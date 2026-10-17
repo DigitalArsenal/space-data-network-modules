@@ -1,5 +1,7 @@
 # HWM14 (C++ port of the NRL release)
 
+FFM (Full Force Model) is defined by [FFM-1](../../propagator/ffm/FFM.md).
+
 Horizontal Wind Model 2014, release HWM14.123114 (31 Dec 2014), ported from
 the NRL FORTRAN to C++. Quiet-time winds (HWMQT), disturbance winds (DWM07,
 DWM07B), the geodetic to quasi-dipole conversion with its base vectors
@@ -36,12 +38,12 @@ Science paper (supporting information 2,
   three data files byte for byte and the model refuses to load if their
   SHA-256 differs.
 
-Licence: the NRL package carries no licence text. It was written by NRL
+License: the NRL package carries no license text. It was written by NRL
 employees as part of their duties (a work of the United States Government,
 not subject to copyright in the United States, 17 U.S.C. 105) and was
 published as journal supporting information. The same basis covers the
 NRLMSISE-00 code vendored in `third_party/nrlmsise00`. The derivative ports
-in the mirrors above add their own licences (Apache-2.0, MIT); nothing here is
+in the mirrors above add their own licenses (Apache-2.0, MIT); nothing here is
 taken from those ports.
 
 ## Verification
@@ -94,4 +96,4 @@ same build reproduces `Check/gfortran.txt`.
   `ap[1] >= 0`; the disturbance winds are height-independent above about
   125 km, with a smooth cutoff of width 4 km (the data file's `twidth`).
 
-Do not edit `nrl/`. Consumers: `propagator/atmosphere`, `propagator/hpop`.
+Do not edit `nrl/`. Consumers: `propagator/atmosphere`, `propagator/ffm`.

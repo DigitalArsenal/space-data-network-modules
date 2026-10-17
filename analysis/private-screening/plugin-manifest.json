@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.private-screening",
   "name": "Private screening decoys",
   "version": "0.2.0",
-  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, resampled or chained histories, or copies of the target itself). features computes rotation-invariant features of each history from its element sets (gp view) or from daily HPOP ephemeris windows (hpop view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N. Typed contracts 1.0: FlatBuffers only. Histories are $LFV rows (id, target, role, generator, class) carrying their $OMM element sets; HPOP windows are one $OEM; feature rows and the distinguishing report are $LFV. Settings are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig), one table per method: decoys {generator, window, perTarget, targets, donors, neighbours, seed}, features {view, window, minPoints}, distinguish {folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks, exclude, relative}.",
+  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, resampled or chained histories, or copies of the target itself). features computes rotation-invariant features of each history from its element sets (gp view) or from daily FFM (Full Force Model) ephemeris windows (ffm view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N. Typed contracts 1.0: FlatBuffers only. Histories are $LFV rows (id, target, role, generator, class) carrying their $OMM element sets; FFM windows are one $OEM; feature rows and the distinguishing report are $LFV. Settings are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig), one table per method: decoys {generator, window, perTarget, targets, donors, neighbours, seed}, features {view, window, minPoints}, distinguish {folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks, exclude, relative}.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -130,7 +130,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "hpop view: daily ephemeris windows, one $OEM block per window: OBJECT.OBJECT_ID the history (SOURCE_ID), START_TIME the window start, the lines up to USEABLE_STOP_TIME the samples over one orbit (GCRF km, km/s), and the line at STOP_TIME after USEABLE_STOP_TIME the state at the next window start."
+          "description": "ffm view: daily ephemeris windows, one $OEM block per window: OBJECT.OBJECT_ID the history (SOURCE_ID), START_TIME the window start, the lines up to USEABLE_STOP_TIME the samples over one orbit (GCRF km, km/s), and the line at STOP_TIME after USEABLE_STOP_TIME the state at the next window start."
         }
       ],
       "outputPorts": [
@@ -152,7 +152,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One $LFV row per history with enough points: VALUES in FEATURE_NAMES order (NaN = not computable), VIEW gp or hpop, SOURCE_COUNT the histories, REFERENCE_COUNT the catalog, SKIPPED_COUNT those with too few points."
+          "description": "One $LFV row per history with enough points: VALUES in FEATURE_NAMES order (NaN = not computable), VIEW gp or ffm, SOURCE_COUNT the histories, REFERENCE_COUNT the catalog, SKIPPED_COUNT those with too few points."
         }
       ]
     },

@@ -737,7 +737,7 @@ if (isMainThread) {
   if (doPublish || provider.kind === "republish") {
     const anchors = [
       path.join(__dirname, "../../../propagator/sgp4/package.json"),
-      path.join(__dirname, "../../../propagator/hpop/package.json"),
+      path.join(__dirname, "../../../propagator/ffm/package.json"),
       path.join(__dirname, "../node_modules/space-data-module-sdk/package.json"),
     ];
     let fbPath;

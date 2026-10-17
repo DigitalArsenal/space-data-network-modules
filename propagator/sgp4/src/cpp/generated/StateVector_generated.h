@@ -180,7 +180,7 @@ inline const char *EnumNameStateFlags(StateFlags e) {
 ///
 /// There is NO unit conversion on this seam. The host does not scale; it
 /// hands these numbers straight to Cesium Cartesian3, whose unit is metres,
-/// and both shipped propagators (propagator.sgp4, propagator.hpop) document
+/// and both shipped propagators (propagator.sgp4, propagator.ffm) document
 /// and emit "ECEF positions in meters". This block previously said kilometres
 /// and claimed "the host converts km → meters for Cesium" — a 1000x error
 /// that renders satellites inside the Earth.

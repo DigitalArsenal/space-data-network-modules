@@ -101,9 +101,9 @@ test('a rotated copy has catalog distance 0 to the object it copies', async () =
   for (const row of features.ROWS.filter((r) => roleName(r.ROLE) === 'real')) assert.ok(row.VALUES[at] > 0, row.SOURCE_ID);
 });
 
-test('the hpop view reads the daily windows from the $OEM', async () => {
+test('the ffm view reads the daily windows from the $OEM', async () => {
   const mu = 398600.4418e9;
-  const hpop = objects.map((o, k) => {
+  const ffm = objects.map((o, k) => {
     const a = (6378.1363 + 500 + 10 * k) * 1e3, w = Math.sqrt(mu / a ** 3), inc = (45 + 3 * k) * Math.PI / 180;
     const state = (t) => {
       const u = w * (t - from);
@@ -115,10 +115,10 @@ test('the hpop view reads the daily windows from the $OEM', async () => {
       return { t: t0, samples: Array.from({ length: 8 }, (_, j) => state(t0 + j * 2 * Math.PI / w / 8)), end: state(t0 + 86400) };
     }) };
   });
-  const f = await call('features', [frame('histories', historiesLfv(hpop), 'LFV'), frame('ephemerides', windowsOem(hpop), 'OEM')],
-    { features: { view: 'hpop', window } });
-  assert.equal(f.VIEW, 'hpop');
-  assert.equal(f.ROWS.length, hpop.length);
+  const f = await call('features', [frame('histories', historiesLfv(ffm), 'LFV'), frame('ephemerides', windowsOem(ffm), 'OEM')],
+    { features: { view: 'ffm', window } });
+  assert.equal(f.VIEW, 'ffm');
+  assert.equal(f.ROWS.length, ffm.length);
   const a = f.FEATURE_NAMES.indexOf('aKm'), jump = f.FEATURE_NAMES.indexOf('jumpRKm');
   f.ROWS.forEach((row, k) => {
     assert.ok(Math.abs(row.VALUES[a] - (6378.1363 + 500 + 10 * k)) < 1e-6, `${row.SOURCE_ID} a ${row.VALUES[a]}`);

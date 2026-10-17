@@ -14,7 +14,7 @@
   "seed": 1,
   "selection": "OBJECT_TYPE PAYLOAD, perigee below 2,000 km, e below 0.1, at least 14 element sets, the first within 2 days of the start and the last within 2 days of the end"
  },
- "hpopDays": {
+ "ffmDays": {
   "from": "2026-08-09",
   "days": 14
  },
@@ -6823,7 +6823,7 @@
     }
    }
   },
-  "hpop": {
+  "ffm": {
    "window": [
     "2026-08-09T00:00:00.000Z",
     "2026-08-23T00:00:00.000Z"
@@ -9537,11 +9537,11 @@
    }
   }
  },
- "hpop": {
+ "ffm": {
   "windows": 251770,
   "propagated": 251770,
   "failed": 0,
   "seconds": 1447,
-  "product": "analysis/epoch-state GCRF state at the latest element set, propagated by propagator/hpop resident (point mass and degree/order 20 field)"
+  "product": "analysis/epoch-state GCRF state at the latest element set, propagated by propagator/ffm resident (point mass and degree/order 20 field)"
  }
 }

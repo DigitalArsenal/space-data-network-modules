@@ -586,6 +586,19 @@ int32_t supply_sqp(const OrbProSolverEvaluation* evaluation) {
   return terminal.status;
 }
 
+// One conversion for both the propagated-state consumer and its diagnostic
+// surface. Provider state is ECEF meters, meters/second, and UTC Julian date;
+// the coordinate library uses kilometers and kilometers/second internally.
+coords::StateVec ingest_propagated_state(const double* propagated_state) {
+  const coords::StateVec ecef(
+      {propagated_state[0] / 1000.0, propagated_state[1] / 1000.0,
+       propagated_state[2] / 1000.0},
+      {propagated_state[3] / 1000.0, propagated_state[4] / 1000.0,
+       propagated_state[5] / 1000.0});
+  return coords::transform(
+      ecef, coords::Frame::ECEF, coords::Frame::GCRF, propagated_state[6]);
+}
+
 }  // namespace
 
 extern "C" {
@@ -646,7 +659,7 @@ int32_t plugin_reference_prepare(const double* candidate, double* output) {
 }
 
 // Consume the state returned by the selected propagator port. The port's
-// common browser contract returns ECEF metres and metres/second followed by
+// common browser contract returns ECEF meters and meters/second followed by
 // the UTC Julian date. The targeting module performs the complete ECEF->GCRF
 // state conversion in WASM before evaluating inertial goals; the host only
 // transports the provider's answer.
@@ -659,13 +672,7 @@ int32_t plugin_reference_finish(const double* candidate,
   const int32_t status = evaluate_reference(candidate, output);
   if (status != 0) return status;
   constexpr double target_apogee = 42164000.0;
-  const coords::StateVec ecef(
-      {propagated_state[0] / 1000.0, propagated_state[1] / 1000.0,
-       propagated_state[2] / 1000.0},
-      {propagated_state[3] / 1000.0, propagated_state[4] / 1000.0,
-       propagated_state[5] / 1000.0});
-  const coords::StateVec gcrf = coords::transform(
-      ecef, coords::Frame::ECEF, coords::Frame::GCRF, propagated_state[6]);
+  const coords::StateVec gcrf = ingest_propagated_state(propagated_state);
   const double x = gcrf.position.x * 1000.0;
   const double y = gcrf.position.y * 1000.0;
   const double z = gcrf.position.z * 1000.0;
@@ -685,6 +692,28 @@ int32_t plugin_reference_finish(const double* candidate,
   output[1] = inclination_sign * std::acos(cosine);
   output[2] = radius;
   output[5] = output[1] * 180.0 / 3.14159265358979323846;
+  return 0;
+}
+
+// Diagnostic for the exact ingest conversion consumed by reference_finish.
+// Input: ECEF meters, meters/second, UTC Julian date. Output: GCRF meters and
+// meters/second under coords.h's classical FK5, UT1=UTC, zero-polar-motion
+// contract. This exposes the converted state without changing solver outputs.
+__attribute__((visibility("default")))
+TARGETING_WASM_EXPORT("plugin_reference_ingest_gcrf")
+int32_t plugin_reference_ingest_gcrf(const double* propagated_state,
+                                    double* output) {
+  if (!propagated_state || !output) return -1;
+  const coords::StateVec state = ingest_propagated_state(propagated_state);
+  output[0] = state.position.x * 1000.0;
+  output[1] = state.position.y * 1000.0;
+  output[2] = state.position.z * 1000.0;
+  output[3] = state.velocity.x * 1000.0;
+  output[4] = state.velocity.y * 1000.0;
+  output[5] = state.velocity.z * 1000.0;
+  for (int index = 0; index < 6; ++index) {
+    if (!std::isfinite(output[index])) return -3;
+  }
   return 0;
 }
 

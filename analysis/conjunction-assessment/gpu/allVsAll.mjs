@@ -1,7 +1,7 @@
 // All-vs-all conjunction screening with the pair search on a GPU, for
 // trajectories from any propagator.
 //
-//   prepare_screening_index (caller: OMM for SGP4, PPE from HPOP or any
+//   prepare_screening_index (caller: OMM for SGP4, PPE from FFM or any
 //     propagator, loaded once)
 //   coarse_grid (module, WASM: every source sampled at every coarse step)
 //     -> GPU screen (gpu/screen_kernel.wgsl: candidate pair-steps)

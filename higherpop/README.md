@@ -1,11 +1,13 @@
 # higherpop
 
+FFM (Full Force Model) is defined by [FFM-1](../propagator/ffm/FFM.md).
+
 A dependency-free, header-only C++17 **special-perturbation propagator core**,
 built for the efficiency-critical inner loop of astrodynamics work.
 
-It complements `propagator/hpop` rather than replacing it:
+It complements `propagator/ffm` rather than replacing it:
 
-| | `hpop` | `higherpop` |
+| | `ffm` | `higherpop` |
 |---|---|---|
 | Role | high-fidelity, WASM-deployed engine | lean native kernel for the hot loop |
 | Gravity | EGM2008 full field | zonal J2–J6 (analytic, Legendre recursion) |
@@ -81,7 +83,7 @@ cfg.density  = hp::makePiecewiseExp();  // built-in Vallado Table 8-4
 ```
 
 `DragQuery` carries position, altitude, lat/lon and Julian date, so a
-high-fidelity model — including a bridge to `hpop`'s NRLMSISE-00 — drops in
+high-fidelity model — including a bridge to `ffm`'s NRLMSISE-00 — drops in
 without touching the propagator or force code. Two models ship built in:
 `SingleExp` and `PiecewiseExp` (Vallado 4th ed. Table 8-4).
 
@@ -134,33 +136,33 @@ so hitting `tf` costs ~3–4 extra evaluations, not a bisection sweep.
 
 `test/dromo_test.cpp` checks DROMO two-body closure and DROMO≡Cowell under J2.
 
-### Cross-validation against hpop  (`test/crosscheck_hpop.cpp`)
+### Cross-validation against ffm  (`test/crosscheck_ffm.cpp`)
 
-higherpop is validated against the sibling `propagator/hpop` engine to
-**< 0.01 m**. hpop's force model (`SphericalHarmonics`, zonal) is used as an
+higherpop is validated against the sibling `propagator/ffm` engine to
+**< 0.01 m**. ffm's force model (`SphericalHarmonics`, zonal) is used as an
 independent reference oracle: the same physics is integrated by a separate
 tight loop, and every higherpop formulation is compared to it.
 
 Worst-case position error over {LEO, GTO, Molniya} × {J2, J4} × {Cowell, MEE,
 Encke, KS, DROMO} is **4.1 mm** — all formulations pass the 0.01 m requirement.
 
-`test/match_accel.cpp` additionally confirms zonal accelerations match hpop's
+`test/match_accel.cpp` additionally confirms zonal accelerations match ffm's
 `SphericalHarmonics` to **3e-12 relative** (machine precision) over 20 000
 random states, so agreement is at the force-model level, not just end-state.
 
-> **Note — hpop bug found and fixed during this work.** hpop's deployed gravity
+> **Note — ffm bug found and fixed during this work.** ffm's deployed gravity
 > path (`SphericalHarmonics` → `computeSphericalHarmonicGravity`) scaled the
 > latitudinal/longitudinal acceleration components by `mu/r³` instead of
 > `mu/r²`, an extra factor of `1/r` that collapsed the J2 nodal-regression
 > effect by ~7000× (verified against analytic secular theory). Fixed in
-> `astrodynamics.cpp` (the `// Scale by mu/r^2` block). After the fix, hpop's
+> `astrodynamics.cpp` (the `// Scale by mu/r^2` block). After the fix, ffm's
 > `SphericalHarmonics`, its `J2Only` closed form, and higherpop all agree.
-> See `PATCH_hpop_spherical_harmonics.md`.
+> The historical spherical-harmonics patch note remains in this directory.
 
-To build the cross-check (needs hpop sources):
+To build the cross-check (needs ffm sources):
 
 ```bash
-cmake -S . -B build -DHIGHERPOP_XCHECK_HPOP=ON
+cmake -S . -B build -DHIGHERPOP_XCHECK_FFM=ON
 cmake --build build -j
 ./build/hp_xcheck
 ```
@@ -179,8 +181,8 @@ include/higherpop/    frames (IAU-2006/2000A GCRF↔ITRF, ERFA-backed),
 third_party/erfa/    vendored ERFA (BSD-3, IAU-SOFA-derived) frame/ephemeris series
 test/validate.cpp        correctness harness (no deps)
 test/dromo_test.cpp      DROMO self-test (no deps)
-test/match_accel.cpp     accel-level match vs hpop
-test/crosscheck_hpop.cpp trajectory-level match vs hpop (< 0.01 m)
+test/match_accel.cpp     accel-level match vs ffm
+test/crosscheck_ffm.cpp trajectory-level match vs ffm (< 0.01 m)
 test/crosscheck_nodal.cpp J2 nodal-regression ground-truth check
 test/rpo/*_validate.cpp  RPO suite validation (stm, lvlh, maneuver, lambert)
 test/frames/, test/target/, test/lighting/, test/stationkeeping/,
@@ -193,7 +195,7 @@ bench/bench.cpp          work-precision survey → CSV
 A companion layer for rendezvous, proximity operations, and formation flying,
 built on relative orbital elements (ROE) and the chief LVLH frame — see
 `include/higherpop/rpo/README.md`. It provides the Koenig–Guffanti–D'Amico J2
-ROE state-transition matrix (validated sub-metre vs nonlinear secular-mean truth
+ROE state-transition matrix (validated sub-meter vs nonlinear secular-mean truth
 through ~15 revs in all regimes), Clohessy–Wiltshire and Tschauner–Hempel
 Cartesian STMs (first-order exact), a Gauss control-input matrix with a
 minimum-energy multi-impulse reconfiguration solver, and a universal-variable
@@ -221,7 +223,7 @@ and station-keeping layers are dependency-free.
 
 1. **DOP853** 8(7) pair behind the existing integrator interface for tighter
    tolerances at lower step count.
-2. **NRLMSISE-00 bridge** — a `DensityFn` adapter over `hpop`'s vendored model
+2. **NRLMSISE-00 bridge** — a `DensityFn` adapter over `ffm`'s vendored model
    (the interface is ready; `DragQuery` already carries alt/lat/lon/JD).
 3. **EDROMO / Stiefel-Scheifele time-elements** for very long arcs where DROMO's
    ideal-anomaly variable accumulates phase error.

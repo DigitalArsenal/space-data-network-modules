@@ -1,5 +1,7 @@
 # Buffered JPL SPK ephemerides (TMPL lane 01)
 
+FFM (Full Force Model) is defined by [FFM-1](../propagator/ffm/FFM.md).
+
 ## C++ lookup
 
 `files/orbit-products/src/spk_kernel.hpp` exposes a borrowed kernel view:
@@ -30,7 +32,7 @@ sampled-state meaning: a coefficient-only kernel returns
 
 ## Kernel input wire
 
-HPOP's `invoke` method and events' `locate_events` method accept optional port
+FFM's `invoke` method and events' `locate_events` method accept optional port
 `kernel`, typed as the existing `NCD.fbs` / `$NCD` / `NCD` identity:
 
 ```text
@@ -44,7 +46,7 @@ This is the existing orbit-products container convention, not a new schema.
 There is no guest filesystem access, kernel download, or baked-in kernel.
 See [reference acquisition and hashes](de440-validation.md).
 
-### HPOP
+### FFM
 
 On the existing `invoke` JSON request surface, `operation: "ephemeris"` accepts
 `params: {target: 301, center: 399, epochTDBJD: 2461041.5}`. It requires a kernel
@@ -66,7 +68,7 @@ Legacy resident/cache/trajectory methods do **not** advertise the kernel port;
 source-aware persistent trajectory caching is outside this lane. The old
 `loadEphemerisFile` stub now returns failure and never marks a file loaded.
 
-HPOP's existing CMake build is diagnostic evidence only: SDK compilation and
+FFM's existing CMake build is diagnostic evidence only: SDK compilation and
 legacy manifest compliance remain blockers described in the lane handoff.
 
 ### Events
@@ -76,7 +78,7 @@ In kernel mode, each trajectory OEM block must declare `TIME_SYSTEM=UTC`,
 ICRF/J2000/GCRF celestial axes, and `CENTER_NAIF_ID` matching the request's
 central body. Other axes/scales are refused. UTC is converted through TT to
 TDB using the vendored ERFA/SOFA geocentric conversion; the body state is
-converted from kilometres to the locator's metres at the boundary.
+converted from kilometers to the locator's meters at the boundary.
 
 A successful body lookup emits `ephemeris_source`, the verified size-prefixed
 NCD descriptor of the kernel actually used. Without a kernel, body lookups

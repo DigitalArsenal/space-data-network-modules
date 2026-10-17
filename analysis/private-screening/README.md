@@ -1,5 +1,7 @@
 # Private screening decoys
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 Decoy orbits for private conjunction screening, and the experiment that
 measures how well they hide a real orbit.
 
@@ -19,7 +21,7 @@ Typed contracts 1.0: every port carries one SDS FlatBuffer.
   back exactly), `MEAN_MOTION` (rev/day), `ECCENTRICITY`, `INCLINATION`,
   `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER`, `MEAN_ANOMALY` (deg) and `BSTAR`
   (1/earth radii).
-- **Daily ephemeris windows** (hpop view) are one `$OEM`, a block per window:
+- **Daily ephemeris windows** (ffm view) are one `$OEM`, a block per window:
   `OBJECT.OBJECT_ID` the history, `START_TIME` the window start, the lines up
   to `USEABLE_STOP_TIME` the samples (GCRF km, km/s), and the line at
   `STOP_TIME` after `USEABLE_STOP_TIME` the state at the next window's start.
@@ -66,12 +68,12 @@ decoys refused for fewer than 6 sets.
 
 ### `features`
 
-Inputs: `histories` ($LFV, real and decoy) and, for the hpop view,
+Inputs: `histories` ($LFV, real and decoy) and, for the ffm view,
 `ephemerides` ($OEM). Config `features`: `view`, `window`, `minPoints`
-(default 6 for gp, 8 for hpop).
+(default 6 for gp, 8 for ffm).
 
 - `view: "gp"` reads the element sets.
-- `view: "hpop"` reads the daily windows: samples spaced over one orbit from
+- `view: "ffm"` reads the daily windows: samples spaced over one orbit from
   the window start, and the state at the next window's start.
 
 Output `features` ($LFV): one row per history with enough points, `VALUES` in
@@ -82,9 +84,9 @@ Every feature is rotation-invariant:
 - orbit: a, e, i;
 - decay and its scatter, the largest step, and steps per day;
 - e and i scatter, and i drift;
-- node-rate residual against SGP4 (gp) or J2 (hpop);
+- node-rate residual against SGP4 (gp) or J2 (ffm);
 - gp view only: cadence, B*, and the agreement of consecutive sets (RTN);
-- hpop view only: the jump between consecutive windows (RTN);
+- ffm view only: the jump between consecutive windows (RTN);
 - both views: the correlation of daily decay with the drag common mode, the
   best lagged correlation of the history's changes with those of the 30 most
   similar public objects, and the distance to the nearest public object.
@@ -120,14 +122,14 @@ Ties count as a uniform draw among the tied candidates.
 
 ```
 node scripts/decoy-study.mjs [--objects 3000] [--from 2026-08-02 --to 2026-08-29] \
-  [--hpop-from 2026-08-09 --hpop-days 14] [--generators …] [--per-target 1] \
-  [--relative] [--views gp,gp-28d,hpop] [--reuse-features] [--out DIR]
+  [--ffm-from 2026-08-09 --ffm-days 14] [--generators …] [--per-target 1] \
+  [--relative] [--views gp,gp-28d,ffm] [--reuse-features] [--out DIR]
 ```
 
 It reads the GP archive (`/opt/data/sdn-archive/spacetrack/gp_history/by-creation`).
-For the HPOP view, each day's window is propagated from the latest element set
-through `analysis/epoch-state` and the `propagator/hpop` resident. The
-helpers are shared from `../gp-error-model/scripts/hpop.mjs`.
+For the FFM view, each day's window is propagated from the latest element set
+through `analysis/epoch-state` and the `propagator/ffm` resident. The
+helpers are shared from `../gp-error-model/scripts/ffm.mjs`.
 
 Element sets, histories and features stay on the machine; only aggregates are
 committed.

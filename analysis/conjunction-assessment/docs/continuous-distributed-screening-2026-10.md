@@ -1,5 +1,7 @@
 # Continuous, distributed, operator-first screening, 2026-10
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 The catalog's coarse grid is kept as its index. When objects get new orbit
 data, only they are screened again, against the whole catalog; the result
 equals a full re-screen for every pair they are in. The same scoping cuts any
@@ -136,15 +138,15 @@ An operator's update is its whole constellation at once. AOE's own catalog
 (SpaceMapper, channel KY) is one daily batch with epochs at 00:00Z, written
 about 01:05Z (E15); the archive held no finished snapshot to count.
 
-## HPOP
+## FFM
 
 With a numerical propagator a screen's cost is propagation: 99,929 CPU-s of
 the 3-day full-force screen of the catalog
-([hpop-full-force-screen-2026-10.md](hpop-full-force-screen-2026-10.md)).
+([ffm-full-force-screen-2026-10.md](ffm-full-force-screen-2026-10.md)).
 Propagation is per object and deterministic, so the incremental screen
 propagates only the objects whose element sets changed and keeps every other
-trajectory. Checked with `propagator/hpop` 1.3.0 at full force
-(`scripts/incremental-hpop.mjs`; 5 farm workers; the environment as released
+trajectory. Checked with `propagator/ffm` 1.3.0 at full force
+(`scripts/incremental-ffm.mjs`; 5 farm workers; the environment as released
 at 2026-10-01T00:00Z) on catalog subsets, six 1-hour windows from
 2026-10-01T00:00Z:
 
@@ -160,10 +162,10 @@ replaced. Determinism: in each run 50 unchanged objects propagated again give
 300 of 300 window trajectories with identical coefficients.
 
 An updated element set costs 0.34–0.56 CPU-s here against 0.77–1.05 s for the
-subsets' objects: HPOP integrates from the element epoch, and a new set's
+subsets' objects: FFM integrates from the element epoch, and a new set's
 epoch is recent. Computed from measured values: Space-Track changes 72,400
 element sets a day on average (Update cadence); propagating each over a 3-day
-horizon at 0.645 CPU-s per object-day (`propagator/hpop` README, "Catalog
+horizon at 0.645 CPU-s per object-day (`propagator/ffm` README, "Catalog
 cost") is about 140,000 CPU-s a day, 1.6 cores, against 99,929 CPU-s for
 each full re-screen.
 
@@ -306,8 +308,8 @@ node scripts/update-cadence.mjs --gp-history <by-creation> --from 2026-09-01T00:
 node scripts/incremental-screen.mjs --catalog-json gp-2026-09-30.json --gp-history <by-creation> \
   --batches 2026-09-30T18:15:00Z,2026-09-30T18:30:00Z,2026-10-01T00:00:00Z,2026-10-01T03:30:00Z,2026-10-01T04:00:00Z --out batches.json
 node scripts/incremental-screen.mjs ... --batches 2026-09-30T18:30:00Z --subsets 100,300,1000,3000,10000 --out sweep.json
-node scripts/incremental-hpop.mjs --catalog-json gp-2026-09-30.json --gp-history <by-creation> --base-to 2026-09-30T18:30:00Z \
-  --batches 2026-10-01T00:00:00Z,2026-10-01T03:30:00Z --hpop-environment <env> --out hpop.json
+node scripts/incremental-ffm.mjs --catalog-json gp-2026-09-30.json --gp-history <by-creation> --base-to 2026-09-30T18:30:00Z \
+  --batches 2026-10-01T00:00:00Z,2026-10-01T03:30:00Z --ffm-environment <env> --out ffm.json
 node scripts/distributed-screen.mjs --catalog catalog.OMM.uint32be.bin --store <dir> --out distributed.json \
   --workers node:2:4096,node:1:768,wasmedge-aot:1:4096,node:1:4096:cheat=0.5,node:1:4096:drop=0.3 --aotc <aotc> --aot-runner <runner>
 node scripts/operator-first.mjs --gp <gp snapshot> --gp-history <by-creation> --store <dir> --out operator.json --verify-runtime wasmedge-aot ...

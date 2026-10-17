@@ -1,13 +1,13 @@
 // The ESPF / set-membership scenario shared by tests/espf.test.mjs and the
-// tri-runtime parity plan: a LEO 400 km truth by full-force HPOP, RA/Dec
+// tri-runtime parity plan: a LEO 400 km truth by full-force FFM, RA/Dec
 // from a fixed observer by this module's simulate_tracking, and the request
 // envelopes of each estimator. Framing only.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { EPOCH_JD, runToCompletion, truthSamples } from './hpop-port.mjs';
+import { EPOCH_JD, runToCompletion, truthSamples } from './ffm-port.mjs';
 import { api, encode, typeRef, unpack } from './wire.mjs';
 
-export async function espfScenario(estimator, hpop) {
+export async function espfScenario(estimator, ffm) {
   const REFERENCE = JSON.parse(fs.readFileSync(new URL('./fixtures/orekit-batch-reference.json', import.meta.url), 'utf8'));
   const TRUTH0 = REFERENCE.cases.find((c) => c.name === 'LEO400-drag').apriori.slice(0, 6);
   const SECONDS = Array.from({ length: 12 }, (_, k) => 30 * (k + 1));
@@ -28,21 +28,21 @@ export async function espfScenario(estimator, hpop) {
   });
   const OFFSET = [400, -250, 120, 0.4, -0.3, 0.2];
 
-  // Truth by HPOP; RA/Dec from a fixed observer by this module's simulator.
-  const truth = await truthSamples(hpop, TRUTH0, SECONDS);
+  // Truth by FFM; RA/Dec from a fixed observer by this module's simulator.
+  const truth = await truthSamples(ffm, TRUTH0, SECONDS);
   const mid = truth[5].state, rmid = Math.hypot(mid[0], mid[1], mid[2]);
   const STATION = mid.slice(0, 3).map((x) => (x / rmid) * 6378137);
   const simulation = await estimator.invoke({ methodId: 'simulate_tracking', inputs: [
     { portId: 'request', typeRef, payload: encode({ request: { config: config('EXTENDED_KALMAN_FILTER'), observations: SECONDS.map((t) => template(t, STATION)),
       error_models: [{ noise_sigma: 1e-5, bias: 0, bias_sigma: 0, correlation_time_seconds: 0, minimum_value: 0, maximum_value: 0, sigma_edit_threshold: 3,
         random_seed: 20261009, measurement_kind: 'RIGHT_ASCENSION_DECLINATION', troposphere: 'NONE', ionosphere: 'NONE', flags: 3 }],
-      propagator_port_id: 'propagator/hpop', propagator_capability: 'plugin_propagate plugin_compute_stm' } }) },
+      propagator_port_id: 'propagator/ffm', propagator_capability: 'plugin_propagate plugin_compute_stm' } }) },
     { portId: 'propagator_samples', typeRef, payload: encode({ propagator_samples: truth }) }] });
   assert.equal(simulation.statusCode, 0, simulation.errorMessage);
   const OBSERVATIONS = unpack(simulation.outputs[0].payload).simulatedObservations;
 
   function envelopeFor(kind, options, { observations = OBSERVATIONS, initial = TRUTH0.map((x, i) => x + OFFSET[i]), epochSeconds = 0, configExtra = {} } = {}) {
-    const env = unpack(encode({ request: { config: config(kind, configExtra), observations: [], propagator_port_id: 'propagator/hpop',
+    const env = unpack(encode({ request: { config: config(kind, configExtra), observations: [], propagator_port_id: 'propagator/ffm',
       propagator_capability: 'plugin_propagate plugin_compute_stm', options: { nonlinear_propagation: true, ...options } } }));
     env.request.config.initialState = [...initial];
     env.request.config.initialEpoch.seconds = epochSeconds;
@@ -60,12 +60,12 @@ export async function espfScenario(estimator, hpop) {
 // the 2026 restart from final_support. Short arcs: the cases prove identical
 // bytes across runtimes, and WasmEdge's interpreter replays an ESPF 2026
 // epoch (three 85-point MVEEs) in seconds, not milliseconds.
-export async function espfCases(estimator, hpop) {
-  const { envelopeFor, OBSERVATIONS, SECONDS } = await espfScenario(estimator, hpop);
+export async function espfCases(estimator, ffm) {
+  const { envelopeFor, OBSERVATIONS, SECONDS } = await espfScenario(estimator, ffm);
   const cases = [];
   const capture = async (id, envelope, options = {}) => {
     const rounds = [];
-    const result = await runToCompletion(estimator, hpop, envelope, { ...options, rounds });
+    const result = await runToCompletion(estimator, ffm, envelope, { ...options, rounds });
     cases.push({ id: `${id}-query`, request: rounds[0] }, { id: `${id}-complete`, request: rounds.at(-1) });
     return result;
   };

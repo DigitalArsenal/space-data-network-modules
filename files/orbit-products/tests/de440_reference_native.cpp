@@ -6,7 +6,7 @@
 // Horizons currently returns DE441: its distinct smoke-test envelope is 10 m
 // and 0.1 mm/s to allow model differences; this does NOT relax DE440 precision.
 #include "spk_kernel.hpp"
-#ifdef DE440_WITH_HPOP
+#ifdef DE440_WITH_FFM
 #include "astrodynamics.h"
 #include "ephemeris.h"
 #endif
@@ -95,7 +95,7 @@ int main(int argc,char** argv) {
         if(excerpt && cspice.size()!=221) throw std::runtime_error("incomplete excerpt references");
         validate(kernel,cspice,"de440_cspice",1e-6,1e-9);
         validate(kernel,horizons,"horizons_de441",0.01,1e-7);
-#ifdef DE440_WITH_HPOP
+#ifdef DE440_WITH_FFM
         astro::Ephemeris::clearEphemerisBuffer();
         astro::Ephemeris::selectEphemerisSource(astro::Ephemeris::EphemerisSource::Analytical);
         std::vector<std::pair<Reference,astro::Vec3>> analytic;
@@ -107,18 +107,18 @@ int main(int argc,char** argv) {
         }
         if(analytic.size()!=24) throw std::runtime_error("incomplete monthly analytic comparison");
         if(!astro::Ephemeris::loadEphemerisBuffer(bytes.data(),bytes.size(),astro::Ephemeris::EphemerisSource::JPL_DE440))
-            throw std::runtime_error("HPOP buffer load failed");
+            throw std::runtime_error("FFM buffer load failed");
         double maxp=0,maxv=0;
         for(const auto& [r,a]:analytic) {
             const auto k=r.target==10?astro::getSunPosition(r.jd):astro::getMoonPosition(r.jd);
             const double av[]={a.x,a.y,a.z}, kp[]={k.position.x,k.position.y,k.position.z}, kv[]={k.velocity.x,k.velocity.y,k.velocity.z};
             const double dp=norm_error(kp,r.state.data()),dv=norm_error(kv,r.state.data()+3);
-            if(!k.valid || k.source!=astro::Ephemeris::EphemerisSource::JPL_DE440) throw std::runtime_error("HPOP reported wrong source");
+            if(!k.valid || k.source!=astro::Ephemeris::EphemerisSource::JPL_DE440) throw std::runtime_error("FFM reported wrong source");
             maxp=std::max(maxp,dp);maxv=std::max(maxv,dv);
             std::cout<<"ANALYTIC "<<r.target<<' '<<r.jd<<' '<<norm_error(av,r.state.data())<<' '<<dp<<'\n';
         }
-        result("hpop_de440_position_km",maxp,1e-6);
-        result("hpop_de440_velocity_km_s",maxv,1e-9);
+        result("ffm_de440_position_km",maxp,1e-6);
+        result("ffm_de440_velocity_km_s",maxv,1e-9);
         astro::Ephemeris::clearEphemerisBuffer();
 #endif
         std::cout<<(failures?"FAIL":"PASS")<<" DE440 authoritative states="<<cspice.size()<<" Horizons states="<<horizons.size()<<" failures="<<failures<<'\n';

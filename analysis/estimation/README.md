@@ -1,5 +1,7 @@
 # Measurement-based orbit estimation
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 C++ WASM estimation through the SDK's `dist/isomorphic/module.wasm`. The caller
 selects the propagator; the estimator contains no force model. JavaScript only
 routes FlatBuffer messages. The build pins SDK **0.8.25** and SDS **1.232.0**.
@@ -102,7 +104,7 @@ The module replays supplied answers deterministically. Every new observation
 starts from the preceding posterior; sigma clouds are newly centered after each
 update. The protocol is stateless and works across runtimes. Replay storage and
 work grow with the observation count; large operational arcs should be split
-at posterior boundaries. There is no live HPOP integration in this lane; the
+at posterior boundaries. There is no live FFM integration in this lane; the
 inverted port is exercised with an independent C++ WASM two-body provider.
 
 ### Adaptive noise (off by default)
@@ -153,7 +155,7 @@ raw navigation-message decoder, transmit-time solver or carrier-phase solver.
 ## Batch fit with dynamic parameters (`fit_batch`)
 
 Weighted batch least squares of the state at the configuration epoch plus
-dynamic parameters (for propagator/hpop: B = Cd·A/m, BDOT, AGOM = Cr·A/m, the
+dynamic parameters (for propagator/ffm: B = Cd·A/m, BDOT, AGOM = Cr·A/m, the
 in-track acceleration), Gauss–Newton on whitened residuals (Tapley, Schutz &
 Born 2004, §4.3–4.6). The module holds no force model.
 
@@ -185,13 +187,13 @@ Born 2004, §4.3–4.6). The module holds no force model.
   (`scaled_covariance`), χ², degrees of freedom, weighted RMS, whitened
   post-fit residuals and edits; status `OK` or `NOT_CONVERGED` in the record
   (the invocation itself succeeds). `estimate` carries the six-state part.
-  Process noise is applied when the result is propagated (propagator/hpop
+  Process noise is applied when the result is propagated (propagator/ffm
   `PROCESS_NOISE` with the full covariance as `INITIAL_COVARIANCE`).
 
 Authority ([batch_fit.test.mjs](tests/batch_fit.test.mjs)): Orekit 13.1
 `BatchLSEstimator` on the same noisy positions
 ([OrekitBatchReference.java](tests/fixtures/OrekitBatchReference.java)),
-with propagator/hpop's WASM answering the queries: LEO 400 km with drag
+with propagator/ffm's WASM answering the queries: LEO 400 km with drag
 (state + B, positions), GPS (state + AGOM, positions with per-axis
 variances as full 3×3 matrices) and GPS with full-state measurements (with
 sigmas, and with RTN covariances rotated by Orekit's QSW frame). The
@@ -213,7 +215,7 @@ six cases, and the module reproduces them.
   a bound is released when its multiplier points back inside, and
   `bound_status` reports 1 or 2 for a parameter that ends there (the data ask
   for less than the bound; its covariance is the formal one at the bound).
-  propagator/hpop refuses a negative Cd·A/m or Cr·A/m: give B and AGOM a
+  propagator/ffm refuses a negative Cd·A/m or Cr·A/m: give B and AGOM a
   lower bound of 0.
 - **Logarithmic parameters.** `parameter_transforms` `LOGARITHM` estimates
   ln p (p must start positive). Each step changes p by at most a factor of ten
@@ -227,7 +229,7 @@ six cases, and the module reproduces them.
   Each trial is one propagation round. Convergence is judged on the
   undamped step.
 - **More dynamic parameters.** Up to 512 state, dynamic and measurement
-  parameters in all; with propagator/hpop, B, BDOT, the in-track
+  parameters in all; with propagator/ffm, B, BDOT, the in-track
   acceleration and the eleven ECOM2 terms at once.
 - **Measurement parameters** (`measurement_parameters`), each over a list of
   observations (for example one pass): `BIAS` (added to one component, in its
@@ -279,8 +281,8 @@ Authority ([batch_fit_v2.test.mjs](tests/batch_fit_v2.test.mjs),
 | Bounds, logarithm, damping, LEO drag | Orekit 13.1 `BatchLSEstimator` | 1.1e-3 σ, covariance 2.2e-6, χ² 1.2e-6 |
 | Starts where version 1 proposes B = −0.18, −0.13 and −1.6 | Orekit's solution | no negative query; same tolerances |
 | Thrust the data read as negative drag | the simulating truth | B held at 0 (status 1); with a signed in-track term both recovered, d² 17 (8) |
-| B, eleven ECOM2 terms and in-track at once | the simulating truth (HPOP, full force) | d² 15.9 (19), every term within 0.7 σ |
-| Range biases, frequency offsets per pass, a drift, a 0.82 s RF lag and a 50 ms radar time bias | the injected values (HPOP truth, observation simulator, association geometry) | every estimate within 2.2 σ, d² 19.9 (20) |
+| B, eleven ECOM2 terms and in-track at once | the simulating truth (FFM, full force) | d² 15.9 (19), every term within 0.7 σ |
+| Range biases, frequency offsets per pass, a drift, a 0.82 s RF lag and a 50 ms radar time bias | the injected values (FFM truth, observation simulator, association geometry) | every estimate within 2.2 σ, d² 19.9 (20) |
 
 ## Tracking data (`$TDM`) on `tracking_data`
 
@@ -317,7 +319,7 @@ They take every measurement kind the EKF/UKF take except `PSEUDORANGE`
 (six-state only), `LINEAR` records included (H is value_count x 6).
 All three use nonlinear propagation through the same inverted port as the UKF
 (`options.nonlinear_propagation`): every support point is a query, answered by
-the caller's propagator (propagator/hpop at full force). Options are
+the caller's propagator (propagator/ffm at full force). Options are
 `SequentialOptions.espf` and `set_membership`. Results add `support_history`
 (per observation: the posterior set, carried and predicted shapes, support and
 survivor counts, medoid, Choquet surprisal, information content, rescaling
@@ -345,7 +347,7 @@ Authority:
   implementation (fixture generated by
   [mvee_numpy_reference.py](tests/fixtures/mvee_numpy_reference.py)), about
   1e-12.
-- [espf.test.mjs](tests/espf.test.mjs), with propagator/hpop answering at full
+- [espf.test.mjs](tests/espf.test.mjs), with propagator/ffm answering at full
   force: the 2025 Gaussian limit reproduces the UKF (state 1.6e-14, covariance
   1.9e-11 relative over 12 epochs); ESPF 2026 invariants and exact restart;
   the 2025 decay; the set-membership filter keeps the truth inside its bound
@@ -431,7 +433,7 @@ Parity runs identical estimator bytes in Chrome/V8, native WasmEdge and containe
 WasmEdge at host worker widths 1/2/4/8. This sequential artifact tests host width
 invariance, not concurrent filter updates.
 
-The dynamical tests are answered by `propagator/hpop`'s WASM. The measurement
+The dynamical tests are answered by `propagator/ffm`'s WASM. The measurement
 campaign ([tracking-pipeline.mjs](tests/tracking-pipeline.mjs), used by
 `measurement_parameters.test.mjs` and the parity plan) also runs the committed
 artifacts of `foundation/frames`, `analysis/access`,

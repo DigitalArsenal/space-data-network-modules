@@ -1,5 +1,7 @@
 # OD covariance publication contract
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 The C++ OD fit and OCM builder must distinguish a missing estimate from zero
 uncertainty. Residual RMS is a fit error summary; it is not an observational
 covariance. The builder never substitutes an RMS-scaled diagonal matrix or a
@@ -65,7 +67,7 @@ matrices, NaN, infinity, unconverged fits, and unobservable normal-matrix modes.
 OD 0.1.2 emits OMM and OCM together for typed OEM input. Text input retains its
 existing JSON result. OCM can report unavailable covariance; absence must not
 be used as zero covariance when computing collision probability. Independently
-retaining epoch state when covariance fails remains separate work. HPOP
+retaining epoch state when covariance fails remains separate work. FFM
 uncertainty propagation and covariance calibration remain unverified.
 
 ## Rebuilding and runtime verification

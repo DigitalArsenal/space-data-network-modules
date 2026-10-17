@@ -1,11 +1,13 @@
 # Decoys for private screening: principle and measurement
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 An owner screening a satellite that the public catalog lacks can submit N
 candidate orbits: one real and N − 1 decoys. Only the owner's key says which
 answers matter. This note covers:
 - the bound decoys give;
 - the conditions the bound needs;
-- what we measured on real histories: GP element sets and HPOP ephemeris
+- what we measured on real histories: GP element sets and FFM ephemeris
   windows, from August 2026.
 
 Status: **principle stated, generators measured. None reaches 1 in 10,000
@@ -84,9 +86,9 @@ Ideal decoys give N_eff = N.
 
 **Views.** Both cover the same 14 days, 9 to 22 August.
 - **GP view:** the element sets themselves.
-- **HPOP view:** what an owner would publish. Each day's window starts from
+- **FFM view:** what an owner would publish. Each day's window starts from
   the latest element set: the `analysis/epoch-state` GCRF state, propagated
-  by the `propagator/hpop` resident (point mass and degree/order 20 field).
+  by the `propagator/ffm` resident (point mass and degree/order 20 field).
   Each window is reduced to 8 states over one orbit and the state at the
   next window's start.
 
@@ -106,7 +108,7 @@ Ideal decoys give N_eff = N.
 - Shared features: orbit, decay, scatter, manoeuvre steps, node-rate
   residual and correlation with the daily drag common mode.
 - GP view only: consecutive-set agreement, cadence and B\*.
-- HPOP view only: window-to-window jumps.
+- FFM view only: window-to-window jumps.
 - Two catalog searches:
   - the distance to the nearest public object;
   - the best lagged correlation of the history's changes with the 30 most
@@ -129,7 +131,7 @@ test decoys.
 | chained | 0.926 | 4.2 | 1.5 | 4.3 | 11.1 | catalog distance, drag common mode |
 | aligned | 0.972 | 4.6 | 1.2 | 2.9 | 10.2 | replay search, catalog distance |
 
-**HPOP view** (daily ephemeris windows, 14 days)
+**FFM view** (daily ephemeris windows, 14 days)
 
 | Generator | AUC | ε ≥ | N_eff of 10 | of 100 | of 1,000 | Leading features |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -147,7 +149,7 @@ reach AUC 0.968 and N_eff 2.6 of 100. The replayed sequence now stands out
 and i, GP view) change little: chained AUC 0.923, N_eff 3.8 of 100. The
 other three generators are still found every time.
 
-**By class** (chained, HPOP view): N_eff of 100 is 1.1 for OneWeb, 2.9 for
+**By class** (chained, FFM view): N_eff of 100 is 1.1 for OneWeb, 2.9 for
 Starlink and 8.0 for other satellites. A satellite in a tight shell has
 neighbours closer than any decoy.
 
@@ -166,20 +168,20 @@ neighbours closer than any decoy.
    They remain distinguishable for two reasons:
    - **They leave their shell.** Real satellites sit close to neighbours that
      move with them (median catalog distance 0.56 against 2.8 for decoys,
-     HPOP view).
+     FFM view).
    - **Their replayed sequence shows** once histories are long enough.
 
    Keeping the donor's own timing (aligned) brings decoys nearer the public
-   objects in the HPOP view (median 2.1). In element sets, however, it makes
+   objects in the FFM view (median 2.1). In element sets, however, it makes
    them too close (0.15 against 0.30 for real objects) and makes the
    replayed sequence plain (correlation 0.94 against 0.70).
 4. **The published ephemeris hides more than element sets.** Every
-   generator is harder to find in the HPOP view: it shows daily windows
+   generator is harder to find in the FFM view: it shows daily windows
    rather than every set, and propagation smooths away exact copies. The
    protocol exposes only this view.
 5. **The worst case decides ε.** Even at AUC 0.90, 105 of 1,520 held-out
    real histories (7 %) scored above a threshold that none of 1,520 held-out
-   decoys reached (chained, HPOP view).
+   decoys reached (chained, FFM view).
    - Those satellites are found almost whatever N is. The 95 % lower bound
      on ε is 3.4, so no guarantee better than about e^(6.8)/N ≈ 900/N holds.
    - Decoys must cover every region where a real orbit can be (the bound
@@ -196,12 +198,12 @@ matched against the catalog.
   Shifting time rather than mean anomaly keeps each set where in the orbit
   the real one's falls; published epochs sit at a preferred argument of
   latitude, and a mean-anomaly shift moves them.
-- 1,000 targets with 50 copies each, published through the same HPOP
+- 1,000 targets with 50 copies each, published through the same FFM
   pipeline: 713,847 windows in 4,340 s.
 - The adversary compares each set's members with each other: every feature
   minus its median over the target's own candidates.
 
-**Results** (HPOP view): AUC 0.794.
+**Results** (FFM view): AUC 0.794.
 
 | Candidates (N) | 10 | 100 | 1,000 | 10,000 |
 | --- | ---: | ---: | ---: | ---: |
@@ -218,7 +220,7 @@ extrapolation.
 - The leading features are the daily mean semi-major axis and the catalog
   distance (gain 23 % and 19 %).
 - A real orbit is consistent with Earth's gravity field at its own
-  positions. A rotated copy of its history is not, once HPOP propagates it
+  positions. A rotated copy of its history is not, once FFM propagates it
   with the Earth-fixed field.
 - By class, AUC was 0.959 for OneWeb, 0.825 for Starlink and 0.701 for other
   satellites.
@@ -253,10 +255,10 @@ to.
 ### Limits
 
 - **Proxy for owner ephemeris.** Real histories are GP sets propagated by the
-  HPOP resident (no drag, Sun or Moon), not an owner's own orbit
+  FFM resident (no drag, Sun or Moon), not an owner's own orbit
   determination.
 - **Scope.** LEO payloads only, 14 days, one decoy per target per generator:
-  17,993 histories and 251,770 HPOP windows (none refused, 1,447 s on 12
+  17,993 histories and 251,770 FFM windows (none refused, 1,447 s on 12
   workers).
 - **One adversary.** A classifier gives a lower bound on distinguishability;
   a stronger adversary can only do better.
@@ -265,4 +267,4 @@ to.
 
 Reproduce: `node scripts/decoy-study.mjs` (README). Aggregates:
 `decoy-study-2026-08.json`; fleet: `fleet-study-2026-08.json`
-(`--generators fleet --per-target 50 --relative --views hpop --objects 1000`).
+(`--generators fleet --per-target 50 --relative --views ffm --objects 1000`).

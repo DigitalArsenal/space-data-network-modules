@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { ByteBuffer } from 'flatbuffers';
 import { OPM } from 'spacedatastandards.org/lib/js/OPM/OPM.js';
-import { runtime,createPropagator } from './hpop-epoch-runner.mjs';
+import { runtime,createPropagator } from './ffm-epoch-runner.mjs';
 import { request as normalizeRequest,container } from '../../../files/orbit-products/tests/vimpel-fixture.mjs';
 import { request as fitRequest,policy,unpackOpm } from './epoch-fixture.mjs';
 import { x, reportOf } from './xmt-recipes.mjs';

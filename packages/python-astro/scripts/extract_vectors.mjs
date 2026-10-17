@@ -10,7 +10,7 @@ function read(p) { const s=fs.readFileSync(path.join(root,p),'utf8'); sources[p]
 function expression(s, pattern) { const m=s.match(pattern); if(!m) throw Error(`Fixture source changed: ${pattern}`); return vm.runInNewContext('('+m[1]+')', {Math,Date}); }
 function constant(s,n) {return expression(s,new RegExp(`const ${n} = ([\\s\\S]*?);`));}
 const sgp=read('propagator/sgp4/tests/tudat_wasm_derived.test.mjs');
-const hpop=JSON.parse(read('propagator/hpop/tests/fixtures/tudat.reference.json'));
+const ffm=JSON.parse(read('propagator/ffm/tests/fixtures/tudat.reference.json'));
 const est=read('analysis/estimation/tests/native_conformance.cpp');
 const time=read('foundation/time/tests/time_conversion.test.mjs');
 const ft=read('foundation/frames/tests/frame_transform.test.mjs');
@@ -28,7 +28,7 @@ const taiblock=time.slice(time.indexOf('test("converts Orekit TAIScaleTest.testA
 const frames={dcm:constant(ft,'BASILISK_DCM_J2000_TO_PFIX'),input:expression(ft,/operation: frmOperationCode.PCI_TO_PCPF,\s*position: (\[[^\]]+\])/),expected:expression(ft,/assertVector\(result, (\[[^\]]+\]), 0.0, "PCPF position"/)};
 const lamblock=lam.slice(lam.indexOf('function createClosedFormCircularQuarterOrbitInvokeRequest'));
 const acblock=ac.slice(ac.indexOf('test("Access analyzer matches Orekit TopocentricFrame inverse'));
-const data={sources,sgp4:sgpData,hpop,estimation:gibbs,
+const data={sources,sgp4:sgpData,ffm,estimation:gibbs,
  time:{input:expression(taiblock,/sourceIso8601: ("[^"]+")/),expected:expression(taiblock,/target.ISO8601\(\), ("[^"]+")/),delta:expression(taiblock,/result.DELTA_SECONDS\(\), ([\d.]+)/)},frames,
  lambert:{mu:constant(lamblock,'mu'),radius:constant(lamblock,'radiusKm')},
  access:{vectors:expression(acblock,/const vectors = (\[[\s\S]*?\]);/)},

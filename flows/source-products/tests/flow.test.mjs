@@ -275,8 +275,8 @@ test('an ephemeris source\'s history of fitted sets is screened in the same two 
 test('an observation source: the fit\'s formal covariance times the measured realism factor, uncalibrated, with the measurement behind it', async () => {
   const x = [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75];
   const lower = Array.from({ length: 21 }, (_, i) => (i === 0 || i === 2 || i === 5 ? 1e-6 : i === 9 || i === 14 || i === 20 ? 1e-12 : 0));
-  const realism = [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }];
-  const recipe = recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit', licence: 'reproducible', extra: { realism } });
+  const realism = [{ sources: ['ilrs-crd'], class: 'slr-ffm-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }];
+  const recipe = recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-ffm-fit', licence: 'reproducible', extra: { realism } });
   const fit = fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x, lower });
   const { egress } = await run([frame('fit_omm', 'omm', encodeOmm(leoH)), frame('fit', 'fit', fit)], recipe);
   const states = await deriveOmm(omm('omm', encodeOmm(leoH)), recipe);

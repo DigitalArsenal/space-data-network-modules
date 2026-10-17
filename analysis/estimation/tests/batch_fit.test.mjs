@@ -1,5 +1,5 @@
 // fit_batch against Orekit 13.1's BatchLSEstimator, end to end: this
-// module's WASM asks for samples through the inverted port, propagator/hpop's
+// module's WASM asks for samples through the inverted port, propagator/ffm's
 // WASM answers them (state, STM and parameter sensitivity), and the fit is
 // compared with Orekit's on the same noisy observations.
 //
@@ -25,10 +25,10 @@
 // off-diagonal terms come from the rotation and cancel when the module
 // rotates back. Whitening by a covariance that is correlated in the request
 // axes has no Orekit reference.
-// The force sets and constants are propagator/hpop's Orekit cases, which
-// HPOP reproduces to 1.3 cm (LEO, drag) and 0.43 mm (GPS) over a day, and
+// The force sets and constants are propagator/ffm's Orekit cases, which
+// FFM reproduces to 1.3 cm (LEO, drag) and 0.43 mm (GPS) over a day, and
 // whose parameter Jacobians agree to 5e-6 (B) and 5e-10 (GPS AGOM)
-// (propagator/hpop/tests/orekit_reference.test.mjs).
+// (propagator/ffm/tests/orekit_reference.test.mjs).
 //
 // Tolerances and their rationale:
 // Measured 2026-10-09 (in parentheses: LEO, GPS; GPS-pv in both variants:
@@ -53,12 +53,12 @@ import { REFERENCE, fit, fitRequest, harness } from './batch-fit-fixtures.mjs';
 import { pack, typeRef } from './wire.mjs';
 
 for (const [c, variant] of REFERENCE.cases.flatMap((c) => (c.rtnCovariances ? [[c, 'sigmas'], [c, 'rtn']] : [[c, 'sigmas']]))) {
-  test(`fit_batch with propagator/hpop matches Orekit BatchLSEstimator: ${c.name} (${variant})`, async (t) => {
+  test(`fit_batch with propagator/ffm matches Orekit BatchLSEstimator: ${c.name} (${variant})`, async (t) => {
     const estimator = await harness('../');
-    const hpop = await harness('../../../propagator/hpop/');
-    t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
+    const ffm = await harness('../../../propagator/ffm/');
+    t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
     const envelope = fitRequest(c, variant);
-    const { result, rounds } = await fit(estimator, hpop, c, envelope);
+    const { result, rounds } = await fit(estimator, ffm, c, envelope);
     assert.equal(result.status, 0, 'converged');
     const b = result.batchFit, n = 7;
     const ref = c.orekit, P = ref.covariance;
@@ -79,7 +79,7 @@ for (const [c, variant] of REFERENCE.cases.flatMap((c) => (c.rtnCovariances ? [[
     const z = [];
     for (let i = 0; i < n; ++i) { let s = e[i]; for (let k = 0; k < i; ++k) s -= L[i * n + k] * z[k]; z.push(s / L[i * n + i]); }
     const d2 = z.reduce((a, v) => a + v * v, 0);
-    t.diagnostic(`${c.name} (${variant}): ${b.iterations} iterations (${rounds} HPOP rounds; Orekit ${ref.iterations}); estimate gap ${estimateGap.toExponential(2)} sigma; ` +
+    t.diagnostic(`${c.name} (${variant}): ${b.iterations} iterations (${rounds} FFM rounds; Orekit ${ref.iterations}); estimate gap ${estimateGap.toExponential(2)} sigma; ` +
       `position ${Math.hypot(...[0, 1, 2].map((i) => b.estimate[i] - ref.estimate[i])).toExponential(2)} m; parameter ${(b.estimate[6] - ref.estimate[6]).toExponential(2)} (sigma ${sigma(6).toExponential(2)}); ` +
       `covariance gap ${covarianceGap.toExponential(2)}; chi-square ${b.chiSquare.toFixed(4)} vs ${ref.chiSquare.toFixed(4)} (${chiGap.toExponential(2)}); truth d2 ${d2.toFixed(3)}`);
     assert.ok(estimateGap <= 5e-3, `estimate differs from Orekit by ${estimateGap} sigma`);

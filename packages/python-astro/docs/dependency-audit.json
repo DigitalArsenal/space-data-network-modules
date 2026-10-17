@@ -22,9 +22,9 @@
           "orbpro/query/CatalogQueryRequest.py": false,
           "orbpro/query/CatalogQueryResult.py": false
         },
-        "propagator/hpop": {
-          "orbpro/hpop/InvokeRequest.py": false,
-          "orbpro/hpop/InvokeResponse.py": false,
+        "propagator/ffm": {
+          "orbpro/ffm/InvokeRequest.py": false,
+          "orbpro/ffm/InvokeResponse.py": false,
           "orbpro/propagator/PropagatorBatchRequest.py": false,
           "orbpro/plugins/PropagatorState.py": false,
           "orbpro/propagator/PropagatorPrepareTrajectorySegmentsRequest.py": false,
@@ -155,9 +155,9 @@
           "orbpro/query/CatalogQueryRequest.py": false,
           "orbpro/query/CatalogQueryResult.py": false
         },
-        "propagator/hpop": {
-          "orbpro/hpop/InvokeRequest.py": false,
-          "orbpro/hpop/InvokeResponse.py": false,
+        "propagator/ffm": {
+          "orbpro/ffm/InvokeRequest.py": false,
+          "orbpro/ffm/InvokeResponse.py": false,
           "orbpro/propagator/PropagatorBatchRequest.py": false,
           "orbpro/plugins/PropagatorState.py": false,
           "orbpro/propagator/PropagatorPrepareTrajectorySegmentsRequest.py": false,

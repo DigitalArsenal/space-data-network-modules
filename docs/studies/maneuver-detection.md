@@ -1,5 +1,7 @@
 # Maneuver detection from element-set history
 
+FFM (Full Force Model) is defined by [FFM-1](../../propagator/ffm/FFM.md).
+
 Module: `analysis/maneuver-detection` 0.3.0. Study: October 2026,
 pre-registered in
 [`analysis/maneuver-detection/docs/studies/PLAN-2026-10.md`](../../analysis/maneuver-detection/docs/studies/PLAN-2026-10.md)
@@ -123,13 +125,13 @@ December 2021.
 | Provider | Answers | Sep 2026 | May 2024 (2 burns) | Dec 2021 (1 burn) |
 | --- | --- | --- | --- | --- |
 | `propagator/sgp4` | TEME | C 1/1, 3 min, no other event | 2/2, no other event | 1/1, 1 unexplained (D1) |
-| `propagator/hpop` 1.3.0, full force | GCRF (from `analysis/epoch-state` states) | 1/1, 31 min, 2 other events | | |
+| `propagator/ffm` 1.3.0, full force | GCRF (from `analysis/epoch-state` states) | 1/1, 31 min, 2 other events | | |
 | `propagator/keplerian-reference` (ABI) | Earth-fixed | D1 1/1 (3.6 h); D2 floods (38 events) | 2/2; 57 events | 1/1; 40 events |
 
 The in-track tests work through every provider. The cross-track test needs a
 propagator that carries the nodal regression: two-body trajectories of
-consecutive sets disagree in plane by metres per second. SGP4 is cleanest
-because GP mean elements are SGP4's own. HPOP from SGP4-derived epoch states
+consecutive sets disagree in plane by meters per second. SGP4 is cleanest
+because GP mean elements are SGP4's own. FFM from SGP4-derived epoch states
 inherits their error.
 
 ### Starlink and planned-vs-executed (descriptive, live window)
@@ -199,7 +201,7 @@ node study/metop.mjs <work> --mhf-dir /opt/data/sdn-archive/hac/eumetsat-metopsg
 node study/gnss.mjs <work> --gp-dir <gp> --variants <variants.json>
 node study/geo.mjs <work> --listing <intelsat-m.json> --gp-dir <gp> --variants <variants.json>
 node study/starlink.mjs <work> --gp-dir <gp> --variants <variants.json> --sample 20
-node study/providers.mjs <work> --history <gp>/25544.json --truth <truth.json> --variants <variants.json> --from 2026-09-01 --to 2026-10-01 --providers sgp4,keplerian-reference,hpop --environment <hpop env>
+node study/providers.mjs <work> --history <gp>/25544.json --truth <truth.json> --variants <variants.json> --from 2026-09-01 --to 2026-10-01 --providers sgp4,keplerian-reference,ffm --environment <ffm env>
 ```
 
 `variants.json` lists `{name, options}`; the study's are D1, D2, C and D3 with

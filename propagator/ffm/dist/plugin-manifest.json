@@ -1,0 +1,454 @@
+{
+  "pluginId": "com.orbpro.ffm",
+  "name": "FFM Full Force Model propagator",
+  "version": "1.4.0",
+  "description": "FFM (Full Force Model) C++ WASM propagation with PRW execution, resident state (configured full-force dynamics, or the gravity-only profile by name), PPE trajectory, finite-burn, STM, atmosphere and ephemeris records. State interchange uses SI units with explicit frame and time. Native diagnostic state-vector exports retain ECEF meter/meter-per-second units.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "invoke",
+      "displayName": "Invoke FFM Operation",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "kernel",
+          "description": "Optional PRW.NATIVE_INPUT containing a verified NCD SPK_DAF descriptor and exactly SOURCE_BYTE_LENGTH SPK bytes with matching SHA256. The instance keeps the last verified kernel: the same kernel again (same SHA256 and length, identical bytes) is compared byte for byte instead of hashed.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "earth_orientation",
+          "description": "Optional PRW.EARTH_ORIENTATION: IERS $EOP rows, one row or up to 366 ordered daily rows of one series (IAU_2000A or IAU_2006) covering the whole arc, read and interpolated as foundation/frames reads them. With it, execution requests evaluate the gravity field, solid tides and the atmosphere in ITRF (IAU 2006/2000A CIO-based rotation with polar motion); tesseral fields and solid tides require it. A single row is used as is over the whole arc.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "space_weather",
+          "description": "Optional PRW.SPACE_WEATHER: daily SDS $SPW rows (CelesTrak space weather) with strictly increasing DATE, covering every day of the arc and the day before it. Drag then reads the model's inputs at each instant: for NRLMSISE-00 the previous day's observed F10.7, the day's 81-day centered average of observed F10.7, the day's Ap and the three-hour Kp; for JACCHIA_ROBERTS the previous day's observed F10.7 and its 81-day centered average and the three-hour Kp 6.7 h earlier. Excludes the request's WEATHER.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "jb2008_indices",
+          "description": "Optional PRW.JB2008_INDICES: consecutive daily rows of Space Environment Technologies' JB2008 drivers (SOLFSMY F10, S10, M10, Y10 with their 81-day centered averages, at 12 UT of DATE; DTCFILE hourly DSTDTC), covering the arc and the days the lags read before it. Required by, and only accepted with, the JB2008 atmosphere: the indices are interpolated linearly in time at the instant less JB2008's lags (1 day for F10 and S10, 2 for M10, 5 for Y10), DSTDTC between hours, as Orekit's JB2008SpaceEnvironmentData reads them.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_state",
+      "displayName": "Ingest Resident State (Configured Dynamics)",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "PRW.RESIDENT_STATE records (1-1024): GCRF states with explicit epochs; optional MASS_KG, DRAG_AREA_OVER_MASS_M2_KG (Cd*A/m, needs drag in the configuration) and SRP_AREA_OVER_MASS_M2_KG (Cr*A/m, needs cannonball radiation pressure), COVARIANCE and PROCESS_NOISE."
+        },
+        {
+          "portId": "configuration",
+          "description": "Required PRW.EXECUTION_REQUEST: the dynamics every resident object is propagated with (FORCES, INTEGRATOR with RK78 or RKF78, STM_TECHNIQUE and DENSITY_TREATMENT for covariance), validated as an execution request. Its INITIAL and TARGET_EPOCH are placeholders that each object's state and each query replace; it carries no STM, covariance, samples, impulses, burns, mass dynamics, dynamic parameters or process noise.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "kernel",
+          "description": "Optional PRW.NATIVE_INPUT: the JPL SPK kernel the configuration reads, verified once (SHA256) and kept for the instance until the next ingest.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "earth_orientation",
+          "description": "Optional PRW.EARTH_ORIENTATION, as for invoke, kept for the instance; it must cover every object's arc.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "space_weather",
+          "description": "Optional PRW.SPACE_WEATHER, as for invoke, kept for the instance; it must cover every object's arc and the day before it.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "jb2008_indices",
+          "description": "Optional PRW.JB2008_INDICES, as for invoke, kept for the instance.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_state_gravity_only",
+      "displayName": "Ingest Resident State (Gravity-Only Profile)",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "PRW.RESIDENT_STATE records (1-1024). The gravity-only profile: the Earth's point mass and the built-in degree/order 20 field (built-in Earth orientation), RK78 60/0.01/600 s at 1e-12; no Sun, Moon, drag, radiation pressure or tides, and no per-object mass or coefficients. Its trajectories are named 'gravity-only'."
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "propagate_state",
+      "displayName": "Propagate Resident States",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "prepare_trajectory_segments",
+      "displayName": "Prepare Trajectory Segments",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "describe_trajectory_segments",
+      "displayName": "Describe Trajectory Segments",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "A resident instance owns ordered state and trajectory-cache mutations and executes one invocation at a time; independent instances may run concurrently in the host. The wasm32-wasip1-threads target still uses shared memory and requires browser cross-origin isolation."
+  }
+}

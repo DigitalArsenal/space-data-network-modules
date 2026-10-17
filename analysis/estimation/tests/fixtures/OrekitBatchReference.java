@@ -3,8 +3,8 @@
 //
 // Orekit (CS GROUP, Apache-2.0) is the independent oracle. For each case it
 //   1. propagates a truth orbit with a named force set (the force sets and
-//      constants of propagator/hpop's tests/fixtures/orekit/OrekitReference.java,
-//      so that HPOP reproduces these trajectories to about a centimetre a day),
+//      constants of propagator/ffm's tests/fixtures/orekit/OrekitReference.java,
+//      so that FFM reproduces these trajectories to about a centimetre a day),
 //   2. samples positions (or positions and velocities) and adds Gaussian
 //      noise drawn with java.util.Random (the algorithm is fixed by the Java
 //      specification) through the Cholesky factor of the stated measurement
@@ -19,8 +19,8 @@
 //   java -cp "<jars>/*" OrekitBatchReference.java <orekit-data dir> <gfc dir> <out.json>
 // Light-time mode (no gravity-field file required):
 //   java -cp "<jars>/*" OrekitBatchReference.java --light-time <orekit-data dir> <out.json>
-// <gfc dir> holds EGM2008-hpop.gfc written by
-// propagator/hpop/tests/fixtures/orekit/make-gfc.mjs <dir>/EGM2008-hpop.gfc 70 3.986004415e14 6378136.3
+// <gfc dir> holds EGM2008-ffm.gfc written by
+// propagator/ffm/tests/fixtures/orekit/make-gfc.mjs <dir>/EGM2008-ffm.gfc 70 3.986004415e14 6378136.3
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -97,7 +97,7 @@ import org.orekit.utils.ParameterDriver;
 import org.orekit.utils.TimeStampedPVCoordinates;
 
 public class OrekitBatchReference {
-    // propagator/hpop's Orekit constants (OrekitReference.java).
+    // propagator/ffm's Orekit constants (OrekitReference.java).
     static final double GM = 3.986004415e14, RE = 6378137.0;
     static final double AU = 149597870700.0, SOLAR_PRESSURE = 1361.0 / 299792458.0;
     static final double MASS = 1000.0, AREA = 20.0, CR = 1.3, CD = 2.2;
@@ -387,7 +387,7 @@ public class OrekitBatchReference {
         DataContext.getDefault().getDataProvidersManager().addProvider(new DirectoryCrawler(new File(args[0])));
         DataContext.getDefault().getDataProvidersManager().addProvider(new DirectoryCrawler(new File(args[1])));
         GravityFieldFactory.clearPotentialCoefficientsReaders();
-        GravityFieldFactory.addPotentialCoefficientsReader(new ICGEMFormatReader("EGM2008-hpop.gfc", false));
+        GravityFieldFactory.addPotentialCoefficientsReader(new ICGEMFormatReader("EGM2008-ffm.gfc", false));
         TimeScale utc = TimeScalesFactory.getUTC();
         AbsoluteDate epoch = new AbsoluteDate(2026, 8, 2, 0, 0, 0.0, utc);
         Frame gcrf = FramesFactory.getGCRF();
@@ -410,7 +410,7 @@ public class OrekitBatchReference {
         gps.dr = new double[] {300, 200, -100}; gps.dv = new double[] {0.03, -0.02, 0.01}; gps.aprioriCoefficient = 1.0; gps.parameter = "SRP_AREA_OVER_MASS";
 
         StringBuilder out = new StringBuilder();
-        out.append("{\n \"source\": \"Orekit 13.1 (CS GROUP, Apache-2.0) BatchLSEstimator, GaussNewtonOptimizer(QRDecomposer 1e-11), NumericalPropagatorBuilder DormandPrince853 (steps <= 10 s, dP 1e-4 m), GCRF; forces and constants of propagator/hpop tests/fixtures/orekit/OrekitReference.java\",\n");
+        out.append("{\n \"source\": \"Orekit 13.1 (CS GROUP, Apache-2.0) BatchLSEstimator, GaussNewtonOptimizer(QRDecomposer 1e-11), NumericalPropagatorBuilder DormandPrince853 (steps <= 10 s, dP 1e-4 m), GCRF; forces and constants of propagator/ffm tests/fixtures/orekit/OrekitReference.java\",\n");
         out.append(String.format(" \"epochUtc\": \"%s\",\n \"constants\": {\"gm\": %.10e, \"massKg\": %.1f, \"areaM2\": %.1f, \"cr\": %.2f, \"cd\": %.2f, \"f107\": %.1f, \"f107a\": %.1f, \"ap\": %.1f},\n",
             epoch.toString(utc), GM, MASS, AREA, CR, CD, F107, F107A, AP));
         out.append(" \"cases\": [\n");

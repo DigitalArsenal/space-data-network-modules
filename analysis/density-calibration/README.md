@@ -1,5 +1,7 @@
 # analysis/density-calibration
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 JB2008 thermospheric mass density at points, with an exospheric-temperature
 correction field, and the estimation of that field from observed densities or
 from the orbital decay of catalogued objects:
@@ -28,22 +30,22 @@ robust editing off (0.4.0's `editSigma: 0`).
 
 - **NRLMSISE-00** (0.4.0; `evaluate` and `drag_work` with `ATMOSPHERE` `NRLMSIS00E`): the real model through the
   public-domain Brodowski C port in `third_party/nrlmsise00` (`gtd7d`, total mass density with anomalous oxygen), driven as
-  `propagator/hpop` drives it: on the UTC day d of a point, F10.7 is the observed flux of day d-1, F10.7a the observed 81-day
+  `propagator/ffm` drives it: on the UTC day d of a point, F10.7 is the observed flux of day d-1, F10.7a the observed 81-day
   centred mean of day d, Ap the daily Ap of day d (all switches 1, the daily-Ap form), local solar time = UT + longitude/15,
   the WGS84 geodetic latitude, longitude and height. Rows are `$SPW` rows (`DATE`, `F107_OBS`, `F107_OBS_CENTER81`,
   `AP_AVG`), strictly increasing; a point whose day or day before has no row, or above 1000 km, is refused. No temperature
   correction applies to it, and `calibrate` stays JB2008.
-- **Density:** `propagator/hpop/lib/jb2008.h` unchanged (Orekit 13.1's
+- **Density:** `propagator/ffm/lib/jb2008.h` unchanged (Orekit 13.1's
   JB2008, itself a port of Space Environment Technologies' Fortran).
 - **Drivers:** `$PRW` `PRWJB2008Indices` rows (SET `SOLFSMY.TXT` and
-  `DTCFILE.TXT`), read as hpop reads them: each day's solar indices at 12 UT
+  `DTCFILE.TXT`), read as ffm reads them: each day's solar indices at 12 UT
   of its DATE, interpolated linearly at the instant less JB2008's lags (1 day
   F10 and S10, 2 M10, 5 Y10); DSTDTC linear between hourly values. A point
   outside the rows is refused, never guessed.
 - **Geometry:** the point's geodetic latitude, longitude (normalized to
   [−π, π]) and altitude; the Sun's Earth-fixed longitude and geocentric
   latitude from ERFA (`eraEpv00`; IAU 2006/2000A `eraC2i06a` held for an
-  hour of TT; `eraEra00` with UT1 = UTC; no polar motion), geometric, as hpop
+  hour of TT; `eraEra00` with UT1 = UTC; no polar motion), geometric, as ffm
   and Orekit give JB2008.
 - **Correction:** either spherical harmonics per time segment, dT(φ, h) =
   Σ_{l≤L} Σ_{m≤l} P_l^m(sin φ)(a_lm cos mh + b_lm sin mh), Schmidt
@@ -54,7 +56,7 @@ robust editing off (0.4.0's `editSigma: 0`).
   or more altitudes, linear in altitude between them (extrapolated linearly up
   to 100 km beyond the outer ones, held beyond that; none: one global value).
   Either is added to DSTDTC, i.e. to the local exospheric temperature exactly
-  as JB2008's geomagnetic term. A constant dT is the same model as hpop with
+  as JB2008's geomagnetic term. A constant dT is the same model as ffm with
   every DTC value raised by dT.
 - **Orbital decay** (`decay`, `calibrate_decay`): each element set is
   propagated by Vallado's SGP4 (`propagator/sgp4`'s sources; WGS-72, opsmode
@@ -118,7 +120,7 @@ out. `sigmas` are the formal posterior standard deviations.
   `POLAR_MOTION_Y_ARCSEC`; `GRAVITY_DEGREE` 2-70 (0 = 36), `GRAVITY_ORDER` (0 = the degree), `GM_M3_S2` (the central
   term, default 3.986004418e14), `EARTH_ROTATION_RAD_S` (7.292115e-5), `SETTINGS` `WANT_GRADIENT`): the Jacobi
   integral of the geopotential, C = 1/2 |v|^2 + U(r_ef) - omega . (r x v) in J/kg, with U the EGM2008 potential
-  energy (the central term -GM/r and the harmonics n >= 2 with EGM2008's own GM and radius, from propagator/hpop's
+  energy (the central term -GM/r and the harmonics n >= 2 with EGM2008's own GM and radius, from propagator/ffm's
   `lib/egm2008_data.h`) at the position in IAU 2006/2000A Earth-fixed axes (ERFA, CIO based, Earth rotation angle
   from UT1 = UTC + dut1, polar motion when given) and omega the Earth's rotation vector in GCRF. A static field in
   uniformly turning axes conserves C along an orbit that only the geopotential acts on, and dC/dt = a . v_r,
@@ -142,11 +144,11 @@ out. `sigmas` are the formal posterior standard deviations.
 | Correction = DTC offset | the module's own evaluation with every hourly DTC raised by 40 K | equal to 1e-12 |
 | Node corrections | dT linear in time and altitude at six points against the closed form; a constant node correction against raising every DTC value | 1e-9 K; 1e-12 |
 | SGP4 trajectory and mean a | Vallado's verification set (SGP4-VER.TLE, tcppver.out t = 0 rows, near-Earth cases); Hoots and Roehrich (1980) Spacetrack Report No. 3 Brouwer semi-major axis with WGS-72 | 2e-8 km, 2e-9 km/s; 1e-6 km |
-| Drag decay | `propagator/hpop` integrating the equations of motion (RK78, zonal gravity to degree 4, JB2008 drag with Cd·A/m = B, DE440 Sun, zero EOP) from the set's GCRF epoch state (`analysis/epoch-state`): the change of the osculating semi-major axis averaged over whole nodal periods, one day, constant drivers; with DTC raised by 60 K and the same node correction | circular 400 km: rate within 0.4 %; e = 0.05, perigee 320 km: 1.6 % (SGP4's analytical trajectory, anomaly terms); the response to +60 K within 0.03 % |
+| Drag decay | `propagator/ffm` integrating the equations of motion (RK78, zonal gravity to degree 4, JB2008 drag with Cd·A/m = B, DE440 Sun, zero EOP) from the set's GCRF epoch state (`analysis/epoch-state`): the change of the osculating semi-major axis averaged over whole nodal periods, one day, constant drivers; with DTC raised by 60 K and the same node correction | circular 400 km: rate within 0.4 %; e = 0.05, perigee 320 km: 1.6 % (SGP4's analytical trajectory, anomaly terms); the response to +60 K within 0.03 % |
 | Estimation | synthetic histories of six objects (360–730 km, a set every 8 h, 1 m noise) made by `decay` under a known correction (30 K, a one-day 90 K excursion, 10 K) and known B, and a seventh at 880 km whose sets rise 0.4 m a day (as radiation pressure can make them); one object anchored | converges; steady-state error under 8 K and within the formal sigmas; the six B within 1 %; without the anchor the level's sigma grows more than fourfold and its correlation with the precision-weighted mean ln B is below −0.9 (the degeneracy) |
-| Energy conservation | `propagator/hpop` integrating gravity alone (EGM2008 36x36, RK78 at 1e-12, UT1 = UTC, no polar motion) for 6 h from a 500 km sun-synchronous state; C from `energy` at the 1-min samples | constant to 0.06 J/kg (2e-9 of C; the Earth's axis precesses, ~0.01 J/kg an hour); the Kepler energy varies by tens of kJ/kg; degrees 35 and 37 against HPOP's 36 drift by more than 0.4 J/kg |
+| Energy conservation | `propagator/ffm` integrating gravity alone (EGM2008 36x36, RK78 at 1e-12, UT1 = UTC, no polar motion) for 6 h from a 500 km sun-synchronous state; C from `energy` at the 1-min samples | constant to 0.06 J/kg (2e-9 of C; the Earth's axis precesses, ~0.01 J/kg an hour); the Kepler energy varies by tens of kJ/kg; degrees 35 and 37 against FFM's 36 drift by more than 0.4 J/kg |
 | Energy gradient | central differences of `energy` itself (2 m, 0.01 m/s) | within 1e-6 and 1e-7 relative |
-| Drag work | HPOP with JB2008 drag (Cd*A/m 0.02, constant synthetic drivers) for 6 h at 30 s: the fall of C against the integral of `drag_work` | within 0.3 % |
-| NRLMSISE-00 drag work | `propagator/hpop` with NRLMSISE-00 drag (Cd*A/m 0.02, a `space_weather` table whose F10.7, 81-day mean and Ap change from day to day) for 6 h at 30 s across 00:00 UTC: the fall of C against the integral of `drag_work` with `ATMOSPHERE` `NRLMSIS00E`; the same integral with F10.7 read from the epoch's own day | 0.14 %; the wrong-day read differs by 6.3 % |
+| Drag work | FFM with JB2008 drag (Cd*A/m 0.02, constant synthetic drivers) for 6 h at 30 s: the fall of C against the integral of `drag_work` | within 0.3 % |
+| NRLMSISE-00 drag work | `propagator/ffm` with NRLMSISE-00 drag (Cd*A/m 0.02, a `space_weather` table whose F10.7, 81-day mean and Ap change from day to day) for 6 h at 30 s across 00:00 UTC: the fall of C against the integral of `drag_work` with `ATMOSPHERE` `NRLMSIS00E`; the same integral with F10.7 read from the epoch's own day | 0.14 %; the wrong-day read differs by 6.3 % |
 | SDK compliance | `space-data-module-sdk` `validateArtifactWithStandards`; every port one concrete type (`$DCL`) | pass |
 | 0.4.0 parity (measured at the 0.5.0 conversion) | the 0.4.0 JSON artifact on the 27 requests of `tests/cases.mjs` with the same values (times through Unix ms or ISO 8601, positions through km, F10.7 through `$SPW`'s float) | 10,252 numbers bit-identical; refusals with the same error codes |

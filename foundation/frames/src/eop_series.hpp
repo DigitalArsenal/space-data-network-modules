@@ -1,6 +1,6 @@
 // SDS $EOP rows as one Earth-orientation series, and its value at a UTC
 // epoch. Shared by foundation/frames (eop_table.hpp reads the rows from the
-// SDK input frames) and propagator/hpop (its earth_orientation input), so
+// SDK input frames) and propagator/ffm (its earth_orientation input), so
 // there is one reading of $EOP and one interpolation rule in the tree.
 //
 // Needs, ahead of it in the translation unit: the generated EOP bindings
@@ -110,7 +110,7 @@ inline std::string addPayload(const uint8_t* data, size_t size,
 }
 
 // Rows inside an enclosing FlatBuffer already verified with it (propagator/
-// hpop's PRW.EARTH_ORIENTATION). They point into that buffer. Empty string =
+// ffm's PRW.EARTH_ORIENTATION). They point into that buffer. Empty string =
 // success.
 inline std::string addRows(const flatbuffers::Vector<flatbuffers::Offset<EOP>>* list,
                            std::vector<Row>& rows) {
@@ -200,7 +200,7 @@ inline std::string at(const std::vector<Row>& rows, double utc1, double utc2,
 }
 
 // The series checks of `at` alone, for a caller that reads one table many
-// times (propagator/hpop evaluates the Earth's orientation at every force
+// times (propagator/ffm evaluates the Earth's orientation at every force
 // evaluation): validate once, then read with `atValidated`. Empty string =
 // valid. `at` above is unchanged.
 inline std::string validate(const std::vector<Row>& rows,

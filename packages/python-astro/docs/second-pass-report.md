@@ -1,5 +1,7 @@
 # TMPL lane09 second-pass handoff
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 Branch: **tmpl/python-astro**. Push only; coordinator integrates main.
 
 Implementation commits:
@@ -35,7 +37,7 @@ inventory is [second-pass-files.txt](evidence/second-pass-files.txt).
 - `tests/test_{runtime,api_contract,numerical,vendoring}.py`,
   `tests/fixtures/module-vectors.json`, `scripts/extract_vectors.mjs`: executable
   runtime/binding tests and expected values extracted from existing module tests.
-- README, `examples/sgp4_hpop.py`, dependency/vector/verification/generation docs,
+- README, `examples/sgp4_ffm.py`, dependency/vector/verification/generation docs,
   and `docs/evidence/second-pass*`: commands, measured errors and limitations.
 
 No physics was implemented in Python or JS. No SDS schema was invented.
@@ -50,7 +52,7 @@ Sources, frame/time scale and tolerance rationales:
 | Module / authority | Measured maximum error | Existing tolerance |
 | --- | --- | --- |
 | SGP4 / Vallado |3.63960862159729e-6m radius|.01m|
-| HPOP / Tudat6 samples |1.676726684077683e-4km;1.810651650404945e-7km/s|5e-4km;5e-7km/s|
+| FFM / Tudat6 samples |1.676726684077683e-4km;1.810651650404945e-7km/s|5e-4km;5e-7km/s|
 | Estimation / Vallado Gibbs |9.094947017729282e-13m/s|1e-9m/s|
 | Conjunction / SOCRATES3 pairs |.0007644295692443848s;4.255402527124869m;.4787075052021805m/s|.010s;5m;5m/s|
 | Access / Orekit6 elevations |4.731326441742567e-12rad|1e-10rad|
@@ -75,7 +77,7 @@ hashes: [verification.md](verification.md) and
   access/conjunction/frames differ, so committed artifacts remain packaged.
 - SDK command parity on browser/V8 + native/container WasmEdge:7PASS;
   access/conjunctionFAIL because browser command harness rejects legacy profile.
-- Clean-main original failures reproduce: HPOP9/1, conjunction9/1,
+- Clean-main original failures reproduce: FFM9/1, conjunction9/1,
   Lambert14/2, access0/1. Access layout-adapted test5/0. These are not introduced
   by Python. Estimation has no sdk_compat suite; its conformance check passes1/0.
 
@@ -84,7 +86,7 @@ hashes: [verification.md](verification.md) and
 - Correct the upstream events include, SDK manifest identity failures, Lambert
   command runner and legacy access/conjunction parity harness/profile issues.
   This lane does not claim the broader tri-runtime gate green.
-- HPOP has no source `.fbs` for its named InvokeRequest/InvokeResponse. Its
+- FFM has no source `.fbs` for its named InvokeRequest/InvokeResponse. Its
   actual JSON-in-PIV payload is mirrored; extra trajectory-segment schema sources
   are also absent. Advanced full estimation/events requests use generated objects.
 - No missing generated SDS symbol was observed; all imports resolve with declared

@@ -1,5 +1,7 @@
 # Differential-correction targeter
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 This maneuver-family module exposes `Vary`/`Achieve` and open SQP
 `Optimize`/`Minimize`/`NonlinearConstraint` operations through the pull/supply
 solver ABI in `orbpro_solver_abi.h`.
@@ -28,7 +30,7 @@ the sibling `maneuver/star-search` search surface.
 - the executable pull/supply protocol for Target and SQP, including an
   inconsistent problem that must report `INFEASIBLE`.
 
-The gallery reference case selects HPOP's point-mass provider, but the solver
+The gallery reference case selects FFM's point-mass provider, but the solver
 and integration take that provider as a port. The WASM module prepares the
 candidate state and consumes the returned propagated state; JavaScript only
 dispatches buffers and renders the resulting trajectories.

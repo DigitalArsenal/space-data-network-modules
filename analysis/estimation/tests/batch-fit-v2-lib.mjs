@@ -1,14 +1,14 @@
 // fit_batch version 2 test plumbing: requests, the replay loop and two
 // answerers of the inverted port. Representation only: every dynamical state
-// comes from propagator/hpop's WASM; the identity answerer (state = seed,
+// comes from propagator/ffm's WASM; the identity answerer (state = seed,
 // STM = I) is the static model of the closed-form tests and holds no physics.
 import assert from 'node:assert/strict';
-import { requestInputs } from '../../../propagator/hpop/tests/lib/orekitCases.mjs';
-import { decodePrw } from '../../../propagator/hpop/tests/lib/prwCodec.mjs';
-import { FULL_FORCE } from './hpop-port.mjs';
+import { requestInputs } from '../../../propagator/ffm/tests/lib/orekitCases.mjs';
+import { decodePrw } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
+import { FULL_FORCE } from './ffm-port.mjs';
 import { api, encode, pack, typeRef, unpack } from './wire.mjs';
 
-export const EPOCH_JD = 2461254.5;  // 2026-08-02T00:00:00 UTC, the HPOP fixtures' month
+export const EPOCH_JD = 2461254.5;  // 2026-08-02T00:00:00 UTC, the FFM fixtures' month
 
 // ISO 8601 UTC of an EstimationEpoch {jdDay (midnight), seconds}, to the
 // nanosecond (a millisecond is 7.5 m along a LEO orbit).
@@ -46,7 +46,7 @@ export function fitEnvelope({ state, observations, kinds = [], values = [], opti
       reference_frame: 'ICRF', estimator: 'BATCH_WEIGHTED_LEAST_SQUARES', process_noise: 'NONE', flags: 0 },
     extended_observations: observations.map((o) => ({ observation: observation(o.seconds, o.kind, o.values.length, o.fields), values: o.values.map(() => 0), sigmas: o.values.map(() => 1) })),
     ...(errorModels ? { error_models: errorModels } : {}),
-    propagator_port_id: 'propagator/hpop', propagator_capability: 'plugin_propagate plugin_compute_stm', trace_id: 'fit_batch v2',
+    propagator_port_id: 'propagator/ffm', propagator_capability: 'plugin_propagate plugin_compute_stm', trace_id: 'fit_batch v2',
     batch_options: { parameter_kinds: kinds, parameter_values: kinds.map(() => 0), maximum_iterations: 20, correction_tolerance: 1e-3 },
   } }));
   const r = envelope.request;
@@ -97,11 +97,11 @@ export function identityAnswerer(sensitivity = []) {
   return async (queries) => queries.map((q) => answerOf(q, [...q.seed.state], identity, sensitivity));
 }
 
-// propagator/hpop at full force for one round of queries (one seed, any
+// propagator/ffm at full force for one round of queries (one seed, any
 // epochs): the PRW DYNAMIC_PARAMETERS `names` take the seed's
 // parameter_values. Mass and area are 1 kg and 1 m^2, so B = Cd*A/m is the
 // drag coefficient and AGOM = Cr*A/m the reflectivity coefficient. `edit`
-// adjusts the execution (forces, ECOM2). One HPOP execution per round, one
+// adjusts the execution (forces, ECOM2). One FFM execution per round, one
 // sample per distinct epoch.
 export const ECOM2_NAMES = ['ECOM2_D0', 'ECOM2_Y0', 'ECOM2_B0', 'ECOM2_D2_COS', 'ECOM2_D2_SIN', 'ECOM2_D4_COS', 'ECOM2_D4_SIN', 'ECOM2_B1_COS', 'ECOM2_B1_SIN', 'ECOM2_B3_COS', 'ECOM2_B3_SIN'];
 export const ECOM2_FIELDS = ['D0_M_S2', 'Y0_M_S2', 'B0_M_S2', 'D2_COS_M_S2', 'D2_SIN_M_S2', 'D4_COS_M_S2', 'D4_SIN_M_S2', 'B1_COS_M_S2', 'B1_SIN_M_S2', 'B3_COS_M_S2', 'B3_SIN_M_S2'];
@@ -117,10 +117,10 @@ export function applyParameters(exec, names, values) {
   });
 }
 
-// One full-force HPOP execution from `state` at EPOCH_JD + `fromSeconds`
+// One full-force FFM execution from `state` at EPOCH_JD + `fromSeconds`
 // to the given epochs: [{state, stm (n x n), n}] in the order of `epochs`.
 // Unless estimated, B = 0.01 and AGOM = 0.01 m^2/kg (`coefficients`).
-export async function hpopRun(hpop, { state, from, epochs, names = [], values = [], forces = FULL_FORCE, edit, stm = false, coefficients = { B: 0.01, AGOM: 0.01 } }) {
+export async function ffmRun(ffm, { state, from, epochs, names = [], values = [], forces = FULL_FORCE, edit, stm = false, coefficients = { B: 0.01, AGOM: 0.01 } }) {
   const key = (e) => `${e.jdDay ?? e.jd_day}|${e.seconds}`;
   const distinct = [...new Map(epochs.map((e) => [key(e), e])).values()]
     .sort((a, b) => ((a.jdDay ?? a.jd_day) - (b.jdDay ?? b.jd_day)) * 86400 + a.seconds - b.seconds);
@@ -134,7 +134,7 @@ export async function hpopRun(hpop, { state, from, epochs, names = [], values = 
     applyParameters(exec, names, values);
     if (stm) exec.INCLUDE_STM = true;
   } });
-  const response = await hpop.invoke({ methodId: 'invoke', inputs });
+  const response = await ffm.invoke({ methodId: 'invoke', inputs });
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const samples = decodePrw(response.outputs.find((o) => o.portId === 'response').payload).EXECUTION_RESULT.SAMPLES;
   assert.equal(samples.length, distinct.length);
@@ -145,10 +145,10 @@ export async function hpopRun(hpop, { state, from, epochs, names = [], values = 
   return epochs.map((e) => byKey.get(key(e)));
 }
 
-export function hpopAnswerer(hpop, { names = [], forces = FULL_FORCE, edit, coefficients } = {}) {
+export function ffmAnswerer(ffm, { names = [], forces = FULL_FORCE, edit, coefficients } = {}) {
   return async (queries) => {
     const q0 = queries[0];
-    const runs = await hpopRun(hpop, { state: q0.seed.state, from: q0.seed.epoch, epochs: queries.map((q) => q.targetEpoch), names, values: q0.parameterValues, forces, edit, stm: true, coefficients });
+    const runs = await ffmRun(ffm, { state: q0.seed.state, from: q0.seed.epoch, epochs: queries.map((q) => q.targetEpoch), names, values: q0.parameterValues, forces, edit, stm: true, coefficients });
     return queries.map((q, k) => {
       const { state, stm: m, n } = runs[k];
       const stm = [], sensitivity = [];

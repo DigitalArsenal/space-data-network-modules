@@ -1,0 +1,74 @@
+{
+  "historyPaths": [
+    "CHANGELOG*",
+    "graph/events.log",
+    "graph/gauntlet/receipts/**",
+    "graph/evidence/**",
+    "graph/tasks/**",
+    "graph/programs/**",
+    "docs/archive/**",
+    "docs/superpowers/**",
+    "docs/tmpl-lane-*",
+    "docs/evidence/**",
+    "packages/python-astro/docs/evidence/**",
+    "**/tests/evidence/**/*.log",
+    "results/**",
+    "H\u0050OP_tasks.md",
+    "h\u0070op_workplan_tasks.md",
+    "h\u0070op_discontiuity_innaccurate.md",
+    ".claude/{loop,todo,completed}/**",
+    "tmp/**",
+    "docs/private/**",
+    "docs/js/**",
+    "deployment/ut-austin-core/evidence/**",
+    "sdn-server/spacedatanetwork-edge*",
+    "sdn-server/registry-builder",
+    "packages/sdn-updater-module/dist/**",
+    "higherpop/PATCH_*"
+  ],
+  "otherLanePaths": [
+    "analysis/conjunction-assessment/scripts/run-all-vs-all-cpu.mjs",
+    "analysis/conjunction-assessment/gpu/catalogScreen.mjs",
+    "scripts/artifact-provenance.json",
+    "analysis/conjunction-assessment/docs/benchmark.md",
+    "analysis/conjunction-assessment/docs/pc-methods.md",
+    "analysis/conjunction-assessment/tests/pcTieredScreen.e2e.mjs",
+    "analysis/conjunction-assessment/tests/sourceCovariance.test.mjs",
+    "analysis/conjunction-assessment/tests/empiricalCovariance.test.mjs",
+    "analysis/conjunction-assessment/tests/cqrAuthoritative.test.mjs",
+    "analysis/conjunction-assessment/src/cpp/src/pc_*.cpp",
+    "analysis/conjunction-assessment/src/cpp/include/conjunction/conjunction_engine.h",
+    "analysis/conjunction-assessment/src/cpp/include/conjunction/pc_method.h",
+    "propagator/sgp4/tests/evidence/vallado/check-vallado.mjs",
+    "analysis/launch-ascent/dist/**",
+    "analysis/reentry/dist/**",
+    "analysis/conjunction-assessment/README.md"
+  ],
+  "generatedSdsPaths": [
+    "**/src/cpp/generated/sds/*_generated.h",
+    "analysis/epoch-state/src/generated/sds/*_generated.h"
+  ],
+  "cachePaths": [
+    ".git",
+    "node_modules",
+    "deps",
+    ".sdk-build",
+    ".build",
+    ".emcache",
+    ".ffm-rename-work",
+    "__pycache__",
+    ".venv",
+    "**/src/cpp/build",
+    "**/src/cpp/build-wasm",
+    "**/src/cpp/build-wasi"
+  ],
+  "coincidentalPaths": [
+    "scalar.standalone.js",
+    "**/embedded/dashboard.html",
+    "geocoder-places.json"
+  ],
+  "coincidentalPatterns": [
+    "bafy[a-z2-7]*h\u0070op"
+  ],
+  "binaryBase64MinimumRunLength": 64
+}

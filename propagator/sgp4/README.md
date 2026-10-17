@@ -1,5 +1,7 @@
 # SGP4 Propagator Plugin
 
+FFM (Full Force Model) is defined by [FFM-1](../ffm/FFM.md).
+
 SGP4/SDP4 orbital propagation operations packaged as a canonical `space-data-module-sdk` command-surface plugin for hosted SDN runtimes, WasmEdge, and browser runtimes.
 
 ## What it does
@@ -229,13 +231,13 @@ Apache-2.0.
 | Request epoch (near-Earth) | 151.767 mm | 0.00018246 m/s | ≤ T + M + P per sample | met |
 | Request epoch (deep space) | 9.742 m | 0.000148972 m/s | ≤ T + M + P per sample | not met |
 
-Request-time rounding (maximum shift 19.4 us) accounts for the 15 cm near-Earth and 9.74 m deep-space maxima (set 33333). The 17 samples exceeding the request criterion by up to 0.109 mm carry the native-source residual on set 20413 ([causes](tests/evidence/vallado/causes.json), [report](../hpop/tests/evidence/CONSOLIDATED.md)).
+Request-time rounding (maximum shift 19.4 us) accounts for the 15 cm near-Earth and 9.74 m deep-space maxima (set 33333). The 17 samples exceeding the request criterion by up to 0.109 mm carry the native-source residual on set 20413 ([causes](tests/evidence/vallado/causes.json), [report](../ffm/tests/evidence/CONSOLIDATED.md)).
 
 [SGP4-XP](tests/evidence/xp/) checks 640 SGP4/XP sets at 7 times for exact library parity and records 15 Tier B anchors. The XP theory itself has no public reference outside the library; agreement with the library is the available check.
 
 From the repository root:
 
 ```sh
-UV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/hpop/tests/evidence/check-all.mjs
+UV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/check-all.mjs
 ```
 <!-- END GENERATED VERIFICATION SETS -->

@@ -2,12 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 // Build products, never sources: a checkout that has built a module (the
-// SDK compiler's .sdk-build holds HPOP's generated ERFA amalgamation) must
+// SDK compiler's .sdk-build holds FFM's generated ERFA amalgamation) must
 // index the same files as one that has not.
 const IGNORED_DIRS = new Set([
   ".build",
   ".sdk-build",
   ".emcache",
+  ".ffm-rename-work",
   ".git",
   "CMakeFiles",
   "build",
@@ -34,7 +35,7 @@ const PARITY_UPDATE_MODULES = new Set([
   "foundation/time",
   "propagator/atmosphere",
   "propagator/cislunar",
-  "propagator/hpop",
+  "propagator/ffm",
   "propagator/sgp4",
 ]);
 

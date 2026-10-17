@@ -25,7 +25,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const anchors = [
   path.resolve(__dirname, "../../../propagator/sgp4/package.json"),
-  path.resolve(__dirname, "../../../propagator/hpop/package.json"),
+  path.resolve(__dirname, "../../../propagator/ffm/package.json"),
   path.resolve(__dirname, "../node_modules/space-data-module-sdk/package.json"),
 ];
 

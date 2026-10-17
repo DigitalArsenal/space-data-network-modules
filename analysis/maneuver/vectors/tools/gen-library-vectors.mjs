@@ -632,7 +632,7 @@ function orekitImpulsiveBurnCase(extract, entry) {
     source: commonSource(extract, entry, "orekit"),
     note: entry.note,
     unmappedModuleSurface: {
-      abi: "plugin_entity_apply_impulsive_burn (propagator/sgp4), plugin_set_burns (propagator/hpop)",
+      abi: "plugin_entity_apply_impulsive_burn (propagator/sgp4), plugin_set_burns (propagator/ffm)",
       owner: "orbpro-propagators-have-no-native-burn-surface",
       why:
         "the burn-application ABI is mid-flight in another lane; adding a second " +

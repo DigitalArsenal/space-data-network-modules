@@ -1,0 +1,158 @@
+{
+  "profile": "FFM-1",
+  "module": "com.orbpro.ffm",
+  "moduleVersion": "1.4.0",
+  "gravity": {
+    "field": "EGM2008",
+    "degree": 70,
+    "order": 70,
+    "gm_m3_s2": 398600441500000,
+    "tideSystem": "tide-free",
+    "frame": "ITRF (Earth-fixed), IERS EOP",
+    "pointMass": true,
+    "legacyZonalFlags": { "j2": false, "j3": false, "j4": false, "higherZonals": false },
+    "degreeSpecified": true,
+    "orderSpecified": true,
+    "maximumTesseralDegree": 0,
+    "maximumTesseralDegreeSpecified": false,
+    "reference": "EGM2008 (Pavlis et al. 2012); IERS Conventions 2010 ch. 6"
+  },
+  "thirdBodies": {
+    "enabled": true,
+    "bodies": [
+      { "naifId": 10, "name": "Sun" },
+      { "naifId": 301, "name": "Moon" },
+      { "naifId": 2, "name": "Venus barycenter" },
+      { "naifId": 4, "name": "Mars barycenter" },
+      { "naifId": 5, "name": "Jupiter barycenter" }
+    ],
+    "ephemeris": "JPL DE440 (SPK)",
+    "ephemerisSource": "JPL_SPK",
+    "ephemerisBinding": "DE440 is supplied by the full-force fixtures; the request selects JPL_SPK and does not enforce a DE release.",
+    "reference": "Park et al. 2021, DE440"
+  },
+  "srp": {
+    "enabled": true,
+    "model": "cannonball",
+    "shadow": "conical (umbra, penumbra, antumbra; Montenbruck & Gill)",
+    "crAreaOverMass_m2_kg": 0.02,
+    "initialMass_kg": 1,
+    "area_m2": 1,
+    "gnss": "Supported with ENABLE_SRP=true, RADIATION_PRESSURE_MODEL=GNSS_BOX_WING and GNSS_BLOCK=GPS_IIR, GPS_IIR_M or GPS_IIF; an ECOM2 record enables its 11 coefficients independently. FFM-1 selects cannonball for every object, with no GNSS block or ECOM2 record.",
+    "gnssBlock": "UNSPECIFIED",
+    "ecom2": null,
+    "reference": "Montenbruck & Gill 2000 §3.4"
+  },
+  "drag": {
+    "enabled": true,
+    "model": "NRLMSISE-00",
+    "alternatives": ["JB2008 (SET indices)", "Jacchia-Roberts", "Harris-Priester", "USSA1976", "Exponential"],
+    "spaceWeather": "Daily F10.7/F10.7a/Ap, 3-h Kp (CSSI layout, read as Orekit's CssiSpaceWeatherData): previous-day observed F10.7, current-day centered 81-day observed F10.7 average and daily Ap, current 3-hour Kp.",
+    "weather": null,
+    "winds": "HWM14 when DragForceConfig.includeWinds is enabled; false by default and not selectable in PRWForceConfiguration.",
+    "cdAreaOverMass_m2_kg": 0.01,
+    "bstarRule": "The C++ export plugin_drag_area_over_mass_from_bstar returns 2 * B* / 0.15696615 for finite positive B* (1/Earth radii), in m²/kg; zero, negative or nonfinite B* uses cdAreaOverMass_m2_kg.",
+    "areaOverMassRate_m2_kg_s": 0,
+    "areaOverMassRateSpecified": false,
+    "reference": "Picone et al. 2002; Bowman et al. 2008; Spacetrack Report No. 3 §§8–9"
+  },
+  "solidTides": {
+    "model": "IERS 2010 (Step 1 + frequency-dependent Step 2, Sun and Moon)",
+    "selection": "IERS_2010",
+    "reference": "IERS Conventions 2010 §6.2"
+  },
+  "oceanTides": {
+    "model": "FES2004",
+    "degree": 30,
+    "order": 30,
+    "oceanPoleTide": false,
+    "reference": "Lyard et al. 2006; IERS 2010 §6.3"
+  },
+  "relativity": {
+    "terms": ["Schwarzschild", "Lense-Thirring", "de Sitter"],
+    "selection": "IERS_2010",
+    "reference": "IERS Conventions 2010 §10.3"
+  },
+  "earthRadiation": {
+    "model": "Knocke",
+    "resolutionDeg": 15,
+    "areaOverMass_m2_kg": 0,
+    "areaOverMassSpecified": false,
+    "coefficient": "Shares the cannonball SRP crAreaOverMass_m2_kg when the explicit Earth-radiation coefficient is absent.",
+    "reference": "Knocke, Ries & Tapley 1988"
+  },
+  "frames": {
+    "inertial": "GCRF",
+    "earthFixed": "ITRF",
+    "chain": "IAU 2006/2000A CIO-based with EOP dX/dY, polar motion, ERA (ERFA)",
+    "eop": "IERS finals (PRW.EARTH_ORIENTATION rows)",
+    "reference": "IERS Conventions 2010 ch. 5"
+  },
+  "time": {
+    "input": "UTC",
+    "integration": "TT",
+    "ephemeris": "TDB (TT + periodic terms)",
+    "leapSeconds": "Built-in IERS Bulletin C table through 2017-01-01 for PRW UTC/TT and drag; ERFA table for EOP conversion.",
+    "reference": "IERS 2010 ch. 10; SOFA/ERFA; IERS Bulletin C"
+  },
+  "integrator": {
+    "catalog": {
+      "algorithm": "RK78",
+      "relativeTolerance": 1e-12,
+      "absoluteTolerance_m": 1e-9,
+      "absoluteToleranceComponents": 6,
+      "absoluteToleranceUnits": "m for position; m/s for velocity",
+      "initialStep_s": 30,
+      "minStep_s": 0.01,
+      "maxStep_s": 300,
+      "maxSteps": 100000
+    },
+    "fit": {
+      "scope": "OD test bridge defaults; analysis/estimation accepts a caller-provided propagator and does not select an integrator itself.",
+      "algorithm": "RK78",
+      "relativeTolerance": 1e-13,
+      "absoluteTolerance_m": 1e-10,
+      "absoluteToleranceComponents": 6,
+      "absoluteToleranceUnits": "m for position; m/s for velocity",
+      "initialStep_s": 30,
+      "minStep_s": 0.001,
+      "maxStep_s": 300,
+      "maxSteps": 1000000,
+      "forceScope": "The OD test bridge FULL_FORCE preset is not FFM-1: it selects only Sun/Moon third bodies and omits ocean tides and Earth radiation."
+    }
+  },
+  "stm": {
+    "technique": "ANALYTIC",
+    "densityTreatment": "FINITE_DIFFERENCE",
+    "include": false
+  },
+  "reentry": "Every state, STM and finite-burn propagation path stops at the first evaluated state below 100 km geodetic altitude with the named reentry flag (propagator/ffm/lib/reentry.h:11,31,71-73); height is measured about the GCRF pole rather than the ITRF pole (line 20).",
+  "poleTide": {
+    "enabled": false,
+    "selection": "ForceModelSet.usePoleTide remains false; PRWForceConfiguration has no pole-tide selector. The separate CreateHighFidelityForceModel helper enables it."
+  },
+  "inTrackAcceleration": {
+    "value_m_s2": 0,
+    "specified": false
+  },
+  "sources": {
+    "profile": ["propagator/ffm/ffm-1.profile.json:2"],
+    "module": ["propagator/ffm/plugin-manifest.json:2"],
+    "moduleVersion": ["propagator/ffm/plugin-manifest.json:4"],
+    "gravity": ["propagator/ffm/catalog.mjs:27", "propagator/ffm/catalog.mjs:73", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:109", "propagator/ffm/lib/egm2008_data.h:6", "propagator/ffm/lib/force_models.h:529", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:50", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:193"],
+    "thirdBodies": ["propagator/ffm/catalog.mjs:75", "propagator/ffm/catalog.mjs:79", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:177", "propagator/ffm/lib/ephemeris.cpp:1129", "propagator/ffm/tests/lib/fullForce.mjs:13"],
+    "srp": ["propagator/ffm/catalog.mjs:29", "propagator/ffm/catalog.mjs:76", "propagator/ffm/catalog.mjs:78", "propagator/ffm/lib/shadow.h:1", "propagator/ffm/lib/force_models.h:202", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:63", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:214"],
+    "drag": ["propagator/ffm/catalog.mjs:14", "propagator/ffm/catalog.mjs:28", "propagator/ffm/catalog.mjs:77", "propagator/ffm/src/ffm_plugin.cpp:3050", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:190", "propagator/ffm/src/cpp/include/ffm/prw_environment.h:101", "propagator/ffm/src/cpp/include/ffm/prw_environment.h:150", "propagator/ffm/lib/force_models.h:268", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:138", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:177"],
+    "solidTides": ["propagator/ffm/catalog.mjs:80", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:216", "propagator/ffm/lib/force_models.h:517"],
+    "oceanTides": ["propagator/ffm/catalog.mjs:82", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:259", "propagator/ffm/lib/force_models.h:560"],
+    "relativity": ["propagator/ffm/catalog.mjs:80", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:224", "propagator/ffm/lib/force_models.h:442"],
+    "earthRadiation": ["propagator/ffm/catalog.mjs:81", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:233", "propagator/ffm/lib/force_models.h:469", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:245"],
+    "frames": ["propagator/ffm/catalog.mjs:36", "propagator/ffm/src/cpp/include/ffm/prw_environment.h:27", "propagator/ffm/src/cpp/include/ffm/prw_environment.h:73", "propagator/ffm/tests/lib/orekitCases.mjs:32"],
+    "time": ["propagator/ffm/catalog.mjs:40", "propagator/ffm/catalog.mjs:59", "propagator/ffm/src/cpp/src/prw_execution.cpp:49", "propagator/ffm/src/cpp/include/ffm/prw_codec.h:164", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:208", "propagator/ffm/lib/time_convert.cpp:54", "propagator/ffm/lib/time_convert.cpp:118", "propagator/ffm/lib/time_convert.cpp:242", "propagator/ffm/src/cpp/include/ffm/prw_environment.h:44"],
+    "integrator": ["propagator/ffm/catalog.mjs:30", "propagator/ffm/catalog.mjs:67", "analysis/conjunction-assessment/scripts/lib/ffmFarmWorker.mjs:42", "analysis/estimation/src/estimation.hpp:460", "analysis/estimation/src/batch_fit.cpp:504", "analysis/estimation/tests/ffm-port.mjs:10", "analysis/estimation/tests/ffm-port.mjs:14", "analysis/estimation/tests/ffm-port.mjs:31", "propagator/ffm/tests/lib/orekitCases.mjs:27", "propagator/ffm/tests/lib/orekitCases.mjs:60", "propagator/ffm/tests/lib/orekitCases.mjs:72", "propagator/ffm/tests/lib/orekitCases.mjs:95", "propagator/ffm/tests/lib/prwCodec.mjs:115"],
+    "stm": ["propagator/ffm/catalog.mjs:84", "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWExecutionRequest.js:50"],
+    "reentry": ["propagator/ffm/lib/reentry.h:11", "propagator/ffm/lib/reentry.h:20", "propagator/ffm/lib/reentry.h:31", "propagator/ffm/lib/reentry.h:71", "propagator/ffm/lib/integrators.cpp:73", "propagator/ffm/lib/variational.cpp:25", "propagator/ffm/lib/finite_burn.cpp:80"],
+    "poleTide": ["propagator/ffm/lib/force_models.h:893", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:216", "propagator/ffm/lib/force_models.cpp:1894"],
+    "inTrackAcceleration": ["propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:162", "propagator/ffm/src/cpp/src/prw_dynamics.cpp:273"]
+  }
+}

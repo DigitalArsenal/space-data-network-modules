@@ -51,7 +51,7 @@
 //                gp    from its element sets (orbit, decay, noise, steps,
 //                      cadence, B*, node-rate residual, agreement between
 //                      consecutive sets);
-//                hpop  from daily ephemeris windows (orbit-averaged elements
+//                ffm  from daily ephemeris windows (orbit-averaged elements
 //                      per window, the jump between consecutive windows);
 //              both views add the correlation of daily decay with the drag
 //              common mode, the best lagged correlation of the history's
@@ -68,7 +68,7 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg = kPi / 180.0;
 constexpr double kDay = 86400.0;
 constexpr double kMuWgs72 = 398600.8;    // km^3/s^2, SGP4's constant
-constexpr double kMu = 398600.4418;      // km^3/s^2, HPOP states
+constexpr double kMu = 398600.4418;      // km^3/s^2, FFM states
 constexpr double kRe = 6378.1363;        // km
 constexpr double kJ2 = 1.08262668e-3;
 constexpr double kSgp4EpochFromUnixDays = 7306.0;  // days from 1949-12-31 00:00 to 1970-01-01
@@ -241,7 +241,7 @@ uint64_t hash_text(const std::string& s) {
 struct Set {
   double t, n, e, i, raan, argp, ma, bstar;  // unix s; rev/day; deg; 1/earth radii
 };
-struct Window {   // one daily ephemeris window (hpop view), GCRF km, km/s
+struct Window {   // one daily ephemeris window (ffm view), GCRF km, km/s
   double t;
   std::vector<std::array<double, 7>> samples;   // t, r, v
   std::array<double, 7> end{};                  // state at the next window's start
@@ -256,7 +256,7 @@ struct History {
 // the id), ROLE (Unlabelled reads as real, the old default), GENERATOR,
 // CLASS_LABEL, and ELEMENT_SETS, the $OMM element sets (EPOCH, MEAN_MOTION,
 // ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY,
-// BSTAR). Daily ephemeris windows (hpop view) arrive as one $OEM: a block per
+// BSTAR). Daily ephemeris windows (ffm view) arrive as one $OEM: a block per
 // window, OBJECT.OBJECT_ID the history's id, START_TIME the window start, the
 // lines up to USEABLE_STOP_TIME the samples (GCRF km, km/s), and a line at
 // STOP_TIME after USEABLE_STOP_TIME the state at the next window's start.
@@ -414,7 +414,7 @@ Track gp_track(const History& h, double w0, double w1, std::vector<elsetrec>* re
   }
   return tr;
 }
-Track hpop_track(const History& h, double w0, double w1) {
+Track ffm_track(const History& h, double w0, double w1) {
   Track tr;
   for (const Window& w : h.windows) {
     if (w.t < w0 || w.t >= w1) continue;
@@ -1304,7 +1304,7 @@ extern "C" int features() {
   if (!histories || (eph && eph->payload && !oem)) return fail("invalid-input", "histories must be an $LFV and ephemerides an $OEM");
   const sdm_piv::ConfigTable options = config.table("features");
   const std::string view = std::string(options.string("view"));
-  if (view != "gp" && view != "hpop") return fail("invalid-options", "view must be gp or hpop");
+  if (view != "gp" && view != "ffm") return fail("invalid-options", "view must be gp or ffm");
   const sdm_piv::Span<double> window = options.numbers("window");
   if (window.size() != 2) return fail("invalid-options", "window [from, to) in unix seconds is required");
   const double w0 = window[0], w1 = window[1];
@@ -1321,10 +1321,10 @@ extern "C" int features() {
   std::vector<std::vector<double>> real_daily;
   Catalog catalog;
   for (size_t k = 0; k < list.size(); ++k) {
-    tracks[k] = view == "gp" ? gp_track(list[k], w0, w1, &recs[k]) : hpop_track(list[k], w0, w1);
+    tracks[k] = view == "gp" ? gp_track(list[k], w0, w1, &recs[k]) : ffm_track(list[k], w0, w1);
     sigs[k] = signature(tracks[k], w0, days);
     // Sequence of changes: mean motion between element sets (gp), or
-    // orbit-averaged a between windows (hpop).
+    // orbit-averaged a between windows (ffm).
     if (view == "gp") {
       std::vector<double> n;
       for (const Set& x : list[k].sets)

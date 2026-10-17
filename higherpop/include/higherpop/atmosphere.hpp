@@ -2,7 +2,7 @@
 //
 // The drag force depends on the atmosphere ONLY through a density query. We
 // expose that as a small interface so any model — the built-in piecewise
-// exponential here, or a high-fidelity model bridged in from propagator/hpop
+// exponential here, or a high-fidelity model bridged in from propagator/ffm
 // (NRLMSISE-00, US76, JB2008, DTM2020) — can be dropped in without touching
 // the propagator or the force code.
 //
@@ -58,7 +58,7 @@ struct SingleExpAtmosphere final : IAtmosphere {
 // ---------------------------------------------------------------------------
 // Built-in model 2: piecewise-exponential, Vallado "Fundamentals of
 // Astrodynamics and Applications" 4th ed., Table 8-4 (0-1000 km). Honest,
-// dependency-free, and the same table propagator/hpop's `Exponential` uses.
+// dependency-free, and the same table propagator/ffm's `Exponential` uses.
 // ---------------------------------------------------------------------------
 struct PiecewiseExpAtmosphere final : IAtmosphere {
     // {base altitude h0 [km], nominal density rho0 [kg/m^3], scale height H [km]}

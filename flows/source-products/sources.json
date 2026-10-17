@@ -709,13 +709,13 @@
         "id": "ilrs"
       },
       "ownModel": false,
-      "fitClass": "slr-hpop-fit",
+      "fitClass": "slr-ffm-fit",
       "realism": [
         {
           "sources": [
             "ilrs-crd"
           ],
-          "class": "slr-hpop-fit",
+          "class": "slr-ffm-fit",
           "factor": 17.04,
           "meanD2Over3": 17.04,
           "coverage95": 0.17,

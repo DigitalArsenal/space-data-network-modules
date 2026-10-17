@@ -3,7 +3,7 @@
 // read:  one VCM (the SP VECTOR/COVARIANCE MESSAGE V2.0, JANAP-128 narrative
 //        lines prefixed "<>"; survey/legacy-messages/vcm in
 //        spacedatastandards.org) ->
-//          request            $PRW EXECUTION_REQUEST for propagator/hpop: the
+//          request            $PRW EXECUTION_REQUEST for propagator/ffm: the
 //                             J2K state as EME2000, the VCM's force model, B,
 //                             BDOT, AGOM and T as force values and, for the
 //                             rows the VCM's covariance solved for, as
@@ -677,7 +677,7 @@ struct Solution {
     double f10 = 0, avgF10 = 0, avgAp = 0;
     double taiUtc = 37, ut1Utc = 0;
     int nutationTerms = 106;
-    std::string integratorMode = "SDN HPOP", coordSys = "J2000", partials = "ANALYTIC", stepMode = "AUTO", fixedStep = "OFF", stepSelection = "AUTO";
+    std::string integratorMode = "SDN FFM", coordSys = "J2000", partials = "ANALYTIC", stepMode = "AUTO", fixedStep = "OFF", stepSelection = "AUTO";
     double initialStep = 30, errorControl = 1e-13;
     double weightedRms = 0;                  // 0: none stated
     std::string eopSource;
@@ -1500,7 +1500,7 @@ int ocm(void) {
     s.nutationTerms = int(std::lround(num("nutationTerms", 106)));
     s.leapText = text("leapSecondTime", "");
     if (!s.leapText.empty()) s.leap = parseVcmTime(s.leapText);
-    s.integratorMode = text("integratorMode", "SDN HPOP");
+    s.integratorMode = text("integratorMode", "SDN FFM");
     s.partials = text("partials", "ANALYTIC");
     s.stepMode = text("stepMode", "AUTO");
     s.fixedStep = text("fixedStep", "OFF");

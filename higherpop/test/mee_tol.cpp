@@ -10,11 +10,11 @@ static void kep2rv(double a,double e,double i,double O,double w,double nu,Vec3&r
   auto R1=[&](double t,Vec3 u){double c=std::cos(t),s=std::sin(t);return Vec3{u.x,c*u.y+s*u.z,-s*u.y+c*u.z};};
   auto rot=[&](Vec3 u){return R3(-O,R1(-i,R3(-w,u)));}; r=rot(rp); v=rot(vp);
 }
-static Vec3 hpopAccel(const Vec3&r,int z){::astro::Vec3 rp(r.x,r.y,r.z);
+static Vec3 ffmAccel(const Vec3&r,int z){::astro::Vec3 rp(r.x,r.y,r.z);
   ::astro::ForceModel::SphericalHarmonicsConfig cf;cf.mu=MU_EARTH;cf.referenceRadius=RE_EARTH;cf.maxDegree=z;cf.maxOrder=0;
   auto g=::astro::ForceModel::SphericalHarmonics(rp,cf);return {g.x,g.y,g.z};}
 static void ref(const Vec3&r0,const Vec3&v0,double tf,int z,Vec3&rf,Vec3&vf){
-  auto f=[&](double,const State<6>&s)->State<6>{Vec3 r{s[0],s[1],s[2]};Vec3 a=hpopAccel(r,z);return {s[3],s[4],s[5],a.x,a.y,a.z};};
+  auto f=[&](double,const State<6>&s)->State<6>{Vec3 r{s[0],s[1],s[2]};Vec3 a=ffmAccel(r,z);return {s[3],s[4],s[5],a.x,a.y,a.z};};
   State<6> y{r0.x,r0.y,r0.z,v0.x,v0.y,v0.z};StepStats st;y=integrate<6>(f,y,0,tf,1e-13,1e-13,st);
   rf={y[0],y[1],y[2]};vf={y[3],y[4],y[5]};}
 int main(){

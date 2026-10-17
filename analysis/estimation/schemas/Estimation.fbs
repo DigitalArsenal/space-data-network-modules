@@ -396,7 +396,7 @@ table CovarianceRegularization {
 // the configuration epoch plus dynamic parameters (fit_batch).
 table BatchFitOptions {
   // The caller's propagator vocabulary for the solve-for parameters (for
-  // propagator/hpop, PRW DYNAMIC_PARAMETERS ordinals); opaque to the module
+  // propagator/ffm, PRW DYNAMIC_PARAMETERS ordinals); opaque to the module
   // and echoed in the result.
   parameter_kinds:[ubyte];
   // Their initial nominal (and a priori) values, SI.

@@ -27,21 +27,21 @@
       ]
     },
     {
-      "id": "propagator/hpop",
-      "plugin_id": "com.orbpro.hpop",
+      "id": "propagator/ffm",
+      "plugin_id": "com.orbpro.ffm",
       "manifest_version": "1.0.0",
       "files": [
         {
           "name": "module.wasm",
-          "source_path": "propagator/hpop/dist/isomorphic/module.wasm",
-          "package_path": "artifacts/propagator-hpop/module.wasm",
+          "source_path": "propagator/ffm/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/propagator-ffm/module.wasm",
           "sha256": "be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c",
           "size": 602855
         },
         {
           "name": "plugin-manifest.json",
-          "source_path": "propagator/hpop/plugin-manifest.json",
-          "package_path": "artifacts/propagator-hpop/plugin-manifest.json",
+          "source_path": "propagator/ffm/plugin-manifest.json",
+          "package_path": "artifacts/propagator-ffm/plugin-manifest.json",
           "sha256": "8e35b02e53d0bb60d9e4092f38ba3db6ada5cf63c20239ee122e3fe06c23a76a",
           "size": 9781
         }

@@ -7,7 +7,7 @@
 // - SET's JB2008 validation package (evaluate raw, calibrate): no redistribution licence, so the points have its shape
 //   and the observed densities are the module's own JB2008 at the printed drivers, which calibrate then starts 37 K
 //   cooler, as the test does with SET's densities;
-// - propagator/hpop's integrated tracks (energy, drag_work): the module only reads the states, so they are the two-body
+// - propagator/ffm's integrated tracks (energy, drag_work): the module only reads the states, so they are the two-body
 //   arc of the tests' own starting state;
 // - calibrate_decay's eight days of seven objects: the same generator on three objects over three days. The histories
 //   come from the module's own `decay`, as in the test.
@@ -82,7 +82,7 @@ const valladoCall = (cluster) => ({ jb2008: { rows: decayRows(cluster[0].mjd - 7
 const meanMotion = (aKm) => 86400 / (2 * Math.PI * Math.sqrt(aKm ** 3 / 398600.8));
 const set = (mjd, aKm, e, inc, extra = {}) => ({ mjd, MEAN_MOTION: meanMotion(aKm), ECCENTRICITY: e, INCLINATION: inc, RA_OF_ASC_NODE: 40,
   ARG_OF_PERICENTER: 90, MEAN_ANOMALY: 0, BSTAR: 1e-5, ...extra });
-// 'the drag decay of an element set matches HPOP's': one day, the module's side of the comparison.
+// 'the drag decay of an element set matches FFM's': one day, the module's side of the comparison.
 const span = 1;
 const circular = { name: 'circular 400 km, 51.6 deg', B: 0.02, s: set(t0, 6778.137 + 2, 0.0004, 51.6) };
 const eccentric = { name: 'eccentric, perigee ~320 km, e 0.05', B: 0.05, s: set(t0, 7050, 0.05, 82.9) };
@@ -148,7 +148,7 @@ function keplerState(a, e, iDeg, raanDeg, argpDeg, nuDeg) {
 }
 const ORBIT = [6378137 + 500e3, 0.001, 97.4, 120, 80, 10];  // the tests' starting state: 500 km, sun-synchronous
 const start = keplerState(...ORBIT);
-// The two-body arc of the starting state over spanSeconds, one state every stepSeconds (the tests integrate it with propagator/hpop).
+// The two-body arc of the starting state over spanSeconds, one state every stepSeconds (the tests integrate it with propagator/ffm).
 function arc(epochMjd, spanSeconds, stepSeconds) {
   const [a, e, i, raan, argp, nu0] = ORBIT, nu = nu0 * Math.PI / 180;
   const E0 = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2)), M0 = E0 - e * Math.sin(E0), rate = Math.sqrt(GM / a ** 3);

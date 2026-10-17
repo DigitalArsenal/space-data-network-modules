@@ -1,5 +1,7 @@
 # Orekit And Basilisk SDN Module Todo Plan
 
+FFM (Full Force Model) is defined by [FFM-1](../propagator/ffm/FFM.md).
+
 This plan is scoped to `space-data-network-modules`. It intentionally keeps the
 goal active: the current repository does not yet contain a complete Orekit and
 Basilisk parity suite.
@@ -161,15 +163,15 @@ Basilisk parity suite.
 - [x] Define the module import descriptor used by parity modules to call another
   module with aligned FlatBuffer frames.
   Done 2026-05-25 in `docs/module-import-descriptors.json` with a verified
-  `propagator/sgp4` `propagate_state` to `propagator/hpop` `ingest_state`
+  `propagator/sgp4` `propagate_state` to `propagator/ffm` `ingest_state`
   descriptor for aligned-binary `orbpro.plugins.PropagatorState` (`PRST`)
   frames; verified by `npm run check:module-imports`.
 - [x] Add host-side integration fixtures that compose two modules through
   binary `PIV`/`TAB` frames without JSON.
   Done 2026-05-25 in
-  `propagator/hpop/tests/intermodule_sgp4_import.test.mjs`; the fixture
+  `propagator/ffm/tests/intermodule_sgp4_import.test.mjs`; the fixture
   invokes SGP4 through `PIV`, hands the aligned-binary `TAB` state payload into
-  HPOP through the SDK invoke harness, and propagates the resident state back
+  FFM through the SDK invoke harness, and propagates the resident state back
   out without JSON payload exchange.
 - [x] Add fail-closed tests for missing imported module, wrong schema ID, wrong
   file identifier, and incompatible dependency version.
@@ -766,7 +768,7 @@ Basilisk parity suite.
     `vcm_state_to_j_zonal_acceleration_oem` consumes SDS VCM `STATE_VECTOR`
     plus SDS GRV `MU`/`EQUATORIAL_RADIUS`/`J2`-`J6` and emits SDS OEM
     acceleration fields with `STATE_VECTOR_SIZE=9`. Shared force-model
-    extraction into a dedicated environment/forces module and HPOP imports
+    extraction into a dedicated environment/forces module and FFM imports
     remain open.
   - [x] Add Basilisk solar radiation pressure acceleration.
     Done 2026-05-26 in `foundation/orbits`; tests reference Basilisk
@@ -781,7 +783,7 @@ Basilisk parity suite.
     VCM `MASS`/`SOLAR_RAD_AREA`/`SOLAR_RAD_COEFF`, plus SDS CRD `sun_vector`
     `X/Y/Z` in AU and emits SDS OEM acceleration fields with
     `STATE_VECTOR_SIZE=9`. Shared force-model extraction into a dedicated
-    environment/forces module and HPOP imports remain open.
+    environment/forces module and FFM imports remain open.
 - [ ] Create `foundation/bodies-geometry` from Orekit `bodies` and
   `geometry/fov`.
   Tests: `OneAxisEllipsoidTest`, geodetic point tests, CR3BP factory/system
@@ -829,21 +831,21 @@ Basilisk parity suite.
 - [ ] Create `propagator/dsst` for Orekit DSST propagation and DSST force
   models.
   Tests: Orekit DSST force, propagation, and orbit determination test classes.
-- [ ] Update `propagator/hpop` to import shared `foundation/*`,
+- [ ] Update `propagator/ffm` to import shared `foundation/*`,
   `models/earth-environment`, and shared force-model modules instead of owning
   duplicate atmosphere/time/force logic.
   Tests: Orekit numerical propagation, force model, event, and Jacobian tests.
-  - [x] Declare existing HPOP resident-state binary stream methods in the SDK
+  - [x] Declare existing FFM resident-state binary stream methods in the SDK
     manifest.
-    Done 2026-05-25 in `propagator/hpop`; `ingest_state`,
+    Done 2026-05-25 in `propagator/ffm`; `ingest_state`,
     `propagate_state`, `prepare_trajectory_segments`, and
     `describe_trajectory_segments` are now manifest-visible with SDS
     FlatBuffer ports and 8-byte aligned-binary `PropagatorState` handoff where
     applicable. The SDK invoke bridge now routes those manifest methods to
-    HPOP's native resident-state stream implementation, and
+    FFM's native resident-state stream implementation, and
     `tests/intermodule_sgp4_import.test.mjs` proves an aligned-binary
     `PropagatorState` emitted by `propagator/sgp4` can be handed directly into
-    HPOP `ingest_state`, then propagated back out as an aligned-binary HPOP
+    FFM `ingest_state`, then propagated back out as an aligned-binary FFM
     `PropagatorState`. `docs/module-import-descriptors.json` now records that
     handoff as a checked import descriptor, and
     `tests/module_import_descriptors.test.mjs` verifies the descriptor fails
@@ -852,11 +854,11 @@ Basilisk parity suite.
     `tests/sdk_compat.test.mjs` verifies the method and port
     contracts, `npm test` verifies the public entrypoint through the SDK
     package export, and `bash build.sh` regenerated the embedded manifest bytes
-    in both browser and isomorphic artifacts. HPOP still needs to replace its
+    in both browser and isomorphic artifacts. FFM still needs to replace its
     duplicated atmosphere/time/force internals with imports of the shared
     foundation and environment modules.
 - [ ] Update `propagator/atmosphere` to become the reusable atmosphere query
-  owner for launch, reentry, HPOP, DSST, and Basilisk environment modules.
+  owner for launch, reentry, FFM, DSST, and Basilisk environment modules.
   Tests: Orekit atmosphere tests, US76/NRLMSISE independent cases, and Basilisk
   atmosphere tests.
   - [x] Add initial SDS HFC binary direct-method contract for atmosphere
@@ -893,7 +895,7 @@ Basilisk parity suite.
     `vcm_state_to_drag_acceleration_oem` consumes SDS VCM `STATE_VECTOR` plus
     VCM `MASS`/`DRAG_AREA`/`DRAG_COEFF`, calls the shared Basilisk-compatible
     atmosphere model layer, and emits SDS OEM acceleration fields with
-    `STATE_VECTOR_SIZE=9`. HPOP, DSST, and future force-model modules still
+    `STATE_VECTOR_SIZE=9`. FFM, DSST, and future force-model modules still
     need to import this atmosphere owner instead of keeping private drag
     implementations.
 - [ ] Update `propagator/cislunar` with Orekit CR3BP/Lagrange trajectory tests
@@ -1375,7 +1377,7 @@ Basilisk parity suite.
   `propagator/sgp4`.
 - [ ] Remove vendored SGP4 duplication from `analysis/conjunction-assessment`
   after it imports `propagator/sgp4`.
-- [ ] Remove private `nrlmsise00` and `us76` copies from `propagator/hpop`
+- [ ] Remove private `nrlmsise00` and `us76` copies from `propagator/ffm`
   after it imports `propagator/atmosphere` or `models/earth-environment`.
 - [ ] Convert any remaining `runtimeTargets: ["browser", "node"]` parity
   modules to browser/WasmEdge shared artifact targets or document why the

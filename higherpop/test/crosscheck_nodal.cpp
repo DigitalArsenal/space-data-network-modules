@@ -34,21 +34,21 @@ int main(){
   {Vec3 r=r0,v=v0; ForceConfig c;c.zonalMax=2;
    rk4prop(r,v,P,1.0,[&](Vec3 x){return totalAccel(x,Vec3{0,0,0},c);});
    printf("higherpop  dRAAN/orbit = %+.6e rad\n", raan(r,v)-raan(r0,v0));}
-  // (b) hpop J2Only
+  // (b) ffm J2Only
   {Vec3 r=r0,v=v0;
    rk4prop(r,v,P,1.0,[&](Vec3 x){::astro::Vec3 xp(x.x,x.y,x.z);
      auto pm=::astro::ForceModel::PointMass(xp,MU_EARTH);
      auto j2=::astro::ForceModel::J2Only(xp,MU_EARTH,1.08262668e-3,RE_EARTH);
      return Vec3{pm.x+j2.x,pm.y+j2.y,pm.z+j2.z};});
-   printf("hpop J2Only dRAAN/orbit = %+.6e rad\n", raan(r,v)-raan(r0,v0));}
-  // (c) hpop SphericalHarmonics maxOrder=0
+   printf("ffm J2Only dRAAN/orbit = %+.6e rad\n", raan(r,v)-raan(r0,v0));}
+  // (c) ffm SphericalHarmonics maxOrder=0
   {Vec3 r=r0,v=v0;
    rk4prop(r,v,P,1.0,[&](Vec3 x){::astro::Vec3 xp(x.x,x.y,x.z);
      ::astro::ForceModel::SphericalHarmonicsConfig cf; cf.mu=MU_EARTH;
      cf.referenceRadius=RE_EARTH; cf.maxDegree=2; cf.maxOrder=0;
      auto g=::astro::ForceModel::SphericalHarmonics(xp,cf);
      return Vec3{g.x,g.y,g.z};});
-   printf("hpop SphHarm dRAAN/orbit = %+.6e rad\n", raan(r,v)-raan(r0,v0));}
+   printf("ffm SphHarm dRAAN/orbit = %+.6e rad\n", raan(r,v)-raan(r0,v0));}
   printf("analytic     dRAAN/orbit = %+.6e rad\n", dOmega_analytic);
   return 0;
 }

@@ -1,6 +1,8 @@
 # spacedatanetwork-astro
 
-NumPy interfaces to nine pinned **C++ WASM** modules: SGP4, HPOP, estimation,
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
+NumPy interfaces to nine pinned **C++ WASM** modules: SGP4, FFM, estimation,
 conjunction assessment, access, events, Lambert Izzo, time and frames. Python
 marshals inputs and orchestrates calls; WasmEdge **0.16.4** executes all physics.
 
@@ -24,14 +26,14 @@ The wheel requires NumPy, FlatBuffers and cryptography (used by generated REC im
 and vendored generated SDS bindings, but does not bundle the native runtime.
 Python 3.10+ is declared; this build is tested with Python 3.14 on macOS arm64.
 
-## SGP4 and HPOP in 20 lines
+## SGP4 and FFM in 20 lines
 
-This is the executable [example](examples/sgp4_hpop.py), tested against the wheel.
+This is the executable [example](examples/sgp4_ffm.py), tested against the wheel.
 Its two initial states have different frames and units, stated at each call.
 
 ```python
 import numpy as np
-from spacedatanetwork_astro import sgp4, hpop
+from spacedatanetwork_astro import sgp4, ffm
 # Vallado verification satellite; OMM angles are degrees, motion rev/day.
 omm = dict(NORAD_CAT_ID=5, OBJECT_NAME="Vallado", OBJECT_ID="1958-002B",
            EPOCH="2000-06-27T18:50:19.733568", MEAN_MOTION=10.82419157,
@@ -42,13 +44,13 @@ omm = dict(NORAD_CAT_ID=5, OBJECT_NAME="Vallado", OBJECT_ID="1958-002B",
 # SGP4 returns ECEF metres and metres/second.
 ecef = sgp4(omm, [2451726.28495062])
 print("SGP4 ECEF [m, m/s]:", ecef[0])
-# Separate inertial state from the Tudat fixture; HPOP epoch is JD TDB.
+# Separate inertial state from the Tudat fixture; FFM epoch is JD TDB.
 r_km = np.array([6993.000000000001, 0., 0.])
 v_km_s = np.array([0., 5.3412039886853915, 5.341203988685391])
 epoch_jd = 2451545.0
-state = hpop(r_km, v_km_s, epoch_jd, epoch_jd + 1170. / 86400.)
-print("HPOP inertial [km]:", state.position)
-print("HPOP inertial [km/s]:", state.velocity)
+state = ffm(r_km, v_km_s, epoch_jd, epoch_jd + 1170. / 86400.)
+print("FFM inertial [km]:", state.position)
+print("FFM inertial [km/s]:", state.velocity)
 assert np.isfinite(state.position).all()
 ```
 
@@ -58,7 +60,7 @@ assert np.isfinite(state.position).all()
 | --- | --- |
 | `sgp4(omm, julian_dates)` | CCSDS OMM mapping + UTC-like JD → `(N,6)` ECEF metres and m/s |
 | `SGP4()` | Context-managed resident catalog; `ingest()` upserts by NORAD, `propagate()` returns states with explicit frame metadata |
-| `hpop(r_km, v_km_s, epoch_jd, target_jd, forces=..., integrator=...)` | Earth inertial km/km/s, **JD TDB** → `State` with NumPy arrays |
+| `ffm(r_km, v_km_s, epoch_jd, target_jd, forces=..., integrator=...)` | Earth inertial km/km/s, **JD TDB** → `State` with NumPy arrays |
 | `initial_orbit(positions_m, method='GIBBS')` | `(3,3)` inertial positions → middle-epoch state in metres and m/s; also Herrick-Gibbs |
 | `estimation(request, propagator_samples=...)` | Advanced generated EstimationEnvelope for WLS/EKF/UKF/RTS or simulation; caller chooses propagator |
 | `estimation_samples(epochs, states, stms)` | Marshal `(N,6)` SI states and `(N,6,6)` STMs supplied by that propagator |
@@ -74,7 +76,7 @@ Advanced ratified objects live under `spacedatanetwork_astro.sds`, module-local
 objects under `.invoke.orbpro`, and SGP4 legacy batch objects under
 `.invoke.legacy.orbpro`. `Module`/`Frame` expose the typed binary PIV/TAB boundary
 for additional artifact methods. Requests and results are generated FlatBuffers;
-HPOP's existing JSON-in-PIV invoke payload is documented in
+FFM's existing JSON-in-PIV invoke payload is documented in
 [dependencies](docs/dependencies.md). No substitute Python physics is provided.
 
 ## Reproduce and build
@@ -124,5 +126,5 @@ module-declared dependency versions, schema sources and compiler stamps.
 See [authoritative vectors](docs/authoritative-vectors.md),
 [verification](docs/verification.md), and [binding generation](docs/sds-generation.md).
 The Python measurements validate the selected cases, not every operation of all
-nine engines. Additional HPOP trajectory schemas, clean SDK parity for the two
+nine engines. Additional FFM trajectory schemas, clean SDK parity for the two
 legacy artifacts, and the events rebuild remain upstream work.

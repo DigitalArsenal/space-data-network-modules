@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { composeErfaTranslationUnit, ERFA_ROOT } from "../../../foundation/frames/erfa-amalgamation.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const modulesRoot = path.resolve(root, "../..");
@@ -20,18 +21,24 @@ const run = spawnSync(output, { stdio: "inherit" });
 if (run.status !== 0) process.exit(run.status ?? 1);
 
 const reverseOutput = path.join(root, "tests/reverse_port_native");
+const erfaWork = fs.mkdtempSync(path.join(root, "tests/.native-erfa-"));
+const erfaSource = path.join(erfaWork, "erfa-all.cpp");
+fs.writeFileSync(erfaSource, (await composeErfaTranslationUnit()).source);
 const reverseCompile = spawnSync("c++", [
   "-std=c++17",
   "-O2",
   "-I", path.join(sdkRoot, "include/orbpro"),
   "-I", path.join(modulesRoot, "higherpop/include"),
   "-I", path.join(modulesRoot, "analysis/optimal-control/include"),
-  "-I", path.join(modulesRoot, "propagator/hpop/lib"),
+  "-I", path.join(modulesRoot, "propagator/ffm/lib"),
+  "-I", ERFA_ROOT,
+  erfaSource,
   path.join(root, "src/targeting_module.cpp"),
-  path.join(modulesRoot, "propagator/hpop/lib/coords.cpp"),
+  path.join(modulesRoot, "propagator/ffm/lib/coords.cpp"),
   path.join(root, "tests/reverse_port_native.cpp"),
   "-o", reverseOutput,
 ], { stdio: "inherit" });
+fs.rmSync(erfaWork, { recursive: true, force: true });
 if (reverseCompile.status !== 0) process.exit(reverseCompile.status ?? 1);
 const reverseRun = spawnSync(reverseOutput, { stdio: "inherit" });
 process.exit(reverseRun.status ?? 1);

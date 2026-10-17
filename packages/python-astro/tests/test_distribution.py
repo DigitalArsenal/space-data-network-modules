@@ -13,7 +13,7 @@ import spacedatanetwork_astro.artifacts as artifacts
 
 class DistributionTests(unittest.TestCase):
     def test_nine_pinned_modules(self):
-        expected = {"propagator/sgp4", "propagator/hpop", "analysis/estimation",
+        expected = {"propagator/sgp4", "propagator/ffm", "analysis/estimation",
                     "analysis/conjunction-assessment", "analysis/access", "propagator/events",
                     "analysis/lambert-izzo", "foundation/time", "foundation/frames"}
         self.assertEqual(set(astro.list_artifacts()), expected)

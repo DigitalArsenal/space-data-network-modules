@@ -36,16 +36,16 @@ def test_sgp4_vallado_radius():
     measure('SGP4 Vallado radius', abs(np.linalg.norm(state[:3])-case['VALLADO_TEME_POSITION_MAGNITUDE_METERS']), 'm', .01)
 
 
-def test_hpop_tudat_six_samples():
+def test_ffm_tudat_six_samples():
     # Tudat inertial two-body fixture, km/km/s, J2000 TDB JD; original RK4 envelope.
-    case = V['hpop']; samples = case['twoBody']['samples']; first=samples[0]
+    case = V['ffm']; samples = case['twoBody']['samples']; first=samples[0]
     errors=[]
     for sample in samples:
-        state=astro.hpop(first['positionKm'], first['velocityKmPerSec'], case['epochJulianDate'],
+        state=astro.ffm(first['positionKm'], first['velocityKmPerSec'], case['epochJulianDate'],
                          case['epochJulianDate']+sample['timeSeconds']/86400.)
         errors.append((np.linalg.norm(state.position-sample['positionKm']), np.linalg.norm(state.velocity-sample['velocityKmPerSec'])))
-    measure('HPOP Tudat six-sample max position', max(e[0] for e in errors), 'km', 5e-4)
-    measure('HPOP Tudat six-sample max velocity', max(e[1] for e in errors), 'km/s', 5e-7)
+    measure('FFM Tudat six-sample max position', max(e[0] for e in errors), 'km', 5e-4)
+    measure('FFM Tudat six-sample max velocity', max(e[1] for e in errors), 'km/s', 5e-7)
 
 
 def test_estimation_vallado_gibbs():

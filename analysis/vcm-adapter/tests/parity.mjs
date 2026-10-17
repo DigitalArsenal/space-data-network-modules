@@ -1,5 +1,5 @@
 // Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of every method of analysis/vcm-adapter 0.2.0: read (the
-// sample VCM, its parameter rows as printed, a refused message), ocm (an HPOP result of the sample's request) and
+// sample VCM, its parameter rows as printed, a refused message), ocm (an FFM result of the sample's request) and
 // write (the sample's $OCM with and without its $EOP records): identical request bytes must give byte-identical
 // outputs, and the same exit class, in every lane.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
@@ -20,13 +20,13 @@ const out = (response, port) => response.outputs.find((o) => o.portId === port).
 const ok = (response) => { assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`); return response; };
 
 // The inputs that are another module's output, made in this process (V8): read's $OCM and $EOP records, and the
-// result HPOP gives for the request read builds.
-const adapter = await load('..'), hpop = await load('../../../propagator/hpop');
+// result FFM gives for the request read builds.
+const adapter = await load('..'), ffm = await load('../../../propagator/ffm');
 const options = { ephemerisSource: 'Analytical', arcSeconds: 3600 };
 const read = ok(await adapter.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, { portId: 'options', payload: Buffer.from(JSON.stringify(options)) }] }));
-const run = ok(await hpop.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(read, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(read, 'earth_orientation') }] }));
+const run = ok(await ffm.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(read, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(read, 'earth_orientation') }] }));
 const report = JSON.parse(Buffer.from(out(read, 'report')).toString());
-await adapter.destroy(); await hpop.destroy();
+await adapter.destroy(); await ffm.destroy();
 
 const header = { satelliteNumber: 0, internationalDesignator: report.internationalDesignator, commonName: 'PARITY', center: 'SDN', geopotential: report.geopotential,
   zonals: report.zonals, tesserals: report.tesserals, drag: report.drag, lunarSolar: 'ON', solarRadiationPressure: 'OFF', solidEarthTides: 'ON', inTrackThrust: 'OFF',

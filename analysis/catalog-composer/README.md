@@ -1,5 +1,7 @@
 # Catalog Editor module
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 `compose` combines ordered, immutable SDS CAT snapshots. A higher layer wins
 unless the recipe selects another layer for that object. Selected records keep
 their original size-prefixed FlatBuffer bytes, including fields newer than this
@@ -237,7 +239,7 @@ See [the binary interfaces, policy and verification](docs/epoch-fitting.md).
 
 Upload two prepared OEMs or two epoch products, choose provider namespaces and IDs,
 and optionally load the attributed `datefirst` crosswalk. For epoch products, set
-a bounded UTC grid and review the propagation model. HPOP is the packaged default;
+a bounded UTC grid and review the propagation model. FFM is the packaged default;
 an alternative WASM artifact implementing canonical PRW execution can be selected.
 The module and all input/output hashes accompany the review. No JavaScript physics
 or mean-element reinterpretation is used.

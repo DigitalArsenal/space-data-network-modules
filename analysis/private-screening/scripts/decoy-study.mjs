@@ -2,20 +2,20 @@
 // How well decoy orbits hide a real one, measured on real histories.
 //
 //   node scripts/decoy-study.mjs [--archive DIR] [--from 2026-08-02] [--to 2026-08-29]
-//     [--hpop-from 2026-08-09] [--hpop-days 14] [--objects 3000] [--seed 1]
+//     [--ffm-from 2026-08-09] [--ffm-days 14] [--objects 3000] [--seed 1]
 //     [--generators independent,rotated,resampled,chained,aligned] [--donors population|regime]
-//     [--per-target 1] [--relative] [--views gp,gp-28d,hpop] [--reuse-features]
+//     [--per-target 1] [--relative] [--views gp,gp-28d,ffm] [--reuse-features]
 //     [--workers N] [--out DIR]
 //
 // 1. Population: LEO payloads (perigee below 2,000 km, e below 0.1) with SGP4
 //    element sets through [from, to], a seeded random sample of --objects.
 //    Each is a target, and the others are the public catalog.
 // 2. Decoys: --per-target per target per generator (decoys).
-// 3. GP view: features of the element sets over the HPOP days (gp) or the
+// 3. GP view: features of the element sets over the FFM days (gp) or the
 //    whole span (gp-28d).
-// 4. HPOP view: every history as its owner would publish it. Each day's
+// 4. FFM view: every history as its owner would publish it. Each day's
 //    window starts from the latest element set (analysis/epoch-state GCRF
-//    state, propagator/hpop resident): 8 states over one orbit from the
+//    state, propagator/ffm resident): 8 states over one orbit from the
 //    window start and the state at the next window's start.
 // 5. distinguish, per view and generator. --relative compares each target's
 //    candidates with each other (for copies of one orbit); with many decoys
@@ -31,17 +31,17 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { historiesLfv, windowsOem, featuresLfv, readLfv, lfvHistories, lfvFeatures, lfvReport } from '../tests/sds.mjs';
 import { readSets, shiftDay } from '../../gp-error-model/scripts/archive.mjs';
-import { epochStates, propagateArcs, unixSeconds } from '../../gp-error-model/scripts/hpop.mjs';
+import { epochStates, propagateArcs, unixSeconds } from '../../gp-error-model/scripts/ffm.mjs';
 
 const { values: args } = parseArgs({ options: {
   archive: { type: 'string', default: '/opt/data/sdn-archive/spacetrack/gp_history/by-creation' },
   from: { type: 'string', default: '2026-08-02' }, to: { type: 'string', default: '2026-08-29' },
-  'hpop-from': { type: 'string', default: '2026-08-09' }, 'hpop-days': { type: 'string', default: '14' },
+  'ffm-from': { type: 'string', default: '2026-08-09' }, 'ffm-days': { type: 'string', default: '14' },
   objects: { type: 'string', default: '3000' }, seed: { type: 'string', default: '1' },
   generators: { type: 'string', default: 'independent,rotated,resampled,chained,aligned' },
   donors: { type: 'string', default: 'population' },
   workers: { type: 'string', default: String(Math.max(1, Math.min(12, os.availableParallelism() - 2))) },
-  views: { type: 'string', default: 'gp,gp-28d,hpop' },
+  views: { type: 'string', default: 'gp,gp-28d,ffm' },
   'per-target': { type: 'string', default: '1' },
   relative: { type: 'boolean', default: false },
   'reuse-features': { type: 'boolean', default: false },
@@ -51,9 +51,9 @@ const out = path.resolve(args.out);
 fs.mkdirSync(out, { recursive: true });
 const day = (d) => Date.parse(`${d}T00:00:00Z`) / 1000;
 const span = [day(args.from), day(shiftDay(args.to, 1))];
-const hpopDays = Number(args['hpop-days']);
-const hpopSpan = [day(args['hpop-from']), day(args['hpop-from']) + hpopDays * 86400];
-if (!(hpopSpan[0] - 3 * 86400 >= span[0] && hpopSpan[1] <= span[1])) throw new Error('the HPOP days need 3 days of history before them, inside [from, to]');
+const ffmDays = Number(args['ffm-days']);
+const ffmSpan = [day(args['ffm-from']), day(args['ffm-from']) + ffmDays * 86400];
+if (!(ffmSpan[0] - 3 * 86400 >= span[0] && ffmSpan[1] <= span[1])) throw new Error('the FFM days need 3 days of history before them, inside [from, to]');
 const generators = args.generators.split(',');
 const viewNames = args.views.split(',');
 const perTarget = Number(args['per-target']);
@@ -134,17 +134,17 @@ for (const g of generators) {
 const report = { kind: 'decoy-indistinguishability', version: 1,
   population: { from: args.from, to: args.to, eligible: eligible.length, sampled: reals.length, classes, seed,
     selection: 'OBJECT_TYPE PAYLOAD, perigee below 2,000 km, e below 0.1, at least 14 element sets, the first within 2 days of the start and the last within 2 days of the end' },
-  hpopDays: { from: args['hpop-from'], days: hpopDays }, donors: args.donors, perTarget, relative: args.relative, generation, views: {} };
+  ffmDays: { from: args['ffm-from'], days: ffmDays }, donors: args.donors, perTarget, relative: args.relative, generation, views: {} };
 
-// ── HPOP: each day's window starts from the latest element set (at most 3
+// ── FFM: each day's window starts from the latest element set (at most 3
 // days old): 8 states over one orbit from the window start, and the state at
 // the next window's start. ──
-const hpopRun = { windows: 0, propagated: 0, failed: 0, seconds: 0 };
+const ffmRun = { windows: 0, propagated: 0, failed: 0, seconds: 0 };
 async function withWindows(histories) {
   const seeds = [], plans = [];
   histories.forEach((h, index) => {
-    for (let k = 0; k < hpopDays; ++k) {
-      const start = hpopSpan[0] + k * 86400;
+    for (let k = 0; k < ffmDays; ++k) {
+      const start = ffmSpan[0] + k * 86400;
       let j = -1;
       for (let m = 0; m < h.t.length && h.t[m] <= start; ++m) j = m;
       if (j < 0 || h.t[j] < start - 3 * 86400) continue;
@@ -169,8 +169,8 @@ async function withWindows(histories) {
     windows[p.index].push({ t: p.start, samples: samples.slice(0, 8).map((x, j) => [p.times[j], ...x.state.map(round)]),
       end: [p.times[8], ...samples[8].state.map(round)] });
   }
-  hpopRun.windows += plans.length, hpopRun.propagated += arcs.length, hpopRun.failed += failed, hpopRun.seconds += seconds;
-  console.log(`HPOP: ${histories.length} histories, ${arcs.length} windows in ${seconds.toFixed(0)} s, ${failed} failed or refused`);
+  ffmRun.windows += plans.length, ffmRun.propagated += arcs.length, ffmRun.failed += failed, ffmRun.seconds += seconds;
+  console.log(`FFM: ${histories.length} histories, ${arcs.length} windows in ${seconds.toFixed(0)} s, ${failed} failed or refused`);
   return histories.map((h, k) => ({ id: h.id, target: h.target, role: h.role, generator: h.generator, cls: h.cls, windows: windows[k] }));
 }
 
@@ -178,19 +178,19 @@ async function withWindows(histories) {
 // the real histories (the catalog) with at most CHUNK decoys a call. ──
 const CHUNK = 4000;
 const strip = (r) => ({ ...r, features: r.features.map(({ name, aloneAuc, separation, gainShare }) => ({ name, aloneAuc, separation, gainShare })) });
-let hpopReals = null;
+let ffmReals = null;
 async function features(view, g, window) {
   const file = path.join(out, `features-${view}-${g}.json`);
   if (args['reuse-features']) return JSON.parse(fs.readFileSync(file, 'utf8'));
-  const hpop = view === 'hpop';
-  if (hpop && !hpopReals) hpopReals = await withWindows(reals);
-  const real = hpop ? hpopReals : reals;
+  const ffm = view === 'ffm';
+  if (ffm && !ffmReals) ffmReals = await withWindows(reals);
+  const real = ffm ? ffmReals : reals;
   let f = null;
   for (let at = 0; at < decoys[g].length; at += CHUNK) {
     const part = decoys[g].slice(at, at + CHUNK);
-    const histories = [...real, ...(hpop ? await withWindows(part) : part)];
+    const histories = [...real, ...(ffm ? await withWindows(part) : part)];
     const chunk = lfvFeatures(await call('features', [frame('histories', historiesLfv(histories), 'LFV'),
-      ...(hpop ? [frame('ephemerides', windowsOem(histories), 'OEM')] : [])], { view: hpop ? 'hpop' : 'gp', window }));
+      ...(ffm ? [frame('ephemerides', windowsOem(histories), 'OEM')] : [])], { view: ffm ? 'ffm' : 'gp', window }));
     if (!f) f = chunk;
     else f.rows.push(...chunk.rows.filter((r) => r.role === 'decoy')), f.counts.histories += part.length, f.counts.tooFewPoints += chunk.counts.tooFewPoints;
   }
@@ -218,9 +218,9 @@ async function views(name, window) {
   }
   report.views[name] = { window: window.map((t) => new Date(t * 1000).toISOString()), generators: rows };
 }
-for (const name of viewNames) await views(name, name === 'gp-28d' ? span : hpopSpan);
-if (viewNames.includes('hpop') && !args['reuse-features'])
-  report.hpop = { ...hpopRun, seconds: Math.round(hpopRun.seconds),
-    product: 'analysis/epoch-state GCRF state at the latest element set, propagated by propagator/hpop resident (point mass and degree/order 20 field)' };
+for (const name of viewNames) await views(name, name === 'gp-28d' ? span : ffmSpan);
+if (viewNames.includes('ffm') && !args['reuse-features'])
+  report.ffm = { ...ffmRun, seconds: Math.round(ffmRun.seconds),
+    product: 'analysis/epoch-state GCRF state at the latest element set, propagated by propagator/ffm resident (point mass and degree/order 20 field)' };
 fs.writeFileSync(path.join(out, 'decoy-study.json'), `${JSON.stringify(report, null, 1)}\n`);
 console.log(`${out}/decoy-study.json`);

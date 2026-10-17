@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "imports": [
     {
-      "id": "sgp4-propagator-state-to-hpop",
-      "description": "Host-composed aligned-binary PropagatorState handoff from SGP4 propagation into HPOP resident-state ingestion.",
+      "id": "sgp4-propagator-state-to-ffm",
+      "description": "Host-composed aligned-binary PropagatorState handoff from SGP4 propagation into FFM (Full Force Model) resident-state ingestion.",
       "transport": "host-piv-tab",
       "status": "verified",
       "provider": {
@@ -14,8 +14,8 @@
         "direction": "output"
       },
       "consumer": {
-        "modulePath": "propagator/hpop",
-        "pluginId": "com.orbpro.hpop",
+        "modulePath": "propagator/ffm",
+        "pluginId": "com.orbpro.ffm",
         "methodId": "ingest_state",
         "portId": "state",
         "direction": "input"
@@ -30,7 +30,7 @@
       "dependency": {
         "providerVersionRange": ">=1.0.0 <2.0.0"
       },
-      "fixture": "propagator/hpop/tests/intermodule_sgp4_import.test.mjs"
+      "fixture": "propagator/ffm/tests/intermodule_sgp4_import.test.mjs"
     }
   ]
 }

@@ -9,9 +9,9 @@
 // day from 2026-07-06T00:00Z, TEME; reference: screen_catalog over the same
 // element sets as catalog frames.
 //
-// HPOP: fixtures/hpop-ppe/crossing-orbits.json
-// (scripts/generate-hpop-ppe-fixture.mjs): four objects on crossing planes
-// that meet at 2026-10-01T00:00 TDB, integrated by propagator/hpop and
+// FFM: fixtures/ffm-ppe/crossing-orbits.json
+// (scripts/generate-ffm-ppe-fixture.mjs): four objects on crossing planes
+// that meet at 2026-10-01T00:00 TDB, integrated by propagator/ffm and
 // exported as its conjunction-screening PPE (Chebyshev, GCRF, TDB). Resident
 // PPE index, 2026-09-30T23:45Z UTC for 0.11 day, GCRF. The candidate path
 // must equal the exhaustive CPU scan, and hold each pair's closest approach as
@@ -40,7 +40,7 @@ import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from '
 const fixture = (name) => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json');
 const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
-const HPOP = fixture('hpop-ppe/crossing-orbits.json');
+const FFM = fixture('ffm-ppe/crossing-orbits.json');
 const STEP_S = 60, THRESHOLD_KM = 5;
 
 const flatc = await initCqrFlatc();
@@ -134,11 +134,11 @@ test('SGP4 element sets: the GPU path reports screen_catalog\'s conjunctions and
   }
 });
 
-test('HPOP trajectories (PPE, GCRF, TDB): the GPU path finds every approach', async () => {
+test('FFM trajectories (PPE, GCRF, TDB): the GPU path finds every approach', async () => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const startJd = 2461314.5 - 15 / 1440;   // 2026-09-30T23:45Z UTC, inside the TDB-converted coverage
-    const windowRecord = await residentWindow(harness, HPOP.sources, startJd, 0.11, 'GCRF');
+    const windowRecord = await residentWindow(harness, FFM.sources, startJd, 0.11, 'GCRF');
     // screen_window on these trajectories takes the generic engine path,
     // which reports every minimum of each pair's range within the threshold,
     // as the candidate path does.

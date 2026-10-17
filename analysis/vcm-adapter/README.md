@@ -1,8 +1,10 @@
 # analysis/vcm-adapter
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 Vector Covariance Messages in and out of the stack. A VCM (the SP VECTOR/
 COVARIANCE MESSAGE V2.0; format in spacedatastandards.org
-`survey/legacy-messages/vcm`) becomes what `propagator/hpop` runs and an SDS
+`survey/legacy-messages/vcm`) becomes what `propagator/ffm` runs and an SDS
 `$OCM`; a propagation result becomes an `$OCM`; and the legacy VCM text is
 generated from an `$OCM` for the systems that still read it. SDS `$VCM` is
 deprecated: the `$OCM` carries everything a VCM does.
@@ -27,10 +29,10 @@ parameter row, one `note=` per note).
 
 ## What `read` builds
 
-- **State.** J2K POS/VEL as an EME2000 resident state; HPOP rotates it by the
+- **State.** J2K POS/VEL as an EME2000 resident state; FFM rotates it by the
   IAU 2000 frame bias and integrates in GCRF.
 - **Forces.** GEOPOTENTIAL `<model> mmZ,nnT` as EGM96 (or EGM2008 standing in
-  for a model HPOP does not embed) to degree max(mm, nn), order nn, tesserals
+  for a model FFM does not embed) to degree max(mm, nn), order nn, tesserals
   to nn; LUNAR/SOLAR as the Sun and Moon; SOLAR RAD PRESS with Cr·A/m = AGOM;
   DRAG with Cd·A/m = B (mass 1000 kg and area 1 m², so Cd = 1000 B and
   Cr = 1000 AGOM): JAC70 as Jacchia-Roberts, JB… as JB2008 (which reads the
@@ -56,7 +58,7 @@ parameter row, one `note=` per note).
 Read options (config table `read`): `meanMotionUnit` (`fraction`, default: the covariance's n row as
 dn/n; or `rad/ks`, `rad/s`, `rad/min`, `rev/day`), `scaleCovarianceByWeightedRms`
 (default true: times max(1, WTD RMS)^2), `arcSeconds` (default 86400),
-`ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel on HPOP's kernel
+`ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel on FFM's kernel
 port), `parameterRows` (`fractional`, default, or `absolute`; see below).
 
 ## The `$OCM`
@@ -84,7 +86,7 @@ printed one (`COVARIANCE_SCALE`, `MEAN_MOTION_UNIT`, `PARAMETER_ROWS`) so that
 `write` undoes it, and `options` on `write` can override them. The record is
 EME2000 only: `write` refuses another frame, a covariance that is not CARTPV,
 or a parameter row a VCM has no slot for. `ocm` builds the same record from an
-HPOP result and the `header` lines (the keys `write` took before the OCM:
+FFM result and the `header` lines (the keys `write` took before the OCM:
 identity, model lines, parameter values, weightedRms, `meanMotionUnit`,
 `parameterRows`, and now `covarianceScale`); the Earth orientation comes from
 the `$EOP` records, not the header.
@@ -116,7 +118,7 @@ AGOM rows are scaled by their values when fractional; BDOT and T rows are
 taken as printed. Every read reports the parameter sigmas it carried
 (`parameterSigmas`), and `write` takes the same keys in its header so a
 message goes back out the way it came in. One measurement supports the
-fractional reading: the GPS message, propagated a day by HPOP and compared
+fractional reading: the GPS message, propagated a day by FFM and compared
 with ESA's final orbit for the satellite, has radial and in-track errors
 with RMS 0.46 and 0.64 of their sigmas when its AGOM row is read as a
 fraction; read as printed, the sigmas overstate the radial error about 20
@@ -146,7 +148,7 @@ VCM text); the sample through VCM -> OCM -> VCM text (printed sigmas within
 1 % and the covariance identical to its five printed digits, with every model,
 parameter, Earth orientation, integrator and leap second line as printed); the
 decoded `$OCM` (state, covariance with its parameter row, parameter values,
-force model, settings); the request run through HPOP for an hour with B as a
+force model, settings); the request run through FFM for an hour with B as a
 parameter, the result written as an `$OCM` and as VCM text and read back (state
 to the printed digits, covariance to 1.8e-5 of the sigmas, with and without a
 weighted RMS above 1); and `parameterRows` both ways (the six element rows
@@ -157,7 +159,7 @@ fractional B row written back unchanged).
 WasmEdge and Docker WasmEdge (`conformance/parity.json`).
 
 ```sh
-npm run build   # SDN_WASI_* toolchain environment as for propagator/hpop
+npm run build   # SDN_WASI_* toolchain environment as for propagator/ffm
 npm test
 npm run test:parity
 ```

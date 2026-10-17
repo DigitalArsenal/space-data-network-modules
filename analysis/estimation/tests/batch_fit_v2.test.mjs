@@ -2,7 +2,7 @@
 //
 // Closed-form cases use the static model (state = seed, STM = I; no
 // dynamics) so the expected estimate and covariance follow from linear
-// algebra alone; the dynamical cases are answered by propagator/hpop at full
+// algebra alone; the dynamical cases are answered by propagator/ffm at full
 // force and compared with Orekit or with the truth that simulated the data.
 // Units SI, GCRF, epochs UTC from 2026-08-02T00:00:00.
 import assert from 'node:assert/strict';
@@ -12,10 +12,10 @@ import { harness } from './batch-fit-fixtures.mjs';
 import { BLOCK, CONSIDER, LEO, STATE, blockEnvelope, considerEnvelope, leoEnvelope, orekitAnswerer } from './batch-fit-v2-fixtures.mjs';
 import { replayDigests, v1Cases } from './fit-batch-v1-cases.mjs';
 import {
-  ECOM2_FIELDS, ECOM2_NAMES, covarianceBlock, fitEnvelope, hpopAnswerer, hpopRun, identityAnswerer, inverse, mahalanobis,
+  ECOM2_FIELDS, ECOM2_NAMES, covarianceBlock, fitEnvelope, ffmAnswerer, ffmRun, identityAnswerer, inverse, mahalanobis,
   measurementParameter, normals, runFit,
 } from './batch-fit-v2-lib.mjs';
-import { makeTable, sds } from '../../../propagator/hpop/tests/lib/prwCodec.mjs';
+import { makeTable, sds } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
 
 const V1 = JSON.parse(fs.readFileSync(new URL('./fixtures/fit-batch-v1-digests.json', import.meta.url), 'utf8'));
 const close = (a, b, tolerance, what) => assert.ok(Math.abs(a - b) <= tolerance, `${what}: ${a} vs ${b} (tolerance ${tolerance})`);
@@ -30,13 +30,13 @@ function rtnRows(r, v) {
 
 test('version-1 requests give the version-1 bytes (every query round and the result)', async (t) => {
   // Reference: tests/fixtures/fit-batch-v1-digests.json, written by the
-  // version-1 artifact (37a0801f, 786d0de9...) with propagator/hpop
+  // version-1 artifact (37a0801f, 786d0de9...) with propagator/ffm
   // answering; the same request bytes in must give the same result bytes out.
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
-  t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
   for (const entry of v1Cases()) {
-    const rounds = await replayDigests(estimator, hpop, entry);
+    const rounds = await replayDigests(estimator, ffm, entry);
     assert.deepEqual(rounds, V1.cases[entry.id], entry.id);
   }
 });
@@ -266,7 +266,7 @@ test('fit_batch applies the request\'s error models: troposphere and ionosphere 
 // Positivity-constrained parameters, against Orekit 13.1's BatchLSEstimator
 // (tests/fixtures/orekit-batch-reference.json; batch_fit.test.mjs states its
 // authority): LEO 400 km, 288 positions over 24 h, sigma 5 m, solve-for
-// state and B = Cd*A/m (truth 0.044 m^2/kg), propagator/hpop answering with
+// state and B = Cd*A/m (truth 0.044 m^2/kg), propagator/ffm answering with
 // the Orekit case's forces. The tolerances are batch_fit.test.mjs's: the
 // estimate within 5e-3 of Orekit's formal sigma, every covariance entry
 // within 1e-4 of sqrt(Pii Pjj), chi-square within 1e-4 relative.
@@ -282,19 +282,19 @@ function assertOrekit(b, c, label) {
   assert.ok(chi <= 1e-4, `${label}: chi-square ${chi} from Orekit`);
   return { gap, cov, chi };
 }
-const orekitFit = (estimator, hpop, envelope) => runFit(estimator, envelope, orekitAnswerer(hpop));
+const orekitFit = (estimator, ffm, envelope) => runFit(estimator, envelope, orekitAnswerer(ffm));
 
 test('bounded, logarithmic and damped B match Orekit on the LEO drag case; LOGARITHM reports its covariance in B', async (t) => {
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
-  t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
   for (const [label, options] of [
     ['lower bound 0', { parameterLowerBounds: [0] }],
     ['LOGARITHM', { parameterTransforms: [1] }],
     ['Levenberg-Marquardt', { levenbergMarquardt: true }],
     ['lower bound 0 and Levenberg-Marquardt', { parameterLowerBounds: [0], levenbergMarquardt: true }],
   ]) {
-    const { result, error, rounds } = await orekitFit(estimator, hpop, leoEnvelope(undefined, undefined, options));
+    const { result, error, rounds } = await orekitFit(estimator, ffm, leoEnvelope(undefined, undefined, options));
     assert.equal(error, undefined, `${label}: ${error}`);
     assert.equal(result.status, 0, label);
     const { gap, cov, chi } = assertOrekit(result.batchFit, LEO, label);
@@ -303,16 +303,16 @@ test('bounded, logarithmic and damped B match Orekit on the LEO drag case; LOGAR
   }
 });
 
-test('where version 1 proposes a negative Cd*A/m (refused by propagator/hpop), the bounded and logarithmic fits never do and reach Orekit\'s solution', async (t) => {
+test('where version 1 proposes a negative Cd*A/m (refused by propagator/ffm), the bounded and logarithmic fits never do and reach Orekit\'s solution', async (t) => {
   // Three first guesses (the Orekit case's a priori state moved by 20 km
   // along track, -20 m/s, or 50 km radially). Version 1's second query
-  // carries a negative B, which propagator/hpop refuses ("Spacecraft mass,
+  // carries a negative B, which propagator/ffm refuses ("Spacecraft mass,
   // area, Cd and Cr are invalid"); E4 lost 154/298 Starlink arcs this way.
   // With a lower bound of 0, or estimated as ln B, every query is >= 0 and
   // the fit converges to Orekit's estimate from the same data.
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
-  t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
   const starts = [['20 km along track', [0, 20e3, 0, 0, 0, 0], 0.036], ['-20 m/s', [0, 0, 0, -20, 0, 0], 0.01], ['50 km radial', [50e3, 0, 0, 0, 0, 0], 0.02]];
   const start = leoEnvelope;
   for (const [label, offset, b0] of starts) {
@@ -322,11 +322,11 @@ test('where version 1 proposes a negative Cd*A/m (refused by propagator/hpop), t
     await runFit(estimator, v1, async (queries) => {
       const b = queries[0].parameterValues[0];
       if (b < 0) { proposal = b; throw Object.assign(new Error('negative'), { negative: b }); }
-      return orekitAnswerer(hpop)(queries);
+      return orekitAnswerer(ffm)(queries);
     }).catch((e) => { if (!e.negative) throw e; });
     assert.ok(proposal !== null && proposal < 0, `${label}: version 1 proposes ${proposal}`);
     for (const [variant, options] of [['lower bound 0', { parameterLowerBounds: [0] }], ['LOGARITHM', { parameterTransforms: [1] }]]) {
-      const { result, error, queried, rounds } = await orekitFit(estimator, hpop, start(offset, b0, options));
+      const { result, error, queried, rounds } = await orekitFit(estimator, ffm, start(offset, b0, options));
       assert.equal(error, undefined, `${label}, ${variant}: ${error}`);
       const smallest = Math.min(...queried.map((q) => q.parameterValues[0]));
       assert.ok(variant === 'LOGARITHM' ? smallest > 0 : smallest >= 0, `${label}, ${variant}: proposed ${smallest}`);
@@ -338,15 +338,15 @@ test('where version 1 proposes a negative Cd*A/m (refused by propagator/hpop), t
 });
 
 // ---------------------------------------------------------------------------
-// HPOP-simulated arcs: the truth that generated the data is the reference.
-// propagator/hpop at full force (EGM2008 70 x 70, Sun and Moon, radiation
+// FFM-simulated arcs: the truth that generated the data is the reference.
+// propagator/ffm at full force (EGM2008 70 x 70, Sun and Moon, radiation
 // pressure, NRLMSISE-00 drag with CSSI weather, IERS 2010 solid tides,
 // relativity) simulates positions from the Orekit LEO case's true state;
 // noise is deterministic (seeded) Gaussian. Mass and area are 1, so B is
 // the drag coefficient (m^2/kg).
 const at = (seconds) => ({ jdDay: 2461254.5, seconds });
-async function simulatePositions(hpop, { seconds, names, values, sigma, seed, edit, coefficients }) {
-  const runs = await hpopRun(hpop, { state: LEO.truth, from: at(0), epochs: seconds.map(at), names, values, edit, coefficients });
+async function simulatePositions(ffm, { seconds, names, values, sigma, seed, edit, coefficients }) {
+  const runs = await ffmRun(ffm, { state: LEO.truth, from: at(0), epochs: seconds.map(at), names, values, edit, coefficients });
   const noise = normals(seed);
   return seconds.map((t, k) => ({ seconds: t, kind: 'POSITION_VECTOR', values: runs[k].state.slice(0, 3).map((x) => x + sigma * noise()), sigmas: [sigma, sigma, sigma] }));
 }
@@ -362,15 +362,15 @@ test('a fit that wants negative drag stops at B = 0 and says so; with a signed i
   // Mahalanobis distance of (state, B, a_T) from the truth below the
   // chi-square(8) 0.9999 quantile, 30.0.
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
-  t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
   const seconds = Array.from({ length: 72 }, (_, k) => 600 * (k + 1));
   const truth = { B: 0.002, T: 2e-7 };
-  const observations = await simulatePositions(hpop, { seconds, names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [truth.B, truth.T], sigma: 1, seed: 20261010 });
+  const observations = await simulatePositions(ffm, { seconds, names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [truth.B, truth.T], sigma: 1, seed: 20261010 });
   const start = LEO.truth.map((x, i) => x + [200, -300, 100, 0.2, 0.1, -0.1][i]);
 
   const alone = await runFit(estimator, fitEnvelope({ state: start, observations, kinds: [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS], values: [0.01], options: { parameterLowerBounds: [0] } }),
-    hpopAnswerer(hpop, { names: ['DRAG_AREA_OVER_MASS'] }));
+    ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS'] }));
   assert.equal(alone.error, undefined, alone.error);
   assert.equal(alone.result.status, 0);
   assert.ok(Math.min(...alone.queried.map((q) => q.parameterValues[0])) >= 0, 'no negative B was asked');
@@ -379,11 +379,11 @@ test('a fit that wants negative drag stops at B = 0 and says so; with a signed i
 
   const kinds = [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS, sds.prwDynamicParameter.IN_TRACK_ACCELERATION];
   const both = await runFit(estimator, fitEnvelope({ state: start, observations, kinds, values: [0.01, 0], options: { parameterLowerBounds: [0, NaN] } }),
-    hpopAnswerer(hpop, { names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'] }));
+    ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'] }));
   assert.equal(both.error, undefined, both.error);
   assert.equal(both.result.status, 0);
   const b = both.result.batchFit;
-  const truthVector = [...(await hpopRun(hpop, { state: LEO.truth, from: at(0), epochs: [at(0)], names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [truth.B, truth.T] }))[0].state, truth.B, truth.T];
+  const truthVector = [...(await ffmRun(ffm, { state: LEO.truth, from: at(0), epochs: [at(0)], names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [truth.B, truth.T] }))[0].state, truth.B, truth.T];
   const d2 = mahalanobis(b.estimate.map((v, i) => v - truthVector[i]), b.covariance, 8);
   t.diagnostic(`alone: ${alone.rounds} rounds, B held at 0, weighted RMS ${alone.result.batchFit.weightedRms.toFixed(1)}; with a_T: ${both.rounds} rounds, B ${b.estimate[6].toExponential(4)} (sigma ${Math.sqrt(b.covariance[54]).toExponential(2)}), a_T ${b.estimate[7].toExponential(4)} (sigma ${Math.sqrt(b.covariance[63]).toExponential(2)}), d2 ${d2.toFixed(2)}, weighted RMS ${b.weightedRms.toFixed(3)}`);
   assert.ok(d2 < chiSquareQuantile(8, 3.719), `d2 ${d2}`);
@@ -398,8 +398,8 @@ test('thirteen dynamic parameters at once: B, the eleven ECOM2 terms and the in-
   // Mahalanobis distance of the estimate from the truth must be below the
   // chi-square(19) 0.9999 quantile, 48.4.
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
-  t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
   const names = ['DRAG_AREA_OVER_MASS', ...ECOM2_NAMES, 'IN_TRACK_ACCELERATION'];
   const truth = [0.01, 3e-8, -2e-8, 1e-8, 2e-8, -1e-8, 5e-9, -5e-9, 1.5e-8, -1e-8, 8e-9, -6e-9, 5e-9];
   const start = [0.012, ...Array(12).fill(0)];
@@ -408,18 +408,18 @@ test('thirteen dynamic parameters at once: B, the eleven ECOM2 terms and the in-
     exec.FORCES.ECOM2 = makeTable('PRWEcom2', Object.fromEntries(ECOM2_FIELDS.map((k) => [k, 0])));
   };
   const seconds = Array.from({ length: 720 }, (_, k) => 120 * (k + 1));
-  const observations = await simulatePositions(hpop, { seconds, names, values: truth, sigma: 0.1, seed: 13, edit: ecom2 });
+  const observations = await simulatePositions(ffm, { seconds, names, values: truth, sigma: 0.1, seed: 13, edit: ecom2 });
   const sigmas = [1e3, 1e3, 1e3, 1, 1, 1, 0.01, ...Array(12).fill(1e-7)];
   const apriori = Array(19 * 19).fill(0);
   sigmas.forEach((v, i) => { apriori[i * 20] = v * v; });
   const initial = LEO.truth.map((x, i) => x + [300, -200, 100, 0.1, -0.2, 0.1][i]);
   const { result, error, rounds } = await runFit(estimator, fitEnvelope({ state: initial, observations, kinds: names.map((n) => sds.prwDynamicParameter[n]), values: start, options: { aprioriCovariance: apriori } }),
-    hpopAnswerer(hpop, { names, edit: ecom2 }));
+    ffmAnswerer(ffm, { names, edit: ecom2 }));
   assert.equal(error, undefined, error);
   assert.equal(result.status, 0);
   const b = result.batchFit;
   assert.equal(b.estimate.length, 19);
-  const truthVector = [...(await hpopRun(hpop, { state: LEO.truth, from: at(0), epochs: [at(0)], names, values: truth, edit: ecom2 }))[0].state, ...truth];
+  const truthVector = [...(await ffmRun(ffm, { state: LEO.truth, from: at(0), epochs: [at(0)], names, values: truth, edit: ecom2 }))[0].state, ...truth];
   const d2 = mahalanobis(b.estimate.map((v, i) => v - truthVector[i]), b.covariance, 19);
   const z = b.estimate.slice(6).map((v, i) => ((v - truth[i]) / Math.sqrt(b.covariance[(6 + i) * 20])).toFixed(2));
   t.diagnostic(`${rounds} rounds; d2 ${d2.toFixed(2)}; parameter errors in sigma: ${z.join(' ')}; weighted RMS ${b.weightedRms.toFixed(3)}`);

@@ -3,7 +3,7 @@
   "normalizerSha256": "d9f8ea296eab142767a02eddcdc888899fdd8fdccd968a1b82479ff673698e82",
   "catalogSha256": "7d87d552215685ee6a069f42f83d411af244e69d3cab7b4880f2e378cae30eed",
   "model": {
-    "propagatorId": "com.orbpro.hpop",
+    "propagatorId": "com.orbpro.ffm",
     "propagatorArtifactSha256": "7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1",
     "forceModel": {
       "centralBody": true,

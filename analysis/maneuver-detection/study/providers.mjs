@@ -1,10 +1,10 @@
 // One element-set history through the detector with each plugged propagator
 // (PLAN-2026-10 Q3, descriptive): the same queries answered by propagator/sgp4,
 // the keplerian reference through the propagator ABI (Earth-fixed answers) and
-// propagator/hpop at full force, each scored against the same truth.
+// propagator/ffm at full force, each scored against the same truth.
 //
 //   node study/providers.mjs <work> --history <gp-25544.json> --truth <iss-truth.json> --variants <variants.json>
-//        --from 2026-09-01 --to 2026-10-01 --providers sgp4,keplerian-reference,hpop [--environment <hpop env dir>]
+//        --from 2026-09-01 --to 2026-10-01 --providers sgp4,keplerian-reference,ffm [--environment <ffm env dir>]
 import fs from 'node:fs';
 import { iso, seconds } from './lib/host.mjs';
 import { detectHistories, scoreVariants, printScores, writeJson, log } from './lib/run.mjs';

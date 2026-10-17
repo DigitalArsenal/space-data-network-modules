@@ -1,5 +1,7 @@
 # Python dependencies and ABI limits — second pass, 2026-09-15
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 The coordinator resolved the first-pass dependency blockers: this package embeds
 **WasmEdge 0.16.4 through its C API using ctypes**, and vendors immutable generated
 **SDS 1.217.0** output. It depends on neither the empty PyPI `wasmedge` package nor
@@ -52,12 +54,12 @@ was observed. Unknown imports fail vendoring instead of being skipped.
 
 ## Remaining upstream contracts
 
-- HPOP's manifest names `orbpro.hpop.InvokeRequest/InvokeResponse`, but no such
+- FFM's manifest names `orbpro.ffm.InvokeRequest/InvokeResponse`, but no such
   `.fbs` source exists. Its shipped C++ command path consumes JSON inside PIV/TAB.
-  The Python `hpop` wrapper mirrors that actual contract, with NumPy marshalling;
+  The Python `ffm` wrapper mirrors that actual contract, with NumPy marshalling;
   all integration and force evaluation remain C++ WASM. This is an existing
   payload exception, not a newly invented FlatBuffer schema.
-- HPOP trajectory-segment generated C++ lacks its `.fbs` source in this checkout.
+- FFM trajectory-segment generated C++ lacks its `.fbs` source in this checkout.
   Additional resident trajectory-segment Python wrappers are not implemented.
 - Current SDK and legacy SGP4 schemas both define incompatible `StateVector`
   types. Legacy SGP4 bindings use `.invoke.legacy.orbpro`, never an alias that

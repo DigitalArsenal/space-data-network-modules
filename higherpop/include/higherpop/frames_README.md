@@ -1,7 +1,7 @@
 # hp::frames — IAU-2006/2000A Earth-orientation frame chain
 
 `frames.hpp` provides the high-precision inertial↔terrestrial transformation
-that STK's HPOP and FreeFlyer use for precision ephemerides: **GCRF ↔ ITRF**
+that STK and FreeFlyer use for precision ephemerides: **GCRF ↔ ITRF**
 via the CIO-based IAU-2006 precession + IAU-2000A nutation of the IERS 2010
 Conventions.
 

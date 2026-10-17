@@ -1,4 +1,6 @@
-# An Attributed, HPOP-First Orbital Catalog for Space Data Network
+# An Attributed, FFM (Full Force Model)-First Orbital Catalog for Space Data Network
+
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
 
 Technical whitepaper | Version 1.0 | Evidence cutoff: 21 September 2026
 
@@ -8,9 +10,9 @@ Space Data Network / Digital Arsenal
 
 Space Data Network (SDN) is developing a reproducible, multi-provider orbital catalog for distributed data sharing and conjunction assessment. Its central product is a versioned view of attributed source records: an object identity, a selected orbital solution, its provenance, its uncertainty status, and an explicit policy explaining why that solution was selected. Original provider products remain available as distinct records. A catalog revision is authoritative within its declared policy and evidence, rather than an assertion that one provider is universally correct.
 
-The design is HPOP-first. Where adequate states, observations, or ephemerides exist, numerical high-precision orbit propagation is the primary computational path. SGP4 remains essential for native general-perturbations (GP) products, interoperability, and comparison with SOCRATES. A TLE or SGP4 OMM is not reinterpreted as an osculating numerical-propagation state. A derived SGP4 product is obtained by fitting and validating the SGP4 model against a selected reference arc, with the approximation recorded.
+The design is FFM-first. Where adequate states, observations, or ephemerides exist, numerical high-precision orbit propagation is the primary computational path. SGP4 remains essential for native general-perturbations (GP) products, interoperability, and comparison with SOCRATES. A TLE or SGP4 OMM is not reinterpreted as an osculating numerical-propagation state. A derived SGP4 product is obtained by fitting and validating the SGP4 model against a selected reference arc, with the approximation recorded.
 
-The initial Vimpel implementation converts osculating elements analytically into epoch position and velocity, retains the provider's native identity and source hashes, propagates through the existing HPOP module, and compares against separately supplied provider positions. One constrained initial-state refinement reduced withheld-position RMS discrepancies from 6.04-10.71 km to 52.82-69.93 m on three four-hour arcs. All 13,808 rows in the acquired element-table snapshot converted successfully. These results establish bounded consistency with provider products, not independent absolute accuracy, catalog-wide accuracy, or certified collision probabilities. [R1-R3]
+The initial Vimpel implementation converts osculating elements analytically into epoch position and velocity, retains the provider's native identity and source hashes, propagates through the existing FFM module, and compares against separately supplied provider positions. One constrained initial-state refinement reduced withheld-position RMS discrepancies from 6.04-10.71 km to 52.82-69.93 m on three four-hour arcs. All 13,808 rows in the acquired element-table snapshot converted successfully. These results establish bounded consistency with provider products, not independent absolute accuracy, catalog-wide accuracy, or certified collision probabilities. [R1-R3]
 
 This paper includes Space Mapper's Chinese AOE catalog as a proposed additional source. Its own-orbit, international, and mixed products require separate provenance so republished information is not counted twice. AOE has not been included in the numerical results reported here. The previously tested China Space Station provider feed is a different source and is not evidence of ingesting the AOE catalog. [R4-R7]
 
@@ -23,7 +25,7 @@ Implemented capabilities and proposed operational requirements are identified th
 3. Chinese AOE integration
 4. Normalization and epoch-state physics
 5. Identity matching and orbit selection
-6. HPOP fitting and measured results
+6. FFM fitting and measured results
 7. Uncertainty, SGP4 and conjunction validation
 8. Publication, feedback and operator experience
 9. Acceptance plan and reproducibility
@@ -49,11 +51,11 @@ An association A = (R_a, R_b, verdict, policyHash, evidenceRefs) links assertion
 
 Authority is reproducible: given identical snapshots, module artifacts and policy, a consumer should obtain the same selection and verdicts within declared numerical tolerances. Consumers may adopt different source policies while preserving shared evidence. Content hashes establish byte identity; publisher signatures establish attribution. Neither establishes that an orbit is physically correct.
 
-### 1.3 HPOP-first, with native-model discipline
+### 1.3 FFM-first, with native-model discipline
 
-HPOP is a numerical propagation capability, not an accuracy label. Its validity depends on the initial state, force model, frame and time conversions, environmental inputs, maneuver treatment and uncertainty model. A fresh but erroneous record must not displace a better-supported solution solely because it is newer.
+FFM is a numerical propagation capability, not an accuracy label. Its validity depends on the initial state, force model, frame and time conversions, environmental inputs, maneuver treatment and uncertainty model. A fresh but erroneous record must not displace a better-supported solution solely because it is newer.
 
-The intended base catalog maintains the latest usable solution from each provider, plus history, and evaluates candidate solutions at a common assessment epoch. It does not average incompatible epochs or models. When adequate HPOP inputs are unavailable, retain a visibly qualified native-model solution or an explicit gap. Do not create an apparently complete catalog by concealing model substitutions.
+The intended base catalog maintains the latest usable solution from each provider, plus history, and evaluates candidate solutions at a common assessment epoch. It does not average incompatible epochs or models. When adequate FFM inputs are unavailable, retain a visibly qualified native-model solution or an explicit gap. Do not create an apparently complete catalog by concealing model substitutions.
 
 ## 2. Data inventory and evidence boundaries
 
@@ -62,7 +64,7 @@ The datasets below have different evidentiary roles. Historical acquisition and 
 | Dataset or family | Role and evidence at cutoff |
 | --- | --- |
 | Vimpel osculating element table | Acquired snapshot: 13,808 rows; all converted to attributed epoch OPM states. Source SHA-256 in section 9. |
-| Vimpel rectangular ephemeris archive | Acquired September 2026 archive. Audit found 6,654 members matching the element table by native identity and exact epoch. A 64-object diagnostic and three-object HPOP refinement study were performed. |
+| Vimpel rectangular ephemeris archive | Acquired September 2026 archive. Audit found 6,654 members matching the element table by native identity and exact epoch. A 64-object diagnostic and three-object FFM refinement study were performed. |
 | Vimpel datefirst and alias products | Acquired supporting identity evidence. datefirst proposes native-to-NORAD associations; automatic candidate generation and accepted-binding persistence remain incomplete. |
 | CelesTrak GP / supplemental GP and SOCRATES | Required interoperability and conjunction comparison sources. Acquire catalog/report snapshots through the celestrak.eth test node, not this local development machine. No completed SOCRATES agreement result is asserted here. |
 | Space Mapper / AOE, China | Public format and API documentation reviewed for this paper. Proposed integration; no acquired catalog snapshot or numerical validation is claimed. |
@@ -129,7 +131,7 @@ The preferred velocity is the analytic osculating velocity or a validated fitted
 
 ### 4.3 Frame and time discipline
 
-Every transformation must identify its conventions and supporting data. The verification path explicitly converts J2000 to GCRF for HPOP and back for comparison, and UTC sample times to TDB for propagation. Do not silently equate TEME, terrestrial coordinates, J2000 and GCRF. Production transformations requiring Earth orientation or leap-second data must pin those inputs as well as software versions. [R1, R11]
+Every transformation must identify its conventions and supporting data. The verification path explicitly converts J2000 to GCRF for FFM and back for comparison, and UTC sample times to TDB for propagation. Do not silently equate TEME, terrestrial coordinates, J2000 and GCRF. Production transformations requiring Earth orientation or leap-second data must pin those inputs as well as software versions. [R1, R11]
 
 ## 5. Rack, stack and match: identity and selection
 
@@ -162,7 +164,7 @@ For each accepted identity, the proposed selection policy first excludes invalid
 
 Composition and matching remain separate. The current recipe-v2 editor uses international designators for authoritative composition. Numeric catalog IDs alone must not silently merge objects. Objects without accepted designators remain review candidates even where the current CAT export excludes them. [R2]
 
-## 6. HPOP refinement and the measured Vimpel study
+## 6. FFM refinement and the measured Vimpel study
 
 ### 6.1 Constrained estimation
 
@@ -189,7 +191,7 @@ Three four-hour arcs contained 25 positions at 600-second spacing. Withholding i
 
 Both training and withheld maximum residuals passed the example 1 km position gate. That gate is experimental tuning, not a collision-screening or operational safety threshold. Withheld positions were excluded from estimation, but came from the same provider ephemeris product; they are not independent tracking truth. The cases are demonstrations rather than a statistically representative sample. [R1]
 
-Vimpel's published model includes degree-8 Earth gravity, DE405 Sun/Moon, atmosphere and radiation pressure. The tested HPOP configuration does not reproduce it, and the current GOST selector is a placeholder. An effective area/mass value cannot establish separate drag and radiation-pressure coefficients. The fit may absorb model mismatch over four hours; these results do not validate the remainder of a multi-day arc or long-term prediction. [R1, R3, R10]
+Vimpel's published model includes degree-8 Earth gravity, DE405 Sun/Moon, atmosphere and radiation pressure. The tested FFM configuration does not reproduce it, and the current GOST selector is a placeholder. An effective area/mass value cannot establish separate drag and radiation-pressure coefficients. The fit may absorb model mismatch over four hours; these results do not validate the remainder of a multi-day arc or long-term prediction. [R1, R3, R10]
 
 ## 7. Uncertainty, SGP4 and conjunction validation
 
@@ -201,7 +203,7 @@ A proposed observation-based estimator should document measurement errors, model
 
 ### 7.2 SGP4 companion products
 
-Native SGP4 products retain their original theory and metadata. A proposed HPOP-to-SGP4 companion path samples the accepted numerical solution over a declared fitting interval, fits SGP4 mean elements, and verifies both training and independent holdout intervals before emitting an OMM. CelesTrak describes an analogous ephemeris-to-GP fitting approach for supplemental elements; SGP4 implementations should be checked against authoritative verification material. [R12, R13]
+Native SGP4 products retain their original theory and metadata. A proposed FFM-to-SGP4 companion path samples the accepted numerical solution over a declared fitting interval, fits SGP4 mean elements, and verifies both training and independent holdout intervals before emitting an OMM. CelesTrak describes an analogous ephemeris-to-GP fitting approach for supplemental elements; SGP4 implementations should be checked against authoritative verification material. [R12, R13]
 
 Availability of an SGP4 OMM for every object is a product objective, not a guarantee that every numerical trajectory has a useful SGP4 approximation. Preserve failure states and approximation errors. An OMM is an exchange message with declared theory, not evidence that a fitted orbit is accurate. The SDS binary representations used by SDN must retain the scientific semantics of their source OPM, OEM and OMM products; they are not the CCSDS XML wire format. [R14]
 
@@ -209,7 +211,7 @@ Availability of an SGP4 OMM for every object is a product objective, not a guara
 
 The first baseline is an SGP4 compatibility replay against SOCRATES: identical input element editions where available, the same assessment interval, compatible model conventions, and explicit screening settings. CelesTrak's methodology identifies SGP4 and STK/CAT. Acquire required reports and GP records through the celestrak.eth test node, preserve their hashes, and record any unavailable proprietary settings. A live report matched to a later catalog is not a controlled comparison. [R15]
 
-The second baseline evaluates the HPOP-selected catalog with independent orbit evidence and conjunction test cases. Report time-of-closest-approach and miss-distance discrepancies, missed and additional encounters, failure counts, screening bounds and uncertainty assumptions. A different HPOP catalog is not expected to reproduce every GP-derived SOCRATES encounter exactly. Collision probability additionally depends on calibrated relative-state uncertainty, cross-correlation assumptions, encounter geometry and hard-body radius. No live SOCRATES parity or collision-probability result is claimed by the present study.
+The second baseline evaluates the FFM-selected catalog with independent orbit evidence and conjunction test cases. Report time-of-closest-approach and miss-distance discrepancies, missed and additional encounters, failure counts, screening bounds and uncertainty assumptions. A different FFM catalog is not expected to reproduce every GP-derived SOCRATES encounter exactly. Collision probability additionally depends on calibrated relative-state uncertainty, cross-correlation assumptions, encounter geometry and hard-body radius. No live SOCRATES parity or collision-probability result is claimed by the present study.
 
 ## 8. Publication, feedback and the operator experience
 
@@ -229,7 +231,7 @@ Incoming observations should append evidence, trigger reevaluation of affected a
 
 The proposed Catalog workspace presents ordered source layers, source coverage, freshness and integrity status, followed by a paginated object table. Each object opens a comparison showing identities, original and fitted solutions, frame/time conventions, residuals, uncertainty status and attribution. A review action should expose why a match is ambiguous and exactly what accepting it will change.
 
-The core free orbital console is intended to expose catalog browsing, HPOP propagation, conjunction assessment and visualization through the same module artifacts. A result should link to its immutable inputs and recipe. Users should be able to distinguish “module available,” “calculation completed,” and “validated result.” Multi-page help should explain native versus derived states, association policy, holdouts and uncertainty. These interface and packaging requirements describe the intended experience; this paper is not a UI completion or release claim.
+The core free orbital console is intended to expose catalog browsing, FFM propagation, conjunction assessment and visualization through the same module artifacts. A result should link to its immutable inputs and recipe. Users should be able to distinguish “module available,” “calculation completed,” and “validated result.” Multi-page help should explain native versus derived states, association policy, holdouts and uncertainty. These interface and packaging requirements describe the intended experience; this paper is not a UI completion or release claim.
 
 ## 9. Acceptance plan and reproducibility
 
@@ -243,7 +245,7 @@ The core free orbital console is intended to expose catalog browsing, HPOP propa
 | Multi-provider identity | datefirst/AOE candidates, conflict review, accepted-link persistence | Incomplete |
 | Uncertainty | Independent calibration and covariance applicability | Not established |
 | Continuous network flow | Update, pin, stream, restart/replay and independent-node retrieval | Not established by this offline study |
-| Conjunction verification | Controlled SOCRATES replay and independent HPOP tests | Pending |
+| Conjunction verification | Controlled SOCRATES replay and independent FFM tests | Pending |
 
 The next study should stratify objects by orbital regime, eccentricity, source age, arc duration, observation availability and maneuver status. Preserve a final untouched validation set; repeated tuning against the same holdout set weakens its independence. Include parser failures and unmatchable objects in the denominator. Report failures and coverage alongside residual percentiles.
 
@@ -261,7 +263,7 @@ The parity result checks selected identical-artifact behavior across runtimes. I
 | Acquired Vimpel ephemeris archive | f46df9c310a8c33752d5baebf429a0583e7896f6714501b77d8fcc033c65e6bb |
 | Normalizer WASM | d9f8ea296eab142767a02eddcdc888899fdd8fdccd968a1b82479ff673698e82 |
 | Catalog WASM | 7d87d552215685ee6a069f42f83d411af244e69d3cab7b4880f2e378cae30eed |
-| HPOP WASM | 7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1 |
+| FFM WASM | 7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1 |
 
 Reproduce the offline study using the recorded commit, documented dependencies, exact artifact hashes and authorized copies of the source files. The driver is analysis/catalog-composer/tests/vimpel-live.mjs ELEMENTS_FILE EPHEMERIS_RAR. It routes existing C++/WASM reader, frame, time, propagation and fitting modules; it does not fetch provider data, install modules, publish records or create covariance. Detailed controls, per-case reference hashes and test commands are in the evidence record. [R1]
 

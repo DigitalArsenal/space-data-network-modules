@@ -81,7 +81,7 @@ constexpr double kOneOverSqrtTwo = 0.70710678118654752440084436210484904;
 
 // ---------------------------------------------------------------------------
 // Small vector algebra. Deliberately local: this header must not depend on
-// higherpop/vec3.hpp (which is native-only) nor on the HPOP coords types.
+// higherpop/vec3.hpp (which is native-only) nor on the FFM coords types.
 // ---------------------------------------------------------------------------
 struct Vec3 {
   double x = 0.0;

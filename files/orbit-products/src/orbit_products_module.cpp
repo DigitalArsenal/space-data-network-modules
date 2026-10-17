@@ -1016,7 +1016,7 @@ int32_t load_from_frame(const char* method, ContainerFrame* frame, Loaded* loade
     if (st == ephem::Status::Unsupported && loaded->format == ephem::Format::SpkDaf) {
         plugin_set_error("unsupported-spk-materialization",
             "This kernel stores Chebyshev coefficients, not discrete state rows. "
-            "Use describe_container for metadata or the HPOP kernel input for body-state evaluation.");
+            "Use describe_container for metadata or the FFM kernel input for body-state evaluation.");
         return 400;
     }
     if (st != ephem::Status::Ok) return fail_with_status(st, "The container could not be read");

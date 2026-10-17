@@ -390,7 +390,7 @@ class Module:
             if not self.memory:
                 raise WasmEdgeError("Module has no imported/exported memory")
             # Mirror SDK browserModuleHarness init: prefer _initialize even
-            # when _start is exported (HPOP exports both); otherwise ctors.
+            # when _start is exported (FFM exports both); otherwise ctors.
             # Calling command _start could consume stdin / exit the process.
             init = "_initialize" if self._find("_initialize") else "__wasm_call_ctors"
             if self._find(init):

@@ -1,0 +1,149 @@
+cmake_minimum_required(VERSION 3.15)
+project(ffm_sdn_plugin LANGUAGES CXX C)
+
+# Vendored public-domain NRLMSISE-00 C port (Picone/Hedin/Drob via Brodowski).
+set(NRLMSISE00_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/nrlmsise00")
+set(HWM14_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/hwm14")
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(EMSCRIPTEN)
+    # Invoke reports invalid inputs and unsupported derivatives through C++
+    # catches. Use standardized native Wasm EH: JavaScript-assisted exceptions
+    # add env imports, and legacy Wasm EH is rejected by WasmEdge 0.16.4.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -DNDEBUG -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0")
+    # WasmEdge 0.16.4 corrupts an exception-cleanup pointer in optimized
+    # plugin_runtime.cpp: invalid STM_METHOD traps instead of returning the
+    # invoke error that the identical bytes return in V8. O0/no-LTO for this
+    # JSON/invoke boundary fixes the measured failure; all physics stays O3.
+    # variational-parity.mjs retains invalid-input cases as the regression gate.
+    set_source_files_properties(src/plugin_runtime.cpp PROPERTIES
+        COMPILE_OPTIONS "-O0;-fno-inline;-fno-lto")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -march=native -mtune=native")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
+find_path(
+    FLATBUFFERS_INCLUDE_DIR
+    NAMES flatbuffers/flatbuffers.h
+    PATHS
+        "$ENV{SDN_FLATBUFFERS_INCLUDE_DIR}"
+        "$ENV{FLATBUFFERS_INCLUDE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../flatbuffers/include"
+        /opt/homebrew/include
+        /opt/homebrew/opt/flatbuffers/include
+        /usr/local/include
+        /usr/local/opt/flatbuffers/include
+    NO_CMAKE_FIND_ROOT_PATH
+)
+
+if(NOT FLATBUFFERS_INCLUDE_DIR)
+    message(FATAL_ERROR "flatbuffers headers not found. Install flatbuffers and retry.")
+endif()
+
+# The physics library is ../../lib — ONE copy, compiled directly.
+#
+# Until gmat-07 this directory carried its OWN copy of nine of those
+# translation units under src/, and CMake compiled THOSE. The copies had
+# drifted: the shipped WASM was still running the pre-fix mu/r^3 spherical
+# harmonics scaling and the pre-fix J3 sign / J4 prefactor that
+# gmat-01-defect-burn-down had already corrected in lib/. A fix that lands in
+# lib/ and an artifact built from a stale duplicate is worse than no fix,
+# because the tests pass on the source nobody ships. tests/no_duplicate_sources
+# fails the build back if a duplicate ever reappears.
+set(FFM_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../lib")
+
+add_library(
+    ffm STATIC
+    "${FFM_LIB_DIR}/astrodynamics.cpp"
+    "${FFM_LIB_DIR}/integrators.cpp"
+    "${FFM_LIB_DIR}/variational.cpp"
+    "${FFM_LIB_DIR}/finite_burn.cpp"
+    "${FFM_LIB_DIR}/force_partials.cpp"
+    "${FFM_LIB_DIR}/coords.cpp"
+    "${FFM_LIB_DIR}/atmosphere_plugin.cpp"
+    "${FFM_LIB_DIR}/environment_models.cpp"
+    "${FFM_LIB_DIR}/ephemeris.cpp"
+    "${FFM_LIB_DIR}/force_models.cpp"
+    "${FFM_LIB_DIR}/atmosphere_winds.cpp"
+    "${FFM_LIB_DIR}/nrlmsise00.cpp"
+    "${FFM_LIB_DIR}/time_convert.cpp"
+    "${FFM_LIB_DIR}/us76.cpp"
+    src/plugin_runtime.cpp
+    "${NRLMSISE00_DIR}/nrlmsise-00.c"
+    "${NRLMSISE00_DIR}/nrlmsise-00_data.c"
+    "${HWM14_DIR}/hwm14.cpp"
+    "${HWM14_DIR}/hwm14_data.cpp"
+)
+target_include_directories(ffm PUBLIC include "${FFM_LIB_DIR}" "${NRLMSISE00_DIR}" "${HWM14_DIR}")
+
+if(NOT EMSCRIPTEN)
+    # Native test targets can be added here
+endif()
+
+if(EMSCRIPTEN)
+    # --- Emscripten browser artifact ---
+    add_executable(
+        ffm_wasm
+        ../ffm_plugin.cpp
+        wasm_api.cpp
+        src/plugin_entrypoints.cpp
+        src/plugin_invoke_bridge.cpp
+    )
+    target_include_directories(
+        ffm_wasm PRIVATE
+        ..
+        include
+        generated
+        generated/sds
+        "${FLATBUFFERS_INCLUDE_DIR}"
+    )
+    target_link_libraries(ffm_wasm ffm)
+    set_target_properties(
+        ffm_wasm PROPERTIES
+        SUFFIX ".js"
+        LINK_FLAGS "\
+            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_init\",\"_plugin_init_states\",\"_plugin_stream_invoke\",\"_get_entity_count\",\"_get_orbital_period\",\"_get_eccentricity\",\"_plugin_propagate\",\"_plugin_propagate_all_positions\",\"_plugin_propagate_path_entity\",\"_plugin_propagate_path_times\",\"_plugin_set_integrator\",\"_plugin_set_state\",\"_plugin_set_force_model\",\"_plugin_set_force_model_v2\",\"_plugin_get_atmosphere_model_status\",\"_plugin_get_atmosphere_model_count\",\"_plugin_get_atmosphere_model_name\",\"_plugin_get_atmosphere_model_provenance\",\"_plugin_load_gravity_field\",\"_plugin_get_gravity_field_error\",\"_plugin_get_gravity_field_name\",\"_plugin_register_force_contribution\",\"_plugin_clear_force_contributions\",\"_plugin_get_force_contribution_slots\",\"_plugin_get_body_constants\",\"_plugin_load_solar_activity_predictions\",\"_plugin_get_solar_activity_prediction_error\",\"_plugin_set_solar_activity_from_prediction\",\"_plugin_get_acceleration_breakdown_v2\",\"_plugin_set_drag_options\",\"_plugin_set_atmosphere_model\",\"_plugin_set_solar_activity\",\"_plugin_set_gravity\",\"_plugin_set_tides\",\"_plugin_set_relativity\",\"_plugin_set_earth_radiation\",\"_plugin_set_third_body_extended\",\"_plugin_set_empirical\",\"_plugin_propagate_to\",\"_plugin_propagate_path\",\"_plugin_set_stm_method\",\"_plugin_compute_stm\",\"_plugin_propagate_covariance\",\"_plugin_get_covariance_ellipsoid\",\"_plugin_get_acceleration_breakdown\",\"_plugin_set_burns\",\"_plugin_clear_burns\",\"_plugin_ensure_coverage\",\"_plugin_eval_positions\",\"_plugin_eval_states\",\"_plugin_set_visibility_mask\",\"_plugin_propagate_path_sv\",\"_plugin_set_ephemeris_retention\",\"_plugin_set_grid_stagger\",\"_plugin_init_states_ecef\",\"_plugin_destroy\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\",\"_malloc\",\"_free\"]' \
+            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\",\"HEAPU8\",\"HEAPU32\",\"HEAP8\",\"HEAP32\",\"HEAPF64\"]' \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME='FFMModule' \
+            -s EXPORT_ES6=1 \
+            -s STANDALONE_WASM=1 \
+            -s INITIAL_MEMORY=268435456 \
+            -s STACK_SIZE=2097152 \
+            -s MALLOC='emmalloc' \
+            -s FILESYSTEM=0 \
+        "
+    )
+elseif(WASI_SDK)
+    # --- Standalone WASI artifact (isomorphic — runs in WasmEdge and browser via shim) ---
+    add_executable(
+        ffm_standalone
+        wasm_api.cpp
+        src/plugin_entrypoints.cpp
+        src/plugin_invoke_bridge.cpp
+    )
+    target_include_directories(
+        ffm_standalone PRIVATE
+        include
+        generated
+        generated/sds
+        "${FLATBUFFERS_INCLUDE_DIR}"
+    )
+    target_link_libraries(ffm_standalone ffm)
+    set_target_properties(
+        ffm_standalone PROPERTIES
+        SUFFIX ".wasm"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+    target_link_options(ffm_standalone PRIVATE
+        -Wl,--export=plugin_alloc
+        -Wl,--export=plugin_free
+        -Wl,--export=plugin_invoke_stream
+        -Wl,--export=plugin_get_manifest_flatbuffer
+        -Wl,--export=plugin_get_manifest_flatbuffer_size
+    )
+endif()

@@ -7,7 +7,7 @@
 //                       interpolated at an epoch (Lagrange through the nearest degree + 1, covariance linear): the error in
 //                       the RTN axes of the predicted state (or the truth's), both position covariances in those
 //                       axes, d^2 against the combined covariance and against the predicted one alone, and the
-//                       per-axis standardized errors. Operator file pairs, HPOP samples, element-set samples.
+//                       per-axis standardized errors. Operator file pairs, FFM samples, element-set samples.
 // fit_calibration       samples (stratum, RTN error, RTN position covariance): per stratum a variance factor by
 //                       maximum likelihood (scalar k^2 = mean d^2 / 3), per-axis factors (s_k^2 = mean e_k^2 / P_kk,
 //                       the marginal maximum likelihood per axis), or the factor that puts the stated coverage
@@ -21,7 +21,7 @@
 //                       act on the along-track position, w_l = sum over lead-l segments of
 //                       ((t - a)^2 - (t - b)^2) / (t - s0)^2 ([a, b] the segment clipped to [s0, t]; at three days
 //                       of whole lead days 5/9, 3/9, 1/9), sigma_eff^2 = w' C w, and P = sigma_eff^2 g g', g the
-//                       state's sensitivity to ln B from s0 (B dx/dB from HPOP, or B (S(t) - Phi(t) Phi(s0)^-1 S(s0))
+//                       state's sensitivity to ln B from s0 (B dx/dB from FFM, or B (S(t) - Phi(t) Phi(s0)^-1 S(s0))
 //                       from samples that start earlier).
 
 namespace covreal {
@@ -74,7 +74,7 @@ std::vector<double> lower6(const double m[36]) { return {m[0], m[6], m[7], m[12]
 std::vector<double> full36(const double m[36]) { return std::vector<double>(m, m + 36); }
 
 // RTN rows (R, T, N) of a state.
-void axes_of(const double r[3], const double v[3], double a[3][3]) { hpopcal::rtn_axes(r, v, a); }
+void axes_of(const double r[3], const double v[3], double a[3][3]) { ffmcal::rtn_axes(r, v, a); }
 // out = J m J' with J = blockdiag(A, A) (inertial -> RTN), or J' m J (RTN -> inertial).
 void rotate6(const double a[3][3], const double m[36], double out[36], bool to_rtn) {
   double j[36] = {};
@@ -96,7 +96,7 @@ void rotate6(const double a[3][3], const double m[36], double out[36], bool to_r
 bool d2_of(const double m[36], const double e[3], double* d2, double* logdet = nullptr) {
   const double p[6] = {m[0], m[6], m[12], m[7], m[13], m[14]};  // xx, xy, xz, yy, yz, zz
   double ld = 0;
-  if (!hpopcal::gauss_terms(p, e, &ld, d2)) return false;
+  if (!ffmcal::gauss_terms(p, e, &ld, d2)) return false;
   if (logdet) *logdet = ld;
   return true;
 }
@@ -741,12 +741,12 @@ extern "C" int dcp_covariance() {
 }
 
 // ── noise_responses ──
-// The white-acceleration process noise HPOP adds (propagator/hpop README: the arc from the initial epoch to each
+// The white-acceleration process noise FFM adds (propagator/ffm README: the arc from the initial epoch to each
 // target is cut into n equal steps h no longer than DISCRETIZATION_SECONDS; each step adds q [[h^3/3, h^2/2],
 // [h^2/2, h]] on one RTN axis of the state at its end; every later step's STM carries it), for unit density on each
 // axis, from that propagation's own STM at the step ends: U_k(t) = sum_j Phi(t, t_j) G_jk G_jk' Phi(t, t_j)' with
-// Phi(t, t_j) = Phi(t, t0) Phi(t_j, t0)^-1. One HPOP run with its STM sampled at the step ends gives the three unit
-// responses that HPOP would give in three more runs.
+// Phi(t, t_j) = Phi(t, t0) Phi(t_j, t0)^-1. One FFM run with its STM sampled at the step ends gives the three unit
+// responses that FFM would give in three more runs.
 extern "C" int noise_responses() {
   using namespace covreal;
   const nlohmann::json in = json_input("request");
