@@ -14,6 +14,18 @@ module's resident identity.
 Its `fullForceRequest` defaults to `FAST_CATALOG_INTEGRATOR`: RK78,
 relative tolerance `1e-14`, absolute tolerances encoded as `1e-14 × 1000`,
 initial step 30 s, minimum 0.01 s, maximum 120 s, and 1,000,000 maximum steps.
+For forward resident propagation, an initial osculating eccentricity `e >= 0.25`
+and `e < 1` automatically selects RK78 with Sundman `alpha = 1.5` instead.
+The C++ policy computes the osculating orbit from the initial GCRF state and the
+force model's gravitational parameter. It uses 200 transformed steps per orbit;
+GTO-like states with perigee altitude below 1,000 km and apogee altitude strictly
+between 30,000 and 45,000 km use 300. Altitudes use the standard Earth radius.
+The normalization stays tied to the original state across weather spans.
+This fixed transformed grid has no adaptive tolerance acceptance; physical-time
+RK78 steps land on weather and shadow boundaries. Explicit fixed-step diagnostic
+requests, backward propagation, and nonelliptic states retain standard RK78.
+The qualification is the eight fixture regimes; those seeds do not establish
+centimeter accuracy for every orbit in the broad eccentricity band.
 
 There is one FFM Fast mode. `CATALOG_INTEGRATOR` aliases the same default
 as `FAST_CATALOG_INTEGRATOR`; no separate accuracy profile is exposed.

@@ -4,8 +4,8 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "5d31804695f00ff4f1278840eea5e1e1f619d8fb97337af825c91cf30dde403c",
-  "bytes": 2118832,
+  "sha256": "581c75cf60a3e392c2f15ca8d16dedf9eea4fa025c91f3c5ab7850e36697292c",
+  "bytes": 2136040,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "flags": [
     "-msimd128"
@@ -15,6 +15,10 @@
   "forkBase": {
     "path": "../ffm/lib/force_models.cpp",
     "sha256": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3"
+  },
+  "residentForkBase": {
+    "path": "src/cpp/src/resident_dynamics.cpp",
+    "sha256": "059e338d0a0c8f71b11f01d6dfa292a544e2a90ff3391325e60415d38fc0878a"
   },
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
@@ -51,7 +55,7 @@
     "../ffm/src/ffm_plugin.cpp",
     "../ffm/src/cpp/src/prw_execution.cpp",
     "../ffm/src/cpp/src/prw_dynamics.cpp",
-    "../ffm/src/cpp/src/resident_dynamics.cpp",
+    "src/cpp/src/resident_dynamics.cpp",
     "../ffm/src/cpp/src/kernel_store.cpp",
     ".sdk-build/erfa-amalgamation.cpp"
   ],

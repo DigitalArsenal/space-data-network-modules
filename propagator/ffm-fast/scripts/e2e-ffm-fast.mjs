@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { packageRoot, standardRoot, STANDARD } from '../standard.mjs';
-import { FAST_CATALOG_INTEGRATOR } from '../catalog.mjs';
+import { FAST_CATALOG_INTEGRATOR, INTEGRATION_POLICY } from '../catalog.mjs';
 
 const standardImport = (relative) => import(pathToFileURL(path.join(standardRoot, relative)));
 const catalog = await standardImport('catalog.mjs');
@@ -44,7 +44,12 @@ function integrity() {
   const forkBase = fork.slice(0, 1600).match(/\b[0-9a-f]{64}\b/)?.[0];
   if (sha(wasm) !== standard.wasmSha256) throw new Error(`Standard artifact changed: expected ${standard.wasmSha256}, got ${sha(wasm)}.`);
   if (sourceSha !== forkBase) throw new Error(`Standard lib/force_models.cpp changed (standard ${sourceSha}, fork base ${forkBase ?? 'missing'}): the fork must be merged before building FFM Fast.`);
-  return { standardDirectory: STANDARD, standardWasmSha256: sha(wasm), forkBaseSha256: forkBase };
+  const residentPath = 'src/cpp/src/resident_dynamics.cpp';
+  const residentFork = fs.readFileSync(path.join(packageRoot, residentPath), 'utf8');
+  const residentBase = residentFork.match(/^\/\/ Fork base sha256: ([a-f0-9]{64})$/m)?.[1];
+  if (residentBase !== sha(fs.readFileSync(path.join(standardRoot, residentPath))))
+    throw new Error('Standard resident dynamics changed; merge the Fast fork.');
+  return { standardDirectory: STANDARD, standardWasmSha256: sha(wasm), forkBaseSha256: forkBase, residentForkBaseSha256: residentBase };
 }
 
 const port = (portId, arm, value) => ({ portId, typeRef: TYPE, payload: encodePrw(arm, value) });
@@ -217,7 +222,7 @@ async function main() {
   const result = { ok: failures.length === 0, mode: opt.measure ? 'lever' : 'e2e', lever: opt.measure ?? null,
     ...hashes, fastWasmSha256: sha(fs.readFileSync(path.join(packageRoot, 'dist/isomorphic/module.wasm'))),
     epochUtc: standard.fixtureEpochUtc, epochTt: standard.fixtureEpochTt, frame: 'GCRF', days: DAYS,
-    truthStandardModuleCppCommit: truthMetadata.standardModuleCppCommit,
+    truthStandardModuleCppCommit: truthMetadata.standardModuleCppCommit, integrationPolicy: INTEGRATION_POLICY,
     fixedStepSeconds: 60, fixedTolerance: 1, truthSamplingSeconds: TRUTH_SAMPLE_SECONDS,
     standardIntegrator: catalog.CATALOG_INTEGRATOR, fastIntegrator: opt.measure ? catalog.CATALOG_INTEGRATOR : FAST_CATALOG_INTEGRATOR,
     maxAddedError: { oneDay: { positionM: maxima('oneDay', 'positionM'), velocityMps: maxima('oneDay', 'velocityMps') },

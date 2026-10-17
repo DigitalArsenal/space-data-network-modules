@@ -39,6 +39,11 @@ const forkBaseSha256 = forkSource.match(/^\/\/\s*Fork base sha256:\s*([a-f0-9]{6
 const standardForceSha256 = sha256(await fs.readFile(path.join(standardRoot, 'lib/force_models.cpp')));
 if (!forkBase || forkBaseSha256 !== standardForceSha256)
   throw new Error('The standard lib/force_models.cpp changed; merge the standard changes into the FFM Fast fork and update its fork base SHA-256.');
+const residentPath = 'src/cpp/src/resident_dynamics.cpp';
+const residentSource = await fs.readFile(path.join(packageRoot, residentPath), 'utf8');
+const residentForkSha256 = residentSource.match(/^\/\/ Fork base sha256: ([a-f0-9]{64})$/m)?.[1];
+if (residentForkSha256 !== sha256(await fs.readFile(path.join(standardRoot, residentPath))))
+  throw new Error('The standard resident dynamics changed; merge it into the Fast fork.');
 const standardWasmSha256 = sha256(await fs.readFile(path.join(standardRoot, 'dist/isomorphic/module.wasm')));
 
 const units = ['astrodynamics', 'integrators', 'variational', 'finite_burn', 'force_partials', 'coords', 'atmosphere_plugin', 'environment_models', 'ephemeris', 'force_models', 'atmosphere_winds', 'nrlmsise00', 'time_convert', 'us76']
@@ -49,7 +54,7 @@ units.push(...[
   '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
   'src/ffm_plugin.cpp', 'src/cpp/src/prw_execution.cpp', 'src/cpp/src/prw_dynamics.cpp',
   'src/cpp/src/resident_dynamics.cpp', 'src/cpp/src/kernel_store.cpp',
-].map(p => path.resolve(standardRoot, p)));
+].map(p => path.resolve(p === 'src/cpp/src/resident_dynamics.cpp' ? packageRoot : standardRoot, p)));
 const erfa = await composeErfaTranslationUnit();
 const erfaUnit = path.join(buildDir, 'erfa-amalgamation.cpp');
 await fs.writeFile(erfaUnit, erfa.source);
@@ -103,6 +108,7 @@ try {
     flags: simd128 ? ['-msimd128'] : [],
     standardSources: STANDARD, standardWasmSha256,
     forkBase: { path: forkBase, sha256: forkBaseSha256 },
+    residentForkBase: { path: residentPath, sha256: residentForkSha256 },
     clangVersion: execFileSync(config.clangxx, ['--version'], { encoding: 'utf8' }).trim(),
     exceptionRuntimeArchives: exceptionLibraries.map(p => ({ name: path.basename(p), sha256: sha256(fsSync.readFileSync(p)) })),
     units: [path.relative(packageRoot, path.join(standardRoot, 'src/cpp/src/prw_sdk_adapter.cpp')), ...units.map(p => path.relative(packageRoot, p))],
