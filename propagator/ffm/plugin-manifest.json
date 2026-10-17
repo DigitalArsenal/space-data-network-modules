@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "FFM (Full Force Model) C++ WASM propagation with PRW execution, resident state (configured full-force dynamics, or the gravity-only profile by name), PPE trajectory, finite-burn, STM, atmosphere and ephemeris records. State interchange uses SI units with explicit frame and time. Native diagnostic state-vector exports retain ECEF meter/meter-per-second units.",
   "pluginFamily": "propagator",
   "capabilities": [],
