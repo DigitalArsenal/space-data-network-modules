@@ -96,11 +96,9 @@ export async function runE2E(runtime) {
     try {
       const flux_image = await loadImage(plan.maps.find(source => source.id === 'flux'));
       const density_image = await loadImage(plan.maps.find(source => source.id === 'density'));
-      // Acceptance is measured before any test-only mutation of the bake.
+      // Run-three: never calibrate physical parameters against this oracle.
       metrics = await invoke('oracle_metrics', {flux_image, density_image});
-      report.dustFit = await invoke('calibrate', {flux_image});
-      report.lines.push(`Dust fit: factor=${report.dustFit.dust_factor}, training=${report.dustFit.training_samples}, boundary=${report.dustFit.boundary_hit}`);
-      check('dust fit bracketed', report.dustFit.boundary_hit === 0);
+      report.lines.push('No Gaia dust recalibration performed (run-three decision).');
     } finally { for (const pointer of pointers) harness.instance.exports.plugin_free(pointer); }
     report.calibration = metrics;
     // Evidence image (IO only): the fitted model sky over the oracle flux
@@ -143,18 +141,22 @@ export async function runE2E(runtime) {
     report.lines.push(`Calibration: log-slope=${metrics.fit_scale}, intercept=${metrics.fit_intercept}, log-RMS=${metrics.fit_log_rmse}; display map, not linear photometry`);
     const masers = plan.masers.records.flatMap(record => [record.longitude, record.latitude, record.parallax, record.arm]);
     const ridges = await invoke('ridge_metrics', {masers,
+      parallax_errors: plan.masers.records.map(record => record.parallaxError),
       maser_segments: plan.masers.records.map(record => record.segment),
       maser_excluded: plan.masers.records.map(record => record.exclusion ? 1 : 0),
       published_arms: plan.reidOracle.rows.flat()});
     report.ridges = ridges;
     check('complete assigned maser sample', ridges.count === plan.masers.records.length, `count=${ridges.count}`);
     check('all named paper exclusions resolved', ridges.paper_exclusions === plan.reidOracle.exclusions.length);
+    check('all parallax uncertainties propagated in WASM',
+      ridges.perpendicular_measurement_sigma?.length === plan.masers.records.length &&
+      ridges.perpendicular_measurement_sigma.every(value => Number.isFinite(value) && value >= 0));
     for (const [index, name] of plan.reidOracle.armNames.entries()) {
       check(`Reid Table 2 curve: ${name}`, ridges.curve_max_errors?.[index] <= 1e-6,
         `max error=${ridges.curve_max_errors?.[index]} kpc`);
-      check(`Reid per-arm RMS: ${name}`, ridges.arm_counts?.[index] > 0 &&
-        ridges.arm_rms?.[index] <= ridges.arm_rms_limits?.[index],
-        `n=${ridges.arm_counts?.[index]}, RMS=${ridges.arm_rms?.[index]}, limit=${ridges.arm_rms_limits?.[index]} kpc`);
+      check(`Reid per-arm chi-square: ${name}`, ridges.arm_counts?.[index] > 0 &&
+        ridges.arm_chi2_nu?.[index] <= 2.0,
+        `n=${ridges.arm_counts?.[index]}, RMS=${ridges.arm_rms?.[index]} kpc, chi2_nu=${ridges.arm_chi2_nu?.[index]}, limit=2`);
     }
     report.lines.push(`Reid masers: n=${ridges.count}, unresolved=${ridges.missing}, max=${ridges.max} kpc, RMS=${ridges.rms} kpc, within0.3=${ridges.within_fraction}; excluded codes=${JSON.stringify(plan.masers.excluded)}`);
   } catch (error) { report.error = error.stack ?? String(error); }

@@ -80,10 +80,9 @@ inline double model_beta(const ArmSegment& a,double beta) {
 // discontinuity in pitch. Used for validation, not the volume's hot loop.
 struct ArmClosestPoint {Vec3 point;double beta,distance;};
 
-inline ArmClosestPoint arm_segment_closest_point(const ArmSegment& a,Vec3 p) {
+inline ArmClosestPoint arm_closest_point(const ArmSegment& a,Vec3 p,std::array<double,2> domain) {
   const double beta0=std::atan2(p.y,-p.x);
   ArmClosestPoint best{{},0,std::numeric_limits<double>::infinity()};
-  const auto domain=arm_beta_domain(a);
   const double domain_lo=domain[0],domain_hi=domain[1];
   for(int side=0;side<2;++side) {
     const double lo=side?std::max(domain_lo,a.beta_kink):domain_lo;
@@ -111,6 +110,22 @@ inline ArmClosestPoint arm_segment_closest_point(const ArmSegment& a,Vec3 p) {
     }
   }
   return best;
+}
+
+inline ArmClosestPoint arm_segment_closest_point(const ArmSegment& a,Vec3 p) {
+  return arm_closest_point(a,p,arm_beta_domain(a));
+}
+
+// Table 2 beta_min/max describe observed parallax coverage, not boundaries of
+// the fitted logarithmic spiral (Reid 2019 III.1). A distance to an arbitrary
+// endpoint is not d_perp. Continue each side over a full turn for the offline
+// likelihood, retaining Scutum's longer far-side continuation. The authored
+// finite Local/3-kpc rendering geometry remains unchanged.
+inline ArmClosestPoint published_arm_closest_point(const ArmSegment& a,Vec3 p) {
+  auto domain=arm_beta_domain(a);
+  domain[0]=std::min(domain[0],a.beta_kink-galactic_constants::pi);
+  domain[1]=std::max(domain[1],a.beta_kink+galactic_constants::pi);
+  return arm_closest_point(a,p,domain);
 }
 
 inline double arm_segment_distance_kpc(const ArmSegment& a,Vec3 p) {

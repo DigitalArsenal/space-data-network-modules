@@ -67,7 +67,7 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `sample_stars` | `bounds`: min xyz/max xyz; `seed`, `candidates`, `completeness`, `tier_limit_g`, optional `display_limit_g` | `stars`, `count`, `stride=7`, `label=model`, `pickable=0` |
 | `oracle_metrics` | `flux_image`, `density_image`: [arena offset, width, height, 4] | Correlations, widths, Rift ratios, global log-affine display fit and residuals |
 | `calibrate` | `flux_image` descriptor, after bake | Fit one dust multiplier on a 2-degree grid, update resident extinction, report every candidate and residual |
-| `ridge_metrics` | `masers`: [longitude deg, latitude deg, parallax mas, family]; `maser_segments`, `maser_excluded`; independent `published_arms` Table 2 rows | Curve agreement, per-segment raw RMS, diagnostic baked-ridge distances |
+| `ridge_metrics` | `masers`: [longitude deg, latitude deg, parallax mas, family]; `maser_segments`, `maser_excluded`, `parallax_errors` (mas); independent `published_arms` Table 2 rows | Curve agreement, per-segment raw RMS and chi-square, propagated perpendicular errors, diagnostic baked-ridge distances |
 
 Global volume: 256 × 256 × 32 over [-16,16] × [-16,16] × [-3,3] kpc.
 Local volume: uniform 128³ over the Sun ±1.25 kpc. Each is exactly 16 MiB,
@@ -119,20 +119,25 @@ display maps: the fitted log slope/intercept cannot establish absolute Gaia
 fluxes or source counts. The final E2E records all residuals and failures in
 `dist/calibration-fit.json`. No measured image or catalog data is bundled.
 
-The compiled dust coefficient is now the prior offline fit,
-0.06788225099390856 kpc^-1. The E2E measures a fresh production bake before
-running diagnostic recalibration, so a test-only mutation cannot substitute
-for shipped behavior. The 5,400-ray calibration maximizes global log-display
-correlation; no FWHM, Rift or maser thresholds enter its objective.
+The compiled relative dust coefficient remains the inherited run-two value
+0.06788225099390856 kpc^-1, obtained from Gaia display-map fitting. **It is not
+independent physical evidence and remains unaccepted.** Run three performs no
+new dust calibration; the callable historical `calibrate` method is retained
+for compatibility but the E2E never calls it. The log-affine display conversion
+is still part of the unchanged measurement procedure, not a dust fit.
 
-The run-two decision replaces the all-maser maximum with independently
-transcribed Table 2 curve agreement (1e-6 kpc) and per-segment raw RMS
-(1.5 times intrinsic width), using only the paper's nine named exclusions.
-`tests/ORACLES.md` lists all exclusions and the remaining failures.
-`tests/PHYSICS.md` records the component ablations and literature constraints.
-The same browser E2E passes 56/63 checks: all seven curve checks pass, four
-raw-RMS checks fail, and the l=180/270 widths and Great Rift still fail.
-The module must not be represented as accepted or landed.
+The run-three decision replaces the per-arm 1.5-width RMS rule with
+`mean(d_perp^2 / (w_int^2 + sigma_perp^2)) <= 2`. C++ propagates Table 1
+parallax uncertainties to perpendicular distances to the published spirals.
+Coverage endpoints do not truncate those fitted curves. Raw RMS, finite
+rendering-segment RMS, and all nine named exclusions remain visible.
+
+The seventeen fixed native configurations and the requested five-hypothesis
+before/after table are in [tests/HYPOTHESES.md](tests/HYPOTHESES.md). These are
+independent experiments, not additional tests or a successful production fit.
+No failed alternative was promoted into the bake. The volume contract, renderer,
+and UI remain unchanged. Remaining work is an independently constrained optical
+luminosity/dust model and resolution of the retained 3-kpc maser discrepancy.
 
 Edenhofer's optional grid is not accepted because its offline license and SDN
 publication are unverified. Retrieval/publication, catalog octree construction,

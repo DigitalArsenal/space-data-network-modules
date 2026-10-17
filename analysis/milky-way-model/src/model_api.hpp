@@ -135,13 +135,15 @@ extern "C" int ridge_metrics() {
   if (!request.ok || !model_ready() || m.empty() || m.size()%4 || m.size()>40000 || !finite_vector(m))
     return wire::fail("Expected finite [Galactic longitude deg,latitude deg,parallax mas,arm family] records");
   const auto segments=request.vector("maser_segments"),excluded=request.vector("maser_excluded");
-  const auto published=request.vector("published_arms");
+  const auto published=request.vector("published_arms"),errors=request.vector("parallax_errors");
   if (segments.size()!=m.size()/4 || excluded.size()!=segments.size() || published.size()!=49
+      || errors.size()!=segments.size() || !finite_vector(errors)
       || !finite_vector(segments) || !finite_vector(excluded) || !finite_vector(published))
     return wire::fail("Expected Table 2 oracle rows, exact segment assignments and explicit exclusion mask");
   for (size_t i=0;i<segments.size();++i)
     if (segments[i]<0 || segments[i]>=7 || std::floor(segments[i])!=segments[i]
-        || (excluded[i]!=0 && excluded[i]!=1)) return wire::fail("Invalid oracle segment or exclusion mask");
+        || errors[i]<0 || (excluded[i]!=0 && excluded[i]!=1)) return wire::fail("Invalid oracle segment or exclusion mask");
+  for(size_t j=0;j<7;++j) if(published[7*j+6]<=0) return wire::fail("Expected positive intrinsic arm widths");
   double maximum=0,squared=0,analytic_max=0,analytic_squared=0;
   size_t within=0,missing=0;std::vector<double> residuals,analytic_residuals;
   for (size_t i=0;i<m.size();i+=4) {
@@ -166,10 +168,14 @@ extern "C" int ridge_metrics() {
   r.number("within_fraction",within/count);r.vector("residuals",residuals,"kpc");
   r.number("analytic_max",analytic_max,"kpc");r.number("analytic_rms",std::sqrt(analytic_squared/count),"kpc");
   r.vector("analytic_residuals",analytic_residuals,"kpc");
-  const auto acceptance=reid_acceptance(m,segments,excluded,published);
+  const auto acceptance=reid_acceptance(m,segments,excluded,published,errors);
   r.vector("curve_max_errors",acceptance.curve_errors,"kpc");
   r.vector("arm_counts",acceptance.counts);r.vector("arm_rms",acceptance.rms,"kpc");
-  r.vector("arm_rms_limits",acceptance.limits,"kpc");
+  r.vector("finite_segment_rms",acceptance.finite_rms,"kpc");
+  r.vector("arm_chi2_nu",acceptance.chi2_nu);
+  r.number("arm_chi2_limit",2.0);
+  r.vector("perpendicular_measurement_sigma",acceptance.measurement_sigma,"kpc");
+  r.text("uncertainty_method","first-order parallax propagation to closest-curve distance; mean d_perp^2/(Table2_width^2+sigma_perp^2)");
   r.vector("paper_frame_residuals",acceptance.residuals,"kpc");
   r.number("paper_exclusions",acceptance.excluded);
   r.text("measurement","local associated peak of baked G minus independently interpolated smooth background; unresolved peaks are failures");

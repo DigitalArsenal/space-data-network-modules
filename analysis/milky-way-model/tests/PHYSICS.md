@@ -1,4 +1,11 @@
-# Run-two physical diagnosis
+# Physical diagnosis
+
+Run three supersedes the run-two acceptance status below. See
+[HYPOTHESES.md](HYPOTHESES.md) for all five required audits, seventeen measured
+configurations, the uncertainty-aware maser result, and remaining physics gaps.
+The production emission model and volume contract are unchanged.
+
+## Run-two physical diagnosis
 
 The accepted geometry has not yet been found. This document records measured
 failures and constrained experiments, not a successful physical calibration.
