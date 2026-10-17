@@ -637,7 +637,11 @@ inline double magnitude(const BodyInfo& b, double r_au, double d_au, double alph
             return base + v10 + a * (7.944e-03 + a * 9.617e-05);
         }
         case PhotMoon:
-            return base + b.v10 + 0.0217 * a + 5.5e-9 * a * a * a * a;
+            // Krisciunas & Schaefer (1991), PASP 103:1033,
+            // "A Model of the Brightness of Moonlight", doi:10.1086/132921.
+            // Phase angle a is in degrees; retain V(1,0) and Sun-Moon /
+            // observer-Moon distances in au in the existing base term.
+            return base + b.v10 + 0.026 * std::fabs(a) + 4e-9 * a * a * a * a;
         case PhotHG:
             return hg_magnitude(b.v10, b.g, r_au, d_au, alpha_rad);
         case PhotLinear:

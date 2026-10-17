@@ -222,6 +222,12 @@ waits for a kernel. Text kernels are read at once (`ssb_load_kernel`).
   the co-rotation aberration of any central body stays under 50" (it was
   0.08 c at 1e13 m from the Sun, and the planets slid tens of au across the
   screen while zooming out).
+- `tests/moon-magnitude.e2e.test.mjs` (0.5.1): the recorded geocentric JPL
+  Horizons APmag and S-T-O phase angle at 24 JD TT epochs across a lunation,
+  using the DE440 excerpt and the module's Earth state as the observer.
+  Bounds are 0.05 mag and 0.05 degree; every residual is printed, including
+  any failures near new moon. Planet magnitudes must exactly equal the
+  pre-change module outputs at the same epoch.
 - `tests/parity.mjs`: `evaluate` byte-identical in browser, WasmEdge and
   Docker WasmEdge (`conformance/parity.json`).
 
@@ -230,4 +236,8 @@ waits for a kernel. Text kernels are read at once (`ssb_load_kernel`).
 Ephemerides and orientation: NASA/JPL NAIF (DE440, Park et al. 2021; satellite
 ephemerides of the JPL Solar System Dynamics group; sb441-n16). Rotation
 models: Archinal et al. (2018), WGCCRE 2015. Planet magnitudes: Mallama &
-Hilton (2018).
+Hilton (2018). Lunar phase function: Krisciunas & Schaefer (1991), PASP
+103:1033, [A Model of the Brightness of Moonlight](https://doi.org/10.1086/132921):
+`V = 0.21 + 5 log10(r d) + 0.026 |a| + 4e-9 a^4`, with phase angle `a`
+in degrees, Sun-Moon distance `r` in au, and observer-Moon distance `d` in au.
+The existing `V(1,0) = 0.21` normalization and distance terms are retained.
