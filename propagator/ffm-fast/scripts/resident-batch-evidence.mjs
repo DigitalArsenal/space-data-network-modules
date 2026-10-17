@@ -165,18 +165,20 @@ export async function boundaryEvidence() {
   };
   run('c++', ['-std=c++17', '-O2', '-ffp-contract=off', '-I', path.join(standardRoot, 'lib'), source, '-o', binary]);
   const orientation = await host(standardRoot, T3, false);
-  let sun, orientationEpochTdb;
+  const orientations = [];
   try {
     // The standard resident encoder supplies the converted TDB label; JS
     // neither converts time scales nor constructs orbit geometry.
-    const state = await residentState(orientation, seeds[0].handle, 917.123);
-    assert.equal(state.EPOCH_TIME_SYSTEM, 'TDB');
-    orientationEpochTdb = state.EPOCH;
-    sun = await sunAtTdb(orientation, orientationEpochTdb);
+    for (const offset of [917.123, 1050.123]) {
+      const state = await residentState(orientation, seeds[0].handle, offset);
+      assert.equal(state.EPOCH_TIME_SYSTEM, 'TDB');
+      orientations.push({ offset, epochTdb: state.EPOCH, sunM: await sunAtTdb(orientation, state.EPOCH) });
+    }
   } finally { await orientation.h.destroy(); }
-  const cases = JSON.parse(run(binary, [String(catalog.GM), String(sun.X), String(sun.Y), String(sun.Z)]));
+  const cases = JSON.parse(run(binary, [String(catalog.GM),
+    ...orientations.flatMap(({ sunM }) => [sunM.X, sunM.Y, sunM.Z].map(String))]));
   const fixtures = cases.map((entry, i) => ({ ...entry, label: entry.name, handle: 10000 + i,
-    norad: 10000 + i, cdAm: .02, crAm: .02, epochOffset: 0 }));
+    norad: 10000 + i, cdAm: .02, crAm: entry.crAm ?? .02, epochOffset: 0 }));
   const handles = fixtures.map(entry => entry.handle);
   const fast = await host(packageRoot, FAST_CATALOG_INTEGRATOR, false, fixtures);
   const reference = await host(standardRoot, T3, false, fixtures);
@@ -197,24 +199,30 @@ export async function boundaryEvidence() {
       }
       assert(positionM <= .01 && velocityMps <= .001, `${entry.name}: T3 error ${positionM} m, ${velocityMps} m/s`);
       const row = { name: entry.name, integrator: entry.expected, seconds: 1800,
-        samplingSeconds: entry.graze ? 1 : 10, positionM, velocityMps };
+        samplingSeconds: entry.graze ? 1 : 10, positionM, velocityMps, crAm: entry.crAm,
+        strongGraze: entry.strongGraze ?? false };
       if (entry.graze) {
         const samples = [];
-        for (let offset = 857; offset <= 977; ++offset) {
+        const halfWidth = entry.auditHalfWidthSeconds;
+        const center = Math.floor(entry.grazeCenterSeconds);
+        for (let offset = center - halfWidth; offset <= center + halfWidth; ++offset) {
           const state = await residentState(reference, entry.handle, offset);
           const solar = await sunAtTdb(reference, state.EPOCH);
           samples.push([offset, state.POSITION.X, state.POSITION.Y, state.POSITION.Z, solar.X, solar.Y, solar.Z].join(' '));
         }
         row.shadow = JSON.parse(run(binary, ['--audit-shadow'], `${samples.join('\n')}\n`));
+        if (entry.strongGraze) for (const key of ['penumbraAtStepStart', 'penumbraAtStepMidpoint', 'penumbraAtStepEnd'])
+          assert(row.shadow[key] > 0, `Strong graze must be hidden from endpoint/midpoint-only detection: ${key}`);
       }
       rows.push(row);
     }
     const grazes = rows.filter(row => row.shadow?.penumbraCrossings === 2 && row.shadow.umbraCrossings === 0 &&
       row.shadow.midpointCrossings === 0 && row.shadow.minimumPenumbra < 0 && row.shadow.minimumMidpoint > 0);
     assert(grazes.length > 0, 'Independent standard trajectory did not realize a penumbra-only enter/exit graze');
+    assert(grazes.some(row => row.strongGraze), 'The larger-area reference object must realize a penumbra-only graze');
     return { ok: true, sourceSha256: createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
       initialStateSource: 'C++ two-body perigee states with configured TT-compatible GM; grazing planes oriented using standard DE440 Sun',
-      gmM3s2: catalog.GM, orientationEpochTdb, orientationSunM: sun, epochUtc: pin.fixtureEpochUtc, frame: 'GCRF',
+      gmM3s2: catalog.GM, orientations, epochUtc: pin.fixtureEpochUtc, frame: 'GCRF',
       referenceIntegrator: T3, confirmedPenumbraOnlyGrazes: grazes.length, rows };
   } finally { await fast.h.destroy(); await reference.h.destroy(); }
 }

@@ -14,6 +14,7 @@
 int main(int argc,char** argv) {
     if (argc==2 && std::string(argv[1])=="--audit-shadow") {
         double t,x,y,z,sx,sy,sz,previous[3]={1,1,1},minimum[3]={1,1,1};
+        double probes[3]={NAN,NAN,NAN};
         unsigned crossings[3]={0,0,0},samples=0;
         while (std::cin>>t>>x>>y>>z>>sx>>sy>>sz) {
             const astro::Vec3 r(x/1000,y/1000,z/1000), d=astro::Vec3(sx/1000,sy/1000,sz/1000)-r;
@@ -21,6 +22,7 @@ int main(int argc,char** argv) {
             const double b=std::asin(astro::RE_EARTH/r.magnitude());
             const double c=std::atan2(r.cross(d).magnitude(),-r.dot(d));
             const double g[3]={c-a-b,c-b+a,c-b};
+            for (int i=0;i<3;++i) if (t==600+300*i) probes[i]=g[0];
             for (int i=0;i<3;++i) {
                 if (samples && ((g[i]<0)!=(previous[i]<0))) ++crossings[i];
                 minimum[i]=std::min(minimum[i],g[i]); previous[i]=g[i];
@@ -30,10 +32,14 @@ int main(int argc,char** argv) {
         std::cout<<std::setprecision(17)<<"{\"samples\":"<<samples<<",\"penumbraCrossings\":"<<crossings[0]
                  <<",\"umbraCrossings\":"<<crossings[1]<<",\"midpointCrossings\":"<<crossings[2]
                  <<",\"minimumPenumbra\":"<<minimum[0]<<",\"minimumUmbra\":"<<minimum[1]
-                 <<",\"minimumMidpoint\":"<<minimum[2]<<"}\n";
+                 <<",\"minimumMidpoint\":"<<minimum[2];
+        if (std::all_of(probes,probes+3,[](double x) { return std::isfinite(x); }))
+            std::cout<<",\"penumbraAtStepStart\":"<<probes[0]<<",\"penumbraAtStepMidpoint\":"<<probes[1]
+                     <<",\"penumbraAtStepEnd\":"<<probes[2];
+        std::cout<<"}\n";
         return 0;
     }
-    if (argc!=2 && argc!=5) return 2;
+    if (argc!=2 && argc!=8) return 2;
     const double mu=std::stod(argv[1])/1e9, re=astro::RE_EARTH, pi=std::acos(-1.);
     bool first=true;
     auto emit=[&](const std::string& name,double a,double e,const std::string& expected) {
@@ -67,13 +73,18 @@ int main(int argc,char** argv) {
         apsides("GTO apogee 30000 km",500,30000+sign*.001,sign<0?200:300);
         apsides("GTO apogee 45000 km",500,45000+sign*.001,sign<0?300:200);
     }
-    if (argc==5) {
-        const astro::Vec3 sun(std::stod(argv[2])/1000,std::stod(argv[3])/1000,std::stod(argv[4])/1000);
-        const auto direction=sun*(1/sun.magnitude());
-        const auto u0=astro::Vec3(0,0,1).cross(direction), u=u0*(1/u0.magnitude());
-        const auto perpendicular=direction.cross(u);
-        const double radius=42164, speed=std::sqrt(mu/radius), rate=speed/radius, center=917.123;
-        for (const double depth:{1e-7,3e-7,1e-6,3e-6}) {
+    if (argc==8) {
+        const double radius=42164, speed=std::sqrt(mu/radius), rate=speed/radius;
+        // Retain narrow same-sign grazes. The larger-area case is offset
+        // from the step midpoint to exercise the multiple-crossing scan.
+        for (const double depth:{1e-7,3e-7,1e-6,3e-6,1.5e-4}) {
+            const bool strong=depth==1.5e-4;
+            const int index=strong?5:2;
+            const astro::Vec3 sun(std::stod(argv[index])/1000,std::stod(argv[index+1])/1000,std::stod(argv[index+2])/1000);
+            const auto direction=sun*(1/sun.magnitude());
+            const auto u0=astro::Vec3(0,0,1).cross(direction), u=u0*(1/u0.magnitude());
+            const auto perpendicular=direction.cross(u);
+            const double center=strong?1050.123:917.123;
             double beta=std::asin(re/radius)+std::asin(astro::shadow::SUN_RADIUS_KM/sun.magnitude())-depth;
             astro::Vec3 normal, middle, tangent;
             for (int iteration=0;iteration<4;++iteration) {
@@ -88,7 +99,11 @@ int main(int argc,char** argv) {
             const auto r=(middle*std::cos(phase)+tangent*std::sin(phase))*radius;
             const auto v=(middle*(-std::sin(phase))+tangent*std::cos(phase))*speed;
             std::cout<<",{\"name\":\"penumbra graze "<<depth<<"\",\"expected\":\""<<gj(600)
-                     <<"\",\"graze\":true,\"state\":["<<r.x*1000<<','<<r.y*1000<<','<<r.z*1000<<','
+                     <<"\",\"graze\":true,\"crAm\":"<<(strong?20:.02)
+                     <<",\"strongGraze\":"<<(strong?"true":"false")
+                     <<",\"grazeCenterSeconds\":"<<center
+                     <<",\"auditHalfWidthSeconds\":"<<(strong?450:60)
+                     <<",\"state\":["<<r.x*1000<<','<<r.y*1000<<','<<r.z*1000<<','
                      <<v.x*1000<<','<<v.y*1000<<','<<v.z*1000<<"]}";
         }
     }
