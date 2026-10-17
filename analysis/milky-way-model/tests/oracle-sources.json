@@ -1,0 +1,35 @@
+{
+  "credit": "ESA/Gaia/DPAC",
+  "license": "CC BY-SA 3.0 IGO",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
+  "projection": "Galactic Hammer; longitude zero at center, positive longitude left, north up",
+  "measurement": "8-bit published display maps, not calibrated linear flux or counts",
+  "maps": [
+    {
+      "id": "flux",
+      "file": "esa-gaia-dr3-flux-hammer.png",
+      "width": 4000,
+      "height": 2000,
+      "sha256": "b8d750891c06d4f7e3ae5968506a6758164bddb13d942fa4d530473985daf29a",
+      "url": "https://www.cosmos.esa.int/documents/29201/8997116/eDR3_flux_hammer_4000x2000_v1.png/e9637606-e347-8f3b-259b-f66242eb9c3b?t=1654976553376",
+      "sourcePage": "https://www.cosmos.esa.int/web/gaia/dr3-what-colour-do-they-have"
+    },
+    {
+      "id": "density",
+      "file": "esa-gaia-dr3-density-hammer.png",
+      "width": 1500,
+      "height": 750,
+      "sha256": "9325bb1e06144e9ce3ee059ede6099fa29b798e8a79937670dc2290ef0e301b3",
+      "url": "https://www.cosmos.esa.int/documents/29201/8941319/eDR3_nsrc_hammer_1500_750_v2.png/f2a5af93-5e55-6ba8-1088-5d78a9462ae3?t=1654531255220",
+      "sourcePage": "https://www.cosmos.esa.int/web/gaia/dr3-where-are-the-stars"
+    }
+  ],
+  "masers": {
+    "file": "reid2019-table1.tsv",
+    "url": "https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=J/ApJ/885/131/table1&-out.all&-out.max=unlimited",
+    "source": "Reid et al. 2019, ApJ 885, 131, Table 1; DOI 10.26093/cds/vizier.18850131",
+    "units": "Galactic longitude/latitude degrees from published source identifier, parallax mas",
+    "epoch": "Published VLBI parallaxes; coordinate names are Galactic, catalog equatorial coordinates FK5 J2000",
+    "tolerance": "DECISION-run2: Table 2 curve <=1e-6 kpc; per-segment raw RMS <=1.5 times intrinsic width after only the paper's named exclusions. No Gaia threshold change."
+  }
+}

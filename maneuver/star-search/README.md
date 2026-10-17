@@ -1,7 +1,7 @@
 # Star — interplanetary broad search
 
 Patched-conic interplanetary mission design as an SDN module. Given a body
-sequence, epoch windows and grid steps, it returns a **Pareto set of
+sequence, epoch windows and grid steps, it returns a **time-bin-filtered set of ballistic
 trajectories** — encounter sequences with their delta-V, flight time, launch C3
 and arrival v-infinity.
 
@@ -131,28 +131,71 @@ scripts/dump_ephemeris.py \
 The binary layout, interface judgments, stage counts, and measured deviations
 are recorded in [`PORTING_NOTES.md`](PORTING_NOTES.md).
 
-## Typed port status
+## Typed guest interface (0.2.0)
 
-| port | status |
+The committed `dist/isomorphic/module.wasm` runs the existing C++ pipeline.
+Its declared target is **WasmEdge**: SDK 0.9.8 permits the required `wallet_sign`
+capability only on server runtimes. Console clients call a server-hosted module.
+No browser capability gate is overridden. The artifact uses wasi-threads;
+`threads=1` exercises the deterministic inline execution path.
+
+| Port | Record |
 | --- | --- |
-| `ephemeris` (input) | typed `$OEM` — **ruled and declared** |
-| `problem` (input) | typed `$SLP` solver/search definition |
-| `solutions` (output) | typed `$PSS` Pareto solution set |
+| `ephemeris` input | `$OEM`, ordinary FlatBuffer, explicit NAIF target IDs, SUN/10 center, ECLIPJ2000 frame name, TDB timestamps |
+| `problem` input | **Size-prefixed** `$SLP`, signed search definition |
+| `request` input | `$PCE`, signing context and page controls |
+| `solutions` output | **Size-prefixed** `$PSS`, with both real Ed25519 signatures |
+| `report` output | `$PCE`, model, objective, source, frame/center/time, stage sampling steps, page counts, cancellation |
 
-The two records are shared with targeting and optimization. `$SLP` names the
-propagator and evaluator ports instead of binding a provider; `$PSS` carries
-each candidate's objective vector, dominance rank, verification residual and
-provenance.
+OEM uses `EPHEMERIS_DATA_LINES` (km and km/s) and ISO Gregorian timestamps
+without a UTC `Z` suffix. Ephemerides cover every encounter; the existing kernel
+uses up to eight-point Lagrange interpolation inside coverage and rejects
+extrapolation. `MESSAGE_ID` is required and retained as PSS source provenance.
+Body GM and mean radius are supplied explicitly in the SLP variables.
 
-Separately, the `$OEM` port also trips `invalid-integer` on the aligned-binary
-peer's `byteLength` — but so does every other shipped manifest in this repo,
-including `analysis/od`. That is fleet-wide drift, not a defect of this family;
-see graph task `mod-manifest-aligned-peer-bytelength-drift`.
+SLP uses `KIND=OPTIMIZE` and a minimizing provider-defined objective named
+`star_patch_total_m_s`. Generic goals, constraints and solver settings are
+rejected because this adapter exposes the fixed ballistic Star algorithm.
+SLP variables use `PARAMETER=PROVIDER_DEFINED`, matching `VARIABLE_ID` and
+`PROVIDER_DEFINED_PARAMETER_NAME`, and numeric `INITIAL_VALUE`. Names match
+`tests/vectors/test2_EMEJ.problem`: vector entries append `.0`, `.1`, etc.;
+each stage additionally supplies `stage.N.body_count`. Add `threads` (1–64),
+`body.ID.gm_km3_s2`, and `body.ID.radius_km`. Omit unbounded TOF limits instead
+of serializing infinities. Unknown or duplicate names are rejected; bounds,
+row/memory caps, unsupported DSM/null/resonant legs and ephemeris coverage
+remain enforced by the C++ kernel. Search uses the fixed Star patch-cost
+objective; it does not claim to interpret other generic SLP optimizers.
 
-Phase 1 scope is the ballistic subset (no DSM leveraging, no resonant legs, no
-null legs) — enough for full `test2_EMEJ` parity. Phase 2 adds
-`maneuver_placement` (primer-vector DSM placement) and validates against
-`test1_DVEGA`. See `PORTING_NOTES.md`.
+The PCE request contains text `signing_slot`, `signing_public_key` (64 lowercase
+hex characters), `generated_at`, and `ephemeris`; dimensionless `page_offset`,
+`page_size` (1–1000), and `cancelled` (0/1). The host authenticates trusted SLP
+signers and the canonical JSON signature at ingress. The guest also verifies
+the binary SLP signature before searching. The host's typed `keyslot.sign`
+operation signs the zeroed, size-prefixed PSS and canonical JSON in IDL order;
+typed `crypto.ed25519.verify` confirms that both signatures match the declared
+public key. Private keys never enter the guest. Signing failures emit no PSS.
+
+Pages retain native trajectory order and stable trajectory IDs. Each invocation
+recomputes the same bounded search, then emits the requested page and total
+count. `cancelled=1` emits an empty signed set plus cancellation report. To stop
+a running synchronous search, the host terminates its dedicated WasmEdge
+process; no cooperative mid-search cancellation is claimed.
+
+PSS objectives distinguish `star_patch_total_m_s` (the upstream filtering
+objective), departure C3, endpoint v∞, sum-of-v∞, circular parking injection,
+flyby impulse, circular capture, and total physical impulse. Star's legacy
+`star_escape_excess_m_s` / `star_insertion_excess_m_s` remain separately labeled:
+they are excess above parabolic escape, **not** circular-orbit impulses.
+The shared budget kernel lives in `analysis/mission-screening/src/budget.hpp`.
+The report explicitly states that dominance ranking and propagation verification
+were not performed; default zero PSS fields must not be read as such evidence.
+
+Build with `npm ci && npm run build` in this directory. The cross-module E2E is
+`node --test analysis/mission-screening/tests/mission-screening.e2e.test.mjs`
+from the modules root. It runs actual typed Star WASM in WasmEdge 0.16.4,
+compares all 33 upstream E–M–E–J rows, and verifies both PSS signatures.
+The test's host binding only adds typed signing/verification over dedicated
+pipes to the SDK's native runner; the ephemeral test key stays in Node memory.
 
 ## Layout
 

@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-maneuver-star-search",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -23,6 +23,11 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "space-data-module-sdk": "0.8.25"
+    "space-data-module-sdk": "0.9.8",
+    "flatc-wasm": "26.1.38"
+  },
+  "dependencies": {
+    "flatbuffers": "25.9.23",
+    "spacedatastandards.org": "1.252.0"
   }
 }
