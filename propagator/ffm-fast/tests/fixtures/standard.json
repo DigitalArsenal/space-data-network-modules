@@ -1,0 +1,8 @@
+{
+  "wasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+  "forceModelsSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+  "fixtureEpochUtc": "2026-08-01T12:00:00.000000",
+  "fixtureEpochTt": "2026-08-01T12:01:09.184000000",
+  "frame": "GCRF",
+  "standardCommit": "01f0bbad"
+}

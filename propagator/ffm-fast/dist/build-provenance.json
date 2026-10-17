@@ -1,0 +1,66 @@
+{
+  "sdk": "0.9.5",
+  "spacedatastandards": "1.249.0",
+  "threadModel": "wasi-sequential",
+  "target": "wasm32-wasip1-threads",
+  "sharedMemory": true,
+  "sha256": "966b5057905ef1bfd14ab444063d0e09192134248e19a080b95f06fd7dff968e",
+  "bytes": 2116416,
+  "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
+  "flags": [
+    "-msimd128"
+  ],
+  "standardSources": "../hpop",
+  "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+  "forkBase": {
+    "path": "../hpop/lib/force_models.cpp",
+    "sha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562"
+  },
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /private/tmp/claude-501/-Users-tj-Cesium-Weather/2a455fdc-3b3d-48e5-883a-54ae2b62d382/scratchpad/emsdk/upstream/bin",
+  "exceptionRuntimeArchives": [
+    {
+      "name": "libc++abi-ww-wasmexcept.a",
+      "sha256": "77c9125bf14bb00b838e4613e791069a04a8d9aab3b4026d2d6df747cc5455fc"
+    },
+    {
+      "name": "libunwind-ww-wasmexcept.a",
+      "sha256": "d8bcc70af787c3993c20e100d48f6ea403e2176b838bca496f93e6f8520c5b8d"
+    }
+  ],
+  "units": [
+    "../hpop/src/cpp/src/prw_sdk_adapter.cpp",
+    "../hpop/lib/astrodynamics.cpp",
+    "../hpop/lib/integrators.cpp",
+    "../hpop/lib/variational.cpp",
+    "../hpop/lib/finite_burn.cpp",
+    "../hpop/lib/force_partials.cpp",
+    "../hpop/lib/coords.cpp",
+    "../hpop/lib/atmosphere_plugin.cpp",
+    "../hpop/lib/environment_models.cpp",
+    "../hpop/lib/ephemeris.cpp",
+    "lib/force_models.cpp",
+    "../hpop/lib/atmosphere_winds.cpp",
+    "../hpop/lib/nrlmsise00.cpp",
+    "../hpop/lib/time_convert.cpp",
+    "../hpop/lib/us76.cpp",
+    "lib/ffm_gravity.cpp",
+    "../../third_party/hwm14/hwm14.cpp",
+    "../../third_party/hwm14/hwm14_data.cpp",
+    "../../third_party/nrlmsise00/nrlmsise-00.c",
+    "../../third_party/nrlmsise00/nrlmsise-00_data.c",
+    "../hpop/src/hpop_plugin.cpp",
+    "../hpop/src/cpp/src/prw_execution.cpp",
+    "../hpop/src/cpp/src/prw_dynamics.cpp",
+    "../hpop/src/cpp/src/resident_dynamics.cpp",
+    "../hpop/src/cpp/src/kernel_store.cpp",
+    ".sdk-build/erfa-amalgamation.cpp"
+  ],
+  "erfa": {
+    "sourceFiles": 248,
+    "root": "../../higherpop/third_party/erfa"
+  },
+  "standardWasmExceptions": true,
+  "legacyRuntimeCompiled": false,
+  "debugInfo": "stripped",
+  "sdkAccommodation": "Delegates to the unchanged standard module build driver. SDK owns PIV, allocation, command framing, direct-surface initialization, manifest embedding, and validation."
+}

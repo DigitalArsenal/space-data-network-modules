@@ -1,0 +1,28 @@
+{
+  "name": "@orbpro/plugin-ffm-fast",
+  "version": "0.1.0",
+  "description": "Full Force Model profile FFM-1, fast implementation",
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node scripts/e2e-ffm-fast.mjs"
+  },
+  "main": "catalog.mjs",
+  "exports": {
+    ".": "./catalog.mjs",
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "catalog.mjs"
+  ],
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "flatbuffers": "^25.9.23",
+    "flatc-wasm": "^26.1.32",
+    "space-data-module-sdk": "0.9.5",
+    "spacedatastandards.org": "1.249.0"
+  },
+  "license": "UNLICENSED"
+}

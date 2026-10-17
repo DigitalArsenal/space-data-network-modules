@@ -1,0 +1,3736 @@
+{
+  "measurement": "Cumulative implementation levers versus unchanged standard WASM, same request bytes; fixed 60 s RK78 for error, default 1e-12 for per-lever CPU. Error windows include all samples through day 1/day 3.",
+  "source": "Study eight-seed GCRF catalog, epoch 2026-08-01T12:00:00 UTC; reference and tolerances in tests/fixtures/README.md",
+  "levers": [
+    {
+      "ok": true,
+      "mode": "lever",
+      "lever": "C1",
+      "standardDirectory": "../hpop",
+      "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+      "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+      "fastWasmSha256": "f4861b7bad2b37bae6eb22f7ce94d44d24c8251da79f009528f0e72c8ebca50d",
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "epochTt": "2026-08-01T12:01:09.184000000",
+      "frame": "GCRF",
+      "days": 3,
+      "fixedStepSeconds": 60,
+      "fixedTolerance": 1,
+      "truthSamplingSeconds": 300,
+      "standardIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "fastIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "maxAddedError": {
+        "oneDay": {
+          "positionM": 2.235468644487387e-06,
+          "velocityMps": 2.5120630297095646e-09
+        },
+        "threeDays": {
+          "positionM": 1.182034003079982e-05,
+          "velocityMps": 1.334017246895297e-08
+        }
+      },
+      "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+      "loadAverageStart": [
+        35.107421875,
+        36.26611328125,
+        35.59033203125
+      ],
+      "loadAverageEnd": [
+        30.81494140625,
+        34.76513671875,
+        35.0791015625
+      ],
+      "rows": [
+        {
+          "seed": "ISS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.235468644487387e-06,
+              "velocityMps": 2.5120630297095646e-09
+            },
+            "threeDays": {
+              "positionM": 1.182034003079982e-05,
+              "velocityMps": 1.334017246895297e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+            "fast": "0a9af5b6e4fefad3f64f324bacad1135a9d3d33e677567b47051460876d04a20"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7793989999999998,
+            "fast": 0.457328
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7825509999999999,
+              "fast": 0.45807899999999996
+            },
+            {
+              "standard": 0.7793989999999998,
+              "fast": 0.457328
+            }
+          ],
+          "loadAverage": [
+            33.59912109375,
+            35.87646484375,
+            35.46240234375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.20974616470710922,
+              "velocityMps": 0.00023997268191783917
+            },
+            "threeDays": {
+              "positionM": 2.1316506537206976,
+              "velocityMps": 0.002407739524648263
+            }
+          }
+        },
+        {
+          "seed": "STARLINK",
+          "fixed": {
+            "oneDay": {
+              "positionM": 3.599611822018368e-07,
+              "velocityMps": 5.654839209868928e-10
+            },
+            "threeDays": {
+              "positionM": 9.200822991167296e-06,
+              "velocityMps": 1.0097407996532825e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+            "fast": "f3eeb844070d7bae0831ac5f2735d3eccccdcec4ad399f93db03f7369d5d0e29"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7536103333333335,
+            "fast": 0.42271366666666665
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7682413333333332,
+              "fast": 0.42271366666666665
+            },
+            {
+              "standard": 0.7536103333333335,
+              "fast": 0.42482899999999996
+            }
+          ],
+          "loadAverage": [
+            32.54248046875,
+            35.56884765625,
+            35.357421875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.029334117682855605,
+              "velocityMps": 3.2064049911271334e-05
+            },
+            "threeDays": {
+              "positionM": 0.06729868568039737,
+              "velocityMps": 6.851707311429196e-05
+            }
+          }
+        },
+        {
+          "seed": "SSO800",
+          "fixed": {
+            "oneDay": {
+              "positionM": 6.606765395199341e-07,
+              "velocityMps": 7.623140224806069e-10
+            },
+            "threeDays": {
+              "positionM": 8.88313683349376e-06,
+              "velocityMps": 9.17543826963148e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+            "fast": "cd6da64fef04bc4f6ba54b7d3a093c09152a78f98325ce05431d27bb4c9d2d48"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.755159,
+            "fast": 0.4329896666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7557579999999998,
+              "fast": 0.4329896666666666
+            },
+            {
+              "standard": 0.755159,
+              "fast": 0.45390033333333335
+            }
+          ],
+          "loadAverage": [
+            33.27734375,
+            35.60107421875,
+            35.373046875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.09475292589290944,
+              "velocityMps": 9.874212817111761e-05
+            },
+            "threeDays": {
+              "positionM": 0.8896322133997616,
+              "velocityMps": 0.0009204678823922181
+            }
+          }
+        },
+        {
+          "seed": "LOW250",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.6090928983866856e-06,
+              "velocityMps": 1.906867666231712e-09
+            },
+            "threeDays": {
+              "positionM": 3.6188895898692722e-06,
+              "velocityMps": 4.185573771103654e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+            "fast": "fa85867cf6cb0476119aee8953a07c46842b0c2e714254d51704674a7dd2fa08"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.9128863333333334,
+            "fast": 0.5474789999999999
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.9128863333333334,
+              "fast": 0.5475046666666668
+            },
+            {
+              "standard": 0.9230573333333334,
+              "fast": 0.5474789999999999
+            }
+          ],
+          "loadAverage": [
+            33.18603515625,
+            35.49951171875,
+            35.33935546875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 1.1829738655147628,
+              "velocityMps": 0.0013678034502791468
+            },
+            "threeDays": {
+              "positionM": 7.9283937795605715,
+              "velocityMps": 0.00929513665665105
+            }
+          }
+        },
+        {
+          "seed": "GPS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 0
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 0
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+            "fast": "1399d259c5cd15d4e018d345f447b62f3da40730a43f6459a8b9d7dc580ad414"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.1990116666666667,
+            "fast": 0.11245466666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.1990116666666667,
+              "fast": 0.11766166666666665
+            },
+            {
+              "standard": 0.203843,
+              "fast": 0.11245466666666666
+            }
+          ],
+          "loadAverage": [
+            32.24072265625,
+            35.2197265625,
+            35.2412109375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 3.690834105348712e-05,
+              "velocityMps": 5.182045425972267e-09
+            },
+            "threeDays": {
+              "positionM": 0.0002816519110235338,
+              "velocityMps": 4.0867665564061886e-08
+            }
+          }
+        },
+        {
+          "seed": "GEO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 0
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 0
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+            "fast": "0394ef13ce1e02c4217bf8761bf9ec9c90719dccc7106591152e3ca5e6f24ecb"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.181634,
+            "fast": 0.10849166666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.181634,
+              "fast": 0.10849166666666667
+            },
+            {
+              "standard": 0.18523600000000004,
+              "fast": 0.11402433333333334
+            }
+          ],
+          "loadAverage": [
+            32.14111328125,
+            35.1494140625,
+            35.21630859375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 6.104529823779336e-06,
+              "velocityMps": 6.319059136507182e-10
+            },
+            "threeDays": {
+              "positionM": 2.865417012526144e-05,
+              "velocityMps": 2.220385143016599e-09
+            }
+          }
+        },
+        {
+          "seed": "MOLNIYA",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.681940357722572e-06,
+              "velocityMps": 1.3446450430415662e-09
+            },
+            "threeDays": {
+              "positionM": 2.7775758332299506e-06,
+              "velocityMps": 2.255386745962429e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+            "fast": "2af2086ea47d964b810dd6e5418b6243fcf8f318db3ec5c96d4ea4a4bcd6003c"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.23718133333333336,
+            "fast": 0.13567166666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.23718133333333336,
+              "fast": 0.13567166666666666
+            },
+            {
+              "standard": 0.23917566666666668,
+              "fast": 0.13763066666666665
+            }
+          ],
+          "loadAverage": [
+            31.40869140625,
+            34.947265625,
+            35.14453125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.21436971235622443,
+              "velocityMps": 0.00017110808436703273
+            },
+            "threeDays": {
+              "positionM": 0.21566102969859535,
+              "velocityMps": 0.00017456926241699294
+            }
+          }
+        },
+        {
+          "seed": "GTO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 8.326672684688674e-14
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 4.440892098500626e-13
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+            "fast": "f584666b12e1d1ff7084558aba9508e8508d5f173d9788ec822ebc0b504dc460"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.2746093333333333,
+            "fast": 0.154471
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.2746093333333333,
+              "fast": 0.15839966666666666
+            },
+            {
+              "standard": 0.2752763333333333,
+              "fast": 0.154471
+            }
+          ],
+          "loadAverage": [
+            30.81494140625,
+            34.76513671875,
+            35.0791015625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.4935609867389087,
+              "velocityMps": 0.00043396153308986594
+            },
+            "threeDays": {
+              "positionM": 3.2952082311502306,
+              "velocityMps": 0.002933935745115684
+            }
+          }
+        }
+      ],
+      "failures": []
+    },
+    {
+      "ok": true,
+      "mode": "lever",
+      "lever": "C4",
+      "standardDirectory": "../hpop",
+      "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+      "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+      "fastWasmSha256": "cf95dd3db5484bfd8552bb7b357c2a44e7103d8e888e21fc7757c00059e4801b",
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "epochTt": "2026-08-01T12:01:09.184000000",
+      "frame": "GCRF",
+      "days": 3,
+      "truthStandardModuleCppCommit": "4d2348a6",
+      "fixedStepSeconds": 60,
+      "fixedTolerance": 1,
+      "truthSamplingSeconds": 300,
+      "standardIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "fastIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "maxAddedError": {
+        "oneDay": {
+          "positionM": 2.235468644487387e-06,
+          "velocityMps": 2.5120630297095646e-09
+        },
+        "threeDays": {
+          "positionM": 1.182034003079982e-05,
+          "velocityMps": 1.334017246895297e-08
+        }
+      },
+      "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+      "loadAverageStart": [
+        34.52392578125,
+        34.7431640625,
+        35.02685546875
+      ],
+      "loadAverageEnd": [
+        33.55615234375,
+        34.37158203125,
+        34.85546875
+      ],
+      "rows": [
+        {
+          "seed": "ISS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.235468644487387e-06,
+              "velocityMps": 2.5120630297095646e-09
+            },
+            "threeDays": {
+              "positionM": 1.182034003079982e-05,
+              "velocityMps": 1.334017246895297e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+            "fast": "0a9af5b6e4fefad3f64f324bacad1135a9d3d33e677567b47051460876d04a20"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7802723333333333,
+            "fast": 0.4544133333333334
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7802723333333333,
+              "fast": 0.4544133333333334
+            },
+            {
+              "standard": 0.7852273333333334,
+              "fast": 0.454898
+            }
+          ],
+          "loadAverage": [
+            32.6044921875,
+            34.29931640625,
+            34.86279296875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.20974616470710922,
+              "velocityMps": 0.00023997268191783917
+            },
+            "threeDays": {
+              "positionM": 2.1316506537206976,
+              "velocityMps": 0.002407739524648263
+            }
+          }
+        },
+        {
+          "seed": "STARLINK",
+          "fixed": {
+            "oneDay": {
+              "positionM": 3.599611822018368e-07,
+              "velocityMps": 5.654839209868928e-10
+            },
+            "threeDays": {
+              "positionM": 9.200822991167296e-06,
+              "velocityMps": 1.0097407996532825e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+            "fast": "f3eeb844070d7bae0831ac5f2735d3eccccdcec4ad399f93db03f7369d5d0e29"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7334710000000001,
+            "fast": 0.4317223333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7334710000000001,
+              "fast": 0.4317223333333333
+            },
+            {
+              "standard": 0.7423086666666667,
+              "fast": 0.43854699999999996
+            }
+          ],
+          "loadAverage": [
+            30.53125,
+            33.7958984375,
+            34.6767578125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.029334117682855605,
+              "velocityMps": 3.2064049911271334e-05
+            },
+            "threeDays": {
+              "positionM": 0.06729868568039737,
+              "velocityMps": 6.851707311429196e-05
+            }
+          }
+        },
+        {
+          "seed": "SSO800",
+          "fixed": {
+            "oneDay": {
+              "positionM": 6.606765395199341e-07,
+              "velocityMps": 7.623140224806069e-10
+            },
+            "threeDays": {
+              "positionM": 8.88313683349376e-06,
+              "velocityMps": 9.17543826963148e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+            "fast": "cd6da64fef04bc4f6ba54b7d3a093c09152a78f98325ce05431d27bb4c9d2d48"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7583243333333334,
+            "fast": 0.44098499999999996
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7717456666666668,
+              "fast": 0.44098499999999996
+            },
+            {
+              "standard": 0.7583243333333334,
+              "fast": 0.45135033333333335
+            }
+          ],
+          "loadAverage": [
+            36.28173828125,
+            34.88720703125,
+            35.04931640625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.09475292589290944,
+              "velocityMps": 9.874212817111761e-05
+            },
+            "threeDays": {
+              "positionM": 0.8896322133997616,
+              "velocityMps": 0.0009204678823922181
+            }
+          }
+        },
+        {
+          "seed": "LOW250",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.6090928983866856e-06,
+              "velocityMps": 1.906867666231712e-09
+            },
+            "threeDays": {
+              "positionM": 3.6188895898692722e-06,
+              "velocityMps": 4.185573771103654e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+            "fast": "fa85867cf6cb0476119aee8953a07c46842b0c2e714254d51704674a7dd2fa08"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.9137323333333333,
+            "fast": 0.5386636666666668
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.916248,
+              "fast": 0.5386636666666668
+            },
+            {
+              "standard": 0.9137323333333333,
+              "fast": 0.5398703333333333
+            }
+          ],
+          "loadAverage": [
+            36.45556640625,
+            34.9853515625,
+            35.0830078125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 1.1829738655147628,
+              "velocityMps": 0.0013678034502791468
+            },
+            "threeDays": {
+              "positionM": 7.9283937795605715,
+              "velocityMps": 0.00929513665665105
+            }
+          }
+        },
+        {
+          "seed": "GPS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 0
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 0
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+            "fast": "1399d259c5cd15d4e018d345f447b62f3da40730a43f6459a8b9d7dc580ad414"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.195327,
+            "fast": 0.10999766666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.19569533333333336,
+              "fast": 0.10999766666666666
+            },
+            {
+              "standard": 0.195327,
+              "fast": 0.11025
+            }
+          ],
+          "loadAverage": [
+            33.9638671875,
+            34.4931640625,
+            34.90673828125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 3.690834105348712e-05,
+              "velocityMps": 5.182045425972267e-09
+            },
+            "threeDays": {
+              "positionM": 0.0002816519110235338,
+              "velocityMps": 4.0867665564061886e-08
+            }
+          }
+        },
+        {
+          "seed": "GEO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 0
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 0
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+            "fast": "0394ef13ce1e02c4217bf8761bf9ec9c90719dccc7106591152e3ca5e6f24ecb"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.182727,
+            "fast": 0.10294333333333335
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.182727,
+              "fast": 0.10294333333333335
+            },
+            {
+              "standard": 0.1832623333333333,
+              "fast": 0.10463433333333333
+            }
+          ],
+          "loadAverage": [
+            33.24560546875,
+            34.33544921875,
+            34.8486328125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 6.104529823779336e-06,
+              "velocityMps": 6.319059136507182e-10
+            },
+            "threeDays": {
+              "positionM": 2.865417012526144e-05,
+              "velocityMps": 2.220385143016599e-09
+            }
+          }
+        },
+        {
+          "seed": "MOLNIYA",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.681940357722572e-06,
+              "velocityMps": 1.3446450430415662e-09
+            },
+            "threeDays": {
+              "positionM": 2.7775758332299506e-06,
+              "velocityMps": 2.255386745962429e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+            "fast": "2af2086ea47d964b810dd6e5418b6243fcf8f318db3ec5c96d4ea4a4bcd6003c"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.23952966666666664,
+            "fast": 0.13376433333333332
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.2584863333333333,
+              "fast": 0.13627166666666668
+            },
+            {
+              "standard": 0.23952966666666664,
+              "fast": 0.13376433333333332
+            }
+          ],
+          "loadAverage": [
+            33.8662109375,
+            34.44580078125,
+            34.88427734375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.21436971235622443,
+              "velocityMps": 0.00017110808436703273
+            },
+            "threeDays": {
+              "positionM": 0.21566102969859535,
+              "velocityMps": 0.00017456926241699294
+            }
+          }
+        },
+        {
+          "seed": "GTO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 8.326672684688674e-14
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 4.440892098500626e-13
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+            "fast": "f584666b12e1d1ff7084558aba9508e8508d5f173d9788ec822ebc0b504dc460"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.287063,
+            "fast": 0.15626333333333334
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.287063,
+              "fast": 0.15626333333333334
+            },
+            {
+              "standard": 0.304198,
+              "fast": 0.17521799999999998
+            }
+          ],
+          "loadAverage": [
+            33.55615234375,
+            34.37158203125,
+            34.85546875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.4935609867389087,
+              "velocityMps": 0.00043396153308986594
+            },
+            "threeDays": {
+              "positionM": 3.2952082311502306,
+              "velocityMps": 0.002933935745115684
+            }
+          }
+        }
+      ],
+      "failures": [],
+      "fixedOutputIdenticalToPrevious": true
+    },
+    {
+      "ok": true,
+      "mode": "lever",
+      "lever": "C3a",
+      "standardDirectory": "../hpop",
+      "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+      "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+      "fastWasmSha256": "b49184a6844eca762f446ee1913331d0334402b25d8db5ab319740a0d3f39ee0",
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "epochTt": "2026-08-01T12:01:09.184000000",
+      "frame": "GCRF",
+      "days": 3,
+      "truthStandardModuleCppCommit": "4d2348a6",
+      "fixedStepSeconds": 60,
+      "fixedTolerance": 1,
+      "truthSamplingSeconds": 300,
+      "standardIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "fastIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "maxAddedError": {
+        "oneDay": {
+          "positionM": 2.235468644487387e-06,
+          "velocityMps": 2.5120630297095646e-09
+        },
+        "threeDays": {
+          "positionM": 1.182034003079982e-05,
+          "velocityMps": 1.334017246895297e-08
+        }
+      },
+      "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+      "loadAverageStart": [
+        38.54150390625,
+        35.92578125,
+        35.4091796875
+      ],
+      "loadAverageEnd": [
+        38.5302734375,
+        36.20361328125,
+        35.53857421875
+      ],
+      "rows": [
+        {
+          "seed": "ISS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.235468644487387e-06,
+              "velocityMps": 2.5120630297095646e-09
+            },
+            "threeDays": {
+              "positionM": 1.182034003079982e-05,
+              "velocityMps": 1.334017246895297e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+            "fast": "0a9af5b6e4fefad3f64f324bacad1135a9d3d33e677567b47051460876d04a20"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.8093643333333334,
+            "fast": 0.3822096666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.8093643333333334,
+              "fast": 0.3915580000000001
+            },
+            {
+              "standard": 0.8233443333333333,
+              "fast": 0.3822096666666667
+            }
+          ],
+          "loadAverage": [
+            38.3203125,
+            35.974609375,
+            35.43310546875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.20974616470710922,
+              "velocityMps": 0.00023997268191783917
+            },
+            "threeDays": {
+              "positionM": 2.1316506537206976,
+              "velocityMps": 0.002407739524648263
+            }
+          }
+        },
+        {
+          "seed": "STARLINK",
+          "fixed": {
+            "oneDay": {
+              "positionM": 3.599611822018368e-07,
+              "velocityMps": 5.654839209868928e-10
+            },
+            "threeDays": {
+              "positionM": 9.200822991167296e-06,
+              "velocityMps": 1.0097407996532825e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+            "fast": "f3eeb844070d7bae0831ac5f2735d3eccccdcec4ad399f93db03f7369d5d0e29"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.729365,
+            "fast": 0.33900099999999994
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7507199999999999,
+              "fast": 0.339131
+            },
+            {
+              "standard": 0.729365,
+              "fast": 0.33900099999999994
+            }
+          ],
+          "loadAverage": [
+            38.19384765625,
+            36.01123046875,
+            35.451171875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.029334117682855605,
+              "velocityMps": 3.2064049911271334e-05
+            },
+            "threeDays": {
+              "positionM": 0.06729868568039737,
+              "velocityMps": 6.851707311429196e-05
+            }
+          }
+        },
+        {
+          "seed": "SSO800",
+          "fixed": {
+            "oneDay": {
+              "positionM": 6.606765395199341e-07,
+              "velocityMps": 7.623140224806069e-10
+            },
+            "threeDays": {
+              "positionM": 8.88313683349376e-06,
+              "velocityMps": 9.17543826963148e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+            "fast": "cd6da64fef04bc4f6ba54b7d3a093c09152a78f98325ce05431d27bb4c9d2d48"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.740417,
+            "fast": 0.3538956666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.740417,
+              "fast": 0.35509199999999996
+            },
+            {
+              "standard": 0.798187,
+              "fast": 0.3538956666666666
+            }
+          ],
+          "loadAverage": [
+            37.06201171875,
+            35.82470703125,
+            35.3916015625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.09475292589290944,
+              "velocityMps": 9.874212817111761e-05
+            },
+            "threeDays": {
+              "positionM": 0.8896322133997616,
+              "velocityMps": 0.0009204678823922181
+            }
+          }
+        },
+        {
+          "seed": "LOW250",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.6090928983866856e-06,
+              "velocityMps": 1.906867666231712e-09
+            },
+            "threeDays": {
+              "positionM": 3.6188895898692722e-06,
+              "velocityMps": 4.185573771103654e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+            "fast": "fa85867cf6cb0476119aee8953a07c46842b0c2e714254d51704674a7dd2fa08"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.9546223333333334,
+            "fast": 0.4488993333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.9767600000000001,
+              "fast": 0.47443433333333324
+            },
+            {
+              "standard": 0.9546223333333334,
+              "fast": 0.4488993333333333
+            }
+          ],
+          "loadAverage": [
+            37.22021484375,
+            35.90234375,
+            35.42529296875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 1.1829738655147628,
+              "velocityMps": 0.0013678034502791468
+            },
+            "threeDays": {
+              "positionM": 7.9283937795605715,
+              "velocityMps": 0.00929513665665105
+            }
+          }
+        },
+        {
+          "seed": "GPS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 0
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 0
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+            "fast": "1399d259c5cd15d4e018d345f447b62f3da40730a43f6459a8b9d7dc580ad414"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.193612,
+            "fast": 0.08778166666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.193612,
+              "fast": 0.088294
+            },
+            {
+              "standard": 0.19476533333333335,
+              "fast": 0.08778166666666666
+            }
+          ],
+          "loadAverage": [
+            36.0810546875,
+            35.68798828125,
+            35.35205078125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 3.690834105348712e-05,
+              "velocityMps": 5.182045425972267e-09
+            },
+            "threeDays": {
+              "positionM": 0.0002816519110235338,
+              "velocityMps": 4.0867665564061886e-08
+            }
+          }
+        },
+        {
+          "seed": "GEO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 0
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 0
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+            "fast": "0394ef13ce1e02c4217bf8761bf9ec9c90719dccc7106591152e3ca5e6f24ecb"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.18268000000000004,
+            "fast": 0.08354733333333335
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.184123,
+              "fast": 0.08354733333333335
+            },
+            {
+              "standard": 0.18268000000000004,
+              "fast": 0.08401900000000001
+            }
+          ],
+          "loadAverage": [
+            35.2734375,
+            35.52685546875,
+            35.296875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 6.104529823779336e-06,
+              "velocityMps": 6.319059136507182e-10
+            },
+            "threeDays": {
+              "positionM": 2.865417012526144e-05,
+              "velocityMps": 2.220385143016599e-09
+            }
+          }
+        },
+        {
+          "seed": "MOLNIYA",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.681940357722572e-06,
+              "velocityMps": 1.3446450430415662e-09
+            },
+            "threeDays": {
+              "positionM": 2.7775758332299506e-06,
+              "velocityMps": 2.255386745962429e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+            "fast": "2af2086ea47d964b810dd6e5418b6243fcf8f318db3ec5c96d4ea4a4bcd6003c"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.24050733333333332,
+            "fast": 0.10796066666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.24137666666666666,
+              "fast": 0.10796066666666666
+            },
+            {
+              "standard": 0.24050733333333332,
+              "fast": 0.10818366666666666
+            }
+          ],
+          "loadAverage": [
+            36.05224609375,
+            35.68408203125,
+            35.353515625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.21436971235622443,
+              "velocityMps": 0.00017110808436703273
+            },
+            "threeDays": {
+              "positionM": 0.21566102969859535,
+              "velocityMps": 0.00017456926241699294
+            }
+          }
+        },
+        {
+          "seed": "GTO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 0,
+              "velocityMps": 8.326672684688674e-14
+            },
+            "threeDays": {
+              "positionM": 0,
+              "velocityMps": 4.440892098500626e-13
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+            "fast": "f584666b12e1d1ff7084558aba9508e8508d5f173d9788ec822ebc0b504dc460"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.280398,
+            "fast": 0.12599766666666665
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.280398,
+              "fast": 0.12599766666666665
+            },
+            {
+              "standard": 0.28355,
+              "fast": 0.12700833333333333
+            }
+          ],
+          "loadAverage": [
+            38.5302734375,
+            36.20361328125,
+            35.53857421875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.4935609867389087,
+              "velocityMps": 0.00043396153308986594
+            },
+            "threeDays": {
+              "positionM": 3.2952082311502306,
+              "velocityMps": 0.002933935745115684
+            }
+          }
+        }
+      ],
+      "failures": [],
+      "fixedOutputIdenticalToPrevious": true
+    },
+    {
+      "ok": true,
+      "mode": "lever",
+      "lever": "C2",
+      "standardDirectory": "../hpop",
+      "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+      "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+      "fastWasmSha256": "a42f9c456b512c6c2258b841f0782dac219b68107c3f78958160ef7f8213c7be",
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "epochTt": "2026-08-01T12:01:09.184000000",
+      "frame": "GCRF",
+      "days": 3,
+      "truthStandardModuleCppCommit": "4d2348a6",
+      "fixedStepSeconds": 60,
+      "fixedTolerance": 1,
+      "truthSamplingSeconds": 300,
+      "standardIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "fastIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "maxAddedError": {
+        "oneDay": {
+          "positionM": 4.823952181896238e-06,
+          "velocityMps": 4.307180419111586e-09
+        },
+        "threeDays": {
+          "positionM": 3.080381806102806e-05,
+          "velocityMps": 3.6135149237617216e-08
+        }
+      },
+      "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+      "loadAverageStart": [
+        53.263671875,
+        40.78271484375,
+        37.29541015625
+      ],
+      "loadAverageEnd": [
+        52.44970703125,
+        43.505859375,
+        38.62109375
+      ],
+      "rows": [
+        {
+          "seed": "ISS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 8.91221808131149e-07,
+              "velocityMps": 9.87572230803581e-10
+            },
+            "threeDays": {
+              "positionM": 1.421123156888454e-05,
+              "velocityMps": 1.6013283423320928e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+            "fast": "a86da45b84d5eebbfb555b255986c2d1ce3225e20cf9f8e3a75f46dddc947056"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.8060526666666665,
+            "fast": 0.32136933333333334
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.8060526666666665,
+              "fast": 0.32136933333333334
+            },
+            {
+              "standard": 0.8495916666666669,
+              "fast": 0.3248226666666667
+            }
+          ],
+          "loadAverage": [
+            55.20458984375,
+            41.82177734375,
+            37.7265625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.20974616470710922,
+              "velocityMps": 0.00023997268191783917
+            },
+            "threeDays": {
+              "positionM": 2.1316506537206976,
+              "velocityMps": 0.002407739524648263
+            }
+          }
+        },
+        {
+          "seed": "STARLINK",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.8264963012558908e-06,
+              "velocityMps": 1.9982337689425593e-09
+            },
+            "threeDays": {
+              "positionM": 2.5833301661972933e-06,
+              "velocityMps": 3.06058042827474e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+            "fast": "57ab99f5713d08b40e57e5c33edb4d2b58ccc414a81803bd9e01e834870767b3"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7542786666666665,
+            "fast": 0.29345233333333337
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7542786666666665,
+              "fast": 0.29362866666666665
+            },
+            {
+              "standard": 0.7700606666666666,
+              "fast": 0.29345233333333337
+            }
+          ],
+          "loadAverage": [
+            56.26171875,
+            42.486328125,
+            38.009765625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.029334117682855605,
+              "velocityMps": 3.2064049911271334e-05
+            },
+            "threeDays": {
+              "positionM": 0.06729868568039737,
+              "velocityMps": 6.851707311429196e-05
+            }
+          }
+        },
+        {
+          "seed": "SSO800",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.3890274814194867e-06,
+              "velocityMps": 1.4029849486318116e-09
+            },
+            "threeDays": {
+              "positionM": 7.896894574952728e-06,
+              "velocityMps": 8.117072113962482e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+            "fast": "b76d55096fbd3d3c2408bf00b8318e08f02abf785b88d1b3a4e9190d66339d16"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7513569999999999,
+            "fast": 0.2939913333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7513569999999999,
+              "fast": 0.2939913333333333
+            },
+            {
+              "standard": 0.752393,
+              "fast": 0.2948556666666667
+            }
+          ],
+          "loadAverage": [
+            56.8427734375,
+            43.06298828125,
+            38.26611328125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.09475292589290944,
+              "velocityMps": 9.874212817111761e-05
+            },
+            "threeDays": {
+              "positionM": 0.8896322133997616,
+              "velocityMps": 0.0009204678823922181
+            }
+          }
+        },
+        {
+          "seed": "LOW250",
+          "fixed": {
+            "oneDay": {
+              "positionM": 8.463473194897401e-07,
+              "velocityMps": 1.2674064085100788e-09
+            },
+            "threeDays": {
+              "positionM": 3.080381806102806e-05,
+              "velocityMps": 3.6135149237617216e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+            "fast": "a53dfe24c9403eb4116e0c5ce73002bc8152be021aae42ce57291b5bb1047022"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.9310793333333334,
+            "fast": 0.3863573333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.9335876666666668,
+              "fast": 0.3863573333333333
+            },
+            {
+              "standard": 0.9310793333333334,
+              "fast": 0.387453
+            }
+          ],
+          "loadAverage": [
+            55.71337890625,
+            43.49755859375,
+            38.5048828125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 1.1829738655147628,
+              "velocityMps": 0.0013678034502791468
+            },
+            "threeDays": {
+              "positionM": 7.9283937795605715,
+              "velocityMps": 0.00929513665665105
+            }
+          }
+        },
+        {
+          "seed": "GPS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 4.538332995751344e-07,
+              "velocityMps": 1.356052780497904e-10
+            },
+            "threeDays": {
+              "positionM": 3.296899884448228e-06,
+              "velocityMps": 5.265227748903168e-10
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+            "fast": "e547eef1a2a883f968c5904e144b0ce1bc193f6eaf60b381634c7bf053c755dc"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.19887833333333335,
+            "fast": 0.07630333333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.1992556666666667,
+              "fast": 0.07738233333333333
+            },
+            {
+              "standard": 0.19887833333333335,
+              "fast": 0.07630333333333333
+            }
+          ],
+          "loadAverage": [
+            54.775390625,
+            43.505859375,
+            38.53662109375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 3.690834105348712e-05,
+              "velocityMps": 5.182045425972267e-09
+            },
+            "threeDays": {
+              "positionM": 0.0002816519110235338,
+              "velocityMps": 4.0867665564061886e-08
+            }
+          }
+        },
+        {
+          "seed": "GEO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 3.637981305092661e-08,
+              "velocityMps": 4.529709940470639e-11
+            },
+            "threeDays": {
+              "positionM": 5.161693311645628e-06,
+              "velocityMps": 4.336425160458012e-10
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+            "fast": "9683913875d77f87af4e0fc9471a6bbaaf00b6dd1a84b4729e07c4d960a0dcc2"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.1861853333333333,
+            "fast": 0.07225266666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.18649866666666667,
+              "fast": 0.07260533333333333
+            },
+            {
+              "standard": 0.1861853333333333,
+              "fast": 0.07225266666666667
+            }
+          ],
+          "loadAverage": [
+            52.55078125,
+            43.2314453125,
+            38.46875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 6.104529823779336e-06,
+              "velocityMps": 6.319059136507182e-10
+            },
+            "threeDays": {
+              "positionM": 2.865417012526144e-05,
+              "velocityMps": 2.220385143016599e-09
+            }
+          }
+        },
+        {
+          "seed": "MOLNIYA",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.916598191408194e-06,
+              "velocityMps": 1.5367649357830955e-09
+            },
+            "threeDays": {
+              "positionM": 5.036700529129718e-06,
+              "velocityMps": 4.0962303653117895e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+            "fast": "b469c3dba24e6f89d7acbb2bf52891c714fc3e9a534242ebf448c1913d0128eb"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.24341766666666667,
+            "fast": 0.09276833333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.24553766666666668,
+              "fast": 0.09276833333333333
+            },
+            {
+              "standard": 0.24341766666666667,
+              "fast": 0.09325166666666666
+            }
+          ],
+          "loadAverage": [
+            51.70556640625,
+            43.2109375,
+            38.4892578125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.21436971235622443,
+              "velocityMps": 0.00017110808436703273
+            },
+            "threeDays": {
+              "positionM": 0.21566102969859535,
+              "velocityMps": 0.00017456926241699294
+            }
+          }
+        },
+        {
+          "seed": "GTO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 4.823952181896238e-06,
+              "velocityMps": 4.307180419111586e-09
+            },
+            "threeDays": {
+              "positionM": 1.882886057335668e-05,
+              "velocityMps": 1.6817959918754912e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+            "fast": "88c65007db8923f6568a32ab61a55929ddd7e97fa8a9a2824fb3e30dc78bdc5d"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.2818623333333334,
+            "fast": 0.10667833333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.28548833333333334,
+              "fast": 0.10695
+            },
+            {
+              "standard": 0.2818623333333334,
+              "fast": 0.10667833333333333
+            }
+          ],
+          "loadAverage": [
+            52.44970703125,
+            43.505859375,
+            38.62109375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.4935609867389087,
+              "velocityMps": 0.00043396153308986594
+            },
+            "threeDays": {
+              "positionM": 3.2952082311502306,
+              "velocityMps": 0.002933935745115684
+            }
+          }
+        }
+      ],
+      "failures": []
+    },
+    {
+      "ok": true,
+      "mode": "lever",
+      "lever": "C3c",
+      "standardDirectory": "../hpop",
+      "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+      "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+      "fastWasmSha256": "748382c2028342415d1547b750a71eaa43c412a208a2ffd0439b9bb10a68250c",
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "epochTt": "2026-08-01T12:01:09.184000000",
+      "frame": "GCRF",
+      "days": 3,
+      "truthStandardModuleCppCommit": "4d2348a6",
+      "fixedStepSeconds": 60,
+      "fixedTolerance": 1,
+      "truthSamplingSeconds": 300,
+      "standardIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "fastIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "maxAddedError": {
+        "oneDay": {
+          "positionM": 9.949906538277633e-06,
+          "velocityMps": 7.90444264297147e-09
+        },
+        "threeDays": {
+          "positionM": 4.4302594307074985e-05,
+          "velocityMps": 3.606753610434232e-08
+        }
+      },
+      "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+      "loadAverageStart": [
+        35.341796875,
+        40.634765625,
+        38.29931640625
+      ],
+      "loadAverageEnd": [
+        35.14501953125,
+        39.3798828125,
+        37.986328125
+      ],
+      "rows": [
+        {
+          "seed": "ISS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 5.371057133845428e-07,
+              "velocityMps": 6.762969825029656e-10
+            },
+            "threeDays": {
+              "positionM": 2.7017829682779176e-06,
+              "velocityMps": 3.0307628085457692e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+            "fast": "597c8f0de24c273aef54357c9c422744a94f56e18cfe648b37a72b3066c13bdf"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.8007703333333334,
+            "fast": 0.288506
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.8845176666666666,
+              "fast": 0.2927446666666667
+            },
+            {
+              "standard": 0.8007703333333334,
+              "fast": 0.288506
+            }
+          ],
+          "loadAverage": [
+            34.34326171875,
+            40.13427734375,
+            38.16015625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.20974616470710922,
+              "velocityMps": 0.00023997268191783917
+            },
+            "threeDays": {
+              "positionM": 2.1316506537206976,
+              "velocityMps": 0.002407739524648263
+            }
+          }
+        },
+        {
+          "seed": "STARLINK",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.1170870734096934e-06,
+              "velocityMps": 2.414531230455891e-09
+            },
+            "threeDays": {
+              "positionM": 1.2203061015118535e-05,
+              "velocityMps": 1.3272877978574108e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+            "fast": "f7299a6df6d56d3b8027098683f816a1358e2bf155ff2f547ec959d105a79ae5"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7304963333333333,
+            "fast": 0.25589666666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7313293333333334,
+              "fast": 0.2616013333333333
+            },
+            {
+              "standard": 0.7304963333333333,
+              "fast": 0.25589666666666666
+            }
+          ],
+          "loadAverage": [
+            31.69873046875,
+            39.38623046875,
+            37.91796875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.029334117682855605,
+              "velocityMps": 3.2064049911271334e-05
+            },
+            "threeDays": {
+              "positionM": 0.06729868568039737,
+              "velocityMps": 6.851707311429196e-05
+            }
+          }
+        },
+        {
+          "seed": "SSO800",
+          "fixed": {
+            "oneDay": {
+              "positionM": 9.797298441243001e-07,
+              "velocityMps": 9.664377345461123e-10
+            },
+            "threeDays": {
+              "positionM": 1.972672220013468e-06,
+              "velocityMps": 1.9959260382327124e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+            "fast": "2c5e65c4052e344a093c14b24ffdd56034fa0d3caff2d06ec70066e6b6592942"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7342,
+            "fast": 0.26736766666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7342,
+              "fast": 0.26736766666666667
+            },
+            {
+              "standard": 0.7611153333333333,
+              "fast": 0.27419333333333334
+            }
+          ],
+          "loadAverage": [
+            32.79833984375,
+            39.38525390625,
+            37.93505859375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.09475292589290944,
+              "velocityMps": 9.874212817111761e-05
+            },
+            "threeDays": {
+              "positionM": 0.8896322133997616,
+              "velocityMps": 0.0009204678823922181
+            }
+          }
+        },
+        {
+          "seed": "LOW250",
+          "fixed": {
+            "oneDay": {
+              "positionM": 4.8167769327773e-06,
+              "velocityMps": 5.69925551570249e-09
+            },
+            "threeDays": {
+              "positionM": 1.4857435660749438e-05,
+              "velocityMps": 1.7447637650452815e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+            "fast": "89e05847e217018a68f68ad4fdda8bb717e0792c92f28f4c619f30db9131225e"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.9172410000000001,
+            "fast": 0.3435006666666666
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.9172410000000001,
+              "fast": 0.3435006666666666
+            },
+            {
+              "standard": 0.9340683333333333,
+              "fast": 0.3485183333333333
+            }
+          ],
+          "loadAverage": [
+            34.9140625,
+            39.619140625,
+            38.03466796875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 1.1829738655147628,
+              "velocityMps": 0.0013678034502791468
+            },
+            "threeDays": {
+              "positionM": 7.9283937795605715,
+              "velocityMps": 0.00929513665665105
+            }
+          }
+        },
+        {
+          "seed": "GPS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.0770325394484656e-06,
+              "velocityMps": 3.5792254164492556e-10
+            },
+            "threeDays": {
+              "positionM": 1.0172051082975439e-05,
+              "velocityMps": 1.5563141840672692e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+            "fast": "53ef12ef4403a5e702b78ce5a87eed4ebb25c595c26568ffa02f4590a9701f8d"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.195658,
+            "fast": 0.06838433333333334
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.198769,
+              "fast": 0.06838433333333334
+            },
+            {
+              "standard": 0.195658,
+              "fast": 0.06839366666666667
+            }
+          ],
+          "loadAverage": [
+            35.1611328125,
+            39.591796875,
+            38.0341796875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 3.690834105348712e-05,
+              "velocityMps": 5.182045425972267e-09
+            },
+            "threeDays": {
+              "positionM": 0.0002816519110235338,
+              "velocityMps": 4.0867665564061886e-08
+            }
+          }
+        },
+        {
+          "seed": "GEO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.0205699044221675e-06,
+              "velocityMps": 1.3785796275288912e-10
+            },
+            "threeDays": {
+              "positionM": 1.98650264142175e-06,
+              "velocityMps": 2.416481709223636e-10
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+            "fast": "3e963d8e75998ac098522453a992a90ae9d3ebf10d6913030810285462239325"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.180183,
+            "fast": 0.06485999999999999
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.180183,
+              "fast": 0.06554733333333333
+            },
+            {
+              "standard": 0.180882,
+              "fast": 0.06485999999999999
+            }
+          ],
+          "loadAverage": [
+            34.82763671875,
+            39.44873046875,
+            37.99267578125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 6.104529823779336e-06,
+              "velocityMps": 6.319059136507182e-10
+            },
+            "threeDays": {
+              "positionM": 2.865417012526144e-05,
+              "velocityMps": 2.220385143016599e-09
+            }
+          }
+        },
+        {
+          "seed": "MOLNIYA",
+          "fixed": {
+            "oneDay": {
+              "positionM": 9.949906538277633e-06,
+              "velocityMps": 7.90444264297147e-09
+            },
+            "threeDays": {
+              "positionM": 4.4302594307074985e-05,
+              "velocityMps": 3.606753610434232e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+            "fast": "50a71b59e09d5ea42e09c57f073dd5c5dcd80ea82311680de318084678cf5121"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.23698233333333332,
+            "fast": 0.081862
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.23698233333333332,
+              "fast": 0.081862
+            },
+            {
+              "standard": 0.23761833333333335,
+              "fast": 0.08199933333333333
+            }
+          ],
+          "loadAverage": [
+            36.20263671875,
+            39.65673828125,
+            38.07470703125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.21436971235622443,
+              "velocityMps": 0.00017110808436703273
+            },
+            "threeDays": {
+              "positionM": 0.21566102969859535,
+              "velocityMps": 0.00017456926241699294
+            }
+          }
+        },
+        {
+          "seed": "GTO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 3.7579038987464677e-06,
+              "velocityMps": 3.541844315860658e-09
+            },
+            "threeDays": {
+              "positionM": 2.019890815362744e-05,
+              "velocityMps": 1.8043297346049782e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+            "fast": "0d6be23a7ef8bfb186702e1041a1ec8a7d2ddf18e7b3c82f6ac1b524a9e18217"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.27241966666666667,
+            "fast": 0.09364233333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.27359300000000003,
+              "fast": 0.093905
+            },
+            {
+              "standard": 0.27241966666666667,
+              "fast": 0.09364233333333333
+            }
+          ],
+          "loadAverage": [
+            35.14501953125,
+            39.3798828125,
+            37.986328125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.4935609867389087,
+              "velocityMps": 0.00043396153308986594
+            },
+            "threeDays": {
+              "positionM": 3.2952082311502306,
+              "velocityMps": 0.002933935745115684
+            }
+          }
+        }
+      ],
+      "failures": []
+    },
+    {
+      "ok": true,
+      "mode": "lever",
+      "lever": "C7",
+      "standardDirectory": "../hpop",
+      "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+      "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+      "fastWasmSha256": "966b5057905ef1bfd14ab444063d0e09192134248e19a080b95f06fd7dff968e",
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "epochTt": "2026-08-01T12:01:09.184000000",
+      "frame": "GCRF",
+      "days": 3,
+      "truthStandardModuleCppCommit": "4d2348a6",
+      "fixedStepSeconds": 60,
+      "fixedTolerance": 1,
+      "truthSamplingSeconds": 300,
+      "standardIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "fastIntegrator": {
+        "tolerance": 1e-12,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 100000
+      },
+      "maxAddedError": {
+        "oneDay": {
+          "positionM": 9.949906538277633e-06,
+          "velocityMps": 7.90444264297147e-09
+        },
+        "threeDays": {
+          "positionM": 4.4302594307074985e-05,
+          "velocityMps": 3.606753610434232e-08
+        }
+      },
+      "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+      "loadAverageStart": [
+        42.7216796875,
+        40.54931640625,
+        38.54150390625
+      ],
+      "loadAverageEnd": [
+        42.78125,
+        41.07958984375,
+        38.88232421875
+      ],
+      "rows": [
+        {
+          "seed": "ISS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 5.371057133845428e-07,
+              "velocityMps": 6.762969825029656e-10
+            },
+            "threeDays": {
+              "positionM": 2.7017829682779176e-06,
+              "velocityMps": 3.0307628085457692e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+            "fast": "597c8f0de24c273aef54357c9c422744a94f56e18cfe648b37a72b3066c13bdf"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.8375013333333333,
+            "fast": 0.2693896666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.8610153333333334,
+              "fast": 0.2693896666666667
+            },
+            {
+              "standard": 0.8375013333333333,
+              "fast": 0.2709803333333333
+            }
+          ],
+          "loadAverage": [
+            44.39453125,
+            40.94970703125,
+            38.705078125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.20974616470710922,
+              "velocityMps": 0.00023997268191783917
+            },
+            "threeDays": {
+              "positionM": 2.1316506537206976,
+              "velocityMps": 0.002407739524648263
+            }
+          }
+        },
+        {
+          "seed": "STARLINK",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.1170870734096934e-06,
+              "velocityMps": 2.414531230455891e-09
+            },
+            "threeDays": {
+              "positionM": 1.2203061015118535e-05,
+              "velocityMps": 1.3272877978574108e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+            "fast": "f7299a6df6d56d3b8027098683f816a1358e2bf155ff2f547ec959d105a79ae5"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7453726666666666,
+            "fast": 0.2434813333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7453726666666666,
+              "fast": 0.24895366666666666
+            },
+            {
+              "standard": 0.7507473333333333,
+              "fast": 0.2434813333333333
+            }
+          ],
+          "loadAverage": [
+            45.38427734375,
+            41.25244140625,
+            38.83740234375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.029334117682855605,
+              "velocityMps": 3.2064049911271334e-05
+            },
+            "threeDays": {
+              "positionM": 0.06729868568039737,
+              "velocityMps": 6.851707311429196e-05
+            }
+          }
+        },
+        {
+          "seed": "SSO800",
+          "fixed": {
+            "oneDay": {
+              "positionM": 9.797298441243001e-07,
+              "velocityMps": 9.664377345461123e-10
+            },
+            "threeDays": {
+              "positionM": 1.972672220013468e-06,
+              "velocityMps": 1.9959260382327124e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+            "fast": "2c5e65c4052e344a093c14b24ffdd56034fa0d3caff2d06ec70066e6b6592942"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.7329990000000001,
+            "fast": 0.23837266666666665
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.7385366666666667,
+              "fast": 0.23837266666666665
+            },
+            {
+              "standard": 0.7329990000000001,
+              "fast": 0.23916533333333334
+            }
+          ],
+          "loadAverage": [
+            46.84912109375,
+            41.7041015625,
+            39.025390625
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.09475292589290944,
+              "velocityMps": 9.874212817111761e-05
+            },
+            "threeDays": {
+              "positionM": 0.8896322133997616,
+              "velocityMps": 0.0009204678823922181
+            }
+          }
+        },
+        {
+          "seed": "LOW250",
+          "fixed": {
+            "oneDay": {
+              "positionM": 4.8167769327773e-06,
+              "velocityMps": 5.69925551570249e-09
+            },
+            "threeDays": {
+              "positionM": 1.4857435660749438e-05,
+              "velocityMps": 1.7447637650452815e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+            "fast": "89e05847e217018a68f68ad4fdda8bb717e0792c92f28f4c619f30db9131225e"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.9076496666666666,
+            "fast": 0.3173996666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.9124116666666667,
+              "fast": 0.3173996666666667
+            },
+            {
+              "standard": 0.9076496666666666,
+              "fast": 0.31831400000000004
+            }
+          ],
+          "loadAverage": [
+            41.904296875,
+            40.82861328125,
+            38.7568359375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 1.1829738655147628,
+              "velocityMps": 0.0013678034502791468
+            },
+            "threeDays": {
+              "positionM": 7.9283937795605715,
+              "velocityMps": 0.00929513665665105
+            }
+          }
+        },
+        {
+          "seed": "GPS",
+          "fixed": {
+            "oneDay": {
+              "positionM": 2.0770325394484656e-06,
+              "velocityMps": 3.5792254164492556e-10
+            },
+            "threeDays": {
+              "positionM": 1.0172051082975439e-05,
+              "velocityMps": 1.5563141840672692e-09
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+            "fast": "53ef12ef4403a5e702b78ce5a87eed4ebb25c595c26568ffa02f4590a9701f8d"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.19394733333333333,
+            "fast": 0.06276866666666667
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.1943223333333333,
+              "fast": 0.06295866666666666
+            },
+            {
+              "standard": 0.19394733333333333,
+              "fast": 0.06276866666666667
+            }
+          ],
+          "loadAverage": [
+            41.904296875,
+            40.82861328125,
+            38.7568359375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 3.690834105348712e-05,
+              "velocityMps": 5.182045425972267e-09
+            },
+            "threeDays": {
+              "positionM": 0.0002816519110235338,
+              "velocityMps": 4.0867665564061886e-08
+            }
+          }
+        },
+        {
+          "seed": "GEO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 1.0205699044221675e-06,
+              "velocityMps": 1.3785796275288912e-10
+            },
+            "threeDays": {
+              "positionM": 1.98650264142175e-06,
+              "velocityMps": 2.416481709223636e-10
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+            "fast": "3e963d8e75998ac098522453a992a90ae9d3ebf10d6913030810285462239325"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.18283700000000003,
+            "fast": 0.059732
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.198264,
+              "fast": 0.061240666666666665
+            },
+            {
+              "standard": 0.18283700000000003,
+              "fast": 0.059732
+            }
+          ],
+          "loadAverage": [
+            41.67138671875,
+            40.7978515625,
+            38.7578125
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 6.104529823779336e-06,
+              "velocityMps": 6.319059136507182e-10
+            },
+            "threeDays": {
+              "positionM": 2.865417012526144e-05,
+              "velocityMps": 2.220385143016599e-09
+            }
+          }
+        },
+        {
+          "seed": "MOLNIYA",
+          "fixed": {
+            "oneDay": {
+              "positionM": 9.949906538277633e-06,
+              "velocityMps": 7.90444264297147e-09
+            },
+            "threeDays": {
+              "positionM": 4.4302594307074985e-05,
+              "velocityMps": 3.606753610434232e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+            "fast": "50a71b59e09d5ea42e09c57f073dd5c5dcd80ea82311680de318084678cf5121"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.238151,
+            "fast": 0.07587833333333333
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.23854700000000004,
+              "fast": 0.07587833333333333
+            },
+            {
+              "standard": 0.238151,
+              "fast": 0.076878
+            }
+          ],
+          "loadAverage": [
+            43.458984375,
+            41.1826171875,
+            38.9052734375
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.21436971235622443,
+              "velocityMps": 0.00017110808436703273
+            },
+            "threeDays": {
+              "positionM": 0.21566102969859535,
+              "velocityMps": 0.00017456926241699294
+            }
+          }
+        },
+        {
+          "seed": "GTO",
+          "fixed": {
+            "oneDay": {
+              "positionM": 3.7579038987464677e-06,
+              "velocityMps": 3.541844315860658e-09
+            },
+            "threeDays": {
+              "positionM": 2.019890815362744e-05,
+              "velocityMps": 1.8043297346049782e-08
+            }
+          },
+          "fixedDescribeSha256": {
+            "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+            "fast": "0d6be23a7ef8bfb186702e1041a1ec8a7d2ddf18e7b3c82f6ac1b524a9e18217"
+          },
+          "cpuSecondsPerDay": {
+            "standard": 0.2732356666666667,
+            "fast": 0.08630666666666668
+          },
+          "cpuRepetitions": [
+            {
+              "standard": 0.2732356666666667,
+              "fast": 0.08958833333333333
+            },
+            {
+              "standard": 0.2845776666666667,
+              "fast": 0.08630666666666668
+            }
+          ],
+          "loadAverage": [
+            42.78125,
+            41.07958984375,
+            38.88232421875
+          ],
+          "standardVsTruth": {
+            "oneDay": {
+              "positionM": 0.4935609867389087,
+              "velocityMps": 0.00043396153308986594
+            },
+            "threeDays": {
+              "positionM": 3.2952082311502306,
+              "velocityMps": 0.002933935745115684
+            }
+          }
+        }
+      ],
+      "failures": [],
+      "fixedOutputIdenticalToPrevious": true
+    }
+  ],
+  "finalDefault": {
+    "ok": true,
+    "mode": "e2e",
+    "lever": null,
+    "standardDirectory": "../hpop",
+    "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+    "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+    "fastWasmSha256": "966b5057905ef1bfd14ab444063d0e09192134248e19a080b95f06fd7dff968e",
+    "epochUtc": "2026-08-01T12:00:00.000000",
+    "epochTt": "2026-08-01T12:01:09.184000000",
+    "frame": "GCRF",
+    "days": 3,
+    "truthStandardModuleCppCommit": "4d2348a6",
+    "fixedStepSeconds": 60,
+    "fixedTolerance": 1,
+    "truthSamplingSeconds": 300,
+    "standardIntegrator": {
+      "tolerance": 1e-12,
+      "initialStep": 30,
+      "minStep": 0.01,
+      "maxStep": 300,
+      "maxSteps": 100000
+    },
+    "fastIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 30,
+      "minStep": 0.01,
+      "maxStep": 120,
+      "maxSteps": 1000000
+    },
+    "maxAddedError": {
+      "oneDay": {
+        "positionM": 9.949906538277633e-06,
+        "velocityMps": 7.90444264297147e-09
+      },
+      "threeDays": {
+        "positionM": 4.4302594307074985e-05,
+        "velocityMps": 3.606753610434232e-08
+      }
+    },
+    "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+    "loadAverageStart": [
+      24.935546875,
+      25.80908203125,
+      21.28564453125
+    ],
+    "loadAverageEnd": [
+      31.5966796875,
+      27.66455078125,
+      22.31787109375
+    ],
+    "rows": [
+      {
+        "seed": "ISS",
+        "fixed": {
+          "oneDay": {
+            "positionM": 5.371057133845428e-07,
+            "velocityMps": 6.762969825029656e-10
+          },
+          "threeDays": {
+            "positionM": 2.7017829682779176e-06,
+            "velocityMps": 3.0307628085457692e-09
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+          "fast": "597c8f0de24c273aef54357c9c422744a94f56e18cfe648b37a72b3066c13bdf"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.7574546666666667,
+          "fast": 0.3895443333333333
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.7574546666666667,
+            "fast": 0.3895443333333333
+          },
+          {
+            "standard": 0.7581186666666667,
+            "fast": 0.39262766666666665
+          }
+        ],
+        "loadAverage": [
+          29.70068359375,
+          26.78857421875,
+          21.7119140625
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.20974616470710922,
+            "velocityMps": 0.00023997268191783917
+          },
+          "threeDays": {
+            "positionM": 2.1316506537206976,
+            "velocityMps": 0.002407739524648263
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.00039983565769313137,
+            "velocityMps": 4.3800404600032615e-07
+          },
+          "threeDays": {
+            "positionM": 0.0026887115008015993,
+            "velocityMps": 3.000681775625618e-06
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "STARLINK",
+        "fixed": {
+          "oneDay": {
+            "positionM": 2.1170870734096934e-06,
+            "velocityMps": 2.414531230455891e-09
+          },
+          "threeDays": {
+            "positionM": 1.2203061015118535e-05,
+            "velocityMps": 1.3272877978574108e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+          "fast": "f7299a6df6d56d3b8027098683f816a1358e2bf155ff2f547ec959d105a79ae5"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.7042253333333334,
+          "fast": 0.35253766666666664
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.7101073333333332,
+            "fast": 0.35601199999999994
+          },
+          {
+            "standard": 0.7042253333333334,
+            "fast": 0.35253766666666664
+          }
+        ],
+        "loadAverage": [
+          28.50048828125,
+          26.61669921875,
+          21.70947265625
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.029334117682855605,
+            "velocityMps": 3.2064049911271334e-05
+          },
+          "threeDays": {
+            "positionM": 0.06729868568039737,
+            "velocityMps": 6.851707311429196e-05
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.001495667866978486,
+            "velocityMps": 1.639368581990714e-06
+          },
+          "threeDays": {
+            "positionM": 0.013407290775479072,
+            "velocityMps": 1.4633580096392494e-05
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "SSO800",
+        "fixed": {
+          "oneDay": {
+            "positionM": 9.797298441243001e-07,
+            "velocityMps": 9.664377345461123e-10
+          },
+          "threeDays": {
+            "positionM": 1.972672220013468e-06,
+            "velocityMps": 1.9959260382327124e-09
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+          "fast": "2c5e65c4052e344a093c14b24ffdd56034fa0d3caff2d06ec70066e6b6592942"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.7060173333333334,
+          "fast": 0.3393716666666666
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.7064246666666666,
+            "fast": 0.3393716666666666
+          },
+          {
+            "standard": 0.7060173333333334,
+            "fast": 0.34044399999999997
+          }
+        ],
+        "loadAverage": [
+          28.87109375,
+          26.76025390625,
+          21.8173828125
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.09475292589290944,
+            "velocityMps": 9.874212817111761e-05
+          },
+          "threeDays": {
+            "positionM": 0.8896322133997616,
+            "velocityMps": 0.0009204678823922181
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.0023511917630163032,
+            "velocityMps": 2.437576215766623e-06
+          },
+          "threeDays": {
+            "positionM": 0.020822092052869123,
+            "velocityMps": 2.1570856202313945e-05
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "LOW250",
+        "fixed": {
+          "oneDay": {
+            "positionM": 4.8167769327773e-06,
+            "velocityMps": 5.69925551570249e-09
+          },
+          "threeDays": {
+            "positionM": 1.4857435660749438e-05,
+            "velocityMps": 1.7447637650452815e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+          "fast": "89e05847e217018a68f68ad4fdda8bb717e0792c92f28f4c619f30db9131225e"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.8751503333333334,
+          "fast": 0.4787133333333334
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.8751503333333334,
+            "fast": 0.479513
+          },
+          {
+            "standard": 0.8760323333333333,
+            "fast": 0.4787133333333334
+          }
+        ],
+        "loadAverage": [
+          29.84521484375,
+          27.03271484375,
+          21.97119140625
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 1.1829738655147628,
+            "velocityMps": 0.0013678034502791468
+          },
+          "threeDays": {
+            "positionM": 7.9283937795605715,
+            "velocityMps": 0.00929513665665105
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.0013921822699536793,
+            "velocityMps": 1.5878460965898424e-06
+          },
+          "threeDays": {
+            "positionM": 0.011292565969031554,
+            "velocityMps": 1.3044453216767283e-05
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "GPS",
+        "fixed": {
+          "oneDay": {
+            "positionM": 2.0770325394484656e-06,
+            "velocityMps": 3.5792254164492556e-10
+          },
+          "threeDays": {
+            "positionM": 1.0172051082975439e-05,
+            "velocityMps": 1.5563141840672692e-09
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+          "fast": "53ef12ef4403a5e702b78ce5a87eed4ebb25c595c26568ffa02f4590a9701f8d"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.1871236666666667,
+          "fast": 0.10569766666666668
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.1871236666666667,
+            "fast": 0.10569766666666668
+          },
+          {
+            "standard": 0.1874536666666667,
+            "fast": 0.10577866666666669
+          }
+        ],
+        "loadAverage": [
+          31.05859375,
+          27.33056640625,
+          22.10595703125
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 3.690834105348712e-05,
+            "velocityMps": 5.182045425972267e-09
+          },
+          "threeDays": {
+            "positionM": 0.0002816519110235338,
+            "velocityMps": 4.0867665564061886e-08
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 9.98527823609677e-06,
+            "velocityMps": 1.77815639823139e-09
+          },
+          "threeDays": {
+            "positionM": 3.306928879060379e-05,
+            "velocityMps": 4.754514800909485e-09
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "GEO",
+        "fixed": {
+          "oneDay": {
+            "positionM": 1.0205699044221675e-06,
+            "velocityMps": 1.3785796275288912e-10
+          },
+          "threeDays": {
+            "positionM": 1.98650264142175e-06,
+            "velocityMps": 2.416481709223636e-10
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+          "fast": "3e963d8e75998ac098522453a992a90ae9d3ebf10d6913030810285462239325"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.175001,
+          "fast": 0.10268066666666668
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.175001,
+            "fast": 0.10268066666666668
+          },
+          {
+            "standard": 0.17669700000000002,
+            "fast": 0.10290599999999998
+          }
+        ],
+        "loadAverage": [
+          32.1748046875,
+          27.62353515625,
+          22.23974609375
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 6.104529823779336e-06,
+            "velocityMps": 6.319059136507182e-10
+          },
+          "threeDays": {
+            "positionM": 2.865417012526144e-05,
+            "velocityMps": 2.220385143016599e-09
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 5.400160406343621e-06,
+            "velocityMps": 5.711314740947835e-10
+          },
+          "threeDays": {
+            "positionM": 2.981611865194734e-05,
+            "velocityMps": 2.3015708328020616e-09
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "MOLNIYA",
+        "fixed": {
+          "oneDay": {
+            "positionM": 9.949906538277633e-06,
+            "velocityMps": 7.90444264297147e-09
+          },
+          "threeDays": {
+            "positionM": 4.4302594307074985e-05,
+            "velocityMps": 3.606753610434232e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+          "fast": "50a71b59e09d5ea42e09c57f073dd5c5dcd80ea82311680de318084678cf5121"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.233321,
+          "fast": 0.12398733333333334
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.233321,
+            "fast": 0.12398733333333334
+          },
+          {
+            "standard": 0.2407123333333333,
+            "fast": 0.125423
+          }
+        ],
+        "loadAverage": [
+          33.04150390625,
+          27.87841796875,
+          22.361328125
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.21436971235622443,
+            "velocityMps": 0.00017110808436703273
+          },
+          "threeDays": {
+            "positionM": 0.21566102969859535,
+            "velocityMps": 0.00017456926241699294
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.019376536297993175,
+            "velocityMps": 1.5463330189506566e-05
+          },
+          "threeDays": {
+            "positionM": 0.022523867078916363,
+            "velocityMps": 1.839656032023936e-05
+          }
+        },
+        "fit": false,
+        "screen": true
+      },
+      {
+        "seed": "GTO",
+        "fixed": {
+          "oneDay": {
+            "positionM": 3.7579038987464677e-06,
+            "velocityMps": 3.541844315860658e-09
+          },
+          "threeDays": {
+            "positionM": 2.019890815362744e-05,
+            "velocityMps": 1.8043297346049782e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+          "fast": "0d6be23a7ef8bfb186702e1041a1ec8a7d2ddf18e7b3c82f6ac1b524a9e18217"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.26410133333333335,
+          "fast": 0.13435466666666665
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.26410133333333335,
+            "fast": 0.13444766666666666
+          },
+          {
+            "standard": 0.265726,
+            "fast": 0.13435466666666665
+          }
+        ],
+        "loadAverage": [
+          31.5966796875,
+          27.66455078125,
+          22.31787109375
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.4935609867389087,
+            "velocityMps": 0.00043396153308986594
+          },
+          "threeDays": {
+            "positionM": 3.2952082311502306,
+            "velocityMps": 0.002933935745115684
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.04851329774616312,
+            "velocityMps": 4.274159704030433e-05
+          },
+          "threeDays": {
+            "positionM": 0.30197826592887944,
+            "velocityMps": 0.0002688368513155269
+          }
+        },
+        "fit": false,
+        "screen": true
+      }
+    ],
+    "failures": []
+  },
+  "comparison300SecondDefault": {
+    "ok": false,
+    "mode": "e2e",
+    "lever": null,
+    "standardDirectory": "../hpop",
+    "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+    "forkBaseSha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562",
+    "fastWasmSha256": "966b5057905ef1bfd14ab444063d0e09192134248e19a080b95f06fd7dff968e",
+    "epochUtc": "2026-08-01T12:00:00.000000",
+    "epochTt": "2026-08-01T12:01:09.184000000",
+    "frame": "GCRF",
+    "days": 3,
+    "truthStandardModuleCppCommit": "4d2348a6",
+    "fixedStepSeconds": 60,
+    "fixedTolerance": 1,
+    "truthSamplingSeconds": 300,
+    "standardIntegrator": {
+      "tolerance": 1e-12,
+      "initialStep": 30,
+      "minStep": 0.01,
+      "maxStep": 300,
+      "maxSteps": 100000
+    },
+    "fastIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 30,
+      "minStep": 0.01,
+      "maxStep": 300,
+      "maxSteps": 1000000
+    },
+    "maxAddedError": {
+      "oneDay": {
+        "positionM": 9.949906538277633e-06,
+        "velocityMps": 7.90444264297147e-09
+      },
+      "threeDays": {
+        "positionM": 4.4302594307074985e-05,
+        "velocityMps": 3.606753610434232e-08
+      }
+    },
+    "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+    "loadAverageStart": [
+      41.04931640625,
+      40.767578125,
+      38.80859375
+    ],
+    "loadAverageEnd": [
+      42.53369140625,
+      41.08154296875,
+      39.06201171875
+    ],
+    "rows": [
+      {
+        "seed": "ISS",
+        "fixed": {
+          "oneDay": {
+            "positionM": 5.371057133845428e-07,
+            "velocityMps": 6.762969825029656e-10
+          },
+          "threeDays": {
+            "positionM": 2.7017829682779176e-06,
+            "velocityMps": 3.0307628085457692e-09
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "d6095ab4d50ea93c3838937deebb0f5449f88138199669c4b8eeaed3d60e705e",
+          "fast": "597c8f0de24c273aef54357c9c422744a94f56e18cfe648b37a72b3066c13bdf"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.781917,
+          "fast": 0.4036680000000001
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.7887193333333333,
+            "fast": 0.40411499999999995
+          },
+          {
+            "standard": 0.781917,
+            "fast": 0.4036680000000001
+          }
+        ],
+        "loadAverage": [
+          38.07666015625,
+          40.125,
+          38.61328125
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.20974616470710922,
+            "velocityMps": 0.00023997268191783917
+          },
+          "threeDays": {
+            "positionM": 2.1316506537206976,
+            "velocityMps": 0.002407739524648263
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.0003691625127230112,
+            "velocityMps": 4.1276441452354585e-07
+          },
+          "threeDays": {
+            "positionM": 0.0030571006530782435,
+            "velocityMps": 3.4366667671132723e-06
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "STARLINK",
+        "fixed": {
+          "oneDay": {
+            "positionM": 2.1170870734096934e-06,
+            "velocityMps": 2.414531230455891e-09
+          },
+          "threeDays": {
+            "positionM": 1.2203061015118535e-05,
+            "velocityMps": 1.3272877978574108e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "c0ae778b3e6288cd9a2f64b7e97e83fa69791af98a7d6dfa9428483e80a2cb47",
+          "fast": "f7299a6df6d56d3b8027098683f816a1358e2bf155ff2f547ec959d105a79ae5"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.7264499999999999,
+          "fast": 0.3628456666666667
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.7264499999999999,
+            "fast": 0.3668213333333334
+          },
+          {
+            "standard": 0.7313813333333333,
+            "fast": 0.3628456666666667
+          }
+        ],
+        "loadAverage": [
+          36.31884765625,
+          39.6767578125,
+          38.47119140625
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.029334117682855605,
+            "velocityMps": 3.2064049911271334e-05
+          },
+          "threeDays": {
+            "positionM": 0.06729868568039737,
+            "velocityMps": 6.851707311429196e-05
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.0015144451243865069,
+            "velocityMps": 1.6594490125597957e-06
+          },
+          "threeDays": {
+            "positionM": 0.013029742921293103,
+            "velocityMps": 1.4253260536366353e-05
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "SSO800",
+        "fixed": {
+          "oneDay": {
+            "positionM": 9.797298441243001e-07,
+            "velocityMps": 9.664377345461123e-10
+          },
+          "threeDays": {
+            "positionM": 1.972672220013468e-06,
+            "velocityMps": 1.9959260382327124e-09
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "b0a7b589419599e63c97000997b89efd3a585e3032ac64e7b5ebdc7ddb89ea84",
+          "fast": "2c5e65c4052e344a093c14b24ffdd56034fa0d3caff2d06ec70066e6b6592942"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.7437766666666666,
+          "fast": 0.35317499999999996
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.7437766666666666,
+            "fast": 0.35317499999999996
+          },
+          {
+            "standard": 0.7604086666666666,
+            "fast": 0.37154466666666663
+          }
+        ],
+        "loadAverage": [
+          37.44775390625,
+          39.84228515625,
+          38.5458984375
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.09475292589290944,
+            "velocityMps": 9.874212817111761e-05
+          },
+          "threeDays": {
+            "positionM": 0.8896322133997616,
+            "velocityMps": 0.0009204678823922181
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.0022865327485935335,
+            "velocityMps": 2.3721829364784655e-06
+          },
+          "threeDays": {
+            "positionM": 0.020734066584854393,
+            "velocityMps": 2.1478812848236918e-05
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "LOW250",
+        "fixed": {
+          "oneDay": {
+            "positionM": 4.8167769327773e-06,
+            "velocityMps": 5.69925551570249e-09
+          },
+          "threeDays": {
+            "positionM": 1.4857435660749438e-05,
+            "velocityMps": 1.7447637650452815e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "ec4251e99508bc71c0e732d4da2b35c7480b749379ce34acf656642ca75f5df3",
+          "fast": "89e05847e217018a68f68ad4fdda8bb717e0792c92f28f4c619f30db9131225e"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.9321276666666667,
+          "fast": 0.5092816666666667
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.948931,
+            "fast": 0.5209253333333334
+          },
+          {
+            "standard": 0.9321276666666667,
+            "fast": 0.5092816666666667
+          }
+        ],
+        "loadAverage": [
+          42.9365234375,
+          40.92919921875,
+          38.955078125
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 1.1829738655147628,
+            "velocityMps": 0.0013678034502791468
+          },
+          "threeDays": {
+            "positionM": 7.9283937795605715,
+            "velocityMps": 0.00929513665665105
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.001330068949006044,
+            "velocityMps": 1.4765956265921952e-06
+          },
+          "threeDays": {
+            "positionM": 0.028808066533812435,
+            "velocityMps": 3.353221473116949e-05
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "GPS",
+        "fixed": {
+          "oneDay": {
+            "positionM": 2.0770325394484656e-06,
+            "velocityMps": 3.5792254164492556e-10
+          },
+          "threeDays": {
+            "positionM": 1.0172051082975439e-05,
+            "velocityMps": 1.5563141840672692e-09
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "d68004452ce5de890ae97415f8992b84c76d26456f3f3f8fde7d4a6c5fb93976",
+          "fast": "53ef12ef4403a5e702b78ce5a87eed4ebb25c595c26568ffa02f4590a9701f8d"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.19482400000000002,
+          "fast": 0.06377333333333333
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.19786233333333333,
+            "fast": 0.06377333333333333
+          },
+          {
+            "standard": 0.19482400000000002,
+            "fast": 0.06418566666666665
+          }
+        ],
+        "loadAverage": [
+          46.625,
+          41.72705078125,
+          39.248046875
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 3.690834105348712e-05,
+            "velocityMps": 5.182045425972267e-09
+          },
+          "threeDays": {
+            "positionM": 0.0002816519110235338,
+            "velocityMps": 4.0867665564061886e-08
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 3.640351082105784e-05,
+            "velocityMps": 5.1193847231982815e-09
+          },
+          "threeDays": {
+            "positionM": 0.0002781210981426817,
+            "velocityMps": 4.03486966887747e-08
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "GEO",
+        "fixed": {
+          "oneDay": {
+            "positionM": 1.0205699044221675e-06,
+            "velocityMps": 1.3785796275288912e-10
+          },
+          "threeDays": {
+            "positionM": 1.98650264142175e-06,
+            "velocityMps": 2.416481709223636e-10
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "3c0188e4d88f376bcb605f6275d417d7d3028bbc19b9768b781a206ba2256c88",
+          "fast": "3e963d8e75998ac098522453a992a90ae9d3ebf10d6913030810285462239325"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.18189,
+          "fast": 0.06064133333333333
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.18189,
+            "fast": 0.06124733333333334
+          },
+          {
+            "standard": 0.18506566666666666,
+            "fast": 0.06064133333333333
+          }
+        ],
+        "loadAverage": [
+          45.61376953125,
+          41.5986328125,
+          39.21728515625
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 6.104529823779336e-06,
+            "velocityMps": 6.319059136507182e-10
+          },
+          "threeDays": {
+            "positionM": 2.865417012526144e-05,
+            "velocityMps": 2.220385143016599e-09
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 6.404085253114076e-06,
+            "velocityMps": 6.599746434086253e-10
+          },
+          "threeDays": {
+            "positionM": 2.7657563200479586e-05,
+            "velocityMps": 2.1540015583471746e-09
+          }
+        },
+        "fit": true,
+        "screen": true
+      },
+      {
+        "seed": "MOLNIYA",
+        "fixed": {
+          "oneDay": {
+            "positionM": 9.949906538277633e-06,
+            "velocityMps": 7.90444264297147e-09
+          },
+          "threeDays": {
+            "positionM": 4.4302594307074985e-05,
+            "velocityMps": 3.606753610434232e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "0c709c506c3f2aa65400526bbe51f03790dd6f54efe2a104a4319271e7385072",
+          "fast": "50a71b59e09d5ea42e09c57f073dd5c5dcd80ea82311680de318084678cf5121"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.23803,
+          "fast": 0.08901700000000001
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.23820033333333335,
+            "fast": 0.08901700000000001
+          },
+          {
+            "standard": 0.23803,
+            "fast": 0.089989
+          }
+        ],
+        "loadAverage": [
+          44.84375,
+          41.50537109375,
+          39.1982421875
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.21436971235622443,
+            "velocityMps": 0.00017110808436703273
+          },
+          "threeDays": {
+            "positionM": 0.21566102969859535,
+            "velocityMps": 0.00017456926241699294
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.028404831165283157,
+            "velocityMps": 2.2656700868919038e-05
+          },
+          "threeDays": {
+            "positionM": 0.26650179169064947,
+            "velocityMps": 0.0002172043161484602
+          }
+        },
+        "fit": false,
+        "screen": true
+      },
+      {
+        "seed": "GTO",
+        "fixed": {
+          "oneDay": {
+            "positionM": 3.7579038987464677e-06,
+            "velocityMps": 3.541844315860658e-09
+          },
+          "threeDays": {
+            "positionM": 2.019890815362744e-05,
+            "velocityMps": 1.8043297346049782e-08
+          }
+        },
+        "fixedDescribeSha256": {
+          "standard": "7a16210e7fd1e411bb3cb3bcb6b74967271eec0779e1408a1f5cbc475c94ff52",
+          "fast": "0d6be23a7ef8bfb186702e1041a1ec8a7d2ddf18e7b3c82f6ac1b524a9e18217"
+        },
+        "cpuSecondsPerDay": {
+          "standard": 0.27428400000000003,
+          "fast": 0.10402866666666666
+        },
+        "cpuRepetitions": [
+          {
+            "standard": 0.2743383333333333,
+            "fast": 0.10537200000000001
+          },
+          {
+            "standard": 0.27428400000000003,
+            "fast": 0.10402866666666666
+          }
+        ],
+        "loadAverage": [
+          42.53369140625,
+          41.08154296875,
+          39.06201171875
+        ],
+        "standardVsTruth": {
+          "oneDay": {
+            "positionM": 0.4935609867389087,
+            "velocityMps": 0.00043396153308986594
+          },
+          "threeDays": {
+            "positionM": 3.2952082311502306,
+            "velocityMps": 0.002933935745115684
+          }
+        },
+        "fastVsTruth": {
+          "oneDay": {
+            "positionM": 0.01001354885713056,
+            "velocityMps": 8.86675103929735e-06
+          },
+          "threeDays": {
+            "positionM": 0.12836949479590753,
+            "velocityMps": 0.00011430630796086076
+          }
+        },
+        "fit": false,
+        "screen": true
+      }
+    ],
+    "failures": [
+      "MOLNIYA fast position 0.26650179169064947 m is worse than standard/floor 0.21566102969859535 m",
+      "MOLNIYA fast velocity 0.0002172043161484602 m/s is worse than standard/floor 0.00017456926241699294 m/s"
+    ]
+  },
+  "catalogWeightedCost": {
+    "populationDate": "2026-09-30",
+    "populationObjects": 32514,
+    "mappingSource": "hpop-interval/harness/catalog_weight.py",
+    "mappingSha256": "0b56ea0770cf8010bdcd24c6f78f95786994a9d829f264a6cf6d86931bc8ea1a",
+    "populationSource": "hpop-interval/map/regimes.txt",
+    "populationSha256": "31f419d497782549f5332c59157e6ff1899bbc7879e7f231aeae127808414006",
+    "formula": "sum(seedCount * measured WASM CPU seconds per day) / populationObjects",
+    "interpretation": "Weighted estimate from independently timed resident seeds; catalog totals are serial CPU seconds, not measured full-catalog wall time. Caps were measured in separate runs; paired standard CPU and load averages are retained.",
+    "seedCounts": {
+      "ISS": 1837,
+      "STARLINK": 14489,
+      "SSO800": 11602,
+      "LOW250": 163,
+      "GPS": 857,
+      "GEO": 1841,
+      "MOLNIYA": 1255,
+      "GTO": 470
+    },
+    "seedWeights": {
+      "ISS": 0.05649873900473642,
+      "STARLINK": 0.4456234237559205,
+      "SSO800": 0.3568309036107523,
+      "LOW250": 0.005013225072276558,
+      "GPS": 0.02635787660700006,
+      "GEO": 0.056621762932890445,
+      "MOLNIYA": 0.038598757458325646,
+      "GTO": 0.01445531155809805
+    },
+    "regimes": {
+      "LEO450-650": {
+        "seed": "STARLINK",
+        "count": 14489
+      },
+      "LEO650-1000": {
+        "seed": "SSO800",
+        "count": 7926
+      },
+      "LEO1000-2000": {
+        "seed": "SSO800",
+        "count": 3676
+      },
+      "LEO300-450": {
+        "seed": "ISS",
+        "count": 1837
+      },
+      "GEO": {
+        "seed": "GEO",
+        "count": 1577
+      },
+      "HEO-other": {
+        "seed": "MOLNIYA",
+        "count": 958
+      },
+      "MEO-low/other": {
+        "seed": "GPS",
+        "count": 550
+      },
+      "GTO": {
+        "seed": "GTO",
+        "count": 470
+      },
+      "MEO-GNSS(12h)": {
+        "seed": "GPS",
+        "count": 307
+      },
+      "MOLNIYA": {
+        "seed": "MOLNIYA",
+        "count": 297
+      },
+      "MEO/GSO-other": {
+        "seed": "GEO",
+        "count": 264
+      },
+      "LEO<300": {
+        "seed": "LOW250",
+        "count": 163
+      }
+    },
+    "cap300Seconds": {
+      "integrator": {
+        "tolerance": 1e-14,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 300,
+        "maxSteps": 1000000
+      },
+      "cpuSecondsPerObjectDay": {
+        "standard": 0.6665625288593631,
+        "fast": 0.3231304204855344
+      },
+      "cpuSecondsPerCatalogDay": {
+        "standard": 21672.61406333333,
+        "fast": 10506.262491666666
+      },
+      "cpuSecondsPerThreeDayCatalog": {
+        "standard": 65017.842189999996,
+        "fast": 31518.787474999997
+      },
+      "loadAverageStart": [
+        41.04931640625,
+        40.767578125,
+        38.80859375
+      ],
+      "loadAverageEnd": [
+        42.53369140625,
+        41.08154296875,
+        39.06201171875
+      ]
+    },
+    "cap120Seconds": {
+      "integrator": {
+        "tolerance": 1e-14,
+        "initialStep": 30,
+        "minStep": 0.01,
+        "maxStep": 120,
+        "maxSteps": 1000000
+      },
+      "cpuSecondsPerObjectDay": {
+        "standard": 0.6405952816632836,
+        "fast": 0.31793382379897883
+      },
+      "cpuSecondsPerCatalogDay": {
+        "standard": 20828.314988000002,
+        "fast": 10337.300346999999
+      },
+      "cpuSecondsPerThreeDayCatalog": {
+        "standard": 62484.94496400001,
+        "fast": 31011.901040999997
+      },
+      "loadAverageStart": [
+        24.935546875,
+        25.80908203125,
+        21.28564453125
+      ],
+      "loadAverageEnd": [
+        31.5966796875,
+        27.66455078125,
+        22.31787109375
+      ]
+    },
+    "fast120Minus300CpuSecondsPerObjectDay": -0.005196596686555588,
+    "fast120Over300Ratio": 0.9839179589506082,
+    "fast120Vs300PercentChange": -1.608204104939177,
+    "fast120Minus300CpuSecondsPerCatalogDay": -168.9621446666684,
+    "pairedStandardNormalizedFast120Over300Ratio": 1.0238021753850373,
+    "pairedStandardNormalizedFast120Vs300PercentChange": 2.380217538503726,
+    "pairedStandardNormalization": "(fast120 / standard measured with 120) / (fast300 / standard measured with 300); both standard runs use unchanged 1e-12 / 300 s settings. This adjusts for timing variation; caps were measured in separate runs."
+  }
+}
