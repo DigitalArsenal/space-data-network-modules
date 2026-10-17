@@ -221,7 +221,9 @@ resident trajectory export, and CA screen. It adds no product mode or flag.
 The resident pipeline retains its own segment/output scheduling; this is
 not a substitution of the native truth harness's output/stop grid.
 
-Fast must have the same event set as the reference. Every event whose two
+Standard and Fast must retain equal exclusion and dropped-object counts;
+all three runs report their exclusion, drop, and reentry counts. Fast must
+have the same event set as the reference. Every event whose two
 GP prediction ages are in `[0, 8]` days must differ from the reference by
 at most **1 m in miss distance and 1 ms in TCA**. Older inputs are listed
 with both deltas and do not vote. Standard/reference and Fast/reference

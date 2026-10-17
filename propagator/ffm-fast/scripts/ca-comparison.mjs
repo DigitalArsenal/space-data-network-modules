@@ -45,9 +45,17 @@ export function compareEvents(standardRun, fastRun, referenceRun, catalogRecords
   }
   for (const run of [standardRun, fastRun, referenceRun]) {
     assert(run.completed, run.error);
+    for (const key of ['excluded', 'dropped', 'reentries'])
+      assert(Number.isInteger(run[key]) && run[key] >= 0, `Invalid population count: ${key}`);
     for (const key of ['workers', 'thresholdKm', 'uncertaintyModelSha256'])
       assert.deepEqual(run.screen[key], referenceRun.screen[key], `Screen controls differ: ${key}`);
   }
+  // Preserve the full farm's population checks when qualifying saved runs.
+  // Event-set equality alone cannot detect an extra lost non-event object.
+  for (const key of ['excluded', 'dropped'])
+    assert.equal(fastRun[key], standardRun[key], `Standard/Fast population differs: ${key}`);
+  const populationCounts = Object.fromEntries([['standard', standardRun], ['fast', fastRun], ['reference', referenceRun]]
+    .map(([name, run]) => [name, Object.fromEntries(['excluded', 'dropped', 'reentries'].map(key => [key, run[key]]))]));
   const standard = groupEvents(standardRun.screen.events), fast = groupEvents(fastRun.screen.events), reference = groupEvents(referenceRun.screen.events);
   const sets = { standard: eventSet(reference, standard), fast: eventSet(reference, fast) };
   const byId = new Map(catalogRecords.map((r) => [Number(r.NORAD_CAT_ID), r]));
@@ -91,7 +99,7 @@ export function compareEvents(standardRun, fastRun, referenceRun, catalogRecords
       sigma[name] = diagnostic;
     }
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
-  return { pass: sets.fast.equal && inside.length > 0 && inside.every((e) => e.fastPass), eventSets: sets,
+  return { pass: sets.fast.equal && inside.length > 0 && inside.every((e) => e.fastPass), eventSets: sets, populationCounts,
     thresholds: { missMeters: 1, tcaSeconds: 0.001, maximumPredictionAgeDays },
     inDomain: summarize(inside), outOfDomain: summarize(outside), allEvents: summarize(rows), events: rows, sigma };
 }
