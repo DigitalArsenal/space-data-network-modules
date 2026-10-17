@@ -1,0 +1,125 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.mission-screening",
+  "name": "Ballistic Mission Screening Budgets",
+  "version": "0.1.0",
+  "pluginFamily": "analysis",
+  "description": "Evaluate explicit circular parking injection/capture and hyperbolic-excess objectives for sampled Lambert grids. All budget calculations execute in C++ WASM.",
+  "abiVersion": 1,
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "screen_grid",
+      "inputPorts": [
+        {
+          "portId": "mesh",
+          "acceptedTypeSets": [
+            {
+              "setId": "mesh",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 400,
+          "required": true
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mesh",
+          "acceptedTypeSets": [
+            {
+              "setId": "mesh",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 400,
+          "required": false
+        },
+        {
+          "portId": "best",
+          "acceptedTypeSets": [
+            {
+              "setId": "best",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "mission-screening",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded typed mesh budget transform; callers partition independent grid requests. This guest never spawns threads."
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "order": [
+    "status.hpp",
+    "bounded_buffer.hpp",
+    "types.hpp",
+    "constants.hpp",
+    "threading.hpp",
+    "ephemeris.hpp",
+    "encounter.hpp",
+    "lambert.hpp",
+    "leg.hpp",
+    "flyby.hpp",
+    "filter.hpp",
+    "combo.hpp",
+    "pipeline.hpp",
+    "status.cpp",
+    "constants.cpp",
+    "threading.cpp",
+    "ephemeris.cpp",
+    "encounter.cpp",
+    "lambert.cpp",
+    "leg.cpp",
+    "flyby.cpp",
+    "filter.cpp",
+    "combo.cpp",
+    "pipeline.cpp",
+    "typed_module.cpp"
+  ]
+}
