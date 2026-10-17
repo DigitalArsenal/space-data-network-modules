@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import * as flatbuffers from 'flatbuffers';
 import { PRW } from 'spacedatastandards.org/lib/js/PRW/main.js';
@@ -23,7 +25,7 @@ const catalog = loadCatalog(o.catalog), { createFfmFarm } = await loadFarm(o['fa
 const workers = o.workers ? Number(o.workers) : undefined;
 const startJd = Date.parse(o.start) / 86400000 + 2440587.5;
 const result = { phase: o.phase, completed: false, catalogSha256: catalog.sha256, startUtc: o.start, carry: [], propagation: [], screen: [],
-  limitations: ['Combined covariance sigma is not present in default ALFANO_MAXIMUM events; report TCA and miss deltas directly.'] };
+  limitations: ['Sigma comparison uses E14 GP prediction-error covariance as an input uncertainty scale; it does not assert calibrated FFM covariance.'] };
 const ppeBytes = (frames) => {
   const map = new Map();
   for (const frame of frames) {
@@ -75,6 +77,8 @@ async function carry(implementation) {
     for (const [handle, bytes] of coldTrajectories) assert(bytes.equals(warmTrajectories.get(handle)), `${implementation} C5 trajectory differs for handle ${handle}.`);
     const unchanged = await warm.updateCatalog(nextBytes);
     assert.equal(unchanged.derived, 0); assert.equal(unchanged.unchanged, next.length);
+    for (const stats of warm.residency) { assert(stats.instances <= stats.maximumInstances); assert(stats.retained <= Math.max(2048, 2 * stats.live)); }
+    const residency = warm.residency;
     // Deleting every object must release every resident instance and return no
     // stale trajectory; repopulation must still work with stable unique handles.
     const empty = await warm.updateCatalog([]);
@@ -85,7 +89,7 @@ async function carry(implementation) {
     const signature = sha256(Buffer.concat([...coldTrajectories.entries()].sort(([a], [b]) => a - b).map(([, bytes]) => bytes)));
     return { implementation, workers: warm.workers, workerPolicy: warm.workerPolicy, update, trajectories: coldTrajectories.size,
       byteIdentical: true, invalidUpdatesPreservedCatalog: true, concurrentWindowSerialized: true, ppeSha256: signature, unchangedUpdateDerived: unchanged.derived, deletedAll: empty.deleted, repopulated: repopulated.added,
-      carriedWindowCpuSeconds: warm.cpu.windows[1].cpuS, coldWindowCpuSeconds: cold.cpu.windows[0].cpuS };
+      residency, carriedWindowCpuSeconds: warm.cpu.windows[1].cpuS, coldWindowCpuSeconds: cold.cpu.windows[0].cpuS };
   } finally { await warm?.close(); await cold?.close(); }
 }
 function compareEvents(a, b) {
@@ -102,9 +106,12 @@ function compareEvents(a, b) {
   const left = groups(a), right = groups(b);
   assert.deepEqual([...left.keys()].sort(), [...right.keys()].sort(), 'Standard/Fast CA pair sets differ.');
   let maxTcaSeconds = 0, maxMissMeters = 0, count = 0;
+  const pairs = [], byId = new Map(catalog.records.map((r) => [Number(r.NORAD_CAT_ID), r]));
+  const metadata = (id) => { const r = byId.get(Number(id)); if (!r) throw new Error(`Missing OMM metadata for ${id}`); return { meanMotion: Number(r.MEAN_MOTION), inclination: Number(r.INCLINATION), eccentricity: Number(r.ECCENTRICITY), epochJd: Date.parse(r.EPOCH.endsWith('Z') ? r.EPOCH : r.EPOCH + 'Z') / 86400000 + 2440587.5 }; };
   for (const [pair, events] of left) {
     const others = right.get(pair); assert.equal(events.length, others.length, `CA event count differs for ${pair}.`);
     for (let i = 0; i < events.length; ++i) {
+      pairs.push({ key: pair, standard: events[i], fast: others[i], primary: metadata(events[i].primaryNorad), secondary: metadata(events[i].secondaryNorad) });
       const tca = Math.abs(events[i].tcaJd - others[i].tcaJd) * 86400, miss = Math.abs(events[i].missM - others[i].missM);
       assert(Number.isFinite(tca) && Number.isFinite(miss));
       maxTcaSeconds = Math.max(maxTcaSeconds, tca); maxMissMeters = Math.max(maxMissMeters, miss); ++count;
@@ -113,7 +120,18 @@ function compareEvents(a, b) {
   assert(count > 0, 'CA sample produced no events; this cannot establish nonempty event-set equivalence.');
   assert(maxTcaSeconds <= 0.01, `CA TCA delta ${maxTcaSeconds} exceeds 10 ms.`);
   assert(maxMissMeters <= 1, `CA miss delta ${maxMissMeters} exceeds 1 m.`);
-  return { eventSetEqual: true, events: count, maxTcaSeconds, maxMissMeters, tcaToleranceSeconds: 0.01, missToleranceMeters: 1, normalizedSigmaDelta: null };
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ffm-ca-sigma-'));
+  let sigma;
+  const modelFile = path.join(modulesRoot, 'analysis/gp-error-model/data/e14-s3-kc.json');
+  try {
+    const executable = path.join(temp, 'compare');
+    execFileSync('clang++', ['-std=c++17', '-O2', '-I', path.join(modulesRoot, 'propagator/ffm/src/cpp/include'), path.join(modulesRoot, 'propagator/ffm-fast/scripts/compare-ca-sigma.cpp'), '-o', executable], { stdio: ['ignore', 'pipe', 'pipe'] });
+    sigma = JSON.parse(execFileSync(executable, [], { encoding: 'utf8', input: JSON.stringify({ model: JSON.parse(fs.readFileSync(modelFile)), pairs }), maxBuffer: 16 * 1024 * 1024 }));
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+  const comparison = { eventSetEqual: true, events: count, maxTcaSeconds, maxMissMeters, tcaToleranceSeconds: 0.01, missToleranceMeters: 1, sigma: { ...sigma, modelSha256: sha256(fs.readFileSync(modelFile)) } };
+  result.caComparison = comparison;
+  assert(sigma.pass, `CA deltas must be <=1% of the combined E14 sigma lower bound, with every event covered: ${JSON.stringify(sigma)}`);
+  return comparison;
 }
 try {
   await assert.rejects(createFfmFarm({ catalog: [], modulesRoot, implementation: 'unknown' }), /Unknown FFM implementation/);

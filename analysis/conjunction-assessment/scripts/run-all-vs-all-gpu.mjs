@@ -2,7 +2,7 @@
 // headless Chrome with WebGPU, or leaves it up for a browser (--serve).
 //
 // usage: node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin>
-//          [--propagator sgp4|ffm] [--start <jd>] [--days 3] [--window-hours 6]
+//          [--propagator sgp4|ffm|ffm-fast] [--start <jd>] [--days 3] [--window-hours 6]
 //          [--threshold-km 5] [--step-s 60] [--farm-workers N] [--cpu]
 //          [--ffm-environment <dir>] [--ffm-profile full-force|gravity-only]
 //          [--out summary.json] [--serve] [--port 0] [--timeout-s 7200]
@@ -27,7 +27,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const example = path.join(root, 'examples/all-vs-all-gpu');
 const sdkTesting = path.dirname(fileURLToPath(import.meta.resolve('space-data-module-sdk/testing')));
 const sdkSource = path.resolve(sdkTesting, '..');
-const { resolveChromeBinary } = await import(path.join(sdkTesting, 'parityLanes.js'));
+// The lane permits only Playwright's Chromium headless shell.
+function headlessShell() {
+  if (process.env.CHROMIUM_HEADLESS_SHELL) {
+    const executable = path.resolve(process.env.CHROMIUM_HEADLESS_SHELL);
+    if (!executable.includes('chromium_headless_shell-') || path.basename(executable) !== 'chrome-headless-shell' || !fs.existsSync(executable))
+      throw new Error('CHROMIUM_HEADLESS_SHELL must name a Playwright Chromium headless shell executable.');
+    return executable;
+  }
+  const cache = process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Caches/ms-playwright') : path.join(os.homedir(), '.cache/ms-playwright');
+  for (const directory of fs.readdirSync(cache).filter((name) => name.startsWith('chromium_headless_shell-')).sort().reverse()) {
+    const root = path.join(cache, directory);
+    for (const child of fs.readdirSync(root)) {
+      const executable = path.join(root, child, 'chrome-headless-shell');
+      if (fs.existsSync(executable)) return executable;
+    }
+  }
+  throw new Error('Install the Playwright Chromium headless shell or set CHROMIUM_HEADLESS_SHELL to its executable.');
+}
 
 const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, propagator: { type: 'string', default: 'sgp4' }, start: { type: 'string', default: '2461314.5' },
@@ -38,13 +55,13 @@ const { values: o } = parseArgs({ options: {
   'timeout-s': { type: 'string', default: '7200' },
 } });
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
-if (!['sgp4', 'ffm'].includes(o.propagator)) throw new Error('--propagator is sgp4 or ffm: one propagator per run.');
+if (!['sgp4', 'ffm', 'ffm-fast'].includes(o.propagator)) throw new Error('--propagator is sgp4, ffm or ffm-fast: one propagator per run.');
 const t0 = performance.now();
 const catalogBytes = fs.readFileSync(o.catalog);
 // FFM windows hold every object's trajectory (~12 KB per object per 2 h).
 // FFM's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
 // trajectories, which the module indexes in about 1.05 of its 2 GiB.
-const windowHours = Number(o['window-hours'] ?? (o.propagator === 'ffm' ? 1 : 6));
+const windowHours = Number(o['window-hours'] ?? (o.propagator !== 'sgp4' ? 1 : 6));
 const windows = Array.from({ length: Math.ceil((Number(o.days) * 24) / windowHours - 1e-9) }, (_, k) => ({
   startJd: Number(o.start) + (k * windowHours) / 24, durationDays: Math.min(windowHours, Number(o.days) * 24 - k * windowHours) / 24 }));
 
@@ -55,17 +72,17 @@ const exports = [];
 // FFM returns whole intervals covering the request; the margin covers
 // TDB - UTC (69 s) so the UTC window is inside them.
 const MARGIN_DAYS = 2 / 1440;
-if (o.propagator === 'ffm') {
+if (o.propagator !== 'sgp4') {
   const catalog = [];
   for (let at = 0; at < catalogBytes.length;) {
     const n = catalogBytes.readUInt32BE(at);
     catalog.push(new Uint8Array(catalogBytes.subarray(at + 4, at + 4 + n)));
     at += 4 + n;
   }
-  farm = await createFfmFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
+  farm = await createFfmFarm({ catalog, implementation: o.propagator, modulesRoot: path.resolve(root, '../..'),
     workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
     profile: o['ffm-profile'], environment: o['ffm-environment'], screenStartJd: Number(o.start) });
-  farmInfo = { workers: farm.workers, instances: farm.instances, deriveMs: farm.deriveMs, ingestMs: farm.ingestMs,
+  farmInfo = { implementation: farm.implementation, moduleId: farm.moduleId, workerPolicy: farm.workerPolicy, workers: farm.workers, instances: farm.instances, deriveMs: farm.deriveMs, ingestMs: farm.ingestMs,
     epochStateExcluded: farm.excluded.length, windowExportMs: [], reentries: farm.reentries };
   process.stderr.write(`farm: ${farm.objects.length} objects, ${farm.workers} workers, ${farm.instances} FFM instances\n`);
 }
@@ -143,7 +160,7 @@ const server = http.createServer((req, res) => {
   res.end(file[0]);
 });
 await new Promise((resolve) => server.listen(Number(o.port), '127.0.0.1', resolve));
-const query = new URLSearchParams({ propagator: o.propagator, startJd: o.start, durationDays: o.days, windowHours,
+const query = new URLSearchParams({ propagator: farm ? 'ffm' : o.propagator, startJd: o.start, durationDays: o.days, windowHours,
   thresholdKm: o['threshold-km'], coarseStepSec: o['step-s'], ...(o.cpu ? { cpu: '1' } : {}) });
 const pageUrl = `http://127.0.0.1:${server.address().port}/?${query}`;
 
@@ -151,7 +168,7 @@ if (o.serve) {
   console.log(`Open ${pageUrl} in a WebGPU browser. Ctrl-C stops the server.`);
 } else {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ca-gpu-chrome-'));
-  const chrome = spawn(await resolveChromeBinary(), ['--headless=new', '--enable-unsafe-webgpu', '--no-first-run',
+  const chrome = spawn(headlessShell(), ['--headless=new', '--enable-unsafe-webgpu', '--no-first-run',
     '--no-default-browser-check', '--disable-extensions', '--disable-background-networking', '--disable-sync',
     `--user-data-dir=${profile}`, `${pageUrl}&auto&report`], { stdio: ['ignore', 'ignore', 'pipe'] });
   const diagnostics = [];

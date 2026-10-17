@@ -19,7 +19,7 @@
 // --base-to: element sets created before it join the snapshot first (no incremental step); the batches follow.
 // --sample-updates k: keep k of each batch's updated objects (a fixed pseudo-random sample).
 // --band lo,hi: the LEO stride sample's perigee band, km (default 300,700).
-//          [--farm-workers 5] [--workers 6] [--load-ceiling 45] [--determinism-sample 50] --out <summary.json>
+//          [--implementation ffm|ffm-fast] [--farm-workers N] [--workers 6] [--load-ceiling 45] [--determinism-sample 50] --out <summary.json>
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,9 +41,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values: o } = parseArgs({ options: {
   'catalog-json': { type: 'string' }, 'gp-history': { type: 'string' }, batches: { type: 'string' }, 'ffm-environment': { type: 'string' }, 'base-to': { type: 'string' },
   objects: { type: 'string', default: '2000' }, start: { type: 'string', default: '2461314.5' }, hours: { type: 'string', default: '6' },
-  'threshold-km': { type: 'string', default: '5' }, 'farm-workers': { type: 'string', default: '5' }, workers: { type: 'string', default: '6' },
+  'threshold-km': { type: 'string', default: '5' }, 'farm-workers': { type: 'string' }, workers: { type: 'string', default: '6' },
   'load-ceiling': { type: 'string', default: '45' }, 'determinism-sample': { type: 'string', default: '50' }, out: { type: 'string' },
-  'sample-updates': { type: 'string' }, band: { type: 'string', default: '300,700' },
+  implementation: { type: 'string', default: 'ffm' }, 'sample-updates': { type: 'string' }, band: { type: 'string', default: '300,700' },
 } });
 if (!o['catalog-json'] || !o['gp-history'] || !o.batches || !o['ffm-environment'] || !o.out) throw new Error('missing arguments; see usage');
 const log = (m) => console.error(`${new Date().toISOString().slice(11, 19)} ${m}`);
@@ -99,7 +99,7 @@ const environment = o['ffm-environment'];
 // FFM over the screen for these element sets: per window, each object's $PRW record (or a drop).
 // rows: each record's subset row (its source handle is row + 1); frames are keyed by row.
 async function propagate(records, rows = records.map((_, i) => i)) {
-  const farm = await createFfmFarm({ catalog: records.map(encode), modulesRoot: path.resolve(root, '../..'), workers: Number(o['farm-workers']),
+  const farm = await createFfmFarm({ catalog: records.map(encode), modulesRoot: path.resolve(root, '../..'), implementation: o.implementation, workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
     profile: 'full-force', environment, screenStartJd: Number(o.start), loadCeiling: Number(o['load-ceiling']), handles: rows.map((r) => r + 1) });
   try {
     const out = [];
@@ -144,7 +144,7 @@ async function fullScreen(records, traj) {
 }
 
 const summary = { subset: subset.length, windows: windows.length, hoursFrom: new Date((Number(o.start) - 2440587.5) * 86400e3).toISOString(), controls,
-  host: { cpus: os.cpus().length, model: os.cpus()[0]?.model }, farmWorkers: Number(o['farm-workers']), batches: [] };
+  host: { cpus: os.cpus().length, model: os.cpus()[0]?.model }, implementation: o.implementation, farmWorkers: o['farm-workers'] ? Number(o['farm-workers']) : 'auto', batches: [] };
 try {
   log('full propagation of the subset');
   let records = subset.slice();

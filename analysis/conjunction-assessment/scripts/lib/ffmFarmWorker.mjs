@@ -26,6 +26,7 @@ const decode = (bytes) => PRW.getSizePrefixedRootAsPRW(new flatbuffers.ByteBuffe
 const gcrf = () => new RFMCoordinateSystemT('GCRF', rfmAxisType.ICRF, new RFMOriginT(rfmOriginKind.CELESTIAL_BODY, 399), 399);
 const utc = (jd) => new TIMInstantT(timingStandard.UTC, timEpochRepresentation.JULIAN_DATE, jd);
 
+let compactions = 0;
 const instances = [];   // { harness, identity, handles: Set<number> }
 
 async function call(harness, methodId, port, arm, records) {
@@ -38,7 +39,7 @@ async function call(harness, methodId, port, arm, records) {
 // gravity-only.
 async function addInstance({ wasm, manifest, catalogPath, profile, environment, id, states }) {
   const harness = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
-  const identity = new PRWInstanceT('com.orbpro.ffm', id, 1n);
+  const identity = new PRWInstanceT(manifest.pluginId, id, 1n);
   if (profile === 'full-force') {
     const catalog = await import(pathToFileURL(catalogPath).href);
     const meters = (s) => [...s.position, ...s.velocity].map((x) => x * 1000);
@@ -51,7 +52,8 @@ async function addInstance({ wasm, manifest, catalogPath, profile, environment, 
     for (const [portId, payload] of Object.entries(environment)) inputs.push({ portId, typeRef: TYPE, payload });
     const response = await harness.invoke({ methodId: 'ingest_state', inputs });
     if (response.statusCode !== 0) throw new Error(`FFM ingest: ${response.errorCode}: ${response.errorMessage}`);
-    instances.push({ harness, identity, handles: new Set(states.map((s) => s.handle)) });
+    instances.push({ harness, identity, handles: new Set(states.map((s) => s.handle)),
+      source: { wasm, manifest, catalogPath, profile, environment, id, states } });
     return;
   }
   const records = states.map((s) => {
@@ -64,7 +66,8 @@ async function addInstance({ wasm, manifest, catalogPath, profile, environment, 
   });
   const response = await call(harness, 'ingest_state_gravity_only', 'state', 'RESIDENT_STATE', records);
   if (response.statusCode !== 0) throw new Error(`FFM ingest: ${response.errorCode}: ${response.errorMessage}`);
-  instances.push({ harness, identity, handles: new Set(states.map((s) => s.handle)) });
+  instances.push({ harness, identity, handles: new Set(states.map((s) => s.handle)),
+      source: { wasm, manifest, catalogPath, profile, environment, id, states } });
 }
 
 const prepare = (instance, startJd, seconds, handles) => call(instance.harness, 'prepare_trajectory_segments', 'request', 'PREPARE_REQUEST',
@@ -121,12 +124,48 @@ async function exportWindow({ startJd, seconds, loadCeiling }) {
   return { frames, dropped, cpuMs: cpuMs(cpu0), pausedMs };
 }
 
-parentPort.on('message', async ({ id, op, args }) => {
+// The resident contract replaces a whole instance. Rebuild from original
+// epoch states when churn retains more than two slabs per live slab.
+function residency() {
+  const live = instances.reduce((n, i) => n + i.handles.size, 0);
+  return { instances: instances.length, live, retained: instances.reduce((n, i) => n + i.source.states.length, 0),
+    maximumInstances: Math.max(2, 2 * Math.ceil(live / 1024)), compactions };
+}
+async function compact() {
+  const stats = residency();
+  if (stats.instances <= stats.maximumInstances && stats.retained <= Math.max(2048, 2 * stats.live)) return;
+  const template = instances[0].source;
+  const states = instances.flatMap((i) => i.source.states.filter((s) => i.handles.has(s.handle)));
+  for (const i of instances) await i.harness.destroy();
+  instances.length = 0;
+  ++compactions;
+  for (let start = 0; start < states.length; start += 1024)
+    await addInstance({ ...template, id: `${template.id}-compact-${compactions}-${start}`, states: states.slice(start, start + 1024) });
+}
+// A worker can receive several adds while their promises finish. Serialize
+// these mutations so compaction cannot race another add or an export.
+let operations = Promise.resolve();
+parentPort.on('message', (message) => { operations = operations.then(() => dispatch(message)); });
+async function dispatch({ id, op, args }) {
+
   try {
     if (op === 'add') {
       const cpu0 = process.threadCpuUsage();
       await addInstance({ ...args, wasm: fs.readFileSync(args.wasmPath), manifest: JSON.parse(fs.readFileSync(args.manifestPath, 'utf8')) });
-      parentPort.postMessage({ id, ok: true, result: { cpuMs: cpuMs(cpu0) } });
+      await compact();
+      parentPort.postMessage({ id, ok: true, result: { cpuMs: cpuMs(cpu0), ...residency() } });
+    } else if (op === 'remove') {
+      const cpu0 = process.threadCpuUsage();
+      const removed = new Set(args.handles);
+      for (let i = instances.length - 1; i >= 0; --i) {
+        const instance = instances[i];
+        for (const handle of removed) instance.handles.delete(handle);
+        if (!instance.handles.size) { await instance.harness.destroy(); instances.splice(i, 1); }
+      }
+      await compact();
+      parentPort.postMessage({ id, ok: true, result: { cpuMs: cpuMs(cpu0), ...residency() } });
+    } else if (op === 'residency') {
+      parentPort.postMessage({ id, ok: true, result: residency() });
     } else if (op === 'window') {
       const result = await exportWindow(args);
       parentPort.postMessage({ id, ok: true, result }, result.frames.map((f) => f.buffer));
@@ -134,4 +173,4 @@ parentPort.on('message', async ({ id, op, args }) => {
   } catch (error) {
     parentPort.postMessage({ id, ok: false, error: String(error?.stack ?? error) });
   }
-});
+}

@@ -99,96 +99,146 @@ async function epochStates(epochStateDir, omms) {
 }
 
 /**
- * @param {object} o
- * @param {Uint8Array[]} o.catalog  One $OMM per object.
- * @param {string} o.modulesRoot  The space-data-network-modules checkout.
- * @param {number} [o.workers]
- * @param {number} [o.screenStartJd]  UTC JD the screen starts (default: the first window's start).
- * @param {number} [o.loadCeiling]  Pause each worker's next chunk of objects while the host's
- *   1-minute load average exceeds it (none by default).
- * @param {number[]} [o.handles]  Each object's source handle (default: its position + 1), so a
- *   farm of some catalog objects (the ones whose element sets changed) keeps the catalog's handles.
- * @returns {Promise<{objects: object[], excluded: object[], reentries: object[], window: Function, close: Function}>}
- *
- * FFM ends a trajectory at reentry (100 km geodetic altitude) with the error
- * `reentry` and its UTC epoch. An object that reenters before the screen
- * starts is dropped, as SGP4 excludes a decayed element set. One that
- * reenters during the screen keeps the windows before the one holding its
- * reentry and is absent from that window on; `reentries` lists both kinds.
+ * A resident FFM farm. `implementation` is `ffm` (default) or `ffm-fast`.
+ * `workers` is an explicit positive integer; auto leaves two cores available
+ * and caps at 16. `environment` is immutable for this farm's lifetime.
+ * `updateCatalog(catalog, { handles })` retains byte-identical OMM records and
+ * handles, deriving and ingesting only changed/new records. Unspecified handles
+ * remain stable by NORAD number. Deleted records leave the active catalog.
+ * New environment/force configuration requires a new farm, so carried states
+ * can never silently retain stale drivers after an environment change.
  */
 export async function createFfmFarm(o) {
+  const implementation = o.implementation ?? 'ffm';
+  if (!['ffm', 'ffm-fast'].includes(implementation)) throw new Error(`Unknown FFM implementation ${implementation}: ffm or ffm-fast.`);
   const profile = o.profile ?? 'full-force';
   if (!['full-force', 'gravity-only'].includes(profile)) throw new Error(`Unknown FFM profile ${profile}: full-force or gravity-only.`);
+  if (o.workers !== undefined && (!Number.isInteger(o.workers) || o.workers < 1)) throw new Error('FFM workers must be a positive integer.');
+  const availableCores = os.availableParallelism();
+  const count = Math.min(o.workers ?? Math.min(16, Math.max(1, availableCores - 2)), Math.max(1, o.catalog.length));
+  const workerPolicy = { requested: o.workers ?? 'auto', availableCores, selected: count, autoCap: 16, reservedCores: 2 };
   let environment = null;
   if (profile === 'full-force') {
     if (!o.environment) throw new Error('The full-force FFM farm needs its environment frames (kernel.prw, earth_orientation.prw, space_weather.prw).');
     environment = Object.fromEntries(['kernel', 'earth_orientation', 'space_weather'].map((port) =>
       [port, new Uint8Array(fs.readFileSync(path.join(o.environment, `${port}.prw`)))]));
   }
-  const omms = o.catalog.map((bytes) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack());
-  const objects = omms.map((m, i) => ({ handle: o.handles?.[i] ?? i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME,
-    bstar: m.BSTAR }));
-  const t0 = performance.now();
-  const { states, report } = await epochStates(path.join(o.modulesRoot, 'analysis/epoch-state'), omms);
-  const deriveMs = performance.now() - t0;
-  const excluded = [], ready = [];
-  for (const obj of objects) {
-    const s = states.get(obj.norad);
-    if (s) ready.push({ ...obj, ...s });
-    else excluded.push({ ...obj, reason: 'epoch-state refused the element set' });
-  }
-
-  const count = Math.max(1, Math.min(o.workers ?? os.availableParallelism() - 2, ready.length));
+  const ffm = path.join(o.modulesRoot, 'propagator', implementation);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ffm, 'plugin-manifest.json'), 'utf8'));
   const workers = Array.from({ length: count }, () => new Worker(new URL('./ffmFarmWorker.mjs', import.meta.url)));
-  let next = 0;
-  const pending = new Map();
-  for (const w of workers) w.on('message', ({ id, ok, result, error }) => {
-    const p = pending.get(id); pending.delete(id);
-    ok ? p.resolve(result) : p.reject(new Error(error));
-  });
-  const send = (w, op, args) => new Promise((resolve, reject) => { const id = next++; pending.set(id, { resolve, reject }); w.postMessage({ id, op, args }); });
-
-  const ffm = path.join(o.modulesRoot, 'propagator/ffm');
-  const t1 = performance.now();
-  // About two instances per worker, objects dealt round-robin, so element
-  // sets of every age (FFM integrates each from its epoch) spread evenly.
-  const instanceCount = Math.max(Math.ceil(ready.length / BATCH), Math.min(2 * count, ready.length));
-  const adds = [];
-  for (let b = 0; b < instanceCount; b++) {
-    adds.push(send(workers[b % count], 'add', { wasmPath: path.join(ffm, 'dist/isomorphic/module.wasm'),
-      manifestPath: path.join(ffm, 'plugin-manifest.json'), catalogPath: path.join(ffm, 'catalog.mjs'), profile, environment,
-      id: `farm-${b}`, states: ready.filter((_, i) => i % instanceCount === b) }));
+  let messageId = 0, instanceId = 0, residentInstances = 0, nextHandle = 1;
+  let rows = new Map(), deriveMs = 0, ingestMs = 0, epochStateReport = null, closed = false, closing = false, fatal = null;
+  let operations = Promise.resolve();
+  const pending = new Map(), reentries = [], cpu = { ingestS: 0, windows: [], updates: [] };
+  const failWorker = (worker, error) => {
+    if (!closed) fatal = error;
+    for (const [id, p] of pending) if (p.worker === worker) { pending.delete(id); p.reject(error); }
+  };
+  for (const worker of workers) {
+    worker.on('message', ({ id, ok, result, error }) => {
+      const p = pending.get(id);
+      if (!p) return;
+      pending.delete(id);
+      ok ? p.resolve(result) : p.reject(new Error(error));
+    });
+    worker.on('error', (error) => failWorker(worker, error));
+    worker.on('exit', (code) => { if (!closed) failWorker(worker, new Error(`FFM worker exited (${code}).`)); });
   }
-  const ingestCpuMs = (await Promise.all(adds)).reduce((sum, r) => sum + (r?.cpuMs ?? 0), 0);
-  const ingestMs = performance.now() - t1;
-  // CPU time of the workers (user and system, per thread): ingest and each window.
-  const cpu = { ingestS: ingestCpuMs / 1000, windows: [] };
-  const byHandle = new Map(objects.map((x) => [x.handle, x]));
-  const reentries = [];
-  let screenStartJd = o.screenStartJd;
-  // The UTC Julian date of the epoch in a reentry error ("... at <ISO> UTC").
+  const send = (worker, op, args) => new Promise((resolve, reject) => {
+    if (fatal || closed) { reject(fatal ?? new Error('FFM farm is closed.')); return; }
+    const id = messageId++; pending.set(id, { worker, resolve, reject });
+    try { worker.postMessage({ id, op, args }); } catch (error) { pending.delete(id); reject(error); }
+  });
+  const serialize = (fn) => {
+    if (closing || closed) return Promise.reject(new Error('FFM farm is closed.'));
+    const result = operations.then(() => { if (fatal) throw fatal; return fn(); });
+    operations = result.catch(() => {});
+    return result;
+  };
+  let screenStartJd = o.screenStartJd, residentStats = [];
   const reentryJd = (reason) => {
     const m = /^reentry: .* at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?) UTC/.exec(reason);
     return m ? unixSeconds(m[1]) / 86400 + 2440587.5 : null;
   };
+  const objectOf = ({ object }) => object;
 
-  return {
-    objects, excluded, reentries, cpu, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
-    /** Trajectories of every object over [startJd, startJd + days], UTC. */
-    async window(startJd, days) {
+  async function update(catalog, { handles } = {}) {
+    if (handles && handles.length !== catalog.length) throw new Error('FFM handles must match catalog length.');
+    const next = new Map(), seenHandles = new Set(), changed = [];
+    let candidateNextHandle = nextHandle;
+    for (const [i, bytes] of catalog.entries()) {
+      const omm = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack();
+      const norad = Number(omm.NORAD_CAT_ID), prior = rows.get(norad);
+      const handle = handles?.[i] ?? prior?.object.handle ?? candidateNextHandle++;
+      if (!Number.isSafeInteger(norad) || norad <= 0 || next.has(norad)) throw new Error('FFM catalog requires unique positive NORAD numbers.');
+      if (!Number.isInteger(handle) || handle <= 0 || handle > 0xffffffff || seenHandles.has(handle)) throw new Error('FFM handles must be unique positive uint32 values.');
+      candidateNextHandle = Math.max(candidateNextHandle, handle + 1); seenHandles.add(handle);
+      if (prior?.object.handle === handle && Buffer.from(bytes).equals(prior.bytes)) { next.set(norad, prior); continue; }
+      const row = { bytes: Buffer.from(bytes), omm, object: { handle, norad, objectId: omm.OBJECT_ID || String(norad), name: omm.OBJECT_NAME, bstar: omm.BSTAR } };
+      changed.push(row); next.set(norad, row);
+    }
+    const removed = [...rows.values()].filter((row) => next.get(row.object.norad) !== row);
+    const t0 = performance.now();
+    const derived = changed.length ? await epochStates(path.join(o.modulesRoot, 'analysis/epoch-state'), changed.map((r) => r.omm)) : null;
+    const thisDeriveMs = performance.now() - t0;
+    deriveMs += thisDeriveMs;
+    if (derived) epochStateReport = derived.report;
+    const ready = [];
+    for (const row of changed) {
+      const state = derived.states.get(row.object.norad);
+      if (state) ready.push({ ...row.object, ...state });
+      else row.excluded = { ...row.object, reason: 'epoch-state refused the element set' };
+    }
+    const t1 = performance.now();
+    try {
+      const removals = removed.length ? await Promise.all(workers.map((w) => send(w, 'remove', { handles: removed.map((r) => r.object.handle) }))) : [];
+      const removalCpuS = removals.reduce((sum, r) => sum + r.cpuMs, 0) / 1000;
+      const batches = Math.max(Math.ceil(ready.length / BATCH), Math.min(2 * count, ready.length));
+      const buckets = Array.from({ length: batches }, () => []);
+      ready.forEach((state, i) => buckets[i % batches].push(state));
+      const adds = buckets.map((states) => {
+        const id = instanceId++;
+        return send(workers[id % count], 'add', { wasmPath: path.join(ffm, 'dist/isomorphic/module.wasm'),
+          manifestPath: path.join(ffm, 'plugin-manifest.json'), catalogPath: path.join(ffm, 'catalog.mjs'), profile, environment,
+          id: `farm-${id}`, states });
+      });
+      const cpuS = removalCpuS + (await Promise.all(adds)).reduce((sum, r) => sum + r.cpuMs, 0) / 1000;
+      residentStats = await Promise.all(workers.map((w) => send(w, 'residency', {})));
+      residentInstances = residentStats.reduce((sum, r) => sum + r.instances, 0); cpu.ingestS += cpuS; ingestMs += performance.now() - t1;
+      const summary = { unchanged: next.size - changed.length, changed: changed.filter((r) => rows.has(r.object.norad)).length,
+        added: changed.filter((r) => !rows.has(r.object.norad)).length, deleted: [...rows.keys()].filter((id) => !next.has(id)).length,
+        derived: changed.length, excluded: changed.filter((r) => r.excluded).length, deriveMs: thisDeriveMs, ingestCpuS: cpuS };
+      rows = next; nextHandle = candidateNextHandle; cpu.updates.push(summary); return summary;
+    } catch (error) { fatal = error; throw error; }
+  }
+
+  const farm = {
+    get objects() { return [...rows.values()].map(objectOf); },
+    get excluded() { return [...rows.values()].flatMap((r) => r.excluded ? [r.excluded] : []); },
+    get instances() { return residentInstances; }, get residency() { return residentStats.map((r) => ({ ...r })); }, get deriveMs() { return deriveMs; }, get ingestMs() { return ingestMs; },
+    get epochStateReport() { return epochStateReport; },
+    reentries, cpu, workers: count, workerPolicy, profile, implementation, moduleId: manifest.pluginId,
+    updateCatalog(catalog, options) { return serialize(() => update(catalog, options)); },
+    window(startJd, days) { return serialize(async () => {
+      if (!Number.isFinite(startJd) || !Number.isFinite(days) || days < 0) throw new Error('FFM window requires finite start and nonnegative days.');
       screenStartJd ??= startJd;
       const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400, loadCeiling: o.loadCeiling })));
-      cpu.windows.push({ startJd, cpuS: parts.reduce((sum, p) => sum + p.cpuMs, 0) / 1000,
+      cpu.windows.push({ startJd, days, cpuS: parts.reduce((sum, p) => sum + p.cpuMs, 0) / 1000,
         maxWorkerCpuS: Math.max(...parts.map((p) => p.cpuMs)) / 1000, maxWorkerPausedS: Math.max(...parts.map((p) => p.pausedMs)) / 1000 });
-      const frames = parts.flatMap((p) => p.frames);
-      const dropped = [];
+      const byHandle = new Map(farm.objects.map((x) => [x.handle, x])), dropped = [];
       for (const d of parts.flatMap((p) => p.dropped)) {
         const object = byHandle.get(d.handle), jd = reentryJd(d.reason);
         if (jd !== null) reentries.push({ ...object, jd, phase: jd < screenStartJd ? 'catch-up' : 'screen', reason: d.reason });
         if (jd === null || jd < screenStartJd) dropped.push({ ...object, reason: d.reason, jd: startJd });
       }
-      return { frames, dropped };
+      return { frames: parts.flatMap((p) => p.frames), dropped };
+    }); },
+    async close() {
+      closing = true; await operations;
+      if (closed) return;
+      closed = true; await Promise.all(workers.map((w) => w.terminate()));
     },
-    async close() { await Promise.all(workers.map((w) => w.terminate())); },
   };
+  try { await update(o.catalog, { handles: o.handles }); return farm; }
+  catch (error) { await farm.close(); throw error; }
 }

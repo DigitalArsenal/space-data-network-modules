@@ -165,3 +165,22 @@ artifact, fork-base, fixture, and exporter hashes must match.
 truth settings, units, TT handling, tolerance rationale, and one-command
 regeneration. The E2E prints readable tables and one final JSON record;
 exit status 0 means every required check passed.
+
+## Catalog acceptance
+
+The CA farm selects `ffm` (default) or `ffm-fast`. It retains unchanged
+residents across refreshes and derives only new or changed element sets.
+Workers default to at most 16, reserving two logical cores. Catalog churn
+compacts original epoch states when retained slabs exceed twice the live
+slabs; cold/carry PPE byte agreement covers the compaction path.
+The CPU CLI remains outside this change because another lane owns it; the
+Fast catalog driver uses the farm library directly.
+
+The 2,000-object comparison requires the exact event set, at most 10 ms TCA
+and 1 m miss differences, and at most 1% of an orientation-independent
+combined E14 S3-KC sigma bound. The native comparator retains covariance
+cross terms and requires every event's regime/age stratum. E14 provides a
+GP prediction-error scale; this comparison does not assert calibrated FFM
+covariance. The bound is the square root of the sum of the two smallest
+position-covariance eigenvalues. TCA differences are converted to along-
+encounter displacement with the reported relative speed before comparison.
