@@ -1,5 +1,7 @@
 # Lane09 second-pass verification — 2026-09-15
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 ## Outcome
 
 Python ctypes executes all nine committed C++ WASM artifacts through WasmEdge
@@ -70,7 +72,7 @@ SDK-backed build scripts and repo-local EMSDK.
 | Module | Build command | Build | SDK check summary |
 | --- | --- | --- | --- |
 | SGP4 | `bash build.sh` | PASS | `node --test tests/sdk_compat.test.mjs`:7pass,0fail |
-| HPOP | `bash build.sh` | PASS | `node --test tests/sdk_compat.test.mjs`:9pass,1fail |
+| FFM | `bash build.sh` | PASS | `node --test tests/sdk_compat.test.mjs`:9pass,1fail |
 | Estimation | `node build.mjs` | PASS | no sdk_compat suite; `tests/conformance.test.mjs`:1pass,0fail |
 | Conjunction | `bash build.sh` | PASS | `node --test tests/sdk_compat.test.mjs`:9pass,1fail |
 | Access | `node build.js --force` | PASS | `node --test test/manifestContract.test.mjs`:0pass,1fail; layout-adapted5pass,0fail |
@@ -79,7 +81,7 @@ SDK-backed build scripts and repo-local EMSDK.
 | Time | `node build.mjs` | PASS | `node --test tests/sdk_compat.test.mjs`:4pass,0fail |
 | Frames | `node build.mjs` | PASS | `node --test tests/sdk_compat.test.mjs`:5pass,0fail |
 
-Rebuilt SGP4/HPOP/estimation/Lambert/time are byte-identical to main. Rebuilt
+Rebuilt SGP4/FFM/estimation/Lambert/time are byte-identical to main. Rebuilt
 access/conjunction/frames differ; the Python package retains the original
 committed artifacts. Build schemas were supplied from the canonical SDS working
 tree, which later proved dirty in RFM. The baseline receipt states this explicitly;
@@ -90,7 +92,7 @@ vendoring uses immutable Git objects and is unaffected by that dirt.
 
 All four first-pass counts reproduce on clean `e461236` committed artifacts:
 
-1. HPOP9/1: `built artifact passes SDK compliance checks`; missing-canonical-file-identifier,
+1. FFM9/1: `built artifact passes SDK compliance checks`; missing-canonical-file-identifier,
    missing-aligned-file-identifier, paired-type-identity-mismatch.
 2. Conjunction9/1: same test name; missing-canonical-root-type-name,
    missing-canonical-file-identifier, paired-type-identity-mismatch.
@@ -120,7 +122,7 @@ accuracy test. Exact artifact hashes/commands are in `parity-checks.json`.
 
 ```text
 propagator/sgp4 [SDK three-runtime error paths]: exit 0
-propagator/hpop [SDK three-runtime error paths]: exit 0
+propagator/ffm [SDK three-runtime error paths]: exit 0
 analysis/estimation [SDK three-runtime error paths]: exit 0
 analysis/conjunction-assessment [SDK three-runtime error paths]: exit 2
 analysis/access [SDK three-runtime error paths]: exit 2
@@ -142,8 +144,8 @@ resulting wheel inventory. It produces `py3-none-macosx_11_0_arm64`; a source
 distribution is also built. See README for documented Linux/Windows recipes;
 those OS executions and the unused wasi.thread-spawn callback remain untested.
 
-The20-line `examples/sgp4_hpop.py` runs. Advanced estimation and events expose
-generated request objects, while common inputs have NumPy helpers. HPOP's
+The20-line `examples/sgp4_ffm.py` runs. Advanced estimation and events expose
+generated request objects, while common inputs have NumPy helpers. FFM's
 manifest-only InvokeRequest/InvokeResponse and absent trajectory `.fbs` sources
 are documented in dependencies.md; no schema was invented.
 

@@ -9,7 +9,7 @@
     {
       "build_provenance": null,
       "declared_sds_dependency": "^1.195.0",
-      "id": "propagator/hpop",
+      "id": "propagator/ffm",
       "wasm_sha256": "be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c"
     },
     {

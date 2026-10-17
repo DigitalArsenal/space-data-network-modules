@@ -21,7 +21,7 @@ import { DCL_TYPE, STANDARDS_ROOT, call } from './dcl.mjs';
 //   longitude at the instant is its longitude less the Earth's rotation in
 //   that light time (360.9856 deg/day). Its latitude is planetodetic (the
 //   surface point under the Sun on the WGS84 ellipsoid); the Sun's own
-//   latitude, as hpop and Orekit give JB2008, is geocentric:
+//   latitude, as ffm and Orekit give JB2008, is geocentric:
 //   tan(geocentric) = (1 - f)^2 tan(geodetic).
 const wasm = fs.readFileSync(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
@@ -126,7 +126,7 @@ test('the Sun\'s Earth-fixed direction matches JPL Horizons\' sub-solar point', 
   });
 });
 
-test('a global correction equals raising every DTC value by the same amount (hpop\'s DSTDTC input)', async () => {
+test('a global correction equals raising every DTC value by the same amount (ffm\'s DSTDTC input)', async () => {
   const days = ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08'];
   const rows = (add) => days.map((DATE, k) => ({ DATE, F10: 140 + k, F10_CENTRED_81: 150, S10: 130, S10_CENTRED_81: 135, M10: 145, M10_CENTRED_81: 148,
     Y10: 120, Y10_CENTRED_81: 125, DTC_HOURLY_K: Array.from({ length: 24 }, (_, h) => 20 + 3 * h + add) }));

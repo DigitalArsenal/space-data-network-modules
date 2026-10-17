@@ -1,5 +1,7 @@
 # Reproducible matching and identity review
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 Version 0.1.9 completes the APP workflow around `match_catalog`. Provider records
 and CAT precedence are independent of the identity decision log.
 
@@ -13,7 +15,7 @@ selected. Products must have distinct candidate IDs and immutable references.
 native public-format Vimpel normalizer when necessary, `foundation/frames` for
 explicit GCRF normalization, `foundation/time` for UTC-to-TDB conversion, and the
 selected PRW implementation for propagation. It serializes canonical SDS binary
-requests and outputs, without implementing dynamics. The packaged HPOP choice is
+requests and outputs, without implementing dynamics. The packaged FFM choice is
 replaceable with a PRW WASM artifact. Its hash is part of the review.
 
 The automatic profile accepts 5–10,000 samples over at most seven days, starting

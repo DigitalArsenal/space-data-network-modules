@@ -1,5 +1,7 @@
 # SDK 0.5.22 Repo-Local Verification And External Stop
 
+FFM (Full Force Model) is defined by [FFM-1](../propagator/ffm/FFM.md).
+
 Superseded on April 10, 2026 by
 [`docs/licensing-client-server-flow-2026-04-10.md`](./licensing-client-server-flow-2026-04-10.md).
 This file remains as the checkpoint captured before the sibling-repo host
@@ -37,7 +39,7 @@ Executed and passing in this repo:
 - `cd packages/cislunar && node --test tests/sdk_compat.test.mjs`
 - `cd packages/conjunction-assessment && node --test tests/sdk_compat.test.mjs`
 - `cd packages/fred && node --test tests/sdk_compat.test.mjs`
-- `cd packages/hpop && node --test tests/sdk_compat.test.mjs`
+- `cd packages/ffm && node --test tests/sdk_compat.test.mjs`
 - `cd packages/maneuver && node --test tests/sdk_compat.test.mjs`
 - `cd packages/od && node --test tests/sdk_compat.test.mjs tests/test_wasm.mjs`
 - `cd packages/propagator.sgp4 && node --test tests/sdk_compat.test.mjs`

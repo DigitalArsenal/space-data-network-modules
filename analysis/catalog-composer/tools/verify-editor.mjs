@@ -17,7 +17,7 @@ const bundle=await parseSingleFileBundle(await fs.readFile(path.join(root,'dist/
 const appBytes=bundle.entries.find(e=>e.entryId==='app.app').payloadBytes,app=decodeAppManifest(appBytes);
 const page=gunzipSync(Buffer.from(app.pages[0].content,'base64'));
 const modules=new Map([[bundle.manifest.pluginId,bundle.canonicalWasmBytes]]);
-for(const relative of ['files/orbit-products','foundation/frames','foundation/time','propagator/hpop']) {
+for(const relative of ['files/orbit-products','foundation/frames','foundation/time','propagator/ffm']) {
  const manifest=JSON.parse(await fs.readFile(path.join(repo,relative,'plugin-manifest.json')));
  const artifact=await computeCanonicalModuleHash(await fs.readFile(path.join(repo,relative,'dist/isomorphic/module.wasm')));modules.set(manifest.pluginId,artifact.canonicalWasmBytes);
 }

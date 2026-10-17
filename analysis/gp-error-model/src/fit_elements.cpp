@@ -231,8 +231,8 @@ struct LoadCounts {
   std::map<std::string, uint64_t> frames;
 };
 
-// RSW rows (R, T, N) of a state, as hpopcal::rtn_axes builds them.
-void rsw_rows(const double r[3], const double v[3], double rows[3][3]) { hpopcal::rtn_axes(r, v, rows); }
+// RSW rows (R, T, N) of a state, as ffmcal::rtn_axes builds them.
+void rsw_rows(const double r[3], const double v[3], double rows[3][3]) { ffmcal::rtn_axes(r, v, rows); }
 
 std::string load_tracks(Tracks* out, LoadCounts* counts) {
   Rotations rot;
@@ -276,7 +276,7 @@ std::string load_tracks(Tracks* out, LoadCounts* counts) {
         if (d->size() % k != 0) return "EPHEMERIS_DATA length must be a multiple of STATE_VECTOR_SIZE.";
         for (uint32_t j = 0; j * k < d->size(); ++j) {
           State s;
-          s.t = hpopcal::plus_seconds(start, j * b->STEP_SIZE());
+          s.t = ffmcal::plus_seconds(start, j * b->STEP_SIZE());
           for (int a = 0; a < 3; ++a) s.r[a] = d->Get(j * k + a);
           if (k >= 6) {
             for (int a = 0; a < 3; ++a) s.v[a] = d->Get(j * k + 3 + a);

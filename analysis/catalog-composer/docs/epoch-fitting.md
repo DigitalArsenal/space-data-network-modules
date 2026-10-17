@@ -1,5 +1,7 @@
 # Epoch-state conversion, validation and refinement
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 This path never derives the initial velocity from ten-minute provider positions.
 The reader converts osculating elements to an analytic J2000 position/velocity
 using the existing `foundation/orbits` implementation. The catalog module checks
@@ -44,7 +46,7 @@ The policy is an `$XMT` `EPOCH_FIT_POLICY`; the example values:
 
 | Field | Example |
 | --- | --- |
-| `PROPAGATOR_ID` | `com.orbpro.hpop` |
+| `PROPAGATOR_ID` | `com.orbpro.ffm` |
 | `PROPAGATOR_ARTIFACT_SHA256` | 64 lowercase hex characters |
 | `FORCE_MODEL` | `$PRW` `PRWForceConfiguration`: point mass, J2-J4, third bodies; no drag, no SRP (required) |
 | `FRAME_TRANSFORMATION_REF` | immutable frame-module/configuration reference |
@@ -86,18 +88,18 @@ the budget is failure, not permission to publish the last iterate. Model changes
 require a new policy/provenance record and a fresh fit. No state is automatically
 promoted into the authoritative catalog by either method.
 
-## HPOP verification and limitations
+## FFM verification and limitations
 
 The opt-in integration driver composes the actual reader, `foundation/frames`,
-`foundation/time`, HPOP, and catalog WASM artifacts. J2000 is explicitly rotated
-to GCRF and back. UTC sample times are explicitly converted to TDB for HPOP.
+`foundation/time`, FFM, and catalog WASM artifacts. J2000 is explicitly rotated
+to GCRF and back. UTC sample times are explicitly converted to TDB for FFM.
 Physics and state fitting run in C++ WASM; the JS driver only routes requests,
 serializes units/records, and computes test diagnostics.
 
 The tested model uses Earth central gravity, J2–J4 and analytical Sun/Moon, with
 RKF78. Drag and SRP are disabled: Vimpel's effective area/mass is not enough to
 infer separate drag/SRP coefficients. This does **not** reproduce the provider's
-degree-8/DE405/GOST model. The current HPOP GOST enum is a placeholder, not GOST.
+degree-8/DE405/GOST model. The current FFM GOST enum is a placeholder, not GOST.
 Do not label this configuration as a matching provider force model.
 
 All 13,808 rows of the downloaded table converted. Three four-hour arcs (one
@@ -116,8 +118,8 @@ convergence claim is made for that diagnostic.
 ## Reproduction
 
 From the modules repository, install dependencies in `files/orbit-products`,
-`analysis/catalog-composer`, `foundation/frames`, and `propagator/hpop`. Build the
-two changed packages in that order. Existing frame/time/HPOP artifacts are inputs.
+`analysis/catalog-composer`, `foundation/frames`, and `propagator/ffm`. Build the
+two changed packages in that order. Existing frame/time/FFM artifacts are inputs.
 
 ```sh
 node --test files/orbit-products/tests/vimpel.test.mjs analysis/catalog-composer/tests/epoch-fit.test.mjs

@@ -1,0 +1,593 @@
+{
+ "about": "GMAT setting variants against FFM (steps <= 30 s) and Orekit 13.1: largest 3D difference over 24 h, m. tests/evidence/gmat/variants.mjs.",
+ "variants": [
+  {
+   "id": "pd78-60s",
+   "label": "PrinceDormand78 at 1e-13, steps <= 60 s",
+   "args": [
+    "--integrator",
+    "PD78",
+    "--accuracy",
+    "1e-13",
+    "--max-step",
+    "60"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 F0-point-mass",
+     "ffmMinusGmatM": 0.002983683541456985,
+     "orekitMinusGmatM": 0.002894466131592132
+    },
+    {
+     "id": "LEO400 F1-J2",
+     "ffmMinusGmatM": 0.0034415356726672764,
+     "orekitMinusGmatM": 0.0035594596005911463
+    },
+    {
+     "id": "LEO400 F2-zonal20",
+     "ffmMinusGmatM": 0.0023753478266621323,
+     "orekitMinusGmatM": 0.003335548166884631
+    },
+    {
+     "id": "LEO400 Z1-zonal20-sun-moon",
+     "ffmMinusGmatM": 0.003354774515816924,
+     "orekitMinusGmatM": 0.004380634854748626
+    },
+    {
+     "id": "LEO400 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00872987402496015,
+     "orekitMinusGmatM": 0.009509031972903075
+    },
+    {
+     "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+     "ffmMinusGmatM": 2.290085946068066,
+     "orekitMinusGmatM": 2.286023619032258
+    },
+    {
+     "id": "LEO400 F3-field20x20",
+     "ffmMinusGmatM": 0.007350566589218925,
+     "orekitMinusGmatM": 0.0067705807565913885
+    },
+    {
+     "id": "LEO400 F4-field-sun-moon",
+     "ffmMinusGmatM": 0.02643359154761777,
+     "orekitMinusGmatM": 0.026198853488306518
+    },
+    {
+     "id": "LEO400 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.013744687863653614,
+     "orekitMinusGmatM": 0.013546482325776012
+    },
+    {
+     "id": "LEO400 F6-field-sun-moon-srp-drag",
+     "ffmMinusGmatM": 2.2922207600934077,
+     "orekitMinusGmatM": 2.2880608871716825
+    },
+    {
+     "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
+     "ffmMinusGmatM": 0.006292693419456634,
+     "orekitMinusGmatM": 0.007314939799908981
+    },
+    {
+     "id": "LEO400 T1-field-sun-moon-solid-tides",
+     "ffmMinusGmatM": 0.02120545878840111,
+     "orekitMinusGmatM": 0.021001860972453795
+    },
+    {
+     "id": "LEO400 I1-field-sun-moon-in-track",
+     "ffmMinusGmatM": 0.014899231122248115,
+     "orekitMinusGmatM": 0.014093412218719127
+    },
+    {
+     "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "ffmMinusGmatM": 1.5447695538648383,
+     "orekitMinusGmatM": 1.5407962115381757
+    },
+    {
+     "id": "LEO400 E1-field-sun-moon-eme2000",
+     "ffmMinusGmatM": 0.019570080122831013,
+     "orekitMinusGmatM": 0.01985954600471869
+    },
+    {
+     "id": "LEO400 G1-egm96-36x36-sun-moon",
+     "ffmMinusGmatM": 0.02536293961501924,
+     "orekitMinusGmatM": 0.024795662608581362
+    },
+    {
+     "id": "LEO400 G2-egm2008-36z24t-sun-moon",
+     "ffmMinusGmatM": 0.01525079886774007,
+     "orekitMinusGmatM": 0.015482115131953163
+    },
+    {
+     "id": "SSO700 F0-point-mass",
+     "ffmMinusGmatM": 0.001913109759441591,
+     "orekitMinusGmatM": 0.001852164688243844
+    },
+    {
+     "id": "SSO700 F1-J2",
+     "ffmMinusGmatM": 0.00418158791693564,
+     "orekitMinusGmatM": 0.004092346261560571
+    },
+    {
+     "id": "SSO700 F2-zonal20",
+     "ffmMinusGmatM": 0.008991232407054375,
+     "orekitMinusGmatM": 0.00882782597644001
+    },
+    {
+     "id": "SSO700 Z1-zonal20-sun-moon",
+     "ffmMinusGmatM": 0.0012264872592026152,
+     "orekitMinusGmatM": 0.002460166380161598
+    },
+    {
+     "id": "SSO700 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.013023791192998587,
+     "orekitMinusGmatM": 0.0142204100172046
+    },
+    {
+     "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+     "ffmMinusGmatM": 7.9295792413613695,
+     "orekitMinusGmatM": 7.930922094440362
+    },
+    {
+     "id": "SSO700 F3-field20x20",
+     "ffmMinusGmatM": 0.007630587365896565,
+     "orekitMinusGmatM": 0.008827895523045385
+    },
+    {
+     "id": "SSO700 F4-field-sun-moon",
+     "ffmMinusGmatM": 0.023555426648459405,
+     "orekitMinusGmatM": 0.024171515997995743
+    },
+    {
+     "id": "SSO700 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.010164036678617481,
+     "orekitMinusGmatM": 0.011490685367185402
+    },
+    {
+     "id": "SSO700 F6-field-sun-moon-srp-drag",
+     "ffmMinusGmatM": 7.946656137648752,
+     "orekitMinusGmatM": 7.947892595289634
+    },
+    {
+     "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+     "ffmMinusGmatM": 6.316762595210765,
+     "orekitMinusGmatM": 6.317838844099961
+    },
+    {
+     "id": "GPS F0-point-mass",
+     "ffmMinusGmatM": 0.0015575241809463107,
+     "orekitMinusGmatM": 0.001551231712024071
+    },
+    {
+     "id": "GPS F1-J2",
+     "ffmMinusGmatM": 0.003061928795390831,
+     "orekitMinusGmatM": 0.003004877317939154
+    },
+    {
+     "id": "GPS F2-zonal20",
+     "ffmMinusGmatM": 0.003853682941489689,
+     "orekitMinusGmatM": 0.004058012806434397
+    },
+    {
+     "id": "GPS Z1-zonal20-sun-moon",
+     "ffmMinusGmatM": 0.0016626533957146286,
+     "orekitMinusGmatM": 0.0016581851816700286
+    },
+    {
+     "id": "GPS Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00009798853887539351,
+     "orekitMinusGmatM": 0.00026769127269547186
+    },
+    {
+     "id": "GPS F3-field20x20",
+     "ffmMinusGmatM": 0.0021872721081798233,
+     "orekitMinusGmatM": 0.0023896542693136237
+    },
+    {
+     "id": "GPS F4-field-sun-moon",
+     "ffmMinusGmatM": 0.00010172062696324252,
+     "orekitMinusGmatM": 0.000273039216135986
+    },
+    {
+     "id": "GPS F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.00032801583618078626,
+     "orekitMinusGmatM": 0.00032709999194193904
+    },
+    {
+     "id": "GPS R2-field-sun-moon-relativity-iers2010",
+     "ffmMinusGmatM": 0.00037484855837835234,
+     "orekitMinusGmatM": 0.0005446441729089939
+    },
+    {
+     "id": "GPS T1-field-sun-moon-solid-tides",
+     "ffmMinusGmatM": 0.0018638317965937292,
+     "orekitMinusGmatM": 0.0018593512333001795
+    },
+    {
+     "id": "GPS E1-field-sun-moon-eme2000",
+     "ffmMinusGmatM": 0.0011974545315122929,
+     "orekitMinusGmatM": 0.001366329470496477
+    },
+    {
+     "id": "GPS G1-egm96-70x70-sun-moon",
+     "ffmMinusGmatM": 0.0012141721867298893,
+     "orekitMinusGmatM": 0.0012148951117489373
+    },
+    {
+     "id": "GPS C1-field-sun-moon-srp-intrack-jacobians",
+     "ffmMinusGmatM": 0.00257843260092543,
+     "orekitMinusGmatM": 0.002750777261837338
+    },
+    {
+     "id": "GEO F0-point-mass",
+     "ffmMinusGmatM": 0.000011902187798929084,
+     "orekitMinusGmatM": 0.000043140629937541505
+    },
+    {
+     "id": "GEO F1-J2",
+     "ffmMinusGmatM": 0.001817190590473496,
+     "orekitMinusGmatM": 0.001850322118391661
+    },
+    {
+     "id": "GEO F2-zonal20",
+     "ffmMinusGmatM": 0.002834150289374359,
+     "orekitMinusGmatM": 0.002831717415321329
+    },
+    {
+     "id": "GEO Z1-zonal20-sun-moon",
+     "ffmMinusGmatM": 0.001321202080745565,
+     "orekitMinusGmatM": 0.0013000603391126555
+    },
+    {
+     "id": "GEO Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.001984896508142628,
+     "orekitMinusGmatM": 0.0019889187035227783
+    },
+    {
+     "id": "GEO F3-field20x20",
+     "ffmMinusGmatM": 0.0024969010901314025,
+     "orekitMinusGmatM": 0.0024917384298225316
+    },
+    {
+     "id": "GEO F4-field-sun-moon",
+     "ffmMinusGmatM": 0.00131085803882534,
+     "orekitMinusGmatM": 0.0012906391804426464
+    },
+    {
+     "id": "GEO F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.0006941237836989519,
+     "orekitMinusGmatM": 0.000670171180462803
+    },
+    {
+     "id": "MOLNIYA F0-point-mass",
+     "ffmMinusGmatM": 0.014020226678471144,
+     "orekitMinusGmatM": 0.013426789386525357
+    },
+    {
+     "id": "MOLNIYA F1-J2",
+     "ffmMinusGmatM": 0.012137601970059518,
+     "orekitMinusGmatM": 0.021994805392330945
+    },
+    {
+     "id": "MOLNIYA F2-zonal20",
+     "ffmMinusGmatM": 0.006949393610320323,
+     "orekitMinusGmatM": 0.004153393724597222
+    },
+    {
+     "id": "MOLNIYA Z1-zonal20-sun-moon",
+     "ffmMinusGmatM": 0.007620401643102262,
+     "orekitMinusGmatM": 0.01737541781691062
+    },
+    {
+     "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.011531852605270823,
+     "orekitMinusGmatM": 0.020519293157288468
+    },
+    {
+     "id": "MOLNIYA F3-field20x20",
+     "ffmMinusGmatM": 0.002921638511215244,
+     "orekitMinusGmatM": 0.0069336811855899155
+    },
+    {
+     "id": "MOLNIYA F4-field-sun-moon",
+     "ffmMinusGmatM": 0.015076580786550645,
+     "orekitMinusGmatM": 0.024792553914929058
+    },
+    {
+     "id": "MOLNIYA F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.011855509063874085,
+     "orekitMinusGmatM": 0.021150798590313543
+    }
+   ]
+  },
+  {
+   "id": "rk89-5s-srp",
+   "label": "RungeKutta89 at 1e-14, steps <= 5 s (radiation pressure cases)",
+   "args": [
+    "--max-step",
+    "5"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.014815988447335603,
+     "orekitMinusGmatM": 0.015011973655663348
+    },
+    {
+     "id": "SSO700 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.009142587819665,
+     "orekitMinusGmatM": 0.008435691421796843
+    },
+    {
+     "id": "GPS F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.00010108239750660344,
+     "orekitMinusGmatM": 0.0002713541779981205
+    },
+    {
+     "id": "GEO F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.000151132387152327,
+     "orekitMinusGmatM": 0.00011325605989810789
+    },
+    {
+     "id": "MOLNIYA F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.005463299230736989,
+     "orekitMinusGmatM": 0.014758544148783664
+    },
+    {
+     "id": "LEO400 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.022481172927477127,
+     "orekitMinusGmatM": 0.02362182304913539
+    },
+    {
+     "id": "SSO700 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.023429567881419432,
+     "orekitMinusGmatM": 0.021887449841033763
+    },
+    {
+     "id": "GPS Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00008588472083872446,
+     "orekitMinusGmatM": 0.00025458090108782227
+    },
+    {
+     "id": "GEO Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.0001474064724276191,
+     "orekitMinusGmatM": 0.00011366954231255318
+    },
+    {
+     "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.005632378146246566,
+     "orekitMinusGmatM": 0.014619779380889368
+    }
+   ]
+  },
+  {
+   "id": "rk89-2s-srp",
+   "label": "RungeKutta89 at 1e-14, steps <= 2 s (radiation pressure cases)",
+   "args": [
+    "--max-step",
+    "2"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.013754062507685615,
+     "orekitMinusGmatM": 0.012791027483440697
+    },
+    {
+     "id": "SSO700 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.004226210924875603,
+     "orekitMinusGmatM": 0.004373266413151839
+    },
+    {
+     "id": "GPS F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.00012028772231619055,
+     "orekitMinusGmatM": 0.000289339737623885
+    },
+    {
+     "id": "GEO F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.0001376282564369144,
+     "orekitMinusGmatM": 0.0001137540510580417
+    },
+    {
+     "id": "MOLNIYA F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.00394477052876522,
+     "orekitMinusGmatM": 0.010026888509153791
+    },
+    {
+     "id": "LEO400 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.005479062210619583,
+     "orekitMinusGmatM": 0.005408708050452158
+    },
+    {
+     "id": "SSO700 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.014901707557193774,
+     "orekitMinusGmatM": 0.016257326045218866
+    },
+    {
+     "id": "GPS Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.0001095430810354052,
+     "orekitMinusGmatM": 0.0002795950964602103
+    },
+    {
+     "id": "GEO Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00014968461731160526,
+     "orekitMinusGmatM": 0.00011053248630247192
+    },
+    {
+     "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00451235484160174,
+     "orekitMinusGmatM": 0.013499731995587266
+    }
+   ]
+  },
+  {
+   "id": "rk89-1s-srp",
+   "label": "RungeKutta89 at 1e-14, steps <= 1 s (radiation pressure cases)",
+   "args": [
+    "--max-step",
+    "1"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.016070195002585372,
+     "orekitMinusGmatM": 0.016882892206431792
+    },
+    {
+     "id": "SSO700 F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.013162282900383489,
+     "orekitMinusGmatM": 0.012204198051645835
+    },
+    {
+     "id": "GPS F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.00012015483476746375,
+     "orekitMinusGmatM": 0.00028952028913091857
+    },
+    {
+     "id": "GEO F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.00013977159921396758,
+     "orekitMinusGmatM": 0.00011551655336762058
+    },
+    {
+     "id": "MOLNIYA F5-field-sun-moon-srp",
+     "ffmMinusGmatM": 0.015215355544644534,
+     "orekitMinusGmatM": 0.02451065581243713
+    },
+    {
+     "id": "LEO400 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.009894894412572451,
+     "orekitMinusGmatM": 0.00969090976228656
+    },
+    {
+     "id": "SSO700 Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.018812045150795518,
+     "orekitMinusGmatM": 0.01761294104572897
+    },
+    {
+     "id": "GPS Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00007953366895530319,
+     "orekitMinusGmatM": 0.0002465168958663577
+    },
+    {
+     "id": "GEO Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.00014132804113235428,
+     "orekitMinusGmatM": 0.00011101345920331586
+    },
+    {
+     "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
+     "ffmMinusGmatM": 0.009461533219865618,
+     "orekitMinusGmatM": 0.00289914423444632
+    }
+   ]
+  },
+  {
+   "id": "tide-solid",
+   "label": "TideModel Solid (IERS step 1 only)",
+   "args": [
+    "--tide",
+    "Solid"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 T1-field-sun-moon-solid-tides",
+     "ffmMinusGmatM": 2.117894278358657,
+     "orekitMinusGmatM": 2.118456900618746
+    },
+    {
+     "id": "GPS T1-field-sun-moon-solid-tides",
+     "ffmMinusGmatM": 0.0885749746195757,
+     "orekitMinusGmatM": 0.08874041918127147
+    }
+   ]
+  },
+  {
+   "id": "tide-solid-and-pole",
+   "label": "TideModel SolidAndPole (steps 1 and 2, solid and ocean pole tides)",
+   "args": [
+    "--tide",
+    "SolidAndPole"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 T1-field-sun-moon-solid-tides",
+     "ffmMinusGmatM": 0.6100125671240342,
+     "orekitMinusGmatM": 0.6103015895654726
+    },
+    {
+     "id": "GPS T1-field-sun-moon-solid-tides",
+     "ffmMinusGmatM": 0.010482799800279682,
+     "orekitMinusGmatM": 0.010460879842734338
+    }
+   ]
+  },
+  {
+   "id": "cssi-published",
+   "label": "CSSI file read by GMAT, as published",
+   "args": [
+    "--cssi",
+    "published"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "ffmMinusGmatM": 209.81590342559252,
+     "orekitMinusGmatM": 209.8119300972235
+    },
+    {
+     "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+     "ffmMinusGmatM": 9.254467125008741,
+     "orekitMinusGmatM": 9.255543361553052
+    }
+   ]
+  },
+  {
+   "id": "cssi-observed",
+   "label": "CSSI file read by GMAT, every row in the observed block",
+   "args": [
+    "--cssi",
+    "observed"
+   ],
+   "gmat": "Build Date: Mar 26 2026  19:40:07",
+   "cases": [
+    {
+     "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "ffmMinusGmatM": 104.52288450391805,
+     "orekitMinusGmatM": 104.51891133290782
+    },
+    {
+     "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+     "ffmMinusGmatM": 8.066642593859092,
+     "orekitMinusGmatM": 8.067718892292831
+    }
+   ]
+  }
+ ],
+ "ffmRefresh": {
+  "module": {
+   "version": "1.4.0",
+   "file": "../../../dist/isomorphic/module.wasm",
+   "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3"
+  },
+  "source": {
+   "path": "../refresh-derived-comparisons.mjs",
+   "sha256": "d7c1e2c5cbfeb01cc85412cfb5fb3f73ff8a8e2d0ebdbc08a206ab6f1cd96f1c"
+  },
+  "reductions": [
+   {
+    "path": "../nyx/score-metrics.cpp",
+    "sha256": "2ed87d76e08b87da8ff86b2470b07dade7bc533e02c09a24c274acf6c44ea8cd"
+   },
+   {
+    "path": "../consolidated-metrics.cpp",
+    "sha256": "3974f561e035b2974da0ef885091871b081c8f1d83d975ee95d2a4ec3ddd39c9"
+   }
+  ]
+ }
+}

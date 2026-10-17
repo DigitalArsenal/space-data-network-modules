@@ -273,7 +273,7 @@ test('screening_evaluation: alert rules on designed misses with known errors', a
   assert.deepEqual([at100.pcAlertRate, at100.boundedSetAlertRate, at100.possibilityAlertRate], [0, 0, 0.5]);
 });
 
-test('hpop_arcs: reference epochs at the requested ages, truth copied, P0 rotated from RTN to GCRF', async (t) => {
+test('ffm_arcs: reference epochs at the requested ages, truth copied, P0 rotated from RTN to GCRF', async (t) => {
   // 06251 at its epoch; reference lines 60 s, 0.25 d + 300 s, 0.75 d + 2000 s
   // (beyond the 900 s tolerance) and 1.5 d - 100 s after it. P0 diagonal in
   // RTN; expected G = J P J' with J = diag(A', A'), A the RTN rows of the
@@ -296,9 +296,9 @@ test('hpop_arcs: reference epochs at the requested ages, truth copied, P0 rotate
   const ref = { ...reference(c, []), payload: Buffer.from(b.asUint8Array()) };
   const diag = [1e-4, 4e-4, 9e-4, 1e-8, 4e-8, 9e-8];
   const p0 = []; for (let a = 0; a < 6; ++a) for (let k = 0; k <= a; ++k) p0.push(a === k ? diag[a] : 0);
-  const model = { kind: 'hpop-covariance-model', version: 1, regimes: [{ regimeIndex: 0, regime: 'LEO below 450 km', p0,
+  const model = { kind: 'ffm-covariance-model', version: 1, regimes: [{ regimeIndex: 0, regime: 'LEO below 450 km', p0,
     processNoise: { spectralDensityM2S3: [1e-12, 2e-12, 3e-12], discretizationSeconds: 600 } }] };
-  const plan = await call(t, 'hpop_arcs', [elements(omm(c)), ref, json('model', model),
+  const plan = await call(t, 'ffm_arcs', [elements(omm(c)), ref, json('model', model),
     json('options', { targetAgesDays: [0, 0.25, 0.75, 1.5] })]);
   assert.equal(plan.arcs.length, 1);
   const arc = plan.arcs[0];
@@ -318,14 +318,14 @@ test('hpop_arcs: reference epochs at the requested ages, truth copied, P0 rotate
   }
 });
 
-test('hpop_coverage: P0 from age-0 errors, maximum-likelihood process noise, held-out coverage', async (t) => {
+test('ffm_coverage: P0 from age-0 errors, maximum-likelihood process noise, held-out coverage', async (t) => {
   // Truth r = (7000, 0, 0) km, v = (0, 7.5, 0) km/s: R, T, N are x, y, z.
   // Predicted state = truth + designed error (SI).
   const truth = [7000, 0, 0, 0, 7.5, 0];
   const arcOf = (arc, norad, nominal, epoch) => ({ arc, norad, epoch: '2026-08-01T00:00:00Z', regimeIndex: 0, regime: 'LEO below 450 km',
     targets: [{ nominalDays: nominal, ageDays: nominal + 0.2, epoch, truth }] });
   const state = (e) => truth.map((x, k) => x * 1e3 + (k < 3 ? e[k] : 0));
-  const run = (mode, plan, predictions, model, extra = {}) => call(t, 'hpop_coverage', [json('plan', { kind: 'hpop-arc-plan', arcs: plan }),
+  const run = (mode, plan, predictions, model, extra = {}) => call(t, 'ffm_coverage', [json('plan', { kind: 'ffm-arc-plan', arcs: plan }),
     json('predictions', { arcs: predictions }), ...(model ? [json('model', model)] : []),
     json('options', { mode, window: ['2026-08-02T00:00:00Z', '2026-08-03T00:00:00Z'], ...extra })]);
 

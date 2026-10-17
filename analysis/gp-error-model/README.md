@@ -1,5 +1,7 @@
 # GP prediction-error model
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 Empirical SGP4 prediction error by orbit regime and prediction age, in RTN,
 and the coverage tests that decide which strata's covariance is calibrated.
 
@@ -14,12 +16,12 @@ record (size-prefixed), with the arm of the port set:
 | `accumulate.options` | `STRATA_SETTINGS` (regimes, age bins, reference step, clip) |
 | `accumulate.prior`, `accumulate.accumulator`, `finalize.accumulator` | `ACCUMULATOR` |
 | `finalize.options` | `GATE` |
-| every `model` and `truth` port | `MODEL`: `StratifiedStatistics` (finalize, scale_model), `ElementSetModel` (E14's S3-KC, `data/e14-s3-kc.erm`), `HorizonFactors`, `PropagatorCovariance` (hpop_coverage) |
+| every `model` and `truth` port | `MODEL`: `StratifiedStatistics` (finalize, scale_model), `ElementSetModel` (E14's S3-KC, `data/e14-s3-kc.erm`), `HorizonFactors`, `PropagatorCovariance` (ffm_coverage) |
 | `scale_model.options` | `SCALE_OPTIONS` |
 | `screening_evaluation.options`, `screening_cases.options` | `SCREENING_SETTINGS` |
 | `screening_cases.cases` | `SCREENING_CASES` |
 | `screening_evaluation.report`, `screening_cases.report` | `SCREENING_REPORT` |
-| `hpop_arcs.options` / `hpop_arcs.plan`, `hpop_coverage.plan` / `hpop_coverage.predictions` / `hpop_coverage.options` / `hpop_coverage.report` | `ARC_OPTIONS` / `ARC_PLAN` / `ARC_PREDICTIONS` / `COVERAGE_OPTIONS` / `PROPAGATOR_COVERAGE` |
+| `ffm_arcs.options` / `ffm_arcs.plan`, `ffm_coverage.plan` / `ffm_coverage.predictions` / `ffm_coverage.options` / `ffm_coverage.report` | `ARC_OPTIONS` / `ARC_PLAN` / `ARC_PREDICTIONS` / `COVERAGE_OPTIONS` / `PROPAGATOR_COVERAGE` |
 | `common_epoch.options` (`REQUESTS`) and `.differences` (`RESULTS`) | `COMMON_EPOCH` |
 | `map_covariance.options` (`REQUESTS`) and `.covariance` (`RESULTS`) | `COVARIANCE_MAP` |
 | `pair_statistics.pairs` (`PAIRS`) and `.statistics` (`STATISTICS`) | `PAIR_STATISTICS` |
@@ -144,27 +146,27 @@ synthetic true misses. Three screening rules are scored on every case:
 It reports alert rates, mean Pc and mean Π(collision) by stratum, geometry and
 miss.
 
-### `hpop_arcs` and `hpop_coverage`
+### `ffm_arcs` and `ffm_coverage`
 
-They calibrate HPOP's covariance P(t) = Φ P₀ Φᵀ + Q for the CA HPOP screen's
+They calibrate FFM's covariance P(t) = Φ P₀ Φᵀ + Q for the CA FFM screen's
 product, analysis/epoch-state's GCRF state at an element set's epoch
-propagated by propagator/hpop at full force (`propagator/hpop/catalog.mjs`,
+propagated by propagator/ffm at full force (`propagator/ffm/catalog.mjs`,
 the screen's configuration, with the space weather released on the element
-set's day). The host runs HPOP (`scripts/hpop-calibration.mjs`).
+set's day). The host runs FFM (`scripts/ffm-calibration.mjs`).
 
-- **`hpop_arcs`** takes `elements`, `reference`, an optional `model` and
+- **`ffm_arcs`** takes `elements`, `reference`, an optional `model` and
   `options`, and outputs a `plan`. For each element set it gives:
   - the reference epoch nearest each requested prediction age (for age 0,
     the first epoch after the set's epoch);
   - the reference state there;
   - with a model, P₀ rotated from RTN to GCRF (SI) and the regime's
     process noise.
-- **`hpop_coverage`** takes `plan`, `predictions`, `model` and `options`, and
+- **`ffm_coverage`** takes `plan`, `predictions`, `model` and `options`, and
   outputs a `model` or a `report`. It has three modes:
   - `epoch`: P₀ per regime, the second moment about zero of the 6-D RTN
     errors at age 0, after a 5 robust sigma clip.
   - `fit`: white-acceleration densities (R, T, N) per regime by maximum
-    likelihood, P = A + Σ qₖ Uₖ. A is HPOP's covariance from P₀ alone, and
+    likelihood, P = A + Σ qₖ Uₖ. A is FFM's covariance from P₀ alone, and
     Uₖ is from P₀ = 0 with unit density on axis k (P(t) is linear in both).
   - `test`: zero-mean coverage by regime and age under the calibration gate,
     with P₀ alone alongside, plus RMS error and RMS predicted sigma per RTN
@@ -235,7 +237,7 @@ TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
   the covariance linear between the two samples that bracket it; an epoch
   outside the samples gives the pair `missing`, never an extrapolation.
   A side's covariance may be `covarianceTerms`, a weighted sum of covariances
-  in one axes (for example HPOP's A plus q-weighted unit-noise responses).
+  in one axes (for example FFM's A plus q-weighted unit-noise responses).
 - **`fit_calibration`** (`samples`, `options` → `calibration`). Samples
   (stratum, RTN error, RTN position covariance, object). Per stratum a
   variance factor: `scalar-mle`, k² = mean d²/3 (the maximum-likelihood
@@ -266,10 +268,10 @@ TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
   w_l = Σ ((t − a)² − (t − b)²)/(t − s₀)² over its segments [a, b] clipped to
   [s₀, t] (5/9, 3/9, 1/9 at three whole days); σ_eff² = wᵀCw and
   P = σ_eff² g gᵀ, g the sensitivity to ln B from s₀: given, or
-  B (S(t) − Φ(t) Φ(s₀)⁻¹ S(s₀)) from HPOP's STM and B columns (`startSample`).
+  B (S(t) − Φ(t) Φ(s₀)⁻¹ S(s₀)) from FFM's STM and B columns (`startSample`).
   With a `base` covariance the total is returned too.
 
-- **`noise_responses`** (`request` → `responses`). HPOP's white-acceleration
+- **`noise_responses`** (`request` → `responses`). FFM's white-acceleration
   process noise (each target's arc cut into n equal steps no longer than
   the discretization; each step adds q[[h³/3, h²/2], [h²/2, h]] on one RTN
   axis at its end; later STMs carry it) for unit density on R, T and N, from
@@ -413,7 +415,7 @@ go on the `models` port, each with its `SOURCES` and `POOLED`):
              "licence": {"class": "cite-only", "id": "celestrak"}, "fitClass": ""},
   "producer": "SDN catalog pipeline", "created": "2026-10-11T00:00:00Z",
   "latestOnly": true, "maxOperatorRows": 8,
-  "realism": [{"sources": ["ilrs-crd"], "class": "slr-hpop-fit", "factor": 17.04, "meanD2Over3": 17.04,
+  "realism": [{"sources": ["ilrs-crd"], "class": "slr-ffm-fit", "factor": 17.04, "meanD2Over3": 17.04,
                "coverage95": 0.17, "samples": 1000, "objects": 5, "evidence": "...", "window": "..."}],
   "models": [{"...": "data/e14-s3-kc.json", "sources": ["celestrak-gp"], "pooled": true}]
 }
@@ -507,19 +509,19 @@ In the calibrated strata:
 - Pc missed 2.7 % of collisions head-on and 16 % in a crossing (dilution);
 - the bounded set missed 0.2–0.4 %.
 
-## HPOP covariance calibration
+## FFM covariance calibration
 
-`scripts/hpop-calibration.mjs` runs the whole sequence. It measures P₀ on
-the fit week, then runs HPOP four times per arc (P₀ alone, and unit noise on
+`scripts/ffm-calibration.mjs` runs the whole sequence. It measures P₀ on
+the fit week, then runs FFM four times per arc (P₀ alone, and unit noise on
 each RTN axis). It fits Q on the fit week and tests coverage on the held-out
 week:
 
 ```sh
-node scripts/hpop-calibration.mjs --reference <reference-states>/reference \
+node scripts/ffm-calibration.mjs --reference <reference-states>/reference \
   --fit-from 2026-08-02 --fit-to 2026-08-08 --test-from 2026-08-09 --test-to 2026-08-15 --out <dir>
 ```
 
-Report: [docs/hpop-calibration-2026-08.md](docs/hpop-calibration-2026-08.md).
+Report: [docs/ffm-calibration-2026-08.md](docs/ffm-calibration-2026-08.md).
 
 ## Build and test
 

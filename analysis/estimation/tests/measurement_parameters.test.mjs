@@ -1,8 +1,8 @@
 // fit_batch measurement parameters (bias, drift, time bias) recovered with
 // the orbit from a simulated tracking campaign (tests/tracking-pipeline.mjs):
-// propagator/hpop truth at full force, analysis/observation-simulator
+// propagator/ffm truth at full force, analysis/observation-simulator
 // measurements, analysis/association sensor geometry, and fit_batch with
-// propagator/hpop answering. The injected values are the reference.
+// propagator/ffm answering. The injected values are the reference.
 //
 // Campaign (tests/batch-fit-v2-fixtures.mjs campaignFit; 2026-08-02 00:00 to
 // 12:00 UTC, the Orekit LEO case's orbit, 51.6 deg, 397 km, B = 0.01
@@ -27,9 +27,9 @@ const chiSquareQuantile = (k, z) => k * (1 - 2 / (9 * k) + z * Math.sqrt(2 / (9 
 
 test('per-pass biases, a frequency drift and time biases are estimated with the orbit and recover what was injected', async (t) => {
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
-  t.after(() => { estimator.destroy?.(); hpop.destroy?.(); });
-  const c = await campaignFit(hpop);
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
+  const c = await campaignFit(ffm);
   const { result, error, rounds } = await runFit(estimator, c.envelope, c.answer);
   assert.equal(error, undefined, error);
   assert.equal(result.status, 0);

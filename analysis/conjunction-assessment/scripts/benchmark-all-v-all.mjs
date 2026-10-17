@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createHPOPPropagator } from "@orbpro/integration/hpop";
+import { createFFMPropagator } from "@orbpro/integration/ffm";
 import { createSGP4Propagator } from "@orbpro/integration/sgp4";
 import {
   extractEpochState,
@@ -115,7 +115,7 @@ async function loadSgp4Scenario(options) {
   };
 }
 
-async function loadHpopScenario(options) {
+async function loadFfmScenario(options) {
   const datasetTarPath =
     options["dataset-tar"] ??
     path.join(
@@ -158,7 +158,7 @@ async function loadHpopScenario(options) {
     });
   }
 
-  const propagator = await createHPOPPropagator({
+  const propagator = await createFFMPropagator({
     requireEmbeddedManifest: true,
   });
   propagator.initFromState(states);
@@ -182,7 +182,7 @@ async function main() {
   const captureMultiplier = Number(args["capture-multiplier"] ?? 4);
 
   const scenario =
-    mode === "hpop-ocm" ? await loadHpopScenario(args) : await loadSgp4Scenario(args);
+    mode === "ffm-ocm" ? await loadFfmScenario(args) : await loadSgp4Scenario(args);
 
   try {
     const referenceEvents = args["reference-socrates-json"]

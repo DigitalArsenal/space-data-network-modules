@@ -16,7 +16,7 @@ export async function run(item, context) {
   detector ??= await loadModule('analysis/maneuver-detection', context.modulesRoot ?? undefined);
   if (!provider) {
     if (context.provider === 'keplerian-reference') provider = await keplerianProvider();
-    else if (context.provider === 'hpop') provider = await (await import('./hpop-provider.mjs')).hpopProvider({ environment: context.environment });
+    else if (context.provider === 'ffm') provider = await (await import('./ffm-provider.mjs')).ffmProvider({ environment: context.environment });
     else provider = await sgp4Provider();
   }
   // Sets within marginDays of the month, and at least marginSets before and

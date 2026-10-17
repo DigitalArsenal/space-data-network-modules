@@ -1,0 +1,230 @@
+[
+ {
+  "after": {
+   "geoM": 1.1009389970083004e-10,
+   "geoVelocityMS": 5.084229945850415e-13,
+   "gpsM": 6.935020838911441e-11,
+   "leoM": 1.7698238457830073e-11,
+   "mas": 5.385733168891732e-10
+  },
+  "afterGeoPositionM": 1.4901161193847656e-08,
+  "before": {
+   "geoM": 96.52808390503291,
+   "geoVelocityMS": 0.007038750327687754,
+   "gpsM": 60.804847066067566,
+   "leoM": 15.51745420473848,
+   "mas": 472.2100903226465
+  },
+  "beforeGeoPositionM": 96.52549075484981,
+  "epochs": "10,000 UTC epochs, 1990–2040",
+  "frame": "TEME"
+ },
+ {
+  "after": {
+   "geoM": 0.0,
+   "geoVelocityMS": 0.0,
+   "gpsM": 0.0,
+   "leoM": 0.0,
+   "mas": 0.0
+  },
+  "afterGeoPositionM": 0,
+  "before": {
+   "geoM": 95.4929310725691,
+   "geoVelocityMS": 0.006963419981575044,
+   "gpsM": 60.15278491874584,
+   "leoM": 15.351047330978657,
+   "mas": 467.1461794612584
+  },
+  "beforeGeoPositionM": 95.49245246125557,
+  "epochs": "10,000 UTC epochs, 1990–2040",
+  "frame": "MOD"
+ },
+ {
+  "after": {
+   "geoM": 0.0,
+   "geoVelocityMS": 0.0,
+   "gpsM": 0.0,
+   "leoM": 0.0,
+   "mas": 0.0
+  },
+  "afterGeoPositionM": 0,
+  "before": {
+   "geoM": 104.76426510571343,
+   "geoVelocityMS": 0.007639076181525744,
+   "gpsM": 65.9929717864184,
+   "leoM": 16.841468516772537,
+   "mas": 512.5010368674393
+  },
+  "beforeGeoPositionM": 104.7580242239976,
+  "epochs": "10,000 UTC epochs, 1990–2040",
+  "frame": "TOD"
+ },
+ {
+  "after": {
+   "geoM": 7.421893716239334e-09,
+   "geoVelocityMS": 2.2737367544323206e-12,
+   "gpsM": 4.67518979036743e-09,
+   "leoM": 1.193112835094568e-09,
+   "mas": 3.6307496847836644e-08
+  },
+  "afterGeoPositionM": 1.6660006275384424e-08,
+  "before": {
+   "geoM": 84328337.89988005,
+   "geoVelocityMS": 16.768534082344512,
+   "gpsM": 53119998.67709513,
+   "leoM": 13556273.662393432,
+   "mas": 647907932.7012775
+  },
+  "beforeGeoPositionM": 84328337.88098404,
+  "epochs": "10,000 UTC epochs, 1990–2040",
+  "frame": "PEF"
+ },
+ {
+  "after": {
+   "geoM": 7.421893716239334e-09,
+   "geoVelocityMS": 2.2737367544323206e-12,
+   "gpsM": 4.67518979036743e-09,
+   "leoM": 1.193112835094568e-09,
+   "mas": 3.6307496847836644e-08
+  },
+  "afterGeoPositionM": 1.6660006275384424e-08,
+  "before": {
+   "geoM": 96.47589451234018,
+   "geoVelocityMS": 11.85714267484444,
+   "gpsM": 60.77197199062035,
+   "leoM": 15.50906445454019,
+   "mas": 471.9547826770335
+  },
+  "beforeGeoPositionM": 96.47330151047143,
+  "epochs": "10,000 UTC epochs, 1990–2040",
+  "frame": "ECEF"
+ },
+ {
+  "after": {
+   "geoM": 0.0,
+   "geoVelocityMS": 0.0,
+   "gpsM": 0.0,
+   "leoM": 0.0,
+   "mas": 0.0
+  },
+  "before": {
+   "geoM": 42.1958992729955,
+   "geoVelocityMS": 0.0,
+   "gpsM": 26.579986863034666,
+   "leoM": 6.7832376662593825,
+   "mas": 206.42002410973046
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "coordsPrecession",
+  "unit": "mas"
+ },
+ {
+  "after": {
+   "geoM": 0.0,
+   "geoVelocityMS": 0.0,
+   "gpsM": 0.0,
+   "leoM": 0.0,
+   "mas": 0.0
+  },
+  "before": {
+   "geoM": 10.033478007649318,
+   "geoVelocityMS": 0.0,
+   "gpsM": 6.320275624616016,
+   "leoM": 1.6129402884566237,
+   "mas": 49.08322391339125
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "coordsNutation",
+  "unit": "mas"
+ },
+ {
+  "after": {
+   "geoM": 4.088752947333315e-11,
+   "geoVelocityMS": 0.0,
+   "gpsM": 2.5755820233428725e-11,
+   "leoM": 6.5729095666246936e-12,
+   "mas": 2.0001955083521162e-10
+  },
+  "before": {
+   "geoM": 43.29472472898221,
+   "geoVelocityMS": 0.0,
+   "gpsM": 27.272157587870637,
+   "leoM": 6.959880286753641,
+   "mas": 211.7954179519075
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "coordsTeme",
+  "unit": "mas"
+ },
+ {
+  "after": {
+   "geoM": 5.851480829302552e-09,
+   "geoVelocityMS": 0.0,
+   "gpsM": 3.685957314617501e-09,
+   "leoM": 9.4065977615322e-10,
+   "mas": 2.8625123167720123e-08
+  },
+  "before": {
+   "geoM": 43.314142371983415,
+   "geoVelocityMS": 0.0,
+   "gpsM": 27.284389124697093,
+   "leoM": 6.963001786464871,
+   "mas": 211.89040799609475
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "c2tBuiltInClassical",
+  "unit": "mas"
+ },
+ {
+  "after": {
+   "geoM": 9.883209136649388e-05,
+   "geoVelocityMS": 0.0,
+   "gpsM": 6.225618449726574e-05,
+   "leoM": 1.588783688327347e-05,
+   "mas": 0.00048348116841159653
+  },
+  "before": {
+   "geoM": 0.04371090136167241,
+   "geoVelocityMS": 0.0,
+   "gpsM": 0.027534315039665653,
+   "leoM": 0.007026783115211379,
+   "mas": 0.21383133120493777
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "c2tTrue",
+  "unit": "mas"
+ },
+ {
+  "after": {
+   "value": 0.39526340911804075
+  },
+  "before": {
+   "value": 1.3536361104859906
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "sunTrue",
+  "unit": "m"
+ },
+ {
+  "after": {
+   "value": 0.0140529004784751
+  },
+  "before": {
+   "value": 0.04887484587072784
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "moonTrue",
+  "unit": "m"
+ },
+ {
+  "after": {
+   "value": 1.3470649719238281e-05
+  },
+  "before": {
+   "value": 4.6133995056152344e-05
+  },
+  "epochs": "50 UTC case epochs, June/August 2026",
+  "frame": "forceClock",
+  "unit": "s"
+ }
+]

@@ -4,7 +4,7 @@
 // sections 2-4), and the ellipsoidal set-membership filter (Schweppe 1968;
 // Bertsekas and Rhodes 1971) used as the bounded-set baseline. Every support
 // point is propagated through config.propagator (the inverted port the UKF
-// uses), so the caller's propagator (propagator/hpop) supplies all dynamics.
+// uses), so the caller's propagator (propagator/ffm) supplies all dynamics.
 // docs/espf-spec.md maps each step to its paper, section and equation and
 // records every choice made where the papers leave a gap.
 #include "estimation.hpp"

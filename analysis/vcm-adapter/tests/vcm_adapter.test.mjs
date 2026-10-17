@@ -1,14 +1,14 @@
 // analysis/vcm-adapter against the survey's sample VCM (an ISS message,
 // epoch revolution 37693; spacedatastandards.org
-// survey/legacy-messages/vcm/sample/vcm.txt) and propagator/hpop.
+// survey/legacy-messages/vcm/sample/vcm.txt) and propagator/ffm.
 //
 // (1) The equinoctial covariance transformed to Cartesian, with the n row as
 //     dn/n, reproduces the UVW sigmas the VCM prints within 1 % (rad/s,
 //     rad/min and rev/day do not), and agrees with an independent
 //     finite-difference Jacobian written here. SP messages that cannot be
 //     redistributed are checked when VCM_PRIVATE_DIR names them.
-// (2) The PRW request it builds runs in HPOP, with B as a dynamic parameter.
-// (3) ocm turns HPOP's result into an $OCM and write turns that into a VCM
+// (2) The PRW request it builds runs in FFM, with B as a dynamic parameter.
+// (3) ocm turns FFM's result into an $OCM and write turns that into a VCM
 //     that read recovers: the state to the printed digits and the covariance
 //     to its five.
 // (4) read's $OCM carries everything the message states, and write prints it
@@ -299,9 +299,9 @@ test('read: the $OCM carries the state, the covariance with its parameter row, t
   assert.equal(user.VCM_NUTATION_TERMS, '4');
 });
 
-test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
-  const hpop = await load('../../../propagator/hpop');
-  t.after(() => hpop.destroy());
+test('read -> FFM -> ocm -> write -> read round trip', async (t) => {
+  const ffm = await load('../../../propagator/ffm');
+  t.after(() => ffm.destroy());
   const options = { ephemerisSource: 'Analytical', arcSeconds: 3600 };
   const read = ok(await call({ read: options }, 'read', [message(SAMPLE)]));
   const report = reportOf(out(read, 'report'));
@@ -310,7 +310,7 @@ test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
   assert.equal(request.FORCES.GRAVITY_CHOICE, sds.prwGravitySelection.EGM96);
   assert.equal(request.FORCES.ATMOSPHERE_MODEL, sds.prwAtmosphereFamily.JACCHIA_ROBERTS);
   assert.equal(request.INITIAL_COVARIANCE.DIMENSION, 7);
-  const run = ok(await hpop.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(read, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(read, 'earth_orientation') }] }));
+  const run = ok(await ffm.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(read, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(read, 'earth_orientation') }] }));
   const result = decodePrw(out(run, 'response')).EXECUTION_RESULT;
   const final = result.FINAL_SAMPLE;
   assert.equal(final.COVARIANCE.DIMENSION, 7);
@@ -363,8 +363,8 @@ test('read -> HPOP -> ocm -> write -> read round trip', async (t) => {
 //     chooses. Read as printed, the sample's B sigma is 5.1 times B; read as
 //     a fraction of B, 4.3 %. Fractional rows go back out as fractions.
 test('parameterRows: B row as printed or as a fraction of B', async (t) => {
-  const hpop = await load('../../../propagator/hpop');
-  t.after(() => hpop.destroy());
+  const ffm = await load('../../../propagator/ffm');
+  t.after(() => ffm.destroy());
   const options = { ephemerisSource: 'Analytical', arcSeconds: 3600 };
   const read = async (rows) => ok(await call({ read: { ...options, parameterRows: rows } }, 'read', [message(SAMPLE)]));
   const absolute = reportOf(out(await read('absolute'), 'report')), fractional = reportOf(out(await read('fractional'), 'report'));
@@ -379,9 +379,9 @@ test('parameterRows: B row as printed or as a fraction of B', async (t) => {
     assert.equal(absolute.cartesianCovarianceKm[i * 7 + j], fractional.cartesianCovarianceKm[i * 7 + j]);
   assert.deepEqual(fractional.recomputedUvwSigmasKm, absolute.recomputedUvwSigmasKm);
   // Fractional rows written back as fractions: the B variance survives the
-  // round trip through HPOP at zero arc length's worth of drift (1 h here).
+  // round trip through FFM at zero arc length's worth of drift (1 h here).
   const r = await read('fractional');
-  const run = ok(await hpop.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(r, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(r, 'earth_orientation') }] }));
+  const run = ok(await ffm.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(r, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(r, 'earth_orientation') }] }));
   const header = { geopotential: fractional.geopotential, zonals: fractional.zonals, tesserals: fractional.tesserals, drag: fractional.drag, ballisticCoefficient: b, weightedRms: 1, parameterRows: 'fractional' };
   const ocm = out(ok(await call({ header }, 'ocm', [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }])), 'ocm');
   const text = textOf(out(ok(await call({}, 'write', [{ portId: 'ocm', typeRef: OCM_REF, payload: ocm }])), 'message'));

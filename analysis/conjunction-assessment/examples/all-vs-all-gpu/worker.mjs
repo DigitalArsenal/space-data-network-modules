@@ -5,7 +5,7 @@
 // comes from the conjunction-assessment module (WASM). Runs on a dedicated
 // Worker, where the threaded module may block.
 //
-// Message in:  { propagator: 'sgp4'|'hpop', cpu, wasmUrl, catalogUrl, startJd,
+// Message in:  { propagator: 'sgp4'|'ffm', cpu, wasmUrl, catalogUrl, startJd,
 //                durationDays, windowHours, thresholdKm, coarseStepSec, workers,
 //                threadWorkerBaseUrl }
 // Messages out: { type: 'progress', stage, done, total } ... then
@@ -51,12 +51,12 @@ self.onmessage = async ({ data }) => {
     const wasmBytes = new Uint8Array(await (await fetch(data.wasmUrl)).arrayBuffer());
     plugin = await createConjunctionAssessmentPlugin({ wasmBytes, surface: 'direct', threadCount: workers,
       wasiThreadWorkerBaseUrl: data.threadWorkerBaseUrl });
-    const hpop = data.propagator === 'hpop';
+    const ffm = data.propagator === 'ffm';
     const result = await screenCatalog({
       invoke: (methodId, inputs) => plugin.invoke({ methodId, inputs }),
-      propagator: hpop ? 'trajectories' : 'sgp4',
-      catalog: hpop ? undefined : splitCatalog(new Uint8Array(await (await fetch(data.catalogUrl)).arrayBuffer())),
-      trajectories: hpop ? {
+      propagator: ffm ? 'trajectories' : 'sgp4',
+      catalog: ffm ? undefined : splitCatalog(new Uint8Array(await (await fetch(data.catalogUrl)).arrayBuffer())),
+      trajectories: ffm ? {
         objects: await (await fetch('objects')).json(),
         window: async (k) => splitWindow(new Uint8Array(await (await fetch(`window/${k}`)).arrayBuffer())),
       } : undefined,

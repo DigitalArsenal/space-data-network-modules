@@ -1,17 +1,19 @@
-# Patch: hpop `SphericalHarmonics` latitudinal/longitudinal acceleration scaling
+# Patch: FFM (Full Force Model) `SphericalHarmonics` latitudinal/longitudinal acceleration scaling
 
-**File:** `propagator/hpop/lib/astrodynamics.cpp`
+The model is defined by [FFM-1](../propagator/ffm/FFM.md).
+
+**File:** `propagator/ffm/lib/astrodynamics.cpp`
 **Function:** `computeSphericalHarmonicGravity(...)`
 **Severity:** high — the deployed gravity path produced a near-zero J2 effect.
 
 ## Symptom
 
 The plugin's production gravity path is
-`hpop_plugin.cpp → ForceModel::SphericalHarmonics → computeSphericalHarmonicGravity`.
+`ffm_plugin.cpp → ForceModel::SphericalHarmonics → computeSphericalHarmonicGravity`.
 With zonal coefficients loaded (J2…J6), this path produced a J2 perturbation
 roughly **7000× too small** and with the wrong sign in the out-of-plane
-component. hpop's own `J2Only` closed form gave the correct result, so the two
-gravity implementations in hpop disagreed with each other.
+component. ffm's own `J2Only` closed form gave the correct result, so the two
+gravity implementations in ffm disagreed with each other.
 
 Ground-truth check — nodal regression of a LEO orbit (a=7078 km, i=51.6°) over
 one revolution, RK4:
@@ -38,7 +40,7 @@ The code scaled the radial term by `mu/r²` (correct) but the latitudinal and
 longitudinal terms by `mu/r³` — an extra factor of `1/r`. At LEO (r≈6.8e3 km)
 that shrinks the latitudinal restoring term by ~6800×, which is exactly the
 observed deficit. The latitudinal term is what carries J2's characteristic
-out-of-plane behaviour, so the perturbation nearly vanished.
+out-of-plane behavior, so the perturbation nearly vanished.
 
 ## Fix
 
@@ -57,7 +59,7 @@ out-of-plane behaviour, so the perturbation nearly vanished.
 - `test/match_accel.cpp`: higherpop's zonal accelerations vs the corrected
   `SphericalHarmonics` — max relative error **3e-12** over 20 000 random states
   (J2, J2–J3, J2–J4).
-- `test/crosscheck_hpop.cpp`: trajectory agreement to **≤ 4.1 mm** across
+- `test/crosscheck_ffm.cpp`: trajectory agreement to **≤ 4.1 mm** across
   {LEO, GTO, Molniya} × {J2, J4} for all five formulations.
 - After the fix, `SphericalHarmonics`, `J2Only`, and analytic theory all agree.
 
@@ -74,7 +76,7 @@ out-of-plane behaviour, so the perturbation nearly vanished.
 
 # Patch 2: `J2J4()` zonal terms (gmat-01-defect-burn-down)
 
-**File:** `propagator/hpop/lib/force_models.cpp`
+**File:** `propagator/ffm/lib/force_models.cpp`
 **Function:** `ForceModel::J2J4(...)`
 
 ## Root cause
@@ -109,9 +111,9 @@ Both terms are the gradient of `U_n = -mu * J_n * Re^n * P_n(z/r) / r^(n+1)`.
 
 ## Verification
 
-`propagator/hpop/tests/zonal_crossvalidation.cpp`, driven by
+`propagator/ffm/tests/zonal_crossvalidation.cpp`, driven by
 `zonal_crossvalidation.test.mjs`. Three implementations that share no algebra —
-hpop's closed forms, higherpop's Legendre recursion, and hpop's normalized
+ffm's closed forms, higherpop's Legendre recursion, and ffm's normalized
 spherical-harmonics production path — compared pointwise over the same 20,000
 random states from 200 to 40,200 km altitude:
 

@@ -1,7 +1,7 @@
 // Writes tests/fixtures/fit-batch-v1-digests.json from a version-1
 // estimation artifact. The committed digests come from the module at
 // space-data-network-modules 37a0801f (analysis/estimation 0.2.0,
-// dist/isomorphic/module.wasm SHA-256 786d0de9...), with propagator/hpop
+// dist/isomorphic/module.wasm SHA-256 786d0de9...), with propagator/ffm
 // at that commit answering:
 //
 //   git show 37a0801f:analysis/estimation/dist/isomorphic/module.wasm > v1.wasm
@@ -17,13 +17,13 @@ const [wasmPath, manifestPath] = process.argv.slice(2);
 if (!wasmPath || !manifestPath) throw new Error('usage: generate-fit-batch-v1-digests.mjs <v1 module.wasm> <v1 plugin-manifest.json>');
 const wasm = fs.readFileSync(wasmPath);
 const estimator = await createBrowserModuleHarness({ wasmSource: wasm, manifest: JSON.parse(fs.readFileSync(manifestPath, 'utf8')), surface: 'direct' });
-const hpop = await harness('../../../propagator/hpop/');
+const ffm = await harness('../../../propagator/ffm/');
 const cases = {};
 try {
-  for (const entry of v1Cases()) cases[entry.id] = await replayDigests(estimator, hpop, entry);
-} finally { estimator.destroy?.(); hpop.destroy?.(); }
+  for (const entry of v1Cases()) cases[entry.id] = await replayDigests(estimator, ffm, entry);
+} finally { estimator.destroy?.(); ffm.destroy?.(); }
 const out = {
-  source: 'analysis/estimation version 1 (space-data-network-modules 37a0801f), propagator/hpop answering',
+  source: 'analysis/estimation version 1 (space-data-network-modules 37a0801f), propagator/ffm answering',
   module: crypto.createHash('sha256').update(wasm).digest('hex'),
   cases,
 };

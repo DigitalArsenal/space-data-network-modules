@@ -1,5 +1,7 @@
 # Python numerical verification — 2026-09-15
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 All nine selected numerical tests execute the **distributed C++ WASM artifacts**
 through Python ctypes and WasmEdge 0.16.4. They reuse existing module expected
 values. `scripts/extract_vectors.mjs` extracts those values from the original
@@ -12,7 +14,7 @@ code; production Python only marshals data and invokes WASM.
 | Python test / authority | Frame, epoch/time scale, units | Maximum measured error | Tolerance and rationale |
 | --- | --- | --- | --- |
 | SGP4: Vallado satellite 5, Tudat `testSpice.cpp` reference | Published TEME position norm vs returned ECEF norm; OMM UTC `2000-06-27T18:50:19.733568`, target UTC-like JD2451726.28495062; m | `3.63960862159729e-6 m` | `0.01 m`; original module's 1cm radius envelope. Rotation preserves norm. This does not test a full TEME/ECEF state transform. |
-| HPOP: six Tudat two-body samples | Earth-centred inertial state; JD2451545.0 **TDB**, offsets0..5850s; km/km/s | `1.676726684077683e-4 km`, `1.810651650404945e-7 km/s` | `5e-4 km`, `5e-7 km/s`; existing RK4(30s) state-history envelope accounts for integration and double-JD target rounding. Same point-mass parameters and no perturbations. |
+| FFM: six Tudat two-body samples | Earth-centred inertial state; JD2451545.0 **TDB**, offsets0..5850s; km/km/s | `1.676726684077683e-4 km`, `1.810651650404945e-7 km/s` | `5e-4 km`, `5e-7 km/s`; existing RK4(30s) state-history envelope accounts for integration and double-JD target rounding. Same point-mass parameters and no perturbations. |
 | Estimation: Vallado4e examples7-2..7-4, Gibbs expected velocity | Inertial Cartesian SI; Gibbs is time-independent, supplied middle epoch2451545 is a label; m/s | `9.094947017729282e-13 m/s` | `1e-9 m/s`; existing double-precision component envelope with three-decimal-m input positions. |
 | Conjunction: CelesTrak SOCRATES Plus top3, captured2026-03-10 | TCA UTC/JD; scalar miss and speed from SGP4/TEME geometry; s,m,m/s | `0.0007644295692443848 s`, `4.255402527124869 m`, `0.4787075052021805 m/s` | `.010s`, `5m`, `5m/s`; original AMOS-based TCA gate; miss gate accommodates CSV quantization. All3 pairs recovered,0 extras; Pc not gated. |
 | Access: Orekit TopocentricFrame inverse6 vectors | Constant ECEF positions, equatorial station at0lat/0lon/0height; JD2460400.5 **TT**,1s span; elevation radians | `4.731326441742567e-12 rad` | `1e-10 rad`; original geometry tolerance allows float subtraction of metre offsets from Earth-radius coordinates. Python checks ACW maximum elevation, not the JS direct-ABI azimuth/range outputs. |
@@ -23,7 +25,7 @@ code; production Python only marshals data and invokes WASM.
 
 These tolerances preserve the module tests' expected values and acceptance
 bounds. They are conformance examples, not global error guarantees for each
-engine. HPOP's TDB convention comes from the current module's explicit input
+engine. FFM's TDB convention comes from the current module's explicit input
 check; older fixture metadata used an unqualified JD. The analytic events and
 Lambert cases are closed-form authorities, not external numerical ephemerides.
 
@@ -31,7 +33,7 @@ Lambert cases are closed-form authorities, not external numerical ephemerides.
 
 - `propagator/sgp4/tests/tudat_wasm_derived.test.mjs`,
   [pinned Tudat testSpice.cpp](https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/src/testSpice.cpp).
-- `propagator/hpop/tests/fixtures/tudat.reference.json`,
+- `propagator/ffm/tests/fixtures/tudat.reference.json`,
   [pinned Tudat propagation source](https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/test_propagation_node.cjs#L49-L191).
 - `analysis/estimation/tests/native_conformance.cpp`: official Vallado Python
   reference commit `2f3d1600c0f8fd0ebc2f149d8195f06f79d3f579` named upstream.

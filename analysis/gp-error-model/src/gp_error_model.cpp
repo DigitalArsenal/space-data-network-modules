@@ -49,7 +49,7 @@
 // s_k = sqrt(E[e_k^2] / C_kk) from reference-state errors (second moment
 // about zero, clipped), so a scaled model is fitted on one reference window
 // and tested on another.
-// hpop_arcs / hpop_coverage: P0 and process noise for HPOP covariance, fitted and
+// ffm_arcs / ffm_coverage: P0 and process noise for FFM covariance, fitted and
 // tested against reference states (section below).
 // screening_evaluation: probabilistic, bounded-set and possibility screening
 // scored on cases built from reference-state errors (section below).
@@ -1352,23 +1352,23 @@ extern "C" int screening_cases() {
                          {"settings", settings_json(st)}, {"summary", summary}});
 }
 
-// ── HPOP covariance calibration ──
-// The product calibrated is the CA HPOP screen's: analysis/epoch-state's GCRF
-// state at an element set's epoch, propagated by propagator/hpop's resident
-// force model, with covariance P(t) = Phi P0 Phi^T + Q. The host runs HPOP;
+// ── FFM covariance calibration ──
+// The product calibrated is the CA FFM screen's: analysis/epoch-state's GCRF
+// state at an element set's epoch, propagated by propagator/ffm's resident
+// force model, with covariance P(t) = Phi P0 Phi^T + Q. The host runs FFM;
 // these methods choose where to compare, supply P0 and score P(t).
-//   hpop_arcs      per element set (an arc): at each requested prediction age
+//   ffm_arcs      per element set (an arc): at each requested prediction age
 //                  the reference epoch nearest it (for age 0, the first
 //                  reference epoch at or after the set's epoch) and the
 //                  reference state there; with a model, P0 in GCRF (SI) and
 //                  the regime's process noise.
-//   hpop_coverage  scores HPOP's states and covariances at those targets.
+//   ffm_coverage  scores FFM's states and covariances at those targets.
 //     epoch  P0 per regime: the second moment about zero of the 6-D RTN error
 //            at age 0. Samples beyond k robust sigma (1.4826 x median |x|)
 //            in any component are left out, and counted.
 //     fit    white-acceleration spectral densities (R, T, N) per regime by
 //            maximum likelihood over the position errors at ages above 0:
-//            P = A + sum_k q_k U_k, where A is HPOP's covariance from P0
+//            P = A + sum_k q_k U_k, where A is FFM's covariance from P0
 //            alone and U_k from P0 = 0 with unit density on axis k (P(t) is
 //            linear in P0 and Q). Coordinate search on log10 q in [-22, -2],
 //            -22 meaning zero. Likelihood and containment can disagree, so
@@ -1377,7 +1377,7 @@ extern "C" int screening_cases() {
 //     test   zero-mean d^2 = e' P^-1 e against chi-square 3, by regime and
 //            prediction age, every sample counted, with the calibration gate;
 //            P0 alone (Q = 0) alongside.
-namespace hpopcal {
+namespace ffmcal {
 
 struct RefLine {
   Instant t;
@@ -1470,7 +1470,7 @@ struct Model {
   std::map<int, double> interval;
 };
 std::string read_model(const nlohmann::json& j, const Options& options, Model* m) {
-  if (!j.is_object() || j.value("kind", std::string()) != "hpop-covariance-model" || !j.contains("regimes") ||
+  if (!j.is_object() || j.value("kind", std::string()) != "ffm-covariance-model" || !j.contains("regimes") ||
       !j["regimes"].is_array())
     return "model must be an $ERM MODEL record of form PropagatorCovariance.";
   m->json = j;
@@ -1535,10 +1535,10 @@ struct Sample {
   double a[6], u[3][6];  // position blocks, m^2
 };
 
-}  // namespace hpopcal
+}  // namespace ffmcal
 
-extern "C" int hpop_arcs() {
-  using namespace hpopcal;
+extern "C" int ffm_arcs() {
+  using namespace ffmcal;
   const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
   if (!opt.is_object()) return fail("invalid-options", "options must be an $ERM options record.");
   Accumulator acc;
@@ -1620,16 +1620,16 @@ extern "C" int hpop_arcs() {
   counts["setsWithoutReference"] = without_reference;
   counts["setsWithoutTargets"] = without_targets;
   counts["arcsWithoutModelRegime"] = without_model;
-  return emit("plan", {{"kind", "hpop-arc-plan"}, {"version", 1}, {"targetAgesDays", ages},
+  return emit("plan", {{"kind", "ffm-arc-plan"}, {"version", 1}, {"targetAgesDays", ages},
                        {"epochToleranceSeconds", epoch_tol}, {"targetToleranceSeconds", target_tol},
                        {"covariance", "row-major 6x6 GCRF, SI (m, m/s), from the model's RTN P0 at the set's epoch"},
                        {"truth", "reference state, GCRF, km and km/s"}, {"counts", counts}, {"arcs", arcs}});
 }
 
-extern "C" int hpop_coverage() {
-  using namespace hpopcal;
+extern "C" int ffm_coverage() {
+  using namespace ffmcal;
   const nlohmann::json plan = json_input("plan"), predictions = json_input("predictions");
-  if (!plan.is_object() || plan.value("kind", std::string()) != "hpop-arc-plan" || !plan.contains("arcs"))
+  if (!plan.is_object() || plan.value("kind", std::string()) != "ffm-arc-plan" || !plan.contains("arcs"))
     return fail("invalid-plan", "plan must be an $ERM ARC_PLAN record.");
   if (!predictions.is_object() || !predictions.contains("arcs") || !predictions["arcs"].is_array())
     return fail("invalid-predictions", "predictions must be an $ERM ARC_PREDICTIONS record.");
@@ -1735,8 +1735,8 @@ extern "C" int hpop_coverage() {
       regimes.push_back({{"regimeIndex", regime}, {"regime", options.regimes[regime].id}, {"n", list.size()}, {"kept", kept},
                          {"objects", objects.size()}, {"clipK", clip_k}, {"p0", p0}});
     }
-    return emit("model", {{"kind", "hpop-covariance-model"}, {"version", 1},
-                          {"basis", "P0: second moment about zero of HPOP's error at its first reference epoch after the "
+    return emit("model", {{"kind", "ffm-covariance-model"}, {"version", 1},
+                          {"basis", "P0: second moment about zero of FFM's error at its first reference epoch after the "
                                     "element set's epoch, against independent reference states, per regime"},
                           {"units", {{"p0", "km, km/s; lower triangle, row-major, RTN: RR, TR, TT, NR, NT, NN, dR R, ..."},
                                      {"spectralDensityM2S3", "m^2/s^3 per R, T, N axis"}}},
@@ -1826,7 +1826,7 @@ extern "C" int hpop_coverage() {
                                     {"rule", "maximum likelihood unless P0 alone passes the gate in more fit-window strata"}}}};
     }
     out["basis"] = std::string(model.json.value("basis", std::string())) +
-                   "; Q: white-acceleration spectral densities per regime by maximum likelihood of HPOP's P(t) = "
+                   "; Q: white-acceleration spectral densities per regime by maximum likelihood of FFM's P(t) = "
                    "Phi P0 Phi' + Q against reference-state position errors at prediction ages above 0";
     return emit("model", out);
   }
@@ -1887,6 +1887,6 @@ extern "C" int hpop_coverage() {
                       {"spectralDensityM2S3", q == model.q.end() ? std::vector<double>{0, 0, 0} : std::vector<double>(q->second.begin(), q->second.end())},
                       {"coverage", coverage_json(with[i], gate)}, {"coverageP0Only", coverage_json(without[i], gate)}});
   }
-  return emit("report", {{"kind", "hpop-covariance-coverage"}, {"version", 1}, {"window", window}, {"gate", gate_json(gate)},
+  return emit("report", {{"kind", "ffm-covariance-coverage"}, {"version", 1}, {"window", window}, {"gate", gate_json(gate)},
                          {"counts", counts}, {"strata", strata}});
 }

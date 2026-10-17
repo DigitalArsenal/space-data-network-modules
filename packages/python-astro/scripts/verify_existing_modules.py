@@ -13,7 +13,7 @@ import subprocess
 
 CHECKS = [
     ("sdk", "propagator/sgp4", "tests/sdk_compat.test.mjs", None),
-    ("sdk", "propagator/hpop", "tests/sdk_compat.test.mjs", None),
+    ("sdk", "propagator/ffm", "tests/sdk_compat.test.mjs", None),
     ("sdk", "analysis/conjunction-assessment", "tests/sdk_compat.test.mjs", None),
     ("sdk", "foundation/time", "tests/sdk_compat.test.mjs", None),
     ("sdk", "foundation/frames", "tests/sdk_compat.test.mjs", None),
@@ -21,7 +21,7 @@ CHECKS = [
     ("sdk", "analysis/access", "test/manifestContract.test.mjs", None),
     ("evidence", "analysis/estimation", "tests/conformance.test.mjs", None),
     ("numerical", "propagator/sgp4", "tests/tudat_wasm_derived.test.mjs", "tudat vallado sgp4 benchmark"),
-    ("numerical", "propagator/hpop", "tests/tudat_wasm_derived.test.mjs", "tudat two-body samples"),
+    ("numerical", "propagator/ffm", "tests/tudat_wasm_derived.test.mjs", "tudat two-body samples"),
     ("numerical-native", "analysis/estimation", "tests/native.test.mjs", None),
     ("numerical", "analysis/conjunction-assessment", "tests/socratesScreenCatalogParity.test.mjs", None),
     ("numerical", "analysis/access", "test/accessAnalyzer.test.mjs", "inverse azimuth/elevation/range"),

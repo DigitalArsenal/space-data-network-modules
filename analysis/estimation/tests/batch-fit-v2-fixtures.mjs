@@ -4,9 +4,9 @@
 // measurement_parameters.test.mjs.
 import assert from 'node:assert/strict';
 import { REFERENCE, answer, fitRequest, harness } from './batch-fit-fixtures.mjs';
-import { covarianceBlock, fitEnvelope, hpopAnswerer, identityAnswerer, isoOf, measurementParameter, runFit } from './batch-fit-v2-lib.mjs';
+import { covarianceBlock, fitEnvelope, ffmAnswerer, identityAnswerer, isoOf, measurementParameter, runFit } from './batch-fit-v2-lib.mjs';
 import { campaign } from './tracking-pipeline.mjs';
-import { sds } from '../../../propagator/hpop/tests/lib/prwCodec.mjs';
+import { sds } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
 
 export const STATE = [7000e3, 100e3, -50e3, 100, 7400, 1000];
 export const LEO = REFERENCE.cases.find((c) => c.name === 'LEO400-drag');
@@ -53,7 +53,7 @@ export function leoEnvelope(offset = [0, 0, 0, 0, 0, 0], b0 = LEO.aprioriParamet
   Object.assign(envelope.request.batchOptions, options);
   return envelope;
 }
-export const orekitAnswerer = (hpop) => (queries) => answer(hpop, LEO, queries);
+export const orekitAnswerer = (ffm) => (queries) => answer(ffm, LEO, queries);
 
 // ---------------------------------------------------------------------------
 // The tracking campaign (measurement_parameters.test.mjs states it).
@@ -74,11 +74,11 @@ function passes(records) {
   }
   return out;
 }
-export async function campaignFit(hpop) {
+export async function campaignFit(ffm) {
   const truth = { state: LEO.truth, names: ['DRAG_AREA_OVER_MASS'], values: [0.01] };
   let rfPasses = [], radarPass = null;
   const data = await campaign({
-    hpop, truth, hours: 12, seed: 20261010, emitterHz: F0,
+    ffm, truth, hours: 12, seed: 20261010, emitterHz: F0,
     stations: [{ id: 'A', lat: 42.6, lon: -71.5, h: 100 }, { id: 'B', lat: 40.4, lon: -4.2, h: 700 }, { id: 'C', lat: 35.7, lon: 139.7, h: 40 }, { id: 'D', lat: -33.9, lon: 151.2, h: 50 }],
     sensors: [
       { id: 'radar-A', station: 'A', kind: 'RADAR', models: [{ type: 'RANGE', sigma: 5, bias: 12 }] },
@@ -121,13 +121,13 @@ export async function campaignFit(hpop) {
   const envelope = fitEnvelope({ state: start, observations, kinds: [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS], values: [0.02],
     options: { parameterLowerBounds: [0], measurementParameters: parameters, maximumIterations: 30 } });
   return { data, envelope, parameters, expected, rfPasses, truthVector: [...LEO.truth, 0.01, ...expected],
-    answer: hpopAnswerer(hpop, { names: ['DRAG_AREA_OVER_MASS'] }) };
+    answer: ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS'] }) };
 }
 
 // Parity cases: each scenario's first query round and its complete replay.
 export async function batchFitV2Cases() {
   const estimator = await harness('../');
-  const hpop = await harness('../../../propagator/hpop/');
+  const ffm = await harness('../../../propagator/ffm/');
   const cases = [];
   const record = async (id, envelope, answerer) => {
     const run = await runFit(estimator, envelope, answerer);
@@ -137,10 +137,10 @@ export async function batchFitV2Cases() {
   try {
     await record('fit-batch-v2-regularized-block', blockEnvelope(true), identityAnswerer());
     await record('fit-batch-v2-consider', considerEnvelope(), identityAnswerer(CONSIDER.g));
-    await record('fit-batch-v2-logarithm-radial-start', leoEnvelope([50e3, 0, 0, 0, 0, 0], 0.02, { parameterTransforms: [1] }), orekitAnswerer(hpop));
-    await record('fit-batch-v2-bound-damped-along-track-start', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036, { parameterLowerBounds: [0], levenbergMarquardt: true }), orekitAnswerer(hpop));
-    const c = await campaignFit(hpop);
+    await record('fit-batch-v2-logarithm-radial-start', leoEnvelope([50e3, 0, 0, 0, 0, 0], 0.02, { parameterTransforms: [1] }), orekitAnswerer(ffm));
+    await record('fit-batch-v2-bound-damped-along-track-start', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036, { parameterLowerBounds: [0], levenbergMarquardt: true }), orekitAnswerer(ffm));
+    const c = await campaignFit(ffm);
     await record('fit-batch-v2-measurement-campaign', c.envelope, c.answer);
-  } finally { estimator.destroy?.(); hpop.destroy?.(); }
+  } finally { estimator.destroy?.(); ffm.destroy?.(); }
   return cases;
 }

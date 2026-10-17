@@ -107,10 +107,10 @@ def sgp4(omm, julian_dates):
         return np.array([np.concatenate((s.position, s.velocity)) for s in states]).reshape(-1, 6)
 
 
-def hpop(position_km, velocity_km_s, epoch_jd, target_jd, *, integrator=None, forces=None):
+def ffm(position_km, velocity_km_s, epoch_jd, target_jd, *, integrator=None, forces=None):
     """Propagate an Earth inertial Cartesian state; return km, km/s.
 
-    Epoch and target JD are TDB, as required by the HPOP module. Force settings are the
+    Epoch and target JD are TDB, as required by the FFM module. Force settings are the
     module's documented mapping. The current module invoke payload is JSON
     inside binary PIV/TAB; no Python integrator or force model is used.
     """
@@ -124,13 +124,13 @@ def hpop(position_km, velocity_km_s, epoch_jd, target_jd, *, integrator=None, fo
                                      'absTolerance': 1e-12, 'relTolerance': 1e-12},
         'forces': forces if forces is not None else {'pointMass': True, 'j2': False, 'j3': False,
             'j4': False, 'thirdBody': False, 'drag': False, 'srp': False}}}
-    with Module('propagator/hpop') as module:
+    with Module('propagator/ffm') as module:
         result = json.loads(output(module.invoke('invoke', [Frame('request', json.dumps(request, allow_nan=False).encode(),
-            'orbpro.hpop.InvokeRequest')]), 'response'))
+            'orbpro.ffm.InvokeRequest')]), 'response'))
     if 'error' in result:
         raise RuntimeError(result['error'])
     return State(array(result['position'], (3,)), array(result['velocity'], (3,)),
-                 'Earth inertial (HPOP)', 'km', 'km/s', float(target_jd), 'TDB')
+                 'Earth inertial (FFM)', 'km', 'km/s', float(target_jd), 'TDB')
 
 
 def convert_time(epoch, source='UTC', target='TAI', *, dut1_seconds=None):

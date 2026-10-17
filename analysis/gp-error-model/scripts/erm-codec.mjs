@@ -132,7 +132,7 @@ const noiseIn = (n) => make(E.ERMProcessNoiseT, { MODEL: str(n, 'model'), AXES: 
 const noiseOut = (n) => ({ ...(n.MODEL ? { model: n.MODEL } : {}), ...(n.AXES ? { axes: n.AXES } : {}), spectralDensityM2S3: n.SPECTRAL_DENSITY_M2_S3,
   discretizationSeconds: n.DISCRETIZATION_S });
 const STRATIFIED_UNITS = { position: 'km', velocity: 'km/s', components: ['R', 'T', 'N', 'dR', 'dT', 'dN'], covariance: 'lower triangle, row-major: RR, TR, TT, NR, NT, NN, dR R, ...' };
-const HPOP_UNITS = { p0: 'km, km/s; lower triangle, row-major, RTN: RR, TR, TT, NR, NT, NN, dR R, ...', spectralDensityM2S3: 'm^2/s^3 per R, T, N axis' };
+const FFM_UNITS = { p0: 'km, km/s; lower triangle, row-major, RTN: RR, TR, TT, NR, NT, NN, dR R, ...', spectralDensityM2S3: 'm^2/s^3 per R, T, N axis' };
 
 // ── models ──
 export function modelIn(j) {
@@ -154,7 +154,7 @@ export function modelIn(j) {
     }));
     if (has(j, 'scale')) m.SCALE = make(E.ERMModelScaleT, { BASIS: str(j.scale, 'basis'), TRUTH_COUNTS: has(j.scale, 'truthCounts') ? countsIn(j.scale.truthCounts) : null,
       TRUTH_WINDOW: str(j.scale, 'truthWindow'), MINIMUM_SAMPLES: num(j.scale, 'minimumSamples', 0) });
-  } else if (kind === 'hpop-covariance-model') {
+  } else if (kind === 'ffm-covariance-model') {
     Object.assign(m, { FORM: E.ermModelForm.PropagatorCovariance, EPOCH_WINDOW_START: j.epochWindow?.[0] ?? null, EPOCH_WINDOW_STOP: j.epochWindow?.[1] ?? null });
     m.PROPAGATOR_REGIMES = (j.regimes ?? []).map((r) => {
       const n = r.processNoise;
@@ -228,7 +228,7 @@ export function modelOut(m) {
       return j;
     }
     case E.ermModelForm.PropagatorCovariance: {
-      Object.assign(j, { kind: 'hpop-covariance-model', version: 1, basis: m.BASIS_TEXT ?? '', units: HPOP_UNITS });
+      Object.assign(j, { kind: 'ffm-covariance-model', version: 1, basis: m.BASIS_TEXT ?? '', units: FFM_UNITS });
       if (m.EPOCH_WINDOW_START || m.EPOCH_WINDOW_STOP) j.epochWindow = [m.EPOCH_WINDOW_START ?? '', m.EPOCH_WINDOW_STOP ?? ''];
       if (m.COUNTS) j.counts = countsOut(m.COUNTS, ['samples', 'targetsOutsideWindow', 'targetsWithoutPrediction']);
       j.regimes = m.PROPAGATOR_REGIMES.map((r) => {
@@ -345,14 +345,14 @@ function screeningReportOut(r) {
       objects: x.OBJECTS, samples: N(x.SAMPLES), pairs: x.PAIRS, sigmaRtnKm: x.SIGMA_RTN_KM, geometries: x.GEOMETRIES.map((g) => ({ geometry: g.GEOMETRY, rows: rowsOut(g.ROWS) })) })) };
 }
 
-// ── HPOP ──
+// ── FFM ──
 const planIn = (j) => make(E.ERMArcPlanT, {
   TARGET_AGES_DAYS: arr(j, 'targetAgesDays'), EPOCH_TOLERANCE_S: num(j, 'epochToleranceSeconds', 0), TARGET_TOLERANCE_S: num(j, 'targetToleranceSeconds', 0),
   COVARIANCE_NOTE: str(j, 'covariance'), TRUTH_NOTE: str(j, 'truth'), COUNTS: has(j, 'counts') ? countsIn(j.counts) : null,
   ARCS: (j.arcs ?? []).map((a) => make(E.ERMArcT, { ARC: num(a, 'arc', 0), NORAD_CAT_ID: num(a, 'norad', 0), EPOCH: str(a, 'epoch'), REGIME_INDEX: num(a, 'regimeIndex', 0),
     REGIME: str(a, 'regime'), COVARIANCE: arr(a, 'covariance'), PROCESS_NOISE: has(a, 'processNoise') ? noiseIn(a.processNoise) : null,
     TARGETS: (a.targets ?? []).map((t) => make(E.ERMArcTargetT, { NOMINAL_DAYS: num(t, 'nominalDays', 0), AGE_DAYS: num(t, 'ageDays', 0), EPOCH: str(t, 'epoch'), TRUTH: arr(t, 'truth') })) })) });
-const planOut = (p) => ({ kind: 'hpop-arc-plan', version: 1, targetAgesDays: p.TARGET_AGES_DAYS, epochToleranceSeconds: p.EPOCH_TOLERANCE_S, targetToleranceSeconds: p.TARGET_TOLERANCE_S,
+const planOut = (p) => ({ kind: 'ffm-arc-plan', version: 1, targetAgesDays: p.TARGET_AGES_DAYS, epochToleranceSeconds: p.EPOCH_TOLERANCE_S, targetToleranceSeconds: p.TARGET_TOLERANCE_S,
   covariance: p.COVARIANCE_NOTE ?? '', truth: p.TRUTH_NOTE ?? '',
   counts: countsOut(p.COUNTS, [...BASE, 'arcs', 'targets', 'setsWithoutReference', 'setsWithoutTargets', 'arcsWithoutModelRegime']),
   arcs: p.ARCS.map((a) => ({ arc: a.ARC, norad: a.NORAD_CAT_ID, epoch: a.EPOCH ?? '', regimeIndex: a.REGIME_INDEX, regime: a.REGIME ?? '',
@@ -365,7 +365,7 @@ const COVERAGE_MODE = { epoch: E.ermCoverageMode.EpochCovariance, fit: E.ermCove
 const coverageOptionsIn = (j) => make(E.ERMCoverageOptionsT, { MODE: COVERAGE_MODE[j.mode] ?? E.ermCoverageMode.CoverageTest, WINDOW_START: j.window?.[0] ?? null,
   WINDOW_STOP: j.window?.[1] ?? null, STRATA_SETTINGS: strataIn(j, true), GATE: has(j, 'gate') ? gateIn(j.gate) : null, CLIP_K: num(j, 'clipK', 5),
   DISCRETIZATION_S: num(j, 'discretizationSeconds', 600) });
-const propagatorCoverageOut = (r) => ({ kind: 'hpop-covariance-coverage', version: 1, window: [r.WINDOW_START ?? '', r.WINDOW_STOP ?? ''], gate: r.GATE ? gateOut(r.GATE) : null,
+const propagatorCoverageOut = (r) => ({ kind: 'ffm-covariance-coverage', version: 1, window: [r.WINDOW_START ?? '', r.WINDOW_STOP ?? ''], gate: r.GATE ? gateOut(r.GATE) : null,
   counts: countsOut(r.COUNTS, ['samples', 'targetsOutsideWindow', 'targetsWithoutPrediction', 'outsideAgeBins', 'withoutCovariance', 'notPositiveDefinite']),
   strata: r.STRATA.map((s) => ({ regime: s.REGIME ?? '', regimeIndex: s.REGIME_INDEX, ageIndex: s.AGE_INDEX, ageDays: [s.AGE_MIN_DAYS, s.AGE_MAX_DAYS],
     rmsErrorRtnKm: s.RMS_ERROR_RTN_KM, rmsSigmaRtnKm: s.RMS_SIGMA_RTN_KM, rmsSigmaP0OnlyRtnKm: s.RMS_SIGMA_P0_ONLY_RTN_KM, spectralDensityM2S3: s.SPECTRAL_DENSITY_M2_S3,
@@ -617,8 +617,8 @@ export const ARM_OF = {
   scale_model: { model: 'model', truth: 'model', options: 'scale' },
   screening_evaluation: { model: 'model', options: 'screeningSettings' },
   screening_cases: { cases: 'screeningCases', options: 'screeningSettings' },
-  hpop_arcs: { model: 'model', options: 'arcOptions' },
-  hpop_coverage: { plan: 'plan', predictions: 'predictions', model: 'model', options: 'coverageOptions' },
+  ffm_arcs: { model: 'model', options: 'arcOptions' },
+  ffm_coverage: { plan: 'plan', predictions: 'predictions', model: 'model', options: 'coverageOptions' },
   common_epoch: { options: 'commonEpoch' },
   map_covariance: { options: 'covarianceMap' },
   pair_statistics: { pairs: 'pairs' },

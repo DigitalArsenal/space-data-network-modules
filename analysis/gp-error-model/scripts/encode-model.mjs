@@ -1,6 +1,6 @@
-// A model in its readable form (data/e14-s3-kc.json, docs/*.json, a finalize or hpop_coverage output written as JSON) as
+// A model in its readable form (data/e14-s3-kc.json, docs/*.json, a finalize or ffm_coverage output written as JSON) as
 // the one $ERM MODEL record the module's model ports take (attach_covariance's models port, calibrate_covariance,
-// accumulate, scale_model, screening_evaluation, hpop_arcs, hpop_coverage). `--sources a,b` names the sources whose own
+// accumulate, scale_model, screening_evaluation, ffm_arcs, ffm_coverage). `--sources a,b` names the sources whose own
 // model it is and `--pooled` marks it the model pooled over all sources, as a recipe uses it.
 //
 //   node scripts/encode-model.mjs data/e14-s3-kc.json --out data/e14-s3-kc.erm [--sources celestrak-gp,space-track-gp] [--pooled]

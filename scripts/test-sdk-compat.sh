@@ -16,7 +16,7 @@ PACKAGES=(
     propagator/atmosphere
     propagator/hypersonics
     propagator/cislunar
-    propagator/hpop
+    propagator/ffm
     propagator/sgp4
     analysis/conjunction-assessment
     analysis/reentry

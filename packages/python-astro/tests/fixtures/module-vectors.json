@@ -1,7 +1,7 @@
 {
   "sources": {
     "propagator/sgp4/tests/tudat_wasm_derived.test.mjs": "4ce7d68c6a60685c8eb8973cca87c69195413b55f0ae256d27a41ef24cc60806",
-    "propagator/hpop/tests/fixtures/tudat.reference.json": "5e3d29a8ad404576364f1aced98d51713072deafb45d4819e840b42310a32ece",
+    "propagator/ffm/tests/fixtures/tudat.reference.json": "5e3d29a8ad404576364f1aced98d51713072deafb45d4819e840b42310a32ece",
     "analysis/estimation/tests/native_conformance.cpp": "f89aaf6870e44edfc9c974ebecbf2a34b558b19e49f9c3470298c27e4280d426",
     "foundation/time/tests/time_conversion.test.mjs": "5002f1f16a45ea185dc7a5ac532cb9bb0d0dcf1141ec59838ecc866dfaddec0d",
     "foundation/frames/tests/frame_transform.test.mjs": "021b742ab72085854a06e4b98b8b21b4dfb5eaec51b229fd3419eec96924fa4a",
@@ -32,7 +32,7 @@
     "VALLADO_TARGET_JD": 2451726.28495062,
     "VALLADO_TEME_POSITION_MAGNITUDE_METERS": 10220462.066408467
   },
-  "hpop": {
+  "ffm": {
     "sources": {
       "twoBody": "https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/test_propagation_node.cjs#L49-L191",
       "highFidelity": "https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/test_propagation_node.cjs#L196-L325"

@@ -55,7 +55,7 @@ const axisEngine = (await fs.readFile(axisEnginePath, "utf8"))
     /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
     "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
   );
-// eop_table.hpp reads $EOP through eop_series.hpp (shared with propagator/hpop).
+// eop_table.hpp reads $EOP through eop_series.hpp (shared with propagator/ffm).
 // eop_table.hpp is inlined at its include site, inside frames_module.cpp's
 // anonymous namespace; eop_series.hpp declares ::sdn::frames::eop, so it goes
 // at file scope after the axis engine it builds on.

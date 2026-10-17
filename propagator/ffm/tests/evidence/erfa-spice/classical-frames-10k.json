@@ -1,0 +1,2051 @@
+{
+ "diagnostic": "neglectedRatesMS: full ERFA chain central difference, delta=1 s, versus Earth-rotation-only rule; includes finite-difference truncation/roundoff",
+ "directions": 6,
+ "epochs": 10000,
+ "invalidInputs": {
+  "matrixFlagged": true,
+  "stateFlagged": true
+ },
+ "maxPositionM": 2.980232266958788e-8,
+ "maxVelocityMS": 3.749943669636968e-12,
+ "met": true,
+ "pairs": 64,
+ "reference": "Independent pyerfa ERFA 2.0.1 classical FK5 chain, exact UTC day/fraction to TT; UT1=UTC, xp=yp=0, no frame bias",
+ "rows": [
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "TEME",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 8.33000234328132e-9,
+   "epochOverloadPositionMAtUtcJd": 2447974.687214397,
+   "epochOverloadVelocityMS": 5.084229945850415e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2448064.179967415,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.00046354214748895703,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.2914277088936463e-10,
+    "gpsM": 8.134944894732957e-11,
+    "leoM": 2.076045594275247e-11
+   },
+   "positionM": 8.33000234328132e-9,
+   "positionMAtUtcJd": 2447974.687214397,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 6.317593496019951e-10,
+   "rotationMasAtUtcJd": 2464876.0321570938,
+   "to": "GCRF",
+   "velocityMS": 5.084229945850415e-13,
+   "velocityMSAtUtcJd": 2448064.179967415,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.8626460467990678e-8,
+   "epochOverloadPositionMAtUtcJd": 2464395.693515863,
+   "epochOverloadVelocityMS": 2.31876622114951e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2462331.88113941,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.0000036902804599198066,
+   "neglectedRatesMSAtUtcJd": 2459223.3778863437,
+   "positionBounds": {
+    "geoM": 9.313996488878736e-9,
+    "gpsM": 5.867060747184617e-9,
+    "leoM": 1.497279425140802e-9
+   },
+   "positionM": 1.8626460467990678e-8,
+   "positionMAtUtcJd": 2464395.693515863,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 4.556355979886971e-8,
+   "rotationMasAtUtcJd": 2457347.6829176634,
+   "to": "ITRF",
+   "velocityMS": 2.31876622114951e-12,
+   "velocityMSAtUtcJd": 2462331.88113941,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 8.33000234328132e-9,
+   "epochOverloadPositionMAtUtcJd": 2447974.687214397,
+   "epochOverloadVelocityMS": 5.084229945850415e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2448064.179967415,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.00046354214748895703,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.2914277088936463e-10,
+    "gpsM": 8.134944894732957e-11,
+    "leoM": 2.076045594275247e-11
+   },
+   "positionM": 8.33000234328132e-9,
+   "positionMAtUtcJd": 2447974.687214397,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 6.317593496019951e-10,
+   "rotationMasAtUtcJd": 2464876.0321570938,
+   "to": "J2000",
+   "velocityMS": 5.084229945850415e-13,
+   "velocityMSAtUtcJd": 2448064.179967415,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.8626460467990678e-8,
+   "epochOverloadPositionMAtUtcJd": 2464395.693515863,
+   "epochOverloadVelocityMS": 2.31876622114951e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2462331.88113941,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.0000036902804599198066,
+   "neglectedRatesMSAtUtcJd": 2459223.3778863437,
+   "positionBounds": {
+    "geoM": 9.313996488878736e-9,
+    "gpsM": 5.867060747184617e-9,
+    "leoM": 1.497279425140802e-9
+   },
+   "positionM": 1.8626460467990678e-8,
+   "positionMAtUtcJd": 2464395.693515863,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 4.556355979886971e-8,
+   "rotationMasAtUtcJd": 2457347.6829176634,
+   "to": "ECEF",
+   "velocityMS": 2.31876622114951e-12,
+   "velocityMSAtUtcJd": 2462331.88113941,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.8626460467990678e-8,
+   "epochOverloadPositionMAtUtcJd": 2464395.693515863,
+   "epochOverloadVelocityMS": 2.31876622114951e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2462331.88113941,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.0000036902804599198066,
+   "neglectedRatesMSAtUtcJd": 2459223.3778863437,
+   "positionBounds": {
+    "geoM": 9.313996488878736e-9,
+    "gpsM": 5.867060747184617e-9,
+    "leoM": 1.497279425140802e-9
+   },
+   "positionM": 1.8626460467990678e-8,
+   "positionMAtUtcJd": 2464395.693515863,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 4.556355979886971e-8,
+   "rotationMasAtUtcJd": 2457347.6829176634,
+   "to": "PEF",
+   "velocityMS": 2.31876622114951e-12,
+   "velocityMSAtUtcJd": 2462331.88113941,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 8.33000234328132e-9,
+   "epochOverloadPositionMAtUtcJd": 2448139.0616551484,
+   "epochOverloadVelocityMS": 9.094947017729282e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2453174.3985888665,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.0005179620583193068,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.1037999729897911e-10,
+    "gpsM": 6.95304266219609e-11,
+    "leoM": 1.7744230320485623e-11
+   },
+   "positionM": 8.33000234328132e-9,
+   "positionMAtUtcJd": 2448139.0616551484,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.399728906421956e-10,
+   "rotationMasAtUtcJd": 2466105.1876696134,
+   "to": "TOD",
+   "velocityMS": 9.094947017729282e-13,
+   "velocityMSAtUtcJd": 2453174.3985888665,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 8.535712389193177e-9,
+   "epochOverloadPositionMAtUtcJd": 2463787.508103297,
+   "epochOverloadVelocityMS": 9.09494714468552e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2452272.165567345,
+   "from": "TEME",
+   "met": true,
+   "neglectedRatesMS": 0.00023312544262609736,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 1.1009402134990021e-10,
+    "gpsM": 6.935028501814099e-11,
+    "leoM": 1.7698258013629785e-11
+   },
+   "positionM": 8.535712389193177e-9,
+   "positionMAtUtcJd": 2463787.508103297,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.385739119897501e-10,
+   "rotationMasAtUtcJd": 2464713.4840979236,
+   "to": "MOD",
+   "velocityMS": 9.09494714468552e-13,
+   "velocityMSAtUtcJd": 2452272.165567345,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.4901161193847656e-8,
+   "epochOverloadPositionMAtUtcJd": 2457543.105863872,
+   "epochOverloadVelocityMS": 5.084229945850415e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2447974.687214397,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0.00046359840301519247,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.1009389970083004e-10,
+    "gpsM": 6.935020838911441e-11,
+    "leoM": 1.7698238457830073e-11
+   },
+   "positionM": 1.4901161193847656e-8,
+   "positionMAtUtcJd": 2457543.105863872,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.385733168891732e-10,
+   "rotationMasAtUtcJd": 2465042.232975761,
+   "to": "TEME",
+   "velocityMS": 5.084229945850415e-13,
+   "velocityMSAtUtcJd": 2447974.687214397,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "GCRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006275384424e-8,
+   "epochOverloadPositionMAtUtcJd": 2454463.8247351055,
+   "epochOverloadVelocityMS": 2.2737367544323206e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463787.508103297,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0.0004651264920916092,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.421893716239334e-9,
+    "gpsM": 4.67518979036743e-9,
+    "leoM": 1.193112835094568e-9
+   },
+   "positionM": 1.6660006275384424e-8,
+   "positionMAtUtcJd": 2454463.8247351055,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6307496847836644e-8,
+   "rotationMasAtUtcJd": 2464899.775130856,
+   "to": "ITRF",
+   "velocityMS": 2.2737367544323206e-12,
+   "velocityMSAtUtcJd": 2463787.508103297,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "J2000",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006275384424e-8,
+   "epochOverloadPositionMAtUtcJd": 2454463.8247351055,
+   "epochOverloadVelocityMS": 2.2737367544323206e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463787.508103297,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0.0004651264920916092,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.421893716239334e-9,
+    "gpsM": 4.67518979036743e-9,
+    "leoM": 1.193112835094568e-9
+   },
+   "positionM": 1.6660006275384424e-8,
+   "positionMAtUtcJd": 2454463.8247351055,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6307496847836644e-8,
+   "rotationMasAtUtcJd": 2464899.775130856,
+   "to": "ECEF",
+   "velocityMS": 2.2737367544323206e-12,
+   "velocityMSAtUtcJd": 2463787.508103297,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006275384424e-8,
+   "epochOverloadPositionMAtUtcJd": 2454463.8247351055,
+   "epochOverloadVelocityMS": 2.2737367544323206e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463787.508103297,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0.0004651264920916092,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.421893716239334e-9,
+    "gpsM": 4.67518979036743e-9,
+    "leoM": 1.193112835094568e-9
+   },
+   "positionM": 1.6660006275384424e-8,
+   "positionMAtUtcJd": 2454463.8247351055,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6307496847836644e-8,
+   "rotationMasAtUtcJd": 2464899.775130856,
+   "to": "PEF",
+   "velocityMS": 2.2737367544323206e-12,
+   "velocityMSAtUtcJd": 2463787.508103297,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0.000890341167642415,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "TOD",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "GCRF",
+   "met": true,
+   "neglectedRatesMS": 0.00032582271002671404,
+   "neglectedRatesMSAtUtcJd": 2466147.1944711786,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "MOD",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 2.242921773119326e-8,
+   "epochOverloadPositionMAtUtcJd": 2456781.5042968853,
+   "epochOverloadVelocityMS": 3.749943669636968e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463703.494500739,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0.0000036886842113679472,
+   "neglectedRatesMSAtUtcJd": 2459223.3778863437,
+   "positionBounds": {
+    "geoM": 9.313996488878737e-9,
+    "gpsM": 5.867060747184618e-9,
+    "leoM": 1.4972794251408023e-9
+   },
+   "positionM": 2.242921773119326e-8,
+   "positionMAtUtcJd": 2456781.5042968853,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 4.556355979886972e-8,
+   "rotationMasAtUtcJd": 2457347.6829176634,
+   "to": "TEME",
+   "velocityMS": 3.749943669636968e-12,
+   "velocityMSAtUtcJd": 2463703.494500739,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.666000468656264e-8,
+   "epochOverloadPositionMAtUtcJd": 2455636.3623831524,
+   "epochOverloadVelocityMS": 2.728486418282439e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2461659.7723245723,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0.0004593672877839476,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.718629667440345e-9,
+    "gpsM": 4.862109320952258e-9,
+    "leoM": 1.2408148752406391e-9
+   },
+   "positionM": 1.666000468656264e-8,
+   "positionMAtUtcJd": 2455636.3623831524,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.775911284030192e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "GCRF",
+   "velocityMS": 2.728486418282439e-12,
+   "velocityMSAtUtcJd": 2461659.7723245723,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "ITRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.666000468656264e-8,
+   "epochOverloadPositionMAtUtcJd": 2455636.3623831524,
+   "epochOverloadVelocityMS": 2.728486418282439e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2461659.7723245723,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0.0004593672877839476,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.718629667440345e-9,
+    "gpsM": 4.862109320952258e-9,
+    "leoM": 1.2408148752406391e-9
+   },
+   "positionM": 1.666000468656264e-8,
+   "positionMAtUtcJd": 2455636.3623831524,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.775911284030192e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "J2000",
+   "velocityMS": 2.728486418282439e-12,
+   "velocityMSAtUtcJd": 2461659.7723245723,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "ECEF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "PEF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.8626453736237252e-8,
+   "epochOverloadPositionMAtUtcJd": 2458284.61721449,
+   "epochOverloadVelocityMS": 2.876075472941809e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2453470.2725787875,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0.0005156024378973603,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 6.820947876734547e-9,
+    "gpsM": 4.29664275630398e-9,
+    "leoM": 1.0965072756884785e-9
+   },
+   "positionM": 1.8626453736237252e-8,
+   "positionMAtUtcJd": 2458284.61721449,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.336770277266681e-8,
+   "rotationMasAtUtcJd": 2450845.7607236183,
+   "to": "TOD",
+   "velocityMS": 2.876075472941809e-12,
+   "velocityMSAtUtcJd": 2453470.2725787875,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660044780313736e-8,
+   "epochOverloadPositionMAtUtcJd": 2465248.614213388,
+   "epochOverloadVelocityMS": 2.749717764901976e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463075.218875023,
+   "from": "ITRF",
+   "met": true,
+   "neglectedRatesMS": 0.00023312544177319546,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.562580407385621e-9,
+    "gpsM": 4.763810970787806e-9,
+    "leoM": 1.2157290437538684e-9
+   },
+   "positionM": 1.6660044780313736e-8,
+   "positionMAtUtcJd": 2465248.614213388,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6995728421963063e-8,
+   "rotationMasAtUtcJd": 2451742.514601822,
+   "to": "MOD",
+   "velocityMS": 2.749717764901976e-12,
+   "velocityMSAtUtcJd": 2463075.218875023,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.4901161193847656e-8,
+   "epochOverloadPositionMAtUtcJd": 2457543.105863872,
+   "epochOverloadVelocityMS": 5.084229945850415e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2447974.687214397,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0.00046359840301519247,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.1009389970083004e-10,
+    "gpsM": 6.935020838911441e-11,
+    "leoM": 1.7698238457830073e-11
+   },
+   "positionM": 1.4901161193847656e-8,
+   "positionMAtUtcJd": 2457543.105863872,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.385733168891732e-10,
+   "rotationMasAtUtcJd": 2465042.232975761,
+   "to": "TEME",
+   "velocityMS": 5.084229945850415e-13,
+   "velocityMSAtUtcJd": 2447974.687214397,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "GCRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006275384424e-8,
+   "epochOverloadPositionMAtUtcJd": 2454463.8247351055,
+   "epochOverloadVelocityMS": 2.2737367544323206e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463787.508103297,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0.0004651264920916092,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.421893716239334e-9,
+    "gpsM": 4.67518979036743e-9,
+    "leoM": 1.193112835094568e-9
+   },
+   "positionM": 1.6660006275384424e-8,
+   "positionMAtUtcJd": 2454463.8247351055,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6307496847836644e-8,
+   "rotationMasAtUtcJd": 2464899.775130856,
+   "to": "ITRF",
+   "velocityMS": 2.2737367544323206e-12,
+   "velocityMSAtUtcJd": 2463787.508103297,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "J2000",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006275384424e-8,
+   "epochOverloadPositionMAtUtcJd": 2454463.8247351055,
+   "epochOverloadVelocityMS": 2.2737367544323206e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463787.508103297,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0.0004651264920916092,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.421893716239334e-9,
+    "gpsM": 4.67518979036743e-9,
+    "leoM": 1.193112835094568e-9
+   },
+   "positionM": 1.6660006275384424e-8,
+   "positionMAtUtcJd": 2454463.8247351055,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6307496847836644e-8,
+   "rotationMasAtUtcJd": 2464899.775130856,
+   "to": "ECEF",
+   "velocityMS": 2.2737367544323206e-12,
+   "velocityMSAtUtcJd": 2463787.508103297,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006275384424e-8,
+   "epochOverloadPositionMAtUtcJd": 2454463.8247351055,
+   "epochOverloadVelocityMS": 2.2737367544323206e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463787.508103297,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0.0004651264920916092,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.421893716239334e-9,
+    "gpsM": 4.67518979036743e-9,
+    "leoM": 1.193112835094568e-9
+   },
+   "positionM": 1.6660006275384424e-8,
+   "positionMAtUtcJd": 2454463.8247351055,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6307496847836644e-8,
+   "rotationMasAtUtcJd": 2464899.775130856,
+   "to": "PEF",
+   "velocityMS": 2.2737367544323206e-12,
+   "velocityMSAtUtcJd": 2463787.508103297,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0.000890341167642415,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "TOD",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "J2000",
+   "met": true,
+   "neglectedRatesMS": 0.00032582271002671404,
+   "neglectedRatesMSAtUtcJd": 2466147.1944711786,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "MOD",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 2.242921773119326e-8,
+   "epochOverloadPositionMAtUtcJd": 2456781.5042968853,
+   "epochOverloadVelocityMS": 3.749943669636968e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463703.494500739,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0.0000036886842113679472,
+   "neglectedRatesMSAtUtcJd": 2459223.3778863437,
+   "positionBounds": {
+    "geoM": 9.313996488878737e-9,
+    "gpsM": 5.867060747184618e-9,
+    "leoM": 1.4972794251408023e-9
+   },
+   "positionM": 2.242921773119326e-8,
+   "positionMAtUtcJd": 2456781.5042968853,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 4.556355979886972e-8,
+   "rotationMasAtUtcJd": 2457347.6829176634,
+   "to": "TEME",
+   "velocityMS": 3.749943669636968e-12,
+   "velocityMSAtUtcJd": 2463703.494500739,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.666000468656264e-8,
+   "epochOverloadPositionMAtUtcJd": 2455636.3623831524,
+   "epochOverloadVelocityMS": 2.728486418282439e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2461659.7723245723,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0.0004593672877839476,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.718629667440345e-9,
+    "gpsM": 4.862109320952258e-9,
+    "leoM": 1.2408148752406391e-9
+   },
+   "positionM": 1.666000468656264e-8,
+   "positionMAtUtcJd": 2455636.3623831524,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.775911284030192e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "GCRF",
+   "velocityMS": 2.728486418282439e-12,
+   "velocityMSAtUtcJd": 2461659.7723245723,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "ITRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.666000468656264e-8,
+   "epochOverloadPositionMAtUtcJd": 2455636.3623831524,
+   "epochOverloadVelocityMS": 2.728486418282439e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2461659.7723245723,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0.0004593672877839476,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.718629667440345e-9,
+    "gpsM": 4.862109320952258e-9,
+    "leoM": 1.2408148752406391e-9
+   },
+   "positionM": 1.666000468656264e-8,
+   "positionMAtUtcJd": 2455636.3623831524,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.775911284030192e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "J2000",
+   "velocityMS": 2.728486418282439e-12,
+   "velocityMSAtUtcJd": 2461659.7723245723,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "ECEF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "PEF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.8626453736237252e-8,
+   "epochOverloadPositionMAtUtcJd": 2458284.61721449,
+   "epochOverloadVelocityMS": 2.876075472941809e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2453470.2725787875,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0.0005156024378973603,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 6.820947876734547e-9,
+    "gpsM": 4.29664275630398e-9,
+    "leoM": 1.0965072756884785e-9
+   },
+   "positionM": 1.8626453736237252e-8,
+   "positionMAtUtcJd": 2458284.61721449,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.336770277266681e-8,
+   "rotationMasAtUtcJd": 2450845.7607236183,
+   "to": "TOD",
+   "velocityMS": 2.876075472941809e-12,
+   "velocityMSAtUtcJd": 2453470.2725787875,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660044780313736e-8,
+   "epochOverloadPositionMAtUtcJd": 2465248.614213388,
+   "epochOverloadVelocityMS": 2.749717764901976e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463075.218875023,
+   "from": "ECEF",
+   "met": true,
+   "neglectedRatesMS": 0.00023312544177319546,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.562580407385621e-9,
+    "gpsM": 4.763810970787806e-9,
+    "leoM": 1.2157290437538684e-9
+   },
+   "positionM": 1.6660044780313736e-8,
+   "positionMAtUtcJd": 2465248.614213388,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6995728421963063e-8,
+   "rotationMasAtUtcJd": 2451742.514601822,
+   "to": "MOD",
+   "velocityMS": 2.749717764901976e-12,
+   "velocityMSAtUtcJd": 2463075.218875023,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 2.242921773119326e-8,
+   "epochOverloadPositionMAtUtcJd": 2456781.5042968853,
+   "epochOverloadVelocityMS": 3.749943669636968e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463703.494500739,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0.0000036886842113679472,
+   "neglectedRatesMSAtUtcJd": 2459223.3778863437,
+   "positionBounds": {
+    "geoM": 9.313996488878737e-9,
+    "gpsM": 5.867060747184618e-9,
+    "leoM": 1.4972794251408023e-9
+   },
+   "positionM": 2.242921773119326e-8,
+   "positionMAtUtcJd": 2456781.5042968853,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 4.556355979886972e-8,
+   "rotationMasAtUtcJd": 2457347.6829176634,
+   "to": "TEME",
+   "velocityMS": 3.749943669636968e-12,
+   "velocityMSAtUtcJd": 2463703.494500739,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.666000468656264e-8,
+   "epochOverloadPositionMAtUtcJd": 2455636.3623831524,
+   "epochOverloadVelocityMS": 2.728486418282439e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2461659.7723245723,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0.0004593672877839476,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.718629667440345e-9,
+    "gpsM": 4.862109320952258e-9,
+    "leoM": 1.2408148752406391e-9
+   },
+   "positionM": 1.666000468656264e-8,
+   "positionMAtUtcJd": 2455636.3623831524,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.775911284030192e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "GCRF",
+   "velocityMS": 2.728486418282439e-12,
+   "velocityMSAtUtcJd": 2461659.7723245723,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "ITRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.666000468656264e-8,
+   "epochOverloadPositionMAtUtcJd": 2455636.3623831524,
+   "epochOverloadVelocityMS": 2.728486418282439e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2461659.7723245723,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0.0004593672877839476,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.718629667440345e-9,
+    "gpsM": 4.862109320952258e-9,
+    "leoM": 1.2408148752406391e-9
+   },
+   "positionM": 1.666000468656264e-8,
+   "positionMAtUtcJd": 2455636.3623831524,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.775911284030192e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "J2000",
+   "velocityMS": 2.728486418282439e-12,
+   "velocityMSAtUtcJd": 2461659.7723245723,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "ECEF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "PEF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.8626453736237252e-8,
+   "epochOverloadPositionMAtUtcJd": 2458284.61721449,
+   "epochOverloadVelocityMS": 2.876075472941809e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2453470.2725787875,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0.0005156024378973603,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 6.820947876734547e-9,
+    "gpsM": 4.29664275630398e-9,
+    "leoM": 1.0965072756884785e-9
+   },
+   "positionM": 1.8626453736237252e-8,
+   "positionMAtUtcJd": 2458284.61721449,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.336770277266681e-8,
+   "rotationMasAtUtcJd": 2450845.7607236183,
+   "to": "TOD",
+   "velocityMS": 2.876075472941809e-12,
+   "velocityMSAtUtcJd": 2453470.2725787875,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660044780313736e-8,
+   "epochOverloadPositionMAtUtcJd": 2465248.614213388,
+   "epochOverloadVelocityMS": 2.749717764901976e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2463075.218875023,
+   "from": "PEF",
+   "met": true,
+   "neglectedRatesMS": 0.00023312544177319546,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.562580407385621e-9,
+    "gpsM": 4.763810970787806e-9,
+    "leoM": 1.2157290437538684e-9
+   },
+   "positionM": 1.6660044780313736e-8,
+   "positionMAtUtcJd": 2465248.614213388,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.6995728421963063e-8,
+   "rotationMasAtUtcJd": 2451742.514601822,
+   "to": "MOD",
+   "velocityMS": 2.749717764901976e-12,
+   "velocityMSAtUtcJd": 2463075.218875023,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 8.33000234328132e-9,
+   "epochOverloadPositionMAtUtcJd": 2448226.7280260497,
+   "epochOverloadVelocityMS": 9.374856803373542e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2448339.963743363,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.0005179620588412013,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.1037999718307336e-10,
+    "gpsM": 6.95304265489497e-11,
+    "leoM": 1.77442303018531e-11
+   },
+   "positionM": 8.33000234328132e-9,
+   "positionMAtUtcJd": 2448226.7280260497,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.399728900751911e-10,
+   "rotationMasAtUtcJd": 2466105.1876696134,
+   "to": "TEME",
+   "velocityMS": 9.374856803373542e-13,
+   "velocityMSAtUtcJd": 2448339.963743363,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.0008903412406192459,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "GCRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660036675143595e-8,
+   "epochOverloadPositionMAtUtcJd": 2462974.767828024,
+   "epochOverloadVelocityMS": 2.273736776257556e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2454916.767623678,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.0005156012782387556,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.2439143447803375e-9,
+    "gpsM": 4.563077252495798e-9,
+    "leoM": 1.1645016099021127e-9
+   },
+   "positionM": 1.6660036675143595e-8,
+   "positionMAtUtcJd": 2462974.767828024,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.543683152773263e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "ITRF",
+   "velocityMS": 2.273736776257556e-12,
+   "velocityMSAtUtcJd": 2454916.767623678,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.0008903412406192459,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "J2000",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660036675143595e-8,
+   "epochOverloadPositionMAtUtcJd": 2462974.767828024,
+   "epochOverloadVelocityMS": 2.273736776257556e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2454916.767623678,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.0005156012782387556,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.2439143447803375e-9,
+    "gpsM": 4.563077252495798e-9,
+    "leoM": 1.1645016099021127e-9
+   },
+   "positionM": 1.6660036675143595e-8,
+   "positionMAtUtcJd": 2462974.767828024,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.543683152773263e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "ECEF",
+   "velocityMS": 2.273736776257556e-12,
+   "velocityMSAtUtcJd": 2454916.767623678,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660036675143595e-8,
+   "epochOverloadPositionMAtUtcJd": 2462974.767828024,
+   "epochOverloadVelocityMS": 2.273736776257556e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2454916.767623678,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.0005156012782387556,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 7.2439143447803375e-9,
+    "gpsM": 4.563077252495798e-9,
+    "leoM": 1.1645016099021127e-9
+   },
+   "positionM": 1.6660036675143595e-8,
+   "positionMAtUtcJd": 2462974.767828024,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.543683152773263e-8,
+   "rotationMasAtUtcJd": 2452427.4080897137,
+   "to": "PEF",
+   "velocityMS": 2.273736776257556e-12,
+   "velocityMSAtUtcJd": 2454916.767623678,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "TOD",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 2.980232266958788e-8,
+   "epochOverloadPositionMAtUtcJd": 2448266.908437264,
+   "epochOverloadVelocityMS": 1.8189928107326956e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2459705.542904964,
+   "from": "TOD",
+   "met": true,
+   "neglectedRatesMS": 0.000564537384749605,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.0271213968520826e-10,
+    "gpsM": 6.47002995680724e-11,
+    "leoM": 1.6511577349903447e-11
+   },
+   "positionM": 2.980232266958788e-8,
+   "positionMAtUtcJd": 2448266.908437264,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.02462151902769e-10,
+   "rotationMasAtUtcJd": 2466092.402994269,
+   "to": "MOD",
+   "velocityMS": 1.8189928107326956e-12,
+   "velocityMSAtUtcJd": 2459705.542904964,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 8.33000234328132e-9,
+   "epochOverloadPositionMAtUtcJd": 2448168.2837806693,
+   "epochOverloadVelocityMS": 9.094947017729282e-13,
+   "epochOverloadVelocityMSAtUtcJd": 2452272.165567345,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.000233125355994792,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 1.100943799301842e-10,
+    "gpsM": 6.935051089457453e-11,
+    "leoM": 1.7698315657508234e-11
+   },
+   "positionM": 8.33000234328132e-9,
+   "positionMAtUtcJd": 2448168.2837806693,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.385756661448253e-10,
+   "rotationMasAtUtcJd": 2464713.4840979236,
+   "to": "TEME",
+   "velocityMS": 9.094947017729282e-13,
+   "velocityMSAtUtcJd": 2452272.165567345,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.0003258227518182628,
+   "neglectedRatesMSAtUtcJd": 2466154.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "GCRF",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006927049563e-8,
+   "epochOverloadPositionMAtUtcJd": 2458470.9082440273,
+   "epochOverloadVelocityMS": 2.2765771512355045e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2464280.6314100795,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.00023312525114335274,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.969355285153156e-9,
+    "gpsM": 5.020046081155346e-9,
+    "leoM": 1.2811204851048214e-9
+   },
+   "positionM": 1.6660006927049563e-8,
+   "positionMAtUtcJd": 2458470.9082440273,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.8985648805760654e-8,
+   "rotationMasAtUtcJd": 2457965.000249511,
+   "to": "ITRF",
+   "velocityMS": 2.2765771512355045e-12,
+   "velocityMSAtUtcJd": 2464280.6314100795,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.0003258227518182628,
+   "neglectedRatesMSAtUtcJd": 2466154.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "J2000",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006927049563e-8,
+   "epochOverloadPositionMAtUtcJd": 2458470.9082440273,
+   "epochOverloadVelocityMS": 2.2765771512355045e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2464280.6314100795,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.00023312525114335274,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.969355285153156e-9,
+    "gpsM": 5.020046081155346e-9,
+    "leoM": 1.2811204851048214e-9
+   },
+   "positionM": 1.6660006927049563e-8,
+   "positionMAtUtcJd": 2458470.9082440273,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.8985648805760654e-8,
+   "rotationMasAtUtcJd": 2457965.000249511,
+   "to": "ECEF",
+   "velocityMS": 2.2765771512355045e-12,
+   "velocityMSAtUtcJd": 2464280.6314100795,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 1.6660006927049563e-8,
+   "epochOverloadPositionMAtUtcJd": 2458470.9082440273,
+   "epochOverloadVelocityMS": 2.2765771512355045e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2464280.6314100795,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.00023312525114335274,
+   "neglectedRatesMSAtUtcJd": 2453380.779829647,
+   "positionBounds": {
+    "geoM": 7.969355285153156e-9,
+    "gpsM": 5.020046081155346e-9,
+    "leoM": 1.2811204851048214e-9
+   },
+   "positionM": 1.6660006927049563e-8,
+   "positionMAtUtcJd": 2458470.9082440273,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 3.8985648805760654e-8,
+   "rotationMasAtUtcJd": 2457965.000249511,
+   "to": "PEF",
+   "velocityMS": 2.2765771512355045e-12,
+   "velocityMSAtUtcJd": 2464280.6314100795,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 2.980232251693221e-8,
+   "epochOverloadPositionMAtUtcJd": 2448266.908437264,
+   "epochOverloadVelocityMS": 1.818994546352065e-12,
+   "epochOverloadVelocityMSAtUtcJd": 2459705.542904964,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0.0005645373373128681,
+   "neglectedRatesMSAtUtcJd": 2461398.599609973,
+   "positionBounds": {
+    "geoM": 1.0299739856984929e-10,
+    "gpsM": 6.48799894795794e-11,
+    "leoM": 1.655743438445587e-11
+   },
+   "positionM": 2.980232251693221e-8,
+   "positionMAtUtcJd": 2448266.908437264,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 5.038576227153274e-10,
+   "rotationMasAtUtcJd": 2466092.402994269,
+   "to": "TOD",
+   "velocityMS": 1.818994546352065e-12,
+   "velocityMSAtUtcJd": 2459705.542904964,
+   "velocityToleranceMS": 1e-9
+  },
+  {
+   "epochOverloadMatrixMas": 0,
+   "epochOverloadMatrixMasAtUtcJd": 2447892.5,
+   "epochOverloadPositionM": 0,
+   "epochOverloadPositionMAtUtcJd": 2447892.5,
+   "epochOverloadVelocityMS": 0,
+   "epochOverloadVelocityMSAtUtcJd": 2447892.5,
+   "from": "MOD",
+   "met": true,
+   "neglectedRatesMS": 0,
+   "neglectedRatesMSAtUtcJd": 2447892.5,
+   "positionBounds": {
+    "geoM": 0,
+    "gpsM": 0,
+    "leoM": 0
+   },
+   "positionM": 0,
+   "positionMAtUtcJd": 2447892.5,
+   "positionToleranceM": 0.000001,
+   "rotationMas": 0,
+   "rotationMasAtUtcJd": 2447892.5,
+   "to": "MOD",
+   "velocityMS": 0,
+   "velocityMSAtUtcJd": 2447892.5,
+   "velocityToleranceMS": 1e-9
+  }
+ ],
+ "velocityAxisDefect": {
+  "epochUtc": "2026-08-02T00:00:00.000",
+  "geoMS": 0,
+  "gpsMS": 0,
+  "leoMS": 0,
+  "poleSeparationArcsec": 536.599405649366
+ },
+ "compilerRounding": {
+  "native": "Apple clang -O2, default floating-point contraction (matches supplied pyerfa)",
+  "wasmNative": "Apple clang -O2 -ffp-contract=off (matches WASM noncontracted arithmetic)",
+  "uncontractedMaxPositionM": 0.0000024149826031619453,
+  "uncontractedMaxVelocityMS": 3.525743937072496e-10,
+  "uncontractedMeetsReferenceLimits": false,
+  "note": "Strict 1 um/1 nm/s reference limits apply to the normal native build; noncontracted WASM arithmetic has the separately reported ERFA polynomial rounding spread."
+ },
+ "hostLibmWasm": {
+  "maxPositionM": 7.450580596923828e-9,
+  "maxPositionMAtUtcJd": 2449718.882637527,
+  "met": false,
+  "rows": [
+   {
+    "differenceM": 0,
+    "jdUtc": 2447892.5,
+    "nativeM": [
+     -7692296.596118321,
+     -41456533.91002545,
+     -40012.91237740559
+    ],
+    "wasmM": [
+     -7692296.596118321,
+     -41456533.91002545,
+     -40012.91237740559
+    ]
+   },
+   {
+    "differenceM": 7.450580596923828e-9,
+    "jdUtc": 2449718.882637527,
+    "nativeM": [
+     -22114474.3661116,
+     35899399.376310684,
+     -19486.396195062858
+    ],
+    "wasmM": [
+     -22114474.3661116,
+     35899399.37631069,
+     -19486.396195062858
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2451545.265274793,
+    "nativeM": [
+     40485671.43985369,
+     -11778269.761677714,
+     -1128.8324635781712
+    ],
+    "wasmM": [
+     40485671.43985369,
+     -11778269.761677714,
+     -1128.8324635781712
+    ]
+   },
+   {
+    "differenceM": 3.725290298461914e-9,
+    "jdUtc": 2453371.647919326,
+    "nativeM": [
+     -37922096.64471867,
+     -18431804.640327428,
+     19888.648044213303
+    ],
+    "wasmM": [
+     -37922096.64471867,
+     -18431804.640327424,
+     19888.648044213303
+    ]
+   },
+   {
+    "differenceM": 7.450580596923828e-9,
+    "jdUtc": 2455198.0305514,
+    "nativeM": [
+     15747823.866417358,
+     39112932.4399733,
+     42322.656827136976
+    ],
+    "wasmM": [
+     15747823.866417358,
+     39112932.439973295,
+     42322.656827136976
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2457024.413187656,
+    "nativeM": [
+     14569459.119795663,
+     -39566959.27634779,
+     61857.65383398527
+    ],
+    "wasmM": [
+     14569459.119795663,
+     -39566959.27634779,
+     61857.65383398527
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2458850.795830705,
+    "nativeM": [
+     -37351703.18787888,
+     19561722.935695656,
+     80601.12019947729
+    ],
+    "wasmM": [
+     -37351703.18787888,
+     19561722.935695656,
+     80601.12019947729
+    ]
+   },
+   {
+    "differenceM": 2.9103830456733704e-11,
+    "jdUtc": 2460677.1784702274,
+    "nativeM": [
+     40820509.30714887,
+     10559012.848068641,
+     102466.42471475022
+    ],
+    "wasmM": [
+     40820509.30714887,
+     10559012.848068641,
+     102466.42471475025
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2462503.561107801,
+    "nativeM": [
+     -23180910.140577633,
+     -35219982.60094279,
+     124348.03034906225
+    ],
+    "wasmM": [
+     -23180910.140577633,
+     -35219982.60094279,
+     124348.03034906225
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2464329.9437406496,
+    "nativeM": [
+     -6446924.134112522,
+     41668140.288922064,
+     143128.82521308624
+    ],
+    "wasmM": [
+     -6446924.134112522,
+     41668140.288922064,
+     143128.82521308624
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2466154.5,
+    "nativeM": [
+     -7150104.123969603,
+     -41553180.4248155,
+     162601.93117920545
+    ],
+    "wasmM": [
+     -7150104.123969603,
+     -41553180.4248155,
+     162601.93117920545
+    ]
+   }
+  ],
+  "samples": 11
+ },
+ "wasmEcef": {
+  "maxPositionM": 0,
+  "met": true,
+  "rows": [
+   {
+    "differenceM": 0,
+    "jdUtc": 2447892.5,
+    "nativeM": [
+     -7692296.596118321,
+     -41456533.91002545,
+     -40012.91237740559
+    ],
+    "wasmM": [
+     -7692296.596118321,
+     -41456533.91002545,
+     -40012.91237740559
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2449718.882637527,
+    "nativeM": [
+     -22114474.3661116,
+     35899399.37631069,
+     -19486.396195062858
+    ],
+    "wasmM": [
+     -22114474.3661116,
+     35899399.37631069,
+     -19486.396195062858
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2451545.265274793,
+    "nativeM": [
+     40485671.43985369,
+     -11778269.761677714,
+     -1128.8324635781712
+    ],
+    "wasmM": [
+     40485671.43985369,
+     -11778269.761677714,
+     -1128.8324635781712
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2453371.647919326,
+    "nativeM": [
+     -37922096.64471867,
+     -18431804.640327424,
+     19888.648044213303
+    ],
+    "wasmM": [
+     -37922096.64471867,
+     -18431804.640327424,
+     19888.648044213303
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2455198.0305514,
+    "nativeM": [
+     15747823.866417358,
+     39112932.439973295,
+     42322.656827136976
+    ],
+    "wasmM": [
+     15747823.866417358,
+     39112932.439973295,
+     42322.656827136976
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2457024.413187656,
+    "nativeM": [
+     14569459.119795663,
+     -39566959.27634779,
+     61857.65383398527
+    ],
+    "wasmM": [
+     14569459.119795663,
+     -39566959.27634779,
+     61857.65383398527
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2458850.795830705,
+    "nativeM": [
+     -37351703.18787888,
+     19561722.935695656,
+     80601.12019947729
+    ],
+    "wasmM": [
+     -37351703.18787888,
+     19561722.935695656,
+     80601.12019947729
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2460677.1784702274,
+    "nativeM": [
+     40820509.30714887,
+     10559012.848068641,
+     102466.42471475025
+    ],
+    "wasmM": [
+     40820509.30714887,
+     10559012.848068641,
+     102466.42471475025
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2462503.561107801,
+    "nativeM": [
+     -23180910.140577633,
+     -35219982.60094279,
+     124348.03034906225
+    ],
+    "wasmM": [
+     -23180910.140577633,
+     -35219982.60094279,
+     124348.03034906225
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2464329.9437406496,
+    "nativeM": [
+     -6446924.134112522,
+     41668140.288922064,
+     143128.82521308624
+    ],
+    "wasmM": [
+     -6446924.134112522,
+     41668140.288922064,
+     143128.82521308624
+    ]
+   },
+   {
+    "differenceM": 0,
+    "jdUtc": 2466154.5,
+    "nativeM": [
+     -7150104.123969603,
+     -41553180.4248155,
+     162601.93117920545
+    ],
+    "wasmM": [
+     -7150104.123969603,
+     -41553180.4248155,
+     162601.93117920545
+    ]
+   }
+  ],
+  "samples": 11,
+  "nativeMath": "Provisioned WASM toolchain musl sin/cos and argument reduction, native C++, floating-point contraction disabled"
+ },
+ "tools": {
+  "pyerfa": "2.0.1.5",
+  "erfa": "2.0.1",
+  "sofa": "20231011",
+  "numpy": "2.5.4",
+  "wasmNativeMathSources": {
+   "src/math/sin.c": "24e53a9d85f196f66919cc19247be5480bb607ef38844b1a24bc47c4fe4974ef",
+   "src/math/cos.c": "3a74e054057d636fa494bdd76a53a40db5cee618264f6ab31cb0538ba63c6bda",
+   "src/math/__sin.c": "f3a37ef9bcfb8a2f9c809d8c7f1aa2c17c8c3319ad7fb2fe7c0a6284ea8859d2",
+   "src/math/__cos.c": "3f0f774aab60a18d7ef935ffdf121bcda17cbadabff14096c614da22e31a42c1",
+   "src/math/__rem_pio2.c": "938329e0939cd83ee2185a52154b41242f618d4a6df1b08395f344da33d4f1e6",
+   "src/math/__rem_pio2_large.c": "b97f19fb5951c83a0c10506fab35646caefde13bd03100ad2af55ef00af0b9fb",
+   "src/internal/libm.h": "8cb6cc4af4b96b92f5af9d4e20609c8b8456bded8908c3d58f5b8e8f37620f67",
+   "arch/generic/fp_arch.h": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "nativeCompiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.3.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+  "erfaAmalgamationSha256": "f2fb22c563c1ece8ccad09e25a8f36165b92ad2e4d18c9a5a10d2e4774e4a8ed",
+  "erfaFileCount": 248
+ },
+ "epochsSha256": "d52b035c4b2006a3829953e769c3b0f917f18c295a531b25d7c8acaed5ec6fbf",
+ "sources": {
+  "lib/coords.cpp": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677",
+  "lib/coords.h": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5",
+  "lib/coords_types.h": "097a94db3c2d8ff74adbb11651a2e7f66bbc9e076ba4f343d8e4e798edd7388f",
+  "lib/time_convert.cpp": "02a82cb7a9bb3f38cbfd3be3b25b32e073cd356df56f3965be0ce5ca0da5b7e6",
+  "lib/time_types.h": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76",
+  "tests/evidence/erfa-spice/classical-frames.cpp": "cc1d3f6ee035268a6d8f9f544ca8918d2a641e26c743ed82cc1cd3509de655e3",
+  "tests/evidence/erfa-spice/classical-frames-reference.py": "ea1eb0b6b9e419da580b4b314b56d39b7b00f6af80d87f76902a8fd221385b7f",
+  "tests/evidence/erfa-spice/check-classical-frames.mjs": "1dcbc2acc242de810b7b980e1f81bac70c3781aed576fc2f5c9e41308c45cbc3"
+ },
+ "moduleVersion": "1.4.0",
+ "moduleSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
+}

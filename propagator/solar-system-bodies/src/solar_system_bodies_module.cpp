@@ -58,6 +58,7 @@ enum Code : int32_t {
     ErrBadKernel = -11,       /* the bytes are not a kernel this module reads */
     ErrBadArgument = -12,
     ErrChainTooLong = -13,
+    ErrNoGM = -14,            /* no positive GM for the conic's center       */
 };
 
 inline const char* code_name(int32_t c) {
@@ -70,6 +71,7 @@ inline const char* code_name(int32_t c) {
         case ErrBadKernel: return "bad-kernel";
         case ErrBadArgument: return "bad-argument";
         case ErrChainTooLong: return "chain-too-long";
+        case ErrNoGM: return "no-gm";
         default: return "error";
     }
 }
@@ -309,6 +311,117 @@ inline bool gm_m3s2(int32_t id, double* out) {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Osculating two-body conics                                                 */
+/* ------------------------------------------------------------------------ */
+inline bool conic_gm(int32_t id, double* out) {
+    if (gm_m3s2(id, out)) return true;
+    /* A planet's system GM is the text kernel's fallback, never a moon's. */
+    return id >= 199 && id <= 999 && id % 100 == 99 && gm_m3s2(id / 100, out);
+}
+
+/* Universal functions U1=x(1-zS), U2=x^2 C, U3=x^3 S, z=beta*x^2.
+ * The Stumpff series avoids cancellation near the parabolic limit z=0; the
+ * half-angle forms avoid subtracting nearly equal cosines elsewhere. */
+inline void conic_universal(double beta, double x, double& u1, double& u2, double& u3) {
+    const double w = std::sqrt(std::fabs(beta)) * x;
+    if (w < 0.1) {
+        const double z = beta * x * x;
+        double c = 0.5, s = 1.0 / 6.0, tc = c, ts = s;
+        for (int k = 1; k <= 8; ++k) {
+            tc *= -z / ((2 * k + 1) * (2 * k + 2));
+            ts *= -z / ((2 * k + 2) * (2 * k + 3));
+            c += tc;
+            s += ts;
+        }
+        u1 = x * (1.0 - z * s);
+        u2 = x * x * c;
+        u3 = x * x * (x * s);
+    } else if (beta > 0.0) {
+        const double sh = std::sin(w / 2.0);
+        u1 = std::sin(w) / std::sqrt(beta);
+        u2 = 2.0 * sh * sh / beta;
+        u3 = (x - u1) / beta;
+    } else {
+        const double sh = std::sinh(w / 2.0);
+        u1 = std::sinh(w) / std::sqrt(-beta);
+        u2 = 2.0 * sh * sh / -beta;
+        u3 = (u1 - x) / -beta;
+    }
+}
+
+/* Universal-variable Kepler equation in units r0, sqrt(mu/r0), and
+ * sqrt(r0^3/mu). Its derivative is radius/r0 > 0, so a bracket protects
+ * Newton at all eccentricities. Reduce complete elliptic revolutions before
+ * solving, rather than accumulating phase error in a large anomaly. */
+inline int32_t conic_state(const double initial[6], double mu, double dt, double out[7]) {
+    const double r0 = std::hypot(std::hypot(initial[0], initial[1]), initial[2]);
+    if (!(r0 > 0.0) || !std::isfinite(r0) || !std::isfinite(dt)) return ErrBadArgument;
+    const double speed = std::sqrt(mu / r0), scale = r0 / speed;
+    double r[3], v[3], v2 = 0.0, eta = 0.0;
+    for (int c = 0; c < 3; ++c) {
+        r[c] = initial[c] / r0;
+        v[c] = initial[c + 3] / speed;
+        v2 += initial[c + 3] * initial[c + 3];
+        eta += r[c] * v[c];
+    }
+    /* Evaluate energy before the square-root velocity normalization so an
+     * exactly parabolic input does not acquire artificial binding energy. */
+    const double beta = 2.0 - v2 / (mu / r0);
+    out[6] = beta > 0.0 ? 2.0 * kPi * scale / (beta * std::sqrt(beta)) : std::nan("");
+    if (beta > 0.0 && std::isfinite(out[6])) dt = std::remainder(dt, out[6]);
+    if (dt == 0.0) {
+        std::memcpy(out, initial, 6 * sizeof(double));
+        return Ok;
+    }
+    const double direction = dt > 0.0 ? 1.0 : -1.0;
+    const double tau = std::fabs(dt) / scale, radial = direction * eta;
+    if (!std::isfinite(tau) || !std::isfinite(beta)) return ErrBadArgument;
+    auto evaluate = [&](double x, double& derivative) {
+        double u1, u2, u3;
+        conic_universal(beta, x, u1, u2, u3);
+        /* Hyperbolic overflow during bracket growth lies beyond the root. */
+        if (!std::isfinite(u3) || !std::isfinite(u2)) {
+            derivative = HUGE_VAL;
+            return HUGE_VAL;
+        }
+        derivative = 1.0 + radial * u1 + (1.0 - beta) * u2;
+        return x + radial * u2 + (1.0 - beta) * u3 - tau;
+    };
+    double lo = 0.0, hi = tau < 1.0 ? tau : 1.0, derivative;
+    for (int i = 0; evaluate(hi, derivative) < 0.0; ++i) {
+        if (i >= 1024 || !std::isfinite(hi *= 2.0)) return ErrBadArgument;
+    }
+    double x = hi / 2.0;
+    bool solved = false;
+    for (int i = 0; i < 512; ++i) {
+        const double residual = evaluate(x, derivative);
+        if (std::fabs(residual) <= 8.0e-15 * tau) { solved = true; break; }
+        if (residual > 0.0) hi = x;
+        else lo = x;
+        const double width = hi - lo;
+        if (width <= 8.0e-15 * hi) { x = lo + width / 2.0; solved = true; break; }
+        const double next = x - residual / derivative;
+        x = next > lo + 0.1 * width && next < hi - 0.1 * width ? next : lo + width / 2.0;
+    }
+    if (!solved) return ErrBadArgument;
+    double u1, u2, u3;
+    conic_universal(beta, x, u1, u2, u3);
+    u1 *= direction;
+    /* g/scale = U1 + eta*U2 avoids subtracting large, almost equal
+     * times (tau-U3) on long parabolic/hyperbolic arcs. */
+    double position[3];
+    for (int c = 0; c < 3; ++c) position[c] = (1.0 - u2) * r[c] + (u1 + eta * u2) * v[c];
+    const double radius = std::hypot(std::hypot(position[0], position[1]), position[2]);
+    if (!(radius > 0.0) || !std::isfinite(radius)) return ErrBadArgument;
+    for (int c = 0; c < 3; ++c) {
+        out[c] = r0 * position[c];
+        out[c + 3] = speed * (-u1 / radius * r[c] + (1.0 - u2 / radius) * v[c]);
+        if (!std::isfinite(out[c]) || !std::isfinite(out[c + 3])) return ErrBadArgument;
+    }
+    return Ok;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Rotation                                                                  */
 /* ------------------------------------------------------------------------ */
 inline void mat_mul(const double a[9], const double b[9], double out[9]) {
@@ -524,7 +637,11 @@ inline double magnitude(const BodyInfo& b, double r_au, double d_au, double alph
             return base + v10 + a * (7.944e-03 + a * 9.617e-05);
         }
         case PhotMoon:
-            return base + b.v10 + 0.0217 * a + 5.5e-9 * a * a * a * a;
+            // Krisciunas & Schaefer (1991), PASP 103:1033,
+            // "A Model of the Brightness of Moonlight", doi:10.1086/132921.
+            // Phase angle a is in degrees; retain V(1,0) and Sun-Moon /
+            // observer-Moon distances in au in the existing base term.
+            return base + b.v10 + 0.026 * std::fabs(a) + 4e-9 * a * a * a * a;
         case PhotHG:
             return hg_magnitude(b.v10, b.g, r_au, d_au, alpha_rad);
         case PhotLinear:
@@ -833,6 +950,29 @@ SSB_EXPORT("ssb_states") int32_t ssb_states(double et, const int32_t* ids, uint3
         }
     }
     return failed;
+}
+
+/* Freeze the geometric ephemeris at et0, then follow that two-body conic.
+ * out: ICRF m and m/s, followed by its bound period in seconds (NaN if open). */
+SSB_EXPORT("ssb_osculating_state") int32_t ssb_osculating_state(double et0, int32_t id, int32_t center,
+                                                               double et, double* out7) {
+    if (!out7 || !std::isfinite(et0) || !std::isfinite(et)) return ssb::ErrBadArgument;
+    double initial[6];
+    const int32_t code = ssb::state_m(id, center, et0, initial);
+    if (code != ssb::Ok) {
+        auto unknown = [et0](int32_t body) {
+            const ssb::Kernel* kernel;
+            const daf::Summary* segment;
+            return !ssb::find_body(body) && (body < 0 || body > 9) &&
+                   ssb::find_segment(body, et0, &kernel, &segment) == ssb::ErrNoEphemeris;
+        };
+        return code == ssb::ErrNoEphemeris && (unknown(id) || unknown(center)) ? ssb::ErrUnknownBody : code;
+    }
+    double center_gm, body_gm = 0.0;
+    if (!ssb::conic_gm(center, &center_gm) || !(center_gm > 0.0) || !std::isfinite(center_gm)) return ssb::ErrNoGM;
+    ssb::conic_gm(id, &body_gm);
+    if (!(body_gm >= 0.0) || !std::isfinite(body_gm + center_gm)) return ssb::ErrBadArgument;
+    return ssb::conic_state(initial, center_gm + body_gm, et - et0, out7);
 }
 
 /* ICRF -> body-fixed rotations (9 doubles, row-major) plus the spin rate

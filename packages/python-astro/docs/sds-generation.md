@@ -1,5 +1,7 @@
 # Reproducible Python FlatBuffer bindings
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 The wheel vendors generated output from ratified SDS **1.217.0**, Git commit
 `b76da41467e260c83b3432ba7f34a1eb05cc7ac7` (package metadata
 `1.217.0+1789398499674`). It does not require the stale PyPI SDS distribution.
@@ -61,18 +63,18 @@ recorded. The current SDK and SGP4's legacy schema both define
 `orbpro.propagator.StateVector` with incompatible layouts. They are generated
 into separate namespaces; neither is overwritten or silently aliased.
 
-## Missing HPOP schema source
+## Missing FFM schema source
 
-The name `orbpro.hpop.InvokeRequest` in HPOP's manifest is not backed by an
+The name `orbpro.ffm.InvokeRequest` in FFM's manifest is not backed by an
 existing `.fbs` in the module or SDK. The current compiled source
-`propagator/hpop/src/cpp/src/plugin_entrypoints.cpp` calls `invoke_json_request`
+`propagator/ffm/src/cpp/src/plugin_entrypoints.cpp` calls `invoke_json_request`
 in `plugin_runtime.cpp`; JS SDK tests and fixtures send that JSON payload inside
-PIV. Thus no `orbpro.hpop.InvokeRequest` Python class is invented. HPOP's Python
+PIV. Thus no `orbpro.ffm.InvokeRequest` Python class is invented. FFM's Python
 wrapper mirrors the actual existing artifact contract. Migrating that payload
 to a ratified typed schema is separate upstream work.
 
 `PropagatorTrajectorySegments_generated.h` also has no corresponding source in
-this checkout; its additional HPOP trajectory methods are not claimed as Python
+this checkout; its additional FFM trajectory methods are not claimed as Python
 wrappers here. No generated C++ file is reverse-engineered into a new schema.
 
 ## Generator checks

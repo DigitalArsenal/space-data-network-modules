@@ -27,7 +27,7 @@ add_executable(hp_validate test/validate.cpp)
 target_link_libraries(hp_validate PRIVATE higherpop)
 add_test(NAME validate COMMAND hp_validate)
 
-# Regularized-formulation self-tests (no hpop dependency).
+# Regularized-formulation self-tests (no ffm dependency).
 add_executable(hp_dromo test/dromo_test.cpp)
 target_link_libraries(hp_dromo PRIVATE higherpop)
 add_test(NAME dromo COMMAND hp_dromo)
@@ -82,19 +82,19 @@ target_link_libraries(hp_interplanetary PRIVATE higherpop higherpop_erfa)
 add_test(NAME interplanetary COMMAND hp_interplanetary)
 
 # --------------------------------------------------------------------------
-# Cross-validation against the sibling hpop plugin (optional).
-# Enable with -DHIGHERPOP_XCHECK_HPOP=ON. Requires hpop's lib/ sources and the
+# Cross-validation against the sibling ffm plugin (optional).
+# Enable with -DHIGHERPOP_XCHECK_FFM=ON. Requires ffm's lib/ sources and the
 # vendored NRLMSISE-00 to be compiled/linked; paths are relative to this repo.
-# match_accel.cpp / crosscheck_hpop.cpp include "force_models.h" from hpop.
+# match_accel.cpp / crosscheck_ffm.cpp include "force_models.h" from ffm.
 # --------------------------------------------------------------------------
-option(HIGHERPOP_XCHECK_HPOP "Build hpop cross-validation harnesses" OFF)
-if(HIGHERPOP_XCHECK_HPOP)
-  set(HPOP_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../propagator/hpop/lib")
+option(HIGHERPOP_XCHECK_FFM "Build ffm cross-validation harnesses" OFF)
+if(HIGHERPOP_XCHECK_FFM)
+  set(FFM_LIB "${CMAKE_CURRENT_SOURCE_DIR}/../propagator/ffm/lib")
   set(NRL "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/nrlmsise00")
-  file(GLOB HPOP_SRC "${HPOP_LIB}/*.cpp")
-  add_executable(hp_xcheck test/crosscheck_hpop.cpp ${HPOP_SRC}
+  file(GLOB FFM_SRC "${FFM_LIB}/*.cpp")
+  add_executable(hp_xcheck test/crosscheck_ffm.cpp ${FFM_SRC}
                  ${NRL}/nrlmsise-00.c ${NRL}/nrlmsise-00_data.c)
-  target_include_directories(hp_xcheck PRIVATE ${HPOP_LIB} ${NRL})
+  target_include_directories(hp_xcheck PRIVATE ${FFM_LIB} ${NRL})
   target_link_libraries(hp_xcheck PRIVATE higherpop)
-  add_test(NAME xcheck_hpop COMMAND hp_xcheck)
+  add_test(NAME xcheck_ffm COMMAND hp_xcheck)
 endif()

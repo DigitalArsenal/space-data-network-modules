@@ -18,20 +18,22 @@ Decade shards cut by tools/build_kernels.py (CSPICE_N0067, no refit) from:
 - `pck00011.tpc`: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc (sha256 3dff7b1dbeceaa01...)
 - `gm_de440.tpc`: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (sha256 924ddf4fb9ead9fe...)
 - `moon_de440_250416.tf`: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf (sha256 a47c71e9c9f33796...)
+- `bennu_v17.tpc` (OSIRIS-REx mission PCK): https://naif.jpl.nasa.gov/pub/naif/ORX/kernels/pck/bennu_v17.tpc (sha256 cdb4bc04f2869d32503db87bddd5a9ab8ea59b6ae91a39cd144e5d9e93339a0a)
+- `ryugu_v10.tpc` (Hayabusa2 mission PCK): https://naif.jpl.nasa.gov/pub/naif/pds/pds4/hyb2/hyb2_spice/spice_kernels/pck/ryugu_v10.tpc (sha256 5c06e668bbc96fdd1c7a5e027543a5b8f8b70d75bc2dbb5e171b24389d0db10c)
 
-Credit: Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015. Licence: NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF node of the Planetary Data System.
+Credit: Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015; OSIRIS-REx Bennu and Hayabusa2 Ryugu mission kernels, NASA/JPL NAIF Planetary Data System. License: NASA/JPL NAIF generic kernels, JPL SSD ephemerides, and OSIRIS-REx and Hayabusa2 mission kernels are distributed freely by NASA/JPL NAIF and the NAIF node of the Planetary Data System.
 
 ## Imagery (imagery/<NAIF id>/)
 
 Public-domain global mosaics, planetocentric latitude converted to planetodetic on the PCK ellipsoid, geographic tiling 2 x 1 at level 0, by tools/build-imagery.py.
 
-| NAIF | Levels | Credit | Licence | Source |
+| NAIF | Levels | Credit | License | Source |
 | --- | --- | --- | --- | --- |
 | 199 | 0-5 | NASA/JHUAPL/CIW MESSENGER MDIS, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mercury_MESSENGER_MDIS_Basemap_MD3Color_Mosaic_Global_64ppd.tif |
 | 299 | 0-4 | NASA/JPL Magellan, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif |
 | 301 | 0-5 | NASA/GSFC/Arizona State University LRO LROC WAC, NASA Scientific Visualization Studio (CGI Moon Kit) | public domain (NASA SVS) | https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_16k.tif |
 | 401 | 0-4 | NASA/JPL Viking Orbiter, USGS Astrogeology (DLR control network) | public domain (NASA Viking mission data, USGS Astrogeology) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Phobos_Viking_Mosaic_40ppd_DLRcontrol.tif |
-| 499 | 0-5 | NASA/JPL Viking Orbiter, USGS Astrogeology MDIM colour | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars_Viking_ClrMosaic_global_925m.tif |
+| 499 | 0-5 | NASA/JPL Viking Orbiter, USGS Astrogeology MDIM color | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars_Viking_ClrMosaic_global_925m.tif |
 | 501 | 0-4 | NASA/JPL Galileo SSI and Voyager, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif |
 | 502 | 0-4 | NASA/JPL Galileo SSI and Voyager, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Europa_Voyager_GalileoSSI_global_mosaic_500m.tif |
 | 503 | 0-4 | NASA/JPL Galileo SSI and Voyager, USGS Astrogeology | public domain (USGS Astrogeology, NASA) | https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif |

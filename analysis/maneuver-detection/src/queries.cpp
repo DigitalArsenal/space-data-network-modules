@@ -3,7 +3,7 @@
 // The module holds no propagator. Given element sets ($OMM), it asks for each
 // set's trajectory, from its own epoch's neighbours two sets earlier to two
 // sets later, on `propagation_requests`; the host routes every query to the
-// propagator plugged into the caller's `propagator_port_id` (SGP4, HPOP, an
+// propagator plugged into the caller's `propagator_port_id` (SGP4, FFM, an
 // ABI provider) and replays the request with the answers on `propagation`
 // ($OEM, one data block per query, in query order). The queries are a pure
 // function of the element sets and options, so the replay is stateless and

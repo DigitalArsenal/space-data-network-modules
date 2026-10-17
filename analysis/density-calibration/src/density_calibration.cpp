@@ -16,14 +16,14 @@
 // method. Times are Unix milliseconds (UTC) on the wire and UTC MJD inside:
 // mjd = (ms + 40587 * 86400000) / 86400000, one rounding. No JSON anywhere.
 //
-// The density is propagator/hpop's JB2008 (lib/jb2008.h, Orekit 13.1's port,
-// itself a port of Space Environment Technologies' Fortran), driven as hpop
+// The density is propagator/ffm's JB2008 (lib/jb2008.h, Orekit 13.1's port,
+// itself a port of Space Environment Technologies' Fortran), driven as ffm
 // drives it: SOLFSMY values at 12 UT of each DATE interpolated linearly at
 // the instant less JB2008's lags (1 day F10 and S10, 2 M10, 5 Y10), DSTDTC
 // linear between hourly values; the Sun's and the point's Earth-fixed
 // longitude and latitude. The correction dT(lat, h) is added to DSTDTC, so
 // it adds to the local exospheric temperature exactly as JB2008's own
-// geomagnetic term does; a constant dT is therefore the same model as hpop
+// geomagnetic term does; a constant dT is therefore the same model as ffm
 // with every DTC value raised by dT.
 //
 // dT(lat, h) = sum over l = 0..L, m = 0..l of P_l^m(sin lat) (a_lm cos mh +
@@ -41,7 +41,7 @@
 // NRLMSISE-00: `evaluate` and `drag_work` also take ATMOSPHERE NRLMSIS00E with
 // SPACE_WEATHER ($SPW rows: DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), the real
 // model through the public-domain Brodowski C port in third_party/nrlmsise00
-// (gtd7d: total mass density with anomalous oxygen), driven as propagator/hpop
+// (gtd7d: total mass density with anomalous oxygen), driven as propagator/ffm
 // drives it (src/cpp/src/prw_execution.cpp SpaceWeatherTable): at a UTC instant on
 // day d, F10.7 is the observed flux of day d-1, F10.7a the 81-day centred mean of
 // day d, Ap the daily Ap of day d (all switches 1: the daily-Ap form), local solar
@@ -132,7 +132,7 @@ fb::Offset<fb::Vector<uint32_t>> indices(fb::FlatBufferBuilder& b, const std::ve
 bool finite(double x) { return std::isfinite(x); }
 bool positive(double x) { return std::isfinite(x) && x > 0; }
 
-// ── JB2008 drivers, read as propagator/hpop's JB2008IndicesTable reads PRW
+// ── JB2008 drivers, read as propagator/ffm's JB2008IndicesTable reads PRW
 // JB2008_INDICES rows (src/cpp/src/prw_execution.cpp) ──
 class Jb2008Table {
  public:
@@ -186,7 +186,7 @@ class Jb2008Table {
   }
 };
 
-// ── NRLMSISE-00 drivers, read as propagator/hpop's SpaceWeatherTable reads $SPW rows ──
+// ── NRLMSISE-00 drivers, read as propagator/ffm's SpaceWeatherTable reads $SPW rows ──
 class Nrlmsise00Table {
  public:
   struct Day { double f107Obs, f107ObsCentred81, apDaily; };
@@ -237,7 +237,7 @@ fb::Offset<ATM> atmosphere_record(fb::FlatBufferBuilder& b, bool msis) {
 }
 
 // The mass density (kg/m^3) of NRLMSISE-00 at a geodetic point and a UTC MJD, with the inputs of Nrlmsise00Table::at and
-// hpop's switches (0 for the output units, 1 for every variation: the daily-Ap form).
+// ffm's switches (0 for the output units, 1 for every variation: the daily-Ap form).
 double msis_density(double mjd, double latRad, double lonRad, double altM, double f107, double f107a, double ap, double* lstHours = nullptr) {
   int year = 0, month = 0, dayOfMonth = 0;
   double fraction = 0;
@@ -395,7 +395,7 @@ std::string load_points(const DCL* request, std::vector<Point>& points) {
     Point& p = points[i];
     p.mjd = mjd_of_ms(pts->TIME_MS()->Get(i));
     p.lat = pts->LATITUDE_DEG()->Get(i) * kDeg;
-    // JB2008 expects longitudes in [-pi, pi], as hpop's geodetic conversion gives them.
+    // JB2008 expects longitudes in [-pi, pi], as ffm's geodetic conversion gives them.
     p.lon = std::remainder(pts->LONGITUDE_DEG()->Get(i) * kDeg, 2 * kPi);
     p.altM = pts->ALTITUDE_KM()->Get(i) * 1000.0;
     if (msis) {
@@ -1767,9 +1767,9 @@ extern "C" int calibrate_decay() {
 // Earth, the Jacobi integral of the geopotential,
 //   C = 1/2 |v|^2 + U(r_ef) - omega . (r x v),
 // with U the EGM2008 potential energy to a given degree and order (the
-// central term -GM/r with the caller's GM, as propagator/hpop takes
+// central term -GM/r with the caller's GM, as propagator/ffm takes
 // GRAVITATIONAL_PARAMETER, and the harmonics n >= 2 with EGM2008's own GM
-// and radius, as hpop reads its embedded field, lib/egm2008_data.h), r_ef the
+// and radius, as ffm reads its embedded field, lib/egm2008_data.h), r_ef the
 // position in IAU 2006/2000A Earth-fixed axes (ERFA: CIO-based, Earth
 // rotation angle from UT1 = UTC + dut1, polar motion when given) and omega
 // the Earth's rotation vector in GCRF. A static field in uniformly rotating

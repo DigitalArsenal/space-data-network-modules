@@ -1,7 +1,7 @@
 // SDS EOP invoke adapter. Inlined after generated bindings and axis_engine.hpp.
 // No new schema: one row, several frames, or a size-prefixed EOP stream. The
 // reading and the interpolation rule are eop_series.hpp's, shared with
-// propagator/hpop.
+// propagator/ffm.
 #include "eop_series.hpp"
 #include <string>
 #include <vector>

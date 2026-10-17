@@ -1,9 +1,11 @@
 # Maneuver detection
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 Maneuver detection over any pluggable propagator. The module holds no
 propagator: it asks for each element set's trajectory on a query port, the
 host routes the query to whatever propagator is plugged in (SGP4, full-force
-HPOP, any provider of the propagator ABI), and the module compares the
+FFM, any provider of the propagator ABI), and the module compares the
 trajectories it gets back. It also checks planned maneuvers against operator
 ephemerides and scores detections against truth. Every output is
 byte-identical in the browser, WasmEdge and Docker WasmEdge.
@@ -77,7 +79,7 @@ Host adapters used in the study (`study/lib/`), as examples:
 | --- | --- |
 | `propagator/sgp4` | `propagate_ephemeris`, TEME, one call per object |
 | `propagator/keplerian-reference` | the propagator ABI (`plugin_init_omm`, `plugin_propagate`), Earth-fixed metres written as km |
-| `propagator/hpop` 1.3.0 | `analysis/epoch-state` GCRF state at each set's epoch, then a full-force execution request forwards to the span's end and backwards to its start, sampled at the query's times |
+| `propagator/ffm` 1.3.0 | `analysis/epoch-state` GCRF state at each set's epoch, then a full-force execution request forwards to the span's end and backwards to its start, sampled at the query's times |
 
 ### Detectors
 

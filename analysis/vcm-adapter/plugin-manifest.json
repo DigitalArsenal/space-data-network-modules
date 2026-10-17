@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
   "name": "SDN VCM Adapter",
   "version": "0.3.0",
-  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/hpop PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the integrator settings as user-defined parameters). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Typed contracts 1.0: every port one FlatBuffer type. The VCM text travels as a $FIL (CONTENT the text, MEDIA_TYPE text/plain); the read options, the ocm header and the write options are node config (plugin.getConfig, one ModuleConfig) under the tables \"read\", \"header\" and \"write\"; read reports as a FlowNotice Info. Pure compute apart from plugin.getConfig; output bytes depend only on input bytes and config.",
+  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/ffm PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the integrator settings as user-defined parameters). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Typed contracts 1.0: every port one FlatBuffer type. The VCM text travels as a $FIL (CONTENT the text, MEDIA_TYPE text/plain); the read options, the ocm header and the write options are node config (plugin.getConfig, one ModuleConfig) under the tables \"read\", \"header\" and \"write\"; read reports as a FlowNotice Info. Pure compute apart from plugin.getConfig; output bytes depend only on input bytes and config.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -59,7 +59,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $PRW EXECUTION_REQUEST for propagator/hpop's request port."
+              "description": "Size-prefixed $PRW EXECUTION_REQUEST for propagator/ffm's request port."
             }
           ],
           "minStreams": 1,
@@ -86,7 +86,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Earth orientation for propagator/hpop's earth_orientation port."
+          "description": "Earth orientation for propagator/ffm's earth_orientation port."
         },
         {
           "portId": "eop",
@@ -173,7 +173,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $PRW EXECUTION_RESULT from propagator/hpop; FINAL_SAMPLE in EME2000, with a covariance over the state and DYNAMIC_PARAMETERS when one is to be written."
+              "description": "Size-prefixed $PRW EXECUTION_RESULT from propagator/ffm; FINAL_SAMPLE in EME2000, with a covariance over the state and DYNAMIC_PARAMETERS when one is to be written."
             }
           ],
           "minStreams": 1,

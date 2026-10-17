@@ -4,7 +4,7 @@
 /**
  * EphemerisSource — Propagator-agnostic state provider
  *
- * Any propagator (SGP4, HPOP, tabulated OEM, external API) implements
+ * Any propagator (SGP4, FFM, tabulated OEM, external API) implements
  * this interface. The conjunction assessment engine only sees states.
  *
  * Implementations:

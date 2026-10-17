@@ -7,12 +7,12 @@
 // resident index. One object SGP4 cannot propagate on that day is excluded
 // for the whole span: none of its earlier conjunctions survive.
 //
-// HPOP: fixtures/hpop-ppe/crossing-orbits.json (propagator/hpop
+// FFM: fixtures/ffm-ppe/crossing-orbits.json (propagator/ffm
 // conjunction-screening PPE, GCRF, TDB), 2026-09-30T23:45Z UTC for 0.11 day,
 // against four windows. Each window loads only the PPE intervals within 20
 // minutes of it, forwarded as the size-prefixed $PRW DESCRIBE_RESULT records a
 // propagator exports (built by flatc-wasm's generateBinary, which runs flatc
-// --size-prefixed, as HPOP's FinishSizePrefixed builds them), through
+// --size-prefixed, as FFM's FinishSizePrefixed builds them), through
 // prepare_screening_index's trajectories port; the request's sources then
 // carry identity only.
 //
@@ -34,11 +34,11 @@ import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from '
 const fixture = (name) => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
 const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json');
 const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
-// An invented element set: the HPOP test only needs some SGP4 source to mix with PRW ones.
+// An invented element set: the FFM test only needs some SGP4 source to mix with PRW ones.
 const SYNTHETIC_GP = { OBJECT_NAME: 'SYNTHETIC-GP', OBJECT_ID: '2026-999A', EPOCH: '2026-07-06T00:00:00Z', MEAN_MOTION: 15.3, ECCENTRICITY: 0.0002,
   INCLINATION: 53, RA_OF_ASC_NODE: 100, ARG_OF_PERICENTER: 90, MEAN_ANOMALY: 0, EPHEMERIS_TYPE: 0, CLASSIFICATION_TYPE: 'U', NORAD_CAT_ID: 99999,
   ELEMENT_SET_NO: 999, REV_AT_EPOCH: 1, BSTAR: 0.0001, MEAN_MOTION_DOT: 0, MEAN_MOTION_DDOT: 0 };
-const HPOP = fixture('hpop-ppe/crossing-orbits.json');
+const FFM = fixture('ffm-ppe/crossing-orbits.json');
 const STEP_S = 60, THRESHOLD_KM = 5;
 
 const flatc = await initCqrFlatc();
@@ -105,21 +105,21 @@ test('SGP4: four 6 h windows report the one-day screen, exclusion included', { s
   }
 });
 
-test('HPOP: four windows of forwarded PRW trajectories report the single-window screen', async () => {
+test('FFM: four windows of forwarded PRW trajectories report the single-window screen', async () => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const startJd = 2461314.5 - 15 / 1440, days = 0.11;
-    const identity = HPOP.sources.map(({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }) => ({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }));
+    const identity = FFM.sources.map(({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }) => ({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }));
     // A propagator's export for one window: its intervals within 20 minutes
     // of the window (TDB epochs; 20 minutes dwarfs TDB - UTC).
     const tdbJd = (iso) => Date.parse(`${iso.slice(0, 23)}Z`) / 86400000 + 2440587.5;
-    const exportWindow = (w) => HPOP.sources.map((s) => {
+    const exportWindow = (w) => FFM.sources.map((s) => {
       const margin = 20 / 1440;
       const records = s.POLYNOMIAL_EPHEMERIS.POSITION_RECORDS.filter((r) =>
         tdbJd(r.EPOCH_MID) + r.EPOCH_HALF_SPAN / 86400 >= w.startJd - margin &&
         tdbJd(r.EPOCH_MID) - r.EPOCH_HALF_SPAN / 86400 <= w.startJd + w.durationDays + margin);
       return flatc.generateBinary(publishedSchema('PRW'), JSON.stringify({ DESCRIBE_RESULT: {
-        INSTANCE: { MODULE_ID: 'com.orbpro.hpop', INSTANCE_ID: 'fixture', GENERATION: 1 }, SEGMENT_SET_HANDLE: 1,
+        INSTANCE: { MODULE_ID: 'com.orbpro.ffm', INSTANCE_ID: 'fixture', GENERATION: 1 }, SEGMENT_SET_HANDLE: 1,
         SOURCES: [{ SOURCE_HANDLE: s.SOURCE_HANDLE, OBJECT_ID: s.OBJECT_ID, EPHEMERIS: { ...s.POLYNOMIAL_EPHEMERIS, POSITION_RECORDS: records } }] } }), { sizePrefix: true });
     });
 
@@ -148,20 +148,20 @@ test('HPOP: four windows of forwarded PRW trajectories report the single-window 
 // Earth, or a non-finite coefficient) is refused by prepare_screening_index
 // with a named error that names the object; the module does not trap, and the
 // same instance prepares the intact trajectories afterwards.
-test('HPOP: a corrupt trajectory is refused by name, without trapping', async () => {
+test('FFM: a corrupt trajectory is refused by name, without trapping', async () => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
-    const identity = HPOP.sources.map(({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }) => ({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }));
-    const frames = (edit) => HPOP.sources.map((s, i) => {
+    const identity = FFM.sources.map(({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }) => ({ OBJECT_ID, OBJECT_NAME, NORAD_CATALOG_ID, SOURCE_HANDLE }));
+    const frames = (edit) => FFM.sources.map((s, i) => {
       const records = s.POLYNOMIAL_EPHEMERIS.POSITION_RECORDS.slice(0, 6).map((r) => ({ ...r }));
       if (i === 1) edit(records[3]);
       const json = JSON.stringify({ DESCRIBE_RESULT: {
-        INSTANCE: { MODULE_ID: 'com.orbpro.hpop', INSTANCE_ID: 'fixture', GENERATION: 1 }, SEGMENT_SET_HANDLE: 1,
+        INSTANCE: { MODULE_ID: 'com.orbpro.ffm', INSTANCE_ID: 'fixture', GENERATION: 1 }, SEGMENT_SET_HANDLE: 1,
         SOURCES: [{ SOURCE_HANDLE: s.SOURCE_HANDLE, OBJECT_ID: s.OBJECT_ID, EPHEMERIS: { ...s.POLYNOMIAL_EPHEMERIS, POSITION_RECORDS: records } }] } });
       return flatc.generateBinary(publishedSchema('PRW'), json.replace('123456789.25', 'nan'), { sizePrefix: true });
     });
     const scale = (k) => (r) => { for (const axis of ['POS_COEFF_X', 'POS_COEFF_Y', 'POS_COEFF_Z']) r[axis] = r[axis].map((c) => c * k); };
-    const named = new RegExp(`Source ${HPOP.sources[1].OBJECT_ID} \\(NORAD ${HPOP.sources[1].NORAD_CATALOG_ID}\\) \\[handle ${HPOP.sources[1].SOURCE_HANDLE}\\]: `);
+    const named = new RegExp(`Source ${FFM.sources[1].OBJECT_ID} \\(NORAD ${FFM.sources[1].NORAD_CATALOG_ID}\\) \\[handle ${FFM.sources[1].SOURCE_HANDLE}\\]: `);
     for (const [label, edit, code] of [
       ['beyond 1e6 km', scale(1e3), 'invalid-trajectory'],
       ['inside the Earth', scale(0.5), 'invalid-trajectory'],

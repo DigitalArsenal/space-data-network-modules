@@ -8,7 +8,7 @@
 //     E'  = L?  -> we integrate energy from power:  dE/ds = r (v . P)
 // where ' = d/ds, P is the perturbing acceleration, and L(u) is the KS matrix.
 //
-// Unlike hpop's `stiefelStep` (a fixed-step Verlet that recomputes energy each
+// Unlike ffm's `stiefelStep` (a fixed-step Verlet that recomputes energy each
 // step), higherpop integrates the *regularized state* directly with the shared
 // adaptive DP54 stepper. State layout (N=10):
 //     [ u0..u3, up0..up3, t, E ]

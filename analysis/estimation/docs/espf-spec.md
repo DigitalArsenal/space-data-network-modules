@@ -1,5 +1,7 @@
 # TEAG and the Epistemic Support-Point Filter: implementation specification
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 This module implements the Theory of Epistemic Abductive Geometry (TEAG)
 primitives and the Epistemic Support-Point Filter (ESPF) from their published
 papers, independently of the authors' code (none is public:
@@ -78,7 +80,7 @@ regenerate), OPT's selection and controller, and the v3 statements.
    uniform", TEAG §5.1); σ = σ₀ = 1.
 2. **Predict** (HJ Thm. 1 (i), eq. 26: transport with π unchanged). Each χ_j is
    propagated to the observation epoch through the inverted port (the caller
-   answers with propagator/hpop at full force).
+   answers with propagator/ffm at full force).
 3. **Jaynesian expansion** (TEAG §3.1; E25 §7.2–7.3; OPT §1.1): the cloud's
    MVEE shape S_f is replaced by the outer bound of S_f ⊕ k_w²Q by an affine
    stretch about its centre (G5).
@@ -249,7 +251,7 @@ not collision probabilities; finite supports screen only what they sample.
 | ID | Claim | Reference | Where | Result |
 | --- | --- | --- | --- | --- |
 | T1 (a) | Scalar front, well width and medioid | HJ §4 eqs. 8–14 | `tests/teag.test.mjs` | exact on dyadic cases; one grid step otherwise |
-| T2 (b) | E25 Appendix B: the Gaussian limit reproduces the UKF | the module's UKF (itself against Orekit 13.1), full-force HPOP answers | `tests/espf.test.mjs` | state 1.6e-14, covariance 1.9e-11 relative over 12 epochs |
+| T2 (b) | E25 Appendix B: the Gaussian limit reproduces the UKF | the module's UKF (itself against Orekit 13.1), full-force FFM answers | `tests/espf.test.mjs` | state 1.6e-14, covariance 1.9e-11 relative over 12 epochs |
 | T3 (c) | Idempotence, Popperian monotonicity, α-cut intersection (TEAG Prop. 3.8), N(A) = 1 − Π(Aᶜ), maxitivity; the G1 counterexample | possibility-theory identities | `tests/teag.test.mjs` | exact |
 | T4 (d) | MVEE | analytic (box, simplex, ellipse, Smolyak grids) and an independent numpy implementation | `tests/teag.test.mjs`, `tests/mvee.test.mjs`, `tests/fixtures/mvee_numpy_reference.py` | about 1e-12 against numpy |
 | T5 (e) | SDK compliance; tri-runtime byte parity | SDK validators; Chrome, native WasmEdge, Docker WasmEdge | `tests/sdk_compat.test.mjs`, `tests/parity.mjs` | see `conformance/` |

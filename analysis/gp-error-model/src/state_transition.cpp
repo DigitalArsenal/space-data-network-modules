@@ -99,7 +99,7 @@ Mat6 symplectic_inverse(const Mat6& p) {
 // Block-diagonal rotation into the RTN axes of (r, v): rows R, T, N.
 Mat6 rtn_block(const double r[3], const double v[3]) {
   double axes[3][3];
-  hpopcal::rtn_axes(r, v, axes);
+  ffmcal::rtn_axes(r, v, axes);
   Mat6 b{};
   for (int blk = 0; blk < 2; ++blk)
     for (int i = 0; i < 3; ++i)

@@ -143,7 +143,7 @@ test("DE440 metadata is described without materializing coefficient records", {
     assert.equal(read.statusCode, 400);
     assert.equal(read.errorCode, "unsupported-spk-materialization");
     assert.match(read.errorMessage, /Chebyshev coefficients/);
-    assert.match(read.errorMessage, /HPOP kernel input/);
+    assert.match(read.errorMessage, /FFM kernel input/);
   } finally {
     await h.destroy?.();
   }

@@ -1,5 +1,5 @@
 // A simulated tracking campaign through the modules, for fit_batch's
-// measurement parameters: propagator/hpop truth (GCRF) -> foundation/frames
+// measurement parameters: propagator/ffm truth (GCRF) -> foundation/frames
 // (ITRF states) -> analysis/access (passes above 10 deg) ->
 // analysis/observation-simulator (radar $RDO ranges, passive RF $RFO
 // frequencies) -> analysis/association (each observation's sensor position and
@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing/browser';
 import { harness } from './batch-fit-fixtures.mjs';
-import { hpopRun, isoOf } from './batch-fit-v2-lib.mjs';
+import { ffmRun, isoOf } from './batch-fit-v2-lib.mjs';
 
 const sdsRoot = path.dirname(createRequire(new URL('../../association/package.json', import.meta.url)).resolve('spacedatastandards.org/package.json'));
 const req = createRequire(path.join(sdsRoot, 'package.json'));
@@ -24,7 +24,7 @@ const associationHarness = () => createBrowserModuleHarness({
 const lib = async (code) => import(pathToFileURL(path.join(sdsRoot, `lib/js/${code}/main.js`)));
 const [ACW, RDO, RFO, OEM, FRM, ASG] = await Promise.all(['ACW', 'RDO', 'RFO', 'OEM', 'FRM', 'ASG'].map(lib));
 
-const EOP_FIXTURE = JSON.parse(fs.readFileSync(new URL('../../../propagator/hpop/tests/fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
+const EOP_FIXTURE = JSON.parse(fs.readFileSync(new URL('../../../propagator/ffm/tests/fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
 const EOP_STREAM = Buffer.from(EOP_FIXTURE.payloadBase64, 'base64');
 const ACW_TYPE = { schemaName: 'ACW.fbs', fileIdentifier: '$ACW', rootTypeName: 'ACW', wireFormat: 'flatbuffer' };
 const EOP_TYPE = { schemaName: 'EOP.fbs', fileIdentifier: '$EOP', rootTypeName: 'EOP', wireFormat: 'flatbuffer' };
@@ -77,13 +77,13 @@ const sample = (seconds, s) => Object.assign(new ACW.ACWStateSampleT(), { JULIAN
 // `emitterHz`. Returns {radar: [$RDO], rf: [$RFO], geometry: Map(id ->
 // {position, velocity} GCRF m, m/s at the record's time tag)} after
 // `edit(records)` has changed the records (time tags, values).
-export async function campaign({ hpop, truth, hours, step = 30, stations, sensors, emitterHz, seed, edit }) {
+export async function campaign({ ffm, truth, hours, step = 30, stations, sensors, emitterHz, seed, edit }) {
   const [frames, access, simulator, association] = await Promise.all([
     harness('../../../foundation/frames/'), harness('../../access/'), harness('../../observation-simulator/'), associationHarness(),
   ]);
   try {
     const seconds = Array.from({ length: Math.round((hours * 3600) / step) + 1 }, (_, k) => k * step);
-    const gcrf = (await hpopRun(hpop, { state: truth.state, from: at(0), epochs: seconds.map(at), names: truth.names, values: truth.values })).map((r) => r.state);
+    const gcrf = (await ffmRun(ffm, { state: truth.state, from: at(0), epochs: seconds.map(at), names: truth.names, values: truth.values })).map((r) => r.state);
     const itrf = await toItrf(frames, seconds, gcrf);
     const states = seconds.map((t, k) => sample(t, itrf[k]));
     // Passes above 10 degrees, per station.

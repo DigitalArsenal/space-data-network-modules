@@ -152,8 +152,8 @@ const productCases = [
     oemFrame('operator', operator), jsonFrame('recipe', recipeFor({ id: 'spacex-starlink', kind: 'ephemeris', lineage: 'spacex-meme', own: false, extra: { maxOperatorRows: 2 } }))] } },
   { id: 'attach-rule-2-fit', request: { methodId: 'attach_covariance', inputs: [ommFrame('elements', encodeOmm(leoH)), oemFrame('states', await deriveStates(encodeOmm(leoH))),
     ocmFrame('fit', fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x: [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75], lower: lower21(1) })),
-    jsonFrame('recipe', recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit',
-      extra: { realism: [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }] } }))] } },
+    jsonFrame('recipe', recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-ffm-fit',
+      extra: { realism: [{ sources: ['ilrs-crd'], class: 'slr-ffm-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5, evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }] } }))] } },
   { id: 'attribute-maneuvers', request: { methodId: 'attribute_maneuvers', inputs: [mnvFrame('maneuvers', Buffer.concat([encodeMnv(), encodeMnv({ ID: 'M2', TAGS: [], PROVENANCE: Object.assign(new MNV.PVNT(), { PRODUCER: 'detector 1' }) })])), jsonFrame('recipe', recipeFor())] } },
 ];
 void productCases;

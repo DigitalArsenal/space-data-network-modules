@@ -7,18 +7,18 @@ import { S as P, call, dayOfMjd } from './dcl.mjs';
 
 const { flatbuffers, EOPT } = P;
 
-// NRLMSISE-00 (atmosphere "NRLMSISE00" of evaluate and drag_work) against propagator/hpop, the module that drives the same model in its force model.
+// NRLMSISE-00 (atmosphere "NRLMSISE00" of evaluate and drag_work) against propagator/ffm, the module that drives the same model in its force model.
 //
-// With NRLMSISE-00 drag HPOP's Jacobi energy C falls by the integral of -1/2 B rho |v_r|^3 (dC/dt = a . v_r), which `drag_work` evaluates with the module's
+// With NRLMSISE-00 drag FFM's Jacobi energy C falls by the integral of -1/2 B rho |v_r|^3 (dC/dt = a . v_r), which `drag_work` evaluates with the module's
 // own NRLMSISE-00. The test orbit crosses 00:00 UTC (21:00 to 03:00) over rows whose F10.7, 81-day mean and Ap all differ from day to day, so that the
-// day each input is read from matters: F10.7 of the day before the epoch, the 81-day mean and Ap of the epoch's day (HPOP's SpaceWeatherTable). Reading
+// day each input is read from matters: F10.7 of the day before the epoch, the 81-day mean and Ap of the epoch's day (FFM's SpaceWeatherTable). Reading
 // F10.7 from the epoch's own day instead moves the integral by far more than the tolerance, which the last assertion shows.
 const here = (p) => new URL(p, import.meta.url);
 const modules = (p) => new URL(`../../../${p}`, import.meta.url);
 const kernelPath = modules('files/orbit-products/tests/fixtures/de440/de440-2026.bsp');
-const hpopWasm = modules('propagator/hpop/dist/isomorphic/module.wasm');
+const ffmWasm = modules('propagator/ffm/dist/isomorphic/module.wasm');
 const GM = 398600.4418e9;
-const skip = !fs.existsSync(kernelPath) || !fs.existsSync(hpopWasm) ? 'DE440 fixture or the propagator/hpop artifact is absent' : false;
+const skip = !fs.existsSync(kernelPath) || !fs.existsSync(ffmWasm) ? 'DE440 fixture or the propagator/ffm artifact is absent' : false;
 
 async function harnessOf(dir) {
   const wasmSource = fs.readFileSync(dir === '.' ? here('../dist/isomorphic/module.wasm') : modules(`${dir}/dist/isomorphic/module.wasm`));
@@ -49,8 +49,8 @@ const spwRows = (fromDay, toDay) => {
 // The module's $SPW rows: the fields it reads, of the same days.
 const jsonRows = (rows) => rows.map((r) => ({ DATE: r.DATE, F107_OBS: r.F107_OBS, F107_OBS_CENTER81: r.F107_OBS_CENTER81, AP_AVG: r.AP_AVG }));
 
-// HPOP with NRLMSISE-00 drag over [t0, t0 + span], samples every stepSeconds, from a GCRF state (m, m/s), zero Earth orientation (UT1 = UTC, no polar motion).
-async function hpopTrack(epochMjd, state, spanSeconds, stepSeconds, { degree = 36, B, rows }) {
+// FFM with NRLMSISE-00 drag over [t0, t0 + span], samples every stepSeconds, from a GCRF state (m, m/s), zero Earth orientation (UT1 = UTC, no polar motion).
+async function ffmTrack(epochMjd, state, spanSeconds, stepSeconds, { degree = 36, B, rows }) {
   const table = (name, fields = {}) => Object.assign(new P[`${name}T`](), fields);
   const encode = (arm, value) => {
     const b = new flatbuffers.Builder(1 << 16);
@@ -86,7 +86,7 @@ async function hpopTrack(epochMjd, state, spanSeconds, stepSeconds, { degree = 3
     { portId: 'earth_orientation', typeRef: TYPE, payload: encode('EARTH_ORIENTATION', table('PRWEarthOrientation', { ROWS: rows.map((x) => Object.assign(new EOPT(), {
       MJD: Math.round(Date.parse(`${x.DATE}T00:00:00Z`) / 86400000 + 40587), TAI_MINUS_UTC_SECONDS: 37 })) })) },
   ];
-  const h = await harnessOf('propagator/hpop');
+  const h = await harnessOf('propagator/ffm');
   try {
     const r = await h.invoke({ methodId: 'invoke', inputs });
     if (r.statusCode !== 0) throw new Error(`${r.errorCode}: ${r.errorMessage}`);
@@ -106,7 +106,7 @@ const rows = spwRows(Math.floor(MJD0) - 3, Math.floor(MJD0) + 3);
 
 test('the fall of the energy under NRLMSISE-00 drag equals the drag work, across a day boundary with day-to-day space weather', { skip }, async (t) => {
   const B = 0.02;
-  const track = await hpopTrack(MJD0, start, 6 * 3600, 30, { B, rows });
+  const track = await ffmTrack(MJD0, start, 6 * 3600, 30, { B, rows });
   const states = track.map((s) => ({ mjd: s.mjd, r: s.r, v: s.v }));
   const energy = (await call('energy', { states, degree: 36, gm: GM, omega: 7.292115e-5 })).STATES.ENERGY_J_KG;
   const work = await call('drag_work', { states, atmosphere: 'NRLMSISE00', nrlmsise00: { rows: jsonRows(rows) }, B });

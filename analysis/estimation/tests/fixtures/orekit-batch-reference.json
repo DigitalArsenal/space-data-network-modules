@@ -1,5 +1,5 @@
 {
- "source": "Orekit 13.1 (CS GROUP, Apache-2.0) BatchLSEstimator, GaussNewtonOptimizer(QRDecomposer 1e-11), NumericalPropagatorBuilder DormandPrince853 (steps <= 10 s, dP 1e-4 m), GCRF; forces and constants of propagator/hpop tests/fixtures/orekit/OrekitReference.java",
+ "source": "Orekit 13.1 (CS GROUP, Apache-2.0) BatchLSEstimator, GaussNewtonOptimizer(QRDecomposer 1e-11), NumericalPropagatorBuilder DormandPrince853 (steps <= 10 s, dP 1e-4 m), GCRF; forces and constants of propagator/ffm tests/fixtures/orekit/OrekitReference.java",
  "epochUtc": "2026-08-02T00:00:00.000",
  "constants": {"gm": 3.9860044150e+14, "massKg": 1000.0, "areaM2": 20.0, "cr": 1.30, "cd": 2.20, "f107": 150.0, "f107a": 150.0, "ap": 15.0},
  "cases": [

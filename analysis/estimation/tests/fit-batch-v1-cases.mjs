@@ -37,9 +37,9 @@ export function v1Cases() {
 }
 
 // Runs one case to completion and returns each round's digests.
-export async function replayDigests(estimator, hpop, entry) {
+export async function replayDigests(estimator, ffm, entry) {
   const requests = [];
-  await fit(estimator, hpop, entry.c, entry.envelope(), requests);
+  await fit(estimator, ffm, entry.c, entry.envelope(), requests);
   const rounds = [];
   for (const request of requests) {
     const response = await estimator.invoke(request);

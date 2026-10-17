@@ -248,6 +248,20 @@ inline double longitude_sense(int32_t id) {
     return (pm && pm->size() > 1 && (*pm)[1] < 0.0) ? 1.0 : -1.0;
 }
 
+/* SPICE recpgr: the spheroid (RADII[0], RADII[0], RADII[2]), longitude
+ * in the IAU sense, geodetic latitude and signed altitude in meters. */
+inline void recpgr(int32_t id, const double radii[3], const double p[3], double out[3]) {
+    const double spheroid[3] = {radii[0], radii[0], radii[2]};
+    double n[3], alt = 0.0, unused = 0.0;
+    nearest_on_ellipsoid(spheroid, p, n, &alt);
+    const double sense = longitude_sense(id);
+    double lon = 0.0;
+    reclat(p, &unused, &lon, &unused);
+    out[0] = wrap_two_pi(sense * lon);
+    out[1] = std::atan2(n[2], std::hypot(n[0], n[1]));
+    out[2] = alt;
+}
+
 /* The body regime's outer edge about `id`: the Hill radius, or for the Sun the
  * Alfven surface. */
 inline int32_t body_boundary(int32_t id, double et, double* out) {
@@ -272,21 +286,14 @@ inline int32_t body_coordinates(int32_t id, double et, const double rel[3], doub
     out[kDistance] = norm3(rel);
     out[kBoundary] = boundary;
     /* Planetographic: the spheroid (re, re, rp), longitude in the IAU sense. */
-    const double spheroid[3] = {radii[0], radii[0], radii[2]};
-    double n[3], alt = 0.0, unused = 0.0;
-    nearest_on_ellipsoid(spheroid, p, n, &alt);
-    const double sense = longitude_sense(id);
-    double lon = 0.0;
-    reclat(p, &unused, &lon, &unused);
-    out[kPgrLon] = wrap_two_pi(sense * lon);
-    out[kPgrLat] = std::atan2(n[2], std::hypot(n[0], n[1]));
-    out[kPgrAlt] = alt;
+    recpgr(id, radii, p, out + kPgrLon);
     reclat(p, &out[kPcRadius], &out[kPcLon], &out[kPcLat]);
     /* Planetodetic on the triaxial ellipsoid. */
+    double n[3];
     nearest_on_ellipsoid(radii, p, n, &out[kPdHeight]);
     out[kPdLon] = std::atan2(n[1], n[0]);
     out[kPdLat] = std::atan2(n[2], std::hypot(n[0], n[1]));
-    out[kLonSense] = sense;
+    out[kLonSense] = longitude_sense(id);
     return Ok;
 }
 

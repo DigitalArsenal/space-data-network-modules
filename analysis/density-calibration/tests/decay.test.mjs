@@ -15,11 +15,11 @@ const { MPE, meanElementSource } = await loadStandard('MPE');
 // - Hoots and Roehrich (1980), Spacetrack Report No. 3, the recovery of the
 //   original (Brouwer) mean motion and semi-major axis from an element set's
 //   mean motion, computed here from the published formulas with WGS-72.
-// - propagator/hpop: the equations of motion integrated numerically (RK78,
+// - propagator/ffm: the equations of motion integrated numerically (RK78,
 //   zonal gravity to degree 4, JB2008 drag of -1/2 Cd A/m rho |v_r| v_r, its own
 //   frames, geodetic conversion and DE440 Sun), started from the element
 //   set's epoch state in GCRF (analysis/epoch-state): the change in orbit-
-//   averaged semi-major axis over two days. HPOP is given zero Earth
+//   averaged semi-major axis over two days. FFM is given zero Earth
 //   orientation (UT1 = UTC, no polar motion), the module's own approximation.
 // The estimator is then checked to invert the forward model on synthetic
 // histories (a self-consistency check of the least squares, not a reference).
@@ -109,9 +109,9 @@ async function epochState(s) {
     await h.destroy();
   }
 }
-// HPOP over [t0, t0 + span] from a GCRF state: zonal gravity to degree 4,
+// FFM over [t0, t0 + span] from a GCRF state: zonal gravity to degree 4,
 // JB2008 drag with Cd A/m = B (unit area and mass), the DE440 Sun; samples every 30 s.
-async function hpopTrack(epochMjd, state, spanDays, B, jbRows) {
+async function ffmTrack(epochMjd, state, spanDays, B, jbRows) {
   const table = (name, fields = {}) => Object.assign(new P[`${name}T`](), fields);
   const encode = (arm, value) => {
     const b = new flatbuffers.Builder(1 << 16);
@@ -141,7 +141,7 @@ async function hpopTrack(epochMjd, state, spanDays, B, jbRows) {
   const kernel = fs.readFileSync(kernelPath);
   const descriptor = table('NCD', { FORMAT: P.ncdContainerFormat.SPK_DAF, SOURCE_BYTE_LENGTH: BigInt(kernel.length),
     SOURCE_SHA256: createHash('sha256').update(kernel).digest('hex') });
-  const h = await harnessOf('propagator/hpop');
+  const h = await harnessOf('propagator/ffm');
   try {
     const r = await h.invoke({ methodId: 'invoke', inputs: [
       { portId: 'request', typeRef: TYPE, payload: encode('EXECUTION_REQUEST', request) },
@@ -161,11 +161,11 @@ async function hpopTrack(epochMjd, state, spanDays, B, jbRows) {
     await h.destroy();
   }
 }
-// HPOP's drag decay rate (m/day): the osculating semi-major axis averaged
+// FFM's drag decay rate (m/day): the osculating semi-major axis averaged
 // over whole nodal periods (measured from the track's own ascending-node
 // crossings, so the J2 short-period terms cancel) at the start and after
 // spanDays, divided by the time between the two averages.
-function hpopRate(track, spanDays, periods = 6) {
+function ffmRate(track, spanDays, periods = 6) {
   const nodes = [];
   for (let i = 1; i < track.length; ++i)
     if (track[i - 1].z < 0 && track[i].z >= 0) nodes.push({ i, t: track[i - 1].mjd + (track[i].mjd - track[i - 1].mjd) * (-track[i - 1].z) / (track[i].z - track[i - 1].z) });
@@ -186,7 +186,7 @@ function hpopRate(track, spanDays, periods = 6) {
   return (b.a - a.a) / (b.t - a.t);
 }
 
-test('the drag decay of an element set matches HPOP\'s numerically integrated decay (circular 400 km, eccentric, with a correction)',
+test('the drag decay of an element set matches FFM\'s numerically integrated decay (circular 400 km, eccentric, with a correction)',
   { skip: !fs.existsSync(kernelPath) && `DE440 fixture absent: ${kernelPath.pathname}` }, async () => {
     const t0 = 61046.0;  // 2026-01-05 00:00 UTC
     // One day, about an element set's refresh interval in LEO: one set's SGP4
@@ -201,22 +201,22 @@ test('the drag decay of an element set matches HPOP\'s numerically integrated de
       const ratios = {};
       for (const add of [0, 60]) {
         const jb = rows(t0 - 8, t0 + span + 2, add);
-        // The module: the set alone over the span, the correction (when given) as nodes; HPOP: DTC raised by the same amount.
+        // The module: the set alone over the span, the correction (when given) as nodes; FFM: DTC raised by the same amount.
         const correction = add ? { nodesMjd: [t0 - 1, t0 + span + 1], altitudeKm: [], values: [[add], [add]] } : undefined;
         const module = await call('decay', { jb2008: { rows: rows(t0 - 8, t0 + span + 2) }, stepSeconds: 30,
           objects: [{ id: name, B, spanDays: span, sets: [s] }], ...(correction ? { correction } : {}) });
         const rate = module.OBJECTS[0].SEGMENT_DECAY_M[0] / span;
-        const hpop = hpopRate(await hpopTrack(t0, await epochState(s), span + 8.5 * periodS / 86400, B, jb), span);
-        ratios[add] = { module: rate, hpop };
+        const ffm = ffmRate(await ffmTrack(t0, await epochState(s), span + 8.5 * periodS / 86400, B, jb), span);
+        ratios[add] = { module: rate, ffm };
         // Measured: circular 0.996, eccentric 0.984. SGP4's analytical
         // trajectory against the numerical one, and the anomaly-dependent
         // short-period terms that nodal averages leave at e = 0.05.
-        assert.ok(Math.abs(rate / hpop - 1) < tolerance, `${name}, DTC +${add} K: module ${rate.toFixed(2)} m/day vs HPOP ${hpop.toFixed(2)} m/day (ratio ${(rate / hpop).toFixed(4)})`);
+        assert.ok(Math.abs(rate / ffm - 1) < tolerance, `${name}, DTC +${add} K: module ${rate.toFixed(2)} m/day vs FFM ${ffm.toFixed(2)} m/day (ratio ${(rate / ffm).toFixed(4)})`);
       }
       // The response to the correction is the same (measured within 0.03 %).
       const response = (x) => x[60] / x[0];
-      const m = response({ 0: ratios[0].module, 60: ratios[60].module }), h = response({ 0: ratios[0].hpop, 60: ratios[60].hpop });
-      assert.ok(Math.abs(m / h - 1) < 0.002, `${name}: response to +60 K module ${m.toFixed(4)} vs HPOP ${h.toFixed(4)}`);
+      const m = response({ 0: ratios[0].module, 60: ratios[60].module }), h = response({ 0: ratios[0].ffm, 60: ratios[60].ffm });
+      assert.ok(Math.abs(m / h - 1) < 0.002, `${name}: response to +60 K module ${m.toFixed(4)} vs FFM ${h.toFixed(4)}`);
     }
   });
 

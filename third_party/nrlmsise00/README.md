@@ -1,5 +1,7 @@
 # NRLMSISE-00 (C port, public domain)
 
+FFM (Full Force Model) is defined by [FFM-1](../../propagator/ffm/FFM.md).
+
 Vendored copy of the NRLMSISE-00 empirical atmosphere model, C source code
 package release 20041227.
 
@@ -34,7 +36,7 @@ published cases reproduce to the printed seven significant digits.
 Do not edit these files except to restore upstream behavior. Consumers:
 
 - `propagator/atmosphere` (atmosphere SDN module)
-- `propagator/hpop` (HPOP drag / atmosphere path)
+- `propagator/ffm` (FFM drag / atmosphere path)
 
 The canonical verification vectors are the 17-case output table distributed
 with the package (DOCUMENTATION file); tests in the consuming modules assert

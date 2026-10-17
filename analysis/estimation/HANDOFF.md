@@ -1,5 +1,7 @@
 # TMPL lane 05 second-pass handoff
 
+FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
+
 ## Candidate
 
 - Branch: `tmpl/05-estimation-depth`; coordinator merges, worker does not.
@@ -100,7 +102,7 @@ intermediate requests, stale-seed rejection, PV/clock and adaptive Q/R.
 
 ## Remaining integration work / limits
 
-- No live HPOP-to-estimation flow was assembled. The provider-neutral port is
+- No live FFM-to-estimation flow was assembled. The provider-neutral port is
   implemented and tested through a separate C++ WASM two-body provider. A host
   must route queries to its chosen propagator; it never computes dynamics.
 - Raw GNSS transmit-time solution, navigation-message ingestion, relativistic

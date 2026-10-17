@@ -2558,7 +2558,7 @@
       },
       "note": "THE IMPULSIVE-BURN IDENTITY, in the frame where it has no free parameters: a delta-v applied in an INERTIAL frame adds component by component to the inertial velocity, and Orekit asserts exactly that to 1e-4 m/s after propagating through the burn. Our maneuver module exposes no burn-application op, so this row is carried as the RIC round-trip's inertial anchor: the same three components, expressed in the RIC triad of a stated state and converted back, must reproduce them.",
       "unmappedModuleSurface": {
-        "abi": "plugin_entity_apply_impulsive_burn (propagator/sgp4), plugin_set_burns (propagator/hpop)",
+        "abi": "plugin_entity_apply_impulsive_burn (propagator/sgp4), plugin_set_burns (propagator/ffm)",
         "owner": "orbpro-propagators-have-no-native-burn-surface",
         "why": "the burn-application ABI is mid-flight in another lane; adding a second suite against the artifact it is rebuilding would race a republish. The follow-on is filed rather than dropped."
       }

@@ -1,5 +1,7 @@
 # Space Data Network Modules
 
+FFM (Full Force Model) is defined by [FFM-1](propagator/ffm/FFM.md).
+
 Private super-repo for DigitalArsenal Space Data Network modules. This
 repository is the canonical home for SDK-compliant module implementations,
 including migrated module families and Basilisk-derived module families.
@@ -54,7 +56,7 @@ including migrated module families and Basilisk-derived module families.
 | `packages/gps-jamming-detection` | `DigitalArsenal/space-data-network-plugin-gps-jamming-detection` | `Friends-Of-Lobsternaut/gps-jamming-detection-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/gscpi` | `DigitalArsenal/space-data-network-plugin-gscpi` | `Friends-Of-Lobsternaut/gscpi-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/gunter-scraper` | `DigitalArsenal/space-data-network-plugin-gunter-scraper` | `Friends-Of-Lobsternaut/gunter-scraper-sdn-plugin` | Pending | Not migrated yet. |
-| `propagator/hpop` | `DigitalArsenal/space-data-network-plugin-hpop` | `Friends-Of-Lobsternaut/hpop-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, numerical propagation with configurable force models, SDK-routed resident-state binary stream methods, and SGP4-to-HPOP aligned-binary `PropagatorState` handoff coverage. |
+| `propagator/ffm` | `DigitalArsenal/space-data-network-plugin-ffm` | `Friends-Of-Lobsternaut/ffm-sdn-plugin` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, numerical propagation with configurable force models, SDK-routed resident-state binary stream methods, and SGP4-to-FFM aligned-binary `PropagatorState` handoff coverage. |
 | `packages/iridium` | `DigitalArsenal/space-data-network-plugin-iridium` | `Friends-Of-Lobsternaut/iridium-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/kiwisdr` | `DigitalArsenal/space-data-network-plugin-kiwisdr` | `Friends-Of-Lobsternaut/kiwisdr-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/launch-predict` | `DigitalArsenal/space-data-network-plugin-launch-predict` | `Friends-Of-Lobsternaut/launch-predict-sdn-plugin` | Pending | Not migrated yet. |
@@ -110,7 +112,7 @@ including migrated module families and Basilisk-derived module families.
 - Packages are organized by family under top-level subfolders:
   - `foundation/` — `time`, `math-bspline`, `numerics`, `attitude-math`,
     `frames`, `orbits`
-  - `propagator/` — `sgp4`, `hpop`, `atmosphere`, `cislunar`
+  - `propagator/` — `sgp4`, `ffm`, `atmosphere`, `cislunar`
   - `analysis/` — `access`, `catalog-synthesis`, `conjunction-assessment`,
     `covariance`, `dop`, `lambert-izzo`, `launch-ascent`, `maneuver`, `od`,
     `reentry`

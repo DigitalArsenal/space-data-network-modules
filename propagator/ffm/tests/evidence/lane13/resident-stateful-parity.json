@@ -1,0 +1,314 @@
+{
+  "wasmSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
+  "wasmBytes": 2064595,
+  "wasmedgeVersion": "0.16.4",
+  "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
+  "runtimeInstances": "One persistent direct instance per group",
+  "groups": 4,
+  "requests": 33,
+  "runtimes": [
+    "Chromium headless shell/V8",
+    "native WasmEdge",
+    "container WasmEdge"
+  ],
+  "steps": [
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "ingest-two",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "state-chunk-0",
+      "responseSha256": "cc1896ed8b0dec2f7145c0ae5f47e47964ebd5c88839ef2f648105fb0592e891",
+      "bytes": 592,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "state-chunk-1",
+      "responseSha256": "023a3f4b108eaa7340a0fe4708585ff9b71e370212bfa04562491efc1f06db0d",
+      "bytes": 584,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "prepare",
+      "responseSha256": "990cbadd95e968183ddd2dcc8d94a13a4052eed11d66a107b326cd769443aac3",
+      "bytes": 352,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "ppe-chunk-0",
+      "responseSha256": "260f6907befe9268b7cf4f10aff5541578fac13b8162985fead9eb21af599a3d",
+      "bytes": 2456,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "ppe-chunk-1",
+      "responseSha256": "ef45601f7b2cef8064c2fd86c6dc3c011ce71fc3dcdf94799bc8ec80ed184a3c",
+      "bytes": 2448,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "duplicate",
+      "responseSha256": "efe95d71c621dd65563388c4ccae1b74bed971c798c448c0984e69ae27fab5f3",
+      "bytes": 156,
+      "errorCode": "invalid-request",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "unknown",
+      "responseSha256": "5992fc31495c84595ad08a6204ea4d692e22aade932a002db86d6d28f9ec5732",
+      "bytes": 152,
+      "errorCode": "unknown-entity",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "wrong-arm",
+      "responseSha256": "e66fe571092b52a87978fbc60cc4cab7f445003b2f68d7ed0d2814cfbcb63189",
+      "bytes": 180,
+      "errorCode": "method-arm-mismatch",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "new-generation",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "stale-generation",
+      "responseSha256": "26f8479e20cb6322538d513ac462135d5f931005c9d35edda65e1fd05dff7c80",
+      "bytes": 192,
+      "errorCode": "stale-instance",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "stale-segment",
+      "responseSha256": "0536b04a6fe1293e65e3f9a8c2c5d519ffc71957b13c47c2cecbd49ee01f7c3c",
+      "bytes": 168,
+      "errorCode": "stale-handle",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "new-state",
+      "responseSha256": "3847847d1269f311413220ae36952981369c2d9e0113b2697b44d2fa0ca33a3a",
+      "bytes": 584,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "unsupported-coefficients",
+      "responseSha256": "0f39fc79d9f0d5cda8e75bd2b3d580258d5804221cf722d18d9e094a4ea9d9fe",
+      "bytes": 252,
+      "errorCode": "unsupported-configuration",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "old-generation-survives",
+      "responseSha256": "a28285b17f854f7ea548ea50ea686d7f18904e92aa6fb6bd37f8016089c0b353",
+      "bytes": 584,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "unsupported-mass",
+      "responseSha256": "0f39fc79d9f0d5cda8e75bd2b3d580258d5804221cf722d18d9e094a4ea9d9fe",
+      "bytes": 252,
+      "errorCode": "unsupported-configuration",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "repeated-generation",
+      "responseSha256": "b39757fc9f675a4a61caa5e845794ddb38d88760df0d8d37f42b736128c5a8c1",
+      "bytes": 176,
+      "errorCode": "stale-instance",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "invalid-flag",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "invalid-selection",
+      "responseSha256": "bcff6cb812a9366a60948b0b7deaf99e7b0752a16eec2345e219f6f18cf2e4b9",
+      "bytes": 160,
+      "errorCode": "invalid-state",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-state-chunk-0",
+      "responseSha256": "e836a753735958803469c7361e49443f92027a2da12eb95044bad9c4f5ae105c",
+      "bytes": 624,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-state-chunk-1",
+      "responseSha256": "4d9457acd7dbd708da71e6f7a7a5a4a7c4b39d72eb9a97b166794ccad6a05b5f",
+      "bytes": 616,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-backward",
+      "responseSha256": "bdc63500d76293683891b483515e2a59b498845eac8defdf711e98f322528b47",
+      "bytes": 616,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-prepare",
+      "responseSha256": "27ced45f9929241c6c7bcb9e5b9affceef17a10ef3082af167faa88a2819f9bb",
+      "bytes": 680,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-ppe-chunk-0",
+      "responseSha256": "0281b8dc3cd2ad1cf0451d0d3e164a928527cf90015892276cbd207240c2e555",
+      "bytes": 10520,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-ppe-chunk-1",
+      "responseSha256": "4d43503ee08836d6bf2f5147f317020234625d64139bc16d150eb2ffd2bc7b51",
+      "bytes": 10520,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-no-configuration",
+      "responseSha256": "247c572368eb448714823f648655db1a9b0764859e267ddd058c740542af2ccf",
+      "bytes": 156,
+      "errorCode": "missing-required-input",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-prepare-before",
+      "responseSha256": "5a17586aa74d4c4d254c9bd8397c67c87ae4f51353236179d248efd7d9b13ae1",
+      "bytes": 672,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-prepare-across",
+      "responseSha256": "c3d9941299e47a23f3053f5ca502f7aacfab1dbe62b7722caa23f99c1cdca70f",
+      "bytes": 260,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-state-after",
+      "responseSha256": "c3d9941299e47a23f3053f5ca502f7aacfab1dbe62b7722caa23f99c1cdca70f",
+      "bytes": 260,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-execution",
+      "responseSha256": "c5e86aff6297725c4a09dd7e99881974febc2315406b8d123912b161f547080c",
+      "bytes": 228,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    }
+  ],
+  "ok": true
+}

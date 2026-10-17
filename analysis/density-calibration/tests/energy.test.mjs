@@ -7,27 +7,27 @@ import { S as P, call, dayOfMjd } from './dcl.mjs';
 
 const { flatbuffers, EOPT } = P;
 
-// energy and drag_work against propagator/hpop, the module that integrates the
+// energy and drag_work against propagator/ffm, the module that integrates the
 // equations of motion.
 //
 // The Jacobi integral C = 1/2 |v|^2 + U(r_ef) - omega . (r x v) of a static
 // geopotential in axes turning with the Earth is a constant of any orbit that
-// only the geopotential acts on (closed form: dC/dt = 0 when a = -grad U). HPOP
+// only the geopotential acts on (closed form: dC/dt = 0 when a = -grad U). FFM
 // integrates exactly such an orbit when asked for gravity alone (EGM2008 to
 // degree and order 36, RK78 at relative tolerance 1e-12, UT1 = UTC and no polar
-// motion, the module's own assumption), so C computed by `energy` along HPOP's
+// motion, the module's own assumption), so C computed by `energy` along FFM's
 // samples must stay constant to the integrator's accuracy, while the Kepler
 // energy 1/2 v^2 - mu/r moves by tens of kJ/kg and a wrong field degree leaves
-// a visible drift. With JB2008 drag HPOP's C must fall by the integral of
+// a visible drift. With JB2008 drag FFM's C must fall by the integral of
 // -1/2 B rho |v_r|^3 (dC/dt = a . v_r), which `drag_work` evaluates with the
 // module's own JB2008. The gradient is checked against finite differences of
 // `energy` itself.
 const here = (p) => new URL(p, import.meta.url);
 const modules = (p) => new URL(`../../../${p}`, import.meta.url);
 const kernelPath = modules('files/orbit-products/tests/fixtures/de440/de440-2026.bsp');
-const hpopWasm = modules('propagator/hpop/dist/isomorphic/module.wasm');
-const GM = 398600.4418e9;  // the central term HPOP is given below
-const OMEGA = 7.292115e-5; // rad/s, HPOP's OMEGA_EARTH
+const ffmWasm = modules('propagator/ffm/dist/isomorphic/module.wasm');
+const GM = 398600.4418e9;  // the central term FFM is given below
+const OMEGA = 7.292115e-5; // rad/s, FFM's OMEGA_EARTH
 
 async function harnessOf(dir) {
   const wasmSource = fs.readFileSync(dir === '.' ? here('../dist/isomorphic/module.wasm') : modules(`${dir}/dist/isomorphic/module.wasm`));
@@ -46,8 +46,8 @@ function keplerState(a, e, iDeg, raanDeg, argpDeg, nuDeg) {
   return { r: mul(pqw), v: mul(vpqw) };
 }
 
-// HPOP over [t0, t0 + span], samples every stepSeconds, from a GCRF state (m, m/s). forces: {degree, drag (B) | null, jbRows}.
-async function hpopTrack(epochMjd, state, spanSeconds, stepSeconds, { degree = 36, B = null, jbRows }) {
+// FFM over [t0, t0 + span], samples every stepSeconds, from a GCRF state (m, m/s). forces: {degree, drag (B) | null, jbRows}.
+async function ffmTrack(epochMjd, state, spanSeconds, stepSeconds, { degree = 36, B = null, jbRows }) {
   const table = (name, fields = {}) => Object.assign(new P[`${name}T`](), fields);
   const encode = (arm, value) => {
     const b = new flatbuffers.Builder(1 << 16);
@@ -84,7 +84,7 @@ async function hpopTrack(epochMjd, state, spanSeconds, stepSeconds, { degree = 3
     { portId: 'earth_orientation', typeRef: TYPE, payload: encode('EARTH_ORIENTATION', table('PRWEarthOrientation', { ROWS: jbRows.map((x) => Object.assign(new EOPT(), {
       MJD: Math.round(Date.parse(`${x.DATE}T00:00:00Z`) / 86400000 + 40587), TAI_MINUS_UTC_SECONDS: 37 })) })) },
   ];
-  const h = await harnessOf('propagator/hpop');
+  const h = await harnessOf('propagator/ffm');
   try {
     const r = await h.invoke({ methodId: 'invoke', inputs });
     if (r.statusCode !== 0) throw new Error(`${r.errorCode}: ${r.errorMessage}`);
@@ -105,12 +105,12 @@ function rows(fromMjd, toMjd) {
       Y10: 130, Y10_CENTRED_81: 128, DTC_HOURLY_K: Array(24).fill(40) });
   return out;
 }
-const skip = !fs.existsSync(kernelPath) || !fs.existsSync(hpopWasm) ? 'DE440 fixture or the propagator/hpop artifact is absent' : false;
+const skip = !fs.existsSync(kernelPath) || !fs.existsSync(ffmWasm) ? 'DE440 fixture or the propagator/ffm artifact is absent' : false;
 const MJD0 = 61131.25;  // 2026-04-01 06:00 UTC (inside the DE440 fixture's 2026 span)
 const start = keplerState(6378137 + 500e3, 0.001, 97.4, 120, 80, 10);
 
-test('energy is conserved along a gravity-only HPOP orbit (EGM2008 36x36) and the Kepler energy is not', { skip }, async (t) => {
-  const track = await hpopTrack(MJD0, start, 6 * 3600, 60, { degree: 36, jbRows: rows(MJD0, MJD0 + 1) });
+test('energy is conserved along a gravity-only FFM orbit (EGM2008 36x36) and the Kepler energy is not', { skip }, async (t) => {
+  const track = await ffmTrack(MJD0, start, 6 * 3600, 60, { degree: 36, jbRows: rows(MJD0, MJD0 + 1) });
   const states = track.map((s) => ({ mjd: s.mjd, r: s.r, v: s.v }));
   const out = (await call('energy', { states, degree: 36, gm: GM, omega: OMEGA })).STATES;
   assert.equal(out.REFUSED.length, 0);
@@ -120,19 +120,19 @@ test('energy is conserved along a gravity-only HPOP orbit (EGM2008 36x36) and th
   // GCRF: precession and nutation move the CIP by ~2e-11 rad/s, and dU/dtilt ~ 8e4 J/kg per rad at 500 km, so the Jacobi integral of a
   // field that turns uniformly about a fixed axis changes by ~0.01 J/kg an hour (the series steps by 0.0097 J/kg each hour, the
   // hour for which both chains hold the celestial-to-intermediate matrix). 0.1 J/kg over 6 h is 2e-9 of the energy and is far below
-  // what a wrong field leaves (degrees 35 and 37 against HPOP's 36: more than 0.5 J/kg below).
+  // what a wrong field leaves (degrees 35 and 37 against FFM's 36: more than 0.5 J/kg below).
   t.diagnostic(`Jacobi energy drift over 6 h: ${drift.toFixed(4)} J/kg`);
   assert.ok(drift < 0.1, `Jacobi energy drifted by ${drift} J/kg over 6 h`);
   for (const degree of [35, 37]) {
     const off = (await call('energy', { states, degree, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG;
     const offDrift = Math.max(...off.map((c) => Math.abs(c - off[0])));
-    t.diagnostic(`module degree ${degree} against HPOP's 36: drift ${offDrift.toFixed(3)} J/kg`);
-    assert.ok(offDrift > 0.4, `degree ${degree} against HPOP's 36 drifts by only ${offDrift} J/kg`);
+    t.diagnostic(`module degree ${degree} against FFM's 36: drift ${offDrift.toFixed(3)} J/kg`);
+    assert.ok(offDrift > 0.4, `degree ${degree} against FFM's 36 drifts by only ${offDrift} J/kg`);
   }
   const kepler = states.map((s) => 0.5 * (s.v[0] ** 2 + s.v[1] ** 2 + s.v[2] ** 2) - GM / Math.hypot(...s.r));
   const keplerRange = Math.max(...kepler) - Math.min(...kepler);
   assert.ok(keplerRange > 5e3, `the Kepler energy varies by ${keplerRange} J/kg: the test orbit exercises the field`);
-  // A wrong field must show: degree 2 against HPOP's degree 36.
+  // A wrong field must show: degree 2 against FFM's degree 36.
   const wrong = (await call('energy', { states, degree: 2, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG;
   const wrongDrift = Math.max(...wrong.map((c) => Math.abs(c - wrong[0])));
   assert.ok(wrongDrift > 0.5, `degree 2 against degree 36 drifts by only ${wrongDrift} J/kg`);
@@ -172,7 +172,7 @@ test('the energy gradient equals finite differences of energy', async () => {
 test('the fall of the energy under JB2008 drag equals the drag work', { skip }, async (t) => {
   const B = 0.02;  // Cd*A/m, m^2/kg
   const jbRows = rows(MJD0, MJD0 + 1);
-  const track = await hpopTrack(MJD0, start, 6 * 3600, 30, { degree: 36, B, jbRows });
+  const track = await ffmTrack(MJD0, start, 6 * 3600, 30, { degree: 36, B, jbRows });
   const states = track.map((s) => ({ mjd: s.mjd, r: s.r, v: s.v }));
   const energy = (await call('energy', { states, degree: 36, gm: GM, omega: OMEGA })).STATES.ENERGY_J_KG;
   const answer = await call('drag_work', { states, jb2008: { rows: jbRows }, B });

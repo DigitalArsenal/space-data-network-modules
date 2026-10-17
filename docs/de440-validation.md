@@ -1,10 +1,12 @@
 # DE440 ephemeris references and measured validation
 
+FFM (Full Force Model) is defined by [FFM-1](../propagator/ffm/FFM.md).
+
 ## Authority and conventions
 
 The numerical oracle is **NASA/JPL NAIF CSPICE N0067**, called through
 SpiceyPy 8.0.0 on the published `de440s.bsp`. No reference state is generated
-by this repository's reader or HPOP implementation. The reproduction script
+by this repository's reader or FFM implementation. The reproduction script
 imports CSPICE and never imports the implementation under test.
 
 - [NAIF DE440s download](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp).
@@ -53,7 +55,7 @@ copies the required original records, retaining every DE440s segment and its
 identity/priority. Production receives either kernel as caller-provided bytes;
 these Python tools are only host-side fixture preparation.
 
-The 238 CSPICE rows cover 17 target/centre pairs at J2000, the first day of
+The 238 CSPICE rows cover 17 target/center pairs at J2000, the first day of
 every month in 2026, and 2027-01-01. Targets include **SSB 0, planetary
 barycentres 1–9, Sun 10, Moon 301, and Earth 399**. Explicit paths include
 Moon/Earth, Moon/EMB, Earth/EMB, Earth/Moon, Sun/Moon, and Earth/SSB. Thus the
@@ -77,7 +79,7 @@ page 2 and Figure 1, explain that their lunar differences grow beyond the
 1970–2020 fitted range. It would therefore be incorrect to require DE440
 vectors to match the current Horizons Moon at the same-kernel tolerance.
 The separate cross-release smoke check uses **0.01 km and 1e-7 km/s**:
-a conservative ten-metre/0.1-mm/s modern lunar-model envelope, not an
+a conservative ten-meter/0.1-mm/s modern lunar-model envelope, not an
 observational uncertainty estimate or a published velocity bound. The strict
 DE440 interpolation tests retain **1e-6 km and 1e-9 km/s**.
 
@@ -88,18 +90,18 @@ Measured on 2026-09-15, native C++ (`c++ -std=c++17 -O2`):
 | Full DE440s vs independent CSPICE | 238 | 0 | 0 |
 | 2026 excerpt vs independent CSPICE from full DE440s | 221 | 0 | 0 |
 | DE440s vs public Horizons DE441 | 48 | 0.0024503268843673186 | 6.913231791605064e-9 |
-| HPOP kernel Sun/Moon vs independent CSPICE | 24 | 0 | 0 |
+| FFM kernel Sun/Moon vs independent CSPICE | 24 | 0 | 0 |
 
 Exact zero is the measured result for these reference states and this native
 compiler, not a promise of bitwise agreement with CSPICE on every platform.
 The tests enforce the stated nonzero tolerances.
 
-## Analytic error removed from the HPOP kernel path
+## Analytic error removed from the FFM kernel path
 
 The following measures the actual legacy force-helper outputs,
 `astro::getSunPosition` and `astro::getMoonPosition`, explicitly selected as
 `EphemerisSource::Analytical`, against the independent CSPICE DE440 vectors.
-This is the behaviour consumed by HPOP before selecting a kernel. It is **not
+This is the behavior consumed by FFM before selecting a kernel. It is **not
 an accuracy claim about full VSOP87, ELP2000, or the separate simplified
 `astro::Ephemeris` helper implementations**. The legacy Solar routine includes
 a mean-longitude coefficient of `360007.6982779` degrees/century and date-
@@ -107,7 +109,7 @@ dependent obliquity; its very large measured discrepancy is retained here
 rather than hidden. The analytic fallback itself is unchanged by this lane.
 
 All rows are 00:00 **TDB**, centred on Earth, comparing the existing equatorial
-vectors as consumed by HPOP to **ICRF/J2000** DE440. Columns are absolute
+vectors as consumed by FFM to **ICRF/J2000** DE440. Columns are absolute
 position-vector differences in **km**, rounded only for display.
 
 | Epoch TDB | Julian date | Analytic Sun error (km) | Analytic Moon error (km) | DE440 error, either body (km) |
@@ -146,8 +148,8 @@ RESULT de440_cspice_position_km 0 9.9999999999999995e-07 PASS
 RESULT de440_cspice_velocity_km_s 0 1.0000000000000001e-09 PASS
 RESULT horizons_de441_position_km 0.0024503268843673186 0.01 PASS
 RESULT horizons_de441_velocity_km_s 6.9132317916050638e-09 9.9999999999999995e-08 PASS
-RESULT hpop_de440_position_km 0 9.9999999999999995e-07 PASS
-RESULT hpop_de440_velocity_km_s 0 1.0000000000000001e-09 PASS
+RESULT ffm_de440_position_km 0 9.9999999999999995e-07 PASS
+RESULT ffm_de440_velocity_km_s 0 1.0000000000000001e-09 PASS
 ℹ tests 3
 ℹ pass 3
 ℹ fail 0
@@ -175,7 +177,7 @@ existing excerpt. Review changed hashes and any new Horizons source labels;
 test execution never regenerates expected values or downloads mutable data.
 
 
-## HPOP force consumption
+## FFM force consumption
 
 A separate focused test verifies the actual `ForceModel::ThirdBody` routine
 for Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune at
@@ -185,7 +187,7 @@ positions and Newtonian differential gravity:
 
 `a = GM * ((R-r)/|R-r|^3 - R/|R|^3)`.
 
-Existing documented HPOP GM constants are explicit inputs to this force-path
+Existing documented FFM GM constants are explicit inputs to this force-path
 check; it does not assert that these legacy constants equal DE440's fitted
 GM values. The maximum measured acceleration error is
 **2.7745692215067836e-22 km/s²**, below the **1e-18 km/s²** absolute vector-norm
@@ -203,7 +205,7 @@ with exact SI `c=299792458 m/s`. Measured error is **0 km/s²** against the same
 vector through the loaded kernel, in addition to the direct-state checks.
 
 ```sh
-node --test propagator/hpop/tests/de440_force.test.mjs
+node --test propagator/ffm/tests/de440_force.test.mjs
 ```
 
 ```text

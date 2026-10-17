@@ -1,5 +1,7 @@
 # Maneuver vector provenance
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 `vectors.json` is the frozen expectation set for `analysis/maneuver`. This file
 records where every number in it came from, and — where a claim could not be
 verified — says so instead of rounding until it looks verified.
@@ -518,7 +520,7 @@ console, in JavaScript, which the no-JS-physics law forbids.
 ### What tier D does NOT cover, said plainly
 
 `plugin_entity_apply_impulsive_burn` (`propagator/sgp4`) and `plugin_set_burns`
-(`propagator/hpop`) are the surfaces that APPLY a burn and recover elements.
+(`propagator/ffm`) are the surfaces that APPLY a burn and recover elements.
 Orekit's `ImpulseManeuverTest` is the natural conformance source for them, and
 they are not tested here: that ABI is **mid-flight in another lane**
 (`orbpro-propagators-have-no-native-burn-surface`), and a second suite against

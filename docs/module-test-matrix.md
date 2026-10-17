@@ -1,5 +1,7 @@
 # Module Test Matrix
 
+FFM (Full Force Model) is defined by [FFM-1](../propagator/ffm/FFM.md).
+
 This repository's SDK module verification is intentionally limited to packages
 that publish canonical module artifacts and can be exercised through
 `space-data-module-sdk` host surfaces only.
@@ -14,7 +16,7 @@ Included package tests:
 
 - `propagator/atmosphere`
 - `propagator/cislunar`
-- `propagator/hpop`
+- `propagator/ffm`
 - `propagator/sgp4`
 - `analysis/conjunction-assessment`
 - `analysis/maneuver`

@@ -48,7 +48,7 @@ if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
 // Dependencies are loaded by the generic APP bridge with exact artifact hashes.
 const matchingModules = [];
-for (const [role, relative] of [['normalizer','files/orbit-products'],['frames','foundation/frames'],['time','foundation/time'],['propagator','propagator/hpop']]) {
+for (const [role, relative] of [['normalizer','files/orbit-products'],['frames','foundation/frames'],['time','foundation/time'],['propagator','propagator/ffm']]) {
   const dependency = JSON.parse(await fs.readFile(path.join(repo,relative,'plugin-manifest.json'),'utf8'));
   const artifact = await computeCanonicalModuleHash(await fs.readFile(path.join(repo,relative,'dist/isomorphic/module.wasm')));
   matchingModules.push({role,pluginId:dependency.pluginId,name:dependency.name,manifest:dependency,hash:artifact.hashHex});

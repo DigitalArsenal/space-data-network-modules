@@ -12,7 +12,7 @@ SDK_ROOT="${SPACE_DATA_MODULE_SDK_ROOT:-$DEFAULT_SDK_ROOT}"
 PACKAGES=(
     propagator/atmosphere
     propagator/cislunar
-    propagator/hpop
+    propagator/ffm
     propagator/sgp4
     analysis/conjunction-assessment
     analysis/maneuver

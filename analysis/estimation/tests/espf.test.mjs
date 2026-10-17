@@ -1,6 +1,6 @@
 // ESPF and the ellipsoidal set-membership filter, end to end through the WASM
-// artifact, with every support point propagated by propagator/hpop at full
-// force (hpop-port.mjs). docs/espf-spec.md, section T:
+// artifact, with every support point propagated by propagator/ffm at full
+// force (ffm-port.mjs). docs/espf-spec.md, section T:
 // (b) the 2025 appendix's Gaussian limit (unscented points and weights,
 //     Gaussian kernels read as densities, additive Q and R, product fusion)
 //     reproduces this module's UKF (itself validated against Orekit 13.1's
@@ -15,19 +15,19 @@
 // 2025 regeneration with zeta = sqrt(n) keeps the spread it was built from.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { module, runToCompletion } from './hpop-port.mjs';
+import { module, runToCompletion } from './ffm-port.mjs';
 import { espfScenario } from './espf-fixtures.mjs';
 import { api } from './wire.mjs';
 
 const estimator = await module('../');
-const hpop = await module('../../../propagator/hpop/');
-test.after(() => { for (const h of [estimator, hpop]) { h.destroy?.(); h.dispose?.(); } });
+const ffm = await module('../../../propagator/ffm/');
+test.after(() => { for (const h of [estimator, ffm]) { h.destroy?.(); h.dispose?.(); } });
 
-const { truth, OBSERVATIONS, SECONDS, envelopeFor, maxRelative } = await espfScenario(estimator, hpop);
+const { truth, OBSERVATIONS, SECONDS, envelopeFor, maxRelative } = await espfScenario(estimator, ffm);
 
-test('(b) ESPF 2025 in its Gaussian limit reproduces the UKF (full-force HPOP port)', async () => {
-  const ukf = await runToCompletion(estimator, hpop, envelopeFor('UNSCENTED_KALMAN_FILTER', { ukf_alpha: 1, ukf_beta: 2, ukf_kappa: 0 }));
-  const limit = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2025', { ukf_alpha: 1, ukf_beta: 2, ukf_kappa: 0, espf: { gaussian_limit: true } }));
+test('(b) ESPF 2025 in its Gaussian limit reproduces the UKF (full-force FFM port)', async () => {
+  const ukf = await runToCompletion(estimator, ffm, envelopeFor('UNSCENTED_KALMAN_FILTER', { ukf_alpha: 1, ukf_beta: 2, ukf_kappa: 0 }));
+  const limit = await runToCompletion(estimator, ffm, envelopeFor('ESPF_2025', { ukf_alpha: 1, ukf_beta: 2, ukf_kappa: 0, espf: { gaussian_limit: true } }));
   assert.equal(ukf.status, 0);
   assert.equal(limit.status, 0);
   assert.equal(limit.filterHistory.length, ukf.filterHistory.length);
@@ -37,13 +37,13 @@ test('(b) ESPF 2025 in its Gaussian limit reproduces the UKF (full-force HPOP po
     state = Math.max(state, maxRelative(e.filteredState, u.filteredState));
     covariance = Math.max(covariance, maxRelative(e.filteredCovariance, u.filteredCovariance));
   });
-  // Same seeds, same HPOP answers; the updates differ only in rounding.
+  // Same seeds, same FFM answers; the updates differ only in rounding.
   assert.ok(state < 1e-12 && covariance < 1e-9, JSON.stringify({ state, covariance }));
   console.log(`PASS (b) ESPF_2025 Gaussian limit vs UKF: state ${state}, covariance ${covariance} (relative, max over ${ukf.filterHistory.length} epochs)`);
 });
 
 test('ESPF 2026: support, survivors, medoid and possibility reset; exact restart from final_support', async () => {
-  const full = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2026', { espf: {} }));
+  const full = await runToCompletion(estimator, ffm, envelopeFor('ESPF_2026', { espf: {} }));
   assert.equal(full.status, 0);
   assert.equal(full.supportHistory.length, OBSERVATIONS.length);
   for (const e of full.supportHistory) {
@@ -57,10 +57,10 @@ test('ESPF 2026: support, survivors, medoid and possibility reset; exact restart
   assert.equal(final.points.length, 85 * 6);
   assert.ok(final.possibility.every((p) => p === 1));
   // Split at observation 6: the second request starts from the support state.
-  const first = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2026', { espf: {} }, { observations: OBSERVATIONS.slice(0, 6) }));
+  const first = await runToCompletion(estimator, ffm, envelopeFor('ESPF_2026', { espf: {} }, { observations: OBSERVATIONS.slice(0, 6) }));
   const restart = envelopeFor('ESPF_2026', { espf: {}, initial_support: {} }, { observations: OBSERVATIONS.slice(6), epochSeconds: SECONDS[5] });
   restart.request.options.initialSupport = first.finalSupport;
-  const second = await runToCompletion(estimator, hpop, restart);
+  const second = await runToCompletion(estimator, ffm, restart);
   second.filterHistory.forEach((e, k) => {
     assert.deepEqual(e.filteredState, full.filterHistory[6 + k].filteredState);
     assert.deepEqual(e.filteredCovariance, full.filterHistory[6 + k].filteredCovariance);
@@ -68,7 +68,7 @@ test('ESPF 2026: support, survivors, medoid and possibility reset; exact restart
 });
 
 test('ESPF 2025: 2n + 1 support, the stated decay exp(-0.05 tau), and all-falsified evidence flagged', async () => {
-  const run = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2025', { espf: {} }));
+  const run = await runToCompletion(estimator, ffm, envelopeFor('ESPF_2025', { espf: {} }));
   assert.equal(run.status, 0);
   run.supportHistory.forEach((e, k) => {
     assert.equal(e.supportCount, 13);
@@ -76,7 +76,7 @@ test('ESPF 2025: 2n + 1 support, the stated decay exp(-0.05 tau), and all-falsif
   });
   // A 0.2 rad gross error lies outside every support point's compatibility region.
   const bad = OBSERVATIONS.map((o, k) => (k === 3 ? Object.assign(Object.create(Object.getPrototypeOf(o)), o, { value: [o.value[0] + 0.2, o.value[1], 0, 0] }) : o));
-  const flagged = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2025', { espf: {} }, { observations: bad }));
+  const flagged = await runToCompletion(estimator, ffm, envelopeFor('ESPF_2025', { espf: {} }, { observations: bad }));
   // The literal 2025 recursion contracts its support by sigma_k^2 at every
   // regeneration and by pruning, with no stated re-expansion (its surprisal
   // gain is unstated), so later epochs may also falsify every point
@@ -93,7 +93,7 @@ test('ESPF 2025: 2n + 1 support, the stated decay exp(-0.05 tau), and all-falsif
 
 test('set-membership filter: the truth stays inside the bound; an impossible observation is flagged', async () => {
   const options = { set_membership: { initial_bound_scale: 3, process_bound_scale: 3, measurement_bound_scale: 5 } };
-  const run = await runToCompletion(estimator, hpop, envelopeFor('ELLIPSOIDAL_SET_MEMBERSHIP', options), { stm: true });
+  const run = await runToCompletion(estimator, ffm, envelopeFor('ELLIPSOIDAL_SET_MEMBERSHIP', options), { stm: true });
   assert.equal(run.status, 0);
   run.supportHistory.forEach((e, k) => {
     const d = e.estimate.map((x, i) => truth[k].state[i] - x);
@@ -110,7 +110,7 @@ test('set-membership filter: the truth stays inside the bound; an impossible obs
     assert.ok(q <= 1, `epoch ${k}: truth at normalized distance ${Math.sqrt(q)}`);
   });
   const bad = OBSERVATIONS.map((o, k) => (k === 3 ? Object.assign(Object.create(Object.getPrototypeOf(o)), o, { value: [o.value[0] + 0.01, o.value[1], 0, 0] }) : o));
-  const flagged = await runToCompletion(estimator, hpop, envelopeFor('ELLIPSOIDAL_SET_MEMBERSHIP', options, { observations: bad }), { stm: true });
+  const flagged = await runToCompletion(estimator, ffm, envelopeFor('ELLIPSOIDAL_SET_MEMBERSHIP', options, { observations: bad }), { stm: true });
   assert.equal(flagged.supportHistory[3].inconsistent, true);
   assert.deepEqual(flagged.rejectedObservationIndices, [3]);
   assert.deepEqual(flagged.supportHistory[3].shape, flagged.supportHistory[3].predictedShape);
@@ -128,7 +128,7 @@ test('LINEAR records with H = [I 0] reproduce POSITION_VECTOR byte for byte (ESP
     const run = async (measurement) => {
       const envelope = envelopeFor(kind, options);
       envelope.request.extendedObservations = records(measurement);
-      return runToCompletion(estimator, hpop, envelope, port);
+      return runToCompletion(estimator, ffm, envelope, port);
     };
     const vector = await run('POSITION_VECTOR'), linear = await run('LINEAR');
     assert.equal(vector.status, 0, vector.error);
@@ -142,7 +142,7 @@ test('LINEAR records with H = [I 0] reproduce POSITION_VECTOR byte for byte (ESP
 });
 
 test('ESPF 2025 regeneration with zeta = sqrt(n): the regenerated support keeps the spread sigma^2 Pi', async () => {
-  const run = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2025', { espf: { regeneration_scale: Math.sqrt(6) } }, { observations: OBSERVATIONS.slice(0, 4) }));
+  const run = await runToCompletion(estimator, ffm, envelopeFor('ESPF_2025', { espf: { regeneration_scale: Math.sqrt(6) } }, { observations: OBSERVATIONS.slice(0, 4) }));
   assert.equal(run.status, 0, run.error);
   const last = run.supportHistory.at(-1), points = run.finalSupport.points;
   assert.equal(points.length, 13 * 6);

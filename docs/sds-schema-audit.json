@@ -42,7 +42,7 @@
       "downstreamConsumers": [
         "foundation/time",
         "foundation/frames",
-        "propagator/hpop",
+        "propagator/ffm",
         "propagator/dsst",
         "basilisk/runtime"
       ]
@@ -178,7 +178,7 @@
       "downstreamConsumers": [
         "foundation/orbits",
         "propagator/sgp4",
-        "propagator/hpop",
+        "propagator/ffm",
         "propagator/dsst",
         "analysis/covariance",
         "basilisk/dynamics/*"
@@ -280,7 +280,7 @@
         "foundation/math-bspline",
         "foundation/orbits",
         "foundation/attitude-math",
-        "propagator/hpop"
+        "propagator/ffm"
       ]
     },
     {
@@ -330,7 +330,7 @@
       "gaps": [
         "HFC does not expose Debye length or acceleration-vector output needed by current Basilisk atmosphere ports.",
         "No canonical geomagnetic WMM/IGRF, solid/ocean tide, geoid, troposphere, or displacement model request/result records are available.",
-        "No reusable force-model acceleration record exists for HPOP/DSST/Basilisk imports."
+        "No reusable force-model acceleration record exists for FFM/DSST/Basilisk imports."
       ],
       "nextSdsActions": [
         "Promote atmosphere force-output vectors before exposing drag/SRP/gravity force modules.",
@@ -339,7 +339,7 @@
       "downstreamConsumers": [
         "models/earth-environment",
         "propagator/atmosphere",
-        "propagator/hpop",
+        "propagator/ffm",
         "propagator/dsst",
         "basilisk/environment/*"
       ]

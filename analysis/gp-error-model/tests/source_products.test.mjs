@@ -253,9 +253,9 @@ test('rule 2: a fit\'s formal covariance times the realism factor measured for t
   const x = [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75];
   const lower = designed(1);
   const fit = fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x, lower });
-  const realism = [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5,
+  const realism = [{ sources: ['ilrs-crd'], class: 'slr-ffm-fit', factor: 17.04, meanD2Over3: 17.04, coverage95: 0.17, samples: 1000, objects: 5,
     evidence: 'orbit-accuracy-experiments E6 test', window: '2026-05-01..2026-09-30' }];
-  const recipe = recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-hpop-fit', extra: { realism } });
+  const recipe = recipeFor({ id: 'ilrs-crd', kind: 'observation', lineage: 'ilrs-slr', own: false, fitClass: 'slr-ffm-fit', extra: { realism } });
   const { report, ocms, omms } = await attach([leoH], { recipe, fit });
   assert.equal(report.counts.rule2, 1);
   const ocm = ocms[0];
@@ -263,7 +263,7 @@ test('rule 2: a fit\'s formal covariance times the realism factor measured for t
   closeAll(ocm.STATE_DATA, x, 'fit state', 0);
   const cvr = ocm.COV_REALISM[0];
   assert.equal(cvr.RULE, OCM.covarianceRule.ScaledFit);
-  assert.equal(cvr.MODEL_ID, 'slr-hpop-fit');
+  assert.equal(cvr.MODEL_ID, 'slr-ffm-fit');
   assert.equal(cvr.SCALE_FACTOR, 17.04);
   assert.equal(cvr.MEAN_D2_OVER_3, 17.04, 'the measured error of the formal covariance, before scaling');
   assert.equal(cvr.COVERAGE_95, 0.17);
@@ -290,7 +290,7 @@ test('rule 2: a fit\'s formal covariance times the realism factor measured for t
 test('rule 2 needs a measured factor for the source and class; without one the next rule answers', async () => {
   const fit = fitOcm({ norad: 90101, name: leoH.name, epoch: '2026-10-01T12:00:00.000000', x: [4000, 5000, 3000, -3.5, 4.25, 4.75], lower: designed(1) });
   const recipe = recipeFor({ id: 'od-fit-source', kind: 'observation', lineage: 'x', own: false, fitClass: 'od-sgp4-fit',
-    extra: { realism: [{ sources: ['ilrs-crd'], class: 'slr-hpop-fit', factor: 17.04 }] } });
+    extra: { realism: [{ sources: ['ilrs-crd'], class: 'slr-ffm-fit', factor: 17.04 }] } });
   const { report, ocms } = await attach([leoH], { recipe, fit });
   assert.equal(report.counts.rule2, 0);
   assert.equal(report.counts.rule4, 1);

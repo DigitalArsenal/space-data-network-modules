@@ -4959,7 +4959,7 @@ double plugin_entity_get_omm_pointer(uint32_t entity_index) {
 // mechanics — so it happens HERE, against the module's own TEME state, and
 // never in the engine's JavaScript.
 //
-// The triad is the same one HPOP applies (`hpop_plugin.cpp:322`,
+// The triad is the same one FFM applies (`ffm_plugin.cpp:322`,
 // `lvlhDeltaVToECI`) and the same one `ManeuverFrame.RIC` declares:
 //
 //     R = r_hat            radial, along the position vector
@@ -4984,12 +4984,12 @@ enum : int32_t {
 };
 
 /// Field count of the impulsive burn record — the layout `plugin_set_burns`
-/// has taken since HPOP shipped. The record is versioned BY LENGTH so it can
+/// has taken since FFM shipped. The record is versioned BY LENGTH so it can
 /// grow (a finite-burn model would append duration) without an ABI break.
 static constexpr uint32_t ORBPRO_BURN_FIELDS_IMPULSIVE = 5;
 
 /// Build the RIC (RTN/RSW/LVLH/Hill) triad from an inertial state.
-/// Bit-for-bit the same construction as HPOP's, deliberately: two propagators
+/// Bit-for-bit the same construction as FFM's, deliberately: two propagators
 /// disagreeing about which way "in-track" points is not a difference anybody
 /// would ever see in a number, only in a trajectory.
 static void ricTriadFromInertialState(const double r[3], const double v[3],
@@ -5156,11 +5156,11 @@ static bool deriveMeanElementsFromState(const double targetR[3],
 // `ingest_omm` is what creates the post-burn entity, and that composition is
 // the caller's, not this function's.
 //
-// THE BURN RECORD IS THE ONE HPOP ALREADY SHIPS.
+// THE BURN RECORD IS THE ONE FFM ALREADY SHIPS.
 // ---------------------------------------------------------------------------
 // `burn` points at a flat array of doubles laid out exactly as
-// `plugin_set_burns` has taken them since HPOP shipped
-// (`hpop_plugin.cpp:1846`, JS mirror `propagator.hpop/index.js` BURN_STRIDE):
+// `plugin_set_burns` has taken them since FFM shipped
+// (`ffm_plugin.cpp:1846`, JS mirror `propagator.ffm/index.js` BURN_STRIDE):
 //
 //   [0] timeJD             burn epoch, UTC Julian date
 //   [1] targetEntityIdx    entity whose state defines the RIC triad;
@@ -5169,7 +5169,7 @@ static bool deriveMeanElementsFromState(const double targetR[3],
 //   [3] dv_t               in-track   delta-V, KILOMETRES PER SECOND, SIGNED
 //   [4] dv_n               cross-track delta-V, KILOMETRES PER SECOND, SIGNED
 //
-// Two propagators, ONE burn wire, ONE unit. Adopting HPOP's layout rather than
+// Two propagators, ONE burn wire, ONE unit. Adopting FFM's layout rather than
 // inventing a second one is the whole point: a burn record that means km/s in
 // one module and m/s in the next is the 1000x class of defect
 // graph/findings/official-harness-shapes.md §4.1 exists to stop.

@@ -1,5 +1,7 @@
 # All-vs-all screening with the pair search on a GPU
 
+FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
+
 Every object of a catalog against every other, for trajectories from any
 propagator. The module does all the numerical work in WASM: it samples the
 trajectories, re-tests candidates, refines TCAs, computes probability and
@@ -23,7 +25,7 @@ A resident index holds one source per object, all in one frame:
 | Source | Evaluated as | Motion bound |
 | --- | --- | --- |
 | Mean elements (OMM, TLE), `PROPAGATOR_PORT_ID=sgp4` | SGP4 in the module | Natural motion: A = 1.05 μ / r_min² |
-| PPE from any propagator (HPOP's `conjunction-screening` export, or another) | The Chebyshev intervals as given | From the coefficients |
+| PPE from any propagator (FFM's `conjunction-screening` export, or another) | The Chebyshev intervals as given | From the coefficients |
 
 PPE intervals may be in UTC, TT or TDB. A TDB or TT interval maps onto UTC
 linearly between its converted ends, using the vendored ERFA from
@@ -36,7 +38,7 @@ tracks cannot bound their motion between samples; supply those as PPE.
 
 A propagator module's output goes in unchanged.
 `prepare_screening_index` takes its `$PRW` `DESCRIBE_RESULT` records, as
-`propagator/hpop` exports them, on the `trajectories` port. The request's
+`propagator/ffm` exports them, on the `trajectories` port. The request's
 `SOURCES` then carry identity only: object id, name, catalog number and
 handle. Records may be size-prefixed, as a module's `FinishSizePrefixed`
 builds them (see the SDK README, "Size-prefixed records"), or plain.
@@ -189,12 +191,12 @@ A long screen runs as consecutive windows (`screenWindowsOnGpu` in
 `gpu/allVsAll.mjs`):
 
 - **SGP4:** the catalog is loaded once, and every window screens that index.
-- **HPOP and other trajectory propagators:** each window loads only that
-  window's trajectories and releases them after. A day of HPOP's 300 s
+- **FFM and other trajectory propagators:** each window loads only that
+  window's trajectories and releases them after. A day of FFM's 300 s
   segments is about 240 KB per object. A 1-hour window of the full catalog is
   about 390 MB, which `prepare_screening_index` holds in 1.05 GiB of the
   module's 2 GiB; a 2-hour window (700 MB) needs 1.85 GiB before the screen
-  itself, so HPOP screens default to 1-hour windows.
+  itself, so FFM screens default to 1-hour windows.
 
 The merged result is a single screen of the whole span:
 
@@ -207,16 +209,16 @@ The merged result is a single screen of the whole span:
 `tests/windowedScreenParity.test.mjs` checks four windows against one screen
 for both propagators.
 
-### The HPOP propagation farm
+### The FFM propagation farm
 
-`scripts/lib/hpopFarm.mjs` runs on worker threads:
+`scripts/lib/ffmFarm.mjs` runs on worker threads:
 
 1. `analysis/epoch-state` turns each element set into a GCRF state at its
    epoch: SGP4 at zero elapsed time, then TEME to GCRF through ERFA.
-2. `propagator/hpop` integrates those states at full force:
-   `propagator/hpop/catalog.mjs` writes the configuration, Cd·A/m comes from
+2. `propagator/ffm` integrates those states at full force:
+   `propagator/ffm/catalog.mjs` writes the configuration, Cd·A/m comes from
    each element set's B* (converted by the module; 0.01 m²/kg where B* ≤ 0)
-   and Cr·A/m is 0.02 m²/kg. `--hpop-environment` supplies the kernel, Earth
+   and Cr·A/m is 0.02 m²/kg. `--ffm-environment` supplies the kernel, Earth
    orientation and space weather (`docs/benchmark.md`). A resident instance
    holds at most 1,024 objects; objects are dealt round-robin into about two
    instances per worker.
@@ -224,31 +226,31 @@ for both propagators.
    The `$PRW` records go to the page unchanged, and the next window is
    prepared while the page screens the current one.
 
-An object HPOP cannot cover is found by preparing objects one at a time and
-leaves its instance. HPOP ends a trajectory at reentry, 100 km geodetic
-altitude (propagator/hpop README, "The end of a trajectory: reentry"):
+An object FFM cannot cover is found by preparing objects one at a time and
+leaves its instance. FFM ends a trajectory at reentry, 100 km geodetic
+altitude (propagator/ffm README, "The end of a trajectory: reentry"):
 - an object that reenters before the screen starts is excluded from the whole
   span, as SGP4 excludes a decayed element set;
 - one that reenters during the screen keeps the windows before the one that
   holds its reentry, and is absent from that window on;
 - any other failure excludes the object from the whole span.
 
-The CPU runner's summary lists them (`hpop.reentries`, `hpop.dropped`).
+The CPU runner's summary lists them (`ffm.reentries`, `ffm.dropped`).
 
-HPOP integrates every object from its element epoch, so the first window
-carries that catch-up. HPOP prunes cache intervals that end before the
+FFM integrates every object from its element epoch, so the first window
+carries that catch-up. FFM prunes cache intervals that end before the
 requested window, so an instance holds about one window per object.
 
 ## Running it
 
 ```
 node build.mjs
-node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin> --propagator sgp4|hpop \
+node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin> --propagator sgp4|ffm \
   --start 2461314.5 --days 3 [--window-hours 6|1] --threshold-km 5 --step-s 60 [--cpu] \
-  [--hpop-environment <env dir>] --out summary.json
+  [--ffm-environment <env dir>] --out summary.json
 # no browser, no GPU (Node, or WasmEdge as on an SDN node):
 node scripts/run-all-vs-all-cpu.mjs --catalog <omm.uint32be.bin> --runtime wasmedge --aot \
-  --propagator sgp4|hpop [--hpop-environment <env dir>] [--farm-workers N] --days 3 --out summary.json
+  --propagator sgp4|ffm [--ffm-environment <env dir>] [--farm-workers N] --days 3 --out summary.json
 ```
 
 The catalog file holds `$OMM` records, each prefixed by its u32 big-endian
@@ -265,8 +267,8 @@ With `--serve`, it leaves the page up for a WebGPU browser instead.
 
 - **SGP4:** element sets, including one SGP4 cannot propagate, against
   `screen_catalog`.
-- **HPOP:** HPOP-integrated crossing orbits (`tests/fixtures/hpop-ppe`, from
-  `scripts/generate-hpop-ppe-fixture.mjs`). The GPU path must equal the
+- **FFM:** FFM-integrated crossing orbits (`tests/fixtures/ffm-ppe`, from
+  `scripts/generate-ffm-ppe-fixture.mjs`). The GPU path must equal the
   exhaustive CPU scan and hold each pair's closest approach as
   `screen_window` finds it.
 
@@ -285,7 +287,7 @@ so times are upper bounds.
 | SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 294,544 (25 objects excluded) |
 | SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 294,544 |
 | SGP4 | GPU | 21.3 s | 6.1 + 2.3 s | 7.2 s | 294,544 |
-| HPOP, 72 × 1 h | module, Node | 6,383 s on 16 cores (15,210 s measured) | 97.7 s | 40.1 s | 283,700 (21 objects excluded) |
+| FFM, 72 × 1 h | module, Node | 6,383 s on 16 cores (15,210 s measured) | 97.7 s | 40.1 s | 283,700 (21 objects excluded) |
 
 - Each propagator's runs report identical conjunctions (same TCA and miss
   distance) whichever host searched.
@@ -298,10 +300,10 @@ so times are upper bounds.
   states (the ISS with its modules and visiting vehicles, the Chinese station,
   attached vehicles; relative speed 0, 67 pairs in each window). Since
   4e06269e a window reports a pair's interior minima of range and never a
-  window edge, and a constant range has none. The HPOP screen differs from its
+  window edge, and a constant range has none. The FFM screen differs from its
   earlier run by -4,871 and +47 events for the same reasons; both screens
   have the candidates of the earlier runs.
-- HPOP's time is propagation: 99,929 CPU-seconds on 8 farm workers
+- FFM's time is propagation: 99,929 CPU-seconds on 8 farm workers
   (user and system time of each worker thread), 0.65 s per object-day; the
   first window, the catch-up from element epochs, took 36 % of it. Its
   end-to-end time is that CPU time on 16 dedicated cores plus search and
@@ -309,13 +311,13 @@ so times are upper bounds.
   maximum 82; the farm held its next chunk while the load exceeded 55), the
   screen took 15,210 s, 15,060 s of it waiting on the farm, with 2 module
   threads.
-- The HPOP row is HPOP 1.3.0 at full force with the conjunction module of
+- The FFM row is FFM 1.3.0 at full force with the conjunction module of
   0.7.0, the one the SGP4 rows used, and the environment released at the
   screen's start. 21 objects reentered (100 km) before the screen and are
   excluded; 6 reentered during it and are screened through the last full
   window before their reentry
-  ([hpop-full-force-screen-2026-10.md](hpop-full-force-screen-2026-10.md)).
-- Against the SGP4 screen (`scripts/compare-screens.mjs`), 39,425 of HPOP's
+  ([ffm-full-force-screen-2026-10.md](ffm-full-force-screen-2026-10.md)).
+- Against the SGP4 screen (`scripts/compare-screens.mjs`), 39,425 of FFM's
   283,700 conjunctions are the same pair with TCAs within 10 minutes; on
   those, TCAs differ by a median of 1.2 s and miss distances by 691 m.
 - AOT compilation (about 10 s, once per install) is not counted.
@@ -362,8 +364,8 @@ Every row reports the same conjunctions.
 
 `screen_catalog` traps out of memory above about 7,000 objects per call.
 
-HPOP's own cost at full force is about 0.65 s per object-day on one thread
-(0.69 s with perigee below 2,000 km, 0.19 s above; propagator/hpop README,
+FFM's own cost at full force is about 0.65 s per object-day on one thread
+(0.69 s with perigee below 2,000 km, 0.19 s above; propagator/ffm README,
 "Catalog cost"). A day of its 300 s segments is about 240 KB per object, so a
 full catalog of PPE does not fit in one module instance; screen it in 1-hour
 windows.

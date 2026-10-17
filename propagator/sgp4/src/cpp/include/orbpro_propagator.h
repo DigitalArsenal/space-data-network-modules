@@ -29,7 +29,7 @@
  *   - packages/orbpro-integration/propagator.sgp4/index.js
  *       "Output: ECEF positions in meters" — reads position[] straight out
  *       of this struct with NO scaling.
- *   - packages/orbpro-integration/propagator.hpop/index.js
+ *   - packages/orbpro-integration/propagator.ffm/index.js
  *       "Output: ECEF positions in meters (always — no JS-side unit
  *       normalization)".
  *

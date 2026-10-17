@@ -2,13 +2,13 @@
 // headless Chrome with WebGPU, or leaves it up for a browser (--serve).
 //
 // usage: node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin>
-//          [--propagator sgp4|hpop] [--start <jd>] [--days 3] [--window-hours 6]
+//          [--propagator sgp4|ffm] [--start <jd>] [--days 3] [--window-hours 6]
 //          [--threshold-km 5] [--step-s 60] [--farm-workers N] [--cpu]
-//          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only]
+//          [--ffm-environment <dir>] [--ffm-profile full-force|gravity-only]
 //          [--out summary.json] [--serve] [--port 0] [--timeout-s 7200]
 // The catalog is $OMM records, each prefixed by its u32 big-endian length.
-// One propagator per run. With --propagator hpop the runner hosts the HPOP
-// propagation farm (scripts/lib/hpopFarm.mjs) and serves each window's
+// One propagator per run. With --propagator ffm the runner hosts the FFM
+// propagation farm (scripts/lib/ffmFarm.mjs) and serves each window's
 // trajectories to the page, exporting the next window while the page screens
 // the current one. --cpu screens without WebGPU (the module's own search), as
 // a browser without a GPU does; scripts/run-all-vs-all-cpu.mjs runs the same
@@ -21,7 +21,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { build } from 'esbuild';
-import { createHpopFarm } from './lib/hpopFarm.mjs';
+import { createFfmFarm } from './lib/ffmFarm.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const example = path.join(root, 'examples/all-vs-all-gpu');
@@ -33,41 +33,41 @@ const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, propagator: { type: 'string', default: 'sgp4' }, start: { type: 'string', default: '2461314.5' },
   days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' }, 'threshold-km': { type: 'string', default: '5' },
   'step-s': { type: 'string', default: '60' }, 'farm-workers': { type: 'string' }, cpu: { type: 'boolean', default: false },
-  'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' },
+  'ffm-environment': { type: 'string' }, 'ffm-profile': { type: 'string', default: 'full-force' },
   out: { type: 'string' }, serve: { type: 'boolean', default: false }, port: { type: 'string', default: '0' },
   'timeout-s': { type: 'string', default: '7200' },
 } });
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
-if (!['sgp4', 'hpop'].includes(o.propagator)) throw new Error('--propagator is sgp4 or hpop: one propagator per run.');
+if (!['sgp4', 'ffm'].includes(o.propagator)) throw new Error('--propagator is sgp4 or ffm: one propagator per run.');
 const t0 = performance.now();
 const catalogBytes = fs.readFileSync(o.catalog);
-// HPOP windows hold every object's trajectory (~12 KB per object per 2 h).
-// HPOP's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
+// FFM windows hold every object's trajectory (~12 KB per object per 2 h).
+// FFM's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
 // trajectories, which the module indexes in about 1.05 of its 2 GiB.
-const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 1 : 6));
+const windowHours = Number(o['window-hours'] ?? (o.propagator === 'ffm' ? 1 : 6));
 const windows = Array.from({ length: Math.ceil((Number(o.days) * 24) / windowHours - 1e-9) }, (_, k) => ({
   startJd: Number(o.start) + (k * windowHours) / 24, durationDays: Math.min(windowHours, Number(o.days) * 24 - k * windowHours) / 24 }));
 
-// HPOP: the farm, and each window's export as the page's window file (u32 JSON
+// FFM: the farm, and each window's export as the page's window file (u32 JSON
 // length, JSON, then each $PRW record as u32 length + bytes, all 8-padded).
 let farm = null, farmInfo = null;
 const exports = [];
-// HPOP returns whole intervals covering the request; the margin covers
+// FFM returns whole intervals covering the request; the margin covers
 // TDB - UTC (69 s) so the UTC window is inside them.
 const MARGIN_DAYS = 2 / 1440;
-if (o.propagator === 'hpop') {
+if (o.propagator === 'ffm') {
   const catalog = [];
   for (let at = 0; at < catalogBytes.length;) {
     const n = catalogBytes.readUInt32BE(at);
     catalog.push(new Uint8Array(catalogBytes.subarray(at + 4, at + 4 + n)));
     at += 4 + n;
   }
-  farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
+  farm = await createFfmFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
     workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
-    profile: o['hpop-profile'], environment: o['hpop-environment'], screenStartJd: Number(o.start) });
+    profile: o['ffm-profile'], environment: o['ffm-environment'], screenStartJd: Number(o.start) });
   farmInfo = { workers: farm.workers, instances: farm.instances, deriveMs: farm.deriveMs, ingestMs: farm.ingestMs,
     epochStateExcluded: farm.excluded.length, windowExportMs: [], reentries: farm.reentries };
-  process.stderr.write(`farm: ${farm.objects.length} objects, ${farm.workers} workers, ${farm.instances} HPOP instances\n`);
+  process.stderr.write(`farm: ${farm.objects.length} objects, ${farm.workers} workers, ${farm.instances} FFM instances\n`);
 }
 const pad = (n) => n + ((8 - (n % 8)) % 8);
 async function windowFile(k) {

@@ -16,9 +16,9 @@ process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 const {version, provenance} = await generateSdsHeaders();
 
 // Reuse a repo-local LLVM toolchain via the SDK's public compiler hook, as in
-// the HPOP PRW build. Outputs stay in this worktree. No emcc is invoked.
+// the FFM PRW build. Outputs stay in this worktree. No emcc is invoked.
 const toolchainRoots = [process.env.SDN_LOCAL_EMSDK_DIR, path.join(packageRoot,'deps/emsdk'),
-  path.resolve(packageRoot,'../../propagator/hpop/deps/emsdk')].filter(Boolean);
+  path.resolve(packageRoot,'../../propagator/ffm/deps/emsdk')].filter(Boolean);
 const llvmRoot = toolchainRoots.find(root => fsSync.existsSync(path.join(root,'upstream/bin/clang++')));
 const compiler = process.env.SDN_WASI_CLANGXX || (llvmRoot && path.join(llvmRoot,'upstream/bin/clang++'));
 if (!compiler) throw new Error('Set SDN_LOCAL_EMSDK_DIR or SDN_WASI_CLANGXX to a local LLVM/WASI SDK compiler.');

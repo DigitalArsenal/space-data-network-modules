@@ -9,8 +9,11 @@
  *  - Planets: Mallama & Hilton (2018), "Computing apparent planetary
  *    magnitudes for The Astronomical Almanac", Astronomy and Computing 25:10-24,
  *    https://doi.org/10.1016/j.ascom.2018.08.002 (equations 1-11, alpha in deg).
- *  - Moon: Allen's Astrophysical Quantities (4th ed., 2000) 12.4,
- *    V = 0.21 + 5 log(r d) + 0.0217 alpha + 5.5e-9 alpha^4 (phase law).
+ *  - Moon phase law: Krisciunas & Schaefer (1991), "A Model of the Brightness
+ *    of Moonlight", PASP 103:1033, https://doi.org/10.1086/132921.
+ *    V = 0.21 + 5 log10(r d) + 0.026 |alpha| + 4e-9 alpha^4;
+ *    alpha in degrees, r = Sun-Moon au, d = observer-Moon au.
+ *    The existing V(1,0) = 0.21 normalization is retained.
  *  - Planetary satellites: V(1,0) from JPL SSD "Planetary Satellite Physical
  *    Parameters" (https://ssd.jpl.nasa.gov/sats/phys_par/), with a linear
  *    phase coefficient of 0.02 mag/deg (Allen 12.4) — display brightness only.

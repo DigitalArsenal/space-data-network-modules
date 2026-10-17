@@ -39,13 +39,13 @@ for(const fixture of kernels) test(`${fixture.filename} states match independent
   } finally { rmSync(work,{recursive:true,force:true}); }
 });
 
-test('HPOP uses DE440 input buffer and reports monthly analytic error', (t) => {
+test('FFM uses DE440 input buffer and reports monthly analytic error', (t) => {
   if(spawnSync('c++',['--version'],{stdio:'ignore'}).status!==0) return t.skip('host C++ compiler unavailable');
   const repo=join(here,'../../..');
-  const hpop=join(repo,'propagator/hpop/lib');
+  const ffm=join(repo,'propagator/ffm/lib');
   const nrl=join(repo,'third_party/nrlmsise00');
   if(!existsSync(join(nrl,'nrlmsise-00.c'))) return t.skip('third_party/nrlmsise00 source missing');
-  const work=mkdtempSync(join(tmpdir(),'sdn-de440-hpop-'));
+  const work=mkdtempSync(join(tmpdir(),'sdn-de440-ffm-'));
   try {
     const objects=[];
     for(const name of ['nrlmsise-00.c','nrlmsise-00_data.c']) {
@@ -53,17 +53,17 @@ test('HPOP uses DE440 input buffer and reports monthly analytic error', (t) => {
       execFileSync('cc',['-std=c11','-O2','-c',join(nrl,name),'-o',output],{stdio:'pipe'});
       objects.push(output);
     }
-    const binary=join(work,'de440-hpop');
-    execFileSync('c++',['-std=c++17','-O2','-DDE440_WITH_HPOP','-I',join(here,'../src'),'-I',hpop,'-I',nrl,'-I',join(repo,'third_party/hwm14'),
+    const binary=join(work,'de440-ffm');
+    execFileSync('c++',['-std=c++17','-O2','-DDE440_WITH_FFM','-I',join(here,'../src'),'-I',ffm,'-I',nrl,'-I',join(repo,'third_party/hwm14'),
       join(here,'de440_reference_native.cpp'),
-      ...['astrodynamics','coords','ephemeris','environment_models','force_models','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin','atmosphere_winds'].map(name=>join(hpop,`${name}.cpp`)),
+      ...['astrodynamics','coords','ephemeris','environment_models','force_models','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin','atmosphere_winds'].map(name=>join(ffm,`${name}.cpp`)),
       join(repo,'third_party/hwm14/hwm14.cpp'),join(repo,'third_party/hwm14/hwm14_data.cpp'),
       ...objects,'-o',binary],{stdio:'pipe'});
     const run=spawnSync(binary,[fixtures,'--excerpt'],{encoding:'utf8'});
     process.stdout.write(run.stdout??'');
     assert.equal(run.status,0,`${run.stdout}\n${run.stderr}`);
     assert.equal(run.stdout.split('\n').filter(line=>line.startsWith('ANALYTIC ')).length,24);
-    for(const name of ['hpop_de440_position_km','hpop_de440_velocity_km_s'])
+    for(const name of ['ffm_de440_position_km','ffm_de440_velocity_km_s'])
       assert.match(run.stdout,new RegExp(`RESULT ${name} [^\\n]+ PASS`));
   } finally {rmSync(work,{recursive:true,force:true});}
 });

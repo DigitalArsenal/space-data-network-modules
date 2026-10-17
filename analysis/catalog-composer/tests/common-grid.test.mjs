@@ -17,7 +17,7 @@ test('grid refuses impossible dates, oversized arcs, excessive samples and sub-m
  for(const bad of [{start:'2026-02-30T00:00:00Z'},{samples:10001},{stepSeconds:1e-4},{stepSeconds:86400}])assert.throws(()=>gridPolicy({...grid,...bad}));
 });
 test('selected PRW implementation, time and frame WASM produce a closed-form circular common grid',async t=>{
- const runtimes={propagator:await load('propagator/hpop',t),frames:await load('foundation/frames',t),time:await load('foundation/time',t)};
+ const runtimes={propagator:await load('propagator/ffm',t),frames:await load('foundation/frames',t),time:await load('foundation/time',t)};
  // Analytic two-body circle, r=7000 km, mu=398600.4418 km^3/s^2,
  // GCRF/UTC at the stated epoch. Absolute tolerance 1e-3 km and 1e-6 km/s
  // permits UTC/JD representation quantization and native integration error.

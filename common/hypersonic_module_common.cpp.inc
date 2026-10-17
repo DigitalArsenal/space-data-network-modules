@@ -328,7 +328,7 @@ AtmosphereState us76(double altitude_m) {
 // wasm modules cannot link the real vendored NRLMSISE-00 implementation
 // (third_party/nrlmsise00/), and silently substituting an exponential fit
 // while calling it NRLMSISE-00 would be dishonest. Use the `atmosphere`
-// or `hpop` modules for real NRLMSISE-00 densities.
+// or `ffm` modules for real NRLMSISE-00 densities.
 AtmosphereState atmosphere_for_model(double altitude_m, const std::string& model) {
   if (model == "US76") {
     return us76(altitude_m);
@@ -355,7 +355,7 @@ AtmosphereState atmosphere_for_model(double altitude_m, const std::string& model
       "single-source wasm build, and approximating it silently is not "
       "acceptable. Supported models: \"US76\", "
       "\"US76_EXPONENTIAL_EXTENSION\". For real NRLMSISE-00 use the "
-      "atmosphere or hpop modules.";
+      "atmosphere or ffm modules.";
   } else {
     invalid.error =
       "Unknown atmosphere model \"" + model + "\". Supported models: "

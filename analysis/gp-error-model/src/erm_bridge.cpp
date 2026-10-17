@@ -267,7 +267,7 @@ J stratified_units() {
   return {{"position", "km"}, {"velocity", "km/s"}, {"components", {"R", "T", "N", "dR", "dT", "dN"}},
           {"covariance", "lower triangle, row-major: RR, TR, TT, NR, NT, NN, dR R, ..."}};
 }
-J hpop_units() {
+J ffm_units() {
   return {{"p0", "km, km/s; lower triangle, row-major, RTN: RR, TR, TT, NR, NT, NN, dR R, ..."},
           {"spectralDensityM2S3", "m^2/s^3 per R, T, N axis"}};
 }
@@ -328,7 +328,7 @@ std::unique_ptr<ERMModelT> model_in(const J& j) {
       m->SCALE->TRUTH_WINDOW = str(s, "truthWindow");
       m->SCALE->MINIMUM_SAMPLES = static_cast<uint32_t>(num(s, "minimumSamples", 0));
     }
-  } else if (kind == "hpop-covariance-model") {
+  } else if (kind == "ffm-covariance-model") {
     m->FORM = ermModelForm::PropagatorCovariance;
     const auto w = window_in(has(j, "epochWindow") ? j["epochWindow"] : J());
     m->EPOCH_WINDOW_START = w.first;
@@ -507,10 +507,10 @@ J model_out(const ERMModelT& m) {
       break;
     }
     case ermModelForm::PropagatorCovariance: {
-      j["kind"] = "hpop-covariance-model";
+      j["kind"] = "ffm-covariance-model";
       j["version"] = 1;
       j["basis"] = m.BASIS_TEXT;
-      j["units"] = hpop_units();
+      j["units"] = ffm_units();
       if (!m.EPOCH_WINDOW_START.empty() || !m.EPOCH_WINDOW_STOP.empty()) j["epochWindow"] = {m.EPOCH_WINDOW_START, m.EPOCH_WINDOW_STOP};
       if (m.COUNTS) {
         J c = J::object();
@@ -783,7 +783,7 @@ std::unique_ptr<ERMScreeningReportT> screening_report_in(const J& j) {
   return r;
 }
 
-// ── HPOP arcs ──
+// ── FFM arcs ──
 std::unique_ptr<ERMArcPlanT> plan_in(const J& j) {
   auto p = std::make_unique<ERMArcPlanT>();
   p->TARGET_AGES_DAYS = dvec(j, "targetAgesDays");
@@ -827,7 +827,7 @@ J plan_out(const ERMArcPlanT& p) {
     if (a->PROCESS_NOISE) x["processNoise"] = noise_out(*a->PROCESS_NOISE);
     arcs.push_back(x);
   }
-  return {{"kind", "hpop-arc-plan"}, {"version", 1}, {"targetAgesDays", p.TARGET_AGES_DAYS}, {"epochToleranceSeconds", p.EPOCH_TOLERANCE_S},
+  return {{"kind", "ffm-arc-plan"}, {"version", 1}, {"targetAgesDays", p.TARGET_AGES_DAYS}, {"epochToleranceSeconds", p.EPOCH_TOLERANCE_S},
           {"targetToleranceSeconds", p.TARGET_TOLERANCE_S}, {"covariance", p.COVARIANCE_NOTE}, {"truth", p.TRUTH_NOTE},
           {"counts", counts_out(p.COUNTS.get())}, {"arcs", arcs}};
 }
@@ -1572,10 +1572,10 @@ std::unique_ptr<ERMT> work_to_erm(const J& j) {
   auto e = std::make_unique<ERMT>();
   const std::string kind = str(j, "kind");
   if (kind == "gp-error-accumulator") e->ACCUMULATOR = accumulator_in(j);
-  else if (kind == "gp-error-model" || kind == "hpop-covariance-model" || kind == "e14-factors" || kind == "e14-element-set-model") e->MODEL = model_in(j);
+  else if (kind == "gp-error-model" || kind == "ffm-covariance-model" || kind == "e14-factors" || kind == "e14-element-set-model") e->MODEL = model_in(j);
   else if (kind == "screening-evaluation" || kind == "screening-cases") e->SCREENING_REPORT = screening_report_in(j);
-  else if (kind == "hpop-arc-plan") e->ARC_PLAN = plan_in(j);
-  else if (kind == "hpop-covariance-coverage") e->PROPAGATOR_COVERAGE = propagator_coverage_in(j);
+  else if (kind == "ffm-arc-plan") e->ARC_PLAN = plan_in(j);
+  else if (kind == "ffm-covariance-coverage") e->PROPAGATOR_COVERAGE = propagator_coverage_in(j);
   else if (kind == "common-epoch") e->COMMON_EPOCH = common_epoch_in(j);
   else if (kind == "covariance-map") e->COVARIANCE_MAP = covariance_map_in(j);
   else if (kind == "e14-pair-statistics") e->PAIR_STATISTICS = pair_statistics_in(j);

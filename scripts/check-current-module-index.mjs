@@ -43,7 +43,7 @@ for (const requiredModule of [
   "basilisk/runtime",
   "propagator/atmosphere",
   "propagator/cislunar",
-  "propagator/hpop",
+  "propagator/ffm",
   "propagator/sgp4",
 ]) {
   assert.ok(

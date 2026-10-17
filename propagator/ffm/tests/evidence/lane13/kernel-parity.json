@@ -1,0 +1,757 @@
+{
+  "ok": true,
+  "fixture": "TMPL lane13 canonical PRW DE440 artifact",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--ffm-coords-classical-frames-fix-20261016/propagator/ffm/dist/isomorphic/module.wasm",
+  "artifactSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
+  "moduleSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 24,
+      "durationMs": 1484
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 24,
+      "durationMs": 3531
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 24,
+      "durationMs": 18876
+    }
+  ],
+  "cases": [
+    "de440-target-10",
+    "de440-target-301",
+    "de440-target-5",
+    "de440-out-of-coverage",
+    "de440-propagation",
+    "analytical-propagation"
+  ],
+  "comparisons": 138,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "de440-target-10",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-10",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-10",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-10",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-301",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-301",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-301",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-301",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-5",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-5",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-5",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-target-5",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-propagation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-propagation",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-propagation",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "de440-propagation",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "analytical-propagation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "analytical-propagation",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "analytical-propagation",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "browser",
+      "caseId": "analytical-propagation",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-10",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0d02f32da88a630cd05741257fa29e7902d13cb19eb0f8d288d37d117d85d334",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-301",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "024455908ad7c2141cf016009903bdb3c98de0f0c05d30dd4508f5a2ba98d6dc",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-target-5",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a327757a6bf31ff49fcd842ab3a203e753ba954c8178dc19d2d3468c0e52397",
+      "stdoutLength": 584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-out-of-coverage",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8efce9589a4123cb45fe46a21bb47379554f3a9f2506bdcdb199257a490d9376",
+      "stdoutLength": 172
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "de440-propagation",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6bbe5ad5b380940f59f38a5d3a7352fe0e7dc428f9e56f49505d5499784c32a5",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "analytical-propagation",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fb68cadc49e329c4e6b7fe3725a8d91e2041f4560fd1b2828f5ede9b08a221aa",
+      "stdoutLength": 592
+    }
+  ]
+}

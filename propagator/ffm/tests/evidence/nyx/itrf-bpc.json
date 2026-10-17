@@ -1,0 +1,29 @@
+{
+ "about": "FFM's GCRF -> ITRF rotation (EarthRotation::matrix with the case export's eop-2026-08 rows) as a type-2 binary PCK for Nyx (make-itrf-bpc.mjs, write_bpc.py). Records tagged with hifitime ET of each UTC sample. Residuals in microarcseconds: fitted = the even 60-s samples the Chebyshev records were fitted to, checked = the odd samples between them, both read back through SPICE pxform; aniseReadBack = every sample read back through ANISE (Nyx).",
+ "earthOrientation": "eop-2026-08",
+ "utcFirst": "2026-08-01T22:00:00.000",
+ "utcLast": "2026-08-03T02:00:00.000",
+ "sampleStepS": 30,
+ "bpc": {
+  "name": "ffm-itrf-2026-08.bpc",
+  "sha256": "9fd90010385711b8f49f64ddce61fa4b7514e8b05ae596304d8aa992e1f6d752",
+  "bytes": 12288
+ },
+ "firstEt": 838893669.1832564,
+ "lastEt": 838990869.1832564,
+ "records": 27,
+ "intervalS": 3600,
+ "degree": 12,
+ "samples": 3361,
+ "fittedSamples": 1621,
+ "checkedSamples": 1620,
+ "maxFittedResidualUas": 2.286402007123092,
+ "maxCheckedResidualUas": 5.061329068738638,
+ "spiceypy": "8.3.0",
+ "cspice": "CSPICE_N0067",
+ "aniseReadBack": {
+  "samples": 3241,
+  "maxResidualUas": 5.061328265283156,
+  "nyxBinarySha256": "36d91a868e53c9fa3b7cd170b890c47d5dfff16a82f1869102ebf76919a0aa57"
+ }
+}
