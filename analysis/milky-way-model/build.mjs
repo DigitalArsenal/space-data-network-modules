@@ -21,7 +21,7 @@ process.env.SDN_WASI_CLANGXX = path.join(emsdk, 'upstream/bin/clang++');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const {header, version} = await generateSdsHeaders(['PCE'], import.meta.url, createFlatc);
 const names = ['model_types.hpp', 'galactic_constants.hpp', 'volume.hpp', 'legacy_model.hpp',
-  'wire.hpp', 'module.cpp'];
+  'wire.hpp', 'module.cpp', 'literature_model.hpp', 'statistical_stars.hpp', 'oracle_metrics.hpp', 'ridge_metrics.hpp', 'model_api.hpp'];
 const frameSource = await fs.readFile(path.join(root, '../../foundation/frames/src/galactic.hpp'), 'utf8');
 const sources = await Promise.all(names.map(async name => (await fs.readFile(path.join(root, 'src', name), 'utf8'))
   .replace(/^#pragma once\s*$/gm, '').replace(/^#include "[^"]+"\s*$/gm, '')));
