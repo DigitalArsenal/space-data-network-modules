@@ -7,11 +7,12 @@ replaces each UTC epoch with `2026-08-01T12:00:00.000000`, exactly as
 values. The standard's `tests/lib/fullForce.mjs` supplies the DE440, EOP,
 and space-weather records.
 
-`truth/*.f64` contains 865 rows per seed, at 300 s intervals over three
+`truth/*.f64` contains 4,321 rows per seed, at 60 s intervals over three
 days: elapsed seconds, x/y/z in km, and vx/vy/vz in km/s, all little-endian
-float64. The frame is GCRF. The original T3 truth is the standard C++ force
-model at commit `4d2348a6`, integrated with RKF78 at relative tolerance
-`1e-14` and steps of at most 2 s through the study's stops. Its independent
+float64. The frame is GCRF. The T3 truth is the standard C++ force
+model at commit `5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86`, integrated with
+RKF78 at relative tolerance
+`1e-14` and steps of at most 2 s through the study's stops. Its finer native
 integration settings provide the accuracy reference; FFM Fast never
 generates its own reference values.
 
@@ -23,24 +24,35 @@ additional TDB/UTC shift; the standard equations already convert TT to
 TDB internally. `truth/truth.json` records input/output hashes, settings,
 units, frame, and the complete regeneration command.
 
-Regenerate all eight fixtures with one command from this worktree:
+The 60 s sampling includes four interior points per resident 300 s
+Chebyshev segment, so truth comparisons cover the delivered interpolation
+as well as segment endpoints. It reuses the existing T3 integrations;
+exporting more samples does not rerun propagation.
+
+Regenerate all eight fixtures from the repository root, setting `--study`
+to the directory containing `data/truth/*-T3.st` and `harness/src/hxio.h`:
 
 ```sh
-node /private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/8e63bb40-3edf-4af4-836a-b5a00536a938/scratchpad/ffmspeed/work/export-truth.mjs --study /private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/8e63bb40-3edf-4af4-836a-b5a00536a938/scratchpad/hpop-interval --output propagator/ffm-fast/tests/fixtures/truth --source-commit 4d2348a6
+node propagator/ffm-fast/scripts/export-truth.mjs --study /path/to/study --source-commit 5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86
 ```
 
-The exporter and its compiled scratch tool remain outside the module.
-After regenerating the study's T3 files with updated standard C++ sources,
-run this command again, replacing `4d2348a6` with the commit that produced
-the new truth files.
+The checked-in native exporter reuses that study reader without copying it.
+The JavaScript wrapper only compiles, invokes, and records provenance; all
+interpolation remains in C++. The output defaults to this fixture directory;
+`--output` can select another directory. `truth/truth.json` records the
+actual source directory used, native exporter and reader hashes, T3 input
+hashes, and exported output hashes. When the study sources change, generate
+new T3 inputs first and pass the full commit that produced those inputs.
+The E2E verifies the exporter source hash against the fixture provenance.
 
 The E2E uses fixed 60 s RK78 steps for implementation comparisons; its
 `1e-3 m` and `1e-6 m/s` limits at three days allow accumulated roundoff
 while remaining below FIT/SCREEN requirements. Lever measurements use
 the stricter `1e-4 m` position limit. Default-integrator results must meet
-SCREEN (`1 m`, `1 mm/s` at three days) and improve on the standard in
-every seed. GPS/GEO comparisons allow the stated truth floors (`1e-4 m`,
-`1e-7 m/s`). FIT (`1 cm` at one day) is informational.
+FIT (`1 cm` through one day), SCREEN (`1 m`, `1 mm/s` through three days),
+and improve on the standard in every seed. GPS/GEO comparisons allow
+the stated truth floors (`1e-4 m`,
+`1e-7 m/s`). Every FIT and SCREEN limit is a required gate.
 
 `standard.json` pins the unchanged standard artifact and force source.
 The source hash must also match the fork header; a mismatch requires

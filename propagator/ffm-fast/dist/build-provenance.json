@@ -4,23 +4,23 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "966b5057905ef1bfd14ab444063d0e09192134248e19a080b95f06fd7dff968e",
-  "bytes": 2116416,
+  "sha256": "5d31804695f00ff4f1278840eea5e1e1f619d8fb97337af825c91cf30dde403c",
+  "bytes": 2118832,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "flags": [
     "-msimd128"
   ],
-  "standardSources": "../hpop",
-  "standardWasmSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+  "standardSources": "../ffm",
+  "standardWasmSha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3",
   "forkBase": {
-    "path": "../hpop/lib/force_models.cpp",
-    "sha256": "a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562"
+    "path": "../ffm/lib/force_models.cpp",
+    "sha256": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3"
   },
-  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /private/tmp/claude-501/-Users-tj-Cesium-Weather/2a455fdc-3b3d-48e5-883a-54ae2b62d382/scratchpad/emsdk/upstream/bin",
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
     {
       "name": "libc++abi-ww-wasmexcept.a",
-      "sha256": "77c9125bf14bb00b838e4613e791069a04a8d9aab3b4026d2d6df747cc5455fc"
+      "sha256": "4e27aa6d5bb01619802a27c00c611100ca10d5eb844f4a7261affcf5560bd51a"
     },
     {
       "name": "libunwind-ww-wasmexcept.a",
@@ -28,31 +28,31 @@
     }
   ],
   "units": [
-    "../hpop/src/cpp/src/prw_sdk_adapter.cpp",
-    "../hpop/lib/astrodynamics.cpp",
-    "../hpop/lib/integrators.cpp",
-    "../hpop/lib/variational.cpp",
-    "../hpop/lib/finite_burn.cpp",
-    "../hpop/lib/force_partials.cpp",
-    "../hpop/lib/coords.cpp",
-    "../hpop/lib/atmosphere_plugin.cpp",
-    "../hpop/lib/environment_models.cpp",
-    "../hpop/lib/ephemeris.cpp",
+    "../ffm/src/cpp/src/prw_sdk_adapter.cpp",
+    "../ffm/lib/astrodynamics.cpp",
+    "../ffm/lib/integrators.cpp",
+    "../ffm/lib/variational.cpp",
+    "../ffm/lib/finite_burn.cpp",
+    "../ffm/lib/force_partials.cpp",
+    "../ffm/lib/coords.cpp",
+    "../ffm/lib/atmosphere_plugin.cpp",
+    "../ffm/lib/environment_models.cpp",
+    "../ffm/lib/ephemeris.cpp",
     "lib/force_models.cpp",
-    "../hpop/lib/atmosphere_winds.cpp",
-    "../hpop/lib/nrlmsise00.cpp",
-    "../hpop/lib/time_convert.cpp",
-    "../hpop/lib/us76.cpp",
+    "../ffm/lib/atmosphere_winds.cpp",
+    "../ffm/lib/nrlmsise00.cpp",
+    "../ffm/lib/time_convert.cpp",
+    "../ffm/lib/us76.cpp",
     "lib/ffm_gravity.cpp",
     "../../third_party/hwm14/hwm14.cpp",
     "../../third_party/hwm14/hwm14_data.cpp",
     "../../third_party/nrlmsise00/nrlmsise-00.c",
     "../../third_party/nrlmsise00/nrlmsise-00_data.c",
-    "../hpop/src/hpop_plugin.cpp",
-    "../hpop/src/cpp/src/prw_execution.cpp",
-    "../hpop/src/cpp/src/prw_dynamics.cpp",
-    "../hpop/src/cpp/src/resident_dynamics.cpp",
-    "../hpop/src/cpp/src/kernel_store.cpp",
+    "../ffm/src/ffm_plugin.cpp",
+    "../ffm/src/cpp/src/prw_execution.cpp",
+    "../ffm/src/cpp/src/prw_dynamics.cpp",
+    "../ffm/src/cpp/src/resident_dynamics.cpp",
+    "../ffm/src/cpp/src/kernel_store.cpp",
     ".sdk-build/erfa-amalgamation.cpp"
   ],
   "erfa": {

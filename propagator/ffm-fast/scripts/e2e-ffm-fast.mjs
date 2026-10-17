@@ -22,6 +22,8 @@ const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const standard = readJson(path.join(fixtureRoot, 'standard.json'));
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const DAYS = 3, DAY = 86400, DURATION = DAYS * DAY;
+// Include four interior samples per 300 s resident segment.
+const TRUTH_SAMPLE_SECONDS = 60;
 const FIXED = Object.freeze({ tolerance: 1, initialStep: 60, minStep: 60, maxStep: 60, maxSteps: 1000000 });
 const opt = {};
 for (let i = 2; i < process.argv.length; ++i) {
@@ -49,12 +51,13 @@ const port = (portId, arm, value) => ({ portId, typeRef: TYPE, payload: encodePr
 const environment = environmentInputs();
 // Re-epoch the copied study states exactly as map/gen-inputs.mjs does: preserve
 // their GCRF vectors and coefficients; replace only the UTC epoch.
-function requests(seed, integrator) {
-  const instance = makeTable('PRWInstance', { MODULE_ID: 'com.orbpro.hpop', INSTANCE_ID: `ffm-fast-${seed.label}`, GENERATION: 1n });
+function requests(seed, integrator, moduleId = 'com.orbpro.ffm') {
+  const instance = makeTable('PRWInstance', { MODULE_ID: moduleId, INSTANCE_ID: `ffm-fast-${seed.label}`, GENERATION: 1n });
   const state = [...seed.position, ...seed.velocity].map((value) => value * 1000);
   const resident = catalog.residentState({ instanceId: instance.INSTANCE_ID, generation: 1n,
     handle: seed.handle, catalogNumber: seed.norad, objectId: seed.label,
     epoch: standard.fixtureEpochUtc, state, cdAm: seed.cdAm, crAm: seed.crAm });
+  resident.INSTANCE.MODULE_ID = moduleId;
   return [
     encodePluginInvokeRequest({ methodId: 'ingest_state', inputs: [port('state', 'RESIDENT_STATE', resident),
       port('configuration', 'EXECUTION_REQUEST', catalog.fullForceRequest({ epoch: standard.fixtureEpochUtc, state,
@@ -143,25 +146,30 @@ async function main() {
   const hashes = integrity(), loadStart = os.loadavg(), rows = [];
   const truthMetadata = readJson(path.join(fixtureRoot, 'truth/truth.json'));
   if (truthMetadata.epoch !== standard.fixtureEpochUtc || truthMetadata.epochTt !== standard.fixtureEpochTt
-      || truthMetadata.frame !== 'GCRF' || truthMetadata.sampling.seconds !== 300
-      || truthMetadata.sampling.durationSeconds !== DURATION)
+      || truthMetadata.frame !== 'GCRF' || truthMetadata.sampling.seconds !== TRUTH_SAMPLE_SECONDS
+      || truthMetadata.sampling.durationSeconds !== DURATION
+      || truthMetadata.sampling.rowsPerSeed !== DURATION / TRUTH_SAMPLE_SECONDS + 1)
     throw new Error('Truth fixture epoch, frame, or sampling differs from the E2E contract; review/regenerate the fixtures.');
+  if (truthMetadata.generatorSha256 !== sha(fs.readFileSync(path.join(packageRoot, 'scripts/export-truth.cpp'))))
+    throw new Error('Truth exporter source differs from recorded provenance; review/regenerate the fixtures.');
   for (const seed of seeds) {
     const provenance = truthMetadata.records.find((row) => row.seed === seed.label);
     const truthPath = path.join(fixtureRoot, `truth/${seed.label}.f64`);
-    if (!provenance || sha(fs.readFileSync(truthPath)) !== provenance.outputSha256)
+    if (!provenance || provenance.rows !== DURATION / TRUTH_SAMPLE_SECONDS + 1
+        || sha(fs.readFileSync(truthPath)) !== provenance.outputSha256)
       throw new Error(`${seed.label} truth fixture differs from its recorded provenance; regenerate the fixtures.`);
   }
   console.log(`FFM Fast ${opt.measure ? `lever ${opt.measure} measurement` : 'phase 1 E2E'}; Node ${process.version}; ${seeds.length} seeds; 3 days; GCRF; UTC epoch ${standard.fixtureEpochUtc}`);
   console.log('Resident path: ingest_state -> prepare_trajectory_segments -> describe_trajectory_segments; PPE/truth coordinate: TT.');
+  console.log(`Truth samples every ${TRUTH_SAMPLE_SECONDS} s, including resident segment interiors.`);
   console.log('Fixed RK78: initial = minimum = maximum 60 s, tolerance 1; CPU: defaults interleaved, min of 2, thread user + system.');
   console.log('seed      fixed dp1 m  fixed dv1 m/s fixed dp3 m  fixed dv3 m/s standard CPU/d fast CPU/d');
   for (const seed of seeds) {
     const fixedBytes = requests(seed, FIXED);
-    const fixedStandard = await run(standardRoot, fixedBytes), fixedFast = await run(packageRoot, fixedBytes);
+    const fixedStandard = await run(standardRoot, fixedBytes), fixedFast = await run(packageRoot, requests(seed, FIXED, 'com.orbpro.ffm-fast'));
     const fixed = compare(fixedFast.ephemeris, fixedStandard.ephemeris, 60);
     const standardBytes = requests(seed, catalog.CATALOG_INTEGRATOR);
-    const fastBytes = opt.measure ? standardBytes : requests(seed, FAST_CATALOG_INTEGRATOR);
+    const fastBytes = requests(seed, opt.measure ? catalog.CATALOG_INTEGRATOR : FAST_CATALOG_INTEGRATOR, 'com.orbpro.ffm-fast');
     let standardRun, fastRun, standardCpu = Infinity, fastCpu = Infinity;
     const cpuRepetitions = [];
     for (let repetition = 0; repetition < 2; ++repetition) {
@@ -176,12 +184,13 @@ async function main() {
     check(fixed.threeDays.velocityMps <= 1e-6, `${seed.label} fixed-step velocity ${fixed.threeDays.velocityMps} m/s exceeds 1e-6 m/s`);
     if (!opt.measure || fs.existsSync(path.join(fixtureRoot, `truth/${seed.label}.f64`))) {
       const truth = fs.readFileSync(path.join(fixtureRoot, `truth/${seed.label}.f64`));
-      if (truth.length !== (DURATION / 300 + 1) * 7 * 8) throw new Error(`${seed.label} truth fixture has the wrong length`);
-      row.standardVsTruth = compare(standardRun.ephemeris, null, 300, truth);
+      if (truth.length !== (DURATION / TRUTH_SAMPLE_SECONDS + 1) * 7 * 8) throw new Error(`${seed.label} truth fixture has the wrong length`);
+      row.standardVsTruth = compare(standardRun.ephemeris, null, TRUTH_SAMPLE_SECONDS, truth);
       if (!opt.measure) {
-        row.fastVsTruth = compare(fastRun.ephemeris, null, 300, truth);
+        row.fastVsTruth = compare(fastRun.ephemeris, null, TRUTH_SAMPLE_SECONDS, truth);
         row.fit = row.fastVsTruth.oneDay.positionM <= 0.01;
         row.screen = row.fastVsTruth.threeDays.positionM <= 1 && row.fastVsTruth.threeDays.velocityMps <= 1e-3;
+        check(row.fit, `${seed.label} fails FIT: ${row.fastVsTruth.oneDay.positionM} m exceeds 0.01 m`);
         check(row.screen, `${seed.label} fails SCREEN: ${row.fastVsTruth.threeDays.positionM} m, ${row.fastVsTruth.threeDays.velocityMps} m/s`);
         const floor = ['GPS', 'GEO'].includes(seed.label);
         const positionLimit = Math.max(row.standardVsTruth.threeDays.positionM, floor ? 1e-4 : 0);
@@ -209,7 +218,7 @@ async function main() {
     ...hashes, fastWasmSha256: sha(fs.readFileSync(path.join(packageRoot, 'dist/isomorphic/module.wasm'))),
     epochUtc: standard.fixtureEpochUtc, epochTt: standard.fixtureEpochTt, frame: 'GCRF', days: DAYS,
     truthStandardModuleCppCommit: truthMetadata.standardModuleCppCommit,
-    fixedStepSeconds: 60, fixedTolerance: 1, truthSamplingSeconds: 300,
+    fixedStepSeconds: 60, fixedTolerance: 1, truthSamplingSeconds: TRUTH_SAMPLE_SECONDS,
     standardIntegrator: catalog.CATALOG_INTEGRATOR, fastIntegrator: opt.measure ? catalog.CATALOG_INTEGRATOR : FAST_CATALOG_INTEGRATOR,
     maxAddedError: { oneDay: { positionM: maxima('oneDay', 'positionM'), velocityMps: maxima('oneDay', 'velocityMps') },
       threeDays: { positionM: maxima('threeDays', 'positionM'), velocityMps: maxima('threeDays', 'velocityMps') } },

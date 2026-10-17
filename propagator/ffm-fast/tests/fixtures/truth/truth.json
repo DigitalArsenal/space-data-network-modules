@@ -1,8 +1,9 @@
 {
-  "generator": "Scratch export-truth.cpp using the unchanged study harness/src/hxio.h quintic Hermite reader",
-  "generatorSha256": "35217b3aaa4488abbdfb6e46389a9bb8c9c4b872ef4ae0e623f41e3029103827",
-  "generatedBy": "export-truth.mjs",
-  "standardModuleCppCommit": "4d2348a6",
+  "generator": "scripts/export-truth.cpp using the unchanged study harness/src/hxio.h quintic Hermite reader",
+  "generatorSha256": "4178c5d87ce196d0673fb07579d2f4375db66801fee6d1c414a81c2cc9ee9a7f",
+  "readerSha256": "0453541cf3be12910fce320953d5aa6b6b71502fbe489bd7072e420ce45d8a31",
+  "generatedBy": "scripts/export-truth.mjs",
+  "standardModuleCppCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
   "settings": {
     "truth": "T3",
     "integrator": "RKF78",
@@ -14,9 +15,9 @@
   "epochTimeScale": "UTC",
   "epochTt": "2026-08-01T12:01:09.184000000",
   "sampling": {
-    "seconds": 300,
+    "seconds": 60,
     "durationSeconds": 259200,
-    "rowsPerSeed": 865,
+    "rowsPerSeed": 4321,
     "coordinate": "Elapsed TT seconds from the fixture epoch"
   },
   "timeHandling": "HXSTAT01 epochs and resident PPE TIME_SYSTEM are TT. Interpolation uses two-part TT differences as hx eval does; no TDB/UTC shift is applied to elapsed seconds. The equations use the standard C++ TT-to-TDB conversion internally.",
@@ -38,16 +39,16 @@
       "vz"
     ]
   },
-  "regenerate": "node '/private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/8e63bb40-3edf-4af4-836a-b5a00536a938/scratchpad/ffmspeed/work/export-truth.mjs' --study '/private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/8e63bb40-3edf-4af4-836a-b5a00536a938/scratchpad/hpop-interval' --output '/Users/tj/software/worktrees/space-data-network-modules--modules-hpop-catalog-speed-20261016/propagator/ffm-fast/tests/fixtures/truth' --source-commit '4d2348a6'",
+  "regenerate": "node propagator/ffm-fast/scripts/export-truth.mjs --study '/private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/8e63bb40-3edf-4af4-836a-b5a00536a938/scratchpad/ffmspeed/work/truth-current' --source-commit '5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86'",
   "records": [
     {
       "seed": "ISS",
       "input": "data/truth/ISS-T3.st",
-      "inputSha256": "d22ca783df5b95703797f9cb9ac775537f15cb119e5054836d49a4ea41d93840",
+      "inputSha256": "426e49bb7698df9b89aa25926a5ce0272c36f2ad49c9a95dc378f026f8ee2a00",
       "output": "ISS.f64",
       "label": "ISS",
       "inputRecords": 25945,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -63,16 +64,16 @@
         "perigee_r_km": 0,
         "source": "worktree"
       },
-      "outputSha256": "de6bd91d91827e70fea6378ade0865386b0d8e2f65be4ed512cd8af13bfd1d9d"
+      "outputSha256": "0d0a70c00376e31275daaf42b40e15ed3217ded03d0faf30a8ae03c53ab57594"
     },
     {
       "seed": "STARLINK",
       "input": "data/truth/STARLINK-T3.st",
-      "inputSha256": "a0f6833ec16a1944c8f0b0b7d073c03ae20e6d12ec726f003f6d45e32ecf1bc9",
+      "inputSha256": "38c8963e7c9a92e7705bdcf259cc19032337f499a67ffba6cc5d81fca595406f",
       "output": "STARLINK.f64",
       "label": "STARLINK",
       "inputRecords": 25945,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -88,16 +89,16 @@
         "perigee_r_km": 0,
         "source": "worktree"
       },
-      "outputSha256": "262515ab4584d7772572d0c270087ce9473719217ca51588275a02dc6850d9d0"
+      "outputSha256": "a3b0b717497ce45a5a3a4f5b17eebe8e318f7905f62e4776b2a0f1d6167c5b0d"
     },
     {
       "seed": "SSO800",
       "input": "data/truth/SSO800-T3.st",
-      "inputSha256": "7e5b133943f69c95f459e3bf13cafb46592c06903c51c6fb8d455338eae5721a",
+      "inputSha256": "c3c655f9f294a856dc002ccfff2a6c4edc99d849057e481a0a75dcaf19a197f9",
       "output": "SSO800.f64",
       "label": "SSO800",
       "inputRecords": 25945,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -113,16 +114,16 @@
         "perigee_r_km": 0,
         "source": "worktree"
       },
-      "outputSha256": "c33d2ff373e91936cf112c722b3269652e0d4a0930d43075207fd3ee87f9331e"
+      "outputSha256": "6007ed1bce5e726ec935e506aa63d00e55233f4880f32ef59c55ffb8ecf75c2e"
     },
     {
       "seed": "LOW250",
       "input": "data/truth/LOW250-T3.st",
-      "inputSha256": "ab2f7a0feb9833dbce9010826f0315d09cea9a9c38836f4d32497103f0cd98ce",
+      "inputSha256": "898188914053a9d96d5bbe4d1dab8fe1975025bd0d7701c74af4cef4e9cbd13c",
       "output": "LOW250.f64",
       "label": "LOW250",
       "inputRecords": 25945,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -138,16 +139,16 @@
         "perigee_r_km": 0,
         "source": "worktree"
       },
-      "outputSha256": "c3e327f4b3f7a11d580ceda96e5fad75e4597c524e9e38d7b367b5d648b3d9b1"
+      "outputSha256": "cd65955aa27221b20cb1b72e5e5468551b68578456582980567aaf4a888781b9"
     },
     {
       "seed": "GPS",
       "input": "data/truth/GPS-T3.st",
-      "inputSha256": "ed889139077ff4b37d794d8949f3750dc991886724799e21e560c1ad19845c2f",
+      "inputSha256": "a935644e621a95d7b8cbf40d07dd8d69856c2b44fd3b24bc18b24d7be28be0f1",
       "output": "GPS.f64",
       "label": "GPS",
       "inputRecords": 25945,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -163,16 +164,16 @@
         "perigee_r_km": 0,
         "source": "worktree"
       },
-      "outputSha256": "0e631a6351280f69c0ae076950e0856b1cfcf0d9be440c291946ad638c76f9c7"
+      "outputSha256": "c6ccfc657c6ab4edd2ea7a263e0badf71a67ffab5f47427f5625ba866da06184"
     },
     {
       "seed": "GEO",
       "input": "data/truth/GEO-T3.st",
-      "inputSha256": "ba138593a9115f7f39dfacbd454a63397e2d8d2ef412817f3d5e623d52b8d03b",
+      "inputSha256": "afef7afa7937c180023e0a814237c9b7075a66a87cb70279a47a12dbe83e08c3",
       "output": "GEO.f64",
       "label": "GEO",
       "inputRecords": 25945,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -188,16 +189,16 @@
         "perigee_r_km": 0,
         "source": "worktree"
       },
-      "outputSha256": "f69292bd1e4ee3544c76c6e5edbd51a525f030e1db39e5773f1de406872b125f"
+      "outputSha256": "bc36c26cd115ed21ed6d88043a655c7b13eea9b5297f7b0c7ab5eac1f8d10dd8"
     },
     {
       "seed": "MOLNIYA",
       "input": "data/truth/MOLNIYA-T3.st",
-      "inputSha256": "8435078914244c14482a100b727450f074b7100b81245e1f587514f54421968f",
+      "inputSha256": "2e66cb232b14dc89a308bb607116272fa1ae126786d273d307a7557bfb482977",
       "output": "MOLNIYA.f64",
       "label": "MOLNIYA",
       "inputRecords": 36110,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -213,16 +214,16 @@
         "perigee_r_km": 8769.97,
         "source": "worktree"
       },
-      "outputSha256": "df2cd5c0c608ef558eb2c612c1201568919fc2874978eecef4a223415e07e599"
+      "outputSha256": "0b03ce82d97d30c0c703015c3dce9d81f697de4f93551e0671623b05e65714f3"
     },
     {
       "seed": "GTO",
       "input": "data/truth/GTO-T3.st",
-      "inputSha256": "bd94fa5aa1af282c3bf4685bfbb7fa2460bd91371b95002d156b6708718e36f8",
+      "inputSha256": "29855ef2f5a1fc4a0e29fa1c55b1494a84eb6968ac845b4e7f4ddbe13320e405",
       "output": "GTO.f64",
       "label": "GTO",
       "inputRecords": 37160,
-      "rows": 865,
+      "rows": 4321,
       "epochWholeTt": 838857669,
       "epochFractionTt": 0.184,
       "sourceSettings": {
@@ -238,7 +239,7 @@
         "perigee_r_km": 8292.13,
         "source": "worktree"
       },
-      "outputSha256": "68665003627e703189c101777019fc9dfc3c15b2acac3ef07ea6538799db29b7"
+      "outputSha256": "038577f85877ecdcc42645f9b1486eb1e29c15ff365465d7172c6658598f96c8"
     }
   ]
 }

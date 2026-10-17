@@ -1,5 +1,5 @@
-// FFM Fast fork base: ../hpop/lib/force_models.cpp
-// Fork base sha256: a74d72455c2e968504652020e881fb4ee498719d820f2d10d820d3f466c75562
+// FFM Fast fork base: ../ffm/lib/force_models.cpp
+// Fork base sha256: a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3
 // force_models.cpp - Phase 11.1.2 Force Models Implementation
 // =============================================================================
 // Phase 11: Astrodynamics Framework (Basilisk + TudatPy Port)
@@ -13,6 +13,9 @@
 #include "atmosphere_winds.h"
 #include "time_convert.h"
 #include "coords.h"
+extern "C" {
+#include "erfa.h"
+}
 #include "egm2008_data.h"
 #include "iers2010_tides.h"
 #include "jb2008.h"
@@ -84,7 +87,7 @@ Vec3 EarthAxes::inertial(const Vec3& v) const {
 
 Vec3 EarthAxes::spin() const { return Vec3(m[2][0], m[2][1], m[2][2]); }
 
-EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet) {
+EarthAxes EarthAxesAt(const timesys::Instant& jdTdb, const ForceModelSet& forceSet) {
     EarthAxes axes;
     GcrfToEarthFixed(jdTdb, forceSet, axes.m);
     return axes;
@@ -97,10 +100,10 @@ SpaceWeatherData WeatherAt(double jdUtc, const ForceModelSet& forceSet) {
     return weather;
 }
 
-DragForceConfig DragAt(double jdTdb, const ForceModelSet& forceSet) {
+DragForceConfig DragAt(const timesys::Instant& jdTdb, const ForceModelSet& forceSet) {
     DragForceConfig drag = forceSet.drag;
     if (forceSet.dragAreaOverMassRate != 0.0 && drag.area > 0.0 && drag.mass > 0.0) {
-        const double seconds = (jdTdb - forceSet.dragRateEpochTdb) * 86400.0;
+        const double seconds = jdTdb.secondsSince(forceSet.dragRateEpochTT);
         const double areaOverMass = drag.Cd * drag.area / drag.mass + forceSet.dragAreaOverMassRate * seconds;
         drag.Cd = areaOverMass * drag.mass / drag.area;
     }
@@ -370,7 +373,7 @@ Vec3 ThirdBodySingle(const Vec3& satPosition, const Vec3& bodyPosition, double m
     return direct + indirect;
 }
 
-Vec3 ThirdBody(const Vec3& satPosition, double jd, const ThirdBodyPerturbConfig& config) {
+Vec3 ThirdBody(const Vec3& satPosition, const timesys::Instant& jd, const ThirdBodyPerturbConfig& config) {
     Vec3 totalAcc;
 
     if (config.includeSun) {
@@ -608,7 +611,7 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
     return AtmosphereModelType::NRLMSISE00;
 }
 
-Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                     const DragForceConfig& dragConfig, double bulgeExponent,
                     const SpaceWeatherData* weather, double windJdUtc,
                     const EarthAxes* axes) {
@@ -626,7 +629,7 @@ Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
     if (density.density < 1e-20) return Vec3();
 
     // jd is TDB for the Sun; the winds need the UTC day and time.
-    const double windJd = windJdUtc > 0.0 ? windJdUtc : jd;
+    const double windJd = windJdUtc > 0.0 ? windJdUtc : jd.utc().jd();
     EarthAxes fallback;
     Vec3 vRel = relativeAtmosphereVelocity(position, velocity, windJd,
                                            axesOr(axes, fallback, windJd),
@@ -738,7 +741,7 @@ AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
 // 9. JB2008 - Jacchia-Bowman 2008
 // =============================================================================
 
-double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+double JB2008DensityAt(const Vec3& position, const timesys::Instant& jdTdb, double jdUtc,
                        const EarthAxes& axes, const SpaceWeatherData& weather) {
     double lat = 0, lon = 0, alt = 0, sunLat = 0, sunLon = 0, sunAlt = 0;
     ecefToGeodetic(axes.fixed(position), lat, lon, alt);
@@ -771,7 +774,7 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const JB2008Config&, const EarthAxes* axes) {
     EarthAxes fallback;
     const EarthAxes& e = axesOr(axes, fallback, jd);
-    return DragFromDensity(JB2008DensityAt(position, jd, jd, e, weather), position, velocity, jd, e, dragConfig, weather);
+    return DragFromDensity(JB2008DensityAt(position, timesys::Instant::fromTdb(jd), jd, e, weather), position, velocity, jd, e, dragConfig, weather);
 }
 
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,
@@ -848,7 +851,7 @@ Vec3 SchwarzschildCorrection(const Vec3& position, const Vec3& velocity, double 
     return term1 + term2;
 }
 
-Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                             double mu, const RelativisticConfig& config,
                             const EarthAxes* axes) {
     Vec3 totalAcc;
@@ -922,10 +925,10 @@ Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double j
 // Orekit 13.1 KnockeRediffusedForceModel (lib/earth_radiation.h), in meters:
 // the pressure vector times Cr*A/m. The annual term reads the time since
 // 1981-12-22T00:00:00 UTC on TT (TDB differs by under 2 ms).
-Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, double jd,
+Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, const timesys::Instant& jd,
                     const EarthRadiationConfig& config) {
     if (!(config.crAreaOverMass > 0) || satPosition.magnitude() <= config.radiusKm) return Vec3();
-    const double deltaT = (timesys::tdbToTt(jd) - knocke::REFERENCE_EPOCH_JD_TT) * 86400.0;
+    const double deltaT = jd.secondsSince(timesys::Instant::fromTt(knocke::REFERENCE_EPOCH_JD_TT));
     const Vec3 pressure = knocke::pressure<Vec3, double>(satPosition * 1000.0, sunPosition * 1000.0, deltaT,
                                                          config.resolutionDeg * DEG_TO_RAD, config.radiusKm * 1000.0);
     return pressure * (config.crAreaOverMass * 1e-3);
@@ -987,26 +990,15 @@ constexpr double ARCSEC_TO_RAD = PI / 648000.0;
 
 // GMST, IERS Conventions (2010) eq. 5.32: the Earth rotation angle (eq.
 // 5.15) at UT1 plus the IAU 2006 polynomial in TT (ERFA eraGmst06).
-double gmst2006(double jdUt1, double jdTt) {
-    const double du = jdUt1 - 2451545.0;
-    const double era = TWO_PI * (std::fmod(jdUt1, 1.0) + 0.7790572732640 + 0.00273781191135448 * du);
-    const double t = (jdTt - 2451545.0) / 36525.0;
-    const double poly = 0.014506 + t * (4612.156534 + t * (1.3915817 + t * (-0.00000044 +
-                        t * (-0.000029956 + t * -0.0000000368))));
-    return std::fmod(era, TWO_PI) + poly * ARCSEC_TO_RAD;
+double gmst2006(const timesys::Instant::Date& ut1, const timesys::Instant& tt) {
+    return eraGmst06(ut1.jd1, ut1.jd2, tt.jd1, tt.jd2);
 }
 
-// Delaunay arguments l, l', F, D, Omega (IERS Conventions 2010 eq. 5.43;
-// ERFA eraFal03, eraFalp03, eraFaf03, eraFad03, eraFaom03), radians.
-void delaunayArguments(double jdTt, double a[5]) {
-    const double t = (jdTt - 2451545.0) / 36525.0;
-    const double turn = 1296000.0;
-    a[0] = std::fmod(485868.249036 + t * (1717915923.2178 + t * (31.8792 + t * (0.051635 + t * -0.00024470))), turn);
-    a[1] = std::fmod(1287104.793048 + t * (129596581.0481 + t * (-0.5532 + t * (0.000136 + t * -0.00001149))), turn);
-    a[2] = std::fmod(335779.526232 + t * (1739527262.8478 + t * (-12.7512 + t * (-0.001037 + t * 0.00000417))), turn);
-    a[3] = std::fmod(1072260.703692 + t * (1602961601.2090 + t * (-6.3706 + t * (0.006593 + t * -0.00003169))), turn);
-    a[4] = std::fmod(450160.398036 + t * (-6962890.5431 + t * (7.4722 + t * (0.007702 + t * -0.00005939))), turn);
-    for (int i = 0; i < 5; ++i) a[i] *= ARCSEC_TO_RAD;
+// IERS Conventions 2010 eq. 5.43, evaluated from the same two-part TT.
+void delaunayArguments(const timesys::Instant& tt, double a[5]) {
+    const double t = tt.daysSinceJ2000() / 36525.0;
+    a[0] = eraFal03(t); a[1] = eraFalp03(t); a[2] = eraFaf03(t);
+    a[3] = eraFad03(t); a[4] = eraFaom03(t);
 }
 
 // Fully normalized associated Legendre functions of degrees 2 and 3 at
@@ -1022,19 +1014,17 @@ void normalizedLegendre3(double t, double u, double p[4][4]) {
     p[3][3] = std::sqrt(70.0) * 0.25 * u * u * u;
 }
 
-double ut1At(double jd, const ForceModelSet& forceSet) {
-    // FFM Fast C3c: exact providers fill bounded environment-owned windows.
-    double interpolated;
-    if (ffm_time::current && ffm_interp::interpolate(jd, forceSet, ffm_interp::Ut1, 1, &interpolated,
-        [&](double t, double* out) {
-            *out = forceSet.jdUt1At ? forceSet.jdUt1At(t)
-                : timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(t)));
-        })) return interpolated;
-    // FFM Fast C3a: cache only the current evaluation's exact epoch.
+timesys::Instant::Date ut1At(const timesys::Instant& jd, const ForceModelSet& forceSet) {
+    // Fit the UT1-TT offset in seconds, never the large Julian date.
+    double offset;
+    if (ffm_time::current && ffm_interp::interpolate(jd, forceSet, ffm_interp::Ut1, 1, &offset,
+        [&](const timesys::Instant& t, double* out) {
+            const auto ut = forceSet.jdUt1At ? forceSet.jdUt1At(t) : t.ut1();
+            *out = ((ut.jd1 - t.jd1) + (ut.jd2 - t.jd2)) * 86400.0;
+        })) return {jd.jd1, jd.jd2 + offset / 86400.0};
     auto* memo = ffm_time::at(jd, forceSet);
     if (memo && memo->ut1Valid) return memo->ut1;
-    const double value = forceSet.jdUt1At ? forceSet.jdUt1At(jd)
-        : timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd)));
+    const auto value = forceSet.jdUt1At ? forceSet.jdUt1At(jd) : jd.ut1();
     if (memo) { memo->ut1 = value; memo->ut1Valid = true; }
     return value;
 }
@@ -1066,7 +1056,7 @@ void ResetTideField(ExtendedGravityField& field, int degree, int order, double m
     }
 }
 }
-bool FillSolidTideField(double jd, const ForceModelSet& forceSet,
+bool FillSolidTideField(const timesys::Instant& jd, const ForceModelSet& forceSet,
                                     const EarthAxes& axes, ExtendedGravityField& field) {
     using namespace iers2010;
     bool available = true;
@@ -1108,7 +1098,7 @@ bool FillSolidTideField(double jd, const ForceModelSet& forceSet,
     // Step 2 (eq. 6.8): frequency dependence of k20, k21, k22, with
     // theta_f = m (GMST + pi) - N . F.
     if (config.frequencyDependent) {
-        const double jdTt = timesys::tdbToTt(jd);
+        const auto& jdTt = jd;
         const double gamma = gmst2006(ut1At(jd, forceSet), jdTt) + PI;
         double fundamental[5];
         delaunayArguments(jdTt, fundamental);
@@ -1142,7 +1132,7 @@ bool FillSolidTideField(double jd, const ForceModelSet& forceSet,
     return available;
 }
 
-ExtendedGravityField SolidTideField(double jd, const ForceModelSet& forceSet,
+ExtendedGravityField SolidTideField(const timesys::Instant& jd, const ForceModelSet& forceSet,
                                     const EarthAxes& axes) {
     ExtendedGravityField field;
     FillSolidTideField(jd, forceSet, axes, field);
@@ -1150,7 +1140,7 @@ ExtendedGravityField SolidTideField(double jd, const ForceModelSet& forceSet,
 }
 // FFM Fast C4 END.
 
-Vec3 SolidTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet) {
+Vec3 SolidTideAcceleration(const Vec3& satPosition, const timesys::Instant& jd, const ForceModelSet& forceSet) {
     if (satPosition.magnitude() < RE_EARTH) return Vec3();
     const EarthAxes axes = EarthAxesAt(jd, forceSet);
     // FFM Fast C4: shape storage survives evaluations; coefficients do not.
@@ -1159,7 +1149,7 @@ Vec3 SolidTideAcceleration(const Vec3& satPosition, double jd, const ForceModelS
     return axes.inertial(ffm::computeGravity(axes.fixed(satPosition), field).zonalHarmonics);
 }
 
-Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& config) {
+Vec3 SolidTides(const Vec3& satPosition, const timesys::Instant& jd, const SolidTideConfig& config) {
     ForceModelSet forceSet;
     forceSet.solidTides = config;
     return SolidTideAcceleration(satPosition, jd, forceSet);
@@ -1176,13 +1166,13 @@ Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& confi
 //   dSnm += (S+ - S-) cos(theta) - (C+ - C-) sin(theta)
 // summed from degree 2. No ocean pole tide.
 // FFM Fast C4 BEGIN.
-void FillOceanTideField(double jd, const ForceModelSet& forceSet, ExtendedGravityField& field) {
+void FillOceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet, ExtendedGravityField& field) {
     ffm_interp::ExactScope exact; // Ocean nodes stay on the shipped 120 s TT grid.
     const OceanTideConfig& config = forceSet.oceanTides;
     const int maxDegree = std::max(2, std::min<int>(config.maxDegree, fes2004::MAX_DEGREE));
     const int maxOrder = std::max(0, std::min<int>(config.maxOrder, maxDegree));
     ResetTideField(field, maxDegree, maxOrder, forceSet.mu, fes2004::MAX_DEGREE);
-    const double jdTt = timesys::tdbToTt(jd);
+    const auto& jdTt = jd;
     const double gamma = gmst2006(ut1At(jd, forceSet), jdTt) + PI;
     double fundamental[5];  // l, l', F, D, Omega
     delaunayArguments(jdTt, fundamental);
@@ -1205,7 +1195,7 @@ void FillOceanTideField(double jd, const ForceModelSet& forceSet, ExtendedGravit
     }
 }
 
-ExtendedGravityField OceanTideField(double jd, const ForceModelSet& forceSet) {
+ExtendedGravityField OceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet) {
     ExtendedGravityField field;
     FillOceanTideField(jd, forceSet, field);
     return field;
@@ -1220,7 +1210,7 @@ struct OceanTideCache {
     std::array<long long, 64> indices{};
     std::array<bool, 64> valid{};
     ExtendedGravityField field;                       // the last interpolated field
-    double jd = std::numeric_limits<double>::quiet_NaN();
+    timesys::Instant jd{std::numeric_limits<double>::quiet_NaN(),0};
 };
 std::shared_ptr<OceanTideCache> MakeOceanTideCache() {
     auto cache = std::make_shared<OceanTideCache>();
@@ -1232,11 +1222,11 @@ std::shared_ptr<OceanTideCache> MakeOceanTideCache() {
     return cache;
 }
 
-const ExtendedGravityField& OceanTideFieldAt(double jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch) {
+const ExtendedGravityField& OceanTideFieldAt(const timesys::Instant& jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch) {
     if (!forceSet.oceanTideCache) { FillOceanTideField(jd, forceSet, scratch); return scratch; }
     OceanTideCache& cache = *forceSet.oceanTideCache;
-    if (jd == cache.jd) return cache.field;
-    const double g = (timesys::tdbToTt(jd) - 2451545.0) * 86400.0 / OCEAN_TIDE_GRID_SECONDS;
+    if (jd.jd1 == cache.jd.jd1 && jd.jd2 == cache.jd.jd2) return cache.field;
+    const double g = jd.daysSinceJ2000() * 86400.0 / OCEAN_TIDE_GRID_SECONDS;
     const long long k = static_cast<long long>(std::floor(g));
     const double u = g - static_cast<double>(k);
     const ExtendedGravityField* node[4];
@@ -1252,8 +1242,8 @@ const ExtendedGravityField& OceanTideFieldAt(double jd, const ForceModelSet& for
         }
         if (found < 0) {
             found = empty >= 0 ? empty : far;
-            const double jdTt = 2451545.0 + static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS / 86400.0;
-            FillOceanTideField(timesys::ttToTdb(jdTt), forceSet, cache.nodes[found]);
+            const auto jdTt = timesys::Instant::fromTTSeconds(static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS, 0);
+            FillOceanTideField(jdTt, forceSet, cache.nodes[found]);
             cache.indices[found] = index;
             cache.valid[found] = true;
         }
@@ -1279,7 +1269,7 @@ const ExtendedGravityField& OceanTideFieldAt(double jd, const ForceModelSet& for
 // FFM Fast C4 END.
 
 namespace {
-bool FfmCombinedGravity(const Vec3& position, double jd, const ForceModelSet& f, Vec3& gravity) {
+bool FfmCombinedGravity(const Vec3& position, const timesys::Instant& jd, const ForceModelSet& f, Vec3& gravity) {
     const bool egmMode = f.gravityMode == GravityMode::EGM2008 ||
         (f.gravityMode == GravityMode::Infer && !(f.useLoadedField && f.loadedField) && f.useEGM2008);
     if (!egmMode || !f.oceanTideCache || (f.useSolidTides && !f.earthFixedRotation)) return false;
@@ -1297,7 +1287,7 @@ bool FfmCombinedGravity(const Vec3& position, double jd, const ForceModelSet& f,
 }
 // FFM Fast C2 END.
 
-Vec3 OceanTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet) {
+Vec3 OceanTideAcceleration(const Vec3& satPosition, const timesys::Instant& jd, const ForceModelSet& forceSet) {
     if (satPosition.magnitude() < RE_EARTH) return Vec3();
     const EarthAxes axes = EarthAxesAt(jd, forceSet);
     static thread_local ExtendedGravityField scratch;
@@ -1364,13 +1354,12 @@ double FiniteManeuverMassRate(const FiniteManeuverConfig& config) {
     return config.thrustMagnitude / (config.Isp * g0 * 1000.0);  // kg/s
 }
 
-Vec3 FiniteManeuver(const Vec3& position, const Vec3& velocity, double currentTime,
+Vec3 FiniteManeuver(const Vec3& position, const Vec3& velocity, const timesys::Instant& currentTime,
                     const FiniteManeuverConfig& config) {
     // Check if maneuver is active
-    double t_start = config.startTime;
-    double t_end = t_start + config.duration / 86400.0;
+    const double elapsed = currentTime.secondsSince(timesys::Instant::fromTdb(config.startTime));
 
-    if (currentTime < t_start || currentTime > t_end) {
+    if (elapsed < 0 || elapsed > config.duration) {
         return Vec3();  // Maneuver not active
     }
 
@@ -1597,27 +1586,18 @@ Vec3 EvaluateContributions(const ContributionSet& set,
     return sum;
 }
 
-void GcrfToEarthFixed(double jd, double m[3][3]) {
-    // Precession and nutation move < 0.01 arcsec in an hour; the rotation
-    // angle is evaluated at every call.
-    static double cachedTt = -1e300, eqeq = 0;
-    static coords::Matrix3x3 np;
-    const double jdTt = timesys::tdbToTt(jd);
-    if (std::abs(jdTt - cachedTt) > 1.0 / 24.0) {
-        cachedTt = jdTt;
-        np = coords::nutationMatrix(jdTt) * coords::precession(jdTt);  // GCRF -> MOD -> TOD
-        eqeq = coords::equationOfEquinoxes(jdTt);
-    }
-    const double jdUt = timesys::taiToUtc(timesys::ttToTai(jdTt));
-    const coords::Matrix3x3 r = coords::Matrix3x3::rotateZ(coords::gmst(jdUt) + eqeq) * np;
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) m[i][j] = r.at(i, j);
+void GcrfToEarthFixed(const timesys::Instant& jd, double m[3][3]) {
+    // Classical no-EOP contract: UT1 = UTC, zero polar motion, no frame bias.
+    const auto utc = jd.utc();
+    const coords::Epoch epoch{jd.jd1,jd.jd2,utc.jd1,utc.jd2};
+    const auto r = coords::getTransformMatrix(coords::Frame::GCRF,coords::Frame::ECEF,epoch);
+    for (int i=0;i<3;++i) for (int j=0;j<3;++j) m[i][j]=r.at(i,j);
 }
 
-void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]) {
+void GcrfToEarthFixed(const timesys::Instant& jd, const ForceModelSet& forceSet, double m[3][3]) {
     // FFM Fast C3c: rotation is fitted on the source's realized TT coordinate.
     if (ffm_time::current && ffm_interp::interpolate(jd, forceSet, ffm_interp::Rotation, 9, &m[0][0],
-        [&](double t, double* out) {
+        [&](const timesys::Instant& t, double* out) {
             auto matrix = reinterpret_cast<double (*)[3]>(out);
             if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(t, matrix);
             else GcrfToEarthFixed(t, matrix);
@@ -1646,7 +1626,7 @@ bool EarthFixedField(const ForceModelSet& forceSet) {
     }
 }
 
-Vec3 CentralBodyGravity(const Vec3& position, double jd, const ForceModelSet& forceSet) {
+Vec3 CentralBodyGravity(const Vec3& position, const timesys::Instant& jd, const ForceModelSet& forceSet) {
     if (!EarthFixedField(forceSet)) return EarthFixedGravity(position, forceSet);
     double m[3][3];
     GcrfToEarthFixed(jd, forceSet, m);
@@ -1701,11 +1681,11 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
     }
 }
 
-Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                           const ForceModelSet& forceSet, const DragForceConfig& drag) {
     Vec3 totalAcc;
     const double atmosphereJD = forceSet.explicitEpochContract
-        ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
+        ? jd.utc().jd() : jd.jdTdb(); // retain the legacy density-clock convention
     // The field's Earth-fixed axes, so density, co-rotation and gravity
     // share one Earth orientation; the weather of this instant.
     const EarthAxes axes = EarthAxesAt(jd, forceSet);
@@ -1745,7 +1725,7 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
     return totalAcc;
 }
 
-double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
+double JacchiaRobertsDensityAt(const Vec3& position, const timesys::Instant& jdTdb, double jdUtc,
                           const EarthAxes& axes, const SpaceWeatherData& weather) {
     double lat = 0, lon = 0, alt = 0;
     const Vec3 fixed = axes.fixed(position);
@@ -1762,13 +1742,13 @@ double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
     return rho > 0 ? rho : 0.0;
 }
 
-Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, double jd, const ForceModelSet& forceSet,
+Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd, const ForceModelSet& forceSet,
                      const SRPForceConfig& srp) {
     const Vec3 sunPos = forceSet.sunPositionProvided ? forceSet.sunPosition : getSunPosition(jd).position;
     return SolarRadiation(position, velocity, sunPos, srp);
 }
 
-Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double jd,
+Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                               ForceModelSet& forceSet) {
     // FFM Fast C3a: no time values survive this scope.
     ffm_time::ForceScope forceScope(forceSet, jd);
@@ -1883,7 +1863,7 @@ void ForceModelDerivative(double t, const double* y, double* dydt, void* params)
     Vec3 velocity(y[3], y[4], y[5]);
 
     // Convert time offset to JD
-    double jd = (forceSet->explicitEpochContract ? forceSet->integrationEpochTDB : forceSet->weather.epoch) + t / 86400.0;
+    const auto jd = IntegrationEpoch(*forceSet).plusSeconds(t);
 
     Vec3 acc = ComputeTotalAcceleration(position, velocity, jd, *forceSet);
 

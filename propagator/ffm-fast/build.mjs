@@ -47,7 +47,7 @@ units.push(path.join(packageRoot, 'lib/ffm_gravity.cpp'));
 units.push(...[
   '../../third_party/hwm14/hwm14.cpp', '../../third_party/hwm14/hwm14_data.cpp',
   '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
-  'src/hpop_plugin.cpp', 'src/cpp/src/prw_execution.cpp', 'src/cpp/src/prw_dynamics.cpp',
+  'src/ffm_plugin.cpp', 'src/cpp/src/prw_execution.cpp', 'src/cpp/src/prw_dynamics.cpp',
   'src/cpp/src/resident_dynamics.cpp', 'src/cpp/src/kernel_store.cpp',
 ].map(p => path.resolve(standardRoot, p)));
 const erfa = await composeErfaTranslationUnit();
@@ -55,9 +55,9 @@ const erfaUnit = path.join(buildDir, 'erfa-amalgamation.cpp');
 await fs.writeFile(erfaUnit, erfa.source);
 units.push(erfaUnit);
 
-const pluginSource = await fs.readFile(path.join(standardRoot, 'src/hpop_plugin.cpp'), 'utf8');
+const pluginSource = await fs.readFile(path.join(standardRoot, 'src/ffm_plugin.cpp'), 'utf8');
 const diagnosticExports = [...new Set([...pluginSource.matchAll(/^(?:int|void|double|const char\*)\s+((?:plugin_|get_)[A-Za-z0-9_]+)\s*\(/gm)]
-  .map(m => m[1]).filter(n => n !== 'plugin_stream_invoke')), 'malloc', 'free', 'hpop_initialize'];
+  .map(m => m[1]).filter(n => n !== 'plugin_stream_invoke')), 'malloc', 'free', 'ffm_initialize'];
 const sdkRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('space-data-module-sdk/compiler'))), '../..');
 const sdkVersion = JSON.parse(await fs.readFile(path.join(sdkRoot, 'package.json'), 'utf8')).version;
 const defines = {
@@ -74,7 +74,7 @@ const config = {
 };
 const configPath = path.join(buildDir, 'compiler.json');
 await fs.writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
-process.env.HPOP_SDK_BUILD_CONFIG = configPath;
+process.env.FFM_SDK_BUILD_CONFIG = configPath;
 process.env.SDN_WASI_CLANGXX = path.join(packageRoot, 'build-driver.mjs');
 process.env.SDN_WASI_CLANG = process.env.SDN_WASI_CLANGXX;
 process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;

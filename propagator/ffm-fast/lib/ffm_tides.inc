@@ -9,7 +9,7 @@ struct FfmMergedTides {
         bool valid = false, usable = false;
         std::array<double, TideSize> C{}, S{};
     };
-    struct Value { double jd = NAN; bool usable = false; std::array<double, FieldSize> C{}, S{}; };
+    struct Value { timesys::Instant jd{NAN, NAN}; bool usable = false; std::array<double, FieldSize> C{}, S{}; };
     using Settings = std::tuple<double, double, double, int, int, int, int,
         bool, bool, int, int, bool, bool, bool, bool>;
     Settings settings{};
@@ -47,7 +47,7 @@ struct FfmMergedTides {
         // General degree scale; FFM-1 has identical GM/radius, hence exactly 1.
         for (int n = 0; n <= fes2004::MAX_DEGREE; ++n)
             scale[n] = (f.mu / egm.mu) * std::pow(EGM2008_RADIUS_KM / egm.referenceRadius, n);
-        for (auto& value : values) { value.jd = NAN; value.usable = false; value.C = baseC; value.S = baseS; }
+        for (auto& value : values) { value.jd = {NAN, NAN}; value.usable = false; value.C = baseC; value.S = baseS; }
         nextValue = 0;
     }
 
@@ -60,8 +60,7 @@ struct FfmMergedTides {
                 (std::llabs(nodes[j].index - index) == std::llabs(nodes[far].index - index) && nodes[j].index < nodes[far].index)) far = j;
         }
         Node& node = nodes[empty >= 0 ? empty : far];
-        const double jdTt = 2451545.0 + static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS / 86400.0;
-        const double jd = timesys::ttToTdb(jdTt);
+        const auto jd = timesys::Instant::fromTTSeconds(static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS, 0);
         // C3c always bypasses interpolation at these shipped TT grid nodes.
         ffm_interp::ExactScope exact;
         node.C.fill(0); node.S.fill(0);
@@ -92,12 +91,12 @@ struct FfmMergedTides {
         return node;
     }
 
-    const Value* at(double jd, const ForceModelSet& f) {
-        for (const auto& value : values) if (value.jd == jd) return value.usable ? &value : nullptr;
+    const Value* at(const timesys::Instant& jd, const ForceModelSet& f) {
+        for (const auto& value : values) if (ffm_interp::same(value.jd, jd)) return value.usable ? &value : nullptr;
         Value& value = values[nextValue++ % values.size()];
         value.usable = false;
         if (!tidesOn) { value.jd = jd; value.usable = true; return &value; }
-        const double g = (timesys::tdbToTt(jd) - 2451545.0) * 86400.0 / OCEAN_TIDE_GRID_SECONDS;
+        const double g = jd.daysSinceJ2000() * 86400.0 / OCEAN_TIDE_GRID_SECONDS;
         const long long k = static_cast<long long>(std::floor(g));
         const double u = g - static_cast<double>(k);
         const Node* node[4];

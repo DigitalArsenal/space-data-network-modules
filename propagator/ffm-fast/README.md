@@ -9,12 +9,18 @@ All force calculations run in C++/WASM.
 
 The force profile defines the physical model, this implementation reduces
 evaluation cost, and the catalog integrator controls numerical accuracy.
-`catalog.mjs` re-exports the standard's PRW encoding and resident identity.
+`catalog.mjs` reuses the standard's PRW encoding and supplies the Fast
+module's resident identity.
 Its `fullForceRequest` defaults to `FAST_CATALOG_INTEGRATOR`: RK78,
 relative tolerance `1e-14`, absolute tolerances encoded as `1e-14 × 1000`,
 initial step 30 s, minimum 0.01 s, maximum 120 s, and 1,000,000 maximum steps.
 
-## Implementation and measurements
+There is one FFM Fast mode. `CATALOG_INTEGRATOR` aliases the same default
+as `FAST_CATALOG_INTEGRATOR`; no separate accuracy profile is exposed.
+The E2E requires FIT (1 cm through one day) and SCREEN (1 m and 1 mm/s
+through three days) in all eight regimes.
+
+## Implementation and historical measurements
 
 - **C1:** Same-degree Pines gravity with tables for each degree/order,
   triangular V/W storage, folded constants, and four accumulators.
@@ -36,7 +42,10 @@ Cross-evaluation tide and window caches belong to the force set's
 and time inputs use the exact path. The standard's other configurations,
 finite burns, and STM/variational implementation remain available.
 
-Measurements below are cumulative versus the unchanged standard artifact.
+The measurements below are historical, from before the standard clock/frame
+changes and the current accuracy gates. They isolate the cumulative force
+levers against their recorded standard artifact; they are not current
+phase acceptance or full-catalog timing evidence.
 Errors are maxima over all eight seeds through three days, with identical
 request bytes and fixed 60 s RK78 steps at tolerance 1. CPU uses the resident
 ingest → prepare → describe path, `process.threadCpuUsage`, interleaved
@@ -58,11 +67,11 @@ C4, C3a, and C7 each add zero error: their fixed-step outputs are
 byte-identical to the preceding lever for all eight seeds. CPU measurements
 include the recorded host load.
 
-With the catalog defaults (standard `1e-12 / 300 s`, fast `1e-14 / 120 s`),
-the full E2E passes fixed-step agreement, SCREEN, and every comparison with
-the standard, including the GPS/GEO truth floors. The largest three-day truth errors are 0.301978266 m and
-0.000268837 m/s (GTO). FIT passes six seeds; MOLNIYA and GTO
-exceed the informational one-day 1 cm target.
+The historical default-profile run used standard `1e-12 / 300 s` and Fast
+`1e-14 / 120 s` with a 30 s startup. It passed the then-required SCREEN
+gate, but did not meet today's required FIT gate in MOLNIYA and GTO.
+The historical maximum three-day errors were 0.301978266 m and
+0.000268837 m/s (GTO). The CPU table below belongs to that run.
 
 | Seed | Standard CPU s/day | Fast CPU s/day |
 | --- | ---: | ---: |
@@ -81,7 +90,8 @@ STARLINK 14,489; SSO800 11,602; LOW250 163; GPS 857; GEO 1,841;
 MOLNIYA 1,255; GTO 470. Weighted cost is
 `sum(seed count × measured CPU s/day) / 32514`.
 
-The 120 s cap costs **0.317933824 CPU s/object-day**, versus
+In those historical runs, the 120 s cap cost
+**0.317933824 CPU s/object-day**, versus
 **0.323130420** for 300 s at the same `1e-14` tolerance: a measured
 **-1.61%** change. For one catalog-day, those weighted estimates
 are **10337.30 versus 10506.26 CPU s**; for three days,
@@ -93,8 +103,9 @@ seed runs. The paired standard also changed from 0.666562529 to
 by its paired standard cost gives a **+2.38%** normalized
 120 s versus 300 s change; raw timings include between-run variation.
 
-The complete defaults, the 300 s comparison, population counts, source
+The historical defaults, the 300 s comparison, population counts, source
 hashes, and both runs' load averages are recorded in `docs/levers.json`.
+The current integrator defaults are authoritative in `catalog.mjs`.
 All six lever measurements retain the standard `1e-12 / 300 s` settings.
 
 ## Shared sources and build
@@ -110,7 +121,7 @@ From the repository root, with dependencies provisioned:
 
 ```sh
 cd propagator/ffm-fast
-export SDN_LOCAL_EMSDK_DIR=/private/tmp/claude-501/-Users-tj-Cesium-Weather/2a455fdc-3b3d-48e5-883a-54ae2b62d382/scratchpad/emsdk
+# Set SDN_LOCAL_EMSDK_DIR to the provisioned repo-local emsdk directory.
 node build.mjs
 ```
 
@@ -131,10 +142,12 @@ Node 24.6 or newer runs both artifacts with the SDK's
 `createBrowserModuleHarness` in Node. The E2E covers ISS, STARLINK, SSO800,
 LOW250, GPS, GEO, MOLNIYA, and GTO for three days from
 `2026-08-01T12:00:00.000000` UTC, in GCRF. It checks fixed-step agreement
-at 60 s samples, defaults against converged T3 truth at 300 s samples,
-SCREEN (`1 m`, `1 mm/s` at three days), and improvement over the standard
-with the stated GPS/GEO truth floors. FIT (`1 cm` at one day) and CPU are
-informational. Standard artifact and fork-base hashes must match.
+at 60 s samples and defaults against native T3 truth at 60 s samples,
+including four interior points of each 300 s resident segment. FIT
+(`1 cm` through one day), SCREEN (`1 m`, `1 mm/s` through three days),
+and improvement over the standard with the stated GPS/GEO truth floors
+are required in every regime. CPU is reported separately. Standard
+artifact, fork-base, fixture, and exporter hashes must match.
 
 [Fixture documentation](tests/fixtures/README.md) gives the independent
 truth settings, units, TT handling, tolerance rationale, and one-command
