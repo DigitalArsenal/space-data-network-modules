@@ -169,7 +169,7 @@
         },
         {
           "portId": "configuration",
-          "description": "Required PRW.EXECUTION_REQUEST: the dynamics every resident object is propagated with (FORCES, INTEGRATOR with RK78 or RKF78, STM_TECHNIQUE and DENSITY_TREATMENT for covariance), validated as an execution request. Its INITIAL and TARGET_EPOCH are placeholders that each object's state and each query replace; it carries no STM, covariance, samples, impulses, burns, mass dynamics, dynamic parameters or process noise.",
+          "description": "Required PRW.EXECUTION_REQUEST: the dynamics every resident object is propagated with (FORCES, INTEGRATOR with RK78 or RKF78, STM_TECHNIQUE and DENSITY_TREATMENT for covariance), validated as an execution request. Its INITIAL and TARGET_EPOCH are placeholders that each object's state and each query replace; it carries no STM, covariance, samples, impulses, burns, mass dynamics, dynamic parameters or process noise. Fast selects GJ8 PEC or RK78 Sundman automatically for supported forward resident orbits; backward queries and explicit fixed-step diagnostics retain RK78. There is no separate accuracy mode.",
           "acceptedTypeSets": [
             {
               "setId": "sds-prw",

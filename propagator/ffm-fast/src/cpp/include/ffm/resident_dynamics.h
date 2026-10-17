@@ -5,10 +5,10 @@
 // instance is configured once (ingest_state): one PRW EXECUTION_REQUEST is
 // the template, and its kernel and environment inputs are verified once and
 // kept. Each resident object is that request with its own state and
-// coefficients, integrated forward from its epoch exactly as the execution
-// path integrates it (the same steps, through the same space-weather
-// restarts), without restarting at sample or export epochs. Chebyshev
-// segments are fitted from the integration's dense output.
+// coefficients. Fast's internal orbit policy selects the resident runner;
+// sample/export epochs do not restart it. Selected-object preparation uses
+// bounded cohorts, with Chebyshev fitting and dense-history trimming kept
+// interleaved. The standard PRW contract and covariance path stay shared.
 #include "ffm/prw_dynamics.h"
 #include "ffm/chebyshev.h"
 #include "ffm/kernel_store.h"

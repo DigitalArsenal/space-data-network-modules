@@ -16,15 +16,17 @@ using namespace dynamics;
 
 namespace {
 
-// A node of the dense output: an accepted state of the integration, with
-// the acceleration the integrator evaluated there (its next first stage).
+// A dense node is an accepted corrected state and its physical acceleration
+// on the selected weather side. GJ evaluates this separately from its PEC
+// predictor/extended-branch force ordinate.
 // t: seconds from the start of the node's span.
 struct Node { double t; double y[6]; double a[3]; };
 
-// The nodes of one smooth stretch of the integration: one span between
-// space-weather restarts, cut again where a step ended on a shadow boundary
-// (the radiation pressure's kink). The acceleration is smooth inside, so a
-// stencil never reaches across a piece's ends.
+// Dense nodes between space-weather boundaries. RK/Sundman additionally cut
+// pieces when they land on shadow kinks. GJ keeps its common lattice and
+// integrates conical shadow corrections inside each step; its delivered
+// dense/PPE interpolation is qualified independently against the reference.
+// A stencil never reaches across a piece's ends.
 struct Piece {
     TTEpoch spanStart;
     std::deque<Node> nodes;   // ascending in time
@@ -345,19 +347,32 @@ bool fit(Object& o, const Environment& environment, long long k, Segment& out, s
     for (int i = 0; i < 6; ++i) chebyshevFit(values[i], out.c[i]);
     out.positionM = out.velocityMS = 0;
     out.samples = 0;
+    const auto score = [&](double tau, const double r[3], const double v[3]) {
+        double dr = 0, dv = 0;
+        for (int i = 0; i < 3; ++i) {
+            dr += std::pow(chebyshevEval(out.c[i], tau) - r[i], 2);
+            dv += std::pow(chebyshevEval(out.c[3 + i], tau) - v[i], 2);
+        }
+        out.positionM = std::max(out.positionM, std::sqrt(dr) * 1000);
+        out.velocityMS = std::max(out.velocityMS, std::sqrt(dv) * 1000);
+        ++out.samples;
+    };
+    // A coarse GJ interval can contain an entire 300 s PPE segment without
+    // an accepted node inside it. Score thirteen interior points against
+    // dense output as well; zero accepted nodes must not imply a zero fit
+    // residual. This remains sampled fitting evidence, not an accuracy bound.
+    for (int j = 0; j < CHEBY_NPTS; ++j) {
+        const double tau = 2 * (j + .5) / CHEBY_NPTS - 1;
+        double r[3], v[3];
+        evaluate(o, plus(mid, tau * kHalfSpan), r, v);
+        score(tau, r, v);
+    }
     for (const Branch* b : {&o.backward, &o.forward})
     for (const auto& piece : b->pieces)
         for (const auto& node : piece.nodes) {
             const double tau = elapsedSeconds(mid, plus(piece.spanStart, node.t)) / kHalfSpan;
             if (tau < -1 || tau > 1) continue;
-            double dr = 0, dv = 0;
-            for (int i = 0; i < 3; ++i) {
-                dr += std::pow(chebyshevEval(out.c[i], tau) - node.y[i], 2);
-                dv += std::pow(chebyshevEval(out.c[3 + i], tau) - node.y[3 + i], 2);
-            }
-            out.positionM = std::max(out.positionM, std::sqrt(dr) * 1000);
-            out.velocityMS = std::max(out.velocityMS, std::sqrt(dv) * 1000);
-            ++out.samples;
+            score(tau, node.y, node.y + 3);
         }
     for (const double* c : {out.c[0], out.c[1], out.c[2], out.c[3], out.c[4], out.c[5]})
         for (int j = 0; j < CHEBY_NPTS; ++j)
@@ -406,7 +421,7 @@ std::unique_ptr<PRWFitQualityT> sampledResidual(double positionM, double velocit
     if (withMethod)
         q->METHOD = "Degree-12 Chebyshev series at the Gauss-Lobatto nodes of 300 s TT segments, from the integrator's dense output "
                     "(Hermite interpolation of position, velocity and acceleration at four accepted steps); the largest difference "
-                    "from the integrator's accepted states inside the segments.";
+                    "from accepted states and thirteen uniformly spaced interior dense-output samples per segment; this is sampled fitting error, not a truth error bound.";
     return q;
 }
 
@@ -668,7 +683,7 @@ bool ResidentDynamics::describe(size_t i, const TTEpoch& start, const TTEpoch& e
     if (last >= 0 && o.forward.run) ppe.COMMENT.push_back("Fast forward resident integrator: " + o.forward.run->description() + ".");
     ppe.COMMENT.push_back("Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; "
                           "segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest "
-                          "difference from the integrator's accepted states inside it (SAMPLED_RESIDUAL).");
+                          "difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound).");
     return true;
 }
 
