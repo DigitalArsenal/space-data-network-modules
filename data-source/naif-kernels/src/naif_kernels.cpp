@@ -39,9 +39,9 @@
 // cycle costs about 160 MB of ranges. A 304 on every file record (a server
 // that ignores the validator) still ends the cycle as unchanged.
 //
-// Licence: NASA/JPL NAIF generic kernels and JPL SSD small-body ephemerides
-// are produced by NASA's Jet Propulsion Laboratory and distributed freely by
-// the NAIF node of the Planetary Data System; the credit rides in the ingest
+// License: NASA/JPL NAIF generic kernels, JPL SSD small-body ephemerides,
+// and OSIRIS-REx and Hayabusa2 mission kernels are distributed by NASA/JPL
+// NAIF and its Planetary Data System node; the credit rides in the ingest
 // meta and so in every publication.
 
 using Json = nlohmann::json;
@@ -53,10 +53,11 @@ constexpr size_t kRecord = 1024;
 constexpr const char* providerId = "naif";
 constexpr const char* sourceName = "ssb-kernels";
 constexpr const char* credit =
-    "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), IAU WGCCRE 2015";
-constexpr const char* licence =
-    "NASA/JPL NAIF generic kernels: produced by NASA's Jet Propulsion Laboratory, distributed freely by the NAIF "
-    "node of the Planetary Data System";
+    "Ephemerides and orientation: NASA/JPL NAIF (DE440, JPL satellite and small-body ephemerides), "
+    "IAU WGCCRE 2015; OSIRIS-REx Bennu and Hayabusa2 Ryugu mission kernels, NASA/JPL NAIF Planetary Data System";
+constexpr const char* license =
+    "NASA/JPL NAIF generic kernels, JPL SSD ephemerides, and OSIRIS-REx and Hayabusa2 mission kernels: "
+    "distributed freely by NASA/JPL NAIF and the NAIF node of the Planetary Data System";
 
 struct Source { const char* file; const char* url; std::vector<int> bodies; int y0, y1; };
 const std::vector<Source>& sources() {
@@ -82,10 +83,12 @@ const std::vector<std::pair<const char*, const char*>>& texts() {
       {"pck00011.tpc", "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc"},
       {"gm_de440.tpc", "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc"},
       {"moon_de440_250416.tf", "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf"},
+      {"bennu_v17.tpc", "https://naif.jpl.nasa.gov/pub/naif/ORX/kernels/pck/bennu_v17.tpc"},
+      {"ryugu_v10.tpc", "https://naif.jpl.nasa.gov/pub/naif/pds/pds4/hyb2/hyb2_spice/spice_kernels/pck/ryugu_v10.tpc"},
   };
   return t;
 }
-// One core shard per decade (planets, Sun, Moon, planet centres, Ceres,
+// One core shard per decade (planets, Sun, Moon, planet centers, Ceres,
 // Vesta) and one per satellite system, the order build_kernels.py writes.
 const std::vector<std::pair<const char*, std::vector<int>>>& shards() {
   static const std::vector<std::pair<const char*, std::vector<int>>> s = {
@@ -641,7 +644,7 @@ extern "C" int announce_kernels() {
                      {"source_url", "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"}, {"source_peer", peer},
                      {"reconcile", "current"}, {"origin_id", "naif.jpl.nasa.gov"}, {"origin_name", "NASA/JPL NAIF"},
                      {"dataset_id", "naif/ssb-kernels"}, {"terms_url", "https://naif.jpl.nasa.gov/naif/rules.html"},
-                     {"citation", credit}, {"licence", licence}};
+                     {"citation", credit}, {"licence", license}};
   const Json report = {{"files", job["files"].size()}, {"batch_id", batch}, {"inputs", job["inputs"]}, {"outputs", job["files"]},
                        {"retrieved_at", when}};
   if (output("meta", meta) < 0 || output("report", report) < 0) return 1;

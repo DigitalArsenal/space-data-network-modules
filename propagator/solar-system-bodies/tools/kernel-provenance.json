@@ -73,6 +73,18 @@
       "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf",
       "bytes": 19478,
       "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768"
+    },
+    {
+      "file": "bennu_v17.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/ORX/kernels/pck/bennu_v17.tpc",
+      "bytes": 18460,
+      "sha256": "cdb4bc04f2869d32503db87bddd5a9ab8ea59b6ae91a39cd144e5d9e93339a0a"
+    },
+    {
+      "file": "ryugu_v10.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/pds/pds4/hyb2/hyb2_spice/spice_kernels/pck/ryugu_v10.tpc",
+      "bytes": 11410,
+      "sha256": "5c06e668bbc96fdd1c7a5e027543a5b8f8b70d75bc2dbb5e171b24389d0db10c"
     }
   ],
   "outputs": [
