@@ -18,8 +18,8 @@ and 12 s steps respectively; higher LEO uses 24 s. Near-circular states
 150 s, and those inside 1,400–1,480 minutes use 600 s. Other low-eccentricity
 elliptic states use a conservative 24 s grid. Altitudes use the standard
 Earth radius. These are physical-state bands, never catalog identifiers.
-The GPS/GEO grids are half the study candidates to retain the existing
-0.1 mm comparison floor against standard as well as FIT/SCREEN.
+The GPS/GEO grids are half the study candidates. Qualification must retain
+the existing 0.1 mm comparison floor against standard as well as FIT/SCREEN.
 
 GJ nodes share an absolute TT lattice anchored at UTC midnight. An initial
 tight RK bridge spans at most one step. Nine history states survive normal
@@ -151,10 +151,12 @@ All six lever measurements retain the standard `1e-12 / 300 s` settings.
 
 `standard.mjs` identifies the standard source directory. The build compiles
 its unchanged sources, committed generated headers, third-party code, and
-ERFA amalgamation read-only. Only `lib/force_models.cpp` is forked; new
-implementation code stays here. Sharing the ABI, models, integrators, and
-runtime keeps the two modules on one contract. The fork header records its
-base path and SHA-256; a changed base requires merging the standard changes.
+ERFA amalgamation read-only. Fast forks `lib/force_models.cpp`, the resident
+dynamics source/header, and the plugin source that routes selected-object
+preparation. `forks.mjs` lists these four files and authenticates each base
+path and SHA-256; a changed base requires merging the standard changes.
+New implementation code stays here. Sharing the ABI, models, standard RK
+integrator, and runtime keeps the two modules on one contract.
 
 From the repository root, with dependencies provisioned:
 
@@ -181,12 +183,19 @@ Node 24.6 or newer runs both artifacts with the SDK's
 `createBrowserModuleHarness` in Node. The E2E covers ISS, STARLINK, SSO800,
 LOW250, GPS, GEO, MOLNIYA, and GTO for three days from
 `2026-08-01T12:00:00.000000` UTC, in GCRF. It checks fixed-step agreement
-at 60 s samples and defaults against native T3 truth at 60 s samples,
-including four interior points of each 300 s resident segment. FIT
+at 60 s samples and defaults against native T3 truth at 10 s samples plus
+every native stop, including eccentric perigee refinement. Both direct
+resident dense-state queries and exported PPE are scored. FIT
 (`1 cm` through one day), SCREEN (`1 m`, `1 mm/s` through three days),
 and improvement over the standard with the stated GPS/GEO truth floors
 are required in every regime. CPU is reported separately. Standard
 artifact, fork-base, fixture, and exporter hashes must match.
+
+The same E2E checks mixed epochs, selected subsets, midnight transitions,
+forward/backward windows, and carried/fresh serialized trajectory agreement.
+C++ generates states on both sides of the automatic regime thresholds and
+penumbra-only graze candidates; unchanged standard T3 trajectories verify
+their accuracy and independently confirm the realized grazing geometry.
 
 [Fixture documentation](tests/fixtures/README.md) gives the independent
 truth settings, units, TT handling, tolerance rationale, and one-command
