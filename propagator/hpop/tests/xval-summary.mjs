@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { residentHarness, wasmPath } from './lib/residentRuntime.mjs';
-import { CASES, TOOLS, difference, hpopInputs, hpopSamples } from './lib/xvalCases.mjs';
+import { CASES, TOOLS, difference, hpopInputs, hpopSamples, xvalMetrics } from './lib/xvalCases.mjs';
 
 const out = process.argv[2] ?? new URL('./evidence/xval/summary.json', import.meta.url).pathname;
 const harness = await residentHarness('browser');
@@ -44,7 +44,7 @@ try {
   await harness.destroy();
 }
 
-const m = (x) => (x === undefined ? 'n/a' : x.worst < 1 ? `${(x.worst * 1000).toFixed(x.worst < 0.01 ? 2 : 1)} mm` : `${x.worst.toFixed(x.worst < 100 ? 2 : 0)} m`);
+const m = (x) => x === undefined ? 'n/a' : xvalMetrics({mode:'format-xval',value:x.worst});
 const pairIds = [...new Set(rows.flatMap((r) => Object.keys(r.pairs)))];
 console.log(`| Case | ${TOOLS.map((t) => `HPOP - ${t.label}`).join(' | ')} |`);
 console.log(`|---|${TOOLS.map(() => '---:').join('|')}|`);
@@ -53,7 +53,7 @@ console.log();
 console.log(`| Case | ${pairIds.join(' | ')} | Spread |`);
 console.log(`|---|${pairIds.map(() => '---:').join('|')}|---:|`);
 for (const r of rows) {
-  const spread = Math.max(...Object.values(r.pairs).map((p) => p.worst));
+  const spread = xvalMetrics({mode:'maximum',values:Object.values(r.pairs).map(p=>p.worst)});
   console.log(`| ${r.case} | ${pairIds.map((p) => m(r.pairs[p])).join(' | ')} | ${m({ worst: spread })} |`);
 }
 fs.mkdirSync(path.dirname(out), { recursive: true });

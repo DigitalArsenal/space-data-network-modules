@@ -12,7 +12,7 @@ export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", impor
 export const metadata = Object.freeze({
   id: "com.orbpro.hpop",
   name: "HPOP High-Precision Orbit Propagator",
-  version: "1.3.1",
+  version: "1.4.0",
   type: "Propagator",
   encrypted: false,
   requiresProtection: false,

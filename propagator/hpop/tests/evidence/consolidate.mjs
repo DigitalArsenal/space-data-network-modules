@@ -106,7 +106,7 @@ function collect() {
   const formatValue = (key, value, unit = 'm', precision) => { format[key] = { value, unit, ...(precision === undefined ? {} : { precision }) }; return key; };
   const hpop = read('../../package.json');
   const moduleHash = sha(path.resolve(here, '../../dist/isomorphic/module.wasm'));
-  require(hpop.version === '1.3.1' && moduleHash === '8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0', 'Unexpected shipped HPOP artifact');
+  require(hpop.version === read('../../plugin-manifest.json').version && moduleHash === read('../../dist/build-provenance.json').sha256, 'Shipped HPOP identity differs from build provenance');
   function add(meta, data) {
     require(nonempty(meta.version) && meta.pins.some((p) => digest(p.sha256)), `${meta.id}: missing version/checksum pin`);
     for (const p of meta.pins) require(p.revision || digest(p.sha256), `${meta.id}: invalid pin ${p.label}`);
@@ -192,10 +192,11 @@ function collect() {
   { kind: 'rows', skipped: [], stmStatement: 'not exposed', rows: [{ id: 'library-parity', label: 'Exact library parity', metrics: [metric('failed parity tests', xp.parity.fail, 0, 'tests')], expectedMet: xp.parity.met }], expected: { scored: xp.parity.pass, met: xp.parity.pass, missed: xp.parity.fail } });
   require(nonempty(xpVersion), 'SGP4-XP engine version pin missing');
   for (const [index, defect] of erfa.verdict.defects.entries()) for (const radius of ['leoM', 'gpsM', 'geoM'])formatValue(`defect-${index}-${radius}`, defect.effect[radius]);
-  for (const [index, row] of erfa.verdict.shippedOutput.measurements.entries())formatValue(`ecef-${index}`, row.wasmMinusErfaCioM);
+  const ecef = erfa.rows.find((r) => r.id === 'coordsEcefCio');
+  for (const radius of ['leoM','gpsM','geoM']) formatValue(`ecef-${radius}`, ecef[radius]);
   const clock = erfa.rows.find((r) => r.id === 'forceClock'), rotation = erfa.rows.find((r) => r.id === 'c2tTrue');
   formatValue('force-clock', clock.max, clock.unit); formatValue('force-clock-rotation', rotation.max, rotation.unit);
-  formatValue('force-clock-leo', rotation.cause.evidence.clockPlusInterpolationBound.leoM);
+  formatValue('force-clock-leo', rotation.leoM);
   for(const [key, row] of Object.entries(vallado.tables.all)) if (key !== 'sets') formatValue(`vallado-${key}`, row.maxPosition3dM);
   formatValue('vallado-time', vallado.requestTimeShiftSeconds.maxAbs, 's');
   formatValue('vallado-time-us', vallado.requestTimeShiftSeconds.maxAbs, 's-as-us');
@@ -293,9 +294,8 @@ function render(data) {
   const diagnosticPins = data.dragDiagnostics.map((d) => `### ${d.label} drag diagnostic inputs\n\n${pinsList(d.pins)}`).join('\n\n');
   const dragFootnote = 'For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).';
   const rowTables = tools.filter((t) => !definitions.some(([id]) => id === t.id)).map((t) => t.id === 'vallado' ? renderVallado(t, f) : renderRows(t)).join('\n\n');
-  const defects = table(['Source defect','LEO bound','GPS bound','GEO bound'],findings.defects.map((d,i) => [`${d.source}: ${d.statement}`,f[`defect-${i}-leoM`],f[`defect-${i}-gpsM`],f[`defect-${i}-geoM`]]));
-  const ecef = table(['Output state','WASM ECEF − ERFA CIO'],findings.shippedOutput.measurements.map((r,i) => [i===0?'LEO':i===1?'GPS':'GEO',f[`ecef-${i}`]]));
-  const findingText = `${defects}\n\n${ecef}\n\nThese defect values are orientation-independent bounds. ECEF rows use GCRF positions on the positive x-axis at ${findings.shippedOutput.measurements[0].utc} UTC. Reference-suite field/drag cases supply EOP and use the CIO force-model chain; the classical defects affect the legacy ECEF exports and no-EOP fallback. ${findings.shippedOutput.interpretation} Evidence: [erfa-spice/summary-erfa-spice.json](erfa-spice/summary-erfa-spice.json), [erfa-spice/diagnosis.json](erfa-spice/diagnosis.json).\n\nThe force clock maximum is ${f['force-clock']}; its Earth-rotation difference is ${f['force-clock-rotation']}, with clock-plus-interpolation LEO bound ${f['force-clock-leo']}. Maxima occur at different epochs and are not added. Recorded clock representation: ${findings.forceClock.note}. Evidence: [erfa-spice/summary-erfa-spice.json](erfa-spice/summary-erfa-spice.json).\n\n${findings.toolCauses.map((x) => `- **${x.label}:** ${x.statement} Evidence: [${x.evidence}](${x.evidence}).`).join('\n')}`;
+  const ecef = table(['Classical ECEF versus CIO','Position bound'],['leoM','gpsM','geoM'].map((r,i) => [['LEO','GPS','GEO'][i],f[`ecef-${r}`]]));
+  const findingText = `Classical-frame source defects remaining: ${findings.defects.length}. ERFA is the authoritative IAU 1976/1980 implementation. Before/after measurements and the velocity-axis diagnostic are in [before-after.json](erfa-spice/before-after.json).\n\n${ecef}\n\nThe remaining classical ECEF budget is UT1 = UTC, zero polar motion, no frame bias and the 1976/1980 model. These values are radius-times-angle bounds over the 50 sample epochs. Reference-suite field/drag cases supply EOP and use the CIO force-model chain.\n\nThe force TDB model spread is ${f['force-clock']}; the exact-epoch Earth-rotation difference is ${f['force-clock-rotation']}, or ${f['force-clock-leo']} at LEO radius. ${findings.forceClock.note} Evidence: [ERFA/SPICE summary](erfa-spice/summary-erfa-spice.json).\n\n${findings.toolCauses.map((x) => `- **${x.label}:** ${x.statement} Evidence: [${x.evidence}](${x.evidence}).`).join('\n')}`;
   const md = `# Consolidated reference evidence\n\nGenerated from pinned summaries by \`consolidate.mjs\`; checked by \`node propagator/hpop/tests/evidence/check-all.mjs\` from the repository root. No timestamps or host details enter this report.\n\nHPOP ${data.module.version}, SHA-256 \`${data.module.sha256}\`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.\n\n## Protocol and coverage\n\n${data.protocol.score}. Epochs and input models are in [the case export](cases/hpop-reference-cases.json). Counts use HPOP's suite setting. Skips are explicit unsupported or unavailable cases, never passes. Row-based counts include only primary rows with a stated limit. Diagnostic and decomposition rows are shown separately and do not count as met or missed; all recorded bounds are independently checked.\n\n${steps}\n\n${limits}\n\nThe GMAT limits apply only to GMAT. These are agreement limits from the shared protocol, not orbit-accuracy guarantees.\n\n${counts}\n\n## Maximum position difference\n\nMaxima across each tool's supported cases, at HPOP's suite setting; the Orekit finest column uses its separately stated HPOP setting. A dash means no scored case. The no-drag class also includes supported tides, relativity and thrust cases. Force-class case coverage varies by tool; see scored and skipped IDs in consolidated.json.\n\n${position}\n\n${dragFootnote}\n\n${renderDragDiagnostics(data.dragDiagnostics)}\n\n## STM agreement\n\nNo STM pass threshold is defined by the export.\n\n${stm}\n\n## Frame, time, ephemeris and SGP4 rows\n\n${rowTables}\n\n## Findings\n\n${findingText}\n\n## Pins and model settings\n\nChecksums identify recorded bytes. A source-recipe pin is labelled as such and does not assert availability of an engine archive.\n\n${settings}\n\n${diagnosticPins}\n`;
   const vallado = tools.find((t) => t.id === 'vallado');
   const links = definitions.map(([,label,evidence]) => `[${label}](../tests/evidence/${path.dirname(evidence)}/)`).join(', ');
@@ -320,7 +320,7 @@ export function generate(work) {
     caseExport:{file:'cases/hpop-reference-cases.json',sha256:sha(path.join(here,'cases/hpop-reference-cases.json'))},
     tools:numeric.tools.map((t)=>({...collected.metadata.find((m)=>m.id===t.id),...t, skipped:collected.input.tools.find((x)=>x.id===t.id).skipped})),
     positionTable:numeric.positionTable,dragDiagnostics:numeric.dragDiagnostics,formatted:numeric.formatted,
-    findings:{defects:s.frames.verdict.defects,shippedOutput:s.frames.verdict.shippedOutput,forceClock:s.frames.rows.find((r)=>r.id==='forceClock'),toolCauses:[
+    findings:{defects:s.frames.verdict.defects,coordsEcefCio:s.frames.rows.find((r)=>r.id==='coordsEcefCio'),forceClock:s.frames.rows.find((r)=>r.id==='forceClock'),toolCauses:[
       {label:'Nyx NRLMSISE-00 port',statement:s.nyx.verdict.drag.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
       {label:'Nyx variational equation',statement:s.nyx.verdict.stm.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
       {label:'GMAT anomalous oxygen',statement:s['gmat-2026'].cases.find((r)=>r.cause).cause.statement,evidence:'gmat/anomalous-oxygen.json'},
@@ -332,7 +332,7 @@ export function applyBlocks(blocks,write=false) {
   for(const b of blocks){const file=path.join(root,b.file),old=fs.readFileSync(file,'utf8');
     const start=old.indexOf(b.start),end=old.indexOf(b.end);require(start>=0&&end>start,`${b.file}: generated markers missing`);
     const next=old.slice(0,start)+b.text+old.slice(end+b.end.length);
-    if(write)fs.writeFileSync(file,next);else require(next===old,`${b.file}: generated block differs; regenerate with consolidate.mjs --write`);
+    if(write&&next!==old)fs.writeFileSync(file,next);else if(!write)require(next===old,`${b.file}: generated block differs; regenerate with consolidate.mjs --write`);
   }
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

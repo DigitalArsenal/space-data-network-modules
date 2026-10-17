@@ -144,14 +144,14 @@ These differences are part of the measured spread:
 
 ## Results
 
-The tables below retain the original subset and artifact identified here.
-The [72-case reference suite](#reference-suite-on-72-cases) scores the shipped
-artifact and supplies the current coverage and diagnoses.
+The tables below score the shipped HPOP 1.4.0 artifact on the original
+subset. The [72-case reference suite](#reference-suite-on-72-cases) supplies
+the wider coverage and diagnoses. The exact artifact digest is pinned in
+[the current subset summary](../tests/evidence/xval/summary.json).
 
-Largest 3D position difference over 24 h, at hourly samples, measured on
-2026-10-11 with HPOP WASM 9c24bf0e...a8a99e3 (propagator/hpop 1.3.0) through
-the SDK's browser harness (`node tests/xval-summary.mjs`, which also writes
-`tests/evidence/xval/summary.json`), at the Orekit suite's request: RK78 at
+Largest 3D position difference over 24 h, at hourly samples, through the
+SDK's browser harness (`node tests/xval-summary.mjs`), at the Orekit suite's
+request: RK78 at
 1e-13 and steps of at most 300 s. HPOP's own integration error at those steps
 is most of its difference from Orekit and Tudat in LEO (README.md, Agreement
 with Orekit 13.1). (JR) marks GMAT's Jacchia-Roberts drag cases, where HPOP
@@ -163,16 +163,16 @@ was also run with Jacchia-Roberts.
 |---|---:|---:|---:|---:|---:|
 | LEO400 F0-point-mass | 0.48 mm | 1.17 mm | 0.32 mm | 0.32 mm | 0.30 mm |
 | LEO400 F1-J2 | 18.1 mm | 17.2 mm | 18.0 mm | 18.0 mm | 27.2 mm |
-| LEO400 F3-field20x20 | 18.1 mm | 19.9 mm | 19.8 mm | 19.8 mm | 27.5 mm |
+| LEO400 F3-field20x20 | 18.2 mm | 20.0 mm | 19.9 mm | 19.9 mm | 27.5 mm |
 | LEO400 F4-field-sun-moon | 18.2 mm | 14.3 mm | 19.9 mm | 19.9 mm | 27.5 mm |
-| LEO400 F5-field-sun-moon-srp | 18.7 mm | 24.2 mm | 19.7 mm | 19.7 mm | 27.8 mm |
+| LEO400 F5-field-sun-moon-srp | 18.8 mm | 24.3 mm | 19.8 mm | 19.8 mm | 27.8 mm |
 | LEO400 F6-field-sun-moon-srp-drag | 21.7 mm | 1.38 m (JR) | 33.5 mm | 33.5 mm | 12.08 m |
 | SSO700 F0-point-mass | 0.48 mm | 0.85 mm | 0.30 mm | 0.30 mm | 0.36 mm |
-| SSO700 F1-J2 | 14.5 mm | 26.1 mm | 14.3 mm | 14.3 mm | 38.3 mm |
-| SSO700 F3-field20x20 | 14.5 mm | 19.5 mm | 13.8 mm | 13.8 mm | 39.0 mm |
-| SSO700 F4-field-sun-moon | 14.6 mm | 29.4 mm | 13.9 mm | 13.9 mm | 39.2 mm |
-| SSO700 F5-field-sun-moon-srp | 14.0 mm | 6.27 mm | 13.4 mm | 13.5 mm | 38.3 mm |
-| SSO700 F6-field-sun-moon-srp-drag | 14.2 mm | 166.6 mm (JR) | 65.3 mm | 65.3 mm | 13.5 mm |
+| SSO700 F1-J2 | 14.5 mm | 26.1 mm | 14.2 mm | 14.2 mm | 38.3 mm |
+| SSO700 F3-field20x20 | 14.5 mm | 19.5 mm | 13.8 mm | 13.8 mm | 39.1 mm |
+| SSO700 F4-field-sun-moon | 14.5 mm | 29.3 mm | 13.8 mm | 13.8 mm | 39.0 mm |
+| SSO700 F5-field-sun-moon-srp | 14.1 mm | 6.33 mm | 13.5 mm | 13.5 mm | 38.3 mm |
+| SSO700 F6-field-sun-moon-srp-drag | 14.3 mm | 166.7 mm (JR) | 65.3 mm | 65.3 mm | 13.5 mm |
 | GPS F0-point-mass | 0.14 mm | 0.63 mm | 0.02 mm | 0.02 mm | 0.01 mm |
 | GPS F1-J2 | 0.20 mm | 0.74 mm | 0.06 mm | 0.06 mm | 1.78 mm |
 | GPS F3-field20x20 | 0.19 mm | 0.01 mm | 0.08 mm | 0.08 mm | 1.76 mm |
@@ -184,10 +184,10 @@ was also run with Jacchia-Roberts.
 | GEO F4-field-sun-moon | 0.07 mm | 1.35 mm | 0.14 mm | 0.14 mm | 0.11 mm |
 | GEO F5-field-sun-moon-srp | 0.06 mm | 1.39 mm | 0.14 mm | 0.14 mm | 0.11 mm |
 | MOLNIYA F0-point-mass | 0.58 mm | 4.18 mm | 0.01 mm | 0.01 mm | 0.02 mm |
-| MOLNIYA F1-J2 | 11.0 mm | 10.6 mm | 10.8 mm | 10.8 mm | 93.0 mm |
-| MOLNIYA F3-field20x20 | 11.0 mm | 4.56 mm | 11.2 mm | 11.2 mm | 92.8 mm |
-| MOLNIYA F4-field-sun-moon | 11.0 mm | 3.23 mm | 11.2 mm | 11.2 mm | 92.6 mm |
-| MOLNIYA F5-field-sun-moon-srp | 10.5 mm | 7.68 mm | 11.1 mm | 11.1 mm | 92.8 mm |
+| MOLNIYA F1-J2 | 11.0 mm | 10.6 mm | 10.7 mm | 10.8 mm | 93.0 mm |
+| MOLNIYA F3-field20x20 | 11.1 mm | 4.69 mm | 11.4 mm | 11.4 mm | 92.7 mm |
+| MOLNIYA F4-field-sun-moon | 10.8 mm | 3.49 mm | 10.9 mm | 10.9 mm | 92.9 mm |
+| MOLNIYA F5-field-sun-moon-srp | 10.3 mm | 7.95 mm | 10.8 mm | 10.8 mm | 93.0 mm |
 
 ### Tool against tool (the spread among established codes)
 
@@ -248,15 +248,12 @@ was also run with Jacchia-Roberts.
 - **Tudat native against Tudat WebAssembly:** at most 0.02 mm in every case,
   drag included, after matching the NRLMSISE-00 storm-conditions default.
   The WebAssembly build reproduces native Tudat.
-- **Jacchia-Roberts date, fixed:** HPOP gave GMAT's density functions
-  MJD + 29999.5 where GMAT's modified Julian date (JD - 2430000) is
-  MJD - 29999.5, moving the semiannual term (1.67 times the 400 km density
-  on 2026-08-02; LEO400 30 km and SSO700 451 m from GMAT after a day). The
-  port's fixture had been made with the same mapping. It is now GMAT's own
-  density from GmatConsole at 2000 epochs and points
+- **Jacchia-Roberts date:** HPOP uses GMAT's modified Julian date
+  `JD - 2430000`, equivalent to `MJD - 29999.5`. The independent fixture
+  contains GmatConsole densities at 2000 epochs and points
   (`tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs`); the port agrees
-  to 1.8e-6 (it was up to 124 % off), and the GMAT drag cases are 1.38 m and
-  0.17 m from GMAT, the axes difference above.
+  to 1.8e-6. The GMAT drag cases are 1.38 m and 0.17 m from GMAT, consistent
+  with the axes difference above.
 
 ## GMAT R2026a on the 72 reference cases
 
@@ -299,96 +296,45 @@ Not run (no GMAT model): R1 (Schwarzschild alone), B1 (Cd*A/m rate), J1
 cases, which combine them. GPS C1 (radiation pressure and in-track thrust) is
 run.
 
-**Results.** HPOP 1.3.1, module SHA-256
-`8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0`; the largest
-3D difference over 24 h, hourly samples (`tests/evidence/gmat/summary-gmat-R2026a.json`):
-
-| Force set | Cases | Steps of at most 300 s (the suite's request) | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s | Orekit 13.1 - GMAT |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Point mass | 5 | 0.32 mm | 0.07 mm | 0.01 mm | 0.58 mm |
-| Field, third bodies, radiation pressure, tides, relativity, thrust | 46 | 4.5 cm | 3.1 cm | 3.0 cm | 3.0 cm |
-| With drag | 6 | 7.97 m | 7.95 m | 7.95 m | 7.95 m |
-| With drag, GMAT's Cd x (1 + anomalous-oxygen share) | 6 | | 12 cm | | |
-
-| Orbit | Row | 300 s | 30 s | 10 s, 1e-15 | Orekit - GMAT |
-| --- | --- | ---: | ---: | ---: | ---: |
-| LEO 400 km | Point mass | 0.32 mm | 0.07 mm | 0.01 mm | 0.16 mm |
-| LEO 400 km | No drag | 4.5 cm | 3.1 cm | 3.0 cm | 3.0 cm |
-| LEO 400 km | With drag | 2.34 m | 2.32 m | 2.32 m | 2.32 m |
-| SSO 700 km | Point mass | 0.29 mm | 0.04 mm | 0.01 mm | 0.19 mm |
-| SSO 700 km | No drag | 1.9 cm | 1.1 cm | 1.1 cm | 1.1 cm |
-| SSO 700 km | With drag | 7.97 m | 7.95 m | 7.95 m | 7.95 m |
-| GPS | Point mass | 0.02 mm | 0.00 mm | 0.01 mm | 0.16 mm |
-| GPS | No drag | 1.52 mm | 1.50 mm | 1.50 mm | 1.66 mm |
-| GEO | Point mass | 0.00 mm | 0.00 mm | 0.00 mm | 0.04 mm |
-| GEO | No drag | 0.15 mm | 0.15 mm | 0.15 mm | 0.12 mm |
-| Molniya | Point mass | 0.01 mm | 0.02 mm | 0.01 mm | 0.58 mm |
-| Molniya | No drag | 5.12 mm | 4.99 mm | 4.95 mm | 1.2 cm |
-
-| Force family | 300 s | 30 s | 10 s, 1e-15 | Orekit - GMAT |
-| --- | ---: | ---: | ---: | ---: |
-| Geopotential, EGM2008 (F1 F2 F3) | 1.8 cm | 1.69 mm | 1.71 mm | 1.2 cm |
-| Geopotential, EGM96 and 36Z,24T (G1 G2) | 1.8 cm | 0.77 mm | 0.71 mm | 0.98 mm |
-| Sun and Moon (F4 Z1) | 1.8 cm | 1.93 mm | 1.96 mm | 1.2 cm |
-| Radiation pressure (F5 Z2) | 3.5 cm | 2.2 cm | 2.2 cm | 2.2 cm |
-| EME2000 (E1) | 1.8 cm | 0.76 mm | 0.68 mm | 0.98 mm |
-| Solid tides (T1) | 4.5 cm | 3.1 cm | 3.0 cm | 3.0 cm |
-| Relativity (R2) | 2.3 cm | 5.45 mm | 5.38 mm | 5.23 mm |
-| In-track thrust (I1) | 1.8 cm | 0.77 mm | 0.71 mm | 0.98 mm |
-| Drag (F6 Z3 W1) | 7.97 m | 7.95 m | 7.95 m | 7.95 m |
-
-The per-case table, with limits, is in the summary file. At the suite's
-request the LEO rows are mostly HPOP's own integration error (Agreement with
-Orekit 13.1, README.md).
+**Results.** The current shipped HPOP artifact, its SHA-256, all three
+integration settings, per-case limits, and Orekit-minus-GMAT scores are in
+[the R2026a summary](../tests/evidence/gmat/summary-gmat-R2026a.json).
+Its verdict keeps measured misses and their causes. The per-case table is
+the numerical authority; aggregate prose does not replace those scores.
 
 **State-transition matrix** (GMAT's `OrbitSTM`, 6x6, against HPOP's analytic
 STM at the suite's request; largest relative column difference, position and
-velocity rows apart, all 57 cases): point mass 8.5e-12; field, Sun and Moon
-4.6e-10 (LEO) and 2.0e-9 (Molniya); in-track thrust 6.1e-7; relativity
-1.0e-5 (LEO); radiation pressure on eclipsing orbits 2.6e-5, drag cases 2.1e-5.
-The last three are terms GMAT leaves out of its variational equations:
+velocity rows apart, all 57 cases): the summary reports each case and the
+maximum in `verdict.stm`. Relativity, in-track thrust and eclipsing radiation
+pressure have identifiable partial-model differences.
+GMAT leaves the corresponding terms out of its variational equations:
 `RelativisticCorrection` and `FiniteThrust` add no partials, and
 `SolarRadiationPressure` differentiates the Sun-direction term without the
 shadow function. GMAT has no Cd or Cr columns in `OrbitSTM`. The STM file
 (1.2 MB) stays out of git; its SHA-256 is in the summary.
 
-**Tolerances** (the case export's GMAT limits: point mass 1 cm, gravity 5 cm,
-radiation pressure 10 cm, drag 1.5 m): all 51 cases without drag are within
-them at all three settings (largest 4.5 cm, LEO400 T1 at 300 s). The six
-NRLMSISE-00 cases are not (LEO400 2.3 m, W1 1.53 m; SSO700 7.9 m, W1 6.3 m).
+**Tolerances** remain the case export's limits: point mass 1 cm, gravity
+5 cm, radiation pressure 10 cm, and drag 1.5 m. The current summary records
+pass/fail at all three settings and diagnoses the R2026a NRLMSISE-00 misses.
+No measured discrepancy changes its limit.
 
 **Cause of the drag gap: anomalous oxygen** (`tests/evidence/gmat/anomalous-oxygen.json`).
 GMAT's NRLMSISE-00 plugin takes the total mass density of `gtd7`, which
 leaves anomalous oxygen out (`NRLMsise00Atmosphere::Density`); HPOP, like
 Orekit, takes `gtd7d`'s, which includes it (Picone et al. 2002 give `gtd7d`
 for drag). Along GMAT's trajectory, every 60 s, HPOP's diagnostic gives both
-densities; the mean share and its effect:
+densities. The [anomalous-oxygen record](../tests/evidence/gmat/anomalous-oxygen.json)
+contains the mean density share, independently measured drag effect, and
+current HPOP differences against both the original and Cd-scaled GMAT
+trajectories. Scaling a constant Cd by the mean share is an approximation;
+the corrected residual remains measured and retains both the GMAT 1.5 m
+and shared 0.1 m limits. GMAT's drag otherwise uses mean local solar time,
+WGS84 geodetic heights, and the same constant drivers.
 
-| Case | Anomalous-oxygen share of the mean density | Drag effect over the day | HPOP - GMAT | HPOP - GMAT, GMAT with Cd x (1 + share) |
-| --- | ---: | ---: | ---: | ---: |
-| LEO400 F6 | 0.0052 % | 43.8 km | 2.32 m | 2.7 cm |
-| LEO400 Z3 | 0.0052 % | 43.8 km | 2.31 m | 3.3 cm |
-| LEO400 W1 | 0.0047 % | 32.7 km | 1.53 m | 1.7 cm |
-| SSO700 F6 | 1.9635 % | 413 m | 7.93 m | 11 cm |
-| SSO700 Z3 | 1.9633 % | 413 m | 7.95 m | 12 cm |
-| SSO700 W1 | 2.5279 % | 256 m | 6.30 m | 12 cm |
-
-Share times drag effect predicts the gap (2.30 m, 8.11 m, 1.55 m, 6.47 m), and
-scaling GMAT's Cd by the mean share closes it to the share's variation along
-the orbit. GMAT's drag is otherwise HPOP's: mean local solar time, geodetic
-heights on WGS84, the same constant drivers. No HPOP defect.
-
-**What the other settings are worth** (`tests/evidence/gmat/variants.json`,
-HPOP with steps <= 30 s):
-
-| GMAT setting | Case | HPOP - GMAT | Orekit - GMAT |
-| --- | --- | ---: | ---: |
-| PrinceDormand78, 1e-13, steps <= 60 s (the 2026-10-09 runner) | point mass LEO400 / Molniya | 3.0 mm / 1.4 cm | 2.9 mm / 1.3 cm |
-| Tide `Solid` (step 1 only) | T1 LEO400 / GPS | 2.12 m / 8.9 cm | 2.12 m / 8.9 cm |
-| Tide `SolidAndPole` (steps 1 and 2, pole tides) | T1 LEO400 / GPS | 61 cm / 1.05 cm | 61 cm / 1.05 cm |
-| CSSI file read by GMAT, as published | W1 LEO400 / SSO700 | 210 m / 9.25 m | 210 m / 9.26 m |
-| CSSI file read by GMAT, all rows observed | W1 LEO400 / SSO700 | 105 m / 8.07 m | 105 m / 8.07 m |
-| RungeKutta89, steps <= 5 / 2 / 1 s | radiation pressure, LEO400 | 2.3 / 1.4 / 1.6 cm | 2.4 / 1.3 / 1.7 cm |
+**Other GMAT settings.** The [variant measurements](../tests/evidence/gmat/variants.json)
+compare the current HPOP run at steps <= 30 s with pinned GMAT integrator,
+tide and CSSI-driver variants. The record retains both HPOP-minus-GMAT and
+Orekit-minus-GMAT for each case and setting.
 
 - Step 2 of IERS 2010 section 6.2 (the frequency dependence of k2, notably
   the K1 band) is 2.1 m in LEO400 over the day.
@@ -398,166 +344,193 @@ HPOP with steps <= 30 s):
   HPOP and Orekit take each day's values as published (F10.7 of the previous
   day, centred average and daily Ap of the day).
 - GMAT's radiation-pressure trajectories in LEO and Molniya move by 1-2 cm
-  with its step size while its other cases move under 0.06 mm; HPOP and
-  Orekit agree to 9.3 mm on them. The 30 s setting is the one used.
+  with its step size while its other cases move under 0.06 mm. The current
+  HPOP comparison is recorded per variant. The 30 s setting is the one used.
 
-**R2022a** (`summary-gmat-R2022a.json`, 55 cases: W1 is not run with
-Jacchia-Roberts, whose drivers HPOP reads three-hourly): point mass 0.07 mm,
-no drag 3.1 cm at 30 s (Sun and Moon 1.5 cm: R2022a reads SPICE ephemerides
-as J2000, which R2026a corrects, GMT-5211), Jacchia-Roberts drag 1.36 m LEO400
-and 18 cm SSO700, within 1.5 m.
+**R2022a.** The [R2022a summary](../tests/evidence/gmat/summary-gmat-R2022a.json)
+contains 55 cases and records the current scores and verdict. W1 is not run
+with Jacchia-Roberts, whose drivers HPOP reads three-hourly. R2022a reads
+SPICE ephemerides as J2000; R2026a corrects that convention (GMT-5211).
+Jacchia-Roberts uses the axes convention described above and keeps the
+unchanged 1.5 m drag limit.
 
-## ERFA and SPICE: clock, Earth orientation, TEME axes, Sun and Moon
+## ERFA, Orekit and SPICE: classical frames and the force clock
 
-The frame, time and ephemeris inputs of the reference cases are checked on
-their own, at the 50 hourly sample epochs of
-`tests/evidence/cases/hpop-reference-cases.json` (25 on 2026-08-02 with the
-`eop-2026-08` rows, 25 on 2026-06-10 with `eop-2026-06`). Runner and
-evidence: `tests/evidence/erfa-spice/` (`run-erfa-spice.mjs`,
-`hpop_frames_native.cpp`, `reference.py`, `hpop-frames.json`,
-`reference.json`, `summary-erfa-spice.json`, `tools.json`).
+HPOP 1.4.0 uses ERFA 2.0.1 as the sole implementation of its classical
+`coords` frames: IAU 1976 `eraPmat76`, IAU 1980 `eraNutm80`/`eraPnm80`,
+FK5 TEME `R3(eraEqeq94) * eraPnm80`, and the equinox terrestrial chain
+`R3(eraGst94) * eraPnm80`. GCRF/J2000 are aliases in this API, without frame
+bias. Every valid frame pair is supported; invalid frame/date inputs return
+all-NaN results. The public single-double argument is UTC JD, split exactly
+before ERFA UTC → TAI → TT conversion. Explicit `coords::Epoch` calls carry
+TT and UT1 in two parts.
 
-**Method.** HPOP's side: its UTC to TT conversion and TDB - TT
-(`prw_codec.h`), the single-double TDB Julian date its force model receives,
-`EarthRotation::matrix` (GCRF to ITRF from the case's EOP rows), the tides'
-GMST, the no-EOP fallback rotation and the `lib/coords` IAU 1976/1980 pieces,
-compiled natively from the module's sources with the vendored ERFA; the Sun
-and Moon from the shipped WASM's ephemeris operation at that TDB date. The
-references evaluate every quantity with two-part Julian dates from the same
-UTC epochs and EOP rows (linear in TAI between daily rows, the rows'
-interpolation rule). Rotations are compared as the angle of A B^T, split into
-the pole and the spin about it; at the radius of LEO 400 km (6778 km)
-1 mas is 3.3 cm.
+The no-EOP force fallback evaluates that same chain at every call. Its
+legacy choices are UT1 = UTC, zero polar motion and no frame bias. The EOP
+force path uses the IAU 2006/2000A CIO chain, case EOP interpolated linearly
+in TAI, and hourly TT X/Y/s nodes interpolated linearly. The force instant is
+two-part TT through integrator stages, rotations, tides and ephemerides.
+SPK reads use `((tdb1 - 2451545) + tdb2) * 86400`. HPOP retains its existing
+two-term TDB−TT model, evaluated in seconds; `eraDtdb` is a different model
+and is used only as an independent diagnostic reference.
 
-**Tools.** pyerfa 2.0.1.5 (ERFA 2.0.1, SOFA 2023-10-11), wheel SHA-256
-`be1aeb70390dd03a34faf96749d5cabc58437410b4aab7213c512323932427df`; SpiceyPy
-8.3.0 (CSPICE N0067), wheel SHA-256
-`94530fe4927ef4d06d7eb4c4ba2036a448313f5b806c65aa7a3943d55e535d31`; NAIF
-`naif0012.tls` (`678e32bd...039b`) and `earth_latest_high_prec.bpc`
-(`earth_000101_270111_261015.bpc`, created 2026-10-15, `16b40c07...1528`);
-the case export's DE440 file. ERFA is the library HPOP vendors for its
-IAU 2006/2000A chain, so the ERFA rows check HPOP's composition, clock and
-interpolation, not the series; SPICE is an independent chain.
+Velocity follows `v_to = M v_from + Mdot r_from`, retaining Earth rotation
+about the true pole and using the analytic GMST82 rate. Precession, nutation
+and equinox rates are omitted. The independent full-chain ±1 s derivative
+measures their residual; the approximate scale is 2e-11 rad/s times radius
+(0.14 mm/s at LEO, 0.8 mm/s at GEO), rather than a strict bound.
 
-**Results.** HPOP 1.3.1 (module SHA-256
-`8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0`); largest
-value over the 50 epochs. Frames and ephemeris reads have no integrator step,
-so one column stands for all three step settings of the trajectory tables.
+**Evidence.** `tests/evidence/erfa-spice/check-classical-frames.mjs` evaluates
+10,000 UTC epochs from 1990-01-01 to 2040-01-01 with deterministic
+subsecond jitter, all 64 frame pairs and six state directions. Independent
+pyerfa evaluates each matrix, transport velocity and full derivative.
+C++ reduces the results, enforcing 1 µm position at GEO radius and
+1e-9 m/s velocity for the native ERFA comparison. A second native build
+with contraction disabled and the provisioned toolchain's musl sin/cos
+checks the shipped WASM ECEF export exactly. The report separately records
+the ARM FMA arithmetic spread and native-libc versus WASM-libc rounding.
 
-| Quantity | Reference | Largest difference | Bound | |
-| --- | --- | ---: | ---: | --- |
-| TAI - UTC | ERFA `eraDat`, SPICE `naif0012.tls` | 0 s | 0 | met |
-| TT from UTC | ERFA `eraUtctai`, `eraTaitt` | 5.6 ps | 1 ns | met |
-| GCRF to ITRF at HPOP's own instant | ERFA IERS 2010 CIO chain, full X, Y, s | 0.48 µas (16 µm at LEO radius) | 21 µas | met |
-| GCRF to ITRF at the UTC epoch | the same, at the exact epoch | 0.214 mas (7.0 mm LEO, 4.4 cm GEO) | 22 µas | missed: clock, below |
-| Tides' GMST (`gmst2006`) at HPOP's own UT1, TT | ERFA `eraGmst06` | 0.00 mas | 1 µas | met |
-| GCRF to TEME, SGP4 module (`foundation/frames`) | ERFA `eraPnm06a`, `eraEe06a` | 0.2 nas | 1 µas | met |
-| Sun from the Earth, HPOP's TDB date | SPICE `spkgeo`, same DE440 file | 30 µm | 1 mm | met |
-| Moon from the Earth, HPOP's TDB date | SPICE `spkgeo`, same DE440 file | 15 nm | 1 mm | met |
-| GCRF to ITRF | SPICE J2000 to ITRF93 (high-precision BPC) | 8.90 mas (pole 8.23, spin 3.50) | 5 mas | missed: the kernel's EOP and model, below |
-| IAU 1976 precession, `lib/coords` | ERFA `eraPmat76` | 206 mas (spin 197, pole 60) | 1 µas | missed: defect 1 |
-| IAU 1980 nutation, `lib/coords` | ERFA `eraNutm80` | 49.1 mas | 10 mas | missed: defect 2 |
-| GCRF to TEME, `lib/coords` | ERFA `eraPnm80`, `eraEqeq94` | 212 mas (7.0 m LEO, 43 m GEO) | 10 mas | missed: defects 1 and 2 |
-| GCRF to Earth-fixed, no-EOP fallback | ERFA `eraGmst82` + `eraEqeq94`, `eraNutm80`, `eraPmat76` (UT1 = UTC, no polar motion) | 212 mas (7.0 m LEO) | 10 mas | missed: defects 1 and 2 |
+`run-erfa-spice.mjs` evaluates 50 hourly UTC epochs of the shared cases
+(2026-06-10/11 and 2026-08-02/03). Source-built force APIs use the exact PRW
+TT instant; the independent references are pyerfa 2.0.1.5, SpiceyPy 8.3.0
+(CSPICE N0067), the pinned DE440 excerpt and NAIF ITRF93 BPC.
+`check-erfa-spice.mjs` authenticates final source/artifact hashes and rebuilds
+all 50 HPOP records against the pinned reference, including the four
+classical rows, exact-epoch CIO rotation and the separate SGP4 TEME chain.
+All comparisons and unit conversions run in C++.
 
-Measured, without a bound:
+<!-- BEGIN CLASSICAL FRAME RESULTS -->
 
-| Quantity | Reference | Largest difference |
-| --- | --- | ---: |
-| TDB - TT (`tdbMinusTtSeconds`) | ERFA `eraDtdb` at the geocentre | 32.0 µs |
-| TDB - TT, SPICE | ERFA `eraDtdb` | 13.3 µs (reference spread) |
-| TDB date the force model receives | ERFA TT + `eraDtdb` | 46.1 µs |
-| GCRF to ITRF: ERFA at HPOP's instant against ERFA at the epoch | ERFA | 0.214 mas (the clock alone) |
-| GCRF to ITRF: SPICE against ERFA | | 8.86 mas (reference spread) |
-| Tides' GMST at the UTC epoch | ERFA `eraGmst06` at exact UT1, TT | 0.51 mas |
-| No-EOP fallback against the full chain with EOP | ERFA | 607 mas (pole 459: the omitted polar motion; spin 402: UT1 - UTC and defect 1) |
-| SGP4 TEME (IAU 2006/2000A definition) against the FK5 definition | ERFA `eraPnm80`, `eraEqeq94` | 77.7 mas (2.6 m at LEO radius) |
-| Sun from the Earth at the UTC epoch | SPICE at ERFA TDB | 1.35 m |
-| Moon from the Earth at the UTC epoch | SPICE at ERFA TDB | 4.9 cm |
+All 64 frame pairs meet the direct-ERFA limits: maximum position error
+2.9802323e-8 m at GEO and velocity error 3.7499437e-12 m/s. The 11-epoch
+WASM/matched-native comparison is exactly 0 m. Stock native-libc versus
+WASM-libc rounding is 7.4505806e-9 m; disabling ARM contraction changes
+the direct-ERFA comparison by at most 2.4149826 µm. These separate compiler
+and library measurements do not change the accuracy limits.
 
-**Findings.**
+| Quantity | 1.3.1 baseline | 1.4.0 | Units / reference |
+| --- | ---: | ---: | --- |
+| MOD precession | 206.420024 | 0 | mas, ERFA, 50 epochs |
+| MOD → TOD nutation | 49.083224 | 0 | mas, ERFA, 50 epochs |
+| GCRF → TEME | 211.795418 | 2.0002e-10 | mas, ERFA, 50 epochs |
+| Classical no-EOP fallback | 211.890408 | 2.8625e-8 | mas, ERFA, 50 epochs |
+| Force CIO rotation at exact epoch | 0.213831331 | 0.000483481 | mas, ERFA, 50 epochs |
+| Force CIO rotation at exact epoch | 7.026783 | 0.015888 | mm at LEO |
+| Sun ephemeris against ERFA TDB | 1.353636 | 0.395263 | m; remaining two-term TDB model spread |
+| Moon ephemeris against ERFA TDB | 0.048875 | 0.014053 | m; remaining two-term TDB model spread |
+| Isolated ECEF velocity pole error | 1.285653 / 5.037807 / 7.997551 | 0 / 0 / 0 | m/s at LEO / GPS / GEO, 2026-08-02 |
 
-- **The IERS 2010 chain the reference cases use is exact.** At the instant
-  HPOP evaluates, `EarthRotation` (hourly X, Y, s nodes interpolated
-  linearly, EOP corrections, polar motion and ERA at every call) is within
-  0.48 µas of the full ERFA chain, forty times inside its stated 0.02 mas.
-  The tides' GMST, HPOP's own code, equals `eraGmst06` at the same dates. The
-  SGP4 module's TEME axes equal ERFA's for the definition they state.
-- **Clock (precision limit, not a trajectory error).** The force model
-  receives TDB as one double Julian date, which resolves 40.2 µs.
-  `tdbMinusTtSeconds` (`prw_codec.h`) takes TDB - TT as the difference of two
-  such dates, so it moves in 40.2 µs steps (-764.430 µs at every 2026-08-02
-  sample, +683.963 µs at every 2026-06-10 sample): up to 19.0 µs of rounding
-  on top of the two-term formula's 13.5 µs against `eraDtdb`, 32.0 µs in all.
-  Rounding the TDB date adds up to 14.1 µs (46.1 µs from IAU TDB in all).
-  Earth rotation, evaluated at the TT recovered from that date, is up to
-  14 µs late or early: 0.214 mas about the pole, 7.0 mm at LEO radius. The
-  Sun and Moon are read 1.35 m and 4.9 cm from their positions at IAU TDB.
-  On a trajectory these are far below the tables above: turning the
-  Earth-fixed axes by 0.214 mas moves the EGM2008 70x70 acceleration by at
-  most 2.9e-12 m/s^2 at 400 and 700 km (4000 points), which would be 11 mm in
-  a day only if it held one direction for the whole day; it changes sign with
-  longitude and with the rounding. The Sun and Moon offsets change their
-  tidal accelerations by under 1e-14 m/s^2. Where it does
-  show is in TDB epoch labels: HPOP writes and reads TDB with its own
-  TDB - TT (consistently with itself), and a reader converting those labels
-  with `eraDtdb` places a sample up to 32 µs away, 25 cm along track in LEO.
-  Computing TDB - TT in seconds rather than as a difference of Julian dates
-  removes the 19 µs; a full series (`eraDtdb`) removes the rest.
-- **SPICE's ITRF93 kernel is 8.9 mas from the IERS 2010 chain, and HPOP
-  follows the IERS chain.** HPOP - SPICE (8.90 mas) and ERFA - SPICE
-  (8.86 mas) differ by the clock term alone. The difference is fixed in
-  Earth-fixed axes (pole offset of about 4.4, 3.6 mas in August and 4.9,
-  5.5 mas in June, plus 1.8 to 3.3 mas of spin), which is an
-  Earth-orientation series difference: the kernel is built from JPL's own EOP
-  series (`latest.long`) through IAU 1976/1980 with nutation corrections and
-  degree-20 Chebyshev fits (its comment area, `tools.json`), while the June
-  case rows agree with the current IERS finals to 0.004 mas. The a-priori
-  5 mas bound remains a miss: the measured reference spread plus HPOP's
-  clock contribution explains it. The kernel states its own accuracy as
-  several microradians.
-- **Defect 1: `lib/coords` IAU 1976 precession.** `coords::precession`
-  states "as ERFA pmat76" but multiplies the Lieske coefficients' T0 terms by
-  T: zeta and z each carry an extra 1.39656 T^2 - 0.000139 T^3 arcsec and
-  theta -0.85330 T^2 - 0.000217 T^3 arcsec (T in centuries from J2000). At
-  2026.6 (T = 0.266) that is 98.7, 98.7 and -60.3 mas, the measured 197 mas
-  of spin and 60 mas of pole; it grows with T^2 (about 0.7 arcsec of spin in
-  2050). For a J2000 start the angles are zeta = 2306.2181 T + 0.30188 T^2 +
-  0.017998 T^3, z = 2306.2181 T + 1.09468 T^2 + 0.018203 T^3, theta =
-  2004.3109 T - 0.42665 T^2 - 0.041833 T^3 (Lieske et al. 1977; `eraPmat76`).
-- **Defect 2: `lib/coords` IAU 1980 nutation table.** In the 63-term table,
-  ten rows carry coefficients that IAU 1980 (`eraNut80`) gives to other
-  argument multipliers: it gives -158 x 0.1 mas to (-1, 0, 2, 0, 2), which
-  IAU 1980 gives to (1, 0, 0, -2, 0), and likewise mispairs (1, 0, 0, -2, 0),
-  (0, 0, 2, -2, 1), (-1, 0, 2, 0, 1), (0, 0, 0, 2, 0), (-1, 0, 2, 2, 2),
-  (-1, 0, 0, 0, 1) and (1, 0, 2, 0, 1), with the obliquity terms of
-  (2, 0, 0, 0, 0) and (0, 0, 2, 0, 0) dropped. One row, (-1, 0, 2, 0, 0), is
-  not an IAU 1980 argument. Delta psi is 49.1 mas off and delta epsilon
-  1.1 mas on 2026-08-02. Truncation alone costs a few mas (ERFA's own first
-  63 rows: 2.4 mas over June to September 2026).
-- **Reach of defects 1 and 2.** They are in `lib/coords` alone: its
-  `gcrfToTeme`, `gcrfToItrf`, `transform` and `getTransformMatrix` (used by
-  `src/hpop_plugin.cpp` for entity input states in TEME or ECEF and its ECEF
-  position batches) and the force model's no-EOP fallback
-  `ForceModel::GcrfToEarthFixed(jd)`: 212 mas, 7.0 m at LEO radius and 43 m
-  at GEO radius, inside the 0.5 arcsec band `environment_conformance.cpp`
-  gates them with. Reference-suite field and drag cases supply EOP and use
-  the CIO `EarthRotation` chain. Point-mass plus NRLMSISE-00 without EOP is
-  accepted and reaches the classical fallback; the blanket refusal statement
-  does not apply. The SGP4 module uses `foundation/frames`. Reachability and
-  shipped ECEF effects are recorded in
-  [the frame diagnosis](../tests/evidence/erfa-spice/summary-erfa-spice.json).
-- **TEME definitions.** SGP4's TEME taken as the IAU 2006/2000A true
-  equator rotated by the equation of the equinoxes (`foundation/frames`)
-  and as the FK5 true equator rotated by `eraEqeq94` differ by 77.7 mas,
-  2.6 m at LEO radius, against SGP4's kilometre-level accuracy.
-- **Existing SPICE and Horizons checks**, not repeated here: HPOP's DE440
-  reads against CSPICE N0067 at one epoch for all planets
-  (`tests/kernel_invoke.test.mjs`, 1 mm; `tests/de440_force.test.mjs`,
-  third-body and SRP accelerations to 1e-18 km/s^2), the DE440 excerpt's
-  CSPICE and Horizons vectors (`files/orbit-products/tests/fixtures/de440/`,
-  `docs/de440-validation.md`), and `propagator/solar-system-bodies`
-  (`tests/cspice_oracle.py`, `tests/parity.mjs`).
+Across the wider 1990–2040 grid, the GCRF → ECEF position error falls from
+96.473302 m to 1.666001e-8 m at GEO; velocity error falls from
+11.857143 m/s to 2.273737e-12 m/s. The old unimplemented GCRF → PEF pair
+returned identity, producing up to 84,328,337.881 m error at GEO.
+The maximum neglected full-matrix velocity derivative is 0.000890341 m/s
+at GEO over all pairs; GCRF → ECEF alone measures 0.000465126 m/s.
+`before-after.json` retains the original measurements, and
+`before-after-metrics.json` gives each frame's angle, radius-scaled chord
+and velocity values.
+
+The remaining classical-ECEF versus CIO budget is 533.295092 mas,
+equivalent to 17.524789 / 68.670550 / 109.014937 m at LEO / GPS / GEO.
+It is a model/EOP limitation, separate from ERFA implementation identity.
+The ERFA/SPICE verdict contains zero remaining classical/clock defects;
+its one limited miss is the retained independent ITRF93 reference spread.
+
+<!-- END CLASSICAL FRAME RESULTS -->
+
+**Independent Orekit frames.** `OrekitFrames.java` uses Orekit 13.1 and the
+same `finals2000A.all`. For classical frames, Orekit EME2000 corresponds to
+HPOP's classical GCRF/J2000 input: neither applies a frame bias inside this
+comparison. MOD/TOD/TEME use IERS 1996 without EOP corrections. Orekit's
+IERS 1996 Delaunay arguments differ from ERFA IAU 1980; its cubic
+psi_A/omega_A/chi_A precession representation also differs slightly from
+ERFA's cubic zeta/z/theta representation. The measured spread is retained
+against the original 1 mm target.
+
+For GCRF → ITRF, Orekit uses IERS 2010, `simpleEOP=true` and its minimum
+allowed EOP interpolation degree, 3. HPOP uses linear interpolation. Raw
+agreement therefore includes interpolation spread. The report also gives
+agreement at midnight EOP nodes and an explicitly labeled same-EOP
+comparison to isolate the force-clock effect; neither replaces the raw
+Orekit score. Java source, jar resources, oracle output and reducer hashes
+are pinned in `orekit-frames-summary.json`.
+
+
+| Independent Orekit comparison | mas | mm at LEO | mm at GEO |
+| --- | ---: | ---: | ---: |
+| Classical MOD | 0.010607577 | 0.348579 | 2.168376 |
+| Classical TOD | 0.019413815 | 0.637964 | 3.968527 |
+| Classical TEME | 0.012053082 | 0.396080 | 2.463863 |
+| Force ITRF, all 50 epochs, raw EOP | 0.263518419 | 8.659567 | 53.867820 |
+| Force ITRF, EOP midnight nodes | 0.000580149 | 0.019064 | 0.118593 |
+| Force ITRF, LEO400 F3 epochs, raw EOP | 0.114602461 | 3.765990 | 23.426767 |
+| Force ITRF, LEO400 F3, aligned-EOP diagnostic | 0.000401117 | 0.013181 | 0.081995 |
+
+At EOP midnight nodes, the 1.3.1 rotation error is 7.019445 mm at LEO;
+the two-part force clock gives 0.019064 mm. The August aligned-EOP
+comparison changes from 7.027113 to 0.013181 mm. Raw scores retain the
+independently measured cubic-versus-linear interpolation spread.
+
+
+The Orekit trajectory suite retains 72/72 published limits. The additional
+before/after constraint (increase no greater than 0.0001 m) is met by 113 of
+117 LEO/SSO setting rows. Its four misses remain explicit:
+
+| Case / setting | Baseline worstM | Current worstM |
+| --- | ---: | ---: |
+| LEO400 F3-field20x20 / suite | 0.018112741869270137 | 0.01821440531773162 |
+| LEO400 J1-field-sun-moon-srp-drag-jb2008 / suite | 0.025022275929181808 | 0.025855702188580517 |
+| SSO700 Z1-zonal20-sun-moon / suite | 0.014466331952695819 | 0.014595130077823898 |
+| LEO400 J1-field-sun-moon-srp-drag-jb2008 / finest | 0.001237102075599719 | 0.0014349286371713363 |
+
+Adaptive-step counts change in some of these cases; tighter settings improve
+F3 and SSO Z1 agreement, while the JB2008 finest row still misses the cap.
+This evidence does not turn the four misses into passes.
+`orekit-trajectory-before-after.json` records every LEO/SSO row and setting.
+
+**SPICE reference spread.** ITRF93 uses the BPC's own EOP series and IAU
+1976/1980 with corrections; the case CIO chain uses shared IERS EOP and
+IAU 2006/2000A. `c2tSpice` retains its 5 mas limit and recorded miss;
+`c2tSpiceErfa` measures the independent spread. `coordsEcefCio` and
+`coordsEcefSpice` record the classical API's remaining EOP/model budget in
+mas and metres at LEO/GPS/GEO. These diagnostic differences are not
+classical ERFA identity errors.
+
+Offline reproduction from `propagator/hpop`:
+
+```sh
+node tests/evidence/erfa-spice/check-classical-frames.mjs
+node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers /Users/tj/software/main-packages/flatbuffers/include
+node tests/evidence/erfa-spice/run-orekit-frames.mjs
+node tests/evidence/erfa-spice/check-erfa-spice.mjs
+```
+
+All seven [runtime receipts](../README.md#verification) pass on HPOP 1.4.0,
+module SHA-256 `eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629`.
+The headless-shell browser, native WasmEdge and Docker WasmEdge lanes have
+byte-identical responses and exit classes: PRW 72, GNSS 20, Earth
+radiation/tides 24, variational 40, finite burn 180 and kernel 24 runs per
+lane. The resident receipt has 33 requests across each of the three runtimes,
+with exact agreement.
+
+`tests/evidence/refresh-derived-comparisons.mjs` refreshes the HPOP side of
+stored GMAT, Nyx and Basilisk diagnostic comparisons. It uses the current
+Tudat HPOP response cache, recomputes missing responses through the shipped
+WASM, and performs reductions in C++. Independent reference trajectories
+stay pinned. Run it after refreshing the primary GMAT/Basilisk summaries
+and Tudat current-WASM cache:
+
+```sh
+node tests/evidence/refresh-derived-comparisons.mjs --gmat --nyx --basilisk
+```
+
+Refresh the affected tool summaries and their file hashes with the
+tool-specific scoring/annotation commands before
+`node tests/evidence/consolidate.mjs --write`.
+
+The GMAT diagnostic inputs are the provisioned local reports under
+`/Users/tj/software/tools/xval/gmat-work/{anomalous-oxygen,variants}`;
+this refresh step does not run or fetch an external reference engine.
 
 ## SGP4: Vallado's verification set
 
@@ -584,31 +557,31 @@ runtime. Its theory has no independent public reference outside that library;
 | Orbit | Force class | Orekit | GMAT R2026a | GMAT R2022a | Nyx | tudatpy | Tudat WASM | Basilisk | Orekit finest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LEO400 | point mass | 0.479 mm | 0.322 mm | 0.316 mm | 0.305 mm | 0.325 mm | 0.319 mm | 0.315 mm | 0.152 mm |
-| LEO400 | field + third bodies + SRP (no drag) | 18.897 mm | 45.193 mm | 45.172 mm | 17.772 mm | 18.113 mm | 19.898 mm | 17.745 mm | 1.318 mm |
-| LEO400 | drag | 25.022 mm | 2.337 m | 1.380 m | 12.459 m | 38.838 mm | 33.545 mm | 5418.749 m | 4.054 mm |
+| LEO400 | field + third bodies + SRP (no drag) | 18.875 mm | 45.162 mm | 45.141 mm | 17.729 mm | 18.148 mm | 19.926 mm | 17.671 mm | 1.317 mm |
+| LEO400 | drag | 25.856 mm | 2.337 m | 1.380 m | 12.459 m | 38.864 mm | 33.484 mm | 5418.749 m | 4.077 mm |
 | SSO700 | point mass | 0.481 mm | 0.292 mm | 0.304 mm | 0.297 mm | 0.302 mm | 0.295 mm | 0.292 mm | 0.178 mm |
-| SSO700 | field + third bodies + SRP (no drag) | 14.817 mm | 19.400 mm | 27.703 mm | 15.972 mm | 14.416 mm | 14.264 mm | 15.821 mm | 1.351 mm |
-| SSO700 | drag | 16.929 mm | 7.965 m | 164.692 mm | 45.653 mm | 13.506 mm | 65.290 mm | 58.128 m | 1.096 mm |
+| SSO700 | field + third bodies + SRP (no drag) | 14.595 mm | 19.487 mm | 27.789 mm | 15.879 mm | 14.367 mm | 14.224 mm | 15.880 mm | 1.355 mm |
+| SSO700 | drag | 16.834 mm | 7.965 m | 164.793 mm | 45.604 mm | 13.555 mm | 65.324 mm | 58.128 m | 1.066 mm |
 | GPS | point mass | 0.143 mm | 0.024 mm | 0.017 mm | 0.017 mm | 0.021 mm | 0.021 mm | 0.023 mm | 0.159 mm |
-| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.139 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.219 mm |
+| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.140 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.220 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |
 | GEO | point mass | 0.035 mm | 0.001 mm | 0.001 mm | 0.002 mm | 9.906e-04 mm | 0.003 mm | 6.219e-04 mm | 0.037 mm |
-| GEO | field + third bodies + SRP (no drag) | 0.066 mm | 0.150 mm | 1.330 mm | 0.153 mm | 0.147 mm | 0.141 mm | 0.148 mm | 0.065 mm |
+| GEO | field + third bodies + SRP (no drag) | 0.067 mm | 0.151 mm | 1.330 mm | 0.154 mm | 0.148 mm | 0.141 mm | 0.148 mm | 0.065 mm |
 | GEO | drag | — | — | — | — | — | — | — | — |
 | MOLNIYA | point mass | 0.579 mm | 0.013 mm | 0.059 mm | 0.003 mm | 0.007 mm | 0.008 mm | 0.020 mm | 0.572 mm |
-| MOLNIYA | field + third bodies + SRP (no drag) | 11.034 mm | 5.116 mm | 28.313 mm | 1.172 mm | 10.767 mm | 11.221 mm | 1.134 mm | 9.839 mm |
+| MOLNIYA | field + third bodies + SRP (no drag) | 11.206 mm | 5.125 mm | 28.577 mm | 1.361 mm | 10.973 mm | 11.352 mm | 1.225 mm | 9.847 mm |
 | MOLNIYA | drag | — | — | — | — | — | — | — | — |
 
 ### Drag cases with the tool-side setting difference removed (diagnostic)
 
 | Tool | Orbit | Cases | Stock | Setting difference removed | Limit | Stock verdict | Diagnostic verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.265 mm | 1.500 m | not met | met |
-| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.955 mm | 1.500 m | not met | met |
-| Nyx | LEO400 | 5 | 12.459 m | 50.136 mm | 100.000 mm | not met | met |
-| Nyx | SSO700 | 3 | 45.653 mm | 14.967 mm | 100.000 mm | met | met |
-| Basilisk | LEO400 | 4 | 5418.749 m | 26.553 mm | 100.000 mm | not met | met |
-| Basilisk | SSO700 | 3 | 58.128 m | 15.210 mm | 100.000 mm | not met | met |
+| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.207 mm | 1.500 m | not met | met |
+| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.950 mm | 1.500 m | not met | met |
+| Nyx | LEO400 | 5 | 12.459 m | 50.162 mm | 100.000 mm | not met | met |
+| Nyx | SSO700 | 3 | 45.604 mm | 15.016 mm | 100.000 mm | met | met |
+| Basilisk | LEO400 | 4 | 5418.749 m | 26.509 mm | 100.000 mm | not met | met |
+| Basilisk | SSO700 | 3 | 58.128 m | 15.259 mm | 100.000 mm | not met | met |
 
 *Maximum hourly 3D position differences at the suite setting; Orekit finest is separate. Drag adjustments: [GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic](../tests/evidence/gmat/anomalous-oxygen.json); [Nyx: Published NRLMSISE-00 formulas + WGS84 shape](../tests/evidence/nyx/drag-settings-diagnostic.json); [Basilisk: WGS84 coordinates + native gtd7d density](../tests/evidence/basilisk/summary-basilisk-2.12.0.json#/diagnostics/wgs84-gtd7d). Limits: [shared protocol](../tests/evidence/cases/hpop-reference-cases.json), with GMAT limits applying only to GMAT.*
 

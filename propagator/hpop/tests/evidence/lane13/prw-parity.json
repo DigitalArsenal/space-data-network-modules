@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "TMPL lane13 PRW malformed classifications",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-hpop-gravity-degree-20261014/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
-  "moduleSha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-coords-classical-frames-fix-20261016/propagator/hpop/dist/isomorphic/module.wasm",
+  "artifactSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
+  "moduleSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 72,
-      "durationMs": 1376
+      "durationMs": 1223
     },
     {
       "lane": "wasmedge",
       "runs": 72,
-      "durationMs": 4057
+      "durationMs": 4640
     },
     {
       "lane": "docker-wasmedge",
       "runs": 72,
-      "durationMs": 24392
+      "durationMs": 66944
     }
   ],
   "cases": [
@@ -732,7 +732,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -742,7 +742,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -752,7 +752,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -762,7 +762,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -1452,7 +1452,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -1462,7 +1462,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -1472,7 +1472,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -1482,7 +1482,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -2172,7 +2172,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -2182,7 +2182,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -2192,7 +2192,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     },
     {
@@ -2202,7 +2202,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "6b197b4529f5f68edacff1e7b2f16ee71b843d4111cbcd890cc9222df795a4dc",
+      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
       "stdoutLength": 312
     }
   ]

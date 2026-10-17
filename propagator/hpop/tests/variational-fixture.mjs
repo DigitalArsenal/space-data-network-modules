@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import { hexRequestFor } from './lib/prwCodec.mjs';
 export const reference=JSON.parse(fs.readFileSync(new URL('./variational-kepler-reference.json',import.meta.url)));
 export const controls={method:'RKF78',initialStep:20,minStep:0.001,maxStep:20,absTolerance:1e-14,relTolerance:1e-14};
-export const oracleParams=c=>({epochJD:reference.epoch_jd,targetJD:c.target_jd??reference.epoch_jd+c.duration_s/86400,
+// The generator supplies TDB request labels and the separate TT integration
+// duration. The request target must not be reconstructed from duration_s.
+export const oracleParams=c=>({epochJD:reference.epoch_jd,epochTimeScale:reference.time_scale,targetJD:c.target_jd,
   position:c.initial_state.slice(0,3),velocity:c.initial_state.slice(3),
   forces:{gravityMode:'POINT_MASS',j2:false,mu:reference.mu_km3_s2},integrator:controls,includeSTM:true});
 const kernel=fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));

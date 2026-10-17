@@ -5,8 +5,10 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { normalizeParityFixture,runParityHarness,formatParityReport } from 'space-data-module-sdk/testing';
+import { useHeadlessShell } from './lib/headlessShell.mjs';
 import { cases } from './variational-fixture.mjs';
 const plan=await normalizeParityFixture({name:'TMPL lane13 canonical PRW variational artifact',threadCounts:[1,2,4,8],cases});
+useHeadlessShell();  // the browser lane: Chromium headless shell only
 const report=await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,timeoutMs:60000,log:console.log});
 console.log(formatParityReport(report));
 fs.mkdirSync(new URL('./evidence/lane13/',import.meta.url),{recursive:true});

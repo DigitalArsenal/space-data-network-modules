@@ -1,0 +1,308 @@
+{
+ "about": "C++ reduction against independent Orekit frames; 1 mm target at LEO/GEO, no tolerance widened. Before: untouched 1.3.1 native. After: current native (baseline mode repeats before).",
+ "units": "Rotation angle mas; worst-direction displacement mm at LEO=6778137 m and GEO=42164170 m.",
+ "notes": {
+  "classical": "Orekit MODProvider composes the IERS 1996 psi_A/omega_A/chi_A cubic precession polynomials; ERFA pmat76 uses the IAU 1976 zeta/z/theta cubic parameterization. Their finite polynomial representations differ beyond their retained order. Orekit IERS 1996 nutation arguments also differ from ERFA IAU 1980 (documented in the pinned jar resource); measured ERFA/Orekit rows isolate that model spread.",
+  "itrf": "Orekit minimum degree-3 EOP interpolation differs from HPOP linear interpolation; same-EOP and interpolation-spread rows isolate it. Midnight rows land exactly on EOP records.",
+  "clock": "LEO400 F3 samples are the August 25-epoch set. AlignedEop rows are explicitly diagnostic: R_ERFA(linear case EOP) * transpose(R_ERFA(Orekit cubic EOP)) * R_Orekit removes only the independently measured EOP interpolation effect. Raw Orekit rows are retained with the unchanged 1 mm target."
+ },
+ "sources": {
+  "java": {
+   "path": "propagator/hpop/tests/evidence/erfa-spice/OrekitFrames.java",
+   "sha256": "2784d4d26b4c567e2d4034eca3ac1db51107dc2735e5407b9ee863b8cc954155"
+  },
+  "reduce": "9161c73713fa43d426bbc4161c1de90bdb403f94e60143f6550fe8e7e30c7ded",
+  "oracle": "f69616a8e750eab6746c2447eb24846490310f1b63498ea2cb9ed665d679815d",
+  "before": "18f86f501bfd2fcc62dfdbac43adf713d0b659e316d285cfb8e1e27e918cf439",
+  "after": {
+   "lib/coords.cpp": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677",
+   "lib/time_convert.cpp": "02a82cb7a9bb3f38cbfd3be3b25b32e073cd356df56f3965be0ce5ca0da5b7e6",
+   "lib/time_types.h": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76",
+   "lib/force_models.cpp": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3",
+   "src/cpp/include/hpop/prw_environment.h": "f36b8e23e6ce6cd65a9d07c2e62c28fa5696994932950f98b76a1d49613832a6",
+   "tests/evidence/erfa-spice/hpop_frames_native.cpp": "a34c2bc03747ab9eba304da27fbae61c1da994f668f4de30eadab041c8d5fee1"
+  }
+ },
+ "rows": [
+  {
+   "id": "coordsMod",
+   "samples": 50,
+   "before": {
+    "mas": 206.42402905363826,
+    "leoMm": 6783.369274064798,
+    "geoMm": 42196.71795427633,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.01060757654256959,
+    "leoMm": 0.3485791316109952,
+    "geoMm": 2.168376024813068,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   }
+  },
+  {
+   "id": "coordsTeme",
+   "samples": 50,
+   "before": {
+    "mas": 211.7979550648051,
+    "leoMm": 6959.963659671773,
+    "geoMm": 43295.24335967579,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-02T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.012053082375037641,
+    "leoMm": 0.3960803837394369,
+    "geoMm": 2.463862951376588,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-02T00:00:00.000"
+   }
+  },
+  {
+   "id": "coordsTod",
+   "samples": 50,
+   "before": {
+    "mas": 216.9854055434412,
+    "leoMm": 7130.430210241649,
+    "geoMm": 44355.649872194175,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-06-11T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.019413814531749583,
+    "leoMm": 0.6379638726693442,
+    "geoMm": 3.968526629232868,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   }
+  },
+  {
+   "id": "forceC2tErfa",
+   "samples": 50,
+   "before": {
+    "mas": 0.21383133224788334,
+    "leoMm": 7.026783149483964,
+    "geoMm": 43.71090157486891,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-02T09:00:00.000"
+   },
+   "after": {
+    "mas": 0.0004834811640171975,
+    "leoMm": 0.01588783673886765,
+    "geoMm": 0.0988320904682011,
+    "leoTargetMet": true,
+    "geoTargetMet": true,
+    "at": "2026-06-11T00:00:00.000"
+   }
+  },
+  {
+   "id": "forceC2tOrekit",
+   "samples": 50,
+   "before": {
+    "mas": 0.47164806079121724,
+    "leoMm": 15.49898516374847,
+    "geoMm": 96.41319514075451,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-06-10T12:00:00.000"
+   },
+   "after": {
+    "mas": 0.26351841863482683,
+    "leoMm": 8.659567165280063,
+    "geoMm": 53.86781973915349,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-06-10T13:00:00.000"
+   }
+  },
+  {
+   "id": "forceC2tOrekitAlignedEop",
+   "samples": 50,
+   "before": {
+    "mas": 0.2138413627176811,
+    "leoMm": 7.027112764117214,
+    "geoMm": 43.71295198008068,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-02T09:00:00.000"
+   },
+   "after": {
+    "mas": 0.000580586158809408,
+    "leoMm": 0.019078836551493974,
+    "geoMm": 0.11868206673299841,
+    "leoTargetMet": true,
+    "geoTargetMet": true,
+    "at": "2026-06-10T21:00:00.000"
+   }
+  },
+  {
+   "id": "forceC2tOrekitLeo400F3",
+   "samples": 25,
+   "before": {
+    "mas": 0.3038715589930082,
+    "leoMm": 9.985625249082872,
+    "geoMm": 62.11671445393071,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-02T11:00:00.000"
+   },
+   "after": {
+    "mas": 0.11460246123319816,
+    "leoMm": 3.7659899277496898,
+    "geoMm": 23.42676749259061,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-02T11:00:00.000"
+   }
+  },
+  {
+   "id": "forceC2tOrekitLeo400F3AlignedEop",
+   "samples": 25,
+   "before": {
+    "mas": 0.2138413627176811,
+    "leoMm": 7.027112764117214,
+    "geoMm": 43.71295198008068,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-02T09:00:00.000"
+   },
+   "after": {
+    "mas": 0.000401116637467875,
+    "leoMm": 0.013181228398603088,
+    "geoMm": 0.08199532629799727,
+    "leoTargetMet": true,
+    "geoTargetMet": true,
+    "at": "2026-08-03T00:00:00.000"
+   }
+  },
+  {
+   "id": "forceC2tOrekitMidnight",
+   "samples": 4,
+   "before": {
+    "mas": 0.21360802833921488,
+    "leoMm": 7.019445084822671,
+    "geoMm": 43.665254311343595,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.0005801489800729764,
+    "leoMm": 0.019064470274362474,
+    "geoMm": 0.11859269967664655,
+    "leoTargetMet": true,
+    "geoTargetMet": true,
+    "at": "2026-06-11T00:00:00.000"
+   }
+  },
+  {
+   "id": "orekitEopInterpolationSpread",
+   "samples": 50,
+   "before": {
+    "mas": 0.2631126417698282,
+    "leoMm": 8.646232795581064,
+    "geoMm": 53.78487178002675,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-06-10T13:00:00.000"
+   },
+   "after": {
+    "mas": 0.2631126417698282,
+    "leoMm": 8.646232795581064,
+    "geoMm": 53.78487178002675,
+    "leoTargetMet": false,
+    "geoTargetMet": false,
+    "at": "2026-06-10T13:00:00.000"
+   }
+  },
+  {
+   "id": "orekitErfaMod",
+   "samples": 50,
+   "before": {
+    "mas": 0.01060757654256959,
+    "leoMm": 0.3485791316109952,
+    "geoMm": 2.168376024813068,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.01060757654256959,
+    "leoMm": 0.3485791316109952,
+    "geoMm": 2.168376024813068,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   }
+  },
+  {
+   "id": "orekitErfaSameEop",
+   "samples": 50,
+   "before": {
+    "mas": 0.0003266515465009834,
+    "leoMm": 0.01073420606127617,
+    "geoMm": 0.06677334630189369,
+    "leoTargetMet": true,
+    "geoTargetMet": true,
+    "at": "2026-06-10T11:00:00.000"
+   },
+   "after": {
+    "mas": 0.0003266515465009834,
+    "leoMm": 0.01073420606127617,
+    "geoMm": 0.06677334630189369,
+    "leoTargetMet": true,
+    "geoTargetMet": true,
+    "at": "2026-06-10T11:00:00.000"
+   }
+  },
+  {
+   "id": "orekitErfaTeme",
+   "samples": 50,
+   "before": {
+    "mas": 0.012053082375037641,
+    "leoMm": 0.3960803837394369,
+    "geoMm": 2.463862951376588,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-02T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.012053082375037641,
+    "leoMm": 0.3960803837394369,
+    "geoMm": 2.463862951376588,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-02T00:00:00.000"
+   }
+  },
+  {
+   "id": "orekitErfaTod",
+   "samples": 50,
+   "before": {
+    "mas": 0.019413814531749583,
+    "leoMm": 0.6379638726693442,
+    "geoMm": 3.968526629232868,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   },
+   "after": {
+    "mas": 0.019413814531749583,
+    "leoMm": 0.6379638726693442,
+    "geoMm": 3.968526629232868,
+    "leoTargetMet": true,
+    "geoTargetMet": false,
+    "at": "2026-08-03T00:00:00.000"
+   }
+  }
+ ]
+}

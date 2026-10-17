@@ -65,6 +65,24 @@ Json difference(const Json& in) {
 }
 Json reduction(const Json& in) {
   const auto mode = in.at("mode");
+  if (mode == "sample-difference") {
+    const auto& a=in.at("a");const auto& b=in.at("b");
+    if(a.size()!=b.size())throw std::runtime_error("sample count mismatch");
+    double worst=0,at=0;
+    for(std::size_t i=0;i<a.size();++i) {
+      if(a[i][0]!=b[i][0])throw std::runtime_error("sample epoch mismatch");
+      double d[3];for(std::size_t k=0;k<3;++k)d[k]=number(a[i][k+1])-number(b[i][k+1]);
+      const double n=norm(d);if(n>worst){worst=n;at=number(a[i][0]);}
+    }
+    return {{"worst",worst},{"worstAt",at}};
+  }
+  if (mode == "samples-si") {
+    const auto& reference=in.at("reference"),positions=in.at("positions");
+    if(reference.size()!=positions.size()+1)throw std::runtime_error("propagated sample count mismatch");
+    Json out=Json::array();out.push_back(reference[0]);
+    for(std::size_t i=0;i<positions.size();++i)out.push_back({reference[i+1][0],number(positions[i][0])*1000,number(positions[i][1])*1000,number(positions[i][2])*1000});
+    return out;
+  }
   if (mode == "maximum") {
     if (in.at("values").empty()) throw std::runtime_error("empty maximum");
     double result = 0; for (const auto& value : in.at("values")) result = std::max(result, number(value)); return result;
@@ -78,7 +96,11 @@ Json reduction(const Json& in) {
     return {{"total", values.size()}, {"met", met}, {"missed", values.size() - met}, {"flags", flags}};
   }
   const double value = number(in.at("value")); std::ostringstream out;
-  if (mode == "format-mm") out << std::fixed << std::setprecision(3) << value * 1000;
+  if (mode == "format-xval") {
+    if(value<1)out<<std::fixed<<std::setprecision(value<0.01?2:1)<<value*1000<<" mm";
+    else out<<std::fixed<<std::setprecision(value<100?2:0)<<value<<" m";
+  }
+  else if (mode == "format-mm") out << std::fixed << std::setprecision(3) << value * 1000;
   else if (mode == "format-scientific") out << std::scientific << std::setprecision(2) << value;
   else if (value < 0.01) out << std::fixed << std::setprecision(value * 1000 < 10 ? 2 : 1) << value * 1000 << " mm";
   else out << std::fixed << std::setprecision(value < 0.1 ? 1 : 0) << value * 100 << " cm";

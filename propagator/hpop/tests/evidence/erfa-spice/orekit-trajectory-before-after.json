@@ -1,0 +1,1070 @@
+{
+ "beforeModule": {
+  "version": "1.3.1",
+  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+ },
+ "afterModule": {
+  "version": "1.4.0",
+  "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
+ },
+ "sourceSha256": "9161c73713fa43d426bbc4161c1de90bdb403f94e60143f6550fe8e7e30c7ded",
+ "toleranceRationale": "User-required no regression beyond 1e-4 m in the maximum hourly 3D GCRF position difference against pinned Orekit 13.1 trajectories. All LEO400/SSO700 rows and all three integration settings.",
+ "allowedIncreaseM": 0.0001,
+ "rows": [
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F0-point-mass",
+   "beforeWorstM": 0.0004788669757680982,
+   "afterWorstM": 0.0004788669757680982,
+   "increaseM": 0,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F0-point-mass",
+   "beforeWorstM": 0.00022939777505017814,
+   "afterWorstM": 0.00022939777505017814,
+   "increaseM": 0,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F0-point-mass",
+   "beforeWorstM": 0.00015190685720620708,
+   "afterWorstM": 0.00015190685720620708,
+   "increaseM": 0,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F1-J2",
+   "beforeWorstM": 0.018058775679633234,
+   "afterWorstM": 0.018065421171767047,
+   "increaseM": 0.000006645492133812436,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F1-J2",
+   "beforeWorstM": 0.0010528629469421947,
+   "afterWorstM": 0.0010529109406896217,
+   "increaseM": 4.799374742699321e-8,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F1-J2",
+   "beforeWorstM": 0.0010486405406559738,
+   "afterWorstM": 0.0010484183103001547,
+   "increaseM": -2.2223035581908114e-7,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F2-zonal20",
+   "beforeWorstM": 0.018065862699792764,
+   "afterWorstM": 0.018053847082007305,
+   "increaseM": -0.000012015617785458843,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F2-zonal20",
+   "beforeWorstM": 0.0010528904126856581,
+   "afterWorstM": 0.0010520712244648312,
+   "increaseM": -8.191882208269385e-7,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F2-zonal20",
+   "beforeWorstM": 0.001045895772702269,
+   "afterWorstM": 0.0010461524288798959,
+   "increaseM": 2.56656177626902e-7,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "Z1-zonal20-sun-moon",
+   "beforeWorstM": 0.018156535740855434,
+   "afterWorstM": 0.018081732251339914,
+   "increaseM": -0.00007480348951552016,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "Z1-zonal20-sun-moon",
+   "beforeWorstM": 0.0010520477276934625,
+   "afterWorstM": 0.0010514680651463322,
+   "increaseM": -5.796625471303409e-7,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "Z1-zonal20-sun-moon",
+   "beforeWorstM": 0.0010457917586457475,
+   "afterWorstM": 0.0010456186498764748,
+   "increaseM": -1.7310876927268196e-7,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "beforeWorstM": 0.01881090111437818,
+   "afterWorstM": 0.018860715762137794,
+   "increaseM": 0.0000498146477596155,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "beforeWorstM": 0.0014088649934218807,
+   "afterWorstM": 0.0014101068402748895,
+   "increaseM": 0.0000012418468530088576,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "beforeWorstM": 0.0013175945971917403,
+   "afterWorstM": 0.001316637181235826,
+   "increaseM": -9.574159559142415e-7,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "beforeWorstM": 0.021547814520861706,
+   "afterWorstM": 0.021645478596858142,
+   "increaseM": 0.00009766407599643562,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "beforeWorstM": 0.004066320200733292,
+   "afterWorstM": 0.004062344864815861,
+   "increaseM": -0.000003975335917430836,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "beforeWorstM": 0.00398981714375153,
+   "afterWorstM": 0.0039700769934789566,
+   "increaseM": -0.00001974015027257376,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F3-field20x20",
+   "beforeWorstM": 0.018112741869270137,
+   "afterWorstM": 0.01821440531773162,
+   "increaseM": 0.00010166344846148159,
+   "met": false
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F3-field20x20",
+   "beforeWorstM": 0.0010711598493167416,
+   "afterWorstM": 0.0010688613205635255,
+   "increaseM": -0.0000022985287532160947,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F3-field20x20",
+   "beforeWorstM": 0.0010657091676758296,
+   "afterWorstM": 0.0010629037042078084,
+   "increaseM": -0.000002805463468021161,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F4-field-sun-moon",
+   "beforeWorstM": 0.018169850405994347,
+   "afterWorstM": 0.018161721064460627,
+   "increaseM": -0.000008129341533720524,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F4-field-sun-moon",
+   "beforeWorstM": 0.0010692145806355108,
+   "afterWorstM": 0.0010654325049240885,
+   "increaseM": -0.000003782075711422292,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F4-field-sun-moon",
+   "beforeWorstM": 0.0010633372947514625,
+   "afterWorstM": 0.0010599686638075106,
+   "increaseM": -0.0000033686309439519366,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F5-field-sun-moon-srp",
+   "beforeWorstM": 0.018690958701176583,
+   "afterWorstM": 0.01875449201334507,
+   "increaseM": 0.00006353331216848654,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F5-field-sun-moon-srp",
+   "beforeWorstM": 0.001329091161571652,
+   "afterWorstM": 0.00130421441084764,
+   "increaseM": -0.0000248767507240121,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F5-field-sun-moon-srp",
+   "beforeWorstM": 0.0012061566363591237,
+   "afterWorstM": 0.0012168404493368042,
+   "increaseM": 0.000010683812977680448,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "beforeWorstM": 0.021726644142352997,
+   "afterWorstM": 0.021656500802447208,
+   "increaseM": -0.00007014333990578922,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "beforeWorstM": 0.004175332950209653,
+   "afterWorstM": 0.004159893680007468,
+   "increaseM": -0.000015439270202184316,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "beforeWorstM": 0.004053644618324132,
+   "afterWorstM": 0.004077094508153804,
+   "increaseM": 0.00002344988982967179,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "R1-field-sun-moon-schwarzschild",
+   "beforeWorstM": 0.018130149976157483,
+   "afterWorstM": 0.01816459723488105,
+   "increaseM": 0.000034447258723566826,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "R1-field-sun-moon-schwarzschild",
+   "beforeWorstM": 0.0010701996940489995,
+   "afterWorstM": 0.0010670724596074596,
+   "increaseM": -0.00000312723444153987,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "R1-field-sun-moon-schwarzschild",
+   "beforeWorstM": 0.00106443822769053,
+   "afterWorstM": 0.0010615075441985505,
+   "increaseM": -0.0000029306834919795403,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "R2-field-sun-moon-relativity-iers2010",
+   "beforeWorstM": 0.018257209171506972,
+   "afterWorstM": 0.018093766722151922,
+   "increaseM": -0.00016344244935504945,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "R2-field-sun-moon-relativity-iers2010",
+   "beforeWorstM": 0.0010703532603521153,
+   "afterWorstM": 0.0010670077214159249,
+   "increaseM": -0.000003345538936190464,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "R2-field-sun-moon-relativity-iers2010",
+   "beforeWorstM": 0.0010632852156282518,
+   "afterWorstM": 0.0010610385517957845,
+   "increaseM": -0.0000022466638324673133,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "T1-field-sun-moon-solid-tides",
+   "beforeWorstM": 0.01814607154350264,
+   "afterWorstM": 0.018114790902797856,
+   "increaseM": -0.00003128064070478248,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "T1-field-sun-moon-solid-tides",
+   "beforeWorstM": 0.0010698757355122473,
+   "afterWorstM": 0.0010674893534762257,
+   "increaseM": -0.000002386382036021579,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "T1-field-sun-moon-solid-tides",
+   "beforeWorstM": 0.001063193082561763,
+   "afterWorstM": 0.00106111026183149,
+   "increaseM": -0.0000020828207302730616,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "I1-field-sun-moon-in-track",
+   "beforeWorstM": 0.018163410303211003,
+   "afterWorstM": 0.018179494472963343,
+   "increaseM": 0.0000160841697523402,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "I1-field-sun-moon-in-track",
+   "beforeWorstM": 0.0010672411550924808,
+   "afterWorstM": 0.0010653809152931261,
+   "increaseM": -0.000001860239799354648,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "I1-field-sun-moon-in-track",
+   "beforeWorstM": 0.0010621366878879133,
+   "afterWorstM": 0.001059216553409788,
+   "increaseM": -0.000002920134478125256,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "B1-field-sun-moon-srp-drag-bdot",
+   "beforeWorstM": 0.021132808188622027,
+   "afterWorstM": 0.02117723563264562,
+   "increaseM": 0.00004442744402359186,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "B1-field-sun-moon-srp-drag-bdot",
+   "beforeWorstM": 0.0037067070466056127,
+   "afterWorstM": 0.003706552682434959,
+   "increaseM": -1.5436417065374172e-7,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "B1-field-sun-moon-srp-drag-bdot",
+   "beforeWorstM": 0.003604054129084444,
+   "afterWorstM": 0.0036176999383796685,
+   "increaseM": 0.000013645809295224649,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "beforeWorstM": 0.021503062757164498,
+   "afterWorstM": 0.021479749541868376,
+   "increaseM": -0.00002331321529612171,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "beforeWorstM": 0.0039767775683247535,
+   "afterWorstM": 0.003973348437073216,
+   "increaseM": -0.000003429131251537522,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "beforeWorstM": 0.0038760001523409945,
+   "afterWorstM": 0.0038816104514408263,
+   "increaseM": 0.000005610299099831784,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "E1-field-sun-moon-eme2000",
+   "beforeWorstM": 0.018101800362080842,
+   "afterWorstM": 0.018128607852443492,
+   "increaseM": 0.00002680749036265001,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "E1-field-sun-moon-eme2000",
+   "beforeWorstM": 0.0010689274713898546,
+   "afterWorstM": 0.0010658970695768722,
+   "increaseM": -0.0000030304018129824126,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "E1-field-sun-moon-eme2000",
+   "beforeWorstM": 0.001063038863573092,
+   "afterWorstM": 0.0010605558685721009,
+   "increaseM": -0.0000024829950009911533,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "G1-egm96-36x36-sun-moon",
+   "beforeWorstM": 0.01721514589856223,
+   "afterWorstM": 0.017309625137079777,
+   "increaseM": 0.00009447923851754747,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "G1-egm96-36x36-sun-moon",
+   "beforeWorstM": 0.0010647634051002954,
+   "afterWorstM": 0.0010646353931813414,
+   "increaseM": -1.2801191895395192e-7,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "G1-egm96-36x36-sun-moon",
+   "beforeWorstM": 0.001061777286479021,
+   "afterWorstM": 0.0010580021699017666,
+   "increaseM": -0.000003775116577254276,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "G2-egm2008-36z24t-sun-moon",
+   "beforeWorstM": 0.018187215487344064,
+   "afterWorstM": 0.01822254230001454,
+   "increaseM": 0.00003532681267047477,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "G2-egm2008-36z24t-sun-moon",
+   "beforeWorstM": 0.0010703509954663327,
+   "afterWorstM": 0.0010675092508190974,
+   "increaseM": -0.000002841744647235321,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "G2-egm2008-36z24t-sun-moon",
+   "beforeWorstM": 0.0010647069819474755,
+   "afterWorstM": 0.0010613439619978958,
+   "increaseM": -0.0000033630199495796823,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "beforeWorstM": 0.0059487221939611735,
+   "afterWorstM": 0.005922449104175867,
+   "increaseM": -0.000026273089785306195,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "beforeWorstM": 0.0037858347651423224,
+   "afterWorstM": 0.0037808940538181413,
+   "increaseM": -0.000004940711324181134,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+   "beforeWorstM": 0.003959678833248212,
+   "afterWorstM": 0.003970185264618113,
+   "increaseM": 0.000010506431369901141,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "beforeWorstM": 0.025022275929181808,
+   "afterWorstM": 0.025855702188580517,
+   "increaseM": 0.0008334262593987091,
+   "met": false
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "beforeWorstM": 0.0034839849402420048,
+   "afterWorstM": 0.0034461146417417605,
+   "increaseM": -0.00003787029850024423,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "beforeWorstM": 0.001237102075599719,
+   "afterWorstM": 0.0014349286371713363,
+   "increaseM": 0.00019782656157161724,
+   "met": false
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F0-point-mass",
+   "beforeWorstM": 0.0004813512985516343,
+   "afterWorstM": 0.0004813512985516343,
+   "increaseM": 0,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F0-point-mass",
+   "beforeWorstM": 0.0002254930543389604,
+   "afterWorstM": 0.0002254930543389604,
+   "increaseM": 0,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F0-point-mass",
+   "beforeWorstM": 0.00017842100191026042,
+   "afterWorstM": 0.00017842100191026042,
+   "increaseM": 0,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F1-J2",
+   "beforeWorstM": 0.014499386758272084,
+   "afterWorstM": 0.014458667441939986,
+   "increaseM": -0.000040719316332097494,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F1-J2",
+   "beforeWorstM": 0.001233727036029402,
+   "afterWorstM": 0.0012420935430765773,
+   "increaseM": 0.0000083665070471754,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F1-J2",
+   "beforeWorstM": 0.0012664672271045217,
+   "afterWorstM": 0.0012736599054169028,
+   "increaseM": 0.000007192678312381139,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F2-zonal20",
+   "beforeWorstM": 0.014548451167729841,
+   "afterWorstM": 0.0144841239087,
+   "increaseM": -0.00006432725902984042,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F2-zonal20",
+   "beforeWorstM": 0.0012179650194237234,
+   "afterWorstM": 0.0012245200970937497,
+   "increaseM": 0.000006555077670026329,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F2-zonal20",
+   "beforeWorstM": 0.0012624362822791285,
+   "afterWorstM": 0.0012631561692894406,
+   "increaseM": 7.198870103121424e-7,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "Z1-zonal20-sun-moon",
+   "beforeWorstM": 0.014466331952695819,
+   "afterWorstM": 0.014595130077823898,
+   "increaseM": 0.00012879812512807919,
+   "met": false
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "Z1-zonal20-sun-moon",
+   "beforeWorstM": 0.0012420616480720652,
+   "afterWorstM": 0.0012375805388068057,
+   "increaseM": -0.0000044811092652595735,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "Z1-zonal20-sun-moon",
+   "beforeWorstM": 0.0012691486039329107,
+   "afterWorstM": 0.0012851445646134682,
+   "increaseM": 0.000015995960680557442,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "beforeWorstM": 0.013800850479976553,
+   "afterWorstM": 0.013887015572636377,
+   "increaseM": 0.00008616509265982342,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "beforeWorstM": 0.0016707675284160488,
+   "afterWorstM": 0.001670187817976622,
+   "increaseM": -5.797104394268063e-7,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "Z2-zonal20-sun-moon-srp",
+   "beforeWorstM": 0.0013513134256392192,
+   "afterWorstM": 0.0013553662201617274,
+   "increaseM": 0.000004052794522508164,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "beforeWorstM": 0.01413437906136503,
+   "afterWorstM": 0.01414293518941409,
+   "increaseM": 0.000008556128049059045,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "beforeWorstM": 0.0013469797806088923,
+   "afterWorstM": 0.0013431899653180213,
+   "increaseM": -0.000003789815290870975,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "Z3-zonal20-sun-moon-srp-drag",
+   "beforeWorstM": 0.0010300489316214909,
+   "afterWorstM": 0.0010357361181962932,
+   "increaseM": 0.000005687186574802362,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F3-field20x20",
+   "beforeWorstM": 0.014480437941190192,
+   "afterWorstM": 0.014505282763828262,
+   "increaseM": 0.00002484482263807007,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F3-field20x20",
+   "beforeWorstM": 0.0012860116929642347,
+   "afterWorstM": 0.0012882707715226197,
+   "increaseM": 0.0000022590785583849558,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F3-field20x20",
+   "beforeWorstM": 0.001328560434873705,
+   "afterWorstM": 0.0013299988078510308,
+   "increaseM": 0.000001438372977325764,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F4-field-sun-moon",
+   "beforeWorstM": 0.014633392214634599,
+   "afterWorstM": 0.014476714251589034,
+   "increaseM": -0.00015667796304556433,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F4-field-sun-moon",
+   "beforeWorstM": 0.001298667914294819,
+   "afterWorstM": 0.0012942783001173598,
+   "increaseM": -0.00000438961417745915,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F4-field-sun-moon",
+   "beforeWorstM": 0.0013384035789464925,
+   "afterWorstM": 0.0013348358712366776,
+   "increaseM": -0.0000035677077098149063,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F5-field-sun-moon-srp",
+   "beforeWorstM": 0.0140172003556535,
+   "afterWorstM": 0.014092690378378325,
+   "increaseM": 0.00007549002272482473,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F5-field-sun-moon-srp",
+   "beforeWorstM": 0.0014239879535624003,
+   "afterWorstM": 0.0014355425082787055,
+   "increaseM": 0.000011554554716305216,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F5-field-sun-moon-srp",
+   "beforeWorstM": 0.0011214536292794219,
+   "afterWorstM": 0.001129145042693735,
+   "increaseM": 0.00000769141341431319,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "beforeWorstM": 0.014225133171,
+   "afterWorstM": 0.01425949411748984,
+   "increaseM": 0.00003436094648984027,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "beforeWorstM": 0.0012407552213739102,
+   "afterWorstM": 0.0012370040067068123,
+   "increaseM": -0.000003751214667097871,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "F6-field-sun-moon-srp-drag",
+   "beforeWorstM": 0.0009263142512884917,
+   "afterWorstM": 0.0009397964104157208,
+   "increaseM": 0.000013482159127229179,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "beforeWorstM": 0.014415740763126605,
+   "afterWorstM": 0.014464626442266855,
+   "increaseM": 0.000048885679140249494,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "beforeWorstM": 0.0010670319717317927,
+   "afterWorstM": 0.0010768265488633878,
+   "increaseM": 0.000009794577131595154,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "W1-field-sun-moon-srp-drag-cssi",
+   "beforeWorstM": 0.0007626359352043803,
+   "afterWorstM": 0.0007580381251748836,
+   "increaseM": -0.000004597810029496668,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "beforeWorstM": 0.016929295444838434,
+   "afterWorstM": 0.01683382443919214,
+   "increaseM": -0.00009547100564629221,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "beforeWorstM": 0.0011524731902717768,
+   "afterWorstM": 0.0011227266305684329,
+   "increaseM": -0.000029746559703343984,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "J1-field-sun-moon-srp-drag-jb2008",
+   "beforeWorstM": 0.0010964284715388286,
+   "afterWorstM": 0.0010658233845341073,
+   "increaseM": -0.00003060508700472131,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "beforeWorstM": 0.018897177786022092,
+   "afterWorstM": 0.018874733455214524,
+   "increaseM": -0.000022444330807568774,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "beforeWorstM": 0.0012881268606180654,
+   "afterWorstM": 0.0012599299319340168,
+   "increaseM": -0.00002819692868404858,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "beforeWorstM": 0.001152868852063491,
+   "afterWorstM": 0.0011577841545210783,
+   "increaseM": 0.000004915302457587272,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "beforeWorstM": 0.014816666285307851,
+   "afterWorstM": 0.014573197568897607,
+   "increaseM": -0.00024346871641024379,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "beforeWorstM": 0.0012800149330265723,
+   "afterWorstM": 0.001290066827907736,
+   "increaseM": 0.000010051894881163599,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "A1-field-sun-moon-srp-knocke",
+   "beforeWorstM": 0.0009473879688935097,
+   "afterWorstM": 0.0009650494143477725,
+   "increaseM": 0.000017661445454262756,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "beforeWorstM": 0.018091322825213266,
+   "afterWorstM": 0.018114949299330715,
+   "increaseM": 0.000023626474117448976,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "beforeWorstM": 0.0010719105620525407,
+   "afterWorstM": 0.0010683677787374504,
+   "increaseM": -0.0000035427833150903504,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "beforeWorstM": 0.0010654149458321556,
+   "afterWorstM": 0.001062086925672997,
+   "increaseM": -0.0000033280201591585554,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "SSO700",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "beforeWorstM": 0.014578696652601586,
+   "afterWorstM": 0.014480427319173553,
+   "increaseM": -0.00009826933342803323,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "SSO700",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "beforeWorstM": 0.0012752613280758763,
+   "afterWorstM": 0.0012778162951409804,
+   "increaseM": 0.0000025549670651040923,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "SSO700",
+   "forces": "O1-field-sun-moon-ocean-tides30",
+   "beforeWorstM": 0.0013156370706762027,
+   "afterWorstM": 0.0013194140100691134,
+   "increaseM": 0.0000037769393929107213,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "O2-field-sun-moon-ocean-tides50",
+   "beforeWorstM": 0.01815306697903897,
+   "afterWorstM": 0.018215304002190798,
+   "increaseM": 0.00006223702315182739,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "O2-field-sun-moon-ocean-tides50",
+   "beforeWorstM": 0.001068674525228706,
+   "afterWorstM": 0.0010671688025898746,
+   "increaseM": -0.0000015057226388313222,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "O2-field-sun-moon-ocean-tides50",
+   "beforeWorstM": 0.001065299959985141,
+   "afterWorstM": 0.0010617026067584953,
+   "increaseM": -0.0000035973532266457813,
+   "met": true
+  },
+  {
+   "setting": "suite",
+   "orbit": "LEO400",
+   "forces": "C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "beforeWorstM": 0.005847025361321544,
+   "afterWorstM": 0.005861106134137196,
+   "increaseM": 0.000014080772815651399,
+   "met": true
+  },
+  {
+   "setting": "steps30",
+   "orbit": "LEO400",
+   "forces": "C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "beforeWorstM": 0.003646776953816705,
+   "afterWorstM": 0.003650184715848842,
+   "increaseM": 0.0000034077620321370204,
+   "met": true
+  },
+  {
+   "setting": "finest",
+   "orbit": "LEO400",
+   "forces": "C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+   "beforeWorstM": 0.003898544551941807,
+   "afterWorstM": 0.0038763385178258933,
+   "increaseM": -0.000022206034115913528,
+   "met": true
+  }
+ ],
+ "total": 117,
+ "missed": 4
+}

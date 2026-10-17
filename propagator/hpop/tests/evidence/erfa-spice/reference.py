@@ -140,22 +140,22 @@ def main():
             ut_frac = (ut11 - 0.5) % 1.0 + ut12
             dtdb = erfa.dtdb(tt1, tt2, ut_frac, 0.0, 0.0, 0.0)
             # The same chain at the instant HPOP evaluates (its jdTtUsed).
-            c2t_hpop_instant, _ = c2t_iers2010(*split(h["jdTtUsed"]), rows)
+            c2t_hpop_instant, _ = c2t_iers2010(h["tt1"], h["tt2"], rows)
             gmst = erfa.gmst06(ut11, ut12, tt1, tt2)
-            gmst_hpop_instant = erfa.gmst06(*split(h["jdUt1"]), *split(h["jdTtUsed"]))
+            gmst_hpop_instant = erfa.gmst06(h["ut11"], h["ut12"], h["tt1"], h["tt2"])
             teme06 = rz(erfa.ee06a(tt1, tt2)) @ erfa.pnm06a(tt1, tt2)
             # IAU 1976/1980 pieces at HPOP's own TT, and the classical
             # Earth-fixed chain (UT1 = UTC, no polar motion, no frame bias)
             # that HPOP's no-EOP fallback states it implements.
-            ht1, ht2 = split(h["jdTtUsed"])
+            ht1, ht2 = h["tt1"], h["tt2"]
             hu1, hu2 = erfa.taiutc(*erfa.tttai(ht1, ht2))
-            classical = rz(erfa.gmst82(hu1, hu2) + erfa.eqeq94(ht1, ht2)) @ erfa.nutm80(ht1, ht2) @ erfa.pmat76(ht1, ht2)
+            classical = rz(erfa.gst94(hu1, hu2)) @ erfa.nutm80(ht1, ht2) @ erfa.pmat76(ht1, ht2)
             teme80 = rz(erfa.eqeq94(tt1, tt2)) @ erfa.pnm80(tt1, tt2)
 
             et_spice = sp.str2et(utc.replace("T", " ") + " UTC")
             tt_s = seconds_since_j2000(tt1, tt2)
             et_erfa = tt_s + dtdb
-            et_hpop = seconds_since_j2000(*split(h["jdTdb"]))
+            et_hpop = h["etTdb"]
             spice_tdb_minus_tt = et_spice - sp.unitim(et_spice, "ET", "TDT")
 
             def body(target, et):
@@ -166,7 +166,7 @@ def main():
                 "utc": utc, "earthOrientation": eop_id,
                 "leapSeconds": erfa.dat(y, mo, d, fd),
                 "leapSecondsSpice": round(sp.deltet(et_spice, "ET") - 32.184),
-                "ttMinusHpopS": float((Fraction(tt1) - Fraction(DJ00) + Fraction(tt2)) * 86400 - Fraction(h["ttWhole"]) - Fraction(h["ttFraction"])),
+                "tt1": tt1, "tt2": tt2,
                 "tdbMinusTtErfaS": dtdb,
                 "tdbMinusTtSpiceS": spice_tdb_minus_tt,
                 "etErfa": et_erfa, "etSpice": et_spice, "etHpop": et_hpop,

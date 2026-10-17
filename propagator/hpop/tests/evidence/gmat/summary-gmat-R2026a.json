@@ -1,8 +1,8 @@
 {
- "note": "HPOP against NASA GMAT (tests/evidence/gmat/score-gmat.mjs): the largest 3D position difference over 24 h, hourly samples, by case, HPOP at three integrator settings; Orekit 13.1 against GMAT beside it; STM: largest relative column difference at the suite's request.",
+ "note": "HPOP shipped WASM against pinned NASA GMAT trajectories; maximum hourly 3D position difference over 24 h in metres, and relative STM column differences. All numerical reductions are C++.",
  "module": {
-  "version": "1.3.1",
-  "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+  "version": "1.4.0",
+  "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
  },
  "gmat": {
   "file": "gmat-R2026a.json",
@@ -32,7 +32,7 @@
   "stmSha256": "6c0e1a1c898a5dcc92489b5c4d2ef9a583fefae73a1c5fb1def035cad0caf29e"
  },
  "node": "v25.4.0",
- "host": "Apple M3 Ultra, 28 cores",
+ "host": "Apple M3 Ultra",
  "settings": [
   {
    "id": "suite",
@@ -68,30 +68,35 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.004893,
    "orekitMinusGmat": {
-    "worstM": 0.00015720657127435964,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00015720657127435964
    },
    "suite": {
-    "worstM": 0.00032166102901668136,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00032166102901668136,
     "steps": 2346,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00007219137801756055,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00007219137801756055,
     "steps": 2903,
     "met": true
    },
    "finest": {
-    "worstM": 0.000005309067145205363,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0000053090671452053626,
     "steps": 8608,
     "met": true
    },
    "stm": {
-    "worst": 6.859995686673342e-12,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 6.859995686673343e-12
    },
    "met": true
   },
@@ -104,30 +109,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004877,
    "orekitMinusGmat": {
-    "worstM": 0.0009717324627401161,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009717324627401161
    },
    "suite": {
-    "worstM": 0.018228313746675252,
     "atHour": 24,
-    "steps": 1342,
+    "sampleCount": 24,
+    "worstM": 0.01823496139104544,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000732958938499774,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007381377729174286,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006761425459914827,
     "atHour": 24,
-    "steps": 8612,
+    "sampleCount": 24,
+    "worstM": 0.0006770267212685859,
+    "steps": 8611,
     "met": true
    },
    "stm": {
-    "worst": 4.4040535963657886e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.398731298836924e-10
    },
    "met": true
   },
@@ -140,30 +150,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009738753841338002,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009738753841338002
    },
    "suite": {
-    "worstM": 0.018229972566619332,
     "atHour": 24,
-    "steps": 1344,
+    "sampleCount": 24,
+    "worstM": 0.018217957408295692,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007368669060810418,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007347753654864578,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006700678086331973,
     "atHour": 24,
-    "steps": 8611,
+    "sampleCount": 24,
+    "worstM": 0.000664691199403893,
+    "steps": 8612,
     "met": true
    },
    "stm": {
-    "worst": 4.4060430769683933e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.4038787424143506e-10
    },
    "met": true
   },
@@ -176,30 +191,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.000969356974414848,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.000969356974414848
    },
    "suite": {
-    "worstM": 0.018337165621485955,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 0.018262370355793863,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00074243917214364,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007422809175155243,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006815864876928983,
     "atHour": 24,
-    "steps": 8606,
+    "sampleCount": 24,
+    "worstM": 0.0006796496953427859,
+    "steps": 8610,
     "met": true
    },
    "stm": {
-    "worst": 4.412131858513454e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.418482915019635e-10
    },
    "met": true
   },
@@ -212,30 +232,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.022001684544722767,
-    "atHour": 16
+    "atHour": 16,
+    "sampleCount": 24,
+    "worstM": 0.022001684544722767
    },
    "suite": {
-    "worstM": 0.035011993917428805,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.03505144721815637,
     "steps": 1415,
     "met": true
    },
    "steps30": {
-    "worstM": 0.022147201442729327,
     "atHour": 16,
-    "steps": 2961,
+    "sampleCount": 24,
+    "worstM": 0.022147231760249773,
+    "steps": 2959,
     "met": true
    },
    "finest": {
-    "worstM": 0.02210748604668902,
     "atHour": 16,
-    "steps": 8641,
+    "sampleCount": 24,
+    "worstM": 0.022107857788471984,
+    "steps": 8638,
     "met": true
    },
    "stm": {
-    "worst": 0.000019630209657078946,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000019629945084425756
    },
    "met": true
   },
@@ -249,30 +274,35 @@
    "atmosphere": "NRLMSISE00",
    "icrfDriftM": 0.004872,
    "orekitMinusGmat": {
-    "worstM": 2.310699614878205,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 2.310699614878205
    },
    "suite": {
-    "worstM": 2.332247146266163,
     "atHour": 24,
-    "steps": 1415,
+    "sampleCount": 24,
+    "worstM": 2.3323448067816006,
+    "steps": 1414,
     "met": false
    },
    "steps30": {
-    "worstM": 2.314765918894618,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 2.3147619436994282,
     "steps": 2958,
     "met": false
    },
    "finest": {
-    "worstM": 2.3146894160566482,
     "atHour": 24,
-    "steps": 8635,
+    "sampleCount": 24,
+    "worstM": 2.3146696762961776,
+    "steps": 8634,
     "met": false
    },
    "stm": {
-    "worst": 0.000019949855705727588,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.00001994905677431114
    },
    "met": false,
    "cause": {
@@ -294,14 +324,14 @@
      "eps": 0.000052453945181385464,
      "dragEffectM": 43812.1082855002,
      "epsTimesDragEffectM": 2.2981179262885516,
-     "hpopMinusGmatM": 2.314765918894618,
-     "hpopMinusGmatCdScaledM": 0.0333837492431298,
+     "hpopMinusGmatM": 2.3147619436994282,
+     "hpopMinusGmatCdScaledM": 0.03338749930318057,
      "correctedDefaultMet": true,
-     "correctedDifferenceM": 0.0333837492431298,
+     "correctedDifferenceM": 0.03338749930318057,
      "correctedMet": true,
      "epsFromMeanDensities": 0.00005245394518116342,
-     "predictionMinusObservedM": -0.01664799260606653,
-     "predictionRelativeDifference": -0.0071920847244962595,
+     "predictionMinusObservedM": -0.01664401741087662,
+     "predictionRelativeDifference": -0.00719037975208644,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -314,7 +344,7 @@
      ],
      "hpopSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.0333837492431298,
+    "correctedDifferenceM": 0.03338749930318057,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": true,
@@ -331,30 +361,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.000980862879909666,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.000980862879909666
    },
    "suite": {
-    "worstM": 0.01826532582553225,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.01836700522781307,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007842059692175217,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000782196577321602,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0007040680241743731,
     "atHour": 24,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.000716940214200276,
+    "steps": 8607,
     "met": true
    },
    "stm": {
-    "worst": 4.591860964390897e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.4825301245221254e-10
    },
    "met": true
   },
@@ -367,30 +402,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009781619606632384,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009781619606632382
    },
    "suite": {
-    "worstM": 0.018326466438802546,
     "atHour": 24,
-    "steps": 1344,
+    "sampleCount": 24,
+    "worstM": 0.018318360782547,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007769237507162188,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007720986949593079,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000700739675694874,
     "atHour": 24,
-    "steps": 8611,
+    "sampleCount": 24,
+    "worstM": 0.0006982940570990409,
+    "steps": 8608,
     "met": true
    },
    "stm": {
-    "worst": 4.487077440182095e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.47095877856171e-10
    },
    "met": true
   },
@@ -403,30 +443,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.005448969600911022,
-    "atHour": 2
+    "atHour": 2,
+    "sampleCount": 24,
+    "worstM": 0.005448969600911022
    },
    "suite": {
-    "worstM": 0.01724646616387734,
     "atHour": 24,
-    "steps": 1415,
+    "sampleCount": 24,
+    "worstM": 0.01731002713709803,
+    "steps": 1414,
     "met": true
    },
    "steps30": {
-    "worstM": 0.005090525185296724,
     "atHour": 2,
+    "sampleCount": 24,
+    "worstM": 0.005088085002024659,
     "steps": 2958,
     "met": true
    },
    "finest": {
-    "worstM": 0.005090171001356809,
     "atHour": 2,
-    "steps": 8640,
+    "sampleCount": 24,
+    "worstM": 0.005088449079145663,
+    "steps": 8638,
     "met": true
    },
    "stm": {
-    "worst": 0.000019629403392080205,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.00001963001683590713
    },
    "met": true
   },
@@ -440,30 +485,35 @@
    "atmosphere": "NRLMSISE00",
    "icrfDriftM": 0.004873,
    "orekitMinusGmat": {
-    "worstM": 2.315394858793735,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 2.3153948587937356
    },
    "suite": {
-    "worstM": 2.3371212074862644,
     "atHour": 24,
-    "steps": 1412,
+    "sampleCount": 24,
+    "worstM": 2.337051068478067,
+    "steps": 1415,
     "met": false
    },
    "steps30": {
-    "worstM": 2.3195701733521235,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 2.31955473394916,
     "steps": 2959,
     "met": false
    },
    "finest": {
-    "worstM": 2.319448487479835,
     "atHour": 24,
-    "steps": 8636,
+    "sampleCount": 24,
+    "worstM": 2.3194719351408617,
+    "steps": 8635,
     "met": false
    },
    "stm": {
-    "worst": 0.000021239934016526605,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000021239148509441375
    },
    "met": false,
    "cause": {
@@ -485,14 +535,14 @@
      "eps": 0.00005249850506094944,
      "dragEffectM": 43791.86632299737,
      "epsTimesDragEffectM": 2.2990075157862986,
-     "hpopMinusGmatM": 2.3195701733521235,
-     "hpopMinusGmatCdScaledM": 0.026513818089225247,
+     "hpopMinusGmatM": 2.31955473394916,
+     "hpopMinusGmatCdScaledM": 0.026503876030322483,
      "correctedDefaultMet": true,
-     "correctedDifferenceM": 0.026513818089225247,
+     "correctedDifferenceM": 0.026503876030322483,
      "correctedMet": true,
      "epsFromMeanDensities": 0.00005249850506094944,
-     "predictionMinusObservedM": -0.02056265756582487,
-     "predictionRelativeDifference": -0.008864856861005752,
+     "predictionMinusObservedM": -0.020547218162861203,
+     "predictionRelativeDifference": -0.00885825967463959,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -505,7 +555,7 @@
      ],
      "hpopSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.026513818089225247,
+    "correctedDifferenceM": 0.026503876030322483,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": true,
@@ -522,30 +572,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.005229080670120061,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.005229080670120061
    },
    "suite": {
-    "worstM": 0.02275725744330402,
     "atHour": 24,
-    "steps": 1341,
+    "sampleCount": 24,
+    "worstM": 0.02259422591081837,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.005453610195599449,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.005461875744126276,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.005383909652176372,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.005400682863658647,
     "steps": 8607,
     "met": true
    },
    "stm": {
-    "worst": 0.000010156405636575484,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000010156455166123399
    },
    "met": true
   },
@@ -558,30 +613,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.03028901660560068,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.030289016605600683
    },
    "suite": {
-    "worstM": 0.045193019780766695,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.045162339449872906,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.030551847220688384,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.030556198413012582,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.03049380321097583,
     "atHour": 23,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.030500550703478072,
+    "steps": 8611,
     "met": true
    },
    "stm": {
-    "worst": 4.883139383510661e-9,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worst": 4.8834946192199074e-9
    },
    "met": true
   },
@@ -594,30 +654,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.000977368634867337,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.000977368634867337
    },
    "suite": {
-    "worstM": 0.01833096907821679,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 0.0183470784675679,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007717662421415479,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007795682920552765,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0007095819216883424,
     "atHour": 24,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.0007106097739865525,
+    "steps": 8611,
     "met": true
    },
    "stm": {
-    "worst": 6.141407045763331e-7,
-    "atHour": 23
+    "atHour": 23,
+    "sampleCount": 24,
+    "worst": 6.141034202937945e-7
    },
    "met": true
   },
@@ -631,30 +696,35 @@
    "atmosphere": "NRLMSISE00",
    "icrfDriftM": 0.004874,
    "orekitMinusGmat": {
-    "worstM": 1.5237844825395874,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 1.5237844825395874
    },
    "suite": {
-    "worstM": 1.5452872201939853,
     "atHour": 24,
-    "steps": 1416,
+    "sampleCount": 24,
+    "worstM": 1.5452639119520046,
+    "steps": 1414,
     "met": false
    },
    "steps30": {
-    "worstM": 1.5277612553694557,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 1.5277578241510927,
     "steps": 2959,
     "met": false
    },
    "finest": {
-    "worstM": 1.52766047861097,
     "atHour": 24,
-    "steps": 8637,
+    "sampleCount": 24,
+    "worstM": 1.527666086557858,
+    "steps": 8631,
     "met": false
    },
    "stm": {
-    "worst": 0.00001473850519892895,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000014736708402538028
    },
    "met": false,
    "cause": {
@@ -676,14 +746,14 @@
      "eps": 0.00004735515595832851,
      "dragEffectM": 32655.217725603314,
      "epsTimesDragEffectM": 1.5463929282491184,
-     "hpopMinusGmatM": 1.5277612553694557,
-     "hpopMinusGmatCdScaledM": 0.01653174378689603,
+     "hpopMinusGmatM": 1.5277578241510927,
+     "hpopMinusGmatCdScaledM": 0.01653512014456305,
      "correctedDefaultMet": true,
-     "correctedDifferenceM": 0.01653174378689603,
+     "correctedDifferenceM": 0.01653512014456305,
      "correctedMet": true,
      "epsFromMeanDensities": 0.00004735515595832851,
-     "predictionMinusObservedM": 0.01863167287966272,
-     "predictionRelativeDifference": 0.012195408683248128,
+     "predictionMinusObservedM": 0.018635104098025712,
+     "predictionRelativeDifference": 0.012197681990848525,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -696,7 +766,7 @@
      ],
      "hpopSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.01653174378689603,
+    "correctedDifferenceM": 0.01653512014456305,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": true,
@@ -713,30 +783,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009819019799500556,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009819019799500556
    },
    "suite": {
-    "worstM": 0.018235926085646958,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 0.018262757444150096,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000758268378661447,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007503155723725721,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0006753617185033872,
     "atHour": 24,
-    "steps": 8608,
+    "sampleCount": 24,
+    "worstM": 0.00069124165862298,
+    "steps": 8609,
     "met": true
    },
    "stm": {
-    "worst": 4.3941457921202777e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.4327186593107765e-10
    },
    "met": true
   },
@@ -749,30 +824,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.0009765765779004313,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009765765779004313
    },
    "suite": {
-    "worstM": 0.017375008456608994,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.017469515399339008,
     "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007572210862665987,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0007765756143907984,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0007075797323309749,
     "atHour": 24,
-    "steps": 8609,
+    "sampleCount": 24,
+    "worstM": 0.0007151754160575205,
+    "steps": 8605,
     "met": true
    },
    "stm": {
-    "worst": 4.51289844616585e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.694364909679115e-10
    },
    "met": true
   },
@@ -785,30 +865,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.004878,
    "orekitMinusGmat": {
-    "worstM": 0.000979512682570208,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.0009795126825702081
    },
    "suite": {
-    "worstM": 0.01833851056495996,
     "atHour": 24,
-    "steps": 1342,
+    "sampleCount": 24,
+    "worstM": 0.01837386119789474,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0007668635734102165,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00077827886047731,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000702412694460567,
     "atHour": 24,
-    "steps": 8607,
+    "sampleCount": 24,
+    "worstM": 0.000706239549750785,
+    "steps": 8609,
     "met": true
    },
    "stm": {
-    "worst": 4.544712348460486e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.47115432215115e-10
    },
    "met": true
   },
@@ -821,30 +906,35 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.005005,
    "orekitMinusGmat": {
-    "worstM": 0.00018949617270981256,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00018949617270981256
    },
    "suite": {
-    "worstM": 0.00029185589504137233,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00029185589504137233,
     "steps": 2196,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00003599701136110363,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00003599701136110363,
     "steps": 2902,
     "met": true
    },
    "finest": {
-    "worstM": 0.00001107568210228092,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00001107568210228092,
     "steps": 8609,
     "met": true
    },
    "stm": {
-    "worst": 3.966576122423573e-12,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 3.966576122423573e-12
    },
    "met": true
   },
@@ -857,30 +947,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0017123598879190455,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0017123598879190453
    },
    "suite": {
-    "worstM": 0.016209708789918068,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.016168990036300436,
     "steps": 1258,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0004952431918996883,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0004893173354484813,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00047289335600535736,
-    "atHour": 22,
-    "steps": 8609,
+    "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.0004680138429673979,
+    "steps": 8606,
     "met": true
    },
    "stm": {
-    "worst": 3.4570738846321034e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 3.457498869428433e-10
    },
    "met": true
   },
@@ -893,30 +988,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0016874213365930702,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016874213365930702
    },
    "suite": {
-    "worstM": 0.01623377252704332,
     "atHour": 24,
-    "steps": 1256,
+    "sampleCount": 24,
+    "worstM": 0.01616944686285397,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0004873813653427636,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00048253577079502945,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00045819538882321305,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00045810156799323457,
     "steps": 8609,
     "met": true
    },
    "stm": {
-    "worst": 3.445511723446513e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 3.444432849681121e-10
    },
    "met": true
   },
@@ -929,30 +1029,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0017054751470571127,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0017054751470571127
    },
    "suite": {
-    "worstM": 0.01616975431357639,
     "atHour": 24,
-    "steps": 1257,
+    "sampleCount": 24,
+    "worstM": 0.016298548736661745,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00048290360615216207,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0004862067445041621,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0004662914497286966,
     "atHour": 21,
-    "steps": 8606,
+    "sampleCount": 24,
+    "worstM": 0.00045643069047081856,
+    "steps": 8610,
     "met": true
    },
    "stm": {
-    "worst": 3.447087850387919e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 3.447519609651537e-10
    },
    "met": true
   },
@@ -965,30 +1070,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.01141710925394227,
-    "atHour": 17
+    "atHour": 17,
+    "sampleCount": 24,
+    "worstM": 0.01141710925394227
    },
    "suite": {
-    "worstM": 0.01940040526373958,
     "atHour": 24,
-    "steps": 1345,
+    "sampleCount": 24,
+    "worstM": 0.019486572335730305,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
-    "worstM": 0.010604913494612485,
     "atHour": 17,
+    "sampleCount": 24,
+    "worstM": 0.01060468546907966,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "worstM": 0.010768255623817087,
     "atHour": 17,
+    "sampleCount": 24,
+    "worstM": 0.010767181844596376,
     "steps": 8676,
     "met": true
    },
    "stm": {
-    "worst": 0.000013813143109231291,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000013814475838487389
    },
    "met": true
   },
@@ -1002,30 +1112,35 @@
    "atmosphere": "NRLMSISE00",
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 7.951276808862888,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 7.951276808862888
    },
    "suite": {
-    "worstM": 7.965410758895273,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 7.9654193177152814,
     "steps": 1342,
     "met": false
    },
    "steps30": {
-    "worstM": 7.9499301647300396,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 7.949933954682701,
     "steps": 2957,
     "met": false
    },
    "finest": {
-    "worstM": 7.950247164157759,
     "atHour": 24,
-    "steps": 8676,
+    "sampleCount": 24,
+    "worstM": 7.950241473272667,
+    "steps": 8673,
     "met": false
    },
    "stm": {
-    "worst": 0.000014127316681564824,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000014126963435230518
    },
    "met": false,
    "cause": {
@@ -1047,14 +1162,14 @@
      "eps": 0.01963280889061214,
      "dragEffectM": 413.1350852945854,
      "epsTimesDragEffectM": 8.111002175595342,
-     "hpopMinusGmatM": 7.9499301647300396,
-     "hpopMinusGmatCdScaledM": 0.12282118631899008,
+     "hpopMinusGmatM": 7.949933954682701,
+     "hpopMinusGmatCdScaledM": 0.12281742741555439,
      "correctedDefaultMet": false,
-     "correctedDifferenceM": 0.12282118631899008,
+     "correctedDifferenceM": 0.12281742741555439,
      "correctedMet": true,
      "epsFromMeanDensities": 0.01963280889061214,
-     "predictionMinusObservedM": 0.16107201086530232,
-     "predictionRelativeDifference": 0.020260808274756955,
+     "predictionMinusObservedM": 0.16106822091264128,
+     "predictionRelativeDifference": 0.02026032188830553,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -1067,7 +1182,7 @@
      ],
      "hpopSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.12282118631899008,
+    "correctedDifferenceM": 0.12281742741555439,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": false,
@@ -1084,30 +1199,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.0017183393099989015,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0017183393099989015
    },
    "suite": {
-    "worstM": 0.016197066684202566,
     "atHour": 24,
-    "steps": 1257,
+    "sampleCount": 24,
+    "worstM": 0.016221907336191877,
+    "steps": 1255,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00046265535532635224,
-    "atHour": 22,
+    "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.0004620509096781252,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0004374116494900543,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.000437996523772367,
     "steps": 8609,
     "met": true
    },
    "stm": {
-    "worst": 3.3970017390885523e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 3.403443385148389e-10
    },
    "met": true
   },
@@ -1120,30 +1240,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.00173933125702834,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00173933125702834
    },
    "suite": {
-    "worstM": 0.016370971410603223,
     "atHour": 24,
-    "steps": 1257,
+    "sampleCount": 24,
+    "worstM": 0.016214293326258945,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00046816656713938814,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00047240899940647577,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00044409903286613884,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.0004471263642088431,
     "steps": 8607,
     "met": true
    },
    "stm": {
-    "worst": 3.4552608750134896e-10,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 3.422353271292478e-10
    },
    "met": true
   },
@@ -1156,30 +1281,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 0.006143454452559658,
-    "atHour": 7
+    "atHour": 7,
+    "sampleCount": 24,
+    "worstM": 0.006143454452559658
    },
    "suite": {
-    "worstM": 0.00990072461223558,
     "atHour": 21,
-    "steps": 1345,
+    "sampleCount": 24,
+    "worstM": 0.009964644062607294,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
-    "worstM": 0.006793993335267867,
     "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.0068014954512691855,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "worstM": 0.0066042750639668584,
     "atHour": 19,
-    "steps": 8677,
+    "sampleCount": 24,
+    "worstM": 0.006609480546087898,
+    "steps": 8673,
     "met": true
    },
    "stm": {
-    "worst": 0.000013813241471900677,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.00001381308765961955
    },
    "met": true
   },
@@ -1193,30 +1323,35 @@
    "atmosphere": "NRLMSISE00",
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 7.935727474277247,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 7.935727474277246
    },
    "suite": {
-    "worstM": 7.949952168472333,
     "atHour": 24,
-    "steps": 1343,
+    "sampleCount": 24,
+    "worstM": 7.949986547544851,
+    "steps": 1342,
     "met": false
    },
    "steps30": {
-    "worstM": 7.9344872770436705,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 7.93449101736126,
     "steps": 2957,
     "met": false
    },
    "finest": {
-    "worstM": 7.9348018655507495,
     "atHour": 24,
-    "steps": 8673,
+    "sampleCount": 24,
+    "worstM": 7.934788359900262,
+    "steps": 8674,
     "met": false
    },
    "stm": {
-    "worst": 0.000014046096732703288,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000014045576172735096
    },
    "met": false,
    "cause": {
@@ -1238,14 +1373,14 @@
      "eps": 0.019634957851031087,
      "dragEffectM": 412.9995072518732,
      "epsTimesDragEffectM": 8.109227917387138,
-     "hpopMinusGmatM": 7.9344872770436705,
-     "hpopMinusGmatCdScaledM": 0.1058506051188806,
+     "hpopMinusGmatM": 7.93449101736126,
+     "hpopMinusGmatCdScaledM": 0.10584640109899,
      "correctedDefaultMet": false,
-     "correctedDifferenceM": 0.1058506051188806,
+     "correctedDifferenceM": 0.10584640109899,
      "correctedMet": true,
      "epsFromMeanDensities": 0.019634957851031087,
-     "predictionMinusObservedM": 0.17474064034346704,
-     "predictionRelativeDifference": 0.022022927788797723,
+     "predictionMinusObservedM": 0.17473690002587716,
+     "predictionRelativeDifference": 0.022022446007379647,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -1258,7 +1393,7 @@
      ],
      "hpopSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.1058506051188806,
+    "correctedDifferenceM": 0.10584640109899,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": false,
@@ -1276,30 +1411,35 @@
    "atmosphere": "NRLMSISE00",
    "icrfDriftM": 0.005034,
    "orekitMinusGmat": {
-    "worstM": 6.297171319353564,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 6.297171319353564
    },
    "suite": {
-    "worstM": 6.3115865420890005,
     "atHour": 24,
-    "steps": 1345,
+    "sampleCount": 24,
+    "worstM": 6.3116354471968,
+    "steps": 1343,
     "met": false
    },
    "steps30": {
-    "worstM": 6.296104882808252,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 6.296095071713942,
     "steps": 2957,
     "met": false
    },
    "finest": {
-    "worstM": 6.296409470229125,
     "atHour": 24,
-    "steps": 8678,
+    "sampleCount": 24,
+    "worstM": 6.296414049817278,
+    "steps": 8676,
     "met": false
    },
    "stm": {
-    "worst": 0.000013843308765454832,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000013843418935233353
    },
    "met": false,
    "cause": {
@@ -1321,14 +1461,14 @@
      "eps": 0.025278904723321505,
      "dragEffectM": 255.82940181861494,
      "epsTimesDragEffectM": 6.4670870739971,
-     "hpopMinusGmatM": 6.296104882808252,
-     "hpopMinusGmatCdScaledM": 0.12275754998974234,
+     "hpopMinusGmatM": 6.296095071713942,
+     "hpopMinusGmatCdScaledM": 0.12276561713645742,
      "correctedDefaultMet": false,
-     "correctedDifferenceM": 0.12275754998974234,
+     "correctedDifferenceM": 0.12276561713645742,
      "correctedMet": true,
      "epsFromMeanDensities": 0.025278904723321727,
-     "predictionMinusObservedM": 0.17098219118884828,
-     "predictionRelativeDifference": 0.02715682066474488,
+     "predictionMinusObservedM": 0.17099200228315858,
+     "predictionRelativeDifference": 0.027158421265168514,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -1341,7 +1481,7 @@
      ],
      "hpopSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.12275754998974234,
+    "correctedDifferenceM": 0.12276561713645742,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": false,
@@ -1358,30 +1498,35 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.00016449599101037,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00016449599101037
    },
    "suite": {
-    "worstM": 0.000024496055114074634,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000024496055114074634,
     "steps": 342,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000003964075284418302,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.000003964075284418302,
     "steps": 2883,
     "met": true
    },
    "finest": {
-    "worstM": 0.0000059174510473025505,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.000005917451047302551,
     "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 6.147455775831384e-13,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 6.147455775831384e-13
    },
    "met": true
   },
@@ -1394,30 +1539,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.00021101075527739792,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00021101075527739792
    },
    "suite": {
-    "worstM": 0.000018131525293891572,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000017776550827528304,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0000118204733987277,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000012962384430733914,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000012853797288933727,
     "atHour": 24,
-    "steps": 8594,
+    "sampleCount": 24,
+    "worstM": 0.000013046873070756968,
+    "steps": 8596,
     "met": true
    },
    "stm": {
-    "worst": 2.0512243958579815e-12,
-    "atHour": 18
+    "atHour": 18,
+    "sampleCount": 24,
+    "worst": 2.0811128459013235e-12
    },
    "met": true
   },
@@ -1430,30 +1580,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.00020856945550870638,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00020856945550870638
    },
    "suite": {
-    "worstM": 0.000014937223804808388,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000014567893712573052,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000015269254484130518,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000015570193607318767,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000016778545930973213,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00001737775039015545,
     "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 1.8245500943140093e-12,
-    "atHour": 18
+    "atHour": 18,
+    "sampleCount": 24,
+    "worst": 1.7827778449440247e-12
    },
    "met": true
   },
@@ -1466,30 +1621,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002611361280465399,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00026113612804654
    },
    "suite": {
-    "worstM": 0.00011108317764343643,
     "atHour": 21,
-    "steps": 336,
+    "sampleCount": 24,
+    "worstM": 0.00011199141517197172,
+    "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00009347408810727559,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00009354297669297283,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00009228027404870169,
     "atHour": 21,
-    "steps": 8594,
+    "sampleCount": 24,
+    "worstM": 0.00009255379952866469,
+    "steps": 8595,
     "met": true
    },
    "stm": {
-    "worst": 1.688760444216072e-11,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 1.680647243262182e-11
    },
    "met": true
   },
@@ -1502,30 +1662,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002664675074905357,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002664675074905357
    },
    "suite": {
-    "worstM": 0.00011455983147244951,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00011484584722480362,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00009682697478321947,
     "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.00009689321531145376,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00009827333671650185,
     "atHour": 20,
-    "steps": 8597,
+    "sampleCount": 24,
+    "worstM": 0.00009579012226279745,
+    "steps": 8595,
     "met": true
    },
    "stm": {
-    "worst": 1.76054087725572e-11,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 1.7535438694733165e-11
    },
    "met": true
   },
@@ -1538,30 +1703,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002052247014080925,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002052247014080925
    },
    "suite": {
-    "worstM": 0.000013698744141640457,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000014129297704880526,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00001616208502213789,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00001667451596649064,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00001887208756176204,
     "atHour": 24,
-    "steps": 8595,
+    "sampleCount": 24,
+    "worstM": 0.000017225059174170343,
+    "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 2.235824730318709e-12,
-    "atHour": 18
+    "atHour": 18,
+    "sampleCount": 24,
+    "worst": 2.344094174444986e-12
    },
    "met": true
   },
@@ -1574,30 +1744,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.00026694174275905096,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002669417427590509
    },
    "suite": {
-    "worstM": 0.00011772363486827878,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00011769221946915395,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00009860184098481098,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00009672624071046418,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00009731343184374075,
     "atHour": 21,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.0000971744826513832,
+    "steps": 8592,
     "met": true
    },
    "stm": {
-    "worst": 1.7423126767653343e-11,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 1.744891172339678e-11
    },
    "met": true
   },
@@ -1610,30 +1785,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.00026646820650404635,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00026646820650404635
    },
    "suite": {
-    "worstM": 0.00011426416451238687,
     "atHour": 21,
-    "steps": 337,
+    "sampleCount": 24,
+    "worstM": 0.00011384241983972746,
+    "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00009726636135866031,
     "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.00009710349740015136,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00009869454439889844,
     "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.00009939220101142338,
     "steps": 8596,
     "met": true
    },
    "stm": {
-    "worst": 1.7450236438477495e-11,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 1.7525412405829414e-11
    },
    "met": true
   },
@@ -1646,30 +1826,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0005547207152712456,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0005547207152712456
    },
    "suite": {
-    "worstM": 0.0004036375466654574,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0004035254900143676,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00038379588966861464,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.00038351475646825815,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000382687922546902,
-    "atHour": 21,
-    "steps": 8596,
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0003832775183812475,
+    "steps": 8597,
     "met": true
    },
    "stm": {
-    "worst": 5.937871805736177e-8,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 5.937871637511919e-8
    },
    "met": true
   },
@@ -1682,30 +1867,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0016622643986238083,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0016622643986238083
    },
    "suite": {
-    "worstM": 0.0015223389587964078,
     "atHour": 23,
-    "steps": 336,
+    "sampleCount": 24,
+    "worstM": 0.0015221009792457578,
+    "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.001500699827788598,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.0015002816077026018,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001499669872800301,
     "atHour": 23,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.0014999962365712719,
+    "steps": 8593,
     "met": true
    },
    "stm": {
-    "worst": 2.8213144817376567e-10,
-    "atHour": 18
+    "atHour": 18,
+    "sampleCount": 24,
+    "worst": 2.81850720991205e-10
    },
    "met": true
   },
@@ -1718,30 +1908,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002737910014479806,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002737910014479806
    },
    "suite": {
-    "worstM": 0.00012325870700032293,
-    "atHour": 23,
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00012288023861756095,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00010357271836645134,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00010421447717506243,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00010312156986048884,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00010408542178066728,
     "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 1.7669823195765226e-11,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 1.7726779750188785e-11
    },
    "met": true
   },
@@ -1754,30 +1949,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002796141208096696,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002796141208096696
    },
    "suite": {
-    "worstM": 0.00012884304185913,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00012878629383610433,
     "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00010627112239924108,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00010884719274467796,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00010801286294047756,
     "atHour": 21,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.00010958009286231963,
+    "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 1.815250197995468e-11,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worst": 1.8130111191360007e-11
    },
    "met": true
   },
@@ -1790,30 +1990,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.01869,
    "orekitMinusGmat": {
-    "worstM": 0.0002693961621608384,
-    "atHour": 22
+    "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.0002693961621608384
    },
    "suite": {
-    "worstM": 0.00011735098666445463,
     "atHour": 21,
-    "steps": 337,
+    "sampleCount": 24,
+    "worstM": 0.00011801463524419054,
+    "steps": 338,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00009984508913761362,
-    "atHour": 20,
+    "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00009985532311958778,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0001019745559079856,
     "atHour": 21,
-    "steps": 8641,
+    "sampleCount": 24,
+    "worstM": 0.00010241124295680719,
+    "steps": 8645,
     "met": true
    },
    "stm": {
-    "worst": 0.0000017843117550897383,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.0000017843117612759716
    },
    "met": true
   },
@@ -1826,30 +2031,35 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.000035679892058948535,
-    "atHour": 17
+    "atHour": 17,
+    "sampleCount": 24,
+    "worstM": 0.000035679892058948535
    },
    "suite": {
-    "worstM": 0.0000010471211519907129,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.0000010471211519907127,
     "steps": 337,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000002052013803214292,
     "atHour": 20,
+    "sampleCount": 24,
+    "worstM": 0.000002052013803214292,
     "steps": 2882,
     "met": true
    },
    "finest": {
-    "worstM": 0.000002687117181052205,
     "atHour": 23,
+    "sampleCount": 24,
+    "worstM": 0.000002687117181052205,
     "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 2.0973579183844367e-12,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 2.0973579183844367e-12
    },
    "met": true
   },
@@ -1862,30 +2072,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00003502848897565565,
-    "atHour": 16
+    "atHour": 16,
+    "sampleCount": 24,
+    "worstM": 0.00003502848897565565
    },
    "suite": {
-    "worstM": 0.0000058691523592664835,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000005815615218983326,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000006677727650464349,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0000067365787828612685,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000006998054924655684,
     "atHour": 24,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.000007054445446497838,
+    "steps": 8593,
     "met": true
    },
    "stm": {
-    "worst": 4.382686987619476e-11,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.383204863361521e-11
    },
    "met": true
   },
@@ -1898,30 +2113,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00003277134331994404,
-    "atHour": 15
+    "atHour": 15,
+    "sampleCount": 24,
+    "worstM": 0.00003277134331994405
    },
    "suite": {
-    "worstM": 0.000007600612041878889,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000007845871762776636,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000008322738805640995,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000008380191078970401,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000007651365414319885,
     "atHour": 24,
-    "steps": 8593,
+    "sampleCount": 24,
+    "worstM": 0.000007703893150695434,
+    "steps": 8592,
     "met": true
    },
    "stm": {
-    "worst": 4.43528017834233e-11,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.4291628801391324e-11
    },
    "met": true
   },
@@ -1934,30 +2154,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00011548088181450119,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.00011548088181450119
    },
    "suite": {
-    "worstM": 0.0001380087557043216,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.0001384372760065726,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0001374522267345526,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00013723607343569863,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00013857404478790128,
     "atHour": 21,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.00013910750842683787,
+    "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 4.851620186309297e-10,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worst": 4.846052724979949e-10
    },
    "met": true
   },
@@ -1970,30 +2195,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00011232657480109174,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.00011232657480109173
    },
    "suite": {
-    "worstM": 0.00015018411037106503,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00015083769288225704,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00014921285235429627,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00015037475478443335,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.00014807454588493558,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00014956232089268626,
     "steps": 8593,
     "met": true
    },
    "stm": {
-    "worst": 4.773408977906634e-10,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worst": 4.774449363597727e-10
    },
    "met": true
   },
@@ -2006,30 +2236,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.000044599678073806,
-    "atHour": 19
+    "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.00004459967807380599
    },
    "suite": {
-    "worstM": 0.000008051274278522604,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.000008294097171997322,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.000007473439934541277,
     "atHour": 22,
+    "sampleCount": 24,
+    "worstM": 0.000007651521072387715,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.000005227443138613092,
-    "atHour": 22,
-    "steps": 8592,
+    "atHour": 19,
+    "sampleCount": 24,
+    "worstM": 0.000005209291444369654,
+    "steps": 8593,
     "met": true
    },
    "stm": {
-    "worst": 4.4159589655980684e-11,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 4.4043053654422263e-11
    },
    "met": true
   },
@@ -2042,30 +2277,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.0001155233254974482,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.0001155233254974482
    },
    "suite": {
-    "worstM": 0.00014154627025714977,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00014237945368753344,
     "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00014150832363312352,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00014209195410236076,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0001403587811398068,
     "atHour": 21,
-    "steps": 8592,
+    "sampleCount": 24,
+    "worstM": 0.00014071061143294822,
+    "steps": 8593,
     "met": true
    },
    "stm": {
-    "worst": 4.820331229830719e-10,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worst": 4.810775389689694e-10
    },
    "met": true
   },
@@ -2078,30 +2318,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02683,
    "orekitMinusGmat": {
-    "worstM": 0.00011236331406900075,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.00011236331406900075
    },
    "suite": {
-    "worstM": 0.00014556829602098808,
     "atHour": 21,
-    "steps": 337,
+    "sampleCount": 24,
+    "worstM": 0.00014664754170804137,
+    "steps": 336,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00014250712186949233,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00014335287798078938,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0001455180423568109,
     "atHour": 21,
+    "sampleCount": 24,
+    "worstM": 0.00014668861039787075,
     "steps": 8592,
     "met": true
    },
    "stm": {
-    "worst": 4.804128174219242e-10,
-    "atHour": 12
+    "atHour": 12,
+    "sampleCount": 24,
+    "worst": 4.797707165878875e-10
    },
    "met": true
   },
@@ -2114,30 +2359,35 @@
    "toleranceM": 0.01,
    "icrfDriftM": 0.02454,
    "orekitMinusGmat": {
-    "worstM": 0.0005754832824293074,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0005754832824293073
    },
    "suite": {
-    "worstM": 0.000012700960620900763,
     "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.000012700960620900763,
     "steps": 553,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00001795517832464923,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.00001795517832464923,
     "steps": 2886,
     "met": true
    },
    "finest": {
-    "worstM": 0.000005609489836007947,
     "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.000005609489836007947,
     "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 8.464370878488408e-12,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 8.464370878488408e-12
    },
    "met": true
   },
@@ -2150,30 +2400,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.011545336909821393,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011545336909821392
    },
    "suite": {
-    "worstM": 0.0006458273738583863,
     "atHour": 12,
-    "steps": 417,
+    "sampleCount": 24,
+    "worstM": 0.0006384706956161459,
+    "steps": 416,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0016862570191633307,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016881416179780836,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0017058546421375531,
     "atHour": 24,
-    "steps": 8595,
+    "sampleCount": 24,
+    "worstM": 0.001702182619347683,
+    "steps": 8597,
     "met": true
    },
    "stm": {
-    "worst": 1.394072539710401e-9,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 1.3951597572144142e-9
    },
    "met": true
   },
@@ -2186,30 +2441,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.011505302172039102,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011505302172039102
    },
    "suite": {
-    "worstM": 0.0006210265527818337,
     "atHour": 12,
-    "steps": 416,
+    "sampleCount": 24,
+    "worstM": 0.0006199202725840838,
+    "steps": 417,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0016361901005438545,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016412851383577546,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0016829183306955662,
     "atHour": 24,
-    "steps": 8598,
+    "sampleCount": 24,
+    "worstM": 0.0016789691948302609,
+    "steps": 8596,
     "met": true
    },
    "stm": {
-    "worst": 1.393272692671388e-9,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 1.402354002710776e-9
    },
    "met": true
   },
@@ -2222,30 +2482,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.011672279817158284,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011672279817158286
    },
    "suite": {
-    "worstM": 0.0008093510323745274,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.000995824135747119,
     "steps": 417,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0019228508933729618,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0019174520126405453,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001964970624271566,
     "atHour": 24,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.001962453529803364,
+    "steps": 8598,
     "met": true
    },
    "stm": {
-    "worst": 1.9323386223684224e-9,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 1.9252131589234855e-9
    },
    "met": true
   },
@@ -2258,30 +2523,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.008524618786080466,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.008524618786080466
    },
    "suite": {
-    "worstM": 0.005116353639065046,
     "atHour": 12,
-    "steps": 430,
+    "sampleCount": 24,
+    "worstM": 0.005125025729458773,
+    "steps": 429,
     "met": true
    },
    "steps30": {
-    "worstM": 0.004987246216329648,
     "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.004988711841820544,
     "steps": 2896,
     "met": true
    },
    "finest": {
-    "worstM": 0.004953042739509919,
     "atHour": 12,
-    "steps": 8605,
+    "sampleCount": 24,
+    "worstM": 0.004962743192518496,
+    "steps": 8606,
     "met": true
    },
    "stm": {
-    "worst": 0.000025621044215289884,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000025620991386799255
    },
    "met": true
   },
@@ -2294,30 +2564,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.01152578567884908,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.01152578567884908
    },
    "suite": {
-    "worstM": 0.0006463225123499611,
     "atHour": 12,
+    "sampleCount": 24,
+    "worstM": 0.000632248927782983,
     "steps": 416,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0016644804048296217,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0016704881793397797,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.001687846576748391,
     "atHour": 24,
-    "steps": 8595,
+    "sampleCount": 24,
+    "worstM": 0.0016785326605627975,
+    "steps": 8594,
     "met": true
    },
    "stm": {
-    "worst": 1.4308005245749053e-9,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 1.3877133854153413e-9
    },
    "met": true
   },
@@ -2330,30 +2605,35 @@
    "toleranceM": 0.05,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.011657248963919384,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.011657248963919384
    },
    "suite": {
-    "worstM": 0.0006688686468126496,
-    "atHour": 12,
-    "steps": 416,
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0008835578716874232,
+    "steps": 417,
     "met": true
    },
    "steps30": {
-    "worstM": 0.0019338795395535033,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0019414894079721073,
     "steps": 2880,
     "met": true
    },
    "finest": {
-    "worstM": 0.0019520089498380265,
     "atHour": 24,
-    "steps": 8596,
+    "sampleCount": 24,
+    "worstM": 0.0019542800245308093,
+    "steps": 8595,
     "met": true
    },
    "stm": {
-    "worst": 2.0009053026877245e-9,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 1.973133085826052e-9
    },
    "met": true
   },
@@ -2366,30 +2646,35 @@
    "toleranceM": 0.1,
    "icrfDriftM": 0.02476,
    "orekitMinusGmat": {
-    "worstM": 0.007444152448907646,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.007444152448907646
    },
    "suite": {
-    "worstM": 0.003082837298617128,
     "atHour": 24,
+    "sampleCount": 24,
+    "worstM": 0.0028191546712444037,
     "steps": 429,
     "met": true
    },
    "steps30": {
-    "worstM": 0.00247478539990637,
     "atHour": 11,
+    "sampleCount": 24,
+    "worstM": 0.00247431230766745,
     "steps": 2896,
     "met": true
    },
    "finest": {
-    "worstM": 0.0024884447346838322,
     "atHour": 11,
+    "sampleCount": 24,
+    "worstM": 0.0024873098167015263,
     "steps": 8602,
     "met": true
    },
    "stm": {
-    "worst": 0.00002590718301820299,
-    "atHour": 24
+    "atHour": 24,
+    "sampleCount": 24,
+    "worst": 0.000025907000492078618
    },
    "met": true
   }
@@ -2457,7 +2742,7 @@
   }
  ],
  "protocol": {
-  "source": "Stored NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; all historical scores retained.",
+  "source": "Pinned NASA GMAT trajectories and the shared hpop-reference-cases.json protocol; HPOP scores refreshed from the shipped WASM using C++ reductions.",
   "units": "maximum 3D position difference, metres; STM relative column difference, dimensionless",
   "frame": "GCRF; EME2000 for explicitly marked EME2000 cases",
   "epoch": "2026-08-02T00:00:00Z",
@@ -2479,69 +2764,69 @@
   "misses": [
    {
     "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
-    "worstM": 2.332247146266163,
+    "worstM": 2.3323448067816006,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.0333837492431298,
+    "correctedDifferenceM": 0.03338749930318057,
     "correctedMet": true,
     "correctedDefaultMet": true
    },
    {
     "id": "LEO400 F6-field-sun-moon-srp-drag",
-    "worstM": 2.3371212074862644,
+    "worstM": 2.337051068478067,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.026513818089225247,
+    "correctedDifferenceM": 0.026503876030322483,
     "correctedMet": true,
     "correctedDefaultMet": true
    },
    {
     "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
-    "worstM": 1.5452872201939853,
+    "worstM": 1.5452639119520046,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.01653174378689603,
+    "correctedDifferenceM": 0.01653512014456305,
     "correctedMet": true,
     "correctedDefaultMet": true
    },
    {
     "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
-    "worstM": 7.965410758895273,
+    "worstM": 7.9654193177152814,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.12282118631899008,
+    "correctedDifferenceM": 0.12281742741555439,
     "correctedMet": true,
     "correctedDefaultMet": false
    },
    {
     "id": "SSO700 F6-field-sun-moon-srp-drag",
-    "worstM": 7.949952168472333,
+    "worstM": 7.949986547544851,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.1058506051188806,
+    "correctedDifferenceM": 0.10584640109899,
     "correctedMet": true,
     "correctedDefaultMet": false
    },
    {
     "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
-    "worstM": 6.3115865420890005,
+    "worstM": 6.3116354471968,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.12275754998974234,
+    "correctedDifferenceM": 0.12276561713645742,
     "correctedMet": true,
     "correctedDefaultMet": false
    }
   ],
   "stm": {
    "byRow": {
-    "drag": 0.000021239934016526605,
-    "fullNoDrag": 0.00002590718301820299,
+    "drag": 0.000021239148509441375,
+    "fullNoDrag": 0.000025907000492078618,
     "pointMass": 8.464370878488408e-12
    },
    "caseCount": 57,
-   "worstRelativeColumnDifference": 0.00002590718301820299,
+   "worstRelativeColumnDifference": 0.000025907000492078618,
    "agreement": "reported numerical agreement; no protocol pass threshold",
-   "statement": "57 stored suite STM comparisons; largest relative column difference 2.590718301820299e-5. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol."
+   "statement": "57 suite STM comparisons; largest relative column difference 0.000025907000492078618. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol."
   }
  },
  "fileHashes": [
@@ -2551,7 +2836,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380"
+   "sha256": "b824525d6df6c4ef57b64f79defa7390b482ff28baf92941b2154f7de06071d7"
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -2559,15 +2844,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "8c9c361bddfda89f5dbb63b0d17c61324ae7351feff550ff554bbea429d9b1a0"
+   "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "d92e2b9acf742a2104a3b61f341ee60ec6aea762c8475eb5e6268b4ac3d3fbac"
+   "sha256": "235aec1dc05b16a515fe939dc027ce85d6257f4188f4b2acee7068eb265da39e"
   },
   {
    "path": "../../../package.json",
-   "sha256": "70593d6ba44980fcaef96f94de08c34d68c2641876e1bdf36ae1db62f89afd29"
+   "sha256": "45601a67b53643d98c642aea072ed25306fabfe222a66c16d9f5200249a51e59"
   },
   {
    "path": "../../fixtures/orekit/orekit-reference.json",
@@ -2598,7 +2883,7 @@
   "sourceIdentity": [
    {
     "path": "evidence.mjs",
-    "sha256": "7207f41f8fd2022ab8e317231cb04f312456d1c4f267c96fce077ae3d9b2b74f"
+    "sha256": "0f12f310b635e266623238cfac8500021b4a57f02bb13f8c1275a666a7820098"
    },
    {
     "path": "gmat-metrics.cpp",
@@ -2610,11 +2895,11 @@
    },
    {
     "path": "update-summary.mjs",
-    "sha256": "90c1d0e6243f6cbac6fddd0481549128e5e226c830e93f319303392aaa8eef88"
+    "sha256": "221333801e5135b6628d6805f98c307ce54dd625e022b4e664cf8392c32b3a88"
    },
    {
     "path": "score-gmat.mjs",
-    "sha256": "4a4cfeafa9b09639cb4cf26007cfc20d54e109dbdf76eb3212d3cc11fc597c22"
+    "sha256": "0725cd2159c2be8d77b0529c22ba7ec6167ed7a2193abaefbdbcbb8c6ef750b3"
    },
    {
     "path": "anomalous-oxygen.mjs",
@@ -2631,6 +2916,14 @@
    {
     "path": "../nyx/scoring.mjs",
     "sha256": "793c80f35e009b3a1ddfa0e381f7de7a4e8ce3824c0ea7e122fc6035b37c3f94"
+   },
+   {
+    "path": "../nyx/score-metrics.cpp",
+    "sha256": "c44c9e3526b5070454f13be7a518d08204b60f591183807d8d0e701d521b1563"
+   },
+   {
+    "path": "../tudat/scoring.mjs",
+    "sha256": "7ad13027948d774ea67fe400048e802458a4f7f7985a9467649ade6e1fe69e0c"
    },
    {
     "path": "../../lib/orekitCases.mjs",
@@ -2669,7 +2962,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "6ba91417546635784f6dd4865aebb4f70658d2a0da179307bea5a768e94a5380",
+   "sha256": "b824525d6df6c4ef57b64f79defa7390b482ff28baf92941b2154f7de06071d7",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {

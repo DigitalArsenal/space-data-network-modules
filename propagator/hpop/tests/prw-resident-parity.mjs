@@ -13,6 +13,7 @@ import {createHash} from 'node:crypto';
 import {encodePluginInvokeRequest,decodePluginInvokeResponse} from 'space-data-module-sdk/invoke';
 import {loadWasmEdgePin,assertWasmEdgeVersionMatchesPin} from 'space-data-module-sdk/testing';
 import {residentHarness,packageDir,wasmPath,dockerRunner} from './lib/residentRuntime.mjs';
+import {headlessShell} from './lib/headlessShell.mjs';
 import {TYPE,makeTable,residentState,instant,coordinateSystem,encodePrw,decodePrw} from './lib/prwCodec.mjs';
 import {GM,environmentInputs,fullForceRequest,isoInstant,residentRecord} from './lib/fullForce.mjs';
 const execFile=promisify(execFileCallback);
@@ -103,10 +104,7 @@ async function runProcess(runtime) {
   return results;
 }
 async function runChrome() {
-  const chrome=process.env.SDM_CHROME_BINARY??[
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium',
-  ].find(p=>fs.existsSync(p));
-  if(!chrome)throw new Error('Real Chrome required; set SDM_CHROME_BINARY.');
+  const chrome=headlessShell();  // Chromium headless shell only, never Chrome.app
   const esbuild=await import('esbuild');
   const source=`import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';
 const b64=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
@@ -146,7 +144,7 @@ for(const runtime of ['browser','wasmedge','docker-wasmedge']) {
 const steps=groups.flatMap(g=>g.steps.map(s=>({...s,group:g.id})));
 const evidence={wasmSha256:wasmSha,wasmBytes:wasm.length,wasmedgeVersion:pin.wasmedgeVersion,dockerImage:image,
   runtimeInstances:'One persistent direct instance per group',groups:groups.length,requests:steps.length,
-  runtimes:['real Chrome/V8','native WasmEdge','container WasmEdge'],steps:[],ok:true};
+  runtimes:['Chromium headless shell/V8','native WasmEdge','container WasmEdge'],steps:[],ok:true};
 for(let i=0;i<steps.length;i++) {
   const item=steps[i],reference=runtimes.browser[i];
   for(const runtime of ['wasmedge','docker-wasmedge'])assert.deepEqual(Buffer.from(runtimes[runtime][i]),Buffer.from(reference),`${runtime} ${item.group}/${item.label}`);

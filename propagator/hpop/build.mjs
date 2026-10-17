@@ -10,12 +10,9 @@ import {composeErfaTranslationUnit} from '../../foundation/frames/erfa-amalgamat
 
 const manifest=JSON.parse(await fs.readFile(path.join(packageRoot,'plugin-manifest.json'),'utf8'));
 await generateSdsBindings();
-// Repo-local toolchain only. The common checkout's existing deps may be read
-// from a private worktree; compiler outputs and caches remain in this worktree.
-const common=execFileSync('git',['rev-parse','--path-format=absolute','--git-common-dir'],{cwd:packageRoot,encoding:'utf8'}).trim();
-let configuredWorktree='';try{configuredWorktree=execFileSync('git',['config','--get','core.worktree'],{cwd:packageRoot,encoding:'utf8'}).trim();}catch{}
-const originalRoot=configuredWorktree?path.resolve(common,configuredWorktree):path.dirname(common);
-const candidates=[process.env.SDN_LOCAL_EMSDK_DIR,path.join(packageRoot,'deps/emsdk'),path.join(originalRoot,'propagator/hpop/deps/emsdk')].filter(Boolean);
+// Explicit provisioned toolchain, or this package's deps. No repository command
+// is needed to select a compiler; outputs and caches stay in this worktree.
+const candidates=[process.env.SDN_LOCAL_EMSDK_DIR,path.join(packageRoot,'deps/emsdk')].filter(Boolean);
 const emsdk=candidates.find(p=>fsSync.existsSync(path.join(p,'upstream/bin/clang++')));
 if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SDN_LOCAL_EMSDK_DIR. This build never invokes emcc.');
 const libDir=path.join(emsdk,'upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto');

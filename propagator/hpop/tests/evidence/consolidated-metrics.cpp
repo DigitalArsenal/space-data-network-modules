@@ -306,4 +306,9 @@ J reduce(const J& input) {
  out["dragDiagnostics"]=reduceDragDiagnostics(input,cases);
  return out;
 }
-int main(){try{J input;std::cin>>input;std::cout<<reduce(input).dump()<<'\n';}catch(const std::exception& e){std::cout<<J{{"error",e.what()}}.dump()<<'\n';return 1;}}
+int main(){try{J input;std::cin>>input;
+ if(input.value("mode",std::string())=="refresh-gmat-diagnostic") {
+  const J samples=gmatSamples(input.at("diagnostic"),input.at("case"));
+  std::cout<<J{{"worstM",positionDifference(input.at("hpop"),samples)}}.dump()<<'\n';
+ } else std::cout<<reduce(input).dump()<<'\n';
+}catch(const std::exception& e){std::cout<<J{{"error",e.what()}}.dump()<<'\n';return 1;}}

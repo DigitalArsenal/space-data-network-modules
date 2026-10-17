@@ -12,7 +12,7 @@ export const sha256 = (file) => createHash('sha256').update(fs.readFileSync(path
 export const classification = 'model-setting difference (GMAT density without anomalous oxygen)';
 export const sourceFiles = ['evidence.mjs', 'gmat-metrics.cpp', 'check-gmat.mjs', 'update-summary.mjs',
   'score-gmat.mjs', 'anomalous-oxygen.mjs', 'run-gmat.mjs', 'gmat-files.mjs',
-  '../nyx/scoring.mjs', '../../lib/orekitCases.mjs', '../../lib/prwCodec.mjs', '../../../lib/nrlmsise00.cpp'];
+  '../nyx/scoring.mjs', '../nyx/score-metrics.cpp', '../tudat/scoring.mjs', '../../lib/orekitCases.mjs', '../../lib/prwCodec.mjs', '../../../lib/nrlmsise00.cpp'];
 export const externalSources = [
   { path: '/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp',
     source: 'NASA GMAT NRLMSISE-00 plugin source copy', lines: '284-285, 322',
@@ -60,7 +60,7 @@ export function verdictFor(summary, release, metrics) {
       correctedMet: row.cause.correctedMet, correctedDefaultMet: row.cause.correctedDefaultMet })),
     stm: { ...stm, agreement: stm.caseCount ? 'reported numerical agreement; no protocol pass threshold' : 'not measured',
       statement: stm.caseCount
-        ? '57 stored suite STM comparisons; largest relative column difference 2.590718301820299e-5. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol.'
+        ? `${stm.caseCount} suite STM comparisons; largest relative column difference ${stm.worstRelativeColumnDifference}. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol.`
         : 'R2022a has no stored STM comparisons; no agreement claim is made.' },
   };
 }

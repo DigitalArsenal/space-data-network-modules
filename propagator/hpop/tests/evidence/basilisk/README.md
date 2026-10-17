@@ -48,12 +48,18 @@ the reuse provenance. No stored Tudat trajectories supply Basilisk states.
   Excluded orders are zeroed; G2 separately zeroes nonzonal degrees above 24.
   Basilisk's native spherical-harmonic model loads the resulting triangular
   file. The installed GGM03S coefficients are never substituted.
-* The unchanged chain in `../erfa-spice/reference.py` supplies GCRF-to-ITRF:
+* The stored references use the historical `../erfa-spice/reference.py`
+  chain for GCRF-to-ITRF:
   split UTC/TAI/TT dates, daily EOP interpolation in TAI, ERFA `xy06`, `s06`,
   `c2ixys` with exported dX/dY, `era00`, `pom00`, and `c2tcio`.
   No SPICE PCK Earth rotation or subdaily EOP correction is substituted.
   A bounded in-process cache reuses exact ERFA matrices at identical epochs
   and EOP rows across cases; it does not interpolate the rotations.
+  Historical generator and density-probe source versions retain their original
+  paths and digests as unavailable informational provenance. Current files at
+  those paths do not represent the historical versions. The summary separately
+  authenticates current HPOP inputs and the stored reference trajectories;
+  no stored reference states are regenerated when HPOP changes.
 * A public `SpicePlanetStateMsg` carries that rotation at the midpoint of
   each integration interval, with zero rotation derivative. It remains an
   orthogonal matrix throughout the interval. This avoids Basilisk's native
@@ -166,11 +172,14 @@ LEO diagnostic residuals are 3.47–4.41 cm, below the original 0.1 m limit.
 ## The one E2E
 
 `check-basilisk.mjs` is the sole E2E for this change. It authenticates existing
-pinned files, requires repository sources and stored trajectories, verifies
+pinned files, requires current repository sources and stored trajectories, verifies
 exactly one disposition for every exported case, and checks unchanged limits,
 all step-halving histories, and recorded causes for every failed setting.
 It recomputes all stored HPOP/Orekit/convergence reductions using the shared
 Nyx C++ helper, then runs **one** cheap LEO400 point-mass trajectory through the
 shipped HPOP WASM and demands an exact re-score. Missing external/package or
-generated scratch files are reported as provenance gaps; an existing file
-with a wrong hash fails. No unit tests or broad test gauntlet are added.
+generated scratch files are reported as provenance gaps. The two unavailable
+historical source versions are informational; their paths and original digests
+remain recorded. Current required files and stored trajectories cannot use this
+exemption, and a wrong hash for an available pin fails. No unit tests or broad
+test gauntlet are added.

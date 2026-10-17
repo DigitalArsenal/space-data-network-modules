@@ -99,7 +99,7 @@ async function main() {
 
   const work = fs.mkdtempSync(path.join(here, '.check-horizons-'));
   try {
-    const metrics = buildMetrics(work);
+    const metrics = await buildMetrics(work);
     const stored = read(path.join(here, 'horizons-comparisons.json'));
     const parsed = Object.fromEntries(names.map((name) => [name, parseRaw(metrics, authenticated, name)]));
     for (const name of names) check(same(stored.parsed?.[name], parsed[name]), `${name}: stored parsed inputs differ from current raw response`);

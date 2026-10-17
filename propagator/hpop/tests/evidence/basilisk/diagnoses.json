@@ -43,19 +43,27 @@
  "inputFiles": [
   {
    "path": "basilisk-2.12.0.json",
-   "sha256": "cbf9a8bd63cb31a60f3b5459e496b83d8095a463a78ceb687fc05480a6d6a1ed"
+   "sha256": "00a6bb57993b477563f9c74cc2d5bac03a436aad660fa32101eb9c0a90d5d47b",
+   "originalSha256": "cbf9a8bd63cb31a60f3b5459e496b83d8095a463a78ceb687fc05480a6d6a1ed",
+   "note": "Current metadata identity; original digest retained. Reference numerical payload is unchanged, and HPOP fields were independently refreshed from the final shipped module."
   },
   {
    "path": "basilisk-wgs84-diagnostic.json",
-   "sha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96"
+   "sha256": "584543a94f870a265848d6d32da6df2f0d26730dcb934d64a688c2edb8e3a758",
+   "originalSha256": "0e4b826b74d4e9266f94cb092f799576b1c53535fbbdcf10bc77bb23a9c65d96",
+   "note": "Current metadata identity; original digest retained. Reference numerical payload is unchanged, and HPOP fields were independently refreshed from the final shipped module."
   },
   {
    "path": "basilisk-wgs84-gtd7d-diagnostic.json",
-   "sha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b"
+   "sha256": "d85ebf129a405a8b57c7f1557dccdbfbdc81793fcf3e14059b92385a6531a72a",
+   "originalSha256": "8d094cd0c8a4f67bae41443c3c7a33a8dc45518c2267dc52a83e72c63a2e157b",
+   "note": "Current metadata identity; original digest retained. Reference numerical payload is unchanged, and HPOP fields were independently refreshed from the final shipped module."
   },
   {
    "path": "hpop-basilisk-2.12.0.json",
-   "sha256": "4d742430c4f1a952a8b39e2f9d7b3b3af0b82268fb60d980c8fde26da1edef80"
+   "sha256": "83ef5af96be2e0fb5b6b24b6ab03ea4d712542bc11e96629311a4ebd6a97000a",
+   "originalSha256": "4d742430c4f1a952a8b39e2f9d7b3b3af0b82268fb60d980c8fde26da1edef80",
+   "note": "Current metadata identity; original digest retained. Reference numerical payload is unchanged, and HPOP fields were independently refreshed from the final shipped module."
   },
   {
    "path": "model-probes.json",
@@ -63,7 +71,9 @@
   },
   {
    "path": "lst-probes.json",
-   "sha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6"
+   "sha256": "9a7426237f77d4396e8f31d6e53b2ee244a41aeb1b3e06f342f90b360a511d34",
+   "originalSha256": "70af3e2eb4d46dd7eb9e66a2d5e08f63eb8152bfcf29b98f17e779f2298d4cf6",
+   "note": "Current metadata identity; original digest retained. Reference numerical payload is unchanged, and HPOP fields were independently refreshed from the final shipped module."
   },
   {
    "path": "../cases/hpop-reference-cases.json",
@@ -95,9 +105,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 5250.628341230262,
-       "steps30": 5250.645822722185,
-       "finest": 5250.645899225305
+       "suite": 5250.628243566877,
+       "steps30": 5250.64582669767,
+       "finest": 5250.645918965623
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -117,9 +127,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 2.3152425245500674,
-       "steps30": 2.2977613115277276,
-       "finest": 2.2976848085828565
+       "suite": 2.3153401848874315,
+       "steps30": 2.2977573363682957,
+       "finest": 2.297665069262368
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -139,9 +149,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.025839778670238362,
-       "steps30": 0.04332105358103384,
-       "finest": 0.04339755457254959
+       "suite": 0.025742114074562374,
+       "steps30": 0.04332502944020785,
+       "finest": 0.04341729580593022
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -196,9 +206,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 2.3152425245500674,
-         "steps30": 2.2977613115277276,
-         "finest": 2.2976848085828565
+         "suite": 2.3153401848874315,
+         "steps30": 2.2977573363682957,
+         "finest": 2.297665069262368
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -218,9 +228,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.025839778670238362,
-         "steps30": 0.04332105358103384,
-         "finest": 0.04339755457254959
+         "suite": 0.025742114074562374,
+         "steps30": 0.04332502944020785,
+         "finest": 0.04341729580593022
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -262,9 +272,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 5248.297751095421,
-       "steps30": 5248.315302392317,
-       "finest": 5248.315424081673
+       "suite": 5248.297821238489,
+       "steps30": 5248.315317837306,
+       "finest": 5248.315400636357
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -284,9 +294,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 2.317000398890711,
-       "steps30": 2.2994493818688215,
-       "finest": 2.2993276961792133
+       "suite": 2.316930259795462,
+       "steps30": 2.2994339424428247,
+       "finest": 2.2993511436922622
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -306,9 +316,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.025857021485853393,
-       "steps30": 0.043408096196171975,
-       "finest": 0.043529787350276544
+       "suite": 0.025927170125828816,
+       "steps30": 0.04342354963664183,
+       "finest": 0.04350634650734576
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -363,9 +373,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 2.317000398890711,
-         "steps30": 2.2994493818688215,
-         "finest": 2.2993276961792133
+         "suite": 2.316930259795462,
+         "steps30": 2.2994339424428247,
+         "finest": 2.2993511436922622
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -385,9 +395,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.025857021485853393,
-         "steps30": 0.043408096196171975,
-         "finest": 0.043529787350276544
+         "suite": 0.025927170125828816,
+         "steps30": 0.04342354963664183,
+         "finest": 0.04350634650734576
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -429,9 +439,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 5418.749489372931,
-       "steps30": 5418.766915460155,
-       "finest": 5418.767018113159
+       "suite": 5418.749444942692,
+       "steps30": 5418.766915620047,
+       "finest": 5418.767004472957
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -451,9 +461,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 2.3908966491135972,
-       "steps30": 2.3734708693883837,
-       "finest": 2.3733682172069424
+       "suite": 2.3909410887549725,
+       "steps30": 2.3734707130228534,
+       "finest": 2.3733818608401394
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -473,9 +483,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.026553229596714814,
-       "steps30": 0.04397917080154745,
-       "finest": 0.04408182189332814
+       "suite": 0.026508822241748917,
+       "steps30": 0.04397933624441474,
+       "finest": 0.04406818751664551
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -530,9 +540,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 2.3908966491135972,
-         "steps30": 2.3734708693883837,
-         "finest": 2.3733682172069424
+         "suite": 2.3909410887549725,
+         "steps30": 2.3734707130228534,
+         "finest": 2.3733818608401394
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -552,9 +562,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.026553229596714814,
-         "steps30": 0.04397917080154745,
-         "finest": 0.04408182189332814
+         "suite": 0.026508822241748917,
+         "steps30": 0.04397933624441474,
+         "finest": 0.04406818751664551
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -596,9 +606,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 4094.0136844565595,
-       "steps30": 4094.0312107589953,
-       "finest": 4094.031311537179
+       "suite": 4094.0137077697386,
+       "steps30": 4094.0312141942427,
+       "finest": 4094.031305933153
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -618,9 +628,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 1.5590041072566911,
-       "steps30": 1.541478121834412,
-       "finest": 1.541377345107848
+       "suite": 1.5589807983373387,
+       "steps30": 1.5414746903109726,
+       "finest": 1.54138295256226
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -640,9 +650,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.01710381659500539,
-       "steps30": 0.03462971905349554,
-       "finest": 0.034730495563645394
+       "suite": 0.01712714024363571,
+       "steps30": 0.03463316043469457,
+       "finest": 0.034724897546067675
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -697,9 +707,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "hpopWorstM": {
-         "suite": 1.5590041072566911,
-         "steps30": 1.541478121834412,
-         "finest": 1.541377345107848
+         "suite": 1.5589807983373387,
+         "steps30": 1.5414746903109726,
+         "finest": 1.54138295256226
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -719,9 +729,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "hpopWorstM": {
-         "suite": 0.01710381659500539,
-         "steps30": 0.03462971905349554,
-         "finest": 0.034730495563645394
+         "suite": 0.01712714024363571,
+         "steps30": 0.03463316043469457,
+         "finest": 0.034724897546067675
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -763,9 +773,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 58.128445315240306,
-       "steps30": 58.14392634083757,
-       "finest": 58.14360933550511
+       "suite": 58.128436758262,
+       "steps30": 58.143922550409165,
+       "finest": 58.143615025958056
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -785,9 +795,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014880833189093473,
-       "steps30": 0.0006002898038775884,
-       "finest": 0.0002832937109287522
+       "suite": 0.014889388835976805,
+       "steps30": 0.0005964995626314769,
+       "finest": 0.00028898511801456016
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -807,9 +817,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014880833189093473,
-       "steps30": 0.0006002898038775884,
-       "finest": 0.0002832937109287522
+       "suite": 0.014889388835976805,
+       "steps30": 0.0005964995626314769,
+       "finest": 0.00028898511801456016
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -865,9 +875,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 58.11304582242233,
-       "steps30": 58.12851115262754,
-       "finest": 58.1281965582678
+       "suite": 58.113011452982775,
+       "steps30": 58.128507413974646,
+       "finest": 58.12821006651427
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -887,9 +897,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014840312083447485,
-       "steps30": 0.0006251037767070275,
-       "finest": 0.00031050963833815414
+       "suite": 0.014874674167929126,
+       "steps30": 0.0006213650660571282,
+       "finest": 0.00032401750875810684
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -909,9 +919,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.014840312083447485,
-       "steps30": 0.0006251037767070275,
-       "finest": 0.00031050963833815414
+       "suite": 0.014874674167929126,
+       "steps30": 0.0006213650660571282,
+       "finest": 0.00032401750875810684
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -967,9 +977,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "hpopWorstM": {
-       "suite": 34.796182528506684,
-       "steps30": 34.8116646876731,
-       "finest": 34.811360093034004
+       "suite": 34.79613363413426,
+       "steps30": 34.81167450114866,
+       "finest": 34.81135551544844
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -989,9 +999,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.015210049037568556,
-       "steps30": 0.00027220750741083525,
-       "finest": 4.212841058274773e-05
+       "suite": 0.015258935240370025,
+       "steps30": 0.00028202035520363654,
+       "finest": 4.587672595960163e-05
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -1011,9 +1021,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "hpopWorstM": {
-       "suite": 0.015210049037568556,
-       "steps30": 0.00027220750741083525,
-       "finest": 4.212841058274773e-05
+       "suite": 0.015258935240370025,
+       "steps30": 0.00028202035520363654,
+       "finest": 4.587672595960163e-05
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -1056,5 +1066,26 @@
     }
    }
   }
- ]
+ ],
+ "hpopRefresh": {
+  "module": {
+   "version": "1.4.0",
+   "file": "../../../dist/isomorphic/module.wasm",
+   "sha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629"
+  },
+  "source": {
+   "path": "../refresh-derived-comparisons.mjs",
+   "sha256": "fc39c15196be42c90039ce34476a31ed317875dddb6eef564931248611844e15"
+  },
+  "reductions": [
+   {
+    "path": "../nyx/score-metrics.cpp",
+    "sha256": "c44c9e3526b5070454f13be7a518d08204b60f591183807d8d0e701d521b1563"
+   },
+   {
+    "path": "../consolidated-metrics.cpp",
+    "sha256": "34db0f0ce51be47620f2c297d30eaa0f0f016a032ff66b8341f5f50f839cb30c"
+   }
+  ]
+ }
 }
