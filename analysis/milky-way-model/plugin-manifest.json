@@ -1,0 +1,123 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.milky-way-model",
+  "name": "Milky Way volumetric model",
+  "version": "0.1.0",
+  "description": "Deterministic C++ shared-memory Milky Way emissivity, extinction and statistical model products; SDS PCE typed parameters and arena layouts.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "bake_legacy",
+      "displayName": "bake legacy",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "verify_legacy",
+      "displayName": "verify legacy",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+Milky Way model — Digital Arsenal.
+
+The legacy-model refactor adapts OrbPro GalaxyFS.glsl, from the CesiumJS-based
+OrbPro source tree; Copyright 2011-2026 CesiumJS Contributors, Apache License
+2.0. The modified implementation is C++ rather than GLSL, with volume baking,
+shared-memory storage, and an independent analytic/baked comparison path.
+The original source path and SHA-256 are recorded in src/legacy_model.hpp.
+
+Published numerical model references (facts, not bundled source datasets):
+Jurić et al. 2008, ApJ 673, 864, doi:10.1086/523619.
+Bland-Hawthorn & Gerhard 2016, ARA&A 54, 529, doi:10.1146/annurev-astro-081915-023441.
+Wegg & Gerhard 2013, MNRAS 435, 1874, doi:10.1093/mnras/stt1376.
+Wegg, Gerhard & Portail 2015, MNRAS 450, 4050, doi:10.1093/mnras/stv745.
+Reid et al. 2019, ApJ 885, 131, doi:10.3847/1538-4357/ab4a11.
+Drimmel & Spergel 2001, ApJ 556, 181, doi:10.1086/321556.
+Solar/frame constants have their own citations in galactic_constants.hpp.
+
+Test-only ESA/Gaia/DPAC all-sky display maps: CC BY-SA 3.0 IGO, attribution and
+URLs in tests/oracle-sources.json. They remain in the ignored oracle cache and
+are excluded from package publication. The Reid Table 1 VizieR cache is also
+test-only; its redistribution terms have not been verified offline, and the
+dataset is not published with this module.
+
+Edenhofer et al. 2024 dust: no data included or accepted; license and SDN
+publication remain unverified. Procedural noise and statistical samples are
+labeled model and carry no observed catalog identity.
