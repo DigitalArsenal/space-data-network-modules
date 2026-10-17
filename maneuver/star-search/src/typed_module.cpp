@@ -31,13 +31,19 @@ struct Parameters {
   }
 };
 bool problem(const SLP& slp,Problem& p,Params& constants,uint32_t& threads) {
+  if(slp.KIND()!=slpProblemKind_OPTIMIZE || !slp.OBJECTIVE() ||
+     !slp.OBJECTIVE()->PROVIDER_DEFINED_PARAMETER_NAME() ||
+     slp.OBJECTIVE()->PROVIDER_DEFINED_PARAMETER_NAME()->str()!="star_patch_total_m_s" ||
+     slp.OBJECTIVE()->DIRECTION()!=slpObjectiveDirection_MINIMIZE ||
+     slp.OBJECTIVE()->PARAMETER()!=pceParameter_PROVIDER_DEFINED || slp.OBJECTIVE()->SCALE()!=1 ||
+     (slp.GOALS()&&slp.GOALS()->size()) || (slp.CONSTRAINTS()&&slp.CONSTRAINTS()->size()) || slp.SETTINGS()) return false;
   if(!slp.PROBLEM_ID()||!slp.PROPAGATOR_PORT_ID()||!slp.VARIABLES()||slp.VARIABLES()->size()>4096||
      !slp.ATTESTATION()||!slp.ATTESTATION()->SIGNING_PUBLIC_KEY()||slp.ATTESTATION()->SIGNING_PUBLIC_KEY()->size()!=64||
      !slp.ATTESTATION()->SIGNATURE()||slp.ATTESTATION()->SIGNATURE()->size()!=64||
      !slp.ATTESTATION()->CANONICAL_JSON_SIGNATURE()||slp.ATTESTATION()->CANONICAL_JSON_SIGNATURE()->size()!=64) return false;
   Parameters q;
   for(const auto* v:*slp.VARIABLES()) {
-    if(!v->VARIABLE_ID()||v->PARAMETER()!=pceParameter_PROVIDER_DEFINED||
+    if(!v->VARIABLE_ID()||!std::isfinite(v->INITIAL_VALUE())||v->PARAMETER()!=pceParameter_PROVIDER_DEFINED||
        !v->PROVIDER_DEFINED_PARAMETER_NAME()||v->VARIABLE_ID()->str()!=v->PROVIDER_DEFINED_PARAMETER_NAME()->str()||
        !q.entries.emplace(v->VARIABLE_ID()->str(),v->INITIAL_VALUE()).second)return false;
   }
@@ -87,7 +93,9 @@ bool problem(const SLP& slp,Problem& p,Params& constants,uint32_t& threads) {
 double epoch(const flatbuffers::String* s) {
   if(!s)return NAN;int y,m,d,h,n,used=0;double seconds;
   if(std::sscanf(s->c_str(),"%d-%d-%dT%d:%d:%lf%n",&y,&m,&d,&h,&n,&seconds,&used)!=6||
-     used!=static_cast<int>(s->size())||m<1||m>12||d<1||d>31||h<0||h>23||n<0||n>59||seconds<0||seconds>=60)return NAN;
+     used!=static_cast<int>(s->size())||y<1600||y>9999||m<1||m>12||d<1||d>31||h<0||h>23||n<0||n>59||seconds<0||seconds>=60)return NAN;
+  const int month_days[]={31,28,31,30,31,30,31,31,30,31,30,31};
+  if(d>month_days[m-1]+(m==2&&y%4==0&&(y%100!=0||y%400==0)))return NAN;
   y-=m<=2;const int era=(y>=0?y:y-399)/400;const unsigned yo=y-era*400;
   const unsigned doy=(153*(m+(m>2?-3:9))+2)/5+d-1;
   const long days=era*146097L+yo*365+yo/4-yo/100+doy-719468;
@@ -158,22 +166,33 @@ bool sign(const std::string& slot,const uint8_t* bytes,size_t n,std::vector<uint
   auto r=sdm_piv::call("keyslot.sign","KeyslotParams",p,{sdm_piv::raw("payload",bytes,n)});
   const auto s=r.raw("data");if(!r.ok()||s.size()!=64)return false;signature.assign(s.begin(),s.end());return true;
 }
+bool verify_signature(const std::string& public_key,const uint8_t* bytes,size_t n,const std::vector<uint8_t>& signature) {
+  if(public_key.size()!=64||public_key.find_first_not_of("0123456789abcdef")!=std::string::npos)return false;
+  std::vector<uint8_t> key(32);
+  for(size_t i=0;i<32;++i){const auto h=public_key.substr(i*2,2);char* end=nullptr;key[i]=std::strtoul(h.c_str(),&end,16);if(!end||*end)return false;}
+  sdn::runtime::Aligned::CryptoParams p{};p.ALGORITHM=sdn::runtime::Aligned::cryptoAlgorithm_Ed25519;
+  auto r=sdm_piv::call("crypto.ed25519.verify","CryptoParams",p,
+    {sdm_piv::raw("data",bytes,n),sdm_piv::raw("signature",signature.data(),signature.size()),sdm_piv::raw("public_key",key.data(),key.size())});
+  const auto* result=r.result<sdn::runtime::Aligned::BoolValue>();return result&&result->VALUE;
+}
 }
 
 extern "C" int search_trajectories(void) {
   using namespace star_guest;
   const auto* pf=input("problem");const auto* ef=input("ephemeris");const auto* cf=input("request");
-  if(plugin_get_input_count()!=3||!pf||!ef||!cf||pf->payload_length>1024*1024||ef->payload_length>64*1024*1024||cf->payload_length>65536)return fail("Expected bounded SLP, OEM and PCE frames.");
+  if(plugin_get_input_count()!=3||!pf||!ef||!cf||!pf->payload||!ef->payload||!cf->payload||pf->payload_length>1024*1024||ef->payload_length>64*1024*1024||cf->payload_length>65536)return fail("Expected bounded SLP, OEM and PCE frames.");
   flatbuffers::Verifier pv(pf->payload,pf->payload_length),ev(ef->payload,ef->payload_length),cv(cf->payload,cf->payload_length);
-  if(!VerifySLPBuffer(pv)||!VerifyOEMBuffer(ev)||!VerifyPCEBuffer(cv))return fail("Malformed typed frame.");
-  const auto& slp=*GetSLP(pf->payload);const auto& oem=*GetOEM(ef->payload);
+  if(!VerifySizePrefixedSLPBuffer(pv))return fail("Malformed size-prefixed SLP frame.");
+  if(!VerifyOEMBuffer(ev))return fail("Malformed OEM frame.");
+  if(!VerifyPCEBuffer(cv))return fail("Malformed PCE frame.");
+  const auto& slp=*GetSizePrefixedSLP(pf->payload);const auto& oem=*GetOEM(ef->payload);
   const auto* cfg=GetPCE(cf->payload)->EVALUATION_RESULT();
-  if(!cfg||!cfg->SAMPLES()||cfg->SAMPLES()->size()!=1||!cfg->SAMPLES()->Get(0)->PARAMETER_VALUES())return fail("Missing screening context.");
+  if(!cfg||cfg->STATUS()!=pceResultStatus_OK||!cfg->SAMPLES()||cfg->SAMPLES()->size()!=1||!cfg->SAMPLES()->Get(0)->PARAMETER_VALUES())return fail("Missing screening context.");
   std::map<std::string,const PCEParameterValue*> fields;
   for(const auto* v:*cfg->SAMPLES()->Get(0)->PARAMETER_VALUES())
-    if(!v->PROVIDER_DEFINED_NAME()||!fields.emplace(v->PROVIDER_DEFINED_NAME()->str(),v).second)return fail("Duplicate context field.");
+    if(v->PARAMETER()!=pceParameter_PROVIDER_DEFINED||v->STATUS()!=pceResultStatus_OK||!v->PROVIDER_DEFINED_NAME()||v->VALUES()||!fields.emplace(v->PROVIDER_DEFINED_NAME()->str(),v).second)return fail("Invalid or duplicate context field.");
   auto text=[&](const char* k){auto it=fields.find(k);return it!=fields.end()&&it->second->STRING_VALUE()?it->second->STRING_VALUE()->str():std::string();};
-  auto number=[&](const char* k){auto it=fields.find(k);return it!=fields.end()&&it->second->UNIT()==pceUnit_DIMENSIONLESS?it->second->VALUE():NAN;};
+  auto number=[&](const char* k){auto it=fields.find(k);return it!=fields.end()&&it->second->UNIT()==pceUnit_DIMENSIONLESS&&!it->second->STRING_VALUE()?it->second->VALUE():NAN;};
   const auto slot=text("signing_slot"),key=text("signing_public_key"),when=text("generated_at"),source=text("ephemeris");
   const double offset=number("page_offset"),size=number("page_size"),cancel=number("cancelled");
   if(slot.empty()||key.size()!=64||key.find_first_not_of("0123456789abcdef")!=std::string::npos||when.empty()||source.empty()||
@@ -181,6 +200,13 @@ extern "C" int search_trajectories(void) {
      (cancel!=0&&cancel!=1))return fail("Invalid signing context or page controls.");
   Problem p{};Params constants;uint32_t threads=1;
   if(!problem(slp,p,constants,threads))return fail("Invalid SLP search parameters or attestation shape; host must authenticate SLP before invoking.");
+  // Authenticate the exact binary problem before expensive search. Hosts also
+  // enforce trusted signer policy and the canonical JSON signature at ingress.
+  std::vector<uint8_t> problem_bytes(pf->payload,pf->payload+pf->payload_length);
+  auto* problem_attestation=GetMutableSizePrefixedSLP(problem_bytes.data())->mutable_ATTESTATION();
+  const std::vector<uint8_t> problem_signature(problem_attestation->SIGNATURE()->begin(),problem_attestation->SIGNATURE()->end());
+  for(size_t i=0;i<64;++i){problem_attestation->mutable_SIGNATURE()->Mutate(i,0);problem_attestation->mutable_CANONICAL_JSON_SIGNATURE()->Mutate(i,0);}
+  if(!verify_signature(slp.ATTESTATION()->SIGNING_PUBLIC_KEY()->str(),problem_bytes.data(),problem_bytes.size(),problem_signature))return fail("SLP binary signature verification failed.");
   MemoryBudget budget(p.memory_cap_bytes);Ephemeris eph;OutputDB output;StageCounts counts;
   if(!ephemeris(oem,constants,&budget,eph))return fail("OEM must contain bounded Sun-centered ECLIPJ2000/TDB states with source MESSAGE_ID.");
   if(cancel==0) {
@@ -213,9 +239,11 @@ extern "C" int search_trajectories(void) {
   flatbuffers::FlatBufferBuilder builder;FinishSizePrefixedPSSBuffer(builder,CreatePSS(builder,&result));
   const auto json=canonical(result);std::vector<uint8_t> binary_sig,json_sig;
   if(!sign(slot,builder.GetBufferPointer(),builder.GetSize(),binary_sig)||!sign(slot,reinterpret_cast<const uint8_t*>(json.data()),json.size(),json_sig))return fail("PSS signing failed; configure a host Ed25519 keyslot.");
+  if(!verify_signature(key,builder.GetBufferPointer(),builder.GetSize(),binary_sig)||
+     !verify_signature(key,reinterpret_cast<const uint8_t*>(json.data()),json.size(),json_sig))return fail("PSS signer does not match the declared public key.");
   auto* att=GetMutableSizePrefixedPSS(builder.GetBufferPointer())->mutable_ATTESTATION();
   for(size_t i=0;i<64;++i){att->mutable_SIGNATURE()->Mutate(i,binary_sig[i]);att->mutable_CANONICAL_JSON_SIGNATURE()->Mutate(i,json_sig[i]);}
-  if(plugin_push_output("solutions","PSS.fbs","$PSS",builder.GetBufferPointer()+4,builder.GetSize()-4)<0)return fail("Output rejected.");
+  if(plugin_push_output("solutions","PSS.fbs","$PSS",builder.GetBufferPointer(),builder.GetSize())<0)return fail("Output rejected.");
   PCEParameterSampleT sample;sample.EPOCH="2000-01-01T12:00:00";sample.EPOCH_TIME_SYSTEM="TDB";
   auto report=[&](const char* name,double value,const std::string& string="",pceUnit unit=pceUnit_DIMENSIONLESS){auto v=std::make_unique<PCEParameterValueT>();v->PARAMETER=pceParameter_PROVIDER_DEFINED;v->PROVIDER_DEFINED_NAME=name;v->VALUE=value;v->STRING_VALUE=string;v->UNIT=unit;v->STATUS=pceResultStatus_OK;sample.PARAMETER_VALUES.push_back(std::move(v));};
   report("model",0,"Star ballistic approximate powered flyby; time-bin filter; not a continuous optimizer or Pareto guarantee",pceUnit_UNSPECIFIED);

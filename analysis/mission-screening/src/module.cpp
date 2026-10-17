@@ -87,6 +87,14 @@ extern "C" int screen_grid(void) {
   const double step=scalar(config,"grid_step",pceUnit_SECOND);
   const double offset=scalar(config,"page_offset",pceUnit_DIMENSIONLESS), limit=scalar(config,"page_size",pceUnit_DIMENSIONLESS);
   const double cancelled=scalar(config,"cancelled",pceUnit_DIMENSIONLESS);
+  for (const char* name:{"departure_mu","arrival_mu"}) {
+    const auto* catalog=request->CATALOG(); bool declared=false;
+    if (catalog && catalog->ENTRIES()) for (const auto* d:*catalog->ENTRIES())
+      if (d->PROVIDER_DEFINED_NAME() && d->PROVIDER_DEFINED_NAME()->str()==name &&
+          d->UNIT()==pceUnit_PROVIDER_DEFINED && d->PROVIDER_DEFINED_UNIT_SYMBOL() &&
+          d->PROVIDER_DEFINED_UNIT_SYMBOL()->str()=="m^3/s^2") declared=true;
+    if (!declared) return fail("Declare each body GM catalog unit as m^3/s^2.");
+  }
   if (!std::isfinite(mission_screening::circular_impulse(0,dm,dr)) ||
       !std::isfinite(mission_screening::circular_impulse(0,am,ar)) || !std::isfinite(step) || step<=0 ||
       !std::isfinite(offset) || offset<0 || std::floor(offset)!=offset || offset>160000 ||
@@ -112,6 +120,8 @@ extern "C" int screen_grid(void) {
     std::map<std::string,std::vector<double>> output;
     for (size_t j=0;j<row.count;++j,++index) {
       const double status=get(row.fields,"status")->VALUES()->Get(j);
+      if (!std::isfinite(status) || status<0 || status>3 || std::floor(status)!=status)
+        return fail("Unknown Lambert cell status.");
       const double d=get(row.fields,"departure_dv")->VALUES()->Get(j),a=get(row.fields,"arrival_dv")->VALUES()->Get(j);
       if (status==0 && (get(row.fields,"revolutions")->VALUES()->Get(j)!=0 || !std::isfinite(d) || d<0 || !std::isfinite(a) || a<0))
         return fail("Screening requires finite zero-revolution cells; multi-revolution objective selection belongs to Lambert.");

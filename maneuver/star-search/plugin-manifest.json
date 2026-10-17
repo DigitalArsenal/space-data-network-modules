@@ -5,7 +5,8 @@
   "description": "Ballistic Star grid search: Lambert arcs patched by approximate powered flybys, followed by time-bin filtering. DSM, null and resonant legs are rejected. Typed SLP/OEM inputs; signed PSS output with a separate PCE model and budget report. Signed execution targets WasmEdge because SDK 0.9.8 restricts wallet_sign to server runtimes.",
   "pluginFamily": "maneuver",
   "capabilities": [
-    "wallet_sign"
+    "wallet_sign",
+    "crypto_verify"
   ],
   "externalInterfaces": [],
   "invokeSurfaces": [
@@ -124,7 +125,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Pareto-optimal trajectory set carried by the ratified signed $PSS record."
+          "description": "Signed page of time-bin-filtered ballistic trajectories with explicit objective components; no dominance-ranking claim."
         },
         {
           "portId": "report",
