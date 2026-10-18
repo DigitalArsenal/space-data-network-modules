@@ -56,7 +56,10 @@ the pick target and whether a moon gives way to a small parent's disc, the
 model matrix and the light), the stand-in places of far points and labels,
 label decluttering on screen, the barycenter and Milky Way labels, the Milky
 Way's frame and fade, the sky box fade, Saturn's ring frame, each body's
-orbiter propagation cutoff with its hysteresis, the switch of central body
+orbiter propagation cutoff with its hysteresis (0.5.2: 100 mean radii from
+the body's center, resumed inside 90; `kOrbiterCutoffRadii` and
+`kOrbiterResumeRadii` are the one definition, and each body's two distances
+are in `S_CUTOFF` for the engine), the switch of central body
 (the camera re-expressed, the flight to the day side), the camera kept
 outside every body, the camera carried with the central body's spin, and the
 small-body layer's observer and heliocentric frame.
@@ -228,6 +231,12 @@ waits for a kernel. Text kernels are read at once (`ssb_load_kernel`).
   Bounds are 0.05 mag and 0.05 degree; every residual is printed, including
   any failures near new moon. Planet magnitudes must exactly equal the
   pre-change module outputs at the same epoch.
+- SpaceAware-UI `src/tools/orbiter-cutoff-verify.mjs` (0.5.2): the built
+  console at desktop and phone. The engine's distances are 100 and 90 mean
+  radii within 1 m (IUGG R1 for the Earth, IAU 2015 for the Moon). Beyond
+  101 R_E the Earth's catalog has no propagator batch and is hidden, and it
+  resumes at 89 R_E at the clock's time. The Moon's orbiters are suspended at
+  101 R_Moon and not at 89 R_Moon.
 - `tests/parity.mjs`: `evaluate` byte-identical in browser, WasmEdge and
   Docker WasmEdge (`conformance/parity.json`).
 
