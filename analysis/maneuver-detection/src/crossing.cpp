@@ -174,6 +174,7 @@ struct Event {
   double separation = 0;                     // km
   size_t before = 0, after = 0;              // block indices
   Json evidence = Json::object();
+  Impulse impulse;                           // the impulse and its uncertainty (src/impulse.cpp), with an error model
 };
 
 // ── D1 ────────────────────────────────────────────────────────────────────────

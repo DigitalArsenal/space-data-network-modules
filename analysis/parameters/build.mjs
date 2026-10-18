@@ -59,9 +59,16 @@ const eopHeader = headers.EOP;
 // evaluates over exactly the headers foundation/frames and foundation/orbits
 // own, so a parameter and a coordinate-system transform cannot disagree.
 const erfa = await composeErfaTranslationUnit();
+// The shared axis engine includes the IAU body models. The SDK compiles this
+// amalgamation outside the source tree, so the dependency goes ahead of its
+// consumer, as propagator/events/build.mjs and foundation/frames/build.mjs do.
+const bodyModels = await fs.readFile(
+  path.join(packageRoot, "..", "..", "foundation", "frames", "src", "iau_body_models.hpp"),
+  "utf8",
+);
 const axisEngine = (
   await fs.readFile(path.join(packageRoot, "..", "..", "foundation", "frames", "src", "axis_engine.hpp"), "utf8")
-).replace(
+).replace('#include "iau_body_models.hpp"', "").replace(
   /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
   "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
 );
@@ -92,6 +99,7 @@ const sourceCode = [
   pceHeader,
   eopHeader,
   erfa.source,
+  bodyModels,
   axisEngine,
   stateRepresentations,
   rosterHeader,
@@ -117,6 +125,12 @@ const compilation = await compileModuleFromSource({
   // manifest and held to by the SDK's own artifact assertion — so a future edit
   // that adds a thread fails loudly instead of silently re-shaping the artifact.
   threadModel: "wasi-sequential",
+  // A browser reserves a shared memory's whole maximum up front (on this
+  // triple the guest's own memory is shared). The largest request the module
+  // accepts (kMaxValues: 4,096 states x 16 parameters, or 256 x 256) peaks
+  // inside the 16 MiB it starts with; x1.5, in 16 MiB steps
+  // (modules-analysis-shared-memory-20261017).
+  maximumMemoryBytes: 32 * 1024 * 1024,
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));

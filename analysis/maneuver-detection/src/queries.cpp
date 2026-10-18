@@ -10,11 +10,29 @@
 // every runtime gives the same bytes.
 namespace {
 
+constexpr double kMuWgs72 = 398600.8, kReWgs72 = 6378.135;  // SGP4's WGS-72
+
+// A set's mean altitude (km): SGP4's un-Kozai'd mean motion under WGS-72, the
+// altitude analysis/gp-error-model places a set in a regime by; NaN when SGP4
+// refuses the set.
+double meanAltitudeOf(const OMM* omm, double epoch) {
+  elsetrec rec{};
+  char satn[9] = "00000";
+  const double days1950 = epoch / 86400.0 + 2440587.5 - 2433281.5;
+  if (!SGP4Funcs::sgp4init(wgs72, 'i', satn, days1950, omm->BSTAR(), 0.0, 0.0, omm->ECCENTRICITY(), omm->ARG_OF_PERICENTER() / kDeg,
+                           omm->INCLINATION() / kDeg, omm->MEAN_ANOMALY() / kDeg, omm->MEAN_MOTION() * kTwoPi / 1440.0,
+                           omm->RA_OF_ASC_NODE() / kDeg, rec) || rec.error != 0)
+    return kNaN;
+  const double n = rec.no_unkozai / 60.0;
+  return std::cbrt(kMuWgs72 / (n * n)) - kReWgs72;
+}
+
 struct ElementSet {
   std::string key, objectId, objectName, comment;
   Source source;
   uint32_t norad = 0;
   double epoch = 0;
+  double meanAltitude = kNaN, meanEccentricity = kNaN;  // the set's regime coordinates (gp-error-model's)
   size_t record = 0;  // index of the $OMM record over all element_sets frames
 };
 
@@ -25,6 +43,7 @@ struct Query {
   std::string objectId, comment;
   Source source;
   double epoch = 0, start = 0, stop = 0, step = 0;
+  double meanAltitude = kNaN, meanEccentricity = kNaN;
 };
 
 using SetsByObject = std::map<std::string, std::vector<ElementSet>>;
@@ -42,6 +61,8 @@ bool loadElementSets(const std::vector<const OMM*>& records, SetsByObject& objec
       return failWith("Element set " + std::to_string(i) + " names no object (NORAD_CAT_ID, OBJECT_ID or OBJECT_NAME).");
     if (!parseIso(omm->EPOCH(), s.epoch)) return failWith("Element set " + std::to_string(i) + " has no valid EPOCH (ISO 8601 UTC).");
     s.key = objectKey(s.norad, s.objectId, s.objectName);
+    s.meanAltitude = meanAltitudeOf(omm, s.epoch);
+    s.meanEccentricity = omm->ECCENTRICITY();
     s.source = sourceOf(omm->PROVENANCE());
     s.comment = "EPOCH " + isoMs(s.epoch) + (omm->COMMENT() && omm->COMMENT()->size() ? " " + omm->COMMENT()->str() : "");
     objects[s.key].push_back(s);
@@ -82,6 +103,8 @@ std::vector<Query> queriesFor(const SetsByObject& objects, int neighbours, doubl
       q.comment = sets[i].comment;
       q.source = sets[i].source;
       q.epoch = sets[i].epoch;
+      q.meanAltitude = sets[i].meanAltitude;
+      q.meanEccentricity = sets[i].meanEccentricity;
       q.start = sets[i >= size_t(neighbours) ? i - neighbours : 0].epoch;
       q.stop = sets[std::min(sets.size() - 1, i + neighbours)].epoch;
       q.step = step;
@@ -123,6 +146,8 @@ bool takeAnswers(const std::vector<Query>& queries, const std::vector<const ephe
     b.norad = q.norad ? q.norad : b.norad;
     b.objectId = q.objectId.empty() ? b.objectId : q.objectId;
     b.epoch = q.epoch;
+    b.meanAltitude = q.meanAltitude;
+    b.meanEccentricity = q.meanEccentricity;
     b.comment = q.comment;
     b.source = q.source;
     objects[q.key].push_back(std::move(b));

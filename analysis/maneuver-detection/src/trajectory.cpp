@@ -83,6 +83,7 @@ struct Block {
   Source source;           // the element set's PROVENANCE (query answers); empty for an ephemeris
   uint32_t norad = 0;
   double epoch = kNaN;     // the element set's epoch when known (query answers)
+  double meanAltitude = kNaN, meanEccentricity = kNaN;  // its regime coordinates (query answers)
   double issued = kNaN;    // the version's issue time (compare_ephemerides)
   std::vector<double> t;
   std::vector<State> s;

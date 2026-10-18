@@ -5,23 +5,32 @@ import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 import { generateSdsHeaders } from './sds-headers.mjs';
 
 // One translation unit: the SDS headers ($OMM in, $OEM in, $MNV in and out,
-// $MDE reports out, $PRW window requests out), nlohmann::json without
-// exceptions for the in-memory evidence tree and the config adapter, and the module's
-// sources in dependency order. The module holds no propagator: trajectories
-// come from the caller, or through the propagator query port. MODULE_PRODUCER,
-// the module and its version, is the manifest's: the PRODUCER of every $MNV's
-// PROVENANCE and the head of its ALGORITHM.
+// $MDE reports out, $PRW window requests out, the $ERM error model in),
+// nlohmann::json without exceptions for the in-memory evidence tree and the
+// config adapter, the Vallado SGP4 that propagator/sgp4 compiles (an element
+// set's un-Kozai'd mean motion places it in an error-model regime, as
+// analysis/gp-error-model does), and the module's sources in dependency order.
+// The module holds no propagator: trajectories come from the caller, or
+// through the propagator query port. MODULE_PRODUCER, the module and its
+// version, is the manifest's: the PRODUCER of every $MNV's PROVENANCE and the
+// head of its ALGORITHM.
 const root = fileURLToPath(new URL('.', import.meta.url));
-const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'MNV', 'MDE', 'PRW'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'MNV', 'MDE', 'PRW', 'ERM'], import.meta.url);
 const json = await fs.readFile(path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
-const files = ['common.cpp', 'provenance.cpp', 'trajectory.cpp', 'queries.cpp', 'crossing.cpp', 'glr.cpp', 'mnv.cpp', 'compare.cpp', 'score.cpp', 'mde.cpp', 'maneuver_detection.cpp'];
+// SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that must not leak. Internal linkage: the flow
+// compiler links this module's object with others that compile the same SGP4Funcs.
+const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
+const sgp4Header = await fs.readFile(path.join(sgp4Src, 'SGP4.h'), 'latin1');
+const sgp4Source = (await fs.readFile(path.join(sgp4Src, 'SGP4.cpp'), 'latin1')).replace('#include "SGP4.h"', '');
+const sgp4 = ['#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {', sgp4Header, sgp4Source, '}  // namespace', '#undef pi'];
+const files = ['common.cpp', 'provenance.cpp', 'trajectory.cpp', 'queries.cpp', 'impulse.cpp', 'crossing.cpp', 'glr.cpp', 'mnv.cpp', 'compare.cpp', 'score.cpp', 'mde.cpp', 'maneuver_detection.cpp'];
 const sources = await Promise.all(files.map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#define JSON_NOEXCEPTION 1', `#define MODULE_PRODUCER ${JSON.stringify(`${manifest.pluginId} ${manifest.version}`)}`, json, header, ...sources].join('\n\n'),
+  sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#define JSON_NOEXCEPTION 1', `#define MODULE_PRODUCER ${JSON.stringify(`${manifest.pluginId} ${manifest.version}`)}`, json, header, ...sgp4, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'single-thread',
@@ -41,6 +50,6 @@ await fs.writeFile(path.join(guestLinkDir, 'metadata.json'), `${JSON.stringify({
   symbolPrefix: result.guestLink.symbolPrefix, methodSymbols: result.guestLink.methodSymbols,
 }, null, 2)}\n`);
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), threadModel: 'single-thread',
+  spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp', threadModel: 'single-thread',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

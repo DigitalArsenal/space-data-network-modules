@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT.
 //
 // Generator : generate-pce-crosswalk.mjs
-// Vocabulary: pceParameter from spacedatastandards.org@1.201.0
+// Vocabulary: pceParameter from spacedatastandards.org@1.206.0
 //
 // Every published member is either mapped to a roster parameter or listed
 // here as deliberately unmapped with its reason. A member that is neither

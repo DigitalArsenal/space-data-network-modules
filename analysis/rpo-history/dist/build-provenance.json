@@ -1,0 +1,40 @@
+{
+  "spacedatastandards": "1.249.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "MET",
+    "CVR",
+    "PVN",
+    "OMM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM",
+    "MNV",
+    "ERM",
+    "ATM",
+    "OCM",
+    "FRM",
+    "PCE",
+    "NCD",
+    "EOP",
+    "SPW",
+    "PRW"
+  ],
+  "sources": [
+    "../../foundation/frames/include/rtn_curvilinear.hpp",
+    "src/common.cpp",
+    "src/provenance.cpp",
+    "src/elements.cpp",
+    "src/sets.cpp",
+    "src/error_model.cpp",
+    "src/history.cpp",
+    "src/uncertainty.cpp",
+    "src/encode.cpp",
+    "src/rpo_history.cpp"
+  ],
+  "threadModel": "single-thread"
+}

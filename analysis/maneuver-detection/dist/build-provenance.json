@@ -20,13 +20,15 @@
     "NCD",
     "EOP",
     "SPW",
-    "PRW"
+    "PRW",
+    "ERM"
   ],
   "sources": [
     "src/common.cpp",
     "src/provenance.cpp",
     "src/trajectory.cpp",
     "src/queries.cpp",
+    "src/impulse.cpp",
     "src/crossing.cpp",
     "src/glr.cpp",
     "src/mnv.cpp",
@@ -35,5 +37,6 @@
     "src/mde.cpp",
     "src/maneuver_detection.cpp"
   ],
+  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
   "threadModel": "single-thread"
 }

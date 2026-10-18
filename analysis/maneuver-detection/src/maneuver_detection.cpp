@@ -73,6 +73,10 @@ bool ommRoots(const plugin_input_frame_t* frame, std::vector<const OMM*>& out) {
   return forEachRecord<OMM>(frame->payload, frame->payload_length, OMMIdentifier(), VerifyOMMBuffer, VerifySizePrefixedOMMBuffer,
                             GetOMM, GetSizePrefixedOMM, out, "element_sets");
 }
+bool ermRoots(const plugin_input_frame_t* frame, std::vector<const ERM*>& out) {
+  return forEachRecord<ERM>(frame->payload, frame->payload_length, ERMIdentifier(), VerifyERMBuffer, VerifySizePrefixedERMBuffer,
+                            GetERM, GetSizePrefixedERM, out, "error_model");
+}
 bool mnvRoots(const plugin_input_frame_t* frame, std::vector<const MNV*>& out, const char* what) {
   return forEachRecord<MNV>(frame->payload, frame->payload_length, MNVIdentifier(), VerifyMNVBuffer, VerifySizePrefixedMNVBuffer,
                             GetMNV, GetSizePrefixedMNV, out, what);
@@ -92,7 +96,7 @@ bool pushMnv(const std::vector<uint8_t>& bytes) {
 }
 
 // ── detect_maneuvers ────────────────────────────────────────────────────────────
-bool detect(Objects& objects, const std::string& creation, const Options& o, const Json& refused, Json& report,
+bool detect(Objects& objects, const std::string& creation, const Options& o, const ErrorModel& model, const Json& refused, Json& report,
             std::vector<std::vector<uint8_t>>& outputs) {
   const std::string reportTime = o.reportTime.empty() ? creation : o.reportTime;
   report["options"] = {{"detectors", Json::array()}, {"k", o.k}, {"floor_in_track_mps", o.floorInTrack}, {"floor_cross_track_mps", o.floorCrossTrack},
@@ -142,7 +146,15 @@ bool detect(Objects& objects, const std::string& creation, const Options& o, con
     else if (o.d2) chosen = d2.events;
     if (o.d3) chosen.insert(chosen.end(), d2.lowThrust.begin(), d2.lowThrust.end());
     Json events = Json::array();
-    for (const Event& e : chosen) {
+    for (Event& e : chosen) {
+      // With an error model, each impulsive event is the impulse between its two sets: its time is the burn-time
+      // posterior's mode and its states those of the two sets there.
+      if (model.loaded && e.detector != "D3" && estimateImpulse(blocks[e.before], blocks[e.after], model, e.impulse)) {
+        const Impulse& im = e.impulse;
+        e.time = e.endTime = im.time;
+        e.r0 = im.r0; e.v0 = im.v0; e.r1 = im.r1; e.v1 = im.v1;
+        e.separation = norm(im.dpos);
+      }
       EventContext pv;
       pv.key = key;
       pv.source = source;
@@ -174,6 +186,7 @@ int detectManeuvers() {
   }
   std::vector<const OEM*> frames, answers;
   std::vector<const OMM*> sets;
+  std::vector<const ERM*> models;
   bool sawPropagation = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* frame = plugin_get_input_frame(i);
@@ -187,6 +200,8 @@ int detectManeuvers() {
     } else if (port == "propagation") {
       sawPropagation = true;
       if (!oemRoots(frame, answers, "propagation")) return fail(error);
+    } else if (port == "error_model") {
+      if (!ermRoots(frame, models)) return fail(error);
     } else {
       return fail("Unknown input port.");
     }
@@ -234,9 +249,11 @@ int detectManeuvers() {
     }
     if (!takeAnswers(queries, blocks, objects, blockCount, refused)) return fail(error);
   }
+  ErrorModel model;
+  if (!models.empty() && !loadErrorModel(models, model)) return fail(error);
   std::vector<std::vector<uint8_t>> outputs;
   report["status"] = "detected";
-  if (!detect(objects, creation, options, refused, report, outputs)) return fail(error);
+  if (!detect(objects, creation, options, model, refused, report, outputs)) return fail(error);
   if (!pushMde(encodeDetectReport(report, &options))) return 1;
   for (const auto& mnv : outputs) if (!pushMnv(mnv)) return 1;
   return 0;
