@@ -1,5 +1,6 @@
 // Frames in and out of a method: errors, control frames and typed SDS outputs.
 #pragma once
+#include <chrono>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -18,9 +19,22 @@ size_t framesOn(const char* port) {
   return n;
 }
 
-int control(const char* port, const std::string& json) {
-  return plugin_push_output_ex(port, nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t*>(json.data()), json.size()) < 0 ? 1 : 0;
+// A FlowNotice (sdn.runtime, "FNTC") on a control port: flow bookkeeping, never a data record.
+int notice(const char* port, sdn::runtime::flowNoticeKind kind, const std::string& source, uint64_t count, const std::string& reason,
+           std::vector<std::string> items = {}) {
+  sdn::runtime::FlowNoticeT n;
+  n.KIND = kind;
+  n.SCHEMA = "SKT.fbs";
+  n.PROVIDER_ID = "gaia-dr3";
+  n.SOURCE_NAME = source;
+  n.COUNT = count;
+  n.REASON = reason;
+  n.ITEMS = std::move(items);
+  n.AT_MS = uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+  flatbuffers::FlatBufferBuilder b(512);
+  sdn::runtime::FinishFlowNoticeBuffer(b, sdn::runtime::FlowNotice::Pack(b, &n));
+  return plugin_push_output_ex(port, "FlowNotice.fbs", sdn::runtime::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0,
+                               b.GetBufferPointer(), b.GetSize()) < 0 ? 1 : 0;
 }
 
 int typed(const char* port, const char* schema, const char* ident, const char* root, const std::vector<uint8_t>& bytes) {

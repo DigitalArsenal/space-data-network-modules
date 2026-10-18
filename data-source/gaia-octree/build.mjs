@@ -39,7 +39,7 @@ async function compile({name, manifestFile, schemas, files}) {
   const outputPath = path.join(root, 'dist', name, 'module.wasm');
   await fs.mkdir(path.dirname(outputPath), {recursive: true});
   const result = await compileModuleFromSource({manifest, language: 'c++', outputPath, threadModel: 'wasi-sequential',
-    sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#include <cstring>', header, ...sources.map(strip)].join('\n'),
+    sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#include "FlowNotice_generated.h"', '#include <cstring>', header, ...sources.map(strip)].join('\n'),
     // The space_data_module_host hostcall bridge resolves at instantiation.
     allowUndefinedImports: true});
   try {
@@ -67,7 +67,7 @@ const outputPath = path.join(dist, 'isomorphic/module.wasm');
 // The flow, as a provider node installs it.
 const node = (nodeId, pluginId, methodId, kind = 'transform') => ({nodeId, pluginId, methodId, kind, drainPolicy: 'single-shot'});
 const edge = (fromNodeId, fromPortId, toNodeId, toPortId) => ({edgeId: [fromNodeId, fromPortId, toNodeId, toPortId].join('-'),
-  fromNodeId, fromPortId, toNodeId, toPortId, backpressurePolicy: 'queue', queueDepth: 1, opaque: true});
+  fromNodeId, fromPortId, toNodeId, toPortId, backpressurePolicy: 'queue', queueDepth: 4});
 const {flow, deps} = gaiaFlow({node, edge, packageDir: root});
 const flowDir = path.join(dist, 'flow');
 await fs.mkdir(flowDir, {recursive: true});

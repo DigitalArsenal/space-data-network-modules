@@ -126,8 +126,9 @@ extern "C" int prepare_scheduled() {
   if (plugin_get_input_count() != 1 || framesOn("tick") != 1) return fail("Exactly one timer tick is required.");
   const Settings s = settings();
   if (!s.why.empty()) return fail(s.why);
-  if (s.peer.empty()) return control("status", R"({"skipped":"disabled"})");
-  return control("cycle", "{\"producer_peer_id\":\"" + s.peer + "\"}");
+  namespace RT = sdn::runtime;
+  if (s.peer.empty()) return notice("status", RT::flowNoticeKind_Skipped, "", 0, "disabled");
+  return notice("cycle", RT::flowNoticeKind_Info, "", 0, "cycle", {s.peer});
 }
 
 // One cycle: both layers made and filed.
@@ -153,15 +154,17 @@ extern "C" int retrieve_gaia() {
   const auto secs = [](auto a, auto b) { return fixed(std::chrono::duration<double>(b - a).count(), 1); };
   char err[32];
   std::snprintf(err, sizeof err, "%.3e", built.maxFloatError);
-  return control("report", std::string("{\"provider_id\":\"") + kProvider + "\",\"angular\":{\"source_name\":\"angular-g" + tier +
-                               "\",\"tiles\":" + std::to_string(run.tiles.size()) + ",\"filed\":" + std::to_string(tilesFiled) +
-                               ",\"stars\":" + std::to_string(run.rows + run.hipOnly) + ",\"gaia\":" + std::to_string(run.rows) +
-                               ",\"hipparcos_only\":" + std::to_string(run.hipOnly) + ",\"bright_edsd\":" + std::to_string(run.brightEdsd) +
-                               ",\"range_splits\":" + std::to_string(run.splits) + ",\"strays\":" + std::to_string(run.strays) + ",\"patched_tiles\":" + std::to_string(run.patched) +
-                               ",\"outside_sky\":" + std::to_string(run.outsideSky) + ",\"seconds\":" + secs(t0, t1) + "},\"octree\":{\"source_name\":\"octree-g" +
-                               tier + "\",\"nodes\":" + std::to_string(built.nodes) + ",\"filed\":" + std::to_string(nodesFiled) +
-                               ",\"stars\":" + std::to_string(built.stars) + ",\"depth\":" + std::to_string(built.depth) +
-                               ",\"max_float32_error_per_edge\":" + err + ",\"seconds\":" + secs(t1, t2) + "},\"tap_queries\":" +
-                               std::to_string(run.queries) + ",\"tap_bytes\":" + std::to_string(run.bytesIn) + "}");
+  namespace RT = sdn::runtime;
+  const auto item = [](const char* k, const std::string& v) { return std::string(k) + "=" + v; };
+  const auto n = [](uint64_t v) { return std::to_string(v); };
+  if (notice("report", RT::flowNoticeKind_Info, "angular-g" + tier, tilesFiled, "filed",
+             {item("tiles", n(run.tiles.size())), item("stars", n(run.rows + run.hipOnly)), item("gaia", n(run.rows)),
+              item("hipparcos_only", n(run.hipOnly)), item("bright_edsd", n(run.brightEdsd)), item("range_splits", n(run.splits)),
+              item("strays", n(run.strays)), item("patched_tiles", n(run.patched)), item("outside_sky", n(run.outsideSky)),
+              item("tap_queries", n(run.queries)), item("tap_bytes", n(run.bytesIn)), item("seconds", secs(t0, t1))}))
+    return 1;
+  return notice("report", RT::flowNoticeKind_Info, "octree-g" + tier, nodesFiled, "filed",
+                {item("nodes", n(built.nodes)), item("stars", n(built.stars)), item("depth", n(uint64_t(built.depth))),
+                 item("max_float32_error_per_edge", err), item("seconds", secs(t1, t2))});
 }
 

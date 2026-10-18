@@ -30,17 +30,16 @@
           "portId": "tick",
           "acceptedTypeSets": [
             {
-              "setId": "tick-v1",
+              "setId": "sdn-runtime-timer-tick",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
-              }
+              "description": "TimerTick (module-sdk runtime type TICK). Configuration is supplied by plugin.getConfig."
             }
           ],
           "minStreams": 1,
@@ -54,17 +53,16 @@
           "portId": "cycle",
           "acceptedTypeSets": [
             {
-              "setId": "cycle-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "This cycle's producer peer ID, for retrieve_gaia."
-              }
+              "description": "FlowNotice Info, REASON cycle, ITEMS [the producer peer ID]: the cycle retrieve_gaia runs."
             }
           ],
           "minStreams": 0,
@@ -76,17 +74,16 @@
           "portId": "status",
           "acceptedTypeSets": [
             {
-              "setId": "status-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
-              }
+              "description": "FlowNotice Skipped, REASON disabled."
             }
           ],
           "minStreams": 0,
@@ -106,17 +103,16 @@
           "portId": "cycle",
           "acceptedTypeSets": [
             {
-              "setId": "cycle-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The cycle prepare_scheduled opened."
-              }
+              "description": "FlowNotice Info, REASON cycle, ITEMS [the producer peer ID]: the cycle retrieve_gaia runs."
             }
           ],
           "minStreams": 1,
@@ -130,17 +126,16 @@
           "portId": "report",
           "acceptedTypeSets": [
             {
-              "setId": "report-v1",
+              "setId": "sdn-runtime-flow-notice",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
                 }
               ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "What was filed: each layer's tiles or nodes and stars, the strays and patches, the octree depth and its float32 error, the TAP queries and bytes; flow bookkeeping, never a data record."
-              }
+              "description": "Two FlowNotices Info, REASON filed: SOURCE_NAME angular-g13.5 (COUNT tiles filed; ITEMS tiles, stars, gaia, hipparcos_only, bright_edsd, range_splits, strays, patched_tiles, outside_sky, tap_queries, tap_bytes, seconds) and octree-g13.5 (COUNT nodes filed; ITEMS nodes, stars, depth, max_float32_error_per_edge, seconds)."
             }
           ],
           "minStreams": 0,
