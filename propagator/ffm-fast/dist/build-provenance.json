@@ -4,8 +4,8 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
-  "bytes": 2208635,
+  "sha256": "3b567ada2d019ba83b9ad208439cbe7ba8221c943f8c7d06de689708a5f943ff",
+  "bytes": 2208871,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "flags": [
     "-msimd128"
