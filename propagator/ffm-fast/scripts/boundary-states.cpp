@@ -12,6 +12,12 @@
 #include <string>
 
 int main(int argc,char** argv) {
+    if (argc==2 && std::string(argv[1])=="--reentry-state") {
+        // A descending elliptic state begins above the GJ handoff sphere,
+        // crosses it on the valid arc, then reaches the physical stop.
+        std::cout<<std::setprecision(17)<<"["<<(astro::RE_EARTH+200.1)*1000<<",0,0,-200,7800,0]\n";
+        return 0;
+    }
     if (argc==2 && std::string(argv[1])=="--startup-state") {
         // A short ascending physical arc is valid above the stop surface,
         // even when artificial backward startup history would cross it.

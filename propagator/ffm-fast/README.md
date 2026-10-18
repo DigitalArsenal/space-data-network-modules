@@ -42,6 +42,13 @@ nonelliptic states, unsupported GJ force families, and insufficient extra
 startup coverage retain standard RK78. If artificial GJ startup history
 crosses the reentry surface, RK resumes from the last accepted physical
 state and exact epoch; a stop on the physical trajectory remains a failure.
+GJ also hands off to adaptive RK before approaching reentry: below the
+equatorial Earth radius plus 150 km, RK uses a maximum two-second step.
+The 50 km buffer conservatively encloses the geodetic 100 km stop surface;
+it changes the numerical integration policy, not the physical stop altitude.
+The handoff preserves the accepted state, exact span clock, and remaining
+step budget. This prevents a fixed GJ grid from continuing a shallow
+atmospheric crossing that the reference resolves as reentry.
 GJ currently supports cannonball
 conical SRP without ECOM2, and NRLMSISE-00 drag without winds (or either
 force disabled). The shared variational/covariance execution path is unchanged.
@@ -201,14 +208,18 @@ penumbra-only graze candidates; unchanged standard T3 trajectories verify
 their accuracy and independently confirm the realized grazing geometry.
 An ascending state just above the reentry surface checks startup fallback
 after a nonzero alignment bridge against the same standard T3 forward arc.
+A descending state at three fractional epochs checks the valid exported arc,
+the GJ-to-RK handoff clock, and a named reentry failure without a trajectory.
+Its stop must agree within 2.1 s with the two-second-capped T3 reference;
+this stop-resolution check is separate from the unchanged 1 ms CA gate.
 
 [Fixture documentation](tests/fixtures/README.md) gives the independent
 truth settings, units, TT handling, tolerance rationale, and one-command
 regeneration. The E2E prints readable tables and one final JSON record;
 exit status 0 means every required check passed.
 
-The Phase 2 artifact `b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15`
-passed this E2E on Node 25.4.0: FIT 8/8, SCREEN 8/8, 436,108 direct
+The initial Phase 2 artifact `b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15`
+passed the then-current E2E on Node 25.4.0: FIT 8/8, SCREEN 8/8, 436,108 direct
 dense-state samples, 28 regime-boundary cases, five independently realized
 penumbra-only grazes, byte-identical batch/cold results, and startup fallback.
 Maximum exported-PPE errors were 2.500 mm through one day and
@@ -216,6 +227,12 @@ Maximum exported-PPE errors were 2.500 mm through one day and
 added at most 45.414 micrometers. Farm carry/invalidation also retained
 identical output for eight sources in each implementation, including
 compaction, deletion, and repopulation.
+
+The subsequent full-catalog run exposed one extra hourly trajectory for
+NORAD 49158. Standard T3 stopped it at 2026-10-05 09:54:03 UTC, while this
+initial GJ candidate continued to 10:28:40 UTC. That candidate remains
+unlanded; the near-reentry handoff and extended E2E require renewed
+artifact qualification and full-catalog measurements.
 
 [Phase 2 qualification](docs/phase2-qualification.json) records all seed
 and event errors, truth provenance, and raw evidence hashes. Both built

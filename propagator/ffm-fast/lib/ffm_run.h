@@ -59,16 +59,32 @@ class Run {
 
     // Preserve the accepted physical state and span clock when GJ yields to
     // RK. The caller decides why the transition is needed.
-    void resumeRkFromGj() {
+    void resumeRkFromGj(bool nearReentry=false) {
         const auto y=gj_->state();
         rkOffset_=gj_->time();
         const auto at=epoch_.plusSeconds(rkOffset_);
         auto config=config_;
         config.maxSteps-=gj_->acceptedSteps();
+        if (nearReentry) {
+            // The physical stop is evaluated at force samples. Resolve the
+            // approach with the reference's two-second cap, before a fixed
+            // GJ step can skip or poorly resolve a shallow atmospheric dip.
+            config.maxStep=std::min(config.maxStep,2.0);
+            config.initialStep=std::min(config.initialStep,config.maxStep);
+            config.minStep=std::min(config.minStep,config.maxStep);
+        }
         astro::StateVector initial({y[0],y[1],y[2]},{y[3],y[4],y[5]},at.jdTdb());
         forces_.integrationEpochTT=at;
         gj_.reset();
         rk_=std::make_unique<astro::Integrator::ForceRun>(initial,1,config,forces_,true);
+    }
+    bool nearReentry() const {
+        const auto& y=gj_->state();
+        // A sphere around the equatorial radius conservatively encloses the
+        // geodetic stop surface at every latitude. The 50 km buffer is a
+        // numerical handoff margin, not a change to the 100 km physical stop.
+        constexpr double radius=astro::RE_EARTH+astro::REENTRY_ALTITUDE_KM+50.0;
+        return y[0]*y[0]+y[1]*y[1]+y[2]*y[2]<radius*radius;
     }
 public:
     static double candidateGjGrid(const astro::StateVector& reference,int direction,
@@ -92,6 +108,7 @@ public:
     bool running(double target) const { return gj_?gj_->running(target):sundman_?sundman_->running(target):rk_->run().running(target-rkOffset_); }
     bool attempt(double target) {
         if (sundman_) return sundman_->attempt(target);
+        if (gj_ && nearReentry()) resumeRkFromGj(true);
         if (gj_) {
             const bool accepted=gj_->attempt(target);
             if (accepted || !gj_->needsRkFallback()) return accepted;

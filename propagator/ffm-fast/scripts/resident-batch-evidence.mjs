@@ -264,3 +264,52 @@ export async function startupDomainEvidence() {
       referenceIntegrator: T3, actualPolicy: actual.COMMENT, ppePositionM, ppeVelocityMps, statePositionM, stateVelocityMps };
   } finally { await fast?.h.destroy(); await reference.h.destroy(); }
 }
+
+export async function reentryDomainEvidence() {
+  const { binary, run } = boundaryGenerator();
+  const state = JSON.parse(run(binary, ['--reentry-state']));
+  const rows = [];
+  // Different fractional epochs exercise the shared GJ lattice and the
+  // transition's span-relative clock. The two-second T3 cap sets the stop
+  // comparison's resolution; this is not a conjunction-TCA tolerance.
+  for (const offset of [.125, 3.125, 7.125]) {
+    const handle = 21000, prefixSeconds = 300;
+    const fixtures = [{ label: 'descending through GJ handoff', handle, norad: handle,
+      state, epochOffset: offset, cdAm: .02, crAm: .02 }];
+    const reference = await host(standardRoot, T3, false, fixtures);
+    let fast;
+    try {
+      const expected = (await describe(reference, await prepare(reference, [handle], offset, prefixSeconds), [handle])).get(handle).ppe;
+      fast = await host(packageRoot, FAST_CATALOG_INTEGRATOR, false, fixtures);
+      const actual = (await describe(fast, await prepare(fast, [handle], offset, prefixSeconds), [handle])).get(handle).ppe;
+      let positionM = 0, velocityMps = 0;
+      for (let elapsed = 0; elapsed <= prefixSeconds; ++elapsed) {
+        const epoch = isoAfter(pin.fixtureEpochTt, offset + elapsed);
+        const a = evaluatePpe(actual, epoch), b = evaluatePpe(expected, epoch);
+        positionM = Math.max(positionM, Math.hypot(...a.position.map((x, i) => x - b.position[i])) * 1000);
+        velocityMps = Math.max(velocityMps, Math.hypot(...a.velocity.map((x, i) => x - b.velocity[i])) * 1000);
+      }
+      assert(positionM <= .01 && velocityMps <= .001,
+        `Near-reentry valid prefix: ${JSON.stringify({ offset, positionM, velocityMps })}`);
+      const stop = async (host) => {
+        const response = await host.h.invoke({ methodId: 'prepare_trajectory_segments', inputs: [frame('request', 'PREPARE_REQUEST',
+          makeTable('PRWPrepareRequest', { INSTANCE: host.instance, SOURCE_HANDLES: [handle],
+            START_EPOCH: catalog.instant(isoAfter(pin.fixtureEpochTt, offset), 'TT'), DURATION_SECONDS: 900,
+            PROFILE: 'conjunction-screening' }))] });
+        assert.notEqual(response.statusCode, 0, 'A trajectory through reentry must fail.');
+        assert.equal(response.errorCode, 'reentry', response.errorMessage);
+        assert.equal(response.outputs.length, 0, 'A failed reentry request must not emit a trajectory.');
+        const utc = /at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?) UTC/.exec(response.errorMessage)?.[1];
+        assert(utc, response.errorMessage);
+        return { utc, reason: response.errorMessage };
+      };
+      const referenceStop = await stop(reference), fastStop = await stop(fast);
+      const stopDeltaSeconds = Math.abs(Date.parse(`${fastStop.utc}Z`) - Date.parse(`${referenceStop.utc}Z`)) / 1000;
+      assert(stopDeltaSeconds <= 2.1, `Near-reentry stop differs from T3: ${JSON.stringify({ offset, stopDeltaSeconds, referenceStop, fastStop })}`);
+      rows.push({ offsetSeconds: offset, prefixSeconds, positionM, velocityMps, stopDeltaSeconds,
+        actualPolicy: actual.COMMENT, referenceStop, fastStop });
+    } finally { await fast?.h.destroy(); await reference.h.destroy(); }
+  }
+  return { ok: true, referenceIntegrator: T3, initialStateSource: 'C++ Cartesian descending elliptic state above the handoff sphere',
+    initialStateMeters: state, handoffBufferKm: 50, physicalStopKm: 100, maximumRkStepSeconds: 2, rows };
+}
