@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// The single FFM Fast E2E: resident WASM propagation, independent study truth,
+// The single FFM E2E: resident WASM propagation, independent study truth,
 // fixed-step implementation agreement, CPU measurements, and source integrity.
 // JS only encodes/decodes, selects sample times, compares outputs, and times calls.
 // All propagation is C++/WASM. PPE evaluation is the standard's test reader.
 import fs from 'node:fs';
+import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -181,6 +182,10 @@ const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 
 async function main() {
+  assert(!fs.existsSync(path.resolve(packageRoot, '../ffm-fast')), 'Retired sibling directory remains');
+  const manifest=readJson(path.join(packageRoot, 'plugin-manifest.json'));
+  assert.equal(manifest.pluginId, 'com.orbpro.ffm');assert.equal(manifest.version, '2.0.0');
+  assert.equal(sha(fs.readFileSync(path.join(packageRoot,'dist/browser/module.wasm'))), sha(fs.readFileSync(path.join(packageRoot,'dist/isomorphic/module.wasm'))));
   const hashes = integrity(), loadStart = os.loadavg(), rows = [];
   const truthMetadata = readJson(path.join(fixtureRoot, 'truth/truth.json'));
   if (truthMetadata.epoch !== standard.fixtureEpochUtc || truthMetadata.epochTt !== standard.fixtureEpochTt
@@ -197,7 +202,7 @@ async function main() {
         || sha(fs.readFileSync(truthPath)) !== provenance.outputSha256)
       throw new Error(`${seed.label} truth fixture differs from its recorded provenance; regenerate the fixtures.`);
   }
-  console.log(`FFM Fast ${opt.measure ? `lever ${opt.measure} measurement` : 'phase 2 E2E'}; Node ${process.version}; ${seeds.length} seeds; 3 days; GCRF; UTC epoch ${standard.fixtureEpochUtc}`);
+  console.log(`FFM 2.0 ${opt.measure ? `lever ${opt.measure} measurement` : 'consolidation E2E'}; Node ${process.version}; ${seeds.length} seeds; 3 days; GCRF; UTC epoch ${standard.fixtureEpochUtc}`);
   console.log('Resident path: ingest_state -> prepare_trajectory_segments -> describe_trajectory_segments; PPE/truth coordinate: TT.');
   console.log(`Truth samples every ${TRUTH_SAMPLE_SECONDS} s plus all native perigee and weather stops, including resident segment interiors.`);
   console.log('Fixed RK78: initial = minimum = maximum 60 s, tolerance 1; CPU: defaults interleaved, min of 2, thread user + system.');
@@ -292,12 +297,12 @@ async function main() {
   if (opt.output) fs.writeFileSync(opt.output, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`Standard untouched: PASS; fork base: PASS; load average ${result.loadAverageEnd.map((x) => x.toFixed(2)).join(', ')}.`);
   for (const failure of failures) console.log(`FAIL: ${failure}`);
-  console.log(`${result.ok ? 'PASS' : 'FAIL'} FFM Fast ${opt.measure ? `lever ${opt.measure}` : 'phase 2 E2E'}`);
+  console.log(`${result.ok ? 'PASS' : 'FAIL'} FFM 2.0 ${opt.measure ? `lever ${opt.measure}` : 'consolidation E2E'}`);
   console.log(JSON.stringify(result));
   if (!result.ok) process.exitCode = 1;
 }
 try { await main(); } catch (error) {
-  console.error(`FAIL FFM Fast: ${error.stack ?? error}`);
+  console.error(`FAIL FFM 2.0: ${error.stack ?? error}`);
   console.log(JSON.stringify({ ok: false, fatal: error.message }));
   process.exitCode = 1;
 }

@@ -1,0 +1,290 @@
+{
+  "moduleId": "com.orbpro.ffm",
+  "version": "2.0.0",
+  "supersedesTask": "modules-ffm-fast-gj8-batching-20261017",
+  "wasmSha256": "eb83a5c68e8cf6c3e22fa24399c3f4ec6829493351b7d14c573c827260d25b09",
+  "numerical": {
+    "fitPassed": 8,
+    "screenPassed": 8,
+    "regimes": 8,
+    "denseSamples": 436108,
+    "maximumPpePositionOneDayMeters": 0.0024999941452636633,
+    "maximumPpePositionThreeDaysMeters": 0.039564196098413856,
+    "maximumPpeVelocityThreeDaysMps": 0.00011801280639294097,
+    "reentryCases": 3,
+    "reentryPassed": true,
+    "boundariesPassed": true,
+    "startupPassed": true,
+    "residentBatchPassed": true,
+    "evidenceArtifactSha256": "b4b21bb71ae91621cebc99d9a3af9bf4c46fbb15cbc7c60d4e8259139cddb16f",
+    "memoryOnlyRebuild": {
+      "beforeSha256": "b4b21bb71ae91621cebc99d9a3af9bf4c46fbb15cbc7c60d4e8259139cddb16f",
+      "afterSha256": "eb83a5c68e8cf6c3e22fa24399c3f4ec6829493351b7d14c573c827260d25b09",
+      "changedSections": [
+        5
+      ],
+      "codeSha256": "e1ea35b4b89f47c0b1d9fe5be4b8755a7c45cb04f76c3379fd5b0cf55c8aea79",
+      "dataSha256": "8e49efdcd6054c47b570722e5be8ce1fb02938cc3ff998aa33ff54a5d10775c2",
+      "initialBytes": 268435456,
+      "maximumBytes": 402653184,
+      "measuredPeakBytes": 268435456,
+      "headroomFactor": 1.5
+    },
+    "exactHeadGate": "The declared resident E2E runs again on the final candidate; see its stack gauntlet receipt."
+  },
+  "ca": {
+    "objects": 2000,
+    "days": 1,
+    "workers": 12,
+    "eventSet": {
+      "standard": {
+        "equal": true,
+        "missingPairs": [],
+        "extraPairs": [],
+        "countDifferences": []
+      },
+      "fast": {
+        "equal": true,
+        "missingPairs": [],
+        "extraPairs": [],
+        "countDifferences": []
+      }
+    },
+    "inDomain": {
+      "events": 71,
+      "fastFailures": 0,
+      "fastNoWorseMiss": 69,
+      "fastNoWorseTca": 71,
+      "standard": {
+        "maxMissMeters": 8.52843705486248,
+        "maxTcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "maxMissMeters": 0.1559667737710697,
+        "maxTcaSeconds": 4.023313522338867e-05
+      }
+    },
+    "outOfDomain": {
+      "events": 2,
+      "fastFailures": 0,
+      "fastNoWorseMiss": 2,
+      "fastNoWorseTca": 2,
+      "standard": {
+        "maxMissMeters": 14.984863714944368,
+        "maxTcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "maxMissMeters": 0.04416443754507782,
+        "maxTcaSeconds": 0
+      }
+    },
+    "thresholds": {
+      "missMeters": 1,
+      "tcaSeconds": 0.001,
+      "maximumPredictionAgeDays": 8
+    },
+    "candidateWasmSha256": "eb83a5c68e8cf6c3e22fa24399c3f4ec6829493351b7d14c573c827260d25b09",
+    "referenceWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+    "evidenceSha256": {
+      "baseline": "0efb855f51f0a4c0bce7c51d767013a9e43be4194c77c55ec078ef8d012b2d94",
+      "candidate": "9521838e2517d112d3bf68f55a633537d2f6e6dff3a85560c91ff63243f74961",
+      "reference": "68097987b7f9c70a2a8ac48cffc856827e3ddf8c1388774dd0829aa9b72798cc",
+      "provenance": "8ee46110c42871557c1ca76047414512a84c60608c374d665dfeec93a75649ce",
+      "pipeline": "3e6c663987a5e0ba71ad70c5a41602e7d648b77dab32192e35ef5e355e23d4d3"
+    },
+    "authenticated": {
+      "historicalSources": {
+        "analysis/conjunction-assessment/scripts/lib/ffmFarm.mjs": "5346ca04555781f9c8bbcc2ef085ef8a9f30ef53485c6ae8d2e1383556d6e3ab",
+        "analysis/conjunction-assessment/scripts/lib/ffmFarmWorker.mjs": "1d1d1f4200d21bbaf0d006eaee801f08f82b532e009dfd02494f267a1c06fafa",
+        "propagator/ffm/catalog.mjs": "d44198661f85d843b29881c6e8ae2eecc53c7a51ef5c5ad786d4dc48757d4744",
+        "propagator/ffm-fast/scripts/benchmark-catalog.mjs": "19c6a382794bd8313415d846c499c701a4d786e1c394f1858464dae4b98774c6"
+      },
+      "adapters": {
+        "reference-catalog.mjs": "dbcb153deaf2e293204356509429bdce270ec23ae770d0a869698a848c55f149",
+        "ffmFarm.mjs": "f62869ac94fbb9dad878e940d73e82a6de690a370e2aa0287244686b68ea4088",
+        "ffmFarmWorker.mjs": "1d1d1f4200d21bbaf0d006eaee801f08f82b532e009dfd02494f267a1c06fafa"
+      },
+      "pipeline": {
+        "analysis/epoch-state/dist/isomorphic/module.wasm": "659496dbd81f4ed5d9d575fa800557ab36aef581e27bfe28612a9cbbc9bdbcdf",
+        "analysis/epoch-state/plugin-manifest.json": "2fda7b2ce49a5de179b1dbe2066fc6ea02b243e895216d3da856065385dff26b",
+        "analysis/conjunction-assessment/dist/isomorphic/module.wasm": "efe591c14744d5cce48556371dfd0a0ab0b76ad70eb56fc309b41e5aee41c3dd",
+        "analysis/conjunction-assessment/plugin-manifest.json": "6f6853331e38bb712f883e4199a85fa49235a17541408718257f448e6be3d957"
+      }
+    }
+  },
+  "runtime": {
+    "ok": true,
+    "wasmSha256": "eb83a5c68e8cf6c3e22fa24399c3f4ec6829493351b7d14c573c827260d25b09",
+    "inputSha256": "a2ffe3dd650acbd24eb0f8ea0eb2bad49725a5baa7672fb64785a6c13d0471bc",
+    "parityObjects": 8,
+    "parityDurationSeconds": 7200,
+    "outputSha256": {
+      "browser": "edcffc942f92d2d98b7c57ccf4706e567101647d54447d5c34d617ebdf04a99c",
+      "native": "edcffc942f92d2d98b7c57ccf4706e567101647d54447d5c34d617ebdf04a99c",
+      "docker": "edcffc942f92d2d98b7c57ccf4706e567101647d54447d5c34d617ebdf04a99c"
+    },
+    "stateCount": 40,
+    "comparison": "entire PIV response stream, bitwise; zero ULP",
+    "runtime": "WasmEdge 0.16.4 (checked by each native host)",
+    "dockerImage": "sha256:78243b8146267a57e73eeb785286bf1ae01c1ce53d067176dddf829409a98111",
+    "browserIsolated": true,
+    "phone": {
+      "objects": 100,
+      "days": 1,
+      "peakLinearMemoryBytes": 268435456,
+      "initialBytes": 268435456,
+      "maximumBytes": 402653184,
+      "shared": true
+    }
+  },
+  "carry": [
+    {
+      "implementation": "ffm",
+      "workers": 2,
+      "workerPolicy": {
+        "requested": 2,
+        "availableCores": 28,
+        "selected": 2,
+        "autoCap": 16,
+        "reservedCores": 2
+      },
+      "update": {
+        "unchanged": 6,
+        "changed": 1,
+        "added": 1,
+        "deleted": 1,
+        "derived": 2,
+        "excluded": 0,
+        "deriveMs": 3.6391670000002705,
+        "ingestCpuS": 0.024080999999999998
+      },
+      "trajectories": 8,
+      "byteIdentical": true,
+      "invalidUpdatesPreservedCatalog": true,
+      "concurrentWindowSerialized": true,
+      "ppeSha256": "7866996d224d4c252e97fdf6fa78d8734d36f091874d449eefcdd08d224ee573",
+      "unchangedUpdateDerived": 0,
+      "deletedAll": 8,
+      "repopulated": 8,
+      "residency": [
+        {
+          "instances": 1,
+          "live": 4,
+          "retained": 4,
+          "maximumInstances": 2,
+          "compactions": 1
+        },
+        {
+          "instances": 1,
+          "live": 4,
+          "retained": 4,
+          "maximumInstances": 2,
+          "compactions": 1
+        }
+      ],
+      "carriedWindowCpuSeconds": 6.20399,
+      "coldWindowCpuSeconds": 6.686459000000001
+    }
+  ],
+  "sourceAuthentication": {
+    "base": "2888b6f65ab7690765afbc54ca0ae286ef4d1645",
+    "sources": {
+      "propagator/ffm-fast/lib/ffm_gj_clock.h": {
+        "landedSha256": "83eb0de3a4b1550a36984f8eb462f2ff544ce57e5d77cdb9725ac9faf27ffbe9",
+        "mergedSha256": "83eb0de3a4b1550a36984f8eb462f2ff544ce57e5d77cdb9725ac9faf27ffbe9",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gj_core.h": {
+        "landedSha256": "2cbd1e8c0583e1e7402d0abd73d7be634a54ee628f554fc779d768c5d3bfc593",
+        "mergedSha256": "2cbd1e8c0583e1e7402d0abd73d7be634a54ee628f554fc779d768c5d3bfc593",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gj_event_scan.h": {
+        "landedSha256": "c0549985557a7c3f4701846518cd325a89cfd8e250bb579686ce09bb1dec2ec8",
+        "mergedSha256": "c0549985557a7c3f4701846518cd325a89cfd8e250bb579686ce09bb1dec2ec8",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gj_forces.h": {
+        "landedSha256": "18d2a925528479d80c905273810b57a1a83737a69eebb2d27045eb98734c0b08",
+        "mergedSha256": "18d2a925528479d80c905273810b57a1a83737a69eebb2d27045eb98734c0b08",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gj_run.h": {
+        "landedSha256": "bae4cd6fdcaea90830bedfd43afb8bdedda6ea0f67500eeac59e802b024e699f",
+        "mergedSha256": "bae4cd6fdcaea90830bedfd43afb8bdedda6ea0f67500eeac59e802b024e699f",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gj_shadow.h": {
+        "landedSha256": "85538eac459182aa3d9a7050638753cd1da0ed8da4c8f6aea11cbe75858471af",
+        "mergedSha256": "85538eac459182aa3d9a7050638753cd1da0ed8da4c8f6aea11cbe75858471af",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gravity.cpp": {
+        "landedSha256": "b6c6b65388ae05e6d814799a277f1cb88599a87dd5d99343634b59f43519aeab",
+        "mergedSha256": "b6c6b65388ae05e6d814799a277f1cb88599a87dd5d99343634b59f43519aeab",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_gravity.h": {
+        "landedSha256": "89e0c02c49c26ac9e96e5ceb630a4033557dbf717e1504fd6368f2cf2025fbad",
+        "mergedSha256": "89e0c02c49c26ac9e96e5ceb630a4033557dbf717e1504fd6368f2cf2025fbad",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_interp.inc": {
+        "landedSha256": "67d4e1f9ac7bb1d270c6a38c11c84d1b3813e20228b9c1f800b5bb8b2c74cd7c",
+        "mergedSha256": "67d4e1f9ac7bb1d270c6a38c11c84d1b3813e20228b9c1f800b5bb8b2c74cd7c",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_run.h": {
+        "landedSha256": "b37389c10a91547b0aaddcc7880a9fc1c675deaeca47363d60775804852ad1d4",
+        "mergedSha256": "b37389c10a91547b0aaddcc7880a9fc1c675deaeca47363d60775804852ad1d4",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_sundman_run.h": {
+        "landedSha256": "2471f4c2b97d3cbad894508c5f66d494fa9c95ffb3bf0ca16627b84714b94271",
+        "mergedSha256": "2471f4c2b97d3cbad894508c5f66d494fa9c95ffb3bf0ca16627b84714b94271",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_tides.inc": {
+        "landedSha256": "d1aba4d029ecea79c4bee1acfa0e1f89c883ca183f5e3034c09926398ad7da93",
+        "mergedSha256": "d1aba4d029ecea79c4bee1acfa0e1f89c883ca183f5e3034c09926398ad7da93",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/ffm_time.inc": {
+        "landedSha256": "498e865b3981c99a1d80821d5cad0d9c14c445df432e4e5a09ab3c56495d5d35",
+        "mergedSha256": "498e865b3981c99a1d80821d5cad0d9c14c445df432e4e5a09ab3c56495d5d35",
+        "identical": true
+      },
+      "propagator/ffm-fast/lib/force_models.cpp": {
+        "landedSha256": "f9cf71b24284e93748397d76c1cda1a73086a46c6f0d88e5c347ea189a1c56af",
+        "mergedSha256": "f9cf71b24284e93748397d76c1cda1a73086a46c6f0d88e5c347ea189a1c56af",
+        "identical": true
+      },
+      "propagator/ffm-fast/src/cpp/include/ffm/resident_dynamics.h": {
+        "landedSha256": "c14ae4cffdc38ec056668e381e5cf63adc285c2f44ce7c25566fdb653b73d7ee",
+        "mergedSha256": "c14ae4cffdc38ec056668e381e5cf63adc285c2f44ce7c25566fdb653b73d7ee",
+        "identical": true
+      },
+      "propagator/ffm-fast/src/cpp/src/resident_dynamics.cpp": {
+        "landedSha256": "f4bd6198384499103cefd24e25e36a48e516382e36c3900177f0d533ac86e583",
+        "mergedSha256": "f4bd6198384499103cefd24e25e36a48e516382e36c3900177f0d533ac86e583",
+        "identical": true
+      },
+      "propagator/ffm-fast/src/ffm_plugin.cpp": {
+        "landedSha256": "03a090ecf8b1a0902b76a677abb46068cd712431a073f375d628e1e4d7b4a288",
+        "mergedSha256": "03a090ecf8b1a0902b76a677abb46068cd712431a073f375d628e1e4d7b4a288",
+        "identical": true
+      }
+    }
+  },
+  "commands": {
+    "e2e": "node propagator/ffm/scripts/e2e-ffm.mjs",
+    "runtime": "SDM_CHROME_BINARY=<Playwright chromium headless shell> FFM_PLAYWRIGHT_ROOT=<installed Playwright package root> node propagator/ffm/scripts/runtime-evidence.mjs <output.json>",
+    "ca": "node propagator/ffm/scripts/benchmark-catalog.mjs --catalog <2026-09-30 GP archive> --environment <PRW environment directory> --implementation ffm --objects 2000 --days 1 --screen --workers 12 --screen-workers 1 --out <output.json>"
+  },
+  "limits": [
+    "Accuracy cases use synthetic weather and a limited population; no full-catalog accuracy or speedup claim.",
+    "Phone budget measurement is committed browser WASM linear memory, not hardware RSS on a physical phone.",
+    "Cross-runtime proof covers 40 states, eight regimes, two forward hours and backward queries; FIT/SCREEN covers three days.",
+    "Host-01 catalog replacement and live console verification belong to the coordinator runbook; this lane makes public reads only."
+  ]
+}

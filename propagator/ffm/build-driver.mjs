@@ -37,4 +37,4 @@ if(compile&&path.basename(source)==='module.cpp'){
   // even for a relocatable link, so include LLVM's ABI archives at this step.
   run(config.linker,['-r',...objects,...config.exceptionLibraries,'-o',output]);
 }else if(compile){run(config.clangxx,[...args,...flags]);}
-else {run(config.clangxx,[...args.map(a=>a.startsWith('-Wl,--initial-memory=')?'-Wl,--initial-memory=268435456':a),...flags,...config.exceptionLibraries,'-Wl,--wrap=__wasm_call_ctors','-Wl,--strip-debug',...config.diagnosticExports.map(s=>`-Wl,--export=${s}`)]);}
+else {run(config.clangxx,[...args.map(a=>a.startsWith('-Wl,--initial-memory=')?'-Wl,--initial-memory=268435456':a.startsWith('-Wl,--max-memory=')?'-Wl,--max-memory=402653184':a),...flags,...config.exceptionLibraries,'-Wl,--wrap=__wasm_call_ctors','-Wl,--strip-debug',...config.diagnosticExports.map(s=>`-Wl,--export=${s}`)]);}

@@ -1,0 +1,1507 @@
+{
+  "thresholds": {
+    "missMeters": 1,
+    "tcaSeconds": 0.001,
+    "maximumPredictionAgeDays": 8
+  },
+  "events": [
+    {
+      "pair": "57023:64685",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.5081923096,
+      "referenceMissMeters": 2994.159997213637,
+      "primaryAgeDays": 3.7699044896289706,
+      "secondaryAgeDays": 3.8165091294795275,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.7526587397478579,
+        "tcaSeconds": 0.0004425644874572754
+      },
+      "fast": {
+        "missMeters": 9.056755834535579e-05,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.5131477593,
+      "referenceMissMeters": 3925.940754409786,
+      "primaryAgeDays": 3.8537742691114545,
+      "secondaryAgeDays": 3.763447219040245,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.6540690437345802,
+        "tcaSeconds": 0.0004023313522338867
+      },
+      "fast": {
+        "missMeters": 0.006098353383549693,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461317.578530953,
+      "referenceMissMeters": 2980.5697940525392,
+      "primaryAgeDays": 3.9191574626602232,
+      "secondaryAgeDays": 3.8288304125890136,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.699159392605452,
+        "tcaSeconds": 0.0004023313522338867
+      },
+      "fast": {
+        "missMeters": 0.006207072392498958,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 2,
+      "referenceTcaJd": 2461317.6439142493,
+      "referenceMissMeters": 1629.128251853498,
+      "primaryAgeDays": 3.9845407591201365,
+      "secondaryAgeDays": 3.894213709048927,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.7442444216417243,
+        "tcaSeconds": 0.0004425644874572754
+      },
+      "fast": {
+        "missMeters": 0.006315734574172893,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 3,
+      "referenceTcaJd": 2461317.709297324,
+      "referenceMissMeters": 155.0877998848908,
+      "primaryAgeDays": 4.049923833925277,
+      "secondaryAgeDays": 3.9595967838540673,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.6746787152340232,
+        "tcaSeconds": 0.0004425644874572754
+      },
+      "fast": {
+        "missMeters": 0.005500636170438611,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 4,
+      "referenceTcaJd": 2461317.774680799,
+      "referenceMissMeters": 1209.1313535337486,
+      "primaryAgeDays": 4.115307308733463,
+      "secondaryAgeDays": 4.024980258662254,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.8455897889050448,
+        "tcaSeconds": 0.0004425644874572754
+      },
+      "fast": {
+        "missMeters": 0.006483139286046935,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 5,
+      "referenceTcaJd": 2461317.8400640865,
+      "referenceMissMeters": 2201.4570332696253,
+      "primaryAgeDays": 4.180690596345812,
+      "secondaryAgeDays": 4.090363546274602,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.9085910428420902,
+        "tcaSeconds": 0.00048279762268066406
+      },
+      "fast": {
+        "missMeters": 0.006639493706188659,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 6,
+      "referenceTcaJd": 2461317.905447303,
+      "referenceMissMeters": 3280.271385525621,
+      "primaryAgeDays": 4.246073812711984,
+      "secondaryAgeDays": 4.155746762640774,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.9568180392830072,
+        "tcaSeconds": 0.00048279762268066406
+      },
+      "fast": {
+        "missMeters": 0.006747963908765087,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58493:59839",
+      "eventIndex": 7,
+      "referenceTcaJd": 2461317.9708304266,
+      "referenceMissMeters": 4573.028528396803,
+      "primaryAgeDays": 4.31145693641156,
+      "secondaryAgeDays": 4.22112988634035,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.0062121677328832,
+        "tcaSeconds": 0.0005230307579040527
+      },
+      "fast": {
+        "missMeters": 0.006855038163848803,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "68724:69623",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.5175664593,
+      "referenceMissMeters": 2957.3461874969303,
+      "primaryAgeDays": 3.781223889440298,
+      "secondaryAgeDays": 4.060477729421109,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.5551928591321484,
+        "tcaSeconds": 0.00020116567611694336
+      },
+      "fast": {
+        "missMeters": 0.0013187617705625598,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59415:67828",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.526903565,
+      "referenceMissMeters": 1576.7900844788871,
+      "primaryAgeDays": 3.919204395264387,
+      "secondaryAgeDays": 3.82886926503852,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.021421306289539643,
+        "tcaSeconds": 8.046627044677734e-05
+      },
+      "fast": {
+        "missMeters": 0.00028986212328163674,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59415:67828",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461317.5922882496,
+      "referenceMissMeters": 563.923675312439,
+      "primaryAgeDays": 3.984589079860598,
+      "secondaryAgeDays": 3.894253949634731,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.033332895446392286,
+        "tcaSeconds": 8.046627044677734e-05
+      },
+      "fast": {
+        "missMeters": 0.0002941158081739559,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59415:67828",
+      "eventIndex": 2,
+      "referenceTcaJd": 2461317.657672688,
+      "referenceMissMeters": 1306.4139412910629,
+      "primaryAgeDays": 4.049973518121988,
+      "secondaryAgeDays": 3.9596383878961205,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.04778340670372927,
+        "tcaSeconds": 8.046627044677734e-05
+      },
+      "fast": {
+        "missMeters": 0.00030252706847022637,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59415:67828",
+      "eventIndex": 3,
+      "referenceTcaJd": 2461317.723057389,
+      "referenceMissMeters": 2781.126247183755,
+      "primaryAgeDays": 4.115358219016343,
+      "secondaryAgeDays": 4.025023088790476,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.05574488136653599,
+        "tcaSeconds": 8.046627044677734e-05
+      },
+      "fast": {
+        "missMeters": 0.0002977519334308454,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59415:67828",
+      "eventIndex": 4,
+      "referenceTcaJd": 2461317.788442223,
+      "referenceMissMeters": 3880.100947292845,
+      "primaryAgeDays": 4.180743053089827,
+      "secondaryAgeDays": 4.09040792286396,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.0698547939709897,
+        "tcaSeconds": 8.046627044677734e-05
+      },
+      "fast": {
+        "missMeters": 0.0003013830437339493,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "41914:47448",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.5384251275,
+      "referenceMissMeters": 2098.7706538986718,
+      "primaryAgeDays": 3.9362770477309823,
+      "secondaryAgeDays": 3.8720595776103437,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.3507122916098524,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.015700348040354584,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.5442181104,
+      "referenceMissMeters": 860.61244993747,
+      "primaryAgeDays": 3.797758990433067,
+      "secondaryAgeDays": 3.88484462024644,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.1423494490048824,
+        "tcaSeconds": 0.0003218650817871094
+      },
+      "fast": {
+        "missMeters": 0.0046314906004454315,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461317.6096015987,
+      "referenceMissMeters": 2788.53192995549,
+      "primaryAgeDays": 3.8631424787454307,
+      "secondaryAgeDays": 3.950228108558804,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.4884158239788121,
+        "tcaSeconds": 0.00036209821701049805
+      },
+      "fast": {
+        "missMeters": 0.005777419357855251,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 2,
+      "referenceTcaJd": 2461318.1653604535,
+      "referenceMissMeters": 3867.1910762710295,
+      "primaryAgeDays": 4.4189013335853815,
+      "secondaryAgeDays": 4.505986963398755,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.2817201933298747,
+        "tcaSeconds": 0.0005230307579040527
+      },
+      "fast": {
+        "missMeters": 0.006778080676212994,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 3,
+      "referenceTcaJd": 2461318.230743838,
+      "referenceMissMeters": 2309.116057640762,
+      "primaryAgeDays": 4.484284718055278,
+      "secondaryAgeDays": 4.571370347868651,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.3790540117552155,
+        "tcaSeconds": 0.0005230307579040527
+      },
+      "fast": {
+        "missMeters": 0.006909318910402362,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 4,
+      "referenceTcaJd": 2461318.2961273375,
+      "referenceMissMeters": 816.4192414082023,
+      "primaryAgeDays": 4.549668217543513,
+      "secondaryAgeDays": 4.636753847356886,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.4656702567647244,
+        "tcaSeconds": 0.0005230307579040527
+      },
+      "fast": {
+        "missMeters": 0.00702477478853325,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 5,
+      "referenceTcaJd": 2461318.3615104277,
+      "referenceMissMeters": 900.4778933386503,
+      "primaryAgeDays": 4.615051307715476,
+      "secondaryAgeDays": 4.702136937528849,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.5359572141159106,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.0071052078184266065,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 6,
+      "referenceTcaJd": 2461318.426893282,
+      "referenceMissMeters": 2528.305699506716,
+      "primaryAgeDays": 4.680434162262827,
+      "secondaryAgeDays": 4.7675197920762,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.6243077460526365,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.007226043019727513,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59839:68004",
+      "eventIndex": 7,
+      "referenceTcaJd": 2461318.492275938,
+      "referenceMissMeters": 4062.2784701334094,
+      "primaryAgeDays": 4.745816817972809,
+      "secondaryAgeDays": 4.832902447786182,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.712390187521578,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.007338063486258761,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "57186:57646",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.55703357,
+      "referenceMissMeters": 2967.4196782115673,
+      "primaryAgeDays": 4.737987350206822,
+      "secondaryAgeDays": 3.8886900800280273,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.7350907802301663,
+        "tcaSeconds": 0.0003218650817871094
+      },
+      "fast": {
+        "missMeters": 1.0068276878882898e-05,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "18764:42282",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.562495142,
+      "referenceMissMeters": 3779.820616596888,
+      "primaryAgeDays": 5.056001112330705,
+      "secondaryAgeDays": 4.144415521994233,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.12096207772128764,
+        "tcaSeconds": 0.0002816319465637207
+      },
+      "fast": {
+        "missMeters": 0.039815751553305745,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "4382:42989",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.6283861855,
+      "referenceMissMeters": 4136.037947559204,
+      "primaryAgeDays": 3.935887085273862,
+      "secondaryAgeDays": 4.201323555316776,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.5635986685092575,
+        "tcaSeconds": 0.00024139881134033203
+      },
+      "fast": {
+        "missMeters": 0.006812020085817494,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "29827:29975",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.6305425377,
+      "referenceMissMeters": 4629.087228767537,
+      "primaryAgeDays": 4.048813317436725,
+      "secondaryAgeDays": 4.197085817810148,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.09226339831002406,
+        "tcaSeconds": 0.00024139881134033203
+      },
+      "fast": {
+        "missMeters": 0.03659501190759329,
+        "tcaSeconds": 4.023313522338867e-05
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "48790:82627",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.6335000764,
+      "referenceMissMeters": 4042.6924326042554,
+      "primaryAgeDays": 3.9415108365938067,
+      "secondaryAgeDays": 7.796618206426501,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.5844256951600073,
+        "tcaSeconds": 0.0005230307579040527
+      },
+      "fast": {
+        "missMeters": 0.0019400574710743967,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "48790:82627",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461317.7095224033,
+      "referenceMissMeters": 4318.476539401338,
+      "primaryAgeDays": 4.017533163540065,
+      "secondaryAgeDays": 7.87264053337276,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.6292603770880305,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.0020803532297577476,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "7182:22186",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.6469092295,
+      "referenceMissMeters": 4318.966678528224,
+      "primaryAgeDays": 4.179125239606947,
+      "secondaryAgeDays": 4.0239791492931545,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.02556631842890056,
+        "tcaSeconds": 0.00024139881134033203
+      },
+      "fast": {
+        "missMeters": 0.00016250339922407875,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "62617:64323",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.672440649,
+      "referenceMissMeters": 4889.666875436082,
+      "primaryAgeDays": 3.9673000490292907,
+      "secondaryAgeDays": 4.141802798956633,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.4909289637926122,
+        "tcaSeconds": 0.0012472271919250488
+      },
+      "fast": {
+        "missMeters": 0.05542834734023927,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "13458:30132",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.681464836,
+      "referenceMissMeters": 4663.549387342126,
+      "primaryAgeDays": 4.693222836125642,
+      "secondaryAgeDays": 3.973998276051134,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.03832795552261814,
+        "tcaSeconds": 0.00024139881134033203
+      },
+      "fast": {
+        "missMeters": 0.0010208297608187422,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "16194:61613",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.691079336,
+      "referenceMissMeters": 4900.784891262872,
+      "primaryAgeDays": 4.3439962160773575,
+      "secondaryAgeDays": 3.9923195661976933,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.029396350439128582,
+        "tcaSeconds": 0.00024139881134033203
+      },
+      "fast": {
+        "missMeters": 0.0004998647200409323,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58900:61775",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.7349420697,
+      "referenceMissMeters": 2296.236272343395,
+      "primaryAgeDays": 4.025998289696872,
+      "secondaryAgeDays": 4.167857989668846,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 4.142093337782171,
+        "tcaSeconds": 0.0006034970283508301
+      },
+      "fast": {
+        "missMeters": 0.004734839363209176,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "53475:54922",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.7857451285,
+      "referenceMissMeters": 3040.267095281709,
+      "primaryAgeDays": 5.0694866185076535,
+      "secondaryAgeDays": 4.035721978638321,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.673833761433343,
+        "tcaSeconds": 0.0008851289749145508
+      },
+      "fast": {
+        "missMeters": 0.11903826897423642,
+        "tcaSeconds": 4.023313522338867e-05
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "33396:36244",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.796993621,
+      "referenceMissMeters": 3520.4245936683155,
+      "primaryAgeDays": 10.011565251275897,
+      "secondaryAgeDays": 4.067584950942546,
+      "inDomain": false,
+      "standard": {
+        "missMeters": 2.035335238643711,
+        "tcaSeconds": 0.0008046627044677734
+      },
+      "fast": {
+        "missMeters": 0.03716624885100828,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "1608:57767",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.8009671755,
+      "referenceMissMeters": 3232.0138807855446,
+      "primaryAgeDays": 4.030912525486201,
+      "secondaryAgeDays": 4.593128775712103,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.01272523081934196,
+        "tcaSeconds": 0.0002816319465637207
+      },
+      "fast": {
+        "missMeters": 0.00014838249398962944,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "1608:57767",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461317.909295009,
+      "referenceMissMeters": 4272.405179480695,
+      "primaryAgeDays": 4.139240358956158,
+      "secondaryAgeDays": 4.70145660918206,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.08982025423665618,
+        "tcaSeconds": 0.0002816319465637207
+      },
+      "fast": {
+        "missMeters": 0.0007080260120346793,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "59577:100269",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.895459253,
+      "referenceMissMeters": 910.6146299515822,
+      "primaryAgeDays": 4.663015662692487,
+      "secondaryAgeDays": 4.145436102990061,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.3908851129585855,
+        "tcaSeconds": 0.0006839632987976074
+      },
+      "fast": {
+        "missMeters": 0.08247374256279727,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "37483:43912",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.913267297,
+      "referenceMissMeters": 2491.3681788467825,
+      "primaryAgeDays": 4.18553509702906,
+      "secondaryAgeDays": 5.584333467297256,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.5529860723790989,
+        "tcaSeconds": 0.00036209821701049805
+      },
+      "fast": {
+        "missMeters": 0.022811763458321366,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "20308:22812",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.9178010765,
+      "referenceMissMeters": 3171.9074473473815,
+      "primaryAgeDays": 15.20935186650604,
+      "secondaryAgeDays": 4.263838946353644,
+      "inDomain": false,
+      "standard": {
+        "missMeters": 14.984863714944368,
+        "tcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "missMeters": 0.04416443754507782,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "45535:57582",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.932696778,
+      "referenceMissMeters": 3367.429898727432,
+      "primaryAgeDays": 4.511702657677233,
+      "secondaryAgeDays": 4.200774088036269,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.009736850204717484,
+        "tcaSeconds": 0.00048279762268066406
+      },
+      "fast": {
+        "missMeters": 0.048658806310868385,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": false,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "63376:100080",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.939530285,
+      "referenceMissMeters": 2799.257373825196,
+      "primaryAgeDays": 4.299948455300182,
+      "secondaryAgeDays": 4.833530735224485,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.2122978771203634,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.01939906888310361,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "25042:37400",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.950426615,
+      "referenceMissMeters": 4050.8144076941494,
+      "primaryAgeDays": 4.639759774785489,
+      "secondaryAgeDays": 5.518141034990549,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.5670517502894654,
+        "tcaSeconds": 0.00036209821701049805
+      },
+      "fast": {
+        "missMeters": 0.0110950499347382,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "56034:64532",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.9902874227,
+      "referenceMissMeters": 3871.4378827529204,
+      "primaryAgeDays": 4.460465752519667,
+      "secondaryAgeDays": 4.3305898825638,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.0112013601037688,
+        "tcaSeconds": 0.00036209821701049805
+      },
+      "fast": {
+        "missMeters": 7.871432399042533e-05,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "56034:64532",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461318.0884567834,
+      "referenceMissMeters": 2515.271076156032,
+      "primaryAgeDays": 4.558635113295168,
+      "secondaryAgeDays": 4.4287592433393,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.230069646308948,
+        "tcaSeconds": 0.0004023313522338867
+      },
+      "fast": {
+        "missMeters": 3.2383008147007786e-05,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "37661:52716",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.992018991,
+      "referenceMissMeters": 2657.3631928202344,
+      "primaryAgeDays": 4.2544454713352025,
+      "secondaryAgeDays": 5.088177401106805,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.04250557520526854,
+        "tcaSeconds": 0.0003218650817871094
+      },
+      "fast": {
+        "missMeters": 0.0018902546280514798,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "55046:100020",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461317.999059821,
+      "referenceMissMeters": 1560.5779862910326,
+      "primaryAgeDays": 4.7485480909235775,
+      "secondaryAgeDays": 4.249036671128124,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.10357298978624385,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.012586349630510085,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "31430:38262",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.001637407,
+      "referenceMissMeters": 1992.744139467254,
+      "primaryAgeDays": 4.334249047096819,
+      "secondaryAgeDays": 4.291081987321377,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.003217477362113641,
+        "tcaSeconds": 0.0002816319465637207
+      },
+      "fast": {
+        "missMeters": 0.03517384244605637,
+        "tcaSeconds": 4.023313522338867e-05
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": false,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "2940:30387",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.0160375647,
+      "referenceMissMeters": 4823.019539012417,
+      "primaryAgeDays": 4.40715551469475,
+      "secondaryAgeDays": 4.707491084933281,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.04512570193855936,
+        "tcaSeconds": 0.0003218650817871094
+      },
+      "fast": {
+        "missMeters": 0.00401366372625489,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "51991:69623",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.0393575886,
+      "referenceMissMeters": 3119.51416721772,
+      "primaryAgeDays": 4.303015018813312,
+      "secondaryAgeDays": 4.384570008609444,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.035334740306097956,
+        "tcaSeconds": 4.023313522338867e-05
+      },
+      "fast": {
+        "missMeters": 0.00031389119976665825,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "63318:100514",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.0464510936,
+      "referenceMissMeters": 4907.849331939367,
+      "primaryAgeDays": 4.6072504334151745,
+      "secondaryAgeDays": 4.296427943743765,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.5750025161669328,
+        "tcaSeconds": 0.0010862946510314941
+      },
+      "fast": {
+        "missMeters": 0.03192534925892687,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "53249:65796",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.064044283,
+      "referenceMissMeters": 3776.0986668935498,
+      "primaryAgeDays": 4.369994242675602,
+      "secondaryAgeDays": 4.47137919254601,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.23717220573826125,
+        "tcaSeconds": 0.0008046627044677734
+      },
+      "fast": {
+        "missMeters": 0.0012679428377850854,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "33396:270342",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.0852592858,
+      "referenceMissMeters": 4175.117490851911,
+      "primaryAgeDays": 4.6169897257350385,
+      "secondaryAgeDays": 4.355850615538657,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.2619133020116351,
+        "tcaSeconds": 0.0003218650817871094
+      },
+      "fast": {
+        "missMeters": 0.009741084194502037,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "17035:31717",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.1031688186,
+      "referenceMissMeters": 3822.385436098727,
+      "primaryAgeDays": 6.14525156840682,
+      "secondaryAgeDays": 4.340897338464856,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.29006262704206165,
+        "tcaSeconds": 0.0004023313522338867
+      },
+      "fast": {
+        "missMeters": 0.0021722059505009383,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "42989:50032",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.1123638717,
+      "referenceMissMeters": 4509.2920700461145,
+      "primaryAgeDays": 4.542306181509048,
+      "secondaryAgeDays": 4.685301241464913,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.49335449283717026,
+        "tcaSeconds": 0.0004023313522338867
+      },
+      "fast": {
+        "missMeters": 0.010677239869437471,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "61695:63273",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.1472305744,
+      "referenceMissMeters": 4527.207381279662,
+      "primaryAgeDays": 4.476749134249985,
+      "secondaryAgeDays": 4.714958364609629,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 2.7197875217152614,
+        "tcaSeconds": 0.0007241964340209961
+      },
+      "fast": {
+        "missMeters": 0.12669480318618298,
+        "tcaSeconds": 4.023313522338867e-05
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "61943:63014",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.159255699,
+      "referenceMissMeters": 3014.9004026673715,
+      "primaryAgeDays": 5.800278718583286,
+      "secondaryAgeDays": 4.466132208704948,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 8.52843705486248,
+        "tcaSeconds": 0.0008448958396911621
+      },
+      "fast": {
+        "missMeters": 0.1559667737710697,
+        "tcaSeconds": 4.023313522338867e-05
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "45331:270055",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.2128930897,
+      "referenceMissMeters": 922.1517646290526,
+      "primaryAgeDays": 4.498543589841574,
+      "secondaryAgeDays": 4.49738743994385,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.001607679694188846,
+        "tcaSeconds": 0.0002816319465637207
+      },
+      "fast": {
+        "missMeters": 0.0002473031066756448,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "56963:100620",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.2313290173,
+      "referenceMissMeters": 4583.864983785496,
+      "primaryAgeDays": 4.47905822750181,
+      "secondaryAgeDays": 4.489184077363461,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.9922405308479938,
+        "tcaSeconds": 0.0012472271919250488
+      },
+      "fast": {
+        "missMeters": 0.07981476175791613,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "58708:63551",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.245171661,
+      "referenceMissMeters": 4700.240124710775,
+      "primaryAgeDays": 4.506324140820652,
+      "secondaryAgeDays": 4.514720131177455,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 5.312652897994667,
+        "tcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "missMeters": 0.018951574294078455,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "43099:60036",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.2823729427,
+      "referenceMissMeters": 3502.843015868149,
+      "primaryAgeDays": 4.591746112797409,
+      "secondaryAgeDays": 4.541573332622647,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.18153328781136224,
+        "tcaSeconds": 0.0006437301635742188
+      },
+      "fast": {
+        "missMeters": 0.002917925597557769,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "49771:66937",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.336720191,
+      "referenceMissMeters": 4663.377814625529,
+      "primaryAgeDays": 4.979693450964987,
+      "secondaryAgeDays": 5.083610861096531,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.3456814083019708,
+        "tcaSeconds": 0.0007644295692443848
+      },
+      "fast": {
+        "missMeters": 0.0003164897234455566,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "49771:66937",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461318.4018544466,
+      "referenceMissMeters": 3550.126780017347,
+      "primaryAgeDays": 5.044827706646174,
+      "secondaryAgeDays": 5.148745116777718,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.358897382187024,
+        "tcaSeconds": 0.0008046627044677734
+      },
+      "fast": {
+        "missMeters": 0.00031926792644298985,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "49771:66937",
+      "eventIndex": 2,
+      "referenceTcaJd": 2461318.4669891396,
+      "referenceMissMeters": 1623.3467530069415,
+      "primaryAgeDays": 5.10996239958331,
+      "secondaryAgeDays": 5.213879809714854,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.345909826918387,
+        "tcaSeconds": 0.0008448958396911621
+      },
+      "fast": {
+        "missMeters": 0.0003143386818464933,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "20197:40552",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.3489993457,
+      "referenceMissMeters": 1498.3866130622062,
+      "primaryAgeDays": 4.720486185513437,
+      "secondaryAgeDays": 4.630322965793312,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.013642413536899767,
+        "tcaSeconds": 0.0002816319465637207
+      },
+      "fast": {
+        "missMeters": 0.0001158542536359164,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "45201:46505",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.3888827004,
+      "referenceMissMeters": 4471.624767020247,
+      "primaryAgeDays": 4.662883760407567,
+      "secondaryAgeDays": 5.011372250504792,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.571250987222811,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.009335676189948572,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "48359:68854",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.416924473,
+      "referenceMissMeters": 3982.781236996691,
+      "primaryAgeDays": 4.92478832276538,
+      "secondaryAgeDays": 4.823751642834395,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.03344836816768293,
+        "tcaSeconds": 0.00048279762268066406
+      },
+      "fast": {
+        "missMeters": 0.0008881389353518898,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "48359:68854",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461318.449537871,
+      "referenceMissMeters": 4562.181912623585,
+      "primaryAgeDays": 4.957401720806956,
+      "secondaryAgeDays": 4.856365040875971,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.01878798560846917,
+        "tcaSeconds": 0.0004425644874572754
+      },
+      "fast": {
+        "missMeters": 0.0003777147503569722,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "60488:100487",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.4303567144,
+      "referenceMissMeters": 3196.4095230150774,
+      "primaryAgeDays": 4.874017124529928,
+      "secondaryAgeDays": 4.6803335645236075,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.4741953967140944,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.003751430620013707,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "60488:100487",
+      "eventIndex": 1,
+      "referenceTcaJd": 2461318.462642158,
+      "referenceMissMeters": 4325.823794730295,
+      "primaryAgeDays": 4.906302568037063,
+      "secondaryAgeDays": 4.712619008030742,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 1.0021491608003998,
+        "tcaSeconds": 0.0005632638931274414
+      },
+      "fast": {
+        "missMeters": 0.0025168726251649787,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    },
+    {
+      "pair": "53870:100420",
+      "eventIndex": 0,
+      "referenceTcaJd": 2461318.487821477,
+      "referenceMissMeters": 3421.102745997889,
+      "primaryAgeDays": 5.345641897059977,
+      "secondaryAgeDays": 5.625657447148114,
+      "inDomain": true,
+      "standard": {
+        "missMeters": 0.1635004272925471,
+        "tcaSeconds": 0.0005230307579040527
+      },
+      "fast": {
+        "missMeters": 0.0004590004778037837,
+        "tcaSeconds": 0
+      },
+      "fastPass": true,
+      "fastNoWorseMiss": true,
+      "fastNoWorseTca": true
+    }
+  ],
+  "sigmaDiagnostic": {
+    "acceptanceGate": false,
+    "modelSha256": "d705ffcb16da10b9eb9af1afd830d79172723183f32e03e7935f603dadeb2072",
+    "standard": {
+      "eventsCovered": 71,
+      "maximumMissSigmaFraction": 0.028027533200947537,
+      "maximumTcaDisplacementSigmaFraction": 0.06183928888789873,
+      "minimumCombinedSigmaMeters": 270.4079646112855,
+      "missing": [
+        {
+          "pair": "33396:36244",
+          "reason": "E14 has no matching regime/age covariance"
+        },
+        {
+          "pair": "20308:22812",
+          "reason": "E14 has no matching regime/age covariance"
+        }
+      ],
+      "modelId": "e14-s3-0e678383cfbd"
+    },
+    "fast": {
+      "eventsCovered": 71,
+      "maximumMissSigmaFraction": 0.0005125633104861812,
+      "maximumTcaDisplacementSigmaFraction": 0.001623848577015706,
+      "minimumCombinedSigmaMeters": 270.4079646112855,
+      "missing": [
+        {
+          "pair": "33396:36244",
+          "reason": "E14 has no matching regime/age covariance"
+        },
+        {
+          "pair": "20308:22812",
+          "reason": "E14 has no matching regime/age covariance"
+        }
+      ],
+      "modelId": "e14-s3-0e678383cfbd"
+    }
+  }
+}

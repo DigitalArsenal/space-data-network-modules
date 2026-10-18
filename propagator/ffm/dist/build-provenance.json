@@ -7,8 +7,8 @@
   "flags": [
     "-msimd128"
   ],
-  "sha256": "b4b21bb71ae91621cebc99d9a3af9bf4c46fbb15cbc7c60d4e8259139cddb16f",
-  "bytes": 2208149,
+  "sha256": "eb83a5c68e8cf6c3e22fa24399c3f4ec6829493351b7d14c573c827260d25b09",
+  "bytes": 2208148,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/worktrees/OrbPro--orbpro-sun-surface-shader-20261016/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
@@ -62,5 +62,5 @@
   "standardWasmExceptions": true,
   "legacyRuntimeCompiled": false,
   "debugInfo": "stripped",
-  "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and supplies LLVM exception ABI archives and the preexisting 256 MiB initial memory, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation."
+  "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and supplies LLVM exception ABI archives and 256 MiB initial / 384 MiB maximum memory (100 objects x1 day measured 256 MiB; 1.5x headroom), idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation."
 }
