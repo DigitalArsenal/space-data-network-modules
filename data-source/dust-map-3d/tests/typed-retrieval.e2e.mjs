@@ -82,7 +82,9 @@ check('every request is a GET HttpRequest naming one range within MAX_BYTES', ()
     assert.ok(m && r.url.startsWith(dustSource.url), r.url);
     assert.equal(r.headers.Range, `bytes=${m[1]}-${m[2]}`);
     assert.equal(r.maxBytes, Number(m[2]) - Number(m[1]) + 1);
-    assert.ok(r.maxBytes <= 48 * 1024 * 1024 && r.timeoutMs > 0, JSON.stringify(r));
+    // Every range fits the node's 5-minute http.request ceiling: at most the
+    // 8 MiB table range, shell ranges of 6 MiB, and a 300 s timeout.
+    assert.ok(r.maxBytes <= 8 * 1024 * 1024 && r.timeoutMs === 300000, JSON.stringify(r));
   }
 });
 check('61 size-prefixed $PCE rows, one per z plane', () => {

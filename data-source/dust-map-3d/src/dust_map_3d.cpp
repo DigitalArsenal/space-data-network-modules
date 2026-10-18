@@ -23,7 +23,7 @@
 //   plan_dust     the primary and MEAN headers;
 //   advance (1)   the STD header, which locates the tables after it;
 //   advance (2)   the radial tables and the integrated inner 68.8 pc sphere;
-//   advance (3-12) the MEAN shells, 48 per stage in three 48 MiB ranges;
+//   advance (3-12) the MEAN shells, 48 per stage in 24 ranges of 6 MiB;
 //   build_dust    the last 36 shells, then the rows, the ingest meta and the
 //                 report. 1.63 GB of ranges in all; STD data is never read.
 // Each voxel is the volume-weighted mean of every HEALPix sample whose centre
@@ -59,10 +59,15 @@ constexpr const char* frameText = "heliocentric Galactic Cartesian, kpc: +X towa
 
 constexpr uint32_t kNside = 256, kPixels = 12u * kNside * kNside, kShells = 516;
 constexpr size_t kShellBytes = size_t(kPixels) * 4;
-constexpr uint32_t kShellsPerRange = 16, kRangesPerStage = 3, kShellsPerStage = kShellsPerRange * kRangesPerStage;
+// A range is two shells (6 MiB): every request must finish inside the node's
+// 5-minute http.request ceiling (sdn caps httpCapMaxTimeout), and host-01 reads
+// Zenodo at 31-120 KB/s (2026-10-18), where 48 MiB never finished.
+constexpr uint32_t kShellsPerRange = 2, kRangesPerStage = 24, kShellsPerStage = kShellsPerRange * kRangesPerStage;
+constexpr uint32_t kRequestTimeoutMs = 300000;  // the node's ceiling
 constexpr uint32_t kFirstChunkStage = 4, kBuildStage = 14;  // 516 = 10 x 48 + 36
 constexpr size_t kHeaderBytes = 8 * 2880, kTailBytes = 8u * 1024u * 1024u;
-constexpr size_t maxRangeBytes = 48u * 1024u * 1024u, maxControlBytes = 32u * 1024u * 1024u;
+constexpr size_t maxRangeBytes = kTailBytes;  // the table range; a shell range is 6 MiB
+constexpr size_t maxControlBytes = 32u * 1024u * 1024u;
 // The output grid: 125 x 125 x 61 voxels of 20 pc about the Sun.
 constexpr uint32_t kNx = 125, kNy = 125, kNz = 61;
 constexpr double kSpacingPc = 20, kMinXPc = -1250, kMinYPc = -1250, kMinZPc = -610;
@@ -122,7 +127,7 @@ std::vector<uint8_t> rangeRequest(size_t first, size_t last) {
       R::CreateHeaderDirect(b, "Range", ("bytes=" + range).c_str()),
       R::CreateHeaderDirect(b, "If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT")};
   R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", (std::string(sourceUrl) + "&sdn-range=" + range).c_str(), &headers,
-                                                           nullptr, 900000, uint64_t(last - first + 1)));
+                                                           nullptr, kRequestTimeoutMs, uint64_t(last - first + 1)));
   return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
