@@ -218,21 +218,25 @@ truth settings, units, TT handling, tolerance rationale, and one-command
 regeneration. The E2E prints readable tables and one final JSON record;
 exit status 0 means every required check passed.
 
-The initial Phase 2 artifact `b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15`
-passed the then-current E2E on Node 25.4.0: FIT 8/8, SCREEN 8/8, 436,108 direct
+The corrected Phase 2 artifact `3b567ada2d019ba83b9ad208439cbe7ba8221c943f8c7d06de689708a5f943ff`
+passed the resident E2E on Node 25.4.0: FIT 8/8, SCREEN 8/8, 436,108 direct
 dense-state samples, 28 regime-boundary cases, five independently realized
-penumbra-only grazes, byte-identical batch/cold results, and startup fallback.
-Maximum exported-PPE errors were 2.500 mm through one day and
-39.564 mm / 0.118013 mm/s through three days. The fixed-step comparison
-added at most 45.414 micrometers. Farm carry/invalidation also retained
-identical output for eight sources in each implementation, including
-compaction, deletion, and repopulation.
+penumbra-only grazes, byte-identical batch/cold results, startup fallback,
+and three fractional-epoch reentry cases. Maximum exported-PPE errors
+were 2.500 mm through one day and 39.564 mm / 0.118013 mm/s through three
+days. The fixed-step comparison added at most 45.414 micrometers. Farm
+carry/invalidation retained identical output for eight sources in each
+implementation, including compaction, deletion, and repopulation.
 
-The subsequent full-catalog run exposed one extra hourly trajectory for
-NORAD 49158. Standard T3 stopped it at 2026-10-05 09:54:03 UTC, while this
-initial GJ candidate continued to 10:28:40 UTC. That candidate remains
-unlanded; the near-reentry handoff and extended E2E require renewed
-artifact qualification and full-catalog measurements.
+The initial full-catalog candidate emitted one extra hourly trajectory for
+NORAD 49158 and was not landed. Independent standard T3 confirmed its late
+reentry stop. With the automatic near-reentry RK handoff, the corrected
+candidate emits the same 33 hourly trajectories as T3 and stops within
+0.040234 ms of T3. A separate 204-object low-perigee replay matches
+standard's 12,681 trajectories, 31 reentries, and every object's window
+coverage. The three new E2E cases also reproduce T3's stop times. These
+replays verify the regression; full-catalog measurements are recorded
+separately and are not an accuracy proof for every catalog object.
 
 [Phase 2 qualification](docs/phase2-qualification.json) records all seed
 and event errors, truth provenance, and raw evidence hashes. Both built

@@ -1,19 +1,22 @@
 {
   "schemaVersion": 1,
   "dateUtc": "2026-10-18",
-  "sourceCommit": "74281fd4249933c7a79a0b699d7ca8ae27badaca",
+  "sourceCommit": "fb4bcf0462c33e646c29fa098679cb77bb921004",
   "standardWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
-  "fastWasmSha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+  "fastWasmSha256": "3b567ada2d019ba83b9ad208439cbe7ba8221c943f8c7d06de689708a5f943ff",
   "node": "v25.4.0",
   "scope": "Numerical and resident behavior qualification; not full-catalog timing or cross-runtime numerical parity.",
   "rawEvidenceSha256": {
-    "residentE2E": "b05ce44cd1e5e8b25820fc2570f716e61c8e6420b93974fd3f2567139737a1d4",
-    "carry": "8d7989ef43cf59620a7d17deae26341907d990e27cde3e517815f3b84108ad47",
-    "portability": "36a7b4dadb7ddde3b48ee5a0628e99984ddae02388334d3040231465fd782153",
-    "fastCA": "4a1e7ab99ec37f5c14beff8cc02021f91f88213aecc520de8fb20f6427f03d5f",
-    "caQualification": "dc715b24314eb51706159c5cd50a5abec438c85275436c4010fcc1c434898ae0",
-    "independentCA": "4c8659ae097d9b88409ffe45f52823744097e639bdc68003c626529a0211b747",
-    "referenceRealizationDiagnostic": "ab647d35ed8cfa75d5bf022a34eea40ac18270766e24c5fe4843614d91c65660"
+    "residentE2E": "3dd89c378ba0f47ba244fd1a398faa635cbb2603bfa506be3c2b81e7d9f2e8c3",
+    "carry": "11d59bf27306ae763c7a34b680190530e3cf2d0b3a8f8b1272848ed4e65b3f83",
+    "portability": "253e81190ff082fc5386effe134a6009a4c33b174046d7b937dfa3792d7dbb70",
+    "fastCA": "9b1f14a4462893da50409ce1053f9c01ff22ece1094e698f98143917bd6ef514",
+    "caQualification": "25f3f1f6786dff1f4fbe20477d00a7fbdbfeb0d38f842c3d020917095febc859",
+    "independentCA": "02a0eae655375d176a5c12528d1f3124d9be04b3df6ca935f8f39952078d1772",
+    "referenceRealizationDiagnostic": "ab647d35ed8cfa75d5bf022a34eea40ac18270766e24c5fe4843614d91c65660",
+    "pipelineAuthentication": "3e6c663987a5e0ba71ad70c5a41602e7d648b77dab32192e35ef5e355e23d4d3",
+    "reentryRegression": "ee2febb6438fb9e2375d0f3e797c30c125b59988a6c241e21a98db78c5dc2876",
+    "reentryPopulationReplay": "bf8a785790430c4cd8ef37e8d90e3b3385d7548b82a0e1b8301b66f7b392c9b6"
   },
   "truth": {
     "generator": "scripts/export-truth.cpp using the unchanged study harness/src/hxio.h quintic Hermite reader",
@@ -346,7 +349,7 @@
     },
     "regimeBoundaries": {
       "ok": true,
-      "sourceSha256": "d60759a36c86da8e1b8e680bdf076e478ffebd0e8c60448fea4daf0626acacee",
+      "sourceSha256": "4a2c61c149451758c12c695fa17ee072f963c119dbb963ce67ceebdb36f13bd5",
       "initialStateSource": "C++ two-body perigee states with configured TT-compatible GM; grazing planes oriented using standard DE440 Sun",
       "gmM3s2": 398600441500000,
       "orientations": [
@@ -775,20 +778,97 @@
         "Fast forward resident integrator: RK78.",
         "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
       ],
-      "ppePositionM": 3.7582078461652276e-05,
-      "ppeVelocityMps": 8.939811273017801e-06,
-      "statePositionM": 3.3993670388525675e-05,
-      "stateVelocityMps": 3.4731146123620184e-06
+      "ppePositionM": 1.691355389077387e-14,
+      "ppeVelocityMps": 3.55271371001526e-12,
+      "statePositionM": 1.8596235662471372e-14,
+      "stateVelocityMps": 8.526676984290849e-14
     },
-    "failures": []
+    "failures": [],
+    "reentryDomain": {
+      "ok": true,
+      "referenceIntegrator": {
+        "tolerance": 1e-14,
+        "initialStep": 2,
+        "minStep": 0.0001,
+        "maxStep": 2,
+        "maxSteps": 100000000
+      },
+      "initialStateSource": "C++ Cartesian descending elliptic state above the handoff sphere",
+      "initialStateMeters": [
+        6578237,
+        0,
+        0,
+        -200,
+        7800,
+        0
+      ],
+      "handoffBufferKm": 50,
+      "physicalStopKm": 100,
+      "maximumRkStepSeconds": 2,
+      "rows": [
+        {
+          "offsetSeconds": 0.125,
+          "prefixSeconds": 300,
+          "positionM": 7.0390056881708704e-06,
+          "velocityMps": 5.280169404984805e-07,
+          "stopDeltaSeconds": 0,
+          "actualPolicy": [
+            "Fast forward resident integrator: RK78.",
+            "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+          ],
+          "referenceStop": {
+            "utc": "2026-08-01T12:09:19.151101112",
+            "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:19.151101112 UTC; FFM ends it there."
+          },
+          "fastStop": {
+            "utc": "2026-08-01T12:09:19.151101112",
+            "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:19.151101112 UTC; FFM ends it there."
+          }
+        },
+        {
+          "offsetSeconds": 3.125,
+          "prefixSeconds": 300,
+          "positionM": 2.3509611735433395e-05,
+          "velocityMps": 5.500175945810827e-07,
+          "stopDeltaSeconds": 0,
+          "actualPolicy": [
+            "Fast forward resident integrator: RK78.",
+            "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+          ],
+          "referenceStop": {
+            "utc": "2026-08-01T12:09:22.151648104",
+            "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:22.151648104 UTC; FFM ends it there."
+          },
+          "fastStop": {
+            "utc": "2026-08-01T12:09:22.151648104",
+            "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:22.151648104 UTC; FFM ends it there."
+          }
+        },
+        {
+          "offsetSeconds": 7.125,
+          "prefixSeconds": 300,
+          "positionM": 2.164713521534349e-05,
+          "velocityMps": 1.7496095627643031e-07,
+          "stopDeltaSeconds": 0,
+          "actualPolicy": [
+            "Fast forward resident integrator: RK78.",
+            "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+          ],
+          "referenceStop": {
+            "utc": "2026-08-01T12:09:26.152390838",
+            "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:26.152390838 UTC; FFM ends it there."
+          },
+          "fastStop": {
+            "utc": "2026-08-01T12:09:26.152390838",
+            "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:26.152390838 UTC; FFM ends it there."
+          }
+        }
+      ]
+    }
   },
   "rows": [
     {
       "seed": "ISS",
-      "actualPolicy": [
-        "Fast forward resident integrator: GJ8 PEC at 15 s.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 4.67241418172898e-06,
@@ -799,6 +879,29 @@
           "velocityMps": 5.121884140749353e-08
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "980726e915f777d21fa6ea89dd0fc176807b3dd4519d693d069ddafe779db2ae",
+        "fast": "17fe3d805191fa9a8c1c31db4b9de2bbdf6a043319d558e7f50ccc8e3dfe70c9"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.669158,
+        "fast": 0.2846086666666667
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.6781296666666669,
+          "fast": 0.2914223333333333
+        },
+        {
+          "standard": 0.669158,
+          "fast": 0.2846086666666667
+        }
+      ],
+      "loadAverage": [
+        3.68505859375,
+        3.4765625,
+        6.09130859375
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 0.23339677152150964,
@@ -809,6 +912,10 @@
           "velocityMps": 0.002899659991568728
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 15 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 0.001691076514105647,
@@ -835,10 +942,6 @@
     },
     {
       "seed": "STARLINK",
-      "actualPolicy": [
-        "Fast forward resident integrator: GJ8 PEC at 12 s.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 3.6436076353252477e-07,
@@ -849,6 +952,29 @@
           "velocityMps": 5.214708654472366e-09
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "85346c69455715d6f916e0e6e8d3d47bfa6d837da80718455630454f000cb92f",
+        "fast": "46ead825e7ca2fce211c792521290735dc3c983ea444f2c857f81a8b0557520f"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.615799,
+        "fast": 0.331631
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.615799,
+          "fast": 0.331631
+        },
+        {
+          "standard": 0.6173723333333333,
+          "fast": 0.3417626666666667
+        }
+      ],
+      "loadAverage": [
+        3.50537109375,
+        3.44384765625,
+        6.048828125
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 0.02659084839776086,
@@ -859,6 +985,10 @@
           "velocityMps": 0.00022119607570022807
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 12 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 0.0005240991613971134,
@@ -885,10 +1015,6 @@
     },
     {
       "seed": "SSO800",
-      "actualPolicy": [
-        "Fast forward resident integrator: GJ8 PEC at 24 s.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 3.070531000691994e-06,
@@ -899,6 +1025,29 @@
           "velocityMps": 5.519385563128472e-09
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "82b956b4d5ea79fa6d829219725488f1b79cc31093018063331b1308bc96d1bd",
+        "fast": "6af3d0bb14160e2dd9465f4b10ffff836646f12a0214063581ce7ff59d193be9"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.6168873333333333,
+        "fast": 0.18430933333333335
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.6168873333333333,
+          "fast": 0.18430933333333335
+        },
+        {
+          "standard": 0.6215546666666667,
+          "fast": 0.18980566666666665
+        }
+      ],
+      "loadAverage": [
+        3.50732421875,
+        3.4453125,
+        6.0185546875
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 0.10265829495616399,
@@ -909,6 +1058,10 @@
           "velocityMps": 0.000931424198763193
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 24 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 0.0013959493315080626,
@@ -935,10 +1088,6 @@
     },
     {
       "seed": "LOW250",
-      "actualPolicy": [
-        "Fast forward resident integrator: GJ8 PEC at 10 s.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 7.414674409857179e-06,
@@ -949,6 +1098,29 @@
           "velocityMps": 3.7066797143184e-08
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "6760654a813f68b7a0b8b8e648a70f80b8b874f0cce8724a3f7d1d271a42472d",
+        "fast": "be03fd6a61efbf5913bdb0ed730459705c8718426a708bbd384bd3ec57912fa8"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.766842,
+        "fast": 0.421386
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.769446,
+          "fast": 0.4232396666666667
+        },
+        {
+          "standard": 0.766842,
+          "fast": 0.421386
+        }
+      ],
+      "loadAverage": [
+        3.4287109375,
+        3.43017578125,
+        5.982421875
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 0.9671641647781605,
@@ -959,6 +1131,10 @@
           "velocityMps": 0.008735635051351212
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 10 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 0.0015125674719589424,
@@ -985,10 +1161,6 @@
     },
     {
       "seed": "GPS",
-      "actualPolicy": [
-        "Fast forward resident integrator: GJ8 PEC at 75 s.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 7.870247465299826e-07,
@@ -999,6 +1171,29 @@
           "velocityMps": 1.7111009092476678e-09
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "4a01844cbdbe9df0050ae3d548a6c2d9c61ef726e62c685b5c56fe76e7b7172d",
+        "fast": "8247f556287984d1fcc2ac05699b4ec761d739c536eba862ec44328c077fe982"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.16238033333333332,
+        "fast": 0.063097
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.16238033333333332,
+          "fast": 0.063097
+        },
+        {
+          "standard": 0.16501333333333332,
+          "fast": 0.06340433333333333
+        }
+      ],
+      "loadAverage": [
+        3.20849609375,
+        3.3828125,
+        5.935546875
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 3.863824602646119e-05,
@@ -1009,6 +1204,10 @@
           "velocityMps": 9.180201953037483e-08
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 75 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 6.044849126060551e-06,
@@ -1035,10 +1234,6 @@
     },
     {
       "seed": "GEO",
-      "actualPolicy": [
-        "Fast forward resident integrator: GJ8 PEC at 600 s.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 2.1031596591193568e-07,
@@ -1049,6 +1244,29 @@
           "velocityMps": 4.4642489798243106e-10
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "d252294d5dbbe01b4046c12b4c15d738f24ad190c948bcdfcb3f447e314940f0",
+        "fast": "1374791d4e2bb282b264c202ccf13aa244c3f210e3fcfc35fd258db4cbe920b2"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.15291166666666667,
+        "fast": 0.02691366666666667
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.15340066666666666,
+          "fast": 0.02698533333333333
+        },
+        {
+          "standard": 0.15291166666666667,
+          "fast": 0.02691366666666667
+        }
+      ],
+      "loadAverage": [
+        3.3515625,
+        3.4091796875,
+        5.9296875
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 5.262876234146149e-06,
@@ -1059,6 +1277,10 @@
           "velocityMps": 3.160769519357412e-09
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 600 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 5.371981442323475e-06,
@@ -1085,10 +1307,6 @@
     },
     {
       "seed": "MOLNIYA",
-      "actualPolicy": [
-        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 4.935946983238876e-06,
@@ -1099,6 +1317,29 @@
           "velocityMps": 1.5269208079819133e-08
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "99c8ac71a4fd45446eb7ffac1ec55f92dedcff5cef5f499730e6e3f0c36915cb",
+        "fast": "f5374afa4d88de965f519b37a0da4cbd99785d658b6c0a74308549680da1df8d"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.19909200000000002,
+        "fast": 0.09587166666666667
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.19951333333333332,
+          "fast": 0.09634100000000001
+        },
+        {
+          "standard": 0.19909200000000002,
+          "fast": 0.09587166666666667
+        }
+      ],
+      "loadAverage": [
+        3.4033203125,
+        3.4189453125,
+        5.91796875
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 0.23775379626595783,
@@ -1109,6 +1350,10 @@
           "velocityMps": 0.00021294749232976778
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 0.0024999941452636633,
@@ -1135,10 +1380,6 @@
     },
     {
       "seed": "GTO",
-      "actualPolicy": [
-        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
-        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
-      ],
       "fixed": {
         "oneDay": {
           "positionM": 1.0262360560438119e-05,
@@ -1149,6 +1390,29 @@
           "velocityMps": 3.2591650122405683e-08
         }
       },
+      "fixedDescribeSha256": {
+        "standard": "a5bc6c0dd2487215f27749be5a0844d7214eff784de8c8c0ee2a9bf5e77bc621",
+        "fast": "e0ace65694cbde12d9f85707703ebc55ab3b72a19412a9f2add53b0a57cc9551"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.22991433333333333,
+        "fast": 0.11257299999999999
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.22997866666666666,
+          "fast": 0.11257299999999999
+        },
+        {
+          "standard": 0.22991433333333333,
+          "fast": 0.11282333333333333
+        }
+      ],
+      "loadAverage": [
+        3.29052734375,
+        3.39501953125,
+        5.89453125
+      ],
       "standardVsTruth": {
         "oneDay": {
           "positionM": 0.4960067254227696,
@@ -1159,6 +1423,10 @@
           "velocityMps": 0.0030678707526594433
         }
       },
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
       "fastVsTruth": {
         "oneDay": {
           "positionM": 0.002361131177511059,
@@ -1188,6 +1456,23 @@
     {
       "implementation": "ffm",
       "workers": 1,
+      "workerPolicy": {
+        "requested": 1,
+        "availableCores": 28,
+        "selected": 1,
+        "autoCap": 16,
+        "reservedCores": 2
+      },
+      "update": {
+        "unchanged": 6,
+        "changed": 1,
+        "added": 1,
+        "deleted": 1,
+        "derived": 2,
+        "excluded": 0,
+        "deriveMs": 3.4298340000004828,
+        "ingestCpuS": 0.011271999999999999
+      },
       "trajectories": 8,
       "byteIdentical": true,
       "invalidUpdatesPreservedCatalog": true,
@@ -1204,11 +1489,30 @@
           "maximumInstances": 2,
           "compactions": 1
         }
-      ]
+      ],
+      "carriedWindowCpuSeconds": 13.71208,
+      "coldWindowCpuSeconds": 13.504494000000001
     },
     {
       "implementation": "ffm-fast",
       "workers": 1,
+      "workerPolicy": {
+        "requested": 1,
+        "availableCores": 28,
+        "selected": 1,
+        "autoCap": 16,
+        "reservedCores": 2
+      },
+      "update": {
+        "unchanged": 6,
+        "changed": 1,
+        "added": 1,
+        "deleted": 1,
+        "derived": 2,
+        "excluded": 0,
+        "deriveMs": 2.4893339999980526,
+        "ingestCpuS": 0.013104999999999999
+      },
       "trajectories": 8,
       "byteIdentical": true,
       "invalidUpdatesPreservedCatalog": true,
@@ -1225,7 +1529,9 @@
           "maximumInstances": 2,
           "compactions": 1
         }
-      ]
+      ],
+      "carriedWindowCpuSeconds": 5.618821,
+      "coldWindowCpuSeconds": 5.624664
     }
   ],
   "ca": {
@@ -2816,12 +3122,12 @@
       "maxSteps": 100000000
     },
     "evidenceSha256": {
-      "baseline": "18aca8a98bd7f2b36add2b82937d9cf42a7062cb9d387ca7757aa5b53a8e8404",
+      "baseline": "0efb855f51f0a4c0bce7c51d767013a9e43be4194c77c55ec078ef8d012b2d94",
       "reference": "68097987b7f9c70a2a8ac48cffc856827e3ddf8c1388774dd0829aa9b72798cc",
       "provenance": "8ee46110c42871557c1ca76047414512a84c60608c374d665dfeec93a75649ce"
     },
     "standardWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
-    "fastWasmSha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+    "fastWasmSha256": "3b567ada2d019ba83b9ad208439cbe7ba8221c943f8c7d06de689708a5f943ff",
     "limitations": [
       "Synthetic weather; GP sigma is diagnostic only.",
       "Standard/Fast evidence is reused only after matching inputs, artifacts and the reference adapter sources.",
@@ -2831,7 +3137,7 @@
   "independentCAReductionAgrees": true,
   "portability": {
     "wasmedgePin": "0.16.4",
-    "receiptDigest": "1cf790fd0e289e65601ba8467c5083227d422cf052971dc7edca5068f35c54d8",
+    "receiptDigest": "a1b526343509cf074690d7a953a539810057fea1198d5af50264e1f5431fd6d8",
     "artifacts": [
       {
         "id": "ffm",
@@ -2864,7 +3170,7 @@
       },
       {
         "id": "ffm-fast",
-        "sha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+        "sha256": "3b567ada2d019ba83b9ad208439cbe7ba8221c943f8c7d06de689708a5f943ff",
         "structural": {
           "verdict": "in-surface",
           "summary": "in-surface (WASI only)",
@@ -2898,8 +3204,8 @@
     "Eight seeds and selected CA events do not establish accuracy for every orbit in the full catalog.",
     "The standard and T3 CA reference were reused only after authenticating unchanged artifacts, inputs, and pipeline.",
     "Artifact instantiation across runtimes is not FFM numerical parity across runtimes.",
-    "CPU contention precludes performance acceptance of the recorded CA timing.",
-    "The separate resident-T3 versus native-T3 diagnostic did not pass its extra-strict 1 mm / 1 micrometer-per-second thresholds; it is not the CA acceptance gate."
+    "The separate resident-T3 versus native-T3 diagnostic did not pass its extra-strict 1 mm / 1 micrometer-per-second thresholds; it is not the CA acceptance gate.",
+    "CA timings are diagnostic; full-catalog timing is reported separately with host-load observations."
   ],
   "referenceRealizationDiagnostic": {
     "completed": true,
@@ -3044,5 +3350,55 @@
       }
     ],
     "pass": false
+  },
+  "reentryRegression": {
+    "rejectedCommit": "0ed18cfac25783d066aff19f88a7a0cb5dbe80e1",
+    "rejectedFastWasmSha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+    "discovery": "The initial full-catalog candidate emitted one extra hourly trajectory for NORAD 49158; independent standard T3 confirmed a delayed Fast reentry stop. It was not landed.",
+    "correction": "Automatic GJ-to-RK handoff near the physical reentry surface, retaining state, exact span clock, and step budget, with a two-second RK step cap. No new mode or flag.",
+    "targetReplay": {
+      "pass": true,
+      "norad": 49158,
+      "framesEach": 33,
+      "stopDeltaSeconds": "0.000040234",
+      "referenceStop": {
+        "handle": 1,
+        "norad": 49158,
+        "objectId": "2021-082AE",
+        "name": "STARLINK-3083",
+        "bstar": 0.00046763,
+        "jd": 2461318.9125456214,
+        "phase": "screen",
+        "reason": "reentry: reentry: handle 1 (2021-082AE, catalog 49158): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-10-05T09:54:03.941688538 UTC; FFM ends it there."
+      },
+      "correctedFastStop": {
+        "handle": 1,
+        "norad": 49158,
+        "objectId": "2021-082AE",
+        "name": "STARLINK-3083",
+        "bstar": 0.00046763,
+        "jd": 2461318.912545621,
+        "phase": "screen",
+        "reason": "reentry: reentry: handle 1 (2021-082AE, catalog 49158): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-10-05T09:54:03.941648304 UTC; FFM ends it there."
+      },
+      "maximumCommonPpePositionM": 0.028246980695134788,
+      "maximumCommonPpeVelocityMps": 3.2824578785831704e-05,
+      "sourceSha256": {
+        "reference.json": "3a9bc609e352aee4dded8d5650a805510f20fafd379947639a6e06f420f1a76d",
+        "fast-original.json": "d1ce7ec14cb21b7299cdd07b23704cb8f07e17f8bbbb0caff648c7fb5c2b9a1d",
+        "fast-corrected.json": "5fb4e971740af164f2fcf1df4c4e279326c2cf5309a765a52001c8eba0d802f1"
+      },
+      "limits": "One replayed reentry object; not full-catalog accuracy proof."
+    },
+    "populationReplay": {
+      "objects": 204,
+      "perigeeMetadataLimitKm": 250,
+      "standardFrames": 12681,
+      "fastFrames": 12681,
+      "standardReentries": 31,
+      "fastReentries": 31,
+      "perObjectWindowDifferences": [],
+      "limitation": "Subset replay is not a replacement for full-catalog measurements or a full-catalog accuracy proof."
+    }
   }
 }
