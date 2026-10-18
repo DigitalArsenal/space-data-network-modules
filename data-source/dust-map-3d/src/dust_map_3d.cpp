@@ -60,7 +60,7 @@ constexpr size_t maxRangeBytes = 48u * 1024u * 1024u, maxControlBytes = 32u * 10
 constexpr uint32_t kNx = 125, kNy = 125, kNz = 61;
 constexpr double kSpacingPc = 20, kMinXPc = -1250, kMinYPc = -1250, kMinZPc = -610;
 constexpr size_t kVoxels = size_t(kNx) * kNy * kNz;
-constexpr uint32_t kProbes = 48;
+constexpr uint32_t kProbes = 768;  // one sightline per NSIDE-8 parent pixel
 constexpr double kAvPerUnit = 2.8;
 
 const char* error = "Invalid 3D dust map input.";
@@ -163,16 +163,20 @@ const std::vector<float>& pixelVectors() {
   }
   return v;
 }
-// Probe sightlines for the report: one pixel inside each NSIDE-2 parent, kept
-// within |b| < 26.7 deg so the 1234 pc integral stays inside the grid.
+// Probe sightlines for the report: one pixel inside each NSIDE-8 parent, the
+// whole sky. Each is integrated to the last shell boundary inside 1200 pc and
+// inside |z| = 590 pc, where every trilinear corner of the grid has data.
 std::vector<uint32_t> probePixels() {
   std::vector<uint32_t> out;
-  const auto& v = pixelVectors();
-  for (uint32_t k = 0; k < kProbes; ++k) {
-    const uint32_t p = k * (kPixels / kProbes) + kPixels / kProbes / 2;
-    if (std::abs(v[size_t(p) * 3 + 2]) < 0.45f) out.push_back(p);
-  }
+  for (uint32_t k = 0; k < kProbes; ++k) out.push_back(k * (kPixels / kProbes) + kPixels / kProbes / 2);
   return out;
+}
+double probeRadius(const std::vector<double>& bounds, uint32_t pixel) {
+  const double sinb = std::abs(pixelVectors()[size_t(pixel) * 3 + 2]);
+  const double limit = std::min(1200.0, sinb > 0 ? 590.0 / sinb : 1200.0);
+  double r = bounds[0];
+  for (double b : bounds) if (b <= limit) r = b;
+  return r;
 }
 inline long voxelOf(double x, double y, double z) {
   const double fx = (x - kMinXPc) / kSpacingPc, fy = (y - kMinYPc) / kSpacingPc, fz = (z - kMinZPc) / kSpacingPc;
@@ -221,7 +225,7 @@ bool depositChunk(State& s, const std::vector<Response>& rs) {
       depositShell(s, data, rc, (hi * hi * hi - lo * lo * lo) / 3);
       for (size_t q = 0; q < probeList.size(); ++q) {
         const float rho = dustmap::bigEndianFloat(data + size_t(probeList[q].get<uint32_t>()) * 4);
-        if (std::isfinite(rho) && hi <= s.meta["probe_radius"].get<double>()) probes[q] = probes[q].get<double>() + rho * (hi - lo);
+        if (std::isfinite(rho) && hi <= s.meta["probe_radii"][q].get<double>()) probes[q] = probes[q].get<double>() + rho * (hi - lo);
       }
     }
   }
@@ -341,16 +345,15 @@ extern "C" int advance_dust() {
     const auto probes = probePixels();
     Json integrals = Json::array();
     for (uint32_t p : probes) integrals.push_back(double(dustmap::bigEndianFloat(inner + size_t(p) * 4)) * bounds[0] / innerRadius);
-    // Probe integrals end at the last boundary inside 1240 pc (the grid's last voxel centre).
-    double probeRadius = bounds[0];
-    for (double b : bounds) if (b <= 1240) probeRadius = b;
+    Json radii = Json::array();
+    for (uint32_t p : probes) radii.push_back(probeRadius(bounds, p));
     s.meta["stage"] = int(kFirstChunkStage);
     s.meta["boundaries"] = bounds;
     s.meta["centers"] = centers;
     s.meta["inner_radius"] = innerRadius;
     s.meta["probe_pixels"] = probes;
     s.meta["probe_integrals"] = integrals;
-    s.meta["probe_radius"] = probeRadius;
+    s.meta["probe_radii"] = radii;
     s.meta["chunk_first"] = 0;
     s.meta["chunk_count"] = kShellsPerStage;
     CHECK(emit(chunkRequests(s.meta["mean_data"], 0, kShellsPerStage), s), error);
@@ -397,12 +400,14 @@ extern "C" int build_dust() {
   CHECK(covered > kVoxels / 3, "Fewer than a third of the voxels received data; the published map stays.");
   // Report: native line integrals against the resampled grid on the probes.
   const auto& vectors = pixelVectors();
-  const double probeRadius = s.meta["probe_radius"];
+
   Json probeReport = Json::array();
   std::vector<double> ratios;
+  double sumGrid = 0, sumNative = 0;
   for (size_t q = 0; q < s.meta["probe_pixels"].size(); ++q) {
     const uint32_t p = s.meta["probe_pixels"][q];
     double integral = 0;
+    const double probeRadius = s.meta["probe_radii"][q];
     for (double t = 1; t < probeRadius; t += 2) {
       const double value = gridAt(grid, t * vectors[size_t(p) * 3], t * vectors[size_t(p) * 3 + 1], t * vectors[size_t(p) * 3 + 2]);
       if (std::isfinite(value)) integral += value * 2;
@@ -412,9 +417,13 @@ extern "C" int build_dust() {
     const double b = std::asin(std::clamp(double(vectors[size_t(p) * 3 + 2]), -1.0, 1.0)) * 57.29577951308232;
     probeReport.push_back({{"l", l < 0 ? l + 360 : l}, {"b", b}, {"a_v_native", kAvPerUnit * native}, {"a_v_grid", kAvPerUnit * integral}});
     if (native > 0) ratios.push_back(integral / native);
+    sumGrid += integral;
+    sumNative += native;
   }
   std::sort(ratios.begin(), ratios.end());
   const double medianRatio = ratios.empty() ? 0 : ratios[ratios.size() / 2];
+  // The aggregate: total resampled over total native extinction on all sightlines.
+  const double aggregateRatio = sumNative > 0 ? sumGrid / sumNative : 0;
 
   std::vector<uint8_t> stream;
   const std::vector<double> shape = {kNx, kNy, kNz};
@@ -448,7 +457,8 @@ extern "C" int build_dust() {
                      {"terms_url", "https://creativecommons.org/licenses/by/4.0/"}, {"citation", credit}, {"licence", license}};
   const Json report = {{"rows", kNz}, {"voxels", kVoxels}, {"covered_voxels", covered}, {"spacing_pc", kSpacingPc},
                        {"max_radius_pc", maxRadius}, {"total_e_pc2", total}, {"shells", kShells}, {"inner_radius_pc", s.meta["inner_radius"]},
-                       {"probe_radius_pc", probeRadius}, {"probes", probeReport}, {"probe_median_grid_over_native", medianRatio},
+                       {"probe_radius_pc", "min(1200, 590/|sin b|), at a shell boundary"}, {"probes", probeReport}, {"probe_median_grid_over_native", medianRatio},
+                       {"probe_aggregate_grid_over_native", aggregateRatio},
                        {"batch_id", batch}, {"retrieved_at", when}, {"source_version", s.meta.value("version", std::string())}};
   if (output("meta", meta) < 0 || output("report", report) < 0) return 1;
   return plugin_push_output_ex("records", "PCE.fbs", "$PCE", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PCE", 0, 0,
