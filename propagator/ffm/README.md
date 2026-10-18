@@ -1079,3 +1079,9 @@ Existing `DENSITY_GRADIENT` choices remain available.
   Existing `maneuvers` can be combined with finite burns; the impulse STM jump extends
   to 7×7 and leaves mass unchanged.
 
+
+## FFM 2.0 integration
+
+`com.orbpro.ffm` is the single full-force module. Its resident implementation uses automatic GJ8 PEC on absolute TT grids, Sundman RK78 on eccentric arcs, and selected-object batching. The RK core supplies startup, backward queries and physical reentry handoff. There is no selectable legacy implementation. The FFM-1 forces are unchanged.
+
+Run `node scripts/e2e-ffm.mjs` for FIT/SCREEN and resident behavior evidence. `tests/reference/` contains the authenticated numerical oracle only; product builds and package exports do not depend on it.

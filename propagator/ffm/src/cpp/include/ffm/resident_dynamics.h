@@ -1,12 +1,14 @@
+// FFM Fast fork base: propagator/ffm/src/cpp/include/ffm/resident_dynamics.h
+// Fork base sha256: f33c228e632a58feaf29618319e7a946c7328d71952c01edc423d185b68bcf05
 #pragma once
 // A resident catalog propagated under an execution request's dynamics. The
 // instance is configured once (ingest_state): one PRW EXECUTION_REQUEST is
 // the template, and its kernel and environment inputs are verified once and
 // kept. Each resident object is that request with its own state and
-// coefficients, integrated forward from its epoch exactly as the execution
-// path integrates it (the same steps, through the same space-weather
-// restarts), without restarting at sample or export epochs. Chebyshev
-// segments are fitted from the integration's dense output.
+// coefficients. Fast's internal orbit policy selects the resident runner;
+// sample/export epochs do not restart it. Selected-object preparation uses
+// bounded cohorts, with Chebyshev fitting and dense-history trimming kept
+// interleaved. The standard PRW contract and covariance path stay shared.
 #include "ffm/prw_dynamics.h"
 #include "ffm/chebyshev.h"
 #include "ffm/kernel_store.h"
@@ -46,6 +48,10 @@ public:
                     astro::StateVector& state, astro::Mat6& p, std::string& error);
     // Segments covering [start, end] (TT) fitted and kept; earlier ones dropped.
     bool prepare(size_t object, const TTEpoch& start, const TTEpoch& end, std::string& error);
+    // Prepare exactly the selected objects; report the failing slot for the
+    // resident port's existing per-object stop/error handling.
+    bool prepareBatch(const std::vector<size_t>& selected, const TTEpoch& start, const TTEpoch& end,
+                      size_t& failedObject, std::string& error);
     // The kept segments covering [start, end] as PPE position records (km,
     // km/s, TT) with their measured fit residuals.
     bool describe(size_t object, const TTEpoch& start, const TTEpoch& end, PPET& ppe,

@@ -1,3 +1,5 @@
+// FFM Fast fork base: ../ffm/lib/force_models.cpp
+// Fork base sha256: a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3
 // force_models.cpp - Phase 11.1.2 Force Models Implementation
 // =============================================================================
 // Phase 11: Astrodynamics Framework (Basilisk + TudatPy Port)
@@ -20,6 +22,10 @@ extern "C" {
 #include "jacchia_roberts.h"
 #include "earth_radiation.h"
 #include "fes2004_data.h"
+// FFM Fast C1: same-degree, retained triangular gravity kernel.
+#include "ffm_gravity.h"
+#include <array>
+#include <tuple>
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -28,6 +34,13 @@ extern "C" {
 #include <cstdlib>
 #include <iterator>
 #include <cstring>
+// FFM Fast C3a BEGIN: aliases are local to this translation unit.
+#include "ffm_interp.inc"
+#include "ffm_time.inc"
+#define getSunPosition ffm_time::sun
+#define getMoonPosition ffm_time::moon
+#define getPlanetPosition ffm_time::planet
+// FFM Fast C3a END.
 
 namespace astro {
 namespace ForceModel {
@@ -318,11 +331,11 @@ const ExtendedGravityField& egm2008Field(const EGM2008ForceConfig& config) {
 }  // namespace
 
 Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config) {
-    return computeExtendedGravity(position, egm2008Field(config)).total;
+    return ffm::computeGravity(position, egm2008Field(config)).total;
 }
 
 Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config) {
-    return computeExtendedGravity(position, egm2008Field(config)).zonalHarmonics;
+    return ffm::computeGravity(position, egm2008Field(config)).zonalHarmonics;
 }
 
 // =============================================================================
@@ -909,7 +922,7 @@ Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, const ti
 // 12. Earth Radiation Pressure - albedo and infrared (Knocke 1988)
 // =============================================================================
 
-// Orekit 13.1 KnockeRediffusedForceModel (lib/earth_radiation.h), in metres:
+// Orekit 13.1 KnockeRediffusedForceModel (lib/earth_radiation.h), in meters:
 // the pressure vector times Cr*A/m. The annual term reads the time since
 // 1981-12-22T00:00:00 UTC on TT (TDB differs by under 2 ms).
 Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, const timesys::Instant& jd,
@@ -1002,8 +1015,18 @@ void normalizedLegendre3(double t, double u, double p[4][4]) {
 }
 
 timesys::Instant::Date ut1At(const timesys::Instant& jd, const ForceModelSet& forceSet) {
-    if (forceSet.jdUt1At) return forceSet.jdUt1At(jd);
-    return jd.ut1();
+    // Fit the UT1-TT offset in seconds, never the large Julian date.
+    double offset;
+    if (ffm_time::current && ffm_interp::interpolate(jd, forceSet, ffm_interp::Ut1, 1, &offset,
+        [&](const timesys::Instant& t, double* out) {
+            const auto ut = forceSet.jdUt1At ? forceSet.jdUt1At(t) : t.ut1();
+            *out = ((ut.jd1 - t.jd1) + (ut.jd2 - t.jd2)) * 86400.0;
+        })) return {jd.jd1, jd.jd2 + offset / 86400.0};
+    auto* memo = ffm_time::at(jd, forceSet);
+    if (memo && memo->ut1Valid) return memo->ut1;
+    const auto value = forceSet.jdUt1At ? forceSet.jdUt1At(jd) : jd.ut1();
+    if (memo) { memo->ut1 = value; memo->ut1Valid = true; }
+    return value;
 }
 
 }  // namespace
@@ -1013,21 +1036,39 @@ timesys::Instant::Date ut1At(const timesys::Instant& jd, const ForceModelSet& fo
 // off by 5/3, dC22/dS22 by 5/12), real Love numbers, no k+ degree-4 terms,
 // step 2 as the K1 line alone on an approximate GMST, and the pole and
 // longitudes taken in GCRF rather than in the Earth-fixed frame.
-ExtendedGravityField SolidTideField(const timesys::Instant& jd, const ForceModelSet& forceSet,
-                                    const EarthAxes& axes) {
-    using namespace iers2010;
-    const SolidTideConfig& config = forceSet.solidTides;
-    ExtendedGravityField field;
-    field.mu = forceSet.mu;
+// FFM Fast C4 BEGIN: fill retained fields without changing tide arithmetic.
+namespace {
+void ResetTideField(ExtendedGravityField& field, int degree, int order, double mu,
+                    int storageDegree) {
+    // Retain every supported row even when this field uses a lower degree or
+    // order. Metadata bounds evaluation; shrinking vectors would discard the
+    // capacity needed by another valid configuration.
+    if (field.Cnm.size() < static_cast<size_t>(storageDegree + 1))
+        field.allocate(storageDegree, storageDegree);
+    field.maxDegree = degree;
+    field.maxOrder = order;
+    field.mu = mu;
     field.referenceRadius = EGM2008_RADIUS_KM;
-    field.allocate(4, 4);
+    for (int n = 0; n <= degree; ++n) {
+        const int count = std::min(n, order) + 1;
+        std::fill_n(field.Cnm[n].data(), count, 0.0);
+        std::fill_n(field.Snm[n].data(), count, 0.0);
+    }
+}
+}
+bool FillSolidTideField(const timesys::Instant& jd, const ForceModelSet& forceSet,
+                                    const EarthAxes& axes, ExtendedGravityField& field) {
+    using namespace iers2010;
+    bool available = true;
+    const SolidTideConfig& config = forceSet.solidTides;
+    ResetTideField(field, 4, 4, forceSet.mu, 4);
 
     // Step 1 (eqs. 6.6, 6.7): each body's degree-2 and -3 tide with the
     // complex anelastic k_nm, and degree 4 through k+_2m.
     for (int body = 0; body < 2; ++body) {
         if (body == 0 ? !config.includeMoonTide : !config.includeSunTide) continue;
         const EphemerisState state = body == 0 ? getMoonPosition(jd) : getSunPosition(jd);
-        if (!state.valid) continue;
+        if (!state.valid) { available = false; continue; }
         const double gm = body == 0 ? MU_MOON : MU_SUN;
         const Vec3 p = axes.fixed(state.position);
         const double r = p.magnitude(), rho = std::sqrt(p.x * p.x + p.y * p.y);
@@ -1085,14 +1126,27 @@ ExtendedGravityField SolidTideField(const timesys::Instant& jd, const ForceModel
 
     // A zero-tide central field already holds the permanent tide (eq. 6.13).
     if (config.zeroTideField) field.Cnm[2][0] -= 4.4228e-8 * -0.31460 * LOVE_RE[2][0];
+    for (int n = 2; n <= 4; ++n)
+        for (int m = 0; m <= n; ++m)
+            if (!std::isfinite(field.Cnm[n][m]) || !std::isfinite(field.Snm[n][m])) available = false;
+    return available;
+}
+
+ExtendedGravityField SolidTideField(const timesys::Instant& jd, const ForceModelSet& forceSet,
+                                    const EarthAxes& axes) {
+    ExtendedGravityField field;
+    FillSolidTideField(jd, forceSet, axes, field);
     return field;
 }
+// FFM Fast C4 END.
 
 Vec3 SolidTideAcceleration(const Vec3& satPosition, const timesys::Instant& jd, const ForceModelSet& forceSet) {
     if (satPosition.magnitude() < RE_EARTH) return Vec3();
     const EarthAxes axes = EarthAxesAt(jd, forceSet);
-    const ExtendedGravityField field = SolidTideField(jd, forceSet, axes);
-    return axes.inertial(computeExtendedGravity(axes.fixed(satPosition), field).zonalHarmonics);
+    // FFM Fast C4: shape storage survives evaluations; coefficients do not.
+    static thread_local ExtendedGravityField field;
+    FillSolidTideField(jd, forceSet, axes, field);
+    return axes.inertial(ffm::computeGravity(axes.fixed(satPosition), field).zonalHarmonics);
 }
 
 Vec3 SolidTides(const Vec3& satPosition, const timesys::Instant& jd, const SolidTideConfig& config) {
@@ -1111,14 +1165,13 @@ Vec3 SolidTides(const Vec3& satPosition, const timesys::Instant& jd, const Solid
 //   dCnm += (C+ + C-) cos(theta) + (S+ + S-) sin(theta)
 //   dSnm += (S+ - S-) cos(theta) - (C+ - C-) sin(theta)
 // summed from degree 2. No ocean pole tide.
-ExtendedGravityField OceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet) {
+// FFM Fast C4 BEGIN.
+void FillOceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet, ExtendedGravityField& field) {
+    ffm_interp::ExactScope exact; // Ocean nodes stay on the shipped 120 s TT grid.
     const OceanTideConfig& config = forceSet.oceanTides;
     const int maxDegree = std::max(2, std::min<int>(config.maxDegree, fes2004::MAX_DEGREE));
     const int maxOrder = std::max(0, std::min<int>(config.maxOrder, maxDegree));
-    ExtendedGravityField field;
-    field.mu = forceSet.mu;
-    field.referenceRadius = EGM2008_RADIUS_KM;
-    field.allocate(maxDegree, maxOrder);
+    ResetTideField(field, maxDegree, maxOrder, forceSet.mu, fes2004::MAX_DEGREE);
     const auto& jdTt = jd;
     const double gamma = gmst2006(ut1At(jd, forceSet), jdTt) + PI;
     double fundamental[5];  // l, l', F, D, Omega
@@ -1140,18 +1193,37 @@ ExtendedGravityField OceanTideField(const timesys::Instant& jd, const ForceModel
             field.Snm[row.n][row.m] += ((sp - sm) * c - (cp - cm) * s) * fes2004::UNIT;
         }
     }
+}
+
+ExtendedGravityField OceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet) {
+    ExtendedGravityField field;
+    FillOceanTideField(jd, forceSet, field);
     return field;
 }
 
+// FFM Fast C2 BEGIN: caches have the force-set environment's lifetime.
+#include "ffm_tides.inc"
 struct OceanTideCache {
-    std::map<long long, ExtendedGravityField> nodes;  // by grid index
+    FfmMergedTides merged;
+    ffm_interp::Cache interpolation;
+    std::array<ExtendedGravityField, 64> nodes;
+    std::array<long long, 64> indices{};
+    std::array<bool, 64> valid{};
     ExtendedGravityField field;                       // the last interpolated field
     timesys::Instant jd{std::numeric_limits<double>::quiet_NaN(),0};
 };
-std::shared_ptr<OceanTideCache> MakeOceanTideCache() { return std::make_shared<OceanTideCache>(); }
+std::shared_ptr<OceanTideCache> MakeOceanTideCache() {
+    auto cache = std::make_shared<OceanTideCache>();
+    for (auto& node : cache->nodes) node.allocate(fes2004::MAX_DEGREE, fes2004::MAX_DEGREE);
+    cache->field.allocate(fes2004::MAX_DEGREE, fes2004::MAX_DEGREE);
+    ffm::prepareGravity(70, 70);
+    ffm::prepareGravity(30, 30);
+    ffm::prepareGravity(4, 4);
+    return cache;
+}
 
 const ExtendedGravityField& OceanTideFieldAt(const timesys::Instant& jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch) {
-    if (!forceSet.oceanTideCache) { scratch = OceanTideField(jd, forceSet); return scratch; }
+    if (!forceSet.oceanTideCache) { FillOceanTideField(jd, forceSet, scratch); return scratch; }
     OceanTideCache& cache = *forceSet.oceanTideCache;
     if (jd.jd1 == cache.jd.jd1 && jd.jd2 == cache.jd.jd2) return cache.field;
     const double g = jd.daysSinceJ2000() * 86400.0 / OCEAN_TIDE_GRID_SECONDS;
@@ -1160,24 +1232,33 @@ const ExtendedGravityField& OceanTideFieldAt(const timesys::Instant& jd, const F
     const ExtendedGravityField* node[4];
     for (int i = 0; i < 4; ++i) {
         const long long index = k - 1 + i;
-        auto it = cache.nodes.find(index);
-        if (it == cache.nodes.end()) {
-            if (cache.nodes.size() >= 64) {
-                // Drop the node farthest from this one.
-                auto far = cache.nodes.begin();
-                if (std::llabs(cache.nodes.rbegin()->first - index) > std::llabs(far->first - index)) far = std::prev(cache.nodes.end());
-                cache.nodes.erase(far);
-            }
-            const auto jdTt = timesys::Instant::fromTTSeconds(static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS, 0);
-            it = cache.nodes.emplace(index, OceanTideField(jdTt, forceSet)).first;
+        int found = -1, empty = -1, far = -1;
+        for (int j = 0; j < 64; ++j) {
+            if (!cache.valid[j]) { if (empty < 0) empty = j; continue; }
+            if (cache.indices[j] == index) { found = j; break; }
+            // The shipped map evicts the lower endpoint when distances tie.
+            if (far < 0 || std::llabs(cache.indices[j] - index) > std::llabs(cache.indices[far] - index) ||
+                (std::llabs(cache.indices[j] - index) == std::llabs(cache.indices[far] - index) && cache.indices[j] < cache.indices[far])) far = j;
         }
-        node[i] = &it->second;
+        if (found < 0) {
+            found = empty >= 0 ? empty : far;
+            const auto jdTt = timesys::Instant::fromTTSeconds(static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS, 0);
+            FillOceanTideField(jdTt, forceSet, cache.nodes[found]);
+            cache.indices[found] = index;
+            cache.valid[found] = true;
+        }
+        node[i] = &cache.nodes[found];
     }
     const double w[4] = {-u * (u - 1) * (u - 2) / 6, (u + 1) * (u - 1) * (u - 2) / 2, -(u + 1) * u * (u - 2) / 2, (u + 1) * u * (u - 1) / 6};
     ExtendedGravityField& f = cache.field;
-    if (f.Cnm.empty() || f.maxDegree != node[0]->maxDegree || f.maxOrder != node[0]->maxOrder) f = *node[0];
-    for (size_t n = 0; n < f.Cnm.size(); ++n)
-        for (size_t m = 0; m < f.Cnm[n].size(); ++m) {
+    f.maxDegree = node[0]->maxDegree;
+    f.maxOrder = node[0]->maxOrder;
+    f.model = node[0]->model;
+    f.mu = node[0]->mu;
+    f.referenceRadius = node[0]->referenceRadius;
+    f.normalized = node[0]->normalized;
+    for (int n = 0; n <= f.maxDegree; ++n)
+        for (int m = 0; m <= std::min(n, int(f.maxOrder)); ++m) {
             f.Cnm[n][m] = w[0] * node[0]->Cnm[n][m] + w[1] * node[1]->Cnm[n][m] + w[2] * node[2]->Cnm[n][m] + w[3] * node[3]->Cnm[n][m];
             f.Snm[n][m] = w[0] * node[0]->Snm[n][m] + w[1] * node[1]->Snm[n][m] + w[2] * node[2]->Snm[n][m] + w[3] * node[3]->Snm[n][m];
         }
@@ -1185,12 +1266,33 @@ const ExtendedGravityField& OceanTideFieldAt(const timesys::Instant& jd, const F
     return f;
 }
 
+// FFM Fast C4 END.
+
+namespace {
+bool FfmCombinedGravity(const Vec3& position, const timesys::Instant& jd, const ForceModelSet& f, Vec3& gravity) {
+    const bool egmMode = f.gravityMode == GravityMode::EGM2008 ||
+        (f.gravityMode == GravityMode::Infer && !(f.useLoadedField && f.loadedField) && f.useEGM2008);
+    if (!egmMode || !f.oceanTideCache || (f.useSolidTides && !f.earthFixedRotation)) return false;
+    const auto& egm = egm2008Field(f.egm2008);
+    const EarthAxes axes = EarthAxesAt(jd, f);
+    const Vec3 fixed = axes.fixed(position);
+    auto& cache = f.oceanTideCache->merged;
+    cache.prepare(f, egm, position.magnitude() >= RE_EARTH);
+    const auto* value = cache.at(jd, f);
+    if (!value) return false;
+    const Vec3 harmonics = ffm::computeFlatGravity(fixed, cache.metadata, value->C.data(), value->S.data());
+    gravity = axes.inertial(PointMass(fixed, f.mu) + harmonics);
+    return true;
+}
+}
+// FFM Fast C2 END.
+
 Vec3 OceanTideAcceleration(const Vec3& satPosition, const timesys::Instant& jd, const ForceModelSet& forceSet) {
     if (satPosition.magnitude() < RE_EARTH) return Vec3();
     const EarthAxes axes = EarthAxesAt(jd, forceSet);
-    ExtendedGravityField scratch;
+    static thread_local ExtendedGravityField scratch;
     const ExtendedGravityField& field = OceanTideFieldAt(jd, forceSet, scratch);
-    return axes.inertial(computeExtendedGravity(axes.fixed(satPosition), field).zonalHarmonics);
+    return axes.inertial(ffm::computeGravity(axes.fixed(satPosition), field).zonalHarmonics);
 }
 
 // =============================================================================
@@ -1493,8 +1595,22 @@ void GcrfToEarthFixed(const timesys::Instant& jd, double m[3][3]) {
 }
 
 void GcrfToEarthFixed(const timesys::Instant& jd, const ForceModelSet& forceSet, double m[3][3]) {
+    // FFM Fast C3c: rotation is fitted on the source's realized TT coordinate.
+    if (ffm_time::current && ffm_interp::interpolate(jd, forceSet, ffm_interp::Rotation, 9, &m[0][0],
+        [&](const timesys::Instant& t, double* out) {
+            auto matrix = reinterpret_cast<double (*)[3]>(out);
+            if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(t, matrix);
+            else GcrfToEarthFixed(t, matrix);
+        })) return;
+    // FFM Fast C3a: the memo is destroyed when ComputeTotalAcceleration returns.
+    auto* memo = ffm_time::at(jd, forceSet);
+    if (memo && memo->rotationValid) {
+        std::memcpy(m, memo->rotation, sizeof memo->rotation);
+        return;
+    }
     if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(jd, m);
     else GcrfToEarthFixed(jd, m);
+    if (memo) { std::memcpy(memo->rotation, m, sizeof memo->rotation); memo->rotationValid = true; }
 }
 
 bool EarthFixedField(const ForceModelSet& forceSet) {
@@ -1634,6 +1750,8 @@ Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, const timesys::
 
 Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                               ForceModelSet& forceSet) {
+    // FFM Fast C3a: no time values survive this scope.
+    ffm_time::ForceScope forceScope(forceSet, jd);
     Vec3 totalAcc;
 
     // Get Sun position if needed and not provided
@@ -1650,7 +1768,10 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const 
 
     // Central-body gravity: exactly one model answers, and which one is the
     // caller's stated choice whenever it made one.
-    totalAcc += CentralBodyGravity(position, jd, forceSet);
+    // FFM Fast C2: one rotation and one recursion for the merged field.
+    Vec3 gravity;
+    const bool combinedGravity = FfmCombinedGravity(position, jd, forceSet, gravity);
+    totalAcc += combinedGravity ? gravity : CentralBodyGravity(position, jd, forceSet);
 
     // Lunar gravity (separate body, doesn't include Earth point mass)
     if (forceSet.useGRGM1200A) {
@@ -1702,12 +1823,12 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const 
     }
 
     // 14. Solid Tides
-    if (forceSet.useSolidTides) {
+    if (forceSet.useSolidTides && !combinedGravity) {
         totalAcc += SolidTideAcceleration(position, jd, forceSet);
     }
 
     // 15. Ocean Tides
-    if (forceSet.useOceanTides) {
+    if (forceSet.useOceanTides && !combinedGravity) {
         totalAcc += OceanTideAcceleration(position, jd, forceSet);
     }
 
@@ -1898,3 +2019,8 @@ ForceModelSet CreateHighFidelityForceModel(double mass, double area) {
 
 } // namespace ForceModel
 } // namespace astro
+
+// FFM Fast C3c: ownership follows the environment, including after re-ingest.
+namespace ffm_interp {
+Cache& cache(const Forces& f) { return f.oceanTideCache->interpolation; }
+}

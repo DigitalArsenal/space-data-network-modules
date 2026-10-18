@@ -2,7 +2,7 @@
 // headless Chrome with WebGPU, or leaves it up for a browser (--serve).
 //
 // usage: node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin>
-//          [--propagator sgp4|ffm|ffm-fast] [--start <jd>] [--days 3] [--window-hours 6]
+//          [--propagator sgp4|ffm] [--start <jd>] [--days 3] [--window-hours 6]
 //          [--threshold-km 5] [--step-s 60] [--farm-workers N] [--cpu]
 //          [--ffm-environment <dir>] [--ffm-profile full-force|gravity-only]
 //          [--out summary.json] [--serve] [--port 0] [--timeout-s 7200]
@@ -55,7 +55,7 @@ const { values: o } = parseArgs({ options: {
   'timeout-s': { type: 'string', default: '7200' },
 } });
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
-if (!['sgp4', 'ffm', 'ffm-fast'].includes(o.propagator)) throw new Error('--propagator is sgp4, ffm or ffm-fast: one propagator per run.');
+if (!['sgp4', 'ffm'].includes(o.propagator)) throw new Error('--propagator is sgp4 or ffm: one propagator per run.');
 const t0 = performance.now();
 const catalogBytes = fs.readFileSync(o.catalog);
 // FFM windows hold every object's trajectory (~12 KB per object per 2 h).

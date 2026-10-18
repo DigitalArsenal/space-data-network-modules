@@ -12,7 +12,7 @@ export const isomorphicWasmPath = new URL("./dist/isomorphic/module.wasm", impor
 export const metadata = Object.freeze({
   id: "com.orbpro.ffm",
   name: "FFM Full Force Model propagator",
-  version: "1.4.0",
+  version: "2.0.0",
   type: "Propagator",
   encrypted: false,
   requiresProtection: false,

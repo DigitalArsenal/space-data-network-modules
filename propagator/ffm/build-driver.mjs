@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 const config=JSON.parse(fs.readFileSync(process.env.FFM_SDK_BUILD_CONFIG));
-const original=process.argv.slice(2);
+const original=[...process.argv.slice(2),'-msimd128'];
 function run(command,args){const r=spawnSync(command,args,{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);}
 if(original.includes('--version')){run(config.clangxx,original);process.exit(0);}
 const args=original.filter(a=>a!=='-fno-exceptions');

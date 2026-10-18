@@ -1,4 +1,7 @@
+// FFM Fast fork base: propagator/ffm/src/cpp/src/resident_dynamics.cpp
+// Fork base sha256: 059e338d0a0c8f71b11f01d6dfa292a544e2a90ff3391325e60415d38fc0878a
 #include "ffm/resident_dynamics.h"
+#include "ffm_run.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -13,15 +16,17 @@ using namespace dynamics;
 
 namespace {
 
-// A node of the dense output: an accepted state of the integration, with
-// the acceleration the integrator evaluated there (its next first stage).
+// A dense node is an accepted corrected state and its physical acceleration
+// on the selected weather side. GJ evaluates this separately from its PEC
+// predictor/extended-branch force ordinate.
 // t: seconds from the start of the node's span.
 struct Node { double t; double y[6]; double a[3]; };
 
-// The nodes of one smooth stretch of the integration: one span between
-// space-weather restarts, cut again where a step ended on a shadow boundary
-// (the radiation pressure's kink). The acceleration is smooth inside, so a
-// stencil never reaches across a piece's ends.
+// Dense nodes between space-weather boundaries. RK/Sundman additionally cut
+// pieces when they land on shadow kinks. GJ keeps its common lattice and
+// integrates conical shadow corrections inside each step; its delivered
+// dense/PPE interpolation is qualified independently against the reference.
+// A stencil never reaches across a piece's ends.
 struct Piece {
     TTEpoch spanStart;
     std::deque<Node> nodes;   // ascending in time
@@ -80,8 +85,8 @@ struct Branch {
     int direction = 1;
     StateVector spanState;
     TTEpoch spanStart, spanEnd;   // the span runs from spanStart toward spanEnd
-    bool bounded = false;
-    std::unique_ptr<Integrator::ForceRun> run;
+    bool bounded = false, needsSpan = true;
+    std::unique_ptr<ffm_fast::Run> run;
     std::deque<Piece> pieces;
     // The piece the run is adding to: the last forward, the first backward.
     Piece& current() { return direction > 0 ? pieces.back() : pieces.front(); }
@@ -104,6 +109,7 @@ struct ResidentDynamics::Object {
     // segments stay: they are a function of the object alone).
     void restart(Branch& b) {
         b.run.reset();
+        b.needsSpan = true;
         b.pieces.clear();
         b.spanState = execution.initial;
         b.spanStart = execution.initialTT;
@@ -120,14 +126,22 @@ using Object = ResidentDynamics::Object;
 // The next space-weather restart in the branch's direction from `from`;
 // false when the configuration has none.
 bool nextBreak(const Execution& e, int direction, const TTEpoch& from, TTEpoch& out) {
-    const double hours = 6 * 3600.0;
-    const auto breaks = direction > 0 ? driverBreaks(e, from, plus(from, hours)) : driverBreaks(e, plus(from, -hours), from);
+    // The standard MSIS adapter supplies daily Ap (ap_a is null). With winds
+    // disabled, its three-hour breakpoints cannot change the force inputs.
+    const bool daily = direction > 0 && !ffm_fast::fixedStep(e.integrator) &&
+        e.forces.dragModel == ForceModel::DragModelType::NRLMSISE00 && !e.forces.drag.includeWinds;
+    const double search = (daily ? 26 : 6) * 3600.0;
+    auto breaks = direction > 0 ? driverBreaks(e, from, plus(from, search)) : driverBreaks(e, plus(from, -search), from);
+    if (daily) breaks.erase(std::remove_if(breaks.begin(), breaks.end(), [](const TTEpoch& at) {
+        const double day = at.instant().utc().jd() - .5;
+        return std::abs(day - std::round(day)) > 1e-7;
+    }), breaks.end());
     if (breaks.empty()) return false;
     out = direction > 0 ? breaks.front() : breaks.back();
     return true;
 }
 
-void record(Branch& b, Integrator::RKF78Run& run) {
+void record(Branch& b, ffm_fast::Run& run) {
     Node n;
     n.t = run.time();
     for (int i = 0; i < 6; ++i) n.y[i] = run.state()[i];
@@ -139,17 +153,30 @@ void record(Branch& b, Integrator::RKF78Run& run) {
 
 // Starts the span at (spanState, spanStart): to the next restart, or open.
 bool startSpan(Execution& e, Branch& b, const Environment& environment, std::string& error) {
-    b.bounded = environment.weather && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
+    const bool automatic = b.direction > 0 && !ffm_fast::fixedStep(e.integrator);
+    b.bounded = (environment.weather || automatic) && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
     const auto here = b.spanStart.instant();
     const auto there = b.bounded ? b.spanEnd.instant() : here.plusSeconds(b.direction*86400.0);
     if (!environmentCovers(e, environment, here, there, error) || !preflightKernel(e, there, error)) return false;
     if (b.bounded) setDriverSpan(e, b.spanStart, b.spanEnd);
     if (e.forces.explicitEpochContract) e.forces.integrationEpochTT = b.spanStart.instant();
-    b.run = std::make_unique<Integrator::ForceRun>(b.spanState, b.direction, e.integrator, e.forces, true);
+    bool allowGj = true;
+    if (const double h = ffm_fast::Run::candidateGjGrid(e.initial, b.direction, e.integrator, e.forces)) {
+        // Centered startup followed by backward restoration uses history as
+        // far as eight steps before the center and four after it. A bridge
+        // adds at most one step. Insufficient extra coverage retains RK.
+        std::string coverage;
+        const auto before = here.plusSeconds(-8*h), after = here.plusSeconds(5*h);
+        allowGj = environmentCovers(e, environment, before, after, coverage) &&
+            preflightKernel(e, before, coverage) && preflightKernel(e, after, coverage);
+    }
+    if (!b.run || (!allowGj && b.run->gridStep()) || !b.run->continueSpan(here))
+        b.run = std::make_unique<ffm_fast::Run>(b.spanState, e.initial, here, b.direction, e.integrator, e.forces, allowGj);
+    b.needsSpan = false;
     Piece piece;
     piece.spanStart = b.spanStart;
     b.add(std::move(piece));
-    record(b, b.run->run());   // the span's first node: its state, with the span's drivers
+    record(b, *b.run);   // the span's first node: its state, with the span's drivers
     return true;
 }
 
@@ -157,8 +184,8 @@ bool startSpan(Execution& e, Branch& b, const Environment& environment, std::str
 // next).
 bool step(Execution& e, Branch& b, const Environment& environment, std::string& error) {
     clearPropagationStop();   // from an accepted state (reentry.h)
-    if (!b.run && !startSpan(e, b, environment, error)) return false;
-    auto& run = b.run->run();
+    if ((!b.run || b.needsSpan) && !startSpan(e, b, environment, error)) return false;
+    auto& run = *b.run;
     const double target = b.bounded ? elapsedSeconds(b.spanStart, b.spanEnd) : b.direction * std::numeric_limits<double>::infinity();
     if (!run.running(target)) {
         if (!b.bounded || std::abs(run.time() - target) > 32 * std::numeric_limits<double>::epsilon() * std::max(1.0, std::abs(target)))
@@ -172,7 +199,7 @@ bool step(Execution& e, Branch& b, const Environment& environment, std::string& 
         b.spanState.velocity = Vec3(y[3], y[4], y[5]);
         b.spanState.epoch = timesys::ttToTdb(b.spanEnd.jdTt());
         b.spanStart = b.spanEnd;
-        b.run.reset();   // the next span starts when it is needed
+        b.needsSpan = true;   // change drivers and rebase history only when needed
         return true;
     }
     // Another object's steps may have moved the shared driver span.
@@ -320,19 +347,32 @@ bool fit(Object& o, const Environment& environment, long long k, Segment& out, s
     for (int i = 0; i < 6; ++i) chebyshevFit(values[i], out.c[i]);
     out.positionM = out.velocityMS = 0;
     out.samples = 0;
+    const auto score = [&](double tau, const double r[3], const double v[3]) {
+        double dr = 0, dv = 0;
+        for (int i = 0; i < 3; ++i) {
+            dr += std::pow(chebyshevEval(out.c[i], tau) - r[i], 2);
+            dv += std::pow(chebyshevEval(out.c[3 + i], tau) - v[i], 2);
+        }
+        out.positionM = std::max(out.positionM, std::sqrt(dr) * 1000);
+        out.velocityMS = std::max(out.velocityMS, std::sqrt(dv) * 1000);
+        ++out.samples;
+    };
+    // A coarse GJ interval can contain an entire 300 s PPE segment without
+    // an accepted node inside it. Score thirteen interior points against
+    // dense output as well; zero accepted nodes must not imply a zero fit
+    // residual. This remains sampled fitting evidence, not an accuracy bound.
+    for (int j = 0; j < CHEBY_NPTS; ++j) {
+        const double tau = 2 * (j + .5) / CHEBY_NPTS - 1;
+        double r[3], v[3];
+        evaluate(o, plus(mid, tau * kHalfSpan), r, v);
+        score(tau, r, v);
+    }
     for (const Branch* b : {&o.backward, &o.forward})
     for (const auto& piece : b->pieces)
         for (const auto& node : piece.nodes) {
             const double tau = elapsedSeconds(mid, plus(piece.spanStart, node.t)) / kHalfSpan;
             if (tau < -1 || tau > 1) continue;
-            double dr = 0, dv = 0;
-            for (int i = 0; i < 3; ++i) {
-                dr += std::pow(chebyshevEval(out.c[i], tau) - node.y[i], 2);
-                dv += std::pow(chebyshevEval(out.c[3 + i], tau) - node.y[3 + i], 2);
-            }
-            out.positionM = std::max(out.positionM, std::sqrt(dr) * 1000);
-            out.velocityMS = std::max(out.velocityMS, std::sqrt(dv) * 1000);
-            ++out.samples;
+            score(tau, node.y, node.y + 3);
         }
     for (const double* c : {out.c[0], out.c[1], out.c[2], out.c[3], out.c[4], out.c[5]})
         for (int j = 0; j < CHEBY_NPTS; ++j)
@@ -348,6 +388,26 @@ void segmentRange(const Object& o, const TTEpoch& start, const TTEpoch& end, lon
     last = std::max(first, static_cast<long long>(std::ceil(b)) - 1);
 }
 
+// Keep only the requested segment window, preserving already fitted overlap.
+long long firstMissing(Object& o, long long first) {
+    if (!o.segments.empty() && first < o.firstSegment) o.segments.clear();
+    while (!o.segments.empty() && o.firstSegment < first) { o.segments.pop_front(); ++o.firstSegment; }
+    if (o.segments.empty()) o.firstSegment = first;
+    return o.firstSegment + static_cast<long long>(o.segments.size());
+}
+
+// The established backward/epoch-straddling fit order. Forward-only requests
+// all use the bounded scheduler, including the single-object public API.
+bool prepareSerial(Object& o, const Environment& environment, long long first, long long last, std::string& error) {
+    for (long long k = firstMissing(o, first); k <= last; ++k) {
+        Segment segment;
+        if (!fit(o, environment, k, segment, error)) return false;
+        o.segments.push_back(segment);
+        trim(o, k + 1);
+    }
+    return true;
+}
+
 // A segment's record carries its residuals only; the method is stated once
 // per source (the PPE comment) and per prepared set (its quality), so the
 // export does not repeat it every 300 s.
@@ -361,7 +421,7 @@ std::unique_ptr<PRWFitQualityT> sampledResidual(double positionM, double velocit
     if (withMethod)
         q->METHOD = "Degree-12 Chebyshev series at the Gauss-Lobatto nodes of 300 s TT segments, from the integrator's dense output "
                     "(Hermite interpolation of position, velocity and acceleration at four accepted steps); the largest difference "
-                    "from the integrator's accepted states inside the segments.";
+                    "from accepted states and thirteen uniformly spaced interior dense-output samples per segment; this is sampled fitting error, not a truth error bound.";
     return q;
 }
 
@@ -506,18 +566,71 @@ bool ResidentDynamics::covariance(size_t i, const TTEpoch& at, const Mat6& p0, c
 }
 
 bool ResidentDynamics::prepare(size_t i, const TTEpoch& start, const TTEpoch& end, std::string& error) {
-    Object& o = *objects_.at(i);
-    long long first, last;
-    segmentRange(o, start, end, first, last);
-    // Kept segments before this window go; an earlier window starts over.
-    if (!o.segments.empty() && first < o.firstSegment) o.segments.clear();
-    while (!o.segments.empty() && o.firstSegment < first) { o.segments.pop_front(); ++o.firstSegment; }
-    if (o.segments.empty()) o.firstSegment = first;
-    for (long long k = o.firstSegment + static_cast<long long>(o.segments.size()); k <= last; ++k) {
-        Segment segment;
-        if (!fit(o, environment_, k, segment, error)) return false;
-        o.segments.push_back(segment);
-        trim(o, k + 1);
+    size_t failed = i;
+    return prepareBatch({i}, start, end, failed, error);
+}
+
+bool ResidentDynamics::prepareBatch(const std::vector<size_t>& selected, const TTEpoch& start,
+                                    const TTEpoch& end, size_t& failedObject, std::string& error) {
+    struct Pending { size_t slot; long long next, last; double grid; };
+    std::vector<Pending> pending;
+    pending.reserve(selected.size());
+    for (const auto slot : selected) {
+        Object& o = *objects_.at(slot);
+        long long first, last;
+        segmentRange(o, start, end, first, last);
+        // Backward or epoch-straddling windows keep the established serial
+        // RK path. They never cause unselected objects to be propagated.
+        if (first < 0) {
+            failedObject = slot;
+            astro::clearCallStop();
+            if (!prepareSerial(o, environment_, first, last, error)) return false;
+            continue;
+        }
+        const auto next = firstMissing(o, first);
+        if (next > last) continue;
+        if (behind(o.forward, o.segmentStart(next))) o.restart(o.forward);
+        pending.push_back({slot, next, last, ffm_fast::Run::candidateGjGrid(o.execution.initial, 1,
+                                                                        o.execution.integrator, o.execution.forces)});
+    }
+    // Small cohorts bound live dense history. Each group advances the oldest
+    // physical node first, making aligned GJ force calls share exact TT keys.
+    std::stable_sort(pending.begin(), pending.end(), [](const Pending& a, const Pending& b) { return a.grid < b.grid; });
+    constexpr size_t cohort = 32;
+    for (size_t begin = 0; begin < pending.size();) {
+        size_t finish = begin + 1;
+        while (finish < pending.size() && finish - begin < cohort && pending[finish].grid == pending[begin].grid) ++finish;
+        while (true) {
+            size_t chosen = finish;
+            timesys::Instant earliest;
+            for (size_t j = begin; j < finish; ++j) {
+                auto& p = pending[j];
+                Object& o = *objects_[p.slot];
+                if (p.next > p.last) continue;
+                while (p.next <= p.last && reaches(o.forward, o.segmentStart(p.next)) &&
+                       reaches(o.forward, o.segmentStart(p.next + 1))) {
+                    failedObject = p.slot;
+                    astro::clearCallStop();
+                    Segment segment;
+                    if (!fit(o, environment_, p.next, segment, error)) return false;
+                    o.segments.push_back(segment);
+                    trim(o, ++p.next);
+                }
+                if (p.next > p.last) continue;
+                const auto at = o.forward.run && !o.forward.needsSpan ? o.forward.run->nextInstant() : o.forward.spanStart.instant();
+                if (chosen == finish || at.secondsSince(earliest) < 0) { chosen = j; earliest = at; }
+            }
+            if (chosen == finish) break;
+            auto& p = pending[chosen];
+            Object& o = *objects_[p.slot];
+            failedObject = p.slot;
+            astro::clearCallStop();
+            if (!step(o.execution, o.forward, environment_, error)) return false;
+            // Catch-up may span many days before the requested window. Keep
+            // its final stencil, never every intervening accepted node.
+            trim(o, p.next);
+        }
+        begin = finish;
     }
     return true;
 }
@@ -566,9 +679,11 @@ bool ResidentDynamics::describe(size_t i, const TTEpoch& start, const TTEpoch& e
     ppe.EPHEMERIS_SOURCE = sourceName();
     ppe.NOMINAL_SEGMENT_SPAN = kSegment;
     ppe.NOMINAL_NUM_COEFFICIENTS = CHEBY_NPTS;
+    if (first < 0 && o.backward.run) ppe.COMMENT.push_back("Fast backward resident integrator: " + o.backward.run->description() + ".");
+    if (last >= 0 && o.forward.run) ppe.COMMENT.push_back("Fast forward resident integrator: " + o.forward.run->description() + ".");
     ppe.COMMENT.push_back("Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; "
                           "segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest "
-                          "difference from the integrator's accepted states inside it (SAMPLED_RESIDUAL).");
+                          "difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound).");
     return true;
 }
 

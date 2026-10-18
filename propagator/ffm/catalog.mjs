@@ -27,9 +27,8 @@ export const TYPE = Object.freeze({ schemaName: 'PRW.fbs', fileIdentifier: '$PRW
 export const GM = 3.986004415e14;                 // m^3/s^2, EGM2008, TT-compatible
 export const DEFAULT_DRAG_AREA_OVER_MASS = 0.01;  // m^2/kg
 export const DEFAULT_SRP_AREA_OVER_MASS = 0.02;   // m^2/kg
-// RK78 at 1e-12 relative (1e-9 m absolute), first step 30 s, steps of at most
-// 300 s: the catalog screen's integrator.
-export const CATALOG_INTEGRATOR = Object.freeze({ tolerance: 1e-12, initialStep: 30, minStep: 0.01, maxStep: 300, maxSteps: 100000 });
+// Automatic resident GJ8/Sundman policy; RK is its startup and physical handoff core.
+export const CATALOG_INTEGRATOR = Object.freeze({ tolerance: 1e-14, initialStep: 30, minStep: 0.01, maxStep: 120, maxSteps: 1000000 });
 
 const table = (name, fields = {}) => Object.assign(new P[`${name}T`](), fields);
 const vector = (v) => table('FRMVector3', { X: v[0], Y: v[1], Z: v[2] });
@@ -114,3 +113,6 @@ export function kernelRecord(bytes) {
 }
 
 export { P as prw };
+
+export const MODULE_ID = 'com.orbpro.ffm';
+export const INTEGRATION_POLICY = 'Forward GJ8 PEC on common TT grids: LEO 10/15/12/24 s by perigee band; near-circular GPS 75 s and GEO 600 s; other low-eccentricity elliptic orbits 24 s. Eccentricity >=0.25: RK78 Sundman alpha=1.5, 200/orbit (GTO-like: 300/orbit). Tight RK alignment <=one GJ step; corrected conical dense acceleration; daily-Ap restart trim; selected-object batches of 32. GJ hands off to two-second-capped RK within 50 km of the sphere enclosing the physical 100 km reentry surface. Fixed diagnostics, backward requests, nonelliptic states, unsupported GJ force families, or insufficient startup coverage retain RK78.';

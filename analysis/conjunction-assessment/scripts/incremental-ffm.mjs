@@ -19,7 +19,7 @@
 // --base-to: element sets created before it join the snapshot first (no incremental step); the batches follow.
 // --sample-updates k: keep k of each batch's updated objects (a fixed pseudo-random sample).
 // --band lo,hi: the LEO stride sample's perigee band, km (default 300,700).
-//          [--implementation ffm|ffm-fast] [--farm-workers N] [--workers 6] [--load-ceiling 45] [--determinism-sample 50] --out <summary.json>
+//          [--implementation ffm] [--farm-workers N] [--workers 6] [--load-ceiling 45] [--determinism-sample 50] --out <summary.json>
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

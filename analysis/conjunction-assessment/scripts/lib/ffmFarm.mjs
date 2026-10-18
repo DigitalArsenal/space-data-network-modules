@@ -99,7 +99,7 @@ async function epochStates(epochStateDir, omms) {
 }
 
 /**
- * A resident FFM farm. `implementation` is `ffm` (default) or `ffm-fast`.
+ * A resident FFM farm. The single implementation is `ffm`.
  * `workers` is an explicit positive integer; auto leaves two cores available
  * and caps at 16. `environment` is immutable for this farm's lifetime.
  * `updateCatalog(catalog, { handles })` retains byte-identical OMM records and
@@ -110,7 +110,7 @@ async function epochStates(epochStateDir, omms) {
  */
 export async function createFfmFarm(o) {
   const implementation = o.implementation ?? 'ffm';
-  if (!['ffm', 'ffm-fast'].includes(implementation)) throw new Error(`Unknown FFM implementation ${implementation}: ffm or ffm-fast.`);
+  if (implementation !== 'ffm') throw new Error(`Unknown FFM implementation ${implementation}: ffm is the only implementation.`);
   const profile = o.profile ?? 'full-force';
   if (!['full-force', 'gravity-only'].includes(profile)) throw new Error(`Unknown FFM profile ${profile}: full-force or gravity-only.`);
   if (o.workers !== undefined && (!Number.isInteger(o.workers) || o.workers < 1)) throw new Error('FFM workers must be a positive integer.');

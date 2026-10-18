@@ -4,17 +4,26 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
-  "bytes": 2064618,
+  "flags": [
+    "-msimd128"
+  ],
+  "sha256": "b4b21bb71ae91621cebc99d9a3af9bf4c46fbb15cbc7c60d4e8259139cddb16f",
+  "bytes": 2208149,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/worktrees/OrbPro--orbpro-sun-surface-shader-20261016/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
     {
       "name": "libc++abi-ww-wasmexcept.a",
-      "sha256": "4e27aa6d5bb01619802a27c00c611100ca10d5eb844f4a7261affcf5560bd51a"
+      "flags": [
+        "-msimd128"
+      ],
+      "sha256": "5c1862202829406f74760c004912c2bb3327c8e61c65bee0a6eafe70ea84c534"
     },
     {
       "name": "libunwind-ww-wasmexcept.a",
+      "flags": [
+        "-msimd128"
+      ],
       "sha256": "d8bcc70af787c3993c20e100d48f6ea403e2176b838bca496f93e6f8520c5b8d"
     }
   ],
@@ -34,6 +43,7 @@
     "lib/nrlmsise00.cpp",
     "lib/time_convert.cpp",
     "lib/us76.cpp",
+    "lib/ffm_gravity.cpp",
     "../../third_party/hwm14/hwm14.cpp",
     "../../third_party/hwm14/hwm14_data.cpp",
     "../../third_party/nrlmsise00/nrlmsise-00.c",

@@ -1,3 +1,5 @@
+// FFM Fast fork base: propagator/ffm/src/ffm_plugin.cpp
+// Fork base sha256: 9f6fe5bf33b5a48573a6c6f2a862b21d8bfa60d3ec7bb5073fdfe0ea9fd78f5e
 // ffm_plugin.cpp - FFM (Full Force Model) Plugin
 // =============================================================================
 // Emscripten glue layer exposing the astrodynamics C++ library as extern "C"
@@ -3464,11 +3466,15 @@ bool preparePortable(const PRWPrepareRequest* request, std::vector<std::vector<u
         TTEpoch start;
         if (!decodeEpochTT(request->START_EPOCH(), start, error)) return false;
         const TTEpoch end = normalizeTT(start.whole, start.fraction + duration);
+        std::vector<size_t> slots;
+        slots.reserve(selected.size());
+        for (const auto handle : selected) slots.push_back(prwSlots.at(handle));
+        size_t failedSlot = 0;
+        if (!prwDynamics->prepareBatch(slots, start, end, failedSlot, error))
+            return stopped(failedSlot, error);
         double positionM = 0, velocityMS = 0;
-        for (const auto handle : selected) {
-            const auto slot = prwSlots.at(handle);
-            astro::clearCallStop();
-            if (!prwDynamics->prepare(slot, start, end, error) || !prwDynamics->residuals(slot, start, end, positionM, velocityMS, error))
+        for (const auto slot : slots) {
+            if (!prwDynamics->residuals(slot, start, end, positionM, velocityMS, error))
                 return stopped(slot, error);
         }
         if (prwNextSegmentSet == 0)
