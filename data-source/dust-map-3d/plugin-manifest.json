@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.dust-map-3d",
   "name": "Local 3D interstellar dust (Edenhofer et al. 2024)",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Retrieval nodes for the local 3D dust map of Edenhofer et al. (2024, A&A 685, A82): the posterior mean of the published NSIDE-256 HEALPix-times-distance map (Zenodo 10658339, CC BY 4.0), read by HTTP range (1.63 GB of the 3.25 GB file; the STD data is never read), resampled in WASM to a heliocentric Galactic grid of 20 pc voxels (125 x 125 x 61, |z| <= 610 pc, r <= 1248 pc) with volume-weighted means, and emitted as 61 SDS $PCE rows, one per z plane, for analysis/milky-way-model load_dust_map.",
   "pluginFamily": "data_source",
   "capabilities": [],

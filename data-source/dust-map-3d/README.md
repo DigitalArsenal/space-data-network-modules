@@ -16,7 +16,7 @@ Licence CC BY 4.0; the credit and licence ride in every row and the ingest meta.
 | `plan_dust` | the primary and MEAN FITS headers (23 KiB) |
 | `advance_dust` 1 | the STD header, which locates the tables after its data |
 | `advance_dust` 2 | the radial tables and the inner sphere (6.3 MB) |
-| `advance_dust` 3-12 | 48 MEAN shells per stage, three 48 MiB ranges |
+| `advance_dust` 3-12 | 48 MEAN shells per stage, 24 ranges of 6 MiB (each inside the node's 5-minute http.request ceiling) |
 | `build_dust` | the last 36 shells; then the rows, meta and report |
 
 - 1.63 GB of the 3.25 GB file is read; the STD data never is.
