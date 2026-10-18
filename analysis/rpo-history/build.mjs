@@ -14,7 +14,7 @@ import { generateSdsHeaders } from './sds-headers.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'MNV', 'ERM', 'OCM', 'CVR', 'PRW'], import.meta.url);
 const frames = await fs.readFile(path.resolve(root, '../../foundation/frames/include/rtn_curvilinear.hpp'), 'utf8');
-const files = ['common.cpp', 'provenance.cpp', 'elements.cpp', 'sets.cpp', 'error_model.cpp', 'history.cpp', 'uncertainty.cpp', 'encode.cpp', 'rpo_history.cpp'];
+const files = ['common.cpp', 'provenance.cpp', 'elements.cpp', 'sets.cpp', 'error_model.cpp', 'history.cpp', 'uncertainty.cpp', 'encode.cpp', 'rpo_history.cpp', 'inspect.cpp'];
 const sources = await Promise.all(files.map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
