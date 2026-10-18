@@ -3,9 +3,9 @@
 A public C++ WASM module using the sibling analysis modules' SDK build, manifest,
 SDS PCE parameter contracts, and `dist/isomorphic/module.wasm` layout. One binary
 uses real WASI pthreads and shared linear memory. JavaScript only handles SDS
-messages, byte views, and E2E IO. The run-four literature model has an explicit
-limited production claim in [tests/ORACLES.md](tests/ORACLES.md), with central
-and anticenter width gaps tracked separately from renderer integration.
+messages, byte views, and E2E IO. The run-five literature model has an explicit
+production claim in [tests/ORACLES.md](tests/ORACLES.md); the l=0, l=90 and
+l=180 widths are reported gaps assigned to milky-way-vertical-structure-20261018.
 The host must provide at least three worker slots; the E2E provisions four.
 
 Build and run the **one E2E** from this directory:
@@ -63,7 +63,9 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | --- | --- | --- |
 | `bake_legacy` | none | Original-model global/local volumes |
 | `verify_legacy` | none, after legacy bake | Maximum/RMS RGB error and sample count |
-| `bake` | none | Literature-model volumes and deterministic detail tile |
+| `load_dust_map` | port `rows`: 1-64 `$PCE` rows of data-source/dust-map-3d (one z plane each) | planes loaded, ready |
+| `bake` | none (uses a fully loaded dust map) | Literature-model volumes, detail tile, `extinction_ratios`, `radiance_scale*`, `dust_map` |
+| `face_on_metrics` | none, after bake | Face-on 48 kpc G/BP/RP image layout, arm/interarm contrast, bar A2, lane color |
 | `extinction` | `points`: packed xyz | `a_g`, `e_bp_rp`, magnitudes |
 | `sample_stars` | `bounds`: min xyz/max xyz; `seed`, `candidates`, `completeness`, `tier_limit_g`, optional `display_limit_g` | `stars`, `count`, `stride=7`, `label=model`, `pickable=0` |
 | `oracle_metrics` | `flux_image`, `density_image`: [arena offset, width, height, 4] | Correlations, widths, Rift ratios, global log-affine display fit and residuals |
@@ -73,8 +75,12 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 Global volume: 256 × 256 × 32 over [-16,16] × [-16,16] × [-3,3] kpc.
 Local volume: uniform 128³ over the Sun ±1.25 kpc. Each is exactly 16 MiB,
 RGBA16F, x fastest, then y, then z. Literature channels are relative G/BP/RP
-emissivity per kpc and G extinction optical depth per kpc. They are not absolute
-calibrated radiometric units. The 32³ RGBA16F noise tile is dimensionless and
+emissivity per kpc and G extinction optical depth per kpc. BP and RP optical
+depths are `extinction_ratios` [A_BP/A_G, A_RP/A_G] times G (Wang & Chen 2019).
+One G unit (emissivity per kpc times kpc) is `radiance_scale` zero-magnitude
+(Vega G) fluxes per arcsec², also given as `radiance_scale_mag_arcsec2` (22.12)
+and `radiance_scale_lsun_v_pc2` (42.7): the model's local mid-plane emissivity
+carries Flynn et al. 2006's 0.056 Lsun,V pc⁻³. The 32³ RGBA16F noise tile is dimensionless and
 labeled `model`; it is never presented as measured dust.
 
 `*_layout` is [byte offset, byte length, nx, ny, nz, components, bytes/component].
@@ -103,45 +109,35 @@ Completeness 1 suppresses only stars inside the delivered magnitude tier.
 
 ## Evidence and limits
 
-Code cites Jurić 2008 thin/thick-disc shapes, the Wegg papers for bulge/bar
-morphology and length, Reid 2019 Table 2 for seven fitted segments in six arm
-families, and Drimmel & Spergel for the dust components. Major arms outside
-measured beta ranges are explicitly extrapolated. The Scutum continuation
-follows section 3.2.2 through negative unwrapped azimuth to the outer radial
-edge, so the far-side OSC segment is not cut off at a principal-angle seam. Reid's fitted radii retain
-their original R0=8.15 kpc fit while the observer uses the required 8.178 kpc.
-Bulge proxy scales, emissivity ratios, luminosity function, and passband
-extinction ratios are model assumptions, clearly separated from published facts.
+Every parameter is cited in code; none is fitted to the Gaia oracle maps.
+Discs: Jurić 2008 shapes for radial lengths, Flynn et al. 2006 luminosity
+densities and columns for the light's vertical structure (thin 206 pc, bright
+young stars 103 pc, thick 1.1 kpc), with the Robin et al. 2003 thin-disc hole.
+Arms: the Drimmel & Spergel 2001 stellar wave (B_K = 1.28, the disc light's
+vertical profile, per Elmegreen et al. 2011's colour-independent contrasts) and
+Flynn's bright young stars on Reid 2019 Table 2 arms with the PHANGS
+(Querejeta et al. 2024) interarm floor, both drifted by DS2001's shear. Bar
+and bulge: Wegg & Gerhard 2013 orientation, Wegg et al. 2015 length, their sum
+set by Portail et al. 2017's bar/bulge to inner-disc mass ratio (1.88/1.29).
+Dust: Drimmel & Spergel 2001, replaced within 1.248 kpc by the Edenhofer et al.
+2024 map when loaded. Reid's fitted radii keep their R0=8.15 kpc fit while the
+observer uses 8.178 kpc. Bulge/bar shapes, BP/RP emissivity ratios and the
+luminosity function remain illustrative and are labeled so.
 
-The saved ESA maps are genuine complete images, so no download was required.
-Exact filenames, URLs, hashes, licenses, projection, and test tolerances are in
-`tests/oracle-sources.json` and `tests/ORACLES.md`. They are stretched 8-bit
-display maps: the fitted log slope/intercept cannot establish absolute Gaia
-fluxes or source counts. The final E2E records all residuals and failures in
-`dist/calibration-fit.json`. No measured image or catalog data is bundled.
+The E2E (`tests/band-vs-gaia.e2e.mjs`) runs data-source/dust-map-3d's retrieval
+stages against an offline copy of the published byte ranges
+(`../../data-source/dust-map-3d/.source-cache/`, gitignored; a missing cache is
+a blocked result with the fetch URL), loads the rows, bakes, and gates the
+run-five claim in [tests/ORACLES.md](tests/ORACLES.md): face-on arm/interarm
+>= 1.5, bar A2 >= 0.25, reddened lanes, flux r >= 0.85, density r >= 0.75,
+l=270 width, the Rift, dust resampling within 2%, exact Reid Table 2 curves and
+per-arm chi-square <= 2 (3-kpc arm reported). l=0, l=90 (a run-four pass, now
+38%) and l=180 widths are reported. Evidence images: `.build/model-vs-flux.png`
+and `.build/face-on-48kpc.png`; residuals in `dist/calibration-fit.json`.
 
-Run four selects the complete Drimmel & Spergel 2001 disk, separate arm dust
-and local segment (hypothesis e), with the published COBE/DIRBE normalization
-and Reid arm centers. The former Gaia-fitted dust coefficient is removed from
-production and retained only in historical native diagnostics. The `calibrate`
-method explicitly fails; log-affine display conversion in the oracle statistics
-does not change the baked physical model.
-
-The E2E gates flux r >=0.84, density r >=0.75, l=90/270 FWHM errors <=25%,
-the Rift dip, exact Reid Table 2 curves, and uncertainty-aware per-arm
-chi-square <=2 except the reported 3-kpc arm. It reports all four widths and
-all arm statistics. l=0/180 widths remain known gaps assigned to
-`milky-way-local-3d-dust-20261017`, whose targets are <=25% and flux r >=0.85.
-Raw RMS, finite rendering-segment RMS and all nine named exclusions remain
-visible; no extra clipping or uncertainty inflation is applied.
-
-The seventeen fixed native configurations and the requested five-hypothesis
-before/after table are historical evidence in [tests/HYPOTHESES.md](tests/HYPOTHESES.md).
-The typed volume contract is unchanged and uses released SDS PCE; it does not
-require the pending RFM amendment. Renderer/shader consumption, cutoff removal,
-console settings and credits remain with the Claude lane.
-
-Edenhofer's optional grid is not accepted because its offline license and SDN
-publication are unverified. Retrieval/publication, catalog octree construction,
-console settings/credits, and rendering belong to their host/provider modules.
+The ESA maps are stretched 8-bit display maps: the fitted log slope/intercept
+cannot establish absolute Gaia fluxes or source counts. The `calibrate` method
+explicitly fails. Run histories are in [tests/HYPOTHESES.md](tests/HYPOTHESES.md)
+and [tests/PHYSICS.md](tests/PHYSICS.md). Renderer/shader consumption of the new
+fields and the dust rows, console settings and credits belong to the OrbPro lane.
 No CID literals, bundled catalogs, or host orchestration are introduced here.

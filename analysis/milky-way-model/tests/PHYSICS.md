@@ -1,5 +1,10 @@
 # Physical diagnosis
 
+Run five (2026-10-18) supersedes the production status below: luminosity-weighted
+discs (Flynn 2006), spiral and bar light, and the Edenhofer 2024 local 3D dust;
+measured configurations and the reported l=0/90/180 widths are in
+[ORACLES.md](ORACLES.md), follow-up `milky-way-vertical-structure-20261018`.
+
 Run four supersedes the historical acceptance status below; the production
 dust is now hypothesis (e), with known l=0/180 width gaps and a reported 3-kpc
 arm exception. See [ORACLES.md](ORACLES.md) for the exact current claim and

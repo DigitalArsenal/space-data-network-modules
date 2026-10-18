@@ -1,0 +1,48 @@
+# Local 3D dust (Edenhofer et al. 2024)
+
+SDN data retrieval module for the local 3D interstellar dust that
+`analysis/milky-way-model` bakes (`load_dust_map`), run on a provider node by
+the flow `com.digitalarsenal.flows.dust-map-3d-ingest` (`flow.mjs`) and stored
+as 61 SDS `$PCE` rows, provider `edenhofer2024`, source `local-dust-1250pc`.
+
+Source: the posterior mean of Edenhofer, Zucker, Frank et al. (2024), A&A 685,
+A82, doi:10.1051/0004-6361/202347628, Zenodo record 10658339 (v1.0.2)
+`mean_and_std_healpix.fits`: NSIDE 256 NESTED HEALPix spheres at 516
+logarithmic distances, 69 to 1248 pc, plus the integrated inner 68.8 pc.
+Licence CC BY 4.0; the credit and licence ride in every row and the ingest meta.
+
+| Stage | Asks for (HTTP ranges) |
+| --- | --- |
+| `plan_dust` | the primary and MEAN FITS headers (23 KiB) |
+| `advance_dust` 1 | the STD header, which locates the tables after its data |
+| `advance_dust` 2 | the radial tables and the inner sphere (6.3 MB) |
+| `advance_dust` 3-12 | 48 MEAN shells per stage, three 48 MiB ranges |
+| `build_dust` | the last 36 shells; then the rows, meta and report |
+
+- 1.63 GB of the 3.25 GB file is read; the STD data never is.
+- Each 20 pc voxel of the heliocentric Galactic grid (125 x 125 x 61:
+  |X|, |Y| <= 1250 pc, |Z| <= 610 pc) is the volume-weighted (r^2 dr dOmega)
+  mean of the HEALPix samples whose centres fall in it, so the integrated
+  extinction is conserved. Voxel centres beyond 1248 pc carry NaN (no data).
+- Units stay the map's: E of Zhang, Green & Rix (2023) per pc;
+  A_V(540 nm) = 2.8 E (Edenhofer et al. 2024, section 5), carried as
+  `a_v_per_unit`.
+- The report compares 16 sightlines (|b| < 27 deg) integrated natively against
+  the resampled grid; the median ratio is 0.978.
+- Host adapter (`host-adapter/`, wasmedge): `prepare_scheduled` reads the flow
+  configuration (`dust_map_3d_enabled`, `dust_map_3d_producer_peer_id`,
+  `dust_map_3d_source.access = anonymous`); `receipt_scheduled` stamps the
+  retrieval.
+
+Row fields (`$PCE`, provider-defined): `dataset`, `plane`, `shape`, `first_center`
+(kpc), `spacing` (kpc), `max_radius` (kpc), `unit`, `a_v_per_unit`, `density`
+(row-major x fastest, NaN = no data), `frame`, `source`, `license`, `credit`,
+`retrieved_at`.
+
+```sh
+npm install && npm run build
+```
+
+The one E2E is the Milky Way model's (`analysis/milky-way-model/tests/band-vs-gaia.e2e.mjs`):
+it runs these stages against an offline copy of the published byte ranges in
+`.source-cache/` (gitignored) and loads the rows into the model.

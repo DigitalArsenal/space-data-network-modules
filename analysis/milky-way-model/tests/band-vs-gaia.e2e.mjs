@@ -40,6 +40,16 @@ if (!legacyOnly) {
     }
   }
 }
+// The local 3D dust map over SDN: the provider stages of data-source/dust-map-3d
+// against the offline copy of the published file (IO only; see dust-provider.mjs).
+let dust = null;
+if (!legacyOnly) {
+  const {dustSource, deliverDustRows} = await import('./dust-provider.mjs');
+  if (!fs.existsSync(dustSource.file)) missing.push({file: dustSource.file,
+    url: `${dustSource.url} (byte ranges ${JSON.stringify(dustSource.ranges)} written at their offsets)`});
+  else dust = await deliverDustRows({retrievedAtMs: Date.parse('2026-10-17T00:00:00Z'),
+    progress: stage => { if (process.env.SDM_E2E_PROGRESS) console.log(`E2E ${stage}`); }});
+}
 if (missing.length) {
   console.log('BLOCKED Gaia E2E: offline oracle cache is incomplete.');
   for (const source of missing) console.log(`FETCH ${source.file}\n${source.url}`);
@@ -69,7 +79,9 @@ const compliance = await validateArtifactWithStandards({manifest, wasmPath,
   standardsRoot: path.dirname(require.resolve('spacedatastandards.org/package.json'))});
 assert.equal(compliance.ok, true, JSON.stringify(compliance.issues));
 console.log('PASS SDK manifest, SDS ports, canonical invoke ABI and artifact compliance');
-const planObject = {legacyOnly, maps: sources.maps, masers, reidOracle};
+const planObject = {legacyOnly, maps: sources.maps, masers, reidOracle,
+  dust: dust && {rowCount: dust.rows.length, meta: dust.meta, report: dust.report, bytesServed: dust.bytesServed}};
+const dustStream = dust ? Buffer.concat(dust.rows.map(row => Buffer.from(row))) : Buffer.alloc(0);
 async function nodeFallback(reason) {
   const summary = /MachPort.*Permission denied/s.test(reason)
     ? 'macOS sandbox denies Chromium Mach-port startup; Node WASM diagnostic follows'
@@ -84,7 +96,7 @@ async function nodeFallback(reason) {
     }
     assert(png, 'Offline pngjs decoder required for Node diagnostic fallback.');
   }
-  const result = await runE2E({browser: false, plan: planObject, wasm,
+  const result = await runE2E({browser: false, plan: planObject, wasm, dustRows: dust?.rows ?? [],
     progress: async stage => { if (process.env.SDM_E2E_PROGRESS) console.log(`E2E Node diagnostic ${stage}`); },
     async loadImage(source) {
       const image = png.sync.read(assets.get(`/oracle/${source.file}`));
@@ -133,6 +145,7 @@ const server = http.createServer((req, res) => {
   } else if (req.url === '/module.wasm') { res.setHeader('Content-Type', 'application/wasm'); res.end(wasm); }
   else if (req.url === '/runner.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(runner.outputFiles[0].text); }
   else if (req.url === '/wasi-worker.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(worker.outputFiles[0].text); }
+  else if (req.url === '/dust-rows') { res.setHeader('Content-Type', 'application/octet-stream'); res.end(dustStream); }
   else if (req.url === '/plan') { res.setHeader('Content-Type', 'application/json'); res.end(plan); }
   else if (assets.has(req.url)) { res.setHeader('Content-Type', 'image/png'); res.end(assets.get(req.url)); }
   else if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><title>Milky Way E2E</title><script type="module">const w=new Worker("/runner.js",{type:"module"});w.onerror=e=>fetch("/done",{method:"POST",body:JSON.stringify({error:e.message,checks:[]})});</script>'); }
@@ -181,6 +194,11 @@ if (report.skyPng) {
   fs.writeFileSync(path.join(buildDir, 'model-vs-flux.png'), Buffer.from(report.skyPng, 'base64'));
   report.evidenceImage = '.build/model-vs-flux.png (fitted model sky over the ESA flux map, 0.5-degree Galactic grid)';
   delete report.skyPng;
+}
+if (report.faceOnPng) {
+  fs.writeFileSync(path.join(buildDir, 'face-on-48kpc.png'), Buffer.from(report.faceOnPng, 'base64'));
+  report.faceOnImage = '.build/face-on-48kpc.png (G brightness, square-root stretch to the 99.5th percentile; BP/RP tint; display only)';
+  delete report.faceOnPng;
 }
 report.oracleSources = legacyOnly ? null : sources;
 report.maserExclusions = masers?.records.filter(record => record.exclusion).map(record => record.exclusion);

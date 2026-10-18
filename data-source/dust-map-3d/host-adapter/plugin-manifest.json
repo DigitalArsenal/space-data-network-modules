@@ -1,0 +1,152 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.dust-map-3d-host",
+  "name": "3D dust map host adapter",
+  "version": "0.1.0",
+  "description": "Host side of the 3D dust map retrieval flow: plugin.getConfig (keys dust_map_3d_enabled, dust_map_3d_producer_peer_id, dust_map_3d_source) and the retrieval receipt. Range planning, resampling and the $PCE rows stay in the portable core.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One configuration read per call, serially; the host owns I/O. No threads."
+  },
+  "methods": [
+    {
+      "methodId": "prepare_scheduled",
+      "displayName": "Prepare scheduled dust map retrieval",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source configuration for plan_dust and receipt_scheduled."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The source configuration for plan_dust and receipt_scheduled."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "receipt_scheduled",
+      "displayName": "Attach retrieval receipt",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The cycle's source configuration."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The cycle's source configuration."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "retrieved_at_ms and the producer peer ID of this node."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "retrieved_at_ms and the producer peer ID of this node."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

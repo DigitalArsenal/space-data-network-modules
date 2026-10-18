@@ -68,15 +68,22 @@ inline double cell_density_bound(const StarRequest& request) {
   const auto lo=request.minimum,hi=request.maximum;
   const double x=interval_min_abs(lo.x,hi.x),y=interval_min_abs(lo.y,hi.y);
   const double z=interval_min_abs(lo.z,hi.z),radius=std::hypot(x,y);
-  const auto discs=disc_densities({radius,0,z});
+  // The Robin hole factor is at most 1/hole(R0) (it rises with radius).
+  const double hole_bound=1/populations::old_hole(galactic_constants::solar_radius_kpc);
+  const double thin_bound=std::exp((galactic_constants::solar_radius_kpc-radius)/2.6-z/0.300)*hole_bound;
+  const double thick_bound=0.12*std::exp((galactic_constants::solar_radius_kpc-radius)/3.6-z/0.900);
   constexpr double angle=bar_angle_rad;
   const double c=std::cos(angle),s=std::sin(angle);
   const double u=interval_min_abs(-hi.x*c+lo.y*s,-lo.x*c+hi.y*s);
   const double v=interval_min_abs(lo.x*s+lo.y*c,hi.x*s+hi.y*c);
   const double ellipsoid=std::pow(std::pow(u/bulge_x_kpc,boxiness)+std::pow(v/bulge_y_kpc,boxiness)
       +std::pow(z/(bulge_z_kpc*(1+peanut_extent_kpc*peanut_strength)),boxiness),1/boxiness);
-  return discs[0]+discs[1]+arm_emissivity*reid_segments.size()*std::exp(-z/young_scale_height_kpc)
-      +bulge_emissivity*std::exp(-ellipsoid)+bar_emissivity*std::exp(-v/bar_minor_kpc-z/bar_height_kpc);
+  // The spiral wave is at most B_K on the thin disc (g<=1, Gaussian<=1); the
+  // young pattern is at most 1, on its own radial and vertical profile.
+  const double young=young_amplitude()/populations::young_hole(galactic_constants::solar_radius_kpc)
+      *std::exp((galactic_constants::solar_radius_kpc-radius)/populations::thin_length_kpc-z/populations::h_bright_kpc);
+  return thin_bound*(1+populations::arm_amplitude_k)+thick_bound+young
+      +bar_bulge_scale()*(bulge_emissivity*std::exp(-ellipsoid)+bar_emissivity*std::exp(-v/bar_minor_kpc-z/bar_height_kpc));
 }
 
 // Spatial completeness comes from the host's delivered octree selection; the

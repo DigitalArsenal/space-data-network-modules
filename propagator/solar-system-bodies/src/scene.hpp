@@ -68,7 +68,6 @@ enum Param : int {
     P_PROJECTION = 57, /* 16: camera.frustum.projectionMatrix, column-major */
     P_SSB_LABEL_SHOWN = 73,
     P_GALAXY_LABEL_SHOWN = 74,
-    P_RESUME_FRACTION = 75,
     P_SWITCH_BODY = 76,  /* index of the body becoming central */
     P_CARRY_NOW = 77,    /* 9: ICRF -> central fixed now, row-major */
     P_CARRY_LAST = 86,   /* 9: ICRF -> central fixed last frame, row-major */
@@ -167,6 +166,13 @@ constexpr int kDeclutterFrames = 3;
 constexpr double kSkyFadeStart = 1.0e15, kSkyFadeEnd = 1.0e16;
 constexpr double kKiloparsec = (1000.0 * 149597870700.0 * 648000.0) / 3.14159265358979323846;
 constexpr double kPiOverThree = 3.14159265358979323846 / 3.0;
+/* The orbiter propagation cutoff, in mean radii of the body orbited (owner
+ * 2026-10-17: "when the camera moves away 100x the radius of any central
+ * body the satellites for that central body should be hidden"), and the
+ * resume distance inside it (the hysteresis band). The one definition: see
+ * scopes(). */
+constexpr double kOrbiterCutoffRadii = 100.0;
+constexpr double kOrbiterResumeRadii = 90.0;
 
 struct Scene {
     uint32_t capacity = 0, n = 0;
@@ -351,7 +357,7 @@ inline void resize(uint32_t n, bool keep) {
             v.swap(next);
         };
         grow(s.ids, 1, 0); grow(s.flags, 1, 0); grow(s.kinds, 1, 0); grow(s.parents, 1, -1); grow(s.radii, 3, 0.0);
-        grow(s.extHelio, 6, 0.0); grow(s.extOk, 1, 0); grow(s.hg, 2, NAN); grow(s.cutoff, 1, 0.0); grow(s.state, 6, 0.0);
+        grow(s.extHelio, 6, 0.0); grow(s.extOk, 1, 0); grow(s.hg, 2, NAN); grow(s.cutoff, 2, 0.0); grow(s.state, 6, 0.0);
         grow(s.status, 1, -9); grow(s.rot, 10, 0.0); grow(s.rotStatus, 1, -9); grow(s.fixed, 3, 0.0); grow(s.drawn, 3, 0.0);
         grow(s.app, 7, 0.0); grow(s.appStatus, 1, -9); grow(s.off, 3, 0.0); grow(s.offStatus, 1, -9);
         grow(s.suspended, 1, 0); grow(s.suspendedChanged, 1, 0); grow(s.drawFlags, 1, 0); grow(s.pointRel, 3, 0.0);
@@ -368,7 +374,7 @@ inline void resize(uint32_t n, bool keep) {
             std::fill(v.begin() + stride * old, v.begin() + stride * s.capacity, static_cast<T>(fill));
         };
         clear(s.ids, 1, 0); clear(s.flags, 1, 0); clear(s.kinds, 1, 0); clear(s.parents, 1, -1); clear(s.radii, 3, 0.0);
-        clear(s.extHelio, 6, 0.0); clear(s.extOk, 1, 0); clear(s.hg, 2, NAN); clear(s.cutoff, 1, 0.0); clear(s.state, 6, 0.0);
+        clear(s.extHelio, 6, 0.0); clear(s.extOk, 1, 0); clear(s.hg, 2, NAN); clear(s.cutoff, 2, 0.0); clear(s.state, 6, 0.0);
         clear(s.status, 1, -9); clear(s.rot, 10, 0.0); clear(s.rotStatus, 1, -9); clear(s.fixed, 3, 0.0); clear(s.drawn, 3, 0.0);
         clear(s.app, 7, 0.0); clear(s.appStatus, 1, -9); clear(s.off, 3, 0.0); clear(s.offStatus, 1, -9);
         clear(s.suspended, 1, 0); clear(s.suspendedChanged, 1, 0); clear(s.drawFlags, 1, 0); clear(s.pointRel, 3, 0.0);
@@ -390,7 +396,7 @@ inline void removeAt(uint32_t i) {
         std::copy(v.begin() + stride * (i + 1), v.begin() + stride * s.n, v.begin() + stride * i);
     };
     drop(s.ids, 1); drop(s.flags, 1); drop(s.kinds, 1); drop(s.parents, 1); drop(s.radii, 3); drop(s.extHelio, 6);
-    drop(s.extOk, 1); drop(s.hg, 2); drop(s.cutoff, 1); drop(s.state, 6); drop(s.status, 1); drop(s.rot, 10);
+    drop(s.extOk, 1); drop(s.hg, 2); drop(s.cutoff, 2); drop(s.state, 6); drop(s.status, 1); drop(s.rot, 10);
     drop(s.rotStatus, 1); drop(s.fixed, 3); drop(s.drawn, 3); drop(s.app, 7); drop(s.appStatus, 1); drop(s.off, 3);
     drop(s.offStatus, 1); drop(s.suspended, 1); drop(s.suspendedChanged, 1); drop(s.drawFlags, 1);
     drop(s.pointRel, 3); drop(s.labelRel, 3); drop(s.style, 2); drop(s.model, 16); drop(s.light, 3); drop(s.ring, 6);
@@ -1041,14 +1047,23 @@ inline void declutterLabels() {
 /* ---- scopes ----------------------------------------------------------------- */
 
 /* Each body's orbiter propagation cutoff for a camera position (central
- * frame): suspended beyond the cutoff, resumed inside resumeFraction of it. */
+ * frame). A body's orbiters are suspended while the camera is farther than
+ * kOrbiterCutoffRadii of its mean radius from its center and resume inside
+ * kOrbiterResumeRadii. The mean radius is the mean of the body's three radii
+ * (for the Earth's ellipsoid, the IUGG mean radius R1). The two distances
+ * (m) are written to each body's S_CUTOFF pair, where the engine reads them;
+ * a body without radii is never cut off. */
 inline void scopes(const double* cam) {
     Scene& s = scene();
     const uint32_t ci = static_cast<uint32_t>(s.params[P_CENTRAL]);
-    const double resume = s.params[P_RESUME_FRACTION];
     for (uint32_t i = 0; i < s.n; ++i) {
         s.suspendedChanged[i] = 0;
-        const double cutoff = s.cutoff[i];
+        const double* r = &s.radii[3 * i];
+        const double mean = (r[0] + r[1] + r[2]) / 3.0;
+        const double cutoff = mean > 0.0 ? kOrbiterCutoffRadii * mean : 0.0;
+        const double resume = mean > 0.0 ? kOrbiterResumeRadii * mean : 0.0;
+        s.cutoff[2 * i] = cutoff;
+        s.cutoff[2 * i + 1] = resume;
         const bool was = s.suspended[i] != 0;
         bool now = false;
         if (cutoff > 0.0) {
@@ -1061,7 +1076,7 @@ inline void scopes(const double* cam) {
                 position = &s.fixed[3 * i];
             }
             const double distance = dist(cam, position);
-            now = was ? distance >= cutoff * resume : distance > cutoff;
+            now = was ? distance >= resume : distance > cutoff;
         }
         if (now != was) {
             s.suspended[i] = now ? 1 : 0;

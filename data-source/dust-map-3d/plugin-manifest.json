@@ -1,0 +1,365 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.dust-map-3d",
+  "name": "Local 3D interstellar dust (Edenhofer et al. 2024)",
+  "version": "0.1.0",
+  "description": "Retrieval nodes for the local 3D dust map of Edenhofer et al. (2024, A&A 685, A82): the posterior mean of the published NSIDE-256 HEALPix-times-distance map (Zenodo 10658339, CC BY 4.0), read by HTTP range (1.63 GB of the 3.25 GB file; the STD data is never read), resampled in WASM to a heliocentric Galactic grid of 20 pc voxels (125 x 125 x 61, |z| <= 610 pc, r <= 1248 pc) with volume-weighted means, and emitted as 61 SDS $PCE rows, one per z plane, for analysis/milky-way-model load_dust_map.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "plan_dust",
+      "displayName": "Plan the FITS header range",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Flow configuration from the host adapter (source.access anonymous)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Flow configuration from the host adapter (source.access anonymous)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
+        },
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.dust-map-3d-state",
+                "detail": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "advance_dust",
+      "displayName": "Deposit a stage of ranges and plan the next",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.dust-map-3d-state",
+                "detail": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
+        },
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.dust-map-3d-state",
+                "detail": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Unchanged source (304): the cycle ends."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Unchanged source (304): the cycle ends."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "build_dust",
+      "displayName": "Build the $PCE rows",
+      "inputPorts": [
+        {
+          "portId": "state",
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.dust-map-3d-state",
+                "detail": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Stage state: \"SDNDUST1\", u32 JSON length, the JSON (stage, offsets, radial tables, probes), then float32 voxel sums and weights."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Retrieval receipt: retrieved_at_ms and producer_peer_id."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Retrieval receipt: retrieved_at_ms and producer_peer_id."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "records-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $PCE stream, one row per z plane: dataset, plane, shape, first_center, spacing, max_radius, unit, a_v_per_unit, density, frame, source, license, credit, retrieved_at."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Ingest meta: schema, batch, provider edenhofer2024, source local-dust-1250pc, citation, licence."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Ingest meta: schema, batch, provider edenhofer2024, source local-dust-1250pc, citation, licence."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Build report: coverage, probe sightlines native against resampled A_V."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Build report: coverage, probe sightlines native against resampled A_V."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each stage deposits the HEALPix samples of its shell ranges into one voxel accumulator and plans the next ranges; the flow serializes stages and the provider node runs one cycle at a time, so the guest never spawns a thread."
+  }
+}
