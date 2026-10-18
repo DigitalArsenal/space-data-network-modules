@@ -1,0 +1,30 @@
+{
+  "name": "space-data-network-plugin-dust-map-3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "flow.mjs",
+    "plugin-manifest.json",
+    "README.md",
+    "NOTICE",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs && node host-adapter/build.mjs"
+  },
+  "dependencies": {
+    "flatbuffers": "25.9.23",
+    "spacedatastandards.org": "1.220.0"
+  },
+  "devDependencies": {
+    "flatc-wasm": "26.1.38",
+    "space-data-module-sdk": "0.9.2"
+  },
+  "license": "Apache-2.0"
+}

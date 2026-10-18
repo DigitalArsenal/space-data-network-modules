@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.milky-way-model",
   "name": "Milky Way volumetric model",
-  "version": "0.1.0",
-  "description": "Deterministic C++ shared-memory Milky Way emissivity, extinction and statistical model products; SDS PCE typed parameters and arena layouts.",
+  "version": "0.2.0",
+  "description": "Deterministic C++ shared-memory Milky Way emissivity, extinction and statistical model products: luminosity-weighted discs, spiral arm light, bar and bulge, Drimmel & Spergel 2001 dust and an optional local 3D dust map delivered as SDS rows (load_dust_map); BP/RP extinction ratios, an absolute radiance scale and face-on metrics; SDS PCE typed parameters and arena layouts.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -380,6 +380,102 @@
           ],
           "minStreams": 1,
           "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "face_on_metrics",
+      "displayName": "face_on_metrics",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "load_dust_map",
+      "displayName": "load_dust_map",
+      "inputPorts": [
+        {
+          "portId": "rows",
+          "acceptedTypeSets": [
+            {
+              "setId": "rows",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
           "required": true
         }
       ],

@@ -5,10 +5,12 @@
 #include "ridge_metrics.hpp"
 #include "reid_acceptance.hpp"
 #include "component_diagnostics.hpp"
+#include "face_on.hpp"
+#include "dust_rows.hpp"
 
 namespace milky_way {
 std::unique_ptr<Volume> detail;
-std::vector<float> last_sky,last_flux;
+std::vector<float> last_sky,last_flux,last_face_on;
 bool finite_vector(const std::vector<double>& values) {
   return std::all_of(values.begin(),values.end(),[](double v){return std::isfinite(v);});
 }
@@ -27,7 +29,9 @@ extern "C" int bake() {
   using namespace milky_way;
   wire::Request request;
   if (!request.ok) return wire::fail("Expected one $PCE request");
-  if (!request.values.empty()) return wire::fail("No optional dust grids accepted: Edenhofer license and SDN provenance are unverified");
+  if (!request.values.empty()) return wire::fail("bake takes no values; deliver a 3D dust map with load_dust_map first");
+  const auto& loaded=dust_map::grid();
+  if (loaded.nz && !loaded.ready) return wire::fail("A 3D dust map is partly loaded; deliver every plane or none");
   volumes=std::make_unique<NestedVolumes>(sun); volumes->bake(literature);legacy_active=false;
   // SplitMix64 seed 20261016; periodic texture samples, dimensionless model
   // noise. No inference of observed dust structure from this procedural tile.
@@ -38,8 +42,25 @@ extern "C" int bake() {
   volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
   r.text("channels","G,BP,RP relative emissivity per kpc; G extinction optical depth per kpc");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
-  r.text("calibration","Drimmel & Spergel 2001 disk, separate arm dust and local segment; independent of Gaia; l=0/180 widths remain known gaps");
-  r.vector("sun",{sun.x,sun.y,sun.z},"kpc");return r.emit();
+  r.text("calibration",loaded.ready
+    ?"Local 3D dust map inside its coverage, Drimmel & Spergel 2001 disk, arm dust and local segment beyond; spiral light from DS2001 B_K and Flynn 2006; independent of Gaia"
+    :"Drimmel & Spergel 2001 disk, separate arm dust and local segment; spiral light from DS2001 B_K and Flynn 2006; independent of Gaia");
+  r.text("dust_map",loaded.ready?(loaded.dataset+": "+loaded.source+"; "+loaded.license).c_str():"none");
+  r.number("dust_map_radius",loaded.ready?loaded.radius:0,"kpc");
+  r.vector("sun",{sun.x,sun.y,sun.z},"kpc");
+  // Additive renderer fields. BP and RP optical depth per kpc are these
+  // multiples of the G channel (Wang & Chen 2019 Table 3).
+  r.vector("extinction_ratios",{model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction},"A_BP/A_G,A_RP/A_G");
+  // One G unit (emissivity per kpc x kpc) in physical units: the model's own
+  // local mid-plane emissivity carries Flynn et al. 2006's 0.056 Lsun,V pc^-3.
+  const double local=literature({-galactic_constants::solar_radius_kpc,0,0}).r;
+  const double column=populations::unit_column_lsun_v_pc2/local;
+  const double mu_g=populations::sun_absolute_v+21.572-2.5*std::log10(column)+populations::g_minus_v_local();
+  r.number("radiance_scale",std::pow(10.0,-0.4*mu_g),"G=0 (Vega) flux arcsec^-2");
+  r.number("radiance_scale_mag_arcsec2",mu_g,"mag_G arcsec^-2");
+  r.number("radiance_scale_lsun_v_pc2",column,"Lsun,V pc^-2");
+  r.text("radiance_scale_basis","Flynn et al. 2006 Table 4 local V luminosity density 0.056 Lsun pc^-3 at the model's local mid-plane G emissivity; M_V,sun=4.81 (Willmer 2018); G-V of (V-I)=0.82 by Gaia EDR3 Table 5.7");
+  return r.emit();
 }
 
 extern "C" int extinction() {
@@ -162,5 +183,45 @@ extern "C" int ridge_metrics() {
   r.vector("paper_frame_residuals",acceptance.residuals,"kpc");
   r.number("paper_exclusions",acceptance.excluded);
   r.text("measurement","local associated peak of baked G minus independently interpolated smooth background; unresolved peaks are failures");
+  return r.emit();
+}
+
+extern "C" int face_on_metrics() {
+  using namespace milky_way;
+  wire::Request request;
+  if (!request.ok || !model_ready()) return wire::fail("Bake the literature model first");
+  auto f=milky_way::face_on(*volumes);
+  if (!f.valid) return wire::fail("Face-on image has too few disc pixels, arm crossings or light");
+  last_face_on=std::move(f.rgb);
+  wire::Result r;
+  r.vector("face_on_layout",{double(reinterpret_cast<uintptr_t>(last_face_on.data())),double(last_face_on.size()*4),
+    double(FaceOnReport::size),double(FaceOnReport::size),3,1,4},"byte-layout");
+  r.vector("face_on_extent",{-FaceOnReport::half_extent_kpc,-FaceOnReport::half_extent_kpc,
+    FaceOnReport::half_extent_kpc,FaceOnReport::half_extent_kpc},"kpc");
+  r.number("camera_height",FaceOnReport::camera_kpc,"kpc");
+  r.number("arm_contrast",f.arm_contrast);
+  r.number("arm_contrast_mag",f.arm_contrast>0?2.5*std::log10(f.arm_contrast):0,"mag");
+  r.vector("arm_crossings",f.crossings_deg,"deg");
+  r.vector("arm_crossing_contrasts",f.crossing_contrasts);
+  r.number("arc_max_over_min",f.arc_max_over_min);
+  r.vector("arc_profile",f.arc_profile,"G units");
+  r.number("bar_a2",f.bar_a2);r.number("bar_phase",f.bar_phase_deg,"deg");
+  r.number("bar_expected_phase",f.bar_expected_deg,"deg");
+  r.number("lane_bp_rp",f.lane_color,"mag");r.number("disc_bp_rp",f.disc_color,"mag");
+  r.number("lane_reddening",f.lane_color-f.disc_color,"mag");
+  r.number("lane_pixels",double(f.lane_pixels));r.number("disc_pixels",double(f.disc_pixels));
+  r.number("lane_tau_threshold",f.lane_tau_threshold);
+  r.text("method","face-on from 48 kpc, 0.125-kpc pixels; arm contrast 2 I_arm/(I_inter1+I_inter2) on the R0 azimuthal scan at drifted major-arm crossings (Elmegreen et al. 2011); bar m=2 amplitude over 1.5-4.5 kpc; lanes = most opaque tenth of 3-12 kpc");
+  return r.emit();
+}
+
+extern "C" int load_dust_map() {
+  using namespace milky_way;
+  const auto loaded=dust_rows::load();
+  if (loaded.error) return wire::fail(loaded.error);
+  wire::Result r;
+  const auto& g=dust_map::grid();
+  r.number("planes_loaded",g.loaded);r.number("planes",g.nz);r.number("ready",g.ready?1:0);
+  r.text("dataset",g.dataset.c_str());r.number("rows",loaded.rows);
   return r.emit();
 }

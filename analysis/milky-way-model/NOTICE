@@ -13,6 +13,14 @@ Wegg & Gerhard 2013, MNRAS 435, 1874, doi:10.1093/mnras/stt1376.
 Wegg, Gerhard & Portail 2015, MNRAS 450, 4050, doi:10.1093/mnras/stv745.
 Reid et al. 2019, ApJ 885, 131, doi:10.3847/1538-4357/ab4a11.
 Drimmel & Spergel 2001, ApJ 556, 181, doi:10.1086/321556.
+Flynn et al. 2006, MNRAS 372, 1149, doi:10.1111/j.1365-2966.2006.10911.x.
+Robin et al. 2003, A&A 409, 523.
+Portail et al. 2017, MNRAS 465, 1621.
+Elmegreen et al. 2011, ApJ 737, 32, doi:10.1088/0004-637X/737/1/32.
+Querejeta et al. 2024, arXiv:2405.05364.
+Wang & Chen 2019, ApJ 877, 116, doi:10.3847/1538-4357/ab1c61.
+Willmer 2018, ApJS 236, 47, doi:10.3847/1538-4365/aabfdf.
+Gaia EDR3 documentation section 5.5.1 (Riello et al. 2021, A&A 649, A3).
 Solar/frame constants have their own citations in galactic_constants.hpp.
 
 Test-only ESA/Gaia/DPAC all-sky display maps: CC BY-SA 3.0 IGO, attribution and
@@ -21,6 +29,7 @@ are excluded from package publication. The Reid Table 1 VizieR cache is also
 test-only; its redistribution terms have not been verified offline, and the
 dataset is not published with this module.
 
-Edenhofer et al. 2024 dust: no data included or accepted; license and SDN
-publication remain unverified. Procedural noise and statistical samples are
+Edenhofer et al. 2024, A&A 685, A82, local 3D dust (Zenodo 10658339, CC BY 4.0):
+no data included; load_dust_map accepts the $PCE rows data-source/dust-map-3d
+delivers over SDN, and the bake output names the dataset and licence. Procedural noise and statistical samples are
 labeled model and carry no observed catalog identity.

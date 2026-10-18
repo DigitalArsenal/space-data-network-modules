@@ -1,0 +1,10 @@
+data-source/dust-map-3d — Digital Arsenal. Licensed under the Apache License 2.0 (LICENSE).
+
+Data retrieved at run time (not bundled):
+Edenhofer, G., Zucker, C., Frank, P., Saydjari, A. K., Speagle, J. S.,
+Finkbeiner, D., Ensslin, T. A. (2024), "A parsec-scale Galactic 3D dust map
+out to 1.25 kpc from the Sun", A&A 685, A82, doi:10.1051/0004-6361/202347628.
+Dataset: Zenodo record 10658339, doi:10.5281/zenodo.10658339, CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/).
+
+HEALPix pixel geometry follows Gorski et al. (2005), ApJ 622, 759.

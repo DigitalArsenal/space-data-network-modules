@@ -15,6 +15,43 @@ function validLayout(harness, name, layout, expected) {
     check(`${name} contains baked data`, bytes.some(value => value !== 0));
   }
 }
+// The face-on view from 48 kpc (the owner's iPhone view): arm/interarm
+// contrast along the Sun's arc against the Elmegreen et al. (2011) S4G
+// multiple-arm/grand-design range (0.81+-0.28 and 1.14+-0.44 mag at 3.6 um,
+// B and I alike: >= 1.5 in intensity), the bar's m=2 amplitude
+// (A2 >= 0.2, the usual bar criterion) aligned with the 27-degree bar, and
+// reddened dust lanes. An evidence PNG is written (IO only, square-root stretch).
+async function faceOn(invoke, harness, report, check) {
+  const f = await invoke('face_on_metrics');
+  report.faceOn = {...f, arc_profile: undefined};
+  check('face-on arm/interarm contrast on the Sun\'s arc >= 1.5', f.arm_contrast >= 1.5,
+    `contrast=${f.arm_contrast} (${f.arm_contrast_mag} mag), crossings=${JSON.stringify(f.arm_crossings)}, per crossing=${JSON.stringify(f.arm_crossing_contrasts)}`);
+  const phase = Math.abs(((f.bar_phase - f.bar_expected_phase) % 180 + 270) % 180 - 90);
+  check('face-on bar visible (A2 >= 0.2, aligned within 10 deg)', f.bar_a2 >= 0.2 && phase <= 10,
+    `A2=${f.bar_a2}, phase=${f.bar_phase}, expected=${f.bar_expected_phase}`);
+  check('face-on dust lanes redder than the disc', f.lane_reddening > 0,
+    `lanes BP-RP=${f.lane_bp_rp}, disc=${f.disc_bp_rp}, reddening=${f.lane_reddening} mag (${f.lane_pixels} of ${f.disc_pixels} px)`);
+  report.lines.push(`Face-on 48 kpc: arm/interarm=${f.arm_contrast?.toFixed(3)} (${f.arm_contrast_mag?.toFixed(3)} mag), arc max/min=${f.arc_max_over_min?.toFixed(3)}, bar A2=${f.bar_a2?.toFixed(3)} phase=${f.bar_phase?.toFixed(1)}/${f.bar_expected_phase?.toFixed(1)}, lane reddening=${f.lane_reddening?.toFixed(4)} mag`);
+  if (typeof OffscreenCanvas !== 'function' || !(f.face_on_layout?.[0] > 0)) return;
+  const n = f.face_on_layout[2], rgb = new Float32Array(harness.memory.buffer, f.face_on_layout[0], n * n * 3);
+  const g = Array.from({length: n * n}, (_, i) => rgb[i * 3]).filter(v => v > 0).sort((a, b) => a - b);
+  const white = g[Math.floor(g.length * 0.995)];
+  const canvas = new OffscreenCanvas(n, n), context = canvas.getContext('2d'), image = context.createImageData(n, n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const k = (j * n + i) * 3, o = ((n - 1 - j) * n + i) * 4, total = rgb[k];
+    const v = total > 0 ? Math.min(1, Math.sqrt(total / white)) : 0;
+    // BP drives blue and RP red about the G brightness; display only.
+    const bp = total > 0 ? rgb[k + 1] / total : 0, rp = total > 0 ? rgb[k + 2] / total : 0;
+    image.data[o] = Math.min(255, 255 * v * rp / 1.2); image.data[o + 1] = 255 * v * 0.85;
+    image.data[o + 2] = Math.min(255, 255 * v * bp / 0.8); image.data[o + 3] = 255;
+  }
+  context.putImageData(image, 0, 0);
+  const bytes = new Uint8Array(await (await canvas.convertToBlob({type: 'image/png'})).arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  report.faceOnPng = btoa(binary);
+}
+
 export async function runE2E(runtime) {
   const {plan, wasm, progress} = runtime;
   await progress('worker started');
@@ -49,7 +86,21 @@ export async function runE2E(runtime) {
     report.lines.push(`Legacy 0.5-degree sky: max=${parity.max_error}, RMS=${parity.rms_error}, samples=${parity.samples}`);
     if (plan.legacyOnly) return report;
 
+    // The 3D dust map arrives as the provider's SDS $PCE rows, one per plane.
+    const dustPlan = plan.dust;
+    check('3D dust map delivered as SDS rows', dustPlan?.rowCount === 61 && runtime.dustRows?.length === 61 &&
+      dustPlan.meta?.schema === 'PCE.fbs' && /CC BY 4\.0/.test(dustPlan.meta?.licence ?? ''),
+      `rows=${dustPlan?.rowCount}, provider=${dustPlan?.meta?.provider_id}, licence=${dustPlan?.meta?.licence}, bytes read=${dustPlan?.bytesServed}`);
+    check('dust resampling conserves sightline extinction (median within 15%)',
+      Math.abs((dustPlan?.report?.probe_median_grid_over_native ?? 0) - 1) <= 0.15,
+      `median grid/native A_V=${dustPlan?.report?.probe_median_grid_over_native} over ${dustPlan?.report?.probes?.length} sightlines`);
+    const loaded = await harness.invoke({methodId: 'load_dust_map', inputs: (runtime.dustRows ?? []).map(payload => ({portId: 'rows',
+      typeRef: {schemaName: 'PCE.fbs', fileIdentifier: '$PCE', rootTypeName: 'PCE', wireFormat: 'flatbuffer'}, payload}))});
+    const loadResult = loaded.statusCode === 0 ? decodeResult(loaded.outputs[0].payload) : {error: loaded.errorMessage};
+    check('model loads every dust plane', loadResult.ready === 1 && loadResult.planes_loaded === 61, JSON.stringify(loadResult));
+    report.lines.push(`Dust map: ${dustPlan?.meta?.citation}; ${dustPlan?.report?.covered_voxels} voxels, median sightline A_V grid/native=${dustPlan?.report?.probe_median_grid_over_native}`);
     const bake = await invoke('bake');
+    check('bake uses the delivered 3D dust map', /edenhofer2024/.test(bake.dust_map ?? ''), bake.dust_map);
     const retiredFit = await harness.invoke(encodeRequest('calibrate'));
     check('Gaia dust calibration is retired', retiredFit.statusCode !== 0 &&
       retiredFit.errorMessage?.includes('calibration retired'), retiredFit.errorMessage);
@@ -62,6 +113,15 @@ export async function runE2E(runtime) {
     check('model label', bake.label === 'model', bake.label);
     check('detail tile layout', Array.isArray(bake.noise_layout) && bake.noise_layout.length === 7 &&
       bake.noise_layout[0] > 0 && bake.noise_layout[1] > 0, JSON.stringify(bake.noise_layout));
+    // Additive renderer fields: BP/RP extinction ratios and the absolute radiance scale.
+    check('BP/RP extinction ratios', Array.isArray(bake.extinction_ratios) && bake.extinction_ratios.length === 2 &&
+      bake.extinction_ratios[0] > 1 && bake.extinction_ratios[1] < 1, JSON.stringify(bake.extinction_ratios));
+    check('absolute radiance scale', bake.radiance_scale > 0 && bake.radiance_scale_mag_arcsec2 > 18 &&
+      bake.radiance_scale_mag_arcsec2 < 26, `mu_G=${bake.radiance_scale_mag_arcsec2} mag arcsec^-2, column=${bake.radiance_scale_lsun_v_pc2} Lsun,V pc^-2`);
+    report.radiance = {radiance_scale: bake.radiance_scale, mu_g: bake.radiance_scale_mag_arcsec2,
+      column_lsun_v_pc2: bake.radiance_scale_lsun_v_pc2, basis: bake.radiance_scale_basis, extinction_ratios: bake.extinction_ratios};
+    report.dustMap = {dataset: bake.dust_map, radius_kpc: bake.dust_map_radius};
+    await faceOn(invoke, harness, report, check);
     const counts = {spawned: harness.threadHost?.spawnCount() ?? 0,
       workers: harness.threadHost?.distinctOsThreadCount() ?? 0};
     check('real WASI pthread workers', counts.spawned > 0 && counts.workers > 0, JSON.stringify(counts));
@@ -133,18 +193,12 @@ export async function runE2E(runtime) {
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       report.skyPng = btoa(binary);
     }
-    check('Gaia flux log-intensity Pearson r', metrics.flux_r >= 0.84, `r=${metrics.flux_r}, required>=0.84`);
+    check('Gaia flux log-intensity Pearson r', metrics.flux_r >= 0.85, `r=${metrics.flux_r}, required>=0.85`);
     check('Gaia density log-intensity Pearson r', metrics.density_r >= 0.75, `r=${metrics.density_r}, required>=0.75`);
     check('four longitude FWHM comparisons', metrics.fwhm_relative_errors?.length === 4);
     for (const [index, longitude] of [0, 90, 180, 270].entries()) {
       const detail = `relative error=${metrics.fwhm_relative_errors?.[index]}, model=${metrics.fwhm_model?.[index]}, oracle=${metrics.fwhm_flux?.[index]} deg`;
-      if (longitude === 90 || longitude === 270) {
-        check(`latitude FWHM at l=${longitude}`, metrics.fwhm_relative_errors?.[index] <= 0.25, detail);
-      } else {
-        report.knownGaps.push({name: `latitude FWHM at l=${longitude}`, detail,
-          followUp: 'milky-way-local-3d-dust-20261017'});
-        report.lines.push(`REPORTED (not gated): latitude FWHM at l=${longitude}: ${detail}`);
-      }
+      check(`latitude FWHM at l=${longitude}`, metrics.fwhm_relative_errors?.[index] <= 0.25, detail);
     }
     check('Great Rift dip', metrics.rift_ratio > 0 && metrics.rift_ratio < 1, `ratio=${metrics.rift_ratio}`);
     report.lines.push(`Gaia display-map log r: flux=${metrics.flux_r}, density=${metrics.density_r}; FWHM errors=${JSON.stringify(metrics.fwhm_relative_errors)}; Rift=${metrics.rift_ratio}`);
@@ -183,6 +237,11 @@ export async function runE2E(runtime) {
 if (typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof WorkerGlobalScope) {
   (async () => runE2E({browser: true,
     plan: await (await fetch('/plan')).json(),
+    dustRows: await (async () => {
+      const bytes = new Uint8Array(await (await fetch('/dust-rows')).arrayBuffer()), view = new DataView(bytes.buffer), rows = [];
+      for (let at = 0; at < bytes.length;) { const size = view.getUint32(at, true); rows.push(bytes.slice(at, at + 4 + size)); at += 4 + size; }
+      return rows;
+    })(),
     wasm: new Uint8Array(await (await fetch('/module.wasm')).arrayBuffer()),
     progress: body => fetch('/progress', {method: 'POST', body}),
     async loadImage(source) {
