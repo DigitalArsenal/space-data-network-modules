@@ -34,7 +34,8 @@
     "src/history.cpp",
     "src/uncertainty.cpp",
     "src/encode.cpp",
-    "src/rpo_history.cpp"
+    "src/rpo_history.cpp",
+    "src/inspect.cpp"
   ],
   "threadModel": "single-thread"
 }

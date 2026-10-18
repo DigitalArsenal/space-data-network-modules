@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.dust-map-3d",
   "name": "Local 3D interstellar dust (Edenhofer et al. 2024)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Retrieval nodes for the local 3D dust map of Edenhofer et al. (2024, A&A 685, A82): the posterior mean of the published NSIDE-256 HEALPix-times-distance map (Zenodo 10658339, CC BY 4.0), read by HTTP range (1.63 GB of the 3.25 GB file; the STD data is never read), resampled in WASM to a heliocentric Galactic grid of 20 pc voxels (125 x 125 x 61, |z| <= 610 pc, r <= 1248 pc) with volume-weighted means, and emitted as 61 SDS $PCE rows, one per z plane, for analysis/milky-way-model load_dust_map.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -54,23 +54,21 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "request-v1",
+              "setId": "http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 64,
           "required": false,
-          "description": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
+          "description": "The next stage's range requests, each an HttpRequest (HREQ: GET, the range in the URL and the Range header, TIMEOUT_MS, MAX_BYTES) for hostcap/http-request."
         },
         {
           "portId": "state",
@@ -128,23 +126,21 @@
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 64,
           "required": true,
-          "description": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+          "description": "hostcap/http-request's HttpResponse (HRSP) frames, one per planned request in order (STATUS 206 and the range bytes as BODY; STATUS 0 with ERROR when the host refused or failed)."
         }
       ],
       "outputPorts": [
@@ -152,23 +148,21 @@
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "request-v1",
+              "setId": "http-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
-              }
+              ]
             }
           ],
           "minStreams": 0,
           "maxStreams": 64,
           "required": false,
-          "description": "The next stage's range requests (JSON: method, url, headers.Range, timeoutMs, maxBytes, responseWire)."
+          "description": "The next stage's range requests, each an HttpRequest (HREQ: GET, the range in the URL and the Range header, TIMEOUT_MS, MAX_BYTES) for hostcap/http-request."
         },
         {
           "portId": "state",
@@ -248,23 +242,21 @@
           "portId": "response",
           "acceptedTypeSets": [
             {
-              "setId": "response-v1",
+              "setId": "http-response",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "foreign-wire-format",
-                "mediaType": "application/vnd.sdn.http-raw-body-v1",
-                "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 64,
           "required": true,
-          "description": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the range bytes."
+          "description": "hostcap/http-request's HttpResponse (HRSP) frames, one per planned request in order (STATUS 206 and the range bytes as BODY; STATUS 0 with ERROR when the host refused or failed)."
         },
         {
           "portId": "receipt",
@@ -313,23 +305,21 @@
           "portId": "meta",
           "acceptedTypeSets": [
             {
-              "setId": "meta-v1",
+              "setId": "ingest-request",
               "allowedTypes": [
                 {
-                  "acceptsAnyFlatbuffer": true
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
                 }
-              ],
-              "wildcardJustification": {
-                "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Ingest meta: schema, batch, provider edenhofer2024, source local-dust-1250pc, citation, licence."
-              }
+              ]
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Ingest meta: schema, batch, provider edenhofer2024, source local-dust-1250pc, citation, licence."
+          "description": "The ingest meta for hostcap/storage-ingest, an IngestRequest (INGQ): SCHEMA PCE.fbs, provider edenhofer2024, source local-dust-1250pc, the batch, source URL, producer peer, license and credit; RECONCILE Current."
         },
         {
           "portId": "report",

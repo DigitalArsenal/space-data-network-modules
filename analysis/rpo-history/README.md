@@ -82,6 +82,36 @@ It assumes no maneuvers after `stop`.
 `projection_hours` (24), `hindcast`, `calibration_days` (14), `settle_days`
 (1), `propagator_port_id`, `creation_date`.
 
+## `inspect`
+
+| Port | Direction | Content |
+| --- | --- | --- |
+| `chaser` | in | `$OEM` blocks of the chaser's trajectory (UTC, km, km/s, one Earth-centered frame); several blocks are arcs |
+| `target` | in | `$OEM` blocks of the target's trajectory, same frame |
+| `sun` | in | `$OEM` of the Sun's Earth-centered position, same frame |
+| `inspection` | out | `$OCM` per run of samples, extended type `RPO_INSPECTION` |
+
+On a fixed UTC grid (`inspect.start`, `inspect.stop`, `inspect.step_seconds`), each
+sample takes each object's block that starts latest and covers it; arcs are never
+blended. The columns:
+
+- `PHASE_ANGLE_DEG`: the angle at the target between the Sun and the chaser.
+- `TARGET_SUNLIT`, `CHASER_SUNLIT`: the conical Earth-shadow function (Montenbruck
+  & Gill 2000, 3.4.2; spherical Earth 6378.137 km, Sun 695700 km): 1 sunlit, 0 umbra.
+- `LINE_OF_SIGHT`: 1 when the chaser-target segment clears the Earth;
+  `TARGET_LIT_FROM_CHASER` = `TARGET_SUNLIT` × `LINE_OF_SIGHT`.
+- `SUN_FROM_LINE_OF_SIGHT_DEG`, `RANGE_KM`.
+- `CHASER_OFF_NADIR_DEG`, `CHASER_CLOCK_DEG`: the chaser in the target's orbit frame
+  (nadir, Earth-relative along-track, right of the track; clock 90 right, 270 left).
+- `IN_SAR_RIGHT`, `IN_SAR_LEFT`: with `inspect.sar_*` (carrier frequency, aperture,
+  incidence band, a citation), 1 when the chaser is inside the side-looking radar's
+  field of regard on that side: off nadir between the band's look angles (spherical
+  Earth, at each sample's radius) and within half the azimuth beamwidth (0.886 λ / L)
+  of the broadside plane. The derived wavelength, beamwidths and look angles are
+  recorded as parameters.
+
+`node tests/inspect.e2e.mjs` checks every column against closed-form geometry.
+
 ## Build and E2E
 
 ```sh

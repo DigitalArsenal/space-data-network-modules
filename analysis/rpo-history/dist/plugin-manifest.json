@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.rpo-history",
   "name": "RPO history",
-  "version": "0.1.0",
-  "description": "Rendezvous and proximity operations characterization for any chaser/target pair from element-set history. characterize takes both objects' element sets ($OMM), asks for each set's trajectory on a propagator query port (SGP4, FFM (Full Force Model) or any provider the host plugs in), and per sample of a fixed UTC grid uses each object's set in force, never interpolating across an element update: the chaser's state in the target's CCSDS RTN axes (rectilinear and curvilinear RIC, the RIC box's definitions), separation, range rate, orbital-plane angle and D'Amico relative orbital elements, split into segments at every element update and left out inside maneuver brackets ($MNV from analysis/maneuver-detection). A conditional coast projection holds the newest sets fixed, with 1-sigma and 3-sigma bands from the GP error model ($ERM), calibrated continuously on the pair's own recent predictions against the next element sets, and a hindcast of those bands ($CVR).",
+  "version": "0.2.0",
+  "description": "Rendezvous and proximity operations characterization for any chaser/target pair from element-set history. characterize takes both objects' element sets ($OMM), asks for each set's trajectory on a propagator query port (SGP4, FFM (Full Force Model) or any provider the host plugs in), and per sample of a fixed UTC grid uses each object's set in force, never interpolating across an element update: the chaser's state in the target's CCSDS RTN axes (rectilinear and curvilinear RIC, the RIC box's definitions), separation, range rate, orbital-plane angle and D'Amico relative orbital elements, split into segments at every element update and left out inside maneuver brackets ($MNV from analysis/maneuver-detection). A conditional coast projection holds the newest sets fixed, with 1-sigma and 3-sigma bands from the GP error model ($ERM), calibrated continuously on the pair's own recent predictions against the next element sets, and a hindcast of those bands ($CVR). inspect takes the chaser's, the target's and the Sun's trajectories ($OEM, one Earth-centered frame) and writes the inspection geometry on a fixed UTC grid ($OCM, extended type RPO_INSPECTION): the solar phase angle at the target, each object's conical Earth-shadow function, the line of sight clear of the Earth, the target lit as seen from the chaser, the Sun's angle from the line of sight, the range, and the chaser's off-nadir and clock angles in the target's orbit frame with its place in a side-looking radar's field of regard (left and right of the track) for a configured carrier frequency, aperture and incidence band, the derived wavelength, beamwidths and look angles recorded as parameters.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -221,6 +221,96 @@
           "maxStreams": 1,
           "required": false,
           "description": "With an error model: one size-prefixed $CVR, the hindcast of the projection bands against the next element sets (mean d2/3, 95 % coverage, samples, objects; distinct truth epochs and the per-axis shares inside the 1- and 3-sigma bands in EVIDENCE). CALIBRATION follows the CVR rule, which needs at least 3 objects: one pair alone stays Uncalibrated."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "inspect",
+      "displayName": "Inspection geometry",
+      "inputPorts": [
+        {
+          "portId": "chaser",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The chaser's trajectory: $OEM data blocks (UTC, km, km/s, an Earth-centered inertial or Earth-fixed frame). Several blocks are arcs: at each sample the block that starts latest and covers it, never blended."
+        },
+        {
+          "portId": "target",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The target's trajectory, as chaser, in the same frame."
+        },
+        {
+          "portId": "sun",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The Sun's Earth-centered position (and velocity, unused) as $OEM data blocks in the same frame."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "inspection",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $OCM records, one per run of samples all three trajectories cover, extended trajectory type RPO_INSPECTION (TRAJ_TYPE_DESCRIPTION): STATE_DATA rows of the columns USER_DEFINED_PARAMETERS COLUMNS names (PHASE_ANGLE_DEG, TARGET_SUNLIT, CHASER_SUNLIT, LINE_OF_SIGHT, TARGET_LIT_FROM_CHASER, SUN_FROM_LINE_OF_SIGHT_DEG, RANGE_KM, CHASER_OFF_NADIR_DEG, CHASER_CLOCK_DEG, IN_SAR_RIGHT, IN_SAR_LEFT), START_TIME + i * STATE_STEP_SIZE; the shadow, line-of-sight and frame models and the radar's inputs and derived wavelength, beamwidths and look angles as parameters."
         }
       ],
       "maxBatch": 1,

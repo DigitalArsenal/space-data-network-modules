@@ -1,0 +1,400 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.optical-astrometry",
+  "name": "Optical astrometry",
+  "version": "0.1.0",
+  "description": "Optical frames to angles and an orbit. reduce reads a sequence of frames (FITS with DATE-OBS, EXPTIME and site headers, or 8/16-bit PGM from a video), times them (FITS DATE-OBS, or a burnt-in UTC overlay read by a self-calibrating fixed-font digit matcher checked against the frame cadence), detects and centroids the stars (trails at mid-exposure) and the satellites, plate-solves every frame (blind quad-hash solving after Lang et al. 2010, then each frame from its neighbor, TAN projection with a linear or quadratic plate, weighted against apparent star places from the catalog: proper motion and parallax to the epoch, light deflection and aberration by the site's velocity), estimates the site and the time-tag bias from a calibrator whose orbit is known when the site is not given, identifies the targets among the tracks by orbit fit, and determines each target's orbit: Gooding angles-only initial orbit, then weighted batch least squares with the a priori element set (its covariance from the GP error model at the set's age) and the site and timing as consider parameters. It holds no propagator and no catalog: element-set trajectories come through the propagator query port ($PRW window requests, answered by analysis/epoch-state or any provider) and reference stars through catalog cones ($SKQ, answered from any star service, e.g. Gaia DR3). Out: CCSDS TDM angles (RADEC, GCRF, per object), $EOO observations with their uncertainties, $SKI plate solutions, the orbit ($OCM state and covariance, with checks against later element sets) and its trajectory ($OEM, for analysis/od to fit mean elements), and a FlowNotice report of every number with its uncertainty.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic image reduction and estimation over caller-supplied frames, element sets, trajectories, star records, Earth orientation and an error model. One host call, plugin.getConfig (the options); no threads, propagation or network access: trajectories and stars come from the caller through the query ports."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    },
+    {
+      "schemaName": "SKT.fbs",
+      "fileIdentifier": "$SKT",
+      "rootTypeName": "SKT"
+    },
+    {
+      "schemaName": "STR.fbs",
+      "fileIdentifier": "$STR",
+      "rootTypeName": "STR"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
+    },
+    {
+      "schemaName": "SKQ.fbs",
+      "fileIdentifier": "$SKQ",
+      "rootTypeName": "SKQ"
+    },
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM"
+    },
+    {
+      "schemaName": "EOO.fbs",
+      "fileIdentifier": "$EOO",
+      "rootTypeName": "EOO"
+    },
+    {
+      "schemaName": "SKI.fbs",
+      "fileIdentifier": "$SKI",
+      "rootTypeName": "SKI"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "reduce",
+      "displayName": "Reduce optical frames to angles and an orbit",
+      "inputPorts": [
+        {
+          "portId": "frames",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-fil-frames",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The frames in time order, one $FIL each (plain or size-prefixed, any number per stream): CONTENT a FITS primary HDU (BITPIX 8, 16, 32, -32, -64; DATE-OBS, EXPTIME, SITELAT, SITELONG, SITEELEV read) or a binary PGM (P5, 8 or 16 bit); NAME echoed in the plate records. Frames without DATE-OBS are timed from a burnt-in UTC overlay (optical.overlay_format)."
+        },
+        {
+          "portId": "element_sets",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Element sets ($OMM, plain or size-prefixed) of the calibrator and the targets; other objects are ignored. The calibrator uses its set nearest the arc; each target its newest set with EPOCH at or before the first frame (optionally created before optical.prior_created_before) as the prior, and its later sets as checks."
+        },
+        {
+          "portId": "propagation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The answers to propagation_requests: one $OEM data block per query in SEQUENCE order (UTC, km, km/s, TEME or GCRF axes, centered on EARTH). A refused set is an empty block whose COMMENT begins REFUSED (refusing the calibrator or a prior fails the call)."
+        },
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-str-rows",
+              "allowedTypes": [
+                {
+                  "schemaName": "STR.fbs",
+                  "fileIdentifier": "$STR",
+                  "rootTypeName": "STR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Reference stars as size-prefixed $STR rows (RA, DEC, PMRA, PMDEC, PARALLAX, STAR_EPOCH; V photometry, else GMAG), e.g. the answers to catalog_requests. Duplicates of one place count once."
+        },
+        {
+          "portId": "sky_tiles",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-skt-tiles",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKT.fbs",
+                  "fileIdentifier": "$SKT",
+                  "rootTypeName": "SKT",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Reference stars as size-prefixed $SKT POINT_SOURCES tiles (ICRS, catalog places; the SDN star-catalog layers), merged with catalog."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Earth orientation ($EOP, one row or a size-prefixed stream, at most 366 rows) for UT1 and polar motion; without it UT1 = UTC and no polar motion, and the report says so."
+        },
+        {
+          "portId": "error_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm-model",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One GP error model ($ERM MODEL, analysis/gp-error-model): the 6x6 RTN covariance by orbit regime and element-set age (the clipped covariance when present, times the stratum scale factors) of each target's prior set at the arc, and of each later set at its age for the checks. Without it the prior is optical.prior_sigma_rtn."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "propagation_requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-window-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "First pass (no answers on propagation): one $PRW WINDOW_REQUEST, one PRWWindowQuery per set used (SET_INDEX its record among element_sets): the calibrator's and the later sets' spans are the arc +- 6 s, each prior's the arc +- optical.trajectory_minutes, at 1 s."
+        },
+        {
+          "portId": "catalog_requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-skq-cone",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKQ.fbs",
+                  "fileIdentifier": "$SKQ",
+                  "rootTypeName": "SKQ",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "While the stars held do not cover the field: size-prefixed $SKQ records, QUERY_KIND CONE, PLACE CATALOG, RA_DEG, DEC_DEG, RADIUS_DEG, MAG_LIMIT and BAND_ID (optical.catalog_mag_limit, catalog_band), EPOCH_JD_TT the arc's middle. First the candidate fields of the site search, then the cones along the field's path; answer them on catalog and call again."
+        },
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One plain CCSDS TDM ($TDM): OBSERVER_X/Y/Z the site (ITRF, m), one segment per object (the calibrator and each target), ANGLE_TYPE RADEC, REFERENCE_FRAME GCRF, TIME_SYSTEM UTC, TIMETAG_REF RECEIVE, INTEGRATION_INTERVAL the exposure, ANGLE_1/ANGLE_2 rows in degrees: the geometric topocentric direction at the receive time (light time not removed, the site's aberration removed). The COMMENTs state the per-point and the common (site, timing) 1-sigma."
+        },
+        {
+          "portId": "optical_observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same observations, one size-prefixed $EOO each: OB_TIME, RA, DECLINATION, RA_UNC (the right ascension's own 1-sigma), DECLINATION_UNC (deg), SENLAT/SENLON/SENALT the site, TIMING_BIAS, EXP_DURATION, MAG (G from the plate's zero point), NORAD_CAT_ID, IMAGE_SET_ID and SEQUENCE_ID (the frame), REFERENCE_FRAME GCRF, DESCRIPTOR the east-north correlation and SNR."
+        },
+        {
+          "portId": "plates",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ski",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKI.fbs",
+                  "fileIdentifier": "$SKI",
+                  "rootTypeName": "SKI",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One size-prefixed $SKI per plate-solved frame: the exposure start and end, the field and pixel size, and in DESCRIPTION the solution (blind or tracked, linear or quadratic TAN, center, scale, stars used, outliers, residual median, rms and 90th percentile in arcsec, reduced chi-square, G zero point); EO_OBSERVATIONS the $EOO in the frame."
+        },
+        {
+          "portId": "orbit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One size-prefixed $OCM per fitted target: the GCRF state at the arc's middle (STATE_EPOCHS), COVARIANCE_DATA the 6x6 total covariance (noise, prior and the calibration as consider parameters; LTM, km and km/s), ORBIT_DETERMINATION the fit, USER_DEFINED_PARAMETERS the residuals, sigmas in RTN, the IOD, the separation from the calibrator and the checks against each later element set (RTN differences and d2 with both covariances)."
+        },
+        {
+          "portId": "orbit_trajectory",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "One plain $OEM per fitted target: the orbit +- optical.trajectory_minutes every optical.trajectory_step_seconds (GCRF, UTC, km, km/s): the prior set's trajectory plus the fit's deviation through the two-body + J2 transition matrix. analysis/od fit turns it into mean elements."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "FlowNotice (FNTC) Info: SCHEMA $TDM, SOURCE_NAME \"optical-astrometry reduce\", REASON need-propagation, need-catalog or done, COUNT the queries, the cones or the observations; ITEMS every number with its uncertainty: timing (decoded frames, cadence, jitter), exposure, plates (solved, median residual, unsolved frames), site and time bias, the calibrator's fit and observed-minus-computed, and per target the track, prior, fit, sigmas, IOD, checks and separation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

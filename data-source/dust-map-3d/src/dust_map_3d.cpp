@@ -37,8 +37,15 @@
 // in the ingest meta, and so in every publication. The state between stages
 // is a binary frame: "SDNDUST1", a u32 JSON length, the JSON, then the
 // float32 accumulators.
+//
+// Typed contracts 1.0 at the host capabilities: each range is an HttpRequest
+// (HREQ) for hostcap/http-request, each answer an HttpResponse (HRSP), and the
+// ingest meta an IngestRequest (INGQ) for hostcap/storage-ingest, whose
+// pce_records port takes the rows. The stage state, the configuration, the
+// receipt, the status and the report stay intra-flow control frames.
 
 using Json = nlohmann::json;
+namespace R = sdn::runtime;
 namespace {
 constexpr const char* sourceUrl = "https://zenodo.org/records/10658339/files/mean_and_std_healpix.fits?download=1";
 constexpr const char* providerId = "edenhofer2024";
@@ -88,24 +95,35 @@ int output(const char* port, const Json& value) {
 }
 uint32_t le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
 
-// The response for request k is responses[k]: $HRB + int32 status + body.
+// The response for request k is responses[k], an HttpResponse (HRSP): a
+// request the host refused or failed answers STATUS 0 with ERROR set.
 struct Response { int status; const uint8_t* body; size_t length; };
 bool responses(size_t expected, std::vector<Response>& out) {
   const auto list = frames("response");
   NEED(list.size() == expected, "One HTTP response per planned request is required.");
   out.clear();
   for (const auto* f : list) {
-    NEED(f->payload && f->payload_length >= 8 && std::memcmp(f->payload, "$HRB", 4) == 0, "Expected raw-body-v1 HTTP responses.");
-    NEED(f->payload_length - 8 <= maxRangeBytes, "An HTTP response is larger than its planned range.");
-    out.push_back({int(le32(f->payload + 4)), f->payload + 8, f->payload_length - 8});
+    NEED(f->payload && f->payload_length > 0, "An HTTP response frame is empty.");
+    flatbuffers::Verifier verifier(f->payload, f->payload_length);
+    NEED(R::VerifyHttpResponseBuffer(verifier), "Expected HttpResponse (HRSP) frames.");
+    const auto* r = R::GetHttpResponse(f->payload);
+    const auto* body = r->BODY();
+    NEED(!body || body->size() <= maxRangeBytes, "An HTTP response is larger than its planned range.");
+    out.push_back({r->ERROR() && r->ERROR()->size() ? 0 : r->STATUS(), body ? body->data() : nullptr, body ? body->size() : 0});
   }
   return true;
 }
-Json rangeRequest(size_t first, size_t last) {
+// One range as an HttpRequest (HREQ). The URL names the range, so the host's
+// per-URL validator never answers one range for another.
+std::vector<uint8_t> rangeRequest(size_t first, size_t last) {
   const std::string range = std::to_string(first) + "-" + std::to_string(last);
-  return {{"method", "GET"}, {"url", std::string(sourceUrl) + "&sdn-range=" + range},
-          {"headers", {{"Range", "bytes=" + range}, {"If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT"}}},
-          {"timeoutMs", 900000}, {"maxBytes", last - first + 1}, {"responseWire", "raw-body-v1"}};
+  flatbuffers::FlatBufferBuilder b(512);
+  std::vector<flatbuffers::Offset<R::Header>> headers{
+      R::CreateHeaderDirect(b, "Range", ("bytes=" + range).c_str()),
+      R::CreateHeaderDirect(b, "If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT")};
+  R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", (std::string(sourceUrl) + "&sdn-range=" + range).c_str(), &headers,
+                                                           nullptr, 900000, uint64_t(last - first + 1)));
+  return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 // ── state ──────────────────────────────────────────────────────────────────
@@ -133,8 +151,10 @@ bool readState(State& s) {
   }
   return true;
 }
-bool emit(const std::vector<Json>& requests, const State& s) {
-  for (const auto& r : requests) NEED(output("request", r) >= 0, "Could not emit a request.");
+bool emit(const std::vector<std::vector<uint8_t>>& requests, const State& s) {
+  for (const auto& r : requests)
+    NEED(plugin_push_output_ex("request", "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                               "HttpRequest", 0, 0, r.data(), uint32_t(r.size())) >= 0, "Could not emit a request.");
   const std::string text = s.meta.dump();
   std::vector<uint8_t> frame(12 + text.size() + s.sum.size() * 4 + s.weight.size() * 4);
   std::memcpy(frame.data(), "SDNDUST1", 8);
@@ -197,8 +217,8 @@ void depositShell(State& s, const uint8_t* shell, double rc, double volume) {
 }
 
 // Shells [first, first+count) as ranges of at most 16 shells each.
-std::vector<Json> chunkRequests(size_t meanData, uint32_t first, uint32_t count) {
-  std::vector<Json> out;
+std::vector<std::vector<uint8_t>> chunkRequests(size_t meanData, uint32_t first, uint32_t count) {
+  std::vector<std::vector<uint8_t>> out;
   for (uint32_t s = first; s < first + count; s += kShellsPerRange) {
     const uint32_t n = std::min(kShellsPerRange, first + count - s);
     out.push_back(rangeRequest(meanData + size_t(s) * kShellBytes, meanData + size_t(s + n) * kShellBytes - 1));
@@ -450,17 +470,39 @@ extern "C" int build_dust() {
     row.finish(stream);
   }
   const std::string batch = ephem::sha256_hex(reinterpret_cast<const uint8_t*>(grid.data()), grid.size() * sizeof(double));
-  const Json meta = {{"schema", "PCE.fbs"}, {"batch_id", batch}, {"provider_id", providerId}, {"source_name", sourceName},
-                     {"source_url", sourceUrl}, {"source_peer", peer}, {"reconcile", "current"}, {"origin_id", "zenodo.org"},
-                     {"origin_name", "Edenhofer et al. 2024 local 3D dust map (Zenodo 10658339)"},
-                     {"dataset_id", std::string(providerId) + "/" + datasetId},
-                     {"terms_url", "https://creativecommons.org/licenses/by/4.0/"}, {"citation", credit}, {"licence", license}};
+  // The ingest meta (IngestRequest, INGQ): the rows replace the lane's
+  // current batch; source, license and credit ride in every publication.
+  R::IngestRequestT ingest;
+  ingest.SCHEMA = "PCE.fbs";
+  ingest.TAGS = std::make_unique<R::SourceTagsT>();
+  ingest.TAGS->PROVIDER_ID = providerId;
+  ingest.TAGS->SOURCE_NAME = sourceName;
+  ingest.TAGS->BATCH_ID = batch;
+  ingest.TAGS->SOURCE_URL = sourceUrl;
+  ingest.TAGS->SOURCE_PEER = peer;
+  ingest.TAGS->LICENSE = license;
+  ingest.TAGS->LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/";
+  ingest.TAGS->CITATION = credit;
+  ingest.RECONCILE = R::reconcileMode_Current;
+  ingest.PROVENANCE = std::make_unique<R::ProvenanceT>();
+  ingest.PROVENANCE->SOURCE_URL = sourceUrl;
+  ingest.PROVENANCE->HTTP_STATUS = 206;
+  ingest.PROVENANCE->RETRIEVED_MS = uint64_t(receipt["retrieved_at_ms"].get<int64_t>());
+  ingest.PROVENANCE->PARSER = "data-source/dust-map-3d";
+  ingest.PROVENANCE->PARSER_VERSION = std::string(datasetId) + " " + s.meta.value("version", std::string());
+  ingest.PROVENANCE->NORMALIZED_SHA256 = batch;
+  ingest.PROVENANCE->NORMALIZED_COUNT = kNz;
+  ingest.PROVENANCE->SCHEMAS = {"PCE.fbs"};
+  ingest.PROVENANCE->SCHEMA_COUNTS = {kNz};
+  flatbuffers::FlatBufferBuilder mb(2048);
+  R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &ingest));
   const Json report = {{"rows", kNz}, {"voxels", kVoxels}, {"covered_voxels", covered}, {"spacing_pc", kSpacingPc},
                        {"max_radius_pc", maxRadius}, {"total_e_pc2", total}, {"shells", kShells}, {"inner_radius_pc", s.meta["inner_radius"]},
                        {"probe_radius_pc", "min(1200, 590/|sin b|), at a shell boundary"}, {"probes", probeReport}, {"probe_median_grid_over_native", medianRatio},
                        {"probe_aggregate_grid_over_native", aggregateRatio},
                        {"batch_id", batch}, {"retrieved_at", when}, {"source_version", s.meta.value("version", std::string())}};
-  if (output("meta", meta) < 0 || output("report", report) < 0) return 1;
+  if (plugin_push_output_ex("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                            "IngestRequest", 0, 0, mb.GetBufferPointer(), mb.GetSize()) < 0 || output("report", report) < 0) return 1;
   return plugin_push_output_ex("records", "PCE.fbs", "$PCE", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "PCE", 0, 0,
                                stream.data(), stream.size()) < 0 ? 1 : 0;
 }

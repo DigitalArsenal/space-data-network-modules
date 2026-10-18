@@ -1,0 +1,14 @@
+analysis/optical-astrometry compiles third-party code into its module:
+
+  ERFA (Essential Routines for Fundamental Astronomy), BSD-3-Clause, derived with
+  permission from the IAU SOFA library; the vendored copy and its license are
+  higherpop/third_party/erfa (LICENSE.txt), amalgamated by
+  foundation/frames/erfa-amalgamation.mjs.
+
+  lambert_izzo (https://github.com/sakobu/izzos-lambert, v2.0.0), MIT OR Apache-2.0,
+  Copyright (c) 2026 Sarkis Melkonian, through analysis/lambert-izzo (see its NOTICE).
+
+The E2E reads Gaia DR3 from the ESA Gaia archive. This work has made use of data from
+the European Space Agency (ESA) mission Gaia (https://www.cosmos.esa.int/gaia),
+processed by the Gaia Data Processing and Analysis Consortium (DPAC). No Gaia data are
+stored in this repository.
