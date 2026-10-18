@@ -27,6 +27,7 @@ the detect, compare or score report arm. Nothing between modules is JSON;
 | `element_sets` | in | `$OMM` | Element sets, plain or a stream of size-prefixed records. Grouped by `NORAD_CAT_ID` (else `OBJECT_ID`, else `OBJECT_NAME`); one set per `EPOCH`, a later record replacing an earlier one |
 | `propagation` | in | `$OEM` | Answers to `propagation_requests`: one data block per query, in query order |
 | `ephemerides` | in | `$OEM` | Per-set trajectories supplied by the caller instead: one block per element set spanning its neighbouring sets' epochs, grouped by object and ordered by the middle of their span |
+| `error_model` | in | `$ERM` (`MODEL`, form `ElementSetModel`) | Optional: `analysis/gp-error-model`'s covariance of SGP4 prediction error by regime and age (`data/e14-s3-kc.erm`). With it every impulsive event between element sets is estimated as one impulse with its uncertainty ([below](#the-impulse-and-its-uncertainty)) |
 | (config) | node config | `ModuleConfig` (MCFG) | The options below, as the node's configuration (`plugin.getConfig`, read with `sdm_piv::get_config`) under the `detect` table (keys `detect.*`); every key optional. Keys outside `detect.*` belong to other modules sharing a flow's config and are not read; an unknown key inside `detect.*` is refused. Not an input frame |
 | `propagation_requests` | out | `$PRW` (`WINDOW_REQUEST`) | The trajectories the detector needs |
 | `maneuvers` | out | `$MNV` | One record per detected maneuver |
@@ -120,21 +121,61 @@ V in-track (W × U), W cross-track along the orbit normal; km/s.
 
 | Field | Value |
 | --- | --- |
-| `EVENT_START_TIME`, `EVENT_END_TIME` | The event time (impulsive: equal) |
-| `DELTA_VEL_U` | Radial: not estimated, 0 |
-| `DELTA_VEL_V`, `DELTA_VEL_W` | In-track and cross-track delta-V, km/s, 0 unless that component's test fired; positive W is along the orbit normal |
+| `EVENT_START_TIME`, `EVENT_END_TIME` | The event time (impulsive: equal); with an error model, the burn-time posterior's mode |
+| `DELTA_VEL_U` | Radial: 0 without an error model; with one, the impulse estimate's |
+| `DELTA_VEL_V`, `DELTA_VEL_W` | In-track and cross-track delta-V, km/s; without an error model 0 unless that component's test fired, with one the impulse estimate's; positive W is along the orbit normal |
+| `DELTA_VEL` | The magnitude; with an error model, the posterior mean of the impulse's magnitude |
+| `DELTA_POS_U`, `_V`, `_W`, `DELTA_POS` | With an error model: post-burn minus pre-burn position at the event time, km |
+| `COV` | With an error model: the covariance of (`DELTA_POS_U`, `_V`, `_W`, `DELTA_VEL_U`, `_V`, `_W`), UVW, km and km/s, 21 values, upper triangle, row-major |
 | `MANEUVER_UNC` | Separation of the two trajectories at the event time, km |
-| `PRE_EVENT`, `POST_EVENT` | Osculating two-body states and elements at the event time (μ = 398600.4418 km³/s²) |
+| `PRE_EVENT`, `POST_EVENT` | Osculating two-body states and elements at the event time (μ = 398600.4418 km³/s²); with an error model, each set's 1-sigma position there (`SIGMA_U`, `_V`, `_W`, km) |
+| `DESCRIPTION` | With an error model: the 1-sigma delta-V, the magnitude and its 1-sigma, the burn window, the minimum two-impulse bound and its 1-sigma, the position mismatch's chi-square and the error-model cells. SDS 1.249.0's `$MNV` has no field for the window or the bound |
 | `CHARACTERIZATION` | DEORBIT (post perigee under 120 km); GEO (period 1300–1600 min, e < 0.05): STATION_KEEPING when \|Δa\| < 5 km, else PHASING; then COMBINED, OUT_OF_PLANE, ORBIT_RAISING or ORBIT_LOWERING |
 | `MNVR_ACCEL_TIMES`, `MNVR_ACCELS` | D3: the change of in-track acceleration, as U, V, W (radial 0, in-track, cross-track 0; km/s²) |
-| `ALGORITHM` | Detector and propagator port |
+| `ALGORITHM` | Detector and propagator port, and the error model when given |
 | `SOURCED_DATA` | The two bracketing sets (`EPOCH`, and the `$OMM` `COMMENT`, e.g. its GP_ID) |
 | `PROVENANCE` | Below |
+
+### The impulse and its uncertainty
+
+With an error model (`error_model`), each event the detectors raise between
+element sets A (the last before it, epoch tA) and B (the first after it, tB),
+D3's excepted, is one impulse at an unknown time tb in [tA, tB]:
+
+- **Covariance of a set.** `analysis/gp-error-model`'s rule: the regime from
+  the set's mean altitude (SGP4's un-Kozai'd mean motion, WGS-72) and its
+  eccentricity, the RTN covariance linear in age between bin centers, held
+  beyond them, times the cell's factor when it has one. B is predicted
+  backwards: the model at the same age with time reversed (velocity, T and N
+  change sign).
+- **Given tb.** The two trajectories differ by the impulse alone,
+  x_B(tb) − x_A(tb) = [0; Δv] + e, e ~ N(0, R), R = P_A + P_B in the RTN axes
+  of A at tb. Δv is Gaussian with mean δv − R_vr R_rr⁻¹ δr and covariance
+  R_vv − R_vr R_rr⁻¹ R_rv.
+- **The burn time.** p(tb) ∝ |R_rr|^(−1/2) exp(−δrᵀ R_rr⁻¹ δr / 2), uniform
+  prior over the bracket, on a grid at most 10 s apart and ten points in every
+  grid cell above 10⁻⁹ of the largest weight. The event time is the mode, the
+  burn window the central 99.73 %.
+- **The estimate.** The mixture over tb: `DELTA_VEL_U`, `_V`, `_W` its mean,
+  `COV` its covariance (each Δv(tb) in the RTN axes at its own tb), and
+  `DELTA_VEL` the mean of the magnitude. A plane change can be made at either
+  node: its sign in W is ambiguous and its magnitude is not; `DESCRIPTION`
+  counts the modes.
+- **One impulse that does not fit.** When the mismatch's chi-square at the
+  mode exceeds 14.16 (three degrees of freedom, 99.73 %), the trajectories do
+  not meet (several burns, a long burn, or a set fitted across the burn): R is
+  scaled by chi-square / 3 and the posterior taken again.
+- **The minimum two-impulse bound.** Δv1 at t1 and Δv2 at t2 > t1 in the
+  bracket that take A onto B: every pair of times on a grid ranked by the
+  transfer linearized about A (two-body and J2 transition matrix), the 24 best
+  and their neighbors solved under the nonlinear relative dynamics about A,
+  the least |Δv1| + |Δv2|, and its 1-sigma from R at t2. It meets the
+  trajectories exactly, errors included, so it can exceed the true impulse.
 
 ### `PROVENANCE`
 
 Every `$MNV` this module writes carries a `$PVN`:
-- `PRODUCER` is this module and its version (`com.digitalarsenal.analysis.maneuver-detection 0.5.0`);
+- `PRODUCER` is this module and its version (`com.digitalarsenal.analysis.maneuver-detection 0.8.0`);
 - `SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR`, `PROVIDER_ID`, `LICENSE_CLASS`, `LICENSE_ID` and `LINEAGE` are the input's `PROVENANCE`: the `$OMM` element sets for `detect_maneuvers`, the planned `$MNV` for `compare_ephemerides`;
 - an input without a `PROVENANCE` (an `$OEM`) gives a record that names only its producer, with `LICENSE_CLASS` Unspecified, which is never a grant;
 - an object whose element sets name different sources gets the fields they agree on. A field they differ in is empty, and licence classes that differ give CiteOnly.
@@ -217,6 +258,35 @@ propagated by `propagator/sgp4` through the query port. Results and method:
 | GNSS (4 GPS), 2025-01 to 2026-09 | 6 manoeuvres in precise orbits | 4/6, 0.16 per year | 6/6, 3.8 per year |
 | GEO (Intelsat), 2025-01 to 2026-09 | 11 post-manoeuvre files | 2/11 | 4/11 |
 
+The impulse estimate (`tests/dv-uncertainty.e2e.mjs`, error model
+`data/e14-s3-kc.erm`):
+
+- **Synthetic truth.** 500 known impulses in RTN (radial and cross-track up to
+  1.5 m/s, in-track 0.3 to 3 m/s) inserted in `propagator/ffm` full-force
+  trajectories of 50 random LEO orbits (520 to 770 km), with SGP4 sets fitted
+  every 8 hours (`study/dv-mc-truth.mjs`, `tests/dv-mc-truth.json`). With
+  2-day fit spans the sets' errors at the burn are at the error model's level;
+  0.75-day spans gave twice its along-track error. All 500 detected.
+
+  | | Within 1 sigma | Within 3 sigma |
+  | --- | --- | --- |
+  | U (radial) | 72.0 % | 100 % |
+  | V (in-track) | 95.2 % | 100 % |
+  | W (cross-track) | 85.8 % | 100 % |
+  | Magnitude | 76.8 % | 100 % |
+
+  The burn time was inside the 99.73 % window in every trial.
+- **Cosmos 2612 (NORAD 68762), 2026-09-28 to 2026-10-17**, Space-Track GP
+  history (ICEYE-X36, 59103: no event):
+
+  | Event time | U, V, W (m/s, 1 sigma) | Magnitude (m/s) | Two-impulse bound (m/s) | Chi-square |
+  | --- | --- | --- | --- | --- |
+  | 2026-09-30 09:15 | 0.9 ± 29.9, 21.5 ± 8.6, 12.0 ± 45.5 | 29.7 ± 24.6 | 25.50 ± 0.21 (8.3 at 07:03, 17.2 at 09:25) | 125284: one impulse does not fit |
+  | 2026-10-07 10:55 | 0.0 ± 0.1, 0.0 ± 0.04, −0.1 ± 4.0 (9 modes, a plane change) | 3.99 ± 0.22 | 3.98 ± 0.23 | 0.1 |
+  | 2026-10-12 02:33 | −1.1 ± 29.2, −31.3 ± 8.5, −9.0 ± 42.1 | 35.5 ± 18.8 | 28.52 ± 0.34 (10.9 at 01:53, 17.6 at 02:45) | 105256: one impulse does not fit |
+  | 2026-10-15 01:58 | 0.15 ± 0.50, −1.27 ± 0.04, 0.45 ± 0.23 | 1.44 ± 0.13 | 1.39 ± 0.24 | 0.1 |
+  | 2026-10-16 06:40 | −0.92 ± 0.44, 1.26 ± 0.04, 0.12 ± 0.22 | 1.61 ± 0.22 | 1.37 ± 0.19 | 6.8 |
+
 ## Limits
 
 - Detection works on element-set history. It waits for the next element
@@ -226,7 +296,12 @@ propagated by `propagator/sgp4` through the query port. Results and method:
   (0.04 m/s) flags 3.7 GP level steps a year that precise orbits do not
   show. For GEO, both floors are above east-west trims.
 - Burns minutes apart are one event.
-- The radial component is not estimated.
+- Without an error model the radial component is not estimated. With one,
+  each set's covariance is the error model's for its regime and age: the
+  model does not know a set's fit span, and the first sets after a burn are
+  often fitted over a few hours.
+- The bracket is the two sets' epochs: a burn before the first set's epoch
+  (a set fitted across it) is outside it.
 - D3 is off by default: it fires 2.3 times a year on the ISS, above the
   plan's limit of 2.
 - Measurement-level detection (the estimation module's innovations) is not
@@ -238,5 +313,6 @@ propagated by `propagator/sgp4` through the query port. Results and method:
 npm ci
 npm run build
 npm test                                          # E2E: 15 cases through the built module
+node tests/dv-uncertainty.e2e.mjs                 # E2E: the impulse estimate (synthetic truth, and the GP archive's Cosmos 2612 window)
 PATH=$HOME/.wasmedge/bin:$PATH npm run test:parity   # browser, WasmEdge, Docker WasmEdge
 ```

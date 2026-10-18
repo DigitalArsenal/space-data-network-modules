@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
   "name": "Maneuver detection",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Maneuver detection over any pluggable propagator. detect_maneuvers takes element sets ($OMM) and asks for each set's trajectory on a propagator query port (the host routes each query to the plugged propagator: SGP4, FFM (Full Force Model), an ABI provider; inertial or Earth-fixed answers) or takes per-set trajectories ($OEM), and emits $MNV DETECTED from three detectors: D1, the crossing of consecutive trajectories with a median step test; D2, a robust GLR step test on orbit-averaged energy levels and the orbit-normal chain; D3, a GLR test for a change of energy rate (low thrust). compare_ephemerides checks planned maneuvers ($MNV) against successive operator ephemeris versions ($OEM: executed, cancelled or unknown, with the executed delta-V) and reports changes between versions. score_detections matches detected $MNV to truth $MNV (recall, time error, delta-V ratio, false alarms). Each method reports one $MDE (maneuver detection evidence: the detect, compare or score report arm); the propagation queries are one $PRW WINDOW_REQUEST. Delta-V is in UVW (U radial, V in-track, W cross-track, km/s), and every emitted $MNV carries PROVENANCE: this module and its version as PRODUCER, and the source that the element sets or the planned maneuver name. Options are the node configuration (plugin.getConfig, a ModuleConfig FlatBuffer read through sdm_piv::get_config), never an input frame: detect_maneuvers, compare_ephemerides and score_detections read the same keys the options object had (lists as StringList/NumberList, spans/explained/assessed as TableList).",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -43,6 +43,11 @@
       "schemaName": "PRW.fbs",
       "fileIdentifier": "$PRW",
       "rootTypeName": "PRW"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
     }
   ],
   "methods": [
@@ -109,6 +114,26 @@
           "maxStreams": 65535,
           "required": false,
           "description": "Per-set trajectories supplied by the caller, instead of element sets: one data block per element set spanning its neighbouring sets' epochs (two on each side), grouped by object and ordered by the midpoint of their span."
+        },
+        {
+          "portId": "error_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm-model",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional: one $ERM record, the MODEL arm of form ElementSetModel (analysis/gp-error-model's element-set covariance model, e.g. its data/e14-s3-kc.erm). With it, each impulsive event is estimated as one impulse between its two sets: the delta-V vector in UVW (radial included) as the mean over the burn-time posterior in the bracket, COV the covariance of DELTA_POS and DELTA_VEL, each state's 1-sigma position, the event time the posterior mode, and the burn window and the minimum two-impulse bound in DESCRIPTION."
         }
       ],
       "outputPorts": [
@@ -130,7 +155,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "One $MNV frame per detected maneuver, STATUS DETECTED."
+          "description": "One $MNV frame per detected maneuver, STATUS DETECTED. With an error model, DELTA_VEL_U, _V, _W are the impulse estimate and COV its covariance (with DELTA_POS)."
         },
         {
           "portId": "propagation_requests",
