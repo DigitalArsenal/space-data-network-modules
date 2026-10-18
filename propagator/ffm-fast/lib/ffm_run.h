@@ -56,6 +56,20 @@ class Run {
     astro::ForceModel::ForceModelSet& forces_;
     double rkOffset_ = 0;
     unsigned sundmanGrid_ = 0;
+
+    // Preserve the accepted physical state and span clock when GJ yields to
+    // RK. The caller decides why the transition is needed.
+    void resumeRkFromGj() {
+        const auto y=gj_->state();
+        rkOffset_=gj_->time();
+        const auto at=epoch_.plusSeconds(rkOffset_);
+        auto config=config_;
+        config.maxSteps-=gj_->acceptedSteps();
+        astro::StateVector initial({y[0],y[1],y[2]},{y[3],y[4],y[5]},at.jdTdb());
+        forces_.integrationEpochTT=at;
+        gj_.reset();
+        rk_=std::make_unique<astro::Integrator::ForceRun>(initial,1,config,forces_,true);
+    }
 public:
     static double candidateGjGrid(const astro::StateVector& reference,int direction,
                                   const astro::IntegratorConfig& config,
@@ -84,15 +98,7 @@ public:
             // Ghost history can cross reentry outside a valid requested arc.
             // Resume standard RK from the last accepted physical state,
             // retaining its exact clock and the caller's span-relative time.
-            const auto y=gj_->state();
-            rkOffset_=gj_->time();
-            const auto at=epoch_.plusSeconds(rkOffset_);
-            auto config=config_;
-            config.maxSteps-=gj_->acceptedSteps();
-            astro::StateVector initial({y[0],y[1],y[2]},{y[3],y[4],y[5]},at.jdTdb());
-            forces_.integrationEpochTT=at;
-            gj_.reset();
-            rk_=std::make_unique<astro::Integrator::ForceRun>(initial,1,config,forces_,true);
+            resumeRkFromGj();
         }
         return rk_->run().attempt(target-rkOffset_);
     }
