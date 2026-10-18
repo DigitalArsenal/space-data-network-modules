@@ -85,7 +85,7 @@ test('Gaia DR3 over SDN: both layers from a local provider node', {timeout: 6 * 
       if (failed) return {failed: failed[0].slice(0, 600)};
       return lanes.records(lane('octree-g13.5'));
     }, FULL ? 5 * 3600_000 : 3600_000, node.child, 10_000);
-    assert.ok(!octree.failed, `the flow's cycle failed: ${octree.failed}`);
+    assert.ok(!octree.failed, `the flow's cycle failed: ${octree.failed}; TAP proxy: ${JSON.stringify(proxy.stats)}`);
     const angular = await lanes.records(lane('angular-g13.5'));
     assert.ok(angular, 'the angular layer is listed');
     log(`the flow's cycle published both layers in ${((Date.now() - t0) / 1000).toFixed(0)} s (TAP: ${proxy.stats.misses} fetched, ${proxy.stats.hits} cached)`);
