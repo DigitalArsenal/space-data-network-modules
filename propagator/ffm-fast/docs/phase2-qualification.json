@@ -1,0 +1,3048 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-10-18",
+  "sourceCommit": "74281fd4249933c7a79a0b699d7ca8ae27badaca",
+  "standardWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+  "fastWasmSha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+  "node": "v25.4.0",
+  "scope": "Numerical and resident behavior qualification; not full-catalog timing or cross-runtime numerical parity.",
+  "rawEvidenceSha256": {
+    "residentE2E": "b05ce44cd1e5e8b25820fc2570f716e61c8e6420b93974fd3f2567139737a1d4",
+    "carry": "8d7989ef43cf59620a7d17deae26341907d990e27cde3e517815f3b84108ad47",
+    "portability": "36a7b4dadb7ddde3b48ee5a0628e99984ddae02388334d3040231465fd782153",
+    "fastCA": "4a1e7ab99ec37f5c14beff8cc02021f91f88213aecc520de8fb20f6427f03d5f",
+    "caQualification": "dc715b24314eb51706159c5cd50a5abec438c85275436c4010fcc1c434898ae0",
+    "independentCA": "4c8659ae097d9b88409ffe45f52823744097e639bdc68003c626529a0211b747",
+    "referenceRealizationDiagnostic": "ab647d35ed8cfa75d5bf022a34eea40ac18270766e24c5fe4843614d91c65660"
+  },
+  "truth": {
+    "generator": "scripts/export-truth.cpp using the unchanged study harness/src/hxio.h quintic Hermite reader",
+    "generatorSha256": "9f765b5d79594592e60dca03e0413d457498cc8a25f883ef15118ba5a439a1ba",
+    "readerSha256": "0453541cf3be12910fce320953d5aa6b6b71502fbe489bd7072e420ce45d8a31",
+    "generatedBy": "scripts/export-truth.mjs",
+    "standardModuleCppCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+    "settings": {
+      "truth": "T3",
+      "integrator": "RKF78",
+      "relativeTolerance": 1e-14,
+      "maximumStepSeconds": 2,
+      "stops": "Every 10 s TT, 1 s through eccentric-orbit perigee, and every three-hour UTC weather boundary; accelerations on both sides"
+    },
+    "epoch": "2026-08-01T12:00:00.000000",
+    "epochTimeScale": "UTC",
+    "epochTt": "2026-08-01T12:01:09.184000000",
+    "sampling": {
+      "seconds": 10,
+      "durationSeconds": 259200,
+      "includeNativeStops": true,
+      "minimumRows": 25921,
+      "coordinate": "Elapsed TT seconds from the fixture epoch"
+    },
+    "timeHandling": "HXSTAT01 epochs and resident PPE TIME_SYSTEM are TT. Interpolation uses two-part TT differences as hx eval does; no TDB/UTC shift is applied to elapsed seconds. The equations use the standard C++ TT-to-TDB conversion internally.",
+    "frame": "GCRF",
+    "units": {
+      "time": "s",
+      "position": "km",
+      "velocity": "km/s"
+    },
+    "format": {
+      "encoding": "little-endian IEEE 754 float64",
+      "columns": [
+        "secondsSinceFixtureEpoch",
+        "x",
+        "y",
+        "z",
+        "vx",
+        "vy",
+        "vz"
+      ]
+    },
+    "regenerate": "node propagator/ffm-fast/scripts/export-truth.mjs --study '/private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/8e63bb40-3edf-4af4-836a-b5a00536a938/scratchpad/ffmspeed/work/truth-current' --source-commit '5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86'",
+    "records": [
+      {
+        "seed": "ISS",
+        "input": "data/truth/ISS-T3.st",
+        "inputSha256": "426e49bb7698df9b89aa25926a5ce0272c36f2ad49c9a95dc378f026f8ee2a00",
+        "output": "ISS.f64",
+        "label": "ISS",
+        "inputRecords": 25945,
+        "rows": 51841,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "ISS",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 0,
+          "source": "worktree"
+        },
+        "outputSha256": "ce48f7c3a19dc82e3c6e2934ce7374186df90286a5ac4cab18080511ecd1a737"
+      },
+      {
+        "seed": "STARLINK",
+        "input": "data/truth/STARLINK-T3.st",
+        "inputSha256": "38c8963e7c9a92e7705bdcf259cc19032337f499a67ffba6cc5d81fca595406f",
+        "output": "STARLINK.f64",
+        "label": "STARLINK",
+        "inputRecords": 25945,
+        "rows": 51841,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "STARLINK",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 0,
+          "source": "worktree"
+        },
+        "outputSha256": "73158d241f859be7dd7575c32ca1f4e46756f7cc10044dfb5ad1638861da319a"
+      },
+      {
+        "seed": "SSO800",
+        "input": "data/truth/SSO800-T3.st",
+        "inputSha256": "c3c655f9f294a856dc002ccfff2a6c4edc99d849057e481a0a75dcaf19a197f9",
+        "output": "SSO800.f64",
+        "label": "SSO800",
+        "inputRecords": 25945,
+        "rows": 51841,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "SSO800",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 0,
+          "source": "worktree"
+        },
+        "outputSha256": "496d59610cba6af98e42b8bd2ed64e9d0a441c8abda77a4e12a245abc1a1b3b7"
+      },
+      {
+        "seed": "LOW250",
+        "input": "data/truth/LOW250-T3.st",
+        "inputSha256": "898188914053a9d96d5bbe4d1dab8fe1975025bd0d7701c74af4cef4e9cbd13c",
+        "output": "LOW250.f64",
+        "label": "LOW250",
+        "inputRecords": 25945,
+        "rows": 51841,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "LOW250",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 0,
+          "source": "worktree"
+        },
+        "outputSha256": "81e49ed856538a9c414cb8f7e4e0bd6f0353ccc8c8883920a5f2fcd7b20f1b25"
+      },
+      {
+        "seed": "GPS",
+        "input": "data/truth/GPS-T3.st",
+        "inputSha256": "a935644e621a95d7b8cbf40d07dd8d69856c2b44fd3b24bc18b24d7be28be0f1",
+        "output": "GPS.f64",
+        "label": "GPS",
+        "inputRecords": 25945,
+        "rows": 51841,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "GPS",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 0,
+          "source": "worktree"
+        },
+        "outputSha256": "0a3fecdd47bd34969ab3a3977801841c827194e3800683c02469535dfeff3f4e"
+      },
+      {
+        "seed": "GEO",
+        "input": "data/truth/GEO-T3.st",
+        "inputSha256": "afef7afa7937c180023e0a814237c9b7075a66a87cb70279a47a12dbe83e08c3",
+        "output": "GEO.f64",
+        "label": "GEO",
+        "inputRecords": 25945,
+        "rows": 51841,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "GEO",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 0,
+          "source": "worktree"
+        },
+        "outputSha256": "eae7defe89e9b829b2f8d098d545a105f02f84e6bf52397614bff8735c14896c"
+      },
+      {
+        "seed": "MOLNIYA",
+        "input": "data/truth/MOLNIYA-T3.st",
+        "inputSha256": "2e66cb232b14dc89a308bb607116272fa1ae126786d273d307a7557bfb482977",
+        "output": "MOLNIYA.f64",
+        "label": "MOLNIYA",
+        "inputRecords": 36110,
+        "rows": 62006,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "MOLNIYA",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 8769.97,
+          "source": "worktree"
+        },
+        "outputSha256": "c2d767dd1d973f7ed24e735425ecff4e7c350387c21c29c9a7e7c2e03a388169"
+      },
+      {
+        "seed": "GTO",
+        "input": "data/truth/GTO-T3.st",
+        "inputSha256": "29855ef2f5a1fc4a0e29fa1c55b1494a84eb6968ac845b4e7f4ddbe13320e405",
+        "output": "GTO.f64",
+        "label": "GTO",
+        "inputRecords": 37160,
+        "rows": 63056,
+        "epochWholeTt": 838857669,
+        "epochFractionTt": 0.184,
+        "sourceSettings": {
+          "mode": "truth",
+          "seed": "GTO",
+          "days": 3,
+          "integrator": 2,
+          "rel": 1e-14,
+          "abs_km": 1e-14,
+          "max_step": 2,
+          "grid": 10,
+          "perigee_grid": 1,
+          "perigee_r_km": 8292.13,
+          "source": "worktree"
+        },
+        "outputSha256": "c2e53df4a3a9876ac8fd41c9892a62e98e7abbbc7759f29ca15bacd87c5b016c"
+      }
+    ]
+  },
+  "residentE2E": {
+    "ok": true,
+    "epochUtc": "2026-08-01T12:00:00.000000",
+    "epochTt": "2026-08-01T12:01:09.184000000",
+    "frame": "GCRF",
+    "days": 3,
+    "truthStandardModuleCppCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+    "standardIntegrator": {
+      "tolerance": 1e-12,
+      "initialStep": 30,
+      "minStep": 0.01,
+      "maxStep": 300,
+      "maxSteps": 100000
+    },
+    "fastIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 30,
+      "minStep": 0.01,
+      "maxStep": 120,
+      "maxSteps": 1000000
+    },
+    "maxAddedError": {
+      "oneDay": {
+        "positionM": 1.0262360560438119e-05,
+        "velocityMps": 9.154019759430525e-09
+      },
+      "threeDays": {
+        "positionM": 4.541358031001369e-05,
+        "velocityMps": 5.121884140749353e-08
+      }
+    },
+    "residentBatch": {
+      "ok": true,
+      "cohortSize": 32,
+      "heterogeneousEpochSpacingSeconds": 7.125,
+      "unselectedReentrySentinelPreserved": true,
+      "rows": [
+        {
+          "name": "midnight",
+          "offset": 42500,
+          "duration": 900,
+          "objects": 8,
+          "byteIdentical": true,
+          "serializedSha256": "1bd7cbb992f3b31c17201cebf7f31d34bb012c346e235b4bb4963f25b7d519fe"
+        },
+        {
+          "name": "carried-forward",
+          "offset": 43400,
+          "duration": 600,
+          "objects": 8,
+          "byteIdentical": true,
+          "serializedSha256": "f3da8a0b73cbdfae94e4e4b5a7d8d9c40bce68dda876d8da32fb72fd83d4a078"
+        },
+        {
+          "name": "earlier-forward",
+          "offset": 1200,
+          "duration": 600,
+          "objects": 4,
+          "byteIdentical": true,
+          "serializedSha256": "c330ed740b9f0ec4a3e8684620ee84b51bd2ee5615a4752803ead2a779490ca9"
+        },
+        {
+          "name": "backward",
+          "offset": -1200,
+          "duration": 600,
+          "objects": 8,
+          "byteIdentical": true,
+          "serializedSha256": "37e450c04833ea60802bd24014d6edad016b0c0a58a4ffb1b600671bf12297ae",
+          "reference": {
+            "integrator": {
+              "tolerance": 1e-14,
+              "initialStep": 2,
+              "minStep": 0.0001,
+              "maxStep": 2,
+              "maxSteps": 100000000
+            },
+            "positionM": 1.0983332497909534e-05,
+            "velocityMps": 1.8329803332327235e-08,
+            "samplingSeconds": 10
+          }
+        }
+      ]
+    },
+    "regimeBoundaries": {
+      "ok": true,
+      "sourceSha256": "d60759a36c86da8e1b8e680bdf076e478ffebd0e8c60448fea4daf0626acacee",
+      "initialStateSource": "C++ two-body perigee states with configured TT-compatible GM; grazing planes oriented using standard DE440 Sun",
+      "gmM3s2": 398600441500000,
+      "orientations": [
+        {
+          "offset": 917.123,
+          "epochTdb": "2026-08-01T12:16:26.306265448",
+          "sunM": {
+            "X": -95360432876.38939,
+            "Y": 108397112749.19627,
+            "Z": 46988892649.9123
+          }
+        },
+        {
+          "offset": 1050.123,
+          "epochTdb": "2026-08-01T12:18:39.306265409",
+          "sunM": {
+            "X": -95363451060.69017,
+            "Y": 108394844515.02505,
+            "Z": 46987909588.19949
+          }
+        }
+      ],
+      "epochUtc": "2026-08-01T12:00:00.000000",
+      "frame": "GCRF",
+      "referenceIntegrator": {
+        "tolerance": 1e-14,
+        "initialStep": 2,
+        "minStep": 0.0001,
+        "maxStep": 2,
+        "maxSteps": 100000000
+      },
+      "confirmedPenumbraOnlyGrazes": 5,
+      "rows": [
+        {
+          "name": "perigee 300 km below",
+          "integrator": "GJ8 PEC at 10 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 1.7670934945894106e-05,
+          "velocityMps": 2.463359750340725e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "perigee 450 km below",
+          "integrator": "GJ8 PEC at 15 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 2.502711516080444e-05,
+          "velocityMps": 8.781247000581306e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "perigee 650 km below",
+          "integrator": "GJ8 PEC at 12 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 1.7931852266979556e-06,
+          "velocityMps": 2.6604296739985936e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "apogee 2000 km below",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 1.9267178912676324e-07,
+          "velocityMps": 9.347504014741707e-10,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "eccentricity 0.25 below",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 4.9845824823821265e-05,
+          "velocityMps": 9.2179000098229e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 600 min below",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.100068074225084e-08,
+          "velocityMps": 2.0399736584669792e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 800 min below",
+          "integrator": "GJ8 PEC at 75 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 4.731121154196427e-08,
+          "velocityMps": 1.7801421397168433e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 1400 min below",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.8296411096002426e-08,
+          "velocityMps": 3.9043826369618825e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 1480 min below",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.269578082105354e-08,
+          "velocityMps": 4.313021721799093e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GPS eccentricity 0.05 below",
+          "integrator": "GJ8 PEC at 75 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.928482455686121e-08,
+          "velocityMps": 2.173146002346898e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GEO eccentricity 0.05 below",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.496494190347085e-07,
+          "velocityMps": 3.951767253605181e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GTO perigee 1000 km below",
+          "integrator": "RK78 Sundman alpha=1.5 at 300/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 2.792845083641988e-06,
+          "velocityMps": 4.0540142163907665e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GTO apogee 30000 km below",
+          "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 8.356403577548309e-06,
+          "velocityMps": 1.1196248539112773e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GTO apogee 45000 km below",
+          "integrator": "RK78 Sundman alpha=1.5 at 300/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 2.542149429967033e-05,
+          "velocityMps": 3.291088681772627e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "perigee 300 km above",
+          "integrator": "GJ8 PEC at 15 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 0.00023225935344068675,
+          "velocityMps": 5.324558774401704e-07,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "perigee 450 km above",
+          "integrator": "GJ8 PEC at 12 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 2.51971695992855e-06,
+          "velocityMps": 6.927973932876711e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "perigee 650 km above",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 0.00023045885286191977,
+          "velocityMps": 4.2574645298673473e-07,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "apogee 2000 km above",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 1.5047139072125891e-07,
+          "velocityMps": 7.814911524952035e-10,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "eccentricity 0.25 above",
+          "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 3.3079289502697227e-06,
+          "velocityMps": 3.857740495447368e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 600 min above",
+          "integrator": "GJ8 PEC at 75 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 9.877129210681819e-08,
+          "velocityMps": 1.772744945980712e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 800 min above",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 3.2754438698919526e-08,
+          "velocityMps": 1.9147164113605836e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 1400 min above",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 8.315910482981674e-08,
+          "velocityMps": 3.800258637577752e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "period 1480 min above",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 6.549822249986197e-08,
+          "velocityMps": 3.7762920782881904e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GPS eccentricity 0.05 above",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.476638477311861e-08,
+          "velocityMps": 2.0999013419147634e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GEO eccentricity 0.05 above",
+          "integrator": "GJ8 PEC at 24 s",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 5.8724066393034906e-08,
+          "velocityMps": 3.668482232561228e-09,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GTO perigee 1000 km above",
+          "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 2.1819085449670396e-06,
+          "velocityMps": 1.0436993113004972e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GTO apogee 30000 km above",
+          "integrator": "RK78 Sundman alpha=1.5 at 300/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 1.2651633757035512e-05,
+          "velocityMps": 1.1532150619454847e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "GTO apogee 45000 km above",
+          "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+          "seconds": 1800,
+          "samplingSeconds": 10,
+          "positionM": 2.2392291794875546e-05,
+          "velocityMps": 3.0727345954374027e-08,
+          "crAm": 0.02,
+          "strongGraze": false
+        },
+        {
+          "name": "penumbra graze 9.9999999999999995e-08",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 1,
+          "positionM": 5.411302401860128e-08,
+          "velocityMps": 3.0776521522148512e-09,
+          "crAm": 0.02,
+          "strongGraze": false,
+          "shadow": {
+            "samples": 121,
+            "penumbraCrossings": 2,
+            "umbraCrossings": 0,
+            "midpointCrossings": 0,
+            "minimumPenumbra": -1.1558400891953369e-07,
+            "minimumUmbra": 0.009161768311711962,
+            "minimumMidpoint": 0.0045808263638515145
+          }
+        },
+        {
+          "name": "penumbra graze 2.9999999999999999e-07",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 1,
+          "positionM": 5.694337539352465e-08,
+          "velocityMps": 3.371086874159074e-09,
+          "crAm": 0.02,
+          "strongGraze": false,
+          "shadow": {
+            "samples": 121,
+            "penumbraCrossings": 2,
+            "umbraCrossings": 0,
+            "midpointCrossings": 0,
+            "minimumPenumbra": -3.1558387084129613e-07,
+            "minimumUmbra": 0.009161568311770764,
+            "minimumMidpoint": 0.004580626363949958
+          }
+        },
+        {
+          "name": "penumbra graze 9.9999999999999995e-07",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 1,
+          "positionM": 1.1765923139170792e-07,
+          "velocityMps": 3.948526618407741e-09,
+          "crAm": 0.02,
+          "strongGraze": false,
+          "shadow": {
+            "samples": 121,
+            "penumbraCrossings": 2,
+            "umbraCrossings": 0,
+            "midpointCrossings": 0,
+            "minimumPenumbra": -1.015583389052388e-06,
+            "minimumUmbra": 0.00916086831197509,
+            "minimumMidpoint": 0.004579926364293024
+          }
+        },
+        {
+          "name": "penumbra graze 3.0000000000000001e-06",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 1,
+          "positionM": 7.212585439595146e-08,
+          "velocityMps": 2.3697199693266647e-09,
+          "crAm": 0.02,
+          "strongGraze": false,
+          "shadow": {
+            "samples": 121,
+            "penumbraCrossings": 2,
+            "umbraCrossings": 0,
+            "midpointCrossings": 0,
+            "minimumPenumbra": -3.0155820110733256e-06,
+            "minimumUmbra": 0.009158868312560266,
+            "minimumMidpoint": 0.004577926365274598
+          }
+        },
+        {
+          "name": "penumbra graze 0.00014999999999999999",
+          "integrator": "GJ8 PEC at 600 s",
+          "seconds": 1800,
+          "samplingSeconds": 1,
+          "positionM": 0.0008301793892465814,
+          "velocityMps": 9.824493778170815e-06,
+          "crAm": 20,
+          "strongGraze": true,
+          "shadow": {
+            "samples": 901,
+            "penumbraCrossings": 2,
+            "umbraCrossings": 0,
+            "midpointCrossings": 0,
+            "minimumPenumbra": -0.00015001407836687242,
+            "minimumUmbra": 0.00901187143979691,
+            "minimumMidpoint": 0.004430928680715013,
+            "penumbraAtStepStart": 0.0032354139890552747,
+            "penumbraAtStepMidpoint": 0.00023526123853445657,
+            "penumbraAtStepEnd": 0.00021886497544992833
+          }
+        }
+      ]
+    },
+    "startupDomain": {
+      "ok": true,
+      "offsetSeconds": 1.125,
+      "durationSeconds": 60,
+      "referenceIntegrator": {
+        "tolerance": 1e-14,
+        "initialStep": 2,
+        "minStep": 0.0001,
+        "maxStep": 2,
+        "maxSteps": 100000000
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "ppePositionM": 3.7582078461652276e-05,
+      "ppeVelocityMps": 8.939811273017801e-06,
+      "statePositionM": 3.3993670388525675e-05,
+      "stateVelocityMps": 3.4731146123620184e-06
+    },
+    "failures": []
+  },
+  "rows": [
+    {
+      "seed": "ISS",
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 15 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 4.67241418172898e-06,
+          "velocityMps": 5.2550743057759585e-09
+        },
+        "threeDays": {
+          "positionM": 4.541358031001369e-05,
+          "velocityMps": 5.121884140749353e-08
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.23339677152150964,
+          "velocityMps": 0.0002703070124939201
+        },
+        "threeDays": {
+          "positionM": 2.566356187917248,
+          "velocityMps": 0.002899659991568728
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.001691076514105647,
+          "velocityMps": 1.393630544632009e-05
+        },
+        "threeDays": {
+          "positionM": 0.005653872959329425,
+          "velocityMps": 1.393630544632009e-05
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0016411623215098763,
+          "velocityMps": 2.0431927079323572e-06
+        },
+        "threeDays": {
+          "positionM": 0.005621557680133844,
+          "velocityMps": 6.558821817469886e-06
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "STARLINK",
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 12 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 3.6436076353252477e-07,
+          "velocityMps": 1.0193077002961662e-09
+        },
+        "threeDays": {
+          "positionM": 4.719194505357267e-06,
+          "velocityMps": 5.214708654472366e-09
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.02659084839776086,
+          "velocityMps": 2.771606425575241e-05
+        },
+        "threeDays": {
+          "positionM": 0.20466774647822947,
+          "velocityMps": 0.00022119607570022807
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0005240991613971134,
+          "velocityMps": 4.732375084698403e-06
+        },
+        "threeDays": {
+          "positionM": 0.0011035176830536456,
+          "velocityMps": 5.244428854952625e-06
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0005213732232506947,
+          "velocityMps": 5.728831067984775e-07
+        },
+        "threeDays": {
+          "positionM": 0.0010975493953101795,
+          "velocityMps": 1.1898383516376999e-06
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "SSO800",
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 24 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 3.070531000691994e-06,
+          "velocityMps": 3.1605166231377434e-09
+        },
+        "threeDays": {
+          "positionM": 5.347052181317974e-06,
+          "velocityMps": 5.519385563128472e-09
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.10265829495616399,
+          "velocityMps": 0.00010685541979733335
+        },
+        "threeDays": {
+          "positionM": 0.9002406815140795,
+          "velocityMps": 0.000931424198763193
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0013959493315080626,
+          "velocityMps": 2.5722913802366945e-06
+        },
+        "threeDays": {
+          "positionM": 0.002681476381213751,
+          "velocityMps": 3.1740165133511562e-06
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0013958411331168007,
+          "velocityMps": 2.5095154887151433e-06
+        },
+        "threeDays": {
+          "positionM": 0.0026814956639578014,
+          "velocityMps": 3.2694070221043484e-06
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "LOW250",
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 10 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 7.414674409857179e-06,
+          "velocityMps": 8.6822995210996e-09
+        },
+        "threeDays": {
+          "positionM": 3.164985332421716e-05,
+          "velocityMps": 3.7066797143184e-08
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.9671641647781605,
+          "velocityMps": 0.0011384760688917025
+        },
+        "threeDays": {
+          "positionM": 7.451774456068994,
+          "velocityMps": 0.008735635051351212
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0015125674719589424,
+          "velocityMps": 7.798558772011032e-05
+        },
+        "threeDays": {
+          "positionM": 0.0038398224356756667,
+          "velocityMps": 7.798558772011032e-05
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0004933723755872685,
+          "velocityMps": 6.216142643034698e-07
+        },
+        "threeDays": {
+          "positionM": 0.003405811444963786,
+          "velocityMps": 4.00060067412521e-06
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "GPS",
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 75 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 7.870247465299826e-07,
+          "velocityMps": 1.4530427423967846e-10
+        },
+        "threeDays": {
+          "positionM": 1.1651350052622122e-05,
+          "velocityMps": 1.7111009092476678e-09
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 3.863824602646119e-05,
+          "velocityMps": 4.3521051788163915e-08
+        },
+        "threeDays": {
+          "positionM": 0.0002927116083265377,
+          "velocityMps": 9.180201953037483e-08
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 6.044849126060551e-06,
+          "velocityMps": 4.22016179981121e-08
+        },
+        "threeDays": {
+          "positionM": 5.759901766951999e-05,
+          "velocityMps": 4.369725639524705e-08
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 6.04038135428264e-06,
+          "velocityMps": 2.1822565188562752e-08
+        },
+        "threeDays": {
+          "positionM": 5.759847225512079e-05,
+          "velocityMps": 2.1822565188562752e-08
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "GEO",
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 600 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 2.1031596591193568e-07,
+          "velocityMps": 9.704263795816537e-11
+        },
+        "threeDays": {
+          "positionM": 5.338998095858446e-06,
+          "velocityMps": 4.4642489798243106e-10
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 5.262876234146149e-06,
+          "velocityMps": 6.781845448582001e-10
+        },
+        "threeDays": {
+          "positionM": 3.9345962772793066e-05,
+          "velocityMps": 3.160769519357412e-09
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 5.371981442323475e-06,
+          "velocityMps": 6.94300717047823e-10
+        },
+        "threeDays": {
+          "positionM": 3.871448536423239e-05,
+          "velocityMps": 3.098513582435289e-09
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 5.369412213466007e-06,
+          "velocityMps": 6.94172801759557e-10
+        },
+        "threeDays": {
+          "positionM": 3.87101593320879e-05,
+          "velocityMps": 3.0982109652610332e-09
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "MOLNIYA",
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 4.935946983238876e-06,
+          "velocityMps": 3.9326887607118214e-09
+        },
+        "threeDays": {
+          "positionM": 1.873987377798211e-05,
+          "velocityMps": 1.5269208079819133e-08
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.23775379626595783,
+          "velocityMps": 0.00018977448607957476
+        },
+        "threeDays": {
+          "positionM": 0.26092565701641873,
+          "velocityMps": 0.00021294749232976778
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0024999941452636633,
+          "velocityMps": 1.990135339839354e-06
+        },
+        "threeDays": {
+          "positionM": 0.03948483143277103,
+          "velocityMps": 3.515543392775184e-05
+        }
+      },
+      "denseVsTruth": {
+        "samples": 62006,
+        "oneDay": {
+          "positionM": 0.0024999914730036822,
+          "velocityMps": 1.981430713499868e-06
+        },
+        "threeDays": {
+          "positionM": 0.039446210340390635,
+          "velocityMps": 3.220876881267192e-05
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "GTO",
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fixed": {
+        "oneDay": {
+          "positionM": 1.0262360560438119e-05,
+          "velocityMps": 9.154019759430525e-09
+        },
+        "threeDays": {
+          "positionM": 3.64984712915406e-05,
+          "velocityMps": 3.2591650122405683e-08
+        }
+      },
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.4960067254227696,
+          "velocityMps": 0.0004631639172149421
+        },
+        "threeDays": {
+          "positionM": 3.3471210589353793,
+          "velocityMps": 0.0030678707526594433
+        }
+      },
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.002361131177511059,
+          "velocityMps": 3.573323833258146e-05
+        },
+        "threeDays": {
+          "positionM": 0.039564196098413856,
+          "velocityMps": 0.00011801280639294097
+        }
+      },
+      "denseVsTruth": {
+        "samples": 63056,
+        "oneDay": {
+          "positionM": 0.0021278941610075744,
+          "velocityMps": 1.8937645006286678e-06
+        },
+        "threeDays": {
+          "positionM": 0.03884772835479181,
+          "velocityMps": 3.4717688015873054e-05
+        }
+      },
+      "fit": true,
+      "screen": true
+    }
+  ],
+  "carry": [
+    {
+      "implementation": "ffm",
+      "workers": 1,
+      "trajectories": 8,
+      "byteIdentical": true,
+      "invalidUpdatesPreservedCatalog": true,
+      "concurrentWindowSerialized": true,
+      "ppeSha256": "91df4568c111e872e2f0882076373703d97361487be3c3cde59ca7a446ae1712",
+      "unchangedUpdateDerived": 0,
+      "deletedAll": 8,
+      "repopulated": 8,
+      "residency": [
+        {
+          "instances": 2,
+          "live": 8,
+          "retained": 8,
+          "maximumInstances": 2,
+          "compactions": 1
+        }
+      ]
+    },
+    {
+      "implementation": "ffm-fast",
+      "workers": 1,
+      "trajectories": 8,
+      "byteIdentical": true,
+      "invalidUpdatesPreservedCatalog": true,
+      "concurrentWindowSerialized": true,
+      "ppeSha256": "88a414d54622404bf3bd5903cd18a02a2d27e9ef0883dd029726b8c0f61c812a",
+      "unchangedUpdateDerived": 0,
+      "deletedAll": 8,
+      "repopulated": 8,
+      "residency": [
+        {
+          "instances": 2,
+          "live": 8,
+          "retained": 8,
+          "maximumInstances": 2,
+          "compactions": 1
+        }
+      ]
+    }
+  ],
+  "ca": {
+    "pass": true,
+    "eventSets": {
+      "standard": {
+        "equal": true,
+        "missingPairs": [],
+        "extraPairs": [],
+        "countDifferences": []
+      },
+      "fast": {
+        "equal": true,
+        "missingPairs": [],
+        "extraPairs": [],
+        "countDifferences": []
+      }
+    },
+    "populationCounts": {
+      "standard": {
+        "excluded": 0,
+        "dropped": 3,
+        "reentries": 3
+      },
+      "fast": {
+        "excluded": 0,
+        "dropped": 3,
+        "reentries": 3
+      },
+      "reference": {
+        "excluded": 0,
+        "dropped": 3,
+        "reentries": 3
+      }
+    },
+    "thresholds": {
+      "missMeters": 1,
+      "tcaSeconds": 0.001,
+      "maximumPredictionAgeDays": 8
+    },
+    "inDomain": {
+      "events": 71,
+      "fastFailures": 0,
+      "fastNoWorseMiss": 69,
+      "fastNoWorseTca": 71,
+      "standard": {
+        "maxMissMeters": 8.52843705486248,
+        "maxTcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "maxMissMeters": 0.1559667737710697,
+        "maxTcaSeconds": 4.023313522338867e-05
+      }
+    },
+    "outOfDomain": {
+      "events": 2,
+      "fastFailures": 0,
+      "fastNoWorseMiss": 2,
+      "fastNoWorseTca": 2,
+      "standard": {
+        "maxMissMeters": 14.984863714944368,
+        "maxTcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "maxMissMeters": 0.04416443754507782,
+        "maxTcaSeconds": 0
+      }
+    },
+    "allEvents": {
+      "events": 73,
+      "fastFailures": 0,
+      "fastNoWorseMiss": 71,
+      "fastNoWorseTca": 73,
+      "standard": {
+        "maxMissMeters": 14.984863714944368,
+        "maxTcaSeconds": 0.0016897916793823242
+      },
+      "fast": {
+        "maxMissMeters": 0.1559667737710697,
+        "maxTcaSeconds": 4.023313522338867e-05
+      }
+    },
+    "events": [
+      {
+        "pair": "57023:64685",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.5081923096,
+        "referenceMissMeters": 2994.159997213637,
+        "primaryAgeDays": 3.7699044896289706,
+        "secondaryAgeDays": 3.8165091294795275,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.7526587397478579,
+          "tcaSeconds": 0.0004425644874572754
+        },
+        "fast": {
+          "missMeters": 9.056755834535579e-05,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.5131477593,
+        "referenceMissMeters": 3925.940754409786,
+        "primaryAgeDays": 3.8537742691114545,
+        "secondaryAgeDays": 3.763447219040245,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.6540690437345802,
+          "tcaSeconds": 0.0004023313522338867
+        },
+        "fast": {
+          "missMeters": 0.006098353383549693,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461317.578530953,
+        "referenceMissMeters": 2980.5697940525392,
+        "primaryAgeDays": 3.9191574626602232,
+        "secondaryAgeDays": 3.8288304125890136,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.699159392605452,
+          "tcaSeconds": 0.0004023313522338867
+        },
+        "fast": {
+          "missMeters": 0.006207072392498958,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 2,
+        "referenceTcaJd": 2461317.6439142493,
+        "referenceMissMeters": 1629.128251853498,
+        "primaryAgeDays": 3.9845407591201365,
+        "secondaryAgeDays": 3.894213709048927,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.7442444216417243,
+          "tcaSeconds": 0.0004425644874572754
+        },
+        "fast": {
+          "missMeters": 0.006315734574172893,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 3,
+        "referenceTcaJd": 2461317.709297324,
+        "referenceMissMeters": 155.0877998848908,
+        "primaryAgeDays": 4.049923833925277,
+        "secondaryAgeDays": 3.9595967838540673,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.6746787152340232,
+          "tcaSeconds": 0.0004425644874572754
+        },
+        "fast": {
+          "missMeters": 0.005500636170438611,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 4,
+        "referenceTcaJd": 2461317.774680799,
+        "referenceMissMeters": 1209.1313535337486,
+        "primaryAgeDays": 4.115307308733463,
+        "secondaryAgeDays": 4.024980258662254,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.8455897889050448,
+          "tcaSeconds": 0.0004425644874572754
+        },
+        "fast": {
+          "missMeters": 0.006483139286046935,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 5,
+        "referenceTcaJd": 2461317.8400640865,
+        "referenceMissMeters": 2201.4570332696253,
+        "primaryAgeDays": 4.180690596345812,
+        "secondaryAgeDays": 4.090363546274602,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.9085910428420902,
+          "tcaSeconds": 0.00048279762268066406
+        },
+        "fast": {
+          "missMeters": 0.006639493706188659,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 6,
+        "referenceTcaJd": 2461317.905447303,
+        "referenceMissMeters": 3280.271385525621,
+        "primaryAgeDays": 4.246073812711984,
+        "secondaryAgeDays": 4.155746762640774,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.9568180392830072,
+          "tcaSeconds": 0.00048279762268066406
+        },
+        "fast": {
+          "missMeters": 0.006747963908765087,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58493:59839",
+        "eventIndex": 7,
+        "referenceTcaJd": 2461317.9708304266,
+        "referenceMissMeters": 4573.028528396803,
+        "primaryAgeDays": 4.31145693641156,
+        "secondaryAgeDays": 4.22112988634035,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.0062121677328832,
+          "tcaSeconds": 0.0005230307579040527
+        },
+        "fast": {
+          "missMeters": 0.006855038163848803,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "68724:69623",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.5175664593,
+        "referenceMissMeters": 2957.3461874969303,
+        "primaryAgeDays": 3.781223889440298,
+        "secondaryAgeDays": 4.060477729421109,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.5551928591321484,
+          "tcaSeconds": 0.00020116567611694336
+        },
+        "fast": {
+          "missMeters": 0.0013187617705625598,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59415:67828",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.526903565,
+        "referenceMissMeters": 1576.7900844788871,
+        "primaryAgeDays": 3.919204395264387,
+        "secondaryAgeDays": 3.82886926503852,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.021421306289539643,
+          "tcaSeconds": 8.046627044677734e-05
+        },
+        "fast": {
+          "missMeters": 0.00028986212328163674,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59415:67828",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461317.5922882496,
+        "referenceMissMeters": 563.923675312439,
+        "primaryAgeDays": 3.984589079860598,
+        "secondaryAgeDays": 3.894253949634731,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.033332895446392286,
+          "tcaSeconds": 8.046627044677734e-05
+        },
+        "fast": {
+          "missMeters": 0.0002941158081739559,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59415:67828",
+        "eventIndex": 2,
+        "referenceTcaJd": 2461317.657672688,
+        "referenceMissMeters": 1306.4139412910629,
+        "primaryAgeDays": 4.049973518121988,
+        "secondaryAgeDays": 3.9596383878961205,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.04778340670372927,
+          "tcaSeconds": 8.046627044677734e-05
+        },
+        "fast": {
+          "missMeters": 0.00030252706847022637,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59415:67828",
+        "eventIndex": 3,
+        "referenceTcaJd": 2461317.723057389,
+        "referenceMissMeters": 2781.126247183755,
+        "primaryAgeDays": 4.115358219016343,
+        "secondaryAgeDays": 4.025023088790476,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.05574488136653599,
+          "tcaSeconds": 8.046627044677734e-05
+        },
+        "fast": {
+          "missMeters": 0.0002977519334308454,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59415:67828",
+        "eventIndex": 4,
+        "referenceTcaJd": 2461317.788442223,
+        "referenceMissMeters": 3880.100947292845,
+        "primaryAgeDays": 4.180743053089827,
+        "secondaryAgeDays": 4.09040792286396,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.0698547939709897,
+          "tcaSeconds": 8.046627044677734e-05
+        },
+        "fast": {
+          "missMeters": 0.0003013830437339493,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "41914:47448",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.5384251275,
+        "referenceMissMeters": 2098.7706538986718,
+        "primaryAgeDays": 3.9362770477309823,
+        "secondaryAgeDays": 3.8720595776103437,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.3507122916098524,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.015700348040354584,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.5442181104,
+        "referenceMissMeters": 860.61244993747,
+        "primaryAgeDays": 3.797758990433067,
+        "secondaryAgeDays": 3.88484462024644,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.1423494490048824,
+          "tcaSeconds": 0.0003218650817871094
+        },
+        "fast": {
+          "missMeters": 0.0046314906004454315,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461317.6096015987,
+        "referenceMissMeters": 2788.53192995549,
+        "primaryAgeDays": 3.8631424787454307,
+        "secondaryAgeDays": 3.950228108558804,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.4884158239788121,
+          "tcaSeconds": 0.00036209821701049805
+        },
+        "fast": {
+          "missMeters": 0.005777419357855251,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 2,
+        "referenceTcaJd": 2461318.1653604535,
+        "referenceMissMeters": 3867.1910762710295,
+        "primaryAgeDays": 4.4189013335853815,
+        "secondaryAgeDays": 4.505986963398755,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.2817201933298747,
+          "tcaSeconds": 0.0005230307579040527
+        },
+        "fast": {
+          "missMeters": 0.006778080676212994,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 3,
+        "referenceTcaJd": 2461318.230743838,
+        "referenceMissMeters": 2309.116057640762,
+        "primaryAgeDays": 4.484284718055278,
+        "secondaryAgeDays": 4.571370347868651,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.3790540117552155,
+          "tcaSeconds": 0.0005230307579040527
+        },
+        "fast": {
+          "missMeters": 0.006909318910402362,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 4,
+        "referenceTcaJd": 2461318.2961273375,
+        "referenceMissMeters": 816.4192414082023,
+        "primaryAgeDays": 4.549668217543513,
+        "secondaryAgeDays": 4.636753847356886,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.4656702567647244,
+          "tcaSeconds": 0.0005230307579040527
+        },
+        "fast": {
+          "missMeters": 0.00702477478853325,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 5,
+        "referenceTcaJd": 2461318.3615104277,
+        "referenceMissMeters": 900.4778933386503,
+        "primaryAgeDays": 4.615051307715476,
+        "secondaryAgeDays": 4.702136937528849,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.5359572141159106,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.0071052078184266065,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 6,
+        "referenceTcaJd": 2461318.426893282,
+        "referenceMissMeters": 2528.305699506716,
+        "primaryAgeDays": 4.680434162262827,
+        "secondaryAgeDays": 4.7675197920762,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.6243077460526365,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.007226043019727513,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59839:68004",
+        "eventIndex": 7,
+        "referenceTcaJd": 2461318.492275938,
+        "referenceMissMeters": 4062.2784701334094,
+        "primaryAgeDays": 4.745816817972809,
+        "secondaryAgeDays": 4.832902447786182,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.712390187521578,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.007338063486258761,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "57186:57646",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.55703357,
+        "referenceMissMeters": 2967.4196782115673,
+        "primaryAgeDays": 4.737987350206822,
+        "secondaryAgeDays": 3.8886900800280273,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.7350907802301663,
+          "tcaSeconds": 0.0003218650817871094
+        },
+        "fast": {
+          "missMeters": 1.0068276878882898e-05,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "18764:42282",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.562495142,
+        "referenceMissMeters": 3779.820616596888,
+        "primaryAgeDays": 5.056001112330705,
+        "secondaryAgeDays": 4.144415521994233,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.12096207772128764,
+          "tcaSeconds": 0.0002816319465637207
+        },
+        "fast": {
+          "missMeters": 0.039815751553305745,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "4382:42989",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.6283861855,
+        "referenceMissMeters": 4136.037947559204,
+        "primaryAgeDays": 3.935887085273862,
+        "secondaryAgeDays": 4.201323555316776,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.5635986685092575,
+          "tcaSeconds": 0.00024139881134033203
+        },
+        "fast": {
+          "missMeters": 0.006812020085817494,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "29827:29975",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.6305425377,
+        "referenceMissMeters": 4629.087228767537,
+        "primaryAgeDays": 4.048813317436725,
+        "secondaryAgeDays": 4.197085817810148,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.09226339831002406,
+          "tcaSeconds": 0.00024139881134033203
+        },
+        "fast": {
+          "missMeters": 0.03659501190759329,
+          "tcaSeconds": 4.023313522338867e-05
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "48790:82627",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.6335000764,
+        "referenceMissMeters": 4042.6924326042554,
+        "primaryAgeDays": 3.9415108365938067,
+        "secondaryAgeDays": 7.796618206426501,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.5844256951600073,
+          "tcaSeconds": 0.0005230307579040527
+        },
+        "fast": {
+          "missMeters": 0.0019400574710743967,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "48790:82627",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461317.7095224033,
+        "referenceMissMeters": 4318.476539401338,
+        "primaryAgeDays": 4.017533163540065,
+        "secondaryAgeDays": 7.87264053337276,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.6292603770880305,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.0020803532297577476,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "7182:22186",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.6469092295,
+        "referenceMissMeters": 4318.966678528224,
+        "primaryAgeDays": 4.179125239606947,
+        "secondaryAgeDays": 4.0239791492931545,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.02556631842890056,
+          "tcaSeconds": 0.00024139881134033203
+        },
+        "fast": {
+          "missMeters": 0.00016250339922407875,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "62617:64323",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.672440649,
+        "referenceMissMeters": 4889.666875436082,
+        "primaryAgeDays": 3.9673000490292907,
+        "secondaryAgeDays": 4.141802798956633,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.4909289637926122,
+          "tcaSeconds": 0.0012472271919250488
+        },
+        "fast": {
+          "missMeters": 0.05542834734023927,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "13458:30132",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.681464836,
+        "referenceMissMeters": 4663.549387342126,
+        "primaryAgeDays": 4.693222836125642,
+        "secondaryAgeDays": 3.973998276051134,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.03832795552261814,
+          "tcaSeconds": 0.00024139881134033203
+        },
+        "fast": {
+          "missMeters": 0.0010208297608187422,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "16194:61613",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.691079336,
+        "referenceMissMeters": 4900.784891262872,
+        "primaryAgeDays": 4.3439962160773575,
+        "secondaryAgeDays": 3.9923195661976933,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.029396350439128582,
+          "tcaSeconds": 0.00024139881134033203
+        },
+        "fast": {
+          "missMeters": 0.0004998647200409323,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58900:61775",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.7349420697,
+        "referenceMissMeters": 2296.236272343395,
+        "primaryAgeDays": 4.025998289696872,
+        "secondaryAgeDays": 4.167857989668846,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 4.142093337782171,
+          "tcaSeconds": 0.0006034970283508301
+        },
+        "fast": {
+          "missMeters": 0.004734839363209176,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "53475:54922",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.7857451285,
+        "referenceMissMeters": 3040.267095281709,
+        "primaryAgeDays": 5.0694866185076535,
+        "secondaryAgeDays": 4.035721978638321,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.673833761433343,
+          "tcaSeconds": 0.0008851289749145508
+        },
+        "fast": {
+          "missMeters": 0.11903826897423642,
+          "tcaSeconds": 4.023313522338867e-05
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "33396:36244",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.796993621,
+        "referenceMissMeters": 3520.4245936683155,
+        "primaryAgeDays": 10.011565251275897,
+        "secondaryAgeDays": 4.067584950942546,
+        "inDomain": false,
+        "standard": {
+          "missMeters": 2.035335238643711,
+          "tcaSeconds": 0.0008046627044677734
+        },
+        "fast": {
+          "missMeters": 0.03716624885100828,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "1608:57767",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.8009671755,
+        "referenceMissMeters": 3232.0138807855446,
+        "primaryAgeDays": 4.030912525486201,
+        "secondaryAgeDays": 4.593128775712103,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.01272523081934196,
+          "tcaSeconds": 0.0002816319465637207
+        },
+        "fast": {
+          "missMeters": 0.00014838249398962944,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "1608:57767",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461317.909295009,
+        "referenceMissMeters": 4272.405179480695,
+        "primaryAgeDays": 4.139240358956158,
+        "secondaryAgeDays": 4.70145660918206,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.08982025423665618,
+          "tcaSeconds": 0.0002816319465637207
+        },
+        "fast": {
+          "missMeters": 0.0007080260120346793,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "59577:100269",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.895459253,
+        "referenceMissMeters": 910.6146299515822,
+        "primaryAgeDays": 4.663015662692487,
+        "secondaryAgeDays": 4.145436102990061,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.3908851129585855,
+          "tcaSeconds": 0.0006839632987976074
+        },
+        "fast": {
+          "missMeters": 0.08247374256279727,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "37483:43912",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.913267297,
+        "referenceMissMeters": 2491.3681788467825,
+        "primaryAgeDays": 4.18553509702906,
+        "secondaryAgeDays": 5.584333467297256,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.5529860723790989,
+          "tcaSeconds": 0.00036209821701049805
+        },
+        "fast": {
+          "missMeters": 0.022811763458321366,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "20308:22812",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.9178010765,
+        "referenceMissMeters": 3171.9074473473815,
+        "primaryAgeDays": 15.20935186650604,
+        "secondaryAgeDays": 4.263838946353644,
+        "inDomain": false,
+        "standard": {
+          "missMeters": 14.984863714944368,
+          "tcaSeconds": 0.0016897916793823242
+        },
+        "fast": {
+          "missMeters": 0.04416443754507782,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "45535:57582",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.932696778,
+        "referenceMissMeters": 3367.429898727432,
+        "primaryAgeDays": 4.511702657677233,
+        "secondaryAgeDays": 4.200774088036269,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.009736850204717484,
+          "tcaSeconds": 0.00048279762268066406
+        },
+        "fast": {
+          "missMeters": 0.048658806310868385,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": false,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "63376:100080",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.939530285,
+        "referenceMissMeters": 2799.257373825196,
+        "primaryAgeDays": 4.299948455300182,
+        "secondaryAgeDays": 4.833530735224485,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.2122978771203634,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.01939906888310361,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "25042:37400",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.950426615,
+        "referenceMissMeters": 4050.8144076941494,
+        "primaryAgeDays": 4.639759774785489,
+        "secondaryAgeDays": 5.518141034990549,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.5670517502894654,
+          "tcaSeconds": 0.00036209821701049805
+        },
+        "fast": {
+          "missMeters": 0.0110950499347382,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "56034:64532",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.9902874227,
+        "referenceMissMeters": 3871.4378827529204,
+        "primaryAgeDays": 4.460465752519667,
+        "secondaryAgeDays": 4.3305898825638,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.0112013601037688,
+          "tcaSeconds": 0.00036209821701049805
+        },
+        "fast": {
+          "missMeters": 7.871432399042533e-05,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "56034:64532",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461318.0884567834,
+        "referenceMissMeters": 2515.271076156032,
+        "primaryAgeDays": 4.558635113295168,
+        "secondaryAgeDays": 4.4287592433393,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.230069646308948,
+          "tcaSeconds": 0.0004023313522338867
+        },
+        "fast": {
+          "missMeters": 3.2383008147007786e-05,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "37661:52716",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.992018991,
+        "referenceMissMeters": 2657.3631928202344,
+        "primaryAgeDays": 4.2544454713352025,
+        "secondaryAgeDays": 5.088177401106805,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.04250557520526854,
+          "tcaSeconds": 0.0003218650817871094
+        },
+        "fast": {
+          "missMeters": 0.0018902546280514798,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "55046:100020",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461317.999059821,
+        "referenceMissMeters": 1560.5779862910326,
+        "primaryAgeDays": 4.7485480909235775,
+        "secondaryAgeDays": 4.249036671128124,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.10357298978624385,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.012586349630510085,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "31430:38262",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.001637407,
+        "referenceMissMeters": 1992.744139467254,
+        "primaryAgeDays": 4.334249047096819,
+        "secondaryAgeDays": 4.291081987321377,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.003217477362113641,
+          "tcaSeconds": 0.0002816319465637207
+        },
+        "fast": {
+          "missMeters": 0.03517384244605637,
+          "tcaSeconds": 4.023313522338867e-05
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": false,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "2940:30387",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.0160375647,
+        "referenceMissMeters": 4823.019539012417,
+        "primaryAgeDays": 4.40715551469475,
+        "secondaryAgeDays": 4.707491084933281,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.04512570193855936,
+          "tcaSeconds": 0.0003218650817871094
+        },
+        "fast": {
+          "missMeters": 0.00401366372625489,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "51991:69623",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.0393575886,
+        "referenceMissMeters": 3119.51416721772,
+        "primaryAgeDays": 4.303015018813312,
+        "secondaryAgeDays": 4.384570008609444,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.035334740306097956,
+          "tcaSeconds": 4.023313522338867e-05
+        },
+        "fast": {
+          "missMeters": 0.00031389119976665825,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "63318:100514",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.0464510936,
+        "referenceMissMeters": 4907.849331939367,
+        "primaryAgeDays": 4.6072504334151745,
+        "secondaryAgeDays": 4.296427943743765,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.5750025161669328,
+          "tcaSeconds": 0.0010862946510314941
+        },
+        "fast": {
+          "missMeters": 0.03192534925892687,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "53249:65796",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.064044283,
+        "referenceMissMeters": 3776.0986668935498,
+        "primaryAgeDays": 4.369994242675602,
+        "secondaryAgeDays": 4.47137919254601,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.23717220573826125,
+          "tcaSeconds": 0.0008046627044677734
+        },
+        "fast": {
+          "missMeters": 0.0012679428377850854,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "33396:270342",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.0852592858,
+        "referenceMissMeters": 4175.117490851911,
+        "primaryAgeDays": 4.6169897257350385,
+        "secondaryAgeDays": 4.355850615538657,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.2619133020116351,
+          "tcaSeconds": 0.0003218650817871094
+        },
+        "fast": {
+          "missMeters": 0.009741084194502037,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "17035:31717",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.1031688186,
+        "referenceMissMeters": 3822.385436098727,
+        "primaryAgeDays": 6.14525156840682,
+        "secondaryAgeDays": 4.340897338464856,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.29006262704206165,
+          "tcaSeconds": 0.0004023313522338867
+        },
+        "fast": {
+          "missMeters": 0.0021722059505009383,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "42989:50032",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.1123638717,
+        "referenceMissMeters": 4509.2920700461145,
+        "primaryAgeDays": 4.542306181509048,
+        "secondaryAgeDays": 4.685301241464913,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.49335449283717026,
+          "tcaSeconds": 0.0004023313522338867
+        },
+        "fast": {
+          "missMeters": 0.010677239869437471,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "61695:63273",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.1472305744,
+        "referenceMissMeters": 4527.207381279662,
+        "primaryAgeDays": 4.476749134249985,
+        "secondaryAgeDays": 4.714958364609629,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 2.7197875217152614,
+          "tcaSeconds": 0.0007241964340209961
+        },
+        "fast": {
+          "missMeters": 0.12669480318618298,
+          "tcaSeconds": 4.023313522338867e-05
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "61943:63014",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.159255699,
+        "referenceMissMeters": 3014.9004026673715,
+        "primaryAgeDays": 5.800278718583286,
+        "secondaryAgeDays": 4.466132208704948,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 8.52843705486248,
+          "tcaSeconds": 0.0008448958396911621
+        },
+        "fast": {
+          "missMeters": 0.1559667737710697,
+          "tcaSeconds": 4.023313522338867e-05
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "45331:270055",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.2128930897,
+        "referenceMissMeters": 922.1517646290526,
+        "primaryAgeDays": 4.498543589841574,
+        "secondaryAgeDays": 4.49738743994385,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.001607679694188846,
+          "tcaSeconds": 0.0002816319465637207
+        },
+        "fast": {
+          "missMeters": 0.0002473031066756448,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "56963:100620",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.2313290173,
+        "referenceMissMeters": 4583.864983785496,
+        "primaryAgeDays": 4.47905822750181,
+        "secondaryAgeDays": 4.489184077363461,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.9922405308479938,
+          "tcaSeconds": 0.0012472271919250488
+        },
+        "fast": {
+          "missMeters": 0.07981476175791613,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "58708:63551",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.245171661,
+        "referenceMissMeters": 4700.240124710775,
+        "primaryAgeDays": 4.506324140820652,
+        "secondaryAgeDays": 4.514720131177455,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 5.312652897994667,
+          "tcaSeconds": 0.0016897916793823242
+        },
+        "fast": {
+          "missMeters": 0.018951574294078455,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "43099:60036",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.2823729427,
+        "referenceMissMeters": 3502.843015868149,
+        "primaryAgeDays": 4.591746112797409,
+        "secondaryAgeDays": 4.541573332622647,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.18153328781136224,
+          "tcaSeconds": 0.0006437301635742188
+        },
+        "fast": {
+          "missMeters": 0.002917925597557769,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "49771:66937",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.336720191,
+        "referenceMissMeters": 4663.377814625529,
+        "primaryAgeDays": 4.979693450964987,
+        "secondaryAgeDays": 5.083610861096531,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.3456814083019708,
+          "tcaSeconds": 0.0007644295692443848
+        },
+        "fast": {
+          "missMeters": 0.0003164897234455566,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "49771:66937",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461318.4018544466,
+        "referenceMissMeters": 3550.126780017347,
+        "primaryAgeDays": 5.044827706646174,
+        "secondaryAgeDays": 5.148745116777718,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.358897382187024,
+          "tcaSeconds": 0.0008046627044677734
+        },
+        "fast": {
+          "missMeters": 0.00031926792644298985,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "49771:66937",
+        "eventIndex": 2,
+        "referenceTcaJd": 2461318.4669891396,
+        "referenceMissMeters": 1623.3467530069415,
+        "primaryAgeDays": 5.10996239958331,
+        "secondaryAgeDays": 5.213879809714854,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.345909826918387,
+          "tcaSeconds": 0.0008448958396911621
+        },
+        "fast": {
+          "missMeters": 0.0003143386818464933,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "20197:40552",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.3489993457,
+        "referenceMissMeters": 1498.3866130622062,
+        "primaryAgeDays": 4.720486185513437,
+        "secondaryAgeDays": 4.630322965793312,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.013642413536899767,
+          "tcaSeconds": 0.0002816319465637207
+        },
+        "fast": {
+          "missMeters": 0.0001158542536359164,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "45201:46505",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.3888827004,
+        "referenceMissMeters": 4471.624767020247,
+        "primaryAgeDays": 4.662883760407567,
+        "secondaryAgeDays": 5.011372250504792,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.571250987222811,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.009335676189948572,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "48359:68854",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.416924473,
+        "referenceMissMeters": 3982.781236996691,
+        "primaryAgeDays": 4.92478832276538,
+        "secondaryAgeDays": 4.823751642834395,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.03344836816768293,
+          "tcaSeconds": 0.00048279762268066406
+        },
+        "fast": {
+          "missMeters": 0.0008881389353518898,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "48359:68854",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461318.449537871,
+        "referenceMissMeters": 4562.181912623585,
+        "primaryAgeDays": 4.957401720806956,
+        "secondaryAgeDays": 4.856365040875971,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.01878798560846917,
+          "tcaSeconds": 0.0004425644874572754
+        },
+        "fast": {
+          "missMeters": 0.0003777147503569722,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "60488:100487",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.4303567144,
+        "referenceMissMeters": 3196.4095230150774,
+        "primaryAgeDays": 4.874017124529928,
+        "secondaryAgeDays": 4.6803335645236075,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.4741953967140944,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.003751430620013707,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "60488:100487",
+        "eventIndex": 1,
+        "referenceTcaJd": 2461318.462642158,
+        "referenceMissMeters": 4325.823794730295,
+        "primaryAgeDays": 4.906302568037063,
+        "secondaryAgeDays": 4.712619008030742,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 1.0021491608003998,
+          "tcaSeconds": 0.0005632638931274414
+        },
+        "fast": {
+          "missMeters": 0.0025168726251649787,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      },
+      {
+        "pair": "53870:100420",
+        "eventIndex": 0,
+        "referenceTcaJd": 2461318.487821477,
+        "referenceMissMeters": 3421.102745997889,
+        "primaryAgeDays": 5.345641897059977,
+        "secondaryAgeDays": 5.625657447148114,
+        "inDomain": true,
+        "standard": {
+          "missMeters": 0.1635004272925471,
+          "tcaSeconds": 0.0005230307579040527
+        },
+        "fast": {
+          "missMeters": 0.0004590004778037837,
+          "tcaSeconds": 0
+        },
+        "fastPass": true,
+        "fastNoWorseMiss": true,
+        "fastNoWorseTca": true
+      }
+    ],
+    "sigma": {
+      "acceptanceGate": false,
+      "modelSha256": "d705ffcb16da10b9eb9af1afd830d79172723183f32e03e7935f603dadeb2072",
+      "standard": {
+        "eventsCovered": 71,
+        "maximumMissSigmaFraction": 0.028027533200947537,
+        "maximumTcaDisplacementSigmaFraction": 0.06183928888789873,
+        "minimumCombinedSigmaMeters": 270.4079646112855,
+        "missing": [
+          {
+            "pair": "33396:36244",
+            "reason": "E14 has no matching regime/age covariance"
+          },
+          {
+            "pair": "20308:22812",
+            "reason": "E14 has no matching regime/age covariance"
+          }
+        ],
+        "modelId": "e14-s3-0e678383cfbd"
+      },
+      "fast": {
+        "eventsCovered": 71,
+        "maximumMissSigmaFraction": 0.0005125633104861812,
+        "maximumTcaDisplacementSigmaFraction": 0.001623848577015706,
+        "minimumCombinedSigmaMeters": 270.4079646112855,
+        "missing": [
+          {
+            "pair": "33396:36244",
+            "reason": "E14 has no matching regime/age covariance"
+          },
+          {
+            "pair": "20308:22812",
+            "reason": "E14 has no matching regime/age covariance"
+          }
+        ],
+        "modelId": "e14-s3-0e678383cfbd"
+      }
+    },
+    "referenceIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 2,
+      "minStep": 0.0001,
+      "maxStep": 2,
+      "maxSteps": 100000000
+    },
+    "evidenceSha256": {
+      "baseline": "18aca8a98bd7f2b36add2b82937d9cf42a7062cb9d387ca7757aa5b53a8e8404",
+      "reference": "68097987b7f9c70a2a8ac48cffc856827e3ddf8c1388774dd0829aa9b72798cc",
+      "provenance": "8ee46110c42871557c1ca76047414512a84c60608c374d665dfeec93a75649ce"
+    },
+    "standardWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+    "fastWasmSha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+    "limitations": [
+      "Synthetic weather; GP sigma is diagnostic only.",
+      "Standard/Fast evidence is reused only after matching inputs, artifacts and the reference adapter sources.",
+      "T3 integrator settings use the same resident farm export and screen; native truth output/stop scheduling is not substituted."
+    ]
+  },
+  "independentCAReductionAgrees": true,
+  "portability": {
+    "wasmedgePin": "0.16.4",
+    "receiptDigest": "1cf790fd0e289e65601ba8467c5083227d422cf052971dc7edca5068f35c54d8",
+    "artifacts": [
+      {
+        "id": "ffm",
+        "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+        "structural": {
+          "verdict": "in-surface",
+          "summary": "in-surface (WASI only)",
+          "importCount": 13,
+          "capabilityImports": [],
+          "forbidden": [],
+          "outsideSurface": []
+        },
+        "lanes": [
+          {
+            "lane": "browser",
+            "outcome": "instantiated",
+            "contractVerdict": "satisfied"
+          },
+          {
+            "lane": "wasmedge-docker",
+            "outcome": "instantiated",
+            "contractVerdict": "satisfied"
+          },
+          {
+            "lane": "wasmedge-native",
+            "outcome": "instantiated",
+            "contractVerdict": "satisfied"
+          }
+        ]
+      },
+      {
+        "id": "ffm-fast",
+        "sha256": "b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15",
+        "structural": {
+          "verdict": "in-surface",
+          "summary": "in-surface (WASI only)",
+          "importCount": 13,
+          "capabilityImports": [],
+          "forbidden": [],
+          "outsideSurface": []
+        },
+        "lanes": [
+          {
+            "lane": "browser",
+            "outcome": "instantiated",
+            "contractVerdict": "satisfied"
+          },
+          {
+            "lane": "wasmedge-docker",
+            "outcome": "instantiated",
+            "contractVerdict": "satisfied"
+          },
+          {
+            "lane": "wasmedge-native",
+            "outcome": "instantiated",
+            "contractVerdict": "satisfied"
+          }
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Synthetic catalog weather; numerical accuracy is not a physical uncertainty claim.",
+    "Eight seeds and selected CA events do not establish accuracy for every orbit in the full catalog.",
+    "The standard and T3 CA reference were reused only after authenticating unchanged artifacts, inputs, and pipeline.",
+    "Artifact instantiation across runtimes is not FFM numerical parity across runtimes.",
+    "CPU contention precludes performance acceptance of the recorded CA timing.",
+    "The separate resident-T3 versus native-T3 diagnostic did not pass its extra-strict 1 mm / 1 micrometer-per-second thresholds; it is not the CA acceptance gate."
+  ],
+  "referenceRealizationDiagnostic": {
+    "completed": true,
+    "sourceE2ESha256": "4590301a08cfc7fd3c734bd4012b9c79fd50f35a1b0b66551e7ba7dae099919d",
+    "standardDirectory": "../ffm",
+    "standardWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+    "forkBaseSha256": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3",
+    "residentForkBaseSha256": "059e338d0a0c8f71b11f01d6dfa292a544e2a90ff3391325e60415d38fc0878a",
+    "integrator": {
+      "tolerance": 1e-14,
+      "initialStep": 2,
+      "minStep": 0.0001,
+      "maxStep": 2,
+      "maxSteps": 100000000
+    },
+    "purpose": "Verify the resident T3 integrator realization against native T3 truth despite different output/stop scheduling.",
+    "thresholds": {
+      "positionMeters": 0.001,
+      "velocityMetersPerSecond": 1e-06,
+      "rationale": "One thousandth of the CA position gate and SCREEN velocity gate; this checks reference realization, not a change to Fast acceptance."
+    },
+    "rows": [
+      {
+        "seed": "ISS",
+        "difference": {
+          "oneDay": {
+            "positionM": 0.00015672698829165242,
+            "velocityMps": 1.0175450529289743e-05
+          },
+          "threeDays": {
+            "positionM": 0.00015672698829165242,
+            "velocityMps": 1.0175450529289743e-05
+          }
+        },
+        "cpuSecondsPerDay": 24.729585333333333,
+        "pass": false
+      },
+      {
+        "seed": "STARLINK",
+        "difference": {
+          "oneDay": {
+            "positionM": 5.2641516301993623e-05,
+            "velocityMps": 3.327751852621534e-06
+          },
+          "threeDays": {
+            "positionM": 0.00016696092628188628,
+            "velocityMps": 3.4294048670039397e-06
+          }
+        },
+        "cpuSecondsPerDay": 24.169646666666665,
+        "pass": false
+      },
+      {
+        "seed": "SSO800",
+        "difference": {
+          "oneDay": {
+            "positionM": 1.1898226536308669e-05,
+            "velocityMps": 3.8166696945407347e-07
+          },
+          "threeDays": {
+            "positionM": 1.3096482020576942e-05,
+            "velocityMps": 3.8166696945407347e-07
+          }
+        },
+        "cpuSecondsPerDay": 24.026944333333333,
+        "pass": true
+      },
+      {
+        "seed": "LOW250",
+        "difference": {
+          "oneDay": {
+            "positionM": 0.0008199305704252027,
+            "velocityMps": 5.525999419470399e-05
+          },
+          "threeDays": {
+            "positionM": 0.0008831244122285164,
+            "velocityMps": 5.525999419470399e-05
+          }
+        },
+        "cpuSecondsPerDay": 25.54306766666667,
+        "pass": false
+      },
+      {
+        "seed": "GPS",
+        "difference": {
+          "oneDay": {
+            "positionM": 1.2220487182010887e-05,
+            "velocityMps": 2.817778387071251e-08
+          },
+          "threeDays": {
+            "positionM": 3.505849115797021e-05,
+            "velocityMps": 3.5498271889376655e-08
+          }
+        },
+        "cpuSecondsPerDay": 21.156126,
+        "pass": true
+      },
+      {
+        "seed": "GEO",
+        "difference": {
+          "oneDay": {
+            "positionM": 3.5616605902530648e-06,
+            "velocityMps": 4.078025535079877e-09
+          },
+          "threeDays": {
+            "positionM": 3.142336385386177e-05,
+            "velocityMps": 5.90820552558062e-09
+          }
+        },
+        "cpuSecondsPerDay": 21.288694666666665,
+        "pass": true
+      },
+      {
+        "seed": "MOLNIYA",
+        "difference": {
+          "oneDay": {
+            "positionM": 0.00029344203547597745,
+            "velocityMps": 1.5125826521739847e-06
+          },
+          "threeDays": {
+            "positionM": 0.0017543543079570328,
+            "velocityMps": 3.966375900218876e-06
+          }
+        },
+        "cpuSecondsPerDay": 21.620261666666664,
+        "pass": false
+      },
+      {
+        "seed": "GTO",
+        "difference": {
+          "oneDay": {
+            "positionM": 0.0005494146186811497,
+            "velocityMps": 2.947607973397339e-05
+          },
+          "threeDays": {
+            "positionM": 0.0025830482932680462,
+            "velocityMps": 7.247274228631704e-05
+          }
+        },
+        "cpuSecondsPerDay": 21.664858,
+        "pass": false
+      }
+    ],
+    "pass": false
+  }
+}

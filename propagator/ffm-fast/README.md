@@ -207,6 +207,29 @@ truth settings, units, TT handling, tolerance rationale, and one-command
 regeneration. The E2E prints readable tables and one final JSON record;
 exit status 0 means every required check passed.
 
+The Phase 2 artifact `b44011744ab1f1cc9a3babe7131799f86d063cc6e411e0b4a55e832d1aacaf15`
+passed this E2E on Node 25.4.0: FIT 8/8, SCREEN 8/8, 436,108 direct
+dense-state samples, 28 regime-boundary cases, five independently realized
+penumbra-only grazes, byte-identical batch/cold results, and startup fallback.
+Maximum exported-PPE errors were 2.500 mm through one day and
+39.564 mm / 0.118013 mm/s through three days. The fixed-step comparison
+added at most 45.414 micrometers. Farm carry/invalidation also retained
+identical output for eight sources in each implementation, including
+compaction, deletion, and repopulation.
+
+[Phase 2 qualification](docs/phase2-qualification.json) records all seed
+and event errors, truth provenance, and raw evidence hashes. Both built
+artifacts instantiated in the explicit Playwright headless shell and
+native/Docker WasmEdge 0.16.4. This verifies runtime linking; it does not
+establish FFM numerical parity across those runtimes. Catalog timings
+recorded under CPU contention are observational and do not establish a
+clean speedup. The eight seeds and selected CA events do not establish
+accuracy for every orbit in the full catalog.
+The separate resident-T3 versus native-T3 diagnostic did not pass its
+extra-strict 1 mm / 1 micrometer-per-second thresholds (maximum three-day
+differences 2.583 mm / 0.072473 mm/s). Its full result is retained in the
+qualification record; it does not change the CA acceptance gate.
+
 ## Catalog acceptance
 
 The CA farm selects `ffm` (default) or `ffm-fast`. It retains unchanged
@@ -243,3 +266,20 @@ with `--baseline`, `--reference`, `--provenance`, `--catalog`, and `--out`.
 It authenticates the exact source/artifact hashes, selected objects,
 controls, and environment before reusing standard/Fast results. Failed
 qualification evidence stays intact.
+
+The Phase 2 comparison retained all 73 reference events and passed all 71
+in-domain events. Maximum in-domain miss/TCA deltas were 0.155967 m /
+0.040233 ms for Fast and 8.528437 m / 1.689792 ms for standard. All three
+runs excluded zero objects and reported three dropped objects and three
+reentries. Independent Python and committed JavaScript reductions agree.
+Fast's miss delta was no worse than standard on 71/73 events; its TCA
+delta was no worse on all 73. The two larger miss deltas were
+45535:57582 (Fast 0.048659 m, standard 0.009737 m) and 31430:38262
+(Fast 0.035174 m, standard 0.003217 m); both passed the fixed gate.
+
+The two older-input events are reported without gating:
+
+| Pair | GP ages, days | Standard miss / TCA delta | Fast miss / TCA delta |
+| --- | --- | --- | --- |
+| 33396:36244 | 10.011565 / 4.067585 | 2.035335 m / 0.804663 ms | 0.037166 m / 0 ms |
+| 20308:22812 | 15.209352 / 4.263839 | 14.984864 m / 1.689792 ms | 0.044164 m / 0 ms |
