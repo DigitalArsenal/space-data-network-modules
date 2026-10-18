@@ -15,10 +15,10 @@ Forward elliptic states with eccentricity below 0.25 use GJ8 PEC. For LEO
 (apogee below 2,000 km), perigee bands below 300, 450, and 650 km use 10, 15,
 and 12 s steps respectively; higher LEO uses 24 s. Near-circular states
 (eccentricity below 0.05) with periods strictly inside 600–800 minutes use
-150 s, and those inside 1,400–1,480 minutes use 600 s. Other low-eccentricity
+75 s, and those inside 1,400–1,480 minutes use 600 s. Other low-eccentricity
 elliptic states use a conservative 24 s grid. Altitudes use the standard
 Earth radius. These are physical-state bands, never catalog identifiers.
-The GPS/GEO grids are half the study candidates. Qualification must retain
+The GPS/GEO grids tighten the study candidates. Qualification must retain
 the existing 0.1 mm comparison floor against standard as well as FIT/SCREEN.
 
 GJ nodes share an absolute TT lattice anchored at UTC midnight. An initial

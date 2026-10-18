@@ -73,7 +73,7 @@ async function describe(host, segmentSet, handles) {
       // Normalize only transport bookkeeping; retain every PPE coefficient,
       // quality value, identity, epoch, and frame byte in the comparison.
       const bytes = Buffer.from(encodePrw('DESCRIBE_RESULT', makeTable('PRWDescribeResult', {
-        INSTANCE: host.instance, SEGMENT_SET_HANDLE: 1, SOURCE_OFFSET: 0, FINAL_CHUNK: true, SOURCES: [source] })));
+        INSTANCE: host.instance, SEGMENT_SET_HANDLE: 1, SOURCE_OFFSET: 0n, FINAL_CHUNK: true, SOURCES: [source] })));
       output.set(source.SOURCE_HANDLE, { bytes, ppe: source.EPHEMERIS });
     }
     if (!response.yielded) break;

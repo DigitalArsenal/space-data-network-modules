@@ -39,10 +39,10 @@ inline double gjGrid(const astro::StateVector& initial,double mu) {
         if (o.perigee<650) return 12;
         return 24;
     }
-    // Use half the study's coarse GPS/GEO grids; qualification must retain
+    // Tighten the study's coarse GPS/GEO grids; qualification must retain
     // the existing 0.1 mm no-regression floor and FIT/SCREEN grades.
     if (o.e<.05 && o.periodMinutes>1400 && o.periodMinutes<1480) return 600;
-    if (o.e<.05 && o.periodMinutes>600 && o.periodMinutes<800) return 150;
+    if (o.e<.05 && o.periodMinutes>600 && o.periodMinutes<800) return 75;
     // The heterogeneous MEO bins have no coarse-grid qualification. Retain
     // a conservative LEO-sized grid until a broader orbit study supports it.
     return 24;

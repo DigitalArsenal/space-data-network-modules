@@ -226,8 +226,10 @@ async function main() {
       row.standardVsTruth = compare(standardRun.ephemeris, null, TRUTH_SAMPLE_SECONDS, truth);
       if (!opt.measure) {
         const policy = { LOW250: 'GJ8 PEC at 10 s', ISS: 'GJ8 PEC at 15 s', STARLINK: 'GJ8 PEC at 12 s',
-          SSO800: 'GJ8 PEC at 24 s', GPS: 'GJ8 PEC at 150 s', GEO: 'GJ8 PEC at 600 s',
-          MOLNIYA: 'RK78 Sundman alpha=1.5 at 200/orbit', GTO: 'RK78 Sundman alpha=1.5 at 300/orbit' }[seed.label];
+          SSO800: 'GJ8 PEC at 24 s', GPS: 'GJ8 PEC at 75 s', GEO: 'GJ8 PEC at 600 s',
+          // The Molniya fixture has 638 km perigee and 39,773 km apogee;
+          // its Cartesian state meets the 300-step band despite its label.
+          MOLNIYA: 'RK78 Sundman alpha=1.5 at 300/orbit', GTO: 'RK78 Sundman alpha=1.5 at 300/orbit' }[seed.label];
         check(fastRun.ephemeris.COMMENT.includes(`Fast forward resident integrator: ${policy}.`),
           `${seed.label}: actual resident integrator differs from the automatic policy`);
         row.actualPolicy = fastRun.ephemeris.COMMENT;
@@ -260,9 +262,20 @@ async function main() {
       console.log(`${row.seed.padEnd(9)} ${pair(row.standardVsTruth.oneDay)}  ${pair(row.fastVsTruth.oneDay)}  ${pair(row.standardVsTruth.threeDays)}  ${pair(row.fastVsTruth.threeDays)}  ${row.fit ? 'PASS' : 'FAIL'} ${row.screen ? 'PASS' : 'FAIL'}`);
     }
   }
-  const residentBatch = opt.measure || opt.seed ? null : await batchEvidence();
-  const regimeBoundaries = opt.measure || opt.seed ? null : await boundaryEvidence();
-  const startupDomain = opt.measure || opt.seed ? null : await startupDomainEvidence();
+  // Preserve numerical rows even if an independent resident behavior check
+  // throws. Each failed check still fails this single E2E's final verdict.
+  async function evidence(name, run) {
+    if (opt.measure || opt.seed) return null;
+    try { return await run(); }
+    catch (error) {
+      check(false, `${name}: ${error.message}`);
+      console.error(`${name}: ${error.stack ?? error}`);
+      return { ok: false, error: error.message };
+    }
+  }
+  const residentBatch = await evidence('resident batch', batchEvidence);
+  const regimeBoundaries = await evidence('regime boundaries', boundaryEvidence);
+  const startupDomain = await evidence('startup domain', startupDomainEvidence);
   integrity();
   const maxima = (window, key) => Math.max(...rows.map((row) => row.fixed[window][key]));
   const result = { ok: failures.length === 0, mode: opt.measure ? 'lever' : 'e2e', lever: opt.measure ?? null,

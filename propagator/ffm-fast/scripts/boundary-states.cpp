@@ -65,11 +65,11 @@ int main(int argc,char** argv) {
         emit("perigee 650 km"+side,(re+650+sign*.001)/.999,.001,gj(sign<0?12:24));
         emit("apogee 2000 km"+side,(re+2000+sign*.001)/1.001,.001,gj(24));
         emit("eccentricity 0.25"+side,10000,.25+sign*.000001,sign<0?gj(24):sundman(200));
-        emit("period 600 min"+side,periodA(600+sign*.001),.01,gj(sign<0?24:150));
-        emit("period 800 min"+side,periodA(800+sign*.001),.01,gj(sign<0?150:24));
+        emit("period 600 min"+side,periodA(600+sign*.001),.01,gj(sign<0?24:75));
+        emit("period 800 min"+side,periodA(800+sign*.001),.01,gj(sign<0?75:24));
         emit("period 1400 min"+side,periodA(1400+sign*.001),.01,gj(sign<0?24:600));
         emit("period 1480 min"+side,periodA(1480+sign*.001),.01,gj(sign<0?600:24));
-        emit("GPS eccentricity 0.05"+side,periodA(720),.05+sign*.000001,gj(sign<0?150:24));
+        emit("GPS eccentricity 0.05"+side,periodA(720),.05+sign*.000001,gj(sign<0?75:24));
         emit("GEO eccentricity 0.05"+side,periodA(1440),.05+sign*.000001,gj(sign<0?600:24));
         auto apsides=[&](const std::string& name,double hp,double ha,int n) {
             const double rp=re+hp,ra=re+ha;
