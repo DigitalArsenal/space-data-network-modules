@@ -1,0 +1,163 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.gaia-octree-cones",
+  "name": "Gaia DR3 cones",
+  "version": "0.1.0",
+  "description": "The consumer side of the Gaia DR3 angular layer (SKT.fbs gaia-dr3/angular-g13.5): cone_tiles names the $SKT tiles a $SKQ cone may touch (the pixel's center within the cone radius, the pixel's own radius and 12\"/yr of motion from J2016.0), and cone_rows keeps the $STR rows of those tiles that lie inside the cone at its epoch (space motion from each row's STAR_EPOCH) to its G limit. No capabilities: the caller fetches the tiles and rows over SDN.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Pure functions of the frames handed in; no host calls, no threads."
+  },
+  "methods": [
+    {
+      "methodId": "cone_tiles",
+      "displayName": "Angular-layer tiles a cone touches",
+      "inputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-skq",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKQ.fbs",
+                  "fileIdentifier": "$SKQ",
+                  "rootTypeName": "SKQ",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Size-prefixed $SKQ cones (RA_DEG, DEC_DEG, RADIUS_DEG, EPOCH_JD_TT)."
+        },
+        {
+          "portId": "tiles",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-skt",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKT.fbs",
+                  "fileIdentifier": "$SKT",
+                  "rootTypeName": "SKT",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Size-prefixed $SKT index records of the angular layer."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "tiles",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-skt",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKT.fbs",
+                  "fileIdentifier": "$SKT",
+                  "rootTypeName": "SKT",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The tiles any cone may touch, size-prefixed $SKT records."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "cone_rows",
+      "displayName": "Rows inside a cone at its epoch",
+      "inputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-skq",
+              "allowedTypes": [
+                {
+                  "schemaName": "SKQ.fbs",
+                  "fileIdentifier": "$SKQ",
+                  "rootTypeName": "SKQ",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Size-prefixed $SKQ cones (RA_DEG, DEC_DEG, RADIUS_DEG, EPOCH_JD_TT, MAG_LIMIT in G)."
+        },
+        {
+          "portId": "rows",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-str",
+              "allowedTypes": [
+                {
+                  "schemaName": "STR.fbs",
+                  "fileIdentifier": "$STR",
+                  "rootTypeName": "STR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Size-prefixed $STR rows (a tile's ROW_COLLECTION_CID)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "rows",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-str",
+              "allowedTypes": [
+                {
+                  "schemaName": "STR.fbs",
+                  "fileIdentifier": "$STR",
+                  "rootTypeName": "STR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The rows inside any cone at its epoch, size-prefixed $STR records."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+data-source/gaia-octree — Digital Arsenal. Licensed under the Apache License 2.0 (LICENSE).
+
+Data retrieved at run time (not bundled), from the ESA Gaia archive (https://gea.esac.esa.int/archive/):
+- Gaia DR3: Gaia Collaboration, Vallenari, A., et al. (2023), A&A 674, A1. This work has made use of data
+  from the European Space Agency (ESA) mission Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia
+  Data Processing and Analysis Consortium (DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium).
+  Funding for the DPAC has been provided by national institutions, in particular the institutions
+  participating in the Gaia Multilateral Agreement. Credit "ESA/Gaia/DPAC", CC BY-NC 3.0 IGO
+  (https://www.cosmos.esa.int/web/gaia-users/license).
+- Distances: Bailer-Jones, C. A. L., Rybizki, J., Fouesneau, M., Demleitner, M., Andrae, R. (2021),
+  AJ 161, 147 (external.gaiaedr3_distance).
+- Hipparcos: ESA (1997), The Hipparcos and Tycho Catalogues, ESA SP-1200; van Leeuwen, F. (2007),
+  A&A 474, 653. Credit: ESA. Cross-match: Marrese, P. M., et al. (2019), A&A 621, A144
+  (gaiadr3.hipparcos2_best_neighbour).
+
+Methods (open literature): HEALPix, Gorski et al. (2005), ApJ 622, 759; epoch propagation, Butkevich &
+Lindegren (2014), A&A 570, A62, as in the Gaia DR3 documentation section 4.1.7; EDSD distances,
+Bailer-Jones (2015), PASP 127, 994, and Astraatmadja & Bailer-Jones (2016), ApJ 832, 137; G from V,
+Riello et al. (2021), A&A 649, A3, Table C.2; the magnitude-sorted octree, Sagrista et al. (2019), IEEE
+TVCG 25(1), 1099; dust, analysis/milky-way-model (Drimmel & Spergel 2001, ApJ 556, 181).
+
+Test oracles (compared, never published): SIMBAD (Wenger et al. 2000, A&AS 143, 9); CDS VizieR I/352
+(Bailer-Jones et al. 2021); the CDS Gaia DR3 HiPS catalog I/355/gaiadr3.

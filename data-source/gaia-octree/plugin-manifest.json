@@ -1,0 +1,156 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.gaia-octree",
+  "name": "Gaia DR3 over SDN",
+  "version": "0.1.0",
+  "description": "Gaia DR3 with Bailer-Jones et al. 2021 distances (Hipparcos 2007 for the brightest and Gaia-missing stars) as two SDN layers on a provider node: the angular layer ($SKT HEALPix order-4 tiles of $STR rows, SKT.fbs gaia-dr3/angular-g13.5) and a magnitude-sorted heliocentric octree after Sagrista et al. 2019 ($SKT OCTREE_HELIO_ICRS nodes, SKT.fbs gaia-dr3/octree-g13.5), tile payloads in the node's IPFS. Fetched from ESA's Gaia archive (TAP) by http.request. Its consumer side is the companion module com.digitalarsenal.data-source.gaia-octree-cones (cones/). Configuration by plugin.getConfig: gaia_octree_enabled, gaia_octree_producer_peer_id, gaia_octree_g_limit, gaia_octree_tap_url, gaia_octree_sky, gaia_octree_range_rows.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "ipfs",
+    "storage_ingest"
+  ],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Host calls in turn (TAP queries, ipfs.add per tile, one ingest per layer); the octree sort and the extinction table are single-threaded passes over the stars held in linear memory. milky-way-model's pthreads bake is not linked; only its dust field headers are."
+  },
+  "methods": [
+    {
+      "methodId": "prepare_scheduled",
+      "displayName": "Prepare the Gaia cycle",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cycle",
+          "acceptedTypeSets": [
+            {
+              "setId": "cycle-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "This cycle's producer peer ID, for retrieve_gaia."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "This cycle's producer peer ID, for retrieve_gaia."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "status-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "retrieve_gaia",
+      "displayName": "Retrieve Gaia DR3 and file both layers",
+      "inputPorts": [
+        {
+          "portId": "cycle",
+          "acceptedTypeSets": [
+            {
+              "setId": "cycle-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The cycle prepare_scheduled opened."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The cycle prepare_scheduled opened."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "What was filed: each layer's tiles or nodes and stars, the strays and patches, the octree depth and its float32 error, the TAP queries and bytes; flow bookkeeping, never a data record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "What was filed: each layer's tiles or nodes and stars, the strays and patches, the octree depth and its float32 error, the TAP queries and bytes; flow bookkeeping, never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
