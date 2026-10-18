@@ -92,7 +92,7 @@ inline CalibrationResult calibrate_site(const Trajectory& tr, const Clock& clock
   }
   double p[7] = {start.lat, start.lon, start.h, 0, 0, 0, 0};
   const int np = 7;
-  // Prior information matrix and centre.
+  // Prior information matrix and center.
   std::vector<double> P0inv(np * np, 0.0);
   double p0[7] = {start.lat, start.lon, prior.h0, 0, 0, 0, 0};
   if (!solve_site) {

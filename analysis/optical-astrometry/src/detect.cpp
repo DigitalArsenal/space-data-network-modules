@@ -8,7 +8,7 @@
 namespace oa {
 
 struct Source {
-  double x = 0, y = 0;           // centroid, pixels (x right, y down, pixel centres integral)
+  double x = 0, y = 0;           // centroid, pixels (x right, y down, pixel centers integral)
   double flux = 0;               // background-subtracted counts
   double peak = 0;               // highest raw pixel value
   int npix = 0;

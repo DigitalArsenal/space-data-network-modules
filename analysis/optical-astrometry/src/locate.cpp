@@ -6,8 +6,8 @@
 // calibrator's angular-rate profile over the pass depends on where the site
 // is (range and geometry). A grid search over sites fits one scale per site
 // to the measured rates; the low-cost sites form a ridge, each predicting a
-// field centre (the calibrator's direction) and a plate scale. Their cones of
-// the deep catalogue are requested and the plate solver decides between them.
+// field center (the calibrator's direction) and a plate scale. Their cones of
+// the deep catalog are requested and the plate solver decides between them.
 // After one frame solves, the calibrator's measured direction fixes the site
 // on that ridge, and the field's path over the whole sequence follows.
 namespace oa {
@@ -50,7 +50,7 @@ struct SiteCandidate {
   Site site;
   double cost = 0;
   double scale = 0;      // rad/px implied by the rate fit
-  V3 centre;             // calibrator direction at the reference frame
+  V3 center;             // calibrator direction at the reference frame
   double elevation = 0;  // of the calibrator at the reference frame, rad
 };
 
@@ -112,18 +112,18 @@ inline std::vector<SiteCandidate> site_ridge(const Trajectory& calib, const std:
       cand.cost = c;
       cand.scale = 1.0 / std::exp(m);  // rate[px/s] = w[rad/s] * exp(m) -> scale = rad/px
       double el;
-      if (!calib_dir(calib, s, t_ref, fe.t2c.back(), &cand.centre, &el)) continue;
+      if (!calib_dir(calib, s, t_ref, fe.t2c.back(), &cand.center, &el)) continue;
       cand.elevation = el;
       all.push_back(cand);
     }
   if (all.empty()) { *err = "the calibrator is above the horizon from no site in the search region"; return out; }
   std::sort(all.begin(), all.end(), [](const SiteCandidate& a, const SiteCandidate& b) { return a.cost < b.cost; });
-  // The ridge: within a factor of the best cost; spread by field centre.
+  // The ridge: within a factor of the best cost; spread by field center.
   const double limit = std::max(all.front().cost * 8.0, all.front().cost + 2e-3);
   for (const SiteCandidate& c : all) {
     if (c.cost > limit || static_cast<int>(out.size()) >= keep) break;
     bool near = false;
-    for (const SiteCandidate& o : out) near = near || separation(o.centre, c.centre) < 1.2 * kDeg;
+    for (const SiteCandidate& o : out) near = near || separation(o.center, c.center) < 1.2 * kDeg;
     if (!near) out.push_back(c);
   }
   return out;
@@ -168,7 +168,7 @@ inline bool site_from_direction(const Trajectory& calib, const Clock& clock, dou
 }
 
 struct Cone {
-  V3 centre;
+  V3 center;
   double radius = 0;   // rad
 };
 
@@ -176,24 +176,24 @@ struct Cone {
 // cones overlap by the field.
 inline std::vector<Cone> path_cones(const Trajectory& calib, const Site& site, const Clock& clock, const std::vector<double>& times,
                                     double fov_radius, std::string* err) {
-  // A frame's field lies inside a cone when its centre is within `margin` of
-  // the cone's centre; a new cone starts when the path leaves that margin.
+  // A frame's field lies inside a cone when its center is within `margin` of
+  // the cone's center; a new cone starts when the path leaves that margin.
   std::vector<Cone> out;
   const double margin = 1.0 * kDeg;
   for (double t : times) {
     Look l;
     if (!look_at(calib, site, clock, t, &l, err)) continue;
-    if (!out.empty() && separation(out.back().centre, l.observed) < margin) continue;
+    if (!out.empty() && separation(out.back().center, l.observed) < margin) continue;
     out.push_back({l.observed, fov_radius + margin});
   }
   return out;
 }
 
-// A cone is covered when the catalogue already holds stars of the requested
-// depth near its centre.
+// A cone is covered when the catalog already holds stars of the requested
+// depth near its center.
 inline bool cone_covered(const Catalog& cat, const Cone& c, double mag_limit) {
   std::vector<int> in;
-  cat.cone(c.centre, 0.3 * c.radius, kNaN, &in);
+  cat.cone(c.center, 0.3 * c.radius, kNaN, &in);
   int deep = 0;
   for (int k : in)
     if (std::isfinite(cat.stars[k].mag) && cat.stars[k].mag > mag_limit - 1.5) ++deep;

@@ -10,7 +10,7 @@
 namespace oa {
 
 struct Star {
-  double ra = 0, dec = 0;        // radians, catalogue place at epoch
+  double ra = 0, dec = 0;        // radians, catalog place at epoch
   double pmra = 0, pmdec = 0;    // mas/yr (pmra includes cos dec)
   double parallax = 0;           // mas
   double epoch = 2000.0;         // Julian year (TT)
@@ -24,7 +24,7 @@ struct Catalog {
   std::vector<int> band_start;   // first cell of each dec band
   std::vector<int> band_cells;
   std::vector<std::vector<int>> cells;
-  std::string sources;           // layer ids / catalogue versions read
+  std::string sources;           // layer ids / catalog versions read
 
   int band_of(double dec) const {
     return std::clamp(static_cast<int>((dec + kPi / 2) / grid), 0, static_cast<int>(band_start.size()) - 1);
@@ -106,7 +106,7 @@ inline bool read_sky_tiles(const uint8_t* p, size_t n, Catalog* cat, std::string
     const SKT* t = GetSKT(rec);
     if (t->PAYLOAD_KIND() != sktPayloadKind::POINT_SOURCES) continue;
     if (t->FRAME() != sktCelestialFrame::ICRS) { *error = "$SKT tile not in ICRS"; return false; }
-    if (t->PLACE() != sktPlaceKind::CATALOG) { *error = "$SKT tile is not a catalogue place"; return false; }
+    if (t->PLACE() != sktPlaceKind::CATALOG) { *error = "$SKT tile is not a catalog place"; return false; }
     if (!t->POINTS()) {
       if (t->POINT_COUNT() > 0) { *error = "$SKT tile payload by PAYLOAD_CID: resolve it before the call"; return false; }
       continue;

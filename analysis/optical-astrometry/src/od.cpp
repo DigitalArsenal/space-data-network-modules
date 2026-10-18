@@ -15,7 +15,7 @@
 // answer for the prior element set (the pluggable port); deviations from it
 // map through the state transition matrix of two-body plus J2 dynamics
 // integrated along it (an arc of a few minutes: the linear map is exact to
-// centimetres for kilometre deviations). Measurements are the observed
+// centimeters for kilometer deviations). Measurements are the observed
 // directions with the light-time solution and the site's aberration, as the
 // calibration models them. The calibration's site and timing parameters are
 // consider parameters: their covariance from the calibrator enters the

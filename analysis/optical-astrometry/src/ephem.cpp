@@ -46,7 +46,7 @@ struct Site {
   double lat = 0, lon = 0, h = 0;  // geodetic WGS-84: rad, rad, m
 };
 
-// GCRS position and velocity of a site, metres and m/s.
+// GCRS position and velocity of a site, meters and m/s.
 inline void site_gcrs(const Site& s, const ax::Epoch& e, const ax::EarthOrientation& eo, V3* r, V3* v) {
   double xyz[3];
   eraGd2gc(1, s.lon, s.lat, s.h, xyz);

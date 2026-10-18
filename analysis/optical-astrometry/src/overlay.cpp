@@ -46,7 +46,7 @@ namespace ocr {
 
 struct Cell {
   char kind = 0;      // format letter: Y M D h m s f, or the literal character
-  double cx = 0;      // column centre, px
+  double cx = 0;      // column center, px
 };
 
 using Bitmap = std::vector<float>;
@@ -65,7 +65,7 @@ inline double ncc(const Bitmap& a, const Bitmap& b) {
   for (size_t i = 0; i < a.size(); ++i) s += a[i] * b[i];
   return s;
 }
-// Crop columns [cx - hw, cx + hw] (fractional centre, linear interpolation)
+// Crop columns [cx - hw, cx + hw] (fractional center, linear interpolation)
 // and rows [y0, y1].
 inline Bitmap crop(const Image& im, double cx, int hw, int y0, int y1) {
   Bitmap out;
@@ -166,8 +166,8 @@ class OverlayReader {
     for (size_t i = 1; i < cells.size(); ++i)
       if (isdig(cells[i].kind) && isdig(cells[i - 1].kind) && cells[i].kind == cells[i - 1].kind) gaps.push_back(cells[i].cx - cells[i - 1].cx);
     const double pitch = gaps.empty() ? 8.0 : median(gaps);
-    // Re-centre each digit cell on its group's uniform pitch (tabular digits):
-    // a narrow glyph such as "1" sits off its run's centre.
+    // Re-center each digit cell on its group's uniform pitch (tabular digits):
+    // a narrow glyph such as "1" sits off its run's center.
     for (size_t i = 0; i < cells.size();) {
       if (!isdig(cells[i].kind)) { ++i; continue; }
       size_t j = i;
@@ -197,24 +197,24 @@ class OverlayReader {
       ocr::normalize(&b10[f]);
     }
     // Cluster the seconds-units bitmaps.
-    std::vector<ocr::Bitmap> centres;
+    std::vector<ocr::Bitmap> centers;
     std::vector<int> counts;
     std::vector<int> cls(n, -1);
     for (size_t f = 0; f < n; ++f) {
       int best = -1;
       double bs = 0.92;
-      for (size_t c = 0; c < centres.size(); ++c) {
-        const double s = ocr::ncc(b1[f], centres[c]);
+      for (size_t c = 0; c < centers.size(); ++c) {
+        const double s = ocr::ncc(b1[f], centers[c]);
         if (s > bs) { bs = s; best = static_cast<int>(c); }
       }
-      if (best < 0) { centres.push_back(b1[f]); counts.push_back(1); cls[f] = static_cast<int>(centres.size()) - 1; continue; }
+      if (best < 0) { centers.push_back(b1[f]); counts.push_back(1); cls[f] = static_cast<int>(centers.size()) - 1; continue; }
       cls[f] = best;
-      for (size_t k = 0; k < centres[best].size(); ++k) centres[best][k] = (centres[best][k] * counts[best] + b1[f][k]) / (counts[best] + 1);
+      for (size_t k = 0; k < centers[best].size(); ++k) centers[best][k] = (centers[best][k] * counts[best] + b1[f][k]) / (counts[best] + 1);
       ++counts[best];
-      ocr::normalize(&centres[best]);
+      ocr::normalize(&centers[best]);
     }
     // Keep the ten most populated classes; others are corrupted frames.
-    std::vector<int> order(centres.size());
+    std::vector<int> order(centers.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](int a, int b) { return counts[a] > counts[b]; });
     if (order.size() < 10) { r.error = "overlay: the seconds digit shows fewer than ten glyphs (needs at least ten seconds of frames)"; return r; }
@@ -258,7 +258,7 @@ class OverlayReader {
     const int pos0 = static_cast<int>(std::find(cycle.begin(), cycle.end(), zero) - cycle.begin());
     for (int i = 0; i < 10; ++i) digit_of_slot[cycle[(pos0 + i) % 10]] = i;
     std::vector<ocr::Bitmap> templ(10);
-    for (int i = 0; i < 10; ++i) templ[digit_of_slot[i]] = centres[order[i]];
+    for (int i = 0; i < 10; ++i) templ[digit_of_slot[i]] = centers[order[i]];
     r.template_frames = 0;
     for (int i = 0; i < 10; ++i) r.template_frames += counts[order[i]];
     // Templates at sub-pixel shifts, made from the template bitmaps by
@@ -267,7 +267,7 @@ class OverlayReader {
     std::vector<double> shifts;
     for (double s = -1.5; s <= 1.5001; s += 0.25) shifts.push_back(s);
     for (int d = 0; d < 10; ++d) {
-      // Average the class's frames cropped at shifted centres.
+      // Average the class's frames cropped at shifted centers.
       const int slot = std::find_if(order.begin(), order.begin() + 10, [&](int c) { return digit_of_slot[keep[c]] == d; }) - order.begin();
       const int cid = order[slot];
       for (double sh : shifts) {

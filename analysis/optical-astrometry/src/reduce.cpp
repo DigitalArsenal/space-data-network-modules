@@ -1,7 +1,7 @@
 // The sequence reduction: frames -> times -> sources -> plate solutions ->
 // satellite tracks -> site and timing from the calibrator -> observations.
 // Stateless: each call recomputes everything from its inputs and either asks
-// for what is missing (propagator answers, deeper catalogue cones) or
+// for what is missing (propagator answers, deeper catalog cones) or
 // finishes. The host answers and calls again with the answers added.
 namespace oa {
 
@@ -32,7 +32,7 @@ struct ReduceOptions {
   Site site;
   double site_sigma_m = 30;           // a known site's uncertainty
   CalibrationPrior prior;
-  double catalog_mag_limit = 13.5;    // depth of requested catalogue cones (G)
+  double catalog_mag_limit = 13.5;    // depth of requested catalog cones (G)
   double search_lat0 = -90, search_lat1 = 90, search_lon0 = -180, search_lon1 = 180, search_step = 1.0;  // deg
   int max_candidates = 24;
   std::map<uint32_t, std::vector<double>> prior_rtn;  // per target: 6x6 RTN covariance of its prior element set at the arc (km, km/s)
@@ -47,7 +47,7 @@ struct FrameState {
   int width = 0, height = 0;
   double drift_x = kNaN, drift_y = kNaN;   // field shift to the next frame, px
   bool solved = false;
-  int solve_method = 0;         // 1 blind, 2 tracked from a neighbour
+  int solve_method = 0;         // 1 blind, 2 tracked from a neighbor
   Wcs wcs;
   PlateFit fit;
   int matched = 0;
@@ -90,7 +90,7 @@ struct ReduceResult {
   int reference_frame = -1;
   double plate_scale_arcsec = kNaN;
   std::vector<SiteCandidate> candidates;
-  int stars_in_catalogue = 0;
+  int stars_in_catalog = 0;
   double exposure_s = kNaN;          // from trail length over drift rate
   std::map<uint32_t, OdResult> fits;  // per target: the batch orbit
   std::map<uint32_t, int> edited;     // per target: observations edited out
@@ -208,7 +208,10 @@ class Reduction {
         r->frames[i].time_ok = ft.decoded && !ft.outlier && !ft.duplicate;
       }
     }
-    mask_ = persistence_mask(lit, width, height, 0.9, 60);
+    // The persistence mask is for burnt-in overlays, which only rendered
+    // video frames carry; in instrument (FITS) frames a bright tracked
+    // satellite is the persistent thing and must not be masked.
+    mask_ = headers_timed ? std::vector<uint8_t>(static_cast<size_t>(width) * height, 0) : persistence_mask(lit, width, height, 0.9, 60);
     for (size_t i = 0; i < n; ++i) {
       Image im;
       decode_image(frames[i].data, frames[i].size, &im, &err);
@@ -273,8 +276,8 @@ class Reduction {
     int nt = 0;
     for (const FrameState& f : r->frames) if (f.time_ok) { tmid += f.t; ++nt; }
     tmid /= std::max(1, nt);
-    r->stars_in_catalogue = static_cast<int>(cat.stars.size());
-    // Places for the geocentre first (the site's diurnal aberration, < 0.32",
+    r->stars_in_catalog = static_cast<int>(cat.stars.size());
+    // Places for the geocenter first (the site's diurnal aberration, < 0.32",
     // is added once the site is known).
     set_places(cat, tmid, nullptr);
     // Satellite tracks in pixels; the tracked one is the calibrator.
@@ -314,7 +317,7 @@ class Reduction {
       for (const SiteCandidate& c : cands) { slo = std::min(slo, c.scale); shi = std::max(shi, c.scale); }
       slo *= 0.8; shi *= 1.25;
     }
-    // Blind solve of a reference frame with what the catalogue holds.
+    // Blind solve of a reference frame with what the catalog holds.
     std::vector<QuadIndex> idx;
     int ref = -1;
     if (!cat.stars.empty()) {
@@ -350,12 +353,12 @@ class Reduction {
           if (!cone_covered(cat, cone, opt_.catalog_mag_limit)) r->cones.push_back(cone);
           continue;
         }
-        Cone cone{c.centre, fov * c.scale + 1.25 * kDeg};
+        Cone cone{c.center, fov * c.scale + 1.25 * kDeg};
         if (!cone_covered(cat, cone, opt_.catalog_mag_limit)) r->cones.push_back(cone);
       }
       if (r->cones.empty()) {
         r->stage = ReduceResult::FAILED;
-        r->error = "no reference frame plate-solved against the catalogue held, and every candidate field's cone is already held";
+        r->error = "no reference frame plate-solved against the catalog held, and every candidate field's cone is already held";
         return;
       }
       r->stage = ReduceResult::NEED_CATALOG;
@@ -369,7 +372,7 @@ class Reduction {
     if (!opt_.site_known) {
       double best = 1e9;
       for (const SiteCandidate& c : cands) {
-        const double sep = separation(c.centre, r->frames[ref].wcs.pixel_to_sky(r->frames[ref].width / 2.0, r->frames[ref].height / 2.0));
+        const double sep = separation(c.center, r->frames[ref].wcs.pixel_to_sky(r->frames[ref].width / 2.0, r->frames[ref].height / 2.0));
         if (sep < best) { best = sep; site = c.site; }
       }
       if (tracked < 0) { r->stage = ReduceResult::FAILED; r->error = "no tracked (pixel-stationary) satellite for the calibrator"; return; }
@@ -397,9 +400,31 @@ class Reduction {
     solve_all(cat, idx, ref, r);
     // The calibrator's track: the tracked one, or the nearest to its
     // prediction when the mount tracked something else.
-    int ci = tracked >= 0 && !opt_.site_known ? tracked : identify_calibrator(r, *calib, site);
+    // With the site given, the tracked object is the calibrator when it
+    // lies within half a degree of its prediction (the time tags may still
+    // be biased): a bright calibrator's blended fragments sit closer.
+    int ci = -1;
+    if (tracked >= 0 && !opt_.site_known) ci = tracked;
+    if (tracked >= 0 && opt_.site_known) {
+      measure_tracks(r, site);
+      std::vector<double> d;
+      for (const TrackPoint& p : r->tracks[tracked].points) {
+        Look l;
+        std::string e2;
+        if (p.valid && look_at(*calib, site, clock_, r->frames[p.frame].t, &l, &e2)) d.push_back(separation(l.observed, p.observed));
+      }
+      if (d.size() >= 10 && median(d) < 0.5 * kDeg) ci = tracked;
+    }
+    if (ci < 0) ci = identify_calibrator(r, *calib, site);
     measure_tracks(r, site);
     if (ci < 0) { r->stage = ReduceResult::FAILED; r->error = "the calibrator's track was not found"; return; }
+    {
+      const TrackPoint& p0 = r->tracks[ci].points.front();
+      char b[160];
+      std::snprintf(b, sizeof b, "calibrator track: %zu points from frame %d at (%.1f, %.1f)%s", r->tracks[ci].points.size(), p0.frame, p0.x, p0.y,
+                    ci == tracked ? ", the tracked object" : ", nearest its prediction");
+      r->notes.push_back(b);
+    }
     r->tracks[ci].calibrator = true;
     r->tracks[ci].norad = opt_.calibrator;
     // Calibrate the site and the timing.
@@ -450,6 +475,9 @@ class Reduction {
   }
 
   const std::vector<uint8_t>& mask() const { return mask_; }
+  // The options as measure_frames left them (a FITS header's site), for
+  // the priors set once the arc's times are known.
+  ReduceOptions& options() { return opt_; }
 
  private:
   static int count_stars(const FrameState& f) {
@@ -526,11 +554,11 @@ class Reduction {
   }
 
   // Plate solutions for every frame, outward from the reference: the
-  // neighbour's solution moved by the measured drift, verified and refined;
+  // neighbor's solution moved by the measured drift, verified and refined;
   // the blind solver when that fails.
   void solve_all(const Catalog& cat, std::vector<QuadIndex>& idx, int ref, ReduceResult* r) {
     const int n = static_cast<int>(r->frames.size());
-    // Rebuild the index with the full catalogue and the known scale.
+    // Rebuild the index with the full catalog and the known scale.
     idx.clear();
     std::vector<std::pair<double, double>> bands;
     const double sc = r->frames[ref].wcs.pixel_scale();
@@ -556,7 +584,7 @@ class Reduction {
       for (int i = ref + dir; i >= 0 && i < n; i += dir) {
         FrameState& f = r->frames[i];
         if (!f.time_ok) continue;
-        // Nearest solved neighbour toward the reference.
+        // Nearest solved neighbor toward the reference.
         int j = i - dir;
         while (j >= 0 && j < n && !r->frames[j].solved) j -= dir;
         bool ok = false;

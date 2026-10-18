@@ -5,13 +5,13 @@
 //    D lie inside the circle with diameter AB;
 //  - its code is (xC, yC, xD, yD) in the frame that puts A at (0, 0) and B at
 //    (1, 1), made unique by xC <= xD and xC + xD <= 1;
-//  - the index holds quads of catalogue stars, a few per sky cell at each
+//  - the index holds quads of catalog stars, a few per sky cell at each
 //    scale band (their "uniformization" of the index over the sky);
 //  - image quads look up nearby codes (both parities); each hit is a
-//    hypothesis verified by projecting the catalogue and counting matches,
+//    hypothesis verified by projecting the catalog and counting matches,
 //    accepted when the chance-coincidence probability is below 1e-9 (their
 //    log-odds threshold), then refined by least squares.
-// The index is built in memory from the catalogue the call carries.
+// The index is built in memory from the catalog the call carries.
 namespace oa {
 
 struct Quad {
@@ -88,8 +88,8 @@ inline void build_index_band(const Catalog& cat, double lo, double hi, int per_c
     const int ncell = std::max(1, static_cast<int>(std::ceil(kTwoPi * std::cos(dmid) / g)));
     for (int c = 0; c < ncell; ++c) {
       const double ra0 = kTwoPi * c / ncell, ra1 = kTwoPi * (c + 1) / ncell;
-      const V3 centre = radec_to_unit(0.5 * (ra0 + ra1), dmid);
-      cat.cone(centre, hi * 0.75 + g, kNaN, &near);
+      const V3 center = radec_to_unit(0.5 * (ra0 + ra1), dmid);
+      cat.cone(center, hi * 0.75 + g, kNaN, &near);
       if (near.size() < 4) continue;
       std::sort(near.begin(), near.end(), [&](int x, int y) {
         const double mx = std::isfinite(cat.stars[x].mag) ? cat.stars[x].mag : 99, my = std::isfinite(cat.stars[y].mag) ? cat.stars[y].mag : 99;
@@ -175,15 +175,15 @@ struct SolveResult {
   double log10_false = 0;
 };
 
-// Match image sources to projected catalogue stars one-to-one (nearest
+// Match image sources to projected catalog stars one-to-one (nearest
 // first) within radius; returns matches.
-inline std::vector<PlateMatch> match_catalogue(const Wcs& w, const Catalog& cat, const Detection& det, int width, int height,
+inline std::vector<PlateMatch> match_catalog(const Wcs& w, const Catalog& cat, const Detection& det, int width, int height,
                                                double radius_px, bool stars_only, int* projected) {
   std::vector<PlateMatch> out;
-  const V3 centre = w.pixel_to_sky(width / 2.0, height / 2.0);
+  const V3 center = w.pixel_to_sky(width / 2.0, height / 2.0);
   const double half = std::hypot(width, height) / 2.0 * w.pixel_scale() * 1.05;
   std::vector<int> cone;
-  cat.cone(centre, half, kNaN, &cone);
+  cat.cone(center, half, kNaN, &cone);
   struct Cand { double d2; int s, k; double x, y; };
   std::vector<Cand> cands;
   int nproj = 0;
@@ -253,7 +253,7 @@ inline bool refine_solution(Wcs* w, const Catalog& cat, const Detection& det, in
   double radius = opt.match_radius_px;
   for (int pass = 0; pass < 4; ++pass) {
     int nproj = 0;
-    *matches = match_catalogue(*w, cat, det, width, height, radius, true, &nproj);
+    *matches = match_catalog(*w, cat, det, width, height, radius, true, &nproj);
     if (static_cast<int>(matches->size()) < opt.min_matches) return false;
     const int order = matches->size() >= 24 && pass >= 1 ? 2 : 1;
     if (!fit_plate(w, *matches, order, opt.catalog_sigma_arcsec * kArcsec, 4.0, fit)) return false;
@@ -321,7 +321,7 @@ inline SolveResult blind_solve(const std::vector<QuadIndex>& indexes, const Cata
                   for (int k = 0; k < 4; ++k) d2 += (q.code[k] - code[k]) * (q.code[k] - code[k]);
                   if (d2 > opt.code_tolerance * opt.code_tolerance) continue;
                   ++result.hypotheses;
-                  // Affine pixel -> tangent plane at the quad centre from the 4 pairs.
+                  // Affine pixel -> tangent plane at the quad center from the 4 pairs.
                   const V3 mid = unit(cat.stars[q.star[0]].dir + cat.stars[q.star[1]].dir);
                   V3 e, nn;
                   tangent_basis(mid, &e, &nn);
@@ -353,7 +353,7 @@ inline SolveResult blind_solve(const std::vector<QuadIndex>& indexes, const Cata
                   const double s1 = std::hypot(j[0][0], j[1][0]), s2 = std::hypot(j[0][1], j[1][1]);
                   if (!(s1 > 0 && s2 > 0) || std::fabs(std::log(s1 / s2)) > 0.15) continue;
                   int nproj = 0;
-                  std::vector<PlateMatch> m = match_catalogue(w, cat, det, width, height, opt.match_radius_px, true, &nproj);
+                  std::vector<PlateMatch> m = match_catalog(w, cat, det, width, height, opt.match_radius_px, true, &nproj);
                   const int k = static_cast<int>(m.size());
 #ifdef OA_DEBUG
                   { double ra, dec; unit_to_radec(w.pixel_to_sky(width / 2.0, height / 2.0), &ra, &dec);
@@ -370,7 +370,7 @@ inline SolveResult blind_solve(const std::vector<QuadIndex>& indexes, const Cata
                   {
                     const double rad = std::max(2.5, 3.0 * fit.p90_arcsec * kArcsec / w.pixel_scale());
                     int np2 = 0;
-                    const std::vector<PlateMatch> again = match_catalogue(w, cat, det, width, height, rad, true, &np2);
+                    const std::vector<PlateMatch> again = match_catalog(w, cat, det, width, height, rad, true, &np2);
                     const double p2 = std::min(1.0, usable * kPi * rad * rad / (double(width) * height));
                     const double lf2 = log10_binomial_tail(np2, static_cast<int>(again.size()), p2);
                     if (lf2 > -opt.log10_odds - 3.0 || fit.used < opt.min_matches + 2) continue;

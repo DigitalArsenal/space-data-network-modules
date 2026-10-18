@@ -101,7 +101,7 @@ struct Wcs {
 
 struct PlateMatch {
   int source = -1;   // index into the detection
-  int star = -1;     // index into the catalogue
+  int star = -1;     // index into the catalog
   double x = 0, y = 0, cxx = 0, cxy = 0, cyy = 0;
   V3 dir;
   double res_xi = 0, res_eta = 0;  // arcsec, star minus model
@@ -129,7 +129,7 @@ inline bool solve_coefficients(Wcs* w, std::vector<PlateMatch>& m, double catalo
     if (!w->project(p.dir, &xi, &eta)) { p.outlier = true; continue; }
     double t[6];
     Wcs::basis((p.x - w->crpix_x) / 1000.0, (p.y - w->crpix_y) / 1000.0, t);
-    // Measurement covariance in (xi, eta): J C J^T + catalogue term.
+    // Measurement covariance in (xi, eta): J C J^T + catalog term.
     double j[2][2];
     w->jacobian(p.x, p.y, j);
     double C[2][2] = {{p.cxx, p.cxy}, {p.cxy, p.cyy}};
@@ -204,12 +204,12 @@ inline bool fit_plate(Wcs* w, std::vector<PlateMatch>& m, int order, double cata
   double chi2 = 0;
   int dof = 0;
   for (int pass = 0; pass < 6; ++pass) {
-    for (int recentre = 0; recentre < 4; ++recentre) {
+    for (int recenter = 0; recenter < 4; ++recenter) {
       if (!solve_coefficients(w, m, catalog_sigma_rad, &chi2, &dof)) return false;
       // Move the tangent point to the sky position of the reference pixel and
       // solve again, until the constant terms vanish.
       const V3 t = w->pixel_to_sky(w->crpix_x, w->crpix_y);
-      if (separation(t, w->tangent) < 1e-11 || recentre == 3) break;
+      if (separation(t, w->tangent) < 1e-11 || recenter == 3) break;
       w->set_tangent(t);
     }
     if (dof <= 0) break;
