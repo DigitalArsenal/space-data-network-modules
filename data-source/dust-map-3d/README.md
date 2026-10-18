@@ -29,6 +29,14 @@ Licence CC BY 4.0; the credit and licence ride in every row and the ingest meta.
   `a_v_per_unit`.
 - The report compares 16 sightlines (|b| < 27 deg) integrated natively against
   the resampled grid; the median ratio is 0.978.
+- Host capabilities on typed contracts 1.0: each range is an `HttpRequest`
+  (HREQ: GET, the range in the URL and the `Range` header, `MAX_BYTES`) for
+  `hostcap/http-request`, each answer its `HttpResponse` (HRSP), and the ingest
+  meta an `IngestRequest` (INGQ: `PCE.fbs`, the provider, source, batch,
+  producer peer, license and credit, `RECONCILE` Current) for
+  `hostcap/storage-ingest`, whose `pce_records` port takes the rows. The stage
+  state, configuration, receipt, status and report are intra-flow control
+  frames.
 - Host adapter (`host-adapter/`, wasmedge): `prepare_scheduled` reads the flow
   configuration (`dust_map_3d_enabled`, `dust_map_3d_producer_peer_id`,
   `dust_map_3d_source.access = anonymous`); `receipt_scheduled` stamps the
@@ -43,6 +51,10 @@ Row fields (`$PCE`, provider-defined): `dataset`, `plane`, `shape`, `first_cente
 npm install && npm run build
 ```
 
-The one E2E is the Milky Way model's (`analysis/milky-way-model/tests/band-vs-gaia.e2e.mjs`):
-it runs these stages against an offline copy of the published byte ranges in
-`.source-cache/` (gitignored) and loads the rows into the model.
+The E2E, `node tests/typed-retrieval.e2e.mjs`, checks that the flow's edges
+match the host capabilities' declared ports and types, then runs every stage
+against an offline copy of the published file in `.source-cache/` (gitignored;
+`tests/offline-retrieval.mjs` answers each HttpRequest as hostcap/http-request
+would) and checks the requests, the 61 rows, the IngestRequest and the
+extinction the resampling conserves. The Milky Way model's E2E
+(`analysis/milky-way-model/tests/band-vs-gaia.e2e.mjs`) loads the same rows.

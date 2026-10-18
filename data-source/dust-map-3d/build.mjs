@@ -22,7 +22,10 @@ const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.rm(path.join(root, 'dist'), {recursive: true, force: true});
 await fs.mkdir(path.dirname(outputPath), {recursive: true});
 const result = await compileModuleFromSource({manifest, language: 'c++', outputPath, threadModel: 'wasi-sequential',
-  sourceCode: ['#include "space_data_module_invoke.h"', header, json, sha, ...sources.map(strip)].join('\n')});
+  sourceCode: ['#include "space_data_module_invoke.h"',
+    // The SDK stages its runtime types (typed contracts 1.0) for the hostcap ports.
+    '#include "HttpRequest_generated.h"', '#include "HttpResponse_generated.h"', '#include "IngestRequest_generated.h"',
+    header, json, sha, ...sources.map(strip)].join('\n')});
 try {
   if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
   const guest = path.join(root, 'dist/guest-link');
