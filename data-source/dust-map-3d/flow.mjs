@@ -1,7 +1,8 @@
 // The 3D dust map retrieval flow, for a provider node's flow builder:
 // timer -> host config -> FITS headers -> STD header -> radial tables and the
 // inner sphere -> ten stages of 48 MEAN shells -> the last 36 shells and the
-// rows -> storage ingest (provider edenhofer2024, source local-dust-1250pc).
+// rows -> storage ingest (provider edenhofer2024, source local-dust-1250pc):
+// typed contracts 1.0 at the host capabilities (HREQ, HRSP, INGQ, pce_records).
 // The receipt (clock + producer) comes from the host adapter at cycle start.
 import path from "node:path";
 
@@ -20,11 +21,11 @@ export function dustMapFlow({ node, edge, http, storage, packageDir }) {
       edge(`fetch${s + 1}`, "response", to, "response"), edge(`advance${s}`, "status", "egress", "result"));
   }
   nodes.push(node("build", source, "build_dust"), node("ingest", storage, "ingest"), node("egress", "sdn.flow.egress", "emit", "sink"));
-  edges.push(edge("receipt", "receipt", "build", "receipt"), edge("build", "records", "ingest", "records"),
+  edges.push(edge("receipt", "receipt", "build", "receipt"), edge("build", "records", "ingest", "pce_records"),
     edge("build", "meta", "ingest", "meta"), edge("build", "report", "egress", "result"), edge("ingest", "result", "egress", "result"));
   return {
     flow: {
-      programId: "com.digitalarsenal.flows.dust-map-3d-ingest", name: "Local 3D interstellar dust (Edenhofer et al. 2024)", version: "0.1.0", engineLinkage: "bridge",
+      programId: "com.digitalarsenal.flows.dust-map-3d-ingest", name: "Local 3D interstellar dust (Edenhofer et al. 2024)", version: "0.2.0", engineLinkage: "bridge",
       description: "The posterior mean of the Edenhofer et al. (2024) local 3D dust map (Zenodo 10658339, CC BY 4.0), monthly: FITS headers, the radial tables and 516 HEALPix shells are read by HTTP range (1.63 GB; the file is never downloaded whole), resampled in WASM to 20 pc heliocentric voxels, and stored as 61 $PCE rows (provider edenhofer2024, source local-dust-1250pc) that the configured SDN auto-publisher signs and announces. When the header range answers 304 the cycle ends unchanged. Disabled cycles emit status only.",
       nodes, edges,
       triggers: [{ triggerId: "monthly", kind: "timer", source: "host-cron", defaultIntervalMs: 30 * 86400000,
