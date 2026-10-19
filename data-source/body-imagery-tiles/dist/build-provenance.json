@@ -1,0 +1,9 @@
+{
+  "spacedatastandards": "1.254.0",
+  "schemas": [
+    "PNM"
+  ],
+  "moduleSdk": "0.9.2",
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "fe3d8b8f87fb0fbc2d9aa63235335629231ce0c0460e433e226d2b3170cc2357"
+}

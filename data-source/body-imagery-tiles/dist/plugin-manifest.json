@@ -1,0 +1,153 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
+  "name": "High-resolution body imagery over SDN",
+  "version": "0.1.0",
+  "description": "High-resolution global imagery of a body as a 256 px JPEG tile pyramid published over SDN. First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain), read once per cycle by HTTP range (If-Match on its ETag, never held whole): level 9 (81.4 m/px) area-averaged from the source rows, every coarser level the 2x2 mean of the level below, planetocentric latitude for the MOLA-sphere globe, packs of 16 tiles of a row (SDNTILE1) added to the node's IPFS and filed as $PNM (PNM.fbs, provider usgs-astrogeology, source mars-themis-day-ir) by storage.ingest_with_source, one batch per band of 16 level-9 rows (one level-5 tile row).",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "ipfs",
+    "storage_ingest"
+  ],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Host calls in turn (one ranged GET per level-9 tile row, ipfs.add per pack, one ingest per band); the resample, the 2x2 pyramid and the JPEG encoder are single-threaded passes over one row per level held in linear memory."
+  },
+  "methods": [
+    {
+      "methodId": "prepare_scheduled",
+      "displayName": "Prepare the Gaia cycle",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (module-sdk runtime type TICK). Configuration is supplied by plugin.getConfig."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "cycle",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice Info, REASON cycle, ITEMS [the producer peer ID]: the cycle retrieve_gaia runs."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "This cycle's producer peer ID, for retrieve_gaia."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice Skipped, REASON disabled."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "The timer tick -> the cycle (FlowNotice Info, ITEMS [the producer peer ID]) when body_imagery_tiles_enabled, else a Skipped status."
+    },
+    {
+      "methodId": "retrieve_tiles",
+      "displayName": "Retrieve and publish the tile pyramid",
+      "inputPorts": [
+        {
+          "portId": "cycle",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice Info, REASON cycle, ITEMS [the producer peer ID]: the cycle retrieve_gaia runs."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The cycle prepare_scheduled opened."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Two FlowNotices Info, REASON filed: SOURCE_NAME angular-g13.5 (COUNT tiles filed; ITEMS tiles, stars, gaia, hipparcos_only, bright_edsd, range_splits, strays, patched_tiles, outside_sky, tap_queries, tap_bytes, seconds) and octree-g13.5 (COUNT nodes filed; ITEMS nodes, stars, depth, max_float32_error_per_edge, seconds)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One FlowNotice: files, tiles, bytes, largest pack, source bytes read, seconds."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "High-resolution global imagery of a body as a 256 px JPEG tile pyramid published over SDN. First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain), read once per cycle by HTTP range (If-Match on its ETag, never held whole): level 9 (81.4 m/px) area-averaged from the source rows, every coarser level the 2x2 mean of the level below, planetocentric latitude for the MOLA-sphere globe, packs of 16 tiles of a row (SDNTILE1) added to the node's IPFS and filed as $PNM (PNM.fbs, provider usgs-astrogeology, source mars-themis-day-ir) by storage.ingest_with_source, one batch per band of 16 level-9 rows (one level-5 tile row)."
+    }
+  ]
+}

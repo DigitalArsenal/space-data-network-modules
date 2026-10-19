@@ -1,0 +1,22 @@
+{
+  "name": "space-data-network-plugin-body-imagery-tiles",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "flatbuffers": "25.9.23",
+    "spacedatastandards.org": "1.254.0"
+  },
+  "devDependencies": {
+    "flatc-wasm": "26.1.38",
+    "space-data-module-sdk": "0.9.2"
+  },
+  "license": "Apache-2.0"
+}

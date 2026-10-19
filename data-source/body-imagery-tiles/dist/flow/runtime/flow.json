@@ -1,0 +1,80 @@
+{
+  "programId": "com.digitalarsenal.flows.mars-themis-imagery-ingest",
+  "name": "Mars THEMIS Day IR imagery (USGS Astrogeology)",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Mars imagery from the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain) as a 256 px JPEG tile pyramid to level 9 (81.4 m/px), planetocentric, read once by HTTP range, packs of 16 tiles added to the node's IPFS and filed as $PNM (provider usgs-astrogeology, source mars-themis-day-ir); the configured SDN auto-publisher signs and announces the lane. Disabled cycles emit status only.",
+  "nodes": [
+    {
+      "nodeId": "prepare",
+      "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
+      "methodId": "prepare_scheduled",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "retrieve",
+      "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
+      "methodId": "retrieve_tiles",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "prepare-cycle-retrieve-cycle",
+      "fromNodeId": "prepare",
+      "fromPortId": "cycle",
+      "toNodeId": "retrieve",
+      "toPortId": "cycle",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "prepare-status-egress-result",
+      "fromNodeId": "prepare",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "retrieve-report-egress-result",
+      "fromNodeId": "retrieve",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "yearly",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 31536000000,
+      "description": "One cycle per year; the mosaic is a fixed release, so a cycle makes the same files under the same CIDs."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "yearly",
+      "targetNodeId": "prepare",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.body-imagery-tiles"
+  ]
+}
