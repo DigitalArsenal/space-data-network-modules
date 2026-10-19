@@ -190,7 +190,10 @@ inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double ba
   // profile/normalization and smooth terminal taper are illustrative choices.
   const double bar=scale*bar_emissivity*std::exp(-std::abs(v)/bar_minor_kpc-height/bar_height_kpc)
       *(1-smoothstep(bar_taper_start_kpc,bar_half_length_kpc,std::abs(u)));
-  const double taper=disc_edge(radius);
+  // The global volume ends 6 kpc above and below the plane: the light (the
+  // thick disc's 1.1 kpc, the bulge) goes to zero over its last 1.5 kpc
+  // rather than stopping flat at its faces (a MODEL CHOICE of window).
+  const double taper=disc_edge(radius)*(1-smoothstep(4.5,6.0,height));
   return {thin*taper,thick*taper,arms*taper,bulge*taper,bar*taper};
 }
 
