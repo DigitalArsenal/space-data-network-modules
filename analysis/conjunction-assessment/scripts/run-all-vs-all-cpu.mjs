@@ -70,15 +70,6 @@ const harness = o['wasmedge-runner']
     args: [wasmSource ?? path.join(root, 'dist/isomorphic/module.wasm'), '--serve-plugin-invoke'], cwd: root, env: process.env } } })
   : await createConjunctionCommandHarness(o.runtime === 'node'
     ? { runtimeKind: 'browser' } : { runtimeKind: o.runtime, surface: 'direct', wasmSource });
-// Temporary Round 3 module diagnostics.
-let diagnosticsOffset = 0;
-function flushGuestDiagnostics() {
-  const bytes = harness.wasi?.stderr;
-  if (bytes?.length > diagnosticsOffset) {
-    process.stderr.write(new TextDecoder().decode(bytes.subarray(diagnosticsOffset)));
-    diagnosticsOffset = bytes.length;
-  }
-}
 let farm = null;
 try {
   if (o.propagator === 'hpop') {
@@ -98,7 +89,7 @@ try {
     return exports[k];
   };
   const result = await screenCatalog({
-    invoke: async (methodId, inputs) => { const result = await harness.invoke({ methodId, inputs }); flushGuestDiagnostics(); return result; },
+    invoke: (methodId, inputs) => harness.invoke({ methodId, inputs }),
     propagator: farm ? 'trajectories' : 'sgp4',
     catalog: farm ? undefined : catalog,
     trajectories: farm ? {

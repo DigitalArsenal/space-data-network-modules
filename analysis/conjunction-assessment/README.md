@@ -72,15 +72,18 @@ shapes.
 
 Catalog screens evaluate tiered Pc in two parallel passes at Screening
 grade and return events in input order; pair assessments retain Reference
-grade. Pc2D and usage diagnostics remain visible below the reporting floor,
-with 3D-Nc or seeded Monte Carlo above it. Far-below-floor events disclose
-when the curvature check is omitted. Screening Monte Carlo can stop at a
-deterministic work checkpoint between complete samples and reports its
+grade. Catalog reporting and Monte Carlo floors are `1e-4` and `1e-3`;
+engine and pair defaults remain `1e-7` and `1e-4`. Pc2D and usage diagnostics
+remain visible below the reporting floor, with 3D-Nc or seeded Monte Carlo
+above it. Far-below-floor events disclose when the curvature check is
+omitted. Screening Monte Carlo can stop at a deterministic work checkpoint
+between complete samples and reports its
 actual sample count and Wilson interval. Parallel WASM screens reserve a
 bounded working heap before starting workers to avoid a reproduced V8
-shared-memory growth failure. When a fallback has no CQR algorithm enum,
-the CQR probability stays labelled maximum-only and `CONJUNCTION_MESSAGE`
-carries its actual method, value and tier. See [Pc methods](docs/pc-methods.md)
+cross-instance shared-memory-growth `memory.copy` failure. When a fallback
+has no CQR algorithm enum, the CQR probability stays labelled maximum-only
+and `CONJUNCTION_MESSAGE` carries its actual method, value and tier.
+See [Pc methods](docs/pc-methods.md)
 for floors, usage-check shortcuts, work limits and accuracy and
 [benchmarks](docs/benchmark.md) for measured screen cost.
 

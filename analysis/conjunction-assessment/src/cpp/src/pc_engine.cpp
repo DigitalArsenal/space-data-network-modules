@@ -3,15 +3,7 @@
 #include "conjunction/pc_maximum.h"
 #include "conjunction/error_status.h"
 #include <atomic>
-#include <chrono>
-#include <ctime>
-#include <sstream>
-#include <iomanip>
-#include <map>
-#include <numeric>
-#ifdef __wasm__
-#include <wasi/api.h>
-#endif
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -222,34 +214,16 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::compute_pc_batch(
     const std::vector<PcEncounter>& encounters, unsigned threads) const {
     std::vector<ConjunctionEvent2> results(encounters.size());
     if(encounters.empty())return results;
-    // Temporary Round 3 profiling; removed after full-screen measurements.
-    using Clock=std::chrono::steady_clock;
-    auto cpu=[] {
-#ifdef __wasm__
-        __wasi_timestamp_t t=0;return __wasi_clock_time_get(3,1,&t)==0?double(t)*1e-9:-1.0;
-#else
-        timespec t{};return clock_gettime(CLOCK_THREAD_CPUTIME_ID,&t)==0?double(t.tv_sec)+double(t.tv_nsec)*1e-9:-1.0;
-#endif
-    };
-    auto elapsed=[](Clock::time_point t) { return std::chrono::duration<double>(Clock::now()-t).count(); };
-    static std::atomic<size_t> batches{0};
-    const auto batch=batches.fetch_add(1);
     const size_t worker_count=std::min(encounters.size(),static_cast<size_t>(std::max(1u,threads)));
-    struct Sample { double wall=0,cpu=0;size_t worker=0; };
-    std::vector<Sample> samples(encounters.size());
-    std::vector<Sample> busy(worker_count);
-    const auto started=Clock::now();
     std::vector<unsigned char> pending(encounters.size(),0);
     std::vector<size_t> fallback_order;
     std::atomic<size_t> next{0};
-    auto work=[&](size_t worker,bool fallback_pass) {
-        const auto start=Clock::now(); const double c0=cpu();
+    auto work=[&](bool fallback_pass) {
         const std::string previous_error=error_message();
         const size_t count=fallback_pass?fallback_order.size():encounters.size();
         for(size_t slot=next.fetch_add(1);slot<count;slot=next.fetch_add(1)) {
             const size_t index=fallback_pass?fallback_order[slot]:slot;
             clear_error();
-            const auto begin=Clock::now();const double before=cpu();
             auto& event=results[index];
             if(fallback_pass)finish_fallback(encounters[index],event,pending[index]==2);
             else if(encounters[index].apply_cross_correlation)event=compute_pc(encounters[index]);
@@ -257,7 +231,6 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::compute_pc_batch(
                 bool direct=false;
                 if(prepare_encounter(encounters[index],event,direct))pending[index]=direct?2:1;
             }
-            samples[index].wall+=elapsed(begin);samples[index].cpu+=cpu()-before;samples[index].worker=worker;
             if(has_error()) {
                 pending[index]=0;
                 event.has_covariance=false;
@@ -269,7 +242,6 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::compute_pc_batch(
         }
         clear_error();
         if(!previous_error.empty())set_error(previous_error);
-        busy[worker].wall+=elapsed(start);busy[worker].cpu+=cpu()-c0;busy[worker].worker=worker;
     };
 #ifndef CONJUNCTION_SINGLE_THREAD
     // Keep the same workers alive across both numerical passes. A worker's
@@ -283,7 +255,7 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::compute_pc_batch(
     std::vector<std::thread> workers;
     workers.reserve(worker_count-1);
     for(size_t worker=1;worker<worker_count;++worker)workers.emplace_back([&,worker] {
-        work(worker,false);
+        work(false);
         {
             std::unique_lock<std::mutex> lock(phase_mutex);
             ++completed_preparers;
@@ -291,17 +263,17 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::compute_pc_batch(
             fallbacks_ready.wait(lock,[&]{return release_fallbacks;});
         }
         // The published order and worker count remain immutable until join.
-        // Idle workers exit without touching the phase-two queue or profiling.
-        if(worker<fallback_workers)work(worker,true);
+        // Idle workers exit without touching the phase-two queue.
+        if(worker<fallback_workers)work(true);
     });
-    work(0,false);
+    work(false);
     {
         std::unique_lock<std::mutex> lock(phase_mutex);
         preparations_complete.wait(lock,[&]{return completed_preparers==worker_count-1;});
     }
 #else
     (void)threads;
-    work(0,false);
+    work(false);
 #endif
     for(size_t i=0;i<encounters.size();++i)if(pending[i])fallback_order.push_back(i);
     // Wide, slow encounters dominate propagation work. Start expensive
@@ -324,44 +296,11 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::compute_pc_batch(
         release_fallbacks=true;
     }
     fallbacks_ready.notify_all();
-    if(!fallback_order.empty())work(0,true);
+    if(!fallback_order.empty())work(true);
     for(auto& worker:workers)worker.join();
 #else
-    if(!fallback_order.empty())work(0,true);
+    if(!fallback_order.empty())work(true);
 #endif
-    const double wall=elapsed(started);
-    struct Tier {size_t n=0;double wall=0,cpu=0;std::array<size_t,6> histogram{};};
-    std::map<std::string,Tier> tiers;
-    for(size_t i=0;i<samples.size();++i) {
-        auto& t=tiers[results[i].pc.tier]; const auto& s=samples[i];
-        ++t.n;t.wall+=s.wall;t.cpu+=s.cpu;
-        size_t bin=0;for(double edge:{.001,.01,.1,1.,10.})if(s.wall>=edge)++bin;
-        ++t.histogram[bin];
-    }
-    std::fprintf(stderr,"PC_R3_BATCH {\"batch\":%zu,\"n\":%zu,\"wall\":%.9g}\n",batch,encounters.size(),wall);
-    for(const auto& entry:tiers) {const auto& t=entry.second;std::fprintf(stderr,
-        "PC_R3_TIER {\"batch\":%zu,\"tier\":\"%s\",\"n\":%zu,\"wall\":%.9g,\"cpu\":%.9g,\"hist\":[%zu,%zu,%zu,%zu,%zu,%zu]}\n",
-        batch,entry.first.c_str(),t.n,t.wall,t.cpu,t.histogram[0],t.histogram[1],t.histogram[2],t.histogram[3],t.histogram[4],t.histogram[5]);}
-    for(const auto& s:busy)std::fprintf(stderr,"PC_R3_WORKER {\"batch\":%zu,\"worker\":%zu,\"wall\":%.9g,\"cpu\":%.9g}\n",batch,s.worker,s.wall,s.cpu);
-    std::vector<size_t> order(samples.size());std::iota(order.begin(),order.end(),0);
-    std::partial_sort(order.begin(),order.begin()+std::min<size_t>(20,order.size()),order.end(),
-        [&](size_t a,size_t b){return samples[a].wall>samples[b].wall;});
-    auto record=[&](size_t i,bool input) {
-        const auto& e=encounters[i]; const auto& p=results[i].pc;const auto& u=results[i].usage;const auto& s=samples[i];
-        std::ostringstream out;out<<std::setprecision(17)<<"{\"batch\":"<<batch<<",\"index\":"<<i<<",\"wall\":"<<s.wall<<",\"cpu\":"<<s.cpu
-            <<",\"worker\":"<<s.worker<<",\"tier\":\""<<p.tier<<"\",\"method\":\""<<p.method<<"\",\"pc\":"<<p.probability
-            <<",\"samples\":"<<p.sample_count<<",\"hits\":"<<p.collision_count<<",\"speed\":"<<results[i].relative_speed_kms
-            <<",\"time_start\":"<<u.time_start<<",\"time_end\":"<<u.time_end;
-        if(input) {
-            out<<",\"epoch_jd\":"<<e.epoch_jd<<",\"combined_radius\":"<<e.combined_radius<<",\"gravitational_parameter\":"<<e.gravitational_parameter
-                <<",\"has_velocity_covariance\":"<<e.has_velocity_covariance<<",\"apply_cross_correlation\":"<<e.apply_cross_correlation;
-            auto array=[&](const char* name,const auto& values){out<<",\""<<name<<"\":[";bool first=true;for(double x:values){if(!first)out<<',';first=false;out<<x;}out<<']';};
-            array("primary",e.primary);array("secondary",e.secondary);array("covariance_primary",e.covariance_primary);array("covariance_secondary",e.covariance_secondary);array("cross_covariance",e.cross_covariance);
-        }
-        out<<'}';std::fprintf(stderr,"%s %s\n",input?"PC_R3_SLOW":"PC_R3_WORST",out.str().c_str());
-    };
-    for(size_t k=0;k<std::min<size_t>(20,order.size());++k)record(order[k],false);
-    for(size_t i=0;i<samples.size();++i)if(samples[i].wall>=1)record(i,true);
     return results;
 }
 

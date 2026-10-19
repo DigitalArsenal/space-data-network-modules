@@ -46,12 +46,14 @@ extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 
 namespace ca_cqr {
 using namespace conjunction;
-// CATALOG SCREEN REPORTING FLOOR: 1e-4, above the 1e-7 engine/pair default.
-// Violations with Pc2D in [1e-7, 1e-4) retain Pc2D and the explicit
-// "usage-violation, below floor" label. See docs/benchmark.md for measured cost.
+// Catalog screens use reporting/Monte Carlo floors 1e-4 / 1e-3: this pair
+// gave the larger measured timing margin (docs/benchmark.md). Violations
+// below 1e-4 retain Pc2D; [1e-4, 1e-3) uses Nc, with MC on Nc's own flags.
+// Below 1e-7, curvature may be omitted with an explicit incomplete-usage
+// disclosure; rectilinear and velocity checks still determine violations.
 // Pair assessments keep Reference grade and the engine's 1e-7 / 1e-4 floors.
 constexpr double kCatalogPcReportingFloor = 1e-4;
-constexpr double kCatalogPcMonteCarloFloor = kDefaultPcMonteCarloFloor;
+constexpr double kCatalogPcMonteCarloFloor = 1e-3;
 constexpr size_t kEventsPerChunk = 128;
 // refine_candidates serves the all-vs-all driver, which drains whole windows:
 // larger frames (about 0.9 MB) save a call per 128 events.
@@ -96,10 +98,8 @@ bool reserveScreeningHeap(size_t sources, unsigned workers) {
     // Keep the allocation observable even under whole-program optimization.
     *static_cast<volatile unsigned char*>(block) = 0;
   }
-  const size_t afterPages = __builtin_wasm_memory_size(0), allocatedBlocks = count;
+  const size_t afterPages = __builtin_wasm_memory_size(0);
   while (count) std::free(blocks[--count]);
-  std::fprintf(stderr, "PC_R3_RESERVE sources=%zu workers=%u before_pages=%zu after_pages=%zu target_pages=%zu blocks=%zu\n",
-               sources, workers, beforePages, afterPages, targetPages, allocatedBlocks);
   if (afterPages < targetPages)
     return error("screening-memory-reserve-failed",
                  "Unable to reserve the bounded working heap before parallel screening.");
@@ -3017,9 +3017,6 @@ extern "C" int search_grid() {
 // reported for the window.
 extern "C" int refine_candidates() {
   using namespace ca_cqr;
-#ifdef __wasm__
-  struct MemoryTrace { ~MemoryTrace() { std::fprintf(stderr,"PC_R3_MEMORY {\"pages\":%zu,\"maximum_pages\":32768}\n",__builtin_wasm_memory_size(0)); } } memory_trace;
-#endif
   if (hasPending("refine_candidates"))
     return emitPending("refine_candidates") ? 0 : 422;
   ScreeningConfig c;

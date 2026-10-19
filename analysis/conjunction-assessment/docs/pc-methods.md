@@ -189,11 +189,14 @@ behavior. `PcResult.probability_2d` preserves Pc2D when a fallback replaces
 the final probability. Unusable covariance stays `PC-UNAVAILABLE`.
 
 Catalog screens use bridge constants `kCatalogPcReportingFloor = 1e-4`
-and `kCatalogPcMonteCarloFloor = 1e-4`. A usage-violating event with
+and `kCatalogPcMonteCarloFloor = 1e-3`. A usage-violating event with
 `1e-7 <= Pc2D < 1e-4` therefore retains Pc2D, its violation diagnostics
-and `usage-violation, below floor`; it is not omitted. Pair assessments
-retain the engine's `1e-7` reporting floor. The full-catalog measurements
-for both floor pairs are recorded in [benchmark measurements](benchmark.md#tiered-pc-2026-10-16).
+and `usage-violation, below floor`; it is not omitted. Violations with
+`1e-4 <= Pc2D < 1e-3` use 3D-Nc, escalating to Monte Carlo when Nc's own
+applicability or convergence checks require it. At or above `1e-3`, they
+use Monte Carlo directly. Pair assessments retain the engine's `1e-7`
+reporting floor and `1e-4` Monte Carlo floor. Full-catalog measurements
+are recorded in [benchmark measurements](benchmark.md#tiered-pc-2026-10-16).
 
 `PcGrade::Reference` is the engine default and the grade used by pair
 assessments and `emit_cdm`. It preserves the authoritative calculations and
@@ -207,13 +210,15 @@ work budgets depend on the encounter and options, not the worker, elapsed
 time or scheduling.
 
 Before parallel WASM screening, the bridge reserves allocator-managed heap
-space serially. This addresses a reproduced V8 14.1 shared-memory-growth
-failure in which an active instance retained stale bulk-memory bounds when
-another instance grew the memory. The reserve depends on source and worker
-counts and is capped at 1 GiB, half the artifact's 2 GiB limit; it is not a
-guarantee that arbitrary inputs cannot require further growth. Reservation
-failure is reported before workers start. Native and single-thread builds
-do not need this reserve.
+space serially. This addresses a reproduced V8 14.1 cross-instance
+shared-memory-growth `memory.copy` failure: an active instance retained
+stale bounds when another instance grew the memory. The reproduction did
+not exhaust the memory limit. The full catalog reserves 998.125 MiB,
+48.7366% of the artifact's 2 GiB limit. The reserve target depends on source and
+worker counts and is capped at 1 GiB; it is not a guarantee that arbitrary
+inputs cannot require further growth. Reservation failure is reported
+before workers start. Native and single-thread builds do not need this
+reserve.
 
 Screening uses bounded 48-point Foster disk quadrature where its relative
 error budget is `1e-5`, with adaptive integration elsewhere and near a tier
