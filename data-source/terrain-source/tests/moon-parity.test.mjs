@@ -21,7 +21,7 @@ import {
 } from "space-data-module-sdk/testing";
 
 import { decodeQuantizedMesh } from "./helpers.mjs";
-import { dttOf, splitSized } from "../tools/moon-lane.mjs";
+import { dttOf, splitSized } from "../tools/body-lane.mjs";
 
 const FIXTURE_DIR = fileURLToPath(new URL("./fixtures/", import.meta.url));
 const FIXTURE = JSON.parse(fs.readFileSync(`${FIXTURE_DIR}terrain-parity.json`, "utf8"));

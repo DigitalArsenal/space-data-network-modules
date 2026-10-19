@@ -20,12 +20,12 @@ Sources: the LOLA gridded data records in the PDS Geosciences Node
 | polar | `ldem_75s_60m_float` | 10 | lat <= -85 |
 
 A tile is built from a cap only when its whole extent lies inside the band.
-Config `lola_caps` (`[{product, min_level, max_level, lat_min, lat_max}]`)
+Config `caps` (`[{product, min_level, max_level, lat_min, lat_max}]`)
 replaces the table.
 
 | Node | Does |
 | --- | --- |
-| `terrain-ingest:lola_plan` | one unit of the walk: the product's PDS3 label and three whole-line ranges of its image (If-Match on the product's ETag), the tiles' `$DTT` body plan |
+| `terrain-ingest:body_plan` (config `body` moon) | one unit of the walk: the product's PDS3 label and three whole-line ranges of its image (If-Match on the product's ETag), the tiles' `$DTT` body plan |
 | `terrain-source:tile` | quantized mesh on the 1737.4 km sphere (`GEOGRAPHIC_TWO_ROOT_BODY`), oct normals, no water mask, 32 KiB per tile |
 | `terrain-source:pack` | `terrain/301/root.dtts` (levels 0-2) and `terrain/301/<L>/<X>_<Y>.dtts` (one 4x4 block), each a size-prefixed `$DTT` stream |
 | `host-adapter:publish_files` | `ipfs.add` per file, one `$PNM` (CID, name) each |
@@ -34,7 +34,7 @@ replaces the table.
 
 Unit 0 is levels 0-2. A global product is walked one block row per unit; a
 polar product by whole 4x4 blocks sorted by the first image line they touch, at
-most 64 blocks and `lola_max_range_bytes` (72 MiB) of lines per unit. 199
+most 64 blocks and `max_range_bytes` (72 MiB) of lines per unit. 199
 units, 179,882 tiles, 4.59 GB (4.27 GiB) of ranges.
 
 Density: each tile takes the coarsest lattice (5 to 321 posts) whose RMS

@@ -1,4 +1,4 @@
-// THE MOON, ON THE REAL LANE (moon-terrain-lane-20261013). terrain-ingest:lola_plan plans real units of the walk,
+// THE MOON, ON THE REAL LANE (moon-terrain-lane-20261013). terrain-ingest:body_plan plans real units of the walk,
 // their requests are answered from local copies of the PDS LOLA products (public domain) exactly as the PDS server
 // answers them, and terrain-source:tile encodes them. Every assertion is checked against an independent reading of
 // the bytes: the quantized-mesh decoder in helpers.mjs (written from the spec), the record through the SDS library,
@@ -15,7 +15,7 @@ import zlib from "node:zlib";
 import { decodeQuantizedMesh } from "./helpers.mjs";
 import { granuleFrame, planInputs } from "../typed-frames.mjs";
 import { lolaFrames, moonPlan, MOON_RADIUS_M } from "../lola-frames.mjs";
-import { createMoonLane, dttOf } from "../tools/moon-lane.mjs";
+import { createBodyLane, dttOf } from "../tools/body-lane.mjs";
 
 const LOLA_DIR = process.env.LOLA_DIR;
 const skip = !(LOLA_DIR && fs.existsSync(`${LOLA_DIR}/ldem_64_float.img`)) && "LOLA_DIR unset";
@@ -55,7 +55,7 @@ function octDecode(x, y) {
 const quantum = (mesh) => (mesh.header.maxHeight - mesh.header.minHeight) / 32767;
 
 let lane;
-test.before(async () => { if (!skip) lane = await createMoonLane({ lolaDir: LOLA_DIR }); });
+test.before(async () => { if (!skip) lane = await createBodyLane({ dataDir: LOLA_DIR }); });
 test.after(() => lane?.destroy());
 
 test("a level-7 Moon tile is a body record with normals, on the 1737.4 km sphere, under the 32 KiB ceiling", { skip }, async () => {

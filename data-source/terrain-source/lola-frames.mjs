@@ -90,7 +90,7 @@ export function lolaFrames(dir, product, first, count, parts = 1) {
 }
 
 /**
- * The answer hostcap/http-request would give one of lola_plan's requests, served from local copies of the PDS files
+ * The answer hostcap/http-request would give one of body_plan's requests, served from local copies of the PDS files
  * (LOLA_DIR): the .lbl whole (200), an .img byte range as a 206 with its Content-Range. `request` is the decoded
  * HttpRequest ({url, headers}). An image range must carry If-Match (the lane's default); its VALUE is not checked
  * here, because a local copy has no server ETag - the pinned ETags in terrain-ingest's product table are what the PDS

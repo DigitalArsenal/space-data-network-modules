@@ -16,7 +16,7 @@ import zlib from "node:zlib";
 
 import { decodeQuantizedMesh } from "./helpers.mjs";
 import { cylindrical, polar, product } from "./lola-reference.mjs";
-import { createMoonLane, dttOf } from "../tools/moon-lane.mjs";
+import { createBodyLane, dttOf } from "../tools/body-lane.mjs";
 
 const LOLA_DIR = process.env.LOLA_DIR;
 const skip = !(LOLA_DIR && fs.existsSync(`${LOLA_DIR}/ldem_75s_240m_float.img`)) && "LOLA_DIR unset";
@@ -41,7 +41,7 @@ function compareMesh(sized, reference) {
 }
 
 let lane;
-test.before(async () => { if (!skip) lane = await createMoonLane({ lolaDir: LOLA_DIR }); });
+test.before(async () => { if (!skip) lane = await createBodyLane({ dataDir: LOLA_DIR }); });
 test.after(() => lane?.destroy());
 
 test("simple cylindrical: the mesh posts are LDEM_64 where its label puts them, across the antimeridian", { skip }, async () => {

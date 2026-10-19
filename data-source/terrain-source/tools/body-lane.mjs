@@ -1,7 +1,7 @@
-// THE MOON LANE, RUN LOCALLY: terrain-ingest:lola_plan plans a unit, each of its requests is answered from local copies
-// of the PDS LOLA files exactly as the PDS server answers it (lola-frames.mjs localResponse), terrain-source:tile
-// encodes it and terrain-source:pack packs it. Shared by tools/moon-sample-budget.mjs and the Moon tests, so both run
-// the same frames the flow does.
+// A BODY'S TERRAIN LANE, RUN LOCALLY: terrain-ingest:body_plan plans a unit, each of its requests is answered from
+// local copies of the PDS files exactly as the PDS server answers it (lola-frames.mjs localResponse), terrain-source:tile
+// encodes it and terrain-source:pack packs it. Shared by the sample-budget and unit tools and the Moon and Mars checks,
+// so all of them run the same frames the flow does. `config.body` picks the body (default moon).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +30,15 @@ export const MOON_CONFIG = {
   retrieved_at: "2026-10-16T00:00:00.000Z",
 };
 
+export const MARS_CONFIG = {
+  body: "mars",
+  tileset_id: "nasa-mola-mars",
+  dataset_epoch: "2003-03-21T00:00:00.000Z",
+  retrieved_at: "2026-10-19T00:00:00.000Z",
+};
+
+const BODY_DEFAULTS = { moon: { datasetId: "nasa-lola-gdr", provider: "nasa-lola" }, mars: { datasetId: "nasa-mola-megdr", provider: "nasa-mola" } };
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 /** [u32 length][record] stream -> the size-prefixed records (zero prefixes are padding). */
@@ -48,19 +57,20 @@ export function splitSized(bytes) {
 /** A $DTT record (no size prefix) through the SDS library. */
 export const dttOf = (record) => DTT_LIB.DTT.getRootAsDTT(new flatbuffers.ByteBuffer(Uint8Array.from(record)));
 
-export async function createMoonLane({ lolaDir, config = MOON_CONFIG, wasmPath = path.join(root, "dist/isomorphic/module.wasm") }) {
+export async function createBodyLane({ dataDir, config = MOON_CONFIG, wasmPath = path.join(root, "dist/isomorphic/module.wasm") }) {
   const source = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(wasmPath),
     manifest: JSON.parse(fs.readFileSync(path.join(root, "plugin-manifest.json"), "utf8")),
     surface: "direct",
   });
   const ingest = await createIngestHarness(null, config);
-  const jobId = jobIdOf(config.dataset_id ?? "nasa-lola-gdr", config.tileset_id, config.dataset_epoch);
+  const defaults = BODY_DEFAULTS[config.body ?? "moon"];
+  const jobId = jobIdOf(config.dataset_id ?? defaults.datasetId, config.tileset_id, config.dataset_epoch);
 
   async function planUnit(index) {
     const inputs = [tickFrame("2026-10-16T00:00:00Z")];
-    if (index > 0) inputs.push(...markFrames([irmRecord({ jobId, next: index, provider: "nasa-lola" })]));
-    const response = await ingest.invoke({ methodId: "lola_plan", inputs });
+    if (index > 0) inputs.push(...markFrames([irmRecord({ jobId, next: index, provider: defaults.provider })]));
+    const response = await ingest.invoke({ methodId: "body_plan", inputs });
     const out = outputs(response);
     if (!out.has("plan")) return null;
     return {
@@ -70,7 +80,7 @@ export async function createMoonLane({ lolaDir, config = MOON_CONFIG, wasmPath =
         const t = dttOf(sized.subarray(4));
         return { sized, level: t.LEVEL(), x: t.X(), y: t.Y() };
       }),
-      requests: [0, 1, 2, 3].map((k) => decodeHttpRequest(out.get(`dem_${k}`)[0])),
+      requests: Array.from({ length: 16 }, (_, k) => out.get(`dem_${k}`)?.[0]).filter(Boolean).map(decodeHttpRequest),
       options: out.get("options")[0],
       pack: out.get("pack")[0],
       backlog: response.backlogRemaining,
@@ -83,7 +93,7 @@ export async function createMoonLane({ lolaDir, config = MOON_CONFIG, wasmPath =
     const inputs = [
       { portId: "plan", typeRef: TYPE.DTT, payload: Uint8Array.from(plan) },
       { portId: "options", typeRef: TYPE.MCFG, payload: unit.options },
-      ...unit.requests.map((r) => localResponse(lolaDir, r)),
+      ...unit.requests.map((r) => localResponse(dataDir, r)),
     ];
     const started = performance.now();
     const response = await source.invoke({ methodId: "tile", inputs });

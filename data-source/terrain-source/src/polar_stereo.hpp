@@ -1,7 +1,7 @@
 // ── SPHERICAL POLAR STEREOGRAPHIC (LOLA DSMAP_POLAR), PURE ─────────────────
 //
 // Shared by terrain-source (pds_img.hpp: decoding) and terrain-ingest
-// (lola_plan.hpp: which image lines a tile needs), so the two can never
+// (body_plan.hpp: which image lines a tile needs), so the two can never
 // disagree about where a tile lies in a polar product. Inlined by each build.
 //
 // The product is square, N x N posts, centred on the pole: with c = N/2 - 0.5,

@@ -4,7 +4,7 @@
 // Every valid spot of a set of LOLA RDR orbit files (the geolocated shots the gridded products were made from, so
 // the check is NOT independent of them, as the acceptance says) is compared with:
 //   * the MESH the lane publishes there - the tile of the deepest level the walk builds at the shot (L7 globally, L10
-//     south of -85.08, L9 north of 85), encoded by the real lane (terrain-ingest:lola_plan -> terrain-source:tile on
+//     south of -85.08, L9 north of 85), encoded by the real lane (terrain-ingest:body_plan -> terrain-source:tile on
 //     the local PDS products) and interpolated on its own triangles;
 //   * the GRIDDED PRODUCT that level reads (LDEM_64, LDEM_75S_60M, LDEM_75N_120M), bilinear, through the independent
 //     reading in lola-reference.mjs.
@@ -32,7 +32,7 @@ import zlib from "node:zlib";
 import { decodeQuantizedMesh } from "./helpers.mjs";
 import { cylindrical, polar, product } from "./lola-reference.mjs";
 import { MOON_RADIUS_M } from "../lola-frames.mjs";
-import { createMoonLane, dttOf } from "../tools/moon-lane.mjs";
+import { createBodyLane, dttOf } from "../tools/body-lane.mjs";
 
 const LOLA_DIR = process.env.LOLA_DIR;
 const RDR_DIR = process.env.LOLA_RDR_DIR;
@@ -105,7 +105,7 @@ function stats(residuals) {
 }
 
 test("the published Moon mesh meets the LOLA shots: global RMS <= 25 m, poleward of 85 degrees RMS <= 6 m", { skip, timeout: 3_600_000 }, async (t) => {
-  const lane = await createMoonLane({ lolaDir: LOLA_DIR });
+  const lane = await createBodyLane({ dataDir: LOLA_DIR });
   t.after(() => lane.destroy());
   // Which unit of the walk builds each tile.
   const unitOf = new Map();
