@@ -997,6 +997,12 @@ dttSourceClass source_class_named(const std::string& name, bool* known) {
 
 // An HttpRequest (HREQ) for one granule: GET, the configured timeout, nothing else. A 404 is the dataset publishing
 // no granule over open ocean - the encoder treats it as sea level, never as an error - and the body arrives verbatim.
+// A body product's requests carry their own validator, so the host never adds the If-None-Match it books per URL:
+// the label and the ranges of one image share a URL, and the host's last 2xx ETag for it would answer every later
+// range 304 (seen on host-01 2026-10-19: ldem_4_float.img ranges 304, the first unit refused). Any edition of the
+// product was modified after the epoch, so the server always answers the bytes; If-Match still pins the edition.
+constexpr const char* kNoValidators = "Thu, 01 Jan 1970 00:00:00 GMT";
+
 Bytes granule_request(const std::string& url, long timeout_ms) {
     flatbuffers::FlatBufferBuilder b(256 + url.size());
     R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str(), nullptr, nullptr,
@@ -1711,9 +1717,14 @@ int body_plan(void) {
         files_read += (files_read.empty() ? "" : " ") + std::string(file.path);
         char port[8];
         std::snprintf(port, sizeof(port), "dem_%zu", frame++);
-        if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest",
-                       granule_request(lbl_url, timeout_ms)) < 0)
-            return 500;
+        {
+            flatbuffers::FlatBufferBuilder b1(512 + lbl_url.size());
+            std::vector<flatbuffers::Offset<R::Header>> lbl_headers{R::CreateHeaderDirect(b1, "if-modified-since", kNoValidators)};
+            R::FinishHttpRequestBuffer(b1, R::CreateHttpRequestDirect(b1, "GET", lbl_url.c_str(), &lbl_headers, nullptr,
+                                                                      static_cast<uint32_t>(timeout_ms), 0, nullptr));
+            if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b1)) < 0)
+                return 500;
+        }
         const uint64_t record_bytes = product.samples * product.sample_bytes, lines = last - first + 1;
         const uint64_t parts = product.range_parts, per = (lines + parts - 1) / parts;
         for (uint64_t part = 0; part < parts; part++) {
@@ -1724,6 +1735,7 @@ int body_plan(void) {
             flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
             std::vector<flatbuffers::Offset<R::Header>> headers;
             headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
+            headers.push_back(R::CreateHeaderDirect(b2, "if-modified-since", kNoValidators));
             if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", file.etag));
             R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
                                                                       static_cast<uint32_t>(timeout_ms), 0, nullptr));
