@@ -39,19 +39,21 @@ inline double dust(Vec3 p,unsigned variant=3,double stellar_arms=0) {
   const double disk=1098*radial/std::pow(std::cosh(z/h),2)/scale;
   if(variant==1) return .789*.018*disk*(1+8*stellar_arms);
   double arms=0;
+  // The arm dust follows the arms the light follows (reid_arms.hpp,
+  // arm_light): Reid's curves over their coverage, continued beyond it.
   for(const auto& a:reid_segments) {
-    if(a.family==0||a.family==4)continue;
-    const double beta=model_beta(a,std::atan2(p.y,-p.x));
-    const double ra=arm_radius_kpc(a,beta)/scale;
-    if(ra<1.5||ra>16/scale)continue;
-    const double pitch_cos=beta<=a.beta_kink?a.cos_before:a.cos_after;
-    const double separation=std::abs(r-ra)*pitch_cos;
-    const double reduction=a.family==3?.407:1;
-    const double w=.0641*ra*reduction;
-    const double ha=(.080+.0146*std::pow(std::max(0.0,ra-5.48),2))*reduction;
-    const double taper=std::exp(-std::pow(std::max(0.0,ra-6.71)/2.07,2));
-    // DS uses the largest contribution, not an additive overlap of arms.
-    arms=std::max(arms,61/scale*taper*std::exp(-std::pow(separation/w,2)-std::pow(z/ha,2)));
+    if(arm_light::finite_segment(a))continue;
+    arm_light::for_each_hit(a,p,[&](const arm_light::Hit& hit) {
+      const double ra=hit.radius/scale;
+      if(ra<1.5)return;
+      const double separation=hit.separation/scale;
+      const double reduction=a.family==3?.407:1;
+      const double w=.0641*ra*reduction;
+      const double ha=(.080+.0146*std::pow(std::max(0.0,ra-5.48),2))*reduction;
+      const double taper=std::exp(-std::pow(std::max(0.0,ra-6.71)/2.07,2));
+      // DS uses the largest contribution, not an additive overlap of arms.
+      arms=std::max(arms,hit.weight*61/scale*taper*std::exp(-std::pow(separation/w,2)-std::pow(z/ha,2)));
+    });
   }
   return .789*.018*(disk+arms+(variant==3?local_dust(p):0));
 }

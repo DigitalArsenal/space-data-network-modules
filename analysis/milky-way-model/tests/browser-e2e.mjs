@@ -7,7 +7,8 @@ function check(name, ok, detail = '') { report.checks.push({name, ok: Boolean(ok
 function same(actual, expected) { return JSON.stringify(actual) === JSON.stringify(expected); }
 function validLayout(harness, name, layout, expected) {
   check(`${name} typed layout`, Array.isArray(layout) && same(layout.slice(2), expected), JSON.stringify(layout));
-  check(`${name} complete storage`, layout?.[1] === 16777216, `bytes=${layout?.[1]}`);
+  const bytes = expected.reduce((product, n) => product * n, 1);
+  check(`${name} complete storage`, layout?.[1] === bytes, `bytes=${layout?.[1]}, expected ${bytes}`);
   check(`${name} SAB bounds`, Number.isInteger(layout?.[0]) && layout[0] > 0 && layout[1] > 0 &&
     layout[0] + layout[1] <= harness.memory.buffer.byteLength, JSON.stringify(layout));
   if (layout?.[0] > 0 && layout[1] > 0) {
@@ -71,7 +72,7 @@ export async function runE2E(runtime) {
   }
   try {
     const legacy = await invoke('bake_legacy');
-    validLayout(harness, 'legacy global RGBA16F', legacy.global_layout, [256, 256, 32, 4, 2]);
+    validLayout(harness, 'legacy global RGBA16F', legacy.global_layout, [320, 320, 48, 4, 2]);
     validLayout(harness, 'legacy local RGBA16F', legacy.local_layout, [128, 128, 128, 4, 2]);
     const parity = await invoke('verify_legacy');
     report.legacy = parity;
@@ -107,7 +108,7 @@ export async function runE2E(runtime) {
     check('Gaia dust calibration is retired', retiredFit.statusCode !== 0 &&
       retiredFit.errorMessage?.includes('calibration retired'), retiredFit.errorMessage);
 
-    validLayout(harness, 'global RGBA16F', bake.global_layout, [256, 256, 32, 4, 2]);
+    validLayout(harness, 'global RGBA16F', bake.global_layout, [320, 320, 48, 4, 2]);
     validLayout(harness, 'local RGBA16F', bake.local_layout, [128, 128, 128, 4, 2]);
     check('explicit rectilinear global z', bake.global_z_mapping === 1 && bake.global_z_coordinates?.length === 32);
     check('uniform local z', bake.local_z_mapping === 0 && bake.local_z_coordinates?.length === 128);

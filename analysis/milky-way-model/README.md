@@ -64,7 +64,8 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `bake_legacy` | none | Original-model global/local volumes |
 | `verify_legacy` | none, after legacy bake | Maximum/RMS RGB error and sample count |
 | `load_dust_map` | port `rows`: 1-64 `$PCE` rows of data-source/dust-map-3d (one z plane each) | planes loaded, ready |
-| `bake` | none (uses a fully loaded dust map) | Literature-model volumes, detail tile, `extinction_ratios`, `radiance_scale*`, `dust_map` |
+| `bake` | none (uses a fully loaded dust map) | Literature-model volumes, detail tile, `extinction_ratios`, `radiance_scale*`, `display_white`, `display_saturation`, `dust_map` |
+| `arm_curves` | none | Each Reid 2019 Table 2 segment as a polyline (kpc): `arm_<i>_measured_xy` over its measured coverage, `arm_<i>_extended_xy` over the arm the light follows |
 | `face_on_metrics` | none, after bake | Face-on 48 kpc G/BP/RP image layout, arm/interarm contrast, bar A2, lane color |
 | `extinction` | `points`: packed xyz | `a_g`, `e_bp_rp`, magnitudes |
 | `sample_stars` | `bounds`: min xyz/max xyz; `seed`, `candidates`, `completeness`, `tier_limit_g`, optional `display_limit_g` | `stars`, `count`, `stride=7`, `label=model`, `pickable=0` |
@@ -72,9 +73,10 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `calibrate` | retired method ID | Explicit error; Gaia dust fitting cannot mutate the literature bake |
 | `ridge_metrics` | `masers`: [longitude deg, latitude deg, parallax mas, family]; `maser_segments`, `maser_excluded`, `parallax_errors` (mas); independent `published_arms` Table 2 rows | Curve agreement, per-segment raw RMS and chi-square, propagated perpendicular errors, diagnostic baked-ridge distances |
 
-Global volume: 256 × 256 × 32 over [-16,16] × [-16,16] × [-3,3] kpc.
-Local volume: uniform 128³ over the Sun ±1.25 kpc. Each is exactly 16 MiB,
-RGBA16F, x fastest, then y, then z. Literature channels are relative G/BP/RP
+Global volume: 320 × 320 × 48 over [-20,20] × [-20,20] × [-6,6] kpc (125 pc
+in x and y), its large-scale dust only. Local volume: uniform 128³ over the
+Sun ±1.25 kpc (20 pc), with the delivered 3D dust map. Both are RGBA16F, x
+fastest, then y, then z. Literature channels are relative G/BP/RP
 emissivity per kpc and G extinction optical depth per kpc. BP and RP optical
 depths are `extinction_ratios` [A_BP/A_G, A_RP/A_G] times G (Wang & Chen 2019).
 One G unit (emissivity per kpc times kpc) is `radiance_scale` zero-magnitude
@@ -114,15 +116,26 @@ Discs: Jurić 2008 shapes for radial lengths, Flynn et al. 2006 luminosity
 densities and columns for the light's vertical structure (thin 206 pc, bright
 young stars 103 pc, thick 1.1 kpc), with the Robin et al. 2003 thin-disc hole.
 Arms: the Drimmel & Spergel 2001 stellar wave (B_K = 1.28, the disc light's
-vertical profile, per Elmegreen et al. 2011's colour-independent contrasts) and
+vertical profile, per Elmegreen et al. 2011's color-independent contrasts) and
 Flynn's bright young stars on Reid 2019 Table 2 arms with the PHANGS
-(Querejeta et al. 2024) interarm floor, both drifted by DS2001's shear. Bar
+(Querejeta et al. 2024) interarm floor, both drifted by DS2001's shear. Beyond
+each segment's measured coverage the major arms continue at the mean 12° pitch
+(Vallée 2017), fading over their last 70°; Scutum keeps its own pitch out past
+the far side (Reid 2019 §3.2.2). HII regions: a seeded statistical population
+on the arms (count, sizes and brightness are model choices at the scale of the
+WISE catalog's giant complexes, Anderson et al. 2014). Disc edge: Minniti et
+al. 2011's 13.9 kpc, beyond it a steeper exponential (type II break, Pohlen &
+Trujillo 2006). Colors: the old disc redder than the Sun, red-clump bulge and
+bar (Ruiz-Dern et al. 2018), B-star arm light, emission-line HII; the display
+balances white on the face-on disc at the Sun's radius (`display_white`) and
+stretches saturation by `display_saturation`, a display choice. Bar
 and bulge: Wegg & Gerhard 2013 orientation, Wegg et al. 2015 length, their sum
 set by Portail et al. 2017's bar/bulge to inner-disc mass ratio (1.88/1.29).
-Dust: Drimmel & Spergel 2001, replaced within 1.248 kpc by the Edenhofer et al.
-2024 map when loaded. Reid's fitted radii keep their R0=8.15 kpc fit while the
-observer uses 8.178 kpc. Bulge/bar shapes, BP/RP emissivity ratios and the
-luminosity function remain illustrative and are labeled so.
+Dust: Drimmel & Spergel 2001 (its arm dust on the same arms), replaced within
+1.248 kpc by the Edenhofer et al. 2024 map when loaded (local volume only). Reid's fitted radii keep their R0=8.15 kpc fit while the
+observer uses 8.178 kpc. Bulge/bar shapes, the arm extensions, the HII
+population, population colors and the luminosity function remain illustrative
+and are labeled so.
 
 The E2E (`tests/band-vs-gaia.e2e.mjs`) runs data-source/dust-map-3d's retrieval
 stages against an offline copy of the published byte ranges

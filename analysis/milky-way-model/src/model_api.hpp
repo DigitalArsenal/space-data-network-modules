@@ -32,7 +32,8 @@ extern "C" int bake() {
   if (!request.values.empty()) return wire::fail("bake takes no values; deliver a 3D dust map with load_dust_map first");
   const auto& loaded=dust_map::grid();
   if (loaded.nz && !loaded.ready) return wire::fail("A 3D dust map is partly loaded; deliver every plane or none");
-  volumes=std::make_unique<NestedVolumes>(sun); volumes->bake(literature);legacy_active=false;
+  volumes=std::make_unique<NestedVolumes>(sun);
+  volumes->bake([](Vec3 p){return literature(p,false);},[](Vec3 p){return literature(p,true);});legacy_active=false;
   // SplitMix64 seed 20261016; periodic texture samples, dimensionless model
   // noise. No inference of observed dust structure from this procedural tile.
   detail=std::make_unique<Volume>(32,32,32,Vec3{0,0,0},Vec3{1,1,1});
@@ -51,6 +52,11 @@ extern "C" int bake() {
   // Additive renderer fields. BP and RP optical depth per kpc are these
   // multiples of the G channel (Wang & Chen 2019 Table 3).
   r.vector("extinction_ratios",{model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction},"A_BP/A_G,A_RP/A_G");
+  // The display's white (literature_model.hpp, display_white): the renderer
+  // divides each band by it, so the local disc's light is drawn white.
+  const auto white=display_white();
+  r.vector("display_white",{white[0],white[1],white[2]},"G,BP,RP");
+  r.number("display_saturation",colors::display_saturation);
   // One G unit (emissivity per kpc x kpc) in physical units: the model's own
   // local mid-plane emissivity carries Flynn et al. 2006's 0.056 Lsun,V pc^-3.
   const double local=literature({-galactic_constants::solar_radius_kpc,0,0}).r;
@@ -223,5 +229,43 @@ extern "C" int load_dust_map() {
   const auto& g=dust_map::grid();
   r.number("planes_loaded",g.loaded);r.number("planes",g.nz);r.number("ready",g.ready?1:0);
   r.text("dataset",g.dataset.c_str());r.number("rows",loaded.rows);
+  return r.emit();
+}
+
+// The arm curves the model draws: each Reid et al. (2019) Table 2 segment as a
+// polyline in the Galactocentric plane (kpc, x then y), over its measured
+// parallax coverage (beta_min..beta_max) and over the domain the light uses
+// (reid_arms.hpp, arm_light). Needs no bake.
+extern "C" int arm_curves() {
+  using namespace milky_way;
+  wire::Request request;
+  if (!request.ok) return wire::fail("Expected one $PCE request");
+  wire::Result r;
+  r.number("arm_count",double(reid_segments.size()));
+  auto polyline=[](const ArmSegment& a,double lo,double hi) {
+    std::vector<double> xy;
+    const int n=std::max(2,int(std::ceil((hi-lo)/(0.5*galactic_constants::radians_per_degree))));
+    for (int i=0;i<=n;++i) {
+      const double beta=lo+(hi-lo)*i/n,radius=arm_radius_kpc(a,beta);
+      xy.push_back(-radius*std::cos(beta));xy.push_back(radius*std::sin(beta));
+    }
+    return xy;
+  };
+  for (size_t i=0;i<reid_segments.size();++i) {
+    const auto& a=reid_segments[i];
+    const std::string p="arm_"+std::to_string(i);
+    r.text((p+"_name").c_str(),a.name);
+    r.vector((p+"_measured_xy").c_str(),polyline(a,a.beta_min_deg*galactic_constants::radians_per_degree,
+      a.beta_max_deg*galactic_constants::radians_per_degree),"kpc");
+    std::vector<double> drawn;
+    const auto light=arm_light::domain(a);
+    const int n=std::max(2,int(std::ceil((light[1]-light[0])/(0.5*galactic_constants::radians_per_degree))));
+    for (int k=0;k<=n;++k) {
+      const double beta=light[0]+(light[1]-light[0])*k/n,radius=arm_light::radius(a,beta);
+      drawn.push_back(-radius*std::cos(beta));drawn.push_back(radius*std::sin(beta));
+    }
+    r.vector((p+"_extended_xy").c_str(),drawn,"kpc");
+  }
+  r.text("source","Reid et al. 2019, ApJ 885, 131, Table 2 (central values)");
   return r.emit();
 }
