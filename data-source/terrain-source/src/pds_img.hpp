@@ -1,31 +1,51 @@
-// ── PDS3 IMG ELEVATION PRODUCTS (LOLA GDR), READ BY ROW BAND ────────────────
+// ── PDS3 IMG ELEVATION PRODUCTS (LOLA GDR, MOLA MEGDR), READ BY ROW BAND ────
 //
 // Inlined into terrain_source_module.cpp by source.mjs, after DemGrid,
 // DecodeBudget and the DEM samplers.
 //
-// The Moon's terrain comes from the LRO LOLA gridded products in the PDS
-// Geosciences Node (public domain): raw little-endian IEEE754 float32 images,
-// one record per image line, heights in KILOMETRES above a reference sphere
-// (OFFSET 1737.4 km), described by a detached PDS3 label. The ingest fetches
-// the label first ("dem" frame 0, so the geometry is the source's own) and then
-// whole-line byte ranges ("dem" frames 1..3); each range response says where it
-// starts in its Content-Range, and that offset divided by RECORD_BYTES is its
-// first line.
+// A body's terrain comes from gridded altimetry products in the PDS
+// Geosciences Node (public domain), each a raw image with one record per image
+// line, described by a detached PDS3 label:
+//
+//   LOLA GDR (the Moon): little-endian IEEE754 float32 (PC_REAL), heights in
+//   KILOMETRES above the 1737.4 km sphere (OFFSET = A_AXIS_RADIUS).
+//   MOLA MEGDR (Mars): big-endian int16 (MSB_INTEGER) metres for the simple
+//   cylindrical tiles, radius = DN + OFFSET (3,396,000 m = A_AXIS_RADIUS);
+//   big-endian float32 (IEEE_REAL) metres for the polar products, whose label
+//   states OFFSET 0 while its IMAGE DESCRIPTION puts the values "relative to a
+//   3396000 meter radius spherical datum" (the datum is read from that text).
+//
+// Every sample decodes to DN x SCALING_FACTOR in the label's UNIT, which is the
+// height above the reference sphere in every case above. The ingest fetches
+// each file's label ("dem" frame k, so the geometry is the source's own) and
+// then whole-line byte ranges of its image (the frames after it, up to the
+// next label); each range response says where it starts in its Content-Range,
+// and that offset divided by RECORD_BYTES is its first line.
 //
 // Two map projections are modelled, both exactly as the products' labels and
-// the LOLA DSMAP / DSMAP_POLAR catalogs state them, and nothing else is guessed
-// at:
+// the DSMAP / DSMAP_POLAR catalogs state them, and nothing else is guessed at:
 //
-//   SIMPLE CYLINDRICAL, global, pixel-registered, 0..360 E: line l (0-based)
-//   is centred on latitude 90 - (l + 0.5)/ppd and sample s on east longitude
-//   (s + 0.5)/ppd. It is decoded into a LINEAR DemGrid rotated to -180..180 E
-//   with one wrap column on each side, so the existing samplers read it
-//   unchanged and a tile on either side of the antimeridian sees the same
-//   posts.
+//   SIMPLE CYLINDRICAL, pixel-registered, 0..360 E, CENTER 0/180: the whole
+//   body in one file (LOLA, MEGDR 4-32 ppd) or a tile of that global grid
+//   (MEGDR 64 ppd 90x180 degrees, 128 ppd 44x90 degrees). The file's place in
+//   the global grid is its MAXIMUM_LATITUDE and WESTERNMOST_LONGITUDE edges;
+//   its projection offsets must agree with them (LOLA states them 0-based,
+//   N/2 - 0.5 for the whole body; MEGDR 1-based, MAXLAT x ppd + 0.5). Global
+//   line l (0-based) is centred on latitude 90 - (l + 0.5)/ppd and global
+//   sample s on east longitude (s + 0.5)/ppd. Every file of one plan is
+//   decoded into ONE LINEAR DemGrid of the global width, rotated to -180..180
+//   E with one wrap column on each side, so the existing samplers read it
+//   unchanged and a tile on either side of the antimeridian, or of a file
+//   boundary, sees the same posts.
 //
 //   POLAR STEREOGRAPHIC on the reference sphere, true at the pole
 //   (polar_stereo.hpp, shared with terrain-ingest's planner): a projected
-//   grid, sampled bilinearly in its own (sample, line) coordinates.
+//   grid, sampled bilinearly in its own (sample, line) coordinates. LOLA
+//   states MAP_SCALE and the N/2 - 0.5 centre; MEGDR states neither offset
+//   ('N/A'; its description gives the centre as 0.5 (N + 1), 1-based) and
+//   calls MAP_SCALE approximate, so its scale is the sphere's arc per pixel at
+//   MAP_RESOLUTION (A_AXIS_RADIUS x pi / 180 / ppd), checked against MAP_SCALE
+//   to 1%.
 //
 // A product whose label departs from these conventions is REFUSED: decoding it
 // anyway would put real relief in the wrong place.
@@ -35,15 +55,24 @@
 constexpr int kProjLinear = 0;
 constexpr int kProjPolarStereo = 1;
 
+constexpr int kSamplePcReal32 = 0;     // little-endian float32
+constexpr int kSampleIeeeReal32 = 1;   // big-endian float32
+constexpr int kSampleMsbInteger16 = 2; // big-endian int16
+
 struct PdsLabel {
     uint64_t file_records = 0, record_bytes = 0, lines = 0, line_samples = 0, sample_bits = 0;
-    std::string sample_type, unit, projection, lon_direction;
-    double offset_km = 0, scaling = 1;
+    std::string sample_type, unit, projection, lon_direction, image_name;
+    double offset_km = 0, scaling = 1;  // OFFSET as stated, in the label's UNIT
     double ppd = 0;          // MAP_RESOLUTION (pixels per degree)
     double map_scale_m = 0;  // MAP_SCALE in metres per pixel
     double line_offset = 0, sample_offset = 0;
     double center_lat = 0, center_lon = 0;
     double a_axis_m = 0, b_axis_m = 0, c_axis_m = 0;
+    // Derived: the sample encoding, metres per UNIT, the sphere the heights are
+    // above, and (simple cylindrical) the file's place in the global grid.
+    int encoding = kSamplePcReal32;
+    double unit_m = 1000.0, datum_m = 0;
+    uint64_t global_lines = 0, global_samples = 0, first_line = 0, first_sample = 0;
 };
 
 // KEY = VALUE pairs of a PDS3 label, first occurrence of each key, quoted
@@ -101,6 +130,9 @@ bool pds_label_number(const std::string& text, const char* key, double* out, std
     return true;
 }
 
+// "<km>" (LOLA) or "<KM>" (MEGDR).
+bool is_km(const std::string& unit) { return unit == "km" || unit == "KM"; }
+
 bool parse_pds_label(const std::string& text, PdsLabel* l, std::string* error) {
     if (text.rfind("PDS_VERSION_ID", 0) != 0 || text.find("PDS3") == std::string::npos) {
         *error = "the label frame is not a PDS3 label";
@@ -124,18 +156,21 @@ bool parse_pds_label(const std::string& text, PdsLabel* l, std::string* error) {
     pds_label_value(text, "UNIT", &l->unit);
     pds_label_value(text, "MAP_PROJECTION_TYPE", &l->projection);
     pds_label_value(text, "POSITIVE_LONGITUDE_DIRECTION", &l->lon_direction);
-    if (!need("LINE_PROJECTION_OFFSET", &l->line_offset)) return false;
-    if (!need("SAMPLE_PROJECTION_OFFSET", &l->sample_offset)) return false;
+    // 'N/A' offsets and centre longitude are read as absent here; the
+    // projection checks below decide whether that product may omit them.
+    const bool polar = l->projection == "POLAR STEREOGRAPHIC";
+    if (!pds_label_number(text, "LINE_PROJECTION_OFFSET", &l->line_offset) && !polar) return need("LINE_PROJECTION_OFFSET", &v);
+    if (!pds_label_number(text, "SAMPLE_PROJECTION_OFFSET", &l->sample_offset) && !polar) return need("SAMPLE_PROJECTION_OFFSET", &v);
     if (!need("CENTER_LATITUDE", &l->center_lat)) return false;
-    if (!need("CENTER_LONGITUDE", &l->center_lon)) return false;
-    if (!pds_label_number(text, "A_AXIS_RADIUS", &v, &unit) || unit != "km") {
+    if (!pds_label_number(text, "CENTER_LONGITUDE", &l->center_lon) && !polar) return need("CENTER_LONGITUDE", &v);
+    if (!pds_label_number(text, "A_AXIS_RADIUS", &v, &unit) || !is_km(unit)) {
         *error = "the PDS3 label states no A_AXIS_RADIUS in km";
         return false;
     }
     l->a_axis_m = v * 1000.0;
-    if (!pds_label_number(text, "B_AXIS_RADIUS", &v, &unit) || unit != "km") { *error = "no B_AXIS_RADIUS in km"; return false; }
+    if (!pds_label_number(text, "B_AXIS_RADIUS", &v, &unit) || !is_km(unit)) { *error = "no B_AXIS_RADIUS in km"; return false; }
     l->b_axis_m = v * 1000.0;
-    if (!pds_label_number(text, "C_AXIS_RADIUS", &v, &unit) || unit != "km") { *error = "no C_AXIS_RADIUS in km"; return false; }
+    if (!pds_label_number(text, "C_AXIS_RADIUS", &v, &unit) || !is_km(unit)) { *error = "no C_AXIS_RADIUS in km"; return false; }
     l->c_axis_m = v * 1000.0;
     pds_label_number(text, "MAP_RESOLUTION", &l->ppd);
     if (pds_label_number(text, "MAP_SCALE", &v, &unit)) {
@@ -143,12 +178,24 @@ bool parse_pds_label(const std::string& text, PdsLabel* l, std::string* error) {
         else if (unit == "m/pix" || unit == "M/PIXEL") l->map_scale_m = v;
     }
 
-    if (l->sample_type != "PC_REAL" || l->sample_bits != 32 || l->unit != "KILOMETER") {
-        *error = "only PC_REAL 32-bit samples in KILOMETER are modelled (LOLA *_float.img)";
+    pds_label_value(text, "^IMAGE", &l->image_name);
+
+    if (l->sample_type == "PC_REAL" && l->sample_bits == 32) l->encoding = kSamplePcReal32;
+    else if (l->sample_type == "IEEE_REAL" && l->sample_bits == 32) l->encoding = kSampleIeeeReal32;
+    else if (l->sample_type == "MSB_INTEGER" && l->sample_bits == 16) l->encoding = kSampleMsbInteger16;
+    else {
+        *error = "only PC_REAL or IEEE_REAL 32-bit and MSB_INTEGER 16-bit samples are modelled (LOLA *_float.img, "
+                 "MOLA MEGDR megr*.img)";
         return false;
     }
-    if (l->record_bytes != l->line_samples * 4 || l->file_records != l->lines || l->lines < 2) {
-        *error = "the label's record geometry is not one 32-bit line per record";
+    if (l->unit == "KILOMETER") l->unit_m = 1000.0;
+    else if (l->unit == "METER") l->unit_m = 1.0;
+    else {
+        *error = "only samples in KILOMETER or METER are modelled";
+        return false;
+    }
+    if (l->record_bytes != l->line_samples * (l->sample_bits / 8) || l->file_records != l->lines || l->lines < 2) {
+        *error = "the label's record geometry is not one line of LINE_SAMPLES samples per record";
         return false;
     }
     if (l->a_axis_m != l->b_axis_m || l->a_axis_m != l->c_axis_m) {
@@ -157,7 +204,15 @@ bool parse_pds_label(const std::string& text, PdsLabel* l, std::string* error) {
     }
     // Heights are stored relative to OFFSET and the body is A_AXIS_RADIUS: a
     // product whose two disagree states its heights above some other surface.
-    if (std::fabs(l->offset_km * 1000.0 - l->a_axis_m) > 1e-6) {
+    // The one stated exception: OFFSET 0 with the image description naming the
+    // A_AXIS_RADIUS sphere as the datum (MEGDR polar).
+    if (std::fabs(l->offset_km * l->unit_m - l->a_axis_m) <= 1e-6) {
+        l->datum_m = l->a_axis_m;
+    } else if (l->offset_km == 0 &&
+               text.find("relative to a " + std::to_string(static_cast<long long>(l->a_axis_m)) +
+                         " meter radius spherical") != std::string::npos) {
+        l->datum_m = l->a_axis_m;
+    } else {
         *error = "the label's OFFSET is not its A_AXIS_RADIUS: heights would be read above another surface";
         return false;
     }
@@ -166,22 +221,59 @@ bool parse_pds_label(const std::string& text, PdsLabel* l, std::string* error) {
         return false;
     }
     if (l->projection == "SIMPLE CYLINDRICAL") {
+        double max_lat = 0, min_lat = 0, west = 0, east = 0;
         if (!(l->ppd > 0) || l->center_lat != 0 || l->center_lon != 180 ||
-            static_cast<double>(l->line_samples) != 360.0 * l->ppd ||
-            static_cast<double>(l->lines) != 180.0 * l->ppd ||
-            l->line_offset != static_cast<double>(l->lines) / 2.0 - 0.5 ||
-            l->sample_offset != static_cast<double>(l->line_samples) / 2.0 - 0.5) {
-            *error = "the SIMPLE CYLINDRICAL product is not the global pixel-registered 0..360 E grid "
-                     "(CENTER 0/180, 360 x 180 degrees at MAP_RESOLUTION, offsets N/2 - 0.5)";
+            !pds_label_number(text, "MAXIMUM_LATITUDE", &max_lat) || !pds_label_number(text, "MINIMUM_LATITUDE", &min_lat) ||
+            !pds_label_number(text, "WESTERNMOST_LONGITUDE", &west) ||
+            !pds_label_number(text, "EASTERNMOST_LONGITUDE", &east) ||
+            static_cast<double>(l->line_samples) != (east - west) * l->ppd ||
+            static_cast<double>(l->lines) != (max_lat - min_lat) * l->ppd || max_lat > 90 || min_lat < -90 ||
+            west < 0 || east > 360) {
+            *error = "the SIMPLE CYLINDRICAL product is not a pixel-registered 0..360 E grid (CENTER 0/180, its "
+                     "LINES x LINE_SAMPLES the MAXIMUM/MINIMUM_LATITUDE and WESTERNMOST/EASTERNMOST_LONGITUDE box at "
+                     "MAP_RESOLUTION)";
             return false;
         }
+        const double edge_line = max_lat * l->ppd, edge_sample = (l->center_lon - west) * l->ppd;
+        const bool zero_based = l->line_offset == edge_line - 0.5 && l->sample_offset == edge_sample - 0.5;
+        const bool one_based = l->line_offset == edge_line + 0.5 && l->sample_offset == edge_sample + 0.5;
+        const double gl = 180.0 * l->ppd, gs = 360.0 * l->ppd;
+        const double fl = (90.0 - max_lat) * l->ppd, fs = west * l->ppd;
+        if ((!zero_based && !one_based) || gl != std::floor(gl) || gs != std::floor(gs) || fl != std::floor(fl) ||
+            fs != std::floor(fs)) {
+            *error = "the SIMPLE CYLINDRICAL product's projection offsets do not put its posts on the global "
+                     "pixel-registered grid its latitude/longitude box states";
+            return false;
+        }
+        l->global_lines = static_cast<uint64_t>(gl);
+        l->global_samples = static_cast<uint64_t>(gs);
+        l->first_line = static_cast<uint64_t>(fl);
+        l->first_sample = static_cast<uint64_t>(fs);
         return true;
     }
     if (l->projection == "POLAR STEREOGRAPHIC") {
+        const double centre = static_cast<double>(l->lines) / 2.0 - 0.5;
+        std::string lpo, spo;
+        pds_label_value(text, "LINE_PROJECTION_OFFSET", &lpo);
+        pds_label_value(text, "SAMPLE_PROJECTION_OFFSET", &spo);
+        const bool stated = lpo != "'N/A'" && spo != "'N/A'";
+        if (!stated) {
+            // MEGDR: the centre is the description's 0.5 (N + 1), 1-based; the
+            // scale the sphere's arc per pixel at MAP_RESOLUTION.
+            const double arc_m = l->a_axis_m * kPolarPi / 180.0 / l->ppd;
+            if (!(l->ppd > 0) || !(l->map_scale_m > 0) || std::fabs(l->map_scale_m - arc_m) > 0.01 * arc_m ||
+                std::fabs(l->center_lat) != 90.0 || l->lines != l->line_samples) {
+                *error = "the POLAR STEREOGRAPHIC product states no projection offsets and is not a square "
+                         "pole-centred grid at MAP_RESOLUTION (MAP_SCALE within 1% of the sphere's arc per pixel)";
+                return false;
+            }
+            l->map_scale_m = arc_m;
+            l->line_offset = l->sample_offset = centre;
+            l->center_lon = 0;
+            return true;
+        }
         if (!(l->map_scale_m > 0) || std::fabs(l->center_lat) != 90.0 || l->center_lon != 0 ||
-            l->lines != l->line_samples ||
-            l->line_offset != static_cast<double>(l->lines) / 2.0 - 0.5 ||
-            l->sample_offset != static_cast<double>(l->line_samples) / 2.0 - 0.5) {
+            l->lines != l->line_samples || l->line_offset != centre || l->sample_offset != centre) {
             *error = "the POLAR STEREOGRAPHIC product is not a square pole-centred grid "
                      "(CENTER_LATITUDE +/-90, CENTER_LONGITUDE 0, offsets N/2 - 0.5, MAP_SCALE in m/pix)";
             return false;
@@ -277,33 +369,76 @@ bool pds_band_of(const PdsLabel& l, const std::string& content_range, const std:
     return true;
 }
 
-// The product lines a lat/lon box needs (2 lines of margin for the bilinear
-// stencil and the normals' halo).
+// The lines a lat/lon box needs (2 lines of margin for the bilinear stencil
+// and the normals' halo): GLOBAL lines of a simple cylindrical grid, the
+// product's own lines of a polar one.
 bool pds_lines_for(const PdsLabel& l, const DemGrid& shape, double west, double east, double south,
                    double north, uint64_t* first, uint64_t* last) {
     double lo = 1e300, hi = -1e300;
+    uint64_t lines = l.lines;
     if (shape.proj == kProjLinear) {
         lo = (90.0 - north) * l.ppd - 0.5;
         hi = (90.0 - south) * l.ppd - 0.5;
+        lines = l.global_lines;
     } else {
         double s_lo = 0, s_hi = 0;
         if (!polar_stereo_footprint(polar_of(shape), west, east, south, north, &s_lo, &s_hi, &lo, &hi)) return false;
     }
     const double first_d = std::floor(lo) - 2, last_d = std::ceil(hi) + 2;
     *first = first_d < 0 ? 0 : static_cast<uint64_t>(first_d);
-    *last = last_d > static_cast<double>(l.lines - 1) ? l.lines - 1 : static_cast<uint64_t>(last_d);
+    *last = last_d > static_cast<double>(lines - 1) ? lines - 1 : static_cast<uint64_t>(last_d);
     return *first <= *last;
 }
 
+// One sample of a product's image, in the label's encoding, as the height in
+// metres above the reference sphere (DN x SCALING_FACTOR x UNIT); a
+// non-finite float is no data.
+float pds_height(const PdsLabel& l, const uint8_t* at, double to_m) {
+    if (l.encoding == kSampleMsbInteger16) {
+        const int16_t dn = static_cast<int16_t>((static_cast<uint16_t>(at[0]) << 8) | at[1]);
+        return static_cast<float>(static_cast<double>(dn) * to_m);
+    }
+    float dn;
+    if (l.encoding == kSampleIeeeReal32) {
+        const uint8_t swapped[4] = {at[3], at[2], at[1], at[0]};
+        std::memcpy(&dn, swapped, 4);
+    } else {
+        std::memcpy(&dn, at, 4);
+    }
+    return std::isfinite(dn) ? static_cast<float>(static_cast<double>(dn) * to_m) : kNoData;
+}
+
+// One file of a product: its label and the whole-line ranges of its image.
+struct PdsFile {
+    PdsLabel label;
+    std::vector<PdsBand> bands;
+};
+
+const PdsBand* pds_band_holding(const PdsFile& f, uint64_t local_line) {
+    for (const PdsBand& b : f.bands)
+        if (b.first_line <= local_line && b.first_line + b.line_count > local_line) return &b;
+    return nullptr;
+}
+
 // Decode the lines `boxes` need (each a tile's extent plus the normals' halo)
-// into ONE DemGrid. Heights are metres
-// above the reference sphere (DN x SCALING_FACTOR km). A needed line no band
-// carries is refused: a gap would be filled with invented terrain.
-DemGrid decode_pds_bands(const PdsLabel& l, const std::vector<PdsBand>& bands, const std::vector<TileExtent>& boxes,
+// from every file into ONE DemGrid. A polar plan reads one file; a simple
+// cylindrical plan reads every file of the global grid its lines cross (the
+// files must share MAP_RESOLUTION). Heights are metres above the reference
+// sphere. A needed line no file holds, or that a file holding it carries in no
+// range, is refused: a gap would be filled with invented terrain.
+DemGrid decode_pds_files(const std::vector<PdsFile>& files, const std::vector<TileExtent>& boxes,
                          DecodeBudget* budget) {
     DemGrid g;
+    const PdsLabel& l = files[0].label;
     g.proj = l.projection == "POLAR STEREOGRAPHIC" ? kProjPolarStereo : kProjLinear;
-    g.full_rows = static_cast<long>(l.lines);
+    for (const PdsFile& f : files) {
+        if (f.label.projection != l.projection || f.label.ppd != l.ppd || (g.proj == kProjPolarStereo && files.size() != 1)) {
+            g.error = "a body plan's files must be ONE polar product or simple cylindrical files of one global grid "
+                      "(one MAP_RESOLUTION)";
+            return g;
+        }
+    }
+    g.full_rows = static_cast<long>(g.proj == kProjLinear ? l.global_lines : l.lines);
     if (g.proj == kProjPolarStereo) {
         g.ps_south = l.center_lat < 0;
         g.ps_scale_m = l.map_scale_m;
@@ -324,12 +459,24 @@ DemGrid decode_pds_bands(const PdsLabel& l, const std::vector<PdsBand>& bands, c
         g.covers = false;
         return g;
     }
-    for (uint64_t line = first; line <= last;) {
-        uint64_t reach = line;
-        for (const PdsBand& b : bands)
-            if (b.first_line <= line && b.first_line + b.line_count > line)
-                reach = std::max(reach, b.first_line + b.line_count);
-        if (reach == line) {
+    // Global line -> the file's own line (polar: the same line).
+    const auto local = [&](const PdsFile& f, uint64_t line, uint64_t* out) {
+        const uint64_t f0 = g.proj == kProjLinear ? f.label.first_line : 0;
+        if (line < f0 || line >= f0 + f.label.lines) return false;
+        *out = line - f0;
+        return true;
+    };
+    for (uint64_t line = first; line <= last; line++) {
+        bool held = false;
+        for (const PdsFile& f : files) {
+            uint64_t k = 0;
+            if (!local(f, line, &k)) continue;
+            held = true;
+            if (pds_band_holding(f, k)) continue;
+            held = false;
+            break;
+        }
+        if (!held) {
             char message[200];
             std::snprintf(message, sizeof(message),
                           "image line %llu is needed by the plan's extent and no range response carries it",
@@ -337,10 +484,9 @@ DemGrid decode_pds_bands(const PdsLabel& l, const std::vector<PdsBand>& bands, c
             g.error = message;
             return g;
         }
-        line = reach;
     }
     const uint64_t rows = last - first + 1;
-    const uint64_t width = g.proj == kProjLinear ? l.line_samples + 2 : l.line_samples;
+    const uint64_t width = g.proj == kProjLinear ? l.global_samples + 2 : l.line_samples;
     const uint64_t need64 = rows * width * 4u;
     if (need64 > kDecodeByteBudget || !budget->admit(static_cast<size_t>(need64))) {
         set_decode_budget_error(need64, budget->used);
@@ -354,42 +500,47 @@ DemGrid decode_pds_bands(const PdsLabel& l, const std::vector<PdsBand>& bands, c
     if (g.proj == kProjLinear) {
         // Rotated to -180..180 E, one wrap column each side: stored column k is
         // virtual column k - 1, centred on -180 + (k - 1 + 0.5)/ppd, which is
-        // product sample (k - 1 + W/2) mod W.
+        // global sample (k - 1 + W/2) mod W.
         g.origin_lon = -180.0 + 0.5 / l.ppd;
         g.origin_lat = 90.0 - 0.5 / l.ppd;
         g.scale_lon = 1.0 / l.ppd;
         g.scale_lat = 1.0 / l.ppd;
         g.off_x = -1;
     }
-    const long W = static_cast<long>(l.line_samples);
-    const double to_m = l.scaling * 1000.0;
+    const long W = static_cast<long>(g.proj == kProjLinear ? l.global_samples : l.line_samples);
     for (uint64_t line = first; line <= last; line++) {
-        const PdsBand* home = nullptr;
-        for (const PdsBand& b : bands)
-            if (b.first_line <= line && b.first_line + b.line_count > line) { home = &b; break; }
-        const uint8_t* src = reinterpret_cast<const uint8_t*>(home->body->data()) +
-                             (line - home->first_line) * l.record_bytes;
         float* dst = &g.samples[static_cast<size_t>(line - first) * width];
         double sum = 0;
         long measured = 0;  // the pole mean is over the line's measured posts only
-        for (long s = 0; s < W; s++) {
-            float dn;
-            std::memcpy(&dn, src + static_cast<size_t>(s) * 4, 4);
-            const float h = std::isfinite(dn) ? static_cast<float>(static_cast<double>(dn) * to_m) : kNoData;
-            if (h != kNoData) { sum += h; measured++; }
-            if (g.proj == kProjLinear) {
-                long k = s - W / 2 + 1;  // stored column of virtual column (s - W/2) mod W
-                if (k < 1) k += W;
-                dst[k] = h;
-            } else {
-                dst[s] = h;
+        for (const PdsFile& f : files) {
+            uint64_t k = 0;
+            if (!local(f, line, &k)) continue;
+            const PdsBand* home = pds_band_holding(f, k);
+            const uint8_t* src = reinterpret_cast<const uint8_t*>(home->body->data()) +
+                                 (k - home->first_line) * f.label.record_bytes;
+            const double to_m = f.label.scaling * f.label.unit_m;
+            const size_t bytes = f.label.sample_bits / 8;
+            const long first_sample = g.proj == kProjLinear ? static_cast<long>(f.label.first_sample) : 0;
+            const long samples = static_cast<long>(f.label.line_samples);
+            for (long s = 0; s < samples; s++) {
+                const float h = pds_height(f.label, src + static_cast<size_t>(s) * bytes, to_m);
+                if (h != kNoData) { sum += h; measured++; }
+                if (g.proj == kProjLinear) {
+                    long c = first_sample + s - W / 2 + 1;  // stored column of virtual column (s - W/2) mod W
+                    if (c < 1) c += W;
+                    dst[c] = h;
+                } else {
+                    dst[s] = h;
+                }
             }
         }
         if (g.proj == kProjLinear) {
             dst[0] = dst[W];
             dst[W + 1] = dst[1];
+            // A pole is closed only from a line the files hold whole (every
+            // longitude measured or not, all W posts decoded).
             if (line == 0 && measured) { g.has_north_pole = true; g.north_pole_m = sum / static_cast<double>(measured); }
-            if (line == l.lines - 1 && measured) {
+            if (line == static_cast<uint64_t>(g.full_rows) - 1 && measured) {
                 g.has_south_pole = true;
                 g.south_pole_m = sum / static_cast<double>(measured);
             }

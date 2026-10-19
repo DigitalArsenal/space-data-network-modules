@@ -1,6 +1,6 @@
 // THE MOON LANE'S SIZE, PROJECTED BEFORE IT IS BUILT (moon-terrain-lane-20261013).
 //
-// Runs the real lane on local copies of the PDS LOLA products: terrain-ingest:lola_plan enumerates every unit of the
+// Runs the real lane on local copies of the PDS LOLA products: terrain-ingest:body_plan enumerates every unit of the
 // walk, each request it makes is answered from the local files as the PDS server answers it (label 200, image ranges
 // 206 with Content-Range; If-Match required but its value not checked, lola-frames.mjs localResponse), and
 // terrain-source:tile encodes the SAMPLED tiles of each unit with
@@ -24,7 +24,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { createMoonLane } from "./moon-lane.mjs";
+import { createBodyLane } from "./body-lane.mjs";
 
 const LOLA_DIR = process.env.LOLA_DIR ?? path.join(os.homedir(), "software/data/lola");
 const OUT = process.argv[2];
@@ -169,7 +169,7 @@ function projection(strata, tiles, steps) {
 
 async function main() {
   const t0 = performance.now();
-  const lane = await createMoonLane({ lolaDir: LOLA_DIR });
+  const lane = await createBodyLane({ dataDir: LOLA_DIR });
   const units = [];
   for (let i = 0; ; i++) {
     const u = await lane.planUnit(i);

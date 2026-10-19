@@ -271,8 +271,13 @@ int push_dtt_stream(const char* port, const std::vector<uint8_t>& bytes) {
 // legitimately carry up to FOUR frames each — the corner granules of an extent
 // that straddles a 2x2 granule neighbourhood — so their budget is 4; every
 // other port is single-stream by contract.
+constexpr uint32_t kBodyDemFrames = 16u;
+
 uint32_t port_stream_budget(const char* port_id) {
-    if (std::strcmp(port_id, "dem") == 0 || std::strcmp(port_id, "water") == 0) return 4u;
+    // A body plan reads up to 8 files of a product, a label and a range each (kBodyDemFrames); an Earth plan's
+    // granules stay at four, checked where they are read.
+    if (std::strcmp(port_id, "dem") == 0) return kBodyDemFrames;
+    if (std::strcmp(port_id, "water") == 0) return 4u;
     // respond's "records": the store's result as ordered $FSB chunks of at most 1 MiB, one invocation's worth.
     if (std::strcmp(port_id, "records") == 0) return 64u;
     return 1u;
@@ -3825,12 +3830,13 @@ int tile(void) {
     std::vector<DemGrid> granules;
     uint32_t responses = 0, absent_granules = 0;
     if (body.active) {
-        // A BODY'S PDS PRODUCT: "dem" frame 0 is the product's PDS3 label, frames
-        // 1..3 whole-line ranges of its image (pds_img.hpp). The window is the
-        // union extent plus one post of the densest lattice, which the normals'
-        // halo reads.
+        // A BODY'S PDS PRODUCT: the "dem" frames are, per file of the product,
+        // its PDS3 label and then whole-line ranges of its image (pds_img.hpp),
+        // in the order the planner asked for them. The window is the union
+        // extent plus one post of the densest lattice, which the normals' halo
+        // reads.
         std::vector<HttpFrame> frames;
-        for (uint32_t ordinal = 0; ordinal < 4; ordinal++) {
+        for (uint32_t ordinal = 0; ordinal < kBodyDemFrames; ordinal++) {
             HttpFrame f = http_input_at("dem", ordinal);
             if (!f.present) break;
             if (f.invalid) {
@@ -3849,7 +3855,8 @@ int tile(void) {
             frames.push_back(std::move(f));
         }
         responses = static_cast<uint32_t>(frames.size());
-        if (frames.size() < 2) {
+        const auto is_label = [](const HttpFrame& f) { return f.body.rfind("PDS_VERSION_ID", 0) == 0; };
+        if (frames.size() < 2 || !is_label(frames[0])) {
             plugin_set_error("missing-dem-frame",
                              "a body plan needs the product's PDS3 label on \"dem\" frame 0 and at least one "
                              "whole-line range of its image after it.");
@@ -3859,26 +3866,37 @@ int tile(void) {
             plugin_set_error("unexpected-water-frame", "a body plan carries no water mask; no \"water\" frame is read.");
             return 400;
         }
-        PdsLabel label;
+        std::vector<PdsFile> files;
         std::string error;
-        if (!parse_pds_label(frames[0].body, &label, &error)) {
-            plugin_set_error("pds-label-unsupported", error.c_str());
-            return 422;
-        }
-        if (std::fabs(label.a_axis_m - body.shape.a) > 1e-6 || std::fabs(label.offset_km * 1000.0 - body.shape.a) > 1e-6) {
-            plugin_set_error("pds-reference-mismatch",
-                             "the product's sphere (A_AXIS_RADIUS, OFFSET) is not the plan's REFERENCE_RADII_M: its "
-                             "heights would be stated above the wrong surface.");
-            return 422;
-        }
-        std::vector<PdsBand> bands;
-        for (size_t i = 1; i < frames.size(); i++) {
+        for (size_t i = 0; i < frames.size(); i++) {
+            if (is_label(frames[i])) {
+                PdsFile file;
+                if (!parse_pds_label(frames[i].body, &file.label, &error)) {
+                    plugin_set_error("pds-label-unsupported", error.c_str());
+                    return 422;
+                }
+                if (std::fabs(file.label.a_axis_m - body.shape.a) > 1e-6 ||
+                    std::fabs(file.label.datum_m - body.shape.a) > 1e-6) {
+                    plugin_set_error("pds-reference-mismatch",
+                                     "the product's sphere (A_AXIS_RADIUS, OFFSET) is not the plan's REFERENCE_RADII_M: "
+                                     "its heights would be stated above the wrong surface.");
+                    return 422;
+                }
+                files.push_back(std::move(file));
+                continue;
+            }
             PdsBand band;
-            if (!pds_band_of(label, frames[i].content_range, frames[i].body, &band, &error)) {
+            if (!pds_band_of(files.back().label, frames[i].content_range, frames[i].body, &band, &error)) {
                 plugin_set_error("pds-range-unsupported", error.c_str());
                 return 422;
             }
-            bands.push_back(band);
+            files.back().bands.push_back(band);
+        }
+        for (const PdsFile& f : files) {
+            if (f.bands.empty()) {
+                plugin_set_error("missing-dem-frame", "a product label on \"dem\" is followed by no range of its image.");
+                return 400;
+            }
         }
         const double max_grid = json_number(plan, "maxGridSize", grid);
         const double densest = std::max<double>(grid, std::min(511.0, max_grid));
@@ -3890,13 +3908,19 @@ int tile(void) {
             boxes.push_back(TileExtent{e.west - halo, e.east + halo, std::max(-90.0, e.south - halo),
                                        std::min(90.0, e.north + halo)});
         }
-        DemGrid g = decode_pds_bands(label, bands, boxes, &budget);
+        DemGrid g = decode_pds_files(files, boxes, &budget);
         if (g.budget_refused) return 413;
         if (!g.ok) {
             plugin_set_error("pds-band-gap", g.error.c_str());
             return 422;
         }
         if (g.covers) granules.push_back(std::move(g));
+    }
+    if (!body.active && http_input_at("dem", 4).present) {
+        plugin_set_error("batched-input-frames",
+                         "an Earth plan's \"dem\" port admits four granules; the surplus frames are refused rather "
+                         "than silently discarded.");
+        return 500;
     }
     for (uint32_t ordinal = 0; ordinal < 4 && !body.active; ordinal++) {
         const HttpFrame f = http_input_at("dem", ordinal);

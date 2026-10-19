@@ -903,7 +903,7 @@ void split_job_id(const std::string& job_id, std::string* dataset, std::string* 
 struct PlanHeader {
     std::string tileset, dataset, dataset_name, epoch, retrieved_at, license, license_url, attribution, source_url;
     std::string source_query, water_source_query, vertical_datum_name, etag, remarks;
-    // A body other than Earth (GEOGRAPHIC_TWO_ROOT_BODY on a reference sphere): set only by lola_plan, so an Earth
+    // A body other than Earth (GEOGRAPHIC_TWO_ROOT_BODY on a reference sphere): set only by body_plan, so an Earth
     // header's bytes are unchanged.
     bool body = false;
     std::string center_name, horizontal_datum_name, native_id;
@@ -1089,10 +1089,10 @@ long wrap_lon(long lon) {
 }
 
 
-// ── the Moon's walk (lola_plan.hpp, with terrain-source's polar_stereo.hpp) ──
+// ── a body's walk (body_plan.hpp, with terrain-source's polar_stereo.hpp) ──
 
 #include "polar_stereo.hpp"
-#include "lola_plan.hpp"
+#include "body_plan.hpp"
 
 }  // namespace
 
@@ -1619,25 +1619,32 @@ int ingest_meta(void) {
 }
 
 // ---------------------------------------------------------------------------
-// lola_plan - the MOON's planner (lola_plan.hpp): TimerTick + $FSB mark? -> the
-// product's PDS3 label (dem_0) and three whole-line ranges of its image
-// (dem_1..dem_3) as HttpRequests, the $DTT plan headers of one unit (a body
-// plan: GEOGRAPHIC_TWO_ROOT_BODY, CENTER_NAME, REFERENCE_RADII_M, REFERENCE_SPHERE),
-// the encoder's options (MCFG), pack's options (MCFG: pathPrefix,
-// rootMaxLevel) and the job ($IRM, walk:lola, stride 1).
+// body_plan - a body's planner (body_plan.hpp; config `body`, default moon):
+// TimerTick + $FSB mark? -> per file of the unit's product, its PDS3 label and
+// `range_parts` whole-line ranges of its image (dem_0..dem_15) as HttpRequests,
+// the $DTT plan headers of one unit (a body plan: GEOGRAPHIC_TWO_ROOT_BODY,
+// CENTER_NAME, REFERENCE_RADII_M, REFERENCE_SPHERE), the encoder's options
+// (MCFG), pack's options (MCFG: pathPrefix, rootMaxLevel) and the job ($IRM,
+// walk:<the body's walk>, stride 1).
 // ---------------------------------------------------------------------------
-int lola_plan(void) {
+int body_plan(void) {
     if (refuse_batched()) return 500;
     const std::string config = load_config();
+    const std::string body_name = config_string(config, "body", "moon");
+    const Body* body = body_named(body_name);
+    if (!body) {
+        plugin_set_error("unknown-body", ("body_plan has no table for body \"" + body_name + "\" (moon, mars).").c_str());
+        return 400;
+    }
     const std::string tileset = config_string(config, "tileset_id", "");
     const std::string epoch = config_string(config, "dataset_epoch", "");
     if (tileset.empty() || epoch.empty()) {
         plugin_set_error("missing-tileset-id",
-                         "lola_plan needs tileset_id and dataset_epoch: a walk with no identity or edition cannot be "
+                         "body_plan needs tileset_id and dataset_epoch: a walk with no identity or edition cannot be "
                          "resumed or superseded.");
         return 400;
     }
-    const std::string dataset = config_string(config, "dataset_id", "nasa-lola-gdr");
+    const std::string dataset = config_string(config, "dataset_id", body->dataset_id);
     const int64_t clock = tick_ms();
     if (clock < 0) {
         plugin_set_error("invalid-tick-frame", "the tick frame is not a TimerTick (TICK).");
@@ -1652,9 +1659,9 @@ int lola_plan(void) {
         return 400;
     }
     std::string error;
-    const std::vector<LolaCap> caps = lola_caps(config, &error);
+    const std::vector<BodyCap> caps = body_caps(*body, config, &error);
     if (caps.empty()) {
-        plugin_set_error("invalid-lola-caps", error.c_str());
+        plugin_set_error("invalid-caps", error.c_str());
         return 400;
     }
     const long grid = static_cast<long>(json_number_or(config, "grid_size", 65));
@@ -1662,11 +1669,11 @@ int lola_plan(void) {
     // than 65 posts takes 81 (1.6x the vertices, under the 32 KiB ceiling) rather than jumping to 129, which never
     // fits (measured on the LOLA sample: every tile the 65 rung left over its RMS target was within 1.45x of it).
     const double max_grid = json_number_or(config, "max_grid_size", 321);
-    const double range_bytes = json_number_or(config, "lola_max_range_bytes", kLolaDefaultRangeBytes);
+    const double range_bytes = json_number_or(config, "max_range_bytes", kBodyDefaultRangeBytes);
     if (grid < 5 || grid > 255 || max_grid < grid || max_grid > 511 || !(range_bytes >= 1024.0 * 1024.0)) {
-        plugin_set_error("invalid-lola-options",
+        plugin_set_error("invalid-body-options",
                          "grid_size must lie in [5, 255], max_grid_size in [grid_size, 511] and "
-                         "lola_max_range_bytes be at least 1 MiB.");
+                         "max_range_bytes be at least 1 MiB.");
         return 400;
     }
 
@@ -1678,62 +1685,78 @@ int lola_plan(void) {
     const std::string job_id = mark_job_id(dataset, tileset, epoch);
     const MarkState mark = read_mark(stream, job_id);
     const long long start = mark.found && mark.next_index > 0 ? mark.next_index : 0;
-    LolaUnit unit;
+    BodyUnit unit;
     long long total = 0;
-    if (!lola_unit_at(caps, max_grid, range_bytes, start, &unit, &total)) {
+    if (!body_unit_at(*body, caps, max_grid, range_bytes, start, &unit, &total)) {
         plugin_set_backlog_remaining(0);  // the walk is drained: a clean no-op
         return 0;
     }
-    const LolaProduct& product = *unit.cap->product;
-    const std::string base = config_string(config, "lola_base_url", kLolaBaseUrl);
-    const std::string img_url = base + product.path + ".img", lbl_url = base + product.path + ".lbl";
-    const bool if_match = json_number_or(config, "lola_verify_etag", 1) != 0;
+    const BodyProduct& product = *unit.cap->product;
+    const std::string base = config_string(config, "base_url", body->base_url);
+    const bool if_match = json_number_or(config, "verify_etag", 1) != 0;
     const long timeout_ms = config_timeout_ms(config);
 
-    // dem_0: the label, so the geometry the encoder decodes with is the source's own.
-    if (push_typed("dem_0", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest",
-                   granule_request(lbl_url, timeout_ms)) < 0)
-        return 500;
-    // dem_1..3: the unit's lines as three whole-line ranges.
-    const uint64_t record_bytes = product.samples * 4, lines = unit.last_line - unit.first_line + 1;
-    const uint64_t per = (lines + 2) / 3;
-    for (int part = 0; part < 3; part++) {
-        const uint64_t a = unit.first_line + std::min<uint64_t>(lines - 1, per * part);
-        const uint64_t b = std::min<uint64_t>(unit.last_line, unit.first_line + per * (part + 1) - 1);
-        const std::string range = "bytes=" + std::to_string(a * record_bytes) + "-" +
-                                  std::to_string((std::max(a, b) + 1) * record_bytes - 1);
-        flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
-        std::vector<flatbuffers::Offset<R::Header>> headers;
-        headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
-        if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", product.etag));
-        R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
-                                                                  static_cast<uint32_t>(timeout_ms), 0, nullptr));
+    // Per file the unit's lines cross: the label (so the geometry the encoder decodes with is the source's own), then
+    // the file's share of the lines as `range_parts` whole-line ranges.
+    size_t frame = 0;
+    std::string files_read;
+    for (const BodyFile& file : product.files) {
+        uint64_t first = 0, last = 0;
+        if (!body_file_lines(product, file, unit, &first, &last)) continue;
+        if (frame + 1 + product.range_parts > kBodyMaxDemFrames) {
+            plugin_set_error("too-many-files", "a unit's files need more than the flow's 16 dem requests.");
+            return 500;
+        }
+        const std::string img_url = base + file.path + ".img", lbl_url = base + file.path + ".lbl";
+        files_read += (files_read.empty() ? "" : " ") + std::string(file.path);
         char port[8];
-        std::snprintf(port, sizeof(port), "dem_%d", part + 1);
-        if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b2)) < 0) return 500;
+        std::snprintf(port, sizeof(port), "dem_%zu", frame++);
+        if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest",
+                       granule_request(lbl_url, timeout_ms)) < 0)
+            return 500;
+        const uint64_t record_bytes = product.samples * product.sample_bytes, lines = last - first + 1;
+        const uint64_t parts = product.range_parts, per = (lines + parts - 1) / parts;
+        for (uint64_t part = 0; part < parts; part++) {
+            const uint64_t a = first + std::min<uint64_t>(lines - 1, per * part);
+            const uint64_t b = std::min<uint64_t>(last, first + per * (part + 1) - 1);
+            const std::string range = "bytes=" + std::to_string(a * record_bytes) + "-" +
+                                      std::to_string((std::max(a, b) + 1) * record_bytes - 1);
+            flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
+            std::vector<flatbuffers::Offset<R::Header>> headers;
+            headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
+            if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", file.etag));
+            R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
+                                                                      static_cast<uint32_t>(timeout_ms), 0, nullptr));
+            std::snprintf(port, sizeof(port), "dem_%zu", frame++);
+            if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b2)) < 0)
+                return 500;
+        }
     }
 
     long max_level = 0;
-    for (const LolaCap& c : caps) max_level = std::max(max_level, c.max_level);
+    for (const BodyCap& c : caps) max_level = std::max(max_level, c.max_level);
     PlanHeader header;
     header.tileset = tileset;
     header.dataset = dataset;
-    header.dataset_name = config_string(config, "dataset_name", "LRO LOLA gridded data records (LOLA GDR)");
+    header.dataset_name = config_string(config, "dataset_name", body->dataset_name);
     header.epoch = std::string(product.created) + "T00:00:00.000Z";
     header.retrieved_at = retrieved_at;
     header.license = config_string(config, "license", "Public domain (NASA)");
     header.license_url = config_string(config, "license_url", "https://www.nasa.gov/nasa-brand-center/images-and-media/");
-    header.attribution = config_string(config, "attribution", "LOLA: NASA/GSFC (Smith et al.)");
-    header.source_url = img_url;
-    header.native_id = product.lidvid;
-    header.vertical_datum_name = config_string(config, "vertical_datum_name", "LOLA reference sphere 1737.4 km");
+    header.attribution = config_string(config, "attribution", body->attribution);
+    // The product's one file, or its directory when the product is a set of files.
+    const std::string first_path = product.files[0].path;
+    header.source_url = product.files.size() == 1 ? base + first_path + ".img"
+                                                  : base + first_path.substr(0, first_path.rfind('/') + 1);
+    header.native_id = product.native_id;
+    header.vertical_datum_name = config_string(config, "vertical_datum_name", body->vertical_datum_name);
     header.source_class = dttSourceClass_SPACEBORNE_ALTIMETRIC;
     header.grid = static_cast<uint32_t>(grid);
     header.max_level = static_cast<uint32_t>(max_level);
     header.body = true;
-    header.center_name = config_string(config, "center_name", "MOON");
-    header.radius_m = kMoonRadiusM;
-    header.horizontal_datum_name = config_string(config, "horizontal_datum_name", "MOON_ME (DE421 mean Earth/polar axis)");
+    header.center_name = config_string(config, "center_name", body->center_name);
+    header.radius_m = body->radius_m;
+    header.horizontal_datum_name = config_string(config, "horizontal_datum_name", body->horizontal_datum_name);
     Bytes plan;
     for (const auto& t : unit.tiles) {
         PlanHeader h = header;
@@ -1761,7 +1784,7 @@ int lola_plan(void) {
     {
         std::vector<std::unique_ptr<R::ConfigEntryT>> entries;
         entries.push_back(number("maxGridSize", max_grid));
-        // The level-0 RMS target (15 m at level 7, the lane's acceptance), judged as RMS over the source posts.
+        // The level-0 RMS target (15 m at level 7), judged as RMS over the source posts.
         entries.push_back(number("levelZeroErrorM", json_number_or(config, "level_zero_error_m", 1920)));
         auto metric = std::make_unique<R::ConfigEntryT>();
         metric->KEY = "errorMetric";
@@ -1777,9 +1800,9 @@ int lola_plan(void) {
         auto prefix = std::make_unique<R::ConfigEntryT>();
         prefix->KEY = "pathPrefix";
         prefix->KIND = R::configValueKind_String;
-        prefix->STRING_VALUE = config_string(config, "path_prefix", "terrain/301");
+        prefix->STRING_VALUE = config_string(config, "path_prefix", body->path_prefix);
         entries.push_back(std::move(prefix));
-        entries.push_back(number("rootMaxLevel", static_cast<double>(kLolaRootMaxLevel)));
+        entries.push_back(number("rootMaxLevel", static_cast<double>(kBodyRootMaxLevel)));
         if (push_typed("pack", "ModuleConfig.fbs", R::ModuleConfigIdentifier(), "ModuleConfig",
                        module_config(std::move(entries))) < 0)
             return 500;
@@ -1787,16 +1810,18 @@ int lola_plan(void) {
 
     Job job;
     job.job_id = job_id;
-    job.provider = config_string(config, "provider_id", "nasa-lola");
+    job.provider = config_string(config, "provider_id", body->provider_id);
     job.source_url = base;
     job.epoch = epoch;
     job.updated_at = retrieved_at;
-    job.walk = "lola";
+    job.walk = body->walk;
     job.first_index = start;
     job.next_index = start + 1;
     job.records_committed = mark.found && mark.stored_total > 0 ? mark.stored_total : 0;
-    job.notes = std::string("product ") + product.key + (unit.root ? ", levels 0-2" : ", level " + std::to_string(unit.level)) +
-                ", lines " + std::to_string(unit.first_line) + "-" + std::to_string(unit.last_line) + ", " +
+    const std::string where = product.files.size() == 1 ? std::string() : " (" + files_read + ")";
+    job.notes = std::string("product ") + product.key + where +
+                (unit.root ? ", levels 0-2" : ", level " + std::to_string(unit.level)) + ", lines " +
+                std::to_string(unit.first_line) + "-" + std::to_string(unit.last_line) + ", " +
                 std::to_string(unit.tiles.size()) + " tiles in " + std::to_string(unit.blocks) + " files, unit " +
                 std::to_string(start) + " of " + std::to_string(total);
     if (push_typed("job", "IRM.fbs", "$IRM", "IRM", build_irm(job, false)) < 0) return 500;
@@ -1820,8 +1845,14 @@ int announce_files(void) {
         return 400;
     }
     const std::string config = load_config();
-    const std::string provider = config_string(config, "provider_id", "nasa-lola");
-    const std::string source = config_string(config, "source_name", "moon-terrain");
+    const Body* body = body_of_walk(job.walk);
+    if (!body) body = body_named(config_string(config, "body", "moon"));
+    if (!body) {
+        plugin_set_error("unknown-body", "announce_files: the job's walk names no body this module has a table for.");
+        return 400;
+    }
+    const std::string provider = config_string(config, "provider_id", body->provider_id);
+    const std::string source = config_string(config, "source_name", body->source_name);
     Bytes records;
     uint32_t files = 0;
     for (uint32_t i = 0; i < plugin_get_input_count(); i++) {
@@ -1877,7 +1908,7 @@ int announce_files(void) {
     meta.TAGS->BATCH_ID = tileset + "@" + epoch + "#" + std::to_string(job.first_index);
     meta.TAGS->SOURCE_URL = job.source_url;
     meta.TAGS->LICENSE = config_string(config, "license", "Public domain (NASA)");
-    meta.TAGS->CITATION = config_string(config, "attribution", "LOLA: NASA/GSFC (Smith et al.)");
+    meta.TAGS->CITATION = config_string(config, "attribution", body->attribution);
     meta.RECONCILE = R::reconcileMode_None;  // a unit is a window of the tileset, never its whole set
     meta.PROVENANCE = std::make_unique<R::ProvenanceT>();
     meta.PROVENANCE->SOURCE_URL = job.source_url;
@@ -1963,15 +1994,15 @@ int publish_request(void) {
     }
     const std::string stamped = config_string(config, "retrieved_at", "");
     if (!stamped.empty()) job.updated_at = stamped;
-    if (job.walk == "lola") {
-        // The Moon's walk: its length is the same pure function of the config lola_plan walks.
+    if (const Body* body = body_of_walk(job.walk)) {
+        // A body's walk: its length is the same pure function of the config body_plan walks.
         std::string error;
-        const std::vector<LolaCap> caps = lola_caps(config, &error);
+        const std::vector<BodyCap> caps = body_caps(*body, config, &error);
         long long total = 0;
-        LolaUnit unused;
+        BodyUnit unused;
         if (!caps.empty())
-            lola_unit_at(caps, json_number_or(config, "max_grid_size", 321),
-                         json_number_or(config, "lola_max_range_bytes", kLolaDefaultRangeBytes), -1, &unused, &total);
+            body_unit_at(*body, caps, json_number_or(config, "max_grid_size", 321),
+                         json_number_or(config, "max_range_bytes", kBodyDefaultRangeBytes), -1, &unused, &total);
         job.complete = total > 0 && job.next_index >= total;
     } else if (job.walk == "cell") {
         // The walk's length is a pure function of the config, re-derived exactly as granule_plan derives it.

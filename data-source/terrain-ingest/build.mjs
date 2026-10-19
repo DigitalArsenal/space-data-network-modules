@@ -48,7 +48,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 // $PNM is the Moon lane's publication record (announce_files).
 const headers = await Promise.all(["IRM", "DTT", "FSO", "FSB", "PNM"].map((code) => readSdsHeader(code, import.meta.url)));
 
-// The module's own headers (src/lola_plan.hpp) and terrain-source's polar projection (polar_stereo.hpp, so the
+// The module's own headers (src/body_plan.hpp) and terrain-source's polar projection (polar_stereo.hpp, so the
 // planner and the decoder share one definition of where a tile lies in a polar product) are inlined where the
 // implementation includes them.
 const includeRoots = [path.join(packageRoot, "src"), path.join(packageRoot, "..", "terrain-source", "src")];

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
   "name": "Terrain Tile Ingest Scheduler Nodes",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: pure nodes read a durable $IRM resume mark (through hostcap/flatsql-query), walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded plans ($DTT header records) and the Copernicus GLO-30 DEM and water-body granule HttpRequests, author the storage attribution (IngestRequest), and advance the mark only from a verified store (IngestResult -> $IRM for hostcap/storage-write). OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is fetched and a 404 is no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it. TYPED CONTRACTS 1.0: FlatBuffers only - TimerTick, HttpRequest, IngestRequest/IngestResult, FlowNotice and ModuleConfig (module-sdk runtime types), $IRM, $DTT, $FSO and $FSB (SDS) - no JSON and no base64 between modules; node config through plugin.getConfig (SDS $PIV, ConfigEntry list \"entries\", nested values under dotted keys such as regions.0.west). NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -705,8 +705,8 @@
       "drainPolicy": "single-shot"
     },
     {
-      "methodId": "lola_plan",
-      "displayName": "Plan one unit of the Moon's LOLA terrain walk",
+      "methodId": "body_plan",
+      "displayName": "Plan one unit of a body's terrain walk",
       "inputPorts": [
         {
           "portId": "tick",
@@ -765,13 +765,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "GET the unit's LOLA product PDS3 label (.lbl), so the encoder decodes with the source's own geometry."
+              "description": "GET a file's PDS3 label (.lbl), so the encoder decodes with the source's own geometry."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "GET the unit's LOLA product PDS3 label (.lbl), so the encoder decodes with the source's own geometry."
+          "description": "dem_0: the first file's label."
         },
         {
           "portId": "dem_1",
@@ -786,13 +786,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "GET part 1 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "GET part 1 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
         },
         {
           "portId": "dem_2",
@@ -807,13 +807,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "GET part 2 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "GET part 2 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
         },
         {
           "portId": "dem_3",
@@ -828,13 +828,265 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "GET part 3 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "GET part 3 of 3 of the unit's image lines: one whole-line byte range (range: bytes=a-b, a multiple of RECORD_BYTES), with if-match on the product's ETag unless lola_verify_etag is 0, so a reprocessed product answers 412 and stops the run."
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_4",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_5",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_6",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_7",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_8",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_9",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_10",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_11",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_12",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_13",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_14",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+        },
+        {
+          "portId": "dem_15",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET the next request of the unit, in order: per file its PDS3 label (.lbl), then range_parts whole-line byte ranges of its image (range: bytes=a-b, a multiple of RECORD_BYTES) with if-match on the file's ETag unless verify_etag is 0, so a reprocessed file answers 412 and stops the run. Absent when the unit needs fewer requests."
         },
         {
           "portId": "plan",
@@ -849,13 +1101,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The encoder's body plan for one unit: a size-prefixed $DTT stream of HEADER records (PAYLOAD present and empty), one per tile: TILESET_ID, TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY, LEVEL/X/Y, GRID_WIDTH/HEIGHT grid_size, MAX_LEVEL the deepest cap, SOURCE_CLASS SPACEBORNE_ALTIMETRIC, VERTICAL_DATUM REFERENCE_SPHERE, VERTICAL_DATUM_NAME, HORIZONTAL_DATUM_NAME, CENTER_NAME (MOON), REFERENCE_RADII_M [1737400], PROVENANCE (DATASET_ID nasa-lola-gdr, DATASET_EPOCH the product's PRODUCT_CREATION_TIME, RETRIEVED_AT, LICENSE public domain, ATTRIBUTION, SOURCE_URL the .img, NATIVE_ID the PDS4 LIDVID)."
+              "description": "The encoder's body plan for one unit: a size-prefixed $DTT stream of HEADER records (PAYLOAD present and empty), one per tile: TILESET_ID, TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY, LEVEL/X/Y, GRID_WIDTH/HEIGHT grid_size, MAX_LEVEL the deepest cap, SOURCE_CLASS SPACEBORNE_ALTIMETRIC, VERTICAL_DATUM REFERENCE_SPHERE, VERTICAL_DATUM_NAME, HORIZONTAL_DATUM_NAME, CENTER_NAME (MOON, MARS), REFERENCE_RADII_M ([1737400], [3396000]), PROVENANCE (DATASET_ID nasa-lola-gdr, nasa-mola-megdr, DATASET_EPOCH the product's PRODUCT_CREATION_TIME, RETRIEVED_AT, LICENSE public domain, ATTRIBUTION, SOURCE_URL the .img or the product's directory, NATIVE_ID the PDS4 LIDVID or PDS3 DATA_SET_ID:PRODUCT)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The encoder's body plan for one unit: a size-prefixed $DTT stream of HEADER records (PAYLOAD present and empty), one per tile: TILESET_ID, TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY, LEVEL/X/Y, GRID_WIDTH/HEIGHT grid_size, MAX_LEVEL the deepest cap, SOURCE_CLASS SPACEBORNE_ALTIMETRIC, VERTICAL_DATUM REFERENCE_SPHERE, VERTICAL_DATUM_NAME, HORIZONTAL_DATUM_NAME, CENTER_NAME (MOON), REFERENCE_RADII_M [1737400], PROVENANCE (DATASET_ID nasa-lola-gdr, DATASET_EPOCH the product's PRODUCT_CREATION_TIME, RETRIEVED_AT, LICENSE public domain, ATTRIBUTION, SOURCE_URL the .img, NATIVE_ID the PDS4 LIDVID)."
+          "description": "The encoder's body plan for one unit: a size-prefixed $DTT stream of HEADER records (PAYLOAD present and empty), one per tile: TILESET_ID, TILING_SCHEME GEOGRAPHIC_TWO_ROOT_BODY, LEVEL/X/Y, GRID_WIDTH/HEIGHT grid_size, MAX_LEVEL the deepest cap, SOURCE_CLASS SPACEBORNE_ALTIMETRIC, VERTICAL_DATUM REFERENCE_SPHERE, VERTICAL_DATUM_NAME, HORIZONTAL_DATUM_NAME, CENTER_NAME (MOON, MARS), REFERENCE_RADII_M ([1737400], [3396000]), PROVENANCE (DATASET_ID nasa-lola-gdr, nasa-mola-megdr, DATASET_EPOCH the product's PRODUCT_CREATION_TIME, RETRIEVED_AT, LICENSE public domain, ATTRIBUTION, SOURCE_URL the .img or the product's directory, NATIVE_ID the PDS4 LIDVID or PDS3 DATA_SET_ID:PRODUCT)."
         },
         {
           "portId": "options",
@@ -912,7 +1164,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The job: the $IRM this unit will make durable once its files are stored - JOB_ID dataset@tileset@epoch, PROVIDER_ID (nasa-lola), SOURCE (SOURCE_URL the PDS base, SOURCE_VERSION the edition), STATE IN_PROGRESS, RANGE_MODE PART_INDEX, LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the unit + 1, RECORDS_COMMITTED what the resumed mark had committed, UPDATED_AT the run's clock, TAGS lane:terrain + walk:lola, NOTES product/level/lines/tiles."
+              "description": "The job: the $IRM this unit will make durable once its files are stored - JOB_ID dataset@tileset@epoch, PROVIDER_ID (the body's: nasa-lola, nasa-mola), SOURCE (SOURCE_URL the PDS base, SOURCE_VERSION the edition), STATE IN_PROGRESS, RANGE_MODE PART_INDEX, LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the unit + 1, RECORDS_COMMITTED what the resumed mark had committed, UPDATED_AT the run's clock, TAGS lane:terrain + walk:<the body's walk: lola, mola>, NOTES product/level/lines/tiles."
             }
           ],
           "minStreams": 1,
@@ -921,7 +1173,7 @@
           "description": "The run contract for this unit."
         }
       ],
-      "description": "The Moon's planner (GEOGRAPHIC_TWO_ROOT_BODY on the 1737.4 km reference sphere). Walks the NASA LRO LOLA gridded products in the PDS Geosciences Node (public domain) by caps (config lola_caps; default ldem_4 L0-3, ldem_16 L4-5 and ldem_64 L6-7 global, ldem_75{s,n}_240m L8 |lat| >= 75, ldem_75{s,n}_120m L9 |lat| >= 80, ldem_75s_60m L10 lat <= -85; a tile is built from a cap only when its whole extent lies inside the band). Unit 0 is every tile of levels 0-2 (the root file); after it, per cap and level, a global product is walked one BLOCK ROW (four tile rows) per unit and a polar product by whole 4x4 blocks sorted by the first image line their footprint touches, at most 64 blocks and lola_max_range_bytes (default 72 MiB) of lines per unit, so every packed block file is complete in one unit. Each unit asks for the product's label and THREE whole-line ranges of its image; the enumeration is a pure function of the config, so the $IRM mark is one integer (the next unit). A drained walk is a clean no-op.",
+      "description": "A body's planner (GEOGRAPHIC_TWO_ROOT_BODY on the body's reference sphere; config body: moon (default) or mars, each a table of its PDS products and default caps). Moon: NASA LRO LOLA gridded products (public domain), ldem_4 L0-3, ldem_16 L4-5, ldem_64 L6-7 global, ldem_75{s,n}_240m L8 |lat| >= 75, ldem_75{s,n}_120m L9 |lat| >= 80, ldem_75s_60m L10 lat <= -85. Mars: NASA MGS MOLA MEGDR (public domain), megr 4 ppd L0-3, 16 ppd L4-5, 32 ppd L6, 64 ppd (4 files) L7, 128 ppd (16 files, to 88 degrees) L8 within 87.1875, the 512 ppd polar products L8 beyond 87.1875, L9 beyond 78.75 and L10 beyond 84.375. A tile is built from a cap (config caps) only when its whole extent lies inside the band. Unit 0 is every tile of levels 0-2 (the root file); after it, per cap and level, a simple cylindrical product is walked one BLOCK ROW (four tile rows; runs of at most 64 blocks by longitude) per unit, reading the lines from every file of the product they cross, and a polar product by whole 4x4 blocks sorted by the first image line their footprint touches, at most 64 blocks and max_range_bytes (default 72 MiB) of lines per unit, so every packed block file is complete in one unit. Each file is asked for as its label then range_parts whole-line ranges (If-Match on its ETag), at most 16 requests (dem_0..dem_15); the enumeration is a pure function of the config, so the $IRM mark is one integer (the next unit). A drained walk is a clean no-op.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },
@@ -942,13 +1194,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The unit's job ($IRM) from lola_plan."
+              "description": "The unit's job ($IRM) from body_plan."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The unit's job ($IRM) from lola_plan."
+          "description": "The unit's job ($IRM) from body_plan."
         },
         {
           "portId": "added",
@@ -1007,16 +1259,16 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The IngestRequest the storage lane stores the batch under: SCHEMA PNM, provider nasa-lola, source moon-terrain (config provider_id / source_name), BATCH_ID tileset@epoch#unit, LICENSE and CITATION, RECONCILE None, NORMALIZED_COUNT / SCHEMA_COUNTS the file count."
+              "description": "The IngestRequest the storage lane stores the batch under: SCHEMA PNM, the body's provider and source (nasa-lola / moon-terrain, nasa-mola / mars-terrain; config provider_id / source_name), BATCH_ID tileset@epoch#unit, LICENSE and CITATION, RECONCILE None, NORMALIZED_COUNT / SCHEMA_COUNTS the file count."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The IngestRequest the storage lane stores the batch under: SCHEMA PNM, provider nasa-lola, source moon-terrain (config provider_id / source_name), BATCH_ID tileset@epoch#unit, LICENSE and CITATION, RECONCILE None, NORMALIZED_COUNT / SCHEMA_COUNTS the file count."
+          "description": "The IngestRequest the storage lane stores the batch under: SCHEMA PNM, the body's provider and source (nasa-lola / moon-terrain, nasa-mola / mars-terrain; config provider_id / source_name), BATCH_ID tileset@epoch#unit, LICENSE and CITATION, RECONCILE None, NORMALIZED_COUNT / SCHEMA_COUNTS the file count."
         }
       ],
-      "description": "Completes the host adapter's IPFS add results into the $PNM records the Moon's terrain is published as (PNM.fbs, provider nasa-lola, source moon-terrain: the console resolves the files through SOLAR_SYSTEM_LANES.terrain and fetches each by CID) and authors the IngestRequest the storage lane cannot invent. publish_request then advances the walk:lola mark from the verified store result.",
+      "description": "Completes the host adapter's IPFS add results into the $PNM records a body's terrain is published as (PNM.fbs; the Moon nasa-lola / moon-terrain, Mars nasa-mola / mars-terrain: the console resolves the files through SOLAR_SYSTEM_LANES.terrain and fetches each by CID) and authors the IngestRequest the storage lane cannot invent. publish_request then advances the body's walk mark from the verified store result.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
