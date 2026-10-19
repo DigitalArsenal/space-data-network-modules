@@ -35,7 +35,7 @@ export function moonTerrainFlow({
     edge("tile", "records", "pack", "records"), edge("plan", "pack", "pack", "options"), edge("tile", "report", "egress", "result"),
     edge("pack", "file", "publish", "file"), edge("pack", "names", "publish", "names"),
     edge("publish", "added", "announce", "added"), edge("plan", "job", "announce", "job"),
-    edge("announce", "records", "ingest", "records"), edge("announce", "meta", "ingest", "meta"),
+    edge("announce", "records", "ingest", "pnm_records"), edge("announce", "meta", "ingest", "meta"),
     edge("ingest", "result", "mark", "result"), edge("announce", "meta", "mark", "meta"), edge("plan", "job", "mark", "job"),
     edge("mark", "mark", "mark_write", "record"), edge("mark", "mark", "egress", "result"),
     edge("mark_write", "result", "egress", "result"), edge("ingest", "result", "egress", "result"),
