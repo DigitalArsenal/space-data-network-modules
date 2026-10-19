@@ -1,12 +1,13 @@
 // Round-trip verification for the CAT/REC FlatBuffer ingestion path. The
-// OrbPro wrapper test asserted the same behaviour through `createSGP4Propagator`,
-// but the SDN-side plugin has no JS wrapper — so these tests drive `upsert_cat`
-// directly against the raw wasm export and then re-read the record through
-// the plugin's JSON helper and `catalog_query` to verify the ingested data is
-// available on every read path.
+// SDN-side plugin has no JS wrapper, so these tests drive `upsert_cat`
+// directly against the raw wasm export, then read the stored record back as
+// its `$CAT` FlatBuffer (plugin_get_cat_record_flatbuffer) and through
+// `catalog_query`, so the ingested data is checked on every read path.
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as flatbuffers from "flatbuffers";
+import { CAT } from "spacedatastandards.org/lib/js/CAT/CAT.js";
 
 import {
   CatalogQueryKind,
@@ -21,24 +22,25 @@ import {
   loadRawSgp4Module,
 } from "./lib/pivInvokeHelper.mjs";
 
-function readCatRecordJson(module, noradCatId) {
-  const required = module._plugin_get_cat_record_json_size(noradCatId);
-  assert.ok(required > 1, `expected JSON payload for CAT ${noradCatId}`);
-  const pointer = module._malloc(required);
+function readCatRecordBytes(module, noradCatId) {
+  const size = module._plugin_get_cat_record_flatbuffer_size(noradCatId);
+  assert.ok(size > 8, `expected a $CAT FlatBuffer for CAT ${noradCatId}`);
+  const pointer = module._malloc(size);
   try {
-    const result = module._plugin_get_cat_record_json(
-      noradCatId,
-      pointer,
-      required,
+    assert.equal(
+      module._plugin_get_cat_record_flatbuffer(noradCatId, pointer, size),
+      size,
     );
-    assert.ok(result >= 0);
-    const bytes = new Uint8Array(
-      module.HEAPU8.slice(pointer, pointer + required - 1),
-    );
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return module.HEAPU8.slice(pointer, pointer + size);
   } finally {
     module._free(pointer);
   }
+}
+
+function readCatRecord(module, noradCatId) {
+  const bb = new flatbuffers.ByteBuffer(readCatRecordBytes(module, noradCatId));
+  assert.ok(CAT.bufferHasIdentifier(bb));
+  return CAT.getRootAsCAT(bb);
 }
 
 test("upsert_cat ingests direct $CAT frames and exposes them through catalog_query", async () => {
@@ -62,15 +64,16 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
     });
     assert.equal(ingestResult.response.STATUS_CODE, 0);
 
+    const catBytes = encodeCatPayload({
+      noradId: 25544,
+      objectName: "ISS CAT",
+      objectId: "1998-067A",
+    });
     const upsertResult = invokePiv(module, {
       methodId: "upsert_cat",
       inputs: [
         {
-          bytes: encodeCatPayload({
-            noradId: 25544,
-            objectName: "ISS CAT",
-            objectId: "1998-067A",
-          }),
+          bytes: catBytes,
           portId: "catalog",
           schemaName: "orbpro.sds.cat",
           fileIdentifier: "$CAT",
@@ -79,7 +82,9 @@ test("upsert_cat ingests direct $CAT frames and exposes them through catalog_que
     });
     assert.equal(upsertResult.response.STATUS_CODE, 0);
 
-    assert.equal(readCatRecordJson(module, 25544).OBJECT_NAME, "ISS CAT");
+    // A direct `$CAT` is stored and answered verbatim.
+    assert.deepEqual(readCatRecordBytes(module, 25544), catBytes);
+    assert.equal(readCatRecord(module, 25544).OBJECT_NAME(), "ISS CAT");
 
     const rowResult = invokePiv(module, {
       methodId: "catalog_query",
@@ -146,7 +151,7 @@ test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT met
       }).response.STATUS_CODE,
       0,
     );
-    assert.equal(readCatRecordJson(module, 25544).OBJECT_NAME, "ISS CAT");
+    assert.equal(readCatRecord(module, 25544).OBJECT_NAME(), "ISS CAT");
 
     assert.equal(
       invokePiv(module, {
@@ -169,9 +174,9 @@ test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT met
       0,
     );
 
-    const catRecord = readCatRecordJson(module, 25544);
-    assert.equal(catRecord.OBJECT_NAME, "ISS REC");
-    assert.equal(catRecord.NORAD_CAT_ID, 25544);
+    const catRecord = readCatRecord(module, 25544);
+    assert.equal(catRecord.OBJECT_NAME(), "ISS REC");
+    assert.equal(catRecord.NORAD_CAT_ID(), 25544);
   } finally {
     module._plugin_destroy();
   }

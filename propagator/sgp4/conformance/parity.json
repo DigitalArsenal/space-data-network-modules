@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "propagator/sgp4",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347",
-  "moduleSha256": "fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347",
+  "artifactSha256": "2b96be20c3d011c6337eb4cb3874946f601cebd7ba73d1100e5be03e65780f8f",
+  "moduleSha256": "2b96be20c3d011c6337eb4cb3874946f601cebd7ba73d1100e5be03e65780f8f",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 8,
-      "durationMs": 1077
+      "runs": 10,
+      "durationMs": 1075
     },
     {
       "lane": "wasmedge",
-      "runs": 8,
-      "durationMs": 9278
+      "runs": 10,
+      "durationMs": 9054
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 8,
-      "durationMs": 12399
+      "runs": 10,
+      "durationMs": 27552
     }
   ],
   "cases": [
@@ -29,10 +29,12 @@
     "propagate-state-gcrf-by-catalog-number",
     "propagate-ephemeris-element-sets-gcrf",
     "propagate-ephemeris-span-teme",
+    "upsert-cat-direct",
+    "upsert-cat-rec",
     "refuse-handle-mismatch",
     "refuse-unknown-object"
   ],
-  "comparisons": 40,
+  "comparisons": 50,
   "failures": [],
   "runs": [
     {
@@ -97,6 +99,26 @@
     },
     {
       "lane": "browser",
+      "caseId": "upsert-cat-direct",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "browser",
+      "caseId": "upsert-cat-rec",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "browser",
       "caseId": "refuse-handle-mismatch",
       "threadCount": 1,
       "exitClass": "ok",
@@ -177,6 +199,26 @@
     },
     {
       "lane": "wasmedge",
+      "caseId": "upsert-cat-direct",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "upsert-cat-rec",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "wasmedge",
       "caseId": "refuse-handle-mismatch",
       "threadCount": 1,
       "exitClass": "ok",
@@ -254,6 +296,26 @@
       "spawnCount": null,
       "stdoutSha256": "36d5605b5d9f5726c6676fc1ed79c3dcc668d088ae639f51a31b8632aa353a70",
       "stdoutLength": 13936
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "upsert-cat-direct",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "upsert-cat-rec",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
     },
     {
       "lane": "docker-wasmedge",

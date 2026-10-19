@@ -19,6 +19,15 @@ SDS PIV invoke surface (`plugin_invoke_stream`). Methods:
 
 Objects with one NORAD number share one entity and its element-set history.
 
+### Catalog records (`$CAT`)
+
+The catalog keeps each `$CAT` as a FlatBuffer (1.3.0): a direct `$CAT`
+byte for byte, one carried in a `$REC` re-finished as its own `$CAT`. The
+direct-call pair `plugin_get_cat_record_flatbuffer_size` /
+`plugin_get_cat_record_flatbuffer` answers that FlatBuffer by NORAD number.
+Records enter only as FlatBuffers (`upsert_cat`,
+`plugin_catalog_upsert_cat_flatbuffer_stream`).
+
 ### Naming objects
 
 `entity_handles` index the entities in ingestion order: after ingesting A

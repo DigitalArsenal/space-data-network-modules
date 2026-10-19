@@ -175,11 +175,9 @@ set(SGP4_EXPORTED_FUNCTIONS "\
 \"_plugin_catalog_begin_transaction\",\
 \"_plugin_catalog_commit_transaction\",\
 \"_plugin_catalog_rollback_transaction\",\
-\"_plugin_catalog_upsert_cat_record\",\
 \"_plugin_catalog_upsert_cat_flatbuffer_stream\",\
-\"_plugin_catalog_upsert_cat_records_packed\",\
-\"_plugin_get_cat_record_json_size\",\
-\"_plugin_get_cat_record_json\",\
+\"_plugin_get_cat_record_flatbuffer_size\",\
+\"_plugin_get_cat_record_flatbuffer\",\
 \"_get_satellite_count\",\
 \"_get_orbital_period\",\
 \"_get_tle_epoch\",\

@@ -18,10 +18,8 @@
 //   plugin_query_entity_rows_by_name(q,out,max)    → SQL name query (rows + names)
 //   plugin_query_visibility_mask_by_name(q,mask,n) → SQL name query (0/1 mask)
 //   plugin_get_entity_catalog_row(i,out)           → row metadata by entity index
-//   plugin_catalog_upsert_cat_record(...)          → CAT ingest/index upsert
 //   plugin_catalog_upsert_cat_flatbuffer_stream(...) → CAT/REC FlatBuffer ingest
-//   plugin_catalog_upsert_cat_records_packed(...)  → bulk CAT ingest/index upsert
-//   plugin_get_cat_record_json_*                   → CAT payload retrieval
+//   plugin_get_cat_record_flatbuffer_*             → the stored `$CAT` FlatBuffer
 //   plugin_entity_omm_count(entity_index)           → count of OMMs
 //   plugin_entity_list_omm(entity_index, out, max)  → list epoch JDs
 //   plugin_entity_remove_omm(entity_index, jd)      → remove by epoch
@@ -46,6 +44,7 @@
 #include "generated/StateVector_generated.h"
 #include "generated/sds/PIV_generated.h"
 #include "generated/sds/OEM_generated.h"
+#include "generated/sds/CAT_generated.h"
 // TEME and GCRF output: foundation/frames' axis engine over the vendored ERFA.
 #include "axis_engine.hpp"
 #include <flatbuffers/flatbuffers.h>
@@ -90,10 +89,14 @@ struct PendingCatalogMetadata {
     std::string objectId;
 };
 
+// A `$CAT` record on its way into the catalog: the index columns and the
+// record itself as a standalone `$CAT` FlatBuffer (verbatim for a direct
+// `$CAT`, the same table re-finished as `$CAT` for one carried in a `$REC`).
 struct PendingCatCatalogRecord {
     uint32_t noradCatId = 0;
     std::string objectName;
     std::string objectId;
+    std::vector<uint8_t> catBytes;
 };
 
 // =============================================================================
@@ -224,7 +227,7 @@ bool ensureOmmDatabase() {
         " object_name_lc TEXT NOT NULL,"
         " object_id TEXT NOT NULL,"
         " object_id_lc TEXT NOT NULL,"
-        " payload_json TEXT NOT NULL"
+        " payload BLOB NOT NULL"
         ");"
         "CREATE INDEX IF NOT EXISTS idx_cat_catalog_name_lc "
         "ON cat_catalog(object_name_lc);"
@@ -274,14 +277,14 @@ bool ensureOmmDatabase() {
     if (g_upsertCatStmt == nullptr) {
         const char* upsertCatSql =
             "INSERT INTO cat_catalog "
-            "(norad_cat_id, object_name, object_name_lc, object_id, object_id_lc, payload_json) "
+            "(norad_cat_id, object_name, object_name_lc, object_id, object_id_lc, payload) "
             "VALUES (?1, ?2, ?3, ?4, ?5, ?6) "
             "ON CONFLICT(norad_cat_id) DO UPDATE SET "
             " object_name = excluded.object_name,"
             " object_name_lc = excluded.object_name_lc,"
             " object_id = excluded.object_id,"
             " object_id_lc = excluded.object_id_lc,"
-            " payload_json = excluded.payload_json;";
+            " payload = excluded.payload;";
         int prepRc = sqlite3_prepare_v2(g_ommDb, upsertCatSql, -1, &g_upsertCatStmt, nullptr);
         if (prepRc != SQLITE_OK || g_upsertCatStmt == nullptr) {
             if (g_upsertCatStmt != nullptr) {
@@ -408,7 +411,7 @@ bool ensureOmmDatabase() {
 
     if (g_getCatPayloadStmt == nullptr) {
         const char* getCatPayloadSql =
-            "SELECT payload_json FROM cat_catalog "
+            "SELECT payload FROM cat_catalog "
             "WHERE norad_cat_id = ?1 "
             "LIMIT 1;";
         int prepRc = sqlite3_prepare_v2(
@@ -706,53 +709,15 @@ std::string sanitizeCatalogName(const std::string& candidate, uint32_t noradCatI
     return "";
 }
 
-std::string escapeJsonString(const std::string& input) {
-    std::string escaped;
-    escaped.reserve(input.size() + 8);
-    for (size_t i = 0; i < input.size(); i++) {
-        const unsigned char c = static_cast<unsigned char>(input[i]);
-        switch (c) {
-            case '\"': escaped += "\\\""; break;
-            case '\\': escaped += "\\\\"; break;
-            case '\b': escaped += "\\b"; break;
-            case '\f': escaped += "\\f"; break;
-            case '\n': escaped += "\\n"; break;
-            case '\r': escaped += "\\r"; break;
-            case '\t': escaped += "\\t"; break;
-            default:
-                if (c < 0x20) {
-                    char hex[7];
-                    std::snprintf(hex, sizeof(hex), "\\u%04x", static_cast<unsigned int>(c));
-                    escaped += hex;
-                } else {
-                    escaped.push_back(static_cast<char>(c));
-                }
-                break;
-        }
-    }
-    return escaped;
-}
-
-bool upsertCatCatalog(
-    uint32_t noradCatId,
-    const std::string& objectName,
-    const std::string& objectId,
-    const std::string& payloadJson
-) {
-    if (!ensureOmmDatabase() || g_upsertCatStmt == nullptr || noradCatId == 0) {
+bool upsertCatCatalog(const PendingCatCatalogRecord& record) {
+    const uint32_t noradCatId = record.noradCatId;
+    if (!ensureOmmDatabase() || g_upsertCatStmt == nullptr || noradCatId == 0 ||
+        record.catBytes.empty()) {
         return false;
     }
 
-    const std::string safeName = sanitizeCatalogName(objectName, noradCatId);
-    const std::string safeObjectId = sanitizeObjectId(objectId);
-    const std::string safeNameJson = escapeJsonString(safeName);
-    const std::string safeObjectIdJson = escapeJsonString(safeObjectId);
-    const std::string safePayload =
-        payloadJson.empty()
-            ? ("{\"NORAD_CAT_ID\":" + std::to_string(noradCatId) +
-              ",\"OBJECT_NAME\":\"" + safeNameJson + "\"" +
-              ",\"OBJECT_ID\":\"" + safeObjectIdJson + "\"}")
-            : payloadJson;
+    const std::string safeName = sanitizeCatalogName(record.objectName, noradCatId);
+    const std::string safeObjectId = sanitizeObjectId(record.objectId);
     const std::string lowerName = toLowerAscii(safeName);
     const std::string lowerObjectId = toLowerAscii(safeObjectId);
 
@@ -779,7 +744,12 @@ bool upsertCatCatalog(
         sqlite3_reset(g_upsertCatStmt);
         return false;
     }
-    if (sqlite3_bind_text(g_upsertCatStmt, 6, safePayload.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+    if (sqlite3_bind_blob(
+            g_upsertCatStmt,
+            6,
+            record.catBytes.data(),
+            static_cast<int>(record.catBytes.size()),
+            SQLITE_TRANSIENT) != SQLITE_OK) {
         sqlite3_reset(g_upsertCatStmt);
         return false;
     }
@@ -871,8 +841,9 @@ void fillCatalogRowFromSqlite(sqlite3_stmt* stmt, OrbProCatalogRow& row) {
     );
 }
 
-bool readCatPayloadJson(uint32_t noradCatId, std::string& jsonOut) {
-    jsonOut.clear();
+// The stored `$CAT` FlatBuffer of one catalog number.
+bool readCatPayload(uint32_t noradCatId, std::vector<uint8_t>& bytesOut) {
+    bytesOut.clear();
     if (!ensureOmmDatabase() || g_getCatPayloadStmt == nullptr || noradCatId == 0) {
         return false;
     }
@@ -887,9 +858,10 @@ bool readCatPayloadJson(uint32_t noradCatId, std::string& jsonOut) {
 
     const int rc = sqlite3_step(stmt);
     if (rc == SQLITE_ROW) {
-        const unsigned char* payload = sqlite3_column_text(stmt, 0);
-        if (payload != nullptr) {
-            jsonOut.assign(reinterpret_cast<const char*>(payload));
+        const auto* payload = static_cast<const uint8_t*>(sqlite3_column_blob(stmt, 0));
+        const int payloadSize = sqlite3_column_bytes(stmt, 0);
+        if (payload != nullptr && payloadSize > 0) {
+            bytesOut.assign(payload, payload + payloadSize);
         }
     }
 
@@ -1346,14 +1318,13 @@ bool parseCatFlatBufferPayload(
         return false;
     }
 
-    return parseCatFlatBufferTable(
-        payload,
-        payloadLen,
-        tablePos,
-        vtablePos,
-        vtableLen,
-        out
-    );
+    flatbuffers::Verifier verifier(payload, payloadLen);
+    if (!VerifyCATBuffer(verifier) ||
+        !parseCatFlatBufferTable(payload, payloadLen, tablePos, vtablePos, vtableLen, out)) {
+        return false;
+    }
+    out.catBytes.assign(payload, payload + payloadLen);
+    return true;
 }
 
 bool appendParsedOmmRecord(
@@ -1567,7 +1538,18 @@ bool parseRecFlatBufferCatPayload(
                 record)) {
             return false;
         }
-        recordsOut.push_back(record);
+        const auto* cat = reinterpret_cast<const CAT*>(payload + catTablePos);
+        flatbuffers::Verifier verifier(payload, payloadLen);
+        if (!cat->Verify(verifier)) {
+            return false;
+        }
+        std::unique_ptr<CATT> unpacked(cat->UnPack());
+        flatbuffers::FlatBufferBuilder builder(payloadLen);
+        FinishCATBuffer(builder, CAT::Pack(builder, unpacked.get()));
+        record.catBytes.assign(
+            builder.GetBufferPointer(),
+            builder.GetBufferPointer() + builder.GetSize());
+        recordsOut.push_back(std::move(record));
         parsedAny = true;
     }
 
@@ -3194,11 +3176,7 @@ uint8_t* sgp4_dispatch_piv(
             if (record.noradCatId == 0) {
                 continue;
             }
-            if (!upsertCatCatalog(
-                    record.noradCatId,
-                    record.objectName,
-                    record.objectId,
-                    std::string())) {
+            if (!upsertCatCatalog(record)) {
                 if (inTransaction) {
                     plugin_catalog_rollback_transaction();
                 }
@@ -4041,7 +4019,7 @@ int32_t plugin_get_entity_catalog_row(uint32_t entity_index, OrbProCatalogRow* o
 }
 
 // -----------------------------------------------------------------------------
-// plugin_catalog_upsert_cat_record — Upsert CAT metadata row keyed by NORAD.
+// plugin_catalog_{begin,commit,rollback}_transaction — CAT upsert transaction.
 // Returns: 0 on success, -1 on failure.
 // -----------------------------------------------------------------------------
 ORBPRO_EXPORT
@@ -4057,132 +4035,6 @@ int32_t plugin_catalog_commit_transaction() {
 ORBPRO_EXPORT
 int32_t plugin_catalog_rollback_transaction() {
     return executeCatalogSql("ROLLBACK;") ? 0 : -1;
-}
-
-// -----------------------------------------------------------------------------
-// plugin_catalog_upsert_cat_record — Upsert CAT metadata row keyed by NORAD.
-// Returns: 0 on success, -1 on failure.
-// -----------------------------------------------------------------------------
-ORBPRO_EXPORT
-int32_t plugin_catalog_upsert_cat_record(
-    uint32_t norad_cat_id,
-    const char* object_name,
-    const char* object_id,
-    const char* payload_json
-) {
-    if (norad_cat_id == 0) {
-        return -1;
-    }
-    const std::string name = object_name != nullptr ? std::string(object_name) : std::string();
-    const std::string objectId = object_id != nullptr ? std::string(object_id) : std::string();
-    const std::string payload = payload_json != nullptr ? std::string(payload_json) : std::string();
-    return upsertCatCatalog(norad_cat_id, name, objectId, payload) ? 0 : -1;
-}
-
-// -----------------------------------------------------------------------------
-// plugin_catalog_upsert_cat_records_packed — Upsert many CAT rows in one call.
-//
-// Packed byte format (little-endian, repeated until end of buffer):
-//   u32 norad_cat_id
-//   u32 object_name_len
-//   u32 object_id_len
-//   u32 payload_json_len
-//   u8[object_name_len] object_name UTF-8 bytes (no NUL)
-//   u8[object_id_len] object_id UTF-8 bytes (no NUL)
-//   u8[payload_json_len] payload JSON UTF-8 bytes (no NUL)
-//
-// Returns: number of records upserted, or -1 on malformed input/fatal error.
-// -----------------------------------------------------------------------------
-ORBPRO_EXPORT
-int32_t plugin_catalog_upsert_cat_records_packed(
-    const uint8_t* packed_bytes,
-    uint32_t packed_len
-) {
-    if (packed_bytes == nullptr || packed_len == 0) {
-        return 0;
-    }
-    if (!ensureOmmDatabase() || g_upsertCatStmt == nullptr) {
-        return -1;
-    }
-
-    auto readU32Le = [](const uint8_t* ptr) -> uint32_t {
-        return static_cast<uint32_t>(ptr[0]) |
-               (static_cast<uint32_t>(ptr[1]) << 8) |
-               (static_cast<uint32_t>(ptr[2]) << 16) |
-               (static_cast<uint32_t>(ptr[3]) << 24);
-    };
-
-    bool inTransaction = false;
-    if (plugin_catalog_begin_transaction() == 0) {
-        inTransaction = true;
-    }
-
-    size_t offset = 0;
-    int32_t upserted = 0;
-    const size_t totalLen = static_cast<size_t>(packed_len);
-
-    while (offset + 16 <= totalLen) {
-        const uint8_t* header = packed_bytes + offset;
-        const uint32_t noradCatId = readU32Le(header + 0);
-        const uint32_t objectNameLen = readU32Le(header + 4);
-        const uint32_t objectIdLen = readU32Le(header + 8);
-        const uint32_t payloadLen = readU32Le(header + 12);
-        offset += 16;
-
-        const size_t fieldBytes =
-            static_cast<size_t>(objectNameLen) +
-            static_cast<size_t>(objectIdLen) +
-            static_cast<size_t>(payloadLen);
-        if (offset + fieldBytes > totalLen) {
-            if (inTransaction) {
-                plugin_catalog_rollback_transaction();
-            }
-            return -1;
-        }
-
-        const std::string objectName(
-            reinterpret_cast<const char*>(packed_bytes + offset),
-            static_cast<size_t>(objectNameLen)
-        );
-        offset += static_cast<size_t>(objectNameLen);
-
-        const std::string objectId(
-            reinterpret_cast<const char*>(packed_bytes + offset),
-            static_cast<size_t>(objectIdLen)
-        );
-        offset += static_cast<size_t>(objectIdLen);
-
-        const std::string payload(
-            reinterpret_cast<const char*>(packed_bytes + offset),
-            static_cast<size_t>(payloadLen)
-        );
-        offset += static_cast<size_t>(payloadLen);
-
-        if (noradCatId == 0) {
-            continue;
-        }
-        if (!upsertCatCatalog(noradCatId, objectName, objectId, payload)) {
-            if (inTransaction) {
-                plugin_catalog_rollback_transaction();
-            }
-            return upserted;
-        }
-        upserted++;
-    }
-
-    if (offset != totalLen) {
-        if (inTransaction) {
-            plugin_catalog_rollback_transaction();
-        }
-        return -1;
-    }
-
-    if (inTransaction && plugin_catalog_commit_transaction() != 0) {
-        plugin_catalog_rollback_transaction();
-        return upserted;
-    }
-
-    return upserted;
 }
 
 // -----------------------------------------------------------------------------
@@ -4220,11 +4072,7 @@ int32_t plugin_catalog_upsert_cat_flatbuffer_stream(
         if (record.noradCatId == 0) {
             continue;
         }
-        if (!upsertCatCatalog(
-                record.noradCatId,
-                record.objectName,
-                record.objectId,
-                std::string())) {
+        if (!upsertCatCatalog(record)) {
             if (inTransaction) {
                 plugin_catalog_rollback_transaction();
             }
@@ -4242,41 +4090,41 @@ int32_t plugin_catalog_upsert_cat_flatbuffer_stream(
 }
 
 // -----------------------------------------------------------------------------
-// plugin_get_cat_record_json_size — Get CAT JSON payload bytes (+NUL).
-// Returns: required bytes including trailing NUL, or 0 if not found.
+// plugin_get_cat_record_flatbuffer_size — Size of the stored `$CAT` FlatBuffer.
+// Returns: its byte length, or 0 if the catalog number has no record.
 // -----------------------------------------------------------------------------
 ORBPRO_EXPORT
-int32_t plugin_get_cat_record_json_size(uint32_t norad_cat_id) {
-    std::string json;
-    if (!readCatPayloadJson(norad_cat_id, json)) {
+int32_t plugin_get_cat_record_flatbuffer_size(uint32_t norad_cat_id) {
+    std::vector<uint8_t> bytes;
+    if (!readCatPayload(norad_cat_id, bytes)) {
         return 0;
     }
-    return static_cast<int32_t>(json.size() + 1);
+    return static_cast<int32_t>(bytes.size());
 }
 
 // -----------------------------------------------------------------------------
-// plugin_get_cat_record_json — Copy CAT JSON payload into caller buffer.
-// Returns: bytes written (excluding trailing NUL), 0 if not found, or -1 on error.
+// plugin_get_cat_record_flatbuffer — Copy the stored `$CAT` FlatBuffer into the
+// caller's buffer.
+// Returns: bytes written, 0 if not found, or -1 on error.
 // -----------------------------------------------------------------------------
 ORBPRO_EXPORT
-int32_t plugin_get_cat_record_json(
+int32_t plugin_get_cat_record_flatbuffer(
     uint32_t norad_cat_id,
-    char* out_json,
+    uint8_t* out_bytes,
     uint32_t out_len
 ) {
-    if (out_json == nullptr || out_len == 0) {
+    if (out_bytes == nullptr || out_len == 0) {
         return -1;
     }
-    std::string json;
-    if (!readCatPayloadJson(norad_cat_id, json)) {
-        out_json[0] = '\0';
+    std::vector<uint8_t> bytes;
+    if (!readCatPayload(norad_cat_id, bytes)) {
         return 0;
     }
-    if (json.size() + 1 > static_cast<size_t>(out_len)) {
+    if (bytes.size() > static_cast<size_t>(out_len)) {
         return -1;
     }
-    std::memcpy(out_json, json.c_str(), json.size() + 1);
-    return static_cast<int32_t>(json.size());
+    std::memcpy(out_bytes, bytes.data(), bytes.size());
+    return static_cast<int32_t>(bytes.size());
 }
 
 // -----------------------------------------------------------------------------
