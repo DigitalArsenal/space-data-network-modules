@@ -113,11 +113,16 @@ export function encodeRecWithOmm(ommPayload) {
   return builder.asUint8Array();
 }
 
-export function encodeRecWithCat(catPayload) {
-  const cat = CATClass.getRootAsCAT(
-    new flatbuffers.ByteBuffer(catPayload),
-  ).unpack();
-  const rec = new RECT("1.0", [new RecordT(RecordType.CAT, cat, "CAT")]);
+export function encodeRecWithCat(...catPayloads) {
+  const records = catPayloads.map(
+    (catPayload) =>
+      new RecordT(
+        RecordType.CAT,
+        CATClass.getRootAsCAT(new flatbuffers.ByteBuffer(catPayload)).unpack(),
+        "CAT",
+      ),
+  );
+  const rec = new RECT("1.0", records);
   const builder = new flatbuffers.Builder(1024);
   RECClass.finishRECBuffer(builder, rec.pack(builder));
   return builder.asUint8Array();

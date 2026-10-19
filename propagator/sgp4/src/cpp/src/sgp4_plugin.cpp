@@ -935,6 +935,14 @@ inline bool readF64LE(const uint8_t* data, size_t len, size_t offset, double& ou
     return true;
 }
 
+bool getFlatBufferTableMetadataAtPosition(
+    const uint8_t* payload,
+    size_t payloadLen,
+    size_t tablePos,
+    size_t& vtablePos,
+    uint16_t& vtableLen
+);
+
 bool getFlatBufferTableBounds(
     const uint8_t* payload,
     size_t payloadLen,
@@ -946,15 +954,7 @@ bool getFlatBufferTableBounds(
     if (!readI32LE(payload, payloadLen, 0, rootOffset)) return false;
     if (rootOffset <= 0) return false;
     tablePos = static_cast<size_t>(rootOffset);
-    if (tablePos + 4 > payloadLen) return false;
-
-    int32_t vtableDistance = 0;
-    if (!readI32LE(payload, payloadLen, tablePos, vtableDistance)) return false;
-    if (vtableDistance <= 0 || static_cast<size_t>(vtableDistance) > tablePos) return false;
-    vtablePos = tablePos - static_cast<size_t>(vtableDistance);
-
-    if (!readU16LE(payload, payloadLen, vtablePos, vtableLen)) return false;
-    return vtableLen >= 4 && vtablePos + static_cast<size_t>(vtableLen) <= payloadLen;
+    return getFlatBufferTableMetadataAtPosition(payload, payloadLen, tablePos, vtablePos, vtableLen);
 }
 
 bool getFlatBufferTableMetadataAtPosition(
@@ -965,10 +965,15 @@ bool getFlatBufferTableMetadataAtPosition(
     uint16_t& vtableLen
 ) {
     if (tablePos + 4 > payloadLen) return false;
+    // The vtable sits at table - soffset: before the table, or after it when
+    // the builder reused a vtable written earlier (one vtable shared by the
+    // tables of a vector, as every multi-record `$REC` has).
     int32_t vtableDistance = 0;
     if (!readI32LE(payload, payloadLen, tablePos, vtableDistance)) return false;
-    if (vtableDistance <= 0 || static_cast<size_t>(vtableDistance) > tablePos) return false;
-    vtablePos = tablePos - static_cast<size_t>(vtableDistance);
+    const int64_t signedVtablePos =
+        static_cast<int64_t>(tablePos) - static_cast<int64_t>(vtableDistance);
+    if (vtableDistance == 0 || signedVtablePos < 0) return false;
+    vtablePos = static_cast<size_t>(signedVtablePos);
     if (!readU16LE(payload, payloadLen, vtablePos, vtableLen)) return false;
     return vtableLen >= 4 && vtablePos + static_cast<size_t>(vtableLen) <= payloadLen;
 }

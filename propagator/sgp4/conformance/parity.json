@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "propagator/sgp4",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "2b96be20c3d011c6337eb4cb3874946f601cebd7ba73d1100e5be03e65780f8f",
-  "moduleSha256": "2b96be20c3d011c6337eb4cb3874946f601cebd7ba73d1100e5be03e65780f8f",
+  "artifactSha256": "6105fea83381ef0754673ea10bdd99d4290814d872ecb3309ea20c44ba372379",
+  "moduleSha256": "6105fea83381ef0754673ea10bdd99d4290814d872ecb3309ea20c44ba372379",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 10,
-      "durationMs": 1075
+      "runs": 11,
+      "durationMs": 957
     },
     {
       "lane": "wasmedge",
-      "runs": 10,
-      "durationMs": 9054
+      "runs": 11,
+      "durationMs": 9164
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 10,
-      "durationMs": 27552
+      "runs": 11,
+      "durationMs": 15778
     }
   ],
   "cases": [
@@ -31,10 +31,11 @@
     "propagate-ephemeris-span-teme",
     "upsert-cat-direct",
     "upsert-cat-rec",
+    "upsert-cat-rec-shared-vtable",
     "refuse-handle-mismatch",
     "refuse-unknown-object"
   ],
-  "comparisons": 50,
+  "comparisons": 55,
   "failures": [],
   "runs": [
     {
@@ -119,6 +120,16 @@
     },
     {
       "lane": "browser",
+      "caseId": "upsert-cat-rec-shared-vtable",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "browser",
       "caseId": "refuse-handle-mismatch",
       "threadCount": 1,
       "exitClass": "ok",
@@ -219,6 +230,16 @@
     },
     {
       "lane": "wasmedge",
+      "caseId": "upsert-cat-rec-shared-vtable",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "wasmedge",
       "caseId": "refuse-handle-mismatch",
       "threadCount": 1,
       "exitClass": "ok",
@@ -310,6 +331,16 @@
     {
       "lane": "docker-wasmedge",
       "caseId": "upsert-cat-rec",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e",
+      "stdoutLength": 32
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "upsert-cat-rec-shared-vtable",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,

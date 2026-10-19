@@ -177,6 +177,29 @@ test("upsert_cat ingests $REC-wrapped CAT records and overwrites earlier CAT met
     const catRecord = readCatRecord(module, 25544);
     assert.equal(catRecord.OBJECT_NAME(), "ISS REC");
     assert.equal(catRecord.NORAD_CAT_ID(), 25544);
+
+    // Several CAT tables in one `$REC` share a vtable that follows them.
+    assert.equal(
+      invokePiv(module, {
+        methodId: "upsert_cat",
+        inputs: [
+          {
+            bytes: encodeRecWithCat(
+              ...[25545, 25546, 25547].map((noradId) =>
+                encodeCatPayload({ noradId, objectName: `REC ${noradId}`, objectId: "1998-067A" }),
+              ),
+            ),
+            portId: "catalog",
+            schemaName: "orbpro.sds.rec",
+            fileIdentifier: "$REC",
+          },
+        ],
+      }).response.STATUS_CODE,
+      0,
+    );
+    for (const noradId of [25545, 25546, 25547]) {
+      assert.equal(readCatRecord(module, noradId).OBJECT_NAME(), `REC ${noradId}`);
+    }
   } finally {
     module._plugin_destroy();
   }

@@ -65,6 +65,9 @@ const cases = [
     [cat(encodeCatPayload({ noradId: 99002, objectName: "CAT DIRECT", objectId: "2024-001A" }))]) },
   { id: "upsert-cat-rec", request: invoke("upsert_cat",
     [rec(encodeRecWithCat(encodeCatPayload({ noradId: 99002, objectName: "CAT REC", objectId: "2024-001A" })))]) },
+  // A multi-record `$REC` shares one vtable among its CAT tables.
+  { id: "upsert-cat-rec-shared-vtable", request: invoke("upsert_cat",
+    [rec(encodeRecWithCat(...[1, 2, 3].map((k) => encodeCatPayload({ noradId: 99000 + k, objectName: `CAT REC ${k}`, objectId: "2024-001A" }))))]) },
   { id: "refuse-handle-mismatch", request: invoke("propagate_state",
     [request(encodePropagatorBatchRequest({ epoch: 2460310.75, entityHandles: [0], catalogNumbers: [99002] })), omm([encodeOmmPayload(), encodeOmmPayload(SYNTHETIC_SSO)])], 1) },
   { id: "refuse-unknown-object", request: invoke("propagate_ephemeris",
