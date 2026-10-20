@@ -728,7 +728,8 @@ inline void place() {
 
 /* A stand-in on the line of sight from the camera to target: in front of the
  * body by clearance and no farther than about PROXY_DISTANCE. */
-inline void proxyPosition(const double* cam, const double* target, double clearance, double* out) {
+inline void proxyPosition(const double* cam, const double* target, double clearance, double* out,
+                          bool compressDistance = true) {
     double d[3] = {target[0] - cam[0], target[1] - cam[1], target[2] - cam[2]};
     const double distance = mag(d);
     if (!(distance > 0.0)) {
@@ -737,7 +738,7 @@ inline void proxyPosition(const double* cam, const double* target, double cleara
     }
     const double nearer = std::max(distance - clearance, 0.5 * distance);
     const double along =
-        nearer <= kProxyDistance ? nearer : kProxyDistance * (1.0 + 0.05 * std::log2(nearer / kProxyDistance));
+        !compressDistance || nearer <= kProxyDistance ? nearer : kProxyDistance * (1.0 + 0.05 * std::log2(nearer / kProxyDistance));
     const double f = along / distance;
     for (int k = 0; k < 3; ++k) out[k] = cam[k] + d[k] * f;
 }
@@ -950,7 +951,9 @@ inline void draw() {
         s.style[2 * i + 1] = clampd(1.15 - 0.12 * v, minimumAlpha, 1.0);
         f |= D_STYLE;
         double world[3];
-        proxyPosition(cam, position, 0.0, world);
+        // Body sprites participate in surface depth and picking. Compressing
+        // their distance can put a background body in front of its occluder.
+        proxyPosition(cam, position, 0.0, world, false);
         double rel[3] = {world[0] - cam[0], world[1] - cam[1], world[2] - cam[2]};
         if (moved(&s.lastPoint[3 * i], s.hasLastPoint[i], rel, pixelAngle)) {
             f |= D_POINT_MOVED;
@@ -960,7 +963,7 @@ inline void draw() {
         }
         if (drawPoints && !asEllipsoid && s.ids[i] != kSun) f |= D_POINT_SHOW;
         if (spritePick && !onSmallParent(i, position, cam, pixelAngle)) f |= D_PICK_SHOW;
-        proxyPosition(cam, position, 1.05 * radius, &s.labelWorld[3 * i]);
+        proxyPosition(cam, position, 1.05 * radius, &s.labelWorld[3 * i], false);
         for (int k = 0; k < 3; ++k) rel[k] = s.labelWorld[3 * i + k] - cam[k];
         if (moved(&s.lastLabel[3 * i], s.hasLastLabel[i], rel, pixelAngle)) {
             f |= D_LABEL_MOVED;
