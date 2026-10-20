@@ -1,0 +1,27 @@
+{
+  "name": "@spacedatanetwork/moon-imagery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Moon's imagery from the USGS LRO LROC WAC global mosaic (100 m/px, public domain): a resumable walk that reads whole mosaic rows by range and cuts 256 px JPEG tiles ($DTT records) into published files.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.e2e.mjs"
+  },
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json"
+  ],
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.7",
+    "spacedatastandards.org": "^1.251.0",
+    "jpeg-js": "0.4.4"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.2"
+  }
+}
