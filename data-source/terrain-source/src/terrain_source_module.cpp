@@ -440,7 +440,9 @@ std::string sha256_multihash(const std::vector<uint8_t>& bytes) {
 //     it is REFUSED by name. A guest that instead traps on allocation takes
 //     its pooled flow instance down with it and that instance never runs work
 //     again — the live failure this ceiling exists to prevent.
-constexpr size_t kDecodeByteBudget = 256u * 1024u * 1024u;  // 256 MiB
+// 512 MiB: an LDEM_512 run (the Moon's level 10, one 45-degree run of a block row with the halo) decodes a
+// 270 MB window; the flows that run it give their guest 1 GiB of linear memory (host-config.py memory_pages).
+constexpr size_t kDecodeByteBudget = 512u * 1024u * 1024u;  // 512 MiB
 
 struct DecodeBudget {
     size_t used = 0;
