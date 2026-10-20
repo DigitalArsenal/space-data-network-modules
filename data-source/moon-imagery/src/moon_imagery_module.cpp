@@ -65,6 +65,7 @@ constexpr const char* kSourceUrl =
     "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Lunar_LRO_LROC-WAC_Mosaic_global_100m_June2013.tif";
 constexpr const char* kSourceEtag = "\"47d026c2618ee60e92eda4f2e0e5347b-711\"";
 constexpr const char* kSourceEpoch = "2013-06-01T00:00:00.000Z";
+constexpr const char* kNoValidators = "Thu, 01 Jan 1970 00:00:00 GMT";
 constexpr uint64_t kWidth = 109164, kHeight = 54582, kFirstRow = 874303;
 constexpr double kSourcePixelM = 100.0, kRadiusM = 1737400.0;
 
@@ -506,8 +507,11 @@ int wac_plan(void) {
             const std::string range = "bytes=" + std::to_string(kFirstRow + a * kWidth) + "-" +
                                       std::to_string(kFirstRow + (a + n) * kWidth - 1);
             flatbuffers::FlatBufferBuilder b(512);
+            // If-Modified-Since epoch: the request states its own validator, so the host adds no If-None-Match
+            // from the last 2xx it booked for this URL (every range of the mosaic shares it and would answer 304).
             std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "range", range.c_str()),
-                                                               R::CreateHeaderDirect(b, "if-match", kSourceEtag)};
+                                                               R::CreateHeaderDirect(b, "if-match", kSourceEtag),
+                                                               R::CreateHeaderDirect(b, "if-modified-since", kNoValidators)};
             R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", kSourceUrl, &headers, nullptr,
                                                                      static_cast<uint32_t>(timeout_ms), 0, nullptr));
             char port[16];

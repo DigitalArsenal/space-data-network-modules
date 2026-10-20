@@ -68,6 +68,7 @@ async function answer(planned) {
     const headers = Object.fromEntries(Object.entries(r.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
     assert.match(headers.range, /^bytes=\d+-\d+$/);
     assert.ok(headers["if-match"], "every range pins the edition");
+    assert.equal(headers["if-modified-since"], "Thu, 01 Jan 1970 00:00:00 GMT", "every range states its own validator (no host-added If-None-Match)");
     const res = await fetch(r.url, { headers });
     const body = new Uint8Array(await res.arrayBuffer());
     frames.push({ portId: `rows_${k}`, typeRef: T.HRSP, payload: encodeHttpResponse({ url: r.url, status: res.status, body }) });

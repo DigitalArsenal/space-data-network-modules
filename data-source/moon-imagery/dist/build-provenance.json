@@ -12,5 +12,5 @@
     "src/moon_imagery_module.cpp"
   ],
   "threadModel": "single-thread",
-  "wasmSha256": "caf37955b4451b3bd34a30acb1fa2348e6ffc4e6885e033a558b7797fcc17d6e"
+  "wasmSha256": "c0527b504b601a0b97a3d4b1f57fdc384c279d086c258f25f7e470ba34fc3d93"
 }
