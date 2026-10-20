@@ -13,6 +13,8 @@
  *   granule_plan    TimerTick + $FSB mark?        -> 8 HttpRequests, $DTT plan headers, MCFG options, $IRM job
  *   ingest_meta     $IRM job + $DTT records + FlowNotice report? + HttpResponse? -> IngestRequest meta, $DTT records
  *   publish_request IngestResult + IngestRequest + $IRM job -> $IRM mark (storage-write + egress), HttpRequest?
+ *   import_plan     TimerTick + $FSB mark?        -> HttpRequests (a walk unit's staged files), $PNM names, $IRM job
+ *   import_files    HttpResponses + $PNM names    -> the files ($DTT streams, checked against their names), $PNM names
  *
  * THE JOB IS THE MARK-TO-BE. The planners emit, per batch, the $IRM this batch will make durable once it is stored:
  * JOB_ID (dataset@tileset@epoch), PROVIDER_ID, SOURCE (SOURCE_URL, SOURCE_VERSION = the edition), STATE IN_PROGRESS,
@@ -1100,6 +1102,15 @@ long wrap_lon(long lon) {
 #include "polar_stereo.hpp"
 #include "body_plan.hpp"
 
+// The file terrain-source:pack writes a tile into: <prefix>/root.dtts at level <= rootMaxLevel, else
+// <prefix>/<L>/<X>_<Y>.dtts with X = x >> 2, Y = y >> 2 (row 0 at the south, as the tiles).
+std::string pack_file_name(const std::string& prefix, long level, long x, long y) {
+    if (level <= kBodyRootMaxLevel) return prefix + "/root.dtts";
+    return prefix + "/" + std::to_string(level) + "/" + std::to_string(x >> 2) + "_" + std::to_string(y >> 2) + ".dtts";
+}
+
+constexpr uint64_t kImportMaxFileBytes = 8u * 1024u * 1024u;  // the host adapter's own bound
+
 }  // namespace
 
 extern "C" {
@@ -1933,6 +1944,221 @@ int announce_files(void) {
     R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
     if (push_typed("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", finished(mb)) < 0) return 500;
     return push_typed("records", "PNM.fbs", "$PNM", "PNM", records) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// THE IMPORT: a body's walk encoded ELSEWHERE, published HERE. import_plan
+// plans the walk's own unit (body_unit_at over the same config: body, caps,
+// max_grid_size, max_range_bytes) at the import's mark, which is its own job
+// (dataset_id + "+import"), never below import_from_unit, and asks for the
+// unit's files, named by terrain-source:pack's rule, from import_base_url
+// (the finished files, staged on this node). import_files checks each answer
+// is the file it names and hands the files and their names to the host
+// adapter exactly as pack does, so announce_files, the storage lane and
+// publish_request publish an imported unit as the walk publishes its own:
+// the same names, the same provider and source, BATCH_ID tileset@epoch#unit.
+// The files' bytes are the walk's for the same unit and run clock (the clock
+// is the only per-run input; RETRIEVED_AT states when the encoder read the
+// source). A file not staged yet answers non-200: the unit stops, the mark
+// stays, the next tick asks again.
+// ---------------------------------------------------------------------------
+
+int import_plan(void) {
+    if (refuse_batched()) return 500;
+    const std::string config = load_config();
+    const std::string body_name = config_string(config, "body", "moon");
+    const Body* body = body_named(body_name);
+    if (!body) {
+        plugin_set_error("unknown-body", ("import_plan has no table for body \"" + body_name + "\" (moon, mars).").c_str());
+        return 400;
+    }
+    const std::string tileset = config_string(config, "tileset_id", "");
+    const std::string epoch = config_string(config, "dataset_epoch", "");
+    if (tileset.empty() || epoch.empty()) {
+        plugin_set_error("missing-tileset-id", "import_plan needs tileset_id and dataset_epoch, the walk's own.");
+        return 400;
+    }
+    std::string base = config_string(config, "import_base_url", "");
+    while (!base.empty() && base.back() == '/') base.pop_back();
+    if (base.rfind("http://", 0) != 0 && base.rfind("https://", 0) != 0) {
+        plugin_set_error("missing-import-base-url",
+                         "import_plan needs import_base_url (http or https), where the staged files are served.");
+        return 400;
+    }
+    const int64_t clock = tick_ms();
+    if (clock < 0) {
+        plugin_set_error("invalid-tick-frame", "the tick frame is not a TimerTick (TICK).");
+        return 400;
+    }
+    std::string retrieved_at = config_string(config, "retrieved_at", "");
+    if (retrieved_at.empty() && clock > 0) retrieved_at = iso_ms(clock);
+    if (retrieved_at.empty()) {
+        plugin_set_error("missing-retrieved-at", "state retrieved_at in the flow config or fire the tick with FIRED_MS.");
+        return 400;
+    }
+    std::string error;
+    const std::vector<BodyCap> caps = body_caps(*body, config, &error);
+    if (caps.empty()) {
+        plugin_set_error("invalid-caps", error.c_str());
+        return 400;
+    }
+    const double max_grid = json_number_or(config, "max_grid_size", 321);
+    const double range_bytes = json_number_or(config, "max_range_bytes", kBodyDefaultRangeBytes);
+    const long long from_unit = static_cast<long long>(json_number_or(config, "import_from_unit", 0));
+    if (from_unit < 0) {
+        plugin_set_error("invalid-import-from-unit", "import_from_unit must be a unit index (>= 0).");
+        return 400;
+    }
+    Bytes stream;
+    if (!mark_stream(&stream)) {
+        plugin_set_error("invalid-mark-frame", "the mark frames are not a complete $FSB chunk sequence.");
+        return 400;
+    }
+    const std::string dataset = config_string(config, "dataset_id", body->dataset_id);
+    const std::string job_id = mark_job_id(dataset + "+import", tileset, epoch);
+    const MarkState mark = read_mark(stream, job_id);
+    const long long start = std::max(from_unit, mark.found && mark.next_index > 0 ? mark.next_index : 0LL);
+    BodyUnit unit;
+    long long total = 0;
+    if (!body_unit_at(*body, caps, max_grid, range_bytes, start, &unit, &total)) {
+        plugin_set_backlog_remaining(0);  // every unit imported: a clean no-op
+        return 0;
+    }
+    const std::string prefix = config_string(config, "path_prefix", body->path_prefix);
+    std::vector<std::string> names;
+    for (const auto& t : unit.tiles) {
+        const std::string name = pack_file_name(prefix, t[0], t[1], t[2]);
+        if (std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
+    }
+    if (names.empty() || names.size() > static_cast<size_t>(kBodyMaxBlocks)) {
+        plugin_set_error("invalid-import-unit", "an import unit names no file, or more than the adapter's 32.");
+        return 500;
+    }
+    const long timeout_ms = config_timeout_ms(config);
+    Bytes named;
+    for (const std::string& name : names) {
+        const std::string url = base + "/" + name;
+        flatbuffers::FlatBufferBuilder b(512 + url.size());
+        // A stated validator keeps the host from adding its own If-None-Match: a staged file always answers whole.
+        std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "if-modified-since", kNoValidators)};
+        R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str(), &headers, nullptr,
+                                                                 static_cast<uint32_t>(timeout_ms), kImportMaxFileBytes, nullptr));
+        if (push_typed("files", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b)) < 0) return 500;
+        flatbuffers::FlatBufferBuilder nb(128 + name.size());
+        const auto name_off = nb.CreateString(name);
+        PNMBuilder pb(nb);
+        pb.add_FILE_NAME(name_off);
+        FinishSizePrefixedPNMBuffer(nb, pb.Finish());
+        named.insert(named.end(), nb.GetBufferPointer(), nb.GetBufferPointer() + nb.GetSize());
+    }
+    if (push_typed("names", "PNM.fbs", "$PNM", "PNM", named) < 0) return 500;
+
+    Job job;
+    job.job_id = job_id;
+    job.provider = config_string(config, "provider_id", body->provider_id);
+    job.source_url = base;
+    job.epoch = epoch;
+    job.updated_at = retrieved_at;
+    job.walk = body->walk;
+    job.first_index = start;
+    job.next_index = start + 1;
+    job.records_committed = mark.found && mark.stored_total > 0 ? mark.stored_total : 0;
+    job.notes = std::string("import of product ") + unit.cap->product->key +
+                (unit.root ? ", levels 0-2" : ", level " + std::to_string(unit.level)) + ", " +
+                std::to_string(names.size()) + " files, unit " + std::to_string(start) + " of " + std::to_string(total);
+    if (push_typed("job", "IRM.fbs", "$IRM", "IRM", build_irm(job, false)) < 0) return 500;
+    const long long backlog = total - (start + 1);
+    plugin_set_backlog_remaining(backlog > 0xffffffffLL ? 0xffffffffu : static_cast<uint32_t>(backlog < 0 ? 0 : backlog));
+    return 0;
+}
+
+int import_files(void) {
+    const auto fail = [](const char* code, const std::string& message) {
+        plugin_set_error(code, message.c_str());
+        return 400;
+    };
+    const plugin_input_frame_t* names_frame = nullptr;
+    std::vector<const plugin_input_frame_t*> responses;
+    for (uint32_t i = 0; i < plugin_get_input_count(); i++) {
+        const plugin_input_frame_t* f = plugin_get_input_frame(i);
+        if (!f || !f->port_id) continue;
+        if (std::strcmp(f->port_id, "names") == 0) {
+            if (names_frame) return fail("batched-input-frames", "import_files takes one names frame per unit.");
+            names_frame = f;
+        } else if (std::strcmp(f->port_id, "responses") == 0) {
+            responses.push_back(f);
+        }
+    }
+    if (!names_frame || !names_frame->payload) return fail("missing-names-frame", "import_files needs import_plan's names.");
+    std::vector<std::string> names;
+    for (size_t at = 0; at + 4 <= names_frame->payload_length;) {
+        uint32_t size;
+        std::memcpy(&size, names_frame->payload + at, 4);
+        at += 4;
+        if (size == 0) continue;
+        if (size > names_frame->payload_length - at) return fail("invalid-names-frame", "the names frame is malformed.");
+        flatbuffers::Verifier verifier(names_frame->payload + at, size);
+        if (!PNMBufferHasIdentifier(names_frame->payload + at) || !VerifyPNMBuffer(verifier))
+            return fail("invalid-names-frame", "a name is not a $PNM.");
+        names.push_back(text_of(GetPNM(names_frame->payload + at)->FILE_NAME()));
+        at += size;
+    }
+    if (names.empty() || names.size() > static_cast<size_t>(kBodyMaxBlocks) || responses.size() != names.size())
+        return fail("invalid-import-unit", "import_files needs one response per named file (1 to 32).");
+    const std::string config = load_config();
+    const std::string tileset = config_string(config, "tileset_id", "");
+    const Body* named_body = body_named(config_string(config, "body", "moon"));
+    if (!named_body) return fail("unknown-body", "import_files: the config names no body this module has a table for.");
+    const std::string prefix = config_string(config, "path_prefix", named_body->path_prefix);
+    for (size_t k = 0; k < names.size(); k++) {
+        const plugin_input_frame_t* f = responses[k];
+        const std::string& name = names[k];
+        flatbuffers::Verifier verifier(f->payload ? f->payload : reinterpret_cast<const uint8_t*>(""), f->payload_length);
+        if (!f->payload || f->payload_length < 8 || !R::VerifyHttpResponseBuffer(verifier))
+            return fail("invalid-response-frame", "a response frame is not an HttpResponse (HRSP).");
+        const R::HttpResponse& r = *R::GetHttpResponse(f->payload);
+        const std::string url = text_of(r.URL());
+        if (url.size() < name.size() + 1 || url.compare(url.size() - name.size() - 1, std::string::npos, "/" + name) != 0)
+            return fail("import-out-of-order", "the response for " + name + " came from " + url + ".");
+        if (r.STATUS() != 200) {
+            return fail(r.STATUS() == 404 ? "import-not-staged" : "import-fetch-failed",
+                        name + " answered " + std::to_string(r.STATUS()) +
+                            (r.ERROR() && r.ERROR()->size() ? " (" + r.ERROR()->str() + ")" : std::string()) +
+                            ": the unit is not imported and its mark stays; it is asked for again on the next tick.");
+        }
+        const auto* body = r.BODY();
+        if (!body || body->size() == 0 || body->size() > kImportMaxFileBytes)
+            return fail("import-file-size", name + " is empty or larger than 8 MiB.");
+        // The file must BE the named file: a size-prefixed $DTT stream whose every tile packs into this name.
+        const uint8_t* data = body->data();
+        const size_t length = body->size();
+        size_t tiles = 0;
+        for (size_t at = 0; at + 4 <= length;) {
+            uint32_t size;
+            std::memcpy(&size, data + at, 4);
+            at += 4;
+            if (size == 0) continue;
+            if (size > length - at) return fail("import-file-malformed", name + " is not a size-prefixed $DTT stream.");
+            flatbuffers::Verifier dv(data + at, size);
+            if (!DTTBufferHasIdentifier(data + at) || !VerifyDTTBuffer(dv))
+                return fail("import-file-malformed", name + " holds a record that is not a $DTT.");
+            const DTT* t = GetDTT(data + at);
+            if (pack_file_name(prefix, t->LEVEL(), t->X(), t->Y()) != name)
+                return fail("import-file-mismatch", name + " holds a tile of another file (level " +
+                                                       std::to_string(t->LEVEL()) + ", " + std::to_string(t->X()) + "/" +
+                                                       std::to_string(t->Y()) + ").");
+            if (!tileset.empty() && text_of(t->TILESET_ID()) != tileset)
+                return fail("import-file-mismatch", name + " belongs to tileset " + text_of(t->TILESET_ID()) + ", not " + tileset + ".");
+            tiles++;
+            at += size;
+        }
+        if (tiles == 0) return fail("import-file-malformed", name + " holds no tile.");
+        if (plugin_push_output_ex("file", "DTT.fbs", "$DTT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "DTT", 0, 0, data,
+                                  static_cast<uint32_t>(length)) < 0)
+            return 500;
+    }
+    return push_typed("names", "PNM.fbs", "$PNM", "PNM",
+                      Bytes(names_frame->payload, names_frame->payload + names_frame->payload_length)) < 0 ? 500 : 0;
 }
 
 // publish_request: the storage-ingest IngestResult, the IngestRequest that produced it and the job ($IRM) -> the
