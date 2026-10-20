@@ -119,6 +119,42 @@ const std::vector<Body>& bodies() {
               7624, 4, true, false, 0, 120, 75, 3, {{"polar/float_img/ldem_75n_120m_float", "\"4328e0f314d21:0\"", 0, 0}}},
              {"ldem_75s_60m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_75s_60m_float::1.0", "2017-06-15", 15248,
               15248, 4, true, true, 0, 60, 75, 3, {{"polar/float_img/ldem_75s_60m_float", "\"26477c26badbd21:0\"", 0, 0}}},
+             // The high-resolution ladder (owner 2026-10-19: "We can get the high resolution terrain for the moon,
+             // right?"): LDEM_128 one file, LDEM_256 four of 90 x 180 degrees, LDEM_512 sixteen of 45 x 90, and the
+             // south-polar 20 m and 5 m stereographic products, all public domain (no SLDEM2015 or Kaguya).
+             {"ldem_128", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_128_float::1.0", "2017-09-15", 23040, 46080, 4,
+              false, false, 128, 0, 0, 3, {{"cylindrical/float_img/ldem_128_float", "\"8c7512ec2927d31:0\"", 90, 0}}},
+             {"ldem_256", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_256_float::1.0", "2019-08-23", 23040, 46080, 4,
+              false, false, 256, 0, 0, 3,
+              {{"cylindrical/float_img/ldem_256_00n_90n_000_180_float", "\"9a133e2f2a27d31:0\"", 90, 0},
+               {"cylindrical/float_img/ldem_256_00n_90n_180_360_float", "\"615d38b7c5fd51:0\"", 90, 180},
+               {"cylindrical/float_img/ldem_256_90s_00s_000_180_float", "\"ba80c502a27d31:0\"", 0, 0},
+               {"cylindrical/float_img/ldem_256_90s_00s_180_360_float", "\"8e71d1bc2b27d31:0\"", 0, 180}}},
+             {"ldem_512", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_512_float::1.0", "2017-09-15", 23040, 46080, 4,
+              false, false, 512, 0, 0, 3,
+              {
+               {"cylindrical/float_img/ldem_512_00n_45n_000_090_float", "\"2093ab882927d31:0\"", 45, 0},
+               {"cylindrical/float_img/ldem_512_00n_45n_090_180_float", "\"6042cf732b27d31:0\"", 45, 90},
+               {"cylindrical/float_img/ldem_512_00n_45n_180_270_float", "\"c64c5c142b27d31:0\"", 45, 180},
+               {"cylindrical/float_img/ldem_512_00n_45n_270_360_float", "\"ef20e0c92927d31:0\"", 45, 270},
+               {"cylindrical/float_img/ldem_512_45n_90n_000_090_float", "\"eaf1dd9b2b27d31:0\"", 90, 0},
+               {"cylindrical/float_img/ldem_512_45n_90n_090_180_float", "\"c5a0e0dc2b27d31:0\"", 90, 90},
+               {"cylindrical/float_img/ldem_512_45n_90n_180_270_float", "\"6eeabafd2b27d31:0\"", 90, 180},
+               {"cylindrical/float_img/ldem_512_45n_90n_270_360_float", "\"362deea82927d31:0\"", 90, 270},
+               {"cylindrical/float_img/ldem_512_45s_00s_000_090_float", "\"47a2e2f32a27d31:0\"", 0, 0},
+               {"cylindrical/float_img/ldem_512_45s_00s_090_180_float", "\"11c93332b27d31:0\"", 0, 90},
+               {"cylindrical/float_img/ldem_512_45s_00s_180_270_float", "\"b953e8702a27d31:0\"", 0, 180},
+               {"cylindrical/float_img/ldem_512_45s_00s_270_360_float", "\"22dd95b22a27d31:0\"", 0, 270},
+               {"cylindrical/float_img/ldem_512_90s_45s_000_090_float", "\"9f6c8c902a27d31:0\"", -45, 0},
+               {"cylindrical/float_img/ldem_512_90s_45s_090_180_float", "\"d5222dd42a27d31:0\"", -45, 90},
+               {"cylindrical/float_img/ldem_512_90s_45s_180_270_float", "\"cae70d2a27d31:0\"", -45, 180},
+               {"cylindrical/float_img/ldem_512_90s_45s_270_360_float", "\"17cecf532b27d31:0\"", -45, 270}}},
+             {"ldem_75n_60m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_75n_60m_float::1.0", "2016-09-15", 15248,
+              15248, 4, true, false, 0, 60, 75, 3, {{"polar/float_img/ldem_75n_60m_float", "\"fa2b445154d21:0\"", 0, 0}}},
+             {"ldem_80s_20m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_80s_20m_float::1.0", "2017-06-15", 30400,
+              30400, 4, true, true, 0, 20, 80, 3, {{"polar/float_img/ldem_80s_20m_float", "\"2dd2663badbd21:0\"", 0, 0}}},
+             {"ldem_875s_5m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_875s_5m_float::1.0", "2017-06-15", 30336,
+              30336, 4, true, true, 0, 5, 87.5, 3, {{"polar/float_img/ldem_875s_5m_float", "\"1af66117badbd21:0\"", 0, 0}}},
          },
          {
              {"ldem_4", 0, 3, -90, 90}, {"ldem_16", 4, 5, -90, 90}, {"ldem_64", 6, 7, -90, 90},
@@ -277,6 +313,9 @@ struct BodyUnit {
     std::vector<std::array<long, 3>> tiles;  // level, x, y
     uint64_t first_line = 0, last_line = 0;
     uint32_t blocks = 0;
+    // A run of a cut block row: its longitudes (degrees east from -180, the halo included); a file of a
+    // simple cylindrical product outside them is not read. lon_east - lon_west >= 360 reads every file.
+    double lon_west = -180.0, lon_east = 180.0;
 };
 
 // The densest lattice step at `level` (the normals' halo, see terrain-source).
@@ -422,6 +461,14 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
                         }
                         set_lines(*c.product, lo, hi);
                         out->blocks = static_cast<uint32_t>(b1 - b0);
+                        if (row_blocks > kBodyMaxBlocks) {
+                            // Only the files this run's columns (and the normals' halo, plus one source post) fall
+                            // in: a 64-block run of level 10 is 45 degrees of a product cut into 90-degree files.
+                            const double span = tile_size_deg(level);
+                            const double margin = body_halo_deg(level, max_grid) + 1.0 / c.product->ppd;
+                            out->lon_west = -180.0 + static_cast<double>(b0 * 4) * span - margin;
+                            out->lon_east = -180.0 + static_cast<double>(std::min(cols, b1 * 4)) * span + margin;
+                        }
                         found = true;
                     }
                 }
@@ -454,7 +501,20 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
 }
 
 // One file's share of a unit: its local lines [first, last]; false when the unit's lines miss the file.
+// Whether a simple cylindrical file's longitudes [west, west + samples/ppd) east meet the unit's run, on the circle.
+bool body_file_meets_run(const BodyProduct& p, const BodyFile& f, const BodyUnit& u) {
+    if (p.polar || u.lon_east - u.lon_west >= 360.0) return true;
+    const double width = static_cast<double>(p.samples) / p.ppd;
+    const double run_west = std::fmod(u.lon_west + 720.0, 360.0), run_width = u.lon_east - u.lon_west;
+    for (const double shift : {-360.0, 0.0, 360.0}) {
+        const double a = run_west + shift;
+        if (a < f.west + width && f.west < a + run_width) return true;
+    }
+    return false;
+}
+
 bool body_file_lines(const BodyProduct& p, const BodyFile& f, const BodyUnit& u, uint64_t* first, uint64_t* last) {
+    if (!body_file_meets_run(p, f, u)) return false;
     const uint64_t f0 = file_first_line(p, f), f1 = f0 + p.lines - 1;
     const uint64_t a = std::max(u.first_line, f0), b = std::min(u.last_line, f1);
     if (a > b) return false;
