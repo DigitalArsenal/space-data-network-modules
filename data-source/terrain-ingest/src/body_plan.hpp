@@ -33,11 +33,11 @@
 // root file) from the whole level-0 product. After it, per cap and level:
 //   * a simple cylindrical product: one BLOCK ROW (four tile rows, so every
 //     4x4 block file is complete in one plan), cut by longitude into runs of
-//     at most 64 blocks (the adapter's file budget; one run through level 7),
+//     at most 32 blocks (the adapter's file budget, see kBodyMaxBlocks; one run through level 6),
 //     reading the lines it spans from EVERY file of the product those lines
 //     cross (all longitudes);
 //   * a polar product: whole 4x4 blocks sorted by the first image line their
-//     footprint touches, taken greedily while the plan stays within 64 blocks
+//     footprint touches, taken greedily while the plan stays within 32 blocks
 //     and `max_range_bytes` of lines - a ring arc of the cap per plan, so
 //     consecutive plans read overlapping, not repeated, lines.
 // Each file a plan reads is asked for as its label and then `range_parts`
@@ -93,7 +93,10 @@ struct Body {
 
 constexpr double kBodyPi = 3.14159265358979323846;
 constexpr long kBodyRootMaxLevel = 2;
-constexpr long kBodyMaxBlocks = 64;
+// Files a plan packs: the flow hands a node at most 64 input frames an invocation (port-blind), and the IPFS
+// adapter takes every file AND the names frame; 64 files made 65 frames, one was dropped and every level-7 unit
+// was refused (host-01 2026-10-20). 32 keeps the walk's levels 0-6 units as they were.
+constexpr long kBodyMaxBlocks = 32;
 constexpr double kBodyDefaultRangeBytes = 72.0 * 1024 * 1024;
 constexpr size_t kBodyMaxDemFrames = 16;
 constexpr double kMarsRadiusM = 3396000.0;
@@ -438,7 +441,7 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
         for (long level = std::max(c.min_level, kBodyRootMaxLevel + 1); level <= c.max_level; level++) {
             const long rows = 1L << level, cols = 2L << level;
             if (!c.product->polar) {
-                // A block row of more than 64 blocks (level 8 and deeper) is cut into runs of 64 by longitude;
+                // A block row of more than 32 blocks (level 7 and deeper) is cut into runs of 32 by longitude;
                 // each run still reads the whole row's lines from every file (the halo crosses the files' edges).
                 const long row_blocks = (cols + 3) / 4;
                 for (long by = 0; by * 4 < rows; by++) {
