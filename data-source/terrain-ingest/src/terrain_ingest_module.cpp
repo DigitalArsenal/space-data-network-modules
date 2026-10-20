@@ -2018,21 +2018,42 @@ int import_plan(void) {
     const std::string job_id = mark_job_id(dataset + "+import", tileset, epoch);
     const MarkState mark = read_mark(stream, job_id);
     const long long start = std::max(from_unit, mark.found && mark.next_index > 0 ? mark.next_index : 0LL);
-    BodyUnit unit;
-    long long total = 0;
-    if (!body_unit_at(*body, caps, max_grid, range_bytes, start, &unit, &total)) {
-        plugin_set_backlog_remaining(0);  // every unit imported: a clean no-op
-        return 0;
-    }
+    // As many of the walk's consecutive units as fit one adapter call (import_max_files, at most 32 files): a unit of
+    // the 5 m south pole is one block file, a unit of LDEM_512 32 of them, and a tick moves the same file budget.
+    const long max_files = static_cast<long>(std::clamp(json_number_or(config, "import_max_files", kBodyMaxBlocks), 1.0,
+                                                        static_cast<double>(kBodyMaxBlocks)));
     const std::string prefix = config_string(config, "path_prefix", body->path_prefix);
     std::vector<std::string> names;
-    for (const auto& t : unit.tiles) {
-        const std::string name = pack_file_name(prefix, t[0], t[1], t[2]);
-        if (std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
+    long long total = 0, next = start;
+    std::string first_product, levels;
+    std::vector<std::string> level_list;
+    // Every unit holds at least one file, so the budget never spans more than max_files units: one pass plans them.
+    std::vector<BodyUnit> units;
+    body_units_in(*body, caps, max_grid, range_bytes, start, start + max_files, &units, &total);
+    for (const BodyUnit& unit : units) {
+        std::vector<std::string> unit_names;
+        for (const auto& t : unit.tiles) {
+            const std::string name = pack_file_name(prefix, t[0], t[1], t[2]);
+            if (std::find(unit_names.begin(), unit_names.end(), name) == unit_names.end()) unit_names.push_back(name);
+        }
+        if (unit_names.empty() || unit_names.size() > static_cast<size_t>(kBodyMaxBlocks)) {
+            plugin_set_error("invalid-import-unit", "an import unit names no file, or more than the adapter's 32.");
+            return 500;
+        }
+        if (!names.empty() && names.size() + unit_names.size() > static_cast<size_t>(max_files)) break;
+        names.insert(names.end(), unit_names.begin(), unit_names.end());
+        if (first_product.empty()) first_product = unit.cap->product->key;
+        const std::string level = unit.root ? "0-2" : std::to_string(unit.level);
+        if (std::find(level_list.begin(), level_list.end(), level) == level_list.end()) {
+            levels += (levels.empty() ? "" : ",") + level;
+            level_list.push_back(level);
+        }
+        next++;
+        if (names.size() >= static_cast<size_t>(max_files)) break;
     }
-    if (names.empty() || names.size() > static_cast<size_t>(kBodyMaxBlocks)) {
-        plugin_set_error("invalid-import-unit", "an import unit names no file, or more than the adapter's 32.");
-        return 500;
+    if (names.empty()) {
+        plugin_set_backlog_remaining(0);  // every unit imported: a clean no-op
+        return 0;
     }
     const long timeout_ms = config_timeout_ms(config);
     Bytes named;
@@ -2061,13 +2082,13 @@ int import_plan(void) {
     job.updated_at = retrieved_at;
     job.walk = body->walk;
     job.first_index = start;
-    job.next_index = start + 1;
+    job.next_index = next;
     job.records_committed = mark.found && mark.stored_total > 0 ? mark.stored_total : 0;
-    job.notes = std::string("import of product ") + unit.cap->product->key +
-                (unit.root ? ", levels 0-2" : ", level " + std::to_string(unit.level)) + ", " +
-                std::to_string(names.size()) + " files, unit " + std::to_string(start) + " of " + std::to_string(total);
+    job.notes = std::string("import of product ") + first_product + ", level " + levels + ", " +
+                std::to_string(names.size()) + " files, units " + std::to_string(start) + "-" + std::to_string(next - 1) +
+                " of " + std::to_string(total);
     if (push_typed("job", "IRM.fbs", "$IRM", "IRM", build_irm(job, false)) < 0) return 500;
-    const long long backlog = total - (start + 1);
+    const long long backlog = total - next;
     plugin_set_backlog_remaining(backlog > 0xffffffffLL ? 0xffffffffu : static_cast<uint32_t>(backlog < 0 ? 0 : backlog));
     return 0;
 }

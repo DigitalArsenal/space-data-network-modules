@@ -416,15 +416,20 @@ std::vector<std::pair<size_t, size_t>> body_polar_batches(const BodyProduct& p, 
 }
 
 // The whole walk: unit `index` (or, with index < 0, only the count). False when `index` is past the end.
-bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max_grid, double max_range_bytes,
-                  long long index, BodyUnit* out, long long* total) {
+// The walk's units [first, end) in one pass over the ladder (the import plans up to 32 consecutive units a tick;
+// enumerating from the start for each would redo every earlier polar cap's blocks per unit), appended to `units`.
+// `total` is the walk's length. body_unit_at is the one-unit case: the walk's indices are this enumeration's.
+void body_units_in(const Body& body, const std::vector<BodyCap>& caps, double max_grid, double max_range_bytes,
+                   long long first, long long end, std::vector<BodyUnit>* units, long long* total) {
     long long count = 1;  // the root unit
-    bool found = false;
-    const auto set_lines = [&](const BodyProduct& p, double lo, double hi) {
+    const auto set_lines = [](BodyUnit* out, const BodyProduct& p, double lo, double hi) {
         out->first_line = lo < 0 ? 0 : static_cast<uint64_t>(std::floor(lo));
         out->last_line = std::min<uint64_t>(product_lines(p) - 1, static_cast<uint64_t>(std::max(0.0, std::ceil(hi))));
     };
-    if (index == 0) {
+    const auto wanted = [&](long long k) { return k >= first && k < end; };
+    if (wanted(0)) {
+        BodyUnit unit;
+        BodyUnit* out = &unit;
         const BodyCap& c = caps[0];
         out->cap = &c;
         out->root = true;
@@ -435,7 +440,7 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
         out->first_line = 0;
         out->last_line = product_lines(*c.product) - 1;
         out->blocks = 1;
-        found = true;
+        units->push_back(std::move(unit));
     }
     for (const BodyCap& c : caps) {
         for (long level = std::max(c.min_level, kBodyRootMaxLevel + 1); level <= c.max_level; level++) {
@@ -450,7 +455,9 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
                         if (body_tile_inside(c, level, y)) ys.push_back(y);
                     if (ys.empty()) continue;
                     for (long b0 = 0; b0 < row_blocks; b0 += kBodyMaxBlocks) {
-                        if (count++ != index) continue;
+                        if (!wanted(count++)) continue;
+                        BodyUnit unit;
+                        BodyUnit* out = &unit;
                         const long b1 = std::min(row_blocks, b0 + kBodyMaxBlocks);
                         out->cap = &c;
                         out->level = level;
@@ -462,7 +469,7 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
                             lo = std::min(lo, a);
                             hi = std::max(hi, b);
                         }
-                        set_lines(*c.product, lo, hi);
+                        set_lines(out, *c.product, lo, hi);
                         out->blocks = static_cast<uint32_t>(b1 - b0);
                         if (row_blocks > kBodyMaxBlocks) {
                             // Only the files this run's columns (and the normals' halo, plus one source post) fall
@@ -472,7 +479,7 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
                             out->lon_west = -180.0 + static_cast<double>(b0 * 4) * span - margin;
                             out->lon_east = -180.0 + static_cast<double>(std::min(cols, b1 * 4)) * span + margin;
                         }
-                        found = true;
+                        units->push_back(std::move(unit));
                     }
                 }
                 continue;
@@ -480,7 +487,9 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
             const std::vector<BodyBlock> blocks = body_polar_blocks(body, c, level, max_grid);
             const auto batches = body_polar_batches(*c.product, blocks, max_range_bytes);
             for (const auto& [i, j] : batches) {
-                if (count++ != index) continue;
+                if (!wanted(count++)) continue;
+                BodyUnit unit;
+                BodyUnit* out = &unit;
                 out->cap = &c;
                 out->level = level;
                 double lo = 1e300, hi = -1e300;
@@ -493,14 +502,22 @@ bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max
                         for (long x = b.bx * 4; x < std::min(cols, b.bx * 4 + 4); x++) out->tiles.push_back({level, x, y});
                     }
                 }
-                set_lines(*c.product, lo, hi);
+                set_lines(out, *c.product, lo, hi);
                 out->blocks = static_cast<uint32_t>(j - i);
-                found = true;
+                units->push_back(std::move(unit));
             }
         }
     }
     if (total) *total = count;
-    return found;
+}
+
+bool body_unit_at(const Body& body, const std::vector<BodyCap>& caps, double max_grid, double max_range_bytes,
+                  long long index, BodyUnit* out, long long* total) {
+    std::vector<BodyUnit> units;
+    body_units_in(body, caps, max_grid, max_range_bytes, index, index + 1, &units, total);
+    if (units.empty()) return false;
+    *out = std::move(units.front());
+    return true;
 }
 
 // One file's share of a unit: its local lines [first, last]; false when the unit's lines miss the file.

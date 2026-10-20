@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
   "name": "Terrain Tile Ingest Scheduler Nodes",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: pure nodes read a durable $IRM resume mark (through hostcap/flatsql-query), walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded plans ($DTT header records) and the Copernicus GLO-30 DEM and water-body granule HttpRequests, author the storage attribution (IngestRequest), and advance the mark only from a verified store (IngestResult -> $IRM for hostcap/storage-write). OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is fetched and a 404 is no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it. TYPED CONTRACTS 1.0: FlatBuffers only - TimerTick, HttpRequest, IngestRequest/IngestResult, FlowNotice and ModuleConfig (module-sdk runtime types), $IRM, $DTT, $FSO and $FSB (SDS) - no JSON and no base64 between modules; node config through plugin.getConfig (SDS $PIV, ConfigEntry list \"entries\", nested values under dotted keys such as regions.0.west). NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -1333,13 +1333,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One GET per file of the walk's unit at the import mark (never below import_from_unit): import_base_url/<FILE_NAME>, if-modified-since the epoch (a staged file always answers whole), MAX_BYTES 8 MiB. One to 32 requests, all on this port, answered in order by one http node."
+              "description": "One GET per file of the walk's units from the import mark on (never below import_from_unit), as many consecutive units as fit import_max_files: import_base_url/<FILE_NAME>, if-modified-since the epoch (a staged file always answers whole), MAX_BYTES 8 MiB. One to 32 requests, all on this port, answered in order by one http node."
             }
           ],
           "minStreams": 1,
           "maxStreams": 32,
           "required": true,
-          "description": "One GET per file of the walk's unit at the import mark (never below import_from_unit): import_base_url/<FILE_NAME>, if-modified-since the epoch (a staged file always answers whole), MAX_BYTES 8 MiB. One to 32 requests, all on this port, answered in order by one http node."
+          "description": "One GET per file of the walk's units from the import mark on (never below import_from_unit), as many consecutive units as fit import_max_files: import_base_url/<FILE_NAME>, if-modified-since the epoch (a staged file always answers whole), MAX_BYTES 8 MiB. One to 32 requests, all on this port, answered in order by one http node."
         },
         {
           "portId": "names",
@@ -1384,7 +1384,7 @@
           "description": "The unit's job ($IRM), the import's own: JOB_ID dataset_id+import@tileset@epoch (never the walk's mark), LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the next, walk tag and provider the body's, so announce_files and publish_request treat the unit as the walk's own; NOTES name the product, level and file count."
         }
       ],
-      "description": "THE IMPORT: a body's terrain walk encoded elsewhere by the same modules (terrain-ingest:body_plan, terrain-source:tile and pack) and published here. Plans the walk's own unit with body_plan's config (body, tileset_id, dataset_epoch, caps, max_grid_size, max_range_bytes, path_prefix) at the import's own mark, never below import_from_unit, and asks import_base_url for the unit's finished files. A drained import is a clean no-op.",
+      "description": "THE IMPORT: a body's terrain walk encoded elsewhere by the same modules (terrain-ingest:body_plan, terrain-source:tile and pack) and published here. Plans the walk's own unit with body_plan's config (body, tileset_id, dataset_epoch, caps, max_grid_size, max_range_bytes, path_prefix) at the import's own mark, never below import_from_unit, and asks import_base_url for the finished files of as many consecutive units as fit one host-adapter call (import_max_files, default and at most 32 files; a unit is never split), planned in one pass over the ladder. A drained import is a clean no-op.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     },

@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/terrain-ingest",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "Terrain ingest scheduler module: regional-priority DEM fetch planning (populated land first), the Moon's LOLA walk by whole-line ranges, resume marks, chunked ranged fetches, epoch announcement, $PNM file announcement. Owns scheduling/chunking/resume; decode/tiling lives in the sibling terrain-source module.",
