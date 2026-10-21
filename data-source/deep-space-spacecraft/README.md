@@ -112,6 +112,8 @@ request order. A transport ERROR fails with `fetch-failed`; non-200 status or an
 empty BODY fails with `horizons-http-error`. Invalid response envelopes, response
 counts, state and configuration remain fatal.
 
+Each vector page's `Target body name:` line must contain its id and a case-insensitive `horizons_name` substring (`|` separates alternatives), or that craft is skipped with `vector-target-mismatch`.
+
 `build_oem` outputs one pair per populated catalog in the table order:
 
 - `<id>_records`: one stream concatenating every size-prefixed `$OEM` in that
@@ -159,10 +161,10 @@ an unqualified `-24` remains Pioneer 11.
 cd data-source/deep-space-spacecraft
 npm install --offline --no-audit --no-fund
 node build.mjs
-PATH="$HOME/.wasmedge/bin:$PATH" HORIZONS_RECORD=0 node --test tests/notable-trajectories.e2e.test.mjs
+PATH="$HOME/.wasmedge/bin:$PATH" HORIZONS_RECORD=0 node --test tests/*.e2e.test.mjs
 ```
 
-The single offline E2E validates the SDK artifact and explicitly probes the
+The standalone offline E2E validates the SDK artifact and explicitly probes the
 original 13 identities. The existing cassette contains **three** craft (Roadster,
 Voyager 1/2), **29** requests and **60** independent Horizons TLIST reference
 epochs, in Sun-centered ICRF km/km/s and JD TDB. Position tolerance is 1 km for
@@ -170,6 +172,30 @@ source rounding/interpolation; observed errors remain meter scale. The cassette
 has no JWST/Juno vectors, Earth positions or geocentric distances: a recorded
 13-craft/JWST geometry replay awaits additional recordings. The cassette is
 unchanged. Its optional `HORIZONS_RECORD=1` refresh mode requires network access.
+
+`tests/composed-flow.e2e.test.mjs` checks the deployment wiring offline. It calls
+`deepSpaceFlow` with the deployment builder's node/typed-edge helpers and dependency
+map, runs SDK CLI `flow check` and `flow compile` into a temporary directory, and
+loads the compiled isomorphic artifact with `createFlowRuntimeHost`. The actual
+source, HTTP and storage-ingest guests run linked inside the JS flow host. Only
+their typed `$PIV` hostcalls are answered by the test: config, the local Horizons
+cassette and a recording `storage.ingest_with_source` stand-in. There is no network
+fallback, even in record mode, and no native WasmEdge dependency for this test.
+
+One `daily` TimerTick selects the three cassette craft via `objects`, using the
+cassette's page size and historical limits. All 29 HTTP URLs must be cached and
+unique. Only the heliocentric OEM and catalogs EGP ingest nodes may run; their
+streams must equal the shared standalone staged replay byte for byte, with source,
+peer, Current reconciliation and batch tags intact. OEM batch IDs are stream
+SHA-256; EGP retains its existing `SHA-256@<retrieved_ms>` contract. Node status,
+typed routing, ingest results and the catalog-count summary are checked. A second,
+disabled run must emit just one Skipped notice with no HTTP or ingest calls and
+no downstream guest invocations. The test compiles once, cleans its temporary
+directory, has a three-minute timeout and normally takes about 15 seconds:
+
+```sh
+HORIZONS_RECORD=0 node --test tests/composed-flow.e2e.test.mjs
+```
 
 `browser and WasmEdge produce byte-identical frames` replays that cassette and
 the 20-object synthetic plan's first two advances on both direct harnesses.

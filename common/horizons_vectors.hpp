@@ -152,12 +152,29 @@ inline std::string headerValue(const std::string& header, const std::string& key
   return trim(header.substr(colon + 1, end - colon - 1));
 }
 
-inline bool validateTarget(const std::string& text, int expectedId, std::string& error, int expectedCenter = 10) {
-  const std::string target = headerValue(text.substr(0, text.find("$$SOE")), "Target body name");
-  if (target.find("(" + std::to_string(expectedId) + ")") == std::string::npos) {
+inline bool targetNameMatches(std::string target, std::string alternatives) {
+  for (char& c : target) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  for (char& c : alternatives) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  size_t start = 0;
+  while (start < alternatives.size()) {
+    const size_t end = alternatives.find('|', start);
+    const std::string name = alternatives.substr(start, end - start);
+    if (!name.empty() && target.find(name) != std::string::npos) return true;
+    if (end == std::string::npos) break;
+    start = end + 1;
+  }
+  return false;
+}
+
+inline bool validateTarget(const std::string& text, int expectedId, const std::string& expectedNames,
+                           std::string& error, int expectedCenter = 10) {
+  const std::string header = text.substr(0, text.find("$$SOE"));
+  const std::string target = headerValue(header, "Target body name");
+  if (target.find("(" + std::to_string(expectedId) + ")") == std::string::npos ||
+      !targetNameMatches(target, expectedNames)) {
     error = "vector-target-mismatch"; return false;
   }
-  if (headerValue(text.substr(0, text.find("$$SOE")), "Center body name").find(
+  if (headerValue(header, "Center body name").find(
       "(" + std::to_string(expectedCenter) + ")") == std::string::npos) {
     error = "vector-center-mismatch"; return false;
   }

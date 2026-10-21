@@ -179,7 +179,7 @@ bool readVectorPage(const Json& pending, const Json& group, int id, size_t pageR
       start == group["start"].get<int64_t>() + int64_t(offset) * step &&
       start + int64_t(count - 1) * step <= group["stop"].get<int64_t>(), "out-of-order-vector-page");
   NEED(horizons::parseVectors(body, start, step, count, rows, error, group["center"].get<int>()), error);
-  NEED(horizons::validateTarget(body, id, error, group["center"].get<int>()), error);
+  NEED(horizons::validateTarget(body, id, notables::find(id)->horizons_name, error, group["center"].get<int>()), error);
   return true;
 }
 bool consume(Json& state) {

@@ -12,6 +12,7 @@ import { createStandaloneHarnessOrSkip } from "space-data-module-sdk/testing/iso
 import { encodeTimerTick, encodeHttpResponse, decodeHttpRequest, decodeHttpResponse, decodeIngestRequest, decodeFlowNotice } from "space-data-module-sdk/runtime-contracts";
 import { deepSpaceFlow } from "../flow.mjs";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
+import { replayStages, requestKey as key } from "./horizons-stages.mjs";
 
 // Independent source: NASA/JPL Horizons TLIST queries, not module outputs.
 // Epochs: the fixture's JD TDB; center: Sun; frame: ICRF; units: km and km/s.
@@ -119,10 +120,6 @@ function skippedCraft(result, id, code) {
 function params(url) {
   return Object.fromEntries([...new URL(url).searchParams].map(([k, v]) => [k, v.replace(/^'(.*)'$/s, "$1")]));
 }
-function key(url) {
-  const p = params(url);
-  return Object.keys(p).sort().map((k) => `${k}=${p[k]}`).join("|");
-}
 function requestShape(request) {
   assert.equal(request.method, "GET");
   assert.equal(new URL(request.url).origin + new URL(request.url).pathname, "https://ssd.jpl.nasa.gov/api/horizons.api");
@@ -164,31 +161,13 @@ async function fetchText(request) {
 }
 
 async function runAll(h, answer) {
-  let result = await h.invoke(planOptions(cassette.config).request);
-  ok(result, "plan_horizons");
-  const keys = [], requestsSeen = [], snapshots = [];
-  for (const methodId of [...Array(6).fill("advance"), "build_oem"]) {
-    const requests = outs(result, "request").map(decodeHttpRequest);
-    assert.ok(requests.length <= 60, `${methodId} received ${requests.length} requests`);
-    const responses = [];
-    for (const request of requests) {
-      requestShape(request);
-      keys.push(key(request.url));
-      requestsSeen.push(request);
-      responses.push(respond(await answer(request)));
-    }
-    const state = outs(result, "state");
-    assert.equal(state.length, 1);
-    const inputs = [input("state", state[0]), ...responses.map((r) => input("response", r))];
-    snapshots.push({ methodId, inputs, requests });
-    result = await h.invoke({ methodId, inputs });
-    ok(result, `${methodId} ${snapshots.length}`);
-  }
-  assert.equal(outs(result, "request").length, 0);
+  const replay = await replayStages(h, { planRequest: planOptions(cassette.config).request, answer,
+    checkResult: ok, checkRequest: requestShape });
+  const { result, keys } = replay;
   assert.equal(keys.length, 29);
   assert.equal(new Set(keys).size, keys.length, "a request must not be duplicated");
   assert.deepEqual([...keys].sort(), Object.keys(cassette.responses).sort(), "the independent cassette defines the exact request set");
-  return { result, keys, requestsSeen, snapshots, records: recordBytes(result) };
+  return { ...replay, records: recordBytes(result) };
 }
 
 function checkGroups(result) {
@@ -404,6 +383,13 @@ test("Horizons stages build deterministic Sun-centered OEMs and evaluate indepen
   });
   const activeResponses = record ? recorded : cassette.responses;
   const activeReference = record ? await refreshReferences(t, first.requestsSeen) : reference;
+  // Real recorded header lines, independent of the module's identity table.
+  assert.deepEqual([...new Set(Object.values(cassette.responses).flatMap((body) =>
+    body.match(/^Target body name:.*$/gm) ?? []))].sort(), [
+    "Target body name: SpaceX Roadster (spacecraft) (-143205) {source: tesla_s11}",
+    "Target body name: Voyager 1 (spacecraft) (-31)    {source: Voyager_1_ST+refit2022_m}",
+    "Target body name: Voyager 2 (spacecraft) (-32)    {source: Voyager_2_ST+refit2022_m}",
+  ]);
   assert.equal(first.records.length, 3);
   const compactStates = first.snapshots.map(compactState);
   const byId = new Map();
@@ -606,11 +592,35 @@ async function advanceWith(h, result, answer, methodId = "advance", extra = []) 
   }
   return h.invoke({ methodId, inputs: [input("state", outs(result, "state")[0]), ...responses, ...extra] });
 }
-function vectorAnswer(fixture) {
+// Synthetic header names exercise the requested identity contract, not a copy
+// read from the module's table. Numeric rows still come from the physics fixture.
+const syntheticTargetNames = new Map([
+  [-143205, ["SpaceX Roadster"]], [-31, ["Voyager 1"]], [-32, ["Voyager 2"]],
+  [-23, ["Pioneer 10"]], [-24, ["Pioneer 11"]], [-98, ["New Horizons"]],
+  [-96, ["Parker Solar Probe"]], [-170, ["James Webb Space Telescope"]], [-61, ["Juno"]],
+  [-159, ["Europa Clipper"]], [-49, ["Lucy"]], [-255, ["Psyche"]], [-64, ["OSIRIS-REx"]],
+  [-21, ["SOHO"]], [-92, ["Advanced Composition Explorer"]],
+  [-78, ["Deep Space Climate Observatory", "DSCOVR"]], [-8, ["Wind"]], [-139479, ["Gaia"]],
+  [-680, ["Euclid"]], [-121, ["BepiColombo", "Mercury Planetary Orbiter"]],
+  [-85, ["Lunar Reconnaissance Orbiter", "LRO"]], [-1176, ["CAPSTONE"]],
+  [-192, ["ARTEMIS P1", "THEMIS-B", "THEMIS B"]], [-193, ["ARTEMIS P2", "THEMIS-C", "THEMIS C"]],
+  [-12, ["LADEE", "Lunar Atmosphere and Dust Environment Explorer"]],
+  [-177, ["GRAIL-A", "GRAIL A", "Ebb"]], [-181, ["GRAIL-B", "GRAIL B", "Flow"]],
+  [-95, ["Transiting Exoplanet Survey Satellite", "TESS"]],
+  [-1023, ["Artemis I", "Orion"]], [-1024, ["Artemis II", "Orion"]],
+  [-74, ["Mars Reconnaissance Orbiter", "MRO"]], [-202, ["MAVEN"]], [-53, ["2001 Mars Odyssey"]],
+  [-41, ["Mars Express"]], [-143, ["Trace Gas Orbiter", "TGO", "ExoMars"]],
+  [-5, ["Akatsuki", "Venus Climate Orbiter"]], [-248, ["Venus Express"]],
+  [-236, ["MESSENGER"]], [-82, ["Cassini"]],
+]);
+function vectorAnswer(fixture, alternative = 0) {
   return async (request) => {
     const p = params(request.url);
-    return fixture({ id: Number(p.COMMAND), center: Number(p.CENTER.split("@")[1]),
+    const names = syntheticTargetNames.get(Number(p.COMMAND));
+    assert.ok(names, `missing synthetic target name for ${p.COMMAND}`);
+    const body = await fixture({ id: Number(p.COMMAND), center: Number(p.CENTER.split("@")[1]),
       start: p.START_TIME, stop: p.STOP_TIME, step: p.STEP_SIZE === "1 d" ? 86400 : Number.parseInt(p.STEP_SIZE) * 60 });
+    return body.replace("Target body name: Synthetic", `Target body name: Synthetic ${names[alternative % names.length].toUpperCase()} (spacecraft)`);
   };
 }
 const decodedRecords = (result) => recordBytes(result).map((bytes) => ({ bytes,
@@ -833,6 +843,53 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       assert.deepEqual(outs(again, "catalogs_records"), outs(result, "catalogs_records"));
     }
   });
+  await t.test("same-id wrong-craft headers skip only that craft and name it on status and notice", async () => {
+    const planned = await plan({ objects: [-53, -74] });
+    ok(planned, "target identity probes");
+    const pages = await advanceWith(h, planned, async (r) => {
+      const lower = params(r.url).START_TIME.startsWith("1900");
+      return coverage(lower, lower ? "2000-JAN-01 00:00:00" : "2040-JAN-01 00:00:00");
+    });
+    ok(pages, "target identity pages");
+    const baseline = await advanceWith(h, pages, vectors, "build_oem");
+    ok(baseline, "matching target names");
+    assert.deepEqual(new Set(lanes(baseline).map((c) => c.naif_id)), new Set([-53, -74]));
+    const rejected = await advanceWith(h, pages, async (r) => {
+      const body = await vectors(r);
+      if (params(r.url).COMMAND !== "-53") return body;
+      // Same id and valid rows, but another craft. The expected name elsewhere
+      // in the header and after the data must not satisfy the target-line check.
+      return body.replace("Synthetic 2001 MARS ODYSSEY", "Mars Pathfinder")
+        .replace("Output units:", "Comment: Mars Odyssey\nOutput units:") + "Mars Odyssey\n";
+    });
+    skippedCraft(rejected, -53, /^vector-target-mismatch$/);
+    assert.deepEqual(decodeFlowNotice(outs(rejected, "status")[0]).items, ["-53:vector-target-mismatch"]);
+    const built = await advanceWith(h, rejected, vectors, "build_oem");
+    skippedCraft(built, -53, /^vector-target-mismatch$/);
+    assert.deepEqual(missing(built), [{ naif_id: -53, skipped: "vector-target-mismatch" }]);
+    assert.deepEqual(lanes(built), lanes(baseline).filter((c) => c.naif_id !== -53));
+    assert.deepEqual(recordBytes(built), recordEntries(baseline).filter((c) => c.naif_id !== -53).map((c) => c.bytes));
+    checkGroups(built);
+  });
+  await t.test("every alternate Horizons name passes case-insensitive substring matching", async () => {
+    const objects = [...syntheticTargetNames].filter(([, names]) => names.length > 1).map(([id]) => id);
+    const planned = await plan({ objects, now_tdb: "2000-01-10T00:00:00" });
+    ok(planned, "alternate-name probes");
+    const pages = await advanceWith(h, planned, async (r) => {
+      const lower = params(r.url).START_TIME.startsWith("1900");
+      return coverage(lower, lower ? "2000-JAN-01 00:00:00" : "2000-FEB-10 00:00:00");
+    });
+    ok(pages, "alternate-name pages");
+    let baseline;
+    for (let alternative = 0; alternative < 3; alternative++) {
+      const built = await advanceWith(h, pages, vectorAnswer(fixture, alternative), "build_oem");
+      ok(built, `alternate name ${alternative}`);
+      assert.deepEqual(missing(built), []);
+      assert.deepEqual(new Set(lanes(built).map((c) => c.naif_id)), new Set(objects));
+      baseline ??= recordBytes(built);
+      assert.deepEqual(recordBytes(built), baseline, "header aliases do not change the published trajectory");
+    }
+  });
   await t.test("page validation skips only the craft while transport and state failures stay fatal", async () => {
     const planned = await plan({ objects: [-21, -92] });
     ok(planned, "validation probes");
@@ -847,7 +904,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       inputs: [input("state", stateBytes), ...responses.map((r) => input("response", r))] });
     for (const [code, corrupt] of [
       ["unknown-horizons-error", () => "Horizons: unknown target id\n"],
-      ["vector-target-mismatch", (s) => s.replace("Synthetic (-21)", "Synthetic (-92)")],
+      ["vector-target-mismatch", (s) => s.replace("(-21)", "(-92)")],
       ["invalid-vector-header", (s) => s.replace("Center body name: Synthetic (10)", "Center body name: Synthetic (399)")],
       ["vector-grid-mismatch", (s) => s.replace(/(\$\$SOE\n)[^,]+,/, (_, marker) => marker + "2400000,")],
       ["missing-vector-row", (s) => s.replace(/(\$\$SOE\n)[^\n]+\n/, "$1")],
