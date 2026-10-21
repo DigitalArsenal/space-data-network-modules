@@ -2,8 +2,8 @@
 // signing mistake in the module is a 403 here, not a pass. One bucket; objects, ListObjectsV2 (prefix, delimiter,
 // max-keys, continuation-token, start-after), HEAD, ranged GET, DELETE and multipart (5 MiB minimum part size, composite
 // ETag). Run as a child process: `node mock-s3.mjs <accessKey> <secret> <bucket> <region>`; it prints its port.
-// Test control: POST /_mock/fail-part?n=2 makes the next UploadPart number 2 answer 500; GET /_mock/state is a JSON
-// dump {objects, aborted, requests}; POST /_mock/reset.
+// Test control: POST /_mock/fail-part?n=2 makes the next UploadPart number 2 answer 500; POST /_mock/seed?key=&size=&modified=
+// stores an object; GET /_mock/state is a JSON dump {objects, aborted, requests}; POST /_mock/reset.
 import crypto from "node:crypto";
 import http from "node:http";
 
@@ -68,6 +68,12 @@ const server = http.createServer(async (req, res) => {
       return ok(res, 200, JSON.stringify(state), { "content-type": "application/json" });
     }
     if (url.pathname === "/_mock/fail-part") { failPart = Number(url.searchParams.get("n")); return ok(res, 200, "ok"); }
+    if (url.pathname === "/_mock/seed") {  // POST ?key=&size=&modified=<ISO>: an object of `size` zero bytes, unauthenticated test control
+      const size = Number(url.searchParams.get("size") || 0);
+      const body = Buffer.alloc(size);
+      objects.set(url.searchParams.get("key"), { body, etag: etagOf(body), modified: url.searchParams.get("modified") || new Date().toISOString(), contentType: "binary/octet-stream" });
+      return ok(res, 200, "ok");
+    }
     if (url.pathname === "/_mock/reset") { objects = new Map(); uploads = new Map(); aborted = []; requests = []; failPart = null; return ok(res, 200, "ok"); }
   }
   const problem = verify(req, sha256(body), url);

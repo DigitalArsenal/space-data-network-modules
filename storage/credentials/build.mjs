@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 
-import { buildStorageModule } from "../tools/build-module.mjs";
+import { buildModule } from "../../scripts/lib/build-module.mjs";
 
-await buildStorageModule({
+await buildModule({
   packageRoot: fileURLToPath(new URL(".", import.meta.url)),
   sourceFile: "storage_credentials_module.cpp",
   standards: ["APR", "QRP"], // the task arrives as an $APR, the answer leaves as a $QRP decision + page

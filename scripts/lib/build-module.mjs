@@ -1,6 +1,6 @@
-// The shared build of the storage modules (build tooling, not module source): compile one C++ source on the SDK's
-// single-thread STANDALONE_WASM lane with the SDS C++ headers it names inlined, then persist what the flow compiler links
-// (dist/guest-link) beside the module and its manifest. Each package's build.mjs is a call to this.
+// The shared build of the storage and terrain-source-watch modules (build tooling, not module source): compile one C++
+// source on the SDK's single-thread STANDALONE_WASM lane with the SDS C++ headers it names inlined, then persist what the
+// flow compiler links (dist/guest-link) beside the module and its manifest. Each package's build.mjs is a call to this.
 //
 // Typed contracts: the SDS standards' generated C++ headers are inlined with their include guards renamed (every SDS
 // header is "main_generated.h") and the flatc version assert relaxed, as foundation/http-route does. The runtime headers
@@ -11,13 +11,13 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = path.dirname(fileURLToPath(import.meta.url)); // <modules>/scripts/lib
 
-export async function buildStorageModule({ packageRoot, sourceFile, standards, httpAbi = false, label }) {
+export async function buildModule({ packageRoot, sourceFile, standards, httpAbi = false, inlineHeaders = [], label }) {
   const require = createRequire(path.join(packageRoot, "package.json"));
   const importSdk = (name) => import(pathToFileURL(require.resolve(`space-data-module-sdk/${name}`)).href);
   const { compileModuleFromSource } = await importSdk("compiler");
-  const { generateSdsHeader } = await import(pathToFileURL(path.join(here, "..", "..", "scripts", "lib", "sds-cpp-headers.mjs")).href);
+  const { generateSdsHeader } = await import(pathToFileURL(path.join(here, "sds-cpp-headers.mjs")).href);
 
   const manifestPath = path.join(packageRoot, "plugin-manifest.json");
   const distRoot = path.join(packageRoot, "dist");
@@ -25,7 +25,7 @@ export async function buildStorageModule({ packageRoot, sourceFile, standards, h
   // The sibling spacedatastandards.org checkout; SPACE_DATA_STANDARDS_ROOT wins when set.
   process.env.SPACE_DATA_STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT
     ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
-    : path.resolve(packageRoot, "..", "..", "..", "spacedatastandards.org");
+    : path.resolve(here, "..", "..", "..", "spacedatastandards.org");
   const from = pathToFileURL(path.join(packageRoot, "build.mjs")).href;
 
   const sdsHeader = async (code) =>
@@ -41,7 +41,13 @@ export async function buildStorageModule({ packageRoot, sourceFile, standards, h
     parts.push(await fs.readFile(path.join(sdkRoot, "src", "generated", "http", "cpp", "HttpRequestAbi_generated.h"), "utf8"));
   }
   for (const code of standards) parts.push(await sdsHeader(code));
-  parts.push(await fs.readFile(path.join(packageRoot, "src", sourceFile), "utf8"));
+  // Local headers named by `inlineHeaders` replace their #include in the source (the compiler takes one translation unit).
+  let source = await fs.readFile(path.join(packageRoot, "src", sourceFile), "utf8");
+  for (const name of inlineHeaders) {
+    const body = (await fs.readFile(path.join(packageRoot, "src", name), "utf8")).replace(/^#pragma once\s*$/m, "");
+    source = source.replace(`#include "${name}"`, () => `// ---- ${name} ----\n${body}\n// ---- end ${name} ----`);
+  }
+  parts.push(source);
 
   await fs.rm(distRoot, { recursive: true, force: true });
   await fs.mkdir(path.dirname(outputPath), { recursive: true });

@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 
-import { buildStorageModule } from "../tools/build-module.mjs";
+import { buildModule } from "../../scripts/lib/build-module.mjs";
 
-await buildStorageModule({
+await buildModule({
   packageRoot: fileURLToPath(new URL(".", import.meta.url)),
   sourceFile: "object_s3_module.cpp",
   standards: ["APR", "FIL"], // tasks and results are $APR, listings $FIL; HREQ / HRSP are the SDK runtime types

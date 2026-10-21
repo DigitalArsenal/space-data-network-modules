@@ -1,0 +1,271 @@
+{
+  "programId": "com.digitalarsenal.flows.terrain-refresh",
+  "name": "Terrain Refresh: monthly source check",
+  "version": "0.1.0",
+  "description": "The monthly source check of the terrain refresh (owner 2026-10-21: terrain updates run on SDN nodes as modules and flows, not as Mac scripts). One timer tick (config body: moon | mars; one service instance per body) reaches data-source/terrain-source-watch plan, which asks every source file the terrain walk reads for its first byte through hostcap/http-request (the ETag, Last-Modified and total size of the publisher's file) and asks storage/object-s3 to list the raw/<naif>/ mirror in R2 (SigV4 with the credential on the node's storage_r2 lane, read grant only). diff compares the two against the ETags the walk is pinned to and answers a $QRP page - per source file: current, source-changed, source-newer, size-changed, not-mirrored or probe-failed, with the product's levels - which a second object-s3 sign stores at watch/<naif>/<yyyy-mm-dd>.qrp beside the mirror, plus one FlowNotice (Unchanged when nothing needs a refresh). A mirror the node cannot read (no credential, the store refusing) still yields the source half as a FlowNotice and stores nothing. This flow only OBSERVES: it fetches one byte per source and writes one small report object; the quarterly re-encode of the changed units is a separate flow that consumes the report. Capabilities: clock, http, and the READ grant on secrets:storage_r2 - no write grant, no storage, no wallet.",
+  "nodes": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "methodId": "plan",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "probe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "capabilities": [
+        "http"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "sign_list",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "kind": "transform",
+      "capabilities": [
+        "clock",
+        "secrets:storage_r2"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_list",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "capabilities": [
+        "http"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "finish_list",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "diff",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "methodId": "diff",
+      "kind": "transform",
+      "capabilities": [
+        "clock"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "sign_put",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "kind": "transform",
+      "capabilities": [
+        "clock",
+        "secrets:storage_r2"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_put",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "capabilities": [
+        "http"
+      ],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "finish_put",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "kind": "transform",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "capabilities": [],
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "plan-probes-probe-request",
+      "fromNodeId": "plan",
+      "fromPortId": "probes",
+      "toNodeId": "probe",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-list-sign_list-task",
+      "fromNodeId": "plan",
+      "fromPortId": "list",
+      "toNodeId": "sign_list",
+      "toPortId": "task",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "plan-status-egress-response",
+      "fromNodeId": "plan",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "sign_list-requests-http_list-request",
+      "fromNodeId": "sign_list",
+      "fromPortId": "requests",
+      "toNodeId": "http_list",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "sign_list-result-diff-mirror_result",
+      "fromNodeId": "sign_list",
+      "fromPortId": "result",
+      "toNodeId": "diff",
+      "toPortId": "mirror_result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_list-response-finish_list-responses",
+      "fromNodeId": "http_list",
+      "fromPortId": "response",
+      "toNodeId": "finish_list",
+      "toPortId": "responses",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "finish_list-listing-diff-mirror",
+      "fromNodeId": "finish_list",
+      "fromPortId": "listing",
+      "toNodeId": "diff",
+      "toPortId": "mirror",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "finish_list-result-diff-mirror_result",
+      "fromNodeId": "finish_list",
+      "fromPortId": "result",
+      "toNodeId": "diff",
+      "toPortId": "mirror_result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "probe-response-diff-probes",
+      "fromNodeId": "probe",
+      "fromPortId": "response",
+      "toNodeId": "diff",
+      "toPortId": "probes",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "diff-put-sign_put-task",
+      "fromNodeId": "diff",
+      "fromPortId": "put",
+      "toNodeId": "sign_put",
+      "toPortId": "task",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "diff-report-egress-response",
+      "fromNodeId": "diff",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "diff-status-egress-response",
+      "fromNodeId": "diff",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "sign_put-requests-http_put-request",
+      "fromNodeId": "sign_put",
+      "fromPortId": "requests",
+      "toNodeId": "http_put",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "sign_put-result-egress-response",
+      "fromNodeId": "sign_put",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "http_put-response-finish_put-responses",
+      "fromNodeId": "http_put",
+      "fromPortId": "response",
+      "toNodeId": "finish_put",
+      "toPortId": "responses",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "finish_put-result-egress-response",
+      "fromNodeId": "finish_put",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "terrain-refresh-watch",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 2592000000,
+      "description": "Monthly (30 days). The host config of the service names the real interval; with none configured nothing runs."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "terrain-refresh-watch",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.terrain-source-watch",
+    "com.digitalarsenal.storage.object-s3",
+    "com.digitalarsenal.hostcap.http-request"
+  ]
+}

@@ -20,7 +20,7 @@ export const MODULES_ROOT = path.resolve(SUPPORT_DIR, "..", "..", "..");
 const SDK_PACKAGE = path.join(MODULES_ROOT, "storage", "object-s3", "package.json");
 const sdkRequire = createRequire(SDK_PACKAGE);
 const sdk = (name) => import(pathToFileURL(sdkRequire.resolve(`space-data-module-sdk/${name}`)).href);
-const { decodeHostCall, encodeHostCallResult } = await sdk("runtime-contracts");
+const { decodeFlowNotice, decodeHostCall, encodeHostCallResult, encodeModuleConfig, encodeTimerTick } = await sdk("runtime-contracts");
 const { decodeHttpResponse, encodeHttpRequest: encodeHtq } = await sdk("http");
 const { createFlowRuntimeHost } = await sdk("flow");
 // The standards checkout: SPACE_DATA_STANDARDS_ROOT, else the sibling of this repo, else (a task worktree) the stack
@@ -85,6 +85,7 @@ export function readQrp(bytes, sizePrefixed) {
   return QRP.QRP.getRootAsQRP(new flatbuffers.ByteBuffer(Uint8Array.from(body))).unpack();
 }
 export const cellValue = (c) => (c.KIND === QRP.qrpValueKind.Text ? c.TEXT_VALUE : c.KIND === QRP.qrpValueKind.Bool ? c.BOOL_VALUE
+  : c.KIND === QRP.qrpValueKind.Int ? Number(c.INT_VALUE) : c.KIND === QRP.qrpValueKind.Float ? c.FLOAT_VALUE
   : c.KIND === QRP.qrpValueKind.Bytes ? Buffer.from(c.BYTES_VALUE) : null);
 export const rowsOf = (page) => page.ROWS.map((r) => Object.fromEntries(page.COLUMNS.map((c, i) => [c.NAME, cellValue(r.CELLS[i])])));
 export const paramsOf = (record) => Object.fromEntries((record.PARAMETERS ?? []).map((p) => [p.NAME, p.VALUE]));
@@ -140,17 +141,21 @@ export async function startMockS3({ accessKey, secret, bucket, region }) {
     endpoint,
     state: async () => JSON.parse(await control("/_mock/state")),
     failPart: (n) => control(`/_mock/fail-part?n=${n}`, { method: "POST" }),
+    seed: (key, size, modified) => control(`/_mock/seed?key=${encodeURIComponent(key)}&size=${size}${modified ? `&modified=${encodeURIComponent(modified)}` : ""}`, { method: "POST" }),
+    objectBytes: async (key) => { const state = await (await fetch(`${endpoint}/_mock/state`)).json(); return state.objects[key]; },
     reset: () => control("/_mock/reset", { method: "POST" }),
     stop: () => child.kill(),
   };
 }
 
 // ---- the node: the credential store, the keyslot, the clock, http --------------------------------------------------
-export function createNode({ store = new Map(), publicKey = "hex", refuseWrites = false, refuseReads = false, now = null, http = syncHttp, withClock = true } = {}) {
+export function createNode({ store = new Map(), publicKey = "hex", refuseWrites = false, refuseReads = false, now = null, http = syncHttp, withClock = true, config = null } = {}) {
   const calls = [];
   const answer = (call) => {
     const id = call.params?.ID;
     switch (call.op) {
+      case "plugin.getConfig":
+        return { ok: true, op: call.op, raw: { config: encodeModuleConfig(config ?? {}) } };
       case "node.publicKey":
         if (publicKey === "none") return { ok: false, error: { code: "unsupported", message: "no node key" } };
         return { ok: true, op: call.op, raw: { value: publicKey === "hex" ? SLOT_PUBLIC.toString("hex") : SLOT_PUBLIC } };
@@ -241,4 +246,4 @@ export async function runFlow({ wasm, node, inputs, sinks = ["sdn.flow.egress:em
   return { outputs, host };
 }
 
-export { assert, decodeHttpResponse, encodeHtq };
+export { assert, decodeFlowNotice, decodeHttpResponse, encodeHtq, encodeTimerTick };

@@ -1,0 +1,679 @@
+{
+  "pluginId": "com.digitalarsenal.flows.terrain-refresh",
+  "name": "Terrain Refresh: monthly source check",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "The monthly source check of the terrain refresh (owner 2026-10-21: terrain updates run on SDN nodes as modules and flows, not as Mac scripts). One timer tick (config body: moon | mars; one service instance per body) reaches data-source/terrain-source-watch plan, which asks every source file the terrain walk reads for its first byte through hostcap/http-request (the ETag, Last-Modified and total size of the publisher's file) and asks storage/object-s3 to list the raw/<naif>/ mirror in R2 (SigV4 with the credential on the node's storage_r2 lane, read grant only). diff compares the two against the ETags the walk is pinned to and answers a $QRP page - per source file: current, source-changed, source-newer, size-changed, not-mirrored or probe-failed, with the product's levels - which a second object-s3 sign stores at watch/<naif>/<yyyy-mm-dd>.qrp beside the mirror, plus one FlowNotice (Unchanged when nothing needs a refresh). A mirror the node cannot read (no credential, the store refusing) still yields the source half as a FlowNotice and stores nothing. This flow only OBSERVES: it fetches one byte per source and writes one small report object; the quarterly re-encode of the changed units is a separate flow that consumes the report. Capabilities: clock, http, and the READ grant on secrets:storage_r2 - no write grant, no storage, no wallet.",
+  "capabilities": [
+    "clock",
+    "http",
+    "secrets:storage_r2"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall (SDS $PIV). Go server host: 100 MiB response ceiling lowered per request by MAX_BYTES (exceeding it is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "terrain_refresh_watch",
+      "displayName": "Flow trigger terrain-refresh-watch",
+      "description": "Compiled-flow ingress for trigger \"terrain-refresh-watch\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (TICK); its payload is not read."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC): Info with the per-state counts and the changed files, Unchanged when nothing needs a refresh, Missing when the check is unconfigured or has no clock."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The check's summary."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    },
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
+    },
+    {
+      "schemaName": "HttpRequestAbi.fbs",
+      "fileIdentifier": "$HTQ",
+      "rootTypeName": "HttpRequest"
+    }
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_terrain_refresh-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "methodId": "plan",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "probe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "sign_list",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_list",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "finish_list",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "diff",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "methodId": "diff",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "sign_put",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_put",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "finish_put",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "plan-probes-probe-request",
+      "fromNodeId": "plan",
+      "fromPortId": "probes",
+      "toNodeId": "probe",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-list-sign_list-task",
+      "fromNodeId": "plan",
+      "fromPortId": "list",
+      "toNodeId": "sign_list",
+      "toPortId": "task",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "plan-status-egress-response",
+      "fromNodeId": "plan",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "sign_list-requests-http_list-request",
+      "fromNodeId": "sign_list",
+      "fromPortId": "requests",
+      "toNodeId": "http_list",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "sign_list-result-diff-mirror_result",
+      "fromNodeId": "sign_list",
+      "fromPortId": "result",
+      "toNodeId": "diff",
+      "toPortId": "mirror_result",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_list-response-finish_list-responses",
+      "fromNodeId": "http_list",
+      "fromPortId": "response",
+      "toNodeId": "finish_list",
+      "toPortId": "responses",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "finish_list-listing-diff-mirror",
+      "fromNodeId": "finish_list",
+      "fromPortId": "listing",
+      "toNodeId": "diff",
+      "toPortId": "mirror",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FIL.fbs",
+          "fileIdentifier": "$FIL",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FIL",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "finish_list-result-diff-mirror_result",
+      "fromNodeId": "finish_list",
+      "fromPortId": "result",
+      "toNodeId": "diff",
+      "toPortId": "mirror_result",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "probe-response-diff-probes",
+      "fromNodeId": "probe",
+      "fromPortId": "response",
+      "toNodeId": "diff",
+      "toPortId": "probes",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "diff-put-sign_put-task",
+      "fromNodeId": "diff",
+      "fromPortId": "put",
+      "toNodeId": "sign_put",
+      "toPortId": "task",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "diff-report-egress-response",
+      "fromNodeId": "diff",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "QRP.fbs",
+          "fileIdentifier": "$QRP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "QRP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "diff-status-egress-response",
+      "fromNodeId": "diff",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "sign_put-requests-http_put-request",
+      "fromNodeId": "sign_put",
+      "fromPortId": "requests",
+      "toNodeId": "http_put",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "sign_put-result-egress-response",
+      "fromNodeId": "sign_put",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http_put-response-finish_put-responses",
+      "fromNodeId": "http_put",
+      "fromPortId": "response",
+      "toNodeId": "finish_put",
+      "toPortId": "responses",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "finish_put-result-egress-response",
+      "fromNodeId": "finish_put",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "APR.fbs",
+          "fileIdentifier": "$APR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "APR",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "terrain-refresh-watch",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 2592000000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "terrain-refresh-watch",
+      "targetNodeId": "plan",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}
