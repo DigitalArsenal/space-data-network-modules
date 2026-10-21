@@ -5,8 +5,8 @@
   "DESCRIPTION": "SigV4 signer and response reader for any S3-compatible object store (Cloudflare R2, AWS S3, Backblaze B2, MinIO, Wasabi, GCS interoperability): put, get, head, delete, list and multipart as HttpRequest frames for hostcap/http-request. Holds the credential read grant and the clock, no network and no write grant.",
   "VERSION": "0.1.0",
   "EPOCH": 1,
-  "CONTENT_HASH": "8880441acb86ee43e79f5efc375008b391770355ed00a5eb60c64b309b102e97",
-  "ARTIFACT_SIZE_BYTES": 210087,
+  "CONTENT_HASH": "f9a8966727a31605b0862404b704b1d6b44fa595f04655f693ff2b4b7e750a45",
+  "ARTIFACT_SIZE_BYTES": 193110,
   "ARTIFACT_PATH": "/modules/com.digitalarsenal.storage.object-s3/0.1.0/module.wasm",
   "TRUST_TIER": "OPTIONAL",
   "DEFAULT_ENABLED": false,
@@ -17,5 +17,5 @@
     "wasmedge"
   ],
   "LICENSE": "",
-  "source_artifact": "artifacts/8880441acb86ee43e79f5efc375008b391770355ed00a5eb60c64b309b102e97.wasm"
+  "source_artifact": "artifacts/f9a8966727a31605b0862404b704b1d6b44fa595f04655f693ff2b4b7e750a45.wasm"
 }

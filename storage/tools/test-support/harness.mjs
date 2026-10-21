@@ -10,14 +10,19 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { decodeHostCall, encodeHostCallResult } from "space-data-module-sdk/runtime-contracts";
-import { decodeHttpResponse, encodeHttpRequest as encodeHtq } from "space-data-module-sdk/http";
-import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
-
 export const SUPPORT_DIR = path.dirname(fileURLToPath(import.meta.url));
-export const MODULES_ROOT = path.resolve(SUPPORT_DIR, "..", "..");
+export const MODULES_ROOT = path.resolve(SUPPORT_DIR, "..", "..", "..");
+
+// The SDK is the one the object-s3 package installed (this directory is not a package: nothing here depends on it).
+const SDK_PACKAGE = path.join(MODULES_ROOT, "storage", "object-s3", "package.json");
+const sdkRequire = createRequire(SDK_PACKAGE);
+const sdk = (name) => import(pathToFileURL(sdkRequire.resolve(`space-data-module-sdk/${name}`)).href);
+const { decodeHostCall, encodeHostCallResult } = await sdk("runtime-contracts");
+const { decodeHttpResponse, encodeHttpRequest: encodeHtq } = await sdk("http");
+const { createFlowRuntimeHost } = await sdk("flow");
 // The standards checkout: SPACE_DATA_STANDARDS_ROOT, else the sibling of this repo, else (a task worktree) the stack
 // checkout this repo is a submodule of, found through the shared git directory.
 function findStandardsRoot() {
@@ -190,7 +195,7 @@ export function createNode({ store = new Map(), publicKey = "hex", refuseWrites 
 }
 
 // ---- flows ---------------------------------------------------------------------------------------------------------
-const SDK_CLI = (from) => path.join(from, "node_modules", "space-data-module-sdk", "bin", "space-data-module.js");
+const SDK_CLI = () => path.join(path.resolve(path.dirname(sdkRequire.resolve("space-data-module-sdk/compiler")), "..", ".."), "bin", "space-data-module.js");
 
 // A committed flow (flows/<name>.flow.json) and its deps (flows/<name>/deps.json, paths relative to that directory).
 export function loadFlow(name) {
@@ -200,12 +205,12 @@ export function loadFlow(name) {
   return { flow, deps: Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, path.resolve(flows, name, v)])) };
 }
 
-// Compiles a flow with the SDK CLI (run from `packageDir`, whose node_modules hold the SDK) and returns runtime.wasm.
-export function compileFlow({ flow, deps, packageDir = SUPPORT_DIR }) {
+// Compiles a flow with the SDK CLI and returns runtime.wasm.
+export function compileFlow({ flow, deps }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "storage-flow-"));
   fs.writeFileSync(path.join(dir, "flow.json"), JSON.stringify(flow, null, 2));
   fs.writeFileSync(path.join(dir, "deps.json"), JSON.stringify(deps));
-  execFileSync(process.execPath, [SDK_CLI(packageDir), "flow", "compile", path.join(dir, "flow.json"), "--deps", path.join(dir, "deps.json"), "--out", path.join(dir, "dist")], { stdio: "pipe", env: { ...process.env, SPACE_DATA_STANDARDS_ROOT: STANDARDS_ROOT } });
+  execFileSync(process.execPath, [SDK_CLI(), "flow", "compile", path.join(dir, "flow.json"), "--deps", path.join(dir, "deps.json"), "--out", path.join(dir, "dist")], { stdio: "pipe", env: { ...process.env, SPACE_DATA_STANDARDS_ROOT: STANDARDS_ROOT } });
   const wasm = fs.readFileSync(path.join(dir, "dist", "runtime.wasm"));
   fs.rmSync(dir, { recursive: true, force: true });
   return wasm;

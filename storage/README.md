@@ -13,6 +13,6 @@ Lanes: `storage_r2`, `storage_s3`, `storage_b2`, `storage_wasabi`, `storage_mini
 
 Store config (endpoint, region, bucket) is the task's: `endpoint=https://<account>.r2.cloudflarestorage.com`, `region=auto`, `bucket`, `style=path|virtual`.
 
-E2E: `npm run e2e` (the harness in `support/` runs the built flows on the SDK WasmEdge-leg host against a SigV4-verifying mock; `r2-live` and `node-r2` need `~/.config/spacedatanetwork/r2.env`, and `node-r2` a node at `SDN_NODE_URL`).
+E2E: `npm run e2e` (the harness in `tools/test-support/` runs the built flows on the SDK WasmEdge-leg host against a SigV4-verifying mock; `r2-live` and `node-r2` need `~/.config/spacedatanetwork/r2.env`, and `node-r2` a node at `SDN_NODE_URL`).
 
 Traps measured on the Go node: its http connector (1) fails a HEAD answered with a non-zero Content-Length as a short read, so `head` is a one-byte ranged GET (`headVia=head` asks for the real HEAD); (2) presents remembered ETag / Last-Modified as `If-None-Match` / `If-Modified-Since` on the next GET of a URL, so every read names a validator no object carries (`freshRead=false` drops it).

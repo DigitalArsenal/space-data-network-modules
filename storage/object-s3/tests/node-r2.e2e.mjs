@@ -14,7 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import * as H from "../../support/harness.mjs";
+import * as H from "../../tools/test-support/harness.mjs";
 
 const NODE = (process.env.SDN_NODE_URL ?? "").replace(/\/$/, "");
 const COOKIE = process.env.SDN_NODE_COOKIE ?? "";

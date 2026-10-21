@@ -13,7 +13,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as H from "../../support/harness.mjs";
+import * as H from "../../tools/test-support/harness.mjs";
 
 const ENV_FILE = process.env.R2_ENV_FILE ?? path.join(os.homedir(), ".config", "spacedatanetwork", "r2.env");
 const env = fs.existsSync(ENV_FILE)

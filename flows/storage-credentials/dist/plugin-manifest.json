@@ -24,8 +24,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.storage.credentials",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.1.1",
+      "maxVersion": "0.1.1"
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",

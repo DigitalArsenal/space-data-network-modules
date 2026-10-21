@@ -494,7 +494,7 @@ int serve_htq(const plugin_input_frame_t* frame) {
         }
     }
     qrpRepresentation representation = qrpRepresentation_Default;
-    if (query.find("format=json") != std::string::npos || accept.find("application/json") != std::string::npos) {
+    if (query.find("format=json") != std::string::npos || accept.find("/json") != std::string::npos) {
         representation = qrpRepresentation_Json;
     } else if (query.find("format=flatbuffer") != std::string::npos || accept.find("flatbuffers") != std::string::npos) {
         representation = qrpRepresentation_FlatBuffer;

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { decodeHttpRequest } from "space-data-module-sdk/runtime-contracts";
 
-import * as H from "../../support/harness.mjs";
+import * as H from "../../tools/test-support/harness.mjs";
 
 const PACKAGE = fileURLToPath(new URL("..", import.meta.url));
 const MODULES = path.resolve(PACKAGE, "..", "..");

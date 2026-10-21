@@ -12,7 +12,7 @@ import path from "node:path";
 import test, { after, before } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as H from "../../support/harness.mjs";
+import * as H from "../../tools/test-support/harness.mjs";
 
 const PACKAGE = fileURLToPath(new URL("..", import.meta.url));
 const FLOWS = path.resolve(PACKAGE, "..", "..", "flows");
