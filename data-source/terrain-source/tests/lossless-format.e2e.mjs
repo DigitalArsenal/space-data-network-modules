@@ -53,14 +53,18 @@ async function gzipOracle() {
   const cpp = `${(await minizSourceFragments()).join('\n')}\n#include <vector>\n#include <cstdint>\n#include <cstdio>\n
 void put_u32(std::vector<uint8_t>* out, uint32_t v) { for (int i=0;i<4;i++) out->push_back(v >> (8*i)); }
 ${gzip}
-int main() { std::vector<uint8_t> in; uint8_t chunk[65536]; size_t n;
-while ((n=std::fread(chunk,1,sizeof(chunk),stdin))) in.insert(in.end(),chunk,chunk+n);
-std::vector<uint8_t> out; if (!gzip_compress(in,&out)) return 1;
-return std::fwrite(out.data(),1,out.size(),stdout)==out.size() ? 0 : 2; }`;
+int main(int argc, char** argv) { if (argc != 3) return 3; std::FILE* fi = std::fopen(argv[1], "rb"); if (!fi) return 4;
+std::vector<uint8_t> in; uint8_t chunk[65536]; size_t n;
+while ((n=std::fread(chunk,1,sizeof(chunk),fi))) in.insert(in.end(),chunk,chunk+n);
+std::fclose(fi); std::vector<uint8_t> out; if (!gzip_compress(in,&out)) return 1;
+std::FILE* fo = std::fopen(argv[2], "wb"); if (!fo) return 5;
+const bool ok = std::fwrite(out.data(),1,out.size(),fo)==out.size(); std::fclose(fo); return ok ? 0 : 2; }`;
   const sourcePath = path.join(temp, 'gzip.cpp'), binary = path.join(temp, 'gzip');
   fs.writeFileSync(sourcePath, cpp);
   run('c++', ['-std=c++17', '-O2', '-Wno-pragma-once-outside-header', sourcePath, '-o', binary]);
-  return (bytes) => run(binary, [], { input: bytes });
+  // Files, not pipes: the input and output go through the temp directory, so no pipe can stall the oracle.
+  const input = path.join(temp, 'gzip-in'), output = path.join(temp, 'gzip-out');
+  return (bytes) => { fs.writeFileSync(input, bytes); run(binary, [input, output], { stdio: 'ignore' }); return fs.readFileSync(output); };
 }
 function writeFile(side, file) {
   if (!outDir) return;
@@ -78,6 +82,26 @@ function validateInputs(unit, dataDir) {
       assert.ok(a <= b && b < size, `${filename}: requested range is missing`);
     }
   }
+}
+// Element-wise comparison of two parsed meshes: arrays by length and value (a plain loop, so thousands of tiles of
+// tens of thousands of elements stay fast), everything else by deep equality.
+function sameMesh(a, b, label, at = '') {
+  if (Array.isArray(a) || ArrayBuffer.isView(a)) {
+    assert.ok(Array.isArray(b) || ArrayBuffer.isView(b), `${label}${at}: not an array`);
+    assert.equal(a.length, b.length, `${label}${at}: length`);
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] === b[i]) continue;
+      if (a[i] && typeof a[i] === 'object') sameMesh(a[i], b[i], label, `${at}[${i}]`);
+      else assert.fail(`${label}${at}[${i}]: ${a[i]} != ${b[i]}`);
+    }
+    return;
+  }
+  if (a && typeof a === 'object') {
+    assert.deepEqual(Object.keys(a).sort(), Object.keys(b).sort(), `${label}${at}: keys`);
+    for (const k of Object.keys(a)) sameMesh(a[k], b[k], label, `${at}.${k}`);
+    return;
+  }
+  assert.ok(Object.is(a, b), `${label}${at}: ${a} != ${b}`);
 }
 function unchanged(record) {
   const copy = structuredClone(record);
@@ -200,7 +224,7 @@ try {
           assert.equal(y.PAYLOAD.CONTENT_ENCODING, EDGE_MATCHED_PLANES);
           const decoded = decodeEdgeMatchedPlanes(stored);
           assert.ok(decoded.equals(raw), `${c.label} ${keyOf(x)}: exact QM bytes`);
-          assert.deepEqual(decodeQuantizedMesh(decoded), decodeQuantizedMesh(raw), `${keyOf(x)}: u/v/height, indices, edges and oct normals`);
+          sameMesh(decodeQuantizedMesh(decoded), decodeQuantizedMesh(raw), `${keyOf(x)}: u/v/height, indices, edges and oct normals`);
           assert.deepEqual(unchanged(y), unchanged(x), `${keyOf(x)}: all other DTT fields`);
           assert.equal(y.PAYLOAD.DIGEST, digest(stored));
           assert.equal(y.PAYLOAD.SIZE_BYTES, BigInt(stored.length));
