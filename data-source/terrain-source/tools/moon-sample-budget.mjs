@@ -4,11 +4,12 @@
 // walk, each request it makes is answered from the local files as the PDS server answers it (label 200, image ranges
 // 206 with Content-Range; If-Match required but its value not checked, lola-frames.mjs localResponse), and
 // terrain-source:tile encodes the SAMPLED tiles of each unit with
-// the production options (normals, the density ladder, the 32 KiB ceiling, gzip). Levels 0-4 are encoded whole; every
+// the production options (normals, the density ladder, the 32 KiB gzip(QM) ceiling, lossless byte planes). Levels 0-4 are encoded whole; every
 // deeper level gets 1,000 tiles stratified by tile row (proportional allocation, at least 2 a row, seeded by
 // sha256("moon-terrain-sample-v1")).
 //
-// Per tile the cost is its stored $DTT record plus its 4-byte size prefix in the packed file. A level's total is the
+// Per tile this projects the uncompressed $DTT record plus its 4-byte size prefix. Published .dtts.gz files
+// compress complete streams, so this is a record-stream budget, not a measurement of compressed file storage. A level's total is the
 // sum over its rows of N_h x the row's mean; the 95% upper bound adds 1.96 sqrt(sum N_h^2 (1 - n_h/N_h) s_h^2 / n_h).
 // The encoder's report gives each tile's RMS and residual histogram against the source posts, so a level's RMS and
 // p99 are exact over its sampled tiles; "over cap" is a tile the 32 KiB ceiling stopped before it met its error target.

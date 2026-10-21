@@ -33,6 +33,15 @@ struct TileMesh {
     size_t size() const { return row.size(); }
 };
 
+// The quantized-mesh high-water-mark order is the first appearance in the triangle stream.
+std::vector<uint32_t> mesh_first_appearance(const TileMesh& mesh) {
+    std::vector<uint32_t> remap(mesh.size(), UINT32_MAX);
+    uint32_t next = 0;
+    for (const uint32_t idx : mesh.indices)
+        if (remap[idx] == UINT32_MAX) remap[idx] = next++;
+    return remap;
+}
+
 TileMesh regular_mesh(uint32_t grid) {
     TileMesh m;
     m.n = grid;

@@ -1986,6 +1986,135 @@ struct MeshBody {
     bool water_extension = true;
 };
 
+// Quantized-mesh topology serialization, shared by the mesh writer and lossless reconstruction.
+void write_mesh_indices(std::vector<uint8_t>& mesh, const std::vector<uint16_t>& qu,
+                        const std::vector<uint16_t>& qv, const std::vector<uint32_t>& indices) {
+    const uint32_t n_verts = static_cast<uint32_t>(qu.size());
+    const bool wide = n_verts > 65536;
+    // Padding before the index data: 2-byte alignment for 16-bit indices,
+    // 4-byte for 32-bit, per the spec.
+    const size_t align = wide ? 4 : 2;
+    while (mesh.size() % align != 0) put_u8(&mesh, 0);
+    put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
+    {
+        uint32_t highest = 0;
+        for (const uint32_t idx : indices) {
+            const uint32_t code = highest - idx;
+            if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
+            if (code == 0) highest++;
+        }
+    }
+    auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
+        std::vector<uint32_t> edge;
+        for (uint32_t v = 0; v < n_verts; v++) {
+            if (is_edge(qu[v], qv[v])) edge.push_back(v);
+        }
+        put_u32(&mesh, static_cast<uint32_t>(edge.size()));
+        for (const uint32_t v : edge) {
+            if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
+        }
+    };
+    put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
+    put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
+    put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
+    put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
+
+}
+
+// Body payload layout D: topology descriptor, zigzag-height byte planes, then extensions.
+// The descriptor is only topology; neither the source product nor the height field participates.
+constexpr const char* kEdgeMatchedPlanes = "qm-edge-matched-planes-v1";
+uint32_t planes_u32(const uint8_t* p) {
+    return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
+}
+uint32_t planes_u16(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8; }
+
+void append_byte_planes(const uint8_t* data, size_t count, bool decode, std::vector<uint8_t>* out) {
+    const size_t at = out->size();
+    out->resize(at + 2 * count);
+    for (size_t i = 0; i < count; i++) {
+        if (decode) { (*out)[at + 2 * i] = data[i]; (*out)[at + 2 * i + 1] = data[count + i]; }
+        else { (*out)[at + i] = data[2 * i]; (*out)[at + count + i] = data[2 * i + 1]; }
+    }
+}
+
+bool append_planes_extensions(const uint8_t* data, size_t length, uint32_t nv, bool decode,
+                              std::vector<uint8_t>* out) {
+    for (size_t at = 0; at < length;) {
+        if (length - at < 5) return false;
+        const uint8_t id = data[at];
+        const size_t size = planes_u32(data + at + 1);
+        if (size > length - at - 5 || (id == 1 && size != 2u * nv)) return false;
+        out->insert(out->end(), data + at, data + at + 5);
+        if (id == 1) append_byte_planes(data + at + 5, nv, decode, out);
+        else out->insert(out->end(), data + at + 5, data + at + 5 + size);
+        at += 5 + size;
+    }
+    return true;
+}
+
+bool decode_edge_matched_planes(const uint8_t* data, size_t length, std::vector<uint8_t>* out) {
+    if (!data || length < 104) return false;
+    const uint32_t n = planes_u16(data + 88), cand = planes_u16(data + 90);
+    const uint32_t nv = planes_u32(data + 100);
+    if (n < 4 || n > 4097 || cand < 4 || cand > n || (n - 1) % (cand - 1) ||
+        nv > 1024u * 1024u || nv > (length - 104) / 2) return false;
+    std::array<std::vector<uint32_t>, 4> edges;
+    uint32_t expected = (cand - 2) * (cand - 2);
+    for (size_t k = 0; k < 4; k++) {
+        const uint32_t count = planes_u16(data + 92 + 2 * k);
+        if (count < 2 || count > n || (n - 1) % (count - 1)) return false;
+        expected += count - 1;
+        const uint32_t stride = (n - 1) / (count - 1);
+        for (uint32_t i = 0; i < count; i++) edges[k].push_back(i * stride);
+    }
+    if (expected != nv) return false;
+    const auto mesh = edge_matched_mesh(n, cand, edges);
+    if (mesh.size() != nv) return false;
+    const auto remap = mesh_first_appearance(mesh);
+    std::vector<uint16_t> qu(nv), qv(nv);
+    for (uint32_t v = 0; v < nv; v++) {
+        if (remap[v] == UINT32_MAX) return false;
+        qu[remap[v]] = static_cast<uint16_t>(32767ull * mesh.col[v] / (n - 1));
+        qv[remap[v]] = static_cast<uint16_t>(32767ull * mesh.row[v] / (n - 1));
+    }
+    auto indices = mesh.indices;
+    for (auto& idx : indices) idx = remap[idx];
+    out->assign(data, data + 88);
+    put_u32(out, nv);
+    for (const auto* axis : {&qu, &qv}) {
+        int32_t prev = 0;
+        for (const uint16_t value : *axis) { put_u16(out, zigzag16(int32_t(value) - prev)); prev = value; }
+    }
+    append_byte_planes(data + 104, nv, true, out);
+    write_mesh_indices(*out, qu, qv, indices);
+    return append_planes_extensions(data + 104 + 2 * nv, length - 104 - 2 * nv, nv, true, out);
+}
+
+bool encode_edge_matched_planes(const std::vector<uint8_t>& qm, const TileMesh& shape, uint32_t cand,
+                                const std::array<std::vector<uint32_t>, 4>& edges, std::vector<uint8_t>* out) {
+    const uint32_t nv = static_cast<uint32_t>(shape.size());
+    if (shape.n > 65535 || cand > 65535 || qm.size() < 92u + 6u * nv) return false;
+    out->assign(qm.begin(), qm.begin() + 88);
+    put_u16(out, static_cast<uint16_t>(shape.n));
+    put_u16(out, static_cast<uint16_t>(cand));
+    size_t edge_posts = 0;
+    for (const auto& edge : edges) {
+        if (edge.size() > 65535) return false;
+        put_u16(out, static_cast<uint16_t>(edge.size()));
+        edge_posts += edge.size();
+    }
+    put_u32(out, nv);
+    append_byte_planes(qm.data() + 92 + 4 * nv, nv, false, out);
+    const size_t index_size = nv > 65536 ? 4 : 2;
+    const size_t vertex_end = 92 + 6 * nv;
+    const size_t ext = (vertex_end + index_size - 1) / index_size * index_size +
+                       4 + shape.indices.size() * index_size + 16 + edge_posts * index_size;
+    if (ext > qm.size() || !append_planes_extensions(qm.data() + ext, qm.size() - ext, nv, false, out)) return false;
+    std::vector<uint8_t> restored;
+    return decode_edge_matched_planes(out->data(), out->size(), &restored) && restored == qm;
+}
+
 void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vector<double>& heights_in,
                  const std::vector<uint8_t>& water_raster, bool uniform_water, std::vector<uint8_t>* out,
                  const MeshBody& body = MeshBody()) {
@@ -2021,11 +2150,7 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
     // match. The decode loop (`index = highest - code; if (code == 0)
     // ++highest`) then reproduces the stream exactly.
     {
-        std::vector<uint32_t> remap(n_verts, UINT32_MAX);
-        uint32_t next = 0;
-        for (uint32_t& idx : indices) {
-            if (remap[idx] == UINT32_MAX) remap[idx] = next++;
-        }
+        const auto remap = mesh_first_appearance(tile_mesh);
         std::vector<uint16_t> pu(n_verts), pv(n_verts), ph(n_verts);
         std::vector<double> ph_m(n_verts), plat(n_verts), plon(n_verts);
         for (uint32_t v = 0; v < n_verts; v++) {
@@ -2082,34 +2207,7 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
     put_zigzag_array(qv);
     put_zigzag_array(qh);
 
-    const bool wide = n_verts > 65536;
-    // Padding before the index data: 2-byte alignment for 16-bit indices,
-    // 4-byte for 32-bit, per the spec.
-    const size_t align = wide ? 4 : 2;
-    while (mesh.size() % align != 0) put_u8(&mesh, 0);
-    put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
-    {
-        uint32_t highest = 0;
-        for (const uint32_t idx : indices) {
-            const uint32_t code = highest - idx;
-            if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
-            if (code == 0) highest++;
-        }
-    }
-    auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
-        std::vector<uint32_t> edge;
-        for (uint32_t v = 0; v < n_verts; v++) {
-            if (is_edge(qu[v], qv[v])) edge.push_back(v);
-        }
-        put_u32(&mesh, static_cast<uint32_t>(edge.size()));
-        for (const uint32_t v : edge) {
-            if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
-        }
-    };
-    put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
-    put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
-    put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
-    put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
+    write_mesh_indices(mesh, qu, qv, indices);
 
     // Oct-encoded vertex normals (extensionId 1): two bytes per vertex, in
     // vertex order.
@@ -3425,6 +3523,9 @@ int reduce_parent(void) {
         if (!VerifyDTTBuffer(verifier)) return fail("A child is not a valid canonical DTT record.");
         child.tile = GetDTT(child.record.data());
         const DTT* t = child.tile;
+        if (t->TILING_SCHEME() == dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY ||
+            (t->PAYLOAD() && parent_string(t->PAYLOAD()->CONTENT_ENCODING()) == kEdgeMatchedPlanes))
+            return fail("reduce_parent supports Earth GEOGRAPHIC_WGS84 regular grids only; body tiles are refused before decoding.");
         const auto* p = t->PROVENANCE();
         if (t->LEVEL() < 1 || t->LEVEL() > 24 || t->X() >= (2u << t->LEVEL()) ||
             t->Y() >= (1u << t->LEVEL()) || t->ROW_ORIGIN_NORTH() ||
@@ -4534,9 +4635,12 @@ int tile(void) {
             continue;
         }
 
-        // Themis: DIGEST and SIZE_BYTES are stated over the GZIPPED bytes —
-        // what a cache stores and a client receives — and the strong ETag is
-        // that digest, so revalidation compares the served bytes themselves.
+        if (body.active && !encode_edge_matched_planes(mesh, chosen_shape, chosen_grid, body_edges, &payload_bytes)) {
+            plugin_set_error("lossless-topology-mismatch",
+                             "body tile refused: edge-matched planes did not reconstruct the chosen quantized mesh byte for byte.");
+            return 500;
+        }
+        // Digest, size and ETag describe the stored bytes, independently of the serving representation.
         const std::string digest = sha256_multihash(payload_bytes);
         stats.digest = digest;
         const std::string etag = "\"" + digest + "\"";
@@ -4549,7 +4653,7 @@ int tile(void) {
                 ? build_provenance(b, water_contract)
                 : flatbuffers::Offset<DTTProvenance>(0);
         const auto payload_media = b.CreateString("application/vnd.quantized-mesh");
-        const auto payload_encoding = gzipped ? b.CreateString("gzip") : 0;
+        const auto payload_encoding = body.active ? b.CreateString(kEdgeMatchedPlanes) : (gzipped ? b.CreateString("gzip") : 0);
         const auto payload_digest = b.CreateString(digest);
         const auto payload_vec = b.CreateVector(payload_bytes.data(), payload_bytes.size());
         flatbuffers::Offset<DTTPayloadRef> payload;
@@ -5685,7 +5789,12 @@ int respond(void) {
     const std::string stored_encoding =
         payload->CONTENT_ENCODING() ? payload->CONTENT_ENCODING()->str() : "";
     const bool accepts_gzip = json_bool(context, "acceptsGzip", true);
-    const bool serve_identity = stored_encoding == "gzip" && !accepts_gzip;
+    if (record->TILING_SCHEME() == dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY && stored_encoding != kEdgeMatchedPlanes) {
+        plugin_set_error("unsupported-body-encoding", "body records require qm-edge-matched-planes-v1.");
+        return 400;
+    }
+    const bool planes = stored_encoding == kEdgeMatchedPlanes;
+    const bool serve_identity = (stored_encoding == "gzip" || planes) && !accepts_gzip;
     if (serve_identity) {
         // ── THE IDENTITY TAG IS DERIVED, NOT RE-HASHED ──────────────────────
         //
@@ -5728,6 +5837,19 @@ int respond(void) {
                                            ? payload->MEDIA_TYPE()->str()
                                            : "application/vnd.quantized-mesh"});
     headers.push_back({"x-content-type-options", "nosniff"});
+    if (planes) {
+        std::vector<uint8_t> qm, encoded;
+        if (!decode_edge_matched_planes(payload->BYTES()->data(), payload->BYTES()->size(), &qm) ||
+            (accepts_gzip && !gzip_compress(qm, &encoded))) {
+            plugin_set_error("stored-encoding-undecodable", "the stored edge-matched planes payload could not be reconstructed.");
+            return 500;
+        }
+        if (accepts_gzip) {
+            headers.push_back({"content-encoding", "gzip"});
+            return push_htr(200, headers, encoded.data(), encoded.size());
+        }
+        return push_htr(200, headers, qm.data(), qm.size());
+    }
     if (serve_identity) {
         // Only now, on a body that is actually going to be sent.
         std::vector<uint8_t> identity;
@@ -5750,13 +5872,13 @@ int respond(void) {
 // A body's tileset is published as files, one $PNM each, fetched by CID (the
 // console reads them over SDN; there is no tile server for a body). The tiles
 // are grouped so a client fetches a few files, not tens of thousands of tiles:
-//   <prefix>/root.dtts          every tile at level <= rootMaxLevel (default 2:
+//   <prefix>/root.dtts.gz          every tile at level <= rootMaxLevel (default 2:
 //                               2 + 8 + 32 = 42 tiles)
-//   <prefix>/<L>/<X>_<Y>.dtts   one 4x4 block of same-level tiles, X = x >> 2,
+//   <prefix>/<L>/<X>_<Y>.dtts.gz   one 4x4 block of same-level tiles, X = x >> 2,
 //                               Y = y >> 2 (row 0 at the SOUTH, as the tiles)
-// Each file is itself a size-prefixed $DTT stream - [u32 LE length][record] per
+// Each file is gzip of a size-prefixed $DTT stream - [u32 LE length][record] per
 // tile, ordered by (level, y, x) - so no new format exists: a reader walks it
-// exactly as it walks any record stream. Records are copied byte for byte.
+// after inflation. Records are copied byte for byte before whole-file compression.
 //
 // One "file" frame per file, the file's bytes (itself a $DTT stream, so the
 // frame is typed $DTT like every record stream of this lane), and ONE "names"
@@ -5838,10 +5960,15 @@ int pack(void) {
             plugin_set_error("mixed-tileset-records", "every record packed together must name the same TILESET_ID.");
             return 400;
         }
+        if (t->TILING_SCHEME() == dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY &&
+            (!t->PAYLOAD() || parent_string(t->PAYLOAD()->CONTENT_ENCODING()) != kEdgeMatchedPlanes)) {
+            plugin_set_error("unsupported-body-encoding", "body records require qm-edge-matched-planes-v1.");
+            return 400;
+        }
         Entry e{t->LEVEL(), t->X(), t->Y(), at, size, std::string()};
-        e.file = e.level <= root_max ? prefix + "/root.dtts"
+        e.file = e.level <= root_max ? prefix + "/root.dtts.gz"
                                      : prefix + "/" + std::to_string(e.level) + "/" + std::to_string(e.x >> 2) + "_" +
-                                           std::to_string(e.y >> 2) + ".dtts";
+                                           std::to_string(e.y >> 2) + ".dtts.gz";
         entries.push_back(std::move(e));
         at += size;
     }
@@ -5872,7 +5999,12 @@ int pack(void) {
             plugin_set_error("too-many-files", "one plan packs into at most 64 files (the adapter's frame budget).");
             return 413;
         }
-        if (push_dtt_stream("file", frame) < 0) return 500;
+        std::vector<uint8_t> compressed;
+        if (!gzip_compress(frame, &compressed)) {
+            plugin_set_error("pack-compression-failed", "the complete DTT file could not be gzipped.");
+            return 500;
+        }
+        if (push_dtt_stream("file", compressed) < 0) return 500;
         flatbuffers::FlatBufferBuilder b(128 + name.size());
         const auto file_name = b.CreateString(name);
         PNMBuilder pb(b);

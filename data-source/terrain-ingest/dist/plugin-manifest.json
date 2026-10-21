@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
   "name": "Terrain Tile Ingest Scheduler Nodes",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: pure nodes read a durable $IRM resume mark (through hostcap/flatsql-query), walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded plans ($DTT header records) and the Copernicus GLO-30 DEM and water-body granule HttpRequests, author the storage attribution (IngestRequest), and advance the mark only from a verified store (IngestResult -> $IRM for hostcap/storage-write). OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is fetched and a 404 is no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it. TYPED CONTRACTS 1.0: FlatBuffers only - TimerTick, HttpRequest, IngestRequest/IngestResult, FlowNotice and ModuleConfig (module-sdk runtime types), $IRM, $DTT, $FSO and $FSB (SDS) - no JSON and no base64 between modules; node config through plugin.getConfig (SDS $PIV, ConfigEntry list \"entries\", nested values under dotted keys such as regions.0.west). NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -1238,13 +1238,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts or terrain/301/<L>/<X>_<Y>.dtts), FILE_ID provider:source:name:CID."
+              "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts.gz or terrain/301/<L>/<X>_<Y>.dtts.gz), FILE_ID provider:source:name:CID."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts or terrain/301/<L>/<X>_<Y>.dtts), FILE_ID provider:source:name:CID."
+          "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts.gz or terrain/301/<L>/<X>_<Y>.dtts.gz), FILE_ID provider:source:name:CID."
         },
         {
           "portId": "meta",
@@ -1354,13 +1354,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2, row 0 at the south)."
+              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2, row 0 at the south)."
+          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
         },
         {
           "portId": "job",
@@ -1405,13 +1405,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The http node's answers to import_plan's files, in request order (URL ending in /<FILE_NAME>, STATUS 200, BODY the file)."
+              "description": "The http node's answers to import_plan's files, in request order (URL ending in /<FILE_NAME>, STATUS 200, BODY the complete gzipped file)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 32,
           "required": true,
-          "description": "The http node's answers to import_plan's files, in request order (URL ending in /<FILE_NAME>, STATUS 200, BODY the file)."
+          "description": "The http node's answers to import_plan's files, in request order (URL ending in /<FILE_NAME>, STATUS 200, BODY the complete gzipped file)."
         },
         {
           "portId": "names",
@@ -1426,13 +1426,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2, row 0 at the south). (import_plan's)."
+              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south). (import_plan's)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2, row 0 at the south). (import_plan's)."
+          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south). (import_plan's)."
         }
       ],
       "outputPorts": [
@@ -1470,16 +1470,16 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2, row 0 at the south)."
+              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts (X = x >> 2, Y = y >> 2, row 0 at the south)."
+          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
         }
       ],
-      "description": "The staged files of one import unit -> the files and their names for the host adapter (publish_files), checked: a file that answers anything but 200 (not staged yet) stops the unit with its mark unmoved, and a file whose tiles belong to another name or tileset is refused.",
+      "description": "The staged files of one import unit -> the files and their names for the host adapter (publish_files), checked: a file that answers anything but 200 (not staged yet) stops the unit with its mark unmoved, and a file whose tiles belong to another name or tileset is refused. Files are whole-stream gzip with terrain-source pack's fixed header, raw deflate, CRC32 and ISIZE; import_files bounds and verifies inflation before validating records, and forwards the stored gzip bytes unchanged.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }

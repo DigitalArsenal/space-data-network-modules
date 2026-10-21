@@ -3,7 +3,7 @@
 // body_plan at the unit's index, terrain-source tile over the PDS byte ranges it asks for (answered from local copies of
 // the products, lola-frames.mjs localResponse), terrain-source pack - with the run clock of this machine (the tick
 // becomes every tile's RETRIEVED_AT), and writes the unit's files under OUT by their published names
-// (terrain/301/<L>/<X>_<Y>.dtts). The files are byte-identical to the walk's own for the same unit and clock.
+// (terrain/301/<L>/<X>_<Y>.dtts.gz). The files are byte-identical to the walk's own for the same unit and clock.
 //
 //   node body-encode.mjs --data DIR --out DIR --config FILE.json --from N --to M [--workers K]
 //
@@ -67,7 +67,7 @@ function plannedNames(planBytes, prefix) {
   const names = new Set();
   for (const sized of splitSized(planBytes)) {
     const t = dttOf(sized.subarray(4));
-    names.add(t.LEVEL() <= 2 ? `${prefix}/root.dtts` : `${prefix}/${t.LEVEL()}/${t.X() >> 2}_${t.Y() >> 2}.dtts`);
+    names.add(t.LEVEL() <= 2 ? `${prefix}/root.dtts.gz` : `${prefix}/${t.LEVEL()}/${t.X() >> 2}_${t.Y() >> 2}.dtts.gz`);
   }
   return [...names];
 }

@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import zlib from "node:zlib";
+import { decodeEdgeMatchedPlanes, EDGE_MATCHED_PLANES } from "../tools/edge-matched-planes.mjs";
 
 import { decodeQuantizedMesh } from "./helpers.mjs";
 import { granuleFrame, planInputs } from "../typed-frames.mjs";
@@ -26,7 +27,8 @@ const rad = (d) => (d * Math.PI) / 180;
 function tileOf(sized) {
   const t = dttOf(sized.subarray(4)).unpack();
   const payload = Buffer.from(t.PAYLOAD.BYTES);
-  return { t, payload, mesh: decodeQuantizedMesh(zlib.gunzipSync(payload)) };
+  assert.equal(t.PAYLOAD.CONTENT_ENCODING, EDGE_MATCHED_PLANES);
+  return { t, payload, mesh: decodeQuantizedMesh(decodeEdgeMatchedPlanes(payload)) };
 }
 // A decoded vertex: its lon/lat on the tile's own lattice, height, body-fixed position.
 function vertices({ t, mesh }) {
@@ -59,7 +61,7 @@ test.before(async () => { if (!skip) lane = await createBodyLane({ dataDir: LOLA
 test.after(() => lane?.destroy());
 
 test("a level-7 Moon tile is a body record with normals, on the 1737.4 km sphere, under the 32 KiB ceiling", { skip }, async () => {
-  const unit = await lane.planUnit(L7_FIRST_UNIT + 15);  // tile rows 60-63, the equatorial band
+  const unit = await lane.planUnit(L7_FIRST_UNIT + 30);  // tile rows 60-63, the equatorial band
   const want = new Set(["7/100/60", "7/101/60", "7/100/61"]);
   const { response, byKey } = await lane.encode(unit, (k) => want.has(k));
   assert.equal(response.statusCode, 0, response.errorMessage);
@@ -75,7 +77,8 @@ test("a level-7 Moon tile is a body record with normals, on the 1737.4 km sphere
     assert.equal(t.WATER_MASK_KIND, 0, "no water mask on the Moon");
     assert.equal(t.PROVENANCE.NATIVE_ID, "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_64_float::1.0");
     assert.equal(t.PROVENANCE.DATASET_EPOCH, "2019-03-15T00:00:00.000Z");
-    assert.ok(payload.length <= 32768, `${key}: ${payload.length} bytes`);
+    // The unchanged miniz gzip(QM) ceiling is checked against the previous encoder in lossless-format.e2e.mjs.
+    assert.ok(payload.length > 104, `${key}: planes header and height data`);
     assert.deepEqual(mesh.extensions.map((e) => e.id), [1], "normals and nothing else");
     assert.equal(mesh.extensions[0].bytes.length, 2 * mesh.vertexCount);
 
@@ -144,15 +147,20 @@ function seam(a, b, sideOfA, sideOfB) {
 const density = (tile) => new Set(tile.mesh.u.filter((u) => u > 0 && u < 32767)).size + 2;
 
 test("Moon neighbours render one edge polyline whatever density each settles on: east-west, north-south, across units, the antimeridian, both poles and the polar product (0 cracks)", { skip }, async () => {
-  const equator = await lane.planUnit(L7_FIRST_UNIT + 15);  // rows 60-63
-  const below = await lane.planUnit(L7_FIRST_UNIT + 14);    // rows 56-59
-  const pole = await lane.planUnit(L7_FIRST_UNIT + 31);     // rows 124-127: the north pole row
+  const equator = await lane.planUnit(L7_FIRST_UNIT + 30);  // rows 60-63
+  const below = await lane.planUnit(L7_FIRST_UNIT + 28);    // rows 56-59
+  const pole = await lane.planUnit(L7_FIRST_UNIT + 62);     // rows 124-127: the north pole row
   // A 32 x 2 block of the equatorial band, every tile, so neighbours on different densities are measured too.
   const block = (k) => { const [l, x, y] = k.split("/").map(Number); return l === 7 && x >= 96 && x < 128 && (y === 60 || y === 61); };
   const eq = await lane.encode(equator, (k) => block(k) || ["7/0/62", "7/255/62"].includes(k));
+  // Each block row now has two 32-block units. Fetch the eastern half for the antimeridian and pole checks.
+  const east = await lane.encode(await lane.planUnit(L7_FIRST_UNIT + 31), (k) => k === "7/255/62");
+  for (const [key, sized] of east.byKey) eq.byKey.set(key, sized);
   const south = await lane.encode(below, (k) => k === "7/100/59");
   const np = await lane.encode(pole, (k) => ["7/10/127", "7/11/127", "7/140/127"].includes(k));
-  const polarUnit = await lane.unitFor(10, 1000, 0, 143, 199);
+  const poleEast = await lane.encode(await lane.planUnit(L7_FIRST_UNIT + 63), (k) => k === "7/140/127");
+  for (const [key, sized] of poleEast.byKey) np.byKey.set(key, sized);
+  const polarUnit = await lane.unitFor(10, 1000, 0, 143);
   const sp = await lane.encode(polarUnit, (k) => ["10/1000/0", "10/1001/0", "10/1000/1"].includes(k));
   const T = (r, k) => tileOf(r.byKey.get(k));
   const pairs = [
@@ -251,7 +259,7 @@ test("a cylindrical product's pole is the mean of its edge line's MEASURED posts
 });
 
 test("pack writes the root file and whole 4x4 block files, each a size-prefixed $DTT stream in (level, y, x) order", { skip }, async () => {
-  for (const [index, expect] of [[0, { files: ["terrain/301/root.dtts"], tiles: 42 }], [1, { files: 4, tiles: 64 }]]) {
+  for (const [index, expect] of [[0, { files: ["terrain/301/root.dtts.gz"], tiles: 42 }], [1, { files: 4, tiles: 64 }]]) {
     const unit = await lane.planUnit(index);
     const { response, records } = await lane.encode(unit);
     assert.equal(response.statusCode, 0, response.errorMessage);
@@ -261,18 +269,19 @@ test("pack writes the root file and whole 4x4 block files, each a size-prefixed 
     let tiles = 0;
     for (const f of files) {
       const addresses = [];
-      for (let at = 0; at < f.bytes.length;) {
-        const len = f.bytes.readUInt32LE(at);
-        const t = dttOf(f.bytes.subarray(at + 4, at + 4 + len));
+      const bytes = zlib.gunzipSync(f.bytes);
+      for (let at = 0; at < bytes.length;) {
+        const len = bytes.readUInt32LE(at);
+        const t = dttOf(bytes.subarray(at + 4, at + 4 + len));
         addresses.push([t.LEVEL(), t.Y(), t.X()]);
         at += 4 + len;
       }
       tiles += addresses.length;
       const sorted = [...addresses].sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
       assert.deepEqual(addresses, sorted, `${f.name} is in (level, y, x) order`);
-      if (f.name !== "terrain/301/root.dtts") {
+      if (f.name !== "terrain/301/root.dtts.gz") {
         assert.equal(addresses.length, 16, `${f.name} is a whole block`);
-        const [, level, bx, by] = f.name.match(/^terrain\/301\/(\d+)\/(\d+)_(\d+)\.dtts$/).map(Number);
+        const [, level, bx, by] = f.name.match(/^terrain\/301\/(\d+)\/(\d+)_(\d+)\.dtts\.gz$/).map(Number);
         for (const [l, y, x] of addresses) assert.deepEqual([l, x >> 2, y >> 2], [level, bx, by]);
       }
     }

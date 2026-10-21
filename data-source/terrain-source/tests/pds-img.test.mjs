@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import zlib from "node:zlib";
+import { decodeEdgeMatchedPlanes } from "../tools/edge-matched-planes.mjs";
 
 import { decodeQuantizedMesh } from "./helpers.mjs";
 import { cylindrical, polar, product } from "./lola-reference.mjs";
@@ -25,7 +25,7 @@ const skip = !(LOLA_DIR && fs.existsSync(`${LOLA_DIR}/ldem_75s_240m_float.img`))
 // against the independent reading.
 function compareMesh(sized, reference) {
   const t = dttOf(sized.subarray(4)).unpack();
-  const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(t.PAYLOAD.BYTES)));
+  const mesh = decodeQuantizedMesh(decodeEdgeMatchedPlanes(t.PAYLOAD.BYTES));
   const grid = 321;
   const q = (mesh.header.maxHeight - mesh.header.minHeight) / 32767;
   let worst = 0;
@@ -46,9 +46,11 @@ test.after(() => lane?.destroy());
 
 test("simple cylindrical: the mesh posts are LDEM_64 where its label puts them, across the antimeridian", { skip }, async () => {
   const p = product("ldem_64_float", 23040, 11520);
-  const unit = await lane.planUnit(1 + 2 + 4 + 8 + 16 + 15);
+  const unit = await lane.planUnit(1 + 2 + 4 + 8 + 16 + 30);
   const want = ["7/100/60", "7/0/62", "7/255/62"];
   const { byKey } = await lane.encode(unit, (k) => want.includes(k));
+  const east = await lane.encode(await lane.planUnit(1 + 2 + 4 + 8 + 16 + 31), (k) => k === "7/255/62");
+  for (const [key, sized] of east.byKey) byKey.set(key, sized);
   for (const key of want) {
     const worst = compareMesh(byKey.get(key), cylindrical(p, 64));
     assert.ok(worst < 0.01, `${key}: a post is ${worst} m from the label's position`);
@@ -58,7 +60,7 @@ test("simple cylindrical: the mesh posts are LDEM_64 where its label puts them, 
 
 test("polar stereographic: the mesh posts are LDEM_75S_60M where DSMAP_POLAR puts them", { skip }, async () => {
   const p = product("ldem_75s_60m_float", 15248, 15248);
-  const unit = await lane.unitFor(10, 1000, 0, 143, 199);
+  const unit = await lane.unitFor(10, 1000, 0, 143);
   const want = ["10/1000/0", "10/1001/0", "10/1000/1"];
   const { byKey } = await lane.encode(unit, (k) => want.includes(k));
   for (const key of want) {

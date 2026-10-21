@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { minizSourceFragments } from "../terrain-source/miniz-source.mjs";
+
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
 import { publishedStandardsRoot, readSdsHeader } from "../terrain-source/sds-headers.mjs";
@@ -67,7 +69,7 @@ async function inlineLocalIncludes(source) {
   return out;
 }
 const implementationSource = await inlineLocalIncludes(await fs.readFile(sourcePath, "utf8"));
-const sourceCode = `${headers.map(inlineGeneratedHeader).join("\n")}\n${implementationSource}`;
+const sourceCode = `${headers.map(inlineGeneratedHeader).join("\n")}\n${(await minizSourceFragments()).join("\n")}\n${implementationSource}`;
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });

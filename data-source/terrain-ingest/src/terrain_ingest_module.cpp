@@ -1102,11 +1102,11 @@ long wrap_lon(long lon) {
 #include "polar_stereo.hpp"
 #include "body_plan.hpp"
 
-// The file terrain-source:pack writes a tile into: <prefix>/root.dtts at level <= rootMaxLevel, else
-// <prefix>/<L>/<X>_<Y>.dtts with X = x >> 2, Y = y >> 2 (row 0 at the south, as the tiles).
+// The file terrain-source:pack writes a tile into: <prefix>/root.dtts.gz at level <= rootMaxLevel, else
+// <prefix>/<L>/<X>_<Y>.dtts.gz with X = x >> 2, Y = y >> 2 (row 0 at the south, as the tiles).
 std::string pack_file_name(const std::string& prefix, long level, long x, long y) {
-    if (level <= kBodyRootMaxLevel) return prefix + "/root.dtts";
-    return prefix + "/" + std::to_string(level) + "/" + std::to_string(x >> 2) + "_" + std::to_string(y >> 2) + ".dtts";
+    if (level <= kBodyRootMaxLevel) return prefix + "/root.dtts.gz";
+    return prefix + "/" + std::to_string(level) + "/" + std::to_string(x >> 2) + "_" + std::to_string(y >> 2) + ".dtts.gz";
 }
 
 constexpr uint64_t kImportMaxFileBytes = 8u * 1024u * 1024u;  // the host adapter's own bound
@@ -2093,6 +2093,26 @@ int import_plan(void) {
     return 0;
 }
 
+// Accept exactly the gzip envelope emitted by terrain-source:pack. Bound allocation before inflation,
+// consume the complete raw deflate stream, and verify both CRC and ISIZE before examining DTT records.
+bool inflate_packed_file(const uint8_t* data, size_t length, Bytes* out) {
+    const uint8_t header[10] = {31, 139, 8, 0, 0, 0, 0, 0, 0, 255};
+    if (!data || length < 18 || std::memcmp(data, header, 10)) return false;
+    const auto little = [](const uint8_t* p) {
+        return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
+    };
+    const size_t size = little(data + length - 4);
+    if (!size || size > kImportMaxFileBytes) return false;
+    out->resize(size);
+    tinfl_decompressor inflater;
+    tinfl_init(&inflater);
+    size_t consumed = length - 18, produced = size;
+    const auto status = tinfl_decompress(&inflater, data + 10, &consumed, out->data(), out->data(), &produced,
+                                         TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+    return status == TINFL_STATUS_DONE && consumed == length - 18 && produced == size &&
+           uint32_t(mz_crc32(MZ_CRC32_INIT, out->data(), out->size())) == little(data + length - 8);
+}
+
 int import_files(void) {
     const auto fail = [](const char* code, const std::string& message) {
         plugin_set_error(code, message.c_str());
@@ -2150,11 +2170,15 @@ int import_files(void) {
         const auto* body = r.BODY();
         if (!body || body->size() == 0 || body->size() > kImportMaxFileBytes)
             return fail("import-file-size", name + " is empty or larger than 8 MiB.");
-        // The file must BE the named file: a size-prefixed $DTT stream whose every tile packs into this name.
-        const uint8_t* data = body->data();
-        const size_t length = body->size();
+        Bytes inflated;
+        if (!inflate_packed_file(body->data(), body->size(), &inflated))
+            return fail("import-file-malformed", name + " is not a complete canonical gzip DTT file (header, deflate, CRC or size).");
+        // Validate the inflated records, then forward the stored gzip bytes unchanged.
+        const uint8_t* data = inflated.data();
+        const size_t length = inflated.size();
         size_t tiles = 0;
-        for (size_t at = 0; at + 4 <= length;) {
+        for (size_t at = 0; at < length;) {
+            if (length - at < 4) return fail("import-file-malformed", name + " ends inside a size prefix.");
             uint32_t size;
             std::memcpy(&size, data + at, 4);
             at += 4;
@@ -2164,6 +2188,9 @@ int import_files(void) {
             if (!DTTBufferHasIdentifier(data + at) || !VerifyDTTBuffer(dv))
                 return fail("import-file-malformed", name + " holds a record that is not a $DTT.");
             const DTT* t = GetDTT(data + at);
+            if (t->TILING_SCHEME() != dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY || !t->PAYLOAD() ||
+                text_of(t->PAYLOAD()->CONTENT_ENCODING()) != "qm-edge-matched-planes-v1")
+                return fail("import-file-mismatch", name + " requires body records encoded as qm-edge-matched-planes-v1.");
             if (pack_file_name(prefix, t->LEVEL(), t->X(), t->Y()) != name)
                 return fail("import-file-mismatch", name + " holds a tile of another file (level " +
                                                        std::to_string(t->LEVEL()) + ", " + std::to_string(t->X()) + "/" +
@@ -2174,8 +2201,8 @@ int import_files(void) {
             at += size;
         }
         if (tiles == 0) return fail("import-file-malformed", name + " holds no tile.");
-        if (plugin_push_output_ex("file", "DTT.fbs", "$DTT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "DTT", 0, 0, data,
-                                  static_cast<uint32_t>(length)) < 0)
+        if (plugin_push_output_ex("file", "DTT.fbs", "$DTT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "DTT", 0, 0, body->data(),
+                                  body->size()) < 0)
             return 500;
     }
     return push_typed("names", "PNM.fbs", "$PNM", "PNM",
