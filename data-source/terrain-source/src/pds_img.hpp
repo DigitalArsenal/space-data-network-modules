@@ -625,6 +625,26 @@ bool body_sample(const std::vector<DemGrid>& grids, double lon, double lat, doub
                  bool* clamped) {
     *nodata = false;
     if (grids.empty() || !grids[0].covers) return false;
+    if(grids[0].inset) {
+        *clamped=false;
+        if(std::strncmp(grids[0].inset->name,"HMC_",4)==0) {
+            // HMC files share one lattice. Fetch a stencil corner from its
+            // neighbor instead of manufacturing nodata at an internal border.
+            const bool covered=sample_dem(grids,lon,lat,out,nodata,clamped);
+            if(*clamped){*nodata=true;*clamped=false;}
+            return covered;
+        }
+        for(const auto& g:grids) {
+            double x,y;g.inset->tiff.pixel(lon,lat,&x,&y);x-=g.off_x;y-=g.off_y;
+            const long i=static_cast<long>(std::floor(x)),j=static_cast<long>(std::floor(y));
+            if(i<0||j<0||i+1>=g.width||j+1>=g.height)continue;
+            const size_t a=static_cast<size_t>(j)*g.width+i;const double fx=x-i,fy=y-j;
+            const double v00=g.samples[a],v10=g.samples[a+1],v01=g.samples[a+g.width],v11=g.samples[a+g.width+1];
+            if(v00==kNoData||v10==kNoData||v01==kNoData||v11==kNoData)continue;
+            *out=(1-fy)*((1-fx)*v00+fx*v10)+fy*((1-fx)*v01+fx*v11);return true;
+        }
+        *nodata=true;return true;
+    }
     const DemGrid& g = grids[0];
     if (g.proj == kProjPolarStereo) return polar_sample(g, lat, lon, out, nodata);
     const double lat_first = g.origin_lat;

@@ -48,6 +48,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <map>
 
 #include "space_data_module_invoke.h"
 #include "typedHostcall.hpp"
@@ -513,7 +514,11 @@ size_t tiff_type_size(uint16_t type) {
     }
 }
 
+#include "body_geotiff.hpp"
+#include "body_insets.hpp"
+
 struct DemGrid {
+    std::shared_ptr<BodyInset> inset;
     // The decoded WINDOW, not the granule: width/height are the sub-raster's.
     uint32_t width = 0;
     uint32_t height = 0;
@@ -1825,6 +1830,7 @@ struct TileExtent {
 
 #include "pds_img.hpp"
 #include "body_fill.hpp"
+#include "body_inset_decode.hpp"
 
 struct BodyFill {
     bool active = false, fill_edges = true, primary_datum = false, fill_datum = false;
@@ -1843,6 +1849,7 @@ struct BodyFill {
         return true;
     }
     BodyInvalidDistance invalid;
+    BodyInsetMask inset_mask;
 
     bool sample(const std::vector<DemGrid>& primary, double lon, double lat, double* h,
                 bool* nodata, bool* clamped, BodyFillStats* stats = nullptr) const {
@@ -1853,7 +1860,9 @@ struct BodyFill {
         double d = band_m;
         if (fill_edges && lat_min > -90) d = std::min(d, std::max(0.0, lat - lat_min) * radius_m * kPolarPi / 180);
         if (fill_edges && lat_max < 90) d = std::min(d, std::max(0.0, lat_max - lat) * radius_m * kPolarPi / 180);
-        if (valid_p && !primary.empty()) {
+        if (valid_p && !primary.empty() && primary[0].inset)
+            d=std::min(d,inset_mask.distance(lon,lat,band_m));
+        if (valid_p && !primary.empty() && !primary[0].inset) {
             const DemGrid& g = primary[0];
             double x = 0, y = 0;
             const double spacing = g.proj == kProjPolarStereo ? g.ps_scale_m : radius_m * kPolarPi / 180 * g.scale_lat;
@@ -4023,7 +4032,19 @@ int tile(void) {
         }
         responses = static_cast<uint32_t>(frames.size());
         const auto is_label = [](const HttpFrame& f) { return f.body.rfind("PDS_VERSION_ID", 0) == 0; };
-        if (frames.size() < 2 || !is_label(frames[0])) {
+        std::map<size_t,std::shared_ptr<BodyInset>> tiff_headers;
+        const std::string tiff_spec=json_string(plan,"bodyTiffLayouts","");
+        for(size_t at=0;at<tiff_spec.size();) {
+            const size_t eq=tiff_spec.find('=',at),end=tiff_spec.find(';',at);
+            if(eq==std::string::npos){plugin_set_error("invalid-tiff-headers","malformed TIFF header map");return 422;}
+            const size_t stop=end==std::string::npos?tiff_spec.size():end;
+            const size_t index=static_cast<size_t>(std::strtoul(tiff_spec.substr(at,eq-at).c_str(),nullptr,10));
+            auto in=std::make_shared<BodyInset>();
+            if(index>=frames.size()||!in->parse(tiff_spec.substr(eq+1,stop-eq-1))){plugin_set_error("inset-layout-invalid","invalid arithmetic TIFF layout");return 422;}
+            tiff_headers[index]=in;at=stop+1;
+        }
+        const auto is_header=[&](size_t i){return i<frames.size()&&(is_label(frames[i])||tiff_headers.count(i));};
+        if (frames.size() < 2 || !is_header(0)) {
             plugin_set_error("missing-dem-frame",
                              "a body plan needs the product's PDS3 label on \"dem\" frame 0 and at least one "
                              "whole-line range of its image after it.");
@@ -4034,13 +4055,15 @@ int tile(void) {
             return 400;
         }
         std::vector<PdsFile> files, fill_files, backing_files, datum_files;
+        std::vector<BodyInsetFile> tiffs,fill_tiffs,backing_tiffs,datum_tiffs,mask_tiffs;
+        const size_t mask_frame=static_cast<size_t>(std::max(0.0,json_number(plan,"bodyMaskFrame",0)));
         const size_t backing_frame = static_cast<size_t>(std::max(0.0, json_number(plan, "bodyBackingFrame", 0)));
         const double datum_frame_number = json_number(plan, "bodyDatumFrame", 0);
         const size_t datum_frame = static_cast<size_t>(std::max(0.0, datum_frame_number));
         fill.primary_datum = json_number(plan, "bodyPrimaryDatum", 0) != 0;
         fill.fill_datum = json_number(plan, "bodyFillDatum", 0) != 0;
         if ((fill.primary_datum || fill.fill_datum) &&
-            (datum_frame_number != datum_frame || datum_frame < 2 || datum_frame >= frames.size() || !is_label(frames[datum_frame]))) {
+            (datum_frame_number != datum_frame || datum_frame < 1 || datum_frame >= frames.size() || !is_label(frames[datum_frame]))) {
             plugin_set_error("invalid-datum-options", "areoid heights need a separate MEGA label/range group"); return 422;
         }
         const double fill_frame_number = json_number(plan, "bodyFillFrame", 0);
@@ -4052,8 +4075,8 @@ int tile(void) {
             fill.fill_edges = json_number(plan, "bodyFillEdges", 1) != 0;
             fill.lat_min = json_number(plan, "bodyLatMin", -90);
             fill.lat_max = json_number(plan, "bodyLatMax", 90);
-            if (fill_frame_number != fill_frame || fill_frame < 2 || fill_frame >= frames.size() ||
-                !is_label(frames[fill_frame]) || posts < 1 || posts > 64 || posts != std::floor(posts) ||
+            if (fill_frame_number != fill_frame || fill_frame < 1 || fill_frame >= frames.size() ||
+                !is_header(fill_frame) || posts < 1 || posts > 64 || posts != std::floor(posts) ||
                 !(spacing > 0) || !std::isfinite(spacing) || fill.lat_min < -90 || fill.lat_max > 90 ||
                 !(fill.lat_min < fill.lat_max) || json_string(plan, "bodyFillProduct", "").empty()) {
                 plugin_set_error("invalid-fill-options", "fill needs a separate label/range group, band, product and 1..64 posts.");
@@ -4064,17 +4087,28 @@ int tile(void) {
         }
         std::string error;
         for (size_t i = 0; i < frames.size(); i++) {
-            const bool is_datum = datum_frame && i >= datum_frame;
-            const bool is_backing = !is_datum && backing_frame && i >= backing_frame;
-            const bool is_fill = !is_datum && !is_backing && fill.active && i >= fill_frame;
+            const bool is_mask = mask_frame && i >= mask_frame;
+            const bool is_datum = !is_mask && datum_frame && i >= datum_frame;
+            const bool is_backing = !is_mask && !is_datum && backing_frame && i >= backing_frame;
+            const bool is_fill = !is_mask && !is_datum && !is_backing && fill.active && i >= fill_frame;
             auto& group = is_datum ? datum_files : is_backing ? backing_files : is_fill ? fill_files : files;
+            auto& tif_group=is_mask?mask_tiffs:is_datum?datum_tiffs:is_backing?backing_tiffs:is_fill?fill_tiffs:tiffs;
+            if(tiff_headers.count(i))tif_group.push_back({tiff_headers[i],{}});
+            if(!tif_group.empty()&&!is_label(frames[i])) {
+                unsigned long long first=0,last=0,total=0;
+                const auto& layout=*tif_group.back().inset;
+                if(std::sscanf(frames[i].content_range.c_str(),"bytes %llu-%llu/%llu",&first,&last,&total)!=3||last<first||last-first+1!=frames[i].body.size()||total!=layout.bytes||first<layout.tiff.first_strip||
+                   (first-layout.tiff.first_strip)%layout.tiff.row_bytes||frames[i].body.size()%layout.tiff.row_bytes||last>=layout.tiff.first_strip+layout.tiff.height*layout.tiff.row_bytes){
+                    plugin_set_error("invalid-tiff-range","TIFF ranges need exact Content-Range");return 422;}
+                tif_group.back().ranges.push_back({static_cast<uint64_t>(first),&frames[i].body});continue;
+            }
             if (is_label(frames[i])) {
                 PdsFile file;
                 if (!parse_pds_label(frames[i].body, &file.label, &error)) {
                     plugin_set_error("pds-label-unsupported", error.c_str());
                     return 422;
                 }
-                const bool add_datum = !is_datum && !is_backing && (is_fill ? fill.fill_datum : fill.primary_datum);
+                const bool add_datum = !is_datum && (is_backing ? json_number(plan,"bodyBackingDatum",0)!=0 : is_fill ? fill.fill_datum : fill.primary_datum);
                 if (file.label.areoid != add_datum ||
                     (!file.label.areoid && std::fabs(file.label.a_axis_m - body.shape.a) > 1e-6) ||
                     std::fabs(file.label.datum_m - body.shape.a) > 1e-6 ||
@@ -4117,7 +4151,11 @@ int tile(void) {
             if (!d.ok) { plugin_set_error("pds-datum-gap", d.error.c_str()); return 422; }
             if (d.covers) fill.datum.push_back(std::move(d));
         }
-        DemGrid g = decode_pds_files(files, boxes, &budget, fill.band_m);
+        DemGrid g;
+        if(!tiffs.empty()) {
+            if(!decode_body_insets(tiffs,boxes,&budget,&granules,&error,mask_frame?0:fill.band_m)){plugin_set_error("inset-decode",error.c_str());return 422;}
+            g.ok=true;
+        } else g = decode_pds_files(files, boxes, &budget, fill.band_m);
         if (g.budget_refused) return 413;
         if (!g.ok) {
             plugin_set_error("pds-band-gap", g.error.c_str());
@@ -4139,14 +4177,23 @@ int tile(void) {
                 return true;
             };
             if (!prepare_distance(g, &fill.invalid)) return 413;
-            const PdsLabel& label = fill_files[0].label;
-            const double spacing = label.projection == "POLAR STEREOGRAPHIC" ? label.map_scale_m :
-                                   label.datum_m * kPolarPi / 180 / label.ppd;
+            if(!tiffs.empty()) {
+                std::vector<DemGrid> masks;
+                if(mask_frame&&!decode_body_insets(mask_tiffs,boxes,&budget,&masks,&error,fill.band_m)){plugin_set_error("inset-mask-decode",error.c_str());return 422;}
+                if(!fill.inset_mask.build(mask_frame?masks:granules,boxes,fill.band_m,&budget))return 413;
+            }
+            const double spacing = !fill_tiffs.empty()?fill_tiffs[0].inset->tiff.scale_x:
+                fill_files[0].label.projection == "POLAR STEREOGRAPHIC" ? fill_files[0].label.map_scale_m :
+                                   fill_files[0].label.datum_m * kPolarPi / 180 / fill_files[0].label.ppd;
             if (std::fabs(spacing - json_number(plan, "fillSpacingM", 0)) > 1e-9 * spacing) {
                 plugin_set_error("fill-spacing-mismatch", "fillSpacingM disagrees with the fill product's label.");
                 return 422;
             }
-            DemGrid f = decode_pds_files(fill_files, boxes, &budget, fill.band_m);
+            DemGrid f;
+            if(!fill_tiffs.empty()) {
+                if(!decode_body_insets(fill_tiffs,boxes,&budget,&fill.grids,&error,json_number(plan,"bodyBackingPosts",0)*json_number(plan,"bodyBackingSpacingM",0))){plugin_set_error("inset-fill-decode",error.c_str());return 422;}
+                f.ok=true;
+            } else f=decode_pds_files(fill_files, boxes, &budget, fill.band_m);
             if (f.budget_refused) return 413;
             if (!f.ok) { plugin_set_error("pds-fill-gap", f.error.c_str()); return 422; }
             if (backing_frame) {
@@ -4159,8 +4206,10 @@ int tile(void) {
                 fill.backing = std::make_unique<BodyFill>();
                 auto& b = *fill.backing;
                 b.active = true; b.fill_edges = false; b.primary_datum = fill.fill_datum;
+                b.fill_datum=json_number(plan,"bodyBackingDatum",0)!=0;
                 b.datum_source = &fill.datum; b.radius_m = body.shape.a; b.band_m = posts * bs;
                 if (!prepare_distance(f, &b.invalid)) return 413;
+                if(!fill_tiffs.empty()&&!b.inset_mask.build(fill.grids,boxes,b.band_m,&budget))return 413;
                 DemGrid bg = decode_pds_files(backing_files, boxes, &budget, fill.band_m + b.band_m);
                 if (bg.budget_refused) return 413;
                 if (!bg.ok) { plugin_set_error("pds-backing-gap", bg.error.c_str()); return 422; }

@@ -98,6 +98,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <map>
 
 #include "space_data_module_invoke.h"
 #include "typedHostcall.hpp"
@@ -1716,7 +1717,7 @@ int body_plan(void) {
     // Per file the unit's lines cross: the label (so the geometry the encoder decodes with is the source's own), then
     // the file's share of the lines as `range_parts` whole-line ranges.
     size_t frame = 0;
-    std::string files_read;
+    std::string files_read, tiff_headers, tiff_layouts;
     const bool with_fill = body_unit_needs_fill(*body, unit, max_grid);
     const double fill_spacing = with_fill ? body_post_spacing(*body, *unit.cap->fill) : 0;
     const double band_m = unit.cap->feather_posts * fill_spacing;
@@ -1725,34 +1726,72 @@ int body_plan(void) {
     // Short fill bands need one range per file. Reduce primary segmentation if necessary;
     // segmentation changes neither the requested lines nor the unit's complete block files.
     uint32_t primary_parts = product.range_parts;
-    const size_t primary_files = body_window_files(product, primary_window);
-    const size_t fill_files = with_fill ? body_window_files(*unit.cap->fill, fill_window) : 0;
+    const size_t primary_files = body_window_files(product, primary_window, max_grid);
+    const size_t fill_files = with_fill ? body_window_files(*unit.cap->fill, fill_window, max_grid) : 0;
     const BodyProduct* backing = with_fill && unit.cap->fill->fallback ? body_product(*body, unit.cap->fill->fallback) : nullptr;
     const double backing_spacing = backing ? body_post_spacing(*body, *backing) : 0;
     const double backing_band = backing ? unit.cap->fill->fallback_posts * backing_spacing : 0;
     const BodyUnit backing_window = backing ? body_product_window(*body, unit, *backing, max_grid, band_m + backing_band) : unit;
-    const size_t backing_frames = backing ? 2 * body_window_files(*backing, backing_window) : 0;
+    const size_t backing_frames = backing ? 2 * body_window_files(*backing, backing_window, max_grid) : 0;
     const BodyProduct* datum = body_product(*body, product.datum ? product.datum :
-        (with_fill && unit.cap->fill->datum ? unit.cap->fill->datum : ""));
+        (with_fill && unit.cap->fill->datum ? unit.cap->fill->datum : (backing&&backing->datum?backing->datum:"")));
     const BodyUnit datum_window = datum ? body_product_window(*body, unit, *datum, max_grid, band_m) : unit;
-    const size_t datum_frames = datum ? 2 * body_window_files(*datum, datum_window) : 0;
+    const size_t datum_frames = datum ? 2 * body_window_files(*datum, datum_window, max_grid) : 0;
     if (with_fill && primary_files * (1 + primary_parts) + 2 * fill_files + datum_frames + backing_frames > kBodyMaxDemFrames) primary_parts = 1;
     if (primary_files * (1 + primary_parts) + 2 * fill_files + datum_frames + backing_frames > kBodyMaxDemFrames) {
         plugin_set_error("too-many-files", "a complete body block needs more than 16 DEM frames including fill.");
         return 422;
     }
-    size_t fill_frame = 0, backing_frame = 0, datum_frame = 0;
-    for (int group = 0; group < 4; group++) {
+    const BodyProduct* mask=nullptr;
+    if(with_fill&&product.inset&&std::strncmp(product.key,"hrsc_",5)!=0) {
+        const std::string key=std::strncmp(product.key,"msl_",4)==0?"msl_gale_dem_1m_v3_ovr32":"msr_trn_hirise_dtm_1m_v003_ovr32";
+        mask=body_product(*body,key);if(mask==&product)mask=nullptr;
+    }
+    size_t fill_frame = 0, backing_frame = 0, datum_frame = 0, mask_frame = 0;
+    for (int group = 0; group < 5; group++) {
         if (group == 1 && !with_fill) continue;
         if (group == 2 && !backing) continue;
         if (group == 3 && !datum) continue;
+        if (group == 4 && !mask) continue;
+        if (group == 4) mask_frame = frame;
         if (group == 1) fill_frame = frame;
         if (group == 2) backing_frame = frame;
         if (group == 3) datum_frame = frame;
-        const BodyProduct& requested = group == 0 ? product : group == 1 ? *unit.cap->fill : group == 2 ? *backing : *datum;
+        const BodyProduct& requested = group == 0 ? product : group == 1 ? *unit.cap->fill : group == 2 ? *backing : group == 3 ? *datum : *mask;
         const BodyUnit& window = group == 0 ? primary_window : group == 1 ? fill_window : group == 2 ? backing_window : datum_window;
         const uint32_t range_parts = group == 0 ? primary_parts : 1;
         for (const BodyFile& file : requested.files) {
+            if(requested.inset) {
+                auto* in=body_inset(file.path);BodyTiffWindow w;
+                if(!in){plugin_set_error("inset-catalog-invalid",file.path);return 422;}
+                const double halo=group==4?band_m:group==1?backing_band:group==0&&!mask?band_m:0;
+                if(!body_inset_window(*in,unit,max_grid,&w,halo)) {
+                    // A descendant of a covered coarse tile may contain no fine
+                    // pixels. Keep its product identity; every post uses backing.
+                    if(group!=0||requested.files.size()!=1)continue;
+                    w={0,0,0,0};
+                }
+                auto ranges=in->tiff.ranges(w,static_cast<uint64_t>(range_bytes));
+                if(frame+ranges.size()>kBodyMaxDemFrames){plugin_set_error("too-many-inset-ranges","inset block exceeds 16 DEM frames");return 422;}
+                const auto append=[&](std::string* text,const std::string& value){if(!text->empty())*text+=';';*text+=std::to_string(frame);*text+='=';*text+=value;};
+                append(&tiff_headers,file.path);append(&tiff_layouts,in->descriptor());
+                if(!files_read.empty())files_read+=' ';files_read+=file.path;
+                const std::string inset_base=config_string(config,"inset_base_url","");
+                if(inset_base.empty()||inset_base.back()!='/'){plugin_set_error("missing-inset-base","inset_base_url must name the raw/499/ mirror ending in /");return 400;}
+                const std::string url=inset_base+file.image_url;
+                const std::string inset_etag=config_string(config,("inset_etag_"+std::string(file.path)).c_str(),"");
+                if(if_match&&inset_etag.empty()){plugin_set_error("missing-inset-etag","set inset_etag_<filename> from the mirrored object's ETag");return 400;}
+                for(const auto& range:ranges) {
+                    flatbuffers::FlatBufferBuilder b(512+url.size());
+                    const std::string value="bytes="+std::to_string(range.first)+"-"+std::to_string(range.first+range.second-1);
+                    std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b,"range",value.c_str()),R::CreateHeaderDirect(b,"if-modified-since",kNoValidators)};
+                    if(if_match)headers.push_back(R::CreateHeaderDirect(b,"if-match",inset_etag.c_str()));
+                    R::FinishHttpRequestBuffer(b,R::CreateHttpRequestDirect(b,"GET",url.c_str(),&headers,nullptr,static_cast<uint32_t>(timeout_ms),0,nullptr));
+                    char port[8];std::snprintf(port,sizeof(port),"dem_%zu",frame++);
+                    if(push_typed(port,"HttpRequest.fbs",R::HttpRequestIdentifier(),"HttpRequest",finished(b))<0)return 500;
+                }
+                continue;
+            }
             uint64_t first = 0, last = 0;
             if (!body_file_lines(requested, file, window, &first, &last)) continue;
             if (frame + 1 + range_parts > kBodyMaxDemFrames) {
@@ -1808,6 +1847,7 @@ int body_plan(void) {
     const std::string first_path = product.files[0].path;
     header.source_url = product.files[0].image_url ? product.files[0].image_url : product.files.size() == 1 ? base + first_path + ".img"
                                                   : base + first_path.substr(0, first_path.rfind('/') + 1);
+    if(product.inset)header.source_url=config_string(config,"inset_base_url","")+product.files[0].image_url;
     if (product.datum || (with_fill && unit.cap->fill->datum)) {
         header.license = "CC BY-SA 3.0 IGO";
         header.license_url = "https://creativecommons.org/licenses/by-sa/3.0/igo/";
@@ -1849,6 +1889,11 @@ int body_plan(void) {
     {
         std::vector<std::unique_ptr<R::ConfigEntryT>> entries;
         entries.push_back(number("maxGridSize", max_grid));
+        if(!tiff_headers.empty()) {
+            auto names=std::make_unique<R::ConfigEntryT>();names->KEY="bodyTiffFiles";names->KIND=R::configValueKind_String;names->STRING_VALUE=tiff_headers;entries.push_back(std::move(names));
+            auto layouts=std::make_unique<R::ConfigEntryT>();layouts->KEY="bodyTiffLayouts";layouts->KIND=R::configValueKind_String;layouts->STRING_VALUE=tiff_layouts;entries.push_back(std::move(layouts));
+        }
+        if(mask_frame)entries.push_back(number("bodyMaskFrame",static_cast<double>(mask_frame)));
         // The level-0 RMS target (15 m at level 7), judged as RMS over the source posts.
         entries.push_back(number("levelZeroErrorM", json_number_or(config, "level_zero_error_m", 1920)));
         auto metric = std::make_unique<R::ConfigEntryT>();
@@ -1858,6 +1903,7 @@ int body_plan(void) {
         entries.push_back(std::move(metric));
         if (backing) {
             entries.push_back(number("bodyBackingFrame", static_cast<double>(backing_frame)));
+            entries.push_back(number("bodyBackingDatum", backing->datum?1:0));
             entries.push_back(number("bodyBackingPosts", unit.cap->fill->fallback_posts));
             entries.push_back(number("bodyBackingSpacingM", backing_spacing));
         }
