@@ -8,5 +8,8 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test tests/*.e2e.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.7"
   }
 }

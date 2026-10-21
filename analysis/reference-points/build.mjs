@@ -30,7 +30,7 @@ const sources=await Promise.all(['reference_points.hpp','reference_points_module
 const outputPath=path.join(root,'dist/isomorphic/module.wasm');await fs.mkdir(path.dirname(outputPath),{recursive:true});
 const result=await compileModuleFromSource({manifest,sourceCode:['#include "space_data_module_invoke.h"',header,...sources].join('\n'),language:'c++',outputPath,threadModel:manifest.threadModel});
 try {
-  if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues,null,2));
+  if (!result.report?.ok) throw new Error((result.report?.issues??[]).map(issue=>issue.message??String(issue)).join('\n'));
   assertArtifactThreadModel(outputPath,'wasi-sequential');
   await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(root,'dist/plugin-manifest.json'));
   console.log(`Built dist/isomorphic/module.wasm (${(await fs.stat(outputPath)).size} bytes, ${result.compiler}, ${result.threadModel})`);
