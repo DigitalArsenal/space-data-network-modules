@@ -144,3 +144,13 @@ allows 1e-8 normalized units; the independent force residual remains <1e-13.
 
 The specified solar and Earth radii yield an umbra length of 1.38263e9 m at
 1 au; the task's 1.384e9 m comparison is treated as an approximate benchmark.
+
+## Consumers
+
+OrbPro bundles this module as `@orbpro/integration/reference-points`
+(`createReferencePoints`). The engine's `ReferencePointsDataSource` (Lagrange
+points, subsolar and sublunar points) and `CelestialReferenceGeometry` (Hill and
+influence spheres, Earth's shadow, terminator, Van Allen shells, asteroid and
+Kuiper belts, heliosphere boundaries) gather the ephemeris provider's ICRF
+states and hand them to the exports above; every position, radius and vertex
+drawn is this module's. The console shows them signed in only.
