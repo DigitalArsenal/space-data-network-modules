@@ -2,7 +2,7 @@
   "programId": "com.digitalarsenal.flows.terrain-refresh",
   "name": "Terrain Refresh: monthly source check",
   "version": "0.1.0",
-  "description": "The monthly source check of the terrain refresh (owner 2026-10-21: terrain updates run on SDN nodes as modules and flows, not as Mac scripts). One timer tick (config body: moon | mars; one service instance per body) reaches data-source/terrain-source-watch plan, which asks every source file the terrain walk reads for its first byte through hostcap/http-request (the ETag, Last-Modified and total size of the publisher's file) and asks storage/object-s3 to list the raw/<naif>/ mirror in R2 (SigV4 with the credential on the node's storage_r2 lane, read grant only). diff compares the two against the ETags the walk is pinned to and answers a $QRP page - per source file: current, source-changed, source-newer, size-changed, not-mirrored or probe-failed, with the product's levels - which a second object-s3 sign stores at watch/<naif>/<yyyy-mm-dd>.qrp beside the mirror, plus one FlowNotice (Unchanged when nothing needs a refresh). A mirror the node cannot read (no credential, the store refusing) still yields the source half as a FlowNotice and stores nothing. This flow only OBSERVES: it fetches one byte per source and writes one small report object; the quarterly re-encode of the changed units is a separate flow that consumes the report. Capabilities: clock, http, and the READ grant on secrets:storage_r2 - no write grant, no storage, no wallet.",
+  "description": "The monthly source check of the terrain refresh (owner 2026-10-21: terrain updates run on SDN nodes as modules and flows, not as Mac scripts). One timer tick (config bodies: moon,mars) reaches data-source/terrain-source-watch plan, which asks every source file the terrain walk reads for its first byte through hostcap/http-request (the ETag, Last-Modified and total size of the publisher's file) and asks storage/object-s3 to list the raw/<naif>/ mirror in R2 (SigV4 with the credential on the node's storage_r2 lane, read grant only). diff compares the two against the ETags the walk is pinned to and answers a $QRP page - per source file: current, source-changed, source-newer, size-changed, not-mirrored or probe-failed, with the product's levels - which a second object-s3 sign stores at watch/<naif>/<yyyy-mm-dd>.qrp beside the mirror, plus one FlowNotice (Unchanged when nothing needs a refresh). A mirror the node cannot read (no credential, the store refusing: no listing arrives) still yields the source half as a FlowNotice and stores nothing. All the probes and listings of one run must fit the 64 frames a node takes an invocation (both bodies: 61 probes and 2 listings), so the list result of a served listing is not wired to diff. This flow only OBSERVES: it fetches one byte per source and writes one small report object; the quarterly re-encode of the changed units is a separate flow that consumes the report. Capabilities: clock, http, and the READ grant on secrets:storage_r2 - no write grant, no storage, no wallet.",
   "nodes": [
     {
       "nodeId": "plan",
@@ -160,15 +160,6 @@
       "fromPortId": "listing",
       "toNodeId": "diff",
       "toPortId": "mirror",
-      "backpressurePolicy": "queue",
-      "queueDepth": 16
-    },
-    {
-      "edgeId": "finish_list-result-diff-mirror_result",
-      "fromNodeId": "finish_list",
-      "fromPortId": "result",
-      "toNodeId": "diff",
-      "toPortId": "mirror_result",
       "backpressurePolicy": "queue",
       "queueDepth": 16
     },

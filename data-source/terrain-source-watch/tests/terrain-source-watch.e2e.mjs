@@ -169,7 +169,7 @@ test("an unreadable mirror (no credential): the source half is reported, nothing
 });
 
 test("unconfigured: one Missing notice and no probe", async () => {
-  for (const cfg of [config({ endpoint: "" }), config({ body: "venus" })]) {
+  for (const cfg of [config({ endpoint: "" }), config({ bodies: "venus" })]) {
     const r = await run({ cfg });
     assert.deepEqual(r.notices.map((n) => n.kind), ["missing"]);
     assert.match(r.notices[0].reason, /unconfigured/);
@@ -178,10 +178,35 @@ test("unconfigured: one Missing notice and no probe", async () => {
   }
 });
 
+test("both bodies in one run: 61 probes, two listings, two reports, two puts, two notices; the frames fit one invocation", async () => {
+  const hrsc = SOURCES.find((s) => s.product === "hrsc_mola_blend_200m_v2");
+  await mock.reset();
+  await mock.seed(key(ldem4), sizeOf(ldem4));
+  await mock.seed(key(hrsc), sizeOf(hrsc));
+  const http = httpFor();
+  const node = H.createNode({ store: new Map([["storage_r2", { username: ACCESS, secret: SECRET }]]), http, config: config({ bodies: "moon, mars" }) });
+  const { outputs } = await H.runFlow({ wasm, node, inputs: [{ trigger: 0, portId: "tick", payload: tick() }] });
+  const reports = outputs.filter((b) => H.idAt(b, 8) === "$QRP").map((b) => H.readQrp(b, true));
+  assert.deepEqual(reports.map((r) => H.rowsOf(r).length).sort((a, b) => a - b), [27, 34]);
+  assert.equal(http.probed.length, 61);
+  const notices = outputs.filter((b) => H.idAt(b, 4) === "FNTC").map((b) => H.decodeFlowNotice(b));
+  assert.equal(notices.length, 2);
+  assert.deepEqual(notices.map((n) => /check (moon|mars) /.exec(n.reason)[1]).sort(), ["mars", "moon"]);
+  const stored = Object.keys((await mock.state()).objects).filter((k) => k.startsWith("watch/")).sort();
+  assert.deepEqual(stored.map((k) => k.split("/")[1]), ["301", "499"]);
+});
+
+test("a body the table lacks is unconfigured, not skipped", async () => {
+  // a name the table lacks is refused (a run whose probes and listings exceed 64 frames is refused the same way)
+  const r = await run({ cfg: config({ bodies: "moon,venus" }) });
+  assert.deepEqual(r.notices.map((n) => n.kind), ["missing"]);
+  assert.match(r.notices[0].reason, /venus/);
+});
+
 test("mars: its own table, NAIF 499 and the HRSC blend by its published name", async () => {
   const hrsc = SOURCES.find((s) => s.product === "hrsc_mola_blend_200m_v2");
   const mega = SOURCES.find((s) => s.product === "mega_16");
-  const r = await run({ cfg: config({ body: "mars" }), mirrorFor: [[hrsc, 11384463908 > 1e6 ? sizeOf(hrsc) : 1], [mega]] });
+  const r = await run({ cfg: config({ body: "mars", bodies: undefined }), mirrorFor: [[hrsc, 11384463908 > 1e6 ? sizeOf(hrsc) : 1], [mega]] });
   assert.equal(r.rows.length, 27);
   assert.ok(r.rows.every((x) => x.body === "mars" && x.naif === "499"));
   assert.equal(r.states["hrsc_mola_blend_200m_v2/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif"], "current");

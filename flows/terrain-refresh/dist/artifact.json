@@ -5,7 +5,7 @@
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 10,
-  "edges": 16,
+  "edges": 15,
   "triggers": 1,
   "capabilities": [
     "clock",
@@ -91,7 +91,7 @@
       "dependencyId": "com.digitalarsenal.data-source.terrain-source-watch",
       "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
       "version": "0.1.0",
-      "sha256": "8af7f568f404fa51a135459d0140a03a7b0ff8d141d3bdc9fd80ee041ce3c996",
+      "sha256": "af204e99a3ec20b92fc8c8ee9c905c51b3c656e4917d1fd81eacd2aef571249d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

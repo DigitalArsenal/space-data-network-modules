@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
   "name": "Terrain Source Watch",
   "version": "0.1.0",
-  "description": "The monthly source check of the terrain refresh flow (typed contracts 1.0: FlatBuffers only; every hostcall an SDS $PIV invocation). For one body (config body: moon | mars) it probes every source file the terrain walk reads - the table terrain-ingest's body_plan uses, generated into src/watch_sources.hpp and held to it by tools/generate-sources.mjs --check - with a one-byte ranged GET (ETag, Last-Modified and the total size in one exchange; a HEAD fails on the Go node's http connector when it answers a Content-Length), lists the raw/<naif>/ mirror through storage/object-s3, and diffs the two. The diff is a $QRP projection page (body, naif, product, file, state, source_url, serves, source_etag, pinned_etag, source_last_modified, mirror_key, source_size, mirror_size, mirror_modified_ms, probe_error), stored beside the mirror as <report_prefix>/<naif>/<yyyy-mm-dd>.qrp through an object-s3 put task, and summarized in one FlowNotice. States: current, source-changed (the live ETag is not the one the walk is pinned to), source-newer (no pin; modified after the mirror was written), size-changed, not-mirrored, probe-failed. It never touches the network and holds only the clock: it builds requests for hostcap/http-request and tasks for storage/object-s3, and reads their answers. Config (plugin.getConfig): body, store, endpoint, bucket, region, report_prefix, timeout_ms, pins (off: compare size and Last-Modified only).",
+  "description": "The monthly source check of the terrain refresh flow (typed contracts 1.0: FlatBuffers only; every hostcall an SDS $PIV invocation). For each configured body (config bodies: moon,mars; body is the one-body spelling) it probes every source file the terrain walk reads - the table terrain-ingest's body_plan uses, generated into src/watch_sources.hpp and held to it by tools/generate-sources.mjs --check - with a one-byte ranged GET (ETag, Last-Modified and the total size in one exchange; a HEAD fails on the Go node's http connector when it answers a Content-Length), lists the raw/<naif>/ mirror through storage/object-s3, and diffs the two. The diff is a $QRP projection page (body, naif, product, file, state, source_url, serves, source_etag, pinned_etag, source_last_modified, mirror_key, source_size, mirror_size, mirror_modified_ms, probe_error), stored beside the mirror as <report_prefix>/<naif>/<yyyy-mm-dd>.qrp through an object-s3 put task, and summarized in one FlowNotice. States: current, source-changed (the live ETag is not the one the walk is pinned to), source-newer (no pin; modified after the mirror was written), size-changed, not-mirrored, probe-failed. It never touches the network and holds only the clock: it builds requests for hostcap/http-request and tasks for storage/object-s3, and reads their answers. Config (plugin.getConfig): bodies, store, endpoint, bucket, region, report_prefix, timeout_ms, pins (off: compare size and Last-Modified only).",
   "pluginFamily": "data_source",
   "capabilities": [
     "clock"
@@ -24,7 +24,7 @@
       "displayName": "Plan the source probes",
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "One timer tick -> one ranged-GET HttpRequest per source file of the configured body (CONTEXT: the table index) on probes, and one object-s3 list task for raw/<naif>/ on list. An unconfigured check (no endpoint, an unknown body) emits one FlowNotice Missing and nothing else.",
+      "description": "One timer tick -> one ranged-GET HttpRequest per source file of each configured body (CONTEXT: the table index) on probes, and one object-s3 list task per body for raw/<naif>/ on list (REQUEST_ID watch-list-<naif>). The probes and listings of one run must fit the 64 frames a node takes an invocation, else the check is unconfigured. An unconfigured check (no endpoint, an unknown body) emits one FlowNotice Missing and nothing else.",
       "inputPorts": [
         {
           "portId": "tick",
@@ -119,7 +119,7 @@
       "displayName": "Diff the sources against the mirror",
       "maxBatch": 1024,
       "drainPolicy": "single-shot",
-      "description": "The probe answers (probes), the mirror listing (mirror, a $FIL) and the listing's result (mirror_result, an $APR whose non-200 STATUS says the mirror could not be read) -> the report page, an object-s3 put task that stores it (only when the mirror was listed: a page claiming an unreadable mirror is empty is never stored) and one FlowNotice.",
+      "description": "The probe answers (probes), the mirror listing (mirror, a $FIL) and the listing's result (mirror_result, an $APR whose non-200 STATUS says the mirror could not be read) -> per body: the report page, an object-s3 put task that stores it (only when that body's mirror was listed: a page claiming an unreadable mirror is empty is never stored) and one FlowNotice.",
       "inputPorts": [
         {
           "portId": "probes",

@@ -6,7 +6,8 @@
  * diffs each source's listing (size, ETag, Last-Modified) against the raw/<naif>/<product>/ mirror; a quarterly rebuild
  * re-encodes what changed.
  *
- * WHAT IT DOES. For one body (config `body`: moon | mars) it asks every source file the terrain walk reads (the table
+ * WHAT IT DOES. For each configured body (moon | mars; all the probes and listings of a run must fit the 64 frames a node
+ * takes an invocation) it asks every source file the terrain walk reads (the table
  * the walk itself uses, src/watch_sources.hpp, generated from terrain-ingest's body_plan.hpp and held to it by
  * `node tools/generate-sources.mjs --check`) for the first byte of the file - a one-byte ranged GET, because the Go
  * node's http connector fails a HEAD answered with a Content-Length - which answers the file's ETag, Last-Modified and
@@ -31,7 +32,7 @@
  *   probe-failed     the source did not answer a ranged read
  * refresh-needed = source-changed | source-newer | size-changed.
  *
- * CONFIG (plugin.getConfig): body; store, endpoint, bucket, region (the object-s3 lane the mirror is read through);
+ * CONFIG (plugin.getConfig): bodies ("moon,mars"; default moon; `body` is the one-body spelling); store, endpoint, bucket, region (the object-s3 lane the mirror is read through);
  * report_prefix (default "watch"); timeout_ms; pins ("off": compare size and Last-Modified only).
  */
 
@@ -60,6 +61,7 @@ namespace R = sdn::runtime;
 
 constexpr const char* kNoValidator = "\"sdn-terrain-source-watch\"";  // see storage/object-s3: the Go node's remembered validators
 constexpr uint32_t kProbeTimeoutMs = 120000;
+constexpr unsigned kMaxFramesPerRun = 64;
 
 std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
     std::vector<const plugin_input_frame_t*> out;
@@ -91,7 +93,8 @@ std::string lower(std::string_view s) {
 
 // ── config ──────────────────────────────────────────────────────────────────────────────────────────────────────
 struct Cfg {
-    std::string body = "moon", store = "r2", endpoint, bucket = "spaceaware", region = "auto", report_prefix = "watch";
+    std::vector<std::string> bodies;
+    std::string store = "r2", endpoint, bucket = "spaceaware", region = "auto", report_prefix = "watch";
     uint32_t timeout_ms = kProbeTimeoutMs;
     bool use_pins = true;  // config pins: "off" compares size and Last-Modified only (a product added without a pin)
     std::string error;
@@ -101,13 +104,33 @@ Cfg load_config() {
     const sdm_piv::Config config = sdm_piv::get_config();
     if (!config.ok()) { c.error = "plugin.getConfig: " + config.error_message(); return c; }
     auto text = [&](const char* key, std::string* out) { const std::string_view v = config.string(key); if (!v.empty()) *out = std::string(v); };
-    text("body", &c.body); text("store", &c.store); text("endpoint", &c.endpoint); text("bucket", &c.bucket);
+    std::string body_list = "moon";
+    text("bodies", &body_list);
+    if (config.string("bodies").empty() && !config.string("body").empty()) body_list = std::string(config.string("body"));
+    for (size_t from = 0; from <= body_list.size();) {
+        size_t comma = body_list.find(',', from);
+        if (comma == std::string::npos) comma = body_list.size();
+        std::string name = body_list.substr(from, comma - from);
+        name.erase(std::remove_if(name.begin(), name.end(), [](unsigned char c) { return std::isspace(c); }), name.end());
+        if (!name.empty() && std::find(c.bodies.begin(), c.bodies.end(), name) == c.bodies.end()) c.bodies.push_back(name);
+        from = comma + 1;
+    }
+    text("store", &c.store); text("endpoint", &c.endpoint); text("bucket", &c.bucket);
     text("region", &c.region); text("report_prefix", &c.report_prefix);
     c.use_pins = config.string("pins") != "off";
     const double timeout = config.number("timeout_ms", 0);
     if (timeout >= 1000) c.timeout_ms = static_cast<uint32_t>(timeout);
-    if (c.body != "moon" && c.body != "mars") c.error = "config body is moon or mars";
+    unsigned sources = 0;
+    for (const std::string& name : c.bodies) {
+        unsigned n = 0;
+        for (unsigned i = 0; i < kWatchSourceCount; ++i) if (name == kWatchSources[i].body) ++n;
+        if (n == 0) { c.error = "config bodies names \"" + name + "\", which the walk's table does not hold (moon, mars)"; return c; }
+        sources += n;
+    }
+    if (c.bodies.empty()) c.error = "config bodies is empty";
     else if (c.endpoint.empty()) c.error = "config endpoint (the mirror store's https://host) is required";
+    // a node takes at most 64 input frames an invocation (port-blind): the probes and one listing per body must fit
+    else if (sources + c.bodies.size() > kMaxFramesPerRun) c.error = std::to_string(sources) + " sources in " + std::to_string(c.bodies.size()) + " bodies do not fit one run (at most " + std::to_string(kMaxFramesPerRun) + " frames): split the bodies across flows";
     return c;
 }
 
@@ -141,53 +164,57 @@ int push_apr(const char* port, const APRT& apr) {
 }
 
 // ── plan ────────────────────────────────────────────────────────────────────────────────────────────────────────
+std::string naif_of(const std::string& body) {
+    for (unsigned i = 0; i < kWatchSourceCount; ++i) if (body == kWatchSources[i].body) return kWatchSources[i].naif;
+    return std::string();
+}
+
 int run_plan() {
     const auto ticks = frames_on("tick");
     if (ticks.empty()) return 0;
     const Cfg cfg = load_config();
     if (!cfg.error.empty()) return push_status(R::flowNoticeKind_Missing, "unconfigured: " + cfg.error, 0, {});
-    std::string naif;
-    uint32_t count = 0;
-    for (unsigned i = 0; i < kWatchSourceCount; ++i) {
-        const WatchSource& s = kWatchSources[i];
-        if (cfg.body != s.body) continue;
-        naif = s.naif;
-        APRT context;
-        context.REQUEST_ID = std::to_string(i);
-        context.ROUTE = "probe";
-        flatbuffers::FlatBufferBuilder cb(128);
-        FinishAPRBuffer(cb, APR::Pack(cb, &context));
+    for (const std::string& body : cfg.bodies) {
+        const std::string naif = naif_of(body);
+        for (unsigned i = 0; i < kWatchSourceCount; ++i) {
+            const WatchSource& s = kWatchSources[i];
+            if (body != s.body) continue;
+            APRT context;
+            context.REQUEST_ID = std::to_string(i);
+            context.ROUTE = "probe";
+            flatbuffers::FlatBufferBuilder cb(128);
+            FinishAPRBuffer(cb, APR::Pack(cb, &context));
 
-        R::HttpRequestT request;
-        request.METHOD = "GET";
-        request.URL = s.url;
-        for (const auto& [name, value] : std::vector<std::pair<std::string, std::string>>{{"if-none-match", kNoValidator}, {"range", "bytes=0-0"}}) {
-            auto h = std::make_unique<R::HeaderT>();
-            h->NAME = name;
-            h->VALUE = value;
-            request.HEADERS.push_back(std::move(h));
+            R::HttpRequestT request;
+            request.METHOD = "GET";
+            request.URL = s.url;
+            for (const auto& [name, value] : std::vector<std::pair<std::string, std::string>>{{"if-none-match", kNoValidator}, {"range", "bytes=0-0"}}) {
+                auto h = std::make_unique<R::HeaderT>();
+                h->NAME = name;
+                h->VALUE = value;
+                request.HEADERS.push_back(std::move(h));
+            }
+            request.TIMEOUT_MS = cfg.timeout_ms;
+            request.MAX_BYTES = 1024 * 1024;
+            request.CONTEXT.assign(cb.GetBufferPointer(), cb.GetBufferPointer() + cb.GetSize());
+            flatbuffers::FlatBufferBuilder b(512);
+            R::FinishHttpRequestBuffer(b, R::HttpRequest::Pack(b, &request));
+            if (plugin_push_output_ex("probes", "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                      "HttpRequest", 0, 8, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0) {
+                return 500;
+            }
         }
-        request.TIMEOUT_MS = cfg.timeout_ms;
-        request.MAX_BYTES = 1024 * 1024;
-        request.CONTEXT.assign(cb.GetBufferPointer(), cb.GetBufferPointer() + cb.GetSize());
-        flatbuffers::FlatBufferBuilder b(512);
-        R::FinishHttpRequestBuffer(b, R::HttpRequest::Pack(b, &request));
-        if (plugin_push_output_ex("probes", "HttpRequest.fbs", R::HttpRequestIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-                                  "HttpRequest", 0, 8, b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0) {
-            return 500;
+        // the mirror's listing: every key under raw/<naif>/ (one page: the mirror holds far fewer than 1000 keys)
+        APRT list;
+        list.REQUEST_ID = "watch-list-" + naif;
+        list.ROUTE = "list";
+        for (const auto& [k, v] : std::vector<std::pair<std::string, std::string>>{
+                 {"store", cfg.store}, {"endpoint", cfg.endpoint}, {"bucket", cfg.bucket}, {"region", cfg.region},
+                 {"prefix", "raw/" + naif + "/"}, {"maxKeys", "1000"}}) {
+            list.PARAMETERS.push_back(parameter(k, v));
         }
-        ++count;
+        if (push_apr("list", list) != 0) return 500;
     }
-    // the mirror's listing: every key under raw/<naif>/ (one page: the mirror holds far fewer than 1000 keys)
-    APRT list;
-    list.REQUEST_ID = "watch-list";
-    list.ROUTE = "list";
-    for (const auto& [k, v] : std::vector<std::pair<std::string, std::string>>{
-             {"store", cfg.store}, {"endpoint", cfg.endpoint}, {"bucket", cfg.bucket}, {"region", cfg.region},
-             {"prefix", "raw/" + naif + "/"}, {"maxKeys", "1000"}}) {
-        list.PARAMETERS.push_back(parameter(k, v));
-    }
-    if (push_apr("list", list) != 0) return 500;
     return 0;
 }
 
@@ -251,6 +278,13 @@ std::unique_ptr<QRPValueT> number_cell(int64_t v) {
     return c;
 }
 
+// The mirror of one body: its listing (a $FIL whose PATH is <bucket>/raw/<naif>/) and what its list task answered.
+struct MirrorOf {
+    bool listed = false;
+    std::map<std::string, Mirrored> files;
+    std::string error;
+};
+
 int run_diff() {
     const auto probes = frames_on("probes");
     const auto mirrors = frames_on("mirror");
@@ -295,104 +329,112 @@ int run_diff() {
         probe[index] = p;
     }
 
-    // the mirror
-    std::map<std::string, Mirrored> mirror;
-    bool mirror_listed = false;
+    // the mirrors, by NAIF id
+    std::map<std::string, MirrorOf> mirror;
     for (const auto* frame : mirrors) {
         if (!frame->payload || !has_identifier(frame->payload, frame->payload_length, "$FIL") ||
             !verify_unaligned(frame->payload, frame->payload_length, verify_fil)) continue;
         const FIL* listing = GetFIL(frame->payload);
-        mirror_listed = true;
+        const std::string where = listing->PATH() ? listing->PATH()->str() : std::string();
+        const size_t at = where.find("raw/");
+        if (at == std::string::npos) continue;
+        MirrorOf& m = mirror[where.substr(at + 4, where.find('/', at + 4) - at - 4)];
+        m.listed = true;
         if (listing->ENTRIES())
             for (const auto* e : *listing->ENTRIES())
-                if (e && e->NAME() && e->KIND() == filEntryKind_File) mirror[e->NAME()->str()] = Mirrored{e->SIZE(), e->MODIFIED_AT_MS()};
+                if (e && e->NAME() && e->KIND() == filEntryKind_File) m.files[e->NAME()->str()] = Mirrored{e->SIZE(), e->MODIFIED_AT_MS()};
     }
-    std::string mirror_error;
-    for (const auto* frame : results) {
+    for (const auto* frame : results) {  // a refusal of the list task (no credential, no clock, a bad endpoint)
         if (!frame->payload || !has_identifier(frame->payload, frame->payload_length, "$APR") ||
             !verify_unaligned(frame->payload, frame->payload_length, verify_apr)) continue;
         const APR* a = GetAPR(frame->payload);
-        if (a->STATUS() != 200) mirror_error = (a->ERROR_CODE() ? a->ERROR_CODE()->str() : std::string("error")) + " " + std::to_string(a->STATUS());
+        const std::string id = a->REQUEST_ID() ? a->REQUEST_ID()->str() : std::string();
+        if (id.rfind("watch-list-", 0) != 0) continue;
+        if (a->STATUS() != 200) mirror[id.substr(11)].error = (a->ERROR_CODE() ? a->ERROR_CODE()->str() : std::string("error")) + " " + std::to_string(a->STATUS());
     }
 
-    QRPT page;
-    page.KIND = qrpKind_Page;
-    page.STATUS = qrpStatus_Ok;
-    for (const char* name : {"body", "naif", "product", "file", "state", "source_url", "serves"}) page.COLUMNS.push_back(column(name, "string"));
-    for (const char* name : {"source_etag", "pinned_etag", "source_last_modified", "mirror_key"}) page.COLUMNS.push_back(column(name, "string"));
-    for (const char* name : {"source_size", "mirror_size", "mirror_modified_ms"}) page.COLUMNS.push_back(column(name, "int"));
-    page.COLUMNS.push_back(column("probe_error", "string"));
+    for (const std::string& body : cfg.bodies) {
+        const std::string naif = naif_of(body);
+        const MirrorOf& mir = mirror[naif];
+        QRPT page;
+        page.KIND = qrpKind_Page;
+        page.STATUS = qrpStatus_Ok;
+        for (const char* name : {"body", "naif", "product", "file", "state", "source_url", "serves"}) page.COLUMNS.push_back(column(name, "string"));
+        for (const char* name : {"source_etag", "pinned_etag", "source_last_modified", "mirror_key"}) page.COLUMNS.push_back(column(name, "string"));
+        for (const char* name : {"source_size", "mirror_size", "mirror_modified_ms"}) page.COLUMNS.push_back(column(name, "int"));
+        page.COLUMNS.push_back(column("probe_error", "string"));
 
-    std::map<std::string, uint64_t> counts;
-    std::vector<std::string> changed;
-    std::string naif;
-    for (unsigned i = 0; i < kWatchSourceCount; ++i) {
-        const WatchSource& s = kWatchSources[i];
-        if (cfg.body != s.body) continue;
-        naif = s.naif;
-        const Probe p = probe.count(i) ? probe[i] : Probe{};
-        const std::string key = std::string("raw/") + s.naif + "/" + s.product + "/" + s.file;
-        const auto m = mirror.find(key);
-        const bool mirrored = m != mirror.end();
-        const std::string pinned = cfg.use_pins ? std::string(s.pinned_etag) : std::string();
-        std::string state, why;
-        const bool answered = p.answered && (p.status == 206 || p.status == 200);
-        if (!answered) {
-            state = "probe-failed";
-            why = !p.answered ? "no answer" : !p.error.empty() ? p.error : "HTTP " + std::to_string(p.status);
-        } else if (!pinned.empty() && !p.etag.empty() && p.etag != pinned) {
-            state = "source-changed";
-        } else if (mirrored && p.size >= 0 && static_cast<uint64_t>(p.size) != m->second.size) {
-            state = "size-changed";
-        } else if (mirrored && pinned.empty() && m->second.modified_ms > 0 && parse_http_date_ms(p.last_modified) > m->second.modified_ms) {
-            state = "source-newer";
-        } else if (!mirrored && mirror_listed) {
-            state = "not-mirrored";
-        } else {
-            state = "current";
+        std::map<std::string, uint64_t> counts;
+        std::vector<std::string> changed;
+        for (unsigned i = 0; i < kWatchSourceCount; ++i) {
+            const WatchSource& s = kWatchSources[i];
+            if (body != s.body) continue;
+            const Probe p = probe.count(i) ? probe[i] : Probe{};
+            const std::string key = std::string("raw/") + s.naif + "/" + s.product + "/" + s.file;
+            const auto m = mir.files.find(key);
+            const bool mirrored = m != mir.files.end();
+            const std::string pinned = cfg.use_pins ? std::string(s.pinned_etag) : std::string();
+            std::string state, why;
+            const bool answered = p.answered && (p.status == 206 || p.status == 200);
+            if (!answered) {
+                state = "probe-failed";
+                why = !p.answered ? "no answer" : !p.error.empty() ? p.error : "HTTP " + std::to_string(p.status);
+            } else if (!pinned.empty() && !p.etag.empty() && p.etag != pinned) {
+                state = "source-changed";
+            } else if (mirrored && p.size >= 0 && static_cast<uint64_t>(p.size) != m->second.size) {
+                state = "size-changed";
+            } else if (mirrored && pinned.empty() && m->second.modified_ms > 0 && parse_http_date_ms(p.last_modified) > m->second.modified_ms) {
+                state = "source-newer";
+            } else if (!mirrored && mir.listed) {
+                state = "not-mirrored";
+            } else {
+                state = "current";
+            }
+            ++counts[state];
+            if (state == "source-changed" || state == "source-newer" || state == "size-changed") changed.push_back(std::string(s.product) + "/" + s.file + "=" + state);
+
+            auto row = std::make_unique<QRPRowT>();
+            for (const std::string& v : {std::string(s.body), std::string(s.naif), std::string(s.product), std::string(s.file), state, std::string(s.url), std::string(s.serves),
+                                         p.etag, pinned, p.last_modified, key}) {
+                row->CELLS.push_back(text_cell(v));
+            }
+            row->CELLS.push_back(number_cell(answered ? p.size : -1));
+            row->CELLS.push_back(number_cell(mirrored ? static_cast<int64_t>(m->second.size) : -1));
+            row->CELLS.push_back(number_cell(mirrored ? m->second.modified_ms : -1));
+            row->CELLS.push_back(text_cell(why));
+            page.ROWS.push_back(std::move(row));
         }
-        ++counts[state];
-        if (state == "source-changed" || state == "source-newer" || state == "size-changed") changed.push_back(std::string(s.product) + "/" + s.file + "=" + state);
 
-        auto row = std::make_unique<QRPRowT>();
-        for (const std::string& v : {std::string(s.body), std::string(s.naif), std::string(s.product), std::string(s.file), state, std::string(s.url), std::string(s.serves),
-                                     p.etag, pinned, p.last_modified, key}) {
-            row->CELLS.push_back(text_cell(v));
+        flatbuffers::FlatBufferBuilder b(4096);
+        FinishSizePrefixedQRPBuffer(b, QRP::Pack(b, &page));
+        if (plugin_push_output_ex("report", "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "QRP", 0, 8,
+                                  b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0) {
+            return 500;
         }
-        row->CELLS.push_back(number_cell(answered ? p.size : -1));
-        row->CELLS.push_back(number_cell(mirrored ? static_cast<int64_t>(m->second.size) : -1));
-        row->CELLS.push_back(number_cell(mirrored ? m->second.modified_ms : -1));
-        row->CELLS.push_back(text_cell(why));
-        page.ROWS.push_back(std::move(row));
+        if (!mir.listed) {
+            // the mirror could not be read (no credential, the store refusing): the report is still the source half; a page that
+            // claims the mirror is empty is never stored
+            std::vector<std::string> items = changed;
+            items.push_back("mirror=" + (mir.error.empty() ? std::string("not listed") : mir.error));
+            if (push_status(R::flowNoticeKind_Info, "terrain source check " + body + ", mirror unreadable", page.ROWS.size(), items) != 0) return 500;
+            continue;
+        }
+        // stored beside the mirror
+        APRT put;
+        put.REQUEST_ID = "watch-put-" + naif;
+        put.ROUTE = "put";
+        for (const auto& [k, v] : std::vector<std::pair<std::string, std::string>>{
+                 {"store", cfg.store}, {"endpoint", cfg.endpoint}, {"bucket", cfg.bucket}, {"region", cfg.region},
+                 {"key", cfg.report_prefix + "/" + naif + "/" + day + ".qrp"}, {"contentType", "application/x-flatbuffers"}}) {
+            put.PARAMETERS.push_back(parameter(k, v));
+        }
+        put.BODY.assign(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+        if (push_apr("put", put) != 0) return 500;
+        std::string summary = "terrain source check " + body + " " + day + ":";
+        for (const auto& [state, n] : counts) summary += " " + state + "=" + std::to_string(n);
+        if (push_status(changed.empty() ? R::flowNoticeKind_Unchanged : R::flowNoticeKind_Info, summary, page.ROWS.size(), changed) != 0) return 500;
     }
-
-    flatbuffers::FlatBufferBuilder b(4096);
-    FinishSizePrefixedQRPBuffer(b, QRP::Pack(b, &page));
-    if (plugin_push_output_ex("report", "QRP.fbs", QRPIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "QRP", 0, 8,
-                              b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0) {
-        return 500;
-    }
-    // stored beside the mirror
-    if (!mirror_error.empty() || !mirror_listed) {
-        // the mirror could not be read (no credential, store refused): the report is still the source half; do not store a page
-        // that claims the mirror is empty
-        std::vector<std::string> items = changed;
-        items.push_back("mirror=" + (mirror_error.empty() ? std::string("not listed") : mirror_error));
-        return push_status(R::flowNoticeKind_Info, "terrain source check, mirror unreadable", page.ROWS.size(), items);
-    }
-    APRT put;
-    put.REQUEST_ID = "watch-put";
-    put.ROUTE = "put";
-    for (const auto& [k, v] : std::vector<std::pair<std::string, std::string>>{
-             {"store", cfg.store}, {"endpoint", cfg.endpoint}, {"bucket", cfg.bucket}, {"region", cfg.region},
-             {"key", cfg.report_prefix + "/" + naif + "/" + day + ".qrp"}, {"contentType", "application/x-flatbuffers"}}) {
-        put.PARAMETERS.push_back(parameter(k, v));
-    }
-    put.BODY.assign(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
-    if (push_apr("put", put) != 0) return 500;
-    std::string summary = "terrain source check " + cfg.body + " " + day + ":";
-    for (const auto& [state, n] : counts) summary += " " + state + "=" + std::to_string(n);
-    return push_status(changed.empty() ? R::flowNoticeKind_Unchanged : R::flowNoticeKind_Info, summary, page.ROWS.size(), changed);
+    return 0;
 }
 
 }  // namespace
