@@ -1,0 +1,4 @@
+{
+  "com.digitalarsenal.storage.credentials": "../../storage/credentials",
+  "com.digitalarsenal.foundation.http-respond": "../../foundation/http-respond"
+}

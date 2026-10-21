@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.storage.object-s3": "../../storage/object-s3",
+  "com.digitalarsenal.hostcap.http-request": "../../hostcap/http-request",
+  "com.digitalarsenal.foundation.http-respond": "../../foundation/http-respond"
+}
