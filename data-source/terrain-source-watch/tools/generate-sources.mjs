@@ -52,7 +52,7 @@ function parseGroup(tokens, at) {
 }
 
 const source = fs.readFileSync(planPath, "utf8");
-const marker = source.indexOf("static const std::vector<Body> table = {");
+const marker = source.search(/static\s+(?:const\s+)?std::vector<Body>\s+table\s*=\s*\{/);
 if (marker < 0) throw new Error("body_plan.hpp: the bodies() table is not where the generator expects it");
 const tokens = tokenize(source.slice(source.indexOf("{", marker)));
 const [[bodies]] = [parseGroup(tokens, 1)];
