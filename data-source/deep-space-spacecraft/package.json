@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-deep-space-spacecraft",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -10,8 +10,11 @@
   },
   "devDependencies": {
     "flatbuffers": "25.9.23",
-    "flatc-wasm": "26.1.32",
-    "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.247.0"
+    "flatc-wasm": "26.1.38",
+    "space-data-module-sdk": "0.9.7",
+    "spacedatastandards.org": "1.249.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
   }
 }

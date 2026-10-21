@@ -61,6 +61,38 @@ inline int64_t ceilDiv(int64_t value, int64_t divisor) {
   return -floorDiv(-value, divisor);
 }
 
+constexpr int64_t kHalfDay = horizons::kDay / 2;
+// Midnight is offset by half a day on the J2000-noon axis.
+inline int64_t floorDay(int64_t time) { return floorDiv(time + kHalfDay, horizons::kDay) * horizons::kDay - kHalfDay; }
+inline int64_t ceilDay(int64_t time) { return -floorDay(-time); }
+
+inline bool window(const notables::Phase& phase, int64_t now, double lower, double upper,
+                   bool hasStart, int64_t limitStart, bool hasStop, int64_t limitStop,
+                   size_t pageRows, Plan& plan, std::string& error) {
+  plan = Plan{}; error.clear();
+  if (!std::isfinite(lower) || !std::isfinite(upper) || lower >= upper ||
+      std::abs(lower) > 2.5e11 || std::abs(upper) > 2.5e11) {
+    error = "invalid-coverage-range"; return false;
+  }
+  const int64_t day = horizons::kDay;
+  const int64_t lo = ceilDay(int64_t(std::ceil(lower)) + day);
+  const int64_t hi = floorDay(int64_t(std::floor(upper)) - day);
+  const int64_t span = int64_t(phase.pre_days + phase.post_days) * day;
+  plan.start = floorDay(now) - phase.pre_days * day;
+  plan.stop = floorDay(now) + phase.post_days * day;
+  if (plan.start > hi) { plan.stop = hi; plan.start = hi - span; }
+  else if (plan.stop < lo) { plan.start = lo; plan.stop = lo + span; }
+  plan.start = std::max(plan.start, lo);
+  plan.stop = std::min(plan.stop, hi);
+  if (hasStart) plan.start = std::max(plan.start, ceilDay(limitStart));
+  if (hasStop) plan.stop = std::min(plan.stop, floorDay(limitStop));
+  if (plan.stop <= plan.start) { error = "empty-trajectory-range"; return false; }
+  std::vector<horizons::Page> pages;
+  if (!horizons::pages(plan.start, plan.stop, phase.step, pageRows, pages, error)) return false;
+  for (const auto& p : pages) plan.pages.push_back({p.start, p.stop, p.step, p.rows, 0, p.offset});
+  return true;
+}
+
 inline bool build(const notables::Notable& craft, double lower, double upper,
                   bool hasStart, int64_t limitStart, bool hasStop, int64_t limitStop,
                   size_t pageRows, Plan& plan, std::string& error) {

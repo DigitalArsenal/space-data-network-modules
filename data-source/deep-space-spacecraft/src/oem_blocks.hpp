@@ -1,6 +1,8 @@
 #pragma once
 // Multi-block SDS projection and reading. The reusable interpolation implementation
 // is included from files/orbit-products/src/ephemeris_series.hpp by the build.
+#include "trajectory_rows.hpp"
+#include "regime.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -8,11 +10,7 @@
 #include <vector>
 
 namespace spacecraft_oem {
-struct Group {
-  int64_t start = 0, stop = 0, step = 0;
-  std::string label;
-  std::vector<double> data;
-};
+using Group = trajectory::Block;
 
 inline bool segments(const std::vector<Group>& groups, bool terminal,
                      std::vector<Group>& blocks, std::string& error) {
@@ -46,13 +44,14 @@ inline bool segments(const std::vector<Group>& groups, bool terminal,
   }
   addDaily(cursor, daily.stop);
   if (blocks.empty()) { error = "empty-trajectory"; return false; }
-  if (terminal) blocks.back().label += "; heliocentric segment ends here; the Jovian tour requires a Jupiter-centred segment";
+  if (terminal) blocks.back().label += "; archive terminal event; subsequent phases are separate";
   return true;
 }
 
 inline std::vector<uint8_t> build(const notables::Notable& craft,
                                  const std::vector<Group>& blocks,
-                                 const std::string& creation) {
+                                 const std::string& creation, const std::string& catalog,
+                                 const std::string& lifecycle) {
   flatbuffers::FlatBufferBuilder fbb(65536);
   std::vector<flatbuffers::Offset<ephemerisDataBlock>> offsets;
   const auto name = fbb.CreateString(craft.name), cospar = fbb.CreateString(craft.cospar);
@@ -64,16 +63,17 @@ inline std::vector<uint8_t> build(const notables::Notable& craft,
   frame.add_REFERENCE_FRAME_type(RFMUnionTraits<CelestialFrameWrapper>::enum_value);
   frame.add_REFERENCE_FRAME(celestial.Union());
   const auto rfm = frame.Finish();
-  const auto center = fbb.CreateString("SUN"), interpolation = fbb.CreateString("Hermite");
+  const auto interpolation = fbb.CreateString("Hermite");
   for (const auto& b : blocks) {
+    const auto center = fbb.CreateString(trajectory::centerName(b.center));
     const auto start = fbb.CreateString(horizons::formatCalendar(b.start));
     const auto stop = fbb.CreateString(horizons::formatCalendar(b.stop));
-    const auto comment = fbb.CreateString(std::string("ALIASES: ") + craft.aliases + "\n" +
+    const auto comment = fbb.CreateString(std::string("CATALOG: ") + catalog + "\nLIFECYCLE: " + lifecycle + "\nALIASES: " + craft.aliases + "\n" +
         craft.licence + "\n" + craft.credit + "\n" + b.label);
     const auto data = fbb.CreateVector(b.data);
     ephemerisDataBlockBuilder block(fbb);
     block.add_OBJECT(object); block.add_CENTER_NAME(center);
-    block.add_OBJECT_NAIF_ID(craft.id); block.add_CENTER_NAIF_ID(10);
+    block.add_OBJECT_NAIF_ID(craft.id); block.add_CENTER_NAIF_ID(b.center);
     block.add_REFERENCE_FRAME(rfm); block.add_TIME_SYSTEM(timingStandard::TDB);
     block.add_START_TIME(start); block.add_STOP_TIME(stop); block.add_STEP_SIZE(double(b.step));
     block.add_STATE_VECTOR_SIZE(6); block.add_EPHEMERIS_DATA(data);
@@ -88,6 +88,39 @@ inline std::vector<uint8_t> build(const notables::Notable& craft,
   if (!creation.empty()) root.add_CREATION_DATE(created);
   FinishSizePrefixedOEMBuffer(fbb, root.Finish());
   return {fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize()};
+}
+
+inline std::vector<uint8_t> groupRecords(const std::array<size_t, regime::kCatalogCount>& counts,
+                                         const std::string& retrieved) {
+  std::vector<uint8_t> stream;
+  for (size_t i = 0; i < counts.size(); ++i) {
+    if (!counts[i]) continue;
+    flatbuffers::FlatBufferBuilder b(1024);
+    const std::string lane = regime::kIds[i], id = "deep-space-spacecraft/" + lane;
+    const bool weekly = lane == "heliocentric" || lane == "sun-earth-l1" || lane == "sun-earth-l2";
+    std::vector<std::string> tagText = {weekly ? "cadence:168h" : "cadence:24h", "class:query", "environment:space",
+        "provisioner:deep-space-spacecraft", "regime:" + lane, "schema:oem", "source:" + lane};
+    std::sort(tagText.begin(), tagText.end());
+    tagText.erase(std::unique(tagText.begin(), tagText.end()), tagText.end());
+    std::vector<flatbuffers::Offset<flatbuffers::String>> tags;
+    for (const auto& tag : tagText) tags.push_back(b.CreateString(tag));
+    // The sdn-data-query text the EGP query format names (keys in sorted order); lane ids are plain kebab-case.
+    const std::string queryText = std::string(1, '{') + "\"provider_id\":\"deep-space-spacecraft\",\"schema\":\"OEM.fbs\",\"source_name\":\"" + lane + "\"}";
+    const auto provenance = CreateEGPProvenanceDirect(b, "NASA/JPL Horizons", "Horizons VECTORS", nullptr,
+        "https://ssd.jpl.nasa.gov/api/horizons.api", nullptr, retrieved.c_str(), nullptr,
+        notables::kLicence, notables::kCredit, nullptr);
+    const auto query = CreateEGPQueryDirect(b, "sdn-data-query", queryText.c_str(),
+        retrieved.empty() ? nullptr : retrieved.c_str(), uint32_t(counts[i]), nullptr);
+    std::vector<flatbuffers::Offset<EGPProvenance>> provenances = {provenance};
+    const std::string description = std::string(regime::kRules[i]) + "; " + std::to_string(counts[i]) +
+        " objects. Sun-centered runs shorter than 3 days merge with a neighbor.";
+    const auto group = CreateEGPDirect(b, id.c_str(), regime::kNames[i], description.c_str(), &tags,
+        egpMembershipMode::QUERY_LIVE, nullptr, query, retrieved.empty() ? nullptr : retrieved.c_str(),
+        retrieved.c_str(), &provenances, nullptr);
+    FinishSizePrefixedEGPBuffer(b, group);
+    stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+  }
+  return stream;
 }
 
 struct SeriesBlock { ephem::Series series; double step; };

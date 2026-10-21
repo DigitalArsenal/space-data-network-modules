@@ -105,7 +105,7 @@ test("hostcap/storage-ingest passes SDK compliance with typed ports", async () =
     assert.equal(port.acceptedTypeSets[0].allowedTypes[0].acceptsAnyFlatbuffer, undefined, port.portId);
   }
   const ids = Object.fromEntries([...method.inputPorts, ...method.outputPorts].map((p) => [p.portId, p.acceptedTypeSets[0].allowedTypes[0].fileIdentifier]));
-  assert.deepEqual([ids.meta, ids.raw, ids.result, ids.wxf_records, ids.omm_records, ids.ldm_records, ids.ocm_records, ids.obd_records], ["INGQ", "HRSP", "INGR", "$WXF", "$OMM", "$LDM", "$OCM", "$OBD"]);
+  assert.deepEqual([ids.meta, ids.raw, ids.result, ids.wxf_records, ids.omm_records, ids.ldm_records, ids.ocm_records, ids.obd_records, ids.oem_records], ["INGQ", "HRSP", "INGR", "$WXF", "$OMM", "$LDM", "$OCM", "$OBD", "$OEM"]);
 });
 
 test("hostcap/storage-ingest imports only WASI and the sync hostcall bridge", async () => {
@@ -203,11 +203,11 @@ test("the record stream's standard must be the request's SCHEMA", async (t) => {
   const ldm = result(await harness.invoke({ methodId: "ingest", inputs: [meta({ ...REQUEST, schema: "LDM.fbs", archive: undefined }), records("LDM", recordStream("LDM", 2))] }));
   assert.equal(ldm.schema, "LDM.fbs", "ldm_records carries data-source/launch-schedule's $LDM batches");
   // flows/supplemental-omm stores its fits' $OCM states and $OBD diagnostics beside the $OMM sets
-  for (const code of ["OCM", "OBD"]) {
+  for (const code of ["OCM", "OBD", "OEM"]) {
     const stored = result(await harness.invoke({ methodId: "ingest", inputs: [meta({ ...REQUEST, schema: `${code}.fbs`, archive: undefined }), records(code, recordStream(code, 2))] }));
     assert.equal(stored.schema, `${code}.fbs`);
   }
-  assert.equal(stub.calls.length, 4, "the disagreeing batch never reached the host");
+  assert.equal(stub.calls.length, 5, "the disagreeing batch never reached the host");
 });
 
 test("missing frames and frames of the wrong type are refused before any hostcall", async (t) => {

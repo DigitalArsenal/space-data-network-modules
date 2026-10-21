@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
   "name": "SDN Host Storage Ingest Node",
-  "version": "0.3.0",
-  "description": "Host storage.ingest_with_source connector (typed contracts 1.0). Method \"ingest\": the parser's IngestRequest (INGQ, module-sdk runtime type: SCHEMA, TAGS SourceTags, RECONCILE, ARCHIVE, PROVENANCE) on \"meta\", the batch's size-prefixed SDS record stream on the \"<code>_records\" port of its standard (one port per standard, since a typed port names one type: omm, mpe, cat, spw, eop, csm, egp, sit, lcc, tbs, gnp, wxf, cnp, rfb, iqc, tct, dtt, ldm, ocm, obd) and, optionally, the HttpResponse (HRSP) the batch was made from on \"raw\" become ONE storage.ingest_with_source hostcall, sent as an SDS $PIV invocation: the StorageIngestParams aligned record (flat source tags, RECONCILE, ARCHIVE_SOURCE/ARCHIVE_NAME), raw \"records\", raw \"archive\" (the HttpResponse BODY, only when the request names an ARCHIVE target) and list \"provenance\" (one Provenance aligned record). It answers ONE IngestResult (INGR) on \"result\". Aligned strings are bounded (SOURCE_URL 255, BATCH_ID 128, ...): a value that does not fit is never truncated - the batch is answered with REFUSED naming the field, and nothing is stored. A host refusal (policy, disk guardrail, capability grant) is answered the same way; any other host failure fails the node. No JSON and no base64. Host-side behavior is policy-mediated by the dedicated storage_ingest capability grant (disk guardrail, batch store with source tags, source-batch reconcile, raw/provenance archiving).",
+  "version": "0.5.0",
+  "description": "Host storage.ingest_with_source connector (typed contracts 1.0). Method \"ingest\": the parser's IngestRequest (INGQ, module-sdk runtime type: SCHEMA, TAGS SourceTags, RECONCILE, ARCHIVE, PROVENANCE) on \"meta\", the batch's size-prefixed SDS record stream on the \"<code>_records\" port of its standard (one port per standard, since a typed port names one type: omm, mpe, cat, spw, eop, csm, egp, sit, lcc, tbs, gnp, wxf, cnp, rfb, iqc, tct, dtt, ldm, ocm, obd, pce, pnm, oem) and, optionally, the HttpResponse (HRSP) the batch was made from on \"raw\" become ONE storage.ingest_with_source hostcall, sent as an SDS $PIV invocation: the StorageIngestParams aligned record (flat source tags, RECONCILE, ARCHIVE_SOURCE/ARCHIVE_NAME), raw \"records\", raw \"archive\" (the HttpResponse BODY, only when the request names an ARCHIVE target) and list \"provenance\" (one Provenance aligned record). It answers ONE IngestResult (INGR) on \"result\". Aligned strings are bounded (SOURCE_URL 255, BATCH_ID 128, ...): a value that does not fit is never truncated - the batch is answered with REFUSED naming the field, and nothing is stored. A host refusal (policy, disk guardrail, capability grant) is answered the same way; any other host failure fails the node. No JSON and no base64. Host-side behavior is policy-mediated by the dedicated storage_ingest capability grant (disk guardrail, batch store with source tags, source-batch reconcile, raw/provenance archiving).",
   "pluginFamily": "infrastructure",
   "capabilities": [
     "storage_ingest"
@@ -477,6 +477,48 @@
           "description": "The record batch when the IngestRequest's SCHEMA is OBD.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
         },
         {
+          "portId": "pce_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-pce",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $PCE FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is PCE.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
+          "portId": "pnm_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-pnm",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $PNM FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is PNM.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
+        },
+        {
           "portId": "raw",
           "acceptedTypeSets": [
             {
@@ -496,6 +538,27 @@
           "maxStreams": 1,
           "required": false,
           "description": "Optional raw source document (as the HttpResponse that fetched it) for archiving."
+        },
+        {
+          "portId": "oem_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $OEM FlatBuffer record stream (the parsers' *_records convention), passed to the host verbatim."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record batch when the IngestRequest's SCHEMA is OEM.fbs. EXACTLY ONE *_records port carries a frame per invocation, and it must be the SCHEMA's."
         }
       ],
       "outputPorts": [
