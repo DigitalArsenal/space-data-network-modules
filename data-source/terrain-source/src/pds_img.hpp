@@ -313,7 +313,8 @@ bool polar_sample(const DemGrid& g, double lat, double lon, double* out, bool* n
     if (px < 0 || py < 0 || px > g.width - 1 || py > g.height - 1) return false;
     const uint32_t x0 = std::min(static_cast<uint32_t>(px), g.width - 2);
     const uint32_t y0 = std::min(static_cast<uint32_t>(py), g.height - 2);
-    const double fx = px - x0, fy = py - y0;
+    // Subtract GLOBAL integer indices, never window-relative floating offsets.
+    const double fx = s - static_cast<double>(x0 + g.off_x), fy = l - static_cast<double>(y0 + g.off_y);
     const float* row0 = &g.samples[static_cast<size_t>(y0) * g.width];
     const float* row1 = row0 + g.width;
     const float s00 = row0[x0], s10 = row0[x0 + 1], s01 = row1[x0], s11 = row1[x0 + 1];
@@ -427,7 +428,7 @@ const PdsBand* pds_band_holding(const PdsFile& f, uint64_t local_line) {
 // sphere. A needed line no file holds, or that a file holding it carries in no
 // range, is refused: a gap would be filled with invented terrain.
 DemGrid decode_pds_files(const std::vector<PdsFile>& files, const std::vector<TileExtent>& boxes,
-                         DecodeBudget* budget) {
+                         DecodeBudget* budget, double halo_m = 0) {
     DemGrid g;
     const PdsLabel& l = files[0].label;
     g.proj = l.projection == "POLAR STEREOGRAPHIC" ? kProjPolarStereo : kProjLinear;
@@ -458,6 +459,12 @@ DemGrid decode_pds_files(const std::vector<PdsFile>& files, const std::vector<Ti
         g.ok = true;
         g.covers = false;
         return g;
+    }
+    if (halo_m > 0) {
+        const double spacing = g.proj == kProjPolarStereo ? l.map_scale_m : l.a_axis_m * kPolarPi / 180 / l.ppd;
+        const uint64_t pad = static_cast<uint64_t>(std::ceil(halo_m / spacing)) + 2;
+        first = first > pad ? first - pad : 0;
+        last = std::min<uint64_t>(g.full_rows - 1, last + pad);
     }
     // Global line -> the file's own line (polar: the same line).
     const auto local = [&](const PdsFile& f, uint64_t line, uint64_t* out) {

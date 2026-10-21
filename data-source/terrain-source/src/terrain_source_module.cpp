@@ -1824,6 +1824,47 @@ struct TileExtent {
 // ── a body's PDS products (pds_img.hpp), read by whole-line ranges ─────────
 
 #include "pds_img.hpp"
+#include "body_fill.hpp"
+
+struct BodyFill {
+    bool active = false;
+    double lat_min = -90, lat_max = 90, band_m = 0, radius_m = 0;
+    std::vector<DemGrid> grids;
+    BodyInvalidDistance invalid;
+
+    bool sample(const std::vector<DemGrid>& primary, double lon, double lat, double* h,
+                bool* nodata, bool* clamped, BodyFillStats* stats = nullptr) const {
+        if (!active) return body_sample(primary, lon, lat, h, nodata, clamped);
+        double p = 0, f = 0;
+        bool pn = false, pc = false, fn = false, fc = false;
+        const bool valid_p = body_sample(primary, lon, lat, &p, &pn, &pc) && !pn && !pc && std::isfinite(p);
+        double d = band_m;
+        if (lat_min > -90) d = std::min(d, std::max(0.0, lat - lat_min) * radius_m * kPolarPi / 180);
+        if (lat_max < 90) d = std::min(d, std::max(0.0, lat_max - lat) * radius_m * kPolarPi / 180);
+        if (valid_p && !primary.empty()) {
+            const DemGrid& g = primary[0];
+            double x = 0, y = 0;
+            const double spacing = g.proj == kProjPolarStereo ? g.ps_scale_m : radius_m * kPolarPi / 180 * g.scale_lat;
+            if (g.proj == kProjPolarStereo) {
+                polar_pixel(g, lat, lon, &x, &y);
+                // The actual image boundary is absent too; a decoded WINDOW boundary is not.
+                d = std::min(d, std::max(0.0, std::min({x + 1, y + 1, g.width - x, g.full_rows - y})) * spacing);
+            } else {
+                x = full_ix(g, lon); y = full_iy(g, lat);
+            }
+            if (!invalid.squared.empty()) {
+                const double limit = band_m / spacing;
+                const double pixels = invalid.distance(x, y, limit);
+                if (pixels < limit) d = std::min(d, pixels * spacing);
+            }
+        }
+        // Avoid even reading fill outside the band: the original double is returned verbatim.
+        const bool need_fill = !valid_p || d < band_m;
+        const bool valid_f = need_fill && body_sample(grids, lon, lat, &f, &fn, &fc) && !fn && !fc && std::isfinite(f);
+        *nodata = false; *clamped = pc || (need_fill && fc);
+        return body_blend(p, valid_p, f, valid_f, d, band_m, h, stats);
+    }
+};
 
 // GEOGRAPHIC_WGS84: level z has 2^(z+1) x 2^z tiles of (180/2^z) degrees, row
 // 0 at the SOUTH edge (TMS).
@@ -3931,6 +3972,7 @@ int tile(void) {
     // ── decode the granule set ONCE, windowed to the union extent ───────────
     DecodeBudget budget;
     std::vector<DemGrid> granules;
+    BodyFill fill;
     uint32_t responses = 0, absent_granules = 0;
     if (body.active) {
         // A BODY'S PDS PRODUCT: the "dem" frames are, per file of the product,
@@ -3969,9 +4011,28 @@ int tile(void) {
             plugin_set_error("unexpected-water-frame", "a body plan carries no water mask; no \"water\" frame is read.");
             return 400;
         }
-        std::vector<PdsFile> files;
+        std::vector<PdsFile> files, fill_files;
+        const double fill_frame_number = json_number(plan, "bodyFillFrame", 0);
+        const size_t fill_frame = static_cast<size_t>(std::max(0.0, fill_frame_number));
+        fill.active = fill_frame != 0;
+        if (fill.active) {
+            const double posts = json_number(plan, "featherPosts", 0);
+            const double spacing = json_number(plan, "fillSpacingM", 0);
+            fill.lat_min = json_number(plan, "bodyLatMin", -90);
+            fill.lat_max = json_number(plan, "bodyLatMax", 90);
+            if (fill_frame_number != fill_frame || fill_frame < 2 || fill_frame >= frames.size() ||
+                !is_label(frames[fill_frame]) || posts < 1 || posts > 64 || posts != std::floor(posts) ||
+                !(spacing > 0) || !std::isfinite(spacing) || fill.lat_min < -90 || fill.lat_max > 90 ||
+                !(fill.lat_min < fill.lat_max) || json_string(plan, "bodyFillProduct", "").empty()) {
+                plugin_set_error("invalid-fill-options", "fill needs a separate label/range group, band, product and 1..64 posts.");
+                return 422;
+            }
+            fill.band_m = posts * spacing;
+            fill.radius_m = body.shape.a;
+        }
         std::string error;
         for (size_t i = 0; i < frames.size(); i++) {
+            auto& group = fill.active && i >= fill_frame ? fill_files : files;
             if (is_label(frames[i])) {
                 PdsFile file;
                 if (!parse_pds_label(frames[i].body, &file.label, &error)) {
@@ -3985,17 +4046,17 @@ int tile(void) {
                                      "its heights would be stated above the wrong surface.");
                     return 422;
                 }
-                files.push_back(std::move(file));
+                group.push_back(std::move(file));
                 continue;
             }
             PdsBand band;
-            if (!pds_band_of(files.back().label, frames[i].content_range, frames[i].body, &band, &error)) {
+            if (!pds_band_of(group.back().label, frames[i].content_range, frames[i].body, &band, &error)) {
                 plugin_set_error("pds-range-unsupported", error.c_str());
                 return 422;
             }
-            files.back().bands.push_back(band);
+            group.back().bands.push_back(band);
         }
-        for (const PdsFile& f : files) {
+        for (const auto* group : {&files, &fill_files}) for (const PdsFile& f : *group) {
             if (f.bands.empty()) {
                 plugin_set_error("missing-dem-frame", "a product label on \"dem\" is followed by no range of its image.");
                 return 400;
@@ -4011,11 +4072,35 @@ int tile(void) {
             boxes.push_back(TileExtent{e.west - halo, e.east + halo, std::max(-90.0, e.south - halo),
                                        std::min(90.0, e.north + halo)});
         }
-        DemGrid g = decode_pds_files(files, boxes, &budget);
+        DemGrid g = decode_pds_files(files, boxes, &budget, fill.band_m);
         if (g.budget_refused) return 413;
         if (!g.ok) {
             plugin_set_error("pds-band-gap", g.error.c_str());
             return 422;
+        }
+        if (fill.active) {
+            const size_t invalid_count = static_cast<size_t>(std::count(g.samples.begin(), g.samples.end(), kNoData));
+            if (invalid_count) {
+                const uint64_t edt_bytes = static_cast<uint64_t>(g.samples.size()) * sizeof(double) +
+                    static_cast<uint64_t>(invalid_count) * sizeof(uint32_t) * 2 +
+                    static_cast<uint64_t>(g.height) * (sizeof(std::vector<uint32_t>) + 2 * sizeof(double) + sizeof(uint32_t));
+                if (edt_bytes > kDecodeByteBudget || !budget.admit(static_cast<size_t>(edt_bytes))) {
+                    set_decode_budget_error(edt_bytes, budget.used);
+                    return 413;
+                }
+                fill.invalid.build(g.samples, g.width, g.height, g.off_x, g.off_y, kNoData);
+            }
+            const PdsLabel& label = fill_files[0].label;
+            const double spacing = label.projection == "POLAR STEREOGRAPHIC" ? label.map_scale_m :
+                                   label.a_axis_m * kPolarPi / 180 / label.ppd;
+            if (std::fabs(spacing - json_number(plan, "fillSpacingM", 0)) > 1e-9 * spacing) {
+                plugin_set_error("fill-spacing-mismatch", "fillSpacingM disagrees with the fill product's label.");
+                return 422;
+            }
+            DemGrid f = decode_pds_files(fill_files, boxes, &budget, fill.band_m);
+            if (f.budget_refused) return 413;
+            if (!f.ok) { plugin_set_error("pds-fill-gap", f.error.c_str()); return 422; }
+            if (f.covers) fill.grids.push_back(std::move(f));
         }
         if (g.covers) granules.push_back(std::move(g));
     }
@@ -4179,6 +4264,7 @@ int tile(void) {
         // per candidate) and what keeps every candidate on the SAME global
         // lattice, so two adjacent tiles that settle on different densities
         // still agree on the posts they share.
+        BodyFillStats fill_stats;
         const uint32_t n_verts = sample_grid * sample_grid;
         std::vector<double> heights(n_verts, 0.0);
         std::vector<double> lats(n_verts), lons(n_verts);
@@ -4201,8 +4287,12 @@ int tile(void) {
                 bool clamped = false;
                 bool bridged = false;
                 const bool covered = body.active
-                                         ? body_sample(granules, lon, lat, &h, &nodata, &clamped)
+                                         ? fill.sample(granules, lon, lat, &h, &nodata, &clamped, &fill_stats)
                                          : sample_dem(granules, lon, lat, &h, &nodata, &clamped, &bridged);
+                if (fill.active && (!covered || nodata)) {
+                    plugin_set_error("fill-nodata", "neither primary nor fill supplies a required height-field post.");
+                    return 422;
+                }
                 post_clamped[v] = clamped ? 1 : 0;
                 post_bridged[v] = bridged ? 1 : 0;
                 if (!covered) {
@@ -4214,6 +4304,24 @@ int tile(void) {
                     h = 0.0;
                 }
                 heights[v] = h;
+            }
+        }
+        std::string fill_items;
+        if (body.active) {
+            fill_items = " filled_posts=" + std::to_string(fill_stats.filled_posts) +
+                         " feathered_posts=" + std::to_string(fill_stats.feathered_posts) +
+                         " max_feather_dev_m=" + fmt_double(fill_stats.max_feather_dev_m);
+            if (json_number(plan, "fillDiagnostics", 0) != 0) {
+                for (int edge = 0; edge < 4; edge++) {
+                    std::vector<uint8_t> bytes;
+                    for (uint32_t k = 0; k < sample_grid; k++) {
+                        const size_t v = edge == 0 ? k : edge == 1 ? k * sample_grid + sample_grid - 1 :
+                                         edge == 2 ? (sample_grid - 1) * sample_grid + k : k * sample_grid;
+                        const uint8_t* raw = reinterpret_cast<const uint8_t*>(&heights[v]);
+                        bytes.insert(bytes.end(), raw, raw + sizeof(double));
+                    }
+                    fill_items += " edgeHeight" + std::to_string(edge) + "=" + sha256_multihash(bytes);
+                }
             }
         }
         double min_h = heights[0], max_h = heights[0];
@@ -4252,7 +4360,13 @@ int tile(void) {
                     double plat = 0, plon = 0, h = 0;
                     bool nd = false, cl = false;
                     body_lattice_post(job.level, sample_grid, row0 + j, col0 + i, &plat, &plon);
-                    if (!body_sample(granules, plon, plat, &h, &nd, &cl) || nd) h = 0.0;
+                    if (!fill.sample(granules, plon, plat, &h, &nd, &cl) || nd) {
+                        if (fill.active) {
+                            plugin_set_error("fill-nodata", "neither primary nor fill supplies a normals halo post.");
+                            return 422;
+                        }
+                        h = 0.0;
+                    }
                     halo[at] = geodetic_to_ecef(body.shape, plat, plon, h);
                 }
             }
@@ -4802,7 +4916,7 @@ int tile(void) {
                              " accuracyProbes=" + std::to_string(stats.accuracy_probes) +
                              " meshBytes=" + std::to_string(stats.mesh_bytes) +
                              " payloadBytes=" + std::to_string(stats.payload_bytes) + " digest=" + digest +
-                             (body.active ? body_tile_items(cap_stopped && at_ceiling, rms_m, residual_histogram) : std::string()));
+                             (body.active ? body_tile_items(cap_stopped && at_ceiling, rms_m, residual_histogram) + fill_items : std::string()));
     }
 
     // THE REPORT IS A FlowNotice (FNTC, KIND Info, REASON "tile-block"): COUNT is the records this block emitted

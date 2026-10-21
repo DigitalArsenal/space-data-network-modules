@@ -256,6 +256,8 @@ struct BodyCap {
     const BodyProduct* product = nullptr;
     long min_level = 0, max_level = 0;
     double lat_min = -90, lat_max = 90;
+    const BodyProduct* fill = nullptr;
+    uint32_t feather_posts = 0;
 };
 
 // The caps from config `caps` ([{product, min_level, max_level, lat_min, lat_max}]) or the body's defaults. An
@@ -278,6 +280,23 @@ std::vector<BodyCap> body_caps(const Body& body, const std::string& config, std:
             c.lat_min = json_number_or(obj, "lat_min", -90);
             c.lat_max = json_number_or(obj, "lat_max", 90);
             if (!c.product) { *error = "caps names a product this body does not know: " + key; return {}; }
+            std::string fill;
+            const bool has_fill = json_string_field(obj, "fill", &fill);
+            if (!has_fill && obj.find("\"fill\"") != std::string::npos) {
+                *error = "fill must name a product key";
+                return {};
+            }
+            const bool has_posts = obj.find("\"feather_posts\"") != std::string::npos;
+            const double n = json_number_or(obj, "feather_posts", 0);
+            if ((has_fill || has_posts) && (n < 1 || n > 64 || n != std::floor(n))) {
+                *error = "feather_posts must be an integer in [1, 64]";
+                return {};
+            }
+            if (has_posts) c.feather_posts = static_cast<uint32_t>(n);
+            if (has_fill) {
+                c.fill = body_product(body, fill);
+                if (!c.fill) { *error = "caps names an unknown fill product: " + fill; return {}; }
+            }
             caps.push_back(c);
         }
     }
@@ -364,9 +383,12 @@ bool body_tile_inside(const BodyCap& c, long level, long y) {
     return south >= c.lat_min && north <= c.lat_max;
 }
 
+double body_post_spacing(const Body& body, const BodyProduct& p);
+
 struct BodyBlock {
     long bx, by;
     double lo, hi;
+    double fill_lo = 1e300, fill_hi = -1e300;
 };
 
 // A polar cap's blocks at one level, in walk order: by first line, then row, then column.
@@ -386,6 +408,10 @@ std::vector<BodyBlock> body_polar_blocks(const Body& body, const BodyCap& c, lon
                     if (!body_tile_lines(body, *c.product, level, x, y, max_grid, &lo, &hi)) continue;
                     b.lo = std::min(b.lo, lo);
                     b.hi = std::max(b.hi, hi);
+                    if (c.fill && body_tile_lines(body, *c.fill, level, x, y, max_grid, &lo, &hi)) {
+                        b.fill_lo = std::min(b.fill_lo, lo);
+                        b.fill_hi = std::max(b.fill_hi, hi);
+                    }
                 }
             }
             if (b.lo <= b.hi) blocks.push_back(b);
@@ -400,16 +426,37 @@ std::vector<BodyBlock> body_polar_blocks(const Body& body, const BodyCap& c, lon
 }
 
 // The polar plans of one cap level: [first block, end block) per plan.
-std::vector<std::pair<size_t, size_t>> body_polar_batches(const BodyProduct& p, const std::vector<BodyBlock>& blocks,
+std::vector<std::pair<size_t, size_t>> body_polar_batches(const Body& body, const BodyCap& cap, const std::vector<BodyBlock>& blocks,
                                                           double max_range_bytes) {
     std::vector<std::pair<size_t, size_t>> out;
+    const BodyProduct& p = *cap.product;
     const double max_lines = std::floor(max_range_bytes / static_cast<double>(p.samples * p.sample_bytes));
+    const double band = cap.fill ? cap.feather_posts * body_post_spacing(body, *cap.fill) : 0;
+    const double primary_pad = cap.fill ? std::ceil(band / body_post_spacing(body, p)) + 2 : 0;
+    const double fill_pad = cap.fill ? cap.feather_posts + 2 : 0;
+    const auto decoded_rows = [](const BodyProduct& product, double lo, double hi, double pad) {
+        return std::min<double>(product_lines(product) - 1, std::ceil(hi + pad)) -
+               std::max(0.0, std::floor(lo - pad)) + 1;
+    };
+    const auto fits_fill = [&](double lo, double hi, double flo, double fhi) {
+        if (!cap.fill) return true;
+        const BodyProduct& f = *cap.fill;
+        // Primary float grid + double EDT + worst-case invalid-post indices and
+        // vector capacity, alongside the fill grid; leave room for row scratch.
+        const double primary_bytes = decoded_rows(p, lo, hi, primary_pad) * p.samples * 20;
+        const double fill_width = f.polar ? f.samples : 360 * f.ppd + 2;
+        const double fill_bytes = decoded_rows(f, flo, fhi, fill_pad) * fill_width * 4;
+        return primary_bytes + fill_bytes <= 480.0 * 1024 * 1024;
+    };
     for (size_t i = 0; i < blocks.size();) {
         double lo = blocks[i].lo, hi = blocks[i].hi;
+        double flo = blocks[i].fill_lo, fhi = blocks[i].fill_hi;
         size_t j = i + 1;
         for (; j < blocks.size() && static_cast<long>(j - i) < kBodyMaxBlocks; j++) {
             const double nlo = std::min(lo, blocks[j].lo), nhi = std::max(hi, blocks[j].hi);
-            if (std::ceil(nhi) - std::floor(nlo) + 1.0 > max_lines) break;
+            const double nflo = std::min(flo, blocks[j].fill_lo), nfhi = std::max(fhi, blocks[j].fill_hi);
+            if (std::ceil(nhi) - std::floor(nlo) + 1.0 > max_lines || !fits_fill(nlo, nhi, nflo, nfhi)) break;
+            flo = nflo; fhi = nfhi;
             lo = nlo;
             hi = nhi;
         }
@@ -489,7 +536,7 @@ void body_units_in(const Body& body, const std::vector<BodyCap>& caps, double ma
                 continue;
             }
             const std::vector<BodyBlock> blocks = body_polar_blocks(body, c, level, max_grid);
-            const auto batches = body_polar_batches(*c.product, blocks, max_range_bytes);
+            const auto batches = body_polar_batches(body, c, blocks, max_range_bytes);
             for (const auto& [i, j] : batches) {
                 if (!wanted(count++)) continue;
                 BodyUnit unit;
@@ -545,4 +592,58 @@ bool body_file_lines(const BodyProduct& p, const BodyFile& f, const BodyUnit& u,
     *first = a - f0;
     *last = b - f0;
     return true;
+}
+
+// A product's metric post spacing. Every window remains on that product's global lattice.
+double body_post_spacing(const Body& body, const BodyProduct& p) {
+    return p.polar ? p.scale_m : body.radius_m * kBodyPi / 180.0 / p.ppd;
+}
+
+// Float PDS products can carry non-finite posts, including in otherwise interior units.
+// An explicit fill opts into covering those holes as well as the latitude seams.
+bool body_unit_needs_fill(const Body& body, const BodyUnit& u, double max_grid) {
+    if (!u.cap->fill) return false;
+    if (u.cap->product->sample_bytes == 4) return true;
+    const double band = u.cap->feather_posts * body_post_spacing(body, *u.cap->fill);
+    const double degrees = band * 180.0 / (body.radius_m * kBodyPi);
+    for (const auto& t : u.tiles) {
+        const double size = tile_size_deg(t[0]), halo = body_halo_deg(t[0], max_grid);
+        const double south = -90 + t[2] * size - halo, north = south + size + 2 * halo;
+        if ((u.cap->lat_min > -90 && south <= u.cap->lat_min + degrees) ||
+            (u.cap->lat_max < 90 && north >= u.cap->lat_max - degrees)) return true;
+    }
+    return false;
+}
+
+// Whole-line windows include the normals' halo AND B metres of source posts for the
+// invalid-mask EDT. All columns are fetched, so this also covers the horizontal halo.
+BodyUnit body_product_window(const Body& body, const BodyUnit& u, const BodyProduct& p,
+                             double max_grid, double band_m) {
+    BodyUnit window = u;
+    double lo = 1e300, hi = -1e300;
+    window.lon_west = 1e300;
+    window.lon_east = -1e300;
+    for (const auto& t : u.tiles) {
+        double a = 0, b = 0;
+        if (!body_tile_lines(body, p, t[0], t[1], t[2], max_grid, &a, &b)) continue;
+        lo = std::min(lo, a); hi = std::max(hi, b);
+        const double size = tile_size_deg(t[0]);
+        const double margin = body_halo_deg(t[0], max_grid) +
+                              (band_m + body_post_spacing(body, p)) * 180 / (body.radius_m * kBodyPi);
+        window.lon_west = std::min(window.lon_west, -180 + t[1] * size - margin);
+        window.lon_east = std::max(window.lon_east, -180 + (t[1] + 1) * size + margin);
+    }
+    const double pad = std::ceil(band_m / body_post_spacing(body, p)) + 2;
+    window.first_line = static_cast<uint64_t>(std::max(0.0, std::floor(lo - pad)));
+    window.last_line = static_cast<uint64_t>(std::min<double>(product_lines(p) - 1, std::ceil(hi + pad)));
+    return window;
+}
+
+size_t body_window_files(const BodyProduct& p, const BodyUnit& u) {
+    size_t count = 0;
+    for (const BodyFile& f : p.files) {
+        uint64_t a = 0, b = 0;
+        if (body_file_lines(p, f, u, &a, &b)) count++;
+    }
+    return count;
 }

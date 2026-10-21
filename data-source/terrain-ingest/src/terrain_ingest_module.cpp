@@ -1717,42 +1717,64 @@ int body_plan(void) {
     // the file's share of the lines as `range_parts` whole-line ranges.
     size_t frame = 0;
     std::string files_read;
-    for (const BodyFile& file : product.files) {
-        uint64_t first = 0, last = 0;
-        if (!body_file_lines(product, file, unit, &first, &last)) continue;
-        if (frame + 1 + product.range_parts > kBodyMaxDemFrames) {
-            plugin_set_error("too-many-files", "a unit's files need more than the flow's 16 dem requests.");
-            return 500;
-        }
-        const std::string img_url = base + file.path + ".img", lbl_url = base + file.path + ".lbl";
-        files_read += (files_read.empty() ? "" : " ") + std::string(file.path);
-        char port[8];
-        std::snprintf(port, sizeof(port), "dem_%zu", frame++);
-        {
-            flatbuffers::FlatBufferBuilder b1(512 + lbl_url.size());
-            std::vector<flatbuffers::Offset<R::Header>> lbl_headers{R::CreateHeaderDirect(b1, "if-modified-since", kNoValidators)};
-            R::FinishHttpRequestBuffer(b1, R::CreateHttpRequestDirect(b1, "GET", lbl_url.c_str(), &lbl_headers, nullptr,
-                                                                      static_cast<uint32_t>(timeout_ms), 0, nullptr));
-            if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b1)) < 0)
+    const bool with_fill = body_unit_needs_fill(*body, unit, max_grid);
+    const double fill_spacing = with_fill ? body_post_spacing(*body, *unit.cap->fill) : 0;
+    const double band_m = unit.cap->feather_posts * fill_spacing;
+    const BodyUnit primary_window = with_fill ? body_product_window(*body, unit, product, max_grid, band_m) : unit;
+    const BodyUnit fill_window = with_fill ? body_product_window(*body, unit, *unit.cap->fill, max_grid, band_m) : unit;
+    // Short fill bands need one range per file. Reduce primary segmentation if necessary;
+    // segmentation changes neither the requested lines nor the unit's complete block files.
+    uint32_t primary_parts = product.range_parts;
+    const size_t primary_files = body_window_files(product, primary_window);
+    const size_t fill_files = with_fill ? body_window_files(*unit.cap->fill, fill_window) : 0;
+    if (with_fill && primary_files * (1 + primary_parts) + 2 * fill_files > kBodyMaxDemFrames) primary_parts = 1;
+    if (primary_files * (1 + primary_parts) + 2 * fill_files > kBodyMaxDemFrames) {
+        plugin_set_error("too-many-files", "a complete body block needs more than 16 DEM frames including fill.");
+        return 422;
+    }
+    size_t fill_frame = 0;
+    for (int group = 0; group < (with_fill ? 2 : 1); group++) {
+        if (group == 1) fill_frame = frame;
+        const BodyProduct& requested = group == 0 ? product : *unit.cap->fill;
+        const BodyUnit& window = group == 0 ? primary_window : fill_window;
+        const uint32_t range_parts = group == 0 ? primary_parts : 1;
+        for (const BodyFile& file : requested.files) {
+            uint64_t first = 0, last = 0;
+            if (!body_file_lines(requested, file, window, &first, &last)) continue;
+            if (frame + 1 + range_parts > kBodyMaxDemFrames) {
+                plugin_set_error("too-many-files", "a unit's files need more than the flow's 16 dem requests.");
                 return 500;
-        }
-        const uint64_t record_bytes = product.samples * product.sample_bytes, lines = last - first + 1;
-        const uint64_t parts = product.range_parts, per = (lines + parts - 1) / parts;
-        for (uint64_t part = 0; part < parts; part++) {
-            const uint64_t a = first + std::min<uint64_t>(lines - 1, per * part);
-            const uint64_t b = std::min<uint64_t>(last, first + per * (part + 1) - 1);
-            const std::string range = "bytes=" + std::to_string(a * record_bytes) + "-" +
-                                      std::to_string((std::max(a, b) + 1) * record_bytes - 1);
-            flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
-            std::vector<flatbuffers::Offset<R::Header>> headers;
-            headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
-            headers.push_back(R::CreateHeaderDirect(b2, "if-modified-since", kNoValidators));
-            if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", file.etag));
-            R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
-                                                                      static_cast<uint32_t>(timeout_ms), 0, nullptr));
+            }
+            const std::string img_url = base + file.path + ".img", lbl_url = base + file.path + ".lbl";
+            files_read += (files_read.empty() ? "" : " ") + std::string(file.path);
+            char port[8];
             std::snprintf(port, sizeof(port), "dem_%zu", frame++);
-            if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b2)) < 0)
-                return 500;
+            {
+                flatbuffers::FlatBufferBuilder b1(512 + lbl_url.size());
+                std::vector<flatbuffers::Offset<R::Header>> lbl_headers{R::CreateHeaderDirect(b1, "if-modified-since", kNoValidators)};
+                R::FinishHttpRequestBuffer(b1, R::CreateHttpRequestDirect(b1, "GET", lbl_url.c_str(), &lbl_headers, nullptr,
+                                                                          static_cast<uint32_t>(timeout_ms), 0, nullptr));
+                if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b1)) < 0)
+                    return 500;
+            }
+            const uint64_t record_bytes = requested.samples * requested.sample_bytes, lines = last - first + 1;
+            const uint64_t parts = range_parts, per = (lines + parts - 1) / parts;
+            for (uint64_t part = 0; part < parts; part++) {
+                const uint64_t a = first + std::min<uint64_t>(lines - 1, per * part);
+                const uint64_t b = std::min<uint64_t>(last, first + per * (part + 1) - 1);
+                const std::string range = "bytes=" + std::to_string(a * record_bytes) + "-" +
+                                          std::to_string((std::max(a, b) + 1) * record_bytes - 1);
+                flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
+                std::vector<flatbuffers::Offset<R::Header>> headers;
+                headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
+                headers.push_back(R::CreateHeaderDirect(b2, "if-modified-since", kNoValidators));
+                if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", file.etag));
+                R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
+                                                                          static_cast<uint32_t>(timeout_ms), 0, nullptr));
+                std::snprintf(port, sizeof(port), "dem_%zu", frame++);
+                if (push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b2)) < 0)
+                    return 500;
+            }
         }
     }
 
@@ -1814,6 +1836,20 @@ int body_plan(void) {
         metric->KIND = R::configValueKind_String;
         metric->STRING_VALUE = config_string(config, "error_metric", "rms");
         entries.push_back(std::move(metric));
+        if (with_fill) {
+            entries.push_back(number("bodyFillFrame", static_cast<double>(fill_frame)));
+            entries.push_back(number("bodyLatMin", unit.cap->lat_min));
+            entries.push_back(number("bodyLatMax", unit.cap->lat_max));
+            entries.push_back(number("featherPosts", unit.cap->feather_posts));
+            entries.push_back(number("fillSpacingM", fill_spacing));
+            auto fill = std::make_unique<R::ConfigEntryT>();
+            fill->KEY = "bodyFillProduct";
+            fill->KIND = R::configValueKind_String;
+            fill->STRING_VALUE = unit.cap->fill->key;
+            entries.push_back(std::move(fill));
+        }
+        if (json_number_or(config, "fill_diagnostics", 0) != 0)
+            entries.push_back(number("fillDiagnostics", 1));
         if (push_typed("options", "ModuleConfig.fbs", R::ModuleConfigIdentifier(), "ModuleConfig",
                        module_config(std::move(entries))) < 0)
             return 500;

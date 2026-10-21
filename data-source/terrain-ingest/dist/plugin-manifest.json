@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
   "name": "Terrain Tile Ingest Scheduler Nodes",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: pure nodes read a durable $IRM resume mark (through hostcap/flatsql-query), walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded plans ($DTT header records) and the Copernicus GLO-30 DEM and water-body granule HttpRequests, author the storage attribution (IngestRequest), and advance the mark only from a verified store (IngestResult -> $IRM for hostcap/storage-write). OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is fetched and a 404 is no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it. TYPED CONTRACTS 1.0: FlatBuffers only - TimerTick, HttpRequest, IngestRequest/IngestResult, FlowNotice and ModuleConfig (module-sdk runtime types), $IRM, $DTT, $FSO and $FSB (SDS) - no JSON and no base64 between modules; node config through plugin.getConfig (SDS $PIV, ConfigEntry list \"entries\", nested values under dotted keys such as regions.0.west). NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes.",
   "pluginFamily": "data_source",
   "capabilities": [],
