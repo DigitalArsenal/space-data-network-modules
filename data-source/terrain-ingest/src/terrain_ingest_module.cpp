@@ -1727,16 +1727,30 @@ int body_plan(void) {
     uint32_t primary_parts = product.range_parts;
     const size_t primary_files = body_window_files(product, primary_window);
     const size_t fill_files = with_fill ? body_window_files(*unit.cap->fill, fill_window) : 0;
-    if (with_fill && primary_files * (1 + primary_parts) + 2 * fill_files > kBodyMaxDemFrames) primary_parts = 1;
-    if (primary_files * (1 + primary_parts) + 2 * fill_files > kBodyMaxDemFrames) {
+    const BodyProduct* backing = with_fill && unit.cap->fill->fallback ? body_product(*body, unit.cap->fill->fallback) : nullptr;
+    const double backing_spacing = backing ? body_post_spacing(*body, *backing) : 0;
+    const double backing_band = backing ? unit.cap->fill->fallback_posts * backing_spacing : 0;
+    const BodyUnit backing_window = backing ? body_product_window(*body, unit, *backing, max_grid, band_m + backing_band) : unit;
+    const size_t backing_frames = backing ? 2 * body_window_files(*backing, backing_window) : 0;
+    const BodyProduct* datum = body_product(*body, product.datum ? product.datum :
+        (with_fill && unit.cap->fill->datum ? unit.cap->fill->datum : ""));
+    const BodyUnit datum_window = datum ? body_product_window(*body, unit, *datum, max_grid, band_m) : unit;
+    const size_t datum_frames = datum ? 2 * body_window_files(*datum, datum_window) : 0;
+    if (with_fill && primary_files * (1 + primary_parts) + 2 * fill_files + datum_frames + backing_frames > kBodyMaxDemFrames) primary_parts = 1;
+    if (primary_files * (1 + primary_parts) + 2 * fill_files + datum_frames + backing_frames > kBodyMaxDemFrames) {
         plugin_set_error("too-many-files", "a complete body block needs more than 16 DEM frames including fill.");
         return 422;
     }
-    size_t fill_frame = 0;
-    for (int group = 0; group < (with_fill ? 2 : 1); group++) {
+    size_t fill_frame = 0, backing_frame = 0, datum_frame = 0;
+    for (int group = 0; group < 4; group++) {
+        if (group == 1 && !with_fill) continue;
+        if (group == 2 && !backing) continue;
+        if (group == 3 && !datum) continue;
         if (group == 1) fill_frame = frame;
-        const BodyProduct& requested = group == 0 ? product : *unit.cap->fill;
-        const BodyUnit& window = group == 0 ? primary_window : fill_window;
+        if (group == 2) backing_frame = frame;
+        if (group == 3) datum_frame = frame;
+        const BodyProduct& requested = group == 0 ? product : group == 1 ? *unit.cap->fill : group == 2 ? *backing : *datum;
+        const BodyUnit& window = group == 0 ? primary_window : group == 1 ? fill_window : group == 2 ? backing_window : datum_window;
         const uint32_t range_parts = group == 0 ? primary_parts : 1;
         for (const BodyFile& file : requested.files) {
             uint64_t first = 0, last = 0;
@@ -1745,7 +1759,8 @@ int body_plan(void) {
                 plugin_set_error("too-many-files", "a unit's files need more than the flow's 16 dem requests.");
                 return 500;
             }
-            const std::string img_url = base + file.path + ".img", lbl_url = base + file.path + ".lbl";
+            const std::string img_url = file.image_url ? file.image_url : base + file.path + ".img";
+            const std::string lbl_url = file.label_url ? file.label_url : base + file.path + ".lbl";
             files_read += (files_read.empty() ? "" : " ") + std::string(file.path);
             char port[8];
             std::snprintf(port, sizeof(port), "dem_%zu", frame++);
@@ -1762,13 +1777,13 @@ int body_plan(void) {
             for (uint64_t part = 0; part < parts; part++) {
                 const uint64_t a = first + std::min<uint64_t>(lines - 1, per * part);
                 const uint64_t b = std::min<uint64_t>(last, first + per * (part + 1) - 1);
-                const std::string range = "bytes=" + std::to_string(a * record_bytes) + "-" +
-                                          std::to_string((std::max(a, b) + 1) * record_bytes - 1);
+                const std::string range = "bytes=" + std::to_string(file.image_offset + a * record_bytes) + "-" +
+                                          std::to_string(file.image_offset + (std::max(a, b) + 1) * record_bytes - 1);
                 flatbuffers::FlatBufferBuilder b2(512 + img_url.size());
                 std::vector<flatbuffers::Offset<R::Header>> headers;
                 headers.push_back(R::CreateHeaderDirect(b2, "range", range.c_str()));
                 headers.push_back(R::CreateHeaderDirect(b2, "if-modified-since", kNoValidators));
-                if (if_match) headers.push_back(R::CreateHeaderDirect(b2, "if-match", file.etag));
+                if (if_match && file.etag[0]) headers.push_back(R::CreateHeaderDirect(b2, "if-match", file.etag));
                 R::FinishHttpRequestBuffer(b2, R::CreateHttpRequestDirect(b2, "GET", img_url.c_str(), &headers, nullptr,
                                                                           static_cast<uint32_t>(timeout_ms), 0, nullptr));
                 std::snprintf(port, sizeof(port), "dem_%zu", frame++);
@@ -1791,8 +1806,13 @@ int body_plan(void) {
     header.attribution = config_string(config, "attribution", body->attribution);
     // The product's one file, or its directory when the product is a set of files.
     const std::string first_path = product.files[0].path;
-    header.source_url = product.files.size() == 1 ? base + first_path + ".img"
+    header.source_url = product.files[0].image_url ? product.files[0].image_url : product.files.size() == 1 ? base + first_path + ".img"
                                                   : base + first_path.substr(0, first_path.rfind('/') + 1);
+    if (product.datum || (with_fill && unit.cap->fill->datum)) {
+        header.license = "CC BY-SA 3.0 IGO";
+        header.license_url = "https://creativecommons.org/licenses/by-sa/3.0/igo/";
+        header.attribution = "HRSC: ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO; MOLA: NASA/GSFC; blend: USGS Astrogeology (Fergason et al. 2018)";
+    }
     header.native_id = product.native_id;
     header.vertical_datum_name = config_string(config, "vertical_datum_name", body->vertical_datum_name);
     header.source_class = dttSourceClass_SPACEBORNE_ALTIMETRIC;
@@ -1836,7 +1856,18 @@ int body_plan(void) {
         metric->KIND = R::configValueKind_String;
         metric->STRING_VALUE = config_string(config, "error_metric", "rms");
         entries.push_back(std::move(metric));
+        if (backing) {
+            entries.push_back(number("bodyBackingFrame", static_cast<double>(backing_frame)));
+            entries.push_back(number("bodyBackingPosts", unit.cap->fill->fallback_posts));
+            entries.push_back(number("bodyBackingSpacingM", backing_spacing));
+        }
+        if (datum) {
+            entries.push_back(number("bodyDatumFrame", static_cast<double>(datum_frame)));
+            entries.push_back(number("bodyPrimaryDatum", product.datum ? 1 : 0));
+            entries.push_back(number("bodyFillDatum", with_fill && unit.cap->fill->datum ? 1 : 0));
+        }
         if (with_fill) {
+            entries.push_back(number("bodyFillEdges", unit.cap->fill_edges ? 1 : 0));
             entries.push_back(number("bodyFillFrame", static_cast<double>(fill_frame)));
             entries.push_back(number("bodyLatMin", unit.cap->lat_min));
             entries.push_back(number("bodyLatMax", unit.cap->lat_max));

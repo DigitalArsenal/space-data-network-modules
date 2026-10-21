@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/terrain-source",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Terrain DEM tiling module: decodes open DEM source responses (Copernicus GeoTIFF granules for Earth, PDS LOLA products for the Moon), emits terrain tile records (water-mask channel on Earth, oct normals on a body) and packs a body's records into published files. Pure transform; scheduling lives in the sibling terrain-ingest module.",

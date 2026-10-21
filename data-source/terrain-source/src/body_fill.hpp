@@ -96,7 +96,7 @@ struct BodyInvalidDistance {
             const auto next = std::lower_bound(holes.begin(), holes.end(), global_x - off_x);
             const double dy = static_cast<double>(j + off_y) - global_y;
             const auto probe = [&](uint32_t i) {
-                const double dx = static_cast<double>(i + off_x) - global_x;
+                const double dx = (static_cast<double>(i) + off_x) - global_x;
                 best = std::min(best, dx * dx + dy * dy);
             };
             if (next != holes.end()) probe(*next);

@@ -50,6 +50,9 @@ struct BodyFile {
     const char* etag;  // the IIS ETag of the .img, as served
     double max_lat;    // simple cylindrical: the file's north edge
     double west;       // simple cylindrical: the file's west edge, 0..360 E
+    const char* image_url = nullptr; // absolute detached image/label URLs, when not a PDS .img pair
+    const char* label_url = nullptr;
+    uint64_t image_offset = 0; // zero-based raster byte offset
 };
 
 struct BodyProduct {
@@ -64,6 +67,10 @@ struct BodyProduct {
     double edge_lat; // polar: the latitude the product covers all round to
     uint32_t range_parts;  // whole-line ranges per file per plan
     std::vector<BodyFile> files;
+    const char* datum = nullptr; // additive height grid: DN metres above the output sphere
+    bool may_have_nodata = false;
+    const char* fallback = nullptr;
+    uint32_t fallback_posts = 0;
 };
 
 struct BodyCapDefault {
@@ -203,6 +210,17 @@ const std::vector<Body>& bodies() {
                {"meg128/megr44s090hb", "\"805b3e4ae4f7c21:0\"", -44, 90},
                {"meg128/megr44s180hb", "\"09d678ce4f7c21:0\"", -44, 180},
                {"meg128/megr44s270hb", "\"03ad1c6e4f7c21:0\"", -44, 270}}},
+             // USGS blend: area pixels, x=(lon+180)*296.3735-.5, y=(90-lat)*296.3735-.5.
+             // ^IMAGE is 1-based; the label's projection sphere is 3396190 m,
+             // independent of its areoid height datum (converted with MEGA DN).
+             {"hrsc_mola_blend_200m_v2", "USGS:HRSC-MOLA-BlendDEM-Global-200mp-v2", "2018-01-31",
+              53347, 106694, 2, false, false, 296.3735, 0, 0, 2,
+              {{"Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2", "\"94ec792407f5a3da2f8b87aba42613eb-1358\"", 90, -180,
+                "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2.tif",
+                "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mars/HRSC_MOLA_Blend/mars_hrsc_mola_blenddem_global_200mp_v2_pds3.lbl",
+                854272}}, "mega_16", true, "megr_128", 4},
+             {"mega_16", "MGS-M-MOLA-5-MEGDR-L3-V1.0:MEGA90N000EB", "2003-04-03", 2880, 5760, 2,
+              false, false, 16, 0, 0, 1, {{"meg016/mega90n000eb", "\"80aee56389f8c21:0\"", 90, 0}}},
              {"megr_n_512", "MGS-M-MOLA-5-MEGDR-L3-V1.0:MEGR_N_512", "2006-03-01", 12288, 12288, 4, true, false, 512,
               kMarsRadiusM * kBodyPi / 180.0 / 512.0, 78, 3, {{"polar/megr_n_512", "\"67faba2c4c5cc71:0\"", 0, 0}}},
              {"megr_s_512", "MGS-M-MOLA-5-MEGDR-L3-V1.0:MEGR_S_512", "2006-03-01", 12288, 12288, 4, true, true, 512,
@@ -258,6 +276,7 @@ struct BodyCap {
     double lat_min = -90, lat_max = 90;
     const BodyProduct* fill = nullptr;
     uint32_t feather_posts = 0;
+    bool fill_edges = true;
 };
 
 // The caps from config `caps` ([{product, min_level, max_level, lat_min, lat_max}]) or the body's defaults. An
@@ -279,6 +298,13 @@ std::vector<BodyCap> body_caps(const Body& body, const std::string& config, std:
             c.max_level = static_cast<long>(json_number_or(obj, "max_level", -1));
             c.lat_min = json_number_or(obj, "lat_min", -90);
             c.lat_max = json_number_or(obj, "lat_max", 90);
+            // JSON booleans are not numeric options.
+            const auto edge_at = obj.find("\"fill_edges\"");
+            if (edge_at != std::string::npos) {
+                const auto value = obj.find_first_not_of(" \t\r\n", obj.find(':', edge_at) + 1);
+                if (obj.compare(value, 5, "false") == 0) c.fill_edges = false;
+                else if (obj.compare(value, 4, "true") != 0) { *error = "fill_edges must be boolean"; return {}; }
+            }
             if (!c.product) { *error = "caps names a product this body does not know: " + key; return {}; }
             std::string fill;
             const bool has_fill = json_string_field(obj, "fill", &fill);
@@ -445,8 +471,8 @@ std::vector<std::pair<size_t, size_t>> body_polar_batches(const Body& body, cons
         // vector capacity, alongside the fill grid; leave room for row scratch.
         const double primary_bytes = decoded_rows(p, lo, hi, primary_pad) * p.samples * 20;
         const double fill_width = f.polar ? f.samples : 360 * f.ppd + 2;
-        const double fill_bytes = decoded_rows(f, flo, fhi, fill_pad) * fill_width * 4;
-        return primary_bytes + fill_bytes <= 480.0 * 1024 * 1024;
+        const double fill_bytes = decoded_rows(f, flo, fhi, fill_pad) * fill_width * (f.may_have_nodata ? 20 : 4);
+        return primary_bytes + fill_bytes <= (f.fallback ? 400.0 : 480.0) * 1024 * 1024;
     };
     for (size_t i = 0; i < blocks.size();) {
         double lo = blocks[i].lo, hi = blocks[i].hi;
@@ -603,7 +629,10 @@ double body_post_spacing(const Body& body, const BodyProduct& p) {
 // An explicit fill opts into covering those holes as well as the latitude seams.
 bool body_unit_needs_fill(const Body& body, const BodyUnit& u, double max_grid) {
     if (!u.cap->fill) return false;
-    if (u.cap->product->sample_bytes == 4) return true;
+    // MOLA polar MEGR is measured complete (no nodata); its fill is only
+    // needed near a band edge. LOLA float products retain hole protection.
+    if ((u.cap->product->sample_bytes == 4 && std::string(body.name) != "mars") || u.cap->product->may_have_nodata) return true;
+    if (!u.cap->fill_edges) return false;
     const double band = u.cap->feather_posts * body_post_spacing(body, *u.cap->fill);
     const double degrees = band * 180.0 / (body.radius_m * kBodyPi);
     for (const auto& t : u.tiles) {

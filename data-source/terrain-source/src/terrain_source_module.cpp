@@ -1827,20 +1827,32 @@ struct TileExtent {
 #include "body_fill.hpp"
 
 struct BodyFill {
-    bool active = false;
+    bool active = false, fill_edges = true, primary_datum = false, fill_datum = false;
     double lat_min = -90, lat_max = 90, band_m = 0, radius_m = 0;
-    std::vector<DemGrid> grids;
+    std::vector<DemGrid> grids, datum;
+    const std::vector<DemGrid>* datum_source = nullptr;
+    std::unique_ptr<BodyFill> backing;
+
+    bool surface(const std::vector<DemGrid>& source, bool add_datum, double lon, double lat,
+                 double* h, bool* nodata, bool* clamped) const {
+        if (!body_sample(source, lon, lat, h, nodata, clamped)) return false;
+        if (!add_datum || *nodata) return true;
+        double offset = 0; bool dn = false, dc = false;
+        if (!body_sample(datum_source ? *datum_source : datum, lon, lat, &offset, &dn, &dc) || dn || dc) return false;
+        *h += offset;
+        return true;
+    }
     BodyInvalidDistance invalid;
 
     bool sample(const std::vector<DemGrid>& primary, double lon, double lat, double* h,
                 bool* nodata, bool* clamped, BodyFillStats* stats = nullptr) const {
-        if (!active) return body_sample(primary, lon, lat, h, nodata, clamped);
+        if (!active) return surface(primary, primary_datum, lon, lat, h, nodata, clamped);
         double p = 0, f = 0;
         bool pn = false, pc = false, fn = false, fc = false;
-        const bool valid_p = body_sample(primary, lon, lat, &p, &pn, &pc) && !pn && !pc && std::isfinite(p);
+        const bool valid_p = surface(primary, primary_datum, lon, lat, &p, &pn, &pc) && !pn && !pc && std::isfinite(p);
         double d = band_m;
-        if (lat_min > -90) d = std::min(d, std::max(0.0, lat - lat_min) * radius_m * kPolarPi / 180);
-        if (lat_max < 90) d = std::min(d, std::max(0.0, lat_max - lat) * radius_m * kPolarPi / 180);
+        if (fill_edges && lat_min > -90) d = std::min(d, std::max(0.0, lat - lat_min) * radius_m * kPolarPi / 180);
+        if (fill_edges && lat_max < 90) d = std::min(d, std::max(0.0, lat_max - lat) * radius_m * kPolarPi / 180);
         if (valid_p && !primary.empty()) {
             const DemGrid& g = primary[0];
             double x = 0, y = 0;
@@ -1860,7 +1872,8 @@ struct BodyFill {
         }
         // Avoid even reading fill outside the band: the original double is returned verbatim.
         const bool need_fill = !valid_p || d < band_m;
-        const bool valid_f = need_fill && body_sample(grids, lon, lat, &f, &fn, &fc) && !fn && !fc && std::isfinite(f);
+        const bool valid_f = need_fill && (backing ? backing->sample(grids, lon, lat, &f, &fn, &fc) :
+                                           surface(grids, fill_datum, lon, lat, &f, &fn, &fc)) && !fn && !fc && std::isfinite(f);
         *nodata = false; *clamped = pc || (need_fill && fc);
         return body_blend(p, valid_p, f, valid_f, d, band_m, h, stats);
     }
@@ -2423,7 +2436,7 @@ struct BodyMeshSurface {
 
 // One source post's departure from the rendered surface; false when
 // `abort_above` stops the walk.
-bool probe_post(double rendered, float truth, double abort_above, SourcePostProbe* out) {
+bool probe_post(double rendered, double truth, double abort_above, SourcePostProbe* out) {
     const double delta = std::fabs(rendered - static_cast<double>(truth));
     out->probes++;
     out->sum_sq += delta * delta;
@@ -2448,7 +2461,8 @@ bool probe_post(double rendered, float truth, double abort_above, SourcePostProb
 // `abort_above` stopped the walk.
 template <class Surface>
 bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
-                            const Surface& surface, double abort_above, SourcePostProbe* out) {
+                            const Surface& surface, double abort_above, SourcePostProbe* out,
+                            const std::vector<DemGrid>& granules, const BodyFill* fill) {
     if (!g.covers || g.samples.empty()) return true;
     double s_lo = 0, s_hi = 0, l_lo = 0, l_hi = 0;
     if (!polar_stereo_footprint(polar_of(g), west, east, south, north, &s_lo, &s_hi, &l_lo, &l_hi)) return true;
@@ -2458,11 +2472,15 @@ bool measure_polar_accuracy(const DemGrid& g, double west, double east, double s
     const long y1 = std::min<long>(static_cast<long>(g.height) - 1, static_cast<long>(std::ceil(l_hi)) + 1 - g.off_y);
     for (long iy = y0; iy <= y1; iy++) {
         for (long ix = x0; ix <= x1; ix++) {
-            const float truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
-            if (truth == kNoData) continue;
+            double truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
+            if (truth == kNoData && !fill) continue;
             double lat = 0, lon = 0;
             polar_lat_lon(g, static_cast<double>(ix + g.off_x), static_cast<double>(iy + g.off_y), &lat, &lon);
             if (lat < south || lat > north || lon < west || lon > east) continue;
+            if (fill) {
+                bool nd = false, cl = false;
+                if (!fill->sample(granules, lon, lat, &truth, &nd, &cl) || nd || cl) continue;
+            }
             if (!probe_post(surface.at(lon, lat), truth, abort_above, out)) return false;
         }
     }
@@ -2472,12 +2490,12 @@ bool measure_polar_accuracy(const DemGrid& g, double west, double east, double s
 template <class Surface>
 SourcePostProbe measure_surface_accuracy(const std::vector<DemGrid>& granules, double west, double east,
                                          double south, double north, const Surface& surface,
-                                         double abort_above, std::vector<uint64_t>* histogram) {
+                                         double abort_above, std::vector<uint64_t>* histogram, const BodyFill* fill = nullptr) {
     SourcePostProbe out;
     out.histogram = histogram;
     for (const DemGrid& g : granules) {
         if (g.proj == kProjPolarStereo) {
-            if (!measure_polar_accuracy(g, west, east, south, north, surface, abort_above, &out)) return out;
+            if (!measure_polar_accuracy(g, west, east, south, north, surface, abort_above, &out, granules, fill)) return out;
             continue;
         }
         PostWindow w;
@@ -2486,9 +2504,13 @@ SourcePostProbe measure_surface_accuracy(const std::vector<DemGrid>& granules, d
             const double lat = full_lat(g, static_cast<double>(g.off_y + iy));
             const float* src = &g.samples[static_cast<size_t>(iy) * g.width];
             for (long ix = w.x0; ix <= w.x1; ix++) {
-                const float truth = src[ix];
-                if (truth == kNoData) continue;
+                double truth = src[ix];
+                if (truth == kNoData && !fill) continue;
                 const double lon = full_lon(g, static_cast<double>(g.off_x + ix));
+                if (fill) {
+                    bool nd = false, cl = false;
+                    if (!fill->sample(granules, lon, lat, &truth, &nd, &cl) || nd || cl) continue;
+                }
                 if (!probe_post(surface.at(lon, lat), truth, abort_above, &out)) return out;
             }
         }
@@ -2521,7 +2543,7 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
 SourcePostProbe measure_body_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
                                            const TileMesh& mesh, const std::vector<double>& mesh_heights,
                                            uint32_t cand, double abort_above,
-                                           std::vector<uint64_t>* histogram = nullptr) {
+                                           std::vector<uint64_t>* histogram = nullptr, const BodyFill* fill = nullptr) {
     const uint32_t n = mesh.n;
     const double west = lattice_lon(job.level, job.x, 0, n);
     const double east = lattice_lon(job.level, job.x, n - 1, n);
@@ -2535,7 +2557,7 @@ SourcePostProbe measure_body_mesh_accuracy(const std::vector<DemGrid>& granules,
     const MeshSurface lookup(mesh, mesh_heights, cand - 1);
     const double span = static_cast<double>(n - 1);
     const BodyMeshSurface surface{west, south, span / (east - west), span / (north - south), &lookup};
-    return measure_surface_accuracy(granules, west, east, south, north, surface, abort_above, histogram);
+    return measure_surface_accuracy(granules, west, east, south, north, surface, abort_above, histogram, fill);
 }
 
 // ── IS THIS TILE OCEAN ACCORDING TO THE SOURCE, NOT THE MESH? ──────────────
@@ -4011,13 +4033,23 @@ int tile(void) {
             plugin_set_error("unexpected-water-frame", "a body plan carries no water mask; no \"water\" frame is read.");
             return 400;
         }
-        std::vector<PdsFile> files, fill_files;
+        std::vector<PdsFile> files, fill_files, backing_files, datum_files;
+        const size_t backing_frame = static_cast<size_t>(std::max(0.0, json_number(plan, "bodyBackingFrame", 0)));
+        const double datum_frame_number = json_number(plan, "bodyDatumFrame", 0);
+        const size_t datum_frame = static_cast<size_t>(std::max(0.0, datum_frame_number));
+        fill.primary_datum = json_number(plan, "bodyPrimaryDatum", 0) != 0;
+        fill.fill_datum = json_number(plan, "bodyFillDatum", 0) != 0;
+        if ((fill.primary_datum || fill.fill_datum) &&
+            (datum_frame_number != datum_frame || datum_frame < 2 || datum_frame >= frames.size() || !is_label(frames[datum_frame]))) {
+            plugin_set_error("invalid-datum-options", "areoid heights need a separate MEGA label/range group"); return 422;
+        }
         const double fill_frame_number = json_number(plan, "bodyFillFrame", 0);
         const size_t fill_frame = static_cast<size_t>(std::max(0.0, fill_frame_number));
         fill.active = fill_frame != 0;
         if (fill.active) {
             const double posts = json_number(plan, "featherPosts", 0);
             const double spacing = json_number(plan, "fillSpacingM", 0);
+            fill.fill_edges = json_number(plan, "bodyFillEdges", 1) != 0;
             fill.lat_min = json_number(plan, "bodyLatMin", -90);
             fill.lat_max = json_number(plan, "bodyLatMax", 90);
             if (fill_frame_number != fill_frame || fill_frame < 2 || fill_frame >= frames.size() ||
@@ -4032,15 +4064,21 @@ int tile(void) {
         }
         std::string error;
         for (size_t i = 0; i < frames.size(); i++) {
-            auto& group = fill.active && i >= fill_frame ? fill_files : files;
+            const bool is_datum = datum_frame && i >= datum_frame;
+            const bool is_backing = !is_datum && backing_frame && i >= backing_frame;
+            const bool is_fill = !is_datum && !is_backing && fill.active && i >= fill_frame;
+            auto& group = is_datum ? datum_files : is_backing ? backing_files : is_fill ? fill_files : files;
             if (is_label(frames[i])) {
                 PdsFile file;
                 if (!parse_pds_label(frames[i].body, &file.label, &error)) {
                     plugin_set_error("pds-label-unsupported", error.c_str());
                     return 422;
                 }
-                if (std::fabs(file.label.a_axis_m - body.shape.a) > 1e-6 ||
-                    std::fabs(file.label.datum_m - body.shape.a) > 1e-6) {
+                const bool add_datum = !is_datum && !is_backing && (is_fill ? fill.fill_datum : fill.primary_datum);
+                if (file.label.areoid != add_datum ||
+                    (!file.label.areoid && std::fabs(file.label.a_axis_m - body.shape.a) > 1e-6) ||
+                    std::fabs(file.label.datum_m - body.shape.a) > 1e-6 ||
+                    (is_datum && file.label.image_name != "MEGA90N000EB.IMG" && file.label.image_name != "mega90n000eb.img")) {
                     plugin_set_error("pds-reference-mismatch",
                                      "the product's sphere (A_AXIS_RADIUS, OFFSET) is not the plan's REFERENCE_RADII_M: "
                                      "its heights would be stated above the wrong surface.");
@@ -4049,6 +4087,7 @@ int tile(void) {
                 group.push_back(std::move(file));
                 continue;
             }
+            if (group.empty()) { plugin_set_error("missing-dem-label", "range has no product label"); return 422; }
             PdsBand band;
             if (!pds_band_of(group.back().label, frames[i].content_range, frames[i].body, &band, &error)) {
                 plugin_set_error("pds-range-unsupported", error.c_str());
@@ -4056,7 +4095,7 @@ int tile(void) {
             }
             group.back().bands.push_back(band);
         }
-        for (const auto* group : {&files, &fill_files}) for (const PdsFile& f : *group) {
+        for (const auto* group : {&files, &fill_files, &backing_files, &datum_files}) for (const PdsFile& f : *group) {
             if (f.bands.empty()) {
                 plugin_set_error("missing-dem-frame", "a product label on \"dem\" is followed by no range of its image.");
                 return 400;
@@ -4072,6 +4111,12 @@ int tile(void) {
             boxes.push_back(TileExtent{e.west - halo, e.east + halo, std::max(-90.0, e.south - halo),
                                        std::min(90.0, e.north + halo)});
         }
+        if (!datum_files.empty()) {
+            DemGrid d = decode_pds_files(datum_files, boxes, &budget);
+            if (d.budget_refused) return 413;
+            if (!d.ok) { plugin_set_error("pds-datum-gap", d.error.c_str()); return 422; }
+            if (d.covers) fill.datum.push_back(std::move(d));
+        }
         DemGrid g = decode_pds_files(files, boxes, &budget, fill.band_m);
         if (g.budget_refused) return 413;
         if (!g.ok) {
@@ -4079,6 +4124,7 @@ int tile(void) {
             return 422;
         }
         if (fill.active) {
+            const auto prepare_distance = [&](const DemGrid& g, BodyInvalidDistance* distance) {
             const size_t invalid_count = static_cast<size_t>(std::count(g.samples.begin(), g.samples.end(), kNoData));
             if (invalid_count) {
                 const uint64_t edt_bytes = static_cast<uint64_t>(g.samples.size()) * sizeof(double) +
@@ -4086,13 +4132,16 @@ int tile(void) {
                     static_cast<uint64_t>(g.height) * (sizeof(std::vector<uint32_t>) + 2 * sizeof(double) + sizeof(uint32_t));
                 if (edt_bytes > kDecodeByteBudget || !budget.admit(static_cast<size_t>(edt_bytes))) {
                     set_decode_budget_error(edt_bytes, budget.used);
-                    return 413;
+                    return false;
                 }
-                fill.invalid.build(g.samples, g.width, g.height, g.off_x, g.off_y, kNoData);
+                distance->build(g.samples, g.width, g.height, g.off_x, g.off_y, kNoData);
             }
+                return true;
+            };
+            if (!prepare_distance(g, &fill.invalid)) return 413;
             const PdsLabel& label = fill_files[0].label;
             const double spacing = label.projection == "POLAR STEREOGRAPHIC" ? label.map_scale_m :
-                                   label.a_axis_m * kPolarPi / 180 / label.ppd;
+                                   label.datum_m * kPolarPi / 180 / label.ppd;
             if (std::fabs(spacing - json_number(plan, "fillSpacingM", 0)) > 1e-9 * spacing) {
                 plugin_set_error("fill-spacing-mismatch", "fillSpacingM disagrees with the fill product's label.");
                 return 422;
@@ -4100,6 +4149,23 @@ int tile(void) {
             DemGrid f = decode_pds_files(fill_files, boxes, &budget, fill.band_m);
             if (f.budget_refused) return 413;
             if (!f.ok) { plugin_set_error("pds-fill-gap", f.error.c_str()); return 422; }
+            if (backing_frame) {
+                const double posts = json_number(plan, "bodyBackingPosts", 0);
+                const double bs = json_number(plan, "bodyBackingSpacingM", 0);
+                if (backing_files.empty() || posts < 1 || posts > 64 || posts != std::floor(posts) || !(bs > 0) ||
+                    std::fabs(bs - backing_files[0].label.datum_m * kPolarPi / 180 / backing_files[0].label.ppd) > bs*1e-9) {
+                    plugin_set_error("invalid-backing-options", "backing needs a label/range group and measured 1..64 post width"); return 422;
+                }
+                fill.backing = std::make_unique<BodyFill>();
+                auto& b = *fill.backing;
+                b.active = true; b.fill_edges = false; b.primary_datum = fill.fill_datum;
+                b.datum_source = &fill.datum; b.radius_m = body.shape.a; b.band_m = posts * bs;
+                if (!prepare_distance(f, &b.invalid)) return 413;
+                DemGrid bg = decode_pds_files(backing_files, boxes, &budget, fill.band_m + b.band_m);
+                if (bg.budget_refused) return 413;
+                if (!bg.ok) { plugin_set_error("pds-backing-gap", bg.error.c_str()); return 422; }
+                if (bg.covers) b.grids.push_back(std::move(bg));
+            }
             if (f.covers) fill.grids.push_back(std::move(f));
         }
         if (g.covers) granules.push_back(std::move(g));
@@ -4289,7 +4355,7 @@ int tile(void) {
                 const bool covered = body.active
                                          ? fill.sample(granules, lon, lat, &h, &nodata, &clamped, &fill_stats)
                                          : sample_dem(granules, lon, lat, &h, &nodata, &clamped, &bridged);
-                if (fill.active && (!covered || nodata)) {
+                if ((fill.active || fill.primary_datum) && (!covered || nodata)) {
                     plugin_set_error("fill-nodata", "neither primary nor fill supplies a required height-field post.");
                     return 422;
                 }
@@ -4361,7 +4427,7 @@ int tile(void) {
                     bool nd = false, cl = false;
                     body_lattice_post(job.level, sample_grid, row0 + j, col0 + i, &plat, &plon);
                     if (!fill.sample(granules, plon, plat, &h, &nd, &cl) || nd) {
-                        if (fill.active) {
+                        if (fill.active || fill.primary_datum) {
                             plugin_set_error("fill-nodata", "neither primary nor fill supplies a normals halo post.");
                             return 422;
                         }
@@ -4646,7 +4712,8 @@ int tile(void) {
             // the 32 KiB ceiling admits). Absent, the worst, as before.
             const double abort_above = rms_metric ? 0.0 : error_target_m;
             const SourcePostProbe probe =
-                body.active ? measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights, cand, abort_above)
+                body.active ? measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights, cand, abort_above, nullptr,
+                                               (fill.active || fill.primary_datum) ? &fill : nullptr)
                             : measure_mesh_accuracy(granules, job, cand, chosen_heights, measure_accuracy, abort_above);
             stats.vertical_accuracy_m = probe.worst;
             stats.accuracy_probes = probe.probes;
@@ -4697,7 +4764,7 @@ int tile(void) {
         if (measure_accuracy && body.active) {
             residual_histogram.assign(kResidualHistogramBins, 0);
             const SourcePostProbe settled = measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights,
-                                                                       chosen_grid, 0.0, &residual_histogram);
+                                                                       chosen_grid, 0.0, &residual_histogram, (fill.active || fill.primary_datum) ? &fill : nullptr);
             stats.vertical_accuracy_m = settled.worst;
             stats.accuracy_probes = settled.probes;
             rms_m = settled.probes ? std::sqrt(settled.sum_sq / static_cast<double>(settled.probes)) : 0.0;
