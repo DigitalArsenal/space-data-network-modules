@@ -158,6 +158,10 @@ const std::vector<Body>& bodies() {
               30400, 4, true, true, 0, 20, 80, 3, {{"polar/float_img/ldem_80s_20m_float", "\"2dd2663badbd21:0\"", 0, 0}}},
              {"ldem_875s_5m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_875s_5m_float::1.0", "2017-06-15", 30336,
               30336, 4, true, true, 0, 5, 87.5, 3, {{"polar/float_img/ldem_875s_5m_float", "\"1af66117badbd21:0\"", 0, 0}}},
+             {"ldem_80n_20m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_80n_20m_float::1.0", "2016-09-15", 30400,
+              30400, 4, true, false, 0, 20, 80, 3, {{"polar/float_img/ldem_80n_20m_float", "\"a5a6f46154d21:0\"", 0, 0}}},
+             {"ldem_875n_5m", "urn:nasa:pds:lro_lola_rdr:data_gridded:ldem_875n_5m_float::1.0", "2016-09-15", 30336,
+              30336, 4, true, false, 0, 5, 87.5, 3, {{"polar/float_img/ldem_875n_5m_float", "\"70325a4f154d21:0\"", 0, 0}}},
          },
          {
              {"ldem_4", 0, 3, -90, 90}, {"ldem_16", 4, 5, -90, 90}, {"ldem_64", 6, 7, -90, 90},
