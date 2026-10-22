@@ -70,7 +70,7 @@ struct Result {
     const auto samples=b.CreateVector(std::vector<flatbuffers::Offset<PCEParameterSample>>{sample});
     const auto result=CreatePCEEvaluationResult(b,pceResultStatus::OK,0,samples);
     const auto entries=b.CreateVector(descriptors);
-    const auto catalog=CreatePCEParameterCatalog(b,b.CreateString("milky-way-model/0.3"),
+    const auto catalog=CreatePCEParameterCatalog(b,b.CreateString("milky-way-model/0.4"),
       b.CreateString("com.digitalarsenal.analysis.milky-way-model"),0,entries);
     const auto root=CreatePCE(b,catalog,0,result);
     FinishPCEBuffer(b,root);

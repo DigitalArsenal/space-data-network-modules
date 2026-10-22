@@ -64,9 +64,9 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `bake_legacy` | none | Original-model global/local volumes |
 | `verify_legacy` | none, after legacy bake | Maximum/RMS RGB error and sample count |
 | `load_dust_map` | port `rows`: 1-64 `$PCE` rows of data-source/dust-map-3d (one z plane each) | planes loaded, ready |
-| `bake` | none (uses a fully loaded dust map) | Literature-model volumes, detail tile, `extinction_ratios`, `radiance_scale*`, `display_white`, `display_saturation`, `dust_map` |
+| `bake` | none (uses a fully loaded dust map) | Literature-model volumes, detail tile, `extinction_ratios`, `radiance_scale*`, `display_asinh`, `display_counts_per_unit`, `display_band_weights`, `display_nanomaggies_per_count`, `dust_map` |
 | `arm_curves` | none | Each Reid 2019 Table 2 segment as a polyline (kpc): `arm_<i>_measured_xy` over its measured coverage, `arm_<i>_extended_xy` over the arm the light follows |
-| `face_on_metrics` | none, after bake | Face-on 48 kpc G/BP/RP image layout, arm/interarm contrast, bar A2, lane color |
+| `face_on_metrics` | none, after bake | Face-on 48 kpc r/g/i image layout, arm/interarm contrast, bar A2, lane g-i |
 | `extinction` | `points`: packed xyz | `a_g`, `e_bp_rp`, magnitudes |
 | `sample_stars` | `bounds`: min xyz/max xyz; `seed`, `candidates`, `completeness`, `tier_limit_g`, optional `display_limit_g` | `stars`, `count`, `stride=7`, `label=model`, `pickable=0` |
 | `oracle_metrics` | `flux_image`, `density_image`: [arena offset, width, height, 4] | Correlations, widths, Rift ratios, global log-affine display fit and residuals |
@@ -76,9 +76,11 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 Global volume: 320 × 320 × 48 over [-20,20] × [-20,20] × [-6,6] kpc (125 pc
 in x and y), its large-scale dust only. Local volume: uniform 128³ over the
 Sun ±1.25 kpc (20 pc), with the delivered 3D dust map. Both are RGBA16F, x
-fastest, then y, then z. Literature channels are relative G/BP/RP
-emissivity per kpc and G extinction optical depth per kpc. BP and RP optical
-depths are `extinction_ratios` [A_BP/A_G, A_RP/A_G] times G (Wang & Chen 2019).
+fastest, then y, then z. Literature channels are relative SDSS r/g/i
+emissivity per kpc and G extinction optical depth per kpc. Each band's optical
+depth is `extinction_ratios` [A_r/A_G, A_g/A_G, A_i/A_G] times G (Wang & Chen
+2019). A band unit is the light of one G unit at zero color term, so all three
+share `radiance_scale_mag_arcsec2` (AB).
 One G unit (emissivity per kpc times kpc) is `radiance_scale` zero-magnitude
 (Vega G) fluxes per arcsec², also given as `radiance_scale_mag_arcsec2` (22.12)
 and `radiance_scale_lsun_v_pc2` (42.7): the model's local mid-plane emissivity
@@ -126,11 +128,26 @@ on the arms (count, sizes and brightness are model choices at the scale of the
 WISE catalog's giant complexes, Anderson et al. 2014). Disc edge: Minniti et
 al. 2011's 13.9 kpc, beyond it a steeper exponential (type II break, Pohlen &
 Trujillo 2006). Colors: the old disc redder than the Sun, red-clump bulge and
-bar (Ruiz-Dern et al. 2018), B-star arm light, emission-line HII; the display
-balances white on the face-on disc at the Sun's radius (`display_white`) and
-stretches saturation by `display_saturation`, a display choice. Bar
-and bulge: Wegg & Gerhard 2013 orientation, Wegg et al. 2015 length, their sum
-set by Portail et al. 2017's bar/bulge to inner-disc mass ratio (1.88/1.29).
+bar (Ruiz-Dern et al. 2018), B-star arm light, emission-line HII, each
+converted from its BP-RP to SDSS g, r, i by Riello et al. 2021 Table C.2.
+Display (0.4.0): the SDSS ImgCutout JPEG transfer, Lupton et al. 2004's asinh
+stretch on band-weighted SDSS counts and a gamma, its parameters fitted to the
+SkyServer JPEGs of six Licquia et al. 2015 Milky Way analogs from their DR17
+frames (`display_asinh`, `display_band_weights`). Bar and bulge: Wegg &
+Gerhard 2013 orientation, Wegg et al. 2015 length, the b/p bulge's axis ratio
+and scale height from Bland-Hawthorn & Gerhard 2016, their sum set by Portail
+et al. 2017's bar/bulge to inner-disc mass ratio (1.88/1.29); the nuclear
+stellar disc (BHG16; Launhardt et al. 2002) at 1.4/18.8 of that light. The old
+light's spiral wave has DS2001's own stellar arm width (143 pc/kpc). Half the
+young light is drawn as star complexes on the young arms (Gies 1987: ~70 % of
+O stars in clusters and associations; Efremov 1995: complexes ~600 pc), their
+luminosities dN/dL ~ L^-2 (Kennicutt, Edgar & Hodge 1989); a seeded
+statistical population, its total the smooth model's. Appearance (stellar_populations.hpp,
+`appearance`): the young light's scale length, the central light and the
+bulge's extent and height stay at their published values; a fit of them to
+SDSS MW analogs (Licquia 2015; four trained, two held out) was evaluated and
+rejected (it did not generalize; tests/appearance-fit-20261022.json). `bake`
+takes `appearance_*` overrides (the fit's trials).
 Dust: Drimmel & Spergel 2001 (its arm dust on the same arms), replaced within
 1.248 kpc by the Edenhofer et al. 2024 map when loaded (local volume only). Reid's fitted radii keep their R0=8.15 kpc fit while the
 observer uses 8.178 kpc. Bulge/bar shapes, the arm extensions, the HII

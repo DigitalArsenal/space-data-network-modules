@@ -14,7 +14,25 @@ namespace model_choices {
 inline constexpr double inner_arm_radius_kpc=1.5,outer_radius_kpc=16.0;
 inline constexpr double minimum_arm_width_kpc=0.08;
 inline constexpr double young_scale_height_kpc=0.09,arm_emissivity=0.45;
-inline constexpr double bulge_x_kpc=1.0,bulge_y_kpc=0.4,bulge_z_kpc=0.3;
+// The b/p bulge's axis ratio from above, 0.5, and its vertical scale height
+// at x ~ 0, 180 pc: Bland-Hawthorn & Gerhard (2016), ARA&A 54, 529, section
+// 4.2 (0.4 and 0.3 kpc in 0.3.0, which drew it a thick, round puff).
+inline constexpr double bulge_x_kpc=1.0,bulge_y_kpc=0.5,bulge_z_kpc=0.18;
+// THE NUCLEAR STELLAR DISC: Bland-Hawthorn & Gerhard (2016) section 4.1
+// (Launhardt et al. 2002, A&A 384, 112): stellar mass (1.4 +- 0.6) x 10^9
+// Msun, break radius ~90 pc, vertical scale height 45 pc; the density falls
+// as R^-0.1 inside the break and R^-3.5 outside it (Launhardt et al. 2002).
+// With the bar and bulge's mass-to-light ratio, its light is 1.4/18.8 of
+// theirs (Portail et al. 2017: 1.88 x 10^10 Msun). It is the galaxy's bright,
+// compact core. R is floored at 5 pc (the inner power law's divergence).
+inline constexpr double nucleus_mass=0.14,nucleus_break_kpc=0.09,nucleus_height_kpc=0.045,nucleus_floor_kpc=0.005;
+inline double nucleus_shape(Vec3 p) {
+  const double r=std::max(nucleus_floor_kpc,std::hypot(p.x,p.y))/nucleus_break_kpc;
+  return std::pow(r,r<1?-0.1:-3.5)*std::exp(-std::abs(p.z)/nucleus_height_kpc);
+}
+// Its integral over all space (unfloored): 2 pi R_b^2 (1/1.9 + 1/1.5) 2 h.
+inline constexpr double nucleus_shape_integral=2*galactic_constants::pi*nucleus_break_kpc*nucleus_break_kpc
+  *(1/1.9+1/1.5)*2*nucleus_height_kpc;
 inline constexpr double bulge_emissivity=8.0,boxiness=4.0,peanut_strength=0.25,peanut_extent_kpc=2.0;
 inline constexpr double bar_minor_kpc=0.45,bar_height_kpc=0.18,bar_emissivity=1.8;
 inline constexpr double bar_taper_start_kpc=4.5;
@@ -29,14 +47,19 @@ inline constexpr double bar_half_length_kpc=5.0;
 // 2.6 kpc, is a MODEL CHOICE. The light thins into the dark with no rim and
 // is gone well inside the 20 kpc volume.
 inline constexpr double disc_edge_kpc=13.9,outer_scale_kpc=1.3;
+// The young light's share drawn as star complexes (complexes, below).
+inline constexpr double young_clumped=0.5;
 inline double disc_edge(double radius) {
   return std::exp(-std::max(0.0,radius-disc_edge_kpc)*(1/outer_scale_kpc-1/2.6));
 }
-// BP and RP extinction ratios to G: Wang & Chen (2019) Table 3 red-clump
-// values (stellar_populations.hpp). Real passband extinction also depends on
-// the source spectrum and the column; one constant ratio per band is used.
+// BP and RP (the statistical stars) and SDSS r, g and i (the light)
+// extinction ratios to G: Wang & Chen (2019) Table 3 red-clump values
+// (stellar_populations.hpp). Real passband extinction also depends on the
+// source spectrum and the column; one constant ratio per band is used.
 inline constexpr double bp_to_g_extinction=populations::bp_per_g_extinction;
 inline constexpr double rp_to_g_extinction=populations::rp_per_g_extinction;
+inline constexpr double channel_extinction[3]={sdss::r_per_big_g_extinction,
+  sdss::g_per_big_g_extinction,sdss::i_per_big_g_extinction};
 } // namespace model_choices
 
 struct StellarComponents { double thin,thick,arms,bulge,bar; };
@@ -72,16 +95,21 @@ inline Vec3 undrifted(Vec3 p,double age_myr) {
 
 // DS2001: the arm of largest exp(-(d/w)^2) contributes, with the dust arms'
 // cut-off g(R_a). Four major families (Norma-Outer, Scutum-Centaurus,
-// Sagittarius-Carina, Perseus), as DS2001's four arms; Reid Table 2 widths.
+// Sagittarius-Carina, Perseus), as DS2001's four arms. The stellar arms'
+// half width is DS2001's own, w*_K = c*_K R_a with c*_K = 143 pc/kpc (Table
+// 3), the width B_K was fitted with: broad waves in the old light (1.1 kpc
+// at R0), not the masers' narrow Reid widths (0.3.0, which drew the old light
+// as thin concentric rings).
+inline constexpr double stellar_arm_width_per_kpc=0.143;
 inline double major_arm_wave(Vec3 p) {
   double best=0;
   for(const auto& a:reid_segments) {
     if(arm_light::finite_segment(a)) continue;
     arm_light::for_each_hit(a,p,[&](const arm_light::Hit& h) {
-      const double width=arm_width_kpc(a,h.radius);
+      const double width=stellar_arm_width_per_kpc*h.radius;
       const double cutoff=h.radius>populations::arm_cutoff_kpc
         ?std::exp(-std::pow((h.radius-populations::arm_cutoff_kpc)/populations::arm_cutoff_scale_kpc,2)):1.0;
-      best=std::max(best,h.weight*cutoff*std::exp(-0.5*(h.separation/width)*(h.separation/width)));
+      best=std::max(best,h.weight*cutoff*std::exp(-(h.separation/width)*(h.separation/width)));
     });
   }
   return best;
@@ -122,9 +150,9 @@ inline std::array<double,2> bulge_bar_shapes(Vec3 p) {
   constexpr double angle=bar_angle_rad;
   const double u=-p.x*std::cos(angle)+p.y*std::sin(angle);
   const double v=p.x*std::sin(angle)+p.y*std::cos(angle);
-  const double effective_z=bulge_z_kpc*(1+peanut_strength*std::min(std::abs(u),peanut_extent_kpc));
-  const double ellipsoid=std::pow(std::pow(std::abs(u)/bulge_x_kpc,boxiness)
-      +std::pow(std::abs(v)/bulge_y_kpc,boxiness)+std::pow(height/effective_z,boxiness),1/boxiness);
+  const double effective_z=bulge_z_kpc*appearance::bulge_height*(1+peanut_strength*std::min(std::abs(u),peanut_extent_kpc));
+  const double ellipsoid=std::pow(std::pow(std::abs(u)/(bulge_x_kpc*appearance::bulge_size),boxiness)
+      +std::pow(std::abs(v)/(bulge_y_kpc*appearance::bulge_size),boxiness)+std::pow(height/effective_z,boxiness),1/boxiness);
   return {bulge_emissivity*std::exp(-ellipsoid),
           bar_emissivity*std::exp(-std::abs(v)/bar_minor_kpc-height/bar_height_kpc)
             *(1-smoothstep(bar_taper_start_kpc,bar_half_length_kpc,std::abs(u)))};
@@ -132,9 +160,12 @@ inline std::array<double,2> bulge_bar_shapes(Vec3 p) {
 
 inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double bar_bulge);
 // Midpoint integrals over the cylinder R <= 5 kpc, |z| <= 3 kpc (20 pc in x
-// and y, z on a signed-square axis dense at the plane), computed once.
-inline double bar_bulge_scale() {
-  static const double scale=[] {
+// and y, z on a signed-square axis dense at the plane), computed once. The
+// bar and bulge light there is 1.88/1.29 of the disc's (Portail 2017); the
+// nuclear disc's is model_choices::nucleus_mass of the bar and bulge's.
+struct CentralScales {double bar_bulge,nucleus;};
+inline const CentralScales& central_scales() {
+  static const CentralScales scales=[] {
     double disc=0,central=0;
     constexpr int n=200,nz=100;
     const double h=2*populations::bar_region_kpc/n;
@@ -149,10 +180,14 @@ inline double bar_bulge_scale() {
         disc+=(c.thin+c.thick+c.arms)*h*h*dz;central+=(shapes[0]+shapes[1])*h*h*dz;
       }
     }
-    return populations::bar_bulge_mass/populations::inner_disc_mass*disc/central;
+    const double bar_bulge=appearance::central_light*populations::bar_bulge_mass/populations::inner_disc_mass*disc/central;
+    const double central_light=bar_bulge*central;
+    return CentralScales{bar_bulge,model_choices::nucleus_mass/populations::bar_bulge_mass
+      *central_light/model_choices::nucleus_shape_integral};
   }();
-  return scale;
+  return scales;
 }
+inline double bar_bulge_scale() {return central_scales().bar_bulge;}
 
 inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern) {
   return stellar_components(p,pattern,bar_bulge_scale());
@@ -170,26 +205,19 @@ inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double ba
   const double thin=discs[0],thick=discs[1];
   // Spiral light: the thin disc's density wave plus the young population.
   static const double young_hole_sun=populations::young_hole(galactic_constants::solar_radius_kpc);
-  const double young=young_amplitude()*pattern.young*populations::young_hole(radius)/young_hole_sun
-    *std::exp((galactic_constants::solar_radius_kpc-radius)/populations::thin_length_kpc
+  const double young=(1-young_clumped)*young_amplitude()*pattern.young*populations::young_hole(radius)/young_hole_sun
+    *std::exp((galactic_constants::solar_radius_kpc-radius)/appearance::young_length_kpc
               -height/populations::h_bright_kpc);
   const double arms=thin*pattern.wave+young;
   // Wegg & Gerhard (2013), MNRAS 435,1874, doi:10.1093/mnras/stt1376:
-  // boxy/peanut morphology and orientation ~27 degrees. The analytic boxy
-  // proxy and its scales/amplitudes below are our choices, not their 3D map.
-  constexpr double angle=bar_angle_rad;
-  const double u=-p.x*std::cos(angle)+p.y*std::sin(angle);
-  const double v=p.x*std::sin(angle)+p.y*std::cos(angle);
-  const double effective_z=bulge_z_kpc*(1+peanut_strength*std::min(std::abs(u),peanut_extent_kpc));
-  const double ellipsoid=std::pow(std::pow(std::abs(u)/bulge_x_kpc,boxiness)
-      +std::pow(std::abs(v)/bulge_y_kpc,boxiness)+std::pow(height/effective_z,boxiness),1/boxiness);
-  const double scale=bar_bulge;
-  const double bulge=scale*bulge_emissivity*std::exp(-ellipsoid);
-  // Wegg, Gerhard & Portail (2015), MNRAS 450,4050,
-  // doi:10.1093/mnras/stv745: long-bar half-length 5.0 kpc; the transverse
-  // profile/normalization and smooth terminal taper are illustrative choices.
-  const double bar=scale*bar_emissivity*std::exp(-std::abs(v)/bar_minor_kpc-height/bar_height_kpc)
-      *(1-smoothstep(bar_taper_start_kpc,bar_half_length_kpc,std::abs(u)));
+  // boxy/peanut morphology and orientation ~27 degrees; Wegg, Gerhard &
+  // Portail (2015), MNRAS 450,4050, doi:10.1093/mnras/stv745: long-bar
+  // half-length 5.0 kpc (bulge_bar_shapes); the nuclear stellar disc
+  // (nucleus_shape) is part of the bulge's light. With bar_bulge = 0 (the
+  // scale's own integral) there is no central light at all.
+  const auto shapes=bulge_bar_shapes(p);
+  const double nucleus=bar_bulge>0?central_scales().nucleus*nucleus_shape(p):0.0;
+  const double bulge=bar_bulge*shapes[0]+nucleus,bar=bar_bulge*shapes[1];
   // The global volume ends 6 kpc above and below the plane: the light (the
   // thick disc's 1.1 kpc, the bulge) goes to zero over its last 1.5 kpc
   // rather than stopping flat at its faces (a MODEL CHOICE of window).
@@ -213,111 +241,165 @@ inline StellarComponents stellar_components(Vec3 p) {
 // (SplitMix64, 20261019); the count, sizes, layer and brightness are MODEL
 // CHOICES of the scale of the giant complexes the WISE catalogue of Galactic
 // HII regions lists (Anderson et al. 2014, ApJS 212, 1), not their places.
-namespace hii {
-inline constexpr unsigned count=700;
-inline constexpr double min_kpc=3.0,max_kpc=14.5,layer_kpc=0.06;
-inline constexpr double sigma_lo_kpc=0.05,sigma_hi_kpc=0.12,peak=1.2,spread_ln=0.8;
+// KNOTS: a statistical population of Gaussian light knots on the arms, from
+// a fixed seed (SplitMix64): positions over [min, max] kpc accepted with the
+// arms' planar density (at `drift_myr`'s shear) times a radial profile and the
+// disc's edge, a Gaussian layer in z, sizes uniform in [sigma_lo, sigma_hi];
+// a 0.5 kpc cell grid finds the knots near a point.
+namespace knots {
+struct Knot {Vec3 c;double sigma,amplitude;};
+struct Population {std::vector<Knot> knots;std::vector<std::vector<uint32_t>> cells;int n=0;};
 inline constexpr double cell_kpc=0.5,half_kpc=16.0;
-struct Region {Vec3 c;double sigma,amplitude;};
-struct Population {std::vector<Region> regions;std::vector<std::vector<uint32_t>> cells;int n=0;};
 inline double next_uniform(uint64_t& s) {
   uint64_t z=(s+=0x9E3779B97F4A7C15ull);
   z=(z^(z>>30))*0xBF58476D1CE4E5B9ull;z=(z^(z>>27))*0x94D049BB133111EBull;z^=z>>31;
   return double(z>>11)*0x1.0p-53;
 }
-inline const Population& population() {
-  static const Population pop=[] {
-    Population p;uint64_t seed=20261019;
-    const double peak_density=2.0;
-    while(p.regions.size()<count) {
-      const double r=min_kpc+(max_kpc-min_kpc)*std::sqrt(next_uniform(seed));
-      const double phi=2*galactic_constants::pi*next_uniform(seed);
-      const Vec3 c{r*std::cos(phi),r*std::sin(phi),0};
-      const double profile=std::exp(-(r-min_kpc)/populations::thin_length_kpc)*populations::young_hole(r)
-        /populations::young_hole(galactic_constants::solar_radius_kpc);
-      const double accept=std::min(1.0,planar_arm_density(c)/peak_density)*std::min(1.0,profile)
-        *model_choices::disc_edge(r);
-      if(next_uniform(seed)>accept) continue;
-      // Box-Muller for the layer and the log-normal brightness.
-      const double u1=std::max(1e-12,next_uniform(seed)),u2=next_uniform(seed);
-      const double g1=std::sqrt(-2*std::log(u1))*std::cos(2*galactic_constants::pi*u2);
-      const double g2=std::sqrt(-2*std::log(u1))*std::sin(2*galactic_constants::pi*u2);
-      const double sigma=sigma_lo_kpc+(sigma_hi_kpc-sigma_lo_kpc)*next_uniform(seed);
-      p.regions.push_back({{c.x,c.y,layer_kpc*g1},sigma,peak*std::exp(spread_ln*g2-0.5*spread_ln*spread_ln)
-        *std::exp((galactic_constants::solar_radius_kpc-r)/populations::thin_length_kpc)});
-    }
-    p.n=int(2*half_kpc/cell_kpc);
-    p.cells.resize(size_t(p.n)*p.n);
-    for(uint32_t i=0;i<p.regions.size();++i) {
-      const auto& g=p.regions[i];const double reach=3*g.sigma;
-      const int x0=std::max(0,int((g.c.x-reach+half_kpc)/cell_kpc)),x1=std::min(p.n-1,int((g.c.x+reach+half_kpc)/cell_kpc));
-      const int y0=std::max(0,int((g.c.y-reach+half_kpc)/cell_kpc)),y1=std::min(p.n-1,int((g.c.y+reach+half_kpc)/cell_kpc));
-      for(int y=y0;y<=y1;++y) for(int x=x0;x<=x1;++x) p.cells[size_t(y)*p.n+x].push_back(i);
-    }
-    return p;
-  }();
-  return pop;
+struct Spec {unsigned count;uint64_t seed;double min_kpc,max_kpc,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,drift_myr;};
+// `brightness(r, seed)`: a knot's amplitude at radius r, drawing from `seed`.
+template<class Brightness> Population build(const Spec& spec,Brightness brightness) {
+  Population p;uint64_t seed=spec.seed;
+  const double peak_density=2.0;
+  while(p.knots.size()<spec.count) {
+    const double r=spec.min_kpc+(spec.max_kpc-spec.min_kpc)*std::sqrt(next_uniform(seed));
+    const double phi=2*galactic_constants::pi*next_uniform(seed);
+    const Vec3 c{r*std::cos(phi),r*std::sin(phi),0};
+    const double profile=std::exp(-(r-spec.min_kpc)/appearance::young_length_kpc)*populations::young_hole(r)
+      /populations::young_hole(galactic_constants::solar_radius_kpc);
+    const Vec3 arm=spec.drift_myr>0?undrifted(c,spec.drift_myr):c;
+    const double accept=std::min(1.0,planar_arm_density(arm)/peak_density)*std::min(1.0,profile)
+      *model_choices::disc_edge(r);
+    if(next_uniform(seed)>accept) continue;
+    // Box-Muller for the layer (and a normal deviate for the brightness).
+    const double u1=std::max(1e-12,next_uniform(seed)),u2=next_uniform(seed);
+    const double g1=std::sqrt(-2*std::log(u1))*std::cos(2*galactic_constants::pi*u2);
+    const double g2=std::sqrt(-2*std::log(u1))*std::sin(2*galactic_constants::pi*u2);
+    const double sigma=spec.sigma_lo_kpc+(spec.sigma_hi_kpc-spec.sigma_lo_kpc)*next_uniform(seed);
+    p.knots.push_back({{c.x,c.y,spec.layer_kpc*g1},sigma,brightness(r,g2,seed)});
+  }
+  p.n=int(2*half_kpc/cell_kpc);
+  p.cells.resize(size_t(p.n)*p.n);
+  for(uint32_t i=0;i<p.knots.size();++i) {
+    const auto& g=p.knots[i];const double reach=3*g.sigma;
+    const int x0=std::max(0,int((g.c.x-reach+half_kpc)/cell_kpc)),x1=std::min(p.n-1,int((g.c.x+reach+half_kpc)/cell_kpc));
+    const int y0=std::max(0,int((g.c.y-reach+half_kpc)/cell_kpc)),y1=std::min(p.n-1,int((g.c.y+reach+half_kpc)/cell_kpc));
+    for(int y=y0;y<=y1;++y) for(int x=x0;x<=x1;++x) p.cells[size_t(y)*p.n+x].push_back(i);
+  }
+  return p;
 }
-// The regions' G emissivity at p (model units).
-inline double light(Vec3 p) {
-  if(std::abs(p.z)>0.6||std::abs(p.x)>=half_kpc||std::abs(p.y)>=half_kpc) return 0;
-  const auto& pop=population();
+// The knots' summed emissivity at p (each A exp(-|p-c|^2 / 2 sigma^2), to 3 sigma).
+inline double light(const Population& pop,Vec3 p) {
+  if(std::abs(p.z)>0.8||std::abs(p.x)>=half_kpc||std::abs(p.y)>=half_kpc) return 0;
   const int x=int((p.x+half_kpc)/cell_kpc),y=int((p.y+half_kpc)/cell_kpc);
   double sum=0;
   for(const uint32_t i:pop.cells[size_t(y)*pop.n+x]) {
-    const auto& g=pop.regions[i];const Vec3 d=p-g.c;
+    const auto& g=pop.knots[i];const Vec3 d=p-g.c;
     const double q=dot(d,d)/(g.sigma*g.sigma);
     if(q<9) sum+=g.amplitude*std::exp(-0.5*q);
   }
   return sum;
 }
+} // namespace knots
+
+// HII REGIONS: the knots of nebular light along the arms. Reid et al. (2019)
+// fit the arms to masers in high-mass star-forming regions, so the regions
+// sit on the fitted arms (unsheared), over the young disc's radial profile
+// (Robin 2003 young hole, Juric 2008 scale length) and a thin layer. The
+// count, sizes, layer and brightness are MODEL CHOICES of the scale of the
+// giant complexes the WISE catalogue of Galactic HII regions lists (Anderson
+// et al. 2014, ApJS 212, 1), not their places; seed 20261019.
+namespace hii {
+inline constexpr double peak=1.2,spread_ln=0.8;
+inline const knots::Population& population() {
+  static const knots::Population pop=knots::build({700,20261019,3.0,14.5,0.06,0.05,0.12,0},
+    [](double r,double g,uint64_t&) {
+      return peak*std::exp(spread_ln*g-0.5*spread_ln*spread_ln)
+        *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc);
+    });
+  return pop;
+}
+// The regions' G emissivity at p (model units).
+inline double light(Vec3 p) {return knots::light(population(),p);}
 } // namespace hii
 
-// The light in G, BP and RP, each population in its own color
-// (stellar_populations.hpp, colors), and the dust: inside a delivered 3D dust
-// map's coverage the map replaces DS2001 (dust_map.hpp) when `local_dust`.
+// STAR COMPLEXES: the young population's clumps. Most young massive stars
+// are born and stay, while young, in clusters and OB associations (Gies
+// 1987, ApJS 64, 545: about 70 % of O stars), and these are grouped in star
+// complexes along the arms (Efremov 1995, ARA&A 33, 19: ~600 pc across). A
+// share `clumped` of the young (M_V < -1) light is drawn as complexes on
+// the young arms (the J-band drift, as the smooth young light), the rest
+// smooth; the total is the smooth model's. Their luminosities follow the HII
+// regions' luminosity function in spirals, dN/dL ~ L^-2 (Kennicutt, Edgar &
+// Hodge 1989, ApJ 337, 761), over two decades. The share (0.5, below the O
+// stars' 0.7 as the population includes dispersing B stars), count, sizes
+// and layer are MODEL CHOICES; seed 20261022.
+namespace complexes {
+inline constexpr double clumped=model_choices::young_clumped,luminosity_range=100;
+inline constexpr unsigned count=1500;
+inline constexpr double sigma_lo_kpc=0.09,sigma_hi_kpc=0.22,layer_kpc=0.06;
+inline const knots::Population& population();
+inline double light(Vec3 p) {return knots::light(population(),p);}
+} // namespace complexes
+
+// The star complexes (namespace complexes): their total light is the
+// clumped share of the smooth model's young light, integrated over the disc
+// (columns 2 h_bright of the exponential layer, 0.1 kpc cells).
+inline const knots::Population& complexes::population() {
+  static const knots::Population pop=[] {
+    static const double hole_sun=populations::young_hole(galactic_constants::solar_radius_kpc);
+    double young_total=0;
+    constexpr double cell=0.1;
+    for(double y=-knots::half_kpc+cell/2;y<knots::half_kpc;y+=cell) for(double x=-knots::half_kpc+cell/2;x<knots::half_kpc;x+=cell) {
+      const double r=std::hypot(x,y);
+      young_total+=young_amplitude()*young_pattern({x,y,0})*populations::young_hole(r)/hole_sun
+        *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc)*model_choices::disc_edge(r)
+        *2*populations::h_bright_kpc*cell*cell;
+    }
+    // dN/dL ~ L^-2 on [1, luminosity_range]: L = 1 / (1 - u (1 - 1/range)).
+    double luminosity_sum=0;
+    auto pop=knots::build({count,20261022,2.0,15.0,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,populations::drift_age_j_myr},
+      [&](double,double,uint64_t& seed) {
+        const double l=1/(1-knots::next_uniform(seed)*(1-1/luminosity_range));
+        luminosity_sum+=l;
+        return l;
+      });
+    const double scale=clumped*young_total/luminosity_sum;
+    for(auto& k:pop.knots) k.amplitude*=scale/(std::pow(2*galactic_constants::pi,1.5)*k.sigma*k.sigma*k.sigma);
+    return pop;
+  }();
+  return pop;
+}
+
+// The light in SDSS r, g and i (channels in that order: the central band
+// first, as the renderer's luminance and the arm ridges use it, then the
+// blue and the red), each population in its own color
+// (stellar_populations.hpp, colors), and the dust's G optical depth: inside a
+// delivered 3D dust map's coverage the map replaces DS2001 (dust_map.hpp)
+// when `local_dust`.
 inline Field literature(Vec3 p,bool local_dust) {
   const auto pattern=arm_patterns(p);
   const auto c=stellar_components(p,pattern);
-  const double young=c.arms-c.thin*pattern.wave;
+  // The young light: its smooth share and its star complexes.
+  const double young=c.arms-c.thin*pattern.wave+complexes::light(p);
   const double disc=c.thin+c.thick+c.thin*pattern.wave;
   const double central=c.bulge+c.bar;
   const double nebulae=hii::light(p);
   using namespace colors;
   const double dust=local_dust?dust_map::blend(p,drimmel2001::dust(p)):drimmel2001::dust(p);
-  return {disc+central+young+nebulae,
-          disc_bp*disc+central_bp*central+young_bp*young+hii_bp*nebulae,
-          disc_rp*disc+central_rp*central+young_rp*young+hii_rp*nebulae,dust};
+  return {disc_bands.r*disc+central_bands.r*central+young_bands.r*young+hii_bands.r*nebulae,
+          disc_bands.g*disc+central_bands.g*central+young_bands.g*young+hii_bands.g*nebulae,
+          disc_bands.i*disc+central_bands.i*central+young_bands.i*young+hii_bands.i*nebulae,dust};
 }
 inline Field literature(Vec3 p) {return literature(p,true);}
 
-// The display's white: the disc's light at the Sun's radius seen face-on, a
-// vertical column through its stars and large-scale dust (no HII region, no
-// local dust map), per unit G, as an image of a galaxy is balanced on the
-// average light of its disc. The column is integrated as the renderer
-// integrates a ray (oracle_metrics.hpp): per step, light gained T j (1 -
-// e^-tau) / tau and transmittance falling by e^-tau, each band with its
-// extinction ratio to G.
-inline std::array<double,3> display_white() {
-  const double x=-galactic_constants::solar_radius_kpc;
-  const double ratio[3]={1.0,model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction};
-  double light[3]={0,0,0},transmittance[3]={1,1,1};
-  constexpr double top=3.0,step=0.002;
-  for(double z=top-step/2;z>-top;z-=step) {
-    const Vec3 p{x,0,z};
-    const auto pattern=arm_patterns(p);
-    const auto c=stellar_components(p,pattern);
-    const double young=c.arms-c.thin*pattern.wave,disc=c.thin+c.thick+c.thin*pattern.wave,central=c.bulge+c.bar;
-    using namespace colors;
-    const double j[3]={disc+central+young,disc_bp*disc+central_bp*central+young_bp*young,disc_rp*disc+central_rp*central+young_rp*young};
-    const double kappa=drimmel2001::dust(p);
-    for(int b=0;b<3;++b) {
-      const double tau=kappa*ratio[b]*step;
-      light[b]+=transmittance[b]*j[b]*step*(tau>1e-6?(1-std::exp(-tau))/tau:1-0.5*tau);
-      transmittance[b]*=std::exp(-tau);
-    }
-  }
-  return {1.0,light[1]/light[0],light[2]/light[0]};
+// The G emissivity of the populations at p (the light before its colors).
+inline double literature_g(Vec3 p) {
+  const auto pattern=arm_patterns(p);
+  const auto c=stellar_components(p,pattern);
+  return c.thin+c.thick+c.arms+c.bulge+c.bar+hii::light(p)+complexes::light(p);
 }
+
+// The Gaia G light of a field's r, g, i channels (oracle_metrics.hpp).
+inline double gaia_g(const Field& f) {return sdss::gaia_g(std::max(0.0,f.g),std::max(0.0,f.b));}
 
 } // namespace milky_way
