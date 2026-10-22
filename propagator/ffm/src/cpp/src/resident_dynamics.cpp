@@ -538,6 +538,24 @@ bool ResidentDynamics::state(size_t i, const TTEpoch& at, StateVector& out, std:
     return true;
 }
 
+bool ResidentDynamics::evaluate(size_t i, const TTEpoch& at, StateVector& out, bool clamp) const {
+    if (i >= objects_.size()) return false;
+    const Object& o = *objects_[i];
+    if (!o.valid || o.segments.empty()) return false;
+    double seconds = elapsedSeconds(o.segmentStart(o.firstSegment), at);
+    const double duration = o.segments.size() * kSegment;
+    if (!std::isfinite(seconds)) return false;
+    if (!clamp && (seconds < 0 || seconds > duration)) return false;
+    seconds = std::max(0.0, std::min(seconds, duration));
+    const auto index = std::min(static_cast<size_t>(seconds / kSegment), o.segments.size() - 1);
+    const double tau = (seconds - index * kSegment) / kHalfSpan - 1;
+    const auto& s = o.segments[index];
+    out.position = Vec3(chebyshevEval(s.c[0], tau), chebyshevEval(s.c[1], tau), chebyshevEval(s.c[2], tau));
+    out.velocity = Vec3(chebyshevEval(s.c[3], tau), chebyshevEval(s.c[4], tau), chebyshevEval(s.c[5], tau));
+    out.epoch = timesys::ttToTdb(plus(o.segmentStart(o.firstSegment), seconds).jdTt());
+    return true;
+}
+
 bool ResidentDynamics::covariance(size_t i, const TTEpoch& at, const Mat6& p0, const Integrator::ProcessNoise& noise,
                                   StateVector& state, Mat6& p, std::string& error) {
     const Object& o = *objects_.at(i);
