@@ -10,7 +10,7 @@
 // sha256 the ledger holds). Exit 1 on any miss.
 // --manifest: <prefix>/MANIFEST.json (credit, licence, source, per-level files/bytes, the sha256 of the sorted
 // ledger lines) from the ledger, uploaded and re-read.
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -32,6 +32,20 @@ const ledger = () => {
   return [...byPath.values()].filter((e) => e.path.startsWith(`${PREFIX}/`)).sort((a, b) => (a.path < b.path ? -1 : 1));
 };
 const levelOf = (p) => (p.endsWith("/root.dtts") ? 2 : Number(p.slice(PREFIX.length + 1).split("/")[0]));
+// Conditional writes make the no-overwrite rule atomic, including a writer
+// racing the inventory check. Identical existing objects are read, never PUT.
+const asyncRun = (args) => new Promise((resolve, reject) => execFile(aws[0], [...aws.slice(1), ...args], { maxBuffer: 64 << 20, encoding: "buffer" }, (error, stdout, stderr) => { if (error) { error.stderr = stderr; reject(error); } else resolve(stdout); }));
+const putNew = async (file, key, type = "application/octet-stream") => {
+  const bytes = fs.readFileSync(file), want = crypto.createHash("sha256").update(bytes).digest("hex");
+  try {
+    const old = await asyncRun(["s3", "cp", `s3://${BUCKET}/${key}`, "-"]);
+    if (crypto.createHash("sha256").update(old).digest("hex") !== want) throw new Error(`refusing overwrite: ${key}`);
+    return;
+  } catch (e) {
+    if (!/NoSuchKey|Not Found|404/.test(String(e.stderr))) throw e;
+  }
+  await asyncRun(["s3api", "put-object", "--bucket", BUCKET, "--key", key, "--body", file, "--if-none-match", "*", "--content-type", type]);
+};
 const listing = (prefix) => {
   const out = new Map();
   let token;
@@ -47,9 +61,14 @@ const listing = (prefix) => {
 if (arg("level")) {
   const level = Number(arg("level"));
   if (flag("verify-only")) { /* the files were uploaded chunk by chunk and are gone locally: check the bucket against the ledger only */ }
-  else if (level <= 2) run(["s3", "cp", path.join(dir, PREFIX, "root.dtts"), `s3://${BUCKET}/${PREFIX}/root.dtts`, "--only-show-errors"]);
-  else run(["s3", "sync", path.join(dir, PREFIX, String(level)), `s3://${BUCKET}/${PREFIX}/${level}/`, "--only-show-errors"], { stdio: "inherit" });
-  if (flag("upload-only")) { console.log(JSON.stringify({ level, uploaded: true })); process.exit(0); }  // verified later against the whole listing
+  else {
+    const pending = ledger().filter((e) => levelOf(e.path) === level && fs.existsSync(path.join(dir, e.path)));
+    let next = 0, failure;
+    await Promise.all(Array.from({ length: Math.min(64, pending.length) }, async () => {
+      while (!failure && next < pending.length) { const e = pending[next++]; try { await putNew(path.join(dir, e.path), e.path); } catch (err) { failure ??= err; } }
+    }));
+    if (failure) throw failure;
+  }
   const have = listing(level <= 2 ? `${PREFIX}/root.dtts` : `${PREFIX}/${level}/`);
   const want = ledger().filter((e) => levelOf(e.path) === level);
   let bytes = 0, bad = 0;
@@ -75,7 +94,7 @@ if (arg("level")) {
   };
   const file = path.join(dir, PREFIX, "MANIFEST.json");
   fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
-  run(["s3", "cp", file, `s3://${BUCKET}/${PREFIX}/MANIFEST.json`, "--content-type", "application/json", "--only-show-errors"]);
+  await putNew(file, `${PREFIX}/MANIFEST.json`, "application/json");
   const back = JSON.parse(run(["s3", "cp", `s3://${BUCKET}/${PREFIX}/MANIFEST.json`, "-"]).toString());
   if (back.ledgerSha256 !== digest) { console.error("MANIFEST.json did not read back"); process.exit(1); }
   console.log(JSON.stringify({ files: manifest.files, bytes: manifest.bytes, levels, ledgerSha256: digest }));

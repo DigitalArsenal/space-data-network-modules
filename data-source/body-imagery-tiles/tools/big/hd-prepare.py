@@ -52,7 +52,7 @@ def read(url, etag, bounds, width, height, radius):
     w = gdal.Warp("", d, format="MEM", dstSRS=target, outputBounds=bounds,
                   width=width, height=height, resampleAlg="bilinear",
                   outputType=gdal.GDT_Float32, dstNodata=float("nan"),
-                  multithread=False, warpMemoryLimit=64)
+                  multithread=False, warpMemoryLimit=64, overviewLevel="NONE")
     return w.ReadAsArray().astype(np.float64)
 
 

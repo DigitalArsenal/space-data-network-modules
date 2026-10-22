@@ -6,7 +6,7 @@
 // --chunk N (even): the deepest level is encoded N rows at a time; each chunk is uploaded, its half as many rows of the level
 // above are reduced from it, and it is deleted (a mosaic whose deepest level is tens of GB, Venus). Every step is resumable:
 // existing files are kept, a finished chunk leaves DIR/_done/<L>_<a>-<b>.
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,11 @@ const key = arg("source"), S = SOURCES[key];
 if (!S || !arg("out") || !process.env.R2_AWS) { console.error("usage: R2_AWS=<aws command> run.mjs --source KEY --out DIR [--workers N] [--chunk N]"); process.exit(2); }
 const out = path.resolve(arg("out")), workers = arg("workers", "3"), chunk = Number(arg("chunk", 0));
 const prefix = prefixOf(S), L = S.maxLevel;
+// A whole-pyramid run is only valid in an empty destination. An additive HD
+// run uses hd-encode/hd-publish and never walks down through published levels.
+const aws = process.env.R2_AWS.split(" ").filter(Boolean);
+const existing = JSON.parse(execFileSync(aws[0], [...aws.slice(1), "s3api", "list-objects-v2", "--bucket", "spaceaware", "--prefix", `${prefix}/`, "--max-keys", "1", "--no-paginate", "--output", "json"], { encoding: "utf8" }));
+if (existing.KeyCount || existing.Contents?.length) throw new Error(`refusing full-pyramid run: ${prefix} already contains published objects; use explicit HD levels/regions`);
 const sh = (script, args) => {
   const r = spawnSync(process.execPath, [path.join(HERE, script), "--source", key, ...args], { stdio: "inherit", env: process.env });
   if (r.status !== 0) { console.error(`FAILED: ${script} ${args.join(" ")}`); process.exit(1); }
@@ -38,7 +43,7 @@ if (chunk) {
     if (fs.existsSync(done)) continue;
     log(`level ${L} rows ${a}-${b}`);
     encode(L, ["--rows", `${a}-${b}`]);
-    publish(L, ["--upload-only"]);
+    publish(L);  // each upload is verified before deleting its local chunk
     log(`level ${L - 1} rows ${a >> 1}-${b >> 1} from the chunk`);
     encode(L - 1, ["--rows", `${a >> 1}-${b >> 1}`, "--children", out]);
     drop(L);
