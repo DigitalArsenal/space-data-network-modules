@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 
 import { encodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
 
@@ -113,8 +114,9 @@ test("an imported unit is published as the walk publishes it", async (t) => {
   const files = handed.outputs.filter((o) => o.portId === "file").map((o) => Buffer.from(o.payload));
   assert.deepEqual(names(handed.outputs.find((o) => o.portId === "names").payload), named);
 
-  // 5. Byte-identical to the walk's own pack output for the unit at the encoder's clock (its tiles' RETRIEVED_AT).
-  const retrievedAt = dttOf(splitSized(files[0])[0].subarray(4)).PROVENANCE().RETRIEVED_AT();
+  // 5. Byte-identical to the walk's own pack output for the unit at the encoder's clock (its tiles' RETRIEVED_AT;
+  //    each file is the gzip of its size-prefixed record stream).
+  const retrievedAt = dttOf(splitSized(zlib.gunzipSync(files[0]))[0].subarray(4)).PROVENANCE().RETRIEVED_AT();
   const lane = await createBodyLane({ dataDir: LOLA_DIR, config: WALK });
   t.after(() => lane.destroy());
   const walk = await walkFiles(lane, UNIT, retrievedAt);
@@ -171,7 +173,7 @@ test("one import tick takes the walk's consecutive units up to 32 files", async 
       ...markFrames([irmRecord({ jobId: jobIdOf("nasa-lola-gdr", WALK.tileset_id, WALK.dataset_epoch), next: unit, provider: "nasa-lola" })])] }));
     for (const sized of splitSized(out.get("plan")[0])) {
       const tile = dttOf(sized.subarray(4));
-      const name = `terrain/301/${tile.LEVEL()}/${tile.X() >> 2}_${tile.Y() >> 2}.dtts`;
+      const name = `terrain/301/${tile.LEVEL()}/${tile.X() >> 2}_${tile.Y() >> 2}.dtts.gz`;
       if (!walkNames.includes(name)) walkNames.push(name);
     }
   }
