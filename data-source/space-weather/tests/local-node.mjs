@@ -21,7 +21,9 @@ export async function localNode(binary) {
  ingest:{enabled:false,spacetrack_enabled:false,udl_enabled:false},flows:{enabled:true,storage_path:path.join(dir,'flows'),first_fire_when_due:true,services:[],mounts:[]},update:{enabled:false}};
  await fs.mkdir(path.join(dir,'kubo'));await fs.writeFile(configPath,JSON.stringify(config,null,2));
  let child;
- const env={...process.env,HOME:dir,GOMAXPROCS:'2',GOMEMLIMIT:'1GiB'};
+ const cache=path.join(os.tmpdir(),'modules-space-weather-source-20261022-aot');
+ await fs.mkdir(cache,{recursive:true}); // Content-addressed artifacts only; no owner node data.
+ const env={...process.env,HOME:dir,XDG_CACHE_HOME:cache,GOMAXPROCS:'2',GOMEMLIMIT:'2GiB'};
  async function stop(){if(!child||child.exitCode!==null||child.signalCode!==null)return;const exited=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');let timer;await Promise.race([exited,new Promise(r=>{timer=setTimeout(r,15000);})]);clearTimeout(timer);if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}}
  async function start(){await fs.writeFile(configPath,JSON.stringify(config,null,2));const log=await fs.open(path.join(dir,'sdn.log'),'a');child=spawn(binary,['daemon','--allow-multi-daemon','--config',configPath],{cwd:dir,env,stdio:['ignore',log.fd,log.fd]});await log.close();let error;child.on('error',e=>error=e);
  const deadline=Date.now()+180000;while(Date.now()<deadline){if(error)throw error;assert(child.exitCode===null,'Node exited before ready; see '+dir+'/sdn.log');try{const r=await fetch(base+'/api/v1/ready',{signal:AbortSignal.timeout(2000)});if(r.ok){const info=await(await fetch(base+'/api/node/info')).json();assert(info.peer_id);return info;}}catch{}await new Promise(r=>setTimeout(r,500));}throw new Error('No node readiness: '+dir);}
