@@ -9,13 +9,14 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { call, invoke, json, frame, modelsFrame, outputs } from './erm-harness.mjs';
+import { call, invoke, json, frame, ermFrame, modelsFrame, outputs } from './erm-harness.mjs';
 import { encodeOmm, ommFrame, valladoOmm, kc, beyond, flatbuffers } from './products-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.dirname(require.resolve('spacedatastandards.org/package.json'));
 const E = await import(pathToFileURL(path.join(root, 'lib/js/ERM/main.js')));
 const raw = (b) => E.ERM.getSizePrefixedRootAsERM(new flatbuffers.ByteBuffer(b)).unpack();
+const frozenModel = fs.readFileSync(new URL('../data/e14-s3-kc.erm', import.meta.url));
 const seed = { ...valladoOmm(6251), norad: 6251 };
 let randomState = 0x62512020;
 const random = () => { randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0; return randomState / 2 ** 32 - 0.5; };
@@ -33,10 +34,13 @@ const elements = (sets) => ommFrame('elements', Buffer.concat(sets.map((s) => en
 const request = (ageDays, s = anchor, id = 'object') => ({ id, set: { norad: s.norad, epoch: s.epoch }, ageDays });
 const cfg = (c) => Object.fromEntries(Object.entries(c).map(([k, v]) => ['object.' + k, v]));
 async function run(sets, ages, { model = kc, config = {}, requests, extra = [] } = {}) {
-  const r = await invoke('object_covariance', [elements(sets), ...(model ? [modelsFrame(Array.isArray(model) ? model : [model])] : []),
+  const modelInputs = model instanceof Uint8Array ? [ermFrame('models', model)]
+    : model ? [modelsFrame(Array.isArray(model) ? model : [model])] : [];
+  const r = await invoke('object_covariance', [elements(sets), ...modelInputs,
     json('request', { objects: requests ?? ages.map((a) => request(a)) }), ...extra], { config: cfg(config) });
   assert.equal(r.statusCode, 0, r.errorMessage);
-  return { ...outputs(r), rawReport: raw(r.outputs.find((f) => f.portId === 'report').payload).ATTACH_REPORT };
+  return { ...outputs(r), frames: r.outputs.map((f) => ({ portId: f.portId, typeRef: f.typeRef, payload: Buffer.from(f.payload) })),
+    rawReport: raw(r.outputs.find((f) => f.portId === 'report').payload).ATTACH_REPORT };
 }
 const lower = (m) => { const a = []; for (let i = 0; i < 6; i++) for (let j = 0; j <= i; j++) a.push(m[6 * i + j]); return a; };
 const full = (a) => { const m = Array(36).fill(0); for (let i = 0, k = 0; i < 6; i++) for (let j = 0; j <= i; j++, k++) m[6 * i + j] = m[6 * j + i] = a[k]; return m; };
@@ -231,13 +235,54 @@ test('causality, duplicate stream order, object isolation and request order', as
   assert.deepEqual(ordered.covariance.objects[1].covarianceRtn, base.covariance.objects[0].covarianceRtn);
 });
 
-test('model selection, missing cells, unsupported regimes/ages and absent sets/models', async () => {
+for (const [status, sets] of [['EMPIRICAL', history], ['POPULATION', history.slice(-4)]]) {
+  test(`embedded default matches the frozen $ERM bytes for ${status}`, async () => {
+    // Same independently verified history/oracle, UTC and SI RTN/GCRF units as
+    // above. Zero tolerance: changing only model delivery must preserve every
+    // covariance/report byte, including NaNs and the frozen model's own CVR ID.
+    const explicit = await run(sets, [2], { model: frozenModel });
+    const embedded = await run(sets, [2], { model: null });
+    assert.equal(explicit.covariance.objects[0].status, status);
+    assert.deepEqual(embedded.frames.map((f) => f.portId), ['covariance', 'report']);
+    assert.deepEqual(embedded.frames, explicit.frames);
+    assert.equal(embedded.rawReport.OBJECTS[0].ROWS[0].REALISM.MODEL_ID, raw(frozenModel).MODEL.ID);
+    const want = status === 'EMPIRICAL' ? expected((await oracle()).stats, 2).covariance
+      : (await populationOracle(anchor, 2)).covarianceRtn;
+    close(embedded.covariance.objects[0].covarianceRtn, want);
+  });
+}
+
+test('supplied scaled model overrides the embedded prior for empirical and population requests', async () => {
+  // Designed factor of two, independent of this method's output. The oracle,
+  // UTC epochs, SI RTN/GCRF units and 1e-9 relative rationale are stated above.
+  // Stream selection equivalence requires zero tolerance on both output frames.
+  const alternate = { ...kc, id: 'scaled-prior', pooled: false,
+    strata: kc.strata.map((s) => ({ ...s, covariance: s.covariance.map((x) => 2 * x) })) };
+  for (const [status, sets] of [['EMPIRICAL', history], ['POPULATION', history.slice(-4)]]) {
+    const embedded = await run(sets, [2], { model: null });
+    const explicit = await run(sets, [2], { model: alternate });
+    const selected = await run(sets, [2], { model: [alternate, { ...kc, pooled: false }] });
+    assert.equal(explicit.covariance.objects[0].status, status);
+    assert.notDeepEqual(explicit.covariance.objects[0].covarianceRtn, embedded.covariance.objects[0].covarianceRtn);
+    assert.notDeepEqual(explicit.frames, embedded.frames);
+    assert.deepEqual(selected.frames, explicit.frames);
+    assert.equal(explicit.rawReport.OBJECTS[0].ROWS[0].REALISM.MODEL_ID, alternate.id);
+    const want = status === 'EMPIRICAL' ? expected((await oracle()).stats, 2, alternate).covariance
+      : (await populationOracle(anchor, 2, alternate)).covarianceRtn;
+    close(explicit.covariance.objects[0].covarianceRtn, want);
+  }
+});
+
+test('model selection, missing cells, unsupported regimes/ages and absent sets', async () => {
   const alternate = { ...kc, id: 'pooled-prior', pooled: true, strata: kc.strata.map((s) => ({ ...s, covariance: s.covariance.map((x) => 2*x) })) };
   const got = await run(history.slice(-4), [2], { model: [kc, alternate, { ...alternate, id: 'later' }] });
   assert.equal(got.covariance.calibrationVersion, '0.8.0:pooled-prior'); assert.equal(got.report.objects[0].rule, 4);
   assert.deepEqual(got.covariance.objects[0].covarianceRtn, (await populationOracle(anchor, 2, alternate)).covarianceRtn);
-  const absent = await run(history, [2], { model: null }); assert.equal(absent.covariance.objects[0].status, 'NO_MODEL');
-  assert.match(absent.rawReport.OBJECTS[0].NOTES[0].REASON, /no model/);
+  const empty = await run(history, [2], { model: Buffer.alloc(0) });
+  assert.equal(empty.covariance.objects[0].status, 'NO_MODEL', 'a supplied empty frame must not enable the default');
+  const absent = await run(history, [2], { model: { ...kc, strata: kc.strata.filter((s) => s.regimeIndex !== 0) } });
+  assert.equal(absent.covariance.objects[0].status, 'NO_MODEL');
+  assert.match(absent.rawReport.OBJECTS[0].NOTES[0].REASON, /no model cells/);
   const heo = { ...valladoOmm(9880), norad: 9880 };
   const refusals = await run([...history, beyond, heo], [], { requests: [request(8.001), request(2, beyond), request(2, heo), request(2, { ...anchor, norad: 999999 })] });
   assert.deepEqual(refusals.covariance.objects.map((o) => o.status), ['OUTSIDE', 'OUTSIDE', 'NO_MODEL', 'NO_SET']);
@@ -273,11 +318,15 @@ test('typed contract: raw CVR, wrong arms, unknown ports, bad ages and config', 
   const valid = [elements(history), modelsFrame([kc]), json('request', { objects: [request(2)] })];
   const unknown = await invoke('object_covariance', [...valid, frame('unknown', 'objects', { objects: [] })]); assert.notEqual(unknown.statusCode, 0);
   const wrong = await invoke('object_covariance', [elements(history), modelsFrame([kc]), frame('request', 'model', kc)]); assert.notEqual(wrong.statusCode, 0);
+  for (const model of [frame('models', 'objects', { objects: [] }), ermFrame('models', frozenModel.subarray(0, 12))]) {
+    const badModel = await invoke('object_covariance', [elements(history), model, json('request', { objects: [request(2)] })]);
+    assert.notEqual(badModel.statusCode, 0, 'invalid supplied models must not fall back to the embedded prior');
+  }
   for (const age of [-1, Infinity, NaN]) {
     const bad = await invoke('object_covariance', [elements(history), modelsFrame([kc]), json('request', { objects: [request(age)] })]); assert.notEqual(bad.statusCode, 0);
   }
   const badConfig = await invoke('object_covariance', valid, { config: cfg({ shrinkage: -1 }) }); assert.notEqual(badConfig.statusCode, 0);
-  assert.equal(JSON.parse(fs.readFileSync(new URL('../dist/plugin-manifest.json', import.meta.url))).version, '0.8.0');
+  assert.equal(JSON.parse(fs.readFileSync(new URL('../dist/plugin-manifest.json', import.meta.url))).version, '0.8.1');
 });
 
 test('varying cell factors: exact population fallback and independently scaled empirical bin priors', async () => {

@@ -27,10 +27,11 @@ std::string settings(Settings* s) {
 }
 // Strict size-prefixed streams, preserving frame and record order.
 template<class Read>
-std::string records(const char* port, Read read) {
+std::string records(const char* port, Read read, bool* supplied = nullptr) {
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* f = plugin_get_input_frame(i);
     if (!f || !f->port_id || std::strcmp(f->port_id, port)) continue;
+    if (supplied) *supplied = true;
     for (size_t at = 0; at < f->payload_length;) {
       const size_t remaining = f->payload_length - at;
       if (remaining < 12) return "truncated size-prefixed $ERM stream";
@@ -114,12 +115,20 @@ extern "C" int object_covariance() {
   std::string error = settings(&cfg);
   if (!error.empty()) return fail("invalid-config", error);
   Json chosen;
-  error = records("models", [&](const ERMT& e) -> std::string {
+  const auto select_model = [&](const ERMT& e) -> std::string {
     if (!e.MODEL || e.MODEL->FORM != ermModelForm::ElementSetModel) return "models requires the MODEL arm, form ElementSetModel.";
     if (chosen.is_null() || (!chosen.value("pooled", false) && e.MODEL->POOLED)) chosen = ermb::model_out(*e.MODEL);
     return {};
-  });
+  };
+  bool models_supplied = false;
+  error = records("models", select_model, &models_supplied);
   if (!error.empty()) return fail("invalid-models", error);
+  if (!models_supplied) {
+    const auto embedded = ermb::read_erm(kDefaultModelErm, kDefaultModelErmSize);
+    if (!embedded) return fail("invalid-models", ermb::last_error);
+    error = select_model(*embedded);
+    if (!error.empty()) return fail("invalid-models", error);
+  }
   sp::Model model;
   const bool has_model = !chosen.is_null();
   Options options;

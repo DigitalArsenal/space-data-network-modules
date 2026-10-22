@@ -32,7 +32,7 @@ record (size-prefixed), with the arm of the port set:
 | `fit_elements.options` (`OPTIONS`) and `.report` (`FITS`); `element_residuals.options` (`RESIDUAL_REQUESTS`) and `.residuals` (`RESIDUAL_RESULTS`) | `ELEMENT_FITS` |
 | `attach_covariance.report`, `attribute_maneuvers.report` | `ATTACH_REPORT` |
 | `attach_covariance.models` | `MODEL` records, any number |
-| `object_covariance.elements` / `.models` / `.request` / `.covariance` / `.report` | `$OMM` / `MODEL` (`ElementSetModel`) / `CALIBRATED_COVARIANCES` (`OBJECTS`) / `CALIBRATED_COVARIANCES` (`RESULTS`) / `ATTACH_REPORT` |
+| `object_covariance.elements` / `.models` (optional) / `.request` / `.covariance` / `.report` | `$OMM` / `MODEL` (`ElementSetModel`; defaults to embedded E14 S3-KC) / `CALIBRATED_COVARIANCES` (`OBJECTS`) / `CALIBRATED_COVARIANCES` (`RESULTS`) / `ATTACH_REPORT` |
 
 The products are `$OMM`, `$OCM` and `$MNV` with `$CVR` and `$PVN`, unchanged.
 The recipes of `attach_covariance` and `attribute_maneuvers` are node config
@@ -292,7 +292,7 @@ particle's noise responses equal q[[t³/3, t²/2], [t²/2, t]] exactly.
 Derives a 6×6 Cartesian covariance for each requested SGP4 object from that
 object's own OMM history, using the population error model as prior and fallback.
 The rule is `empirical-history-shrunk`. This is a deterministic pure function of
-the supplied model, configuration and history up to the set in force; calling it
+the selected model, configuration and history up to the set in force; calling it
 again when a new OMM arrives updates that object's estimate. Physics runs in C++.
 
 All ports carry size-prefixed FlatBuffers streams:
@@ -305,11 +305,16 @@ All ports carry size-prefixed FlatBuffers streams:
   so either duplicate can name the set in force. The retained set's epoch anchors
   the history window and prediction age, even if it is slightly later than the
   requested epoch. Reports still echo the requested `SET_EPOCH`.
-- `models`: `$ERM` `MODEL`, form `ElementSetModel`, such as `data/e14-s3-kc.erm`.
-  Exactly one is used: the first model with `POOLED`, otherwise the first model.
+- `models` (optional): `$ERM` `MODEL`, form `ElementSetModel`. With no frame on
+  this port, the module uses the frozen E14 S3-KC population model compiled from
+  `data/e14-s3-kc.erm` at build time. These are the same bytes as the frozen file;
+  omitting `models` and supplying that file produce bit-identical covariance and
+  report frames, including the file's own model ID in CVR `MODEL_ID`.
+  Supplied frames override the embedded default. Exactly one supplied model is
+  used: the first model with `POOLED`, otherwise the first model.
   This uses `attach_covariance`'s first-pooled preference when no source-specific
   selection is available; this request has no source ID. A selected nonpooled
-  model is labeled SourceModel, a pooled one PooledModel. No model gives NO_MODEL.
+  model is labeled SourceModel, a pooled one PooledModel.
 - `request`: `$ERM` `CALIBRATED_COVARIANCES.OBJECTS`. Each entry supplies `ID`,
   `SET_NORAD_CAT_ID`, `SET_EPOCH` (ISO UTC, the set in force), and finite
   `AGE_DAYS >= 0`, measured forward from that set. All other
@@ -324,7 +329,8 @@ All ports carry size-prefixed FlatBuffers streams:
   then the RTN matrix rotates with B = blockdiag(R, R), as in
   `calibrate_covariance`. Matrices are finite and exactly symmetric.
   Table `RULE` is `empirical-history-shrunk`; `CALIBRATION_VERSION` is
-  `0.8.0:<model ID>`.
+  `0.8.0:<model ID>` (unchanged in release 0.8.1 because the numerical rule is
+  unchanged).
 - `report`: one `$ERM` `ATTACH_REPORT`, one entry per request in the same order,
   with `OBJECT_KEY = ID`, `EPOCH = SET_EPOCH`, `THEORY = SGP4`, rule, method,
   calibration flag, one CVR row and refusal notes. Nothing is encoded in
@@ -371,8 +377,9 @@ specified above. These differ between centers when factors vary; this preserves
 both the existing fallback contract and the per-bin shrinkage formula.
 
 OUTSIDE means age outside the model's support or an uncovered regime;
-NO_MODEL means no model or no usable cells in the regime; NO_SET means the
-named usable SGP4 set is absent. The last model bin's upper edge is included
+NO_MODEL means the selected model has no usable cells in the regime (or a supplied
+model stream is empty); omitting `models` uses the embedded default. NO_SET means
+the named usable SGP4 set is absent. The last model bin's upper edge is included
 for requests, as in `age_of`; pair ages remain strictly below that edge.
 Refusals contain no covariance. SGP4 propagation failures at a requested
 prediction epoch fail the invocation explicitly.
@@ -403,16 +410,18 @@ GP/OMM object whose source carries no covariance (`covariance/derivedCovariance.
 one object per call, `request` at the object's set in force and the clock's age past
 it, `elements` the object's history from the node's `$OMM` lane over flatsql-sync
 (`NORAD_CAT_ID = n AND EPOCH BETWEEN (set in force - 31 days) AND (set in force + 1 s)`),
-`models` the file `e14-s3-kc.erm` on the node's `$PNM` lane
-`gp-error-model/element-set-error-model`. Without that file on the lane the console
-names the reason and draws nothing.
+and no `models` input. The compiled module supplies the frozen E14 S3-KC prior;
+the console needs no model file on any lane.
 
 `tests/object_covariance.test.mjs` uses a seeded 73-set synthetic Vallado LEO
 history over 30 UTC days. Its residual oracle is `common_epoch`, already checked
 against python-sgp4/pyerfa in `tests/stm-reference.json`; test arithmetic forms
 histograms, clipping, second moments, shrinkage and interpolation. `finalize`
 checks the histogram/clipping statistics, and `calibrate_covariance` checks
-population fallback and the independent GCRF rotation path.
+population fallback and the independent GCRF rotation path. Tests compare both
+output frames byte for byte between the embedded and explicit frozen model for
+EMPIRICAL and POPULATION requests, and verify that a supplied scaled model
+overrides the embedded prior.
 
 ### `fit_elements`
 

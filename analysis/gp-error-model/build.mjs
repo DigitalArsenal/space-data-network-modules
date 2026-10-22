@@ -12,6 +12,21 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 // every data, option and report port carries one SDS $ERM record (typed contracts 1.0), and the node config
 // (plugin.getConfig, sdm_piv::get_config) carries the recipes. fit_elements.cpp (SGP4 element fitting) comes last.
 const root = fileURLToPath(new URL('.', import.meta.url));
+// Embed the frozen wire record verbatim, including its size prefix. Validate
+// before generating headers or compiling so a missing/bad prior fails early.
+const defaultModelPath = path.join(root, 'data/e14-s3-kc.erm');
+const defaultModel = await fs.readFile(defaultModelPath).catch((cause) => {
+  throw new Error(`Cannot embed default population model: ${defaultModelPath}`, { cause });
+});
+if (defaultModel.length < 12 || defaultModel.readUInt32LE(0) !== defaultModel.length - 4 ||
+    !defaultModel.subarray(8, 12).equals(Buffer.from('$ERM'))) {
+  throw new Error(`Default population model must be one size-prefixed $ERM record: ${defaultModelPath}`);
+}
+const defaultModelRows = [];
+for (let at = 0; at < defaultModel.length; at += 16)
+  defaultModelRows.push('  ' + Array.from(defaultModel.subarray(at, at + 16), (b) => `0x${b.toString(16).padStart(2, '0')}`).join(', ') + ',');
+const defaultModelSource = `static const unsigned char kDefaultModelErm[] = {\n${defaultModelRows.join('\n')}\n};\n` +
+  'static const size_t kDefaultModelErmSize = sizeof(kDefaultModelErm);';
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
@@ -30,7 +45,7 @@ const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
 const bridge = await fs.readFile(path.join(root, 'src', 'erm_bridge.cpp'), 'utf8');
 const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'object_covariance.cpp', 'fit_elements.cpp']
-  .map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
+  .map(async (f) => (f === 'object_covariance.cpp' ? defaultModelSource + '\n\n' : '') + await fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');

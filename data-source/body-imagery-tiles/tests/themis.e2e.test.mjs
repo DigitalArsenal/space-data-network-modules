@@ -269,7 +269,7 @@ test("a level-8 tile is the 2 x 2 mean of its level-9 tiles; ", { timeout: 1800_
 });
 
 test("the published bucket matches the ledger and answers with CORS", { skip: process.env.THEMIS_VERIFY_R2 !== "1", timeout: 3600_000 }, async () => {
-  const ledger = fs.readFileSync(process.env.THEMIS_R2_LEDGER, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const ledger = [...new Map(fs.readFileSync(process.env.THEMIS_R2_LEDGER, "utf8").trim().split("\n").map((l) => JSON.parse(l)).map((e) => [e.path, e])).values()];
   const aws = (process.env.R2_AWS ?? "").split(" ").filter(Boolean);
   assert.ok(aws.length, "R2_AWS names the command that runs aws against the bucket");
   const listing = execFileSync(aws[0], [...aws.slice(1), "s3api", "list-objects-v2", "--bucket", "spaceaware", "--prefix", "imagery/499/", "--query", "Contents[].[Key,Size]", "--output", "json"], { maxBuffer: 1 << 28 });
