@@ -170,7 +170,7 @@ async function runAll(h, answer) {
   return { ...replay, records: recordBytes(result) };
 }
 
-function checkGroups(result) {
+function checkGroups(result, expectedProducer = producer) {
   const catalogLanes = lanes(result);
   const frames = outs(result, "catalogs_records");
   assert.equal(frames.length, 1);
@@ -199,11 +199,11 @@ function checkGroups(result) {
     assert.equal(group.PROVENANCE[0].LICENSE, licence);
     assert.equal(group.PROVENANCE[0].ATTRIBUTION, credit);
   }
-  checkMetas(result, Date.parse(groups[0]?.UPDATED_AT ?? new Date(firedMs).toISOString()));
+  checkMetas(result, Date.parse(groups[0]?.UPDATED_AT ?? new Date(firedMs).toISOString()), expectedProducer);
   return groups;
 }
 
-function checkMetas(result, expectedMs = firedMs) {
+function checkMetas(result, expectedMs = firedMs, expectedProducer = producer) {
   const entries = recordEntries(result), expectedPorts = [], sourceUrl = "https://ssd.jpl.nasa.gov/api/horizons.api";
   for (const id of [...catalogIds, "catalogs"]) {
     const prefix = id.replaceAll("-", "_"), records = outs(result, `${prefix}_records`), metas = outs(result, `${prefix}_meta`);
@@ -218,7 +218,7 @@ function checkMetas(result, expectedMs = firedMs) {
     assert.equal(meta.schema, schema);
     assert.equal(meta.reconcile, "current");
     for (const [key, value] of Object.entries({ providerId: "deep-space-spacecraft", sourceName: id,
-      batchId: sha + (id === "catalogs" ? `@${expectedMs}` : ""), sourceUrl, sourcePeer: producer,
+      batchId: sha + (id === "catalogs" ? `@${expectedMs}` : ""), sourceUrl, sourcePeer: expectedProducer,
       license: "LicenseRef-NASA-JPL-Horizons-PD", citation: credit })) assert.equal(meta.tags[key], value, `${id}.${key}`);
     const p = meta.provenance;
     for (const [key, value] of Object.entries({ sourceUrl, httpStatus: 200, retrievedMs: expectedMs,
@@ -447,9 +447,8 @@ test("Horizons stages build deterministic Sun-centered OEMs and evaluate indepen
   assert.equal(outs(first.result, "meta").length, 0);
   assert.deepEqual([...new Set(lanes(first.result).map((c) => c.catalog))], ["heliocentric"]);
   checkGroups(first.result);
-  // The cassette/reference contain only Roadster and Voyagers, with no JWST,
-  // Earth vectors or geocentric distances. A recorded JWST geometry check is
-  // unavailable; below we check partition/row consistency and synthetic rules.
+  // This numerical cassette/reference contains only Roadster and Voyagers;
+  // the separate recorded regime cassette below covers JWST and body windows.
   for (const [label, sample] of Object.entries(activeReference)) {
     assert.equal(sample.epochs_jd_tdb.length, 20);
     const craft = byId.get(sample.naif_id);
@@ -599,7 +598,7 @@ const syntheticTargetNames = new Map([
   [-23, ["Pioneer 10"]], [-24, ["Pioneer 11"]], [-98, ["New Horizons"]],
   [-96, ["Parker Solar Probe"]], [-170, ["James Webb Space Telescope"]], [-61, ["Juno"]],
   [-159, ["Europa Clipper"]], [-49, ["Lucy"]], [-255, ["Psyche"]], [-64, ["OSIRIS-REx"]],
-  [-21, ["SOHO"]], [-92, ["Advanced Composition Explorer"]],
+  [-21, ["SOHO"]], [-92, ["ACE (spacecraft)", "Advanced Composition Explorer"]],
   [-78, ["Deep Space Climate Observatory", "DSCOVR"]], [-8, ["Wind"]], [-139479, ["Gaia"]],
   [-680, ["Euclid"]], [-121, ["BepiColombo", "Mercury Planetary Orbiter"]],
   [-85, ["Lunar Reconnaissance Orbiter", "LRO"]], [-1176, ["CAPSTONE"]],
@@ -607,10 +606,10 @@ const syntheticTargetNames = new Map([
   [-12, ["LADEE", "Lunar Atmosphere and Dust Environment Explorer"]],
   [-177, ["GRAIL-A", "GRAIL A", "Ebb"]], [-181, ["GRAIL-B", "GRAIL B", "Flow"]],
   [-95, ["Transiting Exoplanet Survey Satellite", "TESS"]],
-  [-1023, ["Artemis I", "Orion"]], [-1024, ["Artemis II", "Orion"]],
+  [-1023, ["Artemis 1", "Orion"]], [-1024, ["Artemis II", "Orion"]],
   [-74, ["Mars Reconnaissance Orbiter", "MRO"]], [-202, ["MAVEN"]], [-53, ["2001 Mars Odyssey"]],
   [-41, ["Mars Express"]], [-143, ["Trace Gas Orbiter", "TGO", "ExoMars"]],
-  [-5, ["Akatsuki", "Venus Climate Orbiter"]], [-248, ["Venus Express"]],
+  [-5, ["Planet-C", "Akatsuki", "Venus Climate Orbiter"]], [-248, ["Venus Express"]],
   [-236, ["MESSENGER"]], [-82, ["Cassini"]],
 ]);
 function vectorAnswer(fixture, alternative = 0) {
@@ -625,6 +624,107 @@ function vectorAnswer(fixture, alternative = 0) {
 }
 const decodedRecords = (result) => recordBytes(result).map((bytes) => ({ bytes,
   blocks: OEM.getSizePrefixedRootAsOEM(new ByteBuffer(bytes)).unpack().EPHEMERIS_DATA_BLOCK }));
+
+test("recorded live regimes preserve mission membership, centers and evaluable blocks", { timeout: 60000 }, async (t) => {
+  const started = performance.now();
+  const recorded = JSON.parse(gunzipSync(fs.readFileSync(path.join(fixtureRoot, "regime-cassette.json.gz"))));
+  assert.equal(recorded.firedMs, Date.UTC(2026, 9, 21, 12, 34, 56));
+  // This live-drive config already contains the host's typed limits TableList.
+  const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: "direct",
+    hostOptions: { config: recorded.config } });
+  t.after(() => h.destroy());
+  const { result, requestsSeen, snapshots } = await replayStages(h, {
+    planRequest: { methodId: "plan_horizons", inputs: [tick(recorded.firedMs)] },
+    answer: ({ url }) => {
+      assert.ok(Object.hasOwn(recorded.responses, url), `unrecorded regime request: ${url}`);
+      return recorded.responses[url]; // Exact URL lookup; no normalization or network fallback.
+    },
+    checkResult: ok, checkRequest: requestShape,
+  });
+  assert.deepEqual(snapshots.map((s) => s.methodId), [...Array(6).fill("advance"), "build_oem"]);
+  const urls = requestsSeen.map((r) => r.url);
+  assert.equal(urls.length, 27);
+  assert.equal(new Set(urls).size, urls.length, "no duplicate requests");
+  assert.deepEqual([...urls].sort(), Object.keys(recorded.responses).sort(), "every recorded URL is requested exactly once");
+  assert.deepEqual(missing(result), [{ naif_id: -92, skipped: "empty-trajectory-range" }]);
+  // ACE's 1998 limits precede the recorded 2006 coverage start: only two
+  // coverage probes may be sent, and no ACE vector request or OEM may survive.
+  const aceRequests = requestsSeen.filter((r) => params(r.url).COMMAND === "-92");
+  assert.deepEqual(aceRequests.map((r) => params(r.url).START_TIME), ["1900-01-01 00:00:00", "2300-01-01 00:00:00"]);
+  assert.match(recorded.responses[aceRequests[0].url], /prior to A.D. 2006-JUL-02/);
+
+  // Independent expectations: NASA mission descriptions place Webb at Sun-Earth
+  // L2, SOHO at L1, LRO around the Moon, CAPSTONE in a lunar near-rectilinear
+  // halo orbit, MRO around Mars, and Juno around Jupiter. Artemis I's December
+  // 2022 return is cislunar and the mission ended on December 11. Juno's
+  // Sun-centered archive represents the same -61 identity as its Jovian window.
+  // CAPSTONE's ended flag follows the cassette's 2026-Aug-14 coverage end before
+  // FIRED, not a claim of mission termination. These facts are not OEM goldens.
+  const missions = [
+    { id: -170, catalogs: ["sun-earth-l2"] },
+    { id: -21, catalogs: ["sun-earth-l1"] },
+    { id: -85, catalogs: ["lunar-orbit"] },
+    { id: -1176, catalogs: ["earth-moon-lagrange"], lifecycle: "ended" },
+    { id: -74, catalogs: ["mars-orbit"] },
+    { id: -1023, catalogs: ["cislunar"], lifecycle: "ended" },
+    { id: -61, catalogs: ["heliocentric", "jupiter-orbit"] },
+  ];
+  assert.deepEqual([...recorded.config.objects].sort((a, b) => a - b),
+    [-92, ...missions.map((m) => m.id)].sort((a, b) => a - b));
+  const entries = recordEntries(result);
+  assert.equal(entries.length, 8, "seven identities, with Juno alone in two catalogs");
+  assert.deepEqual([...new Set(entries.map((r) => r.naif_id))].sort((a, b) => a - b),
+    missions.map((m) => m.id).sort((a, b) => a - b));
+  for (const mission of missions) {
+    const records = entries.filter((r) => r.naif_id === mission.id);
+    assert.deepEqual(records.map((r) => r.catalog).sort(), [...mission.catalogs].sort(), `exclusive membership for ${mission.id}`);
+    if (mission.lifecycle) for (const r of records) assert.equal(r.lifecycle, mission.lifecycle);
+  }
+  const groups = checkGroups(result, recorded.config.producer_peer_id);
+  const expectedCatalogs = catalogIds.filter((id) => missions.some((m) => m.catalogs.includes(id)));
+  assert.deepEqual(groups.map((g) => g.GROUP_ID), expectedCatalogs.map((id) => `deep-space-spacecraft/${id}`),
+    "exactly one EGP for each populated catalog and none for empty catalogs");
+  // Reference centers are fixed by the recorded requests, independent of the
+  // classification output. Membership must never relabel the coordinates.
+  const centers = new Map([
+    ["lunar-orbit", ["MOON", 301]], ["earth-moon-lagrange", ["MOON", 301]],
+    ["cislunar", ["EARTH", 399]], ["mars-orbit", ["MARS", 499]],
+    ["jupiter-orbit", ["JUPITER", 599]], ["heliocentric", ["SUN", 10]],
+    ["sun-earth-l1", ["SUN", 10]], ["sun-earth-l2", ["SUN", 10]],
+  ]);
+  let blockCount = 0;
+  for (const entry of entries) {
+    const blocks = OEM.getSizePrefixedRootAsOEM(new ByteBuffer(entry.bytes)).unpack().EPHEMERIS_DATA_BLOCK;
+    assert.ok(blocks.length > 0);
+    const epochs = blocks.map((block) => {
+      assert.equal(block.OBJECT_NAIF_ID, entry.naif_id);
+      assert.deepEqual([block.CENTER_NAME, block.CENTER_NAIF_ID], centers.get(entry.catalog));
+      assert.equal(block.TIME_SYSTEM, timingStandard.TDB);
+      assert.equal(block.REFERENCE_FRAME.REFERENCE_FRAME_type, RFMUnion.CelestialFrameWrapper);
+      assert.equal(block.REFERENCE_FRAME.REFERENCE_FRAME.frame, CelestialFrame.ICRF);
+      if (entry.naif_id === -1176 || entry.naif_id === -1023) assert.match(block.COMMENT, /LIFECYCLE: ended /);
+      // TDB calendar arithmetic only: choose a strict interior midpoint, then
+      // express that same TDB instant as JD (Unix calendar anchor 2440587.5).
+      // This tests evaluability/finite km and km/s, not numerical accuracy;
+      // the separate TLIST test supplies independent position tolerances.
+      const start = Date.parse(block.START_TIME + "Z"), stop = Date.parse(block.STOP_TIME + "Z");
+      const middle = start + (stop - start) / 2;
+      assert.ok(start < middle && middle < stop, "nonempty block has an interior epoch");
+      return middle / 86400000 + 2440587.5;
+    });
+    const evaluated = await h.invoke({ methodId: "evaluate_oem", inputs: [input("oem", entry.bytes), input("epochs", { jd_tdb: epochs })] });
+    ok(evaluated, `evaluate ${entry.naif_id}/${entry.catalog}`);
+    const states = J(outs(evaluated, "states")[0]);
+    assert.equal(states.length, blocks.length);
+    for (const [i, state] of states.entries()) {
+      assert.equal(state.jd_tdb, epochs[i]);
+      assert.equal(state.block, i, "each block is evaluated in its own interior");
+      for (const component of ["x", "y", "z", "vx", "vy", "vz"]) assert.ok(Number.isFinite(state[component]), component);
+    }
+    blockCount += blocks.length;
+  }
+  t.diagnostic(`27 recorded requests, 7 identities, 8 catalogs, ${blockCount} evaluated blocks in ${((performance.now() - started) / 1000).toFixed(2)}s`);
+});
 
 test("browser and WasmEdge produce byte-identical frames", async (t) => {
   const started = performance.now(), recordedPlan = planOptions(cassette.config);
@@ -828,10 +928,19 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
           assert.ok(offset >= 0 && offset % 48 === 0, `${c.name}: all output row bits are preserved`);
         }
       }
+      if (c.expected_spans) {
+        // These exact TDB day spans come from the input geometry/durations.
+        // Sorting just puts catalog-ordered records back in chronological order.
+        const epoch = Date.UTC(2000, 0, 1, 12);
+        const spans = records.flatMap((r, i) => r.blocks.map((b) => [catalogLanes[i].catalog,
+          (Date.parse(b.START_TIME + "Z") - epoch) / 86400000,
+          (Date.parse(b.STOP_TIME + "Z") - epoch) / 86400000])).sort((a, b) => a[1] - b[1]);
+        assert.deepEqual(spans, c.expected_spans, `${c.name}: exact run boundaries and merge direction`);
+      }
       if (c.name === "Three shared-edge segments") {
         const blocks = records.flatMap((r) => r.blocks).sort((a,b) => a.START_TIME.localeCompare(b.START_TIME));
         assert.equal(blocks[0].START_TIME, "2000-01-01T12:00:00");
-        assert.equal(blocks.at(-1).STOP_TIME, "2000-01-16T12:00:00");
+        assert.equal(blocks.at(-1).STOP_TIME, "2000-04-15T12:00:00");
         assert.equal(blocks.length, 3);
         for (let i = 1; i < blocks.length; i++) {
           assert.equal(blocks[i-1].STOP_TIME, blocks[i].START_TIME);
@@ -881,7 +990,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
     });
     ok(pages, "alternate-name pages");
     let baseline;
-    for (let alternative = 0; alternative < 3; alternative++) {
+    for (let alternative = 0; alternative < Math.max(...objects.map((id) => syntheticTargetNames.get(id).length)); alternative++) {
       const built = await advanceWith(h, pages, vectorAnswer(fixture, alternative), "build_oem");
       ok(built, `alternate name ${alternative}`);
       assert.deepEqual(missing(built), []);
@@ -964,8 +1073,8 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
     }
   });
   await t.test("20-object run contains probe/vector failures and preserves every surviving record", async () => {
-    const table = J(outs(await plan({ now_tdb: "2026-10-21T00:00:00" }), "state")[0]).craft.map((c) => ({ naif_id: c.id }));
-    const objects = table.slice(0, 20).map((c) => c.naif_id), badVector = -61, badProbe = -121;
+    const table = [...syntheticTargetNames.keys()]; // Independent identities, not the module's plan output.
+    const objects = table.slice(0, 20), badVector = -61, badProbe = -121;
     const run = async (selection, injectFailures) => {
       let result = await plan({
         objects: selection, now_tdb: "2026-10-21T00:00:00", page_rows: 50,
@@ -1030,10 +1139,10 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
     assert.deepEqual(outs(contained, "catalogs_records"), outs(baseline, "catalogs_records"));
   });
   await t.test("20-object vectors, split probe queues, six advances and compact full-table state", async () => {
-    const table = J(outs(await plan({ now_tdb: "2026-10-21T00:00:00" }), "state")[0]).craft.map((c) => ({ naif_id: c.id }));
+    const table = [...syntheticTargetNames.keys()]; // Independent identities, not the module's plan output.
     for (const full of [false, true]) {
       const config = full ? { now_tdb: "2026-10-21T00:00:00" } :
-        { objects: table.slice(0, 20).map((c) => c.naif_id), now_tdb: "2026-10-21T00:00:00", page_rows: 100 };
+        { objects: table.slice(0, 20), now_tdb: "2026-10-21T00:00:00", page_rows: 100 };
       let result = await plan(config);
       ok(result, "staged plan");
       let maximum = 0, probeBatches = 0, vectorRequests = 0;
@@ -1064,7 +1173,9 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       const completedState = outs(result, "state")[0];
       const built = await advanceWith(h, result, answer, "build_oem");
       ok(built, "six-stage build");
-      assert.equal(new Set(lanes(built).map((c) => c.naif_id)).size, full ? 39 : 20);
+      assert.deepEqual(missing(built), [], "every independently named target must survive");
+      assert.deepEqual([...new Set(lanes(built).map((c) => c.naif_id))].sort((a, b) => a - b),
+        (full ? [...table] : table.slice(0, 20)).sort((a, b) => a - b));
       checkGroups(built);
       namedFailure(await h.invoke({ methodId: "advance", inputs: [input("state", completedState)] }), /invalid-stage/);
       t.diagnostic(`${full ? 39 : 20} synthetic craft: ${vectorRequests} vector requests, largest state ${maximum} bytes`);

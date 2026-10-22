@@ -1,8 +1,11 @@
 // Offline, independent geometry fixtures. No production classifier is included.
 // Sun cases: Meeus ch. 25 low-precision solar longitude/radius (km, ICRF,
 // J2000 TDB), independent of the production Standish EMB orbit. Threshold
-// margins are >= 100,000 km except the Earth exclusion, whose 60,000 km
-// margin exceeds the solar approximation error at J2000 (~10,000 km).
+// radial margins are >= 100,000 km except Earth exclusion (60,000 km).
+// The 44/46 degree cone cases at 1,500,000 km have a 1-degree (~26,000 km)
+// transverse margin, exceeding the solar approximation error near J2000
+// (~10,000 km). Catalogs and run endpoints are exact discrete expectations;
+// daily times below are elapsed TDB days from J2000 noon, with zero tolerance.
 // Moon point: Meeus example 47.a, 1992-04-12 00:00 dynamical time:
 // lambda=133.162655 deg, beta=-3.229126 deg, distance=368409.7 km.
 // TT/TDB differences are immaterial at the 60,000 km classification radius.
@@ -79,24 +82,52 @@ Json cases() {
     body("Planet strict boundary",ids[i],centers[i],{{boundary,0,0},{boundary,0,0}},"heliocentric");
     body("Planet median ignores outlier",ids[i],centers[i],{{1000,0,0},{boundary*2,0,0},{1000,0,0}},names[i]);
   }
-  const auto sun = [&](const char* name, const std::vector<std::string>& kinds, const std::vector<std::string>& expected) {
+  // Closed-form offsets: +/-1.5 million km along the Earth-Sun axis are
+  // L2/L1; a +200,000 km ICRF z offset is cislunar; +5 million km
+  // is heliocentric. Expected spans follow elapsed durations, never output.
+  const auto sun = [&](const char* name, const std::vector<std::string>& kinds,
+                       const std::vector<std::string>& expected, const Json& spans) {
     std::vector<Vec> rows;
     for (size_t i=0; i<kinds.size(); ++i) rows.push_back(sunPosition(int64_t(i)*86400,kinds[i]));
-    out.push_back({{"name",name},{"expected",expected},{"state",state(Json::array({group(0,86400,10,rows,"daily")}),-170,1)}});
+    out.push_back({{"name",name},{"expected",expected},{"expected_spans",spans},
+        {"state",state(Json::array({group(0,86400,10,rows,"daily")}),-170,1)}});
+  };
+  const auto sequence = [](std::initializer_list<std::pair<int,const char*>> runs) {
+    std::vector<std::string> rows;
+    for (const auto& run : runs) rows.insert(rows.end(),run.first,run.second);
+    return rows;
   };
   for (const char* kind : {"dropped","cislunar","sun-earth-l1","sun-earth-l2","heliocentric"})
-    sun(kind,std::vector<std::string>(8,kind),{kind});
-  std::vector<std::string> transfer(5,"cislunar");
-  transfer.insert(transfer.end(),5,"sun-earth-l1"); transfer.insert(transfer.end(),6,"sun-earth-l2");
-  sun("Three shared-edge segments",transfer,{"cislunar","sun-earth-l1","sun-earth-l2"});
-  std::vector<std::string> shortFirst(2,"cislunar"); shortFirst.insert(shortFirst.end(),6,"sun-earth-l2");
-  sun("Short initial run merges forward",shortFirst,{"sun-earth-l2"});
-  std::vector<std::string> middle(5,"heliocentric"); middle.insert(middle.end(),2,"sun-earth-l1"); middle.insert(middle.end(),6,"sun-earth-l2");
-  sun("Short middle run merges backward",middle,{"sun-earth-l2","heliocentric"});
-  std::vector<std::string> tail(5,"heliocentric"); tail.insert(tail.end(),2,"cislunar");
-  sun("Short final run merges backward",tail,{"heliocentric"});
-  std::vector<std::string> exactlyThree(3,"cislunar"); exactlyThree.insert(exactlyThree.end(),6,"sun-earth-l2");
-  sun("Three-day run survives",exactlyThree,{"cislunar","sun-earth-l2"});
+    sun(kind,std::vector<std::string>(41,kind),{kind},
+        std::string(kind)=="dropped" ? Json::array() : Json::array({{kind,0,40}}));
+  // A run ends at the next run's first row; a final run ends at its last row.
+  sun("Three shared-edge segments",sequence({{25,"cislunar"},{40,"sun-earth-l1"},{41,"sun-earth-l2"}}),
+      {"cislunar","sun-earth-l1","sun-earth-l2"},
+      {{"cislunar",0,25},{"sun-earth-l1",25,65},{"sun-earth-l2",65,105}});
+  for (int days : {2,15,19,20}) {
+    const bool folds = days < 20;
+    sun((std::to_string(days)+"-day launch leg").c_str(),sequence({{days,"cislunar"},{41,"sun-earth-l2"}}),
+        folds ? std::vector<std::string>{"sun-earth-l2"} : std::vector<std::string>{"cislunar","sun-earth-l2"},
+        folds ? Json::array({{"sun-earth-l2",0,days+40}}) : Json::array({{"cislunar",0,days},{"sun-earth-l2",days,days+40}}));
+  }
+  sun("Short middle run merges backward",sequence({{25,"heliocentric"},{2,"cislunar"},{41,"sun-earth-l2"}}),
+      {"sun-earth-l2","heliocentric"},{{"heliocentric",0,27},{"sun-earth-l2",27,67}});
+  sun("Short final run merges backward",sequence({{25,"heliocentric"},{3,"cislunar"}}),
+      {"heliocentric"},{{"heliocentric",0,27}});
+  sun("Three-day middle run survives",sequence({{25,"heliocentric"},{3,"cislunar"},{41,"sun-earth-l2"}}),
+      {"cislunar","sun-earth-l2","heliocentric"},{{"heliocentric",0,25},{"cislunar",25,28},{"sun-earth-l2",28,68}});
+  sun("Three-day final run survives",sequence({{25,"heliocentric"},{4,"cislunar"}}),
+      {"cislunar","heliocentric"},{{"heliocentric",0,25},{"cislunar",25,28}});
+  // Bound both cones by long heliocentric legs: a short pass cannot survive
+  // simply because it is the only run. 29/30 days pin the exact dwell threshold.
+  for (const char* cone : {"sun-earth-l1","sun-earth-l2"}) for (int days : {5,29,30,40}) {
+    const bool survives = days >= 30;
+    sun((std::to_string(days)+"-day dwell in "+cone).c_str(),
+        sequence({{25,"heliocentric"},{days,cone},{31,"heliocentric"}}),
+        survives ? std::vector<std::string>{cone,"heliocentric"} : std::vector<std::string>{"heliocentric"},
+        survives ? Json::array({{"heliocentric",0,25},{cone,25,25+days},{"heliocentric",25+days,55+days}})
+                 : Json::array({{"heliocentric",0,55+days}}));
+  }
   // An independently published lunar point also exercises the Sun-centered EM rule.
   std::vector<Vec> sunLunar;
   for (int64_t time : {int64_t(moonEpoch),int64_t(moonEpoch)+600}) {
@@ -106,21 +137,24 @@ Json cases() {
   }
   out.push_back({{"name","Sun window at published lunar L1"},{"expected",Json::array({"earth-moon-lagrange"})},
       {"state",state(Json::array({group(int64_t(moonEpoch),600,10,sunLunar)}),-170)}});
-  for (const double angle : {20.0,40.0}) {
+  for (const int direction : {-1,1}) for (const double angle : {44.0,46.0}) {
     std::vector<Vec> rows;
-    for (int i=0;i<8;++i) {
+    for (int i=0;i<=40;++i) {
       auto p=earth(i*86400); const double r=std::sqrt(p[0]*p[0]+p[1]*p[1]+p[2]*p[2]);
       const double xy=std::hypot(p[0],p[1]);
       const Vec perpendicular={-p[1]/xy,p[0]/xy,0};
-      for (size_t j=0;j<3;++j) p[j]+=1500000*(std::cos(angle*rad)*p[j]/r+std::sin(angle*rad)*perpendicular[j]);
+      // Orthonormal basis: |delta|=1,500,000 km and axis cosine=+/-cos(angle).
+      for (size_t j=0;j<3;++j) p[j]+=1500000*(direction*std::cos(angle*rad)*p[j]/r+std::sin(angle*rad)*perpendicular[j]);
       rows.push_back(p);
     }
-    out.push_back({{"name","Solar angle cone"},{"expected",Json::array({angle<30 ? "sun-earth-l2" : "heliocentric"})},
+    const char* expected = angle<45 ? (direction<0 ? "sun-earth-l1" : "sun-earth-l2") : "heliocentric";
+    out.push_back({{"name",std::to_string(int(angle))+" degree "+(direction<0 ? "sunward" : "outward")+" cone"},
+        {"expected",Json::array({expected})},{"expected_spans",{{expected,0,40}}},
         {"state",state(Json::array({group(0,86400,10,rows,"daily")}),-170,1)}});
   }
   for (const double distance : {2400000.0,2600000.0}) {
     std::vector<Vec> rows;
-    for (int i=0;i<8;++i) {
+    for (int i=0;i<=40;++i) {
       auto p=earth(i*86400); const double r=std::sqrt(p[0]*p[0]+p[1]*p[1]+p[2]*p[2]);
       for (double& v:p) v*=1+distance/r;
       rows.push_back(p);
@@ -130,16 +164,17 @@ Json cases() {
   }
   std::vector<Vec> daily,dense;
   const auto mixedPosition = [&](int64_t time) {
-    return sunPosition(time,time<5*86400 ? "cislunar" : time<10*86400 ? "sun-earth-l2" : "heliocentric");
+    return sunPosition(time,time<25*86400 ? "cislunar" : time<65*86400 ? "sun-earth-l2" : "heliocentric");
   };
-  for (int i=0;i<=12;++i) daily.push_back(mixedPosition(i*86400));
-  for (int64_t time=2*86400;time<=8*86400;time+=600) dense.push_back(mixedPosition(time));
+  for (int i=0;i<=67;++i) daily.push_back(mixedPosition(i*86400));
+  for (int64_t time=22*86400;time<=28*86400;time+=600) dense.push_back(mixedPosition(time));
   auto sparse=group(0,86400,10,daily,"daily"); std::string kept;
-  for (size_t i=0;i<daily.size();++i) if (i<=2 || i>=8)
+  for (size_t i=0;i<daily.size();++i) if (i<=22 || i>=28)
     packed_rows::append(kept,{daily[i][0],daily[i][1],daily[i][2],0,0,0});
   sparse["data"]=kept;
   out.push_back({{"name","Mixed daily and ten-minute rows"},{"expected",Json::array({"cislunar","sun-earth-l2"})},
-      {"state",state(Json::array({sparse,group(2*86400,600,10,dense,"encounter")}),-170,2)}});
+      {"expected_spans",{{"cislunar",0,22},{"cislunar",22,25},{"sun-earth-l2",25,28},{"sun-earth-l2",28,67}}},
+      {"state",state(Json::array({sparse,group(22*86400,600,10,dense,"encounter")}),-170,2)}});
   // One identity, two reference centers and two catalogs.
   std::vector<Vec> archive;
   for (int i=0;i<8;++i) archive.push_back(sunPosition(i*86400,"heliocentric"));

@@ -15,7 +15,7 @@ connector moves request/response bytes. The module has no network imports.
 | `lunar-orbit` | Moon window maximum radius <= 30,000 km | 24 h |
 | `cislunar` | Sun rows within 500,000 km of Earth after exclusions; remaining Earth/Moon windows | 24 h |
 | `earth-moon-lagrange` | Within 60,000 km of EM L1/L2; Moon window maximum <= 120,000 km after lunar-orbit | 24 h |
-| `sun-earth-l1` | Earth distance 500,000–2,500,000 km, sunward within 30 degrees of Sun-Earth line | 168 h |
+| `sun-earth-l1` | Earth distance 500,000–2,500,000 km, sunward within 45 degrees of Sun-Earth line | 168 h |
 | `sun-earth-l2` | Same distance/cone, outward beyond Earth | 168 h |
 | `mercury-orbit` | Mercury window median radius < 100 Mercury radii | 24 h |
 | `venus-orbit` | Venus window median radius < 100 Venus radii | 24 h |
@@ -32,7 +32,9 @@ Planet mean radii in km: Mercury **2439.7**, Venus **6051.8**, Mars **3389.5**,
 Jupiter **69911**, Saturn **58232**. Non-Sun windows are classified as a whole.
 
 Sun classification uses the rows actually present across daily and dense blocks.
-Runs shorter than **3 days** merge backward, or forward when first. Splits share
+Runs shorter than **3 days** merge backward, or forward when first; Sun-Earth
+L1/L2 runs need **30 days** (station-keeping, not an Earth-assist flyby crossing
+the cone) and the launch leg (first run) **20 days**. Splits share
 the first row of the new run; pieces with fewer than two rows are dropped.
 Row values, labels, steps and Hermite degree 7 remain intact. Excluded Earth
 segments can leave gaps. Membership never changes the row's reference center.
@@ -165,13 +167,45 @@ PATH="$HOME/.wasmedge/bin:$PATH" HORIZONS_RECORD=0 node --test tests/*.e2e.test.
 ```
 
 The standalone offline E2E validates the SDK artifact and explicitly probes the
-original 13 identities. The existing cassette contains **three** craft (Roadster,
-Voyager 1/2), **29** requests and **60** independent Horizons TLIST reference
+original 13 identities. The original `tests/fixtures/horizons/cassette.json.gz`
+contains **three** craft (Roadster, Voyager 1/2), **29** requests and **60** independent Horizons TLIST reference
 epochs, in Sun-centered ICRF km/km/s and JD TDB. Position tolerance is 1 km for
 source rounding/interpolation; observed errors remain meter scale. The cassette
-has no JWST/Juno vectors, Earth positions or geocentric distances: a recorded
-13-craft/JWST geometry replay awaits additional recordings. The cassette is
+has no JWST/Juno vectors, Earth positions or geocentric distances and remains
 unchanged. Its optional `HORIZONS_RECORD=1` refresh mode requires network access.
+
+`tests/fixtures/horizons/regime-cassette.json.gz` is a separate **27-request**
+recording made on **2026-10-21** by a live drive of the compiled module against
+`https://ssd.jpl.nasa.gov/api/horizons.api`, with the TimerTick **FIRED
+2026-10-21T12:34:56Z** (`firedMs: 1792586096000`). The live drive answered the
+module's requests through `plan_horizons` → six `advance` calls → `build_oem`
+and saved `{firedMs, config, responses}` with each exact URL mapped to its full
+Horizons response text. It selected eight objects and applied these per-craft
+`limits` (TDB calendar timestamps, all at `00:00:00`):
+
+| Craft | NAIF id | Start | Stop |
+| --- | --- | --- | --- |
+| JWST | -170 | 2021-12-28 | 2022-03-01 |
+| SOHO | -21 | 1996-01-15 | 1996-09-01 |
+| ACE | -92 | 1998-01-01 | 1998-06-01 |
+| LRO | -85 | 2026-10-19 | 2026-10-26 |
+| CAPSTONE | -1176 | 2026-08-07 | 2026-08-14 |
+| MRO | -74 | 2026-10-19 | 2026-10-26 |
+| Juno | -61 | 2026-10-19 | 2026-10-26 |
+| Artemis I | -1023 | 2022-12-04 | 2022-12-11 |
+
+The recorded-regime test reuses `tests/horizons-stages.mjs` and the stored config
+and tick without network access or a fetch fallback; all 27 URLs must match
+exactly once. Independent mission expectations require JWST only at Sun-Earth
+L2, SOHO only at L1, LRO in lunar orbit, CAPSTONE in Earth-Moon Lagrange,
+MRO in Mars orbit, Artemis I in cislunar, and the same Juno identity (-61) in both
+heliocentric and Jupiter-orbit catalogs. ACE's limits precede its recorded
+2006 coverage start, so it must skip with `empty-trajectory-range`. Artemis I
+has ended; CAPSTONE is marked ended because its recorded coverage ends before
+FIRED (this does not assert that the mission terminated). The test checks exactly
+one EGP per non-empty catalog, the recorded reference centers (including
+CAPSTONE MOON/301 and Artemis I EARTH/399), and `evaluate_oem` at an interior
+TDB epoch in every block. It has a 60-second timeout.
 
 `tests/composed-flow.e2e.test.mjs` checks the deployment wiring offline. It calls
 `deepSpaceFlow` with the deployment builder's node/typed-edge helpers and dependency
@@ -206,7 +240,9 @@ invocations per lane and their durations; missing WasmEdge explicitly skips this
 named test. The parity replay always uses local responses, including in record mode.
 
 Independent C++ synthetic fixtures additionally test body thresholds, a published
-Meeus lunar point, solar geometry from a separate Meeus approximation, smoothing,
+Meeus lunar point, solar geometry from a separate Meeus approximation, 44/46-degree
+cone edges, 5/29-day passes versus 30/40-day dwells, 15/19-day launch legs versus
+the 20-day boundary, three-day interior/final smoothing, exact run boundaries,
 shared edges, exact row preservation, Juno's two centers, EGP tags/queries,
 lifecycle, tick timestamps, coverage clamps, skipped probes and early builds.
 It also verifies typed ports, disabled/missing-producer behavior, every ingest
