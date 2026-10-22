@@ -191,23 +191,33 @@ inline const sdss::Bands hii_bands=[] {
 } // namespace milky_way::colors
 
 // THE DISPLAY (a DISPLAY CHOICE, not a measurement: it changes no band's
-// light). The r, g and i light is drawn as SDSS g-r-i composites are made,
-// Lupton, Blanton, Fekete et al. (2004), PASP 116, 133, section 2: with
-// I = (i + r + g) / 3 in AB fluxes, each band x is drawn as x F(I) / I,
-// F(I) = asinh(alpha Q I) / Q, i red, r green, g blue, and a pixel whose
-// largest primary passes 1 scaled back to 1 (its color kept). Their SDSS
-// composite (Fig. 1 caption) takes Q = 8 and alpha = 0.02 per count. One
-// SDSS count is NMGY nanomaggies (the frame header's calibration factor; the
-// r frames of the six Milky Way analogs this model is compared with, DR17
-// runs 1045, 3631, 3650, 3813, 5194 and 8062, give 0.00476 to 0.00531, median
-// 0.00502), on a pixel of 0.396 arcsec. alpha per band unit is then
-// 0.02 / 0.00502 x 0.396^2 nanomaggies arcsec^-2 times the unit's
-// 10^(-0.4 (mu - 22.5)) nanomaggies arcsec^-2.
+// light). The r, g and i light is drawn as the SDSS ImgCutout service draws
+// its g-r-i JPEGs: the stretch of Lupton, Blanton, Fekete et al. (2004), PASP
+// 116, 133, section 2, on the bands in SDSS counts per 0.396 arcsec pixel:
+// with I = (i + w_r r + w_g g) / 3, each band x is drawn as x F(I) / I,
+// F(I) = asinh(alpha Q I) / Q, i red, r green, g blue, a pixel whose largest
+// primary passes 1 scaled back to 1 (its color kept), then raised to gamma.
+// Lupton et al.'s own SDSS composite (Fig. 1) takes Q = 8, alpha = 0.02,
+// w = 1, gamma = 1; the ImgCutout service adds a transfer function and a
+// gamma (SDSS DR17 "JPEG Images on SkyServer", FITS2JPEG). Its parameters
+// here are MEASURED: the DR17 g, r, i frames of the six Milky Way analogs
+// this model is compared with (Licquia et al. 2015 selection; runs 1045,
+// 3631, 3650, 3813, 5194, 8062), resampled north up, drawn through this
+// stretch and fitted (least squares, all pixels within 2.5 Petrosian R90)
+// to the service's JPEGs of the same fields: w_g = 0.853, w_r = 0.947,
+// alpha = 0.00714, Q = 6.66, gamma = 0.856, rms 0.031 of full scale (0.054
+// with Lupton et al.'s own parameters). One count is NMGY nanomaggies, the
+// frames' calibration factor, medians 0.00371 (g), 0.00502 (r) and 0.00641
+// (i) over those frames.
 namespace milky_way::display {
-inline constexpr double q=8,alpha_per_count=0.02,nanomaggies_per_count=0.00502,pixel_arcsec=0.396;
-inline constexpr const char* basis="Lupton et al. 2004 (PASP 116, 133) asinh g-r-i composite, Q=8, alpha=0.02 per SDSS count (Fig. 1); 1 count = 0.00502 nanomaggies (median NMGY of the r frames of the six Licquia 2015 analogs, DR17), 0.396 arcsec pixels";
-inline std::array<double,2> asinh_stretch(double unit_mag_arcsec2) {
-  const double per_nanomaggy_arcsec2=alpha_per_count/nanomaggies_per_count*pixel_arcsec*pixel_arcsec;
-  return {q,per_nanomaggy_arcsec2*std::pow(10.0,-0.4*(unit_mag_arcsec2-22.5))};
+inline constexpr double q=6.66,alpha_per_count=0.00714,gamma=0.856,pixel_arcsec=0.396;
+inline constexpr double weights[3]={0.947,0.853,1.0};                      // r, g, i
+inline constexpr double nanomaggies_per_count[3]={0.00502,0.00371,0.00641}; // r, g, i
+inline constexpr const char* basis="SDSS DR17 ImgCutout g-r-i JPEG transfer: Lupton et al. 2004 (PASP 116, 133) asinh stretch on SDSS counts per 0.396 arcsec pixel, fitted to the JPEGs of the six Licquia 2015 analogs from their frames: w_g 0.853, w_r 0.947, alpha 0.00714 per count, Q 6.66, gamma 0.856 (rms 0.031); NMGY medians r 0.00502, g 0.00371, i 0.00641";
+// SDSS counts per pixel (band-weighted) in one band unit of r, g and i light.
+inline std::array<double,3> counts_per_unit(double unit_mag_arcsec2) {
+  const double nanomaggies=std::pow(10.0,-0.4*(unit_mag_arcsec2-22.5))*pixel_arcsec*pixel_arcsec;
+  return {weights[0]*nanomaggies/nanomaggies_per_count[0],weights[1]*nanomaggies/nanomaggies_per_count[1],
+          weights[2]*nanomaggies/nanomaggies_per_count[2]};
 }
 } // namespace milky_way::display

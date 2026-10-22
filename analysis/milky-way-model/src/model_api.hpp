@@ -64,11 +64,12 @@ extern "C" int bake() {
   r.number("radiance_scale_mag_arcsec2",mu_g,"mag_G arcsec^-2 = mag_r, mag_g, mag_i (AB) arcsec^-2 per band unit");
   r.number("radiance_scale_lsun_v_pc2",column,"Lsun,V pc^-2");
   r.text("radiance_scale_basis","Flynn et al. 2006 Table 4 local V luminosity density 0.056 Lsun pc^-3 at the model's local mid-plane G emissivity; M_V,sun=4.81 (Willmer 2018); G-V of (V-I)=0.82 by Gaia EDR3 Table 5.7; SDSS g, r, i by Riello et al. 2021 Table C.2");
-  // The display (stellar_populations.hpp, display): Lupton et al. (2004)
-  // asinh stretch of the r, g, i light, Q and the linear stretch alpha per
-  // band unit.
-  const auto stretch=display::asinh_stretch(mu_g);
-  r.vector("display_asinh",{stretch[0],stretch[1]},"Q,alpha per band unit");
+  // The display (stellar_populations.hpp, display): the SDSS ImgCutout
+  // transfer, Lupton et al. (2004) asinh stretch of the r, g, i light in
+  // band-weighted SDSS counts, then a gamma.
+  const auto counts=display::counts_per_unit(mu_g);
+  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma},"Q,alpha per count,gamma");
+  r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
   r.text("display_asinh_basis",display::basis);
   return r.emit();
 }
