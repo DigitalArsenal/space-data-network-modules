@@ -14,7 +14,25 @@ namespace model_choices {
 inline constexpr double inner_arm_radius_kpc=1.5,outer_radius_kpc=16.0;
 inline constexpr double minimum_arm_width_kpc=0.08;
 inline constexpr double young_scale_height_kpc=0.09,arm_emissivity=0.45;
-inline constexpr double bulge_x_kpc=1.0,bulge_y_kpc=0.4,bulge_z_kpc=0.3;
+// The b/p bulge's axis ratio from above, 0.5, and its vertical scale height
+// at x ~ 0, 180 pc: Bland-Hawthorn & Gerhard (2016), ARA&A 54, 529, section
+// 4.2 (0.4 and 0.3 kpc in 0.3.0, which drew it a thick, round puff).
+inline constexpr double bulge_x_kpc=1.0,bulge_y_kpc=0.5,bulge_z_kpc=0.18;
+// THE NUCLEAR STELLAR DISC: Bland-Hawthorn & Gerhard (2016) section 4.1
+// (Launhardt et al. 2002, A&A 384, 112): stellar mass (1.4 +- 0.6) x 10^9
+// Msun, break radius ~90 pc, vertical scale height 45 pc; the density falls
+// as R^-0.1 inside the break and R^-3.5 outside it (Launhardt et al. 2002).
+// With the bar and bulge's mass-to-light ratio, its light is 1.4/18.8 of
+// theirs (Portail et al. 2017: 1.88 x 10^10 Msun). It is the galaxy's bright,
+// compact core. R is floored at 5 pc (the inner power law's divergence).
+inline constexpr double nucleus_mass=0.14,nucleus_break_kpc=0.09,nucleus_height_kpc=0.045,nucleus_floor_kpc=0.005;
+inline double nucleus_shape(Vec3 p) {
+  const double r=std::max(nucleus_floor_kpc,std::hypot(p.x,p.y))/nucleus_break_kpc;
+  return std::pow(r,r<1?-0.1:-3.5)*std::exp(-std::abs(p.z)/nucleus_height_kpc);
+}
+// Its integral over all space (unfloored): 2 pi R_b^2 (1/1.9 + 1/1.5) 2 h.
+inline constexpr double nucleus_shape_integral=2*galactic_constants::pi*nucleus_break_kpc*nucleus_break_kpc
+  *(1/1.9+1/1.5)*2*nucleus_height_kpc;
 inline constexpr double bulge_emissivity=8.0,boxiness=4.0,peanut_strength=0.25,peanut_extent_kpc=2.0;
 inline constexpr double bar_minor_kpc=0.45,bar_height_kpc=0.18,bar_emissivity=1.8;
 inline constexpr double bar_taper_start_kpc=4.5;
@@ -75,16 +93,21 @@ inline Vec3 undrifted(Vec3 p,double age_myr) {
 
 // DS2001: the arm of largest exp(-(d/w)^2) contributes, with the dust arms'
 // cut-off g(R_a). Four major families (Norma-Outer, Scutum-Centaurus,
-// Sagittarius-Carina, Perseus), as DS2001's four arms; Reid Table 2 widths.
+// Sagittarius-Carina, Perseus), as DS2001's four arms. The stellar arms'
+// half width is DS2001's own, w*_K = c*_K R_a with c*_K = 143 pc/kpc (Table
+// 3), the width B_K was fitted with: broad waves in the old light (1.1 kpc
+// at R0), not the masers' narrow Reid widths (0.3.0, which drew the old light
+// as thin concentric rings).
+inline constexpr double stellar_arm_width_per_kpc=0.143;
 inline double major_arm_wave(Vec3 p) {
   double best=0;
   for(const auto& a:reid_segments) {
     if(arm_light::finite_segment(a)) continue;
     arm_light::for_each_hit(a,p,[&](const arm_light::Hit& h) {
-      const double width=arm_width_kpc(a,h.radius);
+      const double width=stellar_arm_width_per_kpc*h.radius;
       const double cutoff=h.radius>populations::arm_cutoff_kpc
         ?std::exp(-std::pow((h.radius-populations::arm_cutoff_kpc)/populations::arm_cutoff_scale_kpc,2)):1.0;
-      best=std::max(best,h.weight*cutoff*std::exp(-0.5*(h.separation/width)*(h.separation/width)));
+      best=std::max(best,h.weight*cutoff*std::exp(-(h.separation/width)*(h.separation/width)));
     });
   }
   return best;
@@ -135,9 +158,12 @@ inline std::array<double,2> bulge_bar_shapes(Vec3 p) {
 
 inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double bar_bulge);
 // Midpoint integrals over the cylinder R <= 5 kpc, |z| <= 3 kpc (20 pc in x
-// and y, z on a signed-square axis dense at the plane), computed once.
-inline double bar_bulge_scale() {
-  static const double scale=[] {
+// and y, z on a signed-square axis dense at the plane), computed once. The
+// bar and bulge light there is 1.88/1.29 of the disc's (Portail 2017); the
+// nuclear disc's is model_choices::nucleus_mass of the bar and bulge's.
+struct CentralScales {double bar_bulge,nucleus;};
+inline const CentralScales& central_scales() {
+  static const CentralScales scales=[] {
     double disc=0,central=0;
     constexpr int n=200,nz=100;
     const double h=2*populations::bar_region_kpc/n;
@@ -152,10 +178,14 @@ inline double bar_bulge_scale() {
         disc+=(c.thin+c.thick+c.arms)*h*h*dz;central+=(shapes[0]+shapes[1])*h*h*dz;
       }
     }
-    return populations::bar_bulge_mass/populations::inner_disc_mass*disc/central;
+    const double bar_bulge=populations::bar_bulge_mass/populations::inner_disc_mass*disc/central;
+    const double central_light=bar_bulge*central;
+    return CentralScales{bar_bulge,model_choices::nucleus_mass/populations::bar_bulge_mass
+      *central_light/model_choices::nucleus_shape_integral};
   }();
-  return scale;
+  return scales;
 }
+inline double bar_bulge_scale() {return central_scales().bar_bulge;}
 
 inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern) {
   return stellar_components(p,pattern,bar_bulge_scale());
@@ -178,21 +208,14 @@ inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double ba
               -height/populations::h_bright_kpc);
   const double arms=thin*pattern.wave+young;
   // Wegg & Gerhard (2013), MNRAS 435,1874, doi:10.1093/mnras/stt1376:
-  // boxy/peanut morphology and orientation ~27 degrees. The analytic boxy
-  // proxy and its scales/amplitudes below are our choices, not their 3D map.
-  constexpr double angle=bar_angle_rad;
-  const double u=-p.x*std::cos(angle)+p.y*std::sin(angle);
-  const double v=p.x*std::sin(angle)+p.y*std::cos(angle);
-  const double effective_z=bulge_z_kpc*(1+peanut_strength*std::min(std::abs(u),peanut_extent_kpc));
-  const double ellipsoid=std::pow(std::pow(std::abs(u)/bulge_x_kpc,boxiness)
-      +std::pow(std::abs(v)/bulge_y_kpc,boxiness)+std::pow(height/effective_z,boxiness),1/boxiness);
-  const double scale=bar_bulge;
-  const double bulge=scale*bulge_emissivity*std::exp(-ellipsoid);
-  // Wegg, Gerhard & Portail (2015), MNRAS 450,4050,
-  // doi:10.1093/mnras/stv745: long-bar half-length 5.0 kpc; the transverse
-  // profile/normalization and smooth terminal taper are illustrative choices.
-  const double bar=scale*bar_emissivity*std::exp(-std::abs(v)/bar_minor_kpc-height/bar_height_kpc)
-      *(1-smoothstep(bar_taper_start_kpc,bar_half_length_kpc,std::abs(u)));
+  // boxy/peanut morphology and orientation ~27 degrees; Wegg, Gerhard &
+  // Portail (2015), MNRAS 450,4050, doi:10.1093/mnras/stv745: long-bar
+  // half-length 5.0 kpc (bulge_bar_shapes); the nuclear stellar disc
+  // (nucleus_shape) is part of the bulge's light. With bar_bulge = 0 (the
+  // scale's own integral) there is no central light at all.
+  const auto shapes=bulge_bar_shapes(p);
+  const double nucleus=bar_bulge>0?central_scales().nucleus*nucleus_shape(p):0.0;
+  const double bulge=bar_bulge*shapes[0]+nucleus,bar=bar_bulge*shapes[1];
   // The global volume ends 6 kpc above and below the plane: the light (the
   // thick disc's 1.1 kpc, the bulge) goes to zero over its last 1.5 kpc
   // rather than stopping flat at its faces (a MODEL CHOICE of window).

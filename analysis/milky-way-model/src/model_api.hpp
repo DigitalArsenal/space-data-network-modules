@@ -70,6 +70,9 @@ extern "C" int bake() {
   const auto counts=display::counts_per_unit(mu_g);
   r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma},"Q,alpha per count,gamma");
   r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
+  r.vector("display_band_weights",{display::weights[0],display::weights[1],display::weights[2]},"r,g,i");
+  r.vector("display_nanomaggies_per_count",{display::nanomaggies_per_count[0],display::nanomaggies_per_count[1],
+    display::nanomaggies_per_count[2]},"nanomaggies per SDSS count, r,g,i");
   r.text("display_asinh_basis",display::basis);
   return r.emit();
 }

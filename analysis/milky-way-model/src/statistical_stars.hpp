@@ -82,7 +82,10 @@ inline double cell_density_bound(const StarRequest& request) {
   // young pattern is at most 1, on its own radial and vertical profile.
   const double young=young_amplitude()/populations::young_hole(galactic_constants::solar_radius_kpc)
       *std::exp((galactic_constants::solar_radius_kpc-radius)/populations::thin_length_kpc-z/populations::h_bright_kpc);
-  return thin_bound*(1+populations::arm_amplitude_k)+thick_bound+young
+  // The nuclear disc at most at its 5 pc floor, at the cell's lowest |z|.
+  const double nucleus=central_scales().nucleus*std::pow(nucleus_floor_kpc/nucleus_break_kpc,-0.1)
+      *std::exp(-z/nucleus_height_kpc);
+  return thin_bound*(1+populations::arm_amplitude_k)+thick_bound+young+nucleus
       +bar_bulge_scale()*(bulge_emissivity*std::exp(-ellipsoid)+bar_emissivity*std::exp(-v/bar_minor_kpc-z/bar_height_kpc));
 }
 
