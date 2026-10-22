@@ -230,6 +230,11 @@ for (const key of keys) {
       const t = tileOf(files, L, x, row);
       const mine = decode(t.PAYLOAD().bytesArray()), ref = expectedTile(x, (1 << L) - 1 - row);
       if (ref.every((v) => v === 0)) continue;
+      if (S.fill) {  // the fill answers the source's holes, which the independent read of the source itself leaves 0: compare where the source measured
+        let measured = 0;
+        for (let i = 0; i < 256 * 256; i++) if (ref[i * NB]) measured++; else for (let b = 0; b < NB; b++) mine[i * NB + b] = 0;
+        if (measured < 0.9 * 256 * 256) continue;
+      }
       const s = ssim(luma(mine, NB), luma(ref, NB));
       scores.push(s);
       bytes += t.PAYLOAD().bytesLength();
