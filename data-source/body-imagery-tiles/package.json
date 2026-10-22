@@ -1,12 +1,12 @@
 {
   "name": "@spacedatanetwork/body-imagery-tiles",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "A body's high-definition imagery from a global mosaic read by HTTP range: 256 px baseline JPEG tiles ($DTT records) on the two-root geographic scheme, packed 16 to a file in the layout the engine's imageryFromTileFiles reads (imagery/<NAIF id>/root.dtts, imagery/<NAIF id>/<L>/<X16>_<Y>.dtts); Mars THEMIS Day IR 100 m.",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test tests/*.e2e.mjs"
+    "test": "node --test tests/*.e2e.test.mjs"
   },
   "sdn-module": "./dist/isomorphic/module.wasm",
   "exports": {

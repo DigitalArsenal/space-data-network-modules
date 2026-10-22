@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
   "name": "Body Imagery Tiles (high-definition mosaics)",
-  "version": "0.2.0",
-  "description": "A body's high-definition global imagery as the console's tile pyramid. First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain; BigTIFF, 8-bit, one row per strip, planetocentric on the MOLA sphere). tiles_plan names the whole-row byte range of the mosaic one level-9 tile row needs (If-Match on its ETag); tiles_direct area-averages those rows in WASM into 256 px baseline JPEG tiles on the body's two-root geographic scheme (GEOGRAPHIC_TWO_ROOT_BODY, rows from the south), one $DTT record per tile (PAYLOAD_FORMAT CUSTOM, MEDIA_TYPE image/jpeg); tiles_reduce builds a coarser level's row from the two child rows already made (JPEG decode, 2x2 mean of the measured pixels, JPEG), root levels 0-2 from level 3. Files are size-prefixed $DTT streams of 16 tiles of one row, in the layout the engine's imageryFromTileFiles reads: imagery/<NAIF id>/root.dtts (levels 0-2) and imagery/<NAIF id>/<L>/<X16>_<Y>.dtts (X16 = x >> 4, Y from the south). Level 9 (81.4 m/px) is the deepest. TYPED CONTRACTS 1.0: FlatBuffers only between modules; node config through plugin.getConfig.",
+  "version": "0.3.0",
+  "description": "A body's high-definition global imagery as the console's tile pyramid. Sources: Mars THEMIS Day IR 100 m v12 (NAIF 499, the unit default) and the small bodies of src/sources_small.hpp, named by the unit's naif; gray or RGB (planes read as one range each, rows_0..rows_2) (NASA/JPL/ASU, public domain; BigTIFF, 8-bit, one row per strip, planetocentric on the MOLA sphere). tiles_plan names the whole-row byte range of the mosaic one level-9 tile row needs (If-Match on its ETag); tiles_direct area-averages those rows in WASM into 256 px baseline JPEG tiles on the body's two-root geographic scheme (GEOGRAPHIC_TWO_ROOT_BODY, rows from the south), one $DTT record per tile (PAYLOAD_FORMAT CUSTOM, MEDIA_TYPE image/jpeg); tiles_reduce builds a coarser level's row from the two child rows already made (JPEG decode, 2x2 mean of the measured pixels, JPEG), root levels 0-2 from level 3. Files are size-prefixed $DTT streams of 16 tiles of one row, in the layout the engine's imageryFromTileFiles reads: imagery/<NAIF id>/root.dtts (levels 0-2) and imagery/<NAIF id>/<L>/<X16>_<Y>.dtts (X16 = x >> 4, Y from the south). Level 9 (81.4 m/px) is the deepest. TYPED CONTRACTS 1.0: FlatBuffers only between modules; node config through plugin.getConfig.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -69,6 +69,48 @@
       "outputPorts": [
         {
           "portId": "rows_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A ranged GET of the tile row's whole source rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A ranged GET of the tile row's whole source rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+        },
+        {
+          "portId": "rows_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A ranged GET of the tile row's whole source rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A ranged GET of the tile row's whole source rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+        },
+        {
+          "portId": "rows_2",
           "acceptedTypeSets": [
             {
               "setId": "sdn-runtime-http-request",
@@ -158,6 +200,48 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
+          "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
+        },
+        {
+          "portId": "rows_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
+        },
+        {
+          "portId": "rows_2",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
           "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
         }
       ],

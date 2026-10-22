@@ -17,7 +17,7 @@ await buildSourceModule({
   families: ["DTT", "PNM"],
   extraHeaders: ["data-source/body-imagery/src/jpeg_encoder.hpp", "data-source/body-imagery-tiles/src/stb_config.hpp",
     "data-source/body-imagery/vendor/stb_image-2.30/stb_image.h", "data-source/body-imagery-tiles/src/source.hpp",
-    "data-source/body-imagery-tiles/src/pyramid.hpp"],
+    "data-source/body-imagery-tiles/src/pyramid.hpp", "data-source/body-imagery-tiles/src/sources_small.hpp"],
   sources: ["src/body_imagery_tiles.cpp"],
   threadModel: "single-thread",
   allowUndefinedImports: true,

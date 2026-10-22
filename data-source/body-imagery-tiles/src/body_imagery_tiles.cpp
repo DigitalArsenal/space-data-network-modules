@@ -31,6 +31,8 @@
 #include <HttpResponse_generated.h>  // staged by the SDK compiler
 #include <ModuleConfig_generated.h>  // staged by the SDK compiler
 
+#include "sources_small.hpp"
+
 namespace {
 
 namespace R = sdn::runtime;
@@ -38,15 +40,23 @@ using Bytes = std::vector<uint8_t>;
 
 constexpr int kRowFile = 16, kRootMaxLevel = 2;
 constexpr const char* kNoValidators = "Thu, 01 Jan 1970 00:00:00 GMT";
-constexpr const char* kIngestorId = "body-imagery-tiles/v2";
-constexpr const char* kTilesetId = "themis-day-ir-mars";
-constexpr const char* kDatum = "MARS (IAU MOLA sphere 3396.19 km)";
+constexpr const char* kIngestorId = "body-imagery-tiles/v3";
+constexpr int kDefaultNaif = 499;
 constexpr double kPi = 3.14159265358979323846;
 
 Bytes finished(const flatbuffers::FlatBufferBuilder& b) { return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize()); }
 int push_typed(const char* port, const char* schema, const char* id, const char* root, const Bytes& bytes) {
     return plugin_push_output_ex(port, schema, id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, bytes.data(),
                                  static_cast<uint32_t>(bytes.size()));
+}
+// The source of the unit's body: the NAIF id in the unit (499, Mars THEMIS, when it names none).
+const bit::Source* find_source(int naif) {
+    if (naif == kDefaultNaif) return &bit::themis_day_ir();
+    size_t count = 0;
+    const bit::Source* table = bit::small_sources(&count);
+    for (size_t i = 0; i < count; i++)
+        if (table[i].naif == naif) return &table[i];
+    return nullptr;
 }
 std::string text_of(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
 const plugin_input_frame_t* frame_for(const char* port_id) {
@@ -154,8 +164,8 @@ Bytes dtt_record(const bit::Source& src, const TileOut& t, const std::string& re
     prov.add_ATTRIBUTION(attribution);
     prov.add_PROCESSOR(processor);
     const auto provenance = prov.Finish();
-    const auto tileset_off = b.CreateString(kTilesetId), version = b.CreateString("jpeg-baseline-gray-v1"),
-               center = b.CreateString("MARS"), datum = b.CreateString(kDatum);
+    const auto tileset_off = b.CreateString(src.tileset), version = b.CreateString(bit::band_count(src) == 3 ? "jpeg-baseline-rgb-v1" : "jpeg-baseline-gray-v1"),
+               center = b.CreateString(src.center), datum = b.CreateString(src.datum);
     const auto radii = b.CreateVector(std::vector<double>{src.sphere_m, src.sphere_m, src.sphere_m});
     DTTBuilder d(b);
     d.add_TILESET_ID(tileset_off);
@@ -227,20 +237,21 @@ int emit_files(const bit::Source& src, std::vector<TileOut>& tiles, const std::s
 }
 
 // One 256 x 256 tile of a grayscale image `img` (width w) at pixel (x0, y0, from the north), as JPEG.
-Bytes tile_jpeg(const jpeg::Encoder& enc, const uint8_t* img, size_t w, size_t x0, size_t y0) {
-    std::vector<uint8_t> px(static_cast<size_t>(bit::kTile) * bit::kTile);
-    for (int r = 0; r < bit::kTile; r++) std::memcpy(&px[static_cast<size_t>(r) * bit::kTile], img + (y0 + r) * w + x0, bit::kTile);
-    return enc.encode(px.data(), bit::kTile, bit::kTile, 1);
+Bytes tile_jpeg(const jpeg::Encoder& enc, const uint8_t* img, size_t w, size_t x0, size_t y0, int bands) {
+    const size_t row = static_cast<size_t>(bit::kTile) * bands;
+    std::vector<uint8_t> px(row * bit::kTile);
+    for (int r = 0; r < bit::kTile; r++) std::memcpy(&px[static_cast<size_t>(r) * row], img + ((y0 + r) * w + x0) * bands, row);
+    return enc.encode(px.data(), bit::kTile, bit::kTile, bands);
 }
 
 // The tiles of `level` cut from an image of the whole level (w x h) or of its rows [row0, row0 + h / 256) (from the south).
 void cut_tiles(const jpeg::Encoder& enc, const std::vector<uint8_t>& img, size_t w, size_t h, uint32_t level, uint32_t row0,
-               std::vector<TileOut>* out) {
+               std::vector<TileOut>* out, int bands) {
     const size_t across = w / bit::kTile, down = h / bit::kTile;
     for (size_t r = 0; r < down; r++)
         for (size_t x = 0; x < across; x++)
             out->push_back({level, static_cast<uint32_t>(x), row0 + static_cast<uint32_t>(down - 1 - r),
-                            tile_jpeg(enc, img.data(), w, x * bit::kTile, r * bit::kTile)});
+                            tile_jpeg(enc, img.data(), w, x * bit::kTile, r * bit::kTile, bands)});
 }
 
 }  // namespace
@@ -248,94 +259,141 @@ void cut_tiles(const jpeg::Encoder& enc, const std::vector<uint8_t>& img, size_t
 extern "C" {
 
 int tiles_plan(void) {
-    const bit::Source& src = bit::themis_day_ir();
     Config unit;
     if (!read_mcfg("unit", &unit)) {
         plugin_set_error("missing-unit-frame", "tiles_plan requires the unit frame (ModuleConfig).");
         return 400;
     }
+    const bit::Source* source = find_source(static_cast<int>(unit.num("naif", kDefaultNaif)));
+    if (!source) {
+        plugin_set_error("unknown-body", "the unit's naif names no body this module has a source for.");
+        return 400;
+    }
+    const bit::Source& src = *source;
     const int level = static_cast<int>(unit.num("level", -1));
     const double row = unit.num("row", -1);
     if (level != src.max_level || row < 0 || row >= static_cast<double>(1u << level)) {
-        plugin_set_error("invalid-unit", "the unit names no level-9 tile row.");
+        plugin_set_error("invalid-unit", "the unit names no tile row at its body's deepest level.");
         return 400;
     }
     const Config config = load_config();
+    const bool whole = src.max_level <= kRootMaxLevel;  // a body of 1-2 levels is one unit: all its source rows
     const uint64_t y_north = (1u << level) - 1 - static_cast<uint64_t>(row);
-    uint64_t first = 0, last = 0;
-    bit::source_rows_for(src, level, y_north, &first, &last);
+    uint64_t first = 0, last = src.height - 1;
+    if (!whole) bit::source_rows_for(src, level, y_north, &first, &last);
     const uint64_t count = last - first + 1;
-    const std::string range = "bytes=" + std::to_string(src.strip0 + first * src.width) + "-" +
-                              std::to_string(src.strip0 + (first + count) * src.width - 1);
-    flatbuffers::FlatBufferBuilder b(512);
-    // If-Modified-Since epoch: the request states its own validator, so the host adds no If-None-Match from the last
-    // 2xx it booked for this URL (every range of the mosaic shares it and would answer 304).
-    std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "range", range.c_str()),
-                                                       R::CreateHeaderDirect(b, "if-match", src.etag),
-                                                       R::CreateHeaderDirect(b, "if-modified-since", kNoValidators)};
-    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", src.url, &headers, nullptr,
-                                                             static_cast<uint32_t>(config.num("timeout_ms", 600000)), 0, nullptr));
-    if (push_typed("rows_0", "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b)) < 0) return 500;
+    static const char* const kPorts[3] = {"rows_0", "rows_1", "rows_2"};
+    for (int band = 0; band < bit::band_count(src); band++) {
+        const uint64_t base = src.strip0 + static_cast<uint64_t>(band) * src.plane_stride;
+        const std::string range = "bytes=" + std::to_string(base + first * src.width) + "-" + std::to_string(base + (first + count) * src.width - 1);
+        flatbuffers::FlatBufferBuilder b(512);
+        // If-Modified-Since epoch: the request states its own validator, so the host adds no If-None-Match from the last
+        // 2xx it booked for this URL (every range of the mosaic shares it and would answer 304).
+        std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "range", range.c_str()),
+                                                           R::CreateHeaderDirect(b, "if-match", src.etag),
+                                                           R::CreateHeaderDirect(b, "if-modified-since", kNoValidators)};
+        R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", src.url, &headers, nullptr,
+                                                                 static_cast<uint32_t>(config.num("timeout_ms", 600000)), 0, nullptr));
+        if (push_typed(kPorts[band], "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b)) < 0) return 500;
+    }
     unit.numbers["first_row"] = static_cast<double>(first);
     unit.numbers["row_count"] = static_cast<double>(count);
     return push_unit(unit) < 0 ? 500 : 0;
 }
 
 int tiles_direct(void) {
-    const bit::Source& src = bit::themis_day_ir();
     Config unit;
     if (!read_mcfg("unit", &unit)) {
         plugin_set_error("missing-unit-frame", "tiles_direct requires the unit frame (ModuleConfig).");
         return 400;
     }
+    const bit::Source* source = find_source(static_cast<int>(unit.num("naif", kDefaultNaif)));
+    if (!source) {
+        plugin_set_error("unknown-body", "the unit's naif names no body this module has a source for.");
+        return 400;
+    }
+    const bit::Source& src = *source;
     const int level = static_cast<int>(unit.num("level", -1));
     const double row = unit.num("row", -1);
     if (level != src.max_level || row < 0 || row >= static_cast<double>(1u << level)) {
-        plugin_set_error("invalid-unit", "the unit names no level-9 tile row.");
+        plugin_set_error("invalid-unit", "the unit names no tile row at its body's deepest level.");
         return 400;
     }
     const uint64_t first = static_cast<uint64_t>(unit.num("first_row", 0)), count = static_cast<uint64_t>(unit.num("row_count", 0));
-    const plugin_input_frame_t* f = frame_for("rows_0");
-    if (!f || !f->payload) {
-        plugin_set_error("missing-rows-frame", "tiles_direct requires the rows_0 response.");
-        return 400;
-    }
-    flatbuffers::Verifier verifier(f->payload, f->payload_length);
-    if (!R::VerifyHttpResponseBuffer(verifier)) {
-        plugin_set_error("invalid-response-frame", "the rows_0 frame is not an HttpResponse (HRSP).");
-        return 400;
-    }
-    const R::HttpResponse* r = R::GetHttpResponse(f->payload);
-    if (r->STATUS() != 206 || !r->BODY() || r->BODY()->size() != count * src.width) {
-        char message[300];
-        std::snprintf(message, sizeof(message), "the mosaic's rows did not arrive (HTTP %d, %zu of %llu bytes%s%s).",
-                      static_cast<int>(r->STATUS()), r->BODY() ? static_cast<size_t>(r->BODY()->size()) : 0,
-                      static_cast<unsigned long long>(count * src.width), r->ERROR() ? ", " : "", r->ERROR() ? r->ERROR()->c_str() : "");
-        plugin_set_error("rows-not-delivered", message);
-        return 502;
+    const int bands = bit::band_count(src);
+    static const char* const kPorts[3] = {"rows_0", "rows_1", "rows_2"};
+    const uint8_t* planes[3] = {nullptr, nullptr, nullptr};
+    for (int band = 0; band < bands; band++) {
+        const plugin_input_frame_t* f = frame_for(kPorts[band]);
+        if (!f || !f->payload) {
+            plugin_set_error("missing-rows-frame", "tiles_direct requires a rows_<band> response for each band.");
+            return 400;
+        }
+        flatbuffers::Verifier verifier(f->payload, f->payload_length);
+        if (!R::VerifyHttpResponseBuffer(verifier)) {
+            plugin_set_error("invalid-response-frame", "a rows_<band> frame is not an HttpResponse (HRSP).");
+            return 400;
+        }
+        const R::HttpResponse* r = R::GetHttpResponse(f->payload);
+        if (r->STATUS() != 206 || !r->BODY() || r->BODY()->size() != count * src.width) {
+            char message[300];
+            std::snprintf(message, sizeof(message), "the source rows did not arrive (HTTP %d, %zu of %llu bytes%s%s).",
+                          static_cast<int>(r->STATUS()), r->BODY() ? static_cast<size_t>(r->BODY()->size()) : 0,
+                          static_cast<unsigned long long>(count * src.width), r->ERROR() ? ", " : "", r->ERROR() ? r->ERROR()->c_str() : "");
+            plugin_set_error("rows-not-delivered", message);
+            return 502;
+        }
+        planes[band] = r->BODY()->data();
     }
     const Config config = load_config();
     const jpeg::Encoder enc(static_cast<int>(config.num("jpeg_quality", 88)));
-    const uint64_t y_north = (1u << level) - 1 - static_cast<uint64_t>(row);
     const std::vector<bit::ColumnTap> taps = bit::column_taps(src, level);
-    std::vector<uint8_t> band;
-    bit::resample_row(src, level, y_north, r->BODY()->data(), first, count, taps, &band);
+    const auto band_of = [&](uint64_t y_north, std::vector<uint8_t>* out) {
+        if (bands == 3) bit::resample_row_rgb(src, level, y_north, planes, first, count, taps, out);
+        else bit::resample_row(src, level, y_north, planes[0], first, count, taps, out);
+    };
     std::vector<TileOut> tiles;
-    cut_tiles(enc, band, bit::level_width(level), bit::kTile, static_cast<uint32_t>(level), static_cast<uint32_t>(row), &tiles);
+    if (src.max_level > kRootMaxLevel) {
+        std::vector<uint8_t> img;
+        band_of((1u << level) - 1 - static_cast<uint64_t>(row), &img);
+        cut_tiles(enc, img, bit::level_width(level), bit::kTile, static_cast<uint32_t>(level), static_cast<uint32_t>(row), &tiles, bands);
+    } else {
+        // A body of 1-2 levels: the whole deepest level from this one unit, halved down to level 0, all in root.dtts.
+        const size_t w = bit::level_width(level), h = static_cast<size_t>(bit::kTile) << level;
+        std::vector<uint8_t> whole(w * h * bands), part;
+        for (uint64_t y = 0; y < (1u << level); y++) {
+            band_of(y, &part);
+            std::memcpy(&whole[y * bit::kTile * w * bands], part.data(), part.size());
+        }
+        size_t cw = w, ch = h;
+        for (int l = level; l >= 0; l--) {
+            cut_tiles(enc, whole, cw, ch, static_cast<uint32_t>(l), 0, &tiles, bands);
+            if (l > 0) {
+                whole = bands == 3 ? bit::halve_rgb(whole, cw, ch) : bit::halve(whole, cw, ch);
+                cw /= 2;
+                ch /= 2;
+            }
+        }
+    }
     return emit_files(src, tiles, config.str("retrieved_at", src.epoch));
 }
 
 int tiles_reduce(void) {
-    const bit::Source& src = bit::themis_day_ir();
     Config unit;
     if (!read_mcfg("unit", &unit)) {
         plugin_set_error("missing-unit-frame", "tiles_reduce requires the unit frame (ModuleConfig).");
         return 400;
     }
+    const bit::Source* source = find_source(static_cast<int>(unit.num("naif", kDefaultNaif)));
+    if (!source) {
+        plugin_set_error("unknown-body", "the unit's naif names no body this module has a source for.");
+        return 400;
+    }
+    const bit::Source& src = *source;
     const int level = static_cast<int>(unit.num("level", -1));
     const double row_d = unit.num("row", -1);
     if (level < kRootMaxLevel || level >= src.max_level || row_d < 0 || row_d >= static_cast<double>(1u << level)) {
-        plugin_set_error("invalid-unit", "the unit names no level this module reduces to (2..8).");
+        plugin_set_error("invalid-unit", "the unit names no level this module reduces to (2 up to the body's deepest level, exclusive).");
         return 400;
     }
     const bool root = level == kRootMaxLevel;
@@ -344,7 +402,8 @@ int tiles_reduce(void) {
     // The child rows wanted, from the south: two, or all of level 3 for the root.
     const uint32_t c0 = root ? 0 : 2 * row, cn = root ? (1u << child) : 2;
     const size_t cw = bit::level_width(child), ch = static_cast<size_t>(cn) * bit::kTile;
-    std::vector<uint8_t> img(cw * ch, 0);
+    const int bands = bit::band_count(src);
+    std::vector<uint8_t> img(cw * ch * bands, 0);
     std::vector<uint8_t> seen(static_cast<size_t>(cn) * (cw / bit::kTile), 0);
     size_t have = 0;
     for (uint32_t ordinal = 0;; ordinal++) {
@@ -361,11 +420,11 @@ int tiles_reduce(void) {
             const size_t slot = static_cast<size_t>(t->Y() - c0) * (cw / bit::kTile) + t->X();
             if (seen[slot] || !t->PAYLOAD() || !t->PAYLOAD()->BYTES()) return;
             int w = 0, h = 0, comp = 0;
-            uint8_t* px = stbi_load_from_memory(t->PAYLOAD()->BYTES()->data(), static_cast<int>(t->PAYLOAD()->BYTES()->size()), &w, &h, &comp, 1);
+            uint8_t* px = stbi_load_from_memory(t->PAYLOAD()->BYTES()->data(), static_cast<int>(t->PAYLOAD()->BYTES()->size()), &w, &h, &comp, bands);
             if (!px) return;
             if (w == bit::kTile && h == bit::kTile) {
                 const size_t x0 = static_cast<size_t>(t->X()) * bit::kTile, y0 = static_cast<size_t>(cn - 1 - (t->Y() - c0)) * bit::kTile;
-                for (int r = 0; r < bit::kTile; r++) std::memcpy(&img[(y0 + r) * cw + x0], px + static_cast<size_t>(r) * bit::kTile, bit::kTile);
+                for (int r = 0; r < bit::kTile; r++) std::memcpy(&img[((y0 + r) * cw + x0) * bands], px + static_cast<size_t>(r) * bit::kTile * bands, static_cast<size_t>(bit::kTile) * bands);
                 seen[slot] = 1;
                 have++;
             }
@@ -382,16 +441,16 @@ int tiles_reduce(void) {
     const jpeg::Encoder enc(static_cast<int>(config.num("jpeg_quality", 88)));
     std::vector<TileOut> tiles;
     size_t w = cw, h = ch;
-    std::vector<uint8_t> cur = bit::halve(img, w, h);
+    std::vector<uint8_t> cur = bands == 3 ? bit::halve_rgb(img, w, h) : bit::halve(img, w, h);
     w /= 2;
     h /= 2;
     if (!root) {
-        cut_tiles(enc, cur, w, h, static_cast<uint32_t>(level), row, &tiles);
+        cut_tiles(enc, cur, w, h, static_cast<uint32_t>(level), row, &tiles, bands);
     } else {
         for (int l = level; l >= 0; l--) {
-            cut_tiles(enc, cur, w, h, static_cast<uint32_t>(l), 0, &tiles);
+            cut_tiles(enc, cur, w, h, static_cast<uint32_t>(l), 0, &tiles, bands);
             if (l > 0) {
-                cur = bit::halve(cur, w, h);
+                cur = bands == 3 ? bit::halve_rgb(cur, w, h) : bit::halve(cur, w, h);
                 w /= 2;
                 h /= 2;
             }

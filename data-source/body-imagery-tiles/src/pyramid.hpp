@@ -126,4 +126,65 @@ inline std::vector<uint8_t> halve(const std::vector<uint8_t>& img, size_t w, siz
     return out;
 }
 
+// The RGB twin of resample_row: three planes (`px[b]`, rows [first, first + rows) of s.width bytes each) in, interleaved RGB out
+// (W * 256 * 3 bytes). A source pixel is measured when any of its channels is non-zero; an unmeasured output pixel is 0,0,0 and a
+// measured one is at least 1,1,1.
+inline void resample_row_rgb(const Source& s, int level, uint64_t y, const uint8_t* const px[3], uint64_t first, uint64_t rows,
+                             const std::vector<ColumnTap>& taps, std::vector<uint8_t>* out) {
+    const uint64_t W = level_width(level);
+    out->assign(W * kTile * 3, 0);
+    const double e = 180.0 / double(level_rows(level));
+    std::vector<float> sum(W * 3), weight(W);
+    for (int r = 0; r < kTile; r++) {
+        const double north = 90.0 - double(y * kTile + r) * e;
+        const double va = source_row(s, north), vb = source_row(s, north - e);
+        std::fill(sum.begin(), sum.end(), 0.0f);
+        std::fill(weight.begin(), weight.end(), 0.0f);
+        for (double j = std::floor(va); j < vb; j += 1.0) {
+            if (j < double(first) || j >= double(first + rows)) continue;
+            const float wr = float(std::min(vb, j + 1.0) - std::max(va, j));
+            if (wr <= 0) continue;
+            const uint64_t off = uint64_t(j - double(first)) * s.width;
+            for (uint64_t c = 0; c < W; c++) {
+                const ColumnTap& t = taps[c];
+                const uint64_t i[2] = {t.i0, t.i1};
+                const float w2[2] = {t.w0, t.w1};
+                for (int k = 0; k < 2; k++) {
+                    if (w2[k] <= 0) continue;
+                    const uint8_t a = px[0][off + i[k]], g = px[1][off + i[k]], b = px[2][off + i[k]];
+                    if (!(a | g | b)) continue;
+                    const float f = wr * w2[k];
+                    sum[c * 3] += f * a; sum[c * 3 + 1] += f * g; sum[c * 3 + 2] += f * b;
+                    weight[c] += f;
+                }
+            }
+        }
+        uint8_t* dst = out->data() + uint64_t(r) * W * 3;
+        for (uint64_t c = 0; c < W; c++) {
+            if (weight[c] <= 0) continue;
+            for (int k = 0; k < 3; k++) {
+                const float v = std::round(sum[c * 3 + k] / weight[c]);
+                dst[c * 3 + k] = uint8_t(v < 1 ? 1 : (v > 255 ? 255 : v));
+            }
+        }
+    }
+}
+
+// halve() for interleaved RGB: each pixel the mean of the measured (not 0,0,0) pixels of its 2 x 2 block.
+inline std::vector<uint8_t> halve_rgb(const std::vector<uint8_t>& img, size_t w, size_t h) {
+    const size_t nw = w / 2, nh = h / 2;
+    std::vector<uint8_t> out(nw * nh * 3);
+    for (size_t r = 0; r < nh; r++)
+        for (size_t c = 0; c < nw; c++) {
+            unsigned sum[3] = {0, 0, 0}, n = 0;
+            for (size_t dy = 0; dy < 2; dy++)
+                for (size_t dx = 0; dx < 2; dx++) {
+                    const uint8_t* p = &img[((2 * r + dy) * w + 2 * c + dx) * 3];
+                    if (p[0] | p[1] | p[2]) { sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; n++; }
+                }
+            for (int k = 0; k < 3; k++) out[(r * nw + c) * 3 + k] = n ? uint8_t((sum[k] + n / 2) / n) : 0;
+        }
+    return out;
+}
+
 }  // namespace bit

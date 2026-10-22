@@ -32,7 +32,13 @@ struct Source {
     const char* license;
     const char* license_url;
     const char* citation;
+    const char* tileset;     // DTT TILESET_ID
+    const char* center;      // DTT CENTER_NAME
+    const char* datum;       // DTT HORIZONTAL_DATUM_NAME
+    int bands;               // 1 (gray) or 3 (RGB, one plane after another: plane b starts at strip0 + b * plane_stride); 0 reads as 1
+    uint64_t plane_stride;   // bytes from one plane's row 0 to the next plane's (height * width)
 };
+inline int band_count(const Source& s) { return s.bands == 3 ? 3 : 1; }
 
 inline const Source& themis_day_ir() {
     static const Source s{
@@ -42,7 +48,8 @@ inline const Source& themis_day_ir() {
         100.0, -10669500.0, 5334800.0, 3396190.0, 9,
         "Mars Odyssey THEMIS Day IR global mosaic 100 m v12 (USGS Astrogeology)", "2022-11-10T03:49:10.000Z",
         "Public domain (NASA/JPL/ASU)", "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
-        "THEMIS: NASA/JPL/ASU (Christensen et al. 2004; Edwards et al. 2011, JGR 116, E10008); mosaic USGS Astrogeology"};
+        "THEMIS: NASA/JPL/ASU (Christensen et al. 2004; Edwards et al. 2011, JGR 116, E10008); mosaic USGS Astrogeology",
+        "themis-day-ir-mars", "MARS", "MARS (IAU MOLA sphere 3396.19 km)"};
     return s;
 }
 
