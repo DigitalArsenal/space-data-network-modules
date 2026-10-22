@@ -4,6 +4,7 @@
   "sources": [
     "wire.hpp",
     "models.hpp",
+    "photometry.hpp",
     "placement.hpp",
     "module.cpp"
   ],

@@ -1,6 +1,7 @@
 #include "space_data_module_invoke.h"
 #include "wire.hpp"
 #include "models.hpp"
+#include "photometry.hpp"
 #include "placement.hpp"
 
 extern "C" int parameters() {

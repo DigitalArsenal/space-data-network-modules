@@ -35,7 +35,7 @@ const quote = value => JSON.stringify(value);
 const rows = table.map(p => `{${quote(p.model)},${quote(p.parameter)},${p.value},${quote(p.unit)},${quote(p.doi)},${quote(p.locator)},${quote(p.scope)}}`);
 const data = `namespace appearance { struct Parameter {const char *model,*name; double value; const char *unit,*doi,*locator,*scope;};\nconstexpr Parameter parameters_table[]={${rows.join(',\n')}};\n}`;
 const {header, version} = await generateSdsHeaders(['PCE'], import.meta.url, createFlatc);
-const names = ['wire.hpp', 'models.hpp', 'placement.hpp', 'module.cpp'];
+const names = ['wire.hpp', 'models.hpp', 'photometry.hpp', 'placement.hpp', 'module.cpp'];
 const sources = await Promise.all(names.map(async name => (await fs.readFile(path.join(root, 'src', name), 'utf8'))
   .replace(/^#pragma once\s*$/gm, '').replace(/^#include "[^"]+"\s*$/gm, '')));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
