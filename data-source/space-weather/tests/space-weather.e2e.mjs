@@ -13,6 +13,7 @@ import {createSingleFileBundle,verifyModuleArtifact} from 'space-data-module-sdk
 import {appendPublicationRecordCollection,encodePublicationRecordCollection} from 'space-data-module-sdk/transport';
 import {localNode} from './local-node.mjs';
 import {verifySources} from './source-oracle.mjs';
+import {runtimeParity} from './runtime-parity.mjs';
 const require=createRequire(import.meta.url),root=fileURLToPath(new URL('../',import.meta.url)),modules=path.resolve(root,'../..');
 const sds=path.dirname(require.resolve('spacedatastandards.org/package.json'));
 const {SPW}=await import(pathToFileURL(path.join(sds,'lib/js/SPW/SPW.js')));
@@ -43,6 +44,7 @@ try {
  const refused=await harness.invoke({methodId:'parse_weather',inputs:invalid});assert.notEqual(refused.statusCode,0);assert(!refused.outputs.some(o=>o.portId==='records'));
  receipt.sourceChecks={rows:rows.length,sourceSha256:bodies.map(hash),urls:requests.map(r=>r.url),corruptSourceRefused:true};await save();console.log(`PASS WASM source equality: ${rows.length} days, today included; corrupt source refused`);
  await harness.destroy();harness=null;
+ receipt.runtimeParity=await runtimeParity({wasmPath:path.join(root,'dist/isomorphic/module.wasm'),manifest,evidence,cases:[{methodId:'plan_weather',inputs:[input('tick',encodeTimerTick({triggerId:'hourly',firedMs:Date.now()}),'TimerTick.fbs','TICK','TimerTick')]},{methodId:'parse_weather',inputs},{methodId:'parse_weather',inputs:invalid}]});await save();console.log('PASS headless-browser/native WasmEdge byte parity; Docker waived by owner');
  node=await localNode(process.env.SDN_NODE_BINARY);receipt.nodeDirectory=node.dir;await save();const info=await node.start();console.log('PASS scratch node ready');
  const flowDir=path.join(modules,'flows/space-weather/dist/runtime'),portable=await fs.readFile(path.join(flowDir,'runtime.wasm'));
  const response=await fetch(node.base+'/api/v1/admin/modules/sign',{method:'POST',headers:{'Content-Type':'application/wasm'},body:portable,signal:AbortSignal.timeout(30000)});assert(response.ok,`Sign ${response.status}`);const signature=await response.json();assert.equal(signature.content_hash,hash(portable));
