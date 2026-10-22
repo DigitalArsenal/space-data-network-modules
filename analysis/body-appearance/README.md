@@ -53,28 +53,20 @@ missing. A scaffold or skipped test is not acceptance.
 - Muinonen et al. (2010), Icarus: H,G1,G2 basis functions and conventions.
 - Snodgrass & Ulrich (1990), ApJ 351:309: surface differential rotation.
 
-## Environment observations
+## Resume checkpoint (2026-10-22 17:26 UTC)
 
-At initialization on 2026-10-22, the shared reference collection
-`/Users/tj/software/terrain-work/moon-look/references.md` was absent. Creating
-the required source-download and gauntlet-log directory
-`/Users/tj/software/terrain-work/body-look/codex-appearance` was denied by the
-sandbox (`Operation not permitted`). The requested writable scratch location
-must be available before downloads are persisted there.
+The worktree is clean at the start of the resumed lane, and origin contains
+both prior checkpoints (`701ece4c`, `968ee9dc`). Filesystem access is restored.
+The existing paper downloads and parameter table are preserved. Li et al.
+Table 6 and Snodgrass–Ulrich Table 1 have been rechecked against the primary
+paper text. The saved ROLO `paper.pdf` is HTML, not a usable paper.
 
-The Sato DOI resolver was reachable but redirected to a Wiley Cloudflare
-challenge (HTTP 403). This is a publisher access failure, not proof that shell
-network access is blocked; an author-hosted primary copy may resolve it.
+The SDK contract was read from the shared stack's
+`repos/ancillary-packages/space-data-module-sdk/AGENTS.md` and its isomorphic
+artifact documentation. The canonical SDS PCE schema provides typed,
+provider-defined scalar/vector parameters; the existing milky-way module
+is the local pattern. No local schema alias or JSON wire format is needed.
 
-The required initial checkpoint was attempted, but `git add` and `git commit`
-both failed because the sandbox denied creation of the worktree's `index.lock`
-under the stack's `.git/modules/repos/space-data-network-modules/` directory.
-The push created remote branch `task/body-appearance-module-20261022` at the
-unchanged base `9d4535d7c7cedad33f88c8f744b46d4c24c4f0a0`; Git could not update
-local tracking configuration or refs. This README remains untracked, and the
-remote branch contains no implementation from this lane. Further code changes
-are paused until the mandatory commit checkpoints can be made.
-
-No acceptance test, build, or gauntlet has run. There is no gauntlet receipt.
-The test-only oracle papers/code and all other listed primary sources still
-need to be read; no numerical table values have been claimed or implemented.
+Docker and Docker Desktop must never be started. The owner waived Docker
+WasmEdge parity on 2026-10-22; the browser and native WasmEdge checks remain
+required. No build, acceptance measurement, or gauntlet PASS is claimed yet.
