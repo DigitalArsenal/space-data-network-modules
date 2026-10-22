@@ -1,0 +1,220 @@
+# Solar activity — implementation gate and live evidence
+
+Status: BLOCKED; production records stopped pending SDS oracle.
+Branch: `task/solar-activity-data-sources-20261022`.
+Local branch HEAD: `9d4535d7c7cedad33f88c8f744b46d4c24c4f0a0` (unchanged base).
+Changes in this directory are **uncommitted and unpushed**: Git could not create
+the administrative `index.lock` under the shared stack's `.git/modules/` because
+the sandbox denied the write. The initial WIP commit was attempted within ten
+minutes. No remote task branch was returned by `git ls-remote --heads origin
+task/solar-activity-data-sources-20261022`. No commit SHA for this work exists.
+
+## Schema fit check
+
+The supplied nested SDS path does not exist. The canonical checkout has the
+IDL at `repos/main-packages/spacedatastandards.org/schema/` instead.
+Inspected checkout: `2c1f01ddceda11b2f538c80e33d8fa1a3fcb813e`, package version
+`1.251.0+1792119709545`. This repository currently pins SDS `1.220.0`.
+No solar package pin or new record type has been added.
+
+Preliminary result: no complete typed fit found; **this is not a THEMIS verdict**.
+The owner instructed: if no schema fits, propose it in this report and stop that
+part. The following candidates were checked against the canonical IDL:
+
+| Candidate | Fit and missing semantics |
+| --- | --- |
+| SPW | `schema/SPW/main.fbs:22`, `:93`, `:96`: daily geomagnetic/F10.7/sunspot-number indices; no individual NOAA regions, locations, classes, event intervals, or imagery WCS. |
+| SEO | `schema/SEO/main.fbs:70`, `:72`, `:92`: environment measurements; LAT/LON describe the observatory, not a region on the Sun. No active-region or GOES event contract. |
+| CSO | `schema/CSO/main.fbs:123`, `:140`, `:142`, `:187`: astrophysical sources with ICRS RA/DEC, transient times, and photometry. No solar region identifiers/heliographic coordinates or GOES class contract. |
+| SKI | `schema/SKI/main.fbs:14`, `:28`, `:46`, `:70`, `:82`: sky image metadata with ECEF observer position and azimuth/elevation/FOV; no helioprojective FITS WCS or solar observer geometry. |
+| SKT | `schema/SKT/main.fbs:50`, `:200`, `:292`: HEALPix celestial tiles; not a native full-disk helioprojective JP2. |
+| FIL / PNM | `schema/FIL/main.fbs:66`, `schema/PNM/main.fbs:38`: suitable for carrying/announcing original files; not a typed replacement for the requested scientific records. |
+
+The pin is recorded in both root `package.json` and `package-lock.json`; no
+dependencies were installed or upgraded. The fit check uses the newer checked-out
+IDL and is submitted for oracle review, not represented as an authoritative LACK
+ruling. SDK rules were read from the actual checkout at
+`repos/ancillary-packages/space-data-module-sdk/`.
+
+## Proposed schema for THEMIS (not ratified or implemented)
+
+Three logical records are proposed; THEMIS decides whether to add standards or
+extend existing ones. Names below are proposals only. No codes, file identifiers,
+root types, manifests, generated bindings, or repo-local `.fbs` are assigned.
+Unknown values must remain absent (nullable scalars / absent strings), never
+default observations of zero. Each record needs source URL, source content CID
+and SHA-256, retrieval UTC, source record identity, and citation. Preserve original
+source bytes using FIL/PNM rather than a JSON blob in a scientific field.
+
+**SolarRegionObservation**
+
+| Proposed field | Type / meaning |
+| --- | --- |
+| NOAA_REGION | uint; original reported region number; do not add an inferred cycle prefix. |
+| ISSUED_AT_UTC | string; SRS issue instant, distinct from observation time. |
+| OBSERVED_DATE | string; original JSON date label when supplied. |
+| POSITION_EPOCH_UTC | string; SRS `day/2400Z` normalized to next-day midnight. Do not assign an unstated instant to a JSON date. |
+| SECTION | enum: Sunspots / HAlphaPlage; distinguishes SRS I and IA. |
+| SOURCE_LOCATION | string; original N/S/E/W position token. |
+| HELIOGRAPHIC_LATITUDE_DEG | nullable double; north positive. |
+| STONYHURST_LONGITUDE_DEG | nullable double; west positive, east negative, with Earth-centered observer convention explicitly documented by the oracle. NOAA JSON `longitude` has the opposite sign in the captured rows; any conversion belongs in WASM. |
+| CARRINGTON_LONGITUDE_DEG | nullable double; reported Lo in degrees, no inferred rotation. |
+| AREA_MICROHEMISPHERES | nullable double; corrected area in millionths of the solar hemisphere. |
+| MCINTOSH_CLASS / MAGNETIC_CLASS | strings; preserve the source spelling, with any normalized enum separately defined by SDS. |
+| LONGITUDINAL_EXTENT_DEG / SPOT_COUNT | nullable double / uint; preserve absence for plages. |
+
+Use SRS as the positional/morphology authority for the SRS-issued snapshot.
+JSON updates are separate revisions with their own provenance; do not overwrite
+SRS area/class or propagate positions to a later epoch without a separate model.
+
+**SolarEventObservation**
+
+| Proposed field | Type / meaning |
+| --- | --- |
+| SOURCE_EVENT_ID / PRODUCT / OBSERVATORY | strings; stable source identity, product, and observer. Edited-event `bin`, `obsid`, type, time, and observatory must not be collapsed across observers. |
+| EVENT_TYPE | source string or ratified enum covering at least XRA and FLA; other edited event types must be preserved or explicitly filtered. |
+| BEGIN_UTC / PEAK_UTC / END_UTC | nullable strings; source UTC instants, retaining incomplete/qualified times rather than inventing endpoints. |
+| BEGIN_QUALITY / PEAK_QUALITY / END_QUALITY | nullable source quality strings. |
+| GOES_CLASS | nullable string; X-ray class such as C1.4; optical importance SF is a distinct field, not a GOES class. |
+| OPTICAL_IMPORTANCE | nullable string; optical event class. |
+| PEAK_FLUX_W_M2 / FLUENCE_J_M2 | nullable doubles; GOES long-channel values with the passband separately specified. |
+| PASSBAND / SATELLITE | source string / nullable uint. |
+| NOAA_REGION | nullable uint; only an explicit upstream association. |
+| STATUS_CODE / STATUS_TEXT / CHANGE_FLAG | nullable source values for revisions. |
+
+The captured GOES product has **0/78** rows with a `region` field. Do not infer
+one from time proximity. Edited events provide explicit region associations and
+multiple observatories; the eight current-day rows are not eight unique flares.
+Joining the products requires a separately justified association rule.
+
+**SolarDiskImageObservation**
+
+| Proposed field | Type / meaning |
+| --- | --- |
+| OBSERVATORY / INSTRUMENT / MEASUREMENT | strings; SDO, HMI continuum or AIA passband; do not relabel continuum as Ic_flat without source evidence. |
+| SOURCE_ID / IMAGE_ID | original Helioviewer identities. |
+| REQUESTED_AT_UTC / OBSERVED_AT_UTC | strings; desired epoch and actual DATE-OBS, never retrieval time substituted for observation. |
+| DATE_OBS_RAW / TIME_SCALE | strings; retain the original header value and its declared/interpreted scale. T_OBS/T_REC marked TAI are distinct. |
+| SOURCE_CADENCE_S / ACQUISITION_INTERVAL_S | nullable doubles; native published cadence and host sampling interval are different quantities. |
+| IMAGE_CID / HEADER_CID / MIME_TYPE / BYTE_LENGTH | content addresses, image/jp2 or FITS media type, uint64 byte count. |
+| WIDTH / HEIGHT | uint; native image dimensions. |
+| CTYPE1 / CTYPE2 / CUNIT1 / CUNIT2 | strings; preserve FITS helioprojective projection and units. |
+| CRPIX1 / CRPIX2 | doubles; FITS one-based reference pixels, not zero-based texture coordinates. |
+| CRVAL1 / CRVAL2 / CDELT1 / CDELT2 | doubles; world-coordinate values and scales in the stated CUNITs. |
+| CROTA2 or PC/CD matrix | optional typed orientation representation, preserving the source's convention. |
+| RSUN_OBS_ARCSEC | nullable double; observed angular radius. |
+| DSUN_OBS_M | nullable double; observer distance. |
+| CRLN_OBS_DEG / CRLT_OBS_DEG / HGLN_OBS_DEG | nullable doubles; Carrington observer longitude/latitude and supplied Stonyhurst observer longitude. |
+| QUALITY / CONTENT / PROCESSING_DESCRIPTION | source values; retain quality flags and browse-processing identity. |
+
+Rendering/rotation transformations are outside this source qualification and
+must run in the eventual WASM consumer. Helioviewer's DB `scale` differs from
+FITS `CDELT1` in the captured HMI response; do not substitute the former for WCS.
+
+## Live-source findings (2026-10-22 UTC)
+
+All four specified NOAA URLs and Helioviewer `getDataSources` returned HTTP 200.
+The SRS issued 2026-10-22 00:30 UTC explicitly gives positions valid at
+2026-10-21 24:00 UTC. Joining it to JSON `observed_date=2026-10-22` is wrong:
+the JSON already contains later positions. The JSON rows for October 21 have
+matching position strings and Carrington longitudes for the seven SRS regions.
+Other fields differ (e.g. region 4560 area/class); the SRS must remain an
+independent authority, with issue and observation times distinguished.
+
+The live catalog identifies HMI continuum as source 18 and AIA 171/193/304 as
+10/11/13. The final capture ran **16:05:25.912–16:05:28.298 UTC**, at a fixed
+15-minute acquisition target of **16:00:00 UTC**. All **17** downloads returned
+HTTP 200. [Provenance](tests/evidence/2026-10-22-ts940s/provenance.json) contains
+the exact URLs, retrieval times, lengths, and SHA-256 hashes. Original JSON,
+SRS, XML, and JP2 bytes are retained in separate source directories.
+
+| Product | Total source rows | Rows beginning/observed today |
+| --- | ---: | ---: |
+| Solar regions | 222 | 7 |
+| GOES flares | 78 | 7 |
+| Edited events | 700 | 8 (multiple observers; not a unique-event count) |
+
+| Image | DATE-OBS UTC | Offset from 16:00 target, seconds | Bytes |
+| --- | --- | ---: | ---: |
+| HMI continuum | 13:36:28.100 | -8611.900 | 1,053,786 |
+| AIA 171 | 15:31:33.351 | -1706.649 | 1,077,960 |
+| AIA 193 | 15:27:28.843 | -1951.157 | 1,078,098 |
+| AIA 304 | 15:28:17.138 | -1902.862 | 1,077,796 |
+
+All four are 4096×4096 and have the requested WCS/solar observer fields. Each
+embedded JP2 header matches the selected image's API header; DATE-OBS matches
+the database time within its one-second precision. HMI declares CADENCE=45 s
+and fails that bound. AIA does not declare CADENCE in these headers, so its
+source-cadence verdict is **unverified**, not passed. **0/4** images meet even
+the separate 900-second acquisition-interval bound. Current-day data alone
+does not prove current-cadence freshness. JSOC fallback was not implemented
+while the typed image-record contract is stopped.
+
+## Acceptance measurements and commands
+
+| Acceptance line | Measured result |
+| --- | --- |
+| Current-day records published locally and read back by CID | **Not met:** 0 records published, 0 CID read-backs. Schema gate prevents a conforming module/publication. |
+| Active-region positions match same day's SRS exactly | **Source check only:** 7/7 exact location and Carrington-longitude matches at the SRS-stated epoch; 0/7 if wrongly joined on issue calendar date. Includes 3 sunspot regions and 4 plages. No published records to compare yet. |
+| Image timestamps within source cadence | **Not met/unverified:** 4/4 current day; HMI fails its 45-second source cadence; AIA source cadence absent; 0/4 within the 15-minute acquisition interval. |
+
+Numerical source checks state source, units, epoch, frame, tolerance, and
+rationale in `tests/evidence.test.mjs`. Exact position transcription uses zero
+tolerance; no scientific transformation is applied. The image/API timestamp
+bound is less than one second because the API truncates subsecond precision.
+
+Commands run:
+
+```sh
+node data-source/solar-activity/tests/solar-activity.e2e.mjs
+# Exit 2: captures live evidence, then reports the unresolved schema/publication gate.
+node --test data-source/solar-activity/tests/evidence.test.mjs
+# 6 tests passed, 0 failed, 0 skipped.
+git diff --check
+# Exit 0.
+```
+
+The source-only command `node data-source/solar-activity/tests/source-evidence.mjs`
+captures a new dated evidence directory without claiming module acceptance.
+The E2E entry point deliberately cannot report PASS until replaced by actual
+approved-record, module-runtime, and local-node publication verification.
+
+## Publication and verification gate
+
+A real local-node harness exists at
+`../gaia-octree/tests/lib/provider-node.mjs`. Its mock alternatives are not
+publication evidence. Once SDS approves and releases the contract, adapt that
+harness to an isolated solar lane, publish the approved binary records and
+image bytes, retrieve each advertised CID, verify bytes/hashes and decode the
+records, then compare positions to the same SRS issue and image epochs to the
+selected cadence. Use the test node's signing API, never read its private key.
+
+No publication, SDK compatibility, tri-runtime parity, or gauntlet PASS is
+claimed while the schema gate is unresolved. **Gauntlet: not run; receipt path:
+none.** The owner's prerequisite (passing E2E on a committed branch) was not met.
+The local-node harness exists, so its absence is not used as a publication waiver.
+It currently creates temporary node state via `os.tmpdir()`; the solar adaptation
+must accept a lane-owned durable scratch root and clean up only its own children.
+
+No heavy builds, browser, Docker container, node daemon, or background worker was
+started. Source captures are deliverable evidence inside this worktree, not
+scratch files under `/tmp`. The schema approval, Git administrative write
+restriction, and live-image age are separate blockers.
+
+Files added: `README.md`, this `REPORT.md`, `tests/source-evidence.mjs`,
+`tests/solar-activity.e2e.mjs`, `tests/evidence.test.mjs`, and the dated
+`tests/evidence/2026-10-22-ts940s/` source snapshots, hashes, and summary.
+
+## Sources and credits
+
+- [SWPC regions](https://services.swpc.noaa.gov/json/solar_regions.json)
+- [GOES flares](https://services.swpc.noaa.gov/json/goes/primary/xray-flares-7-day.json)
+- [Edited events](https://services.swpc.noaa.gov/json/edited_events.json)
+- [SRS](https://services.swpc.noaa.gov/text/srs.txt)
+- [Helioviewer API](https://api.helioviewer.org/docs/v2/api/index.html)
+- [SWPC user guide](https://www.swpc.noaa.gov/sites/default/files/images/u2/Usr_guide.pdf)
+- NOAA credit: NOAA/NWS Space Weather Prediction Center; SRS prepared jointly
+  by NOAA SWPC and the U.S. Air Force. [NWS data policy](https://www.weather.gov/disclaimer/).
+- SDO credit: “Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams.”
+  [SDO data rules](https://sdo.gsfc.nasa.gov/data/rules.php). Helioviewer is the
+  access service; browse images are not calibrated science products.

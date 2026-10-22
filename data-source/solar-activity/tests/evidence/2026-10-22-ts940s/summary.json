@@ -1,0 +1,443 @@
+{
+  "status": "BLOCKED_SCHEMA",
+  "capturedAt": "2026-10-22T16:05:25.912Z",
+  "completedAt": "2026-10-22T16:05:28.298Z",
+  "evidenceDirectory": "tests/evidence/2026-10-22-ts940s",
+  "target": "2026-10-22T16:00:00.000Z",
+  "currentDay": "2026-10-22",
+  "srs": {
+    "issuedAt": "2026-10-22T00:30:00.000Z",
+    "observationDay": "2026-10-21",
+    "positionEpoch": "2026-10-22T00:00:00.000Z",
+    "rows": [
+      {
+        "section": "I",
+        "region": 4551,
+        "location": "S16W85",
+        "carringtonLongitude": 102,
+        "area": 340,
+        "spotClass": "Eko",
+        "magneticClass": "Beta-Gamma"
+      },
+      {
+        "section": "I",
+        "region": 4557,
+        "location": "N07W55",
+        "carringtonLongitude": 72,
+        "area": 100,
+        "spotClass": "Dso",
+        "magneticClass": "Beta"
+      },
+      {
+        "section": "I",
+        "region": 4560,
+        "location": "N13W28",
+        "carringtonLongitude": 45,
+        "area": 130,
+        "spotClass": "Dai",
+        "magneticClass": "Beta-Gamma"
+      },
+      {
+        "section": "IA",
+        "region": 4553,
+        "location": "N06W82",
+        "carringtonLongitude": 99,
+        "area": null,
+        "spotClass": null,
+        "magneticClass": null
+      },
+      {
+        "section": "IA",
+        "region": 4554,
+        "location": "N07W68",
+        "carringtonLongitude": 85,
+        "area": null,
+        "spotClass": null,
+        "magneticClass": null
+      },
+      {
+        "section": "IA",
+        "region": 4556,
+        "location": "N03W55",
+        "carringtonLongitude": 72,
+        "area": null,
+        "spotClass": null,
+        "magneticClass": null
+      },
+      {
+        "section": "IA",
+        "region": 4559,
+        "location": "S20W78",
+        "carringtonLongitude": 95,
+        "area": null,
+        "spotClass": null,
+        "magneticClass": null
+      }
+    ]
+  },
+  "positions": {
+    "aligned": {
+      "jsonObservationDay": "2026-10-21",
+      "expected": 7,
+      "available": 7,
+      "matches": 7,
+      "comparisons": [
+        {
+          "region": 4551,
+          "expected": {
+            "location": "S16W85",
+            "carringtonLongitude": 102
+          },
+          "actual": {
+            "location": "S16W85",
+            "carringtonLongitude": 102
+          },
+          "matches": true
+        },
+        {
+          "region": 4557,
+          "expected": {
+            "location": "N07W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N07W55",
+            "carringtonLongitude": 72
+          },
+          "matches": true
+        },
+        {
+          "region": 4560,
+          "expected": {
+            "location": "N13W28",
+            "carringtonLongitude": 45
+          },
+          "actual": {
+            "location": "N13W28",
+            "carringtonLongitude": 45
+          },
+          "matches": true
+        },
+        {
+          "region": 4553,
+          "expected": {
+            "location": "N06W82",
+            "carringtonLongitude": 99
+          },
+          "actual": {
+            "location": "N06W82",
+            "carringtonLongitude": 99
+          },
+          "matches": true
+        },
+        {
+          "region": 4554,
+          "expected": {
+            "location": "N07W68",
+            "carringtonLongitude": 85
+          },
+          "actual": {
+            "location": "N07W68",
+            "carringtonLongitude": 85
+          },
+          "matches": true
+        },
+        {
+          "region": 4556,
+          "expected": {
+            "location": "N03W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N03W55",
+            "carringtonLongitude": 72
+          },
+          "matches": true
+        },
+        {
+          "region": 4559,
+          "expected": {
+            "location": "S20W78",
+            "carringtonLongitude": 95
+          },
+          "actual": {
+            "location": "S20W78",
+            "carringtonLongitude": 95
+          },
+          "matches": true
+        }
+      ],
+      "extraRegions": []
+    },
+    "sameCalendarDate": {
+      "jsonObservationDay": "2026-10-22",
+      "expected": 7,
+      "available": 7,
+      "matches": 0,
+      "comparisons": [
+        {
+          "region": 4551,
+          "expected": {
+            "location": "S16W85",
+            "carringtonLongitude": 102
+          },
+          "actual": {
+            "location": "S15W97",
+            "carringtonLongitude": 101
+          },
+          "matches": false
+        },
+        {
+          "region": 4557,
+          "expected": {
+            "location": "N07W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N07W68",
+            "carringtonLongitude": 73
+          },
+          "matches": false
+        },
+        {
+          "region": 4560,
+          "expected": {
+            "location": "N13W28",
+            "carringtonLongitude": 45
+          },
+          "actual": {
+            "location": "N13W42",
+            "carringtonLongitude": 46
+          },
+          "matches": false
+        },
+        {
+          "region": 4553,
+          "expected": {
+            "location": "N06W82",
+            "carringtonLongitude": 99
+          },
+          "actual": {
+            "location": "N06W97",
+            "carringtonLongitude": 101
+          },
+          "matches": false
+        },
+        {
+          "region": 4554,
+          "expected": {
+            "location": "N07W68",
+            "carringtonLongitude": 85
+          },
+          "actual": {
+            "location": "N07W82",
+            "carringtonLongitude": 86
+          },
+          "matches": false
+        },
+        {
+          "region": 4556,
+          "expected": {
+            "location": "N03W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N03W69",
+            "carringtonLongitude": 73
+          },
+          "matches": false
+        },
+        {
+          "region": 4559,
+          "expected": {
+            "location": "S20W78",
+            "carringtonLongitude": 95
+          },
+          "actual": {
+            "location": "S20W92",
+            "carringtonLongitude": 96
+          },
+          "matches": false
+        }
+      ],
+      "extraRegions": []
+    }
+  },
+  "sourceCounts": {
+    "regions": 222,
+    "currentDayRegions": 7,
+    "flares": 78,
+    "currentDayFlares": 7,
+    "flaresWithRegion": 0,
+    "events": 700,
+    "currentDayEvents": 8
+  },
+  "images": [
+    {
+      "instrument": "HMI",
+      "measurement": "continuum",
+      "sourceId": 18,
+      "imageId": "193200290",
+      "requestedAt": "2026-10-22T16:00:00.000Z",
+      "observedAt": "2026-10-22T13:36:28.100Z",
+      "currentDay": true,
+      "offsetSeconds": -8611.9,
+      "sourceCadenceSeconds": 45,
+      "withinSourceCadence": false,
+      "withinAcquisitionInterval": false,
+      "metadataTimeDeltaMs": 100,
+      "bytes": 1053786,
+      "sha256": "07940315dcf1939bc43b459a22e494add58daa86ba4bc558a4c9b6d816cfbf2e",
+      "fields": {
+        "DATE-OBS": "2026-10-22T13:36:28.100",
+        "DATE_OBS": "2026-10-22T13:36:28.100",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000002",
+        "CDELT2": "0.60000002",
+        "CROTA2": "0.00000",
+        "RSUN_OBS": "964.29584",
+        "CRLN_OBS": "9.8589335",
+        "CRLT_OBS": "5.2907505",
+        "DSUN_OBS": "1.4887633e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": "45.0000",
+        "QUALITY": "1024",
+        "CONTENT": "CONTINUUM INTENSITY"
+      }
+    },
+    {
+      "instrument": "AIA",
+      "measurement": "171",
+      "sourceId": 10,
+      "imageId": "193200502",
+      "requestedAt": "2026-10-22T16:00:00.000Z",
+      "observedAt": "2026-10-22T15:31:33.351Z",
+      "currentDay": true,
+      "offsetSeconds": -1706.649,
+      "sourceCadenceSeconds": null,
+      "withinSourceCadence": null,
+      "withinAcquisitionInterval": false,
+      "metadataTimeDeltaMs": 351,
+      "bytes": 1077960,
+      "sha256": "610570bb2fc4ad0a432927ac8800443892068dd6a72f36feff495b4389b710cb",
+      "fields": {
+        "DATE-OBS": "2026-10-22T15:31:33.351",
+        "DATE_OBS": "2026-10-22T15:31:33.351",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000002",
+        "CDELT2": "0.60000002",
+        "CROTA2": "0.00000",
+        "RSUN_OBS": "964.41582",
+        "CRLN_OBS": "8.8054638",
+        "CRLT_OBS": "5.2887516",
+        "DSUN_OBS": "1.4885781e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": null,
+        "QUALITY": "1073741824",
+        "CONTENT": null
+      }
+    },
+    {
+      "instrument": "AIA",
+      "measurement": "193",
+      "sourceId": 11,
+      "imageId": "193200203",
+      "requestedAt": "2026-10-22T16:00:00.000Z",
+      "observedAt": "2026-10-22T15:27:28.843Z",
+      "currentDay": true,
+      "offsetSeconds": -1951.157,
+      "sourceCadenceSeconds": null,
+      "withinSourceCadence": null,
+      "withinAcquisitionInterval": false,
+      "metadataTimeDeltaMs": 157,
+      "bytes": 1078098,
+      "sha256": "274de32d34cba37af449b4dd31fe1720dd759111a7c664d2d941fdf5f6227a4e",
+      "fields": {
+        "DATE-OBS": "2026-10-22T15:27:28.843",
+        "DATE_OBS": "2026-10-22T15:27:28.843",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000008",
+        "CDELT2": "0.60000008",
+        "CROTA2": "0.00000",
+        "RSUN_OBS": "964.41194",
+        "CRLN_OBS": "8.8429461",
+        "CRLT_OBS": "5.2888389",
+        "DSUN_OBS": "1.4885841e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": null,
+        "QUALITY": "1073741824",
+        "CONTENT": null
+      }
+    },
+    {
+      "instrument": "AIA",
+      "measurement": "304",
+      "sourceId": 13,
+      "imageId": "193200398",
+      "requestedAt": "2026-10-22T16:00:00.000Z",
+      "observedAt": "2026-10-22T15:28:17.138Z",
+      "currentDay": true,
+      "offsetSeconds": -1902.862,
+      "sourceCadenceSeconds": null,
+      "withinSourceCadence": null,
+      "withinAcquisitionInterval": false,
+      "metadataTimeDeltaMs": 138,
+      "bytes": 1077796,
+      "sha256": "a3d3f0a9ccb4a7f6d7cb40a75e35fc18d486935e05fc713f1607b66e3e63803d",
+      "fields": {
+        "DATE-OBS": "2026-10-22T15:28:17.138",
+        "DATE_OBS": "2026-10-22T15:28:17.138",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000002",
+        "CDELT2": "0.60000002",
+        "CROTA2": "0.00000",
+        "RSUN_OBS": "964.41271",
+        "CRLN_OBS": "8.8354740",
+        "CRLT_OBS": "5.2888217",
+        "DSUN_OBS": "1.4885829e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": null,
+        "QUALITY": "1073741824",
+        "CONTENT": null
+      }
+    }
+  ],
+  "publishedRecords": 0,
+  "cidReadBacks": 0,
+  "blockers": [
+    "SDS oracle has not ratified a typed solar record contract; production implementation stopped per owner instruction.",
+    "Local-node publication and tri-runtime module verification have not run."
+  ]
+}

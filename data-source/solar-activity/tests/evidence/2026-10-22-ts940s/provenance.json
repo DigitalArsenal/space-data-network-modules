@@ -1,0 +1,189 @@
+[
+  {
+    "source": "noaa-regions",
+    "file": "noaa-regions/solar_regions.json",
+    "url": "https://services.swpc.noaa.gov/json/solar_regions.json",
+    "retrievedAt": "2026-10-22T16:05:25.987Z",
+    "status": 200,
+    "bytes": 127915,
+    "sha256": "59c014a9013505fedec2853791070e29f14435d7ca2a2087351834f89f33b21b",
+    "contentType": "application/json",
+    "lastModified": "Thu, 22 Oct 2026 16:02:14 GMT"
+  },
+  {
+    "source": "noaa-flares",
+    "file": "noaa-flares/xray-flares-7-day.json",
+    "url": "https://services.swpc.noaa.gov/json/goes/primary/xray-flares-7-day.json",
+    "retrievedAt": "2026-10-22T16:05:25.998Z",
+    "status": 200,
+    "bytes": 29389,
+    "sha256": "b9af552a0c880ded2feb1eb0889715e95720ef9a2aa3214548391cd6dc7105ab",
+    "contentType": "application/json",
+    "lastModified": "Thu, 22 Oct 2026 16:04:36 GMT"
+  },
+  {
+    "source": "noaa-events",
+    "file": "noaa-events/edited_events.json",
+    "url": "https://services.swpc.noaa.gov/json/edited_events.json",
+    "retrievedAt": "2026-10-22T16:05:26.011Z",
+    "status": 200,
+    "bytes": 398462,
+    "sha256": "e930f41ce1e73cd06bca38d7c32c7b07d603a1cc4c6c68bd7758e2438fe613bd",
+    "contentType": "application/json",
+    "lastModified": "Thu, 22 Oct 2026 16:03:54 GMT"
+  },
+  {
+    "source": "noaa-srs",
+    "file": "noaa-srs/srs.txt",
+    "url": "https://services.swpc.noaa.gov/text/srs.txt",
+    "retrievedAt": "2026-10-22T16:05:26.024Z",
+    "status": 200,
+    "bytes": 778,
+    "sha256": "8557845fe51697d21496dd645b3d2e081e78b2f9d8e379443e0dca7755ee3428",
+    "contentType": "text/plain",
+    "lastModified": "Thu, 22 Oct 2026 16:04:17 GMT"
+  },
+  {
+    "source": "helioviewer-catalog",
+    "file": "helioviewer-catalog/sources.json",
+    "url": "https://api.helioviewer.org/v2/getDataSources/?",
+    "retrievedAt": "2026-10-22T16:05:26.343Z",
+    "status": 200,
+    "bytes": 36499,
+    "sha256": "8f7ddabc3e694af1dd7be465789aaedcffc3c10878b9993dbf0dead0a3b6c684",
+    "contentType": "application/json;charset=UTF-8",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-hmi-continuum",
+    "file": "helioviewer-hmi-continuum/closest.json",
+    "url": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=18",
+    "retrievedAt": "2026-10-22T16:05:26.425Z",
+    "status": 200,
+    "bytes": 321,
+    "sha256": "202b2e435e00dd6ce7b840ddb77dd94994983ef2733e7ba86a8036bd58db9bfb",
+    "contentType": "application/json",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-hmi-continuum",
+    "file": "helioviewer-hmi-continuum/header.xml",
+    "url": "https://api.helioviewer.org/v2/getJP2Header/?id=193200290",
+    "retrievedAt": "2026-10-22T16:05:26.500Z",
+    "status": 200,
+    "bytes": 5131,
+    "sha256": "faa0c9d0d7fe74442a586edb5170aff8f4e9587639e1a3f8b9c9ad5330857b35",
+    "contentType": "text/xml;charset=UTF-8",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-hmi-continuum",
+    "file": "helioviewer-hmi-continuum/image.jp2",
+    "url": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T13%3A36%3A28Z&sourceId=18",
+    "retrievedAt": "2026-10-22T16:05:27.015Z",
+    "status": 200,
+    "bytes": 1053786,
+    "sha256": "07940315dcf1939bc43b459a22e494add58daa86ba4bc558a4c9b6d816cfbf2e",
+    "contentType": "image/jp2",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-171",
+    "file": "helioviewer-aia-171/closest.json",
+    "url": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=10",
+    "retrievedAt": "2026-10-22T16:05:27.103Z",
+    "status": 200,
+    "bytes": 311,
+    "sha256": "1e733fb3d24a972557f5155327e54df2ebdc32435a2ffb68724c6e2a25446078",
+    "contentType": "application/json",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-171",
+    "file": "helioviewer-aia-171/header.xml",
+    "url": "https://api.helioviewer.org/v2/getJP2Header/?id=193200502",
+    "retrievedAt": "2026-10-22T16:05:27.169Z",
+    "status": 200,
+    "bytes": 6482,
+    "sha256": "6845a79084ba602046d7e3b258138964375245dbc54f27dd8f6d2955e8601b26",
+    "contentType": "text/xml;charset=UTF-8",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-171",
+    "file": "helioviewer-aia-171/image.jp2",
+    "url": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T15%3A31%3A33Z&sourceId=10",
+    "retrievedAt": "2026-10-22T16:05:27.367Z",
+    "status": 200,
+    "bytes": 1077960,
+    "sha256": "610570bb2fc4ad0a432927ac8800443892068dd6a72f36feff495b4389b710cb",
+    "contentType": "image/jp2",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-193",
+    "file": "helioviewer-aia-193/closest.json",
+    "url": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=11",
+    "retrievedAt": "2026-10-22T16:05:27.469Z",
+    "status": 200,
+    "bytes": 311,
+    "sha256": "e60628afadff2dab7f5d8914d38640a75b03cd7514a25f105d473ea74b53e215",
+    "contentType": "application/json",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-193",
+    "file": "helioviewer-aia-193/header.xml",
+    "url": "https://api.helioviewer.org/v2/getJP2Header/?id=193200203",
+    "retrievedAt": "2026-10-22T16:05:27.544Z",
+    "status": 200,
+    "bytes": 6487,
+    "sha256": "455cf0f669c62efcc82eaa8db0d8eca08bc73cefc3e23928921db2af088fa96c",
+    "contentType": "text/xml;charset=UTF-8",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-193",
+    "file": "helioviewer-aia-193/image.jp2",
+    "url": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T15%3A27%3A29Z&sourceId=11",
+    "retrievedAt": "2026-10-22T16:05:27.824Z",
+    "status": 200,
+    "bytes": 1078098,
+    "sha256": "274de32d34cba37af449b4dd31fe1720dd759111a7c664d2d941fdf5f6227a4e",
+    "contentType": "image/jp2",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-304",
+    "file": "helioviewer-aia-304/closest.json",
+    "url": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=13",
+    "retrievedAt": "2026-10-22T16:05:27.933Z",
+    "status": 200,
+    "bytes": 310,
+    "sha256": "3913b4ad64dc39713695c3838e24deda2d8a49d73a5ad9586a353fe8a051cb90",
+    "contentType": "application/json",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-304",
+    "file": "helioviewer-aia-304/header.xml",
+    "url": "https://api.helioviewer.org/v2/getJP2Header/?id=193200398",
+    "retrievedAt": "2026-10-22T16:05:28.011Z",
+    "status": 200,
+    "bytes": 6481,
+    "sha256": "cd437adf10235f99e913c1a51f2905a9abe26eba6a87c3f31414f362bd17bab6",
+    "contentType": "text/xml;charset=UTF-8",
+    "lastModified": null
+  },
+  {
+    "source": "helioviewer-aia-304",
+    "file": "helioviewer-aia-304/image.jp2",
+    "url": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T15%3A28%3A17Z&sourceId=13",
+    "retrievedAt": "2026-10-22T16:05:28.297Z",
+    "status": 200,
+    "bytes": 1077796,
+    "sha256": "a3d3f0a9ccb4a7f6d7cb40a75e35fc18d486935e05fc713f1607b66e3e63803d",
+    "contentType": "image/jp2",
+    "lastModified": null
+  }
+]
