@@ -1,5 +1,32 @@
 {
-  "spacedatastandards": "1.247.0",
-  "schema": "OEM",
-  "threadModel": "wasi-sequential"
+  "spacedatastandards": "1.249.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM",
+    "EGP"
+  ],
+  "commonHeaders": [
+    "civil_time.hpp",
+    "horizons_vectors.hpp"
+  ],
+  "sources": [
+    "src/notables.hpp",
+    "src/trajectory_plan.hpp",
+    "src/packed_rows.hpp",
+    "../../files/orbit-products/src/ephemeris_series.hpp",
+    "src/trajectory_rows.hpp",
+    "src/regime.hpp",
+    "src/oem_blocks.hpp",
+    "../../files/orbit-products/src/sha256.hpp",
+    "src/runtime_contracts.hpp",
+    "src/deep_space_spacecraft.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "fe950d1b0658c3e79009cd51c67360c8809bb6823dffd97a778e02c0d66f0511"
 }

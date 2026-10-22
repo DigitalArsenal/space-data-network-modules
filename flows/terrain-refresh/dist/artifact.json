@@ -1,0 +1,137 @@
+{
+  "programId": "com.digitalarsenal.flows.terrain-refresh",
+  "name": "Terrain Refresh: monthly source check",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 10,
+  "edges": 15,
+  "triggers": 1,
+  "capabilities": [
+    "clock",
+    "http",
+    "secrets:storage_r2"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "methodId": "plan",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "probe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "sign_list",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_list",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "finish_list",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "diff",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "methodId": "diff",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "sign_put",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_put",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "finish_put",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "version": "0.1.0",
+      "sha256": "a387c7953a323e2c2fadac2ad46e2df91983f354e0589e378953f43997281b02",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f757263652d7761746368_",
+      "methodSymbols": {
+        "plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f757263652d7761746368_plan",
+        "diff": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f757263652d7761746368_diff"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "3f9e2db331348abe85a2a378fdc3dfae9a06ba94d0198a6a5767ae29145d3384",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.storage.object-s3",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "version": "0.1.0",
+      "sha256": "8880441acb86ee43e79f5efc375008b391770355ed00a5eb60c64b309b102e97",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_",
+      "methodSymbols": {
+        "serve": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_serve",
+        "sign": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_sign",
+        "split": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_split",
+        "assemble": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_assemble",
+        "finish": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_finish"
+      }
+    }
+  ]
+}

@@ -8,8 +8,9 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { gunzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
-import zlib from "node:zlib";
+import { decodeEdgeMatchedPlanes } from "../tools/edge-matched-planes.mjs";
 
 import { decodePluginInvokeResponse } from "space-data-module-sdk/invoke";
 import {
@@ -35,6 +36,10 @@ function check(caseId, outputs, lane) {
     const files = port("file"), names = splitSized(port("names")[0]);
     assert.equal(files.length, names.length, lane);
     assert.ok(files.length >= 1, lane);
+    for (const file of files) for (const sized of splitSized(gunzipSync(file))) {
+      const record = dttOf(sized.subarray(4)).unpack();
+      decodeQuantizedMesh(decodeEdgeMatchedPlanes(record.PAYLOAD.BYTES));
+    }
     return;
   }
   const records = splitSized(port("records")[0]);
@@ -43,7 +48,7 @@ function check(caseId, outputs, lane) {
     const t = dttOf(sized.subarray(4)).unpack();
     assert.equal(t.TILING_SCHEME, 5, lane);
     assert.equal(t.CENTER_NAME, "MOON", lane);
-    const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(t.PAYLOAD.BYTES)));
+    const mesh = decodeQuantizedMesh(decodeEdgeMatchedPlanes(t.PAYLOAD.BYTES));
     assert.deepEqual(mesh.extensions.map((e) => e.id), [1], `${lane} ${caseId}: normals`);
   }
 }

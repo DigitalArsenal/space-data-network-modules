@@ -1,0 +1,16 @@
+{
+  "spacedatastandards": "1.258.0",
+  "sdsFamilies": [
+    "IRM",
+    "DTT",
+    "FSO",
+    "FSB",
+    "PNM"
+  ],
+  "commonHeaders": [],
+  "sources": [
+    "src/moon_imagery_module.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "c0527b504b601a0b97a3d4b1f57fdc384c279d086c258f25f7e470ba34fc3d93"
+}

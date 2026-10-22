@@ -1,0 +1,501 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.moon-imagery",
+  "name": "Moon Imagery (LRO LROC WAC) Nodes",
+  "version": "0.1.0",
+  "description": "The Moon's imagery from the USGS Astrogeology LRO LROC WAC global mosaic (100 m/px, June 2013, public domain), one unit per tick: wac_plan resumes the walk from the durable $IRM mark (read through hostcap/flatsql-query) and asks for one tile row of one level as whole-row byte ranges of the mosaic (BigTIFF, 8-bit, one row per strip, If-Match on its ETag), or, for the coarse unit, for the stored level-5 tiles; wac_tile area-averages the rows in WASM into 256 px baseline JPEG tiles on the Moon's two-root geographic scheme (GEOGRAPHIC_TWO_ROOT_BODY, rows from the south), one $DTT record per tile (PAYLOAD_FORMAT CUSTOM, MEDIA_TYPE image/jpeg), and packs them as files the console fetches by CID: imagery/301/root.dtts (levels 0-2) and imagery/301/<L>/<X16>_<Y>.dtts (16 tiles of one row), each a size-prefixed $DTT stream. Levels 5-8 come from the mosaic's rows; levels 0-4 from the stored level-5 tiles. TYPED CONTRACTS 1.0: FlatBuffers only between modules; node config through plugin.getConfig.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method is a single-pass transform over the frames the flow hands it: a plan with its requests, or the tiles and files of one unit. No shared mutable state, no workers."
+  },
+  "externalInterfaces": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "moon-imagery-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "schemasUsed": [
+    {
+      "schemaName": "IRM.fbs",
+      "fileIdentifier": "$IRM",
+      "rootTypeName": "IRM"
+    },
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT"
+    },
+    {
+      "schemaName": "FSO.fbs",
+      "fileIdentifier": "$FSO",
+      "rootTypeName": "FSO"
+    },
+    {
+      "schemaName": "FSB.fbs",
+      "fileIdentifier": "$FSB",
+      "rootTypeName": "FSB"
+    },
+    {
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "wac_plan",
+      "displayName": "Plan one unit of the WAC walk",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (TICK); FIRED_MS stamps the run."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-byte-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "hostcap/flatsql-query's answer to mark_query: $FSB chunks of the newest $IRM rows."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The durable resume mark, when one is stored."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "rows_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A ranged GET of whole WAC rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 0 of a direct unit's source rows (at most 48 MiB)."
+        },
+        {
+          "portId": "rows_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A ranged GET of whole WAC rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 1 of a direct unit's source rows (at most 48 MiB)."
+        },
+        {
+          "portId": "rows_2",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A ranged GET of whole WAC rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 2 of a direct unit's source rows (at most 48 MiB)."
+        },
+        {
+          "portId": "rows_3",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A ranged GET of whole WAC rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 3 of a direct unit's source rows (at most 48 MiB)."
+        },
+        {
+          "portId": "children",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-operation",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSO.fbs",
+                  "fileIdentifier": "$FSO",
+                  "rootTypeName": "FSO",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$FSO QUERY_RECORDS: SELECT _data FROM DTT WHERE TILESET_ID = ? AND LEVEL = 5 ORDER BY _rowid DESC LIMIT ?"
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The coarse unit's read of the stored level-5 tiles."
+        },
+        {
+          "portId": "unit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig: level, row, first_row, row_count, coarse."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "What the unit builds."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-irm",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The job ($IRM, the mark-to-be): JOB_ID usgs-lroc-wac@<tileset>@<epoch>, LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the next."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The job the unit runs under."
+        }
+      ],
+      "description": "Turns the tick and the stored mark into one unit of the walk (481 units: level 5 rows, the coarse unit, then levels 6, 7 and 8 row by row) and its requests. A drained walk is a clean no-op.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "wac_tile",
+      "displayName": "Tile one unit of the WAC walk",
+      "inputPorts": [
+        {
+          "portId": "unit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The unit from wac_plan."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "What the unit builds."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-irm",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The job from wac_plan."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The job the unit runs under."
+        },
+        {
+          "portId": "rows_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the matching rows_k request: STATUS 206 and BODY the rows' bytes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 0 of a direct unit's source rows."
+        },
+        {
+          "portId": "rows_1",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the matching rows_k request: STATUS 206 and BODY the rows' bytes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 1 of a direct unit's source rows."
+        },
+        {
+          "portId": "rows_2",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the matching rows_k request: STATUS 206 and BODY the rows' bytes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 2 of a direct unit's source rows."
+        },
+        {
+          "portId": "rows_3",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the matching rows_k request: STATUS 206 and BODY the rows' bytes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Part 3 of a direct unit's source rows."
+        },
+        {
+          "portId": "children",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-byte-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "hostcap/flatsql-query's answer to the children query: $FSB chunks of size-prefixed $DTT records."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The stored level-5 tiles (coarse unit only)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One published file: a size-prefixed $DTT stream of JPEG tiles."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The unit's files, in the order of names."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The files' names."
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The level-5 tiles as a size-prefixed $DTT record stream, for hostcap/storage-ingest dtt_records."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Stored so the coarse unit can read them."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest for the level-5 records: SCHEMA DTT, the tiles' own source tags, RECONCILE None."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Attribution of the stored level-5 tiles."
+        }
+      ],
+      "description": "Area-averages the unit's WAC rows into 256 px JPEG tiles (or, for the coarse unit, builds levels 0-4 from the stored level-5 tiles by 2x2 averaging) and packs them into files.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

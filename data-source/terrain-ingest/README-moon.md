@@ -27,7 +27,7 @@ replaces the table.
 | --- | --- |
 | `terrain-ingest:body_plan` (config `body` moon) | one unit of the walk: the product's PDS3 label and three whole-line ranges of its image (If-Match on the product's ETag), the tiles' `$DTT` body plan |
 | `terrain-source:tile` | quantized mesh on the 1737.4 km sphere (`GEOGRAPHIC_TWO_ROOT_BODY`), oct normals, no water mask, 32 KiB per tile |
-| `terrain-source:pack` | `terrain/301/root.dtts` (levels 0-2) and `terrain/301/<L>/<X>_<Y>.dtts` (one 4x4 block), each a size-prefixed `$DTT` stream |
+| `terrain-source:pack` | `terrain/301/root.dtts.gz` (levels 0-2) and `terrain/301/<L>/<X>_<Y>.dtts.gz` (one 4x4 block), each gzip of a size-prefixed `$DTT` stream |
 | `host-adapter:publish_files` | `ipfs.add` per file, one `$PNM` (CID, name) each |
 | `terrain-ingest:announce_files` | the `$PNM` records and their IngestRequest |
 | `terrain-ingest:publish_request` | the `$IRM` mark (`walk:lola`), from the verified store result |
@@ -73,3 +73,9 @@ LOLA_DIR=~/software/data/lola node ../terrain-source/tools/moon-sample-budget.mj
 LOLA_DIR=~/software/data/lola node ../terrain-source/tools/moon-unit.mjs 16
 LOLA_DIR=~/software/data/lola LOLA_RDR_DIR=~/software/data/lola-rdr node --test ../terrain-source/tests/moon-rdr-residual.test.mjs
 ```
+
+Each `.dtts.gz` file is gzip of the complete size-prefixed `$DTT` stream.
+Body payloads use `qm-edge-matched-planes-v1`; reconstruct the quantized mesh
+from its topology descriptor and height/normal byte planes. Payload digests,
+sizes and ETags describe those stored bytes. The mesh density ceiling remains
+32 KiB over gzip of the reconstructed quantized mesh.

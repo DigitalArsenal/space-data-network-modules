@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.data-source.terrain-source-watch": "../../data-source/terrain-source-watch",
+  "com.digitalarsenal.storage.object-s3": "../../storage/object-s3",
+  "com.digitalarsenal.hostcap.http-request": "../../hostcap/http-request"
+}

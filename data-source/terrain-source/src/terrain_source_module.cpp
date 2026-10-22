@@ -48,6 +48,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <map>
 
 #include "space_data_module_invoke.h"
 #include "typedHostcall.hpp"
@@ -440,7 +441,9 @@ std::string sha256_multihash(const std::vector<uint8_t>& bytes) {
 //     it is REFUSED by name. A guest that instead traps on allocation takes
 //     its pooled flow instance down with it and that instance never runs work
 //     again — the live failure this ceiling exists to prevent.
-constexpr size_t kDecodeByteBudget = 256u * 1024u * 1024u;  // 256 MiB
+// 512 MiB: an LDEM_512 run (the Moon's level 10, one 45-degree run of a block row with the halo) decodes a
+// 270 MB window; the flows that run it give their guest 1 GiB of linear memory (host-config.py memory_pages).
+constexpr size_t kDecodeByteBudget = 512u * 1024u * 1024u;  // 512 MiB
 
 struct DecodeBudget {
     size_t used = 0;
@@ -511,7 +514,11 @@ size_t tiff_type_size(uint16_t type) {
     }
 }
 
+#include "body_geotiff.hpp"
+#include "body_insets.hpp"
+
 struct DemGrid {
+    std::shared_ptr<BodyInset> inset;
     // The decoded WINDOW, not the granule: width/height are the sub-raster's.
     uint32_t width = 0;
     uint32_t height = 0;
@@ -1822,6 +1829,64 @@ struct TileExtent {
 // ── a body's PDS products (pds_img.hpp), read by whole-line ranges ─────────
 
 #include "pds_img.hpp"
+#include "body_fill.hpp"
+#include "body_inset_decode.hpp"
+
+struct BodyFill {
+    bool active = false, fill_edges = true, primary_datum = false, fill_datum = false;
+    double lat_min = -90, lat_max = 90, band_m = 0, radius_m = 0;
+    std::vector<DemGrid> grids, datum;
+    const std::vector<DemGrid>* datum_source = nullptr;
+    std::unique_ptr<BodyFill> backing;
+
+    bool surface(const std::vector<DemGrid>& source, bool add_datum, double lon, double lat,
+                 double* h, bool* nodata, bool* clamped) const {
+        if (!body_sample(source, lon, lat, h, nodata, clamped)) return false;
+        if (!add_datum || *nodata) return true;
+        double offset = 0; bool dn = false, dc = false;
+        if (!body_sample(datum_source ? *datum_source : datum, lon, lat, &offset, &dn, &dc) || dn || dc) return false;
+        *h += offset;
+        return true;
+    }
+    BodyInvalidDistance invalid;
+    BodyInsetMask inset_mask;
+
+    bool sample(const std::vector<DemGrid>& primary, double lon, double lat, double* h,
+                bool* nodata, bool* clamped, BodyFillStats* stats = nullptr) const {
+        if (!active) return surface(primary, primary_datum, lon, lat, h, nodata, clamped);
+        double p = 0, f = 0;
+        bool pn = false, pc = false, fn = false, fc = false;
+        const bool valid_p = surface(primary, primary_datum, lon, lat, &p, &pn, &pc) && !pn && !pc && std::isfinite(p);
+        double d = band_m;
+        if (fill_edges && lat_min > -90) d = std::min(d, std::max(0.0, lat - lat_min) * radius_m * kPolarPi / 180);
+        if (fill_edges && lat_max < 90) d = std::min(d, std::max(0.0, lat_max - lat) * radius_m * kPolarPi / 180);
+        if (valid_p && !primary.empty() && primary[0].inset)
+            d=std::min(d,inset_mask.distance(lon,lat,band_m));
+        if (valid_p && !primary.empty() && !primary[0].inset) {
+            const DemGrid& g = primary[0];
+            double x = 0, y = 0;
+            const double spacing = g.proj == kProjPolarStereo ? g.ps_scale_m : radius_m * kPolarPi / 180 * g.scale_lat;
+            if (g.proj == kProjPolarStereo) {
+                polar_pixel(g, lat, lon, &x, &y);
+                // The actual image boundary is absent too; a decoded WINDOW boundary is not.
+                d = std::min(d, std::max(0.0, std::min({x + 1, y + 1, g.width - x, g.full_rows - y})) * spacing);
+            } else {
+                x = full_ix(g, lon); y = full_iy(g, lat);
+            }
+            if (!invalid.squared.empty()) {
+                const double limit = band_m / spacing;
+                const double pixels = invalid.distance(x, y, limit);
+                if (pixels < limit) d = std::min(d, pixels * spacing);
+            }
+        }
+        // Avoid even reading fill outside the band: the original double is returned verbatim.
+        const bool need_fill = !valid_p || d < band_m;
+        const bool valid_f = need_fill && (backing ? backing->sample(grids, lon, lat, &f, &fn, &fc) :
+                                           surface(grids, fill_datum, lon, lat, &f, &fn, &fc)) && !fn && !fc && std::isfinite(f);
+        *nodata = false; *clamped = pc || (need_fill && fc);
+        return body_blend(p, valid_p, f, valid_f, d, band_m, h, stats);
+    }
+};
 
 // GEOGRAPHIC_WGS84: level z has 2^(z+1) x 2^z tiles of (180/2^z) degrees, row
 // 0 at the SOUTH edge (TMS).
@@ -1984,6 +2049,135 @@ struct MeshBody {
     bool water_extension = true;
 };
 
+// Quantized-mesh topology serialization, shared by the mesh writer and lossless reconstruction.
+void write_mesh_indices(std::vector<uint8_t>& mesh, const std::vector<uint16_t>& qu,
+                        const std::vector<uint16_t>& qv, const std::vector<uint32_t>& indices) {
+    const uint32_t n_verts = static_cast<uint32_t>(qu.size());
+    const bool wide = n_verts > 65536;
+    // Padding before the index data: 2-byte alignment for 16-bit indices,
+    // 4-byte for 32-bit, per the spec.
+    const size_t align = wide ? 4 : 2;
+    while (mesh.size() % align != 0) put_u8(&mesh, 0);
+    put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
+    {
+        uint32_t highest = 0;
+        for (const uint32_t idx : indices) {
+            const uint32_t code = highest - idx;
+            if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
+            if (code == 0) highest++;
+        }
+    }
+    auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
+        std::vector<uint32_t> edge;
+        for (uint32_t v = 0; v < n_verts; v++) {
+            if (is_edge(qu[v], qv[v])) edge.push_back(v);
+        }
+        put_u32(&mesh, static_cast<uint32_t>(edge.size()));
+        for (const uint32_t v : edge) {
+            if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
+        }
+    };
+    put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
+    put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
+    put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
+    put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
+
+}
+
+// Body payload layout D: topology descriptor, zigzag-height byte planes, then extensions.
+// The descriptor is only topology; neither the source product nor the height field participates.
+constexpr const char* kEdgeMatchedPlanes = "qm-edge-matched-planes-v1";
+uint32_t planes_u32(const uint8_t* p) {
+    return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
+}
+uint32_t planes_u16(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8; }
+
+void append_byte_planes(const uint8_t* data, size_t count, bool decode, std::vector<uint8_t>* out) {
+    const size_t at = out->size();
+    out->resize(at + 2 * count);
+    for (size_t i = 0; i < count; i++) {
+        if (decode) { (*out)[at + 2 * i] = data[i]; (*out)[at + 2 * i + 1] = data[count + i]; }
+        else { (*out)[at + i] = data[2 * i]; (*out)[at + count + i] = data[2 * i + 1]; }
+    }
+}
+
+bool append_planes_extensions(const uint8_t* data, size_t length, uint32_t nv, bool decode,
+                              std::vector<uint8_t>* out) {
+    for (size_t at = 0; at < length;) {
+        if (length - at < 5) return false;
+        const uint8_t id = data[at];
+        const size_t size = planes_u32(data + at + 1);
+        if (size > length - at - 5 || (id == 1 && size != 2u * nv)) return false;
+        out->insert(out->end(), data + at, data + at + 5);
+        if (id == 1) append_byte_planes(data + at + 5, nv, decode, out);
+        else out->insert(out->end(), data + at + 5, data + at + 5 + size);
+        at += 5 + size;
+    }
+    return true;
+}
+
+bool decode_edge_matched_planes(const uint8_t* data, size_t length, std::vector<uint8_t>* out) {
+    if (!data || length < 104) return false;
+    const uint32_t n = planes_u16(data + 88), cand = planes_u16(data + 90);
+    const uint32_t nv = planes_u32(data + 100);
+    if (n < 4 || n > 4097 || cand < 4 || cand > n || (n - 1) % (cand - 1) ||
+        nv > 1024u * 1024u || nv > (length - 104) / 2) return false;
+    std::array<std::vector<uint32_t>, 4> edges;
+    uint32_t expected = (cand - 2) * (cand - 2);
+    for (size_t k = 0; k < 4; k++) {
+        const uint32_t count = planes_u16(data + 92 + 2 * k);
+        if (count < 2 || count > n || (n - 1) % (count - 1)) return false;
+        expected += count - 1;
+        const uint32_t stride = (n - 1) / (count - 1);
+        for (uint32_t i = 0; i < count; i++) edges[k].push_back(i * stride);
+    }
+    if (expected != nv) return false;
+    const auto mesh = edge_matched_mesh(n, cand, edges);
+    if (mesh.size() != nv) return false;
+    const auto remap = mesh_first_appearance(mesh);
+    std::vector<uint16_t> qu(nv), qv(nv);
+    for (uint32_t v = 0; v < nv; v++) {
+        if (remap[v] == UINT32_MAX) return false;
+        qu[remap[v]] = static_cast<uint16_t>(32767ull * mesh.col[v] / (n - 1));
+        qv[remap[v]] = static_cast<uint16_t>(32767ull * mesh.row[v] / (n - 1));
+    }
+    auto indices = mesh.indices;
+    for (auto& idx : indices) idx = remap[idx];
+    out->assign(data, data + 88);
+    put_u32(out, nv);
+    for (const auto* axis : {&qu, &qv}) {
+        int32_t prev = 0;
+        for (const uint16_t value : *axis) { put_u16(out, zigzag16(int32_t(value) - prev)); prev = value; }
+    }
+    append_byte_planes(data + 104, nv, true, out);
+    write_mesh_indices(*out, qu, qv, indices);
+    return append_planes_extensions(data + 104 + 2 * nv, length - 104 - 2 * nv, nv, true, out);
+}
+
+bool encode_edge_matched_planes(const std::vector<uint8_t>& qm, const TileMesh& shape, uint32_t cand,
+                                const std::array<std::vector<uint32_t>, 4>& edges, std::vector<uint8_t>* out) {
+    const uint32_t nv = static_cast<uint32_t>(shape.size());
+    if (shape.n > 65535 || cand > 65535 || qm.size() < 92u + 6u * nv) return false;
+    out->assign(qm.begin(), qm.begin() + 88);
+    put_u16(out, static_cast<uint16_t>(shape.n));
+    put_u16(out, static_cast<uint16_t>(cand));
+    size_t edge_posts = 0;
+    for (const auto& edge : edges) {
+        if (edge.size() > 65535) return false;
+        put_u16(out, static_cast<uint16_t>(edge.size()));
+        edge_posts += edge.size();
+    }
+    put_u32(out, nv);
+    append_byte_planes(qm.data() + 92 + 4 * nv, nv, false, out);
+    const size_t index_size = nv > 65536 ? 4 : 2;
+    const size_t vertex_end = 92 + 6 * nv;
+    const size_t ext = (vertex_end + index_size - 1) / index_size * index_size +
+                       4 + shape.indices.size() * index_size + 16 + edge_posts * index_size;
+    if (ext > qm.size() || !append_planes_extensions(qm.data() + ext, qm.size() - ext, nv, false, out)) return false;
+    std::vector<uint8_t> restored;
+    return decode_edge_matched_planes(out->data(), out->size(), &restored) && restored == qm;
+}
+
 void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vector<double>& heights_in,
                  const std::vector<uint8_t>& water_raster, bool uniform_water, std::vector<uint8_t>* out,
                  const MeshBody& body = MeshBody()) {
@@ -2019,11 +2213,7 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
     // match. The decode loop (`index = highest - code; if (code == 0)
     // ++highest`) then reproduces the stream exactly.
     {
-        std::vector<uint32_t> remap(n_verts, UINT32_MAX);
-        uint32_t next = 0;
-        for (uint32_t& idx : indices) {
-            if (remap[idx] == UINT32_MAX) remap[idx] = next++;
-        }
+        const auto remap = mesh_first_appearance(tile_mesh);
         std::vector<uint16_t> pu(n_verts), pv(n_verts), ph(n_verts);
         std::vector<double> ph_m(n_verts), plat(n_verts), plon(n_verts);
         for (uint32_t v = 0; v < n_verts; v++) {
@@ -2080,34 +2270,7 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
     put_zigzag_array(qv);
     put_zigzag_array(qh);
 
-    const bool wide = n_verts > 65536;
-    // Padding before the index data: 2-byte alignment for 16-bit indices,
-    // 4-byte for 32-bit, per the spec.
-    const size_t align = wide ? 4 : 2;
-    while (mesh.size() % align != 0) put_u8(&mesh, 0);
-    put_u32(&mesh, static_cast<uint32_t>(indices.size() / 3));
-    {
-        uint32_t highest = 0;
-        for (const uint32_t idx : indices) {
-            const uint32_t code = highest - idx;
-            if (wide) put_u32(&mesh, code); else put_u16(&mesh, static_cast<uint16_t>(code));
-            if (code == 0) highest++;
-        }
-    }
-    auto put_edge = [&](bool (*is_edge)(uint16_t, uint16_t)) {
-        std::vector<uint32_t> edge;
-        for (uint32_t v = 0; v < n_verts; v++) {
-            if (is_edge(qu[v], qv[v])) edge.push_back(v);
-        }
-        put_u32(&mesh, static_cast<uint32_t>(edge.size()));
-        for (const uint32_t v : edge) {
-            if (wide) put_u32(&mesh, v); else put_u16(&mesh, static_cast<uint16_t>(v));
-        }
-    };
-    put_edge([](uint16_t u, uint16_t) { return u == 0; });          // west
-    put_edge([](uint16_t, uint16_t v) { return v == 0; });          // south
-    put_edge([](uint16_t u, uint16_t) { return u == 32767; });      // east
-    put_edge([](uint16_t, uint16_t v) { return v == 32767; });      // north
+    write_mesh_indices(mesh, qu, qv, indices);
 
     // Oct-encoded vertex normals (extensionId 1): two bytes per vertex, in
     // vertex order.
@@ -2282,7 +2445,7 @@ struct BodyMeshSurface {
 
 // One source post's departure from the rendered surface; false when
 // `abort_above` stops the walk.
-bool probe_post(double rendered, float truth, double abort_above, SourcePostProbe* out) {
+bool probe_post(double rendered, double truth, double abort_above, SourcePostProbe* out) {
     const double delta = std::fabs(rendered - static_cast<double>(truth));
     out->probes++;
     out->sum_sq += delta * delta;
@@ -2307,7 +2470,8 @@ bool probe_post(double rendered, float truth, double abort_above, SourcePostProb
 // `abort_above` stopped the walk.
 template <class Surface>
 bool measure_polar_accuracy(const DemGrid& g, double west, double east, double south, double north,
-                            const Surface& surface, double abort_above, SourcePostProbe* out) {
+                            const Surface& surface, double abort_above, SourcePostProbe* out,
+                            const std::vector<DemGrid>& granules, const BodyFill* fill) {
     if (!g.covers || g.samples.empty()) return true;
     double s_lo = 0, s_hi = 0, l_lo = 0, l_hi = 0;
     if (!polar_stereo_footprint(polar_of(g), west, east, south, north, &s_lo, &s_hi, &l_lo, &l_hi)) return true;
@@ -2317,11 +2481,15 @@ bool measure_polar_accuracy(const DemGrid& g, double west, double east, double s
     const long y1 = std::min<long>(static_cast<long>(g.height) - 1, static_cast<long>(std::ceil(l_hi)) + 1 - g.off_y);
     for (long iy = y0; iy <= y1; iy++) {
         for (long ix = x0; ix <= x1; ix++) {
-            const float truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
-            if (truth == kNoData) continue;
+            double truth = g.samples[static_cast<size_t>(iy) * g.width + static_cast<size_t>(ix)];
+            if (truth == kNoData && !fill) continue;
             double lat = 0, lon = 0;
             polar_lat_lon(g, static_cast<double>(ix + g.off_x), static_cast<double>(iy + g.off_y), &lat, &lon);
             if (lat < south || lat > north || lon < west || lon > east) continue;
+            if (fill) {
+                bool nd = false, cl = false;
+                if (!fill->sample(granules, lon, lat, &truth, &nd, &cl) || nd || cl) continue;
+            }
             if (!probe_post(surface.at(lon, lat), truth, abort_above, out)) return false;
         }
     }
@@ -2331,12 +2499,12 @@ bool measure_polar_accuracy(const DemGrid& g, double west, double east, double s
 template <class Surface>
 SourcePostProbe measure_surface_accuracy(const std::vector<DemGrid>& granules, double west, double east,
                                          double south, double north, const Surface& surface,
-                                         double abort_above, std::vector<uint64_t>* histogram) {
+                                         double abort_above, std::vector<uint64_t>* histogram, const BodyFill* fill = nullptr) {
     SourcePostProbe out;
     out.histogram = histogram;
     for (const DemGrid& g : granules) {
         if (g.proj == kProjPolarStereo) {
-            if (!measure_polar_accuracy(g, west, east, south, north, surface, abort_above, &out)) return out;
+            if (!measure_polar_accuracy(g, west, east, south, north, surface, abort_above, &out, granules, fill)) return out;
             continue;
         }
         PostWindow w;
@@ -2345,9 +2513,13 @@ SourcePostProbe measure_surface_accuracy(const std::vector<DemGrid>& granules, d
             const double lat = full_lat(g, static_cast<double>(g.off_y + iy));
             const float* src = &g.samples[static_cast<size_t>(iy) * g.width];
             for (long ix = w.x0; ix <= w.x1; ix++) {
-                const float truth = src[ix];
-                if (truth == kNoData) continue;
+                double truth = src[ix];
+                if (truth == kNoData && !fill) continue;
                 const double lon = full_lon(g, static_cast<double>(g.off_x + ix));
+                if (fill) {
+                    bool nd = false, cl = false;
+                    if (!fill->sample(granules, lon, lat, &truth, &nd, &cl) || nd || cl) continue;
+                }
                 if (!probe_post(surface.at(lon, lat), truth, abort_above, &out)) return out;
             }
         }
@@ -2380,7 +2552,7 @@ SourcePostProbe measure_mesh_accuracy(const std::vector<DemGrid>& granules, cons
 SourcePostProbe measure_body_mesh_accuracy(const std::vector<DemGrid>& granules, const TileJob& job,
                                            const TileMesh& mesh, const std::vector<double>& mesh_heights,
                                            uint32_t cand, double abort_above,
-                                           std::vector<uint64_t>* histogram = nullptr) {
+                                           std::vector<uint64_t>* histogram = nullptr, const BodyFill* fill = nullptr) {
     const uint32_t n = mesh.n;
     const double west = lattice_lon(job.level, job.x, 0, n);
     const double east = lattice_lon(job.level, job.x, n - 1, n);
@@ -2394,7 +2566,7 @@ SourcePostProbe measure_body_mesh_accuracy(const std::vector<DemGrid>& granules,
     const MeshSurface lookup(mesh, mesh_heights, cand - 1);
     const double span = static_cast<double>(n - 1);
     const BodyMeshSurface surface{west, south, span / (east - west), span / (north - south), &lookup};
-    return measure_surface_accuracy(granules, west, east, south, north, surface, abort_above, histogram);
+    return measure_surface_accuracy(granules, west, east, south, north, surface, abort_above, histogram, fill);
 }
 
 // ── IS THIS TILE OCEAN ACCORDING TO THE SOURCE, NOT THE MESH? ──────────────
@@ -3423,6 +3595,9 @@ int reduce_parent(void) {
         if (!VerifyDTTBuffer(verifier)) return fail("A child is not a valid canonical DTT record.");
         child.tile = GetDTT(child.record.data());
         const DTT* t = child.tile;
+        if (t->TILING_SCHEME() == dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY ||
+            (t->PAYLOAD() && parent_string(t->PAYLOAD()->CONTENT_ENCODING()) == kEdgeMatchedPlanes))
+            return fail("reduce_parent supports Earth GEOGRAPHIC_WGS84 regular grids only; body tiles are refused before decoding.");
         const auto* p = t->PROVENANCE();
         if (t->LEVEL() < 1 || t->LEVEL() > 24 || t->X() >= (2u << t->LEVEL()) ||
             t->Y() >= (1u << t->LEVEL()) || t->ROW_ORIGIN_NORTH() ||
@@ -3828,6 +4003,7 @@ int tile(void) {
     // ── decode the granule set ONCE, windowed to the union extent ───────────
     DecodeBudget budget;
     std::vector<DemGrid> granules;
+    BodyFill fill;
     uint32_t responses = 0, absent_granules = 0;
     if (body.active) {
         // A BODY'S PDS PRODUCT: the "dem" frames are, per file of the product,
@@ -3856,7 +4032,19 @@ int tile(void) {
         }
         responses = static_cast<uint32_t>(frames.size());
         const auto is_label = [](const HttpFrame& f) { return f.body.rfind("PDS_VERSION_ID", 0) == 0; };
-        if (frames.size() < 2 || !is_label(frames[0])) {
+        std::map<size_t,std::shared_ptr<BodyInset>> tiff_headers;
+        const std::string tiff_spec=json_string(plan,"bodyTiffLayouts","");
+        for(size_t at=0;at<tiff_spec.size();) {
+            const size_t eq=tiff_spec.find('=',at),end=tiff_spec.find(';',at);
+            if(eq==std::string::npos){plugin_set_error("invalid-tiff-headers","malformed TIFF header map");return 422;}
+            const size_t stop=end==std::string::npos?tiff_spec.size():end;
+            const size_t index=static_cast<size_t>(std::strtoul(tiff_spec.substr(at,eq-at).c_str(),nullptr,10));
+            auto in=std::make_shared<BodyInset>();
+            if(index>=frames.size()||!in->parse(tiff_spec.substr(eq+1,stop-eq-1))){plugin_set_error("inset-layout-invalid","invalid arithmetic TIFF layout");return 422;}
+            tiff_headers[index]=in;at=stop+1;
+        }
+        const auto is_header=[&](size_t i){return i<frames.size()&&(is_label(frames[i])||tiff_headers.count(i));};
+        if (frames.size() < 2 || !is_header(0)) {
             plugin_set_error("missing-dem-frame",
                              "a body plan needs the product's PDS3 label on \"dem\" frame 0 and at least one "
                              "whole-line range of its image after it.");
@@ -3866,33 +4054,82 @@ int tile(void) {
             plugin_set_error("unexpected-water-frame", "a body plan carries no water mask; no \"water\" frame is read.");
             return 400;
         }
-        std::vector<PdsFile> files;
+        std::vector<PdsFile> files, fill_files, backing_files, datum_files;
+        std::vector<BodyInsetFile> tiffs,fill_tiffs,backing_tiffs,datum_tiffs,mask_tiffs;
+        const size_t mask_frame=static_cast<size_t>(std::max(0.0,json_number(plan,"bodyMaskFrame",0)));
+        const size_t backing_frame = static_cast<size_t>(std::max(0.0, json_number(plan, "bodyBackingFrame", 0)));
+        const double datum_frame_number = json_number(plan, "bodyDatumFrame", 0);
+        const size_t datum_frame = static_cast<size_t>(std::max(0.0, datum_frame_number));
+        fill.primary_datum = json_number(plan, "bodyPrimaryDatum", 0) != 0;
+        fill.fill_datum = json_number(plan, "bodyFillDatum", 0) != 0;
+        if ((fill.primary_datum || fill.fill_datum) &&
+            (datum_frame_number != datum_frame || datum_frame < 1 || datum_frame >= frames.size() || !is_label(frames[datum_frame]))) {
+            plugin_set_error("invalid-datum-options", "areoid heights need a separate MEGA label/range group"); return 422;
+        }
+        const double fill_frame_number = json_number(plan, "bodyFillFrame", 0);
+        const size_t fill_frame = static_cast<size_t>(std::max(0.0, fill_frame_number));
+        fill.active = fill_frame != 0;
+        if (fill.active) {
+            const double posts = json_number(plan, "featherPosts", 0);
+            const double spacing = json_number(plan, "fillSpacingM", 0);
+            fill.fill_edges = json_number(plan, "bodyFillEdges", 1) != 0;
+            fill.lat_min = json_number(plan, "bodyLatMin", -90);
+            fill.lat_max = json_number(plan, "bodyLatMax", 90);
+            if (fill_frame_number != fill_frame || fill_frame < 1 || fill_frame >= frames.size() ||
+                !is_header(fill_frame) || posts < 1 || posts > 64 || posts != std::floor(posts) ||
+                !(spacing > 0) || !std::isfinite(spacing) || fill.lat_min < -90 || fill.lat_max > 90 ||
+                !(fill.lat_min < fill.lat_max) || json_string(plan, "bodyFillProduct", "").empty()) {
+                plugin_set_error("invalid-fill-options", "fill needs a separate label/range group, band, product and 1..64 posts.");
+                return 422;
+            }
+            fill.band_m = posts * spacing;
+            fill.radius_m = body.shape.a;
+        }
         std::string error;
         for (size_t i = 0; i < frames.size(); i++) {
+            const bool is_mask = mask_frame && i >= mask_frame;
+            const bool is_datum = !is_mask && datum_frame && i >= datum_frame;
+            const bool is_backing = !is_mask && !is_datum && backing_frame && i >= backing_frame;
+            const bool is_fill = !is_mask && !is_datum && !is_backing && fill.active && i >= fill_frame;
+            auto& group = is_datum ? datum_files : is_backing ? backing_files : is_fill ? fill_files : files;
+            auto& tif_group=is_mask?mask_tiffs:is_datum?datum_tiffs:is_backing?backing_tiffs:is_fill?fill_tiffs:tiffs;
+            if(tiff_headers.count(i))tif_group.push_back({tiff_headers[i],{}});
+            if(!tif_group.empty()&&!is_label(frames[i])) {
+                unsigned long long first=0,last=0,total=0;
+                const auto& layout=*tif_group.back().inset;
+                if(std::sscanf(frames[i].content_range.c_str(),"bytes %llu-%llu/%llu",&first,&last,&total)!=3||last<first||last-first+1!=frames[i].body.size()||total!=layout.bytes||first<layout.tiff.first_strip||
+                   (first-layout.tiff.first_strip)%layout.tiff.row_bytes||frames[i].body.size()%layout.tiff.row_bytes||last>=layout.tiff.first_strip+layout.tiff.height*layout.tiff.row_bytes){
+                    plugin_set_error("invalid-tiff-range","TIFF ranges need exact Content-Range");return 422;}
+                tif_group.back().ranges.push_back({static_cast<uint64_t>(first),&frames[i].body});continue;
+            }
             if (is_label(frames[i])) {
                 PdsFile file;
                 if (!parse_pds_label(frames[i].body, &file.label, &error)) {
                     plugin_set_error("pds-label-unsupported", error.c_str());
                     return 422;
                 }
-                if (std::fabs(file.label.a_axis_m - body.shape.a) > 1e-6 ||
-                    std::fabs(file.label.datum_m - body.shape.a) > 1e-6) {
+                const bool add_datum = !is_datum && (is_backing ? json_number(plan,"bodyBackingDatum",0)!=0 : is_fill ? fill.fill_datum : fill.primary_datum);
+                if (file.label.areoid != add_datum ||
+                    (!file.label.areoid && std::fabs(file.label.a_axis_m - body.shape.a) > 1e-6) ||
+                    std::fabs(file.label.datum_m - body.shape.a) > 1e-6 ||
+                    (is_datum && file.label.image_name != "MEGA90N000EB.IMG" && file.label.image_name != "mega90n000eb.img")) {
                     plugin_set_error("pds-reference-mismatch",
                                      "the product's sphere (A_AXIS_RADIUS, OFFSET) is not the plan's REFERENCE_RADII_M: "
                                      "its heights would be stated above the wrong surface.");
                     return 422;
                 }
-                files.push_back(std::move(file));
+                group.push_back(std::move(file));
                 continue;
             }
+            if (group.empty()) { plugin_set_error("missing-dem-label", "range has no product label"); return 422; }
             PdsBand band;
-            if (!pds_band_of(files.back().label, frames[i].content_range, frames[i].body, &band, &error)) {
+            if (!pds_band_of(group.back().label, frames[i].content_range, frames[i].body, &band, &error)) {
                 plugin_set_error("pds-range-unsupported", error.c_str());
                 return 422;
             }
-            files.back().bands.push_back(band);
+            group.back().bands.push_back(band);
         }
-        for (const PdsFile& f : files) {
+        for (const auto* group : {&files, &fill_files, &backing_files, &datum_files}) for (const PdsFile& f : *group) {
             if (f.bands.empty()) {
                 plugin_set_error("missing-dem-frame", "a product label on \"dem\" is followed by no range of its image.");
                 return 400;
@@ -3908,11 +4145,77 @@ int tile(void) {
             boxes.push_back(TileExtent{e.west - halo, e.east + halo, std::max(-90.0, e.south - halo),
                                        std::min(90.0, e.north + halo)});
         }
-        DemGrid g = decode_pds_files(files, boxes, &budget);
+        if (!datum_files.empty()) {
+            DemGrid d = decode_pds_files(datum_files, boxes, &budget);
+            if (d.budget_refused) return 413;
+            if (!d.ok) { plugin_set_error("pds-datum-gap", d.error.c_str()); return 422; }
+            if (d.covers) fill.datum.push_back(std::move(d));
+        }
+        DemGrid g;
+        if(!tiffs.empty()) {
+            if(!decode_body_insets(tiffs,boxes,&budget,&granules,&error,mask_frame?0:fill.band_m)){plugin_set_error("inset-decode",error.c_str());return 422;}
+            g.ok=true;
+        } else g = decode_pds_files(files, boxes, &budget, fill.band_m);
         if (g.budget_refused) return 413;
         if (!g.ok) {
             plugin_set_error("pds-band-gap", g.error.c_str());
             return 422;
+        }
+        if (fill.active) {
+            const auto prepare_distance = [&](const DemGrid& g, BodyInvalidDistance* distance) {
+            const size_t invalid_count = static_cast<size_t>(std::count(g.samples.begin(), g.samples.end(), kNoData));
+            if (invalid_count) {
+                const uint64_t edt_bytes = static_cast<uint64_t>(g.samples.size()) * sizeof(double) +
+                    static_cast<uint64_t>(invalid_count) * sizeof(uint32_t) * 2 +
+                    static_cast<uint64_t>(g.height) * (sizeof(std::vector<uint32_t>) + 2 * sizeof(double) + sizeof(uint32_t));
+                if (edt_bytes > kDecodeByteBudget || !budget.admit(static_cast<size_t>(edt_bytes))) {
+                    set_decode_budget_error(edt_bytes, budget.used);
+                    return false;
+                }
+                distance->build(g.samples, g.width, g.height, g.off_x, g.off_y, kNoData);
+            }
+                return true;
+            };
+            if (!prepare_distance(g, &fill.invalid)) return 413;
+            if(!tiffs.empty()) {
+                std::vector<DemGrid> masks;
+                if(mask_frame&&!decode_body_insets(mask_tiffs,boxes,&budget,&masks,&error,fill.band_m)){plugin_set_error("inset-mask-decode",error.c_str());return 422;}
+                if(!fill.inset_mask.build(mask_frame?masks:granules,boxes,fill.band_m,&budget))return 413;
+            }
+            const double spacing = !fill_tiffs.empty()?fill_tiffs[0].inset->tiff.scale_x:
+                fill_files[0].label.projection == "POLAR STEREOGRAPHIC" ? fill_files[0].label.map_scale_m :
+                                   fill_files[0].label.datum_m * kPolarPi / 180 / fill_files[0].label.ppd;
+            if (std::fabs(spacing - json_number(plan, "fillSpacingM", 0)) > 1e-9 * spacing) {
+                plugin_set_error("fill-spacing-mismatch", "fillSpacingM disagrees with the fill product's label.");
+                return 422;
+            }
+            DemGrid f;
+            if(!fill_tiffs.empty()) {
+                if(!decode_body_insets(fill_tiffs,boxes,&budget,&fill.grids,&error,json_number(plan,"bodyBackingPosts",0)*json_number(plan,"bodyBackingSpacingM",0))){plugin_set_error("inset-fill-decode",error.c_str());return 422;}
+                f.ok=true;
+            } else f=decode_pds_files(fill_files, boxes, &budget, fill.band_m, /*uncovered_nodata=*/true);
+            if (f.budget_refused) return 413;
+            if (!f.ok) { plugin_set_error("pds-fill-gap", f.error.c_str()); return 422; }
+            if (backing_frame) {
+                const double posts = json_number(plan, "bodyBackingPosts", 0);
+                const double bs = json_number(plan, "bodyBackingSpacingM", 0);
+                if (backing_files.empty() || posts < 1 || posts > 64 || posts != std::floor(posts) || !(bs > 0) ||
+                    std::fabs(bs - backing_files[0].label.datum_m * kPolarPi / 180 / backing_files[0].label.ppd) > bs*1e-9) {
+                    plugin_set_error("invalid-backing-options", "backing needs a label/range group and measured 1..64 post width"); return 422;
+                }
+                fill.backing = std::make_unique<BodyFill>();
+                auto& b = *fill.backing;
+                b.active = true; b.fill_edges = false; b.primary_datum = fill.fill_datum;
+                b.fill_datum=json_number(plan,"bodyBackingDatum",0)!=0;
+                b.datum_source = &fill.datum; b.radius_m = body.shape.a; b.band_m = posts * bs;
+                if (!prepare_distance(f, &b.invalid)) return 413;
+                if(!fill_tiffs.empty()&&!b.inset_mask.build(fill.grids,boxes,b.band_m,&budget))return 413;
+                DemGrid bg = decode_pds_files(backing_files, boxes, &budget, fill.band_m + b.band_m);
+                if (bg.budget_refused) return 413;
+                if (!bg.ok) { plugin_set_error("pds-backing-gap", bg.error.c_str()); return 422; }
+                if (bg.covers) b.grids.push_back(std::move(bg));
+            }
+            if (f.covers) fill.grids.push_back(std::move(f));
         }
         if (g.covers) granules.push_back(std::move(g));
     }
@@ -4076,6 +4379,7 @@ int tile(void) {
         // per candidate) and what keeps every candidate on the SAME global
         // lattice, so two adjacent tiles that settle on different densities
         // still agree on the posts they share.
+        BodyFillStats fill_stats;
         const uint32_t n_verts = sample_grid * sample_grid;
         std::vector<double> heights(n_verts, 0.0);
         std::vector<double> lats(n_verts), lons(n_verts);
@@ -4098,8 +4402,12 @@ int tile(void) {
                 bool clamped = false;
                 bool bridged = false;
                 const bool covered = body.active
-                                         ? body_sample(granules, lon, lat, &h, &nodata, &clamped)
+                                         ? fill.sample(granules, lon, lat, &h, &nodata, &clamped, &fill_stats)
                                          : sample_dem(granules, lon, lat, &h, &nodata, &clamped, &bridged);
+                if ((fill.active || fill.primary_datum) && (!covered || nodata)) {
+                    plugin_set_error("fill-nodata", "neither primary nor fill supplies a required height-field post.");
+                    return 422;
+                }
                 post_clamped[v] = clamped ? 1 : 0;
                 post_bridged[v] = bridged ? 1 : 0;
                 if (!covered) {
@@ -4111,6 +4419,24 @@ int tile(void) {
                     h = 0.0;
                 }
                 heights[v] = h;
+            }
+        }
+        std::string fill_items;
+        if (body.active) {
+            fill_items = " filled_posts=" + std::to_string(fill_stats.filled_posts) +
+                         " feathered_posts=" + std::to_string(fill_stats.feathered_posts) +
+                         " max_feather_dev_m=" + fmt_double(fill_stats.max_feather_dev_m);
+            if (json_number(plan, "fillDiagnostics", 0) != 0) {
+                for (int edge = 0; edge < 4; edge++) {
+                    std::vector<uint8_t> bytes;
+                    for (uint32_t k = 0; k < sample_grid; k++) {
+                        const size_t v = edge == 0 ? k : edge == 1 ? k * sample_grid + sample_grid - 1 :
+                                         edge == 2 ? (sample_grid - 1) * sample_grid + k : k * sample_grid;
+                        const uint8_t* raw = reinterpret_cast<const uint8_t*>(&heights[v]);
+                        bytes.insert(bytes.end(), raw, raw + sizeof(double));
+                    }
+                    fill_items += " edgeHeight" + std::to_string(edge) + "=" + sha256_multihash(bytes);
+                }
             }
         }
         double min_h = heights[0], max_h = heights[0];
@@ -4149,7 +4475,13 @@ int tile(void) {
                     double plat = 0, plon = 0, h = 0;
                     bool nd = false, cl = false;
                     body_lattice_post(job.level, sample_grid, row0 + j, col0 + i, &plat, &plon);
-                    if (!body_sample(granules, plon, plat, &h, &nd, &cl) || nd) h = 0.0;
+                    if (!fill.sample(granules, plon, plat, &h, &nd, &cl) || nd) {
+                        if (fill.active || fill.primary_datum) {
+                            plugin_set_error("fill-nodata", "neither primary nor fill supplies a normals halo post.");
+                            return 422;
+                        }
+                        h = 0.0;
+                    }
                     halo[at] = geodetic_to_ecef(body.shape, plat, plon, h);
                 }
             }
@@ -4429,7 +4761,8 @@ int tile(void) {
             // the 32 KiB ceiling admits). Absent, the worst, as before.
             const double abort_above = rms_metric ? 0.0 : error_target_m;
             const SourcePostProbe probe =
-                body.active ? measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights, cand, abort_above)
+                body.active ? measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights, cand, abort_above, nullptr,
+                                               (fill.active || fill.primary_datum) ? &fill : nullptr)
                             : measure_mesh_accuracy(granules, job, cand, chosen_heights, measure_accuracy, abort_above);
             stats.vertical_accuracy_m = probe.worst;
             stats.accuracy_probes = probe.probes;
@@ -4480,7 +4813,7 @@ int tile(void) {
         if (measure_accuracy && body.active) {
             residual_histogram.assign(kResidualHistogramBins, 0);
             const SourcePostProbe settled = measure_body_mesh_accuracy(granules, job, chosen_shape, chosen_heights,
-                                                                       chosen_grid, 0.0, &residual_histogram);
+                                                                       chosen_grid, 0.0, &residual_histogram, (fill.active || fill.primary_datum) ? &fill : nullptr);
             stats.vertical_accuracy_m = settled.worst;
             stats.accuracy_probes = settled.probes;
             rms_m = settled.probes ? std::sqrt(settled.sum_sq / static_cast<double>(settled.probes)) : 0.0;
@@ -4532,9 +4865,12 @@ int tile(void) {
             continue;
         }
 
-        // Themis: DIGEST and SIZE_BYTES are stated over the GZIPPED bytes —
-        // what a cache stores and a client receives — and the strong ETag is
-        // that digest, so revalidation compares the served bytes themselves.
+        if (body.active && !encode_edge_matched_planes(mesh, chosen_shape, chosen_grid, body_edges, &payload_bytes)) {
+            plugin_set_error("lossless-topology-mismatch",
+                             "body tile refused: edge-matched planes did not reconstruct the chosen quantized mesh byte for byte.");
+            return 500;
+        }
+        // Digest, size and ETag describe the stored bytes, independently of the serving representation.
         const std::string digest = sha256_multihash(payload_bytes);
         stats.digest = digest;
         const std::string etag = "\"" + digest + "\"";
@@ -4547,7 +4883,7 @@ int tile(void) {
                 ? build_provenance(b, water_contract)
                 : flatbuffers::Offset<DTTProvenance>(0);
         const auto payload_media = b.CreateString("application/vnd.quantized-mesh");
-        const auto payload_encoding = gzipped ? b.CreateString("gzip") : 0;
+        const auto payload_encoding = body.active ? b.CreateString(kEdgeMatchedPlanes) : (gzipped ? b.CreateString("gzip") : 0);
         const auto payload_digest = b.CreateString(digest);
         const auto payload_vec = b.CreateVector(payload_bytes.data(), payload_bytes.size());
         flatbuffers::Offset<DTTPayloadRef> payload;
@@ -4696,7 +5032,7 @@ int tile(void) {
                              " accuracyProbes=" + std::to_string(stats.accuracy_probes) +
                              " meshBytes=" + std::to_string(stats.mesh_bytes) +
                              " payloadBytes=" + std::to_string(stats.payload_bytes) + " digest=" + digest +
-                             (body.active ? body_tile_items(cap_stopped && at_ceiling, rms_m, residual_histogram) : std::string()));
+                             (body.active ? body_tile_items(cap_stopped && at_ceiling, rms_m, residual_histogram) + fill_items : std::string()));
     }
 
     // THE REPORT IS A FlowNotice (FNTC, KIND Info, REASON "tile-block"): COUNT is the records this block emitted
@@ -5683,7 +6019,12 @@ int respond(void) {
     const std::string stored_encoding =
         payload->CONTENT_ENCODING() ? payload->CONTENT_ENCODING()->str() : "";
     const bool accepts_gzip = json_bool(context, "acceptsGzip", true);
-    const bool serve_identity = stored_encoding == "gzip" && !accepts_gzip;
+    if (record->TILING_SCHEME() == dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY && stored_encoding != kEdgeMatchedPlanes) {
+        plugin_set_error("unsupported-body-encoding", "body records require qm-edge-matched-planes-v1.");
+        return 400;
+    }
+    const bool planes = stored_encoding == kEdgeMatchedPlanes;
+    const bool serve_identity = (stored_encoding == "gzip" || planes) && !accepts_gzip;
     if (serve_identity) {
         // ── THE IDENTITY TAG IS DERIVED, NOT RE-HASHED ──────────────────────
         //
@@ -5726,6 +6067,19 @@ int respond(void) {
                                            ? payload->MEDIA_TYPE()->str()
                                            : "application/vnd.quantized-mesh"});
     headers.push_back({"x-content-type-options", "nosniff"});
+    if (planes) {
+        std::vector<uint8_t> qm, encoded;
+        if (!decode_edge_matched_planes(payload->BYTES()->data(), payload->BYTES()->size(), &qm) ||
+            (accepts_gzip && !gzip_compress(qm, &encoded))) {
+            plugin_set_error("stored-encoding-undecodable", "the stored edge-matched planes payload could not be reconstructed.");
+            return 500;
+        }
+        if (accepts_gzip) {
+            headers.push_back({"content-encoding", "gzip"});
+            return push_htr(200, headers, encoded.data(), encoded.size());
+        }
+        return push_htr(200, headers, qm.data(), qm.size());
+    }
     if (serve_identity) {
         // Only now, on a body that is actually going to be sent.
         std::vector<uint8_t> identity;
@@ -5748,13 +6102,13 @@ int respond(void) {
 // A body's tileset is published as files, one $PNM each, fetched by CID (the
 // console reads them over SDN; there is no tile server for a body). The tiles
 // are grouped so a client fetches a few files, not tens of thousands of tiles:
-//   <prefix>/root.dtts          every tile at level <= rootMaxLevel (default 2:
+//   <prefix>/root.dtts.gz          every tile at level <= rootMaxLevel (default 2:
 //                               2 + 8 + 32 = 42 tiles)
-//   <prefix>/<L>/<X>_<Y>.dtts   one 4x4 block of same-level tiles, X = x >> 2,
+//   <prefix>/<L>/<X>_<Y>.dtts.gz   one 4x4 block of same-level tiles, X = x >> 2,
 //                               Y = y >> 2 (row 0 at the SOUTH, as the tiles)
-// Each file is itself a size-prefixed $DTT stream - [u32 LE length][record] per
+// Each file is gzip of a size-prefixed $DTT stream - [u32 LE length][record] per
 // tile, ordered by (level, y, x) - so no new format exists: a reader walks it
-// exactly as it walks any record stream. Records are copied byte for byte.
+// after inflation. Records are copied byte for byte before whole-file compression.
 //
 // One "file" frame per file, the file's bytes (itself a $DTT stream, so the
 // frame is typed $DTT like every record stream of this lane), and ONE "names"
@@ -5836,10 +6190,15 @@ int pack(void) {
             plugin_set_error("mixed-tileset-records", "every record packed together must name the same TILESET_ID.");
             return 400;
         }
+        if (t->TILING_SCHEME() == dttTilingScheme_GEOGRAPHIC_TWO_ROOT_BODY &&
+            (!t->PAYLOAD() || parent_string(t->PAYLOAD()->CONTENT_ENCODING()) != kEdgeMatchedPlanes)) {
+            plugin_set_error("unsupported-body-encoding", "body records require qm-edge-matched-planes-v1.");
+            return 400;
+        }
         Entry e{t->LEVEL(), t->X(), t->Y(), at, size, std::string()};
-        e.file = e.level <= root_max ? prefix + "/root.dtts"
+        e.file = e.level <= root_max ? prefix + "/root.dtts.gz"
                                      : prefix + "/" + std::to_string(e.level) + "/" + std::to_string(e.x >> 2) + "_" +
-                                           std::to_string(e.y >> 2) + ".dtts";
+                                           std::to_string(e.y >> 2) + ".dtts.gz";
         entries.push_back(std::move(e));
         at += size;
     }
@@ -5870,7 +6229,12 @@ int pack(void) {
             plugin_set_error("too-many-files", "one plan packs into at most 64 files (the adapter's frame budget).");
             return 413;
         }
-        if (push_dtt_stream("file", frame) < 0) return 500;
+        std::vector<uint8_t> compressed;
+        if (!gzip_compress(frame, &compressed)) {
+            plugin_set_error("pack-compression-failed", "the complete DTT file could not be gzipped.");
+            return 500;
+        }
+        if (push_dtt_stream("file", compressed) < 0) return 500;
         flatbuffers::FlatBufferBuilder b(128 + name.size());
         const auto file_name = b.CreateString(name);
         PNMBuilder pb(b);

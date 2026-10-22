@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
   "name": "Terrain Tile Ingest Scheduler Nodes",
-  "version": "0.4.0",
+  "version": "0.9.0",
   "description": "The ORCHESTRATION half of the terrain lane. terrain-source is the request-scoped decoder - DEM/WBM bytes in, terrain tiles out, nothing persisted - and this module is the scheduler: pure nodes read a durable $IRM resume mark (through hostcap/flatsql-query), walk the TMS GEOGRAPHIC_WGS84 tile pyramid REGION-PRIORITY ordered (higher priority first, shallow levels before deep), emit bounded plans ($DTT header records) and the Copernicus GLO-30 DEM and water-body granule HttpRequests, author the storage attribution (IngestRequest), and advance the mark only from a verified store (IngestResult -> $IRM for hostcap/storage-write). OCEAN CELLS: Copernicus publishes no granule over open ocean and the guest cannot cheaply know land from ocean, so every intersecting granule is fetched and a 404 is no-data, never an error. The mark doubles as the same-data ledger: the upstream ETag rides on it. TYPED CONTRACTS 1.0: FlatBuffers only - TimerTick, HttpRequest, IngestRequest/IngestResult, FlowNotice and ModuleConfig (module-sdk runtime types), $IRM, $DTT, $FSO and $FSB (SDS) - no JSON and no base64 between modules; node config through plugin.getConfig (SDS $PIV, ConfigEntry list \"entries\", nested values under dotted keys such as regions.0.west). NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -1238,13 +1238,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts or terrain/301/<L>/<X>_<Y>.dtts), FILE_ID provider:source:name:CID."
+              "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts.gz or terrain/301/<L>/<X>_<Y>.dtts.gz), FILE_ID provider:source:name:CID."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts or terrain/301/<L>/<X>_<Y>.dtts), FILE_ID provider:source:name:CID."
+          "description": "A size-prefixed $PNM stream, one per file: MULTIFORMAT_ADDRESS /ipfs/<CID>, PUBLISH_TIMESTAMP the run's retrieval time (the job's UPDATED_AT), CID, FILE_NAME (terrain/301/root.dtts.gz or terrain/301/<L>/<X>_<Y>.dtts.gz), FILE_ID provider:source:name:CID."
         },
         {
           "portId": "meta",
@@ -1269,6 +1269,217 @@
         }
       ],
       "description": "Completes the host adapter's IPFS add results into the $PNM records a body's terrain is published as (PNM.fbs; the Moon nasa-lola / moon-terrain, Mars nasa-mola / mars-terrain: the console resolves the files through SOLAR_SYSTEM_LANES.terrain and fetches each by CID) and authors the IngestRequest the storage lane cannot invent. publish_request then advances the body's walk mark from the verified store result.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "import_plan",
+      "displayName": "Plan one unit of a body's terrain import",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (TICK). FIRED_MS (else SCHEDULED_MS) is the run's clock when the flow config does not state retrieved_at; RETRIEVED_AT is required on every record and is never invented here."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One scheduler tick."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "flatsql-byte-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "FSB.fbs",
+                  "fileIdentifier": "$FSB",
+                  "rootTypeName": "FSB",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "hostcap/flatsql-query's answer to mark_query: ordered $FSB chunks (CHUNK_SEQUENCE 0..n-1) whose DATA is the aligned size-prefixed $IRM record stream, newest first. The first record whose JOB_ID is dataset@tileset@epoch is this walk's mark (NEXT_CHUNK_INDEX, RECORDS_COMMITTED, SOURCE.ENTITY_TAG); a mark for another job is ignored, an ABANDONED / INVALIDATED one restarts the walk, and a pre-1.0 mark whose DECODER_STATE stamps disagree is refused."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The durable resume mark, when one is stored (absent on the first run)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "files",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One GET per file of the walk's units from the import mark on (never below import_from_unit), as many consecutive units as fit import_max_files: import_base_url/<FILE_NAME>, if-modified-since the epoch (a staged file always answers whole), MAX_BYTES 8 MiB. One to 32 requests, all on this port, answered in order by one http node."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One GET per file of the walk's units from the import mark on (never below import_from_unit), as many consecutive units as fit import_max_files: import_base_url/<FILE_NAME>, if-modified-since the epoch (a staged file always answers whole), MAX_BYTES 8 MiB. One to 32 requests, all on this port, answered in order by one http node."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-file-names",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "ingest-resume-mark",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The unit's job ($IRM), the import's own: JOB_ID dataset_id+import@tileset@epoch (never the walk's mark), LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the next, walk tag and provider the body's, so announce_files and publish_request treat the unit as the walk's own; NOTES name the product, level and file count."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The unit's job ($IRM), the import's own: JOB_ID dataset_id+import@tileset@epoch (never the walk's mark), LAST_CHUNK.CHUNK_INDEX the unit, NEXT_CHUNK_INDEX the next, walk tag and provider the body's, so announce_files and publish_request treat the unit as the walk's own; NOTES name the product, level and file count."
+        }
+      ],
+      "description": "THE IMPORT: a body's terrain walk encoded elsewhere by the same modules (terrain-ingest:body_plan, terrain-source:tile and pack) and published here. Plans the walk's own unit with body_plan's config (body, tileset_id, dataset_epoch, caps, max_grid_size, max_range_bytes, path_prefix) at the import's own mark, never below import_from_unit, and asks import_base_url for the finished files of as many consecutive units as fit one host-adapter call (import_max_files, default and at most 32 files; a unit is never split), planned in one pass over the ladder. A drained import is a clean no-op.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "import_files",
+      "displayName": "Check the staged files of an import unit",
+      "inputPorts": [
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The http node's answers to import_plan's files, in request order (URL ending in /<FILE_NAME>, STATUS 200, BODY the complete gzipped file)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "The http node's answers to import_plan's files, in request order (URL ending in /<FILE_NAME>, STATUS 200, BODY the complete gzipped file)."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-file-names",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south). (import_plan's)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south). (import_plan's)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "dtt-file",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Each file verbatim, once checked to be the file it names: a size-prefixed $DTT stream whose every tile packs into that name and belongs to tileset_id. Exactly what terrain-source:pack hands the host adapter."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "Each file verbatim, once checked to be the file it names: a size-prefixed $DTT stream whose every tile packs into that name and belongs to tileset_id. Exactly what terrain-source:pack hands the host adapter."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "pnm-file-names",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A size-prefixed $PNM stream, the k-th record's FILE_NAME naming the unit's k-th file, under terrain-source:pack's rule: <prefix>/root.dtts.gz at levels 0-2, else <prefix>/<L>/<X>_<Y>.dtts.gz (X = x >> 2, Y = y >> 2, row 0 at the south)."
+        }
+      ],
+      "description": "The staged files of one import unit -> the files and their names for the host adapter (publish_files), checked: a file that answers anything but 200 (not staged yet) stops the unit with its mark unmoved, and a file whose tiles belong to another name or tileset is refused. Files are whole-stream gzip with terrain-source pack's fixed header, raw deflate, CRC32 and ISIZE; import_files bounds and verifies inflation before validating records, and forwards the stored gzip bytes unchanged.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }

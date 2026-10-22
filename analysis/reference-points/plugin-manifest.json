@@ -1,0 +1,68 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.reference-points",
+  "name": "Astronomical reference geometry",
+  "version": "0.1.0",
+  "description": "Astronomical reference geometry through caller-owned double arrays.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each call computes deterministic reference geometry into caller-owned arrays with no shared state or thread spawning."
+  },
+  "abiVersion": 1,
+  "schemasUsed": [
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "describe",
+      "displayName": "Module version",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "reference-points-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ]
+}

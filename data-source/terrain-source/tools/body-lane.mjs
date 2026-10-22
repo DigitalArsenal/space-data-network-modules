@@ -10,9 +10,8 @@ import { fileURLToPath } from "node:url";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 import { localResponse } from "../lola-frames.mjs";
-import { decodeTileReport, DTT_LIB, flatbuffers, STANDARDS_ROOT, TYPE } from "../typed-frames.mjs";
+import { createTypedHarness, decodeTileReport, DTT_LIB, flatbuffers, STANDARDS_ROOT, TYPE } from "../typed-frames.mjs";
 import {
-  createHarness as createIngestHarness,
   decodeHttpRequest,
   decodeIrm,
   irmRecord,
@@ -45,9 +44,11 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 export function splitSized(bytes) {
   const buf = Buffer.from(bytes);
   const out = [];
-  for (let at = 0; at + 4 <= buf.length;) {
+  for (let at = 0; at < buf.length;) {
+    if (buf.length - at < 4) throw new Error("truncated record size");
     const len = buf.readUInt32LE(at);
     at += 4;
+    if (len > buf.length - at) throw new Error("truncated size-prefixed record");
     if (len) out.push(buf.subarray(at - 4, at + len));
     at += len;
   }
@@ -57,20 +58,26 @@ export function splitSized(bytes) {
 /** A $DTT record (no size prefix) through the SDS library. */
 export const dttOf = (record) => DTT_LIB.DTT.getRootAsDTT(new flatbuffers.ByteBuffer(Uint8Array.from(record)));
 
-export async function createBodyLane({ dataDir, config = MOON_CONFIG, wasmPath = path.join(root, "dist/isomorphic/module.wasm") }) {
+export async function createBodyLane({ dataDir, config = MOON_CONFIG,
+  sourceDist = path.join(root, "dist"), ingestDist = path.join(root, "../terrain-ingest/dist"),
+  wasmPath = path.join(sourceDist, "isomorphic/module.wasm"), clock = "2026-10-16T00:00:00Z" }) {
   const source = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(wasmPath),
-    manifest: JSON.parse(fs.readFileSync(path.join(root, "plugin-manifest.json"), "utf8")),
+    manifest: JSON.parse(fs.readFileSync(path.join(sourceDist, "plugin-manifest.json"), "utf8")),
     surface: "direct",
   });
-  const ingest = await createIngestHarness(null, config);
+  const ingest = await createTypedHarness({ createBrowserModuleHarness, config,
+    wasmSource: fs.readFileSync(path.join(ingestDist, "isomorphic/module.wasm")),
+    manifest: JSON.parse(fs.readFileSync(path.join(ingestDist, "plugin-manifest.json"), "utf8")),
+  });
   const defaults = BODY_DEFAULTS[config.body ?? "moon"];
   const jobId = jobIdOf(config.dataset_id ?? defaults.datasetId, config.tileset_id, config.dataset_epoch);
 
   async function planUnit(index) {
-    const inputs = [tickFrame("2026-10-16T00:00:00Z")];
+    const inputs = [tickFrame(clock)];
     if (index > 0) inputs.push(...markFrames([irmRecord({ jobId, next: index, provider: defaults.provider })]));
     const response = await ingest.invoke({ methodId: "body_plan", inputs });
+    if (response.statusCode !== 0) throw new Error(`body_plan: ${response.errorCode}: ${response.errorMessage}`);
     const out = outputs(response);
     if (!out.has("plan")) return null;
     return {
@@ -126,7 +133,7 @@ export async function createBodyLane({ dataDir, config = MOON_CONFIG, wasmPath =
   }
 
   /** The unit holding a tile, searched among units [from, to). */
-  async function unitFor(level, x, y, from = 0, to = 199) {
+  async function unitFor(level, x, y, from = 0, to = Infinity) {
     for (let i = from; i < to; i++) {
       const u = await planUnit(i);
       if (!u) return null;

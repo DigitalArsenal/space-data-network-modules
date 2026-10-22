@@ -1,0 +1,15 @@
+{
+  "name": "@digitalarsenal/sdn-module-analysis-reference-points",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Astronomical reference geometry through caller-owned double arrays.",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.e2e.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.7"
+  }
+}

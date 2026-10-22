@@ -331,6 +331,26 @@ double bin_value(int s, double f) {
   return s > 0 ? lo + f * (hi - lo) : -hi + f * (hi - lo);
 }
 
+// The signed-log histogram quantiles used by finalize and history clipping.
+std::vector<double> histogram_quantiles(const Stratum& s, int component) {
+  std::vector<double> values;
+  uint64_t cum = 0;
+  const auto& hist = s.hist[component];
+  auto it = hist.begin();
+  for (double p : kQuantiles) {
+    const double target = p * static_cast<double>(s.n);
+    while (it != hist.end() && static_cast<double>(cum + it->second) < target) cum += (it++)->second;
+    values.push_back(it == hist.end() ? bin_value(hist.rbegin()->first, 1.0)
+                                    : bin_value(it->first, (target - cum) / static_cast<double>(it->second)));
+  }
+  return values;
+}
+bool within_clip(const double x[6], const std::array<double, 6>& clip, double k) {
+  for (int c = 0; c < 3; ++c)
+    if (!(std::fabs(x[c] - clip[c]) <= k * clip[3 + c])) return false;
+  return true;
+}
+
 void add_sample(Stratum& s, const double x[kComponents], const std::array<double, 6>* clip, double k) {
   ++s.n;
   for (int a = 0, t = 0; a < kComponents; ++a) {
@@ -338,9 +358,7 @@ void add_sample(Stratum& s, const double x[kComponents], const std::array<double
     for (int b = 0; b <= a; ++b, ++t) s.sq[t] += x[a] * x[b];
     ++s.hist[a][bin_of(x[a])];
   }
-  if (!clip) return;
-  for (int c = 0; c < 3; ++c)
-    if (!(std::fabs(x[c] - (*clip)[c]) <= k * (*clip)[3 + c])) return;
+  if (!clip || !within_clip(x, *clip, k)) return;
   ++s.n_clip;
   for (int a = 0, t = 0; a < kComponents; ++a) {
     s.sum_clip[a] += x[a];
@@ -372,7 +390,8 @@ struct Counts {
            reference_epochs = 0, reference_without_elements = 0;
 };
 
-bool load_elements(const Options& o, std::vector<ElementSet>& sets, Counts& counts) {
+bool load_elements(const Options& o, std::vector<ElementSet>& sets, Counts& counts,
+                   bool keep_unclassified = false) {
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (!f || !f->port_id || std::strcmp(f->port_id, "elements") != 0) continue;
@@ -423,7 +442,7 @@ bool load_elements(const Options& o, std::vector<ElementSet>& sets, Counts& coun
       const double n_rad_s = s.rec.no_unkozai / 60.0;
       const double alt = std::cbrt(kMuWgs72 / (n_rad_s * n_rad_s)) - kReWgs72;
       s.regime = regime_of(o, alt, omm->ECCENTRICITY());
-      if (s.regime < 0) { ++counts.unclassified; continue; }
+      if (s.regime < 0) { ++counts.unclassified; if (!keep_unclassified) continue; }
       sets.push_back(s);
     }
   }
@@ -887,15 +906,7 @@ extern "C" int finalize() {
     if (!cov.empty()) x["covariance"] = cov;
     nlohmann::json q = nlohmann::json::array(), median = nlohmann::json::array(), sigma = nlohmann::json::array();
     for (int c = 0; c < kComponents; ++c) {
-      std::vector<double> values;
-      uint64_t cum = 0;
-      auto it = s.hist[c].begin();
-      for (double p : kQuantiles) {
-        const double target = p * static_cast<double>(s.n);
-        while (it != s.hist[c].end() && static_cast<double>(cum + it->second) < target) cum += (it++)->second;
-        if (it == s.hist[c].end()) { values.push_back(bin_value(s.hist[c].rbegin()->first, 1.0)); continue; }
-        values.push_back(bin_value(it->first, (target - cum) / static_cast<double>(it->second)));
-      }
+      const std::vector<double> values = histogram_quantiles(s, c);
       q.push_back(values);
       median.push_back(values[3]);
       sigma.push_back((values[4] - values[2]) / 2.0);

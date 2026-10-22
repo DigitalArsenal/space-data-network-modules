@@ -1,0 +1,299 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+  "name": "Terrain Source Watch",
+  "version": "0.1.0",
+  "description": "The monthly source check of the terrain refresh flow (typed contracts 1.0: FlatBuffers only; every hostcall an SDS $PIV invocation). For each configured body (config bodies: moon,mars; body is the one-body spelling) it probes every source file the terrain walk reads - the table terrain-ingest's body_plan uses, generated into src/watch_sources.hpp and held to it by tools/generate-sources.mjs --check - with a one-byte ranged GET (ETag, Last-Modified and the total size in one exchange; a HEAD fails on the Go node's http connector when it answers a Content-Length), lists the raw/<naif>/ mirror through storage/object-s3, and diffs the two. The diff is a $QRP projection page (body, naif, product, file, state, source_url, serves, source_etag, pinned_etag, source_last_modified, mirror_key, source_size, mirror_size, mirror_modified_ms, probe_error), stored beside the mirror as <report_prefix>/<naif>/<yyyy-mm-dd>.qrp through an object-s3 put task, and summarized in one FlowNotice. States: current, source-changed (the live ETag is not the one the walk is pinned to), source-newer (no pin; modified after the mirror was written), size-changed, not-mirrored, probe-failed. It never touches the network and holds only the clock: it builds requests for hostcap/http-request and tasks for storage/object-s3, and reads their answers. Config (plugin.getConfig): bodies, store, endpoint, bucket, region, report_prefix, timeout_ms, pins (off: compare size and Last-Modified only).",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "clock"
+  ],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method reads its frames and makes at most one synchronous clock hostcall, then emits requests, tasks or a report. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "Plan the source probes",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "One timer tick -> one ranged-GET HttpRequest per source file of each configured body (CONTEXT: the table index) on probes, and one object-s3 list task per body for raw/<naif>/ on list (REQUEST_ID watch-list-<naif>). The probes and listings of one run must fit the 64 frames a node takes an invocation, else the check is unconfigured. An unconfigured check (no endpoint, an unknown body) emits one FlowNotice Missing and nothing else.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (TICK); its payload is not read."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "probes",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (HREQ): GET with Range bytes=0-0 and a validator no object carries; CONTEXT is an $APR whose REQUEST_ID is the source's index in the compiled table."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "The source probes, one per source file."
+        },
+        {
+          "portId": "list",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR list task for storage/object-s3 sign: store, endpoint, bucket, region, prefix raw/<naif>/, maxKeys 1000."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The mirror listing task."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC): Info with the per-state counts and the changed files, Unchanged when nothing needs a refresh, Missing when the check is unconfigured or has no clock."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The check's summary."
+        }
+      ]
+    },
+    {
+      "methodId": "diff",
+      "displayName": "Diff the sources against the mirror",
+      "maxBatch": 1024,
+      "drainPolicy": "single-shot",
+      "description": "The probe answers (probes), the mirror listing (mirror, a $FIL) and the listing's result (mirror_result, an $APR whose non-200 STATUS says the mirror could not be read) -> per body: the report page, an object-s3 put task that stores it (only when that body's mirror was listed: a page claiming an unreadable mirror is empty is never stored) and one FlowNotice.",
+      "inputPorts": [
+        {
+          "portId": "probes",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP) of the probes; CONTEXT carries the table index."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The probe answers."
+        },
+        {
+          "portId": "mirror",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-file-listing",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $FIL Directory listing of raw/<naif>/ (ENTRIES: key, size, last-modified)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The mirror listing."
+        },
+        {
+          "portId": "mirror_result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR result of the list task (STATUS, ERROR_CODE)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The listing's result."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-query-page",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP projection page, size-prefixed: one row per source file of the body."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The diff report."
+        },
+        {
+          "portId": "put",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR put task for storage/object-s3 sign: the report page as BODY at <report_prefix>/<naif>/<yyyy-mm-dd>.qrp."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The report's store task."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC): Info with the per-state counts and the changed files, Unchanged when nothing needs a refresh, Missing when the check is unconfigured or has no clock."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The check's summary."
+        }
+      ]
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse"
+    },
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    },
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "target": "wasmedge",
+      "path": "dist/isomorphic/module.wasm"
+    }
+  ],
+  "abiVersion": 1
+}

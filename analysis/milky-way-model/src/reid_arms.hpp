@@ -139,4 +139,88 @@ inline double arm_distance_kpc(unsigned family,Vec3 p) {
   return best;
 }
 
+
+// THE ARMS THE LIGHT AND DUST FOLLOW (0.3.0). Inside each segment's measured
+// coverage (Table 2 beta_min..beta_max) the arm is Reid's fitted curve. Beyond
+// it the major arms continue as logarithmic spirals at the Galaxy's mean arm
+// pitch, 12 deg (Vallee 2017, Ap&SS 362, 79, as the 0.1.0 model cited), for at
+// most light_reach_deg, fading over the last light_fade_deg and kept between
+// light_inner_kpc and light_outer_kpc. 0.2.0 continued each segment's own
+// end pitch a whole turn instead; where that pitch is 1 deg (Sagittarius-
+// Carina after its kink, Norma before its) the continuation is a circle, which
+// drew the arms as concentric rings. Scutum-Centaurus keeps its own pitch
+// outward past the far side (Reid 2019 section 3.2.2, the OSC masers), as
+// 0.2.0 did. The extension is a MODEL CHOICE, not a fit; the 3-kpc and Local
+// segments stay within their coverage. Validation (arm_beta_domain,
+// arm_radius_kpc, ridge and acceptance metrics) keeps Reid's curves unchanged.
+namespace arm_light {
+inline constexpr double mean_pitch_deg=12.0;
+inline constexpr double light_reach_deg=160.0,light_fade_deg=70.0;
+inline constexpr double light_inner_kpc=3.2,light_outer_kpc=17.0;
+inline const double tan_mean=std::tan(mean_pitch_deg*galactic_constants::radians_per_degree);
+inline const double cos_mean=std::cos(mean_pitch_deg*galactic_constants::radians_per_degree);
+inline bool finite_segment(const ArmSegment& a) {return a.family==0||a.family==4;}
+inline double coverage_lo(const ArmSegment& a) {return a.beta_min_deg*galactic_constants::radians_per_degree;}
+inline double coverage_hi(const ArmSegment& a) {return a.beta_max_deg*galactic_constants::radians_per_degree;}
+// Outward (decreasing beta) beyond the coverage: Scutum's own pitch, else the mean.
+inline double outward_tan(const ArmSegment& a) {return a.family==2?a.tan_before:tan_mean;}
+inline double radius(const ArmSegment& a,double beta) {
+  if(finite_segment(a)) return arm_radius_kpc(a,beta);
+  const double lo=coverage_lo(a),hi=coverage_hi(a);
+  if(beta<lo) return arm_radius_kpc(a,lo)*std::exp((lo-beta)*outward_tan(a));
+  if(beta>hi) return arm_radius_kpc(a,hi)*std::exp(-(beta-hi)*tan_mean);
+  return arm_radius_kpc(a,beta);
+}
+inline double cos_pitch(const ArmSegment& a,double beta) {
+  if(!finite_segment(a)) {
+    if(beta<coverage_lo(a)) return a.family==2?a.cos_before:cos_mean;
+    if(beta>coverage_hi(a)) return cos_mean;
+  }
+  return beta<=a.beta_kink?a.cos_before:a.cos_after;
+}
+// The azimuth range drawn: the coverage, extended to the reach or to the radii.
+inline std::array<double,2> domain(const ArmSegment& a) {
+  const double lo=coverage_lo(a),hi=coverage_hi(a);
+  if(finite_segment(a)) return {lo,hi};
+  const double reach=light_reach_deg*galactic_constants::radians_per_degree;
+  const double r_lo=arm_radius_kpc(a,lo),r_hi=arm_radius_kpc(a,hi);
+  const double out=a.family==2?std::log(std::max(1.0,16.0/r_lo))/outward_tan(a)
+                              :std::min(reach,std::log(std::max(1.0,light_outer_kpc/r_lo))/outward_tan(a));
+  const double in=std::min(reach,std::log(std::max(1.0,r_hi/light_inner_kpc))/tan_mean);
+  return {lo-out,hi+in};
+}
+// 1 inside the coverage; beyond it, 1 falling to 0 over the extension's last
+// light_fade_deg (Scutum's observed far-side continuation is not faded).
+inline double weight(const ArmSegment& a,double beta) {
+  if(finite_segment(a)) return 1;
+  const auto d=domain(a);
+  const double fade=light_fade_deg*galactic_constants::radians_per_degree;
+  double w=1;
+  if(beta<coverage_lo(a)&&a.family!=2) w*=smoothstep(d[0],std::min(coverage_lo(a),d[0]+fade),beta);
+  if(beta>coverage_hi(a)) w*=1-smoothstep(std::max(coverage_hi(a),d[1]-fade),d[1],beta);
+  return w;
+}
+struct Hit {double separation,radius,cos_pitch,weight;};
+// Every winding of segment a through the azimuth of p within its domain: the
+// separation across the arm (radial offset times cos pitch) and the arm's
+// radius there. Finite segments (3-kpc, Local) are distances to the curve
+// clamped to their coverage, as 0.2.0 drew them.
+template<class F> inline void for_each_hit(const ArmSegment& a,Vec3 p,F f) {
+  const double r=std::hypot(p.x,p.y),beta0=std::atan2(p.y,-p.x);
+  constexpr double turn=2*galactic_constants::pi;
+  if(finite_segment(a)) {
+    const double beta=model_beta(a,beta0),ra=arm_radius_kpc(a,beta);
+    f(Hit{std::hypot(p.x+ra*std::cos(beta),p.y-ra*std::sin(beta)),ra,cos_pitch(a,beta),1.0});
+    return;
+  }
+  const auto d=domain(a);
+  for(int k=-2;k<=2;++k) {
+    const double beta=beta0+k*turn;
+    if(beta<d[0]||beta>d[1]) continue;
+    const double ra=radius(a,beta),c=cos_pitch(a,beta);
+    f(Hit{std::abs(r-ra)*c,ra,c,weight(a,beta)});
+  }
+}
+} // namespace arm_light
+
 } // namespace milky_way

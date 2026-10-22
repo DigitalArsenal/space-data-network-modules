@@ -1,6 +1,6 @@
 // ONE UNIT OF A BODY'S WALK, WHOLE: body_plan -> local PDS responses -> tile (every tile of the unit) -> pack, in a
 // fresh process, so its peak RSS is one unit's (run it under `/usr/bin/time -l`). Prints the unit, the files pack wrote
-// and their sizes, and the process's own peak RSS.
+// and their stored gzip sizes (.dtts.gz), and the process's own peak RSS.
 //
 // Usage: [BODY=moon|mars] DATA_DIR=<local PDS copies> node tools/body-unit.mjs <unit index> [out-dir]
 //   (BODY moon reads LOLA_DIR, default ~/software/data/lola, when DATA_DIR is unset)

@@ -1,0 +1,17 @@
+{
+  "name": "@digitalarsenal/storage-object-s3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "S3-compatible object store signer and reader (SigV4; R2, S3, B2, MinIO, Wasabi, GCS interop) for SDN flows; typed contracts 1.0.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.7"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
+  }
+}

@@ -105,15 +105,16 @@ inline std::string encodeQuery(const std::string& value) {
   return result;
 }
 
-inline std::string requestUrl(int id, int64_t start, int64_t stop, int64_t step) {
+inline std::string requestUrl(int id, int64_t start, int64_t stop, int64_t step, int center = 10) {
+  if (step <= 0 || step % 60) return {};
   std::string url = "https://ssd.jpl.nasa.gov/api/horizons.api?format=text";
   const auto add = [&](const char* key, const std::string& value) {
     url += '&'; url += key; url += '='; url += encodeQuery("'" + value + "'");
   };
   add("COMMAND", std::to_string(id)); add("OBJ_DATA", "NO"); add("MAKE_EPHEM", "YES");
-  add("EPHEM_TYPE", "VECTORS"); add("CENTER", "500@10");
+  add("EPHEM_TYPE", "VECTORS"); add("CENTER", "500@" + std::to_string(center));
   add("START_TIME", formatCalendar(double(start), true)); add("STOP_TIME", formatCalendar(double(stop), true));
-  add("STEP_SIZE", step == kDay ? "1 d" : "10 m"); add("VEC_TABLE", "2");
+  add("STEP_SIZE", step == kDay ? "1 d" : std::to_string(step / 60) + " m"); add("VEC_TABLE", "2");
   add("REF_SYSTEM", "ICRF"); add("REF_PLANE", "FRAME"); add("OUT_UNITS", "KM-S");
   add("VEC_LABELS", "NO"); add("CSV_FORMAT", "YES");
   return url;
@@ -151,16 +152,37 @@ inline std::string headerValue(const std::string& header, const std::string& key
   return trim(header.substr(colon + 1, end - colon - 1));
 }
 
-inline bool validateTarget(const std::string& text, int expectedId, std::string& error) {
-  const std::string target = headerValue(text.substr(0, text.find("$$SOE")), "Target body name");
-  if (target.find("(" + std::to_string(expectedId) + ")") == std::string::npos) {
+inline bool targetNameMatches(std::string target, std::string alternatives) {
+  for (char& c : target) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  for (char& c : alternatives) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  size_t start = 0;
+  while (start < alternatives.size()) {
+    const size_t end = alternatives.find('|', start);
+    const std::string name = alternatives.substr(start, end - start);
+    if (!name.empty() && target.find(name) != std::string::npos) return true;
+    if (end == std::string::npos) break;
+    start = end + 1;
+  }
+  return false;
+}
+
+inline bool validateTarget(const std::string& text, int expectedId, const std::string& expectedNames,
+                           std::string& error, int expectedCenter = 10) {
+  const std::string header = text.substr(0, text.find("$$SOE"));
+  const std::string target = headerValue(header, "Target body name");
+  if (target.find("(" + std::to_string(expectedId) + ")") == std::string::npos ||
+      !targetNameMatches(target, expectedNames)) {
     error = "vector-target-mismatch"; return false;
+  }
+  if (headerValue(header, "Center body name").find(
+      "(" + std::to_string(expectedCenter) + ")") == std::string::npos) {
+    error = "vector-center-mismatch"; return false;
   }
   return true;
 }
 
 inline bool parseVectorRows(const std::string& text, std::vector<double>& epochs,
-                            std::vector<State>& rows, std::string& error) {
+                            std::vector<State>& rows, std::string& error, int expectedCenter = 10) {
   epochs.clear(); rows.clear(); error.clear();
   const size_t begin = text.find("$$SOE"), end = text.find("$$EOE");
   if (begin == std::string::npos) { error = "unknown-horizons-error"; return false; }
@@ -176,7 +198,7 @@ inline bool parseVectorRows(const std::string& text, std::vector<double>& epochs
       headerValue(header, "Reference frame") != "ICRF" ||
       headerValue(header, "Output type") != "GEOMETRIC cartesian states" ||
       headerValue(header, "Output format") != "2 (position and velocity)" ||
-      center.find("Sun (10)") != 0 || header.find("JDTDB,") == std::string::npos ||
+      center.find("(" + std::to_string(expectedCenter) + ")") == std::string::npos || header.find("JDTDB,") == std::string::npos ||
       header.find("Calendar Date (TDB)") == std::string::npos) {
     error = "invalid-vector-header"; return false;
   }
@@ -210,11 +232,11 @@ inline bool parseVectorRows(const std::string& text, std::vector<double>& epochs
 }
 
 inline bool parseVectors(const std::string& text, int64_t start, int64_t step, size_t expected,
-                         std::vector<State>& rows, std::string& error) {
+                         std::vector<State>& rows, std::string& error, int expectedCenter = 10) {
   rows.clear(); error.clear();
   if (step <= 0 || !expected || expected > kMaxPageRows) { error = "invalid-request-grid"; return false; }
   std::vector<double> epochs;
-  if (!parseVectorRows(text, epochs, rows, error)) return false;
+  if (!parseVectorRows(text, epochs, rows, error, expectedCenter)) return false;
   if (rows.size() != expected) {
     error = rows.size() < expected ? "missing-vector-row" : "extra-vector-row";
     rows.clear(); return false;

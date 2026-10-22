@@ -29,7 +29,7 @@ const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
 const bridge = await fs.readFile(path.join(root, 'src', 'erm_bridge.cpp'), 'utf8');
-const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'fit_elements.cpp']
+const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'object_covariance.cpp', 'fit_elements.cpp']
   .map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));

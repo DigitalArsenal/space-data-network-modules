@@ -70,9 +70,9 @@ test("the manifest declares capabilities [] and both runtime targets", () => {
   assert.equal(recordType.fileIdentifier, "$DTT");
   assert.equal(recordType.rootTypeName, "DTT");
   assert.equal(recordType.wireFormat, "flatbuffer");
-  // The dem port admits the four corner granules of a granule-spanning tile.
+  // Body units admit up to sixteen label/range frames; Earth still uses four granules.
   const dem = tile.inputPorts.find((p) => p.portId === "dem");
-  assert.equal(dem.maxStreams, 4);
+  assert.equal(dem.maxStreams, 16);
   // layer_json's serving output is the canonical $HTR envelope, never a JSON
   // control frame (Janus ruling on HTTP-response-shaped outputs).
   const layer = manifest.methods.find((m) => m.methodId === "layer_json");

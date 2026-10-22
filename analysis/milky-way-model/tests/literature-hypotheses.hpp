@@ -93,7 +93,7 @@ inline Field sample(Vec3 p,const Case& h) {
     *std::exp(-std::abs(shifted.z)/model_choices::young_scale_height_kpc)*selected_taper;
   const double old=thin+thick+central.bulge+central.bar;
   const double kappa=h.dust?dust(shifted,h.dust):run_three_dust(shifted);
-  return {old+arms,model_choices::bp_old*old+model_choices::bp_young*arms,
-    model_choices::rp_old*old+model_choices::rp_young*arms,kappa};
+  return {old+arms,colors::disc_bp*old+colors::young_bp*arms,
+    colors::disc_rp*old+colors::young_rp*arms,kappa};
 }
 } // namespace milky_way::hypotheses

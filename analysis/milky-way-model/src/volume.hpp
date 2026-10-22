@@ -108,12 +108,20 @@ struct Volume {
   }
 };
 
+// The global volume covers the disc to 20 kpc and 6 kpc above and below it
+// (0.2.0: 16 and 3 kpc, which cut the thick disc's light flat at |z| = 3 kpc
+// and the disc at its rim), at 125 pc in x and y and 48 signed-square planes.
+// The local one is the Sun's +-1.25 kpc at 19.5 pc. The global volume bakes
+// the large-scale dust only; a delivered 3D dust map is baked into the local
+// one alone (its 125 pc texels drew the map's clouds as blocks seen from
+// outside).
 struct NestedVolumes {
   Volume global,local;
   explicit NestedVolumes(Vec3 sun)
-    :global(256,256,32,{-16,-16,-3},{16,16,3},1),
+    :global(320,320,48,{-20,-20,-6},{20,20,6},1),
      local(128,128,128,sun-Vec3{1.25,1.25,1.25},sun+Vec3{1.25,1.25,1.25}) {}
-  template<class Sampler> void bake(Sampler sample) { global.bake(sample); local.bake(sample); }
+  template<class Global,class Local> void bake(Global coarse,Local fine) { global.bake(coarse); local.bake(fine); }
+  template<class Sampler> void bake(Sampler sample) { bake(sample,sample); }
   Field sample(Vec3 p) const {
     const Field coarse=global.sample(p);
     if (!local.contains(p)) return coarse;

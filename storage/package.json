@@ -1,0 +1,11 @@
+{
+  "name": "@digitalarsenal/storage-modules",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Object-store modules for SDN nodes: storage/object-s3 (SigV4 signer and reader for every S3-compatible store) and storage/credentials (the sealed-credential mediator), with the flows that carry them.",
+  "scripts": {
+    "provision": "npm --prefix credentials ci --ignore-scripts && npm --prefix object-s3 ci --ignore-scripts",
+    "e2e": "npm run provision && node --test credentials/tests/credentials.e2e.mjs object-s3/tests/object-s3.e2e.mjs object-s3/tests/object-s3-api.e2e.mjs object-s3/tests/r2-live.e2e.mjs object-s3/tests/node-r2.e2e.mjs"
+  }
+}

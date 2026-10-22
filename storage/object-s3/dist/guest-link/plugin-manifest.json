@@ -1,0 +1,476 @@
+{
+  "pluginId": "com.digitalarsenal.storage.object-s3",
+  "name": "S3-Compatible Object Store",
+  "version": "0.1.0",
+  "description": "One signer and reader for every S3-compatible object store (Cloudflare R2, AWS S3, Backblaze B2, MinIO, Wasabi, GCS interoperability); typed contracts 1.0, FlatBuffers only. It never touches the network: operation tasks ($APR) become SigV4-signed HttpRequest frames for hostcap/http-request, and the HttpResponse frames that return become results ($APR, and a $FIL listing). It holds the READ grant on the credential lanes (secrets:storage_<store>, secrets.get) and the clock; the WRITE grant lives in storage/credentials, so this module can read a credential and can never replace or clear one, and it holds no http capability, so the credential has no path out except the Authorization header of the request the flow routes to the http node. The access key id and secret are wiped after each signature and appear in no output frame, CONTEXT or log. Five methods because a flow has no loops: serve (the HTTP edge of a node's admin object API: $HTQ -> $APR task), sign (put, get, head, delete, list; a put above multipartThreshold emits CreateMultipartUpload), split (the create response plus the original put task -> UploadPart x N), assemble (the part responses -> CompleteMultipartUpload, or AbortMultipartUpload on any failure) and finish (responses -> result, plus a $FIL listing for list). Multipart state travels in the HttpRequest CONTEXT. Task PARAMETERS: store (lane suffix), endpoint (https://host[:port]; http only for loopback), region (default auto), bucket, key, style (path|virtual), and per route range / maxBytes (get), contentType / cacheControl / partSize / multipartThreshold / payload=signed|unsigned (put; unsigned over https by default, the body SHA-256 over plain http), prefix / delimiter / maxKeys / continuationToken / startAfter (list), date (fixes the signing time).",
+  "pluginFamily": "infrastructure",
+  "capabilities": [
+    "clock",
+    "secrets:storage_r2",
+    "secrets:storage_s3",
+    "secrets:storage_b2",
+    "secrets:storage_wasabi",
+    "secrets:storage_minio",
+    "secrets:storage_gcs",
+    "secrets:storage_custom"
+  ],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method reads its frames, makes a handful of synchronous typed hostcalls (secrets.get, clock.nowIso) and emits signed requests or results. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "serve",
+      "displayName": "Serve the object API over HTTP",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "The HTTP edge of a node's object-store API: one $HTQ request envelope in (the host is a dumb pipe; routing lives here), one $APR operation task out for sign. PUT|GET|HEAD|DELETE on a path ending /objects/<store>/<bucket>/<key> and GET /objects/<store>/<bucket> (list; GET ...?head=1 answers the metadata as a record, because an HTTP HEAD carries no body); the path is percent-decoded here; endpoint, region, style and the route options (range, contentType, cacheControl, partSize, multipartThreshold, payload, prefix, delimiter, maxKeys, continuationToken, startAfter, maxBytes, timeoutMs, date) ride the query string, with the Range and Content-Type headers as fallbacks; store, bucket and key come from the path alone. A request that is not a route answers a refusal decision ($APR STATUS, ERROR_CODE: invalid-request 400, no-route 404, no-bucket 404, no-key 404, method-not-allowed 405) for foundation/http-respond. The flow that mounts it must mark the routes NOT anonymous: the endpoint is caller-chosen, so an anonymous caller could point a stored credential at any host.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The SDK's WASM-served HTTP request envelope ($HTQ): METHOD, PATH, QUERY, HEADERS, BODY (the object bytes on PUT)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The HTTP request for /objects/<store>/<bucket>[/<key>]."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "task",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR operation task for sign: ROUTE put|get|head|delete|list, PARAMETERS from the path and query, BODY on put."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The operation task."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR refusal for foundation/http-respond: STATUS, ERROR_CODE, ERROR_MESSAGE."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A refusal, when the request is not a route."
+        }
+      ]
+    },
+    {
+      "methodId": "sign",
+      "displayName": "Sign an object-store operation",
+      "maxBatch": 1024,
+      "drainPolicy": "single-shot",
+      "description": "Each task frame ($APR, ROUTE put|get|head|delete|list) becomes one SigV4-signed HttpRequest on requests; a refused task becomes a result with STATUS and ERROR_CODE (unknown-route 400, bad-store 400, bad-endpoint 400, bad-bucket 400, missing-key 400, bad-style 400, bad-part-size 400, no-credential 403, no-clock 503). A put whose BODY exceeds multipartThreshold (16 MiB) emits CreateMultipartUpload (CONTEXT _phase create) for the split stage, and forwards the task itself on held.",
+      "inputPorts": [
+        {
+          "portId": "task",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR operation task: ROUTE, PARAMETERS (store, endpoint, region, bucket, key, ...), BODY for put."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The operation tasks."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Signed requests."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "SigV4-signed requests for hostcap/http-request. CONTEXT carries the task's $APR run contract (never its body); the Authorization header is the only place the access key id appears."
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR result: REQUEST_ID and ROUTE echoed, STATUS the HTTP status (502 when the exchange failed), ERROR_CODE / ERROR_MESSAGE from the store, BODY the object bytes for get (a $FIL listing for list), PARAMETERS store / bucket / key, the store's headers (etag, content-length, content-type, last-modified, content-range) and uploadId / parts / size, keyCount / isTruncated / nextContinuationToken."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "One result per task (or per refused task). Never a credential value."
+        },
+        {
+          "portId": "held",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The multipart put task verbatim (BODY included), for the split stage."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "A multipart put's task, forwarded unchanged to split on its object port."
+        }
+      ]
+    },
+    {
+      "methodId": "split",
+      "displayName": "Split a multipart put into parts",
+      "maxBatch": 1024,
+      "drainPolicy": "single-shot",
+      "description": "For each CreateMultipartUpload response on created (matched by REQUEST_ID, store, bucket, key to its original put task on object), reads the UploadId and emits one signed UploadPart request per partSize slice of the BODY (default 16 MiB; CONTEXT _phase part, _part, _parts, _uploadId). A create the store refused answers a result; a create with no matching put task aborts the upload and answers a result. Responses of small puts are ignored.",
+      "inputPorts": [
+        {
+          "portId": "created",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP) of the CreateMultipartUpload requests; CONTEXT is the task's $APR run contract."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The create responses."
+        },
+        {
+          "portId": "object",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR put task forwarded verbatim by sign (held), with BODY."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The multipart put tasks (sign held output), with BODY, joined to their create response by REQUEST_ID."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Signed UploadPart requests."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "SigV4-signed requests for hostcap/http-request. CONTEXT carries the task's $APR run contract (never its body); the Authorization header is the only place the access key id appears."
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR result: REQUEST_ID and ROUTE echoed, STATUS the HTTP status (502 when the exchange failed), ERROR_CODE / ERROR_MESSAGE from the store, BODY the object bytes for get (a $FIL listing for list), PARAMETERS store / bucket / key, the store's headers (etag, content-length, content-type, last-modified, content-range) and uploadId / parts / size, keyCount / isTruncated / nextContinuationToken."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "One result per task (or per refused task). Never a credential value."
+        }
+      ]
+    },
+    {
+      "methodId": "assemble",
+      "displayName": "Complete or abort a multipart put",
+      "maxBatch": 1024,
+      "drainPolicy": "single-shot",
+      "description": "Groups the UploadPart responses by upload. When all expected parts answered 2xx with an ETag it emits the signed CompleteMultipartUpload request (parts in number order); otherwise it emits a signed AbortMultipartUpload and a result (multipart-part-failed 502, multipart-incomplete 502).",
+      "inputPorts": [
+        {
+          "portId": "parts",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP) of the UploadPart requests; CONTEXT carries _part, _parts, _uploadId."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The part responses."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The signed Complete or Abort request."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 100000,
+          "required": false,
+          "description": "SigV4-signed requests for hostcap/http-request. CONTEXT carries the task's $APR run contract (never its body); the Authorization header is the only place the access key id appears."
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR result: REQUEST_ID and ROUTE echoed, STATUS the HTTP status (502 when the exchange failed), ERROR_CODE / ERROR_MESSAGE from the store, BODY the object bytes for get (a $FIL listing for list), PARAMETERS store / bucket / key, the store's headers (etag, content-length, content-type, last-modified, content-range) and uploadId / parts / size, keyCount / isTruncated / nextContinuationToken."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "One result per task (or per refused task). Never a credential value."
+        }
+      ]
+    },
+    {
+      "methodId": "finish",
+      "displayName": "Read an object-store response",
+      "maxBatch": 1024,
+      "drainPolicy": "single-shot",
+      "description": "Each HttpResponse becomes one result: STATUS, the store's headers as PARAMETERS (etag, content-length, content-type, last-modified, content-range; never RESPONSE_HEADERS, which the HTTP responder would apply to the answer), the object bytes for get, the store's XML error as ERROR_CODE / ERROR_MESSAGE, and for list a $FIL Directory listing (ENTRIES: key, size, last-modified; common prefixes as directories) with keyCount / isTruncated / nextContinuationToken echoed in the result. A 404 on head or get is an answer (STATUS 404, NotFound / NoSuchKey), a transport failure is STATUS 502. Responses of the create, part and abort stages belong to split and assemble and are skipped; the CompleteMultipartUpload response is the multipart put's result.",
+      "inputPorts": [
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP); CONTEXT is the task's $APR run contract."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The responses to read."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-api-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "APR.fbs",
+                  "fileIdentifier": "$APR",
+                  "rootTypeName": "APR",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $APR result: REQUEST_ID and ROUTE echoed, STATUS the HTTP status (502 when the exchange failed), ERROR_CODE / ERROR_MESSAGE from the store, BODY the object bytes for get (a $FIL listing for list), PARAMETERS store / bucket / key, the store's headers (etag, content-length, content-type, last-modified, content-range) and uploadId / parts / size, keyCount / isTruncated / nextContinuationToken."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "One result per task (or per refused task). Never a credential value."
+        },
+        {
+          "portId": "listing",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-file-listing",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "SDS $FIL: KIND Directory, PATH bucket/prefix, ENTRIES the keys (File, SIZE, MODIFIED_AT_MS) and common prefixes (Directory)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "The listing of a list result."
+        }
+      ]
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "APR.fbs",
+      "fileIdentifier": "$APR",
+      "rootTypeName": "APR"
+    },
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse"
+    },
+    {
+      "schemaName": "HttpRequestAbi.fbs",
+      "fileIdentifier": "$HTQ",
+      "rootTypeName": "HttpRequest"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "target": "wasmedge",
+      "path": "dist/isomorphic/module.wasm"
+    }
+  ],
+  "abiVersion": 1
+}

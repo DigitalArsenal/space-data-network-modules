@@ -1,0 +1,121 @@
+{
+  "programId": "com.digitalarsenal.flows.storage-object-s3",
+  "name": "S3-Compatible Object Store",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 9,
+  "edges": 14,
+  "triggers": 1,
+  "capabilities": [
+    "clock",
+    "http",
+    "secrets:storage_b2",
+    "secrets:storage_custom",
+    "secrets:storage_gcs",
+    "secrets:storage_minio",
+    "secrets:storage_r2",
+    "secrets:storage_s3",
+    "secrets:storage_wasabi"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "sign",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "sign",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_first",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "split",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "split",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_parts",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "assemble",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "assemble",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_complete",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "finish_first",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "finish_multipart",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "methodId": "finish",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.storage.object-s3",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "version": "0.1.0",
+      "sha256": "8880441acb86ee43e79f5efc375008b391770355ed00a5eb60c64b309b102e97",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_",
+      "methodSymbols": {
+        "serve": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_serve",
+        "sign": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_sign",
+        "split": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_split",
+        "assemble": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_assemble",
+        "finish": "sdm_guest_636f6d2e6469676974616c617273656e616c2e73746f726167652e6f626a6563742d7333_finish"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "3f9e2db331348abe85a2a378fdc3dfae9a06ba94d0198a6a5767ae29145d3384",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    }
+  ]
+}

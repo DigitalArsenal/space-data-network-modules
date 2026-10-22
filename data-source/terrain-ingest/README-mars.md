@@ -6,7 +6,10 @@ stack's `deployment/solar-system-provider-node`). It is the Moon's lane
 (`README-moon.md`) with the Mars table of `src/body_plan.hpp`: flow config
 `body: mars`. Each packed file is added to the node's IPFS and announced as one
 `$PNM`, auto-published as `PNM.fbs`, provider `nasa-mola`, source
-`mars-terrain`, files `terrain/499/...`.
+`mars-terrain`, files `terrain/499/root.dtts.gz` (levels 0–2) and
+`terrain/499/<L>/<X>_<Y>.dtts.gz` (4×4 blocks). Each file is gzip of a
+size-prefixed `$DTT` record stream; body payloads use the lossless
+`qm-edge-matched-planes-v1` encoding.
 
 Sources: the MOLA Mission Experiment Gridded Data Records in the PDS
 Geosciences Node (`mgs-m-mola-5-megdr-l3-v1/mgsl_300x/`, public domain), the

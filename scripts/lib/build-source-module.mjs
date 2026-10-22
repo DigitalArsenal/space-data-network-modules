@@ -13,8 +13,9 @@ const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../.
 
 // root: the module directory. importMeta: the module's own import.meta.url (where its packages are found).
 // families: the SDS families the source reads or writes. common: headers of common/ in the order they are
-// included. sources: the module's own files, relative to root, in the order they are included.
-export async function buildSourceModule({ root, importMeta, compileModuleFromSource, createFlatc, families, common = [], sources, threadModel, extraHeaders = [] }) {
+// included. sources: the module's own files, relative to root, in the order they are included. extraHeaders:
+// repository files (relative to the repository) included before the module's own, in order.
+export async function buildSourceModule({ root, importMeta, compileModuleFromSource, createFlatc, families, common = [], sources, threadModel, extraHeaders = [], allowUndefinedImports = false }) {
   if (!threadModel) throw new Error("threadModel is declared by the module's build.mjs, never inferred (scripts/lib/thread-model.mjs)");
   const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
   const { header, version, families: ordered } = await generateSdsHeaders(families, importMeta, createFlatc);
@@ -33,6 +34,9 @@ export async function buildSourceModule({ root, importMeta, compileModuleFromSou
     language: "c++",
     outputPath,
     threadModel,
+    // A module on the typed hostcall bridge (typedHostcall.hpp: plugin.getConfig, storage, http) imports
+    // space_data_module_host symbols that resolve only at instantiation.
+    allowUndefinedImports,
   });
   if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues ?? result.report));
   await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));

@@ -112,3 +112,38 @@ inline double unit_surface_brightness_v() {return sun_absolute_v+21.572-2.5*std:
 inline double unit_surface_brightness_g() {return unit_surface_brightness_v()+g_minus_v_local();}
 
 } // namespace milky_way::populations
+
+// COLORS (0.3.0): each population's light in BP and RP per unit G, Vega
+// fluxes (a color of 0 is a ratio of 1): BP/G = 10^(-0.4 (BP-G)), RP/G =
+// 10^(0.4 (G-RP)), BP-G = (BP-RP) - (G-RP).
+//  - the disc's old light: the local light is redder than the Sun, (V-I) =
+//    0.82 (Flynn et al. 2006) against 0.70 (Ramirez et al. 2012, ApJ 752, 5),
+//    and redder again without its M_V < -1 stars: BP-RP = 1.0, G-RP = 0.56
+//    (a MODEL CHOICE at that color);
+//  - the bulge and bar, red-giant light: the red clump's intrinsic
+//    BP-RP = 1.23 (Ruiz-Dern et al. 2018, A&A 609, A116), G-RP = 0.64 on the
+//    giant sequence (a MODEL CHOICE at that color);
+//  - the young arm light, B stars: BP-RP = -0.15, G-RP = -0.08, a B5V on the
+//    dwarf sequence (Pecaut & Mamajek 2013 table; a MODEL CHOICE of type);
+//  - HII regions, emission lines: H-alpha (in RP and G) at 2.86 H-beta (case
+//    B, Osterbrock & Ferland 2006) and [OIII] 4959/5007 with H-beta (in BP and
+//    G). Each line adds to the narrow BP and RP bands more, per Vega unit,
+//    than to the wide G band, which is why such regions are pink in color
+//    images. The ratios below are a MODEL CHOICE of that kind.
+// The display balances white on the disc's light at the Sun's radius seen
+// face-on (display_white, literature_model.hpp), as an image of a galaxy is
+// balanced on its average starlight. In the G band the young
+// light is a tenth of the disc's face-on column (Flynn 2006: 2.3 of 24.4
+// Lsun pc^-2), so the arms differ from the disc by a small shift of hue; the
+// display stretches saturation by display_saturation about each pixel's
+// luminance, as color composites of galaxies are stretched. A DISPLAY
+// CHOICE, not a measurement: it changes no band's light.
+namespace milky_way::colors {
+inline double bp_per_g(double bp_rp,double g_rp) {return std::pow(10.0,-0.4*(bp_rp-g_rp));}
+inline double rp_per_g(double g_rp) {return std::pow(10.0,0.4*g_rp);}
+inline const double disc_bp=bp_per_g(1.0,0.56),disc_rp=rp_per_g(0.56);
+inline const double central_bp=bp_per_g(1.23,0.64),central_rp=rp_per_g(0.64);
+inline const double young_bp=bp_per_g(-0.15,-0.08),young_rp=rp_per_g(-0.08);
+inline constexpr double hii_bp=1.3,hii_rp=2.6;
+inline constexpr double display_saturation=1.8;
+} // namespace milky_way::colors

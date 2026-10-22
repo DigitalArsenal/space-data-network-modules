@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import zlib from "node:zlib";
+import { decodeEdgeMatchedPlanes } from "../tools/edge-matched-planes.mjs";
 
 import { decodeQuantizedMesh } from "./helpers.mjs";
 import { cylindrical, polar, product } from "./lola-reference.mjs";
@@ -66,7 +66,7 @@ function readShots(file) {
 // ── a decoded tile as a surface ─────────────────────────────────────────────
 function surfaceOf(sized) {
   const t = dttOf(sized.subarray(4)).unpack();
-  const mesh = decodeQuantizedMesh(zlib.gunzipSync(Buffer.from(t.PAYLOAD.BYTES)));
+  const mesh = decodeQuantizedMesh(decodeEdgeMatchedPlanes(t.PAYLOAD.BYTES));
   const q = (mesh.header.maxHeight - mesh.header.minHeight) / 32767;
   const H = mesh.h.map((x) => mesh.header.minHeight + x * q);
   const B = 64, cell = 32768 / B, buckets = Array.from({ length: B * B }, () => []);

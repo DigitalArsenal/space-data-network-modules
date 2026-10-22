@@ -1,19 +1,59 @@
 {
   "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
   "name": "Notable deep-space spacecraft (Horizons)",
-  "version": "0.1.0",
-  "description": "Retrieves 13 notable spacecraft from NASA/JPL Horizons VECTORS as Sun-centred ICRF trajectories in TDB. Coverage probes, paged daily samples and 10-minute departure and encounter windows are planned and parsed in C++/WASM. The host HTTP connector executes requests. Emits one size-prefixed OEM per craft on OEM.fbs, provider deep-space-spacecraft, source horizons, and evaluates its declared interpolation with the shared ephemeris evaluator.",
+  "version": "0.2.0",
+  "description": "Retrieves 42 spacecraft as per-regime OEM catalogs from NASA/JPL Horizons: Sun-centered archives and rolling body-centered windows, classified in C++/WASM. Six bounded advance stages, segment membership, lifecycle attributes and EGP query groups. The host executes HTTP requests.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Bounded deterministic Horizons request planning, CSV parsing, OEM construction and interpolation over supplied frames. No host calls, threads or network access."
+    "detail": "Bounded deterministic Horizons request planning, CSV parsing, OEM construction and interpolation. Only typed plugin.getConfig; no threads or network imports."
   },
   "schemasUsed": [
-    {"schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM"}
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP"
+    }
   ],
   "methods": [
     {
@@ -21,57 +61,89 @@
       "displayName": "Plan Horizons coverage probes",
       "inputPorts": [
         {
-          "portId": "config",
-          "acceptedTypeSets": [{
-            "setId": "config-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Source configuration from the host adapter (access anonymous)."
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick"
+                }
+              ]
             }
-          }],
-          "minStreams": 0, "maxStreams": 1, "required": false,
-          "description": "Optional anonymous access, selected catalogue ids, TDB coverage limits and page_rows."
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Daily trigger; ModuleConfig comes from plugin.getConfig."
         }
       ],
       "outputPorts": [
         {
           "portId": "request",
-          "acceptedTypeSets": [{
-            "setId": "request-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "hostcap/http-request descriptors: two Horizons coverage probes per craft, raw-body-v1."
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ]
             }
-          }],
-          "minStreams": 1, "maxStreams": 26, "required": true,
-          "description": "GET requests for the lower and upper Horizons coverage bounds, in craft order."
+          ],
+          "minStreams": 0,
+          "maxStreams": 60,
+          "required": false,
+          "description": "Plain GETs in pending-request order."
         },
         {
           "portId": "state",
-          "acceptedTypeSets": [{
-            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The retrieval state for the next stage: objects and the pending request list."
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The retrieval state for the next stage: objects and the pending request list."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
           "description": "Deterministic retrieval state for the next stage."
         },
         {
           "portId": "status",
-          "acceptedTypeSets": [{
-            "setId": "status-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The selected craft catalogue and request status; never a data record."
+          "acceptedTypeSets": [
+            {
+              "setId": "status-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice"
+                }
+              ]
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
-          "description": "Catalogue identities, aliases, attribution and window counts."
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Stage counts and skipped craft as <naif_id>:<code>; disabled is Skipped."
         }
       ],
-      "maxBatch": 1, "drainPolicy": "single-shot"
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     },
     {
       "methodId": "advance",
@@ -79,146 +151,636 @@
       "inputPorts": [
         {
           "portId": "state",
-          "acceptedTypeSets": [{
-            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The retrieval state emitted by the previous stage."
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The retrieval state emitted by the previous stage."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "The retrieval state emitted by the previous stage."
         },
         {
           "portId": "response",
-          "acceptedTypeSets": [{
-            "setId": "response-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "foreign-wire-format", "mediaType": "application/vnd.sdn.http-raw-body-v1",
-              "detail": "raw-body-v1 responses, one per planned request in order: $HRB, int32 status, the response bytes."
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse"
+                }
+              ]
             }
-          }],
-          "minStreams": 0, "maxStreams": 60, "required": false,
-          "description": "Coverage probe or vector page responses in pending-request order."
+          ],
+          "minStreams": 0,
+          "maxStreams": 60,
+          "required": false,
+          "description": "Responses in pending-request order; HTTP 200 and a non-empty BODY required."
         }
       ],
       "outputPorts": [
         {
           "portId": "request",
-          "acceptedTypeSets": [{
-            "setId": "request-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The next stage's Horizons vector requests: daily pages followed by merged 10-minute window pages."
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ]
             }
-          }],
-          "minStreams": 0, "maxStreams": 60, "required": false,
-          "description": "At most 60 GET requests; no frames when all pages are fetched."
+          ],
+          "minStreams": 0,
+          "maxStreams": 60,
+          "required": false,
+          "description": "Plain GETs in pending-request order."
         },
         {
           "portId": "state",
-          "acceptedTypeSets": [{
-            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The retrieval state after this stage's responses."
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The retrieval state after this stage's responses."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "The pending plan and compact parsed state rows."
         },
         {
           "portId": "status",
-          "acceptedTypeSets": [{
-            "setId": "status-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The retrieval stage and request status; never a data record."
+          "acceptedTypeSets": [
+            {
+              "setId": "status-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice"
+                }
+              ]
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
-          "description": "Progress for this retrieval stage."
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Stage counts and skipped craft as <naif_id>:<code>; disabled is Skipped."
         }
       ],
-      "maxBatch": 1, "drainPolicy": "single-shot"
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     },
     {
       "methodId": "build_oem",
-      "displayName": "Build one OEM per spacecraft",
+      "displayName": "Build one OEM per spacecraft and regime",
       "inputPorts": [
         {
           "portId": "state",
-          "acceptedTypeSets": [{
-            "setId": "state-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "The retrieval state after the third advance stage."
+          "acceptedTypeSets": [
+            {
+              "setId": "state-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "State from the sixth advance, or an earlier exhausted vector queue; consumes its pending responses."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
-          "description": "The retrieval state after the third advance stage."
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "State from the sixth advance, or an earlier exhausted vector queue; consumes its pending responses."
         },
         {
           "portId": "response",
-          "acceptedTypeSets": [{
-            "setId": "response-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "foreign-wire-format", "mediaType": "application/vnd.sdn.http-raw-body-v1",
-              "detail": "raw-body-v1 final vector pages, one per planned request, in planned order."
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse"
+                }
+              ]
             }
-          }],
-          "minStreams": 0, "maxStreams": 60, "required": false,
-          "description": "Responses to any remaining vector requests."
-        },
-        {
-          "portId": "receipt",
-          "acceptedTypeSets": [{
-            "setId": "receipt-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Authenticated host receipt: integer retrieved_at_ms."
-            }
-          }],
-          "minStreams": 0, "maxStreams": 1, "required": false,
-          "description": "Optional retrieval time for OEM CREATION_DATE, expressed as Unix milliseconds."
+          ],
+          "minStreams": 0,
+          "maxStreams": 60,
+          "required": false,
+          "description": "Responses in pending-request order; HTTP 200 and a non-empty BODY required."
         }
       ],
       "outputPorts": [
         {
-          "portId": "records",
-          "acceptedTypeSets": [{
-            "setId": "records-records",
-            "allowedTypes": [{"schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM"}]
-          }],
-          "minStreams": 1, "maxStreams": 13, "required": true,
-          "description": "One size-prefixed $OEM frame per selected craft, in craft order."
+          "portId": "lunar_orbit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "lunar_orbit_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of lunar-orbit, descending NAIF id order."
         },
         {
-          "portId": "meta",
-          "acceptedTypeSets": [{
-            "setId": "meta-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Attribution metadata (provider deep-space-spacecraft, source horizons, licence, credit) for generic storage.ingest_with_source."
+          "portId": "lunar_orbit_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "lunar_orbit_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
-          "description": "OEM.fbs lane identity, licence and credit."
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with lunar_orbit_records."
         },
         {
-          "portId": "report",
-          "acceptedTypeSets": [{
-            "setId": "report-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Per-craft output block, window, row and byte counts; never a dataset record."
+          "portId": "cislunar_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "cislunar_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
             }
-          }],
-          "minStreams": 1, "maxStreams": 13, "required": true,
-          "description": "Per-craft build counts."
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of cislunar, descending NAIF id order."
+        },
+        {
+          "portId": "cislunar_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "cislunar_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with cislunar_records."
+        },
+        {
+          "portId": "earth_moon_lagrange_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "earth_moon_lagrange_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of earth-moon-lagrange, descending NAIF id order."
+        },
+        {
+          "portId": "earth_moon_lagrange_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "earth_moon_lagrange_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with earth_moon_lagrange_records."
+        },
+        {
+          "portId": "sun_earth_l1_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sun_earth_l1_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of sun-earth-l1, descending NAIF id order."
+        },
+        {
+          "portId": "sun_earth_l1_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sun_earth_l1_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with sun_earth_l1_records."
+        },
+        {
+          "portId": "sun_earth_l2_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sun_earth_l2_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of sun-earth-l2, descending NAIF id order."
+        },
+        {
+          "portId": "sun_earth_l2_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sun_earth_l2_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with sun_earth_l2_records."
+        },
+        {
+          "portId": "mercury_orbit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "mercury_orbit_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of mercury-orbit, descending NAIF id order."
+        },
+        {
+          "portId": "mercury_orbit_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "mercury_orbit_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with mercury_orbit_records."
+        },
+        {
+          "portId": "venus_orbit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "venus_orbit_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of venus-orbit, descending NAIF id order."
+        },
+        {
+          "portId": "venus_orbit_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "venus_orbit_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with venus_orbit_records."
+        },
+        {
+          "portId": "mars_orbit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "mars_orbit_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of mars-orbit, descending NAIF id order."
+        },
+        {
+          "portId": "mars_orbit_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "mars_orbit_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with mars_orbit_records."
+        },
+        {
+          "portId": "jupiter_orbit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "jupiter_orbit_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of jupiter-orbit, descending NAIF id order."
+        },
+        {
+          "portId": "jupiter_orbit_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "jupiter_orbit_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with jupiter_orbit_records."
+        },
+        {
+          "portId": "saturn_orbit_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "saturn_orbit_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of saturn-orbit, descending NAIF id order."
+        },
+        {
+          "portId": "saturn_orbit_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "saturn_orbit_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with saturn_orbit_records."
+        },
+        {
+          "portId": "heliocentric_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "heliocentric_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed OEM records of heliocentric, descending NAIF id order."
+        },
+        {
+          "portId": "heliocentric_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "heliocentric_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with heliocentric_records."
+        },
+        {
+          "portId": "catalogs_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalogs_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "EGP.fbs",
+                  "fileIdentifier": "$EGP",
+                  "rootTypeName": "EGP"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed EGP stream: one live query group per populated catalog."
+        },
+        {
+          "portId": "catalogs_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalogs_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Current EGP batch and provenance."
+        },
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "notice-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 40,
+          "required": true,
+          "description": "Missing notice per skipped craft and one Info catalog-counts summary."
         }
       ],
-      "maxBatch": 1, "drainPolicy": "single-shot"
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     },
     {
       "methodId": "evaluate_oem",
@@ -226,41 +788,72 @@
       "inputPorts": [
         {
           "portId": "oem",
-          "acceptedTypeSets": [{
-            "setId": "oem-records",
-            "allowedTypes": [{"schemaName": "OEM.fbs", "fileIdentifier": "$OEM", "rootTypeName": "OEM"}]
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "oem-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "One size-prefixed $OEM frame with compact ephemeris blocks."
         },
         {
           "portId": "epochs",
-          "acceptedTypeSets": [{
-            "setId": "epochs-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Evaluation request containing a jd_tdb array of epochs; never a dataset record."
+          "acceptedTypeSets": [
+            {
+              "setId": "epochs-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Evaluation request containing a jd_tdb array of epochs; never a dataset record."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "Requested Julian dates on the TDB time scale."
         }
       ],
       "outputPorts": [
         {
           "portId": "states",
-          "acceptedTypeSets": [{
-            "setId": "states-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Evaluation response containing jd_tdb, block and Cartesian position and velocity; never an ingest dataset record."
+          "acceptedTypeSets": [
+            {
+              "setId": "states-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Evaluation response containing jd_tdb, block and Cartesian position and velocity; never an ingest dataset record."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
-          "description": "Evaluated states in km and km/s, ICRF, using each block's centre and declared interpolation."
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Evaluated states in km and km/s, ICRF, using each block's center and declared interpolation."
         }
       ],
-      "maxBatch": 1, "drainPolicy": "single-shot"
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     },
     {
       "methodId": "reconcile_id",
@@ -268,32 +861,53 @@
       "inputPorts": [
         {
           "portId": "request",
-          "acceptedTypeSets": [{
-            "setId": "request-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Mission name and integer kernel_id to reconcile; never a dataset record."
+          "acceptedTypeSets": [
+            {
+              "setId": "request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Mission name and integer kernel_id to reconcile; never a dataset record."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "mission artemis-ii or an empty string, and kernel_id."
         }
       ],
       "outputPorts": [
         {
           "portId": "result",
-          "acceptedTypeSets": [{
-            "setId": "result-v1", "allowedTypes": [{"acceptsAnyFlatbuffer": true}],
-            "wildcardJustification": {
-              "kind": "intra-flow-control-frame", "mediaType": "application/json",
-              "detail": "Resolved Horizons id and object name; never a dataset record."
+          "acceptedTypeSets": [
+            {
+              "setId": "result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Resolved Horizons id and object name; never a dataset record."
+              }
             }
-          }],
-          "minStreams": 1, "maxStreams": 1, "required": true,
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
           "description": "Artemis II kernel -24 maps to Horizons -1024; other ids map to themselves."
         }
       ],
-      "maxBatch": 1, "drainPolicy": "single-shot"
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }
