@@ -1,48 +1,27 @@
-# data-source/body-imagery-tiles
+# body-imagery-tiles
 
-High-resolution global imagery of a body as a 256 px JPEG tile pyramid,
-made on a provider node and published over SDN.
+A body's high-definition global imagery as the console's tile pyramid, in the files the engine's `imageryFromTileFiles` reads for the Moon (`data-source/moon-imagery`). First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain), planetocentric on the 3396190 m MOLA sphere. Level 9 (81.4 m/px at the equator) is the deepest.
 
-| Source | Publication (schema, provider, source) | Levels |
-| --- | --- | --- |
-| Mars THEMIS Day IR global mosaic 100 m v12 (USGS Astrogeology; NASA/JPL/ASU, public domain) | `PNM.fbs`, `usgs-astrogeology`, `mars-themis-day-ir` | 0-9 (L9 = 81.4 m/px, 1.23 x the source) |
+Served from R2 bucket `spaceaware` through https://terrain.spacedatanetwork.org (CORS on); no node, no IPFS.
 
-- **Tiling.** The engine's GeographicTilingScheme on the body's sphere:
-  2^(L+1) x 2^L tiles of 256 px, x from 180 W, y from the north pole,
-  planetocentric latitude (the console draws Mars on the MOLA sphere).
-- **Pixels.** Level 9 is the area average of the source pixels each output
-  pixel overlaps (0 is no data and is left out). Every coarser level is the
-  2 x 2 mean of the level below, so every level is the source's area average,
-  from one read of the source.
-- **Files.** `imagery/499/themis-day-ir/<L>/<y>_<x/16>.pack`: 16 tiles of one
-  row in the `SDNTILE1` layout the engine's `readBodyTilePack` reads, JPEG
-  quality 88 (13.5 KB a tile, SSIM 0.983 against the source on 576 test
-  tiles). Each pack is added to the node's IPFS and is one `$PNM`.
-- **Cycle.** `retrieve_tiles` reads the source by HTTP range, one whole-row
-  range per level-9 tile row (If-Match on the file's ETag; the header and
-  every strip offset are checked against `src/source.hpp`). A band is one
-  level-5 tile row (16 level-9 rows, 1,364 files); each band's `$PNM`
-  records are one `storage.ingest_with_source` batch. The body is 32 bands,
-  22.8 GB of source read once; levels 0-4 complete with the bands that end
-  their rows. The cycle is yearly: the mosaic is a fixed release.
-
-Configuration (`plugin.getConfig`): `body_imagery_tiles_enabled`,
-`body_imagery_tiles_producer_peer_id`, `body_imagery_tiles_source_url`
-(default the USGS file), `body_imagery_tiles_bands` (level-5 rows; empty is
-all 32), `body_imagery_tiles_quality` (88).
-
-## Build and test
-
-```sh
-npm install && node build.mjs
-SDN_NODE_BINARY=<sdn built from main> SDN_JS=<sdn-js with dist/ from main> node --test tests/themis.e2e.test.mjs
+```
+imagery/499/root.dtts                    levels 0-2 (42 tiles)
+imagery/499/<L>/<x/16>_<row from south>.dtts   16 tiles of one row, levels 3-9
+imagery/499/MANIFEST.json                credit, licence, source edition, files/bytes per level, ledger digest
 ```
 
-The E2E runs a local provider node over one band through a caching range
-proxy, reads the lane over SDN as a consumer does, and checks the band's
-files, the pack layout, 24 level-9 tiles against GDAL's own area average of
-the source (SSIM, registration shift 0), the level-6 pyramid, and the node's
-peak RSS (2 GB or less).
+Each file is a size-prefixed `$DTT` stream (`[u32 LE length][record]`); one record per 256 px baseline JPEG tile (`GEOGRAPHIC_TWO_ROOT_BODY`, `PAYLOAD_FORMAT CUSTOM`, `image/jpeg`, quality 88, grayscale, 0 = no data).
 
-Credit: THEMIS: NASA/JPL/ASU (Christensen et al. 2004; Edwards et al. 2011,
-JGR 116, E10008); mosaic USGS Astrogeology. Public domain.
+## Module (pure transforms, WASM, single thread)
+
+- `tiles_plan`: level-9 tile row -> the whole-row byte range of the mosaic (`If-Match` on its ETag) and the unit.
+- `tiles_direct`: unit + the range's `HttpResponse` -> the row's 1024 tiles in 64 files (area average of the measured source pixels).
+- `tiles_reduce`: level L row from the two child rows' files (JPEG decode, 2 x 2 mean of the measured pixels, JPEG); level 2 builds `root.dtts` from level 3.
+
+## Tools
+
+- `tools/encode.mjs --out DIR --level 9 --workers 4` (then `--level 8..3 --children DIR`, `--level 2`): resumable, byte-identical at any worker count, `DIR/ledger.jsonl` of path/bytes/sha256/md5.
+- `tools/publish.mjs`: `aws s3 sync` of a level and its verification against the bucket listing (size and ETag = ledger md5), then `--manifest`. `R2_AWS` names the command that runs `aws` against the bucket.
+- `tests/themis.e2e.test.mjs`: the module against GDAL's own read of the source (SSIM, 20 IAU features, layout, pyramid); `THEMIS_VERIFY_R2=1` adds the bucket and live-HEAD checks.
+
+Build: `node build.mjs`.
