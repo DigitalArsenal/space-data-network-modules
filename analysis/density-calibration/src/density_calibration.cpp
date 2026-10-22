@@ -65,6 +65,7 @@
 #include <string>
 #include <vector>
 
+#include "open_dca_common_mode.hpp"
 #include "DCL_generated.h"  // spacedatastandards.org lib/cpp/DCL/main_generated.h and the headers it includes, inlined by build.mjs
 
 namespace {
@@ -228,12 +229,12 @@ class Nrlmsise00Table {
 std::string atmosphere_of(const DCL* request, bool& msis) {
   msis = false;
   const ATM* atm = request->ATMOSPHERE();
-  if (!atm || atm->MODEL() == AtmosphericModelFamily_JB08) return "";
-  if (atm->MODEL() == AtmosphericModelFamily_NRLMSIS00E) { msis = true; return ""; }
+  if (!atm || atm->MODEL() == AtmosphericModelFamily::JB08) return "";
+  if (atm->MODEL() == AtmosphericModelFamily::NRLMSIS00E) { msis = true; return ""; }
   return "ATMOSPHERE (the atmosphere model) must be JB08 or NRLMSIS00E.";
 }
 fb::Offset<ATM> atmosphere_record(fb::FlatBufferBuilder& b, bool msis) {
-  return CreateATM(b, msis ? AtmosphericModelFamily_NRLMSIS00E : AtmosphericModelFamily_JB08, msis ? 2000 : 2008);
+  return CreateATM(b, msis ? AtmosphericModelFamily::NRLMSIS00E : AtmosphericModelFamily::JB08, msis ? 2000 : 2008);
 }
 
 // The mass density (kg/m^3) of NRLMSISE-00 at a geodetic point and a UTC MJD, with the inputs of Nrlmsise00Table::at and
@@ -472,7 +473,7 @@ struct NodeCorrection {
     const auto aa = doubles(b, alt), vv = doubles(b, v);
     const auto ss = sigmas ? doubles(b, *sigmas) : fb::Offset<fb::Vector<double>>();
     dclCorrectionBuilder c(b);
-    c.add_FORM(dclCorrectionForm_Nodes);
+    c.add_FORM(dclCorrectionForm::Nodes);
     c.add_NODE_TIMES_MS(tt);
     c.add_NODE_ALTITUDES_KM(aa);
     c.add_NODE_VALUES_K(vv);
@@ -492,13 +493,13 @@ struct Correction {
   struct Segment { double from, to; std::vector<double> c; };
   std::vector<Segment> segments;
   std::string load(const dclCorrection* j) {
-    if (!j || j->FORM() == dclCorrectionForm_None) return "";
+    if (!j || j->FORM() == dclCorrectionForm::None) return "";
     present = true;
-    if (j->FORM() == dclCorrectionForm_Nodes) {
+    if (j->FORM() == dclCorrectionForm::Nodes) {
       nodal = true;
       return nodes.load(j);
     }
-    if (j->FORM() != dclCorrectionForm_Harmonic) return "CORRECTION FORM must be None, Harmonic or Nodes.";
+    if (j->FORM() != dclCorrectionForm::Harmonic) return "CORRECTION FORM must be None, Harmonic or Nodes.";
     degree = j->DEGREE();
     if (degree < 0 || degree > 8) return "CORRECTION DEGREE must be 0-8.";
     if (j->SEGMENTS())
@@ -542,7 +543,7 @@ struct Correction {
     }
     const auto sv = b.CreateVector(segs);
     dclCorrectionBuilder c(b);
-    c.add_FORM(dclCorrectionForm_Harmonic);
+    c.add_FORM(dclCorrectionForm::Harmonic);
     c.add_DEGREE(uint8_t(degree));
     c.add_SEGMENTS(sv);
     return c.Finish();
@@ -979,11 +980,11 @@ extern "C" int evaluate() {
   sb.add_WANT_SUN_DIAGNOSTICS(diagnostics);
   const auto set = sb.Finish();
   DCLBuilder d(b);
-  d.add_PRODUCT(dclProduct_DensityEvaluation);
+  d.add_PRODUCT(dclProduct::DensityEvaluation);
   d.add_ATMOSPHERE(atm);
   d.add_SETTINGS(set);
   if (correction.present) d.add_CORRECTION(corr);
-  d.add_STATUS(dclStatus_Solved);
+  d.add_STATUS(dclStatus::Solved);
   d.add_POINTS(pointsOut);
   return emit("result", b, d.Finish());
 }
@@ -1141,7 +1142,7 @@ extern "C" int calibrate() {
   }
   const auto segs = b.CreateVector(bins);
   dclCorrectionBuilder cb(b);
-  cb.add_FORM(dclCorrectionForm_Harmonic);
+  cb.add_FORM(dclCorrectionForm::Harmonic);
   cb.add_DEGREE(uint8_t(degree));
   cb.add_SEGMENTS(segs);
   const auto corr = cb.Finish();
@@ -1159,11 +1160,11 @@ extern "C" int calibrate() {
   const auto set = sb.Finish();
   const auto atm = atmosphere_record(b, false);
   DCLBuilder d(b);
-  d.add_PRODUCT(dclProduct_DensityCalibration);
+  d.add_PRODUCT(dclProduct::DensityCalibration);
   d.add_ATMOSPHERE(atm);
   d.add_SETTINGS(set);
   d.add_CORRECTION(corr);
-  d.add_STATUS(dclStatus_Solved);
+  d.add_STATUS(dclStatus::Solved);
   return emit("calibration", b, d.Finish());
 }
 
@@ -1200,9 +1201,9 @@ extern "C" int decay() {
   if (!e.empty()) return fail("invalid-request", e);
   NodeCorrection corr;
   const dclCorrection* given = request->CORRECTION();
-  const bool corrected = given && given->FORM() != dclCorrectionForm_None;
+  const bool corrected = given && given->FORM() != dclCorrectionForm::None;
   if (corrected) {
-    if (given->FORM() != dclCorrectionForm_Nodes) return fail("invalid-correction", "decay takes a correction in time nodes (FORM Nodes).");
+    if (given->FORM() != dclCorrectionForm::Nodes) return fail("invalid-correction", "decay takes a correction in time nodes (FORM Nodes).");
     e = corr.load(given);
     if (!e.empty()) return fail("invalid-correction", e);
   } else {
@@ -1314,11 +1315,11 @@ extern "C" int decay() {
   const auto set = sb.Finish();
   const auto atm = atmosphere_record(b, false);
   DCLBuilder d(b);
-  d.add_PRODUCT(dclProduct_OrbitalDecay);
+  d.add_PRODUCT(dclProduct::OrbitalDecay);
   d.add_ATMOSPHERE(atm);
   d.add_SETTINGS(set);
   if (corrected) d.add_CORRECTION(corrOut);
-  d.add_STATUS(dclStatus_Solved);
+  d.add_STATUS(dclStatus::Solved);
   d.add_OBJECTS(objs);
   return emit("result", b, d.Finish());
 }
@@ -1747,11 +1748,11 @@ extern "C" int calibrate_decay() {
   const auto set = sb.Finish();
   const auto atm = atmosphere_record(b, false);
   DCLBuilder d(b);
-  d.add_PRODUCT(dclProduct_DecayCalibration);
+  d.add_PRODUCT(dclProduct::DecayCalibration);
   d.add_ATMOSPHERE(atm);
   d.add_SETTINGS(set);
   d.add_CORRECTION(corrOut);
-  d.add_STATUS(converged ? dclStatus_Solved : dclStatus_NotConverged);
+  d.add_STATUS(converged ? dclStatus::Solved : dclStatus::NotConverged);
   d.add_OBJECTS(vObjs);
   d.add_FIT(fit);
   d.add_LEVELS(vLevel);
@@ -2023,14 +2024,14 @@ extern "C" int energy() {
   const auto set = st.Finish();
   const auto field = b.CreateString("EGM2008");
   DCLBuilder d(b);
-  d.add_PRODUCT(dclProduct_OrbitalEnergy);
+  d.add_PRODUCT(dclProduct::OrbitalEnergy);
   d.add_GRAVITY_FIELD(field);
   d.add_GRAVITY_DEGREE(uint16_t(degree));
   d.add_GRAVITY_ORDER(uint16_t(order));
   d.add_GM_M3_S2(gm);
   d.add_EARTH_ROTATION_RAD_S(omegaEarth);
   d.add_SETTINGS(set);
-  d.add_STATUS(dclStatus_Solved);
+  d.add_STATUS(dclStatus::Solved);
   d.add_STATES(statesOut);
   return emit("result", b, d.Finish());
 }
@@ -2051,7 +2052,7 @@ extern "C" int drag_work() {
   if (!e.empty()) return fail("invalid-request", e);
   Jb2008Table table;
   Nrlmsise00Table msisTable;
-  const bool corrected = request->CORRECTION() && request->CORRECTION()->FORM() != dclCorrectionForm_None;
+  const bool corrected = request->CORRECTION() && request->CORRECTION()->FORM() != dclCorrectionForm::None;
   if (msis) {
     if (corrected) return fail("invalid-correction", "ATMOSPHERE NRLMSIS00E has no temperature correction.");
     e = msisTable.add(request->SPACE_WEATHER());
@@ -2118,12 +2119,55 @@ extern "C" int drag_work() {
   const auto atm = atmosphere_record(b, msis);
   const auto corr = correction.record(b);
   DCLBuilder d(b);
-  d.add_PRODUCT(dclProduct_DragWork);
+  d.add_PRODUCT(dclProduct::DragWork);
   d.add_ATMOSPHERE(atm);
   d.add_EARTH_ROTATION_RAD_S(omegaEarth);
   d.add_BALLISTIC_COEFFICIENT_M2_KG(B);
   if (correction.present) d.add_CORRECTION(corr);
-  d.add_STATUS(dclStatus_Solved);
+  d.add_STATUS(dclStatus::Solved);
   d.add_STATES(statesOut);
   return emit("result", b, d.Finish());
+}
+
+// E13's exploratory NRLMSISE-00 form (PLAN S3), frozen R1/R2 solver. This
+// method deliberately emits no OBJECTS, STATES, drivers or private arc fits.
+extern "C" int calibrate_log_density() {
+  std::string error;
+  const DCL* request=dcl_request(error);
+  if(!request)return fail("invalid-request",error);
+  if(!request->ATMOSPHERE()||request->ATMOSPHERE()->MODEL()!=AtmosphericModelFamily::NRLMSIS00E || request->CREATED_AT_MS()<=0)
+    return fail("invalid-request","NRLMSISE-00 and an explicit UTC issue time are required.");
+  std::vector<open_dca::Arc> arcs;
+  if(request->OBJECTS())for(const auto* o:*request->OBJECTS()){
+    if(!o->OK())continue;
+    const double hours=double(o->LAST_MS()-o->FIRST_MS())/open_dca::hour;
+    if(!o->ID()||hours<20||hours>28||!positive(o->BALLISTIC_COEFFICIENT_M2_KG())||!std::isfinite(o->LN_B())||!std::isfinite(o->LN_B_SIGMA())||o->LN_B_SIGMA()<0||o->LN_B_SIGMA()>0.5)
+      return fail("invalid-arc","Accepted arcs must be finite 20–28 hour NRLMSISE-00 energy fits with positive B and sigma(ln B) <= 0.5.");
+    arcs.push_back({o->ID()->str(),double(o->FIRST_MS()),double(o->LAST_MS()),o->LN_B()});
+  }
+  open_dca::Result result;
+  if(!open_dca::solve(arcs,double(request->CREATED_AT_MS()),result,error))return fail("insufficient-fleet",error);
+  if(!result.converged)return fail("not-converged","E13 common-mode solve did not meet its frozen tolerance in 60 iterations.");
+  size_t first=0,last=result.times.size()-1;
+  while(!result.supported[first])++first;
+  while(!result.supported[last])--last;
+  if(double(request->CREATED_AT_MS())-result.times[last]>48*open_dca::hour)
+    return fail("stale-fleet","Last supported solve is more than 48 hours before issue; publication refused.");
+  DCLT out;
+  out.ID="open-dca-nrlmsise00-"+std::to_string(request->CREATED_AT_MS());
+  out.CREATED_AT_MS=request->CREATED_AT_MS();out.PRODUCT=dclProduct::DensityCalibration;out.STATUS=dclStatus::Solved;
+  out.ATMOSPHERE=std::make_unique<ATMT>();out.ATMOSPHERE->MODEL=AtmosphericModelFamily::NRLMSIS00E;out.ATMOSPHERE->YEAR=2000;
+  out.SETTINGS=std::make_unique<dclSettingsT>();out.SETTINGS->FROM_MS=int64_t(result.times[first]);out.SETTINGS->TO_MS=int64_t(result.times[last]);
+  out.CORRECTION=std::make_unique<dclCorrectionT>();out.CORRECTION->FORM=dclCorrectionForm::LogDensityNodes;
+  for(size_t i=first;i<=last;++i){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[i]));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(result.s[i]);}
+  for(int h=1;h<=48;++h){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[last]+h*open_dca::hour));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(result.s[last]*std::exp(-double(h)/48));}
+  out.FIT=std::make_unique<dclFitStatisticsT>();out.FIT->ITERATIONS=result.iterations;out.FIT->CONVERGED=true;out.FIT->OBSERVATIONS=arcs.size();out.FIT->USED=result.arcs;out.FIT->PARAMETERS=last-first;
+  double sum=0;for(double r:result.residuals)sum+=r*r;out.FIT->POSTFIT_RMS=std::sqrt(sum/result.residuals.size());
+  out.PROVENANCE=std::make_unique<PVNT>();out.PROVENANCE->SOURCE_ID="open-dca-planet";out.PROVENANCE->SOURCE_KIND=pvnSourceKind::Ephemeris;
+  out.PROVENANCE->ORIGINATOR="Derived aggregate from Planet Labs PBC orbital ephemerides, https://ephemerides.planet-labs.com/, copyright Planet Labs PBC, CC BY-NC 4.0. GFZ Kp/ap/F10.7: CC BY 4.0, Matzka et al. (2021), doi:10.1029/2020SW002641; NOAA SWPC: public domain.";
+  out.PROVENANCE->PROVIDER_ID="open-dca";out.PROVENANCE->PRODUCER="density-calibration/0.6.0; E13 R1/R2/S3 NRLMSISE-00 exploratory method";
+  out.PROVENANCE->LICENSE_CLASS=pvnLicenseClass::NonCommercial;out.PROVENANCE->LICENSE_ID="CC-BY-NC-4.0 (Planet inputs); CC-BY-4.0 (GFZ); public domain (NOAA SWPC)";
+  out.PROVENANCE->LINEAGE="E13/OAE-3e0ff003; daily24h; rw0.005; smooth0.05; latency6h; history30d; tau48h; mean-zero-supported";
+  if(request->PROVENANCE()&&request->PROVENANCE()->LINEAGE())out.PROVENANCE->LINEAGE+="; "+request->PROVENANCE()->LINEAGE()->str();
+  fb::FlatBufferBuilder b;return emit("calibration",b,DCL::Pack(b,&out));
 }
