@@ -24,14 +24,14 @@ Manifest: `bafkreibjov2bt6eyslsqoud6dza2cdh67qyqhvj66rhv2ovu64un3n5h3q`.
 Shard: `bafkreide5dpnwpokydcxyz5fy3fomilhwcq4eekeqhoo3grb64sdxmvpqi`.
 These are scratch-node CIDs, not persistent production availability.
 
-Landing remains blocked. Typed-port coverage passed, but JSON-BOUNDARY refused
-build metadata emissions: `data-source/space-weather/build.mjs` G5 count 3 and
-`flows/space-weather/build.mjs` G5 count 4, each versus baseline 0. No runtime
-JSON or source-licence exception was added to bypass this guard. The gauntlet
-dry-run also still requests the stale sibling SDK and `wasmedge-docker`, which
-the owner explicitly forbids. No full gauntlet PASS, review or landing claimed.
+The build now passes guest-link metadata directly between the SDK compiler APIs.
+No new JSON encoder or baseline exception is added. The portable module and
+flow rebuilt byte-identically; JSON-BOUNDARY and typed-port gates pass. A fresh
+scratch-node E2E after the build change also passes, with headless-browser and
+native WasmEdge parity; Docker remains waived by owner ruling. Final landing
+requires the gauntlet receipt bound to the frozen component and ops heads.
 
-Host-02's public build is `1.0.6-updatelane.24c0512bc` (October 9), before
-the required TimerTick fix. A separate owner fleet update must precede rollout.
-No production SSH, installation or restart occurred. SDS dependency
-`upstream-spacedatastandards-2` is waiting for npm visibility; DCA was not started.
+Host-02's public build remains `1.0.6-updatelane.24c0512bc`, before TimerTick.
+The owner-run stage script refuses it before SSH. The rollout scripts, backup
+and live CID-check procedure are in stack deployment/space-weather-provider-node.
+No production SSH, installation or restart occurred.
