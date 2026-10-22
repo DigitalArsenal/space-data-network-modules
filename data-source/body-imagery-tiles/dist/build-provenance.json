@@ -9,5 +9,5 @@
     "src/body_imagery_tiles.cpp"
   ],
   "threadModel": "single-thread",
-  "wasmSha256": "b3fa7b00649735f43ebc799d36b5608aceaa0b2e2b022d3e9633c5d38de876ab"
+  "wasmSha256": "06e2770f2f050aa6827b02ba3013c8c12d62600a0dd1299d6616aec8e2c0dd41"
 }

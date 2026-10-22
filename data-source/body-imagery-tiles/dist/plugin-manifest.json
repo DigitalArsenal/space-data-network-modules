@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
   "name": "Body Imagery Tiles (high-definition mosaics)",
-  "version": "0.4.0",
-  "description": "A body's high-definition global imagery as the console's tile pyramid. Sources: Mars THEMIS Day IR 100 m v12 (NAIF 499, the unit default) and the small bodies of src/sources_small.hpp, named by the unit's naif; gray or RGB (planes read as one range each, rows_0..rows_2) (NASA/JPL/ASU, public domain; BigTIFF, 8-bit, one row per strip, planetocentric on the MOLA sphere). tiles_plan names the whole-row byte range of the mosaic one level-9 tile row needs (If-Match on its ETag); tiles_direct area-averages those rows in WASM into 256 px baseline JPEG tiles on the body's two-root geographic scheme (GEOGRAPHIC_TWO_ROOT_BODY, rows from the south), one $DTT record per tile (PAYLOAD_FORMAT CUSTOM, MEDIA_TYPE image/jpeg); tiles_reduce builds a coarser level's row from the two child rows already made (JPEG decode, 2x2 mean of the measured pixels, JPEG), root levels 0-2 from level 3. Files are size-prefixed $DTT streams of 16 tiles of one row, in the layout the engine's imageryFromTileFiles reads: imagery/<NAIF id>/root.dtts (levels 0-2) and imagery/<NAIF id>/<L>/<X16>_<Y>.dtts (X16 = x >> 4, Y from the south). Level 9 (81.4 m/px) is the deepest. TYPED CONTRACTS 1.0: FlatBuffers only between modules; node config through plugin.getConfig.",
+  "version": "0.5.0",
+  "description": "A body's high-definition global imagery as the console's tile pyramid. Sources: Mars THEMIS Day IR 100 m v12 (NAIF 499, the unit default) and the small bodies of src/sources_small.hpp, named by the unit's naif; gray or RGB (planes read as one range each, rows_0..rows_2) (NASA/JPL/ASU, public domain; BigTIFF, 8-bit, one row per strip, planetocentric on the MOLA sphere). tiles_plan names the whole-row byte range of the mosaic one level-9 tile row needs (If-Match on its ETag); tiles_direct area-averages those rows in WASM into 256 px baseline JPEG tiles on the body's two-root geographic scheme (GEOGRAPHIC_TWO_ROOT_BODY, rows from the south), one $DTT record per tile (PAYLOAD_FORMAT CUSTOM, MEDIA_TYPE image/jpeg); tiles_reduce builds a coarser level's row from the two child rows already made (JPEG decode, 2x2 mean of the measured pixels, JPEG), root levels 0-2 from level 3. Files are size-prefixed $DTT streams of 16 tiles of one row, in the layout the engine's imageryFromTileFiles reads: imagery/<NAIF id>/root.dtts (levels 0-2) and imagery/<NAIF id>/<L>/<X16>_<Y>.dtts (X16 = x >> 4, Y from the south). Level 9 (81.4 m/px) is the deepest. TYPED CONTRACTS 1.0: FlatBuffers only between modules; node config through plugin.getConfig. tiles_window encodes bounded Moon LO+UVVIS and USGS CTX grayscale windows above protected base levels.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -427,6 +427,101 @@
         }
       ],
       "description": "Decodes the child tiles, takes the 2x2 mean of the measured pixels and cuts the parent row into JPEG tiles.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "tiles_window",
+      "displayName": "Encode a bounded HD raster window",
+      "inputPorts": [
+        {
+          "portId": "unit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GDAL-prepared north-first 8-bit grayscale window in rows_0 HRSP status 200; unit source, level, row (south), x, tiles (1..16, within one file). Moon L9 or CTX L10..13 only; source reads, radiometry and coverage are recorded by tools/big HD orchestration."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GDAL-prepared north-first 8-bit grayscale window in rows_0 HRSP status 200; unit source, level, row (south), x, tiles (1..16, within one file). Moon L9 or CTX L10..13 only; source reads, radiometry and coverage are recorded by tools/big HD orchestration."
+        },
+        {
+          "portId": "rows_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "GDAL-prepared north-first 8-bit grayscale window in rows_0 HRSP status 200; unit source, level, row (south), x, tiles (1..16, within one file). Moon L9 or CTX L10..13 only; source reads, radiometry and coverage are recorded by tools/big HD orchestration."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GDAL-prepared north-first 8-bit grayscale window in rows_0 HRSP status 200; unit source, level, row (south), x, tiles (1..16, within one file). Moon L9 or CTX L10..13 only; source reads, radiometry and coverage are recorded by tools/big HD orchestration."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One file: a size-prefixed $DTT stream of 16 JPEG tiles."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 256,
+          "required": false,
+          "description": "One file: a size-prefixed $DTT stream of 16 JPEG tiles."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+        }
+      ],
+      "description": "GDAL-prepared north-first 8-bit grayscale window in rows_0 HRSP status 200; unit source, level, row (south), x, tiles (1..16, within one file). Moon L9 or CTX L10..13 only; source reads, radiometry and coverage are recorded by tools/big HD orchestration.",
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }

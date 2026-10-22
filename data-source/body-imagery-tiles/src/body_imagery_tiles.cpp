@@ -32,6 +32,7 @@
 #include <ModuleConfig_generated.h>  // staged by the SDK compiler
 
 #include "sources_big.hpp"
+#include "sources_hd.hpp"
 #include "sources_small.hpp"
 
 namespace {
@@ -274,6 +275,35 @@ int push_range(const char* port, const bit::Source& s, uint64_t at, uint64_t byt
 }  // namespace
 
 extern "C" {
+
+// Bounded, north-first 8-bit raster prepared by the GDAL range reader. The module owns JPEG and DTT.
+int tiles_window(void) {
+    Config unit;
+    if (!read_mcfg("unit", &unit)) { plugin_set_error("missing-unit", "tiles_window requires ModuleConfig."); return 400; }
+    const auto* src = bit::hd_source(unit.str("source", ""));
+    const double ld = unit.num("level", -1), yd = unit.num("row", -1), xd = unit.num("x", -1), nd = unit.num("tiles", -1);
+    const auto integer = [](double v) { return std::isfinite(v) && std::floor(v) == v; };
+    if (!src || !integer(ld) || ld < (src->naif == 301 ? 9 : 10) || ld > src->max_level ||
+        !integer(yd) || yd < 0 || yd >= (1u << int(ld)) || !integer(xd) || xd < 0 ||
+        !integer(nd) || nd < 1 || nd > 16 || xd + nd > (2u << int(ld)) || int(xd) / 16 != int(xd + nd - 1) / 16) {
+        plugin_set_error("invalid-window", "HD window must be within one file and above the protected base levels."); return 400;
+    }
+    const auto* f = frame_for("rows_0");
+    if (!f || !f->payload) { plugin_set_error("missing-raster", "rows_0 is required."); return 400; }
+    flatbuffers::Verifier v(f->payload, f->payload_length);
+    if (!R::VerifyHttpResponseBuffer(v)) { plugin_set_error("invalid-raster", "Expected HRSP."); return 400; }
+    const auto* r = R::GetHttpResponse(f->payload);
+    const size_t width = size_t(nd) * bit::kTile;
+    if (r->STATUS() != 200 || !r->BODY() || r->BODY()->size() != width * bit::kTile) {
+        plugin_set_error("invalid-raster", "Expected exactly tiles * 256 * 256 grayscale bytes, status 200."); return 400;
+    }
+    const Config config = load_config();
+    const jpeg::Encoder enc(static_cast<int>(config.num("jpeg_quality", 88)));
+    std::vector<TileOut> tiles;
+    for (unsigned i = 0; i < unsigned(nd); ++i)
+        tiles.push_back({unsigned(ld), unsigned(xd) + i, unsigned(yd), tile_jpeg(enc, r->BODY()->data(), width, i * bit::kTile, 0, 1)});
+    return emit_files(*src, tiles, config.str("retrieved_at", "2026-10-22T00:00:00.000Z"));
+}
 
 int tiles_plan(void) {
     Config unit;
