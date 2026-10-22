@@ -4,7 +4,7 @@
 //   R2_AWS=... node tools/big/publish.mjs [--source KEY] --dir DIR --manifest
 //
 // --source: a key of tools/big/sources.mjs its files live under imagery/<naif>/.
-// --level L [--upload-only]: `aws s3 sync` of DIR/<prefix>/<L>/ (root.dtts for level 2) to s3://spaceaware/<prefix>/, then
+// --level L [--upload-only | --verify-only]: `aws s3 sync` of DIR/<prefix>/<L>/ (root.dtts for level 2) to s3://spaceaware/<prefix>/, then
 // every ledger entry of that level is checked against the bucket's own listing: present, same bytes, ETag = the
 // ledger's md5 (a single-part object's ETag is the MD5 of its bytes, so the stored bytes are the encoded bytes whose
 // sha256 the ledger holds). Exit 1 on any miss.
@@ -46,7 +46,8 @@ const listing = (prefix) => {
 
 if (arg("level")) {
   const level = Number(arg("level"));
-  if (level <= 2) run(["s3", "cp", path.join(dir, PREFIX, "root.dtts"), `s3://${BUCKET}/${PREFIX}/root.dtts`, "--only-show-errors"]);
+  if (flag("verify-only")) { /* the files were uploaded chunk by chunk and are gone locally: check the bucket against the ledger only */ }
+  else if (level <= 2) run(["s3", "cp", path.join(dir, PREFIX, "root.dtts"), `s3://${BUCKET}/${PREFIX}/root.dtts`, "--only-show-errors"]);
   else run(["s3", "sync", path.join(dir, PREFIX, String(level)), `s3://${BUCKET}/${PREFIX}/${level}/`, "--only-show-errors"], { stdio: "inherit" });
   if (flag("upload-only")) { console.log(JSON.stringify({ level, uploaded: true })); process.exit(0); }  // verified later against the whole listing
   const have = listing(level <= 2 ? `${PREFIX}/root.dtts` : `${PREFIX}/${level}/`);

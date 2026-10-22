@@ -44,7 +44,7 @@ if (chunk) {
     drop(L);
     fs.writeFileSync(done, "");
   }
-  publish(L, []);  // verifies the whole level against the bucket listing (all ledger entries)
+  publish(L, ["--verify-only"]);  // the whole level against the bucket listing (all ledger entries); its files are uploaded and gone
 } else {
   log(`level ${L}`);
   encode(L);
