@@ -1,72 +1,126 @@
 # Body appearance
 
-Work in progress for `body-appearance-module-20261022`. This package is not a
-validated appearance model and does not yet publish a WASM artifact.
+Partial implementation for `body-appearance-module-20261022`. This is **not a
+completed or validated all-body appearance model**. The required E2E gate fails
+until absolute Moon and planetary disk photometry is implemented and validated.
 
-## Contract and boundaries
+The C++ module contains cited parameter lookup, deterministic rock/crater
+placement, solar differential rotation, and relative H,G1,G2 photometry.
+`dist/isomorphic/module.wasm` is the single artifact for Node, browser and native
+WasmEdge. `codec.js` only encodes/decodes canonical SDS PCE FlatBuffers. There is
+no runtime physics or statistics in JavaScript.
 
-The planned authoritative implementation is C++, compiled with the module SDK
-and repo-local Emscripten to `dist/isomorphic/module.wasm`. The same bytes must
-run in Node, a headless browser, and WasmEdge. Runtime photometry, surface
-statistics, deterministic placement, and solar rotation belong in that module.
-JavaScript may encode typed SDS requests and perform independent tests.
+## Build and verification
 
-The SDK supplies `plugin_invoke_stream` and the embedded manifest accessors.
-Module methods will use canonical SDS types; an unratified schema alias or JSON
-payload will not be substituted for a typed port. The candidate unique module
-identifier is `com.digitalarsenal.body-appearance`.
+```sh
+cd analysis/body-appearance
+npm ci
+# Install the repository-approved Emscripten release under deps/emsdk first.
+# The SDK's native WASI route also needs its sanctioned WASI sysroot/runtime.
+# SDN_WASI_SYSROOT and SDN_WASI_RESOURCE_DIR may identify those libraries.
+uptime
+npm run build
+node --test tests/sdk_compat.test.mjs
+npm test
+# Optional: FIREFOX_BINARY=/absolute/path/to/an/installed/headless/Firefox
+# Optional: WASMEDGE_BINARY=/absolute/path/to/wasmedge
+npm run test:e2e
+```
 
-Mallama & Hilton (2018), DOI `10.1016/j.ascom.2018.08.002`, is an independent
-oracle. Its equations and published code belong only under `tests/`, never in
-the compiled source or a shipped JavaScript entry point. Runtime magnitudes
-must be obtained from independently sourced photometric parameters. No value
-will be populated solely from memory or a secondary summary.
+`build.mjs` uses SDK 0.8.27 `compileModuleFromSource` with `wasi-sequential` and
+the native clang++ driver inside **repo-local** `deps/emsdk`. This bounded pure
+transform has a manifest `sequentialJustification`. No system Emscripten is
+invoked. The SDK resolves the WASI sysroot and runtime libraries separately;
+the build does not claim those libraries are shipped with Emscripten.
+The build limits compiler cores to two and refuses load averages of 30 or more.
+Build scratch stays in ignored `.build/`.
 
-## Required evidence
+The E2E runs sequential Node, one headless Firefox, and native WasmEdge legs.
+It compares SHA-256 digests of the complete typed outputs, including both
+100,005-object populations, repeated/different seeds, a polar tile, rotation,
+phase and table lookup. Browser and native WasmEdge use unchanged artifact bytes.
+The owner waived Docker parity on 2026-10-22: **never start Docker or Docker
+Desktop**. The test has no Docker or Chrome launcher.
 
-| Acceptance | Required measurement | Current status |
+The default evidence path is `.build/e2e-report.json`; set
+`BODY_APPEARANCE_REPORT` to preserve a report elsewhere. Missing science gates
+are failures, not skips. `npm test` validates the implemented subset and the
+independent oracle; it does not replace the full E2E acceptance gate.
+
+## Typed contract
+
+Module ID: `com.digitalarsenal.analysis.body-appearance`. Every method accepts
+one `request` PCE and emits one `result` PCE. Provider-defined names identify
+scalars, vectors and strings. Result descriptors carry data types and units;
+parameter descriptors also carry DOI, locator and scope. The SDK supplies the
+invoke ABI and embeds the authoring manifest in the WASM artifact.
+
+| Method | Required input | Result and convention |
 | --- | --- | --- |
-| Every table value cited | DOI and table/figure or equation locator, with units and model convention | Pending primary-source verification |
-| Placement size-frequency law | KS p > 0.05 with 100,000 samples | Not measured |
-| Cumulative fractional area | Relative error <= 5% | Not measured |
-| Three-runtime parity | Same artifact and identical placement outputs | Not measured |
-| Moon photometry | Maximum residual <= 0.1 mag against ROLO over its documented domain | Not measured |
-| Mercury through Neptune, excluding Earth | Maximum residual <= 0.1 mag against Mallama & Hilton across each observed phase range | Not measured |
+| `parameters` | `model` | Cited table entries for that exact named model; unavailable classes fail explicitly. |
+| `rotate` | `profile`, `latitude_rad`, `longitude_rad`, `epoch_tai_s`, `scene_tai_s` | Snodgrass–Ulrich sidereal rate and advanced longitude, wrapped to [0,2π). Optional `frame_rate_rad_s` defaults to zero. |
+| `phase_curve` | `model`, `phase_rad` vector; `G1`, `G2` for `hg1g2` | Relative flux and magnitude dimming. `moon:muinonen2010` selects the published lunar weights. No absolute magnitude or geometric/normal albedo is implied. |
+| `place` | `body_id`, `level`, `x`, `y`, `seed`, `radius_m` | Body-fixed XYZ meters, diameter meters, azimuth radians and uint32 shape seeds for each requested population. |
 
-The end-to-end entry point required by the task is
-`node analysis/body-appearance/tests/body-appearance.e2e.mjs`. It will fail if
-mandatory source evidence, runtime checks, or acceptance measurements are
-missing. A scaffold or skipped test is not acceptance.
+Rotation profiles are `magnetic`, `doppler` and `spectroscopic`; selection is
+explicit because their physical tracers differ. Times are TAI seconds from the
+same caller-chosen epoch. Longitude increases in the rotation direction relative
+to the caller's uniformly rotating frame. This is feature advection, not an
+ephemeris or a live space-weather model.
 
-## Primary-source checklist
+Tiles are equirectangular: `2^level` cells on each axis, longitude from −π to π
+west to east and latitude from +π/2 to −π/2 north to south. Positions are uniform
+in spherical area. Levels 0–24, valid tile indices, uint32 seeds, and a caller
+radius in meters are required. +Z is north, +X the prime meridian, +Y east.
+Azimuth is clockwise from local north about the surface normal. Uniform azimuth
+is an explicit modeling assumption, not a measured orientation distribution.
 
-- Sato et al. (2014), `10.1002/2013JE004580`: lunar Hapke maps.
-- Mallama & Hilton (2018), `10.1016/j.ascom.2018.08.002`: test-only planet oracle
-  and its published code.
-- Kieffer & Stone (2005), AJ 129:2887: ROLO spectral irradiance model,
-  coefficients, and geometry conventions.
-- Bandfield et al. (2011), `10.1029/2011JE003866`: Diviner rock abundance.
-- Golombek & Rapp (1997), JGR: cumulative fractional rock area law.
-- Rosenburg et al. (2011), `10.1029/2010JE003716`: LOLA roughness.
-- Neukum et al. (2001): crater production function and validity limits.
-- Li et al. (2015), Asteroids IV, "Asteroid photometry": taxonomic priors.
-- Muinonen et al. (2010), Icarus: H,G1,G2 basis functions and conventions.
-- Snodgrass & Ulrich (1990), ApJ 351:309: surface differential rotation.
+Rock placement takes `rock_abundance`, `rock_min_m`, `rock_max_m`. The abundance
+is the extrapolated coefficient k in F(D)=k exp(−qD), **not** the fractional area
+above an arbitrary raster detection threshold. For Mars (`body_id=499`), the
+published calibration q=1.79+0.152/k is used. Other bodies require explicit
+`rock_q_per_m` and `rock_law_source`. A Diviner pixel cannot be passed unchanged
+without converting its documented diameter-threshold convention. That mapping
+and a validated lunar size law remain unfinished.
 
-## Resume checkpoint (2026-10-22)
+The rock *number* distribution is proportional to exp(−qD)/D², obtained by
+dividing the differential area distribution by each circular footprint. It is
+not an exponential number distribution. Expected CFA over [a,b] is
+k[exp(−qa)−exp(−qb)]. Reported CFA is the sum of projected footprints divided by
+tile area; overlaps are not unioned. Placement does not perform collision
+resolution or claim geologic clustering.
 
-The worktree is clean at the start of the resumed lane, and origin contains
-both prior checkpoints (`701ece4c`, `968ee9dc`). Filesystem access is restored.
-The existing paper downloads and parameter table are preserved. Li et al.
-Table 6 and Snodgrass–Ulrich Table 1 have been rechecked against the primary
-paper text. The saved ROLO `paper.pdf` is HTML, not a usable paper.
+Lunar craters (`body_id=301`) take `crater_n1_km2`, `crater_min_m`,
+`crater_max_m`. N(1 km) is an explicit retained density, not an assumed age.
+The Neukum 2001 shape is restricted to its published 10 m–300 km diameter
+domain; sub-10-meter craters are refused. Maximum output is 250,000 instances
+per population and rejection sampling is bounded. Request a finer tile when
+the budget is exceeded. Omitting both populations returns empty vectors.
 
-The SDK contract was read from the shared stack's
-`repos/ancillary-packages/space-data-module-sdk/AGENTS.md` and its isomorphic
-artifact documentation. The canonical SDS PCE schema provides typed,
-provider-defined scalar/vector parameters; the existing milky-way module
-is the local pattern. No local schema alias or JSON wire format is needed.
+## Sources and remaining scope
 
-Docker and Docker Desktop must never be started. The owner waived Docker
-WasmEdge parity on 2026-10-22; the browser and native WasmEdge checks remain
-required. No build, acceptance measurement, or gauntlet PASS is claimed yet.
+`data/parameters.json` holds 112 cited values: S/C/V class-average Hapke
+parameters, three solar profiles, lunar median roughness/Hurst scales, lunar
+crater coefficients, the Mars rock law, H,G1,G2 basis/weights and two identified
+566 nm LROC Hapke map pixels. Median slopes are labeled as medians, not RMS.
+The two map pixels are not asserted to represent whole terrain classes.
+`data/sources.json` records primary download URLs, hashes, byte sizes and limits.
+All physical numbers have DOI and table/equation/dataset-pixel locators.
+
+Mallama & Hilton 2018 equations exist **only in tests/**. The published Fortran
+was read as data and not executed. Ten published numerical examples validate
+the test oracle; its Saturn cubic follows the paper's printed coefficient,
+which differs from the published Fortran by 1e-9. It is never a runtime or build
+input. ROLO 553.8 nm is also a test-only oracle here.
+
+The current lunar comparison is a **relative phase-shape diagnostic**, normalized
+at 5°, over 2°–96° for both signs of solar longitude at zero observer libration.
+It does not compare absolute irradiance, matched bandpasses or a rendered Moon.
+Its residual cannot be reported as passing the required absolute 0.1 mag gate.
+
+Still required: independent disk photometry for Moon and all seven requested
+planets, all-body albedo/color/roughness tables, D and X/M taxonomic priors and
+taxonomy/albedo selection, Diviner input mapping, and named-spacecraft
+matched-geometry render/image-similarity and shadow-fraction evidence. Original
+Bandfield 2011 and Golombek–Rapp 1997 downloads remain unavailable after publisher
+403/timeouts; the rock law is verified in Golombek et al. 2021 Section 1.

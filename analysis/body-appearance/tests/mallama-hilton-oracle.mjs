@@ -5,7 +5,7 @@
 // Units: Johnson V mag, angles degrees, r and delta AU. Geocentric viewing;
 // outer-planet extensions use the paper's spacecraft phase domains. Neptune
 // year is CE. No epoch applies to the other static mean curves.
-export const phaseDomains=Object.freeze({Mercury:[2,170],Venus:[0,179],Mars:[0,50],Jupiter:[0,130],Saturn:[0,150],Uranus:[0,154],Neptune:[0,133]});
+export const phaseDomains=Object.freeze({Mercury:[2,170],Venus:[2,179],Mars:[0,50],Jupiter:[0,130],Saturn:[0,150],Uranus:[0,154],Neptune:[0,133]});
 export function planetMagnitude(body,phaseDeg,{r=1,delta=1,year=2014,uranusLatitudeDeg=0,saturnRings=false,ringLatitudeDeg=0,marsLongitudeCorrection=0,marsSeasonCorrection=0}={}) {
   const a=phaseDeg,range=phaseDomains[body];
   if(!range || !Number.isFinite(a) || a<range[0] || a>range[1] || !(r>0 && delta>0))throw new RangeError('Outside documented oracle domain');
@@ -22,7 +22,7 @@ export function planetMagnitude(body,phaseDeg,{r=1,delta=1,year=2014,uranusLatit
     // Eq. (12) prints 1.505e-6; published Fortran uses 1.506e-6. This oracle
     // follows the paper and records that difference instead of silently fitting.
   }
-  if(body==='Uranus')m=-7.110-.00084*Math.abs(uranusLatitudeDeg)+.006587*a+.0001045*a*a;
+  if(body==='Uranus')m=-7.110-.00084*Math.abs(uranusLatitudeDeg)+(a<=3.1?0:.006587*a+.0001045*a*a);
   if(body==='Neptune') {
     m=year<1980?-6.89:year<=2000?-6.89-.0054*(year-1980):-7;
     if(a>1.9) {if(year<=2000)throw new RangeError('Neptune extended curve requires year > 2000');m+=.007944*a+.00009617*a*a;}

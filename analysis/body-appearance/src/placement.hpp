@@ -3,7 +3,8 @@
 
 namespace appearance {
 // A counter-derived integer generator. All arithmetic is explicitly modulo
-// 2^64; the top 53 bits map to the OPEN unit interval. No host random/clock.
+// 2^64; the top 52 bits map to the OPEN unit interval. No host random/clock.
+// 52 bits leave room for the exact half-unit offset; 53 could round up to 1.
 struct Random {
   uint64_t state;
   uint64_t next() {
@@ -12,7 +13,7 @@ struct Random {
     z=(z^(z>>27))*UINT64_C(0x94d049bb133111eb);
     return z^(z>>31);
   }
-  double uniform(){return (double(next()>>11)+0.5)/9007199254740992.0;}
+  double uniform(){return (double(next()>>12)+0.5)/4503599627370496.0;}
 };
 struct Tile {
   uint32_t level,x,y,seed;int32_t body;

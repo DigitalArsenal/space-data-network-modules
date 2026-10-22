@@ -1,0 +1,44 @@
+// Task acceptance gate. Missing calibrations are failures, never skipped passes.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
+import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';
+import {measure} from './measurements.mjs';
+import {runtimeParity} from './runtime-parity.mjs';
+import {phaseDomains} from './mallama-hilton-oracle.mjs';
+
+const root=fileURLToPath(new URL('../',import.meta.url));
+const bytes=await fs.readFile(path.join(root,'dist/isomorphic/module.wasm'));
+const report={task:'body-appearance-module-20261022',measuredAt:new Date().toISOString(),
+  artifactSha256:createHash('sha256').update(bytes).digest('hex'),acceptance:{},failures:[]};
+const table=JSON.parse(await fs.readFile(path.join(root,'data/parameters.json'),'utf8'));
+const missing=table.filter(p=>!Number.isFinite(p.value)||!/^10\./.test(p.doi)||!p.locator||!p.unit||!p.scope);
+report.acceptance.citations={status:missing.length?'fail':'pass',values:table.length,uncited:missing.length,
+  scope:'All shipped table entries; this does not assert that all requested body tables exist.'};
+if(missing.length)report.failures.push('Uncited table entries');
+const harness=await createBrowserModuleHarness({wasmSource:bytes,surface:'direct'});
+try {
+  report.measurements=await measure(harness);
+  report.acceptance.placement={status:'pass',rock:report.measurements.rock,crater:report.measurements.crater,
+    cfaConvention:'Sum of circular footprints within the diameter interval, not overlap-unioned coverage.'};
+} catch(error) {report.failures.push(`Numerical checks: ${error.message}`);report.acceptance.placement={status:'fail',error:error.message};}
+finally {await harness.destroy();}
+try {report.acceptance.runtimeParity=await runtimeParity();}
+catch(error) {report.acceptance.runtimeParity={status:'fail',error:error.message};report.failures.push(`Runtime parity: ${error.message}`);}
+report.acceptance.moon={status:'fail',threshold_mag:.1,absolute_calibration:false,
+  diagnostic:report.measurements?.moon_phase_shape,
+  reason:'Only a normalized H,G1,G2 phase curve is implemented; absolute disk radiometry and matched ROLO geometry/bandpass are missing.'};
+report.failures.push('Moon absolute disk photometry is incomplete');
+report.acceptance.planets=Object.fromEntries(Object.entries(phaseDomains).map(([body,range])=>[body,
+  {status:'fail',phase_domain_deg:range,threshold_mag:.1,samples:0,reason:'No independently sourced and validated absolute disk-photometry implementation.'}]));
+report.failures.push('Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune disk magnitudes are unimplemented');
+report.unfinishedScope=['Whole-body photometric/albedo/color tables and roughness RMS baselines',
+  'D and X/M taxonomic priors and explicit taxonomy/albedo selection',
+  'Diviner rock-abundance input mapping and independently justified lunar rock-size law',
+  'Named-spacecraft matched-geometry render/image-similarity and shadow-fraction evidence'];
+report.status=report.failures.length?'fail':'pass';
+const reportPath=process.env.BODY_APPEARANCE_REPORT || path.join(root,'.build/e2e-report.json');
+await fs.mkdir(path.dirname(reportPath),{recursive:true});await fs.writeFile(reportPath,JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report,null,2));console.log(`Evidence: ${reportPath}`);
+process.exitCode=report.status==='pass'?0:1;
