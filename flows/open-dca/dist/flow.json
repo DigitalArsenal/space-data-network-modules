@@ -1,0 +1,436 @@
+{
+  "programId": "com.digitalarsenal.flows.open-dca",
+  "name": "Open DCA NRLMSISE-00",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Scheduled private Planet energy fits and aggregate E13 log-density correction publication. Raw operator states never enter SDN storage.",
+  "nodes": [
+    {
+      "nodeId": "operator-plan",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "plan_operator",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "operator-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "operator-parse",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "parse_operator",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "prepare",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "prepare_operator_states",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "eop-plan",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "methodId": "finals2000a",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "eop-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "eop-parse",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "methodId": "parse_finals2000a",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "eop-wrap",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "wrap_eop",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "weather-plan",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "plan_weather",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "weather-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "weather-parse",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "parse_weather",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "weather-wrap",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "wrap_weather",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fit",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "fit_energy_arcs",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "solve",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "calibrate_log_density",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "publish_correction",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "operator-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "operator-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "weather-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "weather-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "eop-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "eop-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "operator-plan-request-operator-fetch-request",
+      "fromNodeId": "operator-plan",
+      "fromPortId": "request",
+      "toNodeId": "operator-route",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "operator-fetch-response-operator-parse-response",
+      "fromNodeId": "operator-restore",
+      "fromPortId": "response",
+      "toNodeId": "operator-parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "operator-parse-operator_states-prepare-operator_states",
+      "fromNodeId": "operator-parse",
+      "fromPortId": "operator_states",
+      "toNodeId": "prepare",
+      "toPortId": "operator_states",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "operator-parse-kernel-fit-kernel",
+      "fromNodeId": "operator-parse",
+      "fromPortId": "kernel",
+      "toNodeId": "fit",
+      "toPortId": "kernel",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "eop-plan-request-eop-fetch-request",
+      "fromNodeId": "eop-plan",
+      "fromPortId": "request",
+      "toNodeId": "eop-route",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "eop-fetch-response-eop-parse-response",
+      "fromNodeId": "eop-restore",
+      "fromPortId": "response",
+      "toNodeId": "eop-parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "eop-parse-records-eop-wrap-records",
+      "fromNodeId": "eop-parse",
+      "fromPortId": "records",
+      "toNodeId": "eop-wrap",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "eop-wrap-earth_orientation-fit-earth_orientation",
+      "fromNodeId": "eop-wrap",
+      "fromPortId": "earth_orientation",
+      "toNodeId": "fit",
+      "toPortId": "earth_orientation",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "prepare-request-fit-request",
+      "fromNodeId": "prepare",
+      "fromPortId": "request",
+      "toNodeId": "fit",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "weather-plan-request-weather-fetch-request",
+      "fromNodeId": "weather-plan",
+      "fromPortId": "request",
+      "toNodeId": "weather-route",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "weather-fetch-response-weather-parse-response",
+      "fromNodeId": "weather-restore",
+      "fromPortId": "response",
+      "toNodeId": "weather-parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "weather-parse-records-weather-wrap-records",
+      "fromNodeId": "weather-parse",
+      "fromPortId": "records",
+      "toNodeId": "weather-wrap",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "weather-wrap-space_weather-fit-space_weather",
+      "fromNodeId": "weather-wrap",
+      "fromPortId": "space_weather",
+      "toNodeId": "fit",
+      "toPortId": "space_weather",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fit-arcs-solve-request",
+      "fromNodeId": "fit",
+      "fromPortId": "arcs",
+      "toNodeId": "solve",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "solve-calibration-publish-calibration",
+      "fromNodeId": "solve",
+      "fromPortId": "calibration",
+      "toNodeId": "publish",
+      "toPortId": "calibration",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "publish-records-ingest-dcl_records",
+      "fromNodeId": "publish",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "dcl_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "publish-meta-ingest-meta",
+      "fromNodeId": "publish",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "operator-route-request-operator-fetch-request",
+      "fromNodeId": "operator-route",
+      "fromPortId": "request",
+      "toNodeId": "operator-fetch",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "operator-fetch-response-operator-restore-response",
+      "fromNodeId": "operator-fetch",
+      "fromPortId": "response",
+      "toNodeId": "operator-restore",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "weather-route-request-weather-fetch-request",
+      "fromNodeId": "weather-route",
+      "fromPortId": "request",
+      "toNodeId": "weather-fetch",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "weather-fetch-response-weather-restore-response",
+      "fromNodeId": "weather-fetch",
+      "fromPortId": "response",
+      "toNodeId": "weather-restore",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "eop-route-request-eop-fetch-request",
+      "fromNodeId": "eop-route",
+      "fromPortId": "request",
+      "toNodeId": "eop-fetch",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "eop-fetch-response-eop-restore-response",
+      "fromNodeId": "eop-fetch",
+      "fromPortId": "response",
+      "toNodeId": "eop-restore",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "daily",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "Causal 30-day fleet solve on final daily operator states."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "daily",
+      "targetNodeId": "operator-plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "daily",
+      "targetNodeId": "weather-plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "daily",
+      "targetNodeId": "eop-plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "daily",
+      "targetNodeId": "eop-wrap",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.operator-states-public",
+    "com.digitalarsenal.data-source.space-weather",
+    "com.digitalarsenal.analysis.density-calibration",
+    "com.digitalarsenal.data-source.eop-parser",
+    "com.digitalarsenal.data-source.eop-request",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

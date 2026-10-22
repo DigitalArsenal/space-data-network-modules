@@ -46,12 +46,12 @@ export async function prepare(dir){
   const parsed=await operator.call('parse_operator',await responses(dir,'operator',33));
   const converted=await density.call('prepare_operator_states',[{...parsed.outputs.find(o=>o.portId==='operator_states')}]);
   const eopParsed=await eop.call('parse_finals2000a',await responses(dir,'eop',1));
-  const earth=await operator.call('wrap_eop',[eopParsed.outputs.find(o=>o.portId==='records')]);
+  const earth=await operator.call('wrap_eop',[eopParsed.outputs.find(o=>o.portId==='records'),input('tick',encodeTimerTick({triggerId:'daily',firedMs:info.issue}),'TimerTick.fbs','TICK','TimerTick')]);
   const weatherParsed=await weather.call('parse_weather',await responses(dir,'weather',4));
   const spw=await operator.call('wrap_weather',[weatherParsed.outputs.find(o=>o.portId==='records')]);
   const inputs=[...converted.outputs,...earth.outputs,...spw.outputs,parsed.outputs.find(o=>o.portId==='kernel')];
   for(const [i,f]of inputs.entries())await fs.writeFile(path.join(dir,`fit-${i}.fb`),f.payload);
-  await fs.writeFile(path.join(dir,'fit-frames.json'),JSON.stringify(inputs.map(({payload,...f},i)=>({...f,file:`fit-${i}.fb`}))));
+  await fs.writeFile(path.join(dir,'fit-frames.json'),JSON.stringify(inputs.map(({portId,typeRef},i)=>({portId,typeRef,file:`fit-${i}.fb`}))));
   console.log(`Prepared ${converted.outputs.length} private state series and typed weather/EOP/kernel`);return {info,inputs};
  }finally{for(const m of [operator,weather,density,eop])await m.destroy();}
 }

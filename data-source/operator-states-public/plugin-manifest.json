@@ -260,6 +260,25 @@
           "required": true,
           "minStreams": 1,
           "maxStreams": 1
+        },
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
         }
       ],
       "outputPorts": [
