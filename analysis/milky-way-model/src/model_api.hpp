@@ -41,7 +41,7 @@ extern "C" int bake() {
   for (auto& v:detail->rgba) v=to_half(float(random_uniform(seed)));
   wire::Result r;volume_result(r,"global",volumes->global);volume_result(r,"local",volumes->local);
   volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
-  r.text("channels","G,BP,RP relative emissivity per kpc; G extinction optical depth per kpc");
+  r.text("channels","SDSS r,g,i relative emissivity per kpc; G extinction optical depth per kpc");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
   r.text("calibration",loaded.ready
     ?"Local 3D dust map inside its coverage, Drimmel & Spergel 2001 disk, arm dust and local segment beyond; spiral light from DS2001 B_K and Flynn 2006; independent of Gaia"
@@ -49,23 +49,27 @@ extern "C" int bake() {
   r.text("dust_map",loaded.ready?(loaded.dataset+": "+loaded.source+"; "+loaded.license).c_str():"none");
   r.number("dust_map_radius",loaded.ready?loaded.radius:0,"kpc");
   r.vector("sun",{sun.x,sun.y,sun.z},"kpc");
-  // Additive renderer fields. BP and RP optical depth per kpc are these
-  // multiples of the G channel (Wang & Chen 2019 Table 3).
-  r.vector("extinction_ratios",{model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction},"A_BP/A_G,A_RP/A_G");
-  // The display's white (literature_model.hpp, display_white): the renderer
-  // divides each band by it, so the local disc's light is drawn white.
-  const auto white=display_white();
-  r.vector("display_white",{white[0],white[1],white[2]},"G,BP,RP");
-  r.number("display_saturation",colors::display_saturation);
-  // One G unit (emissivity per kpc x kpc) in physical units: the model's own
-  // local mid-plane emissivity carries Flynn et al. 2006's 0.056 Lsun,V pc^-3.
-  const double local=literature({-galactic_constants::solar_radius_kpc,0,0}).r;
+  // Renderer fields. Each light channel's optical depth per kpc is this
+  // multiple of the G optical depth channel (Wang & Chen 2019 Table 3).
+  r.vector("extinction_ratios",{model_choices::channel_extinction[0],model_choices::channel_extinction[1],
+    model_choices::channel_extinction[2]},"A_r/A_G,A_g/A_G,A_i/A_G");
+  // One unit of each band (emissivity per kpc x kpc) in physical units: the
+  // model's own local mid-plane G emissivity carries Flynn et al. 2006's
+  // 0.056 Lsun,V pc^-3; a band unit is the G unit's light at zero color term
+  // (stellar_populations.hpp, sdss), so all three share its zero point.
+  const double local=literature_g({-galactic_constants::solar_radius_kpc,0,0});
   const double column=populations::unit_column_lsun_v_pc2/local;
   const double mu_g=populations::sun_absolute_v+21.572-2.5*std::log10(column)+populations::g_minus_v_local();
   r.number("radiance_scale",std::pow(10.0,-0.4*mu_g),"G=0 (Vega) flux arcsec^-2");
-  r.number("radiance_scale_mag_arcsec2",mu_g,"mag_G arcsec^-2");
+  r.number("radiance_scale_mag_arcsec2",mu_g,"mag_G arcsec^-2 = mag_r, mag_g, mag_i (AB) arcsec^-2 per band unit");
   r.number("radiance_scale_lsun_v_pc2",column,"Lsun,V pc^-2");
-  r.text("radiance_scale_basis","Flynn et al. 2006 Table 4 local V luminosity density 0.056 Lsun pc^-3 at the model's local mid-plane G emissivity; M_V,sun=4.81 (Willmer 2018); G-V of (V-I)=0.82 by Gaia EDR3 Table 5.7");
+  r.text("radiance_scale_basis","Flynn et al. 2006 Table 4 local V luminosity density 0.056 Lsun pc^-3 at the model's local mid-plane G emissivity; M_V,sun=4.81 (Willmer 2018); G-V of (V-I)=0.82 by Gaia EDR3 Table 5.7; SDSS g, r, i by Riello et al. 2021 Table C.2");
+  // The display (stellar_populations.hpp, display): Lupton et al. (2004)
+  // asinh stretch of the r, g, i light, Q and the linear stretch alpha per
+  // band unit.
+  const auto stretch=display::asinh_stretch(mu_g);
+  r.vector("display_asinh",{stretch[0],stretch[1]},"Q,alpha per band unit");
+  r.text("display_asinh_basis",display::basis);
   return r.emit();
 }
 
@@ -213,7 +217,7 @@ extern "C" int face_on_metrics() {
   r.vector("arc_profile",f.arc_profile,"G units");
   r.number("bar_a2",f.bar_a2);r.number("bar_phase",f.bar_phase_deg,"deg");
   r.number("bar_expected_phase",f.bar_expected_deg,"deg");
-  r.number("lane_bp_rp",f.lane_color,"mag");r.number("disc_bp_rp",f.disc_color,"mag");
+  r.number("lane_g_i",f.lane_color,"mag");r.number("disc_g_i",f.disc_color,"mag");
   r.number("lane_reddening",f.lane_color-f.disc_color,"mag");
   r.number("lane_pixels",double(f.lane_pixels));r.number("disc_pixels",double(f.disc_pixels));
   r.number("lane_tau_threshold",f.lane_tau_threshold);

@@ -107,7 +107,7 @@ inline double integrate(const NestedVolumes& volumes,Vec3 direction) {
     const Field f=volumes.sample(sun+direction*(t+step/2));
     const double tau=std::max(0.0,f.kappa)*step;
     const double integral=tau>1e-10?-std::expm1(-tau)/std::max(0.0,f.kappa):step;
-    light+=transmittance*std::max(0.0,f.r)*integral;
+    light+=transmittance*gaia_g(f)*integral;
     transmittance*=std::exp(-tau); t+=step;
   }
   return light;
@@ -141,7 +141,7 @@ inline std::vector<TransferSegment> cache_ray(const NestedVolumes& volumes,Vec3 
     const bool local=volumes.local.contains(sun+direction*(t+0.025));
     const double step=std::min(end-t,local?0.015:0.05);
     const Field f=volumes.sample(sun+direction*(t+step/2));
-    segments.push_back({std::max(0.0,f.r),std::max(0.0,f.kappa),step});
+    segments.push_back({gaia_g(f),std::max(0.0,f.kappa),step});
     t+=step;
   }
   return segments;

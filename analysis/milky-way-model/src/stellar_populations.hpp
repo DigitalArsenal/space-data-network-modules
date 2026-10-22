@@ -113,37 +113,101 @@ inline double unit_surface_brightness_g() {return unit_surface_brightness_v()+g_
 
 } // namespace milky_way::populations
 
-// COLORS (0.3.0): each population's light in BP and RP per unit G, Vega
-// fluxes (a color of 0 is a ratio of 1): BP/G = 10^(-0.4 (BP-G)), RP/G =
-// 10^(0.4 (G-RP)), BP-G = (BP-RP) - (G-RP).
+// SDSS g, r, i (0.4.0). The light is drawn in the SDSS bands, as SDSS gri
+// composites of galaxies are made (Lupton et al. 2004, PASP 116, 133), each
+// population's per unit G light from its Gaia color through the Gaia EDR3 -
+// SDSS12 relations of Riello et al. (2021), A&A 649, A3, Table C.2 (one
+// family, all in g-i):
+//   BP-RP = 0.3971 + 0.777 y - 0.04164 y^2 + 0.008237 y^3   (y = g-i,
+//           -0.5 < y < 3.5),
+//   G-g   = -0.1064 - 0.4964 y - 0.09339 y^2 + 0.004444 y^3 (-1 < y < 9),
+//   G-r   = -0.01664 + 0.2662 z - 0.649 z^2 + 0.08227 z^3   (z = r-i,
+//           -0.5 < z < 2),
+// solved for y from BP-RP, then z from G-i = (G-g) + y = (G-r) + z. G is
+// Vega, g, r and i are SDSS (AB); one unit of a band's emissivity is the
+// light of one G unit of zero G-band color term, so each band's surface
+// brightness is the G unit's mu_G - 2.5 log10(I_band).
+// The populations' colors, BP-RP:
 //  - the disc's old light: the local light is redder than the Sun, (V-I) =
 //    0.82 (Flynn et al. 2006) against 0.70 (Ramirez et al. 2012, ApJ 752, 5),
-//    and redder again without its M_V < -1 stars: BP-RP = 1.0, G-RP = 0.56
-//    (a MODEL CHOICE at that color);
+//    and redder again without its M_V < -1 stars: BP-RP = 1.0 (a MODEL
+//    CHOICE at that color); g-r = 0.58;
 //  - the bulge and bar, red-giant light: the red clump's intrinsic
-//    BP-RP = 1.23 (Ruiz-Dern et al. 2018, A&A 609, A116), G-RP = 0.64 on the
-//    giant sequence (a MODEL CHOICE at that color);
-//  - the young arm light, B stars: BP-RP = -0.15, G-RP = -0.08, a B5V on the
-//    dwarf sequence (Pecaut & Mamajek 2013 table; a MODEL CHOICE of type);
-//  - HII regions, emission lines: H-alpha (in RP and G) at 2.86 H-beta (case
-//    B, Osterbrock & Ferland 2006) and [OIII] 4959/5007 with H-beta (in BP and
-//    G). Each line adds to the narrow BP and RP bands more, per Vega unit,
-//    than to the wide G band, which is why such regions are pink in color
-//    images. The ratios below are a MODEL CHOICE of that kind.
-// The display balances white on the disc's light at the Sun's radius seen
-// face-on (display_white, literature_model.hpp), as an image of a galaxy is
-// balanced on its average starlight. In the G band the young
-// light is a tenth of the disc's face-on column (Flynn 2006: 2.3 of 24.4
-// Lsun pc^-2), so the arms differ from the disc by a small shift of hue; the
-// display stretches saturation by display_saturation about each pixel's
-// luminance, as color composites of galaxies are stretched. A DISPLAY
-// CHOICE, not a measurement: it changes no band's light.
+//    BP-RP = 1.23 (Ruiz-Dern et al. 2018, A&A 609, A116); g-r = 0.78;
+//  - the young arm light, B stars: BP-RP = -0.15, a B5V on the dwarf
+//    sequence (Pecaut & Mamajek 2013 table; a MODEL CHOICE of type). Its
+//    g-i = -0.68 lies 0.18 mag below the fit's -0.5 bound; the g-r it gives,
+//    -0.36, is within 0.06 of the table's own B5V g-r = -0.413 (Mamajek,
+//    version 2022.04.16, from Covey et al. 2007);
+//  - HII regions: their young stars' light plus the nebular lines. A giant
+//    HII region's H-alpha equivalent width of ~1000 A falls in r (FWHM
+//    1400 A), [OIII] 4959/5007 with H-beta, ~500 A together, in g; none of
+//    note in i; all of them in G (FWHM ~4400 A). The equivalent widths are a
+//    MODEL CHOICE of that scale: g, r, i are the young light's times
+//    (1 + 500/1400, 1 + 1000/1400, 1) per (1 + 1500/4400) of G.
+// No white balance and no saturation stretch: the bands are AB fluxes and
+// the display maps them as Lupton et al. (2004) do (display_asinh).
+namespace milky_way::sdss {
+struct Bands {double g,r,i;};
+// The root of f on [lo, hi] (f(lo) and f(hi) of opposite signs), bisected.
+template<class F> double root(F f,double lo,double hi) {
+  const bool rising=f(hi)>f(lo);
+  for(int k=0;k<80;++k) {const double m=0.5*(lo+hi);((f(m)<0)==rising?lo:hi)=m;}
+  return 0.5*(lo+hi);
+}
+inline double bp_rp_of_g_i(double y) {return 0.3971+0.777*y-0.04164*y*y+0.008237*y*y*y;}
+inline double g_minus_g_of_g_i(double y) {return -0.1064-0.4964*y-0.09339*y*y+0.004444*y*y*y;}
+inline double g_minus_r_of_r_i(double z) {return -0.01664+0.2662*z-0.649*z*z+0.08227*z*z*z;}
+// Light in g, r and i per unit G light of Gaia color BP-RP.
+inline Bands per_g(double bp_rp) {
+  const double y=root([&](double v){return bp_rp_of_g_i(v)-bp_rp;},-1.5,3.5);
+  const double big_g_minus_g=g_minus_g_of_g_i(y),big_g_minus_i=big_g_minus_g+y;
+  const double z=root([&](double v){return big_g_minus_i-v-g_minus_r_of_r_i(v);},-1.0,2.0);
+  const double big_g_minus_r=big_g_minus_i-z;
+  return {std::pow(10.0,0.4*big_g_minus_g),std::pow(10.0,0.4*big_g_minus_r),std::pow(10.0,0.4*big_g_minus_i)};
+}
+// The Gaia G light of g and i light (the G-g relation above): what the Gaia
+// all-sky maps are compared with (oracle_metrics.hpp).
+inline double gaia_g(double g,double i) {
+  if(!(g>0)||!(i>0)) return std::max(0.0,g);
+  const double y=std::clamp(-2.5*std::log10(g/i),-1.0,3.5);
+  return g*std::pow(10.0,-0.4*g_minus_g_of_g_i(y));
+}
+// Wang & Chen (2019), ApJ 877, 116, Table 3: A_g/A_V=1.205, A_r/A_V=0.848,
+// A_i/A_V=0.630 (and A_G/A_V=0.789); the model's dust carries A_G.
+inline constexpr double a_g_per_a_v=1.205,a_r_per_a_v=0.848,a_i_per_a_v=0.630;
+inline constexpr double g_per_big_g_extinction=a_g_per_a_v/populations::a_g_per_a_v;
+inline constexpr double r_per_big_g_extinction=a_r_per_a_v/populations::a_g_per_a_v;
+inline constexpr double i_per_big_g_extinction=a_i_per_a_v/populations::a_g_per_a_v;
+} // namespace milky_way::sdss
+
 namespace milky_way::colors {
-inline double bp_per_g(double bp_rp,double g_rp) {return std::pow(10.0,-0.4*(bp_rp-g_rp));}
-inline double rp_per_g(double g_rp) {return std::pow(10.0,0.4*g_rp);}
-inline const double disc_bp=bp_per_g(1.0,0.56),disc_rp=rp_per_g(0.56);
-inline const double central_bp=bp_per_g(1.23,0.64),central_rp=rp_per_g(0.64);
-inline const double young_bp=bp_per_g(-0.15,-0.08),young_rp=rp_per_g(-0.08);
-inline constexpr double hii_bp=1.3,hii_rp=2.6;
-inline constexpr double display_saturation=1.8;
+inline const sdss::Bands disc_bands=sdss::per_g(1.0),central_bands=sdss::per_g(1.23),young_bands=sdss::per_g(-0.15);
+inline constexpr double hii_g_ew_a=500,hii_r_ew_a=1000,g_fwhm_a=1400,r_fwhm_a=1400,big_g_fwhm_a=4400;
+inline const sdss::Bands hii_bands=[] {
+  const double big_g=1+(hii_g_ew_a+hii_r_ew_a)/big_g_fwhm_a;
+  return sdss::Bands{young_bands.g*(1+hii_g_ew_a/g_fwhm_a)/big_g,young_bands.r*(1+hii_r_ew_a/r_fwhm_a)/big_g,young_bands.i/big_g};
+}();
 } // namespace milky_way::colors
+
+// THE DISPLAY (a DISPLAY CHOICE, not a measurement: it changes no band's
+// light). The r, g and i light is drawn as SDSS g-r-i composites are made,
+// Lupton, Blanton, Fekete et al. (2004), PASP 116, 133, section 2: with
+// I = (i + r + g) / 3 in AB fluxes, each band x is drawn as x F(I) / I,
+// F(I) = asinh(alpha Q I) / Q, i red, r green, g blue, and a pixel whose
+// largest primary passes 1 scaled back to 1 (its color kept). Their SDSS
+// composite (Fig. 1 caption) takes Q = 8 and alpha = 0.02 per count. One
+// SDSS count is NMGY nanomaggies (the frame header's calibration factor; the
+// r frames of the six Milky Way analogs this model is compared with, DR17
+// runs 1045, 3631, 3650, 3813, 5194 and 8062, give 0.00476 to 0.00531, median
+// 0.00502), on a pixel of 0.396 arcsec. alpha per band unit is then
+// 0.02 / 0.00502 x 0.396^2 nanomaggies arcsec^-2 times the unit's
+// 10^(-0.4 (mu - 22.5)) nanomaggies arcsec^-2.
+namespace milky_way::display {
+inline constexpr double q=8,alpha_per_count=0.02,nanomaggies_per_count=0.00502,pixel_arcsec=0.396;
+inline constexpr const char* basis="Lupton et al. 2004 (PASP 116, 133) asinh g-r-i composite, Q=8, alpha=0.02 per SDSS count (Fig. 1); 1 count = 0.00502 nanomaggies (median NMGY of the r frames of the six Licquia 2015 analogs, DR17), 0.396 arcsec pixels";
+inline std::array<double,2> asinh_stretch(double unit_mag_arcsec2) {
+  const double per_nanomaggy_arcsec2=alpha_per_count/nanomaggies_per_count*pixel_arcsec*pixel_arcsec;
+  return {q,per_nanomaggy_arcsec2*std::pow(10.0,-0.4*(unit_mag_arcsec2-22.5))};
+}
+} // namespace milky_way::display

@@ -32,11 +32,14 @@ inline constexpr double disc_edge_kpc=13.9,outer_scale_kpc=1.3;
 inline double disc_edge(double radius) {
   return std::exp(-std::max(0.0,radius-disc_edge_kpc)*(1/outer_scale_kpc-1/2.6));
 }
-// BP and RP extinction ratios to G: Wang & Chen (2019) Table 3 red-clump
-// values (stellar_populations.hpp). Real passband extinction also depends on
-// the source spectrum and the column; one constant ratio per band is used.
+// BP and RP (the statistical stars) and SDSS r, g and i (the light)
+// extinction ratios to G: Wang & Chen (2019) Table 3 red-clump values
+// (stellar_populations.hpp). Real passband extinction also depends on the
+// source spectrum and the column; one constant ratio per band is used.
 inline constexpr double bp_to_g_extinction=populations::bp_per_g_extinction;
 inline constexpr double rp_to_g_extinction=populations::rp_per_g_extinction;
+inline constexpr double channel_extinction[3]={sdss::r_per_big_g_extinction,
+  sdss::g_per_big_g_extinction,sdss::i_per_big_g_extinction};
 } // namespace model_choices
 
 struct StellarComponents { double thin,thick,arms,bulge,bar; };
@@ -273,9 +276,12 @@ inline double light(Vec3 p) {
 }
 } // namespace hii
 
-// The light in G, BP and RP, each population in its own color
-// (stellar_populations.hpp, colors), and the dust: inside a delivered 3D dust
-// map's coverage the map replaces DS2001 (dust_map.hpp) when `local_dust`.
+// The light in SDSS r, g and i (channels in that order: the central band
+// first, as the renderer's luminance and the arm ridges use it, then the
+// blue and the red), each population in its own color
+// (stellar_populations.hpp, colors), and the dust's G optical depth: inside a
+// delivered 3D dust map's coverage the map replaces DS2001 (dust_map.hpp)
+// when `local_dust`.
 inline Field literature(Vec3 p,bool local_dust) {
   const auto pattern=arm_patterns(p);
   const auto c=stellar_components(p,pattern);
@@ -285,39 +291,20 @@ inline Field literature(Vec3 p,bool local_dust) {
   const double nebulae=hii::light(p);
   using namespace colors;
   const double dust=local_dust?dust_map::blend(p,drimmel2001::dust(p)):drimmel2001::dust(p);
-  return {disc+central+young+nebulae,
-          disc_bp*disc+central_bp*central+young_bp*young+hii_bp*nebulae,
-          disc_rp*disc+central_rp*central+young_rp*young+hii_rp*nebulae,dust};
+  return {disc_bands.r*disc+central_bands.r*central+young_bands.r*young+hii_bands.r*nebulae,
+          disc_bands.g*disc+central_bands.g*central+young_bands.g*young+hii_bands.g*nebulae,
+          disc_bands.i*disc+central_bands.i*central+young_bands.i*young+hii_bands.i*nebulae,dust};
 }
 inline Field literature(Vec3 p) {return literature(p,true);}
 
-// The display's white: the disc's light at the Sun's radius seen face-on, a
-// vertical column through its stars and large-scale dust (no HII region, no
-// local dust map), per unit G, as an image of a galaxy is balanced on the
-// average light of its disc. The column is integrated as the renderer
-// integrates a ray (oracle_metrics.hpp): per step, light gained T j (1 -
-// e^-tau) / tau and transmittance falling by e^-tau, each band with its
-// extinction ratio to G.
-inline std::array<double,3> display_white() {
-  const double x=-galactic_constants::solar_radius_kpc;
-  const double ratio[3]={1.0,model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction};
-  double light[3]={0,0,0},transmittance[3]={1,1,1};
-  constexpr double top=3.0,step=0.002;
-  for(double z=top-step/2;z>-top;z-=step) {
-    const Vec3 p{x,0,z};
-    const auto pattern=arm_patterns(p);
-    const auto c=stellar_components(p,pattern);
-    const double young=c.arms-c.thin*pattern.wave,disc=c.thin+c.thick+c.thin*pattern.wave,central=c.bulge+c.bar;
-    using namespace colors;
-    const double j[3]={disc+central+young,disc_bp*disc+central_bp*central+young_bp*young,disc_rp*disc+central_rp*central+young_rp*young};
-    const double kappa=drimmel2001::dust(p);
-    for(int b=0;b<3;++b) {
-      const double tau=kappa*ratio[b]*step;
-      light[b]+=transmittance[b]*j[b]*step*(tau>1e-6?(1-std::exp(-tau))/tau:1-0.5*tau);
-      transmittance[b]*=std::exp(-tau);
-    }
-  }
-  return {1.0,light[1]/light[0],light[2]/light[0]};
+// The G emissivity of the populations at p (the light before its colors).
+inline double literature_g(Vec3 p) {
+  const auto pattern=arm_patterns(p);
+  const auto c=stellar_components(p,pattern);
+  return c.thin+c.thick+c.arms+c.bulge+c.bar+hii::light(p);
 }
+
+// The Gaia G light of a field's r, g, i channels (oracle_metrics.hpp).
+inline double gaia_g(const Field& f) {return sdss::gaia_g(std::max(0.0,f.g),std::max(0.0,f.b));}
 
 } // namespace milky_way

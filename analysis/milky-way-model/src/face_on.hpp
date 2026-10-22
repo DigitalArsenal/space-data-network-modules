@@ -5,24 +5,24 @@
 #include <thread>
 #include <vector>
 
-// The Galaxy seen face-on from 48 kpc above its center: G, BP and RP radiance
+// The Galaxy seen face-on from 48 kpc above its center: SDSS r, g and i radiance
 // of every pixel of the plane through the baked volumes, emission and
-// absorption as the renderer integrates them, with BP and RP taking the
-// extinction ratios. Three measurements of that image:
+// absorption as the renderer integrates them, each band taking its
+// extinction ratio to G. Three measurements of that image:
 //  - the arm/interarm contrast along the Sun's arc, as Elmegreen et al. (2011,
 //    ApJ 737, 32, section 4.2) measure it on azimuthal scans:
 //    2 I_arm / (I_interarm1 + I_interarm2) at each arm crossing;
 //  - the bar: the m=2 Fourier amplitude A2 = |sum I e^(2i phi)| / sum I over
 //    the 1.5-4.5 kpc annulus, and its phase against the bar's 27 degrees;
-//  - the dust lanes' color: integrated BP-RP of the most opaque tenth of the
-//    3-12 kpc disc against the integrated BP-RP of that whole disc.
+//  - the dust lanes' color: integrated g-i of the most opaque tenth of the
+//    3-12 kpc disc against the integrated g-i of that whole disc.
 namespace milky_way {
 
 struct FaceOnReport {
   bool valid=false;
   static constexpr uint32_t size=256;
   static constexpr double half_extent_kpc=16,camera_kpc=48;
-  std::vector<float> rgb;              // size^2 x (G, BP, RP), row-major, +y rows up
+  std::vector<float> rgb;              // size^2 x (r, g, i), row-major, +y rows up
   std::vector<double> crossings_deg,crossing_contrasts,arc_profile;
   double arm_contrast=0,arc_max_over_min=0;
   double bar_a2=0,bar_phase_deg=0,bar_expected_deg=0;
@@ -38,7 +38,7 @@ inline void integrate(const NestedVolumes& volumes,Vec3 target,float* rgb,float*
   const double top=volumes.global.maximum.z,bottom=volumes.global.minimum.z;
   double z=top;
   double light[3]={0,0,0},transmit[3]={1,1,1},tau_total=0;
-  const double ratios[3]={1,model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction};
+  const double* ratios=model_choices::channel_extinction;
   while(z>bottom) {
     // Steps in z: 5 pc through the dust and young layers, 50 pc beyond.
     const double dz=std::min(z-bottom,std::abs(z)<0.6?0.005:0.05);
@@ -176,19 +176,19 @@ inline FaceOnReport face_on(const NestedVolumes& volumes) {
   std::vector<float> sorted=disc_tau;
   std::nth_element(sorted.begin(),sorted.begin()+sorted.size()*9/10,sorted.end());
   report.lane_tau_threshold=sorted[sorted.size()*9/10];
-  double lane_bp=0,lane_rp=0,disc_bp=0,disc_rp=0;
+  double lane_g=0,lane_i=0,disc_g=0,disc_i=0;
   for(uint32_t j=0;j<n;++j) for(uint32_t i=0;i<n;++i) {
     const double x=-FaceOnReport::half_extent_kpc+(i+0.5)*pixel,y=-FaceOnReport::half_extent_kpc+(j+0.5)*pixel;
     const double r=std::hypot(x,y);
     if(r<3||r>12) continue;
     const size_t index=size_t(j)*n+i;
-    const double bp=report.rgb[index*3+1],rp=report.rgb[index*3+2];
-    disc_bp+=bp;disc_rp+=rp;++report.disc_pixels;
-    if(tau[index]>=report.lane_tau_threshold) {lane_bp+=bp;lane_rp+=rp;++report.lane_pixels;}
+    const double g=report.rgb[index*3+1],i_band=report.rgb[index*3+2];
+    disc_g+=g;disc_i+=i_band;++report.disc_pixels;
+    if(tau[index]>=report.lane_tau_threshold) {lane_g+=g;lane_i+=i_band;++report.lane_pixels;}
   }
-  if(!(lane_bp>0&&lane_rp>0&&disc_bp>0&&disc_rp>0)) return report;
-  report.lane_color=-2.5*std::log10(lane_bp/lane_rp);
-  report.disc_color=-2.5*std::log10(disc_bp/disc_rp);
+  if(!(lane_g>0&&lane_i>0&&disc_g>0&&disc_i>0)) return report;
+  report.lane_color=-2.5*std::log10(lane_g/lane_i);
+  report.disc_color=-2.5*std::log10(disc_g/disc_i);
   report.valid=m>=2&&std::isfinite(report.arm_contrast)&&total>0;
   return report;
 }
