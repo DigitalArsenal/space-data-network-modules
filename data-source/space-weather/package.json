@@ -1,0 +1,20 @@
+{
+  "name": "@digitalarsenal/sdn-module-space-weather",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/space-weather.e2e.mjs"
+  },
+  "devDependencies": {
+    "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.32",
+    "space-data-module-sdk": "0.9.9",
+    "spacedatastandards.org": "1.258.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
+  }
+}
