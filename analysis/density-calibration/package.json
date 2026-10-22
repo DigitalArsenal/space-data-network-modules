@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-analysis-density-calibration",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -10,7 +10,12 @@
     "test:parity": "node tests/parity.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.7"
+    "space-data-module-sdk": "0.9.9",
+    "spacedatastandards.org": "1.259.0",
+    "flatc-wasm": "26.1.38",
+    "flatbuffers": "25.9.23",
+    "esbuild": "0.27.7",
+    "playwright": "1.63.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.0"
