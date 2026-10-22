@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {gunzipSync} from 'node:zlib';
 import {ByteBuffer} from 'flatbuffers';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';
@@ -57,6 +57,19 @@ try {
  node.config.flows.services=[{flow:node.program,memory_pages:8192,intervals:{hourly:'1h'},retrieval_interval:'59m',exclusive_group:'space-weather',release_after_run:true}];
  await fs.mkdir(path.join(node.dir,'data/modules'),{recursive:true});await fs.writeFile(path.join(node.dir,'data/modules/capability_policy.json'),JSON.stringify({version:1,approvals:['http','storage_ingest'].map(capability=>({module_hash:hash(portable),capability,plugin_id:node.program,approved_at:new Date().toISOString(),approved_by:'space-weather-e2e',note:'Isolated scratch-node acceptance'}))}));
  await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));
+ // In the cross-component gate, run the actual owner rollout config merger
+ // before AOT/boot. The same publication acceptance below exercises its result.
+ if(process.env.GAUNTLET_CANDIDATE_OPS) {
+  node.config.publishing.allowed_schemas=[]; // Empty means unrestricted, not SPW-only.
+  await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));
+  const deploy=path.join(process.env.GAUNTLET_CANDIDATE_OPS,'deployment/space-weather-provider-node/deploy/host-config.py');
+  await command('python3',[deploy,node.configPath,'apply'],{stdio:'inherit'});
+  const merged=JSON.parse(execFileSync('python3',['-c','import json,sys,yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))',node.configPath],{encoding:'utf8'}));
+  assert.deepEqual(merged.publishing.allowed_schemas,[],'Rollout preserves unrestricted publication');
+  assert.deepEqual(merged.admin,node.config.admin);assert.deepEqual(merged.network,node.config.network);
+  Object.assign(node.config,merged);await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));
+  receipt.deploymentConfig='PASS: owner config merger used for signed/AOT scheduled publication';await save();
+ }
  const log=await fs.open(path.join(node.dir,'prewarm.log'),'w');try{await command(process.env.SDN_NODE_BINARY,['prewarm-aot','--config',node.configPath],{cwd:node.dir,env:node.env,stdio:['ignore',log.fd,log.fd]});}finally{await log.close();}
  await node.start();console.log('PASS signed flow installed, AOT prewarmed, scratch node ready');
  assert(process.env.SDN_JS,'Set SDN_JS to the built sdn-js checkout');const sdn=await import(pathToFileURL(path.join(process.env.SDN_JS,'dist/index.mjs')));
