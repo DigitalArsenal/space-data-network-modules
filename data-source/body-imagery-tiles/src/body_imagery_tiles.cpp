@@ -31,6 +31,7 @@
 #include <HttpResponse_generated.h>  // staged by the SDK compiler
 #include <ModuleConfig_generated.h>  // staged by the SDK compiler
 
+#include "sources_big.hpp"
 #include "sources_small.hpp"
 
 namespace {
@@ -54,6 +55,9 @@ const bit::Source* find_source(int naif) {
     if (naif == kDefaultNaif) return &bit::themis_day_ir();
     size_t count = 0;
     const bit::Source* table = bit::small_sources(&count);
+    for (size_t i = 0; i < count; i++)
+        if (table[i].naif == naif) return &table[i];
+    table = bit::big_sources(&count);  // the first of a body is its imagery; Venus' C3-MDIR (the fill) comes after it
     for (size_t i = 0; i < count; i++)
         if (table[i].naif == naif) return &table[i];
     return nullptr;
@@ -219,8 +223,8 @@ int emit_files(const bit::Source& src, std::vector<TileOut>& tiles, const std::s
         put_u32(&it->second, static_cast<uint32_t>(record.size()));
         it->second.insert(it->second.end(), record.begin(), record.end());
     }
-    if (files.size() > 64) {
-        plugin_set_error("too-many-files", "a unit made more than 64 files.");
+    if (files.size() > 256) {
+        plugin_set_error("too-many-files", "a unit made more than 256 files.");
         return 500;
     }
     Bytes names;
@@ -254,6 +258,19 @@ void cut_tiles(const jpeg::Encoder& enc, const std::vector<uint8_t>& img, size_t
                             tile_jpeg(enc, img.data(), w, x * bit::kTile, r * bit::kTile, bands)});
 }
 
+// A ranged GET of one source's bytes [at, at + bytes) pinned to its edition, pushed on `port`.
+int push_range(const char* port, const bit::Source& s, uint64_t at, uint64_t bytes, double timeout_ms) {
+    const std::string range = "bytes=" + std::to_string(at) + "-" + std::to_string(at + bytes - 1);
+    flatbuffers::FlatBufferBuilder b(512);
+    // If-Modified-Since epoch: the request states its own validator, so the host adds no If-None-Match from the last
+    // 2xx it booked for this URL (every range of the mosaic shares it and would answer 304).
+    std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "range", range.c_str()),
+                                                       R::CreateHeaderDirect(b, "if-match", s.etag),
+                                                       R::CreateHeaderDirect(b, "if-modified-since", kNoValidators)};
+    R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", s.url, &headers, nullptr, static_cast<uint32_t>(timeout_ms), 0, nullptr));
+    return push_typed(port, "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b));
+}
+
 }  // namespace
 
 extern "C" {
@@ -283,21 +300,25 @@ int tiles_plan(void) {
     if (!whole) bit::source_rows_for(src, level, y_north, &first, &last);
     const uint64_t count = last - first + 1;
     static const char* const kPorts[3] = {"rows_0", "rows_1", "rows_2"};
+    const double timeout_ms = config.num("timeout_ms", 600000);
     for (int band = 0; band < bit::band_count(src); band++) {
         const uint64_t base = src.strip0 + static_cast<uint64_t>(band) * src.plane_stride;
-        const std::string range = "bytes=" + std::to_string(base + first * src.width) + "-" + std::to_string(base + (first + count) * src.width - 1);
-        flatbuffers::FlatBufferBuilder b(512);
-        // If-Modified-Since epoch: the request states its own validator, so the host adds no If-None-Match from the last
-        // 2xx it booked for this URL (every range of the mosaic shares it and would answer 304).
-        std::vector<flatbuffers::Offset<R::Header>> headers{R::CreateHeaderDirect(b, "range", range.c_str()),
-                                                           R::CreateHeaderDirect(b, "if-match", src.etag),
-                                                           R::CreateHeaderDirect(b, "if-modified-since", kNoValidators)};
-        R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", src.url, &headers, nullptr,
-                                                                 static_cast<uint32_t>(config.num("timeout_ms", 600000)), 0, nullptr));
-        if (push_typed(kPorts[band], "HttpRequest.fbs", R::HttpRequestIdentifier(), "HttpRequest", finished(b)) < 0) return 500;
+        if (push_range(kPorts[band], src, base + first * src.width, count * src.width, timeout_ms) < 0) return 500;
     }
     unit.numbers["first_row"] = static_cast<double>(first);
     unit.numbers["row_count"] = static_cast<double>(count);
+    // A source with a fill (a mosaic that stops short of the poles and has holes) also reads the fill source's rows of the tile row.
+    unit.numbers["fill_row_count"] = 0;
+    const bit::Source* fill = src.fill_key[0] ? bit::find_big_source(src.fill_key) : nullptr;
+    if (fill && !whole) {
+        uint64_t ffirst = 0, flast = 0;
+        bit::source_rows_for(*fill, level, y_north, &ffirst, &flast);
+        if (ffirst > 0) ffirst--;  // a row each side for the bilinear fill
+        if (flast + 1 < fill->height) flast++;
+        if (push_range("fill_0", *fill, fill->strip0 + ffirst * fill->width, (flast - ffirst + 1) * fill->width, timeout_ms) < 0) return 500;
+        unit.numbers["fill_first_row"] = static_cast<double>(ffirst);
+        unit.numbers["fill_row_count"] = static_cast<double>(flast - ffirst + 1);
+    }
     return push_unit(unit) < 0 ? 500 : 0;
 }
 
@@ -356,6 +377,23 @@ int tiles_direct(void) {
     if (src.max_level > kRootMaxLevel) {
         std::vector<uint8_t> img;
         band_of((1u << level) - 1 - static_cast<uint64_t>(row), &img);
+        const uint64_t fill_count = static_cast<uint64_t>(unit.num("fill_row_count", 0));
+        if (fill_count > 0) {  // the coarser source fills what the finer one lacks
+            const bit::Source* fill = bit::find_big_source(src.fill_key);
+            const plugin_input_frame_t* f = fill ? frame_for("fill_0") : nullptr;
+            flatbuffers::Verifier fv(f ? f->payload : nullptr, f ? f->payload_length : 0);
+            if (!f || !f->payload || !R::VerifyHttpResponseBuffer(fv)) {
+                plugin_set_error("missing-fill-frame", "tiles_direct requires the fill_0 response the plan asked for.");
+                return 400;
+            }
+            const R::HttpResponse* fr = R::GetHttpResponse(f->payload);
+            if (fr->STATUS() != 206 || !fr->BODY() || fr->BODY()->size() != fill_count * fill->width) {
+                plugin_set_error("rows-not-delivered", "the fill source's rows did not arrive.");
+                return 502;
+            }
+            const uint8_t* fplanes[3] = {fr->BODY()->data(), nullptr, nullptr};
+            bit::fill_gaps(*fill, level, (1u << level) - 1 - static_cast<uint64_t>(row), fplanes, static_cast<uint64_t>(unit.num("fill_first_row", 0)), fill_count, &img);
+        }
         cut_tiles(enc, img, bit::level_width(level), bit::kTile, static_cast<uint32_t>(level), static_cast<uint32_t>(row), &tiles, bands);
     } else {
         // A body of 1-2 levels: the whole deepest level from this one unit, halved down to level 0, all in root.dtts.

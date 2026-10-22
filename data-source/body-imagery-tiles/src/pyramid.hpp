@@ -68,8 +68,11 @@ inline void source_rows_for(const Source& s, int level, uint64_t y, uint64_t* fi
     const double e = 180.0 / double(level_rows(level));
     const double north = 90.0 - double(y * kTile) * e, south = north - double(kTile) * e;
     const double a = std::floor(source_row(s, north)), b = std::ceil(source_row(s, south)) - 1.0;
-    *first = a < 0 ? 0 : uint64_t(a);
-    *last = b > double(s.height - 1) ? s.height - 1 : uint64_t(b);
+    // A tile row wholly outside the source (a mosaic that stops short of a pole) gets the nearest edge row; resample_row leaves it no data.
+    const double top = double(s.height - 1);
+    const double lo = a < 0 ? 0 : (a > top ? top : a), hi = b > top ? top : (b < lo ? lo : b);
+    *first = uint64_t(lo);
+    *last = uint64_t(hi);
 }
 
 // One tile row of the deepest level from the source rows [first, first + rows) in `px` (row-major, s.width each):
@@ -185,6 +188,57 @@ inline std::vector<uint8_t> halve_rgb(const std::vector<uint8_t>& img, size_t w,
             for (int k = 0; k < 3; k++) out[(r * nw + c) * 3 + k] = n ? uint8_t((sum[k] + n / 2) / n) : 0;
         }
     return out;
+}
+
+// The fill of a coarser source: each no-data pixel (every band 0) of `out`, a tile row from resample_row, takes the bilinear
+// interpolation of the measured pixels of `s` (here the pixels are much larger than the output's, so a box average would show
+// them) at its centre. `bands` holds the rows [first, first + rows) of `s`.
+inline void fill_gaps(const Source& s, int level, uint64_t y, const uint8_t* const* bands, uint64_t first, uint64_t rows,
+                      std::vector<uint8_t>* out) {
+    const uint64_t W = level_width(level);
+    const int nb = band_count(s);
+    const double e = 180.0 / double(level_rows(level)), step = 360.0 / double(W);
+    for (int r = 0; r < kTile; r++) {
+        const double lat = 90.0 - (double(y * kTile + r) + 0.5) * e;
+        const double rf = source_row(s, lat) - 0.5, j0f = std::floor(rf), fy = rf - j0f;
+        uint8_t* dst = out->data() + uint64_t(r) * W * nb;
+        for (uint64_t c = 0; c < W; c++) {
+            bool present = false;
+            for (int b = 0; b < nb; b++)
+                if (dst[c * nb + b]) present = true;
+            if (present) continue;
+            double lon = -180.0 + (double(c) + 0.5) * step;
+            if (lon < 0) lon += 360.0;
+            const double cf = source_col(s, lon) - 0.5, i0f = std::floor(cf), fx = cf - i0f;
+            float sum[3] = {0, 0, 0}, wsum = 0;
+            for (int dj = 0; dj < 2; dj++) {
+                long long j = static_cast<long long>(j0f) + dj;
+                if (j < static_cast<long long>(first)) j = static_cast<long long>(first);
+                if (j >= static_cast<long long>(first + rows)) j = static_cast<long long>(first + rows) - 1;
+                for (int di = 0; di < 2; di++) {
+                    long long i = static_cast<long long>(i0f) + di;
+                    i %= static_cast<long long>(s.width);
+                    if (i < 0) i += static_cast<long long>(s.width);
+                    const uint64_t at = uint64_t(j - static_cast<long long>(first)) * s.width + uint64_t(i);
+                    bool m = false;
+                    for (int b = 0; b < nb; b++)
+                        if (bands[b][at]) m = true;
+                    if (!m) continue;
+                    const float w = float((di ? fx : 1.0 - fx) * (dj ? fy : 1.0 - fy));
+                    for (int b = 0; b < nb; b++) sum[b] += w * bands[b][at];
+                    wsum += w;
+                }
+            }
+            if (wsum <= 0) continue;
+            bool any = false;
+            for (int b = 0; b < nb; b++) {
+                const float v = std::round(sum[b] / wsum);
+                dst[c * nb + b] = uint8_t(v < 0 ? 0 : (v > 255 ? 255 : v));
+                if (dst[c * nb + b]) any = true;
+            }
+            if (!any) dst[c * nb] = 1;
+        }
+    }
 }
 
 }  // namespace bit

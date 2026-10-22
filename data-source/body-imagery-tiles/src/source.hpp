@@ -37,6 +37,8 @@ struct Source {
     const char* datum;       // DTT HORIZONTAL_DATUM_NAME
     int bands;               // 1 (gray) or 3 (RGB, one plane after another: plane b starts at strip0 + b * plane_stride); 0 reads as 1
     uint64_t plane_stride;   // bytes from one plane's row 0 to the next plane's (height * width)
+    double lon0_deg = 180.0; // the east longitude at x = 0 of x0_m (the module's frame is 180; sources_big.hpp states the file's own)
+    const char* fill_key = "";  // "" or the key of a coarser source whose pixels fill this one's no data (outside its latitudes, holes)
 };
 inline int band_count(const Source& s) { return s.bands == 3 ? 3 : 1; }
 
@@ -58,6 +60,11 @@ inline double m_per_deg(const Source& s) { return s.sphere_m * 3.141592653589793
 
 // The source's pixel coordinates (edges at integers) of a planetocentric latitude and an east longitude in [0, 360).
 inline double source_row(const Source& s, double lat) { return (s.y0_m - lat * m_per_deg(s)) / s.pixel_m; }
-inline double source_col(const Source& s, double lon_e) { return ((lon_e - 180.0) * m_per_deg(s) - s.x0_m) / s.pixel_m; }
+inline double source_col(const Source& s, double lon_e) {
+    double d = lon_e - s.lon0_deg;  // [-180, 180) around the CRS centre
+    while (d < -180.0) d += 360.0;
+    while (d >= 180.0) d -= 360.0;
+    return (d * m_per_deg(s) - s.x0_m) / s.pixel_m;
+}
 
 }  // namespace bit

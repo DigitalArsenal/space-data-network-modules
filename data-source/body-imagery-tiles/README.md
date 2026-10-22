@@ -50,3 +50,9 @@ levels (the giants) is one unit and writes root.dtts alone.
 - **Run.** `node tools/small/encode.mjs --body <key> --out DIR [--derived DIR] --workers 2` (deepest level from the source, coarser
   levels reduced from it, root.dtts last; byte-identical at any worker count), `R2_AWS=... node tools/small/publish.mjs --body <key> --out DIR`,
   test `SMALL_WORK=<dir> node --test tests/small.e2e.test.mjs`.
+
+## Large bodies (sources_big.hpp, tools/big/)
+
+Mercury (199, MESSENGER MDIS BDR 166 m, level 8), Venus (299, Magellan SAR left-look 75 m, level 10), Ceres (2000001, Dawn FC LAMO 35 m, level 7) and Vesta (2000004, Dawn FC LAMO 20 m, level 7), chosen by the unit's NAIF id. Each source states its file's own frame (`lon0_deg`, x0/y0 from the GeoTIFF or PDS label), planetocentric east longitude taken literally; `tests/big.e2e.test.mjs` registers 10 IAU gazetteer features per body within one pixel (Ceres: Kait system, Vesta: Claudia Double Prime, the frame of the console's pck00011). Venus stops at 80 S and 84 N: its no data (and holes) is filled bilinearly from the C3-MDIR 2025 m mosaic (`fill_0` range; C3-MDIR itself ends at 82.4 S, the south pole stays no data). A unit makes up to 256 files (level 10 is 128 a row).
+
+`tools/big/run.mjs --source KEY --out DIR [--chunk N]` encodes, uploads, verifies and reduces a whole pyramid with bounded local disk (`R2_AWS` runs aws against the bucket); `encode.mjs` / `publish.mjs` are its steps.
