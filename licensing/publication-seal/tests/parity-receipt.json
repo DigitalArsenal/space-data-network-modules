@@ -1,0 +1,118 @@
+{
+  "artifactSha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
+  "wasmedgeVersion": "0.16.4",
+  "runs": [
+    {
+      "lane": "wasmedge",
+      "files": [
+        {
+          "name": "499-root.dtts.gz",
+          "length": 49409,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "e740a7431edb86f2651fc1755f2ef772345049fdc2e0fb79756f0efb669c7a7d"
+        },
+        {
+          "name": "499-12-1462_615.dtts.gz",
+          "length": 61867,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 200,
+          "plaintextSha256": "5ad0d308eb443f634a0a8b150531a92f8148ba760c237904729f7acca3365256"
+        },
+        {
+          "name": "301-root.dtts.gz",
+          "length": 453804,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "a650f331b23632e086ac06d082280d10eaddd448d4174f59baf672e542955e3e"
+        },
+        {
+          "name": "301-9-0_0.dtts.gz",
+          "length": 17441,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "afc4320b1bf2bc65910ffbfdd6fb1901bc2db894af2d01ac26316ef987e319b0"
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "files": [
+        {
+          "name": "499-root.dtts.gz",
+          "length": 49409,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "e740a7431edb86f2651fc1755f2ef772345049fdc2e0fb79756f0efb669c7a7d"
+        },
+        {
+          "name": "499-12-1462_615.dtts.gz",
+          "length": 61867,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 200,
+          "plaintextSha256": "5ad0d308eb443f634a0a8b150531a92f8148ba760c237904729f7acca3365256"
+        },
+        {
+          "name": "301-root.dtts.gz",
+          "length": 453804,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "a650f331b23632e086ac06d082280d10eaddd448d4174f59baf672e542955e3e"
+        },
+        {
+          "name": "301-9-0_0.dtts.gz",
+          "length": 17441,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "afc4320b1bf2bc65910ffbfdd6fb1901bc2db894af2d01ac26316ef987e319b0"
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "files": [
+        {
+          "name": "499-root.dtts.gz",
+          "length": 49409,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "e740a7431edb86f2651fc1755f2ef772345049fdc2e0fb79756f0efb669c7a7d"
+        },
+        {
+          "name": "499-12-1462_615.dtts.gz",
+          "length": 61867,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 200,
+          "plaintextSha256": "5ad0d308eb443f634a0a8b150531a92f8148ba760c237904729f7acca3365256"
+        },
+        {
+          "name": "301-root.dtts.gz",
+          "length": 453804,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "a650f331b23632e086ac06d082280d10eaddd448d4174f59baf672e542955e3e"
+        },
+        {
+          "name": "301-9-0_0.dtts.gz",
+          "length": 17441,
+          "overhead": 296,
+          "trailerLength": 272,
+          "aadLength": 192,
+          "plaintextSha256": "afc4320b1bf2bc65910ffbfdd6fb1901bc2db894af2d01ac26316ef987e319b0"
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS"
+}
