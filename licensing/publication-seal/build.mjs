@@ -70,8 +70,14 @@ async function main() {
   await stageRuntime(manifest);
   const archive = path.join(build, 'libcryptopp.a');
   const objects = path.join(build, 'cryptopp-obj');
-  const stamp = path.join(build, 'crypto-build.json');
-  const identity = JSON.stringify({ compiler: lane.identity, source: crypto.source, flags });
+  const stamp = path.join(build, 'crypto-build.sha256');
+  // A cache only needs an equality fingerprint; toolchain provenance is recorded
+  // separately by recordLaneToolchain. NUL separates these filesystem/flag fields.
+  const fingerprintFields = [
+    ...Object.entries(lane.identity).sort().flatMap(([key, value]) => [key, String(value)]),
+    crypto.source, ...flags,
+  ];
+  const identity = createHash('sha256').update(fingerprintFields.join('\0')).digest('hex');
   if (!fs.existsSync(stamp) || fs.readFileSync(stamp, 'utf8') !== identity) {
     fs.rmSync(objects, { recursive: true, force: true }); fs.rmSync(archive, { force: true });
     fs.writeFileSync(stamp, identity);
