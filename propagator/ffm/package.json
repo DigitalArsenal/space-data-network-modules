@@ -24,18 +24,21 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./dist/*": "./dist/*"
+    "./dist/*": "./dist/*",
+    "./catalog-configuration": "./catalog-configuration.mjs"
   },
   "files": [
     "dist/",
     "src/",
     "index.js",
-    "catalog.mjs"
+    "catalog.mjs",
+    "catalog-configuration.mjs"
   ],
   "devDependencies": {
     "esbuild": "0.28.0",
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
+    "playwright": "1.61.1",
     "space-data-module-sdk": "0.9.5",
     "spacedatastandards.org": "1.249.0"
   },

@@ -1,0 +1,147 @@
+{
+  "artifactSha256": "b8efb44320d3cea37a155cb2edd07004d0bca567a8b9cc347ba21dbab576f7a7",
+  "epochUtc": "2026-08-01T12:00:00.000000",
+  "threads": 1,
+  "logicalCpus": 28,
+  "loadStart": [
+    11.12744140625,
+    11.42822265625,
+    10.3798828125
+  ],
+  "kernelBytes": 114688,
+  "inputs": {
+    "kernel": 114920,
+    "earth_orientation": 1792,
+    "space_weather": 1752
+  },
+  "durationSeconds": 86400,
+  "regimes": [
+    {
+      "regime": "ISS",
+      "maximumPositionErrorM": 0.0005905222725209585,
+      "maximumVelocityErrorMS": 0.0000022456427447588972,
+      "coverageCpuSecondsPerObjectDay": 0.35040699999999997,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "STARLINK",
+      "maximumPositionErrorM": 0.0005714027352932133,
+      "maximumVelocityErrorMS": 0.0000011283476036806378,
+      "coverageCpuSecondsPerObjectDay": 0.3881750000000001,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "SSO800",
+      "maximumPositionErrorM": 0.0005587195447591076,
+      "maximumVelocityErrorMS": 8.032390172302433e-7,
+      "coverageCpuSecondsPerObjectDay": 0.21778400000000048,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "LOW250",
+      "maximumPositionErrorM": 0.0007326797414353876,
+      "maximumVelocityErrorMS": 0.00001294430265040719,
+      "coverageCpuSecondsPerObjectDay": 0.4907019999999996,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "GPS",
+      "maximumPositionErrorM": 0.0002909288927886107,
+      "maximumVelocityErrorMS": 4.3774855041431515e-8,
+      "coverageCpuSecondsPerObjectDay": 0.07753500000000003,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "GEO",
+      "maximumPositionErrorM": 0.00023020383558296014,
+      "maximumVelocityErrorMS": 1.6814661569175836e-8,
+      "coverageCpuSecondsPerObjectDay": 0.03466800000000004,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "MOLNIYA",
+      "maximumPositionErrorM": 0.0007449893269138551,
+      "maximumVelocityErrorMS": 7.09314514616006e-7,
+      "coverageCpuSecondsPerObjectDay": 0.11357300000000009,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "GTO",
+      "maximumPositionErrorM": 0.00076698383972379,
+      "maximumVelocityErrorMS": 0.0000049175511684701575,
+      "coverageCpuSecondsPerObjectDay": 0.13734100000000019,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    }
+  ],
+  "loadEnd": [
+    10.796875,
+    11.3544921875,
+    10.35986328125
+  ],
+  "numerics": "PASS",
+  "browserMemory": [
+    {
+      "entities": 1000,
+      "profile": "FFM-1",
+      "seedMilliseconds": 28.16000000014901,
+      "workerCount": 1,
+      "highWaterBytes": 268435456,
+      "windows": [
+        {
+          "seconds": 1800,
+          "milliseconds": 9848.815000001341,
+          "wasmMemoryBytes": 268435456
+        },
+        {
+          "seconds": 3600,
+          "milliseconds": 3915.324999999255,
+          "wasmMemoryBytes": 268435456
+        }
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+    },
+    {
+      "entities": 10000,
+      "profile": "FFM-1",
+      "seedMilliseconds": 104.2199999988079,
+      "workerCount": 1,
+      "highWaterBytes": 268435456,
+      "windows": [
+        {
+          "seconds": 1800,
+          "milliseconds": 97925.56000000238,
+          "wasmMemoryBytes": 268435456
+        },
+        {
+          "seconds": 3600,
+          "milliseconds": 38962.99500000104,
+          "wasmMemoryBytes": 268435456
+        }
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+    }
+  ],
+  "runtimeParity": {
+    "browser": [
+      "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "20fb2475cdf580411373f5f159fda6bb821cdcb4e22565898382527badaecefc"
+    ],
+    "docker-wasmedge": "WAIVED: owner ruling 2026-10-22; do not start Docker. Browser and native WasmEdge are required.",
+    "wasmedge": [
+      "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "20fb2475cdf580411373f5f159fda6bb821cdcb4e22565898382527badaecefc"
+    ]
+  },
+  "diagnosticSurface": "Entity pointer exports are exercised in browser WASM; SDK process hosts expose canonical PIV methods, whose shared resident dynamics are checked byte-for-byte above.",
+  "status": "PASS"
+}

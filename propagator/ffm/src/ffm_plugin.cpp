@@ -18,6 +18,7 @@
 #include "cpp/include/ffm/prw_covariance.h"
 #include "cpp/include/ffm/chebyshev.h"
 #include "cpp/include/ffm/resident_dynamics.h"
+#include "cpp/generated/catalog_profile.h"
 
 #include "../lib/astrodynamics_types.h"
 #include "../lib/astrodynamics.h"
@@ -79,6 +80,18 @@ static void applyWindMode() {
 }
 
 static bool g_initialized = false;
+static std::unique_ptr<ffm::ResidentDynamics> g_catalogDynamics;
+static std::vector<double> g_catalogBstars;
+static std::string g_catalogError, g_catalogProfile = "diagnostic";
+static uint32_t g_catalogConfigVersion = 0;
+static bool catalogEpoch(double utcJd, ffm::TTEpoch& out) {
+    return ffm::toTT(0, (utcJd - 2451545.0) * 86400.0, utcJd, timingStandard::UTC, out, g_catalogError);
+}
+static bool catalogState(int i, double utcJd, StateVector& out, bool clamp = false) {
+    ffm::TTEpoch at;
+    return catalogEpoch(utcJd, at) && g_catalogDynamics->evaluatePrepared(i, at, out, clamp);
+}
+
 
 /// Earth's GM as the diagnostic force model takes it, in km^3/s^2.
 ///
@@ -108,9 +121,7 @@ static bool g_forceModelRefused = false;
 
 /// The diagnostic propagation exports need an initialized module and an
 /// accepted force model.
-static bool propagationReady() {
-    return g_initialized && !g_forceModelRefused;
-}
+static bool propagationReady();
 
 /// Refusal codes shared by every gmat-07 setter and plugin_set_force_model.
 /// Zero is success; every refusal is NEGATIVE, distinct, and leaves the
@@ -139,6 +150,11 @@ static std::string g_predictionDetail;
 static uint32_t g_configVersion = 0;
 // Catalog replacement invalidates portable handles even through diagnostic APIs.
 static uint64_t g_catalogRevision = 0;
+static bool propagationReady() {
+    return g_initialized && !g_forceModelRefused &&
+        (!g_catalogDynamics || g_configVersion == g_catalogConfigVersion);
+}
+
 
 // =============================================================================
 // Per-Entity Chebyshev Ephemeris
@@ -531,6 +547,18 @@ static Mat6 computeSTMFiniteDifference(const StateVector& state, double dtSec) {
 /// not just the rotation matrix (which would introduce ~510 m/s error at LEO).
 static void eciToEcefMeters(const StateVector& eciKm, double jd,
                             double* outPos, double* outVel) {
+    if (g_catalogDynamics) {
+        ffm::TTEpoch at;
+        StateVector fixed;
+        if (catalogEpoch(jd, at) && g_catalogDynamics->earthFixed(at, eciKm, fixed, false, g_catalogError)) {
+            outPos[0] = fixed.position.x * 1000; outPos[1] = fixed.position.y * 1000; outPos[2] = fixed.position.z * 1000;
+            outVel[0] = fixed.velocity.x * 1000; outVel[1] = fixed.velocity.y * 1000; outVel[2] = fixed.velocity.z * 1000;
+        } else {
+            std::fill(outPos, outPos + 3, std::numeric_limits<double>::quiet_NaN());
+            std::fill(outVel, outVel + 3, std::numeric_limits<double>::quiet_NaN());
+        }
+        return;
+    }
     coords::StateVec sv(
         {eciKm.position.x, eciKm.position.y, eciKm.position.z},
         {eciKm.velocity.x, eciKm.velocity.y, eciKm.velocity.z}
@@ -881,8 +909,18 @@ static StateVector propagateEntity(int entityIndex, double targetJD) {
     FFMEntity& entity = g_entities[entityIndex];
 
     StateVector result;
+    if (g_catalogDynamics) {
+        ffm::TTEpoch at, from;
+        const double begin = targetJD >= entity.initialState.epoch
+            ? std::max(entity.initialState.epoch, targetJD - 1800.0 / 86400.0) : targetJD - 1800.0 / 86400.0;
+        if (catalogEpoch(targetJD, at) && catalogEpoch(begin, from) && g_catalogDynamics->activate(g_catalogError) &&
+            g_catalogDynamics->prepare(entityIndex, from, at, g_catalogError) && catalogState(entityIndex, targetJD, result)) return result;
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        result.position = result.velocity = Vec3(nan, nan, nan);
+        return result;
+    }
 
-    if (entity.arcCount > 0) {
+    if (entity.arcCount > 0 || g_catalogDynamics) {
         // Arc-aware path: burns are present
         int arcIdx = findArcIndex(entity, targetJD);
         result = evaluateArc(entity, arcIdx, targetJD);
@@ -1011,6 +1049,8 @@ static void mat3ToQuaternion(const double R[3][3], double quat[4]) {
 // =============================================================================
 
 extern "C" {
+int plugin_ensure_coverage(double, int, int);
+int plugin_eval_positions(double, double*, int);
 
 // -----------------------------------------------------------------------------
 // Initialization & Entity Management
@@ -1018,6 +1058,8 @@ extern "C" {
 
 /// Initialize the FFM module with default configuration.
 int plugin_init() {
+    g_catalogDynamics.reset(); g_catalogBstars.clear();
+    g_catalogError.clear(); g_catalogProfile = "diagnostic";
     ++g_catalogRevision;
     g_integratorConfig.method = IntegrationMethod::RK78;
     g_integratorConfig.initialStep = 60.0;
@@ -1072,11 +1114,109 @@ int plugin_init() {
     return 0;
 }
 
+// Catalog bootstrap: concatenated size-prefixed PRW records, exactly the
+// resident configuration/kernel/environment inputs. Configure before seeding;
+// all subsequent entity epochs are UTC Julian dates. Each B* belongs to one
+// seed slot, including invalid rows. The module computes both coefficients.
+int plugin_configure_catalog(const uint8_t* data, int bytes, const double* bstars, int count) {
+    g_catalogError.clear();
+    g_forceModelRefused = true;
+    if (!g_initialized || g_entityCount || !data || bytes <= 0 || !bstars || count <= 0 || count > MAX_ENTITIES) {
+        g_catalogError = "invalid-catalog: Initialize an empty instance and supply one B* per seed.";
+        return -1;
+    }
+    ffm::ResidentDynamics::Inputs inputs;
+    const auto once = [&](const uint8_t*& ptr, size_t& size, const uint8_t* frame, size_t length) {
+        if (ptr) { g_catalogError = "invalid-catalog: Duplicate configuration input."; return false; }
+        ptr = frame; size = length; return true;
+    };
+    for (size_t offset = 0; offset < static_cast<size_t>(bytes);) {
+        if (bytes - offset < 4) { g_catalogError = "invalid-catalog: Truncated PRW size."; return -1; }
+        const size_t length = size_t(flatbuffers::ReadScalar<uint32_t>(data + offset)) + 4;
+        if (length > bytes - offset) { g_catalogError = "invalid-catalog: Truncated PRW frame."; return -1; }
+        const PRW* root = nullptr;
+        const auto* frame = data + offset;
+        if (!ffm::verifyPrw(frame, length, root, g_catalogError)) return -1;
+        bool ok = false;
+        if (root->EXECUTION_REQUEST()) ok = once(inputs.configuration, inputs.configurationSize, frame, length);
+        else if (root->NATIVE_INPUT()) ok = once(inputs.kernel, inputs.kernelSize, frame, length);
+        else if (root->EARTH_ORIENTATION()) ok = once(inputs.environment.earthOrientation, inputs.environment.earthOrientationSize, frame, length);
+        else if (root->SPACE_WEATHER()) ok = once(inputs.environment.spaceWeather, inputs.environment.spaceWeatherSize, frame, length);
+        else if (root->JB2008_INDICES()) ok = once(inputs.environment.jb2008Indices, inputs.environment.jb2008IndicesSize, frame, length);
+        else g_catalogError = "invalid-catalog: Unexpected PRW arm.";
+        if (!ok) return -1;
+        offset += length;
+    }
+    auto dynamics = ffm::ResidentDynamics::configure(inputs, ffm::instanceKernels(), g_catalogError);
+    if (!dynamics) return -1;
+    const auto* actual = GetSizePrefixedPRW(inputs.configuration)->EXECUTION_REQUEST()->FORCES();
+    const auto* standard = GetSizePrefixedPRW(catalogProfile)->EXECUTION_REQUEST()->FORCES();
+    std::unique_ptr<PRWForceConfigurationT> a(actual->UnPack()), b(standard->UnPack());
+    // Coefficients are object data. The force/profile selection is invariant
+    // under the B*-derived Cd*A/m and the catalog's Cr*A/m.
+    a->DRAG_COEFFICIENT = b->DRAG_COEFFICIENT;
+    a->REFLECTIVITY_COEFFICIENT = b->REFLECTIVITY_COEFFICIENT;
+    flatbuffers::FlatBufferBuilder ab, bb;
+    ab.Finish(PRWForceConfiguration::Pack(ab, a.get()));
+    bb.Finish(PRWForceConfiguration::Pack(bb, b.get()));
+    g_catalogProfile = ab.GetSize() == bb.GetSize() &&
+        std::memcmp(ab.GetBufferPointer(), bb.GetBufferPointer(), ab.GetSize()) == 0 ? "FFM-1" : "custom";
+    g_catalogBstars.assign(bstars, bstars + count);
+    g_catalogDynamics = std::move(dynamics);
+    g_catalogConfigVersion = ++g_configVersion;
+    ++g_catalogRevision;
+    g_retentionBehindDays = 1800.0 / 86400.0;
+    g_forceModelRefused = false;
+    return 0;
+}
+
+const char* plugin_get_profile() { return propagationReady() ? g_catalogProfile.c_str() : "unconfigured"; }
+const char* plugin_catalog_error() { return g_catalogError.c_str(); }
+
+// Host frame conversion uses the configured EOP, including velocity transport.
+int plugin_catalog_transform_state(double utcJd, const double* in, double* out, int inverse) {
+    if (!propagationReady() || !g_catalogDynamics || !in || !out) return -1;
+    ffm::TTEpoch at;
+    StateVector source, target;
+    source.position = Vec3(in[0] / 1000, in[1] / 1000, in[2] / 1000);
+    source.velocity = Vec3(in[3] / 1000, in[4] / 1000, in[5] / 1000);
+    if (!catalogEpoch(utcJd, at) || !g_catalogDynamics->earthFixed(at, source, target, inverse != 0, g_catalogError)) return -1;
+    out[0] = target.position.x * 1000; out[1] = target.position.y * 1000; out[2] = target.position.z * 1000;
+    out[3] = target.velocity.x * 1000; out[4] = target.velocity.y * 1000; out[5] = target.velocity.z * 1000;
+    return 0;
+}
+
+
+// Evaluation-only GCRF SI state, also useful to consumers needing inertial
+// products. No integration and no clamping: uncovered slots are zero.
+int plugin_eval_catalog_states_gcrf(double utcJd, double* out, int maxCount) {
+    if (!propagationReady() || !g_catalogDynamics || !out || maxCount <= 0) return -1;
+    const int n = std::min(g_entityCount, maxCount);
+    for (int i = 0; i < n; ++i) {
+        double* dest = out + i * 6;
+        std::fill(dest, dest + 6, 0.0);
+        StateVector state;
+        if (!g_entities[i].valid || !entityVisible(i) || !catalogState(i, utcJd, state)) continue;
+        dest[0] = state.position.x * 1000; dest[1] = state.position.y * 1000; dest[2] = state.position.z * 1000;
+        dest[3] = state.velocity.x * 1000; dest[4] = state.velocity.y * 1000; dest[5] = state.velocity.z * 1000;
+    }
+    return n;
+}
+
 /// Batch-initialize entities from a flat array of state vectors.
 /// Input: [epochJD, rx, ry, rz, vx, vy, vz, ...] — 7 doubles per entity, ECI km/km/s.
 /// Analogous to SGP4's plugin_init_omm.
 /// Returns entity count on success.
+double plugin_drag_area_over_mass_from_bstar(double bstar, double nonPositive);
 int plugin_init_states(double* statesPtr, int count) {
+    if (g_catalogDynamics) {
+        g_catalogDynamics->clearObjects();
+        if (count != static_cast<int>(g_catalogBstars.size())) {
+            g_catalogError = "invalid-state: Catalog B* count must equal seed count.";
+            g_forceModelRefused = true;
+            return -1;
+        }
+    }
     ++g_catalogRevision;
     // Free existing ephemeris/burn/arc memory before reinitializing
     for (int i = 0; i < g_entityCount; i++) {
@@ -1130,6 +1270,17 @@ int plugin_init_states(double* statesPtr, int count) {
     }
 
     g_entityCount = n;
+    if (g_catalogDynamics) {
+        for (int i = 0; i < n; ++i) {
+            const auto& entity = g_entities[i];
+            if (!g_catalogDynamics->addCatalogState(entity.initialState,
+                    plugin_drag_area_over_mass_from_bstar(g_catalogBstars[i], 0.01), 0.02,
+                    entity.valid, g_catalogError)) {
+                g_forceModelRefused = true;
+                return -1;
+            }
+        }
+    }
     return n;
 }
 
@@ -1190,16 +1341,13 @@ int plugin_propagate_path_entity(int entityIndex, double startJD, double stepDay
     FFMEntity& entity = g_entities[entityIndex];
     int valid = 0;
 
-    if (entity.arcCount > 0) {
+    if (entity.arcCount > 0 || g_catalogDynamics) {
         // Arc-aware: propagate each sample through arc dispatch
         for (int i = 0; i < count; i++) {
             double jd = startJD + i * stepDays;
             StateVector sv = propagateEntity(entityIndex, jd);
-            coords::Vec3 cPos = {sv.position.x, sv.position.y, sv.position.z};
-            coords::Vec3 cPosEcef = transformPosition(cPos, coords::Frame::GCRF, coords::Frame::ECEF, jd);
-            outPtr[valid * 3 + 0] = cPosEcef.x * 1000.0;
-            outPtr[valid * 3 + 1] = cPosEcef.y * 1000.0;
-            outPtr[valid * 3 + 2] = cPosEcef.z * 1000.0;
+            double velocity[3];
+            eciToEcefMeters(sv, jd, outPtr + valid * 3, velocity);
             valid++;
         }
     } else {
@@ -1267,6 +1415,15 @@ int plugin_eval_states(double jd, double* outPtr, int maxCount) {
         std::fill(out, out + 6, 0.0);
         FFMEntity& entity = g_entities[i];
         if (!entity.valid || !entityVisible(i) || entity.arcCount > 0) continue;
+        if (g_catalogDynamics) {
+            StateVector state, fixed;
+            ffm::TTEpoch at;
+            if (!catalogState(i, jd, state) || !catalogEpoch(jd, at)) continue;
+            if (!g_catalogDynamics->earthFixed(at, state, fixed, false, g_catalogError)) return -1;
+            out[0] = fixed.position.x * 1000; out[1] = fixed.position.y * 1000; out[2] = fixed.position.z * 1000;
+            out[3] = fixed.velocity.x * 1000; out[4] = fixed.velocity.y * 1000; out[5] = fixed.velocity.z * 1000;
+            continue;
+        }
         int segment = -1;
         // Never mislabel a state at a coverage edge as the requested epoch.
         if (!lookupCoveredSegment(entity.ephemeris, jd, segment)) continue;
@@ -1299,16 +1456,13 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
     FFMEntity& entity = g_entities[entityIndex];
     int valid = 0;
 
-    if (entity.arcCount > 0) {
+    if (entity.arcCount > 0 || g_catalogDynamics) {
         // Arc-aware: propagate each sample through arc dispatch
         for (int i = 0; i < count; i++) {
             double jd = timesPtr[i];
             StateVector sv = propagateEntity(entityIndex, jd);
-            coords::Vec3 cPos = {sv.position.x, sv.position.y, sv.position.z};
-            coords::Vec3 cPosEcef = transformPosition(cPos, coords::Frame::GCRF, coords::Frame::ECEF, jd);
-            outPtr[valid * 3 + 0] = cPosEcef.x * 1000.0;
-            outPtr[valid * 3 + 1] = cPosEcef.y * 1000.0;
-            outPtr[valid * 3 + 2] = cPosEcef.z * 1000.0;
+            double velocity[3];
+            eciToEcefMeters(sv, jd, outPtr + valid * 3, velocity);
             valid++;
         }
     } else {
@@ -1359,6 +1513,10 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
 int plugin_propagate_all_positions(double julianDate, double* positionsOut,
                                    int maxCount) {
     if (!propagationReady() || positionsOut == nullptr || maxCount <= 0) return 0;
+    if (g_catalogDynamics) {
+        if (plugin_ensure_coverage(julianDate, 0, std::min(g_entityCount, maxCount)) < 0) return -1;
+        return plugin_eval_positions(julianDate, positionsOut, maxCount);
+    }
 
     int n = g_entityCount;
     if (n > maxCount) n = maxCount;
@@ -1404,6 +1562,22 @@ int plugin_propagate_all_positions(double julianDate, double* positionsOut,
 /// retention window (focus = julianDate). Returns entities processed.
 int plugin_ensure_coverage(double julianDate, int startEntity, int count) {
     if (!propagationReady() || startEntity < 0 || count <= 0) return 0;
+    if (g_catalogDynamics) {
+        ffm::TTEpoch at;
+        if (!catalogEpoch(julianDate, at) || !g_catalogDynamics->activate(g_catalogError)) return -1;
+        const int end = std::min(g_entityCount, startEntity + count);
+        int processed = 0;
+        for (int i = startEntity; i < end; ++i) {
+            if (!g_entities[i].valid || !entityVisible(i)) continue;
+            ffm::TTEpoch from;
+            const double behind = std::min(g_retentionBehindDays, 1800.0 / 86400.0);
+            const double start = julianDate >= g_entities[i].initialState.epoch
+                ? std::max(g_entities[i].initialState.epoch, julianDate - behind) : julianDate - behind;
+            if (!catalogEpoch(start, from) || !g_catalogDynamics->prepare(i, from, at, g_catalogError)) return -1;
+            ++processed;
+        }
+        return processed;
+    }
     int end = startEntity + count;
     if (end > g_entityCount) end = g_entityCount;
     int processed = 0;
@@ -1444,6 +1618,15 @@ int plugin_eval_positions(double julianDate, double* positionsOut, int maxCount)
         Vec3 posKm;
         bool have = false;
 
+        if (g_catalogDynamics) {
+            StateVector state, fixed;
+            ffm::TTEpoch at;
+            std::fill(out, out + 3, 0.0);
+            if (!entity.valid || !entityVisible(i) || !catalogState(i, julianDate, state, true)) continue;
+            if (!catalogEpoch(julianDate, at) || !g_catalogDynamics->earthFixed(at, state, fixed, false, g_catalogError)) return -1;
+            out[0] = fixed.position.x * 1000; out[1] = fixed.position.y * 1000; out[2] = fixed.position.z * 1000;
+            continue;
+        }
         if (entity.valid) {
             if (entity.arcCount > 0) {
                 StateVector sv = propagateEntity(i, julianDate);
@@ -1507,6 +1690,17 @@ int plugin_init_states_ecef(double* statesPtr, int count) {
     for (int i = 0; i < n; i++) {
         double* s = statesPtr + i * 7;
         if (!(s[0] > 0.0) || (s[1] == 0.0 && s[2] == 0.0 && s[3] == 0.0)) continue;
+        if (g_catalogDynamics) {
+            StateVector fixed, inertial;
+            fixed.epoch = s[0];
+            fixed.position = Vec3(s[1] / 1000, s[2] / 1000, s[3] / 1000);
+            fixed.velocity = Vec3(s[4] / 1000, s[5] / 1000, s[6] / 1000);
+            ffm::TTEpoch at;
+            if (!catalogEpoch(s[0], at) || !g_catalogDynamics->earthFixed(at, fixed, inertial, true, g_catalogError)) return -1;
+            s[1] = inertial.position.x; s[2] = inertial.position.y; s[3] = inertial.position.z;
+            s[4] = inertial.velocity.x; s[5] = inertial.velocity.y; s[6] = inertial.velocity.z;
+            continue;
+        }
         const coords::StateVec ecef(
             {s[1] / 1000.0, s[2] / 1000.0, s[3] / 1000.0},
             {s[4] / 1000.0, s[5] / 1000.0, s[6] / 1000.0});
@@ -2358,6 +2552,7 @@ int plugin_get_acceleration_breakdown_v2(double jd, double* outPtr, int len) {
 ///   [timeJD, targetEntityIdx, dv_r, dv_t, dv_n] — delta-V in LVLH km/s.
 /// Replaces any existing burns. Builds arc structure for arc-aware propagation.
 void plugin_set_burns(int entityIndex, double* burnsPtr, int count) {
+    if (g_catalogDynamics) { g_catalogError = "unsupported-configuration: Catalog burns belong to a focus instance."; g_forceModelRefused = true; return; }
     if (entityIndex < 0 || entityIndex >= g_entityCount || count <= 0) return;
     ++g_catalogRevision;
     FFMEntity& entity = g_entities[entityIndex];
@@ -3060,6 +3255,7 @@ double plugin_drag_area_over_mass_from_bstar(double bstar, double nonPositive) {
 }
 
 void plugin_destroy() {
+    g_catalogDynamics.reset(); g_catalogBstars.clear(); g_catalogProfile = "diagnostic";
     ++g_catalogRevision;
     // Free ephemeris/burn/arc memory and clear entities
     for (int i = 0; i < g_entityCount; i++) {
