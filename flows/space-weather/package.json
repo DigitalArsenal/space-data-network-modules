@@ -1,0 +1,15 @@
+{
+  "name": "@digitalarsenal/sdn-flow-space-weather",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.9"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.1"
+  }
+}
