@@ -54,6 +54,11 @@ try {
     fs.writeFileSync(target, content);
   }
   fs.writeFileSync(path.join(tmp, 'roundtrip.cpp'), String.raw`
+#include <cmath>
+// Darwin's legacy math exception macro collides with an SDS country code.
+#ifdef SING
+#undef SING
+#endif
 #include "schemas.h"
 #include <fstream>
 #include <iterator>
