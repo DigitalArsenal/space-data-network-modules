@@ -10,6 +10,7 @@ import {gunzipSync} from 'node:zlib';
 import {modules,require,decodeHttpResponse,ByteBuffer,S} from './inputs.mjs';
 import {localNode} from '../../../data-source/space-weather/tests/local-node.mjs';
 import {offline} from './offline.mjs';
+import {verifyInputs} from './verify-inputs.mjs';
 const dir=process.env.OPEN_DCA_CAPTURE;assert(dir,'OPEN_DCA_CAPTURE must name prepared private real-source inputs');
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const {createSingleFileBundle,verifyModuleArtifact}=await import(pathToFileURL(require.resolve('space-data-module-sdk/bundle')));
@@ -23,6 +24,7 @@ const command=(bin,args,options)=>new Promise((resolve,reject)=>{const c=spawn(b
 let node,client,server;
 try{
  const capture=JSON.parse(await fs.readFile(path.join(dir,'capture.json')));assert.equal(new Date(capture.issue).toISOString().slice(0,10),new Date().toISOString().slice(0,10),'Capture must be today');
+ receipt.inputs=await verifyInputs(dir);await save();
  const sources=new Map();for(const group of capture.groups)for(let i=0;i<group.requests;i++){const r=decodeHttpResponse(await fs.readFile(path.join(dir,`${group.name}-${i}.fb`)));sources.set('/'+hash(r.url),r);}
  // Generic loopback HTTP archive: preserves source bodies and Last-Modified;
  // no upstream IERS/USNO requests, TLS bypass, production state, or host code.
@@ -52,11 +54,11 @@ try{
  receipt.deploymentConfig='PASS: actual owner merger, both signed flows, capabilities before boot';
  await fs.mkdir(path.join(node.dir,'data/modules'),{recursive:true});await fs.writeFile(path.join(node.dir,'data/modules/capability_policy.json'),JSON.stringify({version:1,approvals}));
  await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));const log=await fs.open(path.join(node.dir,'prewarm.log'),'w');try{await command(process.env.SDN_NODE_BINARY,['prewarm-aot','--config',node.configPath],{cwd:node.dir,env:node.env,stdio:['ignore',log.fd,log.fd]});}finally{await log.close();}
- await node.start();console.log('Signed/AOT DCA daily flow running on scratch node: '+node.dir);await save();
+ await node.start();console.log('Signed/AOT scratch node ready; awaiting scheduled DCA: '+node.dir);await save();
  assert(process.env.SDN_JS);const sdn=await import(pathToFileURL(path.join(process.env.SDN_JS,'dist/index.mjs'))),addrs=[`/ip4/127.0.0.1/tcp/${node.ports.ws}/ws/p2p/${info.peer_id}`];
  client=await sdn.createHeliaSDNNode({edgeRelays:addrs,enableAutoDial:false,enableDHT:false,enableIdentify:true,allowPrivateAddressDial:true});
  let publications=[];const deadline=Date.now()+90*60*1000;
- while(Date.now()<deadline&&!publications.length){assert.deepEqual(misses,[],'Archive missing source: capture the current complete day window');const peer=client.libp2p.getConnections().find(c=>String(c.remotePeer)===info.peer_id)?.remotePeer;if(peer){const stream=await client.libp2p.dialProtocol(peer,sdn.FLATSQL_SYNC_LIST_PUBLISHED_PROTOCOL_ID);const chunks=[];const reading=(async()=>{for await(const c of stream)chunks.push(c instanceof Uint8Array?c:c.subarray());})();if(!stream.send(sdn.encodeFlatSqlPublishedListRequest({schema:'DCL.fbs',providerId:'open-dca',sourceName:'planet-nrlmsise00'})))await stream.onDrain?.();await stream.close();await reading;publications=sdn.decodeFlatSqlPublishedList(Buffer.concat(chunks)).publications.filter(p=>p.providerId==='open-dca'&&p.sourceName==='planet-nrlmsise00');}if(!publications.length)await new Promise(r=>setTimeout(r,5000));}
+ while(Date.now()<deadline&&!publications.length){assert(!(await fs.readFile(path.join(node.dir,'sdn.log'),'utf8')).includes('Configured flow service startup failed'),'Flow startup failed; '+node.dir+'/sdn.log');assert.deepEqual(misses,[],'Archive missing source: capture the current complete day window');const peer=client.libp2p.getConnections().find(c=>String(c.remotePeer)===info.peer_id)?.remotePeer;if(peer){const stream=await client.libp2p.dialProtocol(peer,sdn.FLATSQL_SYNC_LIST_PUBLISHED_PROTOCOL_ID);const chunks=[];const reading=(async()=>{for await(const c of stream)chunks.push(c instanceof Uint8Array?c:c.subarray());})();if(!stream.send(sdn.encodeFlatSqlPublishedListRequest({schema:'DCL.fbs',providerId:'open-dca',sourceName:'planet-nrlmsise00'})))await stream.onDrain?.();await stream.close();await reading;publications=sdn.decodeFlatSqlPublishedList(Buffer.concat(chunks)).publications.filter(p=>p.providerId==='open-dca'&&p.sourceName==='planet-nrlmsise00');}if(!publications.length)await new Promise(r=>setTimeout(r,5000));}
  assert(publications.length,'No DCL publication; '+node.dir+'/sdn.log');const pub=publications.sort((a,b)=>b.publishedAtMs-a.publishedAtMs)[0];
  const fetchCid=async cid=>Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,cid,{providerAddrs:addrs,maxBytes:1048576}));const mb=await fetchCid(pub.manifestCid),manifest=(mb.subarray(8,12).toString()==='$DPM'?DPM.getSizePrefixedRootAsDPM:DPM.getRootAsDPM)(new ByteBuffer(mb)).unpack();assert.equal(manifest.PROVIDER_PEER_ID,info.peer_id);assert(manifest.PROVIDER_SIGNATURE.length);
  const source=manifest.SOURCES.find(s=>s.SOURCE_NAME==='planet-nrlmsise00');assert.match(source.LICENSE,/CC-BY-NC-4.0/);assert.match(source.CITATION,/Planet/);

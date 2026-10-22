@@ -18,19 +18,25 @@ export async function capture(dir){
  // Resume the exact captured TimerTick, including a prior interrupted capture.
  let issue=Date.now();
  try{const first=decodeHttpResponse(await fs.readFile(path.join(dir,'operator-0.fb')));issue=Number(decodeTimerTick(first.context.slice(4)).firedMs);}catch(e){if(e.code!=='ENOENT')throw e;}
+ const reused=new Map();
+ if(process.env.OPEN_DCA_CAPTURE_REUSE){
+  const oldDir=process.env.OPEN_DCA_CAPTURE_REUSE,old=JSON.parse(await fs.readFile(path.join(oldDir,'capture.json')));
+  for(const group of old.groups)for(let i=0;i<group.requests;i++){const r=decodeHttpResponse(await fs.readFile(path.join(oldDir,`${group.name}-${i}.fb`)));reused.set(r.url,r);}
+ }
  const groups=[];
  for(const [name,folder,methodId]of [['operator','data-source/operator-states-public','plan_operator'],['weather','data-source/space-weather','plan_weather'],['eop','data-source/eop-request','finals2000a']]){
   const m=await load(folder,name==='eop'?path.join(modules,'flows/open-dca/dist/transport/eop-request/dist/isomorphic/module.wasm'):undefined);try{const r=await m.call(methodId,[input('tick',encodeTimerTick({triggerId:'daily',firedMs:issue}),'TimerTick.fbs','TICK','TimerTick')]);const requests=r.outputs.map(o=>decodeHttpRequest(o.payload));groups.push({name,requests:requests.length});
    for(const [i,q]of requests.entries()){
     const file=path.join(dir,`${name}-${i}.fb`);let exists=false;try{await fs.access(file);exists=true;}catch{}
     if(exists)continue;
-    let body,headers={};
-    if(name==='eop'){
+    let body,headers={},retrievedMs=issue;
+    if(reused.has(q.url)){const r=reused.get(q.url);body=r.body;headers=r.headers;retrievedMs=r.retrievedMs;}
+    else if(name==='eop'){
      assert(process.env.OPEN_DCA_EOP_ARCHIVE,'OPEN_DCA_EOP_ARCHIVE must name the local IERS finals archive; never fetch IERS from this Mac');
      body=await fs.readFile(process.env.OPEN_DCA_EOP_ARCHIVE);
     }else{const response=await fetch(q.url,{headers:q.headers,signal:AbortSignal.timeout(90000)});assert.equal(response.status,200,q.url);body=Buffer.from(await response.arrayBuffer());headers=Object.fromEntries(response.headers);}
     assert(body.length<=Number(q.maxBytes||100e6));
-    const payload=encodeHttpResponse({url:q.url,status:200,headers,body,context:q.context,retrievedMs:issue});
+    const payload=encodeHttpResponse({url:q.url,status:200,headers,body,context:q.context,retrievedMs});
     await fs.writeFile(file,payload);await fs.writeFile(path.join(dir,`${name}-${i}.raw`),body);
     console.log(`Captured ${name} ${i+1}/${requests.length}: ${body.length} bytes`);
     if(q.url.includes('ephemerides.planet-labs.com'))await new Promise(r=>setTimeout(r,3000));
