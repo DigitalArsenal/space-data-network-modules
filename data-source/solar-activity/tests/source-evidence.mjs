@@ -4,109 +4,14 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parseSrs, compareRegions, fitsFields, jp2Xml, iso} from './lib/source-parsers.mjs';
+export {parseSrs, compareRegions, fitsFields, jp2Xml} from './lib/source-parsers.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const base = 'https://api.helioviewer.org/v2/';
 const noaa = 'https://services.swpc.noaa.gov/';
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const iso = value => {
-  const text = value.replace(' ', 'T');
-  assert.match(text, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/);
-  const normalized = text.endsWith('Z') ? text : `${text}Z`;
-  assert.ok(Number.isFinite(Date.parse(normalized)), `Invalid timestamp ${value}`);
-  return normalized;
-};
 const api = (method, params) => `${base}${method}/?${new URLSearchParams(params)}`;
-
-export function parseSrs(text) {
-  const issued = /:Issued: (\d{4}) (\w{3}) (\d{2}) (\d{2})(\d{2}) UTC/.exec(text);
-  assert.ok(issued, 'SRS issue epoch required');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const month = months.indexOf(issued[2]);
-  assert.ok(month >= 0, 'SRS issue month');
-  const issuedAt = new Date(Date.UTC(+issued[1], month, +issued[3], +issued[4], +issued[5]));
-  const valid = /I\.\s+Regions with Sunspots\.\s+Locations Valid at (\d{2})\/2400Z/.exec(text);
-  assert.ok(valid, 'SRS must explicitly state the supported 24:00 position epoch');
-  const observationDay = new Date(issuedAt);
-  observationDay.setUTCDate(observationDay.getUTCDate() - 1);
-  assert.equal(+valid[1], observationDay.getUTCDate(), 'SRS observation day must precede issue day');
-  const sectionI = text.split(/I\.\s+Regions with Sunspots\./)[1]?.split(/IA\./)[0];
-  const sectionIa = text.split(/IA\.\s+H-alpha Plages without Spots\./)[1]?.split(/II\./)[0];
-  assert.ok(sectionI && sectionIa, 'Both SRS position sections required');
-  const iaEpoch = /Locations Valid at (\d{2})\/2400Z/.exec(sectionIa);
-  assert.equal(iaEpoch?.[1], valid[1], 'SRS sections must use the same epoch');
-  const rows = [];
-  for (const [section, body] of [['I', sectionI], ['IA', sectionIa]]) {
-    for (const line of body.split('\n')) {
-      if (!/^\d/.test(line.trim())) continue;
-      const row = /^(\d+)\s+([NS]\d{2}[EW]\d{2,3})\s+(\d+)(?:\s+(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(.+))?\s*$/.exec(line.trim());
-      assert.ok(row, `Unrecognized SRS row: ${line}`);
-      assert.ok(section !== 'I' || row[4], 'Sunspot row requires area and class');
-      rows.push({section, region: +row[1], location: row[2], carringtonLongitude: +row[3],
-        area: row[4] === undefined ? null : +row[4], spotClass: row[5] ?? null, magneticClass: row[8]?.trim() ?? null});
-    }
-    assert.ok(rows.some(r => r.section === section) || /\bNone\b/.test(body), `SRS ${section} must state rows or None`);
-  }
-  assert.equal(new Set(rows.map(r => r.region)).size, rows.length, 'Duplicate SRS region');
-  return {issuedAt: issuedAt.toISOString(), observationDay: observationDay.toISOString().slice(0,10),
-    positionEpoch: `${issuedAt.toISOString().slice(0,10)}T00:00:00.000Z`, rows};
-}
-
-export function compareRegions(srs, rows, day) {
-  const selected = rows.filter(r => r.observed_date === day);
-  assert.equal(new Set(selected.map(r => r.region)).size, selected.length, 'Duplicate NOAA region/day');
-  const comparisons = srs.rows.map(expected => {
-    const actual = selected.find(r => r.region === expected.region);
-    return {region: expected.region, expected: {location: expected.location, carringtonLongitude: expected.carringtonLongitude},
-      actual: actual ? {location: actual.location, carringtonLongitude: actual.carrington_longitude} : null,
-      matches: actual?.location === expected.location && actual?.carrington_longitude === expected.carringtonLongitude};
-  });
-  return {jsonObservationDay: day, expected: srs.rows.length, available: selected.length,
-    matches: comparisons.filter(r => r.matches).length, comparisons,
-    extraRegions: selected.filter(r => !srs.rows.some(s => s.region === r.region)).map(r => r.region)};
-}
-
-export function fitsFields(xml) {
-  assert.ok(!/<!DOCTYPE|<!ENTITY/i.test(xml), 'XML entity declarations are not accepted');
-  const fits = /<fits>([\s\S]*?)<\/fits>/.exec(xml)?.[1];
-  assert.ok(fits, 'JP2 must include FITS metadata');
-  const names = ['DATE-OBS','DATE_OBS','CTYPE1','CTYPE2','CUNIT1','CUNIT2','CRPIX1','CRPIX2','CRVAL1','CRVAL2',
-    'CDELT1','CDELT2','CROTA2','RSUN_OBS','CRLN_OBS','CRLT_OBS','DSUN_OBS','NAXIS1','NAXIS2','CADENCE','QUALITY','CONTENT'];
-  const fields = Object.fromEntries(names.map(name => {
-    const matches = [...fits.matchAll(new RegExp(`<${name}>([^<]*)</${name}>`, 'g'))];
-    assert.ok(matches.length <= 1, `Duplicate FITS keyword ${name}`);
-    return [name, matches[0]?.[1]?.trim() ?? null];
-  }));
-  assert.ok(fields['DATE-OBS'] || fields.DATE_OBS, 'Observation time required');
-  for (const key of ['CRPIX1','CRPIX2','CRVAL1','CRVAL2','CDELT1','CDELT2','RSUN_OBS','CRLN_OBS','CRLT_OBS','DSUN_OBS','NAXIS1','NAXIS2']) {
-    assert.ok(fields[key] !== null && fields[key] !== '' && Number.isFinite(Number(fields[key])), `Missing/nonnumeric ${key}`);
-  }
-  return fields;
-}
-
-export function jp2Xml(bytes) {
-  assert.equal(bytes.subarray(0,12).toString('hex'), '0000000c6a5020200d0a870a', 'JPEG2000 signature');
-  let xml;
-  for (let offset = 0; offset < bytes.length;) {
-    assert.ok(offset + 8 <= bytes.length, 'Truncated JP2 box header');
-    let length = bytes.readUInt32BE(offset), header = 8;
-    const type = bytes.toString('ascii', offset + 4, offset + 8);
-    if (length === 1) {
-      assert.ok(offset + 16 <= bytes.length, 'Truncated extended JP2 box');
-      const extended = bytes.readBigUInt64BE(offset + 8);
-      assert.ok(extended <= BigInt(Number.MAX_SAFE_INTEGER));
-      length = Number(extended); header = 16;
-    } else if (length === 0) length = bytes.length - offset;
-    assert.ok(length >= header && offset + length <= bytes.length, 'Invalid JP2 box length');
-    if (type === 'xml ') {
-      assert.equal(xml, undefined, 'Ambiguous multiple JP2 XML boxes');
-      xml = bytes.toString('utf8', offset + header, offset + length);
-    }
-    offset += length;
-  }
-  assert.ok(xml, 'No JP2 XML box');
-  return xml;
-}
 
 export async function captureEvidence() {
   const started = new Date();

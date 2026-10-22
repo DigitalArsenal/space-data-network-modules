@@ -2,12 +2,17 @@
 
 Status: BLOCKED; production records stopped pending SDS oracle.
 Branch: `task/solar-activity-data-sources-20261022`.
-Local branch HEAD: `9d4535d7c7cedad33f88c8f744b46d4c24c4f0a0` (unchanged base).
-Changes in this directory are **uncommitted and unpushed**: Git could not create
-the administrative `index.lock` under the shared stack's `.git/modules/` because
-the sandbox denied the write. The initial WIP commit was attempted within ten
-minutes. No remote task branch was returned by `git ls-remote --heads origin
-task/solar-activity-data-sources-20261022`. No commit SHA for this work exists.
+Recovered work and schema proposal committed and pushed first as
+`d37b67a9` on resumption. The earlier Git sandbox restriction is resolved.
+The coordinator routes the proposal to the SDS oracle; this lane files nothing.
+
+Resumed source parsing now preserves all 222 region rows, 78 GOES rows, and
+700 edited-event rows in the retained capture, including 12 flagged location
+tokens, absent peak/flux/region fields, qualified event times, all event types,
+observer-specific rows, and revisions. It does not associate GOES flares with
+regions by time proximity. Strict calendar, SRS, and WCS validation rejects
+malformed or ambiguous inputs. These are test-only source parsers pending the
+approved C++/WASM wire contract, not production SDS records.
 
 ## Schema fit check
 
@@ -198,8 +203,8 @@ must accept a lane-owned durable scratch root and clean up only its own children
 
 No heavy builds, browser, Docker container, node daemon, or background worker was
 started. Source captures are deliverable evidence inside this worktree, not
-scratch files under `/tmp`. The schema approval, Git administrative write
-restriction, and live-image age are separate blockers.
+scratch files under `/tmp`. Schema approval and live-image age remain separate
+blockers.
 
 Files added: `README.md`, this `REPORT.md`, `tests/source-evidence.mjs`,
 `tests/solar-activity.e2e.mjs`, `tests/evidence.test.mjs`, and the dated
