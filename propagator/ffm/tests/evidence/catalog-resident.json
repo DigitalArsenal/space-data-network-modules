@@ -1,0 +1,1228 @@
+{
+  "ok": true,
+  "mode": "e2e",
+  "lever": null,
+  "standardDirectory": "tests/reference",
+  "standardWasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+  "forkBaseSha256": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3",
+  "residentForkBaseSha256": "059e338d0a0c8f71b11f01d6dfa292a544e2a90ff3391325e60415d38fc0878a",
+  "forkBases": {
+    "lib/force_models.cpp": {
+      "path": "../ffm/lib/force_models.cpp",
+      "sha256": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3"
+    },
+    "src/cpp/src/resident_dynamics.cpp": {
+      "path": "propagator/ffm/src/cpp/src/resident_dynamics.cpp",
+      "sha256": "059e338d0a0c8f71b11f01d6dfa292a544e2a90ff3391325e60415d38fc0878a"
+    },
+    "src/cpp/include/ffm/resident_dynamics.h": {
+      "path": "propagator/ffm/src/cpp/include/ffm/resident_dynamics.h",
+      "sha256": "f33c228e632a58feaf29618319e7a946c7328d71952c01edc423d185b68bcf05"
+    },
+    "src/ffm_plugin.cpp": {
+      "path": "propagator/ffm/src/ffm_plugin.cpp",
+      "sha256": "9f6fe5bf33b5a48573a6c6f2a862b21d8bfa60d3ec7bb5073fdfe0ea9fd78f5e"
+    }
+  },
+  "fastWasmSha256": "b8efb44320d3cea37a155cb2edd07004d0bca567a8b9cc347ba21dbab576f7a7",
+  "epochUtc": "2026-08-01T12:00:00.000000",
+  "epochTt": "2026-08-01T12:01:09.184000000",
+  "frame": "GCRF",
+  "days": 3,
+  "truthStandardModuleCppCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
+  "integrationPolicy": "Forward GJ8 PEC on common TT grids: LEO 10/15/12/24 s by perigee band; near-circular GPS 75 s and GEO 600 s; other low-eccentricity elliptic orbits 24 s. Eccentricity >=0.25: RK78 Sundman alpha=1.5, 200/orbit (GTO-like: 300/orbit). Tight RK alignment <=one GJ step; corrected conical dense acceleration; daily-Ap restart trim; selected-object batches of 32. GJ hands off to two-second-capped RK within 50 km of the sphere enclosing the physical 100 km reentry surface. Fixed diagnostics, backward requests, nonelliptic states, unsupported GJ force families, or insufficient startup coverage retain RK78.",
+  "fixedStepSeconds": 60,
+  "fixedTolerance": 1,
+  "truthSamplingSeconds": 10,
+  "standardIntegrator": {
+    "tolerance": 1e-12,
+    "initialStep": 30,
+    "minStep": 0.01,
+    "maxStep": 300,
+    "maxSteps": 100000
+  },
+  "fastIntegrator": {
+    "tolerance": 1e-14,
+    "initialStep": 30,
+    "minStep": 0.01,
+    "maxStep": 120,
+    "maxSteps": 1000000
+  },
+  "maxAddedError": {
+    "oneDay": {
+      "positionM": 0.000010262360560438119,
+      "velocityMps": 9.154019759430525e-9
+    },
+    "threeDays": {
+      "positionM": 0.00004541358031001369,
+      "velocityMps": 5.121884140749353e-8
+    }
+  },
+  "cpuMethod": "process.threadCpuUsage user + system, ingest + prepare + describe, interleaved standard/fast, minimum of two repetitions divided by three days",
+  "loadAverageStart": [
+    16.2451171875,
+    12.4716796875,
+    10.7890625
+  ],
+  "loadAverageEnd": [
+    16.60693359375,
+    13.38330078125,
+    11.32080078125
+  ],
+  "residentBatch": {
+    "ok": true,
+    "cohortSize": 32,
+    "heterogeneousEpochSpacingSeconds": 7.125,
+    "unselectedReentrySentinelPreserved": true,
+    "rows": [
+      {
+        "name": "midnight",
+        "offset": 42500,
+        "duration": 900,
+        "objects": 8,
+        "byteIdentical": true,
+        "serializedSha256": "5d4a81c8fd4d51e52dfc8047c6874f04c2a0952df96bee723ecba3ef9a6a0482"
+      },
+      {
+        "name": "carried-forward",
+        "offset": 43400,
+        "duration": 600,
+        "objects": 8,
+        "byteIdentical": true,
+        "serializedSha256": "7469e0098c0e81655fa57656f6fd2f8ee8ab89b0a09d7b8effb2b38b7c4608f7"
+      },
+      {
+        "name": "earlier-forward",
+        "offset": 1200,
+        "duration": 600,
+        "objects": 4,
+        "byteIdentical": true,
+        "serializedSha256": "f4bd8190de80bf318b0d29ac62866565d698a568b8f4154b41cab345c9f92d69"
+      },
+      {
+        "name": "backward",
+        "offset": -1200,
+        "duration": 600,
+        "objects": 8,
+        "byteIdentical": true,
+        "serializedSha256": "7553021b02888dd67484ad9803a48662173e9d2b8dde1908e5f7196cd10503c3",
+        "reference": {
+          "integrator": {
+            "tolerance": 1e-14,
+            "initialStep": 2,
+            "minStep": 0.0001,
+            "maxStep": 2,
+            "maxSteps": 100000000
+          },
+          "positionM": 0.000010983332497909534,
+          "velocityMps": 1.8329803332327235e-8,
+          "samplingSeconds": 10
+        }
+      }
+    ]
+  },
+  "regimeBoundaries": {
+    "ok": true,
+    "sourceSha256": "4a2c61c149451758c12c695fa17ee072f963c119dbb963ce67ceebdb36f13bd5",
+    "initialStateSource": "C++ two-body perigee states with configured TT-compatible GM; grazing planes oriented using standard DE440 Sun",
+    "gmM3s2": 398600441500000,
+    "orientations": [
+      {
+        "offset": 917.123,
+        "epochTdb": "2026-08-01T12:16:26.306265448",
+        "sunM": {
+          "X": -95360432876.38939,
+          "Y": 108397112749.19627,
+          "Z": 46988892649.9123
+        }
+      },
+      {
+        "offset": 1050.123,
+        "epochTdb": "2026-08-01T12:18:39.306265409",
+        "sunM": {
+          "X": -95363451060.69017,
+          "Y": 108394844515.02505,
+          "Z": 46987909588.19949
+        }
+      }
+    ],
+    "epochUtc": "2026-08-01T12:00:00.000000",
+    "frame": "GCRF",
+    "referenceIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 2,
+      "minStep": 0.0001,
+      "maxStep": 2,
+      "maxSteps": 100000000
+    },
+    "confirmedPenumbraOnlyGrazes": 5,
+    "rows": [
+      {
+        "name": "perigee 300 km below",
+        "integrator": "GJ8 PEC at 10 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.000017670934945894106,
+        "velocityMps": 2.463359750340725e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "perigee 450 km below",
+        "integrator": "GJ8 PEC at 15 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.00002502711516080444,
+        "velocityMps": 8.781247000581306e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "perigee 650 km below",
+        "integrator": "GJ8 PEC at 12 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.0000017931852266979556,
+        "velocityMps": 2.6604296739985936e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "apogee 2000 km below",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 1.9267178912676324e-7,
+        "velocityMps": 9.347504014741707e-10,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "eccentricity 0.25 below",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.000049845824823821265,
+        "velocityMps": 9.2179000098229e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 600 min below",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.100068074225084e-8,
+        "velocityMps": 2.0399736584669792e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 800 min below",
+        "integrator": "GJ8 PEC at 75 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 4.731121154196427e-8,
+        "velocityMps": 1.7801421397168433e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 1400 min below",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.8296411096002426e-8,
+        "velocityMps": 3.9043826369618825e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 1480 min below",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.269578082105354e-8,
+        "velocityMps": 4.313021721799093e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GPS eccentricity 0.05 below",
+        "integrator": "GJ8 PEC at 75 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.928482455686121e-8,
+        "velocityMps": 2.173146002346898e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GEO eccentricity 0.05 below",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.496494190347085e-7,
+        "velocityMps": 3.951767253605181e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GTO perigee 1000 km below",
+        "integrator": "RK78 Sundman alpha=1.5 at 300/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.000002792845083641988,
+        "velocityMps": 4.0540142163907665e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GTO apogee 30000 km below",
+        "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.000008356403577548309,
+        "velocityMps": 1.1196248539112773e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GTO apogee 45000 km below",
+        "integrator": "RK78 Sundman alpha=1.5 at 300/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.00002542149429967033,
+        "velocityMps": 3.291088681772627e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "perigee 300 km above",
+        "integrator": "GJ8 PEC at 15 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.00023225935344068675,
+        "velocityMps": 5.324558774401704e-7,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "perigee 450 km above",
+        "integrator": "GJ8 PEC at 12 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.00000251971695992855,
+        "velocityMps": 6.927973932876711e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "perigee 650 km above",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.00023045885286191977,
+        "velocityMps": 4.2574645298673473e-7,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "apogee 2000 km above",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 1.5047139072125891e-7,
+        "velocityMps": 7.814911524952035e-10,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "eccentricity 0.25 above",
+        "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.0000033079289502697227,
+        "velocityMps": 3.857740495447368e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 600 min above",
+        "integrator": "GJ8 PEC at 75 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 9.877129210681819e-8,
+        "velocityMps": 1.772744945980712e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 800 min above",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 3.2754438698919526e-8,
+        "velocityMps": 1.9147164113605836e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 1400 min above",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 8.315910482981674e-8,
+        "velocityMps": 3.800258637577752e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "period 1480 min above",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 6.549822249986197e-8,
+        "velocityMps": 3.7762920782881904e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GPS eccentricity 0.05 above",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.476638477311861e-8,
+        "velocityMps": 2.0999013419147634e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GEO eccentricity 0.05 above",
+        "integrator": "GJ8 PEC at 24 s",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 5.8724066393034906e-8,
+        "velocityMps": 3.668482232561228e-9,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GTO perigee 1000 km above",
+        "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.0000021819085449670396,
+        "velocityMps": 1.0436993113004972e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GTO apogee 30000 km above",
+        "integrator": "RK78 Sundman alpha=1.5 at 300/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.000012651633757035512,
+        "velocityMps": 1.1532150619454847e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "GTO apogee 45000 km above",
+        "integrator": "RK78 Sundman alpha=1.5 at 200/orbit",
+        "seconds": 1800,
+        "samplingSeconds": 10,
+        "positionM": 0.000022392291794875546,
+        "velocityMps": 3.0727345954374027e-8,
+        "crAm": 0.02,
+        "strongGraze": false
+      },
+      {
+        "name": "penumbra graze 9.9999999999999995e-08",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 1,
+        "positionM": 5.411302401860128e-8,
+        "velocityMps": 3.0776521522148512e-9,
+        "crAm": 0.02,
+        "strongGraze": false,
+        "shadow": {
+          "samples": 121,
+          "penumbraCrossings": 2,
+          "umbraCrossings": 0,
+          "midpointCrossings": 0,
+          "minimumPenumbra": -1.1558400891953369e-7,
+          "minimumUmbra": 0.009161768311711962,
+          "minimumMidpoint": 0.0045808263638515145
+        }
+      },
+      {
+        "name": "penumbra graze 2.9999999999999999e-07",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 1,
+        "positionM": 5.694337539352465e-8,
+        "velocityMps": 3.371086874159074e-9,
+        "crAm": 0.02,
+        "strongGraze": false,
+        "shadow": {
+          "samples": 121,
+          "penumbraCrossings": 2,
+          "umbraCrossings": 0,
+          "midpointCrossings": 0,
+          "minimumPenumbra": -3.1558387084129613e-7,
+          "minimumUmbra": 0.009161568311770764,
+          "minimumMidpoint": 0.004580626363949958
+        }
+      },
+      {
+        "name": "penumbra graze 9.9999999999999995e-07",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 1,
+        "positionM": 1.1765923139170792e-7,
+        "velocityMps": 3.948526618407741e-9,
+        "crAm": 0.02,
+        "strongGraze": false,
+        "shadow": {
+          "samples": 121,
+          "penumbraCrossings": 2,
+          "umbraCrossings": 0,
+          "midpointCrossings": 0,
+          "minimumPenumbra": -0.000001015583389052388,
+          "minimumUmbra": 0.00916086831197509,
+          "minimumMidpoint": 0.004579926364293024
+        }
+      },
+      {
+        "name": "penumbra graze 3.0000000000000001e-06",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 1,
+        "positionM": 7.212585439595146e-8,
+        "velocityMps": 2.3697199693266647e-9,
+        "crAm": 0.02,
+        "strongGraze": false,
+        "shadow": {
+          "samples": 121,
+          "penumbraCrossings": 2,
+          "umbraCrossings": 0,
+          "midpointCrossings": 0,
+          "minimumPenumbra": -0.0000030155820110733256,
+          "minimumUmbra": 0.009158868312560266,
+          "minimumMidpoint": 0.004577926365274598
+        }
+      },
+      {
+        "name": "penumbra graze 0.00014999999999999999",
+        "integrator": "GJ8 PEC at 600 s",
+        "seconds": 1800,
+        "samplingSeconds": 1,
+        "positionM": 0.0008301793892465814,
+        "velocityMps": 0.000009824493778170815,
+        "crAm": 20,
+        "strongGraze": true,
+        "shadow": {
+          "samples": 901,
+          "penumbraCrossings": 2,
+          "umbraCrossings": 0,
+          "midpointCrossings": 0,
+          "minimumPenumbra": -0.00015001407836687242,
+          "minimumUmbra": 0.00901187143979691,
+          "minimumMidpoint": 0.004430928680715013,
+          "penumbraAtStepStart": 0.0032354139890552747,
+          "penumbraAtStepMidpoint": 0.00023526123853445657,
+          "penumbraAtStepEnd": 0.00021886497544992833
+        }
+      }
+    ]
+  },
+  "startupDomain": {
+    "ok": true,
+    "offsetSeconds": 1.125,
+    "durationSeconds": 60,
+    "referenceIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 2,
+      "minStep": 0.0001,
+      "maxStep": 2,
+      "maxSteps": 100000000
+    },
+    "actualPolicy": [
+      "Fast forward resident integrator: RK78.",
+      "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+    ],
+    "ppePositionM": 1.691355389077387e-14,
+    "ppeVelocityMps": 3.55271371001526e-12,
+    "statePositionM": 1.8596235662471372e-14,
+    "stateVelocityMps": 8.526676984290849e-14
+  },
+  "reentryDomain": {
+    "ok": true,
+    "referenceIntegrator": {
+      "tolerance": 1e-14,
+      "initialStep": 2,
+      "minStep": 0.0001,
+      "maxStep": 2,
+      "maxSteps": 100000000
+    },
+    "initialStateSource": "C++ Cartesian descending elliptic state above the handoff sphere",
+    "initialStateMeters": [
+      6578237,
+      0,
+      0,
+      -200,
+      7800,
+      0
+    ],
+    "handoffBufferKm": 50,
+    "physicalStopKm": 100,
+    "maximumRkStepSeconds": 2,
+    "rows": [
+      {
+        "offsetSeconds": 0.125,
+        "prefixSeconds": 300,
+        "positionM": 0.0000070390056881708704,
+        "velocityMps": 5.280169404984805e-7,
+        "stopDeltaSeconds": 0,
+        "actualPolicy": [
+          "Fast forward resident integrator: RK78.",
+          "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+        ],
+        "referenceStop": {
+          "utc": "2026-08-01T12:09:19.151101112",
+          "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:19.151101112 UTC; FFM ends it there."
+        },
+        "fastStop": {
+          "utc": "2026-08-01T12:09:19.151101112",
+          "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:19.151101112 UTC; FFM ends it there."
+        }
+      },
+      {
+        "offsetSeconds": 3.125,
+        "prefixSeconds": 300,
+        "positionM": 0.000023509611735433395,
+        "velocityMps": 5.500175945810827e-7,
+        "stopDeltaSeconds": 0,
+        "actualPolicy": [
+          "Fast forward resident integrator: RK78.",
+          "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+        ],
+        "referenceStop": {
+          "utc": "2026-08-01T12:09:22.151648104",
+          "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:22.151648104 UTC; FFM ends it there."
+        },
+        "fastStop": {
+          "utc": "2026-08-01T12:09:22.151648104",
+          "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:22.151648104 UTC; FFM ends it there."
+        }
+      },
+      {
+        "offsetSeconds": 7.125,
+        "prefixSeconds": 300,
+        "positionM": 0.00002164713521534349,
+        "velocityMps": 1.7496095627643031e-7,
+        "stopDeltaSeconds": 0,
+        "actualPolicy": [
+          "Fast forward resident integrator: RK78.",
+          "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+        ],
+        "referenceStop": {
+          "utc": "2026-08-01T12:09:26.152390838",
+          "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:26.152390838 UTC; FFM ends it there."
+        },
+        "fastStop": {
+          "utc": "2026-08-01T12:09:26.152390838",
+          "reason": "reentry: handle 21000 (descending through GJ handoff, catalog 21000): the trajectory descends below 100 km geodetic altitude (100.0 km) at 2026-08-01T12:09:26.152390838 UTC; FFM ends it there."
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "seed": "ISS",
+      "fixed": {
+        "oneDay": {
+          "positionM": 0.00000467241418172898,
+          "velocityMps": 5.2550743057759585e-9
+        },
+        "threeDays": {
+          "positionM": 0.00004541358031001369,
+          "velocityMps": 5.121884140749353e-8
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "cd3f5924034cb61fc0f2bfd625168bd158973d3c1a713d411f147267a4cf7f35",
+        "fast": "384389e354e2a33a92d452f5d935aea94c885e515b09c42d344b9f046ba05a34"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.7390766666666667,
+        "fast": 0.3251246666666667
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.7596833333333333,
+          "fast": 0.3251246666666667
+        },
+        {
+          "standard": 0.7390766666666667,
+          "fast": 0.3432853333333333
+        }
+      ],
+      "loadAverage": [
+        16.1650390625,
+        12.572265625,
+        10.84375
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.23339677152150964,
+          "velocityMps": 0.0002703070124939201
+        },
+        "threeDays": {
+          "positionM": 2.566356187917248,
+          "velocityMps": 0.002899659991568728
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 15 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.001691076514105647,
+          "velocityMps": 0.00001393630544632009
+        },
+        "threeDays": {
+          "positionM": 0.005653872959329425,
+          "velocityMps": 0.00001393630544632009
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0016411623215098763,
+          "velocityMps": 0.0000020431927079323572
+        },
+        "threeDays": {
+          "positionM": 0.005621557680133844,
+          "velocityMps": 0.000006558821817469886
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "STARLINK",
+      "fixed": {
+        "oneDay": {
+          "positionM": 3.6436076353252477e-7,
+          "velocityMps": 1.0193077002961662e-9
+        },
+        "threeDays": {
+          "positionM": 0.000004719194505357267,
+          "velocityMps": 5.214708654472366e-9
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "928ded9c3f8b9490213d1c3ded8d14ee2d8a4d77dfb578e1600b7aa24e824c01",
+        "fast": "895f66b3c719baf5c2ea0842fae39fe43c5906643db7417988b4d98492f55a28"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.691083,
+        "fast": 0.38072900000000004
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.691083,
+          "fast": 0.38421433333333327
+        },
+        {
+          "standard": 0.6938036666666667,
+          "fast": 0.38072900000000004
+        }
+      ],
+      "loadAverage": [
+        15.162109375,
+        12.4716796875,
+        10.82763671875
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.02659084839776086,
+          "velocityMps": 0.00002771606425575241
+        },
+        "threeDays": {
+          "positionM": 0.20466774647822947,
+          "velocityMps": 0.00022119607570022807
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 12 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0005240991613971134,
+          "velocityMps": 0.000004732375084698403
+        },
+        "threeDays": {
+          "positionM": 0.0011035176830536456,
+          "velocityMps": 0.000005244428854952625
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0005213732232506947,
+          "velocityMps": 5.728831067984775e-7
+        },
+        "threeDays": {
+          "positionM": 0.0010975493953101795,
+          "velocityMps": 0.0000011898383516376999
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "SSO800",
+      "fixed": {
+        "oneDay": {
+          "positionM": 0.000003070531000691994,
+          "velocityMps": 3.1605166231377434e-9
+        },
+        "threeDays": {
+          "positionM": 0.000005347052181317974,
+          "velocityMps": 5.519385563128472e-9
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "0469381e35bf86ae166b76cfe09082d259420ce128a9b3e7e2d5cd9a6f127dad",
+        "fast": "737db19b81e1a0f2a1a75c552123c7e5ec7393d04bfc9aca8d90e6c4bcf071f7"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.7026586666666667,
+        "fast": 0.2103703333333333
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.7094653333333335,
+          "fast": 0.21423499999999998
+        },
+        {
+          "standard": 0.7026586666666667,
+          "fast": 0.2103703333333333
+        }
+      ],
+      "loadAverage": [
+        13.69873046875,
+        12.283203125,
+        10.7890625
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.10265829495616399,
+          "velocityMps": 0.00010685541979733335
+        },
+        "threeDays": {
+          "positionM": 0.9002406815140795,
+          "velocityMps": 0.000931424198763193
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 24 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0013959493315080626,
+          "velocityMps": 0.0000025722913802366945
+        },
+        "threeDays": {
+          "positionM": 0.002681476381213751,
+          "velocityMps": 0.0000031740165133511562
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0013958411331168007,
+          "velocityMps": 0.0000025095154887151433
+        },
+        "threeDays": {
+          "positionM": 0.0026814956639578014,
+          "velocityMps": 0.0000032694070221043484
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "LOW250",
+      "fixed": {
+        "oneDay": {
+          "positionM": 0.000007414674409857179,
+          "velocityMps": 8.6822995210996e-9
+        },
+        "threeDays": {
+          "positionM": 0.00003164985332421716,
+          "velocityMps": 3.7066797143184e-8
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "9daf55b068eb633c8807c2ccea26f8f6d28ed0a80320f3c38a32f6a22fa82904",
+        "fast": "8fc29e93a82277b00f3c2a1124ad83ab447b0f23e0d924ffd4fffd88ba5c5483"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.8682776666666667,
+        "fast": 0.4879763333333333
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.8839816666666667,
+          "fast": 0.4879763333333333
+        },
+        {
+          "standard": 0.8682776666666667,
+          "fast": 0.4904013333333334
+        }
+      ],
+      "loadAverage": [
+        13.41552734375,
+        12.27294921875,
+        10.81005859375
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.9671641647781605,
+          "velocityMps": 0.0011384760688917025
+        },
+        "threeDays": {
+          "positionM": 7.451774456068994,
+          "velocityMps": 0.008735635051351212
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 10 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0015125674719589424,
+          "velocityMps": 0.00007798558772011032
+        },
+        "threeDays": {
+          "positionM": 0.0038398224356756667,
+          "velocityMps": 0.00007798558772011032
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.0004933723755872685,
+          "velocityMps": 6.216142643034698e-7
+        },
+        "threeDays": {
+          "positionM": 0.003405811444963786,
+          "velocityMps": 0.00000400060067412521
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "GPS",
+      "fixed": {
+        "oneDay": {
+          "positionM": 7.870247465299826e-7,
+          "velocityMps": 1.4530427423967846e-10
+        },
+        "threeDays": {
+          "positionM": 0.000011651350052622122,
+          "velocityMps": 1.7111009092476678e-9
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "61beb081d89b6b9ab24aca91f39ab488396e1d148ca0a6047ccf536408e8a413",
+        "fast": "353208dfc8d00ef985619948ea0c2ca91b05ad0b64657bfe9355466c6307f986"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.18438766666666662,
+        "fast": 0.074492
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.18438766666666662,
+          "fast": 0.07602966666666668
+        },
+        {
+          "standard": 0.18880399999999997,
+          "fast": 0.074492
+        }
+      ],
+      "loadAverage": [
+        13.0615234375,
+        12.21826171875,
+        10.79931640625
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.00003863824602646119,
+          "velocityMps": 4.3521051788163915e-8
+        },
+        "threeDays": {
+          "positionM": 0.0002927116083265377,
+          "velocityMps": 9.180201953037483e-8
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 75 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.000006044849126060551,
+          "velocityMps": 4.22016179981121e-8
+        },
+        "threeDays": {
+          "positionM": 0.00005759901766951999,
+          "velocityMps": 4.369725639524705e-8
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.00000604038135428264,
+          "velocityMps": 2.1822565188562752e-8
+        },
+        "threeDays": {
+          "positionM": 0.00005759847225512079,
+          "velocityMps": 2.1822565188562752e-8
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "GEO",
+      "fixed": {
+        "oneDay": {
+          "positionM": 2.1031596591193568e-7,
+          "velocityMps": 9.704263795816537e-11
+        },
+        "threeDays": {
+          "positionM": 0.000005338998095858446,
+          "velocityMps": 4.4642489798243106e-10
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "26f75d67305db790d8c7cc8b27beb0c91f80aa85533977959d9c644af7d63b3e",
+        "fast": "df53bdd84e701753c8457c23c628e94e0ff71946c0611a65b92d5b7c3f2e6fb9"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.172462,
+        "fast": 0.031821
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.17888633333333334,
+          "fast": 0.03186633333333334
+        },
+        {
+          "standard": 0.172462,
+          "fast": 0.031821
+        }
+      ],
+      "loadAverage": [
+        13.05615234375,
+        12.23095703125,
+        10.81201171875
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.000005262876234146149,
+          "velocityMps": 6.781845448582001e-10
+        },
+        "threeDays": {
+          "positionM": 0.000039345962772793066,
+          "velocityMps": 3.160769519357412e-9
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: GJ8 PEC at 600 s.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.000005371981442323475,
+          "velocityMps": 6.94300717047823e-10
+        },
+        "threeDays": {
+          "positionM": 0.00003871448536423239,
+          "velocityMps": 3.098513582435289e-9
+        }
+      },
+      "denseVsTruth": {
+        "samples": 51841,
+        "oneDay": {
+          "positionM": 0.000005369412213466007,
+          "velocityMps": 6.94172801759557e-10
+        },
+        "threeDays": {
+          "positionM": 0.0000387101593320879,
+          "velocityMps": 3.0982109652610332e-9
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "MOLNIYA",
+      "fixed": {
+        "oneDay": {
+          "positionM": 0.000004935946983238876,
+          "velocityMps": 3.9326887607118214e-9
+        },
+        "threeDays": {
+          "positionM": 0.00001873987377798211,
+          "velocityMps": 1.5269208079819133e-8
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "c8833a3b5b9896bca97815f7e9e209df6f3079c15ff6930b9312928836ec9d3f",
+        "fast": "ada51ba30ab1fa2604d112e4bb21fb5f6322fc6d2d8ca51514d3ab27a01aa96e"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.22920166666666666,
+        "fast": 0.11252766666666665
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.22920166666666666,
+          "fast": 0.11252766666666665
+        },
+        {
+          "standard": 0.23714833333333332,
+          "fast": 0.11470166666666665
+        }
+      ],
+      "loadAverage": [
+        14.50732421875,
+        12.5556640625,
+        10.94287109375
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.23775379626595783,
+          "velocityMps": 0.00018977448607957476
+        },
+        "threeDays": {
+          "positionM": 0.26092565701641873,
+          "velocityMps": 0.00021294749232976778
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.0024999941452636633,
+          "velocityMps": 0.000001990135339839354
+        },
+        "threeDays": {
+          "positionM": 0.03948483143277103,
+          "velocityMps": 0.00003515543392775184
+        }
+      },
+      "denseVsTruth": {
+        "samples": 62006,
+        "oneDay": {
+          "positionM": 0.0024999914730036822,
+          "velocityMps": 0.000001981430713499868
+        },
+        "threeDays": {
+          "positionM": 0.039446210340390635,
+          "velocityMps": 0.00003220876881267192
+        }
+      },
+      "fit": true,
+      "screen": true
+    },
+    {
+      "seed": "GTO",
+      "fixed": {
+        "oneDay": {
+          "positionM": 0.000010262360560438119,
+          "velocityMps": 9.154019759430525e-9
+        },
+        "threeDays": {
+          "positionM": 0.0000364984712915406,
+          "velocityMps": 3.2591650122405683e-8
+        }
+      },
+      "fixedDescribeSha256": {
+        "standard": "0c58cd3a780e7c45f0d7cb67a5a2e9683b30758d960fcab2130347ad3055f2cc",
+        "fast": "19048ca39991a3e3166c29cb0145433e3b140e5a6994c21a22c9df861b2c6f76"
+      },
+      "cpuSecondsPerDay": {
+        "standard": 0.27052933333333334,
+        "fast": 0.13477133333333333
+      },
+      "cpuRepetitions": [
+        {
+          "standard": 0.27382266666666666,
+          "fast": 0.13693566666666665
+        },
+        {
+          "standard": 0.27052933333333334,
+          "fast": 0.13477133333333333
+        }
+      ],
+      "loadAverage": [
+        14.70654296875,
+        12.62939453125,
+        10.97802734375
+      ],
+      "standardVsTruth": {
+        "oneDay": {
+          "positionM": 0.4960067254227696,
+          "velocityMps": 0.0004631639172149421
+        },
+        "threeDays": {
+          "positionM": 3.3471210589353793,
+          "velocityMps": 0.0030678707526594433
+        }
+      },
+      "actualPolicy": [
+        "Fast forward resident integrator: RK78 Sundman alpha=1.5 at 300/orbit.",
+        "Full-force FFM: the configured execution request's dynamics integrated forward from the state's epoch; segments fitted from the integration's dense output. PRW.SEGMENT_QUALITY gives each segment's largest difference from accepted states and thirteen interior dense-output samples (SAMPLED_RESIDUAL, not a truth error bound)."
+      ],
+      "fastVsTruth": {
+        "oneDay": {
+          "positionM": 0.002361131177511059,
+          "velocityMps": 0.00003573323833258146
+        },
+        "threeDays": {
+          "positionM": 0.039564196098413856,
+          "velocityMps": 0.00011801280639294097
+        }
+      },
+      "denseVsTruth": {
+        "samples": 63056,
+        "oneDay": {
+          "positionM": 0.0021278941610075744,
+          "velocityMps": 0.0000018937645006286678
+        },
+        "threeDays": {
+          "positionM": 0.03884772835479181,
+          "velocityMps": 0.000034717688015873054
+        }
+      },
+      "fit": true,
+      "screen": true
+    }
+  ],
+  "failures": []
+}
