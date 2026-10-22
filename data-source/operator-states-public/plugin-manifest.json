@@ -352,6 +352,102 @@
       ],
       "maxBatch": 60,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "route_request",
+      "displayName": "route request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 33
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 33
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "restore_response",
+      "displayName": "restore response",
+      "inputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 33
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 33
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
     }
   ]
 }

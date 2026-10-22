@@ -47,6 +47,7 @@ if (!msisModel.includes(mallocCast)) throw new Error('nrlmsise-00.c no longer ha
 const msis = ['#include <math.h>', '#include <stdio.h>', '#include <stdlib.h>', 'namespace nrlmsise00 {', msisHeader, msisData, msisModel.replace(mallocCast, 'u=(double*)malloc(sizeof(double)*(unsigned int)n);'), '}'].join('\n');
 // The SDS headers: DCL and the standards its schema includes, each once, after the ones it includes.
 const {header:sdsHeaders,version:sdsVersion,families:ordered}=await generateSdsHeaders(['DCL'],import.meta.url);
+const sha=await fs.readFile(path.join(root,'../../files/orbit-products/src/sha256.hpp'),'utf8');
 const energyArcs=await fs.readFile(path.join(root,'src/open_dca_energy_arcs.hpp'),'utf8');
 const commonMode=await fs.readFile(path.join(root,'src/open_dca_common_mode.hpp'),'utf8');
 const source = (await fs.readFile(path.join(root, 'src/density_calibration.cpp'), 'utf8'))
@@ -58,7 +59,7 @@ const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 export const compilation = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', '#include "erfa.h"', jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
+  sourceCode: ['#include "space_data_module_invoke.h"', '#include "erfa.h"', jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', sha, source].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'wasi-sequential',stackSize:2*1024*1024,

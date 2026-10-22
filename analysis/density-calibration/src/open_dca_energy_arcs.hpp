@@ -86,6 +86,8 @@ extern "C" int fit_energy_arcs(){
       }
     }
   }catch(const std::exception& e){return fail("energy-fit-failed",e.what());}
+  if(!output.PROVENANCE)output.PROVENANCE=std::make_unique<PVNT>();
+  for(const auto* f:{kernel,eop,weather})output.PROVENANCE->LINEAGE+="; "+std::string(f->port_id)+"-typed-sha256="+ephem::sha256_hex(f->payload,f->payload_length);
   if(output.OBJECTS.empty())return fail("insufficient-arcs","No 20–28 hour state pairs.");
   fb::FlatBufferBuilder b;return emit("arcs",b,DCL::Pack(b,&output));
 }

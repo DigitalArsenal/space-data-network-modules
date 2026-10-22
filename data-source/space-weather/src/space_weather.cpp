@@ -93,11 +93,11 @@ bool kpForecast(const std::string& body,Rows& rows) {
 bool mean(const Rows& rows,int64_t start,int n,bool adjusted,double& out) {
  double sum=0;for(int i=0;i<n;++i){auto p=rows.find(start+i);if(p==rows.end())return false;double v=adjusted?p->second.adj:p->second.flux;if(v<=0||!std::isfinite(v))return false;sum+=v;}out=sum/n;return true;
 }
-void encode(const Row& r,int64_t at,double center,double trailing,double adjCenter,double adjTrailing,std::vector<uint8_t>& stream) {
+void encode(const Row& r,int64_t at,double center,double trailing,double adjCenter,double adjTrailing,const std::string& sourceHash,std::vector<uint8_t>& stream) {
  flatbuffers::FlatBufferBuilder b(1024);auto date=b.CreateString(iso(at));
  auto source=b.CreateString("gfz-noaa"),origin=b.CreateString(credit),provider=b.CreateString("space-weather");
  auto producer=b.CreateString("space-weather/0.2.0"),license=b.CreateString("CC-BY-4.0 (GFZ); public domain (NOAA SWPC)");
- auto lineage=b.CreateString("gfz-kp-ap;drao-f107;noaa-swpc");
+ auto lineage=b.CreateString("gfz-kp-ap;drao-f107;noaa-swpc;canonical-source-batch-sha256="+sourceHash);
  PVNBuilder p(b);p.add_SOURCE_ID(source);p.add_SOURCE_KIND(pvnSourceKind::Observation);
  p.add_ORIGINATOR(origin);p.add_PROVIDER_ID(provider);p.add_PRODUCER(producer);
  p.add_LICENSE_CLASS(pvnLicenseClass::Reproducible);p.add_LICENSE_ID(license);p.add_LINEAGE(lineage);
@@ -144,7 +144,7 @@ extern "C" int parse_weather() {
    if(at<today-40||at>today+4||r.ap<0||r.flux<=0)continue;
    bool complete=true;for(int k:r.kp)if(k<0)complete=false;if(!complete)continue;
    double center=0,trailing=0,ac=-1,al=-1;if(!mean(rows,at-40,81,false,center)||!mean(rows,at-80,81,false,trailing))continue;
-   mean(rows,at-40,81,true,ac);mean(rows,at-80,81,true,al);encode(r,at,center,trailing,ac,al,stream);++count;current|=at==today;
+   mean(rows,at-40,81,true,ac);mean(rows,at-80,81,true,al);encode(r,at,center,trailing,ac,al,batch.hex(),stream);++count;current|=at==today;
   }
   CHECK(current&&count>=40,"Today's complete drivers and history unavailable; keep previous batch.");
   R::IngestRequestT meta;meta.SCHEMA="SPW.fbs";meta.RECONCILE=R::reconcileMode_Current;meta.TAGS=std::make_unique<R::SourceTagsT>();
