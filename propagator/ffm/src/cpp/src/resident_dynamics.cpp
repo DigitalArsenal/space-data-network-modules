@@ -476,6 +476,47 @@ std::unique_ptr<ResidentDynamics> ResidentDynamics::configure(const Inputs& in, 
 
 bool ResidentDynamics::activate(std::string& error) { return KernelStore::activate(kernel_, error); }
 
+void ResidentDynamics::clearObjects() { objects_.clear(); }
+
+bool ResidentDynamics::addCatalogState(const StateVector& state, double cdAm, double crAm, bool valid, std::string& error) {
+    const StateVector& seed = valid ? state : template_.initial;
+    auto record = makeState(seed, *makeFrame("GCRF"));
+    record->STATE->EPOCH = formatIsoSeconds(normalizeTT(0, ((valid ? state.epoch : template_.initialTT.instant().utc().jd()) - 2451545.0) * 86400.0));
+    record->STATE->EPOCH_TIME_SYSTEM = "UTC";
+    record->VALID = valid;
+    record->HAS_DRAG_AREA_OVER_MASS_M2_KG = template_.forces.useDrag;
+    record->DRAG_AREA_OVER_MASS_M2_KG = template_.forces.useDrag ? cdAm : 0;
+    record->HAS_SRP_AREA_OVER_MASS_M2_KG = template_.forces.useSRP && cannonball_;
+    record->SRP_AREA_OVER_MASS_M2_KG = record->HAS_SRP_AREA_OVER_MASS_M2_KG ? crAm : 0;
+    flatbuffers::FlatBufferBuilder b;
+    b.Finish(PRWResidentState::Pack(b, record.get()));
+    return add(flatbuffers::GetRoot<PRWResidentState>(b.GetBufferPointer()), error);
+}
+
+bool ResidentDynamics::earthFixed(const TTEpoch& at, const StateVector& in, StateVector& out,
+                                 bool inverse, std::string& error) {
+    if (!environment_.earth) return prwError(error, "eop-data-required: Catalog rendering requires Earth orientation.");
+    auto& earth = *environment_.earth;
+    if (!earth.covers(at.instant()) || !earth.covers(plus(at, -.5).instant()) || !earth.covers(plus(at, .5).instant()))
+        return prwError(error, earth.error.c_str());
+    double m[3][3], before[3][3], after[3][3];
+    earth.matrix(at.instant(), m);
+    earth.matrix(plus(at, -.5).instant(), before);
+    earth.matrix(plus(at, .5).instant(), after);
+    const double r[3] = {in.position.x, in.position.y, in.position.z};
+    const double v[3] = {in.velocity.x, in.velocity.y, in.velocity.z};
+    double p[3] = {}, w[3] = {};
+    for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) p[i] += (inverse ? m[j][i] : m[i][j]) * r[j];
+    for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) {
+        w[i] += (inverse ? m[j][i] : m[i][j]) * v[j];
+        // d(R r)/dt = R v + R' r. The inverse subtracts R^T R' r.
+        if (!inverse) w[i] += (after[i][j] - before[i][j]) * r[j];
+        else for (int k = 0; k < 3; ++k) w[i] -= m[j][i] * (after[j][k] - before[j][k]) * p[k];
+    }
+    out = in; out.position = Vec3(p[0], p[1], p[2]); out.velocity = Vec3(w[0], w[1], w[2]);
+    return true;
+}
+
 bool ResidentDynamics::add(const PRWResidentState* record, std::string& error) {
     auto o = std::make_unique<Object>();
     o->execution = template_;

@@ -35,6 +35,11 @@ public:
     // One resident object: its GCRF state and epoch, mass and coefficients
     // (Cd*A/m, Cr*A/m) applied to the template's spacecraft.
     bool add(const PRWResidentState* record, std::string& error);
+    void clearObjects();
+    // UTC-Julian-date host bridge; state vectors remain GCRF km and km/s.
+    bool addCatalogState(const astro::StateVector& state, double cdAm, double crAm, bool valid, std::string& error);
+    bool earthFixed(const TTEpoch& at, const astro::StateVector& in, astro::StateVector& out,
+                    bool inverse, std::string& error);
     size_t size() const { return objects_.size(); }
     // The instance's kernel as the active ephemeris, at the start of each call.
     bool activate(std::string& error);
