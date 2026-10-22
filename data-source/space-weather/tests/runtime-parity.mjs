@@ -15,7 +15,7 @@ const summarize=r=>({status:r.statusCode,error:r.errorMessage||'',outputs:(r.out
 // Docker is waived by the owner, 2026-10-22. This function never starts it.
 export async function runtimeParity({wasmPath,manifest,cases,evidence}) {
  const bundle=path.join(evidence,'browser-harness.js');
- await build({stdin:{contents:`export {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';`,resolveDir:path.dirname(require.resolve('space-data-module-sdk/package.json')),sourcefile:'parity-entry.js'},bundle:true,format:'esm',platform:'browser',outfile:bundle});
+ await build({stdin:{contents:`export {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';`,resolveDir:path.dirname(require.resolve('space-data-module-sdk')),sourcefile:'parity-entry.js'},bundle:true,format:'esm',platform:'browser',outfile:bundle});
  const assets=new Map([['/module.wasm',await fs.readFile(wasmPath)],['/harness.js',await fs.readFile(bundle)]]);
  const descriptions=cases.map((c,i)=>({...c,inputs:c.inputs.map((f,j)=>{const url=`/case-${i}-${j}.bin`;assets.set(url,Buffer.from(f.payload));return {...f,payload:undefined,url};})}));
  const server=http.createServer((req,res)=>{res.setHeader('Cross-Origin-Opener-Policy','same-origin');res.setHeader('Cross-Origin-Embedder-Policy','require-corp');if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Space weather runtime parity</title>');return;}const bytes=assets.get(req.url);res.statusCode=bytes?200:404;res.setHeader('Content-Type',req.url.endsWith('.js')?'text/javascript':'application/octet-stream');res.end(bytes);});

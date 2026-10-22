@@ -65,22 +65,22 @@ try {
  let publications=[];const deadline=Date.now()+180000;
  while(Date.now()<deadline&&!publications.length) {
   const peer=client.libp2p.getConnections().find(c=>String(c.remotePeer)===info.peer_id)?.remotePeer;
-  if(peer){const stream=await client.libp2p.dialProtocol(peer,sdn.FLATSQL_SYNC_PROTOCOL_ID);const chunks=[];const reading=(async()=>{for await(const c of stream)chunks.push(c instanceof Uint8Array?c:c.subarray());})();
-   if(!stream.send(sdn.encodeFlatSqlSyncRequest({op:'list_published_shards',schema:'SPW.fbs',providerId:'space-weather',sourceName:'gfz-noaa'})))await stream.onDrain?.();await stream.close();await reading;
-   const bytes=Buffer.concat(chunks);for(let o=0;o+4<=bytes.length;){const n=bytes.readUInt32BE(o);assert(n&&o+4+n<=bytes.length);const frame=JSON.parse(bytes.subarray(o+4,o+4+n));if(frame.op==='list_published_shards')publications=(frame.publications||[]).filter(p=>p.provider_id==='space-weather'&&p.source_name==='gfz-noaa');o+=4+n;}
+  if(peer){const stream=await client.libp2p.dialProtocol(peer,sdn.FLATSQL_SYNC_LIST_PUBLISHED_PROTOCOL_ID);const chunks=[];const reading=(async()=>{for await(const c of stream)chunks.push(c instanceof Uint8Array?c:c.subarray());})();
+   if(!stream.send(sdn.encodeFlatSqlPublishedListRequest({schema:'SPW.fbs',providerId:'space-weather',sourceName:'gfz-noaa'})))await stream.onDrain?.();await stream.close();await reading;
+   publications=sdn.decodeFlatSqlPublishedList(Buffer.concat(chunks)).publications.filter(p=>p.providerId==='space-weather'&&p.sourceName==='gfz-noaa');
   }
   if(!publications.length)await new Promise(r=>setTimeout(r,2000));
  }
  assert(publications.length,'No SPW publication within 180 seconds; '+node.dir+'/sdn.log');
- const newest=publications.sort((a,b)=>String(b.published_at).localeCompare(String(a.published_at)))[0];
- const manifestBytes=Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,newest.manifest_cid,{providerAddrs:addrs,maxBytes:1048576}));
+ const newest=publications.sort((a,b)=>b.publishedAtMs-a.publishedAtMs)[0];
+ const manifestBytes=Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,newest.manifestCid,{providerAddrs:addrs,maxBytes:1048576}));
  const dpm=(manifestBytes.subarray(8,12).toString()==='$DPM'?DPM.getSizePrefixedRootAsDPM:DPM.getRootAsDPM)(new ByteBuffer(manifestBytes)).unpack();assert.equal(dpm.PROVIDER_PEER_ID,info.peer_id);assert(dpm.PROVIDER_SIGNATURE.length>0);
  const source=dpm.SOURCES.find(s=>s.PROVIDER_ID==='space-weather'&&s.SOURCE_NAME==='gfz-noaa');assert(source,'Manifest source');assert.match(source.LICENSE,/CC-BY-4.0/);assert.match(source.CITATION,/Matzka/);assert.match(source.CITATION,/DRAO/);assert.match(source.CITATION,/NOAA/);
- const asset=dpm.ASSETS.find(a=>a.ASSET_KIND===publicationAssetKind.DATA_SHARD&&a.SCHEMA_NAME==='SPW.fbs');assert(asset);assert.equal(asset.CID,newest.shard_cid);
+ const asset=dpm.ASSETS.find(a=>a.ASSET_KIND===publicationAssetKind.DATA_SHARD&&a.SCHEMA_NAME==='SPW.fbs');assert(asset);assert.equal(asset.CID,newest.shardCid);
  let readback=Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,asset.CID,{providerAddrs:addrs,maxBytes:1048576}));if(readback[0]===31&&readback[1]===139)readback=gunzipSync(readback);
  assert.equal(hash(readback),asset.BYTE_SHA256.toLowerCase());assert.equal(readback.length,Number(asset.BYTE_LENGTH));
  const actual=decodeRecords(readback);verifySources(actual,bodies,new Date().toISOString().slice(0,10));
- receipt.publication={provider:info.peer_id,manifestCid:newest.manifest_cid,shardCid:asset.CID,rows:actual.length,license:source.LICENSE,citation:source.CITATION,sha256:hash(readback)};receipt.status='PASS';console.log(`PASS scheduled native flow -> signed SPW publication -> independent SDN CID readback: ${actual.length} days`);
+ receipt.publication={provider:info.peer_id,manifestCid:newest.manifestCid,shardCid:asset.CID,rows:actual.length,license:source.LICENSE,citation:source.CITATION,sha256:hash(readback)};receipt.status='PASS';console.log(`PASS scheduled native flow -> signed SPW publication -> independent SDN CID readback: ${actual.length} days`);
 } catch(error){receipt.status='FAIL';receipt.error=error.stack;process.exitCode=1;console.error(error.stack);}finally{if(harness)await harness.destroy();if(client)await client.stop();if(node)await node.stop();receipt.completedAt=new Date().toISOString();await save();console.log('Evidence: '+evidence);}
 
 // All owned runtimes/nodes are stopped above; terminate residual third-party client timers.
