@@ -483,6 +483,27 @@ std::string read_set_model(const nlohmann::json& j, SetModel* m) {
   return {};
 }
 
+// Shared population evaluation. Keep the multiplication order at the caller:
+// calibrate_covariance converts the interpolated moment to SI before scaling.
+std::vector<bool> populated_bins(const SetModel& m, int regime) {
+  std::vector<bool> have(m.options.ages.size());
+  for (size_t i = 0; i < have.size(); ++i) {
+    const auto key = std::make_pair(regime, static_cast<int>(i));
+    const auto n = m.n.find(key);
+    have[i] = m.cov.count(key) && n != m.n.end() && n->second >= m.minimum_bin_samples;
+  }
+  return have;
+}
+bool evaluate_population(const SetModel& m, int regime, double age, std::vector<double>* c21, double* factor) {
+  const auto have = populated_bins(m, regime);
+  if (!interpolate_bins(m.options.ages, have, age, [&](int i, size_t k) { return m.cov.at({regime, i})[k]; }, 21, c21)) return false;
+  std::vector<bool> have_f(have.size());
+  for (size_t i = 0; i < have.size(); ++i) have_f[i] = have[i] && m.factor.count({regime, static_cast<int>(i)});
+  std::vector<double> f;
+  *factor = interpolate_bins(m.options.ages, have_f, age, [&](int i, size_t) { return m.factor.at({regime, i}); }, 1, &f) ? f[0] : 1.0;
+  return true;
+}
+
 std::string read_factor_cells(const nlohmann::json& j, std::vector<FactorCell>* cells) {
   if (!j.contains("strata") || !j["strata"].is_array()) return "a factor model needs strata [{regime, horizonDays [lo, hi], factor | axesFactors [3]}].";
   for (const auto& s : j["strata"]) {
@@ -572,24 +593,13 @@ extern "C" int calibrate_covariance() {
     if (set_model) {
       if (!o.contains("ageDays") || !o["ageDays"].is_number()) return fail("invalid-objects", "an element-set model needs each object's ageDays.");
       const double age = o["ageDays"].get<double>();
-      std::vector<std::pair<double, double>> bins = sm.options.ages;
-      std::vector<bool> have(bins.size());
-      for (size_t i = 0; i < bins.size(); ++i) {
-        const auto key = std::make_pair(regime, static_cast<int>(i));
-        have[i] = sm.cov.count(key) && sm.n[key] >= sm.minimum_bin_samples;
-      }
-      std::vector<double> c21, k2;
-      if (!interpolate_bins(bins, have, age, [&](int i, size_t k) { return sm.cov[{regime, i}][k]; }, 21, &c21)) {
+      std::vector<double> c21;
+      double factor = 1.0;
+      if (!evaluate_population(sm, regime, age, &c21, &factor)) {
         row["status"] = "NO_MODEL";
         rows.push_back(row);
         continue;
       }
-      std::vector<bool> have_f(bins.size());
-      for (size_t i = 0; i < bins.size(); ++i) have_f[i] = have[i] && sm.factor.count({regime, static_cast<int>(i)});
-      double factor = 1.0;
-      if (std::any_of(have_f.begin(), have_f.end(), [](bool b) { return b; }) &&
-          interpolate_bins(bins, have_f, age, [&](int i, size_t) { return sm.factor[{regime, i}]; }, 1, &k2))
-        factor = k2[0];
       for (int a = 0, t = 0; a < 6; ++a)
         for (int b = 0; b <= a; ++b, ++t) rtn[6 * a + b] = rtn[6 * b + a] = c21[t] * 1e6 * factor * object_factor;  // km -> m
       const int bin = age_of(sm.options, age);

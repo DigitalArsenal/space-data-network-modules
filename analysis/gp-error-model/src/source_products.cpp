@@ -582,28 +582,15 @@ Lookup model_lookup(const Model& m, double alt_km, double ecc, double age_days) 
   out.regime_id = o.regimes[out.regime].id;
   out.age_index = age_of(o, age_days);
   if (out.age_index < 0) { out.status = "age-outside-model"; return out; }
-  std::vector<bool> have(o.ages.size()), have_factor(o.ages.size());
-  bool any = false;
-  for (size_t i = 0; i < o.ages.size(); ++i) {
-    const auto key = std::make_pair(out.regime, static_cast<int>(i));
-    const auto c = m.sm.cov.find(key);
-    const auto n = m.sm.n.find(key);
-    have[i] = c != m.sm.cov.end() && n != m.sm.n.end() && n->second >= m.sm.minimum_bin_samples;
-    have_factor[i] = have[i] && m.sm.factor.count(key);
-    any = any || have[i];
-  }
-  if (!any) { out.status = "no-model-for-regime"; return out; }
-  std::vector<double> c21, factor;
-  if (!interpolate_bins(o.ages, have, age_days, [&](int i, size_t k) { return m.sm.cov.find({out.regime, i})->second[k]; }, 21, &c21)) {
+  std::vector<double> c21;
+  double k2 = 1.0;
+  if (!evaluate_population(m.sm, out.regime, age_days, &c21, &k2)) {
     out.status = "no-model-for-regime";
     return out;
   }
-  double k2 = 1.0;
-  if (std::any_of(have_factor.begin(), have_factor.end(), [](bool b) { return b; }) &&
-      interpolate_bins(o.ages, have_factor, age_days, [&](int i, size_t) { return m.sm.factor.find({out.regime, i})->second; }, 1, &factor)) {
-    k2 = factor[0];
-    out.scale = k2;
-  }
+  const auto have = populated_bins(m.sm, out.regime);
+  for (size_t i = 0; i < have.size(); ++i)
+    if (have[i] && m.sm.factor.count({out.regime, static_cast<int>(i)})) out.scale = k2;
   for (int k = 0; k < 21; ++k) out.cov[k] = c21[k] * k2;
   return out;
 }

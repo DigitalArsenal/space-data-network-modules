@@ -1655,14 +1655,14 @@ void objects_from_lists(J& j, std::initializer_list<const char*> keys) {
     if (j.contains(k) && j[k].is_array() && j[k].size() == 1 && j[k][0].is_object()) j[k] = J(j[k][0]);
 }
 // The recipe under `prefix` (a flow configures several nodes), else the config's root keys.
-J recipe_from_config(const char* prefix, std::string* error) {
+J recipe_from_config(const char* prefix, std::string* error, bool root_fallback = true) {
   const sdm_piv::Config config = sdm_piv::get_config();
   if (!config.ok()) {
     *error = "plugin.getConfig: " + config.error_message();
     return J();
   }
   J all = unflatten(config_table(config));
-  J recipe = all.contains(prefix) ? all[prefix] : all;
+  J recipe = all.contains(prefix) ? all[prefix] : root_fallback ? all : J::object();
   if (recipe.is_array() && recipe.size() == 1 && recipe[0].is_object()) recipe = J(recipe[0]);
   if (!recipe.is_object()) recipe = J::object();
   objects_from_lists(recipe, {"source"});

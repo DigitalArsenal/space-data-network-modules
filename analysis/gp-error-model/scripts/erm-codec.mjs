@@ -602,7 +602,10 @@ function attachReportOut(r) {
       if (o.OCM_SHA256) x.ocmSha256 = o.OCM_SHA256;
       if (o.RULE) Object.assign(x, { rule: o.RULE, method: o.METHOD ?? '', product: o.PRODUCT ?? '', calibrated: o.CALIBRATED, ommCovariance: o.OMM_COVARIANCE ?? '',
         rows: o.ROWS.map(labelOut) });
-      else x.rule = null;
+      else {
+        x.rule = null;
+        if (o.ROWS.length) Object.assign(x, { method: o.METHOD ?? '', calibrated: o.CALIBRATED, rows: o.ROWS.map(labelOut) });
+      }
       x.notes = o.NOTES.map((n) => ({ rule: n.RULE, reason: n.REASON ?? '', ...(n.ROW ? { row: n.ROW } : {}), ...(Number.isNaN(n.AGE_DAYS) ? {} : { ageDays: n.AGE_DAYS }) }));
       x.licence = source.licence;
       return x;
@@ -624,6 +627,7 @@ export const ARM_OF = {
   pair_statistics: { pairs: 'pairs' },
   fit_calibration: { samples: 'calibration', options: 'calibration' },
   calibrate_covariance: { model: 'model', objects: 'objects' },
+  object_covariance: { models: 'model', request: 'objects' },
   dcp_covariance: { request: 'dcp' },
   noise_responses: { request: 'noise' },
   fit_elements: { options: 'fitOptions' },

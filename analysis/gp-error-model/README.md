@@ -32,6 +32,7 @@ record (size-prefixed), with the arm of the port set:
 | `fit_elements.options` (`OPTIONS`) and `.report` (`FITS`); `element_residuals.options` (`RESIDUAL_REQUESTS`) and `.residuals` (`RESIDUAL_RESULTS`) | `ELEMENT_FITS` |
 | `attach_covariance.report`, `attribute_maneuvers.report` | `ATTACH_REPORT` |
 | `attach_covariance.models` | `MODEL` records, any number |
+| `object_covariance.elements` / `.models` / `.request` / `.covariance` / `.report` | `$OMM` / `MODEL` (`ElementSetModel`) / `CALIBRATED_COVARIANCES` (`OBJECTS`) / `CALIBRATED_COVARIANCES` (`RESULTS`) / `ATTACH_REPORT` |
 
 The products are `$OMM`, `$OCM` and `$MNV` with `$CVR` and `$PVN`, unchanged.
 The recipes of `attach_covariance` and `attribute_maneuvers` are node config
@@ -285,6 +286,124 @@ of the whole case; a quintic reproduced exactly by degree-5 interpolation; facto
 inertial rotation and the midpoint of two bins; Hejduk's weights and
 σ_eff = √(wᵀCw); the start-relative sensitivity for designed matrices; a free
 particle's noise responses equal q[[t³/3, t²/2], [t²/2, t]] exactly.
+
+### `object_covariance`
+
+Derives a 6×6 Cartesian covariance for each requested SGP4 object from that
+object's own OMM history, using the population error model as prior and fallback.
+The rule is `empirical-history-shrunk`. This is a deterministic pure function of
+the supplied model, configuration and history up to the set in force; calling it
+again when a new OMM arrives updates that object's estimate. Physics runs in C++.
+
+All ports carry size-prefixed FlatBuffers streams:
+
+- `elements`: `$OMM` SGP4 mean element sets for any number of objects, in any
+  order. As in `accumulate`, epochs less than 1.0 second apart for the same
+  NORAD ID collapse to the later record in stream order, including republished
+  sets whose epochs differ only by microseconds. The request's `SET_EPOCH`
+  matches the retained set within the same window (absolute difference < 1.0 s),
+  so either duplicate can name the set in force. The retained set's epoch anchors
+  the history window and prediction age, even if it is slightly later than the
+  requested epoch. Reports still echo the requested `SET_EPOCH`.
+- `models`: `$ERM` `MODEL`, form `ElementSetModel`, such as `data/e14-s3-kc.erm`.
+  Exactly one is used: the first model with `POOLED`, otherwise the first model.
+  This uses `attach_covariance`'s first-pooled preference when no source-specific
+  selection is available; this request has no source ID. A selected nonpooled
+  model is labeled SourceModel, a pooled one PooledModel. No model gives NO_MODEL.
+- `request`: `$ERM` `CALIBRATED_COVARIANCES.OBJECTS`. Each entry supplies `ID`,
+  `SET_NORAD_CAT_ID`, `SET_EPOCH` (ISO UTC, the set in force), and finite
+  `AGE_DAYS >= 0`, measured forward from that set. All other
+  `ERMCalibrationObject` fields are ignored, including supplied states, regime,
+  native covariance, object factor and horizon.
+- `covariance`: one `$ERM` `CALIBRATED_COVARIANCES` record, `RESULTS` in request
+  order. Each result names `ID`, `REGIME`, `STATUS`, `AGE_INDEX`, `AGE_DAYS`,
+  and the interpolated population `FACTOR`. Successful results have
+  `COVARIANCE_RTN` (lower21) and `COVARIANCE_INERTIAL` (row-major 6×6), in SI
+  (m², m²/s, m²/s²). Inertial axes are GCRF at the retained set epoch + AGE_DAYS: the
+  anchor's SGP4 TEME state goes through the foundation/frames axis engine,
+  then the RTN matrix rotates with B = blockdiag(R, R), as in
+  `calibrate_covariance`. Matrices are finite and exactly symmetric.
+  Table `RULE` is `empirical-history-shrunk`; `CALIBRATION_VERSION` is
+  `0.8.0:<model ID>`.
+- `report`: one `$ERM` `ATTACH_REPORT`, one entry per request in the same order,
+  with `OBJECT_KEY = ID`, `EPOCH = SET_EPOCH`, `THEORY = SGP4`, rule, method,
+  calibration flag, one CVR row and refusal notes. Nothing is encoded in
+  COMMENT or user-defined parameters.
+
+Configuration is `plugin.getConfig`, exclusively under `object.`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `historyDays` | 30 | Inclusive lookback before the set in force |
+| `maxAgeDays` | 8 | Exclusive upper limit on pair ages, also capped by the last model bin edge |
+| `minimumSets` | 8 | Distinct older sets in the selected history |
+| `minimumBinSets` | 12 | Distinct older sets contributing retained pairs to the requested age bin |
+| `shrinkage` | 30 | Prior weight in w = n / (n + shrinkage) |
+
+History is restricted to the same NORAD ID, epochs at or before the set in force,
+within `historyDays`, capped at the newest 200 distinct epochs including that
+set. Pairs less than 1.0 second apart are also explicitly skipped. Every
+remaining older/newer pair in the allowed age range contributes prediction
+minus later-set state in the later set's RTN axes (`rtn_error`). A pair is
+attributed to its older set. Each bin pools all pairs, then uses exactly
+`finalize`'s signed-log histogram median and robust sigma
+(q84.1345 − q15.8655)/2. The existing model's clip rejects a pair when **any
+position component** exceeds five robust sigma from its median; velocities do
+not gate the clip. All six components enter the retained second moment about
+zero M = Σrrᵀ/m. This is not the centered sample covariance from `finalize`.
+Counts m (pairs) and n (distinct older sets) are after clipping.
+
+For each usable population bin, P_pop is its second moment times its factor;
+w is n/(n + shrinkage) when n >= minimumBinSets, otherwise zero. The empirical
+bin matrix is w M + (1 − w) P_pop. Missing population bins have no value and
+zero weight; interpolation skips them. Matrices and weights interpolate linearly
+between populated bin centers and hold beyond the first/last center.
+
+STATUS is EMPIRICAL only when the overall and containing-bin set thresholds
+pass, the containing population bin is usable, and the requested age does not
+exceed the largest available pair age or reach `maxAgeDays`. Otherwise it is
+POPULATION and **all empirical weights are zero for that request**. Different
+ages requested for one set can therefore have different statuses. Population
+fallback reuses `calibrate_covariance`'s evaluator and multiplication order,
+bit for bit: it interpolates the unscaled moment and factor separately, then
+multiplies. Empirical interpolation instead uses the already-scaled bin priors
+specified above. These differ between centers when factors vary; this preserves
+both the existing fallback contract and the per-bin shrinkage formula.
+
+OUTSIDE means age outside the model's support or an uncovered regime;
+NO_MODEL means no model or no usable cells in the regime; NO_SET means the
+named usable SGP4 set is absent. The last model bin's upper edge is included
+for requests, as in `age_of`; pair ages remain strictly below that edge.
+Refusals contain no covariance. SGP4 propagation failures at a requested
+prediction epoch fail the invocation explicitly.
+
+EMPIRICAL uses ScaledFit, method `empirical-history-shrunk`, and is always
+**Uncalibrated**. POPULATION uses SourceModel/PooledModel and the corresponding
+`attach_covariance` method name (`e14-s3-kc` / `e14-s3-kc-pooled`). Its calibration
+flag is computed from the population cell's own numbers: mean d²/3 in
+[0.8, 1.25], coverage95 in [0.93, 0.97], at least 30 samples from 3 objects.
+The model's decision string does not control the verdict. There is no source
+lineage in this request, so this describes the population cell's test only;
+it does not assert that the current object's source lineage was tested.
+
+The CVR has RULE, MODEL_ID, REGIME, AGE_DAYS, SAMPLES (retained history pairs
+in the containing bin), OBJECTS (their distinct older sets), and SCALE_FACTOR
+(the interpolated shrinkage weight, zero for POPULATION). The population
+verdict uses the model cell's own counts before those CVR fields are filled
+with history counts. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
+TEST_WINDOW. EVIDENCE names the method and default thresholds; NOTES explains
+each failed empirical condition, including insufficient sets, insufficient bin
+support, age outside history, and missing model. The empirical residuals compare
+against later element sets, **not truth**. They can share errors and understate
+true uncertainty; no empirical coverage or calibration claim is made (the
+paper's section 6 caveat).
+
+`tests/object_covariance.test.mjs` uses a seeded 73-set synthetic Vallado LEO
+history over 30 UTC days. Its residual oracle is `common_epoch`, already checked
+against python-sgp4/pyerfa in `tests/stm-reference.json`; test arithmetic forms
+histograms, clipping, second moments, shrinkage and interpolation. `finalize`
+checks the histogram/clipping statistics, and `calibrate_covariance` checks
+population fallback and the independent GCRF rotation path.
 
 ### `fit_elements`
 

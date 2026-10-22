@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
-  "version": "0.7.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). ffm_arcs and ffm_coverage calibrate FFM (Full Force Model) covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter). fit_elements fits SGP4 mean elements (an OMM, optionally B*) to an ephemeris by weighted Levenberg-Marquardt differential correction in equinoctial elements, with exact residual statistics on every state, a half-split closure test and the fit covariance; element_residuals scores element sets against an ephemeris over time windows. Typed contracts 1.0 (FlatBuffers only, no JSON): every model, accumulator, option, request and report port carries one SDS Orbit Error Model ($ERM) record with the matching arm set (MODEL, ACCUMULATOR, STRATA_SETTINGS, GATE, SCALE_OPTIONS, SCREENING_SETTINGS, SCREENING_CASES, SCREENING_REPORT, ARC_OPTIONS, ARC_PLAN, ARC_PREDICTIONS, COVERAGE_OPTIONS, PROPAGATOR_COVERAGE, COMMON_EPOCH, COVARIANCE_MAP, PAIR_STATISTICS, CALIBRATION, CALIBRATED_COVARIANCES, CONSIDER_COVARIANCES, NOISE_RESPONSES, ELEMENT_FITS, ATTACH_REPORT); the catalog-pipeline products are $OMM, $OCM and $MNV with $CVR and $PVN. attach_covariance and attribute_maneuvers read their recipe from the node config (plugin.getConfig, one ModuleConfig): keys under \"attach.\" and \"attribute.\" (a flow configures several nodes), else the same keys at the root; attach_covariance takes its models as $ERM MODEL records on the models port.",
+  "version": "0.8.0",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). ffm_arcs and ffm_coverage calibrate FFM (Full Force Model) covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter). fit_elements fits SGP4 mean elements (an OMM, optionally B*) to an ephemeris by weighted Levenberg-Marquardt differential correction in equinoctial elements, with exact residual statistics on every state, a half-split closure test and the fit covariance; element_residuals scores element sets against an ephemeris over time windows. Typed contracts 1.0 (FlatBuffers only, no JSON): every model, accumulator, option, request and report port carries one SDS Orbit Error Model ($ERM) record with the matching arm set (MODEL, ACCUMULATOR, STRATA_SETTINGS, GATE, SCALE_OPTIONS, SCREENING_SETTINGS, SCREENING_CASES, SCREENING_REPORT, ARC_OPTIONS, ARC_PLAN, ARC_PREDICTIONS, COVERAGE_OPTIONS, PROPAGATOR_COVERAGE, COMMON_EPOCH, COVARIANCE_MAP, PAIR_STATISTICS, CALIBRATION, CALIBRATED_COVARIANCES, CONSIDER_COVARIANCES, NOISE_RESPONSES, ELEMENT_FITS, ATTACH_REPORT); the catalog-pipeline products are $OMM, $OCM and $MNV with $CVR and $PVN. attach_covariance and attribute_maneuvers read their recipe from the node config (plugin.getConfig, one ModuleConfig): keys under \"attach.\" and \"attribute.\" (a flow configures several nodes), else the same keys at the root; attach_covariance takes its models as $ERM MODEL records on the models port. object_covariance derives each object’s Cartesian covariance from its own causal OMM history, with empirical second moments shrunk toward the population model and a population fallback.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -1676,6 +1676,120 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "object_covariance",
+      "displayName": "Object covariance from element history",
+      "invokeSurfaces": [
+        "direct"
+      ],
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "SGP4 history, any order; epochs less than one second apart for the same NORAD ID keep the later record in stream order."
+        },
+        {
+          "portId": "models",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "MODEL ElementSetModel records; first pooled model, else first model."
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "CALIBRATED_COVARIANCES OBJECTS: ID, SET_NORAD_CAT_ID, SET_EPOCH (matched to the retained set within one second), AGE_DAYS."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "covariance",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CALIBRATED_COVARIANCES RESULTS, SI RTN and GCRF, in request order."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ATTACH_REPORT with per-object CVR rows and empirical refusal reasons."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Causal history covariance with population shrinkage; object. config defaults: historyDays 30, maxAgeDays 8, minimumSets 8, minimumBinSets 12, shrinkage 30. Empirical results are Uncalibrated."
     }
   ]
 }
