@@ -16,7 +16,6 @@ export async function offline(dir){
  const env=inputs.filter(f=>f.portId!=='request');
  try{
   for(const [seriesIndex,f]of inputs.filter(f=>f.portId==='request').entries()){
-   if(process.env.OPEN_DCA_DEBUG_SERIES&&seriesIndex+1!==Number(process.env.OPEN_DCA_DEBUG_SERIES))continue;
    const d=decodeDcl(f),lines=d.STATES.EPHEMERIS.EPHEMERIS_DATA_LINES;
    const states=lines.map(s=>({ms:Date.parse(s.EPOCH+'Z'),state:[s.X,s.Y,s.Z,s.X_DOT,s.Y_DOT,s.Z_DOT].map(v=>v*1000)}));
    if(!states.some((s,i)=>i>0&&(s.ms-states[i-1].ms)/3600000>=20&&(s.ms-states[i-1].ms)/3600000<=28))continue;
@@ -39,7 +38,7 @@ export async function offline(dir){
    assert.equal(index,actual.length,'All and only the 20–28 hour arcs are compared');
    console.log(`Offline E13 ${seriesIndex+1}/${inputs.length-env.length}: ${result.arcs.length} accepted arcs; max relative B ${result.maxRelativeB}`);
   }
-  result.completed=new Date().toISOString();if(process.env.OPEN_DCA_DEBUG_SERIES)return result;await fs.writeFile(file,JSON.stringify(result));await fs.writeFile(path.join(dir,'offline-receipt-path.txt'),file);return result;
+  result.completed=new Date().toISOString();await fs.writeFile(file,JSON.stringify(result));await fs.writeFile(path.join(dir,'offline-receipt-path.txt'),file);return result;
  }finally{await oracle.destroy();await density.destroy();}
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await offline(process.argv[2]);

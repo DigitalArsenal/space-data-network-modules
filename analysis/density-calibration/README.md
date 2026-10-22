@@ -2,6 +2,32 @@
 
 FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
 
+## Open NRLMSISE-00 calibration (0.6.0)
+
+The scheduled [open-DCA provider](../../flows/open-dca/README.md) uses three
+additional WASM methods with SDS 1.259.0 contracts:
+
+| Method | Input | Output |
+| --- | --- | --- |
+| `prepare_operator_states` | Private `$OEM` Planet states, explicitly TT/EME2000 | Private `$DCL` series, UTC/GCRF; ERFA time and frame conversion |
+| `fit_energy_arcs` | Private `$DCL` series and typed `$PRW` kernel, EOP and licensed weather | Private energy-arc estimates against NRLMSISE-00; only 20–28-hour pairs, inclusive in UTC milliseconds |
+| `calibrate_log_density` | Accepted fleet energy-arc estimates | Aggregate `$DCL` `LogDensityNodes`, with dimensionless `NODE_LOG_DENSITY_SCALE_DIMENSIONLESS` and `$PVN`; no states or per-object estimates |
+
+The method follows E13's exploratory NRLMSISE-00 rescale (S3), frozen
+random-walk fit (R1/R2), six-hour latency, causal 30-day history and 48-hour
+forecast time constant. Its common-mode level is mean-zero over supported
+nodes: it estimates fleet-wide variation, not an independently identified
+absolute atmospheric density. The producer emits the forecast as hourly nodes.
+Consumers multiply NRLMSISE-00 density by `exp(s(t))`, interpolate s linearly
+in UTC and hold the endpoints outside; they apply no second decay.
+
+The module and composed flow are built without WASM exception instructions.
+Errors are returned or recorded as propagation failures. Verification uses the
+frozen E13 reference, headless-browser/native WasmEdge parity, and a signed,
+AOT-prewarmed scratch node whose aggregate is read back through SDN by CID.
+Docker is waived by the owner's 2026-10-22 ruling. Planet inputs remain local;
+the aggregate retains conservative CC BY-NC 4.0 attribution.
+
 JB2008 thermospheric mass density at points, with an exospheric-temperature
 correction field, and the estimation of that field from observed densities or
 from the orbital decay of catalogued objects:
