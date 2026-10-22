@@ -81,7 +81,10 @@ extern "C" int fit_energy_arcs(){
       if(!output.PROVENANCE&&r->PROVENANCE())output.PROVENANCE.reset(r->PROVENANCE()->UnPack());
       std::vector<OrbitalState> states;auto error=load_states(r,states);if(!error.empty()||states.size()>33)return fail("invalid-states",error.empty()?"State budget exceeded":error);
       double B=positive(r->BALLISTIC_COEFFICIENT_M2_KG())?r->BALLISTIC_COEFFICIENT_M2_KG():0.02;
-      for(size_t j=1;j<states.size();++j){const double hours=(states[j].mjd-states[j-1].mjd)*24;if(hours<20||hours>28)continue;
+      // Match E13's inclusive 20–28 hour window in the published UTC-ms
+      // contract. Subtracting two MJD doubles can turn exactly 20h into
+      // 19.9999999999h and silently omit a boundary arc.
+      for(size_t j=1;j<states.size();++j){const int64_t spanMs=ms_of_mjd(states[j].mjd)-ms_of_mjd(states[j-1].mjd);if(spanMs<20LL*3600000||spanMs>28LL*3600000)continue;
         auto fit=fit_arc(r->ID()->str(),states[j-1],states[j],B,kernel,env);if(fit->OK)B=fit->BALLISTIC_COEFFICIENT_M2_KG;output.OBJECTS.push_back(std::move(fit));
       }
     }
