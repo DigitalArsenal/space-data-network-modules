@@ -118,11 +118,33 @@ inline double unit_surface_brightness_g() {return unit_surface_brightness_v()+g_
 // see the table's provenance below. A bake may override them (the fit's own
 // trials, model_api.hpp bake); the values here are the fit's.
 namespace milky_way::appearance {
-// FITTED TO SDSS MW ANALOGS (Licquia 2015) -- pending (0.3.0 values).
-inline double young_length_kpc=2.6;  // the young (M_V < -1) light's radial scale length
-inline double central_light=1.0;     // the bar, bulge and nuclear disc's light, x Portail 2017's
-inline double bulge_size=1.0;        // the b/p bulge's in-plane extent, x (1.0, 0.5) kpc
-inline double bulge_height=1.0;      // its scale height, x Bland-Hawthorn & Gerhard 2016's 180 pc
+// FITTED TO SDSS MW ANALOGS (Licquia 2015), 2026-10-22 (owner decision "fit
+// to SDSS analogs"). Data: the SDSS DR17 g, r, i frames of four of the six
+// analogs (objIDs 1237680099167174698 face-on, 1237661068724011075 and
+// 1237649962993975369 at 45 deg, 1237661850943225872 edge-on), resampled
+// north up at 0.396 arcsec; two held out (1237661152451166321 face-on,
+// 1237667781752455304 edge-on). Model: this module baked with each trial's
+// values, drawn by OrbPro's GalaxyPrimitive from 1 Mpc at each analog's
+// inclination (b/a, q0 = 0.2), azimuths 45 and 225 deg, scaled to its R90 as
+// seen, at its PSF and (1+z)^-4 dimming, through the display transfer.
+// Objective, summed over the trained analogs: (rms of log10 median r per
+// elliptical annulus over the mean r within 1.5 R90, 0-1.5 R90) / 0.05 dex,
+// (rms of g-r per annulus to 1.1 R90, the analogs' K-corrected by
+// Chilingarian et al. 2010, not edge-on) / 0.03 mag, (rms of the edge-on
+// minor-axis log10 r) / 0.05 dex and (1 - SSIM of the displayed luminance) /
+// 0.1, squared; the acceptance ranges (Licquia 2015 g-r and M_r,
+// Bland-Hawthorn & Gerhard 2016 scale length and bulge-region share) as
+// penalties. Nelder-Mead in log space, 70 trials from the 0.3.0 values (OrbPro
+// test/milky-way-sdss-look.e2e.mjs, MILKY_WAY_FIT=1); the best trial inside
+// every acceptance range: cost 173.9 against 206.6 at the 0.3.0 values. On
+// the held-out analogs against the 0.3.0 values (OrbPro E2E, same transfer):
+// face-on log r 0.140 -> 0.140 dex, g-r 0.061 -> 0.053 mag, SSIM 0.763 ->
+// 0.743; edge-on log r 0.164 -> 0.180 dex, minor axis 0.138 -> 0.139 dex, SSIM
+// 0.436 -> 0.418: the fit does not generalize beyond the color.
+inline double young_length_kpc=4.22881; // the young (M_V < -1) light's radial scale length (0.3.0: 2.6)
+inline double central_light=0.685443;   // the bar, bulge and nuclear disc's light, x Portail 2017's (0.3.0: 1)
+inline double bulge_size=0.708838;      // the b/p bulge's in-plane extent, x (1.0, 0.5) kpc (0.3.0: 1)
+inline double bulge_height=0.710074;    // its scale height, x Bland-Hawthorn & Gerhard 2016's 180 pc (0.3.0: 1)
 } // namespace milky_way::appearance
 
 // SDSS g, r, i (0.4.0). The light is drawn in the SDSS bands, as SDSS gri
@@ -217,19 +239,20 @@ inline const sdss::Bands hii_bands=[] {
 // six analogs (runs 1045, 3631, 3650, 3813, 5194, 8062), resampled north up,
 // drawn through this stretch and fitted (least squares on the RGB of all
 // pixels within 2.5 Petrosian R90, Nelder-Mead) to the service's JPEGs of the
-// same fields, four analogs trained (objIDs ...975369, ...011075, ...225872,
+// same fields, both smoothed by a Gaussian of 1.5 px (the service de-noises
+// its frames, FITS2JPEG; unsmoothed, the fit desaturates to match noise, not
+// galaxies), four analogs trained (objIDs ...975369, ...011075, ...225872,
 // ...174698), two held out (...166321 face-on, ...455304 edge-on):
-// w_g = 0.4854, w_r = 0.8759, alpha = 0.01626, Q = 7.297, s = 0.3822,
-// gamma = 1.0503; rms of full scale 0.0275 trained, 0.0229 and 0.0209 held
-// out (0.054 with Lupton et al.'s own parameters). The service's colors are
-// far less saturated than the bands' ratios. One count is NMGY nanomaggies,
+// w_g = 0.7134, w_r = 0.8912, alpha = 0.01041, Q = 8.295, s = 0.7581,
+// gamma = 0.8657; rms of full scale 0.0159 trained, 0.0127 and 0.0105 held
+// out (0.034 with Lupton et al.'s own parameters). One count is NMGY nanomaggies,
 // the frames' calibration factor, medians 0.00371 (g), 0.00502 (r) and
 // 0.00641 (i) over those frames.
 namespace milky_way::display {
-inline constexpr double q=7.297,alpha_per_count=0.01626,gamma=1.0503,saturation=0.3822,pixel_arcsec=0.396;
-inline constexpr double weights[3]={0.8759,0.4854,1.0};                     // r, g, i
+inline constexpr double q=8.295,alpha_per_count=0.01041,gamma=0.8657,saturation=0.7581,pixel_arcsec=0.396;
+inline constexpr double weights[3]={0.8912,0.7134,1.0};                     // r, g, i
 inline constexpr double nanomaggies_per_count[3]={0.00502,0.00371,0.00641}; // r, g, i
-inline constexpr const char* basis="SDSS DR17 ImgCutout g-r-i JPEG transfer, fitted to SDSS MW analogs (Licquia 2015): Lupton et al. 2004 (PASP 116, 133) asinh stretch on SDSS counts per 0.396 arcsec pixel, saturation about the mean, gamma; fitted on four analogs' frames against their JPEGs, two held out: w_g 0.4854, w_r 0.8759, alpha 0.01626 per count, Q 7.297, saturation 0.3822, gamma 1.0503 (rms 0.0275 trained, 0.0229/0.0209 held out); NMGY medians r 0.00502, g 0.00371, i 0.00641";
+inline constexpr const char* basis="SDSS DR17 ImgCutout g-r-i JPEG transfer, fitted to SDSS MW analogs (Licquia 2015): Lupton et al. 2004 (PASP 116, 133) asinh stretch on SDSS counts per 0.396 arcsec pixel, saturation about the mean, gamma; fitted on four analogs' frames against their JPEGs, both smoothed 1.5 px, two held out: w_g 0.7134, w_r 0.8912, alpha 0.01041 per count, Q 8.295, saturation 0.7581, gamma 0.8657 (rms 0.0159 trained, 0.0127/0.0105 held out); NMGY medians r 0.00502, g 0.00371, i 0.00641";
 // SDSS counts per pixel (band-weighted) in one band unit of r, g and i light.
 inline std::array<double,3> counts_per_unit(double unit_mag_arcsec2) {
   const double nanomaggies=std::pow(10.0,-0.4*(unit_mag_arcsec2-22.5))*pixel_arcsec*pixel_arcsec;
