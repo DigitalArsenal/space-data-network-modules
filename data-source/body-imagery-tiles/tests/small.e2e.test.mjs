@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS = path.join(HERE, "../tools/small");
 const WORK = process.env.SMALL_WORK;
+if (!WORK && process.env.SMALL_ALLOW_SKIP !== "1") throw new Error("SMALL_WORK (a directory with src/, derived/, gaz/) is required; SMALL_ALLOW_SKIP=1 skips the local checks");
 const OUT = process.env.SMALL_OUT ?? fs.mkdtempSync(path.join(os.tmpdir(), "small-e2e-"));
 const doc = JSON.parse(fs.readFileSync(path.join(TOOLS, "bodies.json"), "utf8"));
 const want = process.env.SMALL_BODIES?.split(",");
