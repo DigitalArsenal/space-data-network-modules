@@ -13,10 +13,11 @@ const dir=path.resolve(arg('dir')),prefix=arg('prefix'),plan=JSON.parse(fs.readF
 const data=fs.readFileSync(path.join(dir,'ledger.jsonl')),entries=data.toString().trim().split('\n').filter(Boolean).map(JSON.parse);
 const gate=JSON.parse(fs.readFileSync(arg('gate'))),digest=sha(data);
 const staging=prefix.startsWith('staging/imagery-hd/');
-if(!entries.length||gate.ledgerSha256!==digest||gate.sourcePass!==true||!Number.isInteger(gate.sampledTiles)||gate.sampledTiles<200||!(gate.meanAbs<=1.5))
+const boundedError=(value,maximum)=>Number.isFinite(value)&&value>=0&&value<=maximum;
+if(!entries.length||gate.ledgerSha256!==digest||gate.sourcePass!==true||!Number.isInteger(gate.sampledTiles)||gate.sampledTiles<200||!boundedError(gate.meanAbs,1.5))
   throw Error('staging requires 200 independent source comparisons and a matching ledger');
-if(!staging&&(gate.pass!==true||!Number.isInteger(gate.featuresRegistered)||gate.featuresRegistered<10||!(gate.maxFeatureErrorPixels<=1)||
-   !Number.isFinite(gate.boundarySeamMeanAbs)||(s.naif===301&&!(gate.sharpnessRatio>1))))
+if(!staging&&(gate.pass!==true||!Number.isInteger(gate.featuresRegistered)||gate.featuresRegistered<10||!boundedError(gate.maxFeatureErrorPixels,1)||
+   !boundedError(gate.boundarySeamMeanAbs,255)||(s.naif===301&&!(Number.isFinite(gate.sharpnessRatio)&&gate.sharpnessRatio>1))))
   throw Error('served publication requires registration, seam and sharpness evidence');
 const commands=process.env.R2_AWS.split(' ').filter(Boolean);
 const aws=async args=>(await exec(commands[0],[...commands.slice(1),...args],{maxBuffer:64*1024*1024,encoding:'buffer'})).stdout;

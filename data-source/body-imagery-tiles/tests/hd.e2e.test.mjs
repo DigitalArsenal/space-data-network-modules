@@ -48,6 +48,24 @@ else throw Error('unexpected command '+a.join(' '));
   const run=(script,args)=>spawnSync(process.execPath,[path.join(root,'tools/big',script),...args],{env,encoding:'utf8'});
   const prefix='staging/imagery-hd/e2e/301',remote=path.join(bucket,prefix,'9/28_280.dtts');
   const args=['--dir',output,'--prefix',prefix,'--gate',gate];
+  const validGate=JSON.parse(fs.readFileSync(gate));
+  const invalidGates=[
+    {prefix,values:{meanAbs:null}},
+    {prefix,values:{meanAbs:-1}},
+    {prefix:'imagery/301',values:{maxFeatureErrorPixels:null}},
+    {prefix:'imagery/301',values:{maxFeatureErrorPixels:-1}},
+    {prefix:'imagery/301',values:{boundarySeamMeanAbs:null}},
+    {prefix:'imagery/301',values:{sharpnessRatio:'2'}},
+  ];
+  for(const invalid of invalidGates) {
+    fs.writeFileSync(gate,JSON.stringify({...validGate,...invalid.values}));
+    const rejectedGate=run('hd-publish.mjs',['--dir',output,'--prefix',invalid.prefix,'--gate',gate]);
+    assert.notEqual(rejectedGate.status,0,'reject unknown or invalid numeric evidence');
+    assert.match(rejectedGate.stderr,/requires .*comparisons|requires registration/);
+    assert.equal(fs.existsSync(path.join(bucket,'puts.log')),false,'invalid evidence issues no PUT');
+    assert.ok(fs.existsSync(local),'invalid evidence preserves local output');
+  }
+  fs.writeFileSync(gate,JSON.stringify(validGate));
   fs.mkdirSync(path.dirname(remote),{recursive:true});fs.writeFileSync(remote,'foreign object');
   assert.notEqual(run('hd-publish.mjs',args).status,0);assert.equal(fs.readFileSync(remote,'utf8'),'foreign object');assert.ok(fs.existsSync(local));
   fs.unlinkSync(remote);
@@ -58,5 +76,5 @@ else throw Error('unexpected command '+a.join(' '));
   assert.equal(fs.readFileSync(path.join(bucket,'puts.log'),'utf8'),puts,'resume issues no PUT');
   const rejected=run('run.mjs',['--source','mercury-mdis-bdr','--out',output]);
   assert.notEqual(rejected.status,0);assert.match(rejected.stderr,/already contains published/);
-  console.log(JSON.stringify({deterministicInvokes:2,rejectedInvalidWindows:5,conflictingObjectsPreserved:1,roundTripFiles:1,resumePuts:0,fullPyramidRefusals:1,scope:'synthetic storage E2E only'}));
+  console.log(JSON.stringify({deterministicInvokes:2,rejectedInvalidWindows:5,rejectedInvalidEvidence:invalidGates.length,conflictingObjectsPreserved:1,roundTripFiles:1,resumePuts:0,fullPyramidRefusals:1,scope:'synthetic storage E2E only'}));
 });
