@@ -398,6 +398,15 @@ against later element sets, **not truth**. They can share errors and understate
 true uncertainty; no empirical coverage or calibration claim is made (the
 paper's section 6 caveat).
 
+**Who calls it.** The SpaceAware console runs it in a worker of its own for every
+GP/OMM object whose source carries no covariance (`covariance/derivedCovariance.ts`):
+one object per call, `request` at the object's set in force and the clock's age past
+it, `elements` the object's history from the node's `$OMM` lane over flatsql-sync
+(`NORAD_CAT_ID = n AND EPOCH BETWEEN (set in force - 31 days) AND (set in force + 1 s)`),
+`models` the file `e14-s3-kc.erm` on the node's `$PNM` lane
+`gp-error-model/element-set-error-model`. Without that file on the lane the console
+names the reason and draws nothing.
+
 `tests/object_covariance.test.mjs` uses a seeded 73-set synthetic Vallado LEO
 history over 30 UTC days. Its residual oracle is `common_epoch`, already checked
 against python-sgp4/pyerfa in `tests/stm-reference.json`; test arithmetic forms
