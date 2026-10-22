@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// One unmodified WASM, real browser + native WasmEdge + Docker WasmEdge.
+// One unmodified WASM, real headless browser + native WasmEdge.
+// Docker is waived by the owner (2026-10-22); never invoke or start it here.
 // Randomized ciphertext is intentionally unequal; lengths/layout and decrypted
 // fixture SHA-256 must agree exactly. No module-side test entropy hooks.
 import assert from 'node:assert/strict';
@@ -8,7 +9,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import {
-  loadWasmEdgePin, runBrowserLane, runDockerWasmEdgeLane,
+  loadWasmEdgePin, runBrowserLane,
   resolveWasmEdgeBinary, assertWasmEdgeVersionMatchesPin, normalizeWasmEdgeOutcome,
 } from 'space-data-module-sdk/testing';
 import { generateX25519Keypair, decryptBytesFromEnvelope } from 'space-data-module-sdk/transport';
@@ -44,7 +45,11 @@ function child(command, args, input) {
     p.stdin.on('error', () => {}); p.stdin.end(input);
   });
 }
-const receipt = { artifactSha256: sha256(wasmBytes), wasmedgeVersion: pin.wasmedgeVersion, runs: [] };
+const receipt = {
+  artifactSha256: sha256(wasmBytes), wasmedgeVersion: pin.wasmedgeVersion, runs: [],
+  waived: [{ lane: 'docker-wasmedge', authority: 'owner 2026-10-22',
+    reason: 'Never start Docker or Docker Desktop; browser and native WasmEdge only.' }],
+};
 let reference;
 async function verify(lane, bytes) {
   const response = decodePluginInvokeResponse(bytes);
@@ -78,14 +83,10 @@ try {
   // private HTTP server, kills its own PID and removes its own profile in finally.
   const browser = await runBrowserLane(context);
   for (const run of browser) { assert.equal(run.exitClass, 'ok', run.exitDetail); await verify('browser', run.stdout); }
-  // SDK uses --rm containers and --network none; an already provisioned image
-  // is required, never an implicit build/download during verification.
-  const docker = await runDockerWasmEdgeLane(context);
-  for (const run of docker) { assert.equal(run.exitClass, 'ok', run.exitDetail); await verify('docker-wasmedge', run.stdout); }
-  assert.equal(receipt.runs.length, 3);
+  assert.deepEqual(receipt.runs.map(run => run.lane), ['wasmedge', 'browser']);
   receipt.verdict = 'PASS';
   fs.writeFileSync(new URL('./parity-receipt.json', import.meta.url), JSON.stringify(receipt, null, 2) + '\n');
-  console.log('PASS tri-runtime parity');
+  console.log('PASS browser/native WasmEdge parity; Docker WasmEdge WAIVED by owner 2026-10-22');
 } finally {
   release.privateKey.fill(0); stdinBytes.fill(0);
   request.inputs.find(x => x.portId === 'release_key').payload.fill(0);

@@ -102,13 +102,13 @@ bytes in input order. This exercises the existing descriptor requirement without
 changing client-decrypt. Production data-publication descriptors and catalog/R2
 rollout are separate work.
 
-The parity script runs one headless browser at a time plus native and Docker
-WasmEdge pinned by the SDK. It compares lengths, trailer structure, AAD size and
-decrypted SHA-256; independent runtime ciphertexts are intentionally random.
-It requires an already provisioned Docker image and running Docker daemon. SDK
-containers use `--rm`; browser profiles and the browser PID are cleaned up by the
-SDK runner. If you start Docker Desktop for this test, quit it when finished.
-Only a complete three-runtime pass writes `tests/parity-receipt.json`.
+The parity script runs one headless browser plus native WasmEdge pinned by the
+SDK. It compares lengths, trailer structure, AAD size and decrypted SHA-256;
+independent runtime ciphertexts are intentionally random. Browser profiles and
+the browser PID are cleaned up by the SDK runner. The owner waived Docker
+WasmEdge on 2026-10-22: never start Docker or Docker Desktop for this task.
+Both required runtimes must pass before the script writes
+`tests/parity-receipt.json`; the receipt records the Docker waiver separately.
 
 The SDK-compat suite also injects early and late failures at the **host's** ordinary
 WASI entropy import to prove atomic failure. The production module is unchanged
