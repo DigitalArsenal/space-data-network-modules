@@ -52,16 +52,20 @@ inline double hg_flux(double phase,double g1,double g2) {
 
 // Neukum et al. (2001), Eq. (2), Table I (new coefficients). Shape is
 // normalized at 1 km, separating the caller's retention age from the SFD.
+inline const std::array<double,12>& crater_coefficients() {
+  static const auto coefficients=[](){std::array<double,12> a{};for(int j=0;j<12;++j)a[j]=parameter("crater:moon:neukum2001","a"+std::to_string(j));return a;}();
+  return coefficients;
+}
 inline double crater_shape(double diameter_m) {
   const double x=std::log10(diameter_m/1000);
-  double p=parameter("crater:moon:neukum2001","a11");
-  for(int j=10;j>=1;--j)p=p*x+parameter("crater:moon:neukum2001","a"+std::to_string(j));
+  const auto& a=crater_coefficients();double p=a[11];
+  for(int j=10;j>=1;--j)p=p*x+a[j];
   return std::pow(10,p*x);
 }
 inline double crater_differential(double diameter_m) {
   const double x=std::log10(diameter_m/1000);
-  double p=11*parameter("crater:moon:neukum2001","a11");
-  for(int j=10;j>=1;--j)p=p*x+j*parameter("crater:moon:neukum2001","a"+std::to_string(j));
+  const auto& a=crater_coefficients();double p=11*a[11];
+  for(int j=10;j>=1;--j)p=p*x+j*a[j];
   return -crater_shape(diameter_m)*p/diameter_m;
 }
 // Composite Simpson in log diameter: handles many orders of magnitude

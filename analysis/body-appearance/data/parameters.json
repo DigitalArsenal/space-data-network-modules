@@ -844,5 +844,167 @@
     "doi": "10.1016/j.icarus.2010.04.003",
     "locator": "Table 4, caption",
     "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "w",
+    "value": 0.187866672873497,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 1, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "b",
+    "value": 0.254497230052948,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 2, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "c",
+    "value": 0.15799617767333984,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 3, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "Bc0",
+    "value": 0.0,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 4, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "hc",
+    "value": 1.0,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 5, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "B0",
+    "value": 2.1340200901031494,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 6, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "h",
+    "value": 0.0623493492603302,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 7, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "theta_deg",
+    "value": 23.656600952148438,
+    "unit": "degree",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 8, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:23.5E:0.5N",
+    "parameter": "filling_factor",
+    "value": 0.0,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 9, 1-based line 70, sample 24; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "w",
+    "value": 0.32151973247528076,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 1, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "b",
+    "value": 0.21536463499069214,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 2, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "c",
+    "value": 0.5599135160446167,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 3, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "Bc0",
+    "value": 0.0,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 4, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "hc",
+    "value": 1.0,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 5, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "B0",
+    "value": 1.6755197048187256,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 6, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "h",
+    "value": 0.07601635158061981,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 7, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "theta_deg",
+    "value": 23.656600952148438,
+    "unit": "degree",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 8, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "moon:wac566:15.5E:8.5S",
+    "parameter": "filling_factor",
+    "value": 0.0,
+    "unit": "1",
+    "doi": "10.1002/2013JE004580",
+    "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 9, 1-based line 79, sample 16; Fig. 16 methodology",
+    "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
   }
 ]

@@ -1,0 +1,83 @@
+[
+  {
+    "id": "sato2014",
+    "doi": "10.1002/2013JE004580",
+    "url": "https://pds.lroc.im-ldi.com/data/LRO-L-LROC-5-RDR-V1.0/LROLRC_2001/DATA/SDP/WAC_HAPKEPARAMMAP/WAC_HAPKEPARAMMAP_566NM.IMG",
+    "local_download": "sato-566/WAC_HAPKEPARAMMAP_566NM.IMG",
+    "sha256": "2868152f9c63b6887f68fa05bf671f425c335fe440988ebbc1bf7ed76ec71831",
+    "bytes": 1820160,
+    "scope": "PDS v1.1, 9 bands, float32 LE, data offset 5760 bytes; two identified pixels transcribed. Paper HTML checked separately; publisher PDF returned 403."
+  },
+  {
+    "id": "li2015",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "url": "https://arxiv.org/pdf/1502.06302",
+    "local_download": "li2015/paper.pdf",
+    "sha256": "577d734a0c5dc8daf800f73fe193999f6963f7f0a18c62009027fde969b30d29",
+    "bytes": 9528949,
+    "scope": "Table 6 class averages S, C, V."
+  },
+  {
+    "id": "snodgrass1990",
+    "doi": "10.1086/168467",
+    "url": "https://articles.adsabs.harvard.edu/pdf/1990ApJ...351..309S",
+    "local_download": "snodgrass1990/paper.pdf",
+    "sha256": "537a2bbb9b2f3fea7169f915ccbfc9b16150e9f5a20a1e941403b7b624462d92",
+    "bytes": 994513,
+    "scope": "Table 1 profiles and Eq. (4), microradian/s sidereal."
+  },
+  {
+    "id": "rosenburg2011",
+    "doi": "10.1029/2010JE003716",
+    "url": "https://doi.org/10.1029/2010JE003716",
+    "local_download": "rosenburg2011.txt",
+    "sha256": "2e2cfe8375257d009aab340e129c47abfd40a6d075c1479d17571c3de5997ea2",
+    "bytes": 53809,
+    "scope": "Table 1 median slopes are not RMS slopes. Text copied from the shared reference lane PDF."
+  },
+  {
+    "id": "muinonen2010",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "url": "https://hal.science/hal-00676207/document",
+    "local_download": "muinonen-hal/source.pdf",
+    "sha256": "e34b45ac75ec13940bbddd7f0790a79f9d7b000e00217353018dbd0d40c6a2c7",
+    "bytes": 1262935,
+    "scope": "Accepted manuscript Tables 3,4,6, Eq. (18)."
+  },
+  {
+    "id": "rolo2005",
+    "doi": "10.1086/430185",
+    "url": "https://modresvetlo.cz/PDF/The_Spectral_Irradiance_of_the_Moon.pdf",
+    "local_download": "rolo-journal-copy/source.pdf",
+    "sha256": "1666a5414916c2e38fcf34097aad3794cc1aae9d4a7d090bef2a049219316e96",
+    "bytes": 461609,
+    "scope": "Journal copy, Eqs. (10)/(11), Tables 4/5, 553.8 nm. TEST-ONLY oracle."
+  },
+  {
+    "id": "golombek2021",
+    "doi": "10.1029/2021EA001959",
+    "url": "https://elib.dlr.de/148012/1/Golombek_et_al.RSF_InSight.ESS_2021.pdf",
+    "local_download": "golombek2021-dlr/source.pdf",
+    "sha256": "2f8641d28916533009c0eb57002e3f7dab68f1ea552a2e15b3db82d3d3f805a9",
+    "bytes": 5180458,
+    "scope": "Section 1 reproduces the Mars exponential-area law and q(k). Original Golombek-Rapp 1997 PDF remains inaccessible."
+  },
+  {
+    "id": "neukum2001",
+    "doi": "10.1023/A:1011989004263",
+    "url": "https://sseh.uchicago.edu/doc/2001_Book_ChronologyAndEvolutionOfMars.pdf",
+    "local_download": "neukum-chicago-reading/book.pdf",
+    "sha256": "9a7f05286530faa013c61c1d138ae13e8d4feaf6a59e323ef31bb220cc8fc356",
+    "bytes": 61525784,
+    "scope": "Book chapter pp.55-86, Table I p.62 and Eq.(2). Server TLS chain could not be verified; downloaded for reading with curl -k; content identity checked against journal chapter. Published a0=-3.0876 retained, not silently replaced."
+  },
+  {
+    "id": "mallama2018",
+    "doi": "10.1016/j.ascom.2018.08.002",
+    "url": "https://arxiv.org/pdf/1808.01973",
+    "local_download": "mallama2018/paper.pdf",
+    "sha256": "805e53ab8f921c55e1c5e3dd64bbd567f806cdba56148625afcddfc650b6f9a7",
+    "bytes": 2164274,
+    "scope": "TEST-ONLY planetary oracle. Eq.(12) Saturn cubic differs from published Fortran by 1e-9; oracle follows paper."
+  }
+]

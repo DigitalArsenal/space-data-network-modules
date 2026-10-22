@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "reason": "Each invocation is a bounded deterministic transform of its typed input; the module owns no background workers or mutable simulation state."
+    "detail": "Each invocation is a bounded deterministic transform of its typed input; the module owns no background workers or mutable simulation state."
   },
   "schemasUsed": [
     {

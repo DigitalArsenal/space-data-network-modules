@@ -1,0 +1,24 @@
+{
+  "sdk": "0.8.27",
+  "standards": "1.220.0",
+  "sources": [
+    "wire.hpp",
+    "models.hpp",
+    "placement.hpp",
+    "module.cpp"
+  ],
+  "threadModel": "wasi-sequential",
+  "threading": {
+    "sharedMemory": true,
+    "threadSpawnImport": null,
+    "threadStartExport": false,
+    "trailingBytes": 0,
+    "importModules": [
+      "wasi_snapshot_preview1"
+    ]
+  },
+  "compiler": "deps/emsdk/upstream/bin/clang++ --target=wasm32-wasip1-threads",
+  "emsdkRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+  "tableSha256": "98bb43dfd2733500f743527513ef11bce86a6f6d981f601bda0feedf909d354f",
+  "wasmSha256": "6007e0c353ee325f7dfedd00a5add0201f1cd98b8e4c15283fa197026b9dbde3"
+}
