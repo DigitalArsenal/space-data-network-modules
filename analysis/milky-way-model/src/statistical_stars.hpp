@@ -76,12 +76,12 @@ inline double cell_density_bound(const StarRequest& request) {
   const double c=std::cos(angle),s=std::sin(angle);
   const double u=interval_min_abs(-hi.x*c+lo.y*s,-lo.x*c+hi.y*s);
   const double v=interval_min_abs(lo.x*s+lo.y*c,hi.x*s+hi.y*c);
-  const double ellipsoid=std::pow(std::pow(u/bulge_x_kpc,boxiness)+std::pow(v/bulge_y_kpc,boxiness)
-      +std::pow(z/(bulge_z_kpc*(1+peanut_extent_kpc*peanut_strength)),boxiness),1/boxiness);
+  const double ellipsoid=std::pow(std::pow(u/(bulge_x_kpc*appearance::bulge_size),boxiness)+std::pow(v/(bulge_y_kpc*appearance::bulge_size),boxiness)
+      +std::pow(z/(bulge_z_kpc*appearance::bulge_height*(1+peanut_extent_kpc*peanut_strength)),boxiness),1/boxiness);
   // The spiral wave is at most B_K on the thin disc (g<=1, Gaussian<=1); the
   // young pattern is at most 1, on its own radial and vertical profile.
   const double young=young_amplitude()/populations::young_hole(galactic_constants::solar_radius_kpc)
-      *std::exp((galactic_constants::solar_radius_kpc-radius)/populations::thin_length_kpc-z/populations::h_bright_kpc);
+      *std::exp((galactic_constants::solar_radius_kpc-radius)/appearance::young_length_kpc-z/populations::h_bright_kpc);
   // The nuclear disc at most at its 5 pc floor, at the cell's lowest |z|.
   const double nucleus=central_scales().nucleus*std::pow(nucleus_floor_kpc/nucleus_break_kpc,-0.1)
       *std::exp(-z/nucleus_height_kpc);

@@ -150,9 +150,9 @@ inline std::array<double,2> bulge_bar_shapes(Vec3 p) {
   constexpr double angle=bar_angle_rad;
   const double u=-p.x*std::cos(angle)+p.y*std::sin(angle);
   const double v=p.x*std::sin(angle)+p.y*std::cos(angle);
-  const double effective_z=bulge_z_kpc*(1+peanut_strength*std::min(std::abs(u),peanut_extent_kpc));
-  const double ellipsoid=std::pow(std::pow(std::abs(u)/bulge_x_kpc,boxiness)
-      +std::pow(std::abs(v)/bulge_y_kpc,boxiness)+std::pow(height/effective_z,boxiness),1/boxiness);
+  const double effective_z=bulge_z_kpc*appearance::bulge_height*(1+peanut_strength*std::min(std::abs(u),peanut_extent_kpc));
+  const double ellipsoid=std::pow(std::pow(std::abs(u)/(bulge_x_kpc*appearance::bulge_size),boxiness)
+      +std::pow(std::abs(v)/(bulge_y_kpc*appearance::bulge_size),boxiness)+std::pow(height/effective_z,boxiness),1/boxiness);
   return {bulge_emissivity*std::exp(-ellipsoid),
           bar_emissivity*std::exp(-std::abs(v)/bar_minor_kpc-height/bar_height_kpc)
             *(1-smoothstep(bar_taper_start_kpc,bar_half_length_kpc,std::abs(u)))};
@@ -180,7 +180,7 @@ inline const CentralScales& central_scales() {
         disc+=(c.thin+c.thick+c.arms)*h*h*dz;central+=(shapes[0]+shapes[1])*h*h*dz;
       }
     }
-    const double bar_bulge=populations::bar_bulge_mass/populations::inner_disc_mass*disc/central;
+    const double bar_bulge=appearance::central_light*populations::bar_bulge_mass/populations::inner_disc_mass*disc/central;
     const double central_light=bar_bulge*central;
     return CentralScales{bar_bulge,model_choices::nucleus_mass/populations::bar_bulge_mass
       *central_light/model_choices::nucleus_shape_integral};
@@ -206,7 +206,7 @@ inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double ba
   // Spiral light: the thin disc's density wave plus the young population.
   static const double young_hole_sun=populations::young_hole(galactic_constants::solar_radius_kpc);
   const double young=(1-young_clumped)*young_amplitude()*pattern.young*populations::young_hole(radius)/young_hole_sun
-    *std::exp((galactic_constants::solar_radius_kpc-radius)/populations::thin_length_kpc
+    *std::exp((galactic_constants::solar_radius_kpc-radius)/appearance::young_length_kpc
               -height/populations::h_bright_kpc);
   const double arms=thin*pattern.wave+young;
   // Wegg & Gerhard (2013), MNRAS 435,1874, doi:10.1093/mnras/stt1376:
@@ -264,7 +264,7 @@ template<class Brightness> Population build(const Spec& spec,Brightness brightne
     const double r=spec.min_kpc+(spec.max_kpc-spec.min_kpc)*std::sqrt(next_uniform(seed));
     const double phi=2*galactic_constants::pi*next_uniform(seed);
     const Vec3 c{r*std::cos(phi),r*std::sin(phi),0};
-    const double profile=std::exp(-(r-spec.min_kpc)/populations::thin_length_kpc)*populations::young_hole(r)
+    const double profile=std::exp(-(r-spec.min_kpc)/appearance::young_length_kpc)*populations::young_hole(r)
       /populations::young_hole(galactic_constants::solar_radius_kpc);
     const Vec3 arm=spec.drift_myr>0?undrifted(c,spec.drift_myr):c;
     const double accept=std::min(1.0,planar_arm_density(arm)/peak_density)*std::min(1.0,profile)
@@ -314,7 +314,7 @@ inline const knots::Population& population() {
   static const knots::Population pop=knots::build({700,20261019,3.0,14.5,0.06,0.05,0.12,0},
     [](double r,double g,uint64_t&) {
       return peak*std::exp(spread_ln*g-0.5*spread_ln*spread_ln)
-        *std::exp((galactic_constants::solar_radius_kpc-r)/populations::thin_length_kpc);
+        *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc);
     });
   return pop;
 }
@@ -352,7 +352,7 @@ inline const knots::Population& complexes::population() {
     for(double y=-knots::half_kpc+cell/2;y<knots::half_kpc;y+=cell) for(double x=-knots::half_kpc+cell/2;x<knots::half_kpc;x+=cell) {
       const double r=std::hypot(x,y);
       young_total+=young_amplitude()*young_pattern({x,y,0})*populations::young_hole(r)/hole_sun
-        *std::exp((galactic_constants::solar_radius_kpc-r)/populations::thin_length_kpc)*model_choices::disc_edge(r)
+        *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc)*model_choices::disc_edge(r)
         *2*populations::h_bright_kpc*cell*cell;
     }
     // dN/dL ~ L^-2 on [1, luminosity_range]: L = 1 / (1 - u (1 - 1/range)).

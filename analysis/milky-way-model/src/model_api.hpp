@@ -29,7 +29,19 @@ extern "C" int bake() {
   using namespace milky_way;
   wire::Request request;
   if (!request.ok) return wire::fail("Expected one $PCE request");
-  if (!request.values.empty()) return wire::fail("bake takes no values; deliver a 3D dust map with load_dust_map first");
+  // The only values a bake takes: overrides of the appearance table (the
+  // SDSS analog fit's trials), each within its fit bounds.
+  struct Override {const char* name;double* value;double lo,hi;};
+  const Override overrides[]={{"appearance_young_length_kpc",&appearance::young_length_kpc,1.0,12.0},
+    {"appearance_central_light",&appearance::central_light,0.2,3.0},{"appearance_bulge_size",&appearance::bulge_size,0.2,3.0},
+    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0}};
+  for (const auto& [name,value]:request.values) {
+    const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
+    const double v=request.number(name.c_str(),NAN);
+    if (o==std::end(overrides) || !std::isfinite(v) || v<o->lo || v>o->hi)
+      return wire::fail("bake takes only appearance_* overrides within their fit bounds; deliver a 3D dust map with load_dust_map first");
+    *o->value=v;
+  }
   const auto& loaded=dust_map::grid();
   if (loaded.nz && !loaded.ready) return wire::fail("A 3D dust map is partly loaded; deliver every plane or none");
   volumes=std::make_unique<NestedVolumes>(sun);
@@ -49,6 +61,8 @@ extern "C" int bake() {
   r.text("dust_map",loaded.ready?(loaded.dataset+": "+loaded.source+"; "+loaded.license).c_str():"none");
   r.number("dust_map_radius",loaded.ready?loaded.radius:0,"kpc");
   r.vector("sun",{sun.x,sun.y,sun.z},"kpc");
+  r.vector("appearance",{appearance::young_length_kpc,appearance::central_light,appearance::bulge_size,appearance::bulge_height},
+    "young length kpc, central light, bulge size, bulge height (fitted to SDSS MW analogs, Licquia 2015)");
   // Renderer fields. Each light channel's optical depth per kpc is this
   // multiple of the G optical depth channel (Wang & Chen 2019 Table 3).
   r.vector("extinction_ratios",{model_choices::channel_extinction[0],model_choices::channel_extinction[1],
@@ -68,7 +82,7 @@ extern "C" int bake() {
   // transfer, Lupton et al. (2004) asinh stretch of the r, g, i light in
   // band-weighted SDSS counts, then a gamma.
   const auto counts=display::counts_per_unit(mu_g);
-  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma},"Q,alpha per count,gamma");
+  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma,display::saturation},"Q,alpha per count,gamma,saturation");
   r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
   r.vector("display_band_weights",{display::weights[0],display::weights[1],display::weights[2]},"r,g,i");
   r.vector("display_nanomaggies_per_count",{display::nanomaggies_per_count[0],display::nanomaggies_per_count[1],

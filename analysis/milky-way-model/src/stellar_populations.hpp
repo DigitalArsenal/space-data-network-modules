@@ -113,6 +113,18 @@ inline double unit_surface_brightness_g() {return unit_surface_brightness_v()+g_
 
 } // namespace milky_way::populations
 
+// APPEARANCE: the free parameters of the model's look, the ones no cited
+// measurement of the Galaxy fixes. FITTED TO SDSS MW ANALOGS (Licquia 2015):
+// see the table's provenance below. A bake may override them (the fit's own
+// trials, model_api.hpp bake); the values here are the fit's.
+namespace milky_way::appearance {
+// FITTED TO SDSS MW ANALOGS (Licquia 2015) -- pending (0.3.0 values).
+inline double young_length_kpc=2.6;  // the young (M_V < -1) light's radial scale length
+inline double central_light=1.0;     // the bar, bulge and nuclear disc's light, x Portail 2017's
+inline double bulge_size=1.0;        // the b/p bulge's in-plane extent, x (1.0, 0.5) kpc
+inline double bulge_height=1.0;      // its scale height, x Bland-Hawthorn & Gerhard 2016's 180 pc
+} // namespace milky_way::appearance
+
 // SDSS g, r, i (0.4.0). The light is drawn in the SDSS bands, as SDSS gri
 // composites of galaxies are made (Lupton et al. 2004, PASP 116, 133), each
 // population's per unit G light from its Gaia color through the Gaia EDR3 -
@@ -190,30 +202,34 @@ inline const sdss::Bands hii_bands=[] {
 }();
 } // namespace milky_way::colors
 
-// THE DISPLAY (a DISPLAY CHOICE, not a measurement: it changes no band's
-// light). The r, g and i light is drawn as the SDSS ImgCutout service draws
-// its g-r-i JPEGs: the stretch of Lupton, Blanton, Fekete et al. (2004), PASP
-// 116, 133, section 2, on the bands in SDSS counts per 0.396 arcsec pixel:
-// with I = (i + w_r r + w_g g) / 3, each band x is drawn as x F(I) / I,
-// F(I) = asinh(alpha Q I) / Q, i red, r green, g blue, a pixel whose largest
-// primary passes 1 scaled back to 1 (its color kept), then raised to gamma.
+// THE DISPLAY (not a measurement: it changes no band's light). The r, g and
+// i light is drawn as the SDSS ImgCutout service draws its g-r-i JPEGs: the
+// stretch of Lupton, Blanton, Fekete et al. (2004), PASP 116, 133, section
+// 2, on the bands in SDSS counts per 0.396 arcsec pixel: with
+// I = (i + w_r r + w_g g) / 3, each band x is drawn as x F(I) / I,
+// F(I) = asinh(alpha Q I) / Q, i red, r green, g blue; a pixel whose largest
+// primary passes 1 scaled back to 1 (its color kept); its saturation s about
+// the mean of its primaries, each kept in [0, 1]; then raised to gamma.
 // Lupton et al.'s own SDSS composite (Fig. 1) takes Q = 8, alpha = 0.02,
-// w = 1, gamma = 1; the ImgCutout service adds a transfer function and a
-// gamma (SDSS DR17 "JPEG Images on SkyServer", FITS2JPEG). Its parameters
-// here are MEASURED: the DR17 g, r, i frames of the six Milky Way analogs
-// this model is compared with (Licquia et al. 2015 selection; runs 1045,
-// 3631, 3650, 3813, 5194, 8062), resampled north up, drawn through this
-// stretch and fitted (least squares, all pixels within 2.5 Petrosian R90)
-// to the service's JPEGs of the same fields: w_g = 0.853, w_r = 0.947,
-// alpha = 0.00714, Q = 6.66, gamma = 0.856, rms 0.031 of full scale (0.054
-// with Lupton et al.'s own parameters). One count is NMGY nanomaggies, the
-// frames' calibration factor, medians 0.00371 (g), 0.00502 (r) and 0.00641
-// (i) over those frames.
+// w = 1, s = 1, gamma = 1; the ImgCutout service adds a transfer function
+// and a gamma (SDSS DR17 "JPEG Images on SkyServer", FITS2JPEG).
+// FITTED TO SDSS MW ANALOGS (Licquia 2015): the DR17 g, r, i frames of the
+// six analogs (runs 1045, 3631, 3650, 3813, 5194, 8062), resampled north up,
+// drawn through this stretch and fitted (least squares on the RGB of all
+// pixels within 2.5 Petrosian R90, Nelder-Mead) to the service's JPEGs of the
+// same fields, four analogs trained (objIDs ...975369, ...011075, ...225872,
+// ...174698), two held out (...166321 face-on, ...455304 edge-on):
+// w_g = 0.4854, w_r = 0.8759, alpha = 0.01626, Q = 7.297, s = 0.3822,
+// gamma = 1.0503; rms of full scale 0.0275 trained, 0.0229 and 0.0209 held
+// out (0.054 with Lupton et al.'s own parameters). The service's colors are
+// far less saturated than the bands' ratios. One count is NMGY nanomaggies,
+// the frames' calibration factor, medians 0.00371 (g), 0.00502 (r) and
+// 0.00641 (i) over those frames.
 namespace milky_way::display {
-inline constexpr double q=6.66,alpha_per_count=0.00714,gamma=0.856,pixel_arcsec=0.396;
-inline constexpr double weights[3]={0.947,0.853,1.0};                      // r, g, i
+inline constexpr double q=7.297,alpha_per_count=0.01626,gamma=1.0503,saturation=0.3822,pixel_arcsec=0.396;
+inline constexpr double weights[3]={0.8759,0.4854,1.0};                     // r, g, i
 inline constexpr double nanomaggies_per_count[3]={0.00502,0.00371,0.00641}; // r, g, i
-inline constexpr const char* basis="SDSS DR17 ImgCutout g-r-i JPEG transfer: Lupton et al. 2004 (PASP 116, 133) asinh stretch on SDSS counts per 0.396 arcsec pixel, fitted to the JPEGs of the six Licquia 2015 analogs from their frames: w_g 0.853, w_r 0.947, alpha 0.00714 per count, Q 6.66, gamma 0.856 (rms 0.031); NMGY medians r 0.00502, g 0.00371, i 0.00641";
+inline constexpr const char* basis="SDSS DR17 ImgCutout g-r-i JPEG transfer, fitted to SDSS MW analogs (Licquia 2015): Lupton et al. 2004 (PASP 116, 133) asinh stretch on SDSS counts per 0.396 arcsec pixel, saturation about the mean, gamma; fitted on four analogs' frames against their JPEGs, two held out: w_g 0.4854, w_r 0.8759, alpha 0.01626 per count, Q 7.297, saturation 0.3822, gamma 1.0503 (rms 0.0275 trained, 0.0229/0.0209 held out); NMGY medians r 0.00502, g 0.00371, i 0.00641";
 // SDSS counts per pixel (band-weighted) in one band unit of r, g and i light.
 inline std::array<double,3> counts_per_unit(double unit_mag_arcsec2) {
   const double nanomaggies=std::pow(10.0,-0.4*(unit_mag_arcsec2-22.5))*pixel_arcsec*pixel_arcsec;
