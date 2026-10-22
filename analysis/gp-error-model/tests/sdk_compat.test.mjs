@@ -23,9 +23,13 @@ test('manifest validates against fixed SDS 1.249.0 and declares typed object_cov
     return [p.portId, allowed[0].fileIdentifier];
   }));
   assert.deepEqual(types(method.inputPorts), { elements: '$OMM', models: '$ERM', request: '$ERM' });
+  assert.deepEqual(Object.fromEntries(method.inputPorts.map((p) => [p.portId, { required: p.required, minStreams: p.minStreams }])), {
+    elements: { required: true, minStreams: 1 }, models: { required: false, minStreams: 0 }, request: { required: true, minStreams: 1 },
+  });
   assert.deepEqual(types(method.outputPorts), { covariance: '$ERM', report: '$ERM' });
   assert.deepEqual(method.invokeSurfaces, ['direct']);
-  assert.equal(manifest.version, '0.8.0');
+  assert.equal(manifest.version, '0.8.1');
+  assert.equal(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).version, manifest.version);
   assert.deepEqual(JSON.parse(fs.readFileSync(new URL('../dist/plugin-manifest.json', import.meta.url))), manifest);
 });
 
