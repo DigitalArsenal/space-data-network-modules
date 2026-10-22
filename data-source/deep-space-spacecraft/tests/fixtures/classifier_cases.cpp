@@ -9,6 +9,11 @@
 // Moon point: Meeus example 47.a, 1992-04-12 00:00 dynamical time:
 // lambda=133.162655 deg, beta=-3.229126 deg, distance=368409.7 km.
 // TT/TDB differences are immaterial at the 60,000 km classification radius.
+// Lunar dwell cases: independent four-term Meeus ch. 47 longitude/latitude
+// and three-term distance approximation near J2000, in Sun-centered ICRF km.
+// Omitted lunar terms total < 1 degree / 2,000 km over these 100 TDB days;
+// combined with the solar approximation, error stays well inside 60,000 km.
+// Exact 5/29/30/40-day dwell expectations use elapsed TDB days, zero tolerance.
 // Body windows use constant Cartesian states (v=0), a closed-form geometry
 // case. Boundaries have zero tolerance; no integration or orbit model is used.
 #include <iomanip>
@@ -37,12 +42,29 @@ Vec lunarL1() {
   const double t = epoch/(36525*86400.0);
   return rotate(368409.7*.8369, (133.162655-(5029.0966*t+1.11113*t*t)/3600)*rad, -3.229126*rad);
 }
+Vec lunarLagrange(int64_t seconds, double factor) {
+  const double days = double(seconds)/86400, t = days/36525;
+  const double longitude = 218.3164477 + 13.17639648*days;
+  const double anomaly = (134.9633964 + 13.06499295*days)*rad;
+  const double elongation = (297.8501921 + 12.19074912*days)*rad;
+  const double argument = (93.2720950 + 13.22935024*days)*rad;
+  const double lon = longitude + 6.288774*std::sin(anomaly) + 1.274027*std::sin(2*elongation-anomaly) +
+      .658314*std::sin(2*elongation) + .213618*std::sin(2*anomaly) - (5029.0966*t+1.11113*t*t)/3600;
+  const double lat = 5.128122*std::sin(argument) + .280602*std::sin(anomaly+argument) +
+      .277693*std::sin(anomaly-argument) + .173237*std::sin(2*elongation-argument);
+  const double radius = 385000.56 - 20905.355*std::cos(anomaly) -
+      3699.111*std::cos(2*elongation-anomaly) - 2955.968*std::cos(2*elongation);
+  return rotate(radius*factor,lon*rad,lat*rad);
+}
 Vec sunPosition(int64_t time, const std::string& regime) {
   Vec p = earth(time);
   if (regime == "sun-earth-l1" || regime == "sun-earth-l2") {
     const double r = std::sqrt(p[0]*p[0]+p[1]*p[1]+p[2]*p[2]);
     const double offset = regime == "sun-earth-l1" ? -1500000 : 1500000;
     for (double& v : p) v *= 1+offset/r;
+  } else if (regime == "earth-moon-l1" || regime == "earth-moon-l2") {
+    const auto point = lunarLagrange(time,regime == "earth-moon-l1" ? .8369 : 1.1557);
+    for (size_t i=0;i<3;++i) p[i]+=point[i];
   } else if (regime == "cislunar") p[2] += 200000;
   else if (regime == "heliocentric") p[2] += 5000000;
   return p;
@@ -127,6 +149,27 @@ Json cases() {
         survives ? std::vector<std::string>{cone,"heliocentric"} : std::vector<std::string>{"heliocentric"},
         survives ? Json::array({{"heliocentric",0,25},{cone,25,25+days},{"heliocentric",25+days,55+days}})
                  : Json::array({{"heliocentric",0,55+days}}));
+  }
+  // Wind-like lunar swingbys must fold into the neighboring Sun-centered run.
+  // Exercise both EM neighborhoods and first/interior/final placement; the
+  // first-run 20-day launch rule must not override the 30-day station dwell.
+  for (const char* point : {"earth-moon-l1","earth-moon-l2"}) for (int days : {5,29,30,40}) {
+    const bool survives = days >= 30;
+    sun((std::to_string(days)+"-day interior dwell at "+point).c_str(),
+        sequence({{25,"heliocentric"},{days,point},{31,"heliocentric"}}),
+        survives ? std::vector<std::string>{"earth-moon-lagrange","heliocentric"} : std::vector<std::string>{"heliocentric"},
+        survives ? Json::array({{"heliocentric",0,25},{"earth-moon-lagrange",25,25+days},{"heliocentric",25+days,55+days}})
+                 : Json::array({{"heliocentric",0,55+days}}));
+    sun((std::to_string(days)+"-day first dwell at "+point).c_str(),
+        sequence({{days,point},{31,"heliocentric"}}),
+        survives ? std::vector<std::string>{"earth-moon-lagrange","heliocentric"} : std::vector<std::string>{"heliocentric"},
+        survives ? Json::array({{"earth-moon-lagrange",0,days},{"heliocentric",days,days+30}})
+                 : Json::array({{"heliocentric",0,days+30}}));
+    sun((std::to_string(days)+"-day final dwell at "+point).c_str(),
+        sequence({{25,"heliocentric"},{days+1,point}}),
+        survives ? std::vector<std::string>{"earth-moon-lagrange","heliocentric"} : std::vector<std::string>{"heliocentric"},
+        survives ? Json::array({{"heliocentric",0,25},{"earth-moon-lagrange",25,25+days}})
+                 : Json::array({{"heliocentric",0,25+days}}));
   }
   // An independently published lunar point also exercises the Sun-centered EM rule.
   std::vector<Vec> sunLunar;

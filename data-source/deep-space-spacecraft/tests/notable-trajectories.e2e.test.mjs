@@ -194,6 +194,12 @@ function checkGroups(result, expectedProducer = producer) {
     assert.deepEqual(JSON.parse(group.QUERY.TEXT), { schema: "OEM.fbs", provider_id: "deep-space-spacecraft", source_name: lane });
     assert.equal(group.QUERY.RESULT_COUNT, catalogLanes.filter((c) => c.catalog === lane).length);
     assert.ok(group.NAME && group.DESCRIPTION.includes(`${group.QUERY.RESULT_COUNT} objects`));
+    if (["sun-earth-l1", "sun-earth-l2"].includes(lane)) {
+      assert.ok(group.DESCRIPTION.includes("within 45 degrees of the Sun-Earth line"));
+      assert.ok(group.DESCRIPTION.includes("for at least 30 days"));
+    }
+    if (lane === "earth-moon-lagrange")
+      assert.ok(group.DESCRIPTION.includes("Sun-centered runs require at least 30 days of station-keeping"));
     assert.equal(group.PROVENANCE[0].SOURCE, "NASA/JPL Horizons");
     assert.equal(group.PROVENANCE[0].SOURCE_URL, "https://ssd.jpl.nasa.gov/api/horizons.api");
     assert.equal(group.PROVENANCE[0].LICENSE, licence);
@@ -601,6 +607,7 @@ const syntheticTargetNames = new Map([
   [-21, ["SOHO"]], [-92, ["ACE (spacecraft)", "Advanced Composition Explorer"]],
   [-78, ["Deep Space Climate Observatory", "DSCOVR"]], [-8, ["Wind"]], [-139479, ["Gaia"]],
   [-680, ["Euclid"]], [-121, ["BepiColombo", "Mercury Planetary Orbiter"]],
+  [-144, ["Solar Orbiter"]], [-18, ["LCROSS"]], [-155, ["Danuri", "KPLO"]],
   [-85, ["Lunar Reconnaissance Orbiter", "LRO"]], [-1176, ["CAPSTONE"]],
   [-192, ["ARTEMIS P1", "THEMIS-B", "THEMIS B"]], [-193, ["ARTEMIS P2", "THEMIS-C", "THEMIS C"]],
   [-12, ["LADEE", "Lunar Atmosphere and Dust Environment Explorer"]],
@@ -838,14 +845,15 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
   t.after(() => h.destroy());
   const fixture = await fixtureHarness(t);
   const vectors = vectorAnswer(fixture);
-  await t.test("39-object table, window bounds, skipping and named failures", async () => {
+  await t.test("42-object table, window bounds, skipping and named failures", async () => {
     const defaults = await plan({ now_tdb: "2026-10-21T12:34:56" });
     ok(defaults, "full table");
     const objects = J(outs(defaults, "state")[0]).craft.map((c) => ({ naif_id: c.id }));
-    assert.equal(objects.length, 39);
-    assert.equal(new Set(objects.map((o) => o.naif_id)).size, 39);
+    assert.equal(objects.length, 42);
+    assert.equal(new Set(objects.map((o) => o.naif_id)).size, 42);
+    assert.deepEqual(new Set(objects.map((o) => o.naif_id)), new Set(syntheticTargetNames.keys()));
     assert.equal(outs(defaults, "request").length, 60);
-    assert.equal(J(outs(defaults, "state")[0]).queue.length, 78);
+    assert.equal(J(outs(defaults, "state")[0]).queue.length, 84);
     assert.equal(J(outs(defaults, "state")[0]).config.now_tdb, "2026-10-21T00:00:00", "tick floors to UTC day");
     assert.equal(J(outs(defaults, "state")[0]).config.retrieved_ms, Date.parse("2026-10-21T12:34:56Z"));
     ok(await plan({ objects: [-21, -92] }), "archive-only uses the same tick clock");
@@ -904,6 +912,48 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
     skippedCraft(wrongCenter, -85, /^invalid-vector-header$/);
     assert.ok(missing(wrongCenter).some((r) => r.naif_id === -85 && r.skipped === "invalid-vector-header"));
     assert.ok(lanes(wrongCenter).every((c) => c.naif_id !== -85));
+  });
+  await t.test("archive additions preserve identities and Gaia/LCROSS mission end dates", async () => {
+    // User-verified mission identities and end dates; exact metadata, no numerical tolerance.
+    // The synthetic coverage extends beyond the fixed 2026 tick so active craft
+    // cannot accidentally pass through the coverage-ended fallback.
+    const expected = new Map([
+      [-144, { name: "Solar Orbiter", cospar: "2020-010A", norad: 45167, alias: "Solo", life: "active" }],
+      [-18, { name: "LCROSS Shepherd", cospar: "2009-031B", norad: 35490, alias: "LCROSS",
+        life: "ended", end: "2009-10-09T00:00:00" }],
+      [-155, { name: "Danuri", cospar: "2022-093A", norad: 52790, alias: "KPLO", life: "active" }],
+      [-139479, { name: "Gaia", cospar: "2013-074A", norad: 39479, alias: "Gaia spacecraft",
+        life: "ended", end: "2025-03-27T00:00:00" }],
+    ]);
+    const objects = [...expected.keys()];
+    const planned = await plan({ objects, limits: Object.fromEntries(objects.map((id) =>
+      [id, { start: "2000-01-01T00:00:00", stop: "2000-02-10T00:00:00" }])) });
+    ok(planned, "new archive probes");
+    const pages = await advanceWith(h, planned, async (request) => {
+      const lower = params(request.url).START_TIME.startsWith("1900");
+      return coverage(lower, lower ? "2000-JAN-01 00:00:00" : "2040-JAN-01 00:00:00");
+    });
+    ok(pages, "new archive pages");
+    for (const craft of J(outs(pages, "state")[0]).craft) {
+      assert.equal(craft.archive_groups, craft.groups.length, "archive kind has no body windows");
+      assert.equal(craft.groups.length, 2, "daily archive and departure only, no encounter events");
+      assert.ok(craft.groups.every((g) => g.center === 10));
+    }
+    const built = await advanceWith(h, pages, vectors, "build_oem");
+    ok(built, "new archive OEMs");
+    assert.deepEqual(missing(built), []);
+    assert.deepEqual(new Set(lanes(built).map((c) => c.naif_id)), new Set(objects));
+    for (const record of decodedRecords(built)) for (const block of record.blocks) {
+      const e = expected.get(block.OBJECT_NAIF_ID);
+      assert.equal(block.OBJECT.OBJECT_NAME, e.name);
+      assert.equal(block.OBJECT.OBJECT_ID, e.cospar);
+      assert.equal(block.OBJECT.NORAD_CAT_ID, e.norad);
+      assert.ok(block.COMMENT.includes(`LIFECYCLE: ${e.life} ${e.end ?? ""}`));
+      assert.ok(block.COMMENT.includes(`ALIASES: ${e.alias}`));
+      assert.ok(block.COMMENT.includes(licence));
+      assert.ok(block.COMMENT.includes(credit));
+    }
+    checkGroups(built);
   });
   await t.test("catalog geometry, smoothing, shared edges and exact row preservation", async () => {
     const cases = await fixture();
@@ -1178,7 +1228,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
         (full ? [...table] : table.slice(0, 20)).sort((a, b) => a - b));
       checkGroups(built);
       namedFailure(await h.invoke({ methodId: "advance", inputs: [input("state", completedState)] }), /invalid-stage/);
-      t.diagnostic(`${full ? 39 : 20} synthetic craft: ${vectorRequests} vector requests, largest state ${maximum} bytes`);
+      t.diagnostic(`${full ? table.length : 20} synthetic craft: ${vectorRequests} vector requests, largest state ${maximum} bytes`);
     }
     // All probes can fail without aborting advances, but an empty build is fatal.
     let skipped = await plan({ objects: [-85], now_tdb: "2026-10-21T00:00:00" });
@@ -1230,6 +1280,7 @@ test("typed flow has twelve ingests, seven HTTP stages and only state edges opaq
   assert.deepEqual(flow.requiredPlugins, [source, http, storage]); assert.deepEqual(deps, { [source]: root });
   assert.equal(flow.nodes.filter((n) => n.plugin === storage).length, 12);
   assert.equal(flow.nodes.filter((n) => n.plugin === http).length, 7);
+  assert.equal(flow.triggers[0].defaultIntervalMs, 604800000, "Horizons predictions refresh every seven days");
   assert.equal(flow.triggerBindings[0].targetNodeId, "plan"); assert.equal(flow.triggerBindings[0].targetPortId, "tick");
   for (const e of flow.edges) assert.equal(e.opaque, e.fromPort === "state" ? true : undefined);
   for (const id of [...catalogIds, "catalogs"]) {

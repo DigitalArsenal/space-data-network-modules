@@ -6,8 +6,9 @@
 // remove general longitude precession to J2000, then use obliquity 23.43928 deg.
 // Rules: Earth exclusion 60,000 km; EM L1/L2 0.8369/1.1557 lunar distances,
 // neighborhoods 60,000 km; cislunar 500,000 km; solar L1/L2 2,500,000 km,
-// half-angle 30 deg. Sun runs shorter than 3 days merge with a neighbor; Sun-Earth L1/L2 runs need 30 days
-// and the launch leg 10 days.
+// half-angle 45 deg. Sun runs shorter than 3 days merge with a neighbor;
+// Earth-Moon and Sun-Earth L1/L2 runs need 30 days of station-keeping,
+// and the launch leg 20 days. Non-Sun window rules are unchanged by this dwell.
 // Window rules: Moon maxima 30,000/120,000 km; planets median < 100 mean radii
 // (Mercury 2439.7, Venus 6051.8, Mars 3389.5, Jupiter 69911, Saturn 58232 km).
 // These analytic approximations are never used to change an ephemeris row.
@@ -28,9 +29,9 @@ constexpr const char* kNames[] = {"Lunar orbit", "Cislunar space", "Earth-Moon L
     "Sun-Earth L2", "Mercury orbit", "Venus orbit", "Mars orbit", "Jupiter orbit", "Saturn orbit", "Heliocentric spacecraft"};
 constexpr const char* kRules[] = {"Moon-centered window maximum radius <= 30,000 km",
     "Earth distance <= 500,000 km or remaining Earth/Moon windows outside Earth orbit",
-    "Within 60,000 km of Earth-Moon L1/L2, or Moon window maximum radius <= 120,000 km",
-    "Earth distance 500,000–2,500,000 km, sunward within 30 degrees of the Sun-Earth line, for at least 30 days",
-    "Earth distance 500,000–2,500,000 km, outward within 30 degrees of the Sun-Earth line, for at least 30 days",
+    "Within 60,000 km of Earth-Moon L1/L2 (Sun-centered runs require at least 30 days of station-keeping), or Moon window maximum radius <= 120,000 km",
+    "Earth distance 500,000–2,500,000 km, sunward within 45 degrees of the Sun-Earth line, for at least 30 days",
+    "Earth distance 500,000–2,500,000 km, outward within 45 degrees of the Sun-Earth line, for at least 30 days",
     "Mercury window median distance < 100 Mercury radii", "Venus window median distance < 100 Venus radii",
     "Mars window median distance < 100 Mars radii", "Jupiter window median distance < 100 Jupiter radii",
     "Saturn window median distance < 100 Saturn radii", "Remaining Sun-centered segments and distant planet windows"};
@@ -42,9 +43,9 @@ constexpr double kEmL1 = 0.8369, kEmL2 = 1.1557, kLunarOrbitRadius = 30000, kLun
 constexpr double kPlanetRadii = 100, kMercuryRadius = 2439.7, kVenusRadius = 6051.8,
     kMarsRadius = 3389.5, kJupiterRadius = 69911, kSaturnRadius = 58232;
 // A Sun-centered run shorter than its minimum merges into its previous neighbor (the next one when first).
-// Sun-Earth L1/L2 membership means station-keeping there: a flyby crossing the sunward or anti-sunward
-// cone (Lucy, OSIRIS-APEX, BepiColombo at their Earth assists) lasts days, a halo orbit months, so those
-// runs need 30 days. The launch leg (the first run, 10 days) folds into the regime the craft is sent to.
+// Earth-Moon and Sun-Earth L1/L2 membership means station-keeping there: lunar swingbys
+// (Wind) and Earth assists crossing the solar cones last days, a halo orbit months,
+// so those runs need 30 days. The launch leg (the first run, 20 days) folds into the destination regime.
 constexpr int64_t kSmoothDuration = 3 * horizons::kDay, kSolarDwell = 30 * horizons::kDay, kLaunchLeg = 20 * horizons::kDay;
 using Vec = std::array<double, 3>;
 inline Vec minus(const Vec& a, const Vec& b) { return {a[0]-b[0], a[1]-b[1], a[2]-b[2]}; }
@@ -172,7 +173,8 @@ inline std::vector<Segment> classifySun(const std::vector<trajectory::Block>& bl
     const auto& r = runs[i];
     const int64_t end = rows[std::min(r.last+1, rows.size()-1)].time;
     int64_t need = kSmoothDuration;
-    if (r.catalog == Catalog::SunEarthL1 || r.catalog == Catalog::SunEarthL2) need = kSolarDwell;
+    if (r.catalog == Catalog::EarthMoonLagrange || r.catalog == Catalog::SunEarthL1 ||
+        r.catalog == Catalog::SunEarthL2) need = kSolarDwell;
     else if (i == 0) need = kLaunchLeg;
     if (end - rows[r.first].time >= need) { ++i; continue; }
     if (i == 0) { runs[1].first = r.first; runs.erase(runs.begin()); }

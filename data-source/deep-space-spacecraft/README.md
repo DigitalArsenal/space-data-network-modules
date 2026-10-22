@@ -1,6 +1,6 @@
 # Deep-space spacecraft 0.2.0
 
-39 spacecraft from NASA/JPL Horizons VECTORS, published by trajectory segment.
+42 spacecraft from NASA/JPL Horizons VECTORS, published by trajectory segment.
 Each `(NAIF id, catalog)` gets one size-prefixed SDS `$OEM`, containing only that
 regime's blocks. Lane: `OEM.fbs`, provider `deep-space-spacecraft`, source name
 from the table below. A spacecraft can occupy several lanes; Juno has both its
@@ -14,7 +14,7 @@ connector moves request/response bytes. The module has no network imports.
 | --- | --- | --- |
 | `lunar-orbit` | Moon window maximum radius <= 30,000 km | 24 h |
 | `cislunar` | Sun rows within 500,000 km of Earth after exclusions; remaining Earth/Moon windows | 24 h |
-| `earth-moon-lagrange` | Within 60,000 km of EM L1/L2; Moon window maximum <= 120,000 km after lunar-orbit | 24 h |
+| `earth-moon-lagrange` | Within 60,000 km of EM L1/L2 (Sun-centered runs need 30 days of station-keeping); Moon window maximum <= 120,000 km after lunar-orbit | 24 h |
 | `sun-earth-l1` | Earth distance 500,000–2,500,000 km, sunward within 45 degrees of Sun-Earth line | 168 h |
 | `sun-earth-l2` | Same distance/cone, outward beyond Earth | 168 h |
 | `mercury-orbit` | Mercury window median radius < 100 Mercury radii | 24 h |
@@ -32,9 +32,12 @@ Planet mean radii in km: Mercury **2439.7**, Venus **6051.8**, Mars **3389.5**,
 Jupiter **69911**, Saturn **58232**. Non-Sun windows are classified as a whole.
 
 Sun classification uses the rows actually present across daily and dense blocks.
-Runs shorter than **3 days** merge backward, or forward when first; Sun-Earth
-L1/L2 runs need **30 days** (station-keeping, not an Earth-assist flyby crossing
-the cone) and the launch leg (first run) **20 days**. Splits share
+Runs shorter than **3 days** merge backward, or forward when first; Earth-Moon
+and Sun-Earth L1/L2 runs need **30 days** of station-keeping, so brief lunar
+swingbys such as Wind's and Earth-assist cone crossings fold into a neighbor.
+The launch leg (first run) needs **20 days**. The published solar cone rules
+use the same **45-degree** half-angle as the classifier. Non-Sun window rules
+and all reference frames are unchanged by the dwell requirement. Splits share
 the first row of the new run; pieces with fewer than two rows are dropped.
 Row values, labels, steps and Hermite degree 7 remain intact. Excluded Earth
 segments can leave gaps. Membership never changes the row's reference center.
@@ -46,10 +49,17 @@ general longitude precession removed. AU = **149597870.7 km**; J2000 obliquity =
 **23.43928 degrees**. These approximations are for regime classification only,
 not trajectory evaluation. Times are seconds from **2000-01-01T12:00:00 TDB**.
 
-The 20 archive craft are Roadster, Voyager 1/2, Pioneer 10/11, New Horizons,
+The 23 archive craft are Roadster, Voyager 1/2, Pioneer 10/11, New Horizons,
 Parker Solar Probe, JWST, Juno, Europa Clipper, Lucy, Psyche, OSIRIS-APEX,
-SOHO, ACE, DSCOVR, Wind, Gaia, Euclid and BepiColombo. The original 13 retain
-their event table. The seven additions have no encounter events.
+SOHO, ACE, DSCOVR, Wind, Gaia, Euclid, BepiColombo, Solar Orbiter, LCROSS Shepherd
+and Danuri/KPLO. The original 13 retain their event table. The ten additions
+have no encounter events and use the same public JPL Horizons license and credit.
+
+| Added archive craft | NAIF id | Horizons name | COSPAR | NORAD | Aliases | Lifecycle |
+| --- | --- | --- | --- | --- | --- | --- |
+| Solar Orbiter | -144 | `solar orbiter` | 2020-010A | 45167 | Solo | Active |
+| LCROSS Shepherd | -18 | `lcross` | 2009-031B | 35490 | LCROSS | Ended 2009-10-09 |
+| Danuri | -155 | `danuri\|kplo` | 2022-093A | 52790 | KPLO; Korea Pathfinder Lunar Orbiter | Active |
 
 | Window center | Step | Craft |
 | --- | --- | --- |
@@ -63,7 +73,8 @@ their event table. The seven additions have no encounter events.
 
 `src/notables.hpp` is the identity/event/lifecycle source. Missing COSPAR/NORAD
 values stay empty/zero. Pioneer 10/11, LADEE, GRAIL-A/B, Artemis I, Venus Express,
-MESSENGER and Cassini carry explicit mission end times. If coverage ends before
+MESSENGER, Cassini, Gaia (**2025-03-27T00:00:00**) and LCROSS Shepherd
+(**2009-10-09T00:00:00**) carry explicit mission end times. If coverage ends before
 `now_tdb`, lifecycle falls back to ended with that coverage end. A terminal
 archive encounter truncates that archive, not the mission lifecycle.
 
@@ -73,7 +84,7 @@ Configuration and retrieval:
    `sdm_piv::get_config()`. `deep_space_enabled` is a Bool; false or absent emits
    one `FlowNotice` Skipped (`disabled`) and nothing else. Enabled runs require
    a non-empty String `producer_peer_id` (`missing-producer-peer-id` otherwise).
-2. `objects` is an optional NumberList of known NAIF ids; omitted means all 39.
+2. `objects` is an optional NumberList of known NAIF ids; omitted means all 42.
    `plan_horizons` requires one `TimerTick`. Its UTC `FIRED_MS` is floored to the
    UTC day for the internal `now_tdb` day label; the window plan uses only that
    day, not a sub-day UTC/TDB conversion. The exact milliseconds remain in state
@@ -149,6 +160,10 @@ and EGP UTC timestamps; output bytes are deterministic for identical inputs.
 `flow.mjs` composes the timer-bound plan, seven HTTP stages, six advances and
 build with eleven OEM storage-ingest nodes plus one EGP storage-ingest node.
 Only internal state edges are opaque. Storage-ingest 0.5.0 supplies `oem_records`.
+The Horizons predictions refresh defaults to **604800000 ms (7 days)**.
+The existing `daily` trigger id remains stable; its interval is weekly.
+The UTC day conversion in `src/runtime_contracts.hpp` still uses 86400000 ms
+per day, independently of refresh cadence or trajectory sampling steps.
 
 License: NASA/JPL Horizons On-Line Ephemeris System (Solar System Dynamics Group):
 U.S. Government work, public domain. Credit: Ephemeris: NASA/JPL-Caltech Horizons.
@@ -173,6 +188,11 @@ epochs, in Sun-centered ICRF km/km/s and JD TDB. Position tolerance is 1 km for
 source rounding/interpolation; observed errors remain meter scale. The cassette
 has no JWST/Juno vectors, Earth positions or geocentric distances and remains
 unchanged. Its optional `HORIZONS_RECORD=1` refresh mode requires network access.
+Solar Orbiter, LCROSS Shepherd and Danuri have no recorded Horizons responses.
+Recorded replays keep their explicit `objects` selections and historical
+`limits`, so none requests an uncached URL. The new craft remain in the default
+roster and run in the offline C++ synthetic tests, including the full-roster
+stress run; no synthetic body is added to either recorded cassette.
 
 `tests/fixtures/horizons/regime-cassette.json.gz` is a separate **27-request**
 recording made on **2026-10-21** by a live drive of the compiled module against
@@ -216,8 +236,9 @@ their typed `$PIV` hostcalls are answered by the test: config, the local Horizon
 cassette and a recording `storage.ingest_with_source` stand-in. There is no network
 fallback, even in record mode, and no native WasmEdge dependency for this test.
 
-One `daily` TimerTick selects the three cassette craft via `objects`, using the
-cassette's page size and historical limits. All 29 HTTP URLs must be cached and
+One TimerTick on the weekly interval (trigger id `daily`) selects the three
+cassette craft via `objects`, using the cassette's page size and historical
+limits. All 29 HTTP URLs must be cached and
 unique. Only the heliocentric OEM and catalogs EGP ingest nodes may run; their
 streams must equal the shared standalone staged replay byte for byte, with source,
 peer, Current reconciliation and batch tags intact. OEM batch IDs are stream
@@ -241,11 +262,14 @@ named test. The parity replay always uses local responses, including in record m
 
 Independent C++ synthetic fixtures additionally test body thresholds, a published
 Meeus lunar point, solar geometry from a separate Meeus approximation, 44/46-degree
-cone edges, 5/29-day passes versus 30/40-day dwells, 15/19-day launch legs versus
+cone edges, 5/29-day passes versus 30/40-day dwells at Sun-Earth and Earth-Moon
+L1/L2 (including first, interior and final lunar runs), 15/19-day launch legs versus
 the 20-day boundary, three-day interior/final smoothing, exact run boundaries,
 shared edges, exact row preservation, Juno's two centers, EGP tags/queries,
 lifecycle, tick timestamps, coverage clamps, skipped probes and early builds.
 It also verifies typed ports, disabled/missing-producer behavior, every ingest
 metadata/record pairing and digest, notices and typed flow topology.
-The 20-object paged run and 39-object 1970–2050 stress run finish within six
-advances. The latter retains approximately 52 MB of state, below 64 MiB.
+The 20-object paged run and 42-object 1970–2050 stress run finish within six
+advances. The latter issues 147 vector requests and retains at most 57,680,723
+bytes of state, below 64 MiB. Identity/lifecycle tests check the three
+new archive craft and Gaia's explicit end date, and flow tests check the weekly default.

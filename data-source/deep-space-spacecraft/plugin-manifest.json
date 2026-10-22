@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
   "name": "Notable deep-space spacecraft (Horizons)",
   "version": "0.2.0",
-  "description": "Retrieves 39 spacecraft as per-regime OEM catalogs from NASA/JPL Horizons: Sun-centered archives and rolling body-centered windows, classified in C++/WASM. Six bounded advance stages, segment membership, lifecycle attributes and EGP query groups. The host executes HTTP requests.",
+  "description": "Retrieves 42 spacecraft as per-regime OEM catalogs from NASA/JPL Horizons: Sun-centered archives and rolling body-centered windows, classified in C++/WASM. Six bounded advance stages, segment membership, lifecycle attributes and EGP query groups. The host executes HTTP requests.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],

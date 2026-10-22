@@ -54,6 +54,7 @@ inline bool config(const sdm_piv::Config& in, uint64_t fired, Json& out, std::st
     return refuse("missing-producer-peer-id");
   // The window planner uses only the day. FIRED_MS is UTC: floor to its UTC
   // calendar day and use that day label for now_tdb, not a sub-day UTC->TDB conversion.
+  // This day conversion is independent of the flow's weekly refresh interval.
   // Keep the original millisecond timestamp separately for creation/provenance.
   if (fired > 60000000000000ULL) return refuse("invalid-tick-time");
   out = {{"now_tdb", sdn_time::format_iso_micro(int64_t(fired / 86400000ULL) * 86400000000LL).substr(0, 19)},

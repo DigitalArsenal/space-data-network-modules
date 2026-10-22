@@ -173,9 +173,10 @@ async function runFlow(wasmSource, hostConfig) {
   return { calls, egress, nodes, urls };
 }
 
-test("composed deep-space flow: offline daily tick through real HTTP and ingest guests", { timeout: 180000 }, async (t) => {
+test("composed deep-space flow: offline weekly tick through real HTTP and ingest guests", { timeout: 180000 }, async (t) => {
   const started = performance.now();
   assert.deepEqual(config.objects, [-143205, -31, -32], "Roadster, Voyager 1 and Voyager 2 only");
+  assert.equal(flow.triggers[0].defaultIntervalMs, 604800000, "weekly Horizons predictions cadence");
   const wasm = await compile(t);
 
   await t.test("enabled: cassette HTTP, byte-identical OEM/EGP storage and summary", async () => {

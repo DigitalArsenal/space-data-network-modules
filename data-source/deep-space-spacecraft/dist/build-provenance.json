@@ -28,5 +28,5 @@
     "src/deep_space_spacecraft.cpp"
   ],
   "threadModel": "single-thread",
-  "wasmSha256": "3d4d2d4bf62a3c293266b0456786ae6d228461e45afbd7c5b4aa71b79e8cb452"
+  "wasmSha256": "fe950d1b0658c3e79009cd51c67360c8809bb6823dffd97a778e02c0d66f0511"
 }
