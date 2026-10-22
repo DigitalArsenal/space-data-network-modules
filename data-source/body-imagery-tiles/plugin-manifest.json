@@ -1,153 +1,308 @@
 {
   "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
-  "name": "High-resolution body imagery over SDN",
-  "version": "0.1.0",
-  "description": "High-resolution global imagery of a body as a 256 px JPEG tile pyramid published over SDN. First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain), read once per cycle by HTTP range (If-Match on its ETag, never held whole): level 9 (81.4 m/px) area-averaged from the source rows, every coarser level the 2x2 mean of the level below, planetocentric latitude for the MOLA-sphere globe, packs of 16 tiles of a row (SDNTILE1) added to the node's IPFS and filed as $PNM (PNM.fbs, provider usgs-astrogeology, source mars-themis-day-ir) by storage.ingest_with_source, one batch per band of 16 level-9 rows (one level-5 tile row).",
+  "name": "Body Imagery Tiles (high-definition mosaics)",
+  "version": "0.2.0",
+  "description": "A body's high-definition global imagery as the console's tile pyramid. First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain; BigTIFF, 8-bit, one row per strip, planetocentric on the MOLA sphere). tiles_plan names the whole-row byte range of the mosaic one level-9 tile row needs (If-Match on its ETag); tiles_direct area-averages those rows in WASM into 256 px baseline JPEG tiles on the body's two-root geographic scheme (GEOGRAPHIC_TWO_ROOT_BODY, rows from the south), one $DTT record per tile (PAYLOAD_FORMAT CUSTOM, MEDIA_TYPE image/jpeg); tiles_reduce builds a coarser level's row from the two child rows already made (JPEG decode, 2x2 mean of the measured pixels, JPEG), root levels 0-2 from level 3. Files are size-prefixed $DTT streams of 16 tiles of one row, in the layout the engine's imageryFromTileFiles reads: imagery/<NAIF id>/root.dtts (levels 0-2) and imagery/<NAIF id>/<L>/<X16>_<Y>.dtts (X16 = x >> 4, Y from the south). Level 9 (81.4 m/px) is the deepest. TYPED CONTRACTS 1.0: FlatBuffers only between modules; node config through plugin.getConfig.",
   "pluginFamily": "data_source",
-  "capabilities": [
-    "http",
-    "ipfs",
-    "storage_ingest"
-  ],
-  "externalInterfaces": [],
+  "capabilities": [],
   "invokeSurfaces": [
     "direct",
     "command"
   ],
   "runtimeTargets": [
+    "browser",
     "wasmedge"
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Host calls in turn (one ranged GET per level-9 tile row, ipfs.add per pack, one ingest per band); the resample, the 2x2 pyramid and the JPEG encoder are single-threaded passes over one row per level held in linear memory."
+    "detail": "Each method is a single-pass transform over the frames it is handed: a plan, a tile row from source rows, or a parent row from child files. No shared mutable state, no workers."
   },
-  "methods": [
+  "externalInterfaces": [],
+  "buildArtifacts": [
     {
-      "methodId": "prepare_scheduled",
-      "displayName": "Prepare the Gaia cycle",
-      "inputPorts": [
-        {
-          "portId": "tick",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-runtime-timer-tick",
-              "allowedTypes": [
-                {
-                  "schemaName": "TimerTick.fbs",
-                  "fileIdentifier": "TICK",
-                  "rootTypeName": "TimerTick",
-                  "wireFormat": "flatbuffer"
-                }
-              ],
-              "description": "TimerTick (module-sdk runtime type TICK). Configuration is supplied by plugin.getConfig."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "Generic timer tick. Configuration is supplied by plugin.getConfig."
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "cycle",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-runtime-flow-notice",
-              "allowedTypes": [
-                {
-                  "schemaName": "FlowNotice.fbs",
-                  "fileIdentifier": "FNTC",
-                  "rootTypeName": "FlowNotice",
-                  "wireFormat": "flatbuffer"
-                }
-              ],
-              "description": "FlowNotice Info, REASON cycle, ITEMS [the producer peer ID]: the cycle retrieve_gaia runs."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "This cycle's producer peer ID, for retrieve_gaia."
-        },
-        {
-          "portId": "status",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn-runtime-flow-notice",
-              "allowedTypes": [
-                {
-                  "schemaName": "FlowNotice.fbs",
-                  "fileIdentifier": "FNTC",
-                  "rootTypeName": "FlowNotice",
-                  "wireFormat": "flatbuffer"
-                }
-              ],
-              "description": "FlowNotice Skipped, REASON disabled."
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "Skipped (disabled) timer cycle; flow bookkeeping, never a data record."
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "The timer tick -> the cycle (FlowNotice Info, ITEMS [the producer peer ID]) when body_imagery_tiles_enabled, else a Skipped status."
+      "artifactId": "body-imagery-tiles-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "schemasUsed": [
+    {
+      "schemaName": "DTT.fbs",
+      "fileIdentifier": "$DTT",
+      "rootTypeName": "DTT"
     },
     {
-      "methodId": "retrieve_tiles",
-      "displayName": "Retrieve and publish the tile pyramid",
+      "schemaName": "PNM.fbs",
+      "fileIdentifier": "$PNM",
+      "rootTypeName": "PNM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "tiles_plan",
+      "displayName": "Plan one level-9 tile row",
       "inputPorts": [
         {
-          "portId": "cycle",
+          "portId": "unit",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-runtime-flow-notice",
+              "setId": "sdn-runtime-module-config",
               "allowedTypes": [
                 {
-                  "schemaName": "FlowNotice.fbs",
-                  "fileIdentifier": "FNTC",
-                  "rootTypeName": "FlowNotice",
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "FlowNotice Info, REASON cycle, ITEMS [the producer peer ID]: the cycle retrieve_gaia runs."
+              "description": "ModuleConfig: level (9), row (from the south)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The cycle prepare_scheduled opened."
+          "description": "ModuleConfig: level (9), row (from the south)."
         }
       ],
       "outputPorts": [
         {
-          "portId": "report",
+          "portId": "rows_0",
           "acceptedTypeSets": [
             {
-              "setId": "sdn-runtime-flow-notice",
+              "setId": "sdn-runtime-http-request",
               "allowedTypes": [
                 {
-                  "schemaName": "FlowNotice.fbs",
-                  "fileIdentifier": "FNTC",
-                  "rootTypeName": "FlowNotice",
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Two FlowNotices Info, REASON filed: SOURCE_NAME angular-g13.5 (COUNT tiles filed; ITEMS tiles, stars, gaia, hipparcos_only, bright_edsd, range_splits, strays, patched_tiles, outside_sky, tap_queries, tap_bytes, seconds) and octree-g13.5 (COUNT nodes filed; ITEMS nodes, stars, depth, max_float32_error_per_edge, seconds)."
+              "description": "A ranged GET of the tile row's whole source rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One FlowNotice: files, tiles, bytes, largest pack, source bytes read, seconds."
+          "description": "A ranged GET of the tile row's whole source rows (Range bytes=a-b, If-Match on the mosaic's ETag)."
+        },
+        {
+          "portId": "unit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig: level, row, first_row, row_count."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ModuleConfig: level, row, first_row, row_count."
         }
       ],
+      "description": "Names the source rows a level-9 tile row needs as one byte range of the mosaic.",
       "maxBatch": 1,
-      "drainPolicy": "single-shot",
-      "description": "High-resolution global imagery of a body as a 256 px JPEG tile pyramid published over SDN. First source: Mars, the USGS Astrogeology THEMIS Day IR global mosaic 100 m v12 (NASA/JPL/ASU, public domain), read once per cycle by HTTP range (If-Match on its ETag, never held whole): level 9 (81.4 m/px) area-averaged from the source rows, every coarser level the 2x2 mean of the level below, planetocentric latitude for the MOLA-sphere globe, packs of 16 tiles of a row (SDNTILE1) added to the node's IPFS and filed as $PNM (PNM.fbs, provider usgs-astrogeology, source mars-themis-day-ir) by storage.ingest_with_source, one batch per band of 16 level-9 rows (one level-5 tile row)."
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "tiles_direct",
+      "displayName": "Cut one level-9 tile row from the mosaic",
+      "inputPorts": [
+        {
+          "portId": "unit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig: level, row, first_row, row_count."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ModuleConfig: level, row, first_row, row_count."
+        },
+        {
+          "portId": "rows_0",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HttpResponse of the rows_0 request: STATUS 206 and BODY the rows."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One file: a size-prefixed $DTT stream of 16 JPEG tiles."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "One file: a size-prefixed $DTT stream of 16 JPEG tiles."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+        }
+      ],
+      "description": "Area-averages the unit's rows into 256 px JPEG tiles and packs them into files.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "tiles_reduce",
+      "displayName": "Build a coarser level row from its children",
+      "inputPorts": [
+        {
+          "portId": "unit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig: level (target), row (from the south); level 2 builds the root levels 0-2 from all of level 3."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ModuleConfig: level (target), row (from the south); level 2 builds the root levels 0-2 from all of level 3."
+        },
+        {
+          "portId": "child",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The child level's files of the child rows (size-prefixed $DTT streams of JPEG tiles)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 256,
+          "required": true,
+          "description": "The child level's files of the child rows (size-prefixed $DTT streams of JPEG tiles)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dtt-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One file: a size-prefixed $DTT stream of JPEG tiles."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "One file: a size-prefixed $DTT stream of JPEG tiles."
+        },
+        {
+          "portId": "names",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNM.fbs",
+                  "fileIdentifier": "$PNM",
+                  "rootTypeName": "PNM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $PNM stream; the k-th record's FILE_NAME names the k-th file."
+        }
+      ],
+      "description": "Decodes the child tiles, takes the 2x2 mean of the measured pixels and cuts the parent row into JPEG tiles.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }

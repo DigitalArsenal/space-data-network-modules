@@ -1,9 +1,13 @@
 {
-  "spacedatastandards": "1.254.0",
-  "schemas": [
+  "spacedatastandards": "1.258.0",
+  "sdsFamilies": [
+    "DTT",
     "PNM"
   ],
-  "moduleSdk": "0.9.2",
-  "threadModel": "wasi-sequential",
-  "wasmSha256": "fe3d8b8f87fb0fbc2d9aa63235335629231ce0c0460e433e226d2b3170cc2357"
+  "commonHeaders": [],
+  "sources": [
+    "src/body_imagery_tiles.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "275e1703b987f64dffa6f3b5b540758b5c926ca8c03518acc1757c35dcffdc06"
 }

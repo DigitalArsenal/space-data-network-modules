@@ -1,23 +1,13 @@
-// THE TILE PYRAMID, BUILT IN ONE PASS FROM NORTH TO SOUTH.
+// THE TILE GEOMETRY AND THE DEEPEST LEVEL'S RESAMPLING.
 //
-// The engine's GeographicTilingScheme on the body's sphere: level L is 2^(L+1)
-// x 2^L tiles of 256 px, x from 180 W, y from the north pole, planetocentric
-// latitude (the console draws Mars on the MOLA reference sphere, where geodetic
-// and planetocentric latitude are one). Level 9 is 262144 x 131072 px (81.4 m
-// at the equator, 1.23 x the 100 m source).
+// The engine's GeographicTilingScheme on the body's sphere (GEOGRAPHIC_TWO_ROOT_BODY): level L is 2^(L+1) x 2^L tiles
+// of 256 px, x from 180 W, planetocentric latitude (the console draws Mars on the MOLA reference sphere, where geodetic
+// and planetocentric latitude are one). Rows are counted from the SOUTH in the files, from the north in the pixels.
+// Level 9 is 262144 x 131072 px (81.4 m at the equator, 1.23 x the 100 m source).
 //
-// The deepest level's rows are area averages of the source (resample_row):
-// each output pixel is the mean of the source pixels it overlaps, weighted by
-// the overlap, over the measured ones (0 is no data). Every coarser level is
-// the 2 x 2 mean of the measured pixels of the level below (reduce_into), so
-// the whole pyramid is the area average of the source at every level, from
-// one read of it.
-//
-// A tile row is complete when its 256 pixel rows are. The level-9 row is made,
-// cut into tiles and reduced into the top or bottom half of its parent's row;
-// a parent whose two halves are filled is complete in turn, and so on to level
-// 0, so at most one row per level is ever held (level 8 is 33.5 MB, each level
-// above half the one below).
+// The deepest level's rows are area averages of the source (resample_row): each output pixel is the mean of the source
+// pixels it overlaps, weighted by the overlap, over the measured ones (0 is no data). A coarser level is the 2 x 2 mean
+// of the measured pixels of the level below (halve).
 #pragma once
 #include <cmath>
 #include <cstdint>
@@ -116,16 +106,16 @@ inline void resample_row(const Source& s, int level, uint64_t y, const uint8_t* 
     }
 }
 
-// One completed tile row of `level` (256 x level_width bytes) halved into the top or bottom half of its parent row.
-inline void reduce_into(const std::vector<uint8_t>& child, int level, bool bottom, std::vector<uint8_t>* parent) {
-    const uint64_t W = level_width(level), PW = W / 2;
-    if (parent->size() != PW * kTile) parent->assign(PW * kTile, 0);
-    const int r0 = bottom ? kTile / 2 : 0;
-    for (int r = 0; r < kTile / 2; r++) {
-        const uint8_t* a = child.data() + uint64_t(2 * r) * W;
-        const uint8_t* b = a + W;
-        uint8_t* dst = parent->data() + uint64_t(r0 + r) * PW;
-        for (uint64_t c = 0; c < PW; c++) {
+// An image of `w` x `h` bytes halved to w/2 x h/2: each pixel the mean of the measured (non-zero) pixels of its 2 x 2
+// block, 0 where none was measured.
+inline std::vector<uint8_t> halve(const std::vector<uint8_t>& img, size_t w, size_t h) {
+    const size_t nw = w / 2, nh = h / 2;
+    std::vector<uint8_t> out(nw * nh);
+    for (size_t r = 0; r < nh; r++) {
+        const uint8_t* a = &img[2 * r * w];
+        const uint8_t* b = a + w;
+        uint8_t* dst = &out[r * nw];
+        for (size_t c = 0; c < nw; c++) {
             const uint8_t v[4] = {a[2 * c], a[2 * c + 1], b[2 * c], b[2 * c + 1]};
             unsigned sum = 0, n = 0;
             for (const uint8_t x : v)
@@ -133,42 +123,7 @@ inline void reduce_into(const std::vector<uint8_t>& child, int level, bool botto
             dst[c] = n ? uint8_t((sum + n / 2) / n) : 0;
         }
     }
+    return out;
 }
-
-// The rows held above the deepest level: per level its current tile row (y), which halves are filled, its pixels.
-struct Pending {
-    long long y = -1;
-    unsigned halves = 0;  // 1 top, 2 bottom
-    std::vector<uint8_t> px;
-};
-
-// A completed tile row goes to `emit`; its reduction climbs into the parents. A parent row whose top half was not
-// made in this cycle (a cycle over some bands only) is never emitted.
-struct Pyramid {
-    int max_level = 9;
-    std::vector<Pending> pending;  // index = level
-    std::function<bool(int level, uint64_t y, const std::vector<uint8_t>& row)> emit;
-
-    explicit Pyramid(int deepest) : max_level(deepest), pending(size_t(deepest) + 1) {}
-
-    bool complete(int level, uint64_t y, const std::vector<uint8_t>& row) {
-        if (!emit(level, y, row)) return false;
-        if (level == 0) return true;
-        Pending& p = pending[size_t(level - 1)];
-        const long long py = static_cast<long long>(y / 2);
-        if (p.y != py) {
-            p.y = py;
-            p.halves = 0;
-        }
-        reduce_into(row, level, (y & 1) != 0, &p.px);
-        p.halves |= (y & 1) ? 2u : 1u;
-        if (p.halves != 3u) return true;
-        p.halves = 0;
-        p.y = -1;
-        std::vector<uint8_t> parent;
-        parent.swap(p.px);
-        return complete(level - 1, uint64_t(py), parent);
-    }
-};
 
 }  // namespace bit
