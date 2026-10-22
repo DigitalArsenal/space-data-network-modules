@@ -1,0 +1,366 @@
+{
+  "status": "PASS_RAW_SOURCE_FILES_ONLY",
+  "scope": "raw-source-files-only",
+  "startedAt": "2026-10-22T17:25:43.779Z",
+  "binarySha256": "1752fdfd5676ee7e89719fe5e48d92340d915bff30b5fb898a2538e210fad1a4",
+  "stateDirectory": "/Users/tj/software/terrain-work/body-look/solar-activity-data-sources-20261022/solar-node-3QJl9C",
+  "records": [
+    {
+      "sourceFile": "2026-10-22-ts940s/noaa-regions/solar_regions.json",
+      "sourceUrl": "https://services.swpc.noaa.gov/json/solar_regions.json",
+      "cid": "bafkreiczyakksajvax7n5qufg6iqodrj6fcdlv6kfiqioniygt4j6m5sdm",
+      "bytes": 127915,
+      "sourceSha256": "59c014a9013505fedec2853791070e29f14435d7ca2a2087351834f89f33b21b",
+      "readBackSha256": "59c014a9013505fedec2853791070e29f14435d7ca2a2087351834f89f33b21b"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/noaa-flares/xray-flares-7-day.json",
+      "sourceUrl": "https://services.swpc.noaa.gov/json/goes/primary/xray-flares-7-day.json",
+      "cid": "bafkreifzv5ksudeibxws72y6wcejofpjk4qo7grkumquksbzdtlny4ifvm",
+      "bytes": 29389,
+      "sourceSha256": "b9af552a0c880ded2feb1eb0889715e95720ef9a2aa3214548391cd6dc7105ab",
+      "readBackSha256": "b9af552a0c880ded2feb1eb0889715e95720ef9a2aa3214548391cd6dc7105ab"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/noaa-events/edited_events.json",
+      "sourceUrl": "https://services.swpc.noaa.gov/json/edited_events.json",
+      "cid": "bafybeif4fqrtnmrwlnlrxc5w4d475v4nidajlpxy7t7edh75ugupogipoi",
+      "bytes": 398462,
+      "sourceSha256": "e930f41ce1e73cd06bca38d7c32c7b07d603a1cc4c6c68bd7758e2438fe613bd",
+      "readBackSha256": "e930f41ce1e73cd06bca38d7c32c7b07d603a1cc4c6c68bd7758e2438fe613bd"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/noaa-srs/srs.txt",
+      "sourceUrl": "https://services.swpc.noaa.gov/text/srs.txt",
+      "cid": "bafkreiefk6cf7ziws7jbjfw5mrnt2lqidz4lf6oy4n4uipqnzj3vl3rufa",
+      "bytes": 778,
+      "sourceSha256": "8557845fe51697d21496dd645b3d2e081e78b2f9d8e379443e0dca7755ee3428",
+      "readBackSha256": "8557845fe51697d21496dd645b3d2e081e78b2f9d8e379443e0dca7755ee3428"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-catalog/sources.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getDataSources/?",
+      "cid": "bafkreieppxnlyptjjly5267emv4jvlw477b4ccdyxgmt3pyn5likhnwgqq",
+      "bytes": 36499,
+      "sourceSha256": "8f7ddabc3e694af1dd7be465789aaedcffc3c10878b9993dbf0dead0a3b6c684",
+      "readBackSha256": "8f7ddabc3e694af1dd7be465789aaedcffc3c10878b9993dbf0dead0a3b6c684"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-hmi-continuum/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=18",
+      "cid": "bafkreibafmxegxqa3vwopoca3w3x3wkjssmd54tthz52q2uag26vrw437m",
+      "bytes": 321,
+      "sourceSha256": "202b2e435e00dd6ce7b840ddb77dd94994983ef2733e7ba86a8036bd58db9bfb",
+      "readBackSha256": "202b2e435e00dd6ce7b840ddb77dd94994983ef2733e7ba86a8036bd58db9bfb"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-hmi-continuum/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193200290",
+      "cid": "bafkreih2ude5bv76orccuwdo3nixbl7y6tuvq5rz4gr7roojvvjtbbl3gu",
+      "bytes": 5131,
+      "sourceSha256": "faa0c9d0d7fe74442a586edb5170aff8f4e9587639e1a3f8b9c9ad5330857b35",
+      "readBackSha256": "faa0c9d0d7fe74442a586edb5170aff8f4e9587639e1a3f8b9c9ad5330857b35"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-hmi-continuum/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T13%3A36%3A28Z&sourceId=18",
+      "cid": "bafybeibguyshkvzmttfh4fftabtywthzinn5m4f7uh6bkqmq42ukbvarda",
+      "bytes": 1053786,
+      "sourceSha256": "07940315dcf1939bc43b459a22e494add58daa86ba4bc558a4c9b6d816cfbf2e",
+      "readBackSha256": "07940315dcf1939bc43b459a22e494add58daa86ba4bc558a4c9b6d816cfbf2e"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-171/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=10",
+      "cid": "bafkreia6om73husks4svp5ivkmt6ktps5podeq22f75wq4smnyvckrdapa",
+      "bytes": 311,
+      "sourceSha256": "1e733fb3d24a972557f5155327e54df2ebdc32435a2ffb68724c6e2a25446078",
+      "readBackSha256": "1e733fb3d24a972557f5155327e54df2ebdc32435a2ffb68724c6e2a25446078"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-171/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193200502",
+      "cid": "bafkreidiiwtzbbf2maqenv7dwjmbhcleg5jelw6fj4t53d3nffk6qya3ey",
+      "bytes": 6482,
+      "sourceSha256": "6845a79084ba602046d7e3b258138964375245dbc54f27dd8f6d2955e8601b26",
+      "readBackSha256": "6845a79084ba602046d7e3b258138964375245dbc54f27dd8f6d2955e8601b26"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-171/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T15%3A31%3A33Z&sourceId=10",
+      "cid": "bafybeigadpbg6vajoudjzk3jk2s7zpfxpmsqz6hqcpv4yjkqww5lmfkrdu",
+      "bytes": 1077960,
+      "sourceSha256": "610570bb2fc4ad0a432927ac8800443892068dd6a72f36feff495b4389b710cb",
+      "readBackSha256": "610570bb2fc4ad0a432927ac8800443892068dd6a72f36feff495b4389b710cb"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-193/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=11",
+      "cid": "bafkreihgayuk7lp7fwvx6xmjctjymqfhlmb425iuujpraxkhh2tuwu7ccu",
+      "bytes": 311,
+      "sourceSha256": "e60628afadff2dab7f5d8914d38640a75b03cd7514a25f105d473ea74b53e215",
+      "readBackSha256": "e60628afadff2dab7f5d8914d38640a75b03cd7514a25f105d473ea74b53e215"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-193/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193200203",
+      "cid": "bafkreicfltypm2ogf36mqlvkrwynr3farpdtz36d4i4sreq5wkxqrd5jnq",
+      "bytes": 6487,
+      "sourceSha256": "455cf0f669c62efcc82eaa8db0d8eca08bc73cefc3e23928921db2af088fa96c",
+      "readBackSha256": "455cf0f669c62efcc82eaa8db0d8eca08bc73cefc3e23928921db2af088fa96c"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-193/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T15%3A27%3A29Z&sourceId=11",
+      "cid": "bafybeiez4sy5ov4ltspgazkg2rxlwyfxy7icyfy2rxl5ucvs7garif4wly",
+      "bytes": 1078098,
+      "sourceSha256": "274de32d34cba37af449b4dd31fe1720dd759111a7c664d2d941fdf5f6227a4e",
+      "readBackSha256": "274de32d34cba37af449b4dd31fe1720dd759111a7c664d2d941fdf5f6227a4e"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-304/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T16%3A00%3A00.000Z&sourceId=13",
+      "cid": "bafkreibzco2k2zg4hfytnfodqohcjxw2fwfetvz2llmvq2rvh7ukauolsa",
+      "bytes": 310,
+      "sourceSha256": "3913b4ad64dc39713695c3838e24deda2d8a49d73a5ad9586a353fe8a051cb90",
+      "readBackSha256": "3913b4ad64dc39713695c3838e24deda2d8a49d73a5ad9586a353fe8a051cb90"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-304/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193200398",
+      "cid": "bafkreignin5n6ebdl6m6se6buupssbnjvprg5otkq7b7gfau6nrl2f52wy",
+      "bytes": 6481,
+      "sourceSha256": "cd437adf10235f99e913c1a51f2905a9abe26eba6a87c3f31414f362bd17bab6",
+      "readBackSha256": "cd437adf10235f99e913c1a51f2905a9abe26eba6a87c3f31414f362bd17bab6"
+    },
+    {
+      "sourceFile": "2026-10-22-ts940s/helioviewer-aia-304/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T15%3A28%3A17Z&sourceId=13",
+      "cid": "bafybeic5xtngykq555pbspwbt2oxadmnydjjb44g6fibsmecpa3ga3hv6y",
+      "bytes": 1077796,
+      "sourceSha256": "a3d3f0a9ccb4a7f6d7cb40a75e35fc18d486935e05fc713f1607b66e3e63803d",
+      "readBackSha256": "a3d3f0a9ccb4a7f6d7cb40a75e35fc18d486935e05fc713f1607b66e3e63803d"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/helioviewer-catalog/sources.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getDataSources/?",
+      "cid": "bafkreigs6j5pcfgoskx5ks5yte36u5xlinl6oerz23ozminzymuq522v7i",
+      "bytes": 36499,
+      "sourceSha256": "d2f27af114ce92afd54bb89937ea76eb4357e71239d6dd9621b9c3290eeb55fa",
+      "readBackSha256": "d2f27af114ce92afd54bb89937ea76eb4357e71239d6dd9621b9c3290eeb55fa"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/helioviewer-guide/user-guide.html",
+      "sourceUrl": "https://helioviewer-project.github.io/user_guide/",
+      "cid": "bafkreib5wwd3za72lvf4tr37d6zc7grkhdvnyghmliieivlhjjhvhfplxa",
+      "bytes": 12376,
+      "sourceSha256": "3db587bc83fa5d4bc9c77f1fb22f9a2a38eadc18ec5a104455674a4f5395ebb8",
+      "readBackSha256": "3db587bc83fa5d4bc9c77f1fb22f9a2a38eadc18ec5a104455674a4f5395ebb8"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/helioviewer-status/status.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getStatus/?",
+      "cid": "bafkreihee3hlw3oeshzy65xexdiljw6iyjllei4ts24mbsltj3fl2u5jee",
+      "bytes": 1801,
+      "sourceSha256": "e426cebb6dc491f38f76e4b8d0b4dbc8c256b2239396b8c0c9734ecabd53a921",
+      "readBackSha256": "e426cebb6dc491f38f76e4b8d0b4dbc8c256b2239396b8c0c9734ecabd53a921"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-hmi-continuum/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T17%3A15%3A00.000Z&sourceId=18",
+      "cid": "bafkreicll3wd54twidvuvghp27y6fefrq4zkkblmayby5z7uhl3asf4lqa",
+      "bytes": 321,
+      "sourceSha256": "4b5eec3ef27640eb4a98efd7f1e290b18732a5056c06038ee7f43af609178b80",
+      "readBackSha256": "4b5eec3ef27640eb4a98efd7f1e290b18732a5056c06038ee7f43af609178b80"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-hmi-continuum/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193201145",
+      "cid": "bafkreifgk7xxnoqj6cs52yo4eazg5j4scgsbpd2df7h6j2lgnbpmaeo47a",
+      "bytes": 5131,
+      "sourceSha256": "a657ef76ba09f0a5dd61dc20326ea79211a4178f432fcfe4e966685ec011dcf8",
+      "readBackSha256": "a657ef76ba09f0a5dd61dc20326ea79211a4178f432fcfe4e966685ec011dcf8"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-hmi-continuum/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T14%3A21%3A28Z&sourceId=18",
+      "cid": "bafybeiftp63tnzzh3vfrys4yoq7urmtqzblkanmjjzhsy6zb5dk523rgca",
+      "bytes": 1053801,
+      "sourceSha256": "77cd07a25bddd7fa37c690c4146275cb8b1cda16cf914e363fbd3bfe2ae03145",
+      "readBackSha256": "77cd07a25bddd7fa37c690c4146275cb8b1cda16cf914e363fbd3bfe2ae03145"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-171/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T17%3A15%3A00.000Z&sourceId=10",
+      "cid": "bafkreid7y6psuugrvvdkseptk7foyvfulgoneaq7ruejlhu3bah5nw666m",
+      "bytes": 310,
+      "sourceSha256": "7fc79f2a50d1ad46a911f357caec54b4599cd2021f8d08959e9b080fd6dbdef3",
+      "readBackSha256": "7fc79f2a50d1ad46a911f357caec54b4599cd2021f8d08959e9b080fd6dbdef3"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-171/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193201871",
+      "cid": "bafkreigziannqrjyauhun5rjmenz53s6edzbahlg6rjdvozzsk6bxeayt4",
+      "bytes": 6484,
+      "sourceSha256": "d9401ad84538050f46f629611b9eee5e20f2101d66f4523abb3992bc1b90189f",
+      "readBackSha256": "d9401ad84538050f46f629611b9eee5e20f2101d66f4523abb3992bc1b90189f"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-171/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T16%3A49%3A09Z&sourceId=10",
+      "cid": "bafybeia6uingpdnm3cp6ntjzndq5brkqdqqkisq6rzlorsvmabwvlo5dry",
+      "bytes": 1078221,
+      "sourceSha256": "206e5391fc3502a25cf6162725457c2ad06aabbf639c67d6fc3b8c7ce1c1dda6",
+      "readBackSha256": "206e5391fc3502a25cf6162725457c2ad06aabbf639c67d6fc3b8c7ce1c1dda6"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-193/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T17%3A15%3A00.000Z&sourceId=11",
+      "cid": "bafkreiat3ns3uplmbw3cvitbdd7qyzkl6lvurtl2xkp75cyelyzlshwc44",
+      "bytes": 312,
+      "sourceSha256": "13db65ba3d6c0db62aa26118ff0c654bf2eb48cd7aba9ffe8b045e32b91ec2e7",
+      "readBackSha256": "13db65ba3d6c0db62aa26118ff0c654bf2eb48cd7aba9ffe8b045e32b91ec2e7"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-193/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193201716",
+      "cid": "bafkreibxvk7hq7v2ltyvgmwtegzarlcobxbfonfxidvykwdtm42fcs2mfu",
+      "bytes": 6483,
+      "sourceSha256": "37aabe787eba5cf15332d321b208ac4e0dc25734b740eb8558736734514b4c2d",
+      "readBackSha256": "37aabe787eba5cf15332d321b208ac4e0dc25734b740eb8558736734514b4c2d"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-193/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T16%3A46%3A41Z&sourceId=11",
+      "cid": "bafybeidk7k2424f5qk4bhxn5gegm7g6reg52wy3wlynllyqq3dnjmdwgre",
+      "bytes": 1077833,
+      "sourceSha256": "361c62627e7959a980215c84b7e5770d58579fe5e3dc1d597589b6dbe35aba0d",
+      "readBackSha256": "361c62627e7959a980215c84b7e5770d58579fe5e3dc1d597589b6dbe35aba0d"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-304/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T17%3A15%3A00.000Z&sourceId=13",
+      "cid": "bafkreicpvkjipfuvy4qjtaabbi4uyab3g4zdob22g2urdvwbozshwt5cfu",
+      "bytes": 311,
+      "sourceSha256": "4faa92879695c7209980010a394c003b373237075a36a911d6c176647b4fa22d",
+      "readBackSha256": "4faa92879695c7209980010a394c003b373237075a36a911d6c176647b4fa22d"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-304/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193201789",
+      "cid": "bafkreiavqiripqo6p7qbuc75qfabigxmdkrqe5bbyasm2x2vpyvyq4qdf4",
+      "bytes": 6481,
+      "sourceSha256": "15822287c1de7fe01a0bfd8140141aec1aa3027421c024cd5f557e2b8872032f",
+      "readBackSha256": "15822287c1de7fe01a0bfd8140141aec1aa3027421c024cd5f557e2b8872032f"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/current-helioviewer-aia-304/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T16%3A47%3A29Z&sourceId=13",
+      "cid": "bafybeigiyfccz2m47c4xlve3j5msy2un3eiiqmn2vkyv37hrvn4grxx7jy",
+      "bytes": 1077591,
+      "sourceSha256": "1a40b029e7774f6c07956ce9717c64ad174a517ca1cf4c2c0c4f26eabf779fc8",
+      "readBackSha256": "1a40b029e7774f6c07956ce9717c64ad174a517ca1cf4c2c0c4f26eabf779fc8"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-hmi-continuum/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T14%3A15%3A00.000Z&sourceId=18",
+      "cid": "bafkreifmp6onyficm3xtskezxjrlby5ix7idoogttplqt3pzhdbp4e2yzm",
+      "bytes": 321,
+      "sourceSha256": "ac7f9cdc150266ef392899ba62b0e3a8bfd03738d39bd709edf938c2fe1358cb",
+      "readBackSha256": "ac7f9cdc150266ef392899ba62b0e3a8bfd03738d39bd709edf938c2fe1358cb"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-hmi-continuum/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193201154",
+      "cid": "bafkreifn67thl23ybcz5in2cnuwao7djip2whb7okpuyxdwenrlpiai65a",
+      "bytes": 5131,
+      "sourceSha256": "adf7e675eb7808b3d437426d2c077c6943f56387ee53e98b8ec46c56f4011ee8",
+      "readBackSha256": "adf7e675eb7808b3d437426d2c077c6943f56387ee53e98b8ec46c56f4011ee8"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-hmi-continuum/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T14%3A14%3A43Z&sourceId=18",
+      "cid": "bafybeie726bsewavwl3omzrzuepjuzfdtz6crvdzmolqvpxbj43dcxkje4",
+      "bytes": 1053890,
+      "sourceSha256": "db9d8fe56e7f1c2d83d8edc2738b349bdf2d41823c5e5073a469c5160120bd52",
+      "readBackSha256": "db9d8fe56e7f1c2d83d8edc2738b349bdf2d41823c5e5073a469c5160120bd52"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-171/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T14%3A15%3A00.000Z&sourceId=10",
+      "cid": "bafkreigra5oy45vdttivq6cyng5keh3rheecddiebief2xf35zjgvfmu7e",
+      "bytes": 311,
+      "sourceSha256": "d1075d8e76a39cd158785869baa21f713908218d040a085d5cbbee526a9594f9",
+      "readBackSha256": "d1075d8e76a39cd158785869baa21f713908218d040a085d5cbbee526a9594f9"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-171/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193198818",
+      "cid": "bafkreigbcsj6pd5owxrjueb4rnwzb7hk5rpfzq4tf3o6esqv5i5rpmdqou",
+      "bytes": 6485,
+      "sourceSha256": "c11493e78faeb5e29a103c8b6d90fceaec5e5cc3932edde24a15ea3b17b07075",
+      "readBackSha256": "c11493e78faeb5e29a103c8b6d90fceaec5e5cc3932edde24a15ea3b17b07075"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-171/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T14%3A14%3A45Z&sourceId=10",
+      "cid": "bafybeichtiq4dapn7wgaghzs7wj36wrl7qa2sgxxz5el7rawjxspfjdy3y",
+      "bytes": 1078341,
+      "sourceSha256": "076c1e58025a81567e573368224c691cde7d2a97edaa0e08b4abb64f651ca352",
+      "readBackSha256": "076c1e58025a81567e573368224c691cde7d2a97edaa0e08b4abb64f651ca352"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-193/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T14%3A15%3A00.000Z&sourceId=11",
+      "cid": "bafkreib77tsne76cmhlfq7ci53qx7cbovchcagyy6dickkcfquoo5vb2ha",
+      "bytes": 311,
+      "sourceSha256": "3ffce4d27fc261d6587c48eee17f882ea88e201b18f0d0252845851ceed43a38",
+      "readBackSha256": "3ffce4d27fc261d6587c48eee17f882ea88e201b18f0d0252845851ceed43a38"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-193/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193198649",
+      "cid": "bafkreig263yi6jmbzb3vbtqmvih5cvm774ehcgvaciqzslveuueh4so664",
+      "bytes": 6484,
+      "sourceSha256": "daf6f08f2581c87750ce0caa0fd1559fff08711aa01221992ea4a5087e49def7",
+      "readBackSha256": "daf6f08f2581c87750ce0caa0fd1559fff08711aa01221992ea4a5087e49def7"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-193/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T14%3A15%3A17Z&sourceId=11",
+      "cid": "bafybeiaqdrjvy3yslkrnjk4nvrhawctjeofes3nely4opqzib2nmdqrscu",
+      "bytes": 1078011,
+      "sourceSha256": "2a96eea75de36654aa38952e48c99e4917146dc7a51d2fea714d43d3f0bad35f",
+      "readBackSha256": "2a96eea75de36654aa38952e48c99e4917146dc7a51d2fea714d43d3f0bad35f"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-304/closest.json",
+      "sourceUrl": "https://api.helioviewer.org/v2/getClosestImage/?date=2026-10-22T14%3A15%3A00.000Z&sourceId=13",
+      "cid": "bafkreih2ltqrv34z273hmagmw52nrmmfr5offjrczcw6tx3vnhjy3hknoq",
+      "bytes": 312,
+      "sourceSha256": "fa5ce11aef99d7f67600ccb774d8b1858f5c52a622c8ade9df7569d38d9d4d74",
+      "readBackSha256": "fa5ce11aef99d7f67600ccb774d8b1858f5c52a622c8ade9df7569d38d9d4d74"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-304/header.xml",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Header/?id=193198906",
+      "cid": "bafkreibr63gu34xonybemgqgbgworzqli7efdprqhwhae4ux376e7jfdiy",
+      "bytes": 6480,
+      "sourceSha256": "31f6cd4df2ee6e02461a0609ace8e60b47c851be303d8e027297dffc4fa4a346",
+      "readBackSha256": "31f6cd4df2ee6e02461a0609ace8e60b47c851be303d8e027297dffc4fa4a346"
+    },
+    {
+      "sourceFile": "2026-10-22-freshness-R5Cpu0/backfill-helioviewer-aia-304/image.jp2",
+      "sourceUrl": "https://api.helioviewer.org/v2/getJP2Image/?date=2026-10-22T14%3A15%3A05Z&sourceId=13",
+      "cid": "bafybeig5d4gxhh6zlira2ppeklloqcoic5dvomaxmsqgslb353czqvdqjq",
+      "bytes": 1077844,
+      "sourceSha256": "5ad4a431387b9388da79775c41daab83b1c8a97ad498546e5b8e125e82423583",
+      "readBackSha256": "5ad4a431387b9388da79775c41daab83b1c8a97ad498546e5b8e125e82423583"
+    }
+  ],
+  "publishedSolarRecords": 0,
+  "solarRecordCidReadBacks": 0,
+  "peerId": "16Uiu2HAm43ryHTv3AXqXU3Fh1Lc6vt7yxJ29vcDLj53Z7pG2wRnU",
+  "completedAt": "2026-10-22T17:25:51.792Z",
+  "nodeStopped": true
+}

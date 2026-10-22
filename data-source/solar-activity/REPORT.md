@@ -199,7 +199,7 @@ The probe did not bypass TLS, register an account, or submit an export job.
 
 | Acceptance line | Measured result |
 | --- | --- |
-| Current-day records published locally and read back by CID | **Not met:** 0 records published, 0 CID read-backs. Schema gate prevents a conforming module/publication. |
+| Current-day records published locally and read back by CID | **Not met for typed records:** 0 solar records published/read back. Separately, 44 original source files stored on a real local SDN node and read back by CID byte-for-byte; no typed record or PNM announcement is claimed. |
 | Active-region positions match same day's SRS exactly | **Source check only:** 7/7 exact location and Carrington-longitude matches at the SRS-stated epoch; 0/7 if wrongly joined on issue calendar date. Includes 3 sunspot regions and 4 plages. No published records to compare yet. |
 | Image timestamps within source cadence | **Not met for current slot:** 4/4 current day, 0/4 within source cadence (HMI 45 s; AIA feed 36 s), 0/4 within 15 minutes. Separate fixed three-hour backfill: 4/4 within source cadence; not current-slot freshness. |
 
@@ -236,15 +236,39 @@ image bytes, retrieve each advertised CID, verify bytes/hashes and decode the
 records, then compare positions to the same SRS issue and image epochs to the
 selected cadence. Use the test node's signing API, never read its private key.
 
-No publication, SDK compatibility, browser/native WasmEdge parity, or gauntlet PASS is
+No typed-record publication, SDK compatibility, browser/native WasmEdge parity, or gauntlet PASS is
 claimed while the schema gate is unresolved. **Gauntlet: not run; receipt path:
 none.** The owner's prerequisite (passing E2E on a committed branch) was not met.
 The local-node harness exists, so its absence is not used as a publication waiver.
-It currently creates temporary node state via `os.tmpdir()`; the solar adaptation
-must accept a lane-owned durable scratch root and clean up only its own children.
+The solar adaptation now exists in `tests/lib/local-node.mjs`: explicit
+`SOLAR_NODE_WORK`, random loopback ports, no bootstrap peers/flow execution,
+GOMAXPROCS=2, GOMEMLIMIT=1GiB, and exact-child shutdown in `finally`. It uses
+the full native SDN daemon's in-process Kubo; no Docker is involved.
 
-No heavy builds, browser, Docker container, node daemon, or background worker was
-started. The Docker parity leg is waived, not failed or pending. Source captures are deliverable evidence inside this worktree, not
+The [raw-file receipt](tests/evidence/source-cid-roundtrip.json) records
+**44/44** successful add-and-CID-read-back checks for the retained NOAA and
+Helioviewer source bytes. Each read-back equals the original bytes and SHA-256;
+the receipt identifies the native binary by its SHA-256 and records shutdown.
+The node reports version 1.1.0. This is raw source storage only, with
+publishing/flows disabled, **not** SDS solar records, signed announcements,
+a service deployment, or an acceptance PASS. Node state remains in the lane's
+durable scratch directory; no private key was read, printed, or committed.
+
+```sh
+SDN_NODE_BINARY=<absolute-native-full-node-path> \
+SOLAR_NODE_WORK=<absolute-durable-lane-directory> \
+node data-source/solar-activity/tests/source-cid-roundtrip.mjs
+# PASS_RAW_SOURCE_FILES_ONLY: 44 files, nodeStopped=true.
+```
+
+A preliminary `version` probe of the separate edge-relay binary unexpectedly
+started its relay (that binary accepts unused positional arguments). It was
+terminated by its exact child PID, 65460, before the isolated full-node test;
+it supplied no publication evidence.
+
+No heavy builds, browser, Docker, or background worker was started. The
+isolated full node and preliminary edge relay have both stopped. The Docker
+parity leg is waived, not failed or pending. Source captures are deliverable evidence inside this worktree, not
 scratch files under `/tmp`. Schema approval and live-image age remain separate
 blockers.
 

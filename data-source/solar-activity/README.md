@@ -34,3 +34,9 @@ cadence reference, and probes JSOC availability. A source-only exit 0 never
 means module acceptance. The 2026-10-22 capture has 0/4 current-slot cadence
 matches and 4/4 backfill matches. Docker parity is waived by the owner;
 browser and native WasmEdge parity remain gated on the approved SDK artifact.
+
+`tests/source-cid-roundtrip.mjs` checks the raw source files against a real
+native SDN node, using `SDN_NODE_BINARY` and `SOLAR_NODE_WORK` (a durable,
+lane-owned directory). The 2026-10-22 run read back 44/44 files exactly and
+stopped its node. This is source transport evidence; typed-record publication
+and signed announcements remain gated on SDS approval.
