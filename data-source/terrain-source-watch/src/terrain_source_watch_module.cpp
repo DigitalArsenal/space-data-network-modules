@@ -7,11 +7,13 @@
  * re-encodes what changed.
  *
  * WHAT IT DOES. For each configured body (moon | mars; all the probes and listings of a run must fit the 64 frames a node
- * takes an invocation) it asks every source file the terrain walk reads (the table
+ * takes an invocation) it asks every non-inset source file the terrain walk reads (the table
  * the walk itself uses, src/watch_sources.hpp, generated from terrain-ingest's body_plan.hpp and held to it by
  * `node tools/generate-sources.mjs --check`) for the first byte of the file - a one-byte ranged GET, because the Go
  * node's http connector fails a HEAD answered with a Content-Length - which answers the file's ETag, Last-Modified and
- * total size in one exchange, and lists the mirror (`raw/<naif>/`) through storage/object-s3. The diff is a $QRP
+ * total size in one exchange, and lists the mirror (`raw/<naif>/`) through storage/object-s3. Insets exist only in the
+ * raw/499/ mirror: they have no source URL and are checked against their byte-size pins using that listing alone.
+ * Moon and Mars together need 61 probes and two listings (63 frames). The diff is a $QRP
  * projection page, stored beside the mirror (`<report_prefix>/<naif>/<yyyy-mm-dd>.qrp`) and summarized in one FlowNotice.
  *
  * It never touches the network: it builds requests for hostcap/http-request and reads their answers, and builds the
@@ -23,17 +25,17 @@
  *         sign) + status (FlowNotice)
  *
  * STATES, per source file
- *   current          the live ETag is the pinned one and the mirror holds the same number of bytes
+ *   current          the live ETag is the pinned one and the mirror holds the same number of bytes; an inset's mirror size matches its pin
  *   source-changed   the live ETag is not the one the walk is pinned to: the publisher reprocessed the product; every
  *                    unit that reads it must be re-encoded
  *   source-newer     no pin, but the source was modified after the mirror was written
- *   size-changed     the mirrored object is not the source's size
- *   not-mirrored     the source answers and nothing is mirrored (the walk reads these from the publisher)
+ *   size-changed     the source differs from its byte-size pin, the mirror differs from the source, or an inset's mirror size differs from its pin
+ *   not-mirrored     the listing lacks the mirror object
  *   probe-failed     the source did not answer a ranged read
  * refresh-needed = source-changed | source-newer | size-changed.
  *
  * CONFIG (plugin.getConfig): bodies ("moon,mars"; default moon; `body` is the one-body spelling); store, endpoint, bucket, region (the object-s3 lane the mirror is read through);
- * report_prefix (default "watch"); timeout_ms; pins ("off": compare size and Last-Modified only).
+ * report_prefix (default "watch"); timeout_ms; pins ("off": compare non-inset mirror size and Last-Modified only).
  */
 
 #include <algorithm>
@@ -62,6 +64,8 @@ namespace R = sdn::runtime;
 constexpr const char* kNoValidator = "\"sdn-terrain-source-watch\"";  // see storage/object-s3: the Go node's remembered validators
 constexpr uint32_t kProbeTimeoutMs = 120000;
 constexpr unsigned kMaxFramesPerRun = 64;
+
+bool needs_probe(const WatchSource& source) { return source.url[0] != '\0'; }
 
 std::vector<const plugin_input_frame_t*> frames_on(const char* port) {
     std::vector<const plugin_input_frame_t*> out;
@@ -96,7 +100,7 @@ struct Cfg {
     std::vector<std::string> bodies;
     std::string store = "r2", endpoint, bucket = "spaceaware", region = "auto", report_prefix = "watch";
     uint32_t timeout_ms = kProbeTimeoutMs;
-    bool use_pins = true;  // config pins: "off" compares size and Last-Modified only (a product added without a pin)
+    bool use_pins = true;  // config pins: "off" compares non-inset size and Last-Modified only
     std::string error;
 };
 Cfg load_config() {
@@ -120,17 +124,19 @@ Cfg load_config() {
     c.use_pins = config.string("pins") != "off";
     const double timeout = config.number("timeout_ms", 0);
     if (timeout >= 1000) c.timeout_ms = static_cast<uint32_t>(timeout);
-    unsigned sources = 0;
+    unsigned probes = 0;
     for (const std::string& name : c.bodies) {
         unsigned n = 0;
-        for (unsigned i = 0; i < kWatchSourceCount; ++i) if (name == kWatchSources[i].body) ++n;
+        for (unsigned i = 0; i < kWatchSourceCount; ++i) if (name == kWatchSources[i].body) {
+            ++n;
+            if (needs_probe(kWatchSources[i])) ++probes;
+        }
         if (n == 0) { c.error = "config bodies names \"" + name + "\", which the walk's table does not hold (moon, mars)"; return c; }
-        sources += n;
     }
     if (c.bodies.empty()) c.error = "config bodies is empty";
     else if (c.endpoint.empty()) c.error = "config endpoint (the mirror store's https://host) is required";
     // a node takes at most 64 input frames an invocation (port-blind): the probes and one listing per body must fit
-    else if (sources + c.bodies.size() > kMaxFramesPerRun) c.error = std::to_string(sources) + " sources in " + std::to_string(c.bodies.size()) + " bodies do not fit one run (at most " + std::to_string(kMaxFramesPerRun) + " frames): split the bodies across flows";
+    else if (probes + c.bodies.size() > kMaxFramesPerRun) c.error = std::to_string(probes) + " probes in " + std::to_string(c.bodies.size()) + " bodies do not fit one run (at most " + std::to_string(kMaxFramesPerRun) + " frames): split the bodies across flows";
     return c;
 }
 
@@ -178,7 +184,7 @@ int run_plan() {
         const std::string naif = naif_of(body);
         for (unsigned i = 0; i < kWatchSourceCount; ++i) {
             const WatchSource& s = kWatchSources[i];
-            if (body != s.body) continue;
+            if (body != s.body || !needs_probe(s)) continue;
             APRT context;
             context.REQUEST_ID = std::to_string(i);
             context.ROUTE = "probe";
@@ -204,7 +210,8 @@ int run_plan() {
                 return 500;
             }
         }
-        // the mirror's listing: every key under raw/<naif>/ (one page: the mirror holds far fewer than 1000 keys)
+        // Every key under raw/<naif>/, including <product>/ovr/<file>: omit delimiter so S3 returns nested keys.
+        // One page of up to 1000 keys covers the current mirror; object-s3 does not auto-page this leg.
         APRT list;
         list.REQUEST_ID = "watch-list-" + naif;
         list.ROUTE = "list";
@@ -315,7 +322,7 @@ int run_diff() {
         const APR* ctx = GetAPR(r->CONTEXT()->data());
         if (!ctx->REQUEST_ID()) continue;
         const unsigned index = static_cast<unsigned>(std::strtoul(ctx->REQUEST_ID()->c_str(), nullptr, 10));
-        if (index >= kWatchSourceCount) continue;
+        if (index >= kWatchSourceCount || !needs_probe(kWatchSources[index])) continue;
         Probe p;
         p.answered = true;
         p.status = r->STATUS();
@@ -361,7 +368,7 @@ int run_diff() {
         page.STATUS = qrpStatus_Ok;
         for (const char* name : {"body", "naif", "product", "file", "state", "source_url", "serves"}) page.COLUMNS.push_back(column(name, "string"));
         for (const char* name : {"source_etag", "pinned_etag", "source_last_modified", "mirror_key"}) page.COLUMNS.push_back(column(name, "string"));
-        for (const char* name : {"source_size", "mirror_size", "mirror_modified_ms"}) page.COLUMNS.push_back(column(name, "int"));
+        for (const char* name : {"source_size", "mirror_size", "mirror_modified_ms", "pinned_size"}) page.COLUMNS.push_back(column(name, "int"));
         page.COLUMNS.push_back(column("probe_error", "string"));
 
         std::map<std::string, uint64_t> counts;
@@ -376,11 +383,16 @@ int run_diff() {
             const std::string pinned = cfg.use_pins ? std::string(s.pinned_etag) : std::string();
             std::string state, why;
             const bool answered = p.answered && (p.status == 206 || p.status == 200);
-            if (!answered) {
+            if (!needs_probe(s)) {
+                // No publisher exists for an inset. Without a listing its state is unknown (null in the report).
+                if (mir.listed) state = !mirrored ? "not-mirrored" : m->second.size != s.pinned_size ? "size-changed" : "current";
+            } else if (!answered) {
                 state = "probe-failed";
                 why = !p.answered ? "no answer" : !p.error.empty() ? p.error : "HTTP " + std::to_string(p.status);
             } else if (!pinned.empty() && !p.etag.empty() && p.etag != pinned) {
                 state = "source-changed";
+            } else if (cfg.use_pins && s.pinned_size > 0 && p.size >= 0 && static_cast<uint64_t>(p.size) != s.pinned_size) {
+                state = "size-changed";
             } else if (mirrored && p.size >= 0 && static_cast<uint64_t>(p.size) != m->second.size) {
                 state = "size-changed";
             } else if (mirrored && pinned.empty() && m->second.modified_ms > 0 && parse_http_date_ms(p.last_modified) > m->second.modified_ms) {
@@ -390,7 +402,7 @@ int run_diff() {
             } else {
                 state = "current";
             }
-            ++counts[state];
+            if (!state.empty()) ++counts[state];
             if (state == "source-changed" || state == "source-newer" || state == "size-changed") changed.push_back(std::string(s.product) + "/" + s.file + "=" + state);
 
             auto row = std::make_unique<QRPRowT>();
@@ -401,6 +413,7 @@ int run_diff() {
             row->CELLS.push_back(number_cell(answered ? p.size : -1));
             row->CELLS.push_back(number_cell(mirrored ? static_cast<int64_t>(m->second.size) : -1));
             row->CELLS.push_back(number_cell(mirrored ? m->second.modified_ms : -1));
+            row->CELLS.push_back(number_cell((!needs_probe(s) || cfg.use_pins) && s.pinned_size > 0 ? static_cast<int64_t>(s.pinned_size) : -1));
             row->CELLS.push_back(text_cell(why));
             page.ROWS.push_back(std::move(row));
         }
