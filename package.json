@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "spacedatastandards.org": "1.259.0"
+    "spacedatastandards.org": "1.260.0"
   },
   "devDependencies": {
     "space-data-module-sdk": "0.8.25"
