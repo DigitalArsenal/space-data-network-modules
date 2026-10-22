@@ -2,13 +2,16 @@
 
 Partial implementation for `body-appearance-module-20261022`. This is **not a
 completed or validated all-body appearance model**. The required E2E gate fails
-until absolute Moon and planetary disk photometry is implemented and validated.
+until planetary Johnson V disk photometry is implemented and validated.
 
 The C++ module contains cited parameter lookup, deterministic rock/crater
 placement, solar differential rotation, and relative H,G1,G2 photometry.
 It also integrates independent Jupiter and Saturn scattering models over a
 sphere and converts their absolute albedo into flux and magnitude. Those narrow
 or Pioneer bands are not a validated Johnson V calibration.
+The Moon has absolute ROLO 311g spectral irradiance at 553.8 nm, checked against
+an independently transcribed ROLO oracle with both signs of solar longitude,
+observer libration, and distance scaling.
 `dist/isomorphic/module.wasm` is the single artifact for Node, browser and native
 WasmEdge. `codec.js` only encodes/decodes canonical SDS PCE FlatBuffers. There is
 no runtime physics or statistics in JavaScript.
@@ -65,6 +68,7 @@ invoke ABI and embeds the authoring manifest in the WASM artifact.
 | `rotate` | `profile`, `latitude_rad`, `longitude_rad`, `epoch_tai_s`, `scene_tai_s` | Snodgrass–Ulrich sidereal rate and advanced longitude, wrapped to [0,2π). Optional `frame_rate_rad_s` defaults to zero. |
 | `phase_curve` | `model`, `phase_rad` vector; `G1`, `G2` for `hg1g2` | Relative flux and magnitude dimming. `moon:muinonen2010` selects the published lunar weights. No absolute magnitude or geometric/normal albedo is implied. |
 | `disk_photometry` | `model`, `phase_rad`, `radius_m`, `sun_distance_au`, `observer_distance_m`, `solar_magnitude` | Absolute disk albedo, flux relative to the Sun at 1 au, and apparent magnitude. Solar magnitude must match the model band. |
+| `lunar_irradiance` | `model`, `phase_rad`, `solar_longitude_rad`, `observer_latitude_rad`, `observer_longitude_rad`, `sun_distance_au`, `observer_distance_m` | Absolute spectral irradiance in W/m²/nm, disk reflectance, solar flux ratio, and monochromatic-equivalent AB magnitude. |
 | `place` | `body_id`, `level`, `x`, `y`, `seed`, `radius_m` | Body-fixed XYZ meters, diameter meters, azimuth radians and uint32 shape seeds for each requested population. |
 
 Rotation profiles are `magnetic`, `doppler` and `spectroscopic`; selection is
@@ -84,6 +88,17 @@ between its 30° parameter knots. These models contain no Mallama–Hilton input
 closed-form verification case. Geometry is far-field (observer at least 100
 radii away), with a caller-specified spherical radius; there is no ellipsoid,
 ring, seasonal, or longitudinal correction. At most 256 angles per call.
+
+The lunar identifier is `moon:rolo311g:553.8nm`; angles on the wire are radians.
+Phase and solar-longitude vectors must have equal lengths (1–4096). East solar
+longitude and observer libration are selenographic. ROLO's fitted phase interval
+is strictly 1.55°–97°. Operational bounds are ±8° observer latitude, ±10°
+observer longitude, 0.9–1.1 au Sun distance, and 300,000–500,000 km observer
+distance. The caller supplies physically consistent geometry. The output is
+ROLO filter 23 (nominal 555 nm), not Johnson V. AB values use the corrected
+conventional sign in the Oke–Gunn definition (−48.60), not the + sign misprinted
+in the 1983 paper. Absolute flux uses ROLO Table 1's solar irradiance and Eq.(8)'s
+standard lunar solid angle; it does not normalize to a selected phase.
 
 Tiles are equirectangular: `2^level` cells on each axis, longitude from −π to π
 west to east and latitude from +π/2 to −π/2 north to south. Positions are uniform
@@ -116,11 +131,11 @@ the budget is exceeded. Omitting both populations returns empty vectors.
 
 ## Sources and remaining scope
 
-`data/parameters.json` holds 144 cited values: S/C/V class-average Hapke
+`data/parameters.json` holds 166 cited values: S/C/V class-average Hapke
 parameters, three solar profiles, lunar median roughness/Hurst scales, lunar
 crater coefficients, the Mars rock law, H,G1,G2 basis/weights and two identified
 566 nm LROC Hapke map pixels, and independent Jupiter/Saturn scattering
-coefficients. Median slopes are labeled as medians, not RMS.
+coefficients and ROLO 311g radiometric parameters. Median slopes are labeled as medians, not RMS.
 The two map pixels are not asserted to represent whole terrain classes.
 `data/sources.json` records primary download URLs, hashes, byte sizes and limits.
 All physical numbers have DOI and table/equation/dataset-pixel locators.
@@ -129,15 +144,18 @@ Mallama & Hilton 2018 equations exist **only in tests/**. The published Fortran
 was read as data and not executed. Ten published numerical examples validate
 the test oracle; its Saturn cubic follows the paper's printed coefficient,
 which differs from the published Fortran by 1e-9. It is never a runtime or build
-input. ROLO 553.8 nm is also a test-only oracle here.
+input. The independent ROLO transcription remains in tests, while the shipped
+lunar model evaluates the published parameters from `data/parameters.json`.
 
-The current lunar comparison is a **relative phase-shape diagnostic**, normalized
+The H,G1,G2 lunar comparison is a **relative phase-shape diagnostic**, normalized
 at 5°, over 2°–96° for both signs of solar longitude at zero observer libration.
 It does not compare absolute irradiance, matched bandpasses or a rendered Moon.
 Its residual cannot be reported as passing the required absolute 0.1 mag gate.
+The separate absolute ROLO comparison is same-model implementation verification;
+it does not establish that a separate surface-scattering model predicts ROLO.
 
-Still required: independent disk photometry for Moon and all seven requested
-planets, all-body albedo/color/roughness tables, D and X/M taxonomic priors and
+Still required: validated Johnson V disk photometry for all seven requested
+planets, independent lunar surface-model validation, all-body albedo/color/roughness tables, D and X/M taxonomic priors and
 taxonomy/albedo selection, Diviner input mapping, and named-spacecraft
 matched-geometry render/image-similarity and shadow-fraction evidence. Original
 Bandfield 2011 and Golombek–Rapp 1997 downloads remain unavailable after publisher

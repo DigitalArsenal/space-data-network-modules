@@ -59,6 +59,44 @@ extern "C" int phase_curve() {
   r.text("normalization","Unity at zero phase; no absolute magnitude or albedo supplied.");return r.emit();
 }
 
+extern "C" int lunar_irradiance() {
+  using namespace appearance;
+  wire::Request q;
+  if(!q.only({"model","phase_rad","solar_longitude_rad","observer_latitude_rad","observer_longitude_rad","sun_distance_au","observer_distance_m"}))
+    return wire::fail("invalid-input","Invalid lunar irradiance request.");
+  const auto model=q.text("model");
+  if(model!="moon:rolo311g:553.8nm")return wire::fail("model-unavailable","Only the published ROLO 311g 553.8 nm band is available.");
+  const auto phases=q.vector("phase_rad"),longitudes=q.vector("solar_longitude_rad");
+  const double lat=q.number("observer_latitude_rad"),lon=q.number("observer_longitude_rad");
+  const double sun=q.number("sun_distance_au"),observer=q.number("observer_distance_m");
+  if(phases.empty() || phases.size()>4096 || phases.size()!=longitudes.size() ||
+     !in_range(lat,-8*pi/180,8*pi/180) || !in_range(lon,-10*pi/180,10*pi/180) ||
+     !in_range(sun,.9,1.1) || !in_range(observer,3e8,5e8))
+    return wire::fail("invalid-input","Require equal phase/solar-longitude arrays, observer libration within 8 deg latitude/10 deg longitude, Sun 0.9..1.1 au, observer 300000..500000 km.");
+  const double distance_scale=std::pow(parameter(model,"standard_distance_m")/observer/sun,2);
+  const double solid_angle=parameter(model,"solid_angle_sr"),solar=parameter(model,"solar_irradiance_w_m2_nm");
+  const double wavelength=parameter(model,"wavelength_nm")*1e-9;
+  std::vector<double> reflectance,ratio,irradiance,magnitude;
+  for(size_t i=0;i<phases.size();i++) {
+    const double phase=phases[i],sun_lon=longitudes[i];
+    if(!in_range(phase,1.55*pi/180,97*pi/180) || phase<=1.55*pi/180 || phase>=97*pi/180 || !in_range(sun_lon,-pi,pi))
+      return wire::fail("out-of-domain","ROLO fitted domain is strictly 1.55 < phase < 97 degrees; solar longitude is signed east longitude.");
+    const double A=lunar_disk_reflectance(phase,sun_lon,lat,lon),flux=A*solid_angle/pi*distance_scale,E=flux*solar;
+    reflectance.push_back(A);ratio.push_back(flux);irradiance.push_back(E);
+    // Monochromatic-equivalent AB definition: f_nu in erg/s/cm2/Hz, zero
+    // constant 48.60 (Oke-Gunn, doi:10.1086/160817). SI c is exact.
+    const double fnu_cgs=E*1e9*wavelength*wavelength/299792458.0*1000;
+    magnitude.push_back(-2.5*std::log10(fnu_cgs)-48.60);
+  }
+  wire::Result r;r.vector("disk_reflectance",reflectance);r.vector("solar_flux_ratio",ratio);
+  r.vector("spectral_irradiance_w_m2_nm",irradiance,"W/m2/nm");r.vector("monochromatic_ab_magnitude",magnitude,"mag");
+  r.text("model",model);r.text("band","ROLO 553.8 nm, filter 23 (nominal 555 nm); monochromatic-equivalent AB, not Johnson V");
+  r.text("citation","doi:10.1086/430185; Eqs. (7),(8),(10),(11), Tables 1/4; doi:10.1086/160817 (AB definition)");
+  r.text("geometry","Selenographic east solar longitude and observer libration; caller supplies a physically consistent geometry. Static 311g surface; no epoch or ephemeris inferred.");
+  r.text("scope","Published empirical whole-disk ROLO model; its verification against ROLO is same-model implementation verification, not an independent Hapke prediction. Operational bounds restrict the model to Earth-distance lunar observations.");
+  return r.emit();
+}
+
 extern "C" int disk_photometry() {
   using namespace appearance;
   wire::Request q;

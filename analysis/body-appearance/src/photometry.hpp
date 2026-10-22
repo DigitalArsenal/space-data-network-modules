@@ -30,4 +30,18 @@ inline double hg_flux(double phase,double g1,double g2) {
   return g1*hg_basis(1,phase)+g2*hg_basis(2,phase)+(1-g1-g2)*hg_basis(3,phase);
 }
 
+// Kieffer & Stone (2005), Eq.(10), coefficients in Table 4 and Eq.(11).
+// The original polynomial angles are radians, observer libration and the
+// nonlinear phase scales degrees. Inputs here are uniformly SI radians.
+inline double lunar_disk_reflectance(double phase,double sun_lon,double observer_lat,double observer_lon) {
+  const std::string model="moon:rolo311g:553.8nm";
+  const auto p=[&model](const char* name){return parameter(model,name);};
+  const double degrees=phase*180/pi,lat=observer_lat*180/pi,lon=observer_lon*180/pi;
+  const double phase_polynomial=((p("a3")*phase+p("a2"))*phase+p("a1"))*phase+p("a0");
+  const double sun_polynomial=sun_lon*(p("b1")+sun_lon*sun_lon*(p("b2")+sun_lon*sun_lon*p("b3")));
+  return std::exp(phase_polynomial+sun_polynomial+(p("c1")+p("c3")*sun_lon)*lat+
+    (p("c2")+p("c4")*sun_lon)*lon+p("d1")*std::exp(-degrees/p("p1"))+
+    p("d2")*std::exp(-degrees/p("p2"))+p("d3")*std::cos((degrees-p("p3"))/p("p4")));
+}
+
 }

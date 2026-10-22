@@ -21,6 +21,6 @@
   },
   "compiler": "deps/emsdk/upstream/bin/clang++ --target=wasm32-wasip1-threads",
   "emsdkRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
-  "tableSha256": "01705520d14673cf14edfc8eba3d72936c928f6bf47f2d9aefc9088bfe598825",
-  "wasmSha256": "17288a5f4ba9c0af3ce6ce048b7ba2b6d4caeeddcac903e02a4d9739bf5479e9"
+  "tableSha256": "8010bb06b1ce08200a92cb2949da75101111aa424a26fbd892542e478ffd5e36",
+  "wasmSha256": "d79693298b137cd66f47c64a8a454eda2363cd4afbe05f0e33d9e881685a0382"
 }

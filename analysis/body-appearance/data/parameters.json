@@ -1294,5 +1294,203 @@
     "doi": "10.3847/0004-637X/822/2/76",
     "locator": "Table 3, 440nm B row, phase 180 degrees",
     "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "a0",
+    "value": -2.12504,
+    "unit": "1",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, a0",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "a1",
+    "value": -1.6597,
+    "unit": "rad^-1",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, a1",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "a2",
+    "value": 0.38409,
+    "unit": "rad^-2",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, a2",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "a3",
+    "value": -0.20655,
+    "unit": "rad^-3",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, a3",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "b1",
+    "value": 0.04052,
+    "unit": "rad^-1",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, b1",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "b2",
+    "value": 0.01009,
+    "unit": "rad^-3",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, b2",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "b3",
+    "value": -0.00388,
+    "unit": "rad^-5",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, b3",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "d1",
+    "value": 0.37206,
+    "unit": "1",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, d1",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "d2",
+    "value": -0.10745,
+    "unit": "1",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, d2",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "d3",
+    "value": 0.00347,
+    "unit": "1",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, 553.8 nm row, d3",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "c1",
+    "value": 0.00034115,
+    "unit": "deg^-1",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), c1",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "c2",
+    "value": -0.0013425,
+    "unit": "deg^-1",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), c2",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "c3",
+    "value": 0.00095906,
+    "unit": "rad^-1 deg^-1",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), c3",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "c4",
+    "value": 0.00066229,
+    "unit": "rad^-1 deg^-1",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), c4",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "p1",
+    "value": 4.06054,
+    "unit": "deg",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), p1",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "p2",
+    "value": 12.8802,
+    "unit": "deg",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), p2",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "p3",
+    "value": -30.5858,
+    "unit": "deg",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), p3",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "p4",
+    "value": 16.7498,
+    "unit": "deg",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (11), p4",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "standard_distance_m",
+    "value": 384400000,
+    "unit": "m",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (7), mean viewer-Moon distance",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "solid_angle_sr",
+    "value": 6.4177e-05,
+    "unit": "sr",
+    "doi": "10.1086/430185",
+    "locator": "Eq. (8), standard-distance lunar solid angle",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "solar_irradiance_w_m2_nm",
+    "value": 1.8575,
+    "unit": "W/m2/nm",
+    "doi": "10.1086/430185",
+    "locator": "Table 1, nominal 555 nm, filter ID 23",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "moon:rolo311g:553.8nm",
+    "parameter": "wavelength_nm",
+    "value": 553.8,
+    "unit": "nm",
+    "doi": "10.1086/430185",
+    "locator": "Table 4, band identifier",
+    "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
   }
 ]

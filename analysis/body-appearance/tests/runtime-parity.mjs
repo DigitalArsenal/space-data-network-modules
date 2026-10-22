@@ -12,6 +12,7 @@ import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-mod
 import {loadModule} from 'space-data-module-sdk/host/isomorphic';
 import {encodeRequest} from '../codec.js';
 import {rockRequest,craterRequest} from './measurements.mjs';
+import {lunarRequest} from './lunar-measurements.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -51,6 +52,7 @@ export async function runtimeParity() {
     {name:'offset northern tile',method:'place',values:{...rockRequest(),level:2,x:2,y:0}},
     {name:'solar rotation',method:'rotate',values:{profile:'magnetic',latitude_rad:.7,longitude_rad:2,epoch_tai_s:0,scene_tai_s:86400}},
     {name:'lunar phase',method:'phase_curve',values:{model:'moon:muinonen2010',phase_rad:[0,.1,.5,1,1.5]}},
+    {name:'absolute lunar irradiance',method:'lunar_irradiance',values:lunarRequest()},
     ...['jupiter:heng2021:550nm','saturn:dyudina2016:640nm','saturn:dyudina2016:440nm'].map(model=>({
       name:model+' absolute disk',method:'disk_photometry',values:{model,phase_rad:[0,.1,.5,1,2],
         radius_m:1000,sun_distance_au:2,observer_distance_m:1e8,solar_magnitude:0}})),

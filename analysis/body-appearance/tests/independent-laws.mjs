@@ -46,8 +46,10 @@ export function ks(samples,cdf) {
 // Eqs. (10)/(11), Tables 4/5. 553.8 nm narrow band (NOT Johnson V).
 // Polynomial phase and solar longitude radians; exponential/cosine angles
 // and observer libration degrees. Standard distances cancel in ratios.
-// Domain in section 3.3.1: 1.55 < phase < 97 degrees. No calibration of the
-// runtime to these values is allowed. This checks SHAPE, not absolute flux.
+// Domain in section 3.3.1: 1.55 < phase < 97 degrees. No fitting of another
+// runtime model to this oracle is allowed. Independently transcribed from
+// the paper; also used to verify the published ROLO implementation's absolute
+// irradiance through Eqs.(7),(8). Same-model verification is labeled as such.
 export function roloReflectance(phaseDeg,solarLongitudeDeg=phaseDeg,observerLatDeg=0,observerLonDeg=0) {
   const g=phaseDeg*Math.PI/180,s=solarLongitudeDeg*Math.PI/180;
   const logA=-2.12504-1.65970*g+.38409*g*g-.20655*g*g*g

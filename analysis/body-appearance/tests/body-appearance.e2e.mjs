@@ -7,6 +7,7 @@ import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-mod
 import {measure} from './measurements.mjs';
 import {runtimeParity} from './runtime-parity.mjs';
 import {phaseDomains} from './mallama-hilton-oracle.mjs';
+import {measureLunar} from './lunar-measurements.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const bytes=await fs.readFile(path.join(root,'dist/isomorphic/module.wasm'));
@@ -23,13 +24,13 @@ try {
   report.acceptance.placement={status:'pass',rock:report.measurements.rock,crater:report.measurements.crater,
     cfaConvention:'Sum of circular footprints within the diameter interval, not overlap-unioned coverage.'};
 } catch(error) {report.failures.push(`Numerical checks: ${error.message}`);report.acceptance.placement={status:'fail',error:error.message};}
-finally {await harness.destroy();}
+try {
+  report.acceptance.moon=await measureLunar(harness);
+  if(report.acceptance.moon.status!=='pass')report.failures.push('Moon absolute disk photometry exceeds 0.1 mag');
+} catch(error) {report.acceptance.moon={status:'fail',error:error.message};report.failures.push(`Moon: ${error.message}`);}
+await harness.destroy();
 try {report.acceptance.runtimeParity=await runtimeParity();}
 catch(error) {report.acceptance.runtimeParity={status:'fail',error:error.message};report.failures.push(`Runtime parity: ${error.message}`);}
-report.acceptance.moon={status:'fail',threshold_mag:.1,absolute_calibration:false,
-  diagnostic:report.measurements?.moon_phase_shape,
-  reason:'Only a normalized H,G1,G2 phase curve is implemented; absolute disk radiometry and matched ROLO geometry/bandpass are missing.'};
-report.failures.push('Moon absolute disk photometry is incomplete');
 report.acceptance.planets=Object.fromEntries(Object.entries(phaseDomains).map(([body,range])=>[body,
   {status:'fail',phase_domain_deg:range,threshold_mag:.1,samples:0,reason:'No independently sourced and validated absolute disk-photometry implementation.'}]));
 report.failures.push('Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune disk magnitudes are unimplemented');

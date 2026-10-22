@@ -51,7 +51,7 @@
     "local_download": "rolo-journal-copy/source.pdf",
     "sha256": "1666a5414916c2e38fcf34097aad3794cc1aae9d4a7d090bef2a049219316e96",
     "bytes": 461609,
-    "scope": "Journal copy, Eqs. (10)/(11), Tables 4/5, 553.8 nm. TEST-ONLY oracle."
+    "scope": "Journal copy, Eqs. (7),(8),(10),(11), Tables 1/4, 553.8 nm. Runtime model parameters and independently transcribed test oracle."
   },
   {
     "id": "golombek2021",
@@ -106,5 +106,14 @@
     "sha256": "856f6e2b320fa904c7d49a762d6951b63a128351aaa092c226aba4c5e720d9f9",
     "bytes": 688361,
     "scope": "Eq. (4), Table 3, Pioneer red/blue Saturn Barkstrom coefficients"
+  },
+  {
+    "id": "oke-gunn1983",
+    "doi": "10.1086/160817",
+    "url": "https://articles.adsabs.harvard.edu/pdf/1983ApJ...266..713O",
+    "local_download": "oke-gunn1983/source.pdf",
+    "sha256": "85a65c23cbf06da3d479795568683223bee4dc10f1c918845344068a48c16fae",
+    "bytes": 428623,
+    "scope": "AB monochromatic magnitude definition, p.716; use conventional -48.60 sign, correcting the original printed +48.60 typo; verified against SDSS flux-calibration definition."
   }
 ]
