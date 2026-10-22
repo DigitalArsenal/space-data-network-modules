@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.operator-states-public",
   "name": "Private public-operator input for open DCA",
   "version": "0.1.0",
-  "description": "Planet CC BY-NC 4.0 states remain private. Retrieves 32 final daily files plus JPL kernel and IERS EOP, emits a private TT/EME2000 OEM and typed environment, and publishes only aggregate E13 DCL with provenance. Never publishes raw or per-object data.",
+  "description": "Planet CC BY-NC 4.0 states remain private. Retrieves 32 final daily files plus JPL kernel, emits a private TT/EME2000 OEM and typed environment, and publishes only aggregate E13 DCL with provenance. Never publishes raw or per-object data.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -117,7 +117,7 @@
           ],
           "required": true,
           "minStreams": 1,
-          "maxStreams": 34
+          "maxStreams": 33
         }
       ],
       "maxBatch": 60,
@@ -144,7 +144,7 @@
           ],
           "required": true,
           "minStreams": 1,
-          "maxStreams": 34
+          "maxStreams": 33
         }
       ],
       "outputPorts": [
@@ -177,25 +177,6 @@
                   "schemaName": "PRW.fbs",
                   "fileIdentifier": "$PRW",
                   "rootTypeName": "PRW",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "required": true,
-          "minStreams": 1,
-          "maxStreams": 1
-        },
-        {
-          "portId": "eop_response",
-          "acceptedTypeSets": [
-            {
-              "setId": "eop_response-typed",
-              "allowedTypes": [
-                {
-                  "schemaName": "HttpResponse.fbs",
-                  "fileIdentifier": "HRSP",
-                  "rootTypeName": "HttpResponse",
                   "wireFormat": "flatbuffer"
                 }
               ]

@@ -18,12 +18,12 @@ export async function buildHook(folder,sourceFile){
  if(!result.report?.ok)throw new Error(`Host hook ${folder} refused`,{cause:result.report?.issues});
  const entries=await resolveFlowDependencies({depsPath:original});return {...entries.get(manifest.pluginId),manifest,wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
 }
-export async function buildEop(){
- const original=path.join(modules,'data-source/eop-parser'),target=path.join(out,'transport/eop-parser');
+export async function buildEop(kind="parser"){
+ const original=path.join(modules,`data-source/eop-${kind}`),target=path.join(out,`transport/eop-${kind}`);
  const manifest=JSON.parse(await fs.readFile(path.join(original,'plugin-manifest.json'),'utf8'));
  manifest.sequentialJustification={kind:'pure-transform',detail:'Existing bounded IERS parser; no host calls or concurrency.'};
  const {header}=await generateSdsHeaders(['ICN','FIL','EOP'],pathToFileURL(path.join(packageDir,'build.mjs')));
- const pieces=await Promise.all(['data-source/eop-request/src/eop_wire.hpp','files/orbit-products/src/sha256.hpp','data-source/eop-parser/src/module.cpp'].map(p=>fs.readFile(path.join(modules,p),'utf8')));
+ const pieces=await Promise.all(['data-source/eop-request/src/eop_wire.hpp','files/orbit-products/src/sha256.hpp',`data-source/eop-${kind}/src/module.cpp`].map(p=>fs.readFile(path.join(modules,p),'utf8')));
  const source=pieces.join('\n').replace(/^#include "(?:ICN|FIL|EOP)_generated\.h".*$/gm,'').replace(/\b(DataType|eopSeries|iauPrecessionNutationModel|icnConnectorKind|icnPostIngestAction)_([A-Za-z0-9_]+)/g,'$1::$2');
  await fs.mkdir(path.join(target,'dist/isomorphic'),{recursive:true});
  const result=await compileModuleFromSource({manifest,sourceCode:header.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g,'')+'\n'+source,language:'c++',outputPath:path.join(target,'dist/isomorphic/module.wasm'),threadModel:'wasi-sequential'});
@@ -31,7 +31,7 @@ export async function buildEop(){
  const entries=await resolveFlowDependencies({depsPath:original});return {...entries.get(manifest.pluginId),manifest,wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- const eop=await buildEop();
+ const eop=await buildEop(),eopRequest=await buildEop('request');
  if(process.argv.includes('--eop-only'))console.log(`Built EOP parser: ${eop.wasmPath}`);
  else{
  const operator=(await import('../../data-source/operator-states-public/build.mjs')).compilation;
@@ -40,16 +40,16 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
  // Last: FFM's canonical compiler also supplies the final flow link's standard
  // Wasm EH runtime and memory accommodation. No physics is rebuilt in JS.
  const density=(await import('../../analysis/density-calibration/build.mjs')).compilation;
- const ids={operator:'com.digitalarsenal.data-source.operator-states-public',weather:'com.digitalarsenal.data-source.space-weather',density:'com.digitalarsenal.analysis.density-calibration',eop:eop.manifest.pluginId,http:http.manifest.pluginId,storage:storage.manifest.pluginId};
+ const ids={operator:'com.digitalarsenal.data-source.operator-states-public',weather:'com.digitalarsenal.data-source.space-weather',density:'com.digitalarsenal.analysis.density-calibration',eop:eop.manifest.pluginId,eopRequest:eopRequest.manifest.pluginId,http:http.manifest.pluginId,storage:storage.manifest.pluginId};
  const node=(id,plugin,method,kind='transform')=>({nodeId:id,pluginId:plugin,methodId:method,kind,drainPolicy:'single-shot'});
  const edge=(from,port,to,target)=>({edgeId:[from,port,to,target].join('-'),fromNodeId:from,fromPortId:port,toNodeId:to,toPortId:target,backpressurePolicy:'queue',queueDepth:1});
  const flow={programId:'com.digitalarsenal.flows.open-dca',name:'Open DCA NRLMSISE-00',version:'0.1.0',engineLinkage:'bridge',description:'Scheduled private Planet energy fits and aggregate E13 log-density correction publication. Raw operator states never enter SDN storage.',
- nodes:[node('operator-plan',ids.operator,'plan_operator'),node('operator-fetch',ids.http,'request'),node('operator-parse',ids.operator,'parse_operator'),node('prepare',ids.density,'prepare_operator_states'),node('eop-parse',ids.eop,'parse_finals2000a'),node('eop-wrap',ids.operator,'wrap_eop'),node('weather-plan',ids.weather,'plan_weather'),node('weather-fetch',ids.http,'request'),node('weather-parse',ids.weather,'parse_weather'),node('weather-wrap',ids.operator,'wrap_weather'),node('fit',ids.density,'fit_energy_arcs'),node('solve',ids.density,'calibrate_log_density'),node('publish',ids.operator,'publish_correction'),node('ingest',ids.storage,'ingest'),node('egress','sdn.flow.egress','emit','sink')],
- edges:[edge('operator-plan','request','operator-fetch','request'),edge('operator-fetch','response','operator-parse','response'),edge('operator-parse','operator_states','prepare','operator_states'),edge('operator-parse','kernel','fit','kernel'),edge('operator-parse','eop_response','eop-parse','response'),edge('eop-parse','records','eop-wrap','records'),edge('eop-wrap','earth_orientation','fit','earth_orientation'),edge('prepare','request','fit','request'),edge('weather-plan','request','weather-fetch','request'),edge('weather-fetch','response','weather-parse','response'),edge('weather-parse','records','weather-wrap','records'),edge('weather-wrap','space_weather','fit','space_weather'),edge('fit','arcs','solve','request'),edge('solve','calibration','publish','calibration'),edge('publish','records','ingest','dcl_records'),edge('publish','meta','ingest','meta'),edge('ingest','result','egress','result')],
- triggers:[{triggerId:'daily',kind:'timer',source:'host-cron',defaultIntervalMs:86400000,description:'Causal 30-day fleet solve on final daily operator states.'}],triggerBindings:['operator-plan','weather-plan'].map(targetNodeId=>({triggerId:'daily',targetNodeId,targetPortId:'tick',backpressurePolicy:'queue',queueDepth:1})),requiredPlugins:Object.values(ids)};
+ nodes:[node('operator-plan',ids.operator,'plan_operator'),node('operator-fetch',ids.http,'request'),node('operator-parse',ids.operator,'parse_operator'),node('prepare',ids.density,'prepare_operator_states'),node('eop-plan',ids.eopRequest,'finals2000a'),node('eop-fetch',ids.http,'request'),node('eop-parse',ids.eop,'parse_finals2000a'),node('eop-wrap',ids.operator,'wrap_eop'),node('weather-plan',ids.weather,'plan_weather'),node('weather-fetch',ids.http,'request'),node('weather-parse',ids.weather,'parse_weather'),node('weather-wrap',ids.operator,'wrap_weather'),node('fit',ids.density,'fit_energy_arcs'),node('solve',ids.density,'calibrate_log_density'),node('publish',ids.operator,'publish_correction'),node('ingest',ids.storage,'ingest'),node('egress','sdn.flow.egress','emit','sink')],
+ edges:[edge('operator-plan','request','operator-fetch','request'),edge('operator-fetch','response','operator-parse','response'),edge('operator-parse','operator_states','prepare','operator_states'),edge('operator-parse','kernel','fit','kernel'),edge('eop-plan','request','eop-fetch','request'),edge('eop-fetch','response','eop-parse','response'),edge('eop-parse','records','eop-wrap','records'),edge('eop-wrap','earth_orientation','fit','earth_orientation'),edge('prepare','request','fit','request'),edge('weather-plan','request','weather-fetch','request'),edge('weather-fetch','response','weather-parse','response'),edge('weather-parse','records','weather-wrap','records'),edge('weather-wrap','space_weather','fit','space_weather'),edge('fit','arcs','solve','request'),edge('solve','calibration','publish','calibration'),edge('publish','records','ingest','dcl_records'),edge('publish','meta','ingest','meta'),edge('ingest','result','egress','result')],
+ triggers:[{triggerId:'daily',kind:'timer',source:'host-cron',defaultIntervalMs:86400000,description:'Causal 30-day fleet solve on final daily operator states.'}],triggerBindings:['operator-plan','weather-plan','eop-plan'].map(targetNodeId=>({triggerId:'daily',targetNodeId,targetPortId:'tick',backpressurePolicy:'queue',queueDepth:1})),requiredPlugins:Object.values(ids)};
  const dependencies=new Map();
  for(const [folder,compilation] of [['data-source/operator-states-public',operator],['data-source/space-weather',weather],['analysis/density-calibration',density]]){const entries=await resolveFlowDependencies({depsPath:path.join(modules,folder)});for(const [id,entry]of entries)dependencies.set(id,{...entry,guestLink:{objectBytes:compilation.guestLink.objectBytes,metadata:compilation.guestLink}});}
- for(const entry of [eop,http,storage])dependencies.set(entry.manifest.pluginId,entry);
+ for(const entry of [eop,eopRequest,http,storage])dependencies.set(entry.manifest.pluginId,entry);
  resolveWasiThreadsToolchain({force:true});
  await compileFlowProgram({flow,dependencies,outDir:path.join(out,'runtime'),standardsRoot:process.env.SPACE_DATA_STANDARDS_ROOT});
  await fs.copyFile(path.join(out,'runtime/flow.json'),path.join(out,'flow.json'));
