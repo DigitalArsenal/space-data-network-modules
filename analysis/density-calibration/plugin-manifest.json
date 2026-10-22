@@ -24,6 +24,12 @@
       "fileIdentifier": "$DCL",
       "rootTypeName": "DCL",
       "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW",
+      "wireFormat": "flatbuffer"
     }
   ],
   "methods": [
@@ -389,6 +395,111 @@
         }
       ],
       "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_energy_arcs",
+      "displayName": "Fit private E13 NRLMSISE-00 energy arcs",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 36
+        },
+        {
+          "portId": "kernel",
+          "acceptedTypeSets": [
+            {
+              "setId": "kernel-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "earth_orientation-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        },
+        {
+          "portId": "space_weather",
+          "acceptedTypeSets": [
+            {
+              "setId": "space_weather-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "arcs",
+          "acceptedTypeSets": [
+            {
+              "setId": "arcs-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "maxBatch": 36,
       "drainPolicy": "single-shot"
     }
   ]

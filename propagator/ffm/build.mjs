@@ -43,6 +43,9 @@ process.env.SDN_WASI_CLANGXX=path.join(packageRoot,'build-driver.mjs');
 process.env.SDN_WASI_CLANG=process.env.SDN_WASI_CLANGXX;
 process.env.SPACE_DATA_STANDARDS_ROOT=standardsRoot;
 await fs.chmod(process.env.SDN_WASI_CLANGXX,0o755);
+// Importing prepares the canonical multi-unit compiler for another physics
+// module. Only the CLI builds the standalone FFM artifact.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const outputPath=path.join(packageRoot,'dist/isomorphic/module.wasm');await fs.mkdir(path.dirname(outputPath),{recursive:true});
 let result;
 try{
@@ -56,3 +59,5 @@ try{
   await fs.writeFile(path.join(packageRoot,'dist/build-provenance.json'),JSON.stringify({sdk:sdkVersion,spacedatastandards:JSON.parse(fsSync.readFileSync(path.join(packageRoot,'node_modules/spacedatastandards.org/package.json'))).version,threadModel:result.threadModel,target:'wasm32-wasip1-threads',sharedMemory:true,flags:['-msimd128'],sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,compiler:result.compiler,clangVersion:execFileSync(config.clangxx,['--version'],{encoding:'utf8'}).trim(),exceptionRuntimeArchives:exceptionLibraries.map(p=>({name:path.basename(p),flags:['-msimd128'],sha256:createHash('sha256').update(fsSync.readFileSync(p)).digest('hex')})),units:['src/cpp/src/prw_sdk_adapter.cpp',...units.map(p=>path.relative(packageRoot,p))],erfa:{sourceFiles:erfa.fileCount,root:path.relative(packageRoot,path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../higherpop/third_party/erfa'))},standardWasmExceptions:true,legacyRuntimeCompiled:false,debugInfo:'stripped',sdkAccommodation:'Public SDN_WASI_CLANGXX driver compiles multiple source units and supplies LLVM exception ABI archives and 256 MiB initial / 384 MiB maximum memory (100 objects x1 day measured 256 MiB; 1.5x headroom), idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation.'},null,2)+'\n');
   console.log(`Built ${bytes.length} bytes; canonical SDK artifact validation passed.`);
 }finally{if(result)await cleanupCompilation(result);}
+
+}

@@ -17,11 +17,18 @@ import { generateSdsHeaders } from '../../scripts/lib/sds-cpp-headers.mjs';
 // propagator/sgp4's Vallado SGP4 (the element sets' trajectories for the
 // decay methods; as analysis/epoch-state compiles it) and this module's source.
 const root = fileURLToPath(new URL('.', import.meta.url));
+// Reuse FFM's compiler, units and EH runtime; the SDK still owns this module's
+// ABI. Internal-linkage SDS headers isolate this consumer's released layout.
+const previousStandards=process.env.SPACE_DATA_STANDARDS_ROOT;
+delete process.env.SPACE_DATA_STANDARDS_ROOT;
+await import('../../propagator/ffm/build.mjs');
+if(previousStandards)process.env.SPACE_DATA_STANDARDS_ROOT=previousStandards;
+else delete process.env.SPACE_DATA_STANDARDS_ROOT;
 const jb2008Header = path.resolve(root, '../../propagator/ffm/lib/jb2008.h');
 const egm2008Header = path.resolve(root, '../../propagator/ffm/lib/egm2008_data.h');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const msisDir = path.resolve(root, '../../third_party/nrlmsise00');
-const erfa = await composeErfaTranslationUnit();
+const erfa = await composeErfaTranslationUnit(); // provenance; FFM links the authoritative ERFA unit
 const jb2008 = await fs.readFile(jb2008Header, 'utf8');
 const egm2008 = await fs.readFile(egm2008Header, 'utf8');
 // SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that
@@ -40,19 +47,21 @@ if (!msisModel.includes(mallocCast)) throw new Error('nrlmsise-00.c no longer ha
 const msis = ['#include <math.h>', '#include <stdio.h>', '#include <stdlib.h>', 'namespace nrlmsise00 {', msisHeader, msisData, msisModel.replace(mallocCast, 'u=(double*)malloc(sizeof(double)*(unsigned int)n);'), '}'].join('\n');
 // The SDS headers: DCL and the standards its schema includes, each once, after the ones it includes.
 const {header:sdsHeaders,version:sdsVersion,families:ordered}=await generateSdsHeaders(['DCL'],import.meta.url);
+const energyArcs=await fs.readFile(path.join(root,'src/open_dca_energy_arcs.hpp'),'utf8');
 const commonMode=await fs.readFile(path.join(root,'src/open_dca_common_mode.hpp'),'utf8');
 const source = (await fs.readFile(path.join(root, 'src/density_calibration.cpp'), 'utf8'))
   .replace(/^#include "DCL_generated\.h".*$/m, () => sdsHeaders.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g,''))
-  .replace('#include "open_dca_common_mode.hpp"',()=>commonMode);
+  .replace('#include "open_dca_common_mode.hpp"',()=>commonMode)
+  .replace('#include "open_dca_energy_arcs.hpp"',()=>energyArcs);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 export const compilation = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', erfa.source, jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
+  sourceCode: ['#include "space_data_module_invoke.h"', '#include "erfa.h"', jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'wasi-sequential',
+  threadModel: 'wasi-sequential',stackSize:2*1024*1024,
 });
 if (!compilation.report?.ok) throw new Error('Density calibration validation failed',{cause:compilation.report?.issues});
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));

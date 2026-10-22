@@ -1936,6 +1936,25 @@ Frame frame_of(EarthOrientation& eo, const OrbitalState& s, double omegaEarth) {
   return f;
 }
 
+// Shared EGM2008 Jacobi energy and gradient for the public energy method and
+// E13 energy-arc calibration. Keep the physical computation in one place.
+struct EnergyPoint { double value=0,kinetic=0,potential=0,rotation=0,speed=0,lat=0,lon=0,alt=0,gradient[6]={}; bool ok=false; };
+EnergyPoint orbital_energy(EarthOrientation& eo,const OrbitalState& s,int degree,int order,double gm,double omegaEarth,bool wantGradient) {
+  EnergyPoint out;const Frame f=frame_of(eo,s,omegaEarth);if(!f.ok)return out;
+  out.potential=geopotential(f.xe,degree,order,gm);
+  double rv[3];cross(s.r,s.v,rv);out.kinetic=0.5*dot(s.v,s.v);out.rotation=dot(f.omega,rv);
+  out.value=out.kinetic+out.potential-out.rotation;out.speed=std::sqrt(dot(f.vr,f.vr));
+  double elong=0,phi=0,height=0,xe[3]={f.xe[0],f.xe[1],f.xe[2]};eraGc2gd(1,xe,&elong,&phi,&height);
+  out.lat=phi/kDeg;out.lon=elong/kDeg;out.alt=height/1000.0;
+  if(wantGradient){
+    constexpr double h=0.5;double g[3];
+    for(int k=0;k<3;++k){double up[3]={f.xe[0],f.xe[1],f.xe[2]},dn[3]={f.xe[0],f.xe[1],f.xe[2]};up[k]+=h;dn[k]-=h;g[k]=(geopotential(up,degree,order,gm)-geopotential(dn,degree,order,gm))/(2.0*h);}
+    double gradU[3],wv[3];for(int j=0;j<3;++j)gradU[j]=f.rc2t[0][j]*g[0]+f.rc2t[1][j]*g[1]+f.rc2t[2][j]*g[2];
+    cross(f.omega,s.v,wv);for(int k=0;k<3;++k){out.gradient[k]=gradU[k]+wv[k];out.gradient[k+3]=f.vr[k];}
+  }
+  out.ok=true;return out;
+}
+
 }  // namespace
 
 // energy: STATES (EPHEMERIS, DUT1_S?, POLAR_MOTION_*?), GRAVITY_DEGREE (2-70; 0 = 36), GRAVITY_ORDER (0 = the degree),
@@ -1964,43 +1983,16 @@ extern "C" int energy() {
   std::vector<uint32_t> refused;
   for (size_t i = 0; i < states.size(); ++i) {
     const OrbitalState& s = states[i];
-    const Frame f = frame_of(eo, s, omegaEarth);
-    if (!f.ok) {
+    const auto point=orbital_energy(eo,s,degree,order,gm,omegaEarth,wantGradient);
+    if(!point.ok){
       refused.push_back(uint32_t(i));
-      for (std::vector<double>* a : {&energyJ, &kinetic, &potential, &rotation, &speed, &lat, &lon, &alt}) a->push_back(kNaN);
-      if (wantGradient) gradient.insert(gradient.end(), 6, kNaN);
+      for(std::vector<double>* a:{&energyJ,&kinetic,&potential,&rotation,&speed,&lat,&lon,&alt})a->push_back(kNaN);
+      if(wantGradient)gradient.insert(gradient.end(),6,kNaN);
       continue;
     }
-    const double U = geopotential(f.xe, degree, order, gm);
-    double rv[3];
-    cross(s.r, s.v, rv);
-    const double K = 0.5 * dot(s.v, s.v), rot = dot(f.omega, rv);
-    energyJ.push_back(K + U - rot);
-    kinetic.push_back(K);
-    potential.push_back(U);
-    rotation.push_back(rot);
-    speed.push_back(std::sqrt(dot(f.vr, f.vr)));
-    double elong = 0, phi = 0, height = 0;
-    double xe[3] = {f.xe[0], f.xe[1], f.xe[2]};
-    eraGc2gd(1, xe, &elong, &phi, &height);
-    lat.push_back(phi / kDeg);
-    lon.push_back(elong / kDeg);
-    alt.push_back(height / 1000.0);
-    if (wantGradient) {
-      constexpr double h = 0.5;
-      double g[3];
-      for (int k = 0; k < 3; ++k) {
-        double up[3] = {f.xe[0], f.xe[1], f.xe[2]}, dn[3] = {f.xe[0], f.xe[1], f.xe[2]};
-        up[k] += h;
-        dn[k] -= h;
-        g[k] = (geopotential(up, degree, order, gm) - geopotential(dn, degree, order, gm)) / (2.0 * h);
-      }
-      double gradU[3], wv[3];
-      for (int j = 0; j < 3; ++j) gradU[j] = f.rc2t[0][j] * g[0] + f.rc2t[1][j] * g[1] + f.rc2t[2][j] * g[2];  // R^T g
-      cross(f.omega, s.v, wv);
-      const double row[6] = {gradU[0] + wv[0], gradU[1] + wv[1], gradU[2] + wv[2], f.vr[0], f.vr[1], f.vr[2]};
-      gradient.insert(gradient.end(), row, row + 6);
-    }
+    energyJ.push_back(point.value);kinetic.push_back(point.kinetic);potential.push_back(point.potential);rotation.push_back(point.rotation);
+    speed.push_back(point.speed);lat.push_back(point.lat);lon.push_back(point.lon);alt.push_back(point.alt);
+    if(wantGradient)gradient.insert(gradient.end(),point.gradient,point.gradient+6);
   }
   fb::FlatBufferBuilder b(1024 + states.size() * 120);
   const auto vE = doubles(b, energyJ), vK = doubles(b, kinetic), vU = doubles(b, potential), vR = doubles(b, rotation);
@@ -2171,3 +2163,5 @@ extern "C" int calibrate_log_density() {
   if(request->PROVENANCE()&&request->PROVENANCE()->LINEAGE())out.PROVENANCE->LINEAGE+="; "+request->PROVENANCE()->LINEAGE()->str();
   fb::FlatBufferBuilder b;return emit("calibration",b,DCL::Pack(b,&out));
 }
+
+#include "open_dca_energy_arcs.hpp"
