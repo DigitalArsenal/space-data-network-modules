@@ -52,6 +52,13 @@ inline PropagationStop& callStop() {
 }
 inline void clearCallStop() { callStop() = PropagationStop(); clearPropagationStop(); }
 
+// EH-free typed consumers fail through the same per-call stop channel as
+// reentry. Never turn an unsupported force into a successful zero force.
+inline void flagForceFailure() {
+    propagationStop() = PropagationStop{true, "invalid-force", 0, NAN};
+    if (!callStop().active) callStop() = propagationStop();
+}
+
 /// Records the stop at a state y (GCRF position km, velocity km/s) at the
 /// integration clock jd (TDB Julian date) below the Karman line or not finite.
 /// True once the integration has stopped: the derivative is then zero.
@@ -82,6 +89,8 @@ inline std::string propagationStopMessage(const PropagationStop& stop = propagat
     if (std::string(stop.code) == "reentry")
         std::snprintf(text, sizeof text, "reentry: the trajectory descends below %.0f km geodetic altitude (%.1f km) at TDB JD %.6f; "
                       "FFM ends it there.", REENTRY_ALTITUDE_KM, stop.heightKm, stop.jd);
+    else if (std::string(stop.code) == "invalid-force")
+        std::snprintf(text, sizeof text, "invalid-force: unsupported or singular force evaluation.");
     else
         std::snprintf(text, sizeof text, "invalid-state: the integration produced a non-finite state at TDB JD %.6f.", stop.jd);
     return text;

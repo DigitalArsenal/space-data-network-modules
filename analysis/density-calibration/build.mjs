@@ -17,18 +17,20 @@ import { generateSdsHeaders } from '../../scripts/lib/sds-cpp-headers.mjs';
 // propagator/sgp4's Vallado SGP4 (the element sets' trajectories for the
 // decay methods; as analysis/epoch-state compiles it) and this module's source.
 const root = fileURLToPath(new URL('.', import.meta.url));
-// Reuse FFM's compiler, units and EH runtime; the SDK still owns this module's
-// ABI. Internal-linkage SDS headers isolate this consumer's released layout.
-const previousStandards=process.env.SPACE_DATA_STANDARDS_ROOT;
-delete process.env.SPACE_DATA_STANDARDS_ROOT;
-await import('../../propagator/ffm/build.mjs');
-if(previousStandards)process.env.SPACE_DATA_STANDARDS_ROOT=previousStandards;
-else delete process.env.SPACE_DATA_STANDARDS_ROOT;
+// FFM owns the typed force/propagation implementation; this consumer links
+// only that surface using the SDK EH-free compiler contract.
+const {generateSdsBindings}=await import('../../propagator/ffm/generate-sds-bindings.mjs');
+await generateSdsBindings();
+process.env.SDN_WASI_CLANGXX=path.join(root,'build-driver.mjs');
+process.env.SDN_WASI_CLANG=process.env.SDN_WASI_CLANGXX;
+await fs.chmod(process.env.SDN_WASI_CLANGXX,0o755);
 const jb2008Header = path.resolve(root, '../../propagator/ffm/lib/jb2008.h');
 const egm2008Header = path.resolve(root, '../../propagator/ffm/lib/egm2008_data.h');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const msisDir = path.resolve(root, '../../third_party/nrlmsise00');
-const erfa = await composeErfaTranslationUnit(); // provenance; FFM links the authoritative ERFA unit
+const erfa = await composeErfaTranslationUnit();
+await fs.mkdir(path.join(root,'.sdk-build'),{recursive:true});
+await fs.writeFile(path.join(root,'.sdk-build/erfa.cpp'),erfa.source);
 const jb2008 = await fs.readFile(jb2008Header, 'utf8');
 const egm2008 = await fs.readFile(egm2008Header, 'utf8');
 // SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that

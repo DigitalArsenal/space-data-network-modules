@@ -3,7 +3,7 @@
 // estimates, covariance rotations and time arithmetic execute in this WASM.
 #include "ffm/prw_execution.h"
 #include <cerrno>
-#include <exception>
+#include "reentry.h"
 namespace {
 std::string utc_iso(double mjd){
   int y,m,d,hmsf[4];if(eraD2dtf("UTC",6,2400000.5,mjd,&y,&m,&d,hmsf)<0)return "";
@@ -73,7 +73,7 @@ extern "C" int fit_energy_arcs(){
   if(!kernel||!eop||!weather)return fail("missing-environment","E13 energy fits require kernel, Earth orientation and licensed NRLMSISE-00 weather.");
   ffm::PrwEnvironment env;env.earthOrientation=eop->payload;env.earthOrientationSize=eop->payload_length;env.spaceWeather=weather->payload;env.spaceWeatherSize=weather->payload_length;
   DCLT output;output.ATMOSPHERE=std::make_unique<ATMT>();output.ATMOSPHERE->MODEL=AtmosphericModelFamily::NRLMSIS00E;output.STATUS=dclStatus::Solved;
-  try{
+  {
     for(uint32_t i=0;i<plugin_get_input_count();++i){const auto* f=plugin_get_input_frame(i);if(!f->port_id||std::strcmp(f->port_id,"request"))continue;
       fb::Verifier verifier(f->payload,f->payload_length);if(!VerifyDCLBuffer(verifier))return fail("invalid-request","Expected a private DCL state series.");auto* r=GetDCL(f->payload);
       if(!r->ID()||r->CREATED_AT_MS()<=0)return fail("invalid-request","State series needs ID and issue time.");
@@ -85,7 +85,7 @@ extern "C" int fit_energy_arcs(){
         auto fit=fit_arc(r->ID()->str(),states[j-1],states[j],B,kernel,env);if(fit->OK)B=fit->BALLISTIC_COEFFICIENT_M2_KG;output.OBJECTS.push_back(std::move(fit));
       }
     }
-  }catch(const std::exception& e){return fail("energy-fit-failed",e.what());}
+  }
   if(!output.PROVENANCE)output.PROVENANCE=std::make_unique<PVNT>();
   for(const auto* f:{kernel,eop,weather})output.PROVENANCE->LINEAGE+="; "+std::string(f->port_id)+"-typed-sha256="+ephem::sha256_hex(f->payload,f->payload_length);
   if(output.OBJECTS.empty())return fail("insufficient-arcs","No 20–28 hour state pairs.");
@@ -125,3 +125,9 @@ extern "C" int prepare_operator_states(){
   }
   return 0;
 }
+
+namespace astro {
+Vec3 HorizontalWindEarthFixed(const Vec3&, double, const SpaceWeatherData&, bool) {
+  flagForceFailure(); return Vec3(NAN, NAN, NAN);
+}
+} // namespace astro

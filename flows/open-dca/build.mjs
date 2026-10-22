@@ -37,8 +37,8 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
  const operator=(await import('../../data-source/operator-states-public/build.mjs')).compilation;
  const weather=(await import('../../data-source/space-weather/build.mjs')).compilation;
  const http=await buildHook('http-request','http_request_module.cpp'),storage=await buildHook('storage-ingest','storage_ingest_module.cpp');
- // Last: FFM's canonical compiler also supplies the final flow link's standard
- // Wasm EH runtime and memory accommodation. No physics is rebuilt in JS.
+ // Last: the EH-free typed energy compiler also supplies the final flow link.
+ // The SDK owns composition; all physics stays in the linked WASM units.
  const density=(await import('../../analysis/density-calibration/build.mjs')).compilation;
  const ids={operator:'com.digitalarsenal.data-source.operator-states-public',weather:'com.digitalarsenal.data-source.space-weather',density:'com.digitalarsenal.analysis.density-calibration',eop:eop.manifest.pluginId,eopRequest:eopRequest.manifest.pluginId,http:http.manifest.pluginId,storage:storage.manifest.pluginId};
  const node=(id,plugin,method,kind='transform')=>({nodeId:id,pluginId:plugin,methodId:method,kind,drainPolicy:'single-shot'});
