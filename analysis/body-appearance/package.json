@@ -1,0 +1,29 @@
+{
+  "name": "space-data-network-module-body-appearance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "files": [
+    "dist/",
+    "plugin-manifest.json",
+    "README.md",
+    "data/"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:e2e": "node tests/body-appearance.e2e.mjs",
+    "check:compliance": "node --test tests/sdk_compat.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.8.27",
+    "flatc-wasm": "26.1.38",
+    "esbuild": "0.28.0",
+    "playwright": "1.56.1"
+  },
+  "dependencies": {
+    "flatbuffers": "25.9.23",
+    "spacedatastandards.org": "1.220.0"
+  }
+}

@@ -1,0 +1,272 @@
+[
+  {
+    "model": "asteroid:S",
+    "parameter": "w",
+    "value": 0.23,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average S",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:S",
+    "parameter": "h",
+    "value": 0.08,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average S",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:S",
+    "parameter": "B0",
+    "value": 1.6,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average S",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:S",
+    "parameter": "g",
+    "value": -0.27,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average S",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:S",
+    "parameter": "theta_deg",
+    "value": 20,
+    "unit": "degree",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average S",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:C",
+    "parameter": "w",
+    "value": 0.037,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average C",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:C",
+    "parameter": "h",
+    "value": 0.025,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average C",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:C",
+    "parameter": "B0",
+    "value": 1.03,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average C",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:C",
+    "parameter": "g",
+    "value": -0.47,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average C",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:C",
+    "parameter": "theta_deg",
+    "value": 20,
+    "unit": "degree",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average C",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:V",
+    "parameter": "w",
+    "value": 0.51,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average V",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:V",
+    "parameter": "h",
+    "value": 0.098,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average V",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:V",
+    "parameter": "B0",
+    "value": 1.0,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average V",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:V",
+    "parameter": "g",
+    "value": -0.26,
+    "unit": "1",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average V",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "asteroid:V",
+    "parameter": "theta_deg",
+    "value": 32,
+    "unit": "degree",
+    "doi": "10.2458/azu_uapress_9780816532131-ch007",
+    "locator": "Table 6, Average V",
+    "scope": "Visible-band class average; Hapke one-term Henyey-Greenstein. Not a per-object measurement."
+  },
+  {
+    "model": "sun:doppler",
+    "parameter": "A",
+    "value": 2.972,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, doppler column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:doppler",
+    "parameter": "B",
+    "value": -0.484,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, doppler column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:doppler",
+    "parameter": "C",
+    "value": -0.361,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, doppler column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:magnetic",
+    "parameter": "A",
+    "value": 2.879,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, magnetic column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:magnetic",
+    "parameter": "B",
+    "value": -0.339,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, magnetic column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:magnetic",
+    "parameter": "C",
+    "value": -0.485,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, magnetic column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:spectroscopic",
+    "parameter": "A",
+    "value": 2.851,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, spectroscopic column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:spectroscopic",
+    "parameter": "B",
+    "value": -0.343,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, spectroscopic column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "sun:spectroscopic",
+    "parameter": "C",
+    "value": -0.474,
+    "unit": "microradian/second",
+    "doi": "10.1086/168467",
+    "locator": "Table 1, spectroscopic column; Eq. (4)",
+    "scope": "Sidereal solar latitude fit; 1967-1987 (spectroscopic 1967-1984)."
+  },
+  {
+    "model": "moon:highlands",
+    "parameter": "median_slope_deg",
+    "value": 7.5,
+    "unit": "degree",
+    "doi": "10.1029/2010JE003716",
+    "locator": "Table 1, highlands column",
+    "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  },
+  {
+    "model": "moon:highlands",
+    "parameter": "hurst",
+    "value": 0.95,
+    "unit": "1",
+    "doi": "10.1029/2010JE003716",
+    "locator": "Table 1, highlands column",
+    "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  },
+  {
+    "model": "moon:highlands",
+    "parameter": "breakover_km",
+    "value": 0.98,
+    "unit": "kilometre",
+    "doi": "10.1029/2010JE003716",
+    "locator": "Table 1, highlands column",
+    "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  },
+  {
+    "model": "moon:maria",
+    "parameter": "median_slope_deg",
+    "value": 2.0,
+    "unit": "degree",
+    "doi": "10.1029/2010JE003716",
+    "locator": "Table 1, maria column",
+    "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  },
+  {
+    "model": "moon:maria",
+    "parameter": "hurst",
+    "value": 0.76,
+    "unit": "1",
+    "doi": "10.1029/2010JE003716",
+    "locator": "Table 1, maria column",
+    "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  },
+  {
+    "model": "moon:maria",
+    "parameter": "breakover_km",
+    "value": 0.53,
+    "unit": "kilometre",
+    "doi": "10.1029/2010JE003716",
+    "locator": "Table 1, maria column",
+    "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  }
+]
