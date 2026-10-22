@@ -1,0 +1,376 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+  "name": "Private public-operator input for open DCA",
+  "version": "0.1.0",
+  "description": "Planet CC BY-NC 4.0 states remain private. Retrieves 32 final daily files plus JPL kernel and IERS EOP, emits a private TT/EME2000 OEM and typed environment, and publishes only aggregate E13 DCL with provenance. Never publishes raw or per-object data.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded parsing and typed request planning; host owns I/O, density module owns physics."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DCL.fbs",
+      "fileIdentifier": "$DCL",
+      "rootTypeName": "DCL",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "plan_operator",
+      "displayName": "plan operator",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 34
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse_operator",
+      "displayName": "parse operator",
+      "inputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 34
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "operator_states",
+          "acceptedTypeSets": [
+            {
+              "setId": "operator_states-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        },
+        {
+          "portId": "kernel",
+          "acceptedTypeSets": [
+            {
+              "setId": "kernel-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        },
+        {
+          "portId": "eop_response",
+          "acceptedTypeSets": [
+            {
+              "setId": "eop_response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "wrap_weather",
+      "displayName": "wrap weather",
+      "inputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "space_weather",
+          "acceptedTypeSets": [
+            {
+              "setId": "space_weather-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "wrap_eop",
+      "displayName": "wrap eop",
+      "inputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "earth_orientation-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "publish_correction",
+      "displayName": "publish correction",
+      "inputPorts": [
+        {
+          "portId": "calibration",
+          "acceptedTypeSets": [
+            {
+              "setId": "calibration-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "maxBatch": 60,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

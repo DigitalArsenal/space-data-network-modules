@@ -97,3 +97,29 @@ extern "C" void __wasm_call_ctors(void);
 extern "C" void ffm_initialize(void){static bool initialized=false;if(!initialized){initialized=true;__wasm_call_ctors();}}
 extern "C" int emscripten_futex_wait(volatile void* address,uint32_t expected,double timeoutMs){const int64_t timeout=std::isfinite(timeoutMs)?static_cast<int64_t>(timeoutMs*1000000.0):-1;const int r=__builtin_wasm_memory_atomic_wait32(const_cast<int32_t*>(static_cast<volatile int32_t*>(address)),static_cast<int32_t>(expected),timeout);return r==0?0:r==1?-EWOULDBLOCK:-ETIMEDOUT;}
 extern "C" int emscripten_futex_wake(volatile void* address,int count){return __builtin_wasm_memory_atomic_notify(const_cast<int32_t*>(static_cast<volatile int32_t*>(address)),count);}
+
+// OEM metadata truthfully declares Planet's TT epochs and EME2000 axes. This
+// transform is the same ERFA IAU-2006 J2000 bias as foundation/frames, and the
+// same TT -> TAI -> UTC conversion as foundation/time; no JS approximation.
+extern "C" int prepare_operator_states(){
+  const int index=plugin_find_input_index("operator_states",0);if(index<0)return fail("invalid-request","One private OEM required.");
+  const auto* f=plugin_get_input_frame(index);fb::Verifier verifier(f->payload,f->payload_length);if(!VerifySizePrefixedOEMBuffer(verifier))return fail("invalid-request","Expected size-prefixed OEM.");
+  const auto* oem=GetSizePrefixedOEM(f->payload);double issue=0;if(!mjd_of_iso(oem->CREATION_DATE(),issue))return fail("invalid-request","OEM needs UTC issue time.");
+  if(!oem->EPHEMERIS_DATA_BLOCK()||oem->EPHEMERIS_DATA_BLOCK()->size()>36)return fail("invalid-request","Expected at most 36 calibration Doves.");
+  double rb[3][3],rp[3][3],rbp[3][3];eraBp06(2451545.0,0,rb,rp,rbp);
+  for(const auto* block:*oem->EPHEMERIS_DATA_BLOCK()){
+    if(block->TIME_SYSTEM()!=timingStandard::TT||!block->REFERENCE_FRAME()||!block->REFERENCE_FRAME()->NAME()||block->REFERENCE_FRAME()->NAME()->str()!="EME2000"||!block->OBJECT()||!block->OBJECT()->OBJECT_ID()||!block->EPHEMERIS_DATA_LINES()||block->EPHEMERIS_DATA_LINES()->size()>33)return fail("invalid-request","Planet series needs explicit TT/EME2000 and bounded states.");
+    DCLT out;out.ID=block->OBJECT()->OBJECT_ID()->str();out.CREATED_AT_MS=ms_of_mjd(issue);out.BALLISTIC_COEFFICIENT_M2_KG=0.02;out.STATES=std::make_unique<dclStatesT>();out.STATES->EPHEMERIS=std::make_unique<ephemerisDataBlockT>();auto& states=*out.STATES->EPHEMERIS;
+    out.PROVENANCE=std::make_unique<PVNT>();if(oem->COMMENT())out.PROVENANCE->LINEAGE=oem->COMMENT()->str();
+    int64_t previous=0;
+    for(const auto* line:*block->EPHEMERIS_DATA_LINES()){
+      double tt,tai1,tai2,utc1,utc2;if(!mjd_of_iso(line->EPOCH(),tt)||eraTttai(2400000.5,tt,&tai1,&tai2)||eraTaiutc(tai1,tai2,&utc1,&utc2)<0)return fail("invalid-time","Planet TT conversion refused.");
+      const int64_t ms=ms_of_mjd((utc1-2400000.5)+utc2);if(ms<=previous)return fail("invalid-time","Planet epochs must increase.");previous=ms;
+      auto target=std::make_unique<ephemerisDataLineT>();target->EPOCH=utc_iso(mjd_of_ms(ms));
+      double r[3]={line->X(),line->Y(),line->Z()},v[3]={line->X_DOT(),line->Y_DOT(),line->Z_DOT()},rr[3],vv[3];eraTrxp(rb,r,rr);eraTrxp(rb,v,vv);
+      target->X=rr[0];target->Y=rr[1];target->Z=rr[2];target->X_DOT=vv[0];target->Y_DOT=vv[1];target->Z_DOT=vv[2];states.EPHEMERIS_DATA_LINES.push_back(std::move(target));
+    }
+    fb::FlatBufferBuilder b;if(emit("request",b,DCL::Pack(b,&out)))return 1;
+  }
+  return 0;
+}

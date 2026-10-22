@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-hostcap-storage-ingest",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -17,9 +17,10 @@
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.7"
+    "space-data-module-sdk": "0.9.9",
+    "spacedatastandards.org": "1.259.0"
   },
   "overrides": {
-    "hd-wallet-wasm": "2.1.0"
+    "hd-wallet-wasm": "2.1.1"
   }
 }
