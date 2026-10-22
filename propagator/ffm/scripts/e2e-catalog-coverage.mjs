@@ -31,8 +31,10 @@ const frame = (portId, arm, value) => ({ portId, typeRef: TYPE, payload: encodeP
 const report = { artifactSha256: createHash('sha256').update(wasm).digest('hex'), epochUtc: standard.fixtureEpochUtc,
   threads: 1, logicalCpus: os.cpus().length, loadStart: os.loadavg(), kernelBytes: KERNEL.length,
   inputs: Object.fromEntries(environment.map(x => [x.portId, x.payload.length])), durationSeconds: 86400, regimes: [] };
-const reportPath = new URL('../tests/evidence/catalog-coverage.json', import.meta.url);
-const save = () => { fs.mkdirSync(new URL('../tests/evidence/', import.meta.url), { recursive: true }); fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n'); };
+// Timing evidence changes every run. Keep live results outside tracked source
+// so an exact-head gauntlet cannot mutate the candidate it is measuring.
+const reportPath = new URL('../.sdk-build/catalog-coverage.json', import.meta.url);
+const save = () => { fs.mkdirSync(new URL('../.sdk-build/', import.meta.url), { recursive: true }); fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n'); };
 try {
   for (const seed of seeds) {
     const coverage = await makeHost(), resident = await makeHost();

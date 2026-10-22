@@ -43,7 +43,8 @@ Negative return values are explained by `plugin_catalog_error()`.
 
 Run `node propagator/ffm/scripts/e2e-catalog-coverage.mjs` from the module repo.
 It records one-day dense-state agreement for eight regimes, single-thread CPU,
-real headless-browser memory at 1k/10k entities, and shared resident PIV parity.
+real headless-browser memory at 1k/10k entities, and shared resident PIV parity
+in `.sdk-build/catalog-coverage.json` (a snapshot may be committed as evidence).
 The diagnostic pointer exports are browser-host surfaces; the SDK process
 harness exposes canonical PIV methods. The existing `scripts/e2e-ffm.mjs`
 separately qualifies resident dynamics against independent study truth.

@@ -7,10 +7,10 @@
   "flags": [
     "-msimd128"
   ],
-  "sha256": "ae421b309580b8232e9d4427fe0d6ed92666ad610f54c62cfcc76f5641ad5764",
-  "bytes": 2228620,
+  "sha256": "b8efb44320d3cea37a155cb2edd07004d0bca567a8b9cc347ba21dbab576f7a7",
+  "bytes": 2228817,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/worktrees/space-data-network-modules--ffm-catalog-coverage-ffm1-fast-20261022/propagator/ffm/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
     {
       "name": "libc++abi-ww-wasmexcept.a",
