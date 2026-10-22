@@ -12,7 +12,7 @@ const manifest=JSON.parse(fs.readFileSync(path.join(ffm,'plugin-manifest.json'))
 const units=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','nrlmsise00','time_convert','us76','ffm_gravity'].map(n=>path.join(ffm,`lib/${n}.cpp`));
 units.push(...['prw_execution','prw_dynamics','kernel_store'].map(n=>path.join(ffm,`src/cpp/src/${n}.cpp`)),path.join(root,'.sdk-build/erfa.cpp'),...['nrlmsise-00.c','nrlmsise-00_data.c'].map(n=>path.resolve(root,'../../third_party/nrlmsise00',n)));
 const include=[path.join(ffm,'lib'),path.join(ffm,'src/cpp/include'),path.join(ffm,'src/cpp/generated'),path.join(ffm,'src/cpp/generated/sds'),path.resolve(root,'../../third_party/nrlmsise00'),path.resolve(root,'../../foundation/frames/src'),path.resolve(root,'../../higherpop/third_party/erfa')];
-const flags=['-msimd128','-fno-exceptions','-fno-c++-static-destructors','-DFFM_TYPED_INPUTS_ONLY=1',`-DFFM_MODULE_ID=${JSON.stringify(manifest.pluginId)}`,`-DFFM_MODULE_VERSION=${JSON.stringify(manifest.version)}`,...include.map(p=>`-I${p}`)];
+const flags=['-msimd128','-fno-exceptions','-fno-c++-static-destructors','-DFFM_TYPED_INPUTS_ONLY=1',`-DFFM_MODULE_ID="${manifest.pluginId}"`,`-DFFM_MODULE_VERSION="${manifest.version}"`,...include.map(p=>`-I${p}`)];
 const args=process.argv.slice(2);
 function run(bin,argv){const r=spawnSync(bin,argv,{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);}
 if(args.includes('--version'))run(clang,args);

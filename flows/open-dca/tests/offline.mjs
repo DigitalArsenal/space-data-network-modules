@@ -17,9 +17,10 @@ export async function offline(dir){
  try{
   for(const [seriesIndex,f]of inputs.filter(f=>f.portId==='request').entries()){
    const d=decodeDcl(f),lines=d.STATES.EPHEMERIS.EPHEMERIS_DATA_LINES;
+   const states=lines.map(s=>({ms:Date.parse(s.EPOCH+'Z'),state:[s.X,s.Y,s.Z,s.X_DOT,s.Y_DOT,s.Z_DOT].map(v=>v*1000)}));
+   if(!states.some((s,i)=>i>0&&(s.ms-states[i-1].ms)/3600000>=20&&(s.ms-states[i-1].ms)/3600000<=28))continue;
    const actual=decodeDcl((await density.call('fit_energy_arcs',[f,...env])).outputs[0]).OBJECTS;
    let B=d.BALLISTIC_COEFFICIENT_M2_KG,index=0;
-   const states=lines.map(s=>({ms:Date.parse(s.EPOCH+'Z'),state:[s.X,s.Y,s.Z,s.X_DOT,s.Y_DOT,s.Z_DOT].map(v=>v*1000)}));
    for(let j=1;j<states.length;j++){
     const a=states[j-1],b=states[j],hours=(b.ms-a.ms)/3600000;if(hours<20||hours>28)continue;
     const e=await oracle.energyArc(a,b,{b0:B,cr:0.0135,sigma:{posRtnM:[4,10,2],velRtnMmS:[10,3,2.5]},tolerance:1e-3,maxIterations:6});

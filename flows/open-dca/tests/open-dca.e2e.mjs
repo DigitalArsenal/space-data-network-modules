@@ -5,7 +5,7 @@ import path from 'node:path';
 import http from 'node:http';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {gunzipSync} from 'node:zlib';
 import {modules,require,decodeHttpResponse,ByteBuffer,S} from './inputs.mjs';
 import {localNode} from '../../../data-source/space-weather/tests/local-node.mjs';
@@ -29,13 +29,28 @@ try{
  const misses=[];server=http.createServer((req,res)=>{const r=sources.get(req.url);if(!r){misses.push(req.url);res.writeHead(404);res.end();return;}for(const [k,v]of Object.entries(r.headers||{}))if(!['content-length','content-encoding','transfer-encoding','connection'].includes(k.toLowerCase()))res.setHeader(k,v);res.writeHead(200);res.end(r.body);});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  node=await localNode(process.env.SDN_NODE_BINARY);const info=await node.start();receipt.nodeDirectory=node.dir;await save();
- const flowDir=path.join(modules,'flows/open-dca/dist/runtime'),portable=await fs.readFile(path.join(flowDir,'runtime.wasm'));receipt.artifactSha256=hash(portable);
- const response=await fetch(node.base+'/api/v1/admin/modules/sign',{method:'POST',headers:{'Content-Type':'application/wasm'},body:portable});assert(response.ok,`Sign ${response.status}`);const sig=await response.json();assert.equal(sig.content_hash,hash(portable));
- const bundle=await createSingleFileBundle({wasmBytes:portable,signature:sig.signature_entry});const signed=appendPublicationRecordCollection(portable,encodePublicationRecordCollection({mbl:bundle.bundle}));assert((await verifyModuleArtifact(signed,{requireSignature:true,trustedPublicKeys:[sig.public_key_hex]})).verified);
- await node.stop();const program='com.digitalarsenal.flows.open-dca',target=path.join(node.dir,'flows',program);await fs.cp(flowDir,target,{recursive:true});for(const name of ['runtime.wasm','isomorphic/module.wasm'])await fs.writeFile(path.join(target,name),signed);
- node.config.flows.services=[{flow:program,memory_pages:8192,intervals:{daily:'24h'},retrieval_interval:'23h',exclusive_group:'space-weather',release_after_run:true,config:{open_dca_archive_url:`http://127.0.0.1:${server.address().port}`}}];
- node.config.publishing.allowed_schemas=['DCL','DCL.fbs'];node.config.publishing.auto_publish=[{schema:'DCL.fbs',provider_id:'open-dca',source_name:'planet-nrlmsise00',min_interval:'1s',settle:'1s',max_shard_bytes:1048576}];
- await fs.mkdir(path.join(node.dir,'data/modules'),{recursive:true});await fs.writeFile(path.join(node.dir,'data/modules/capability_policy.json'),JSON.stringify({version:1,approvals:['http','storage_ingest'].map(capability=>({module_hash:hash(portable),capability,plugin_id:program,signer_public_key:sig.public_key_hex,note:'Isolated DCA E2E'}))}));
+ const approvals=[],signedFlows=[];
+ for(const slug of ['space-weather','open-dca']){
+  const flowDir=path.join(modules,`flows/${slug}/dist/runtime`),portable=await fs.readFile(path.join(flowDir,'runtime.wasm'));
+  const response=await fetch(node.base+'/api/v1/admin/modules/sign',{method:'POST',headers:{'Content-Type':'application/wasm'},body:portable});assert(response.ok,`Sign ${slug}: ${response.status}`);const sig=await response.json();assert.equal(sig.content_hash,hash(portable));
+  const bundle=await createSingleFileBundle({wasmBytes:portable,signature:sig.signature_entry});const signed=appendPublicationRecordCollection(portable,encodePublicationRecordCollection({mbl:bundle.bundle}));assert((await verifyModuleArtifact(signed,{requireSignature:true,trustedPublicKeys:[sig.public_key_hex]})).verified);
+  const program=`com.digitalarsenal.flows.${slug}`;signedFlows.push({flowDir,program,signed});
+  approvals.push(...['http','storage_ingest'].map(capability=>({module_hash:hash(portable),capability,plugin_id:program,signer_public_key:sig.public_key_hex,note:'Isolated DCA E2E'})));
+  if(slug==='open-dca')receipt.artifactSha256=hash(portable);
+ }
+ await node.stop();
+ for(const {flowDir,program,signed}of signedFlows){const target=path.join(node.dir,'flows',program);await fs.cp(flowDir,target,{recursive:true});for(const name of ['runtime.wasm','isomorphic/module.wasm'])await fs.writeFile(path.join(target,name),signed);}
+ const ops=process.env.GAUNTLET_CANDIDATE_OPS||process.env.SPACEWX_OPS;assert(ops,'SPACEWX_OPS must name the owner installer candidate');
+ const python=process.env.SPACEWX_PYTHON||'python3',deploy=path.join(ops,'deployment/space-weather-provider-node/deploy/host-config.py');
+ node.config.publishing.allowed_schemas=[];
+ await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));
+ await command(python,[deploy,node.configPath,'apply'],{stdio:'inherit'});
+ const merged=JSON.parse(execFileSync(python,['-c','import json,sys,yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))',node.configPath],{encoding:'utf8'}));
+ assert.deepEqual(merged.publishing.allowed_schemas,[]);assert.deepEqual(merged.admin,node.config.admin);assert.deepEqual(merged.network,node.config.network);
+ Object.assign(node.config,merged);
+ node.config.flows.services.find(s=>s.flow==='com.digitalarsenal.flows.open-dca').config={open_dca_archive_url:`http://127.0.0.1:${server.address().port}`};
+ receipt.deploymentConfig='PASS: actual owner merger, both signed flows, capabilities before boot';
+ await fs.mkdir(path.join(node.dir,'data/modules'),{recursive:true});await fs.writeFile(path.join(node.dir,'data/modules/capability_policy.json'),JSON.stringify({version:1,approvals}));
  await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));const log=await fs.open(path.join(node.dir,'prewarm.log'),'w');try{await command(process.env.SDN_NODE_BINARY,['prewarm-aot','--config',node.configPath],{cwd:node.dir,env:node.env,stdio:['ignore',log.fd,log.fd]});}finally{await log.close();}
  await node.start();console.log('Signed/AOT DCA daily flow running on scratch node: '+node.dir);await save();
  assert(process.env.SDN_JS);const sdn=await import(pathToFileURL(path.join(process.env.SDN_JS,'dist/index.mjs'))),addrs=[`/ip4/127.0.0.1/tcp/${node.ports.ws}/ws/p2p/${info.peer_id}`];
