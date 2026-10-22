@@ -15,6 +15,22 @@ import {rockRequest,craterRequest} from './measurements.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+async function firefoxBinary() {
+  if(process.env.FIREFOX_BINARY)return process.env.FIREFOX_BINARY;
+  const expected=firefox.executablePath();
+  try {await fs.access(expected);return expected;}catch{}
+  // Reuse an existing Playwright Firefox cache; never download or open a
+  // windowed browser. Report its actual version so the evidence is explicit.
+  const match=expected.match(/^(.*[\\/])(firefox-\d+)([\\/].*)$/);
+  if(match) {
+    const entries=await fs.readdir(match[1]).catch(()=>[]);
+    for(const entry of entries.filter(n=>/^firefox-\d+$/.test(n)).sort((a,b)=>Number(b.slice(8))-Number(a.slice(8)))) {
+      const candidate=path.join(match[1],entry)+match[3];
+      try {await fs.access(candidate);return candidate;}catch{}
+    }
+  }
+  throw new Error('No cached headless Firefox; set FIREFOX_BINARY to an installed Playwright Firefox.');
+}
 async function digests(harness,requests) {
   const outputs=[];
   for(const {name,method,values} of requests) {
@@ -63,7 +79,7 @@ export async function runtimeParity() {
   try {
     // Redirect Playwright profiles to ignored worktree scratch, not /tmp.
     const previousTemp=process.env.TMPDIR;process.env.TMPDIR=scratch;
-    try {browser=await firefox.launch({headless:true,executablePath:process.env.FIREFOX_BINARY || firefox.executablePath()});}
+    try {browser=await firefox.launch({headless:true,executablePath:await firefoxBinary()});}
     finally {if(previousTemp===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=previousTemp;}
     browserVersion=browser.version();
     const page=await browser.newPage();page.on('pageerror',error=>errors.push(error.message));

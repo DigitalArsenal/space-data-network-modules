@@ -21,6 +21,19 @@ export function lunarCraterShape(diameterM) {
   return 10**coefficients.reduce((sum,a,i)=>sum+a*x**(i+1),0);
 }
 export function craterNumberCdf(d,a,b) {return (lunarCraterShape(a)-lunarCraterShape(d))/(lunarCraterShape(a)-lunarCraterShape(b));}
+export function craterAreaFraction(n1PerKm2,a,b) {
+  // Integration by parts on cumulative N(D), independent of the runtime's
+  // polynomial derivative/Simpson integration. Midpoints in log D, 8192 bins;
+  // doubling this resolution is checked below against a 1e-7 relative budget.
+  const integrate=n=>{
+    const h=Math.log(b/a)/n;let sum=0;
+    for(let i=0;i<n;i++){const d=a*Math.exp((i+.5)*h);sum+=2*d*d*lunarCraterShape(d)*h;}
+    return n1PerKm2/1e6*Math.PI/4*(a*a*lunarCraterShape(a)-b*b*lunarCraterShape(b)+sum);
+  };
+  const coarse=integrate(8192),fine=integrate(16384);
+  if(Math.abs(coarse/fine-1)>1e-7)throw new Error('Independent crater area quadrature did not converge');
+  return fine;
+}
 export function ks(samples,cdf) {
   const sorted=[...samples].sort((a,b)=>a-b),n=sorted.length;let d=0;
   for(let i=0;i<n;i++){const f=cdf(sorted[i]);d=Math.max(d,(i+1)/n-f,f-i/n);}

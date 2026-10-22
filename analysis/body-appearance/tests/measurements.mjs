@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {encodeRequest,decodeResult} from '../codec.js';
-import {rockIntegral,rockNumberCdf,lunarCraterShape,craterNumberCdf,ks,roloReflectance} from './independent-laws.mjs';
+import {rockIntegral,rockNumberCdf,lunarCraterShape,craterNumberCdf,craterAreaFraction,ks,roloReflectance} from './independent-laws.mjs';
 
 export async function invoke(harness,method,values) {
   const response=await harness.invoke(encodeRequest(method,values));
@@ -42,9 +42,16 @@ export async function measure(harness) {
   }
   const cq=craterRequest(),crater=await invoke(harness,'place',cq);
   const cs=ks(crater.crater_diameter_m,d=>craterNumberCdf(d,cq.crater_min_m,cq.crater_max_m));
-  report.crater={...cs,expected_count:crater.crater_expected_count,measured_cfa:crater.crater_actual_cfa};
+  const craterArea=4*Math.PI*cq.radius_m**2;
+  const craterMeasured=crater.crater_diameter_m.reduce((s,d)=>s+Math.PI*d*d/4,0)/craterArea;
+  const craterTarget=craterAreaFraction(cq.crater_n1_km2,cq.crater_min_m,cq.crater_max_m);
+  report.crater={...cs,expected_count:crater.crater_expected_count,target_cfa:craterTarget,measured_cfa:craterMeasured,
+    relative_area_error:Math.abs(craterMeasured/craterTarget-1)};
   assert.ok(cs.n>=100000);assert.ok(cs.p>.05,JSON.stringify(report.crater));
   assert.ok(Math.abs(crater.crater_expected_count-100005)<.01);
+  assert.ok(report.crater.relative_area_error<=.05);
+  assert.ok(Math.abs(crater.crater_expected_cfa/craterTarget-1)<1e-7);
+  assert.ok(Math.abs(crater.crater_actual_cfa-craterMeasured)<1e-12);
   // Snodgrass-Ulrich Table 1 magnetic profile, latitude 0 and pi/2, 86400 TAI
   // seconds from synthetic epoch 0, sidereal frame. Closed form at the poles
   // is A+B+C=2.055 microradian/s; 1e-14 rad tolerance is roundoff only.
