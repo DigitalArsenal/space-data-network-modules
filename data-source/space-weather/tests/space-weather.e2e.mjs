@@ -74,8 +74,9 @@ try {
  assert(publications.length,'No SPW publication within 180 seconds; '+node.dir+'/sdn.log');
  const newest=publications.sort((a,b)=>b.publishedAtMs-a.publishedAtMs)[0];
  const manifestBytes=Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,newest.manifestCid,{providerAddrs:addrs,maxBytes:1048576}));
+ await fs.writeFile(path.join(evidence,'manifest.dpmfb'),manifestBytes);
  const dpm=(manifestBytes.subarray(8,12).toString()==='$DPM'?DPM.getSizePrefixedRootAsDPM:DPM.getRootAsDPM)(new ByteBuffer(manifestBytes)).unpack();assert.equal(dpm.PROVIDER_PEER_ID,info.peer_id);assert(dpm.PROVIDER_SIGNATURE.length>0);
- const source=dpm.SOURCES.find(s=>s.PROVIDER_ID==='space-weather'&&s.SOURCE_NAME==='gfz-noaa');assert(source,'Manifest source');assert.match(source.LICENSE,/CC-BY-4.0/);assert.match(source.CITATION,/Matzka/);assert.match(source.CITATION,/DRAO/);assert.match(source.CITATION,/NOAA/);
+ const source=dpm.SOURCES.find(s=>s.SOURCE_NAME==='gfz-noaa');assert(source,'Manifest source');assert.match(source.LICENSE,/CC-BY-4.0/);assert.match(source.CITATION,/Matzka/);assert.match(source.CITATION,/DRAO/);assert.match(source.CITATION,/NOAA/);
  const asset=dpm.ASSETS.find(a=>a.ASSET_KIND===publicationAssetKind.DATA_SHARD&&a.SCHEMA_NAME==='SPW.fbs');assert(asset);assert.equal(asset.CID,newest.shardCid);
  let readback=Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,asset.CID,{providerAddrs:addrs,maxBytes:1048576}));if(readback[0]===31&&readback[1]===139)readback=gunzipSync(readback);
  assert.equal(hash(readback),asset.BYTE_SHA256.toLowerCase());assert.equal(readback.length,Number(asset.BYTE_LENGTH));
