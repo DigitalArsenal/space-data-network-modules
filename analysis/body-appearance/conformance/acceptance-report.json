@@ -1,0 +1,245 @@
+{
+  "task": "body-appearance-module-20261022",
+  "measuredAt": "2026-10-22T17:48:04.243Z",
+  "artifactSha256": "67464aefe176911cf6bf089631b09ed7da9fef83d5b3a508e8744023ca837703",
+  "acceptance": {
+    "citations": {
+      "status": "pass",
+      "values": 112,
+      "uncited": 0,
+      "scope": "All shipped table entries; this does not assert that all requested body tables exist."
+    },
+    "placement": {
+      "status": "pass",
+      "rock": {
+        "n": 100005,
+        "d": 0.002148655527825949,
+        "p": 0.7446435365150527,
+        "target_cfa": 0.0716871738094957,
+        "measured_cfa": 0.07086645511985869,
+        "relative_area_error": 0.011448612715825868
+      },
+      "crater": {
+        "n": 100005,
+        "d": 0.0021947130472185217,
+        "p": 0.7206844026741241,
+        "expected_count": 100005.00000000001,
+        "target_cfa": 0.009407412792468846,
+        "measured_cfa": 0.009368541178630889,
+        "relative_area_error": 0.004132019578122037
+      },
+      "cfaConvention": "Sum of circular footprints within the diameter interval, not overlap-unioned coverage."
+    },
+    "runtimeParity": {
+      "status": "pass",
+      "artifactSha256": "67464aefe176911cf6bf089631b09ed7da9fef83d5b3a508e8744023ca837703",
+      "node": "v25.4.0",
+      "firefox": "155.0",
+      "wasmedge": "/Users/tj/.wasmedge/bin/wasmedge version 0.16.4",
+      "comparison": "exact SHA-256 equality of complete typed result payloads",
+      "outputs": [
+        {
+          "name": "100005 rocks",
+          "sha256": "0b52a80c354e49c8818b38292b4a9eb5aaebc0a4885b571c7521144e96541d33",
+          "bytes": 4803624
+        },
+        {
+          "name": "100005 craters",
+          "sha256": "866702dcebb19fffc81eaf130a5b287ed9bfde530708c919ffc2796b63c91011",
+          "bytes": 4803624
+        },
+        {
+          "name": "repeated rock seed",
+          "sha256": "0b52a80c354e49c8818b38292b4a9eb5aaebc0a4885b571c7521144e96541d33",
+          "bytes": 4803624
+        },
+        {
+          "name": "different rock seed",
+          "sha256": "4bc851463a54e8effbb5388e2ac60de700ce41c5a69051ff5a3ef3082db163d1",
+          "bytes": 4803624
+        },
+        {
+          "name": "offset northern tile",
+          "sha256": "77862d655119bcc5082ba30f72a523d47e4f1f54a350a9ad991389afab41eab8",
+          "bytes": 179112
+        },
+        {
+          "name": "solar rotation",
+          "sha256": "bf4043621de0d8366a4b9007a185c2320e3d57f0e1be66c6ed6b739112b91307",
+          "bytes": 1064
+        },
+        {
+          "name": "lunar phase",
+          "sha256": "4311417d772e803ed023ee6b4d8a3c5a58533b8f83bd47e5cc2e4f4e57407657",
+          "bytes": 888
+        },
+        {
+          "name": "cited asteroid table",
+          "sha256": "5bc671bdee3d606e6eec02c69593e6cc079a6c9570ee4b67cc7bac08850a0dbc",
+          "bytes": 1688
+        }
+      ],
+      "docker": {
+        "status": "waived",
+        "authority": "Owner 2026-10-22: never start Docker or Docker Desktop"
+      }
+    },
+    "moon": {
+      "status": "fail",
+      "threshold_mag": 0.1,
+      "absolute_calibration": false,
+      "diagnostic": {
+        "max_residual_mag": 0.1350818752598184,
+        "worst": {
+          "phase_deg": 96,
+          "solar_longitude_sign": 1,
+          "residual_mag": 0.1350818752598184
+        },
+        "samples": 190,
+        "absolute_calibration": false,
+        "band": "ROLO 553.8 nm"
+      },
+      "reason": "Only a normalized H,G1,G2 phase curve is implemented; absolute disk radiometry and matched ROLO geometry/bandpass are missing."
+    },
+    "planets": {
+      "Mercury": {
+        "status": "fail",
+        "phase_domain_deg": [
+          2,
+          170
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      },
+      "Venus": {
+        "status": "fail",
+        "phase_domain_deg": [
+          2,
+          179
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      },
+      "Mars": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          50
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      },
+      "Jupiter": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          130
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      },
+      "Saturn": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          150
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      },
+      "Uranus": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          154
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      },
+      "Neptune": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          133
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+      }
+    }
+  },
+  "failures": [
+    "Moon absolute disk photometry is incomplete",
+    "Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune disk magnitudes are unimplemented"
+  ],
+  "measurements": {
+    "rock": {
+      "n": 100005,
+      "d": 0.002148655527825949,
+      "p": 0.7446435365150527,
+      "target_cfa": 0.0716871738094957,
+      "measured_cfa": 0.07086645511985869,
+      "relative_area_error": 0.011448612715825868
+    },
+    "crater": {
+      "n": 100005,
+      "d": 0.0021947130472185217,
+      "p": 0.7206844026741241,
+      "expected_count": 100005.00000000001,
+      "target_cfa": 0.009407412792468846,
+      "measured_cfa": 0.009368541178630889,
+      "relative_area_error": 0.004132019578122037
+    },
+    "rotation": [
+      {
+        "latitude_rad": 0,
+        "rate_rad_s": 2.879e-06,
+        "advance_rad": 0.24874559999999998,
+        "error_rad": 0
+      },
+      {
+        "latitude_rad": 1.5707963267948966,
+        "rate_rad_s": 2.0550000000000002e-06,
+        "advance_rad": 0.17755200000000002,
+        "error_rad": 2.7755575615628914e-17
+      }
+    ],
+    "moon_phase_shape": {
+      "max_residual_mag": 0.1350818752598184,
+      "worst": {
+        "phase_deg": 96,
+        "solar_longitude_sign": 1,
+        "residual_mag": 0.1350818752598184
+      },
+      "samples": 190,
+      "absolute_calibration": false,
+      "band": "ROLO 553.8 nm"
+    }
+  },
+  "unfinishedScope": [
+    "Whole-body photometric/albedo/color tables and roughness RMS baselines",
+    "D and X/M taxonomic priors and explicit taxonomy/albedo selection",
+    "Diviner rock-abundance input mapping and independently justified lunar rock-size law",
+    "Named-spacecraft matched-geometry render/image-similarity and shadow-fraction evidence"
+  ],
+  "status": "fail",
+  "testedCommit": "5db5607dd44ac5a0c1646ec91d395d48f0c28492",
+  "unitTests": {
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "oraclePublishedExamples": 10,
+    "command": "npm test"
+  },
+  "gauntlet": {
+    "status": "not-run",
+    "receipt": null,
+    "reason": "The user requires E2E PASS before gauntlet; full science acceptance fails."
+  }
+}

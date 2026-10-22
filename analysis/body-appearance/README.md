@@ -42,7 +42,8 @@ phase and table lookup. Browser and native WasmEdge use unchanged artifact bytes
 The owner waived Docker parity on 2026-10-22: **never start Docker or Docker
 Desktop**. The test has no Docker or Chrome launcher.
 
-The default evidence path is `.build/e2e-report.json`; set
+The committed checkpoint evidence is `conformance/acceptance-report.json`.
+The default fresh evidence path is `.build/e2e-report.json`; set
 `BODY_APPEARANCE_REPORT` to preserve a report elsewhere. Missing science gates
 are failures, not skips. `npm test` validates the implemented subset and the
 independent oracle; it does not replace the full E2E acceptance gate.
