@@ -6,7 +6,7 @@
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node tests/space-weather.e2e.mjs"
+    "test": "node ../../flows/open-dca/tests/open-dca.e2e.mjs"
   },
   "devDependencies": {
     "esbuild": "0.27.7",
