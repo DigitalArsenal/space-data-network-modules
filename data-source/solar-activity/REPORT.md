@@ -5,6 +5,10 @@ Branch: `task/solar-activity-data-sources-20261022`.
 Recovered work and schema proposal committed and pushed first as
 `d37b67a9` on resumption. The earlier Git sandbox restriction is resolved.
 The coordinator routes the proposal to the SDS oracle; this lane files nothing.
+At the 17:16Z resumption the worktree was clean and origin matched `d62b1eeb`.
+The cadence/latency separation was committed and pushed as `1602bb29`.
+Docker/Desktop must never be started; the owner waived that parity leg on
+2026-10-22. Browser and native WasmEdge checks still require an approved module.
 
 Resumed source parsing now preserves all 222 region rows, 78 GOES rows, and
 700 edited-event rows in the retained capture, including 12 flagged location
@@ -150,10 +154,46 @@ All four are 4096×4096 and have the requested WCS/solar observer fields. Each
 embedded JP2 header matches the selected image's API header; DATE-OBS matches
 the database time within its one-second precision. HMI declares CADENCE=45 s
 and fails that bound. AIA does not declare CADENCE in these headers, so its
-source-cadence verdict is **unverified**, not passed. **0/4** images meet even
+source-cadence verdict was **unverified** in this initial capture; the
+resumed qualification below supplies the published feed cadence. **0/4** images meet even
 the separate 900-second acquisition-interval bound. Current-day data alone
-does not prove current-cadence freshness. JSOC fallback was not implemented
-while the typed image-record contract is stopped.
+does not prove current-cadence freshness. The resumed qualification probes JSOC availability below.
+
+## Resumed image qualification (2026-10-22 UTC)
+
+The [Helioviewer user guide](https://helioviewer-project.github.io/user_guide/)
+states a **36-second browse-feed cadence** for AIA 171/193/304, from native
+12-second observations; HMI is supplied at its source production cadence
+(**45 seconds** in these headers). This resolves the missing AIA cadence
+without inserting an invented FITS keyword. The guide documents SDO delivery
+latency separately from cadence. Its original HTML is retained with a hash.
+
+The new [capture](tests/evidence/2026-10-22-freshness-R5Cpu0/provenance.json)
+contains 27 HTTP-200 responses and two failed JSOC HTTPS probes. All eight
+JP2s match their corresponding API headers, are current-day 4096×4096 images,
+and retain WCS and observer geometry. The diagnostic selected its fixed
+three-hour backfill offset before fetching; it does not change the E2E's
+current acquisition target.
+
+| Image | Current DATE-OBS UTC | Offset from 17:15 UTC, s | Backfill DATE-OBS UTC | Offset from 14:15 UTC, s |
+| --- | --- | ---: | --- | ---: |
+| HMI continuum | 14:21:28.100 | -10411.900 | 14:14:43.100 | -16.900 |
+| AIA 171 | 16:49:09.348 | -1550.652 | 14:14:45.349 | -14.651 |
+| AIA 193 | 16:46:40.843 | -1699.157 | 14:15:16.843 | +16.843 |
+| AIA 304 | 16:47:29.128 | -1650.872 | 14:15:05.129 | +5.129 |
+
+**0/4** current-slot images meet their source cadence or the 900-second
+acquisition interval. **4/4** backfill images meet source cadence at the
+explicit 14:15 UTC target. This demonstrates same-day historical retrieval,
+not a fresh view at 17:15 UTC. No latency allowance is silently substituted
+for the cadence requirement. The `getStatus` response is retained as service
+context; its representative AIA 94 / HMI magnetogram times are not timestamps
+for these requested channels.
+
+Both `https://jsoc.stanford.edu/` and the read-only latest HMI continuum
+`jsoc_info` query failed with `ERR_SSL_UNSUPPORTED_PROTOCOL` before an HTTP
+response. No HTTP status, FITS data, or JSOC fallback success is claimed.
+The probe did not bypass TLS, register an account, or submit an export job.
 
 ## Acceptance measurements and commands
 
@@ -161,7 +201,7 @@ while the typed image-record contract is stopped.
 | --- | --- |
 | Current-day records published locally and read back by CID | **Not met:** 0 records published, 0 CID read-backs. Schema gate prevents a conforming module/publication. |
 | Active-region positions match same day's SRS exactly | **Source check only:** 7/7 exact location and Carrington-longitude matches at the SRS-stated epoch; 0/7 if wrongly joined on issue calendar date. Includes 3 sunspot regions and 4 plages. No published records to compare yet. |
-| Image timestamps within source cadence | **Not met/unverified:** 4/4 current day; HMI fails its 45-second source cadence; AIA source cadence absent; 0/4 within the 15-minute acquisition interval. |
+| Image timestamps within source cadence | **Not met for current slot:** 4/4 current day, 0/4 within source cadence (HMI 45 s; AIA feed 36 s), 0/4 within 15 minutes. Separate fixed three-hour backfill: 4/4 within source cadence; not current-slot freshness. |
 
 Numerical source checks state source, units, epoch, frame, tolerance, and
 rationale in `tests/evidence.test.mjs`. Exact position transcription uses zero
@@ -173,8 +213,10 @@ Commands run:
 ```sh
 node data-source/solar-activity/tests/solar-activity.e2e.mjs
 # Exit 2: captures live evidence, then reports the unresolved schema/publication gate.
-node --test data-source/solar-activity/tests/evidence.test.mjs
-# 6 tests passed, 0 failed, 0 skipped.
+node --test data-source/solar-activity/tests/*.test.mjs
+# 15 tests passed, 0 failed, 0 skipped.
+node data-source/solar-activity/tests/image-freshness.mjs
+# Exit 0: source-only qualification; 0/4 current, 4/4 backfill cadence matches.
 git diff --check
 # Exit 0.
 ```
@@ -194,7 +236,7 @@ image bytes, retrieve each advertised CID, verify bytes/hashes and decode the
 records, then compare positions to the same SRS issue and image epochs to the
 selected cadence. Use the test node's signing API, never read its private key.
 
-No publication, SDK compatibility, tri-runtime parity, or gauntlet PASS is
+No publication, SDK compatibility, browser/native WasmEdge parity, or gauntlet PASS is
 claimed while the schema gate is unresolved. **Gauntlet: not run; receipt path:
 none.** The owner's prerequisite (passing E2E on a committed branch) was not met.
 The local-node harness exists, so its absence is not used as a publication waiver.
@@ -202,13 +244,14 @@ It currently creates temporary node state via `os.tmpdir()`; the solar adaptatio
 must accept a lane-owned durable scratch root and clean up only its own children.
 
 No heavy builds, browser, Docker container, node daemon, or background worker was
-started. Source captures are deliverable evidence inside this worktree, not
+started. The Docker parity leg is waived, not failed or pending. Source captures are deliverable evidence inside this worktree, not
 scratch files under `/tmp`. Schema approval and live-image age remain separate
 blockers.
 
-Files added: `README.md`, this `REPORT.md`, `tests/source-evidence.mjs`,
-`tests/solar-activity.e2e.mjs`, `tests/evidence.test.mjs`, and the dated
-`tests/evidence/2026-10-22-ts940s/` source snapshots, hashes, and summary.
+Files are confined to `data-source/solar-activity/`: README/report, the E2E
+gate, source and image capture scripts, three offline test files, shared
+test-only parsers/capture helpers, and two dated evidence directories. No
+production manifest, SDK artifact, schema, or host flow has been introduced.
 
 ## Sources and credits
 

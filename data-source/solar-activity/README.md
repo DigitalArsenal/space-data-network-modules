@@ -17,7 +17,7 @@ Source qualification scripts under `tests/` are test-only: they inspect public
 source data, never compute production solar geometry or emit SDS records.
 
 ```sh
-node --test data-source/solar-activity/tests/evidence.test.mjs
+node --test data-source/solar-activity/tests/*.test.mjs
 node data-source/solar-activity/tests/source-evidence.mjs
 node data-source/solar-activity/tests/solar-activity.e2e.mjs
 ```
@@ -26,3 +26,11 @@ Run from the repository root. The first command verifies retained primary-source
 evidence offline. The second captures new live source evidence. The third is the
 task's acceptance entry point: it currently captures evidence and exits **2** for
 the unresolved schema/publication gate; source checks alone are not an E2E pass.
+
+`node data-source/solar-activity/tests/image-freshness.mjs` diagnoses delivery
+latency separately: it compares the current 15-minute slot with a fixed
+three-hour backfill slot, retains full JP2/header evidence and the published
+cadence reference, and probes JSOC availability. A source-only exit 0 never
+means module acceptance. The 2026-10-22 capture has 0/4 current-slot cadence
+matches and 4/4 backfill matches. Docker parity is waived by the owner;
+browser and native WasmEdge parity remain gated on the approved SDK artifact.
