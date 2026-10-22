@@ -1,0 +1,148 @@
+{
+  "artifactSha256": "ae421b309580b8232e9d4427fe0d6ed92666ad610f54c62cfcc76f5641ad5764",
+  "epochUtc": "2026-08-01T12:00:00.000000",
+  "threads": 1,
+  "logicalCpus": 28,
+  "loadStart": [
+    7.10107421875,
+    9.7265625,
+    11.06005859375
+  ],
+  "kernelBytes": 114688,
+  "inputs": {
+    "kernel": 114920,
+    "earth_orientation": 1792,
+    "space_weather": 1752
+  },
+  "durationSeconds": 86400,
+  "regimes": [
+    {
+      "regime": "ISS",
+      "maximumPositionErrorM": 0.0005905222725209585,
+      "maximumVelocityErrorMS": 2.2456427447588972e-06,
+      "coverageCpuSecondsPerObjectDay": 0.32522100000000026,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "STARLINK",
+      "maximumPositionErrorM": 0.0005714027352932133,
+      "maximumVelocityErrorMS": 1.1283476036806378e-06,
+      "coverageCpuSecondsPerObjectDay": 0.36477000000000004,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "SSO800",
+      "maximumPositionErrorM": 0.0005587195447591076,
+      "maximumVelocityErrorMS": 8.032390172302433e-07,
+      "coverageCpuSecondsPerObjectDay": 0.20548900000000028,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "LOW250",
+      "maximumPositionErrorM": 0.0007326797414353876,
+      "maximumVelocityErrorMS": 1.294430265040719e-05,
+      "coverageCpuSecondsPerObjectDay": 0.46786599999999984,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "GPS",
+      "maximumPositionErrorM": 0.0002909288927886107,
+      "maximumVelocityErrorMS": 4.3774855041431515e-08,
+      "coverageCpuSecondsPerObjectDay": 0.0717290000000001,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "GEO",
+      "maximumPositionErrorM": 0.00023020383558296014,
+      "maximumVelocityErrorMS": 1.6814661569175836e-08,
+      "coverageCpuSecondsPerObjectDay": 0.03212799999999997,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "MOLNIYA",
+      "maximumPositionErrorM": 0.0007449893269138551,
+      "maximumVelocityErrorMS": 7.09314514616006e-07,
+      "coverageCpuSecondsPerObjectDay": 0.10885300000000019,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    },
+    {
+      "regime": "GTO",
+      "maximumPositionErrorM": 0.00076698383972379,
+      "maximumVelocityErrorMS": 4.9175511684701575e-06,
+      "coverageCpuSecondsPerObjectDay": 0.1307140000000002,
+      "samples": 1440,
+      "memoryBytes": 268435456
+    }
+  ],
+  "loadEnd": [
+    6.8525390625,
+    9.63134765625,
+    11.0185546875
+  ],
+  "numerics": "PASS",
+  "browserMemory": [
+    {
+      "entities": 1000,
+      "profile": "FFM-1",
+      "seedMilliseconds": 21.24500000104308,
+      "workerCount": 1,
+      "highWaterBytes": 268435456,
+      "windows": [
+        {
+          "seconds": 1800,
+          "milliseconds": 9588.380000002682,
+          "wasmMemoryBytes": 268435456
+        },
+        {
+          "seconds": 3600,
+          "milliseconds": 3791.129999998957,
+          "wasmMemoryBytes": 268435456
+        }
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+    },
+    {
+      "entities": 10000,
+      "profile": "FFM-1",
+      "seedMilliseconds": 100.3450000025332,
+      "workerCount": 1,
+      "highWaterBytes": 268435456,
+      "windows": [
+        {
+          "seconds": 1800,
+          "milliseconds": 94328.70500000194,
+          "wasmMemoryBytes": 268435456
+        },
+        {
+          "seconds": 3600,
+          "milliseconds": 37258.21499999985,
+          "wasmMemoryBytes": 268435456
+        }
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+    }
+  ],
+  "runtimeParity": {
+    "browser": [
+      "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "20fb2475cdf580411373f5f159fda6bb821cdcb4e22565898382527badaecefc"
+    ],
+    "wasmedge": [
+      "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "20fb2475cdf580411373f5f159fda6bb821cdcb4e22565898382527badaecefc"
+    ]
+  },
+  "failure": "Error: Command failed: docker run --rm --entrypoint /bin/sh -v /Users/tj/software/worktrees/space-data-network-modules--ffm-catalog-coverage-ffm1-fast-20261022/propagator/ffm/:/work -w /work space-data-module-sdk/parity-wasmedge:0.16.4 -c apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libc6-dev >/dev/null && gcc \"$1\" -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -pthread -I/opt/wasmedge/include -L/opt/wasmedge/lib64 -L/opt/wasmedge/lib -lwasmedge -Wl,-rpath,/opt/wasmedge/lib64 -Wl,-rpath,/opt/wasmedge/lib -o .sdk-build/resident-wasmedge-runner-linux compile-runner node_modules/space-data-module-sdk/src/testing/native/wasmedge_emscripten_pthread_runner.c\nfailed to connect to the docker API at unix:///Users/tj/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/tj/.docker/run/docker.sock: connect: no such file or directory\n\n    at genericNodeError (node:internal/errors:998:15)\n    at wrappedFn (node:internal/errors:543:14)\n    at ChildProcess.exithandler (node:child_process:417:12)\n    at ChildProcess.emit (node:events:508:20)\n    at maybeClose (node:internal/child_process:1084:16)\n    at Socket.<anonymous> (node:internal/child_process:456:11)\n    at Socket.emit (node:events:508:20)\n    at Pipe.<anonymous> (node:net:346:12)",
+  "status": "BLOCKED",
+  "testedWasmCommit": "dcbe5184",
+  "remaining": "Docker WasmEdge unavailable. Current C++ source after the tested artifact still needs rebuilding; rerun both E2Es and exact-candidate gauntlet before landing. OrbPro task not started."
+}
