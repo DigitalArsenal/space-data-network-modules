@@ -143,10 +143,10 @@ young light is drawn as star complexes on the young arms (Gies 1987: ~70 % of
 O stars in clusters and associations; Efremov 1995: complexes ~600 pc), their
 luminosities dN/dL ~ L^-2 (Kennicutt, Edgar & Hodge 1989); a seeded
 statistical population, its total the smooth model's. Appearance (stellar_populations.hpp,
-`appearance`): the young light's radial scale length (4.23 kpc), the central
-light (0.685 x Portail 2017), the bulge's extent (0.709) and height (0.710),
-fitted to SDSS MW analogs (Licquia 2015): four analogs' DR17 frames trained,
-two held out, the objective and held-out residuals recorded there; `bake`
+`appearance`): the young light's scale length, the central light and the
+bulge's extent and height stay at their published values; a fit of them to
+SDSS MW analogs (Licquia 2015; four trained, two held out) was evaluated and
+rejected (it did not generalize; tests/appearance-fit-20261022.json). `bake`
 takes `appearance_*` overrides (the fit's trials).
 Dust: Drimmel & Spergel 2001 (its arm dust on the same arms), replaced within
 1.248 kpc by the Edenhofer et al. 2024 map when loaded (local volume only). Reid's fitted radii keep their R0=8.15 kpc fit while the

@@ -113,14 +113,17 @@ inline double unit_surface_brightness_g() {return unit_surface_brightness_v()+g_
 
 } // namespace milky_way::populations
 
-// APPEARANCE: the free parameters of the model's look, the ones no cited
-// measurement of the Galaxy fixes. FITTED TO SDSS MW ANALOGS (Licquia 2015):
-// see the table's provenance below. A bake may override them (the fit's own
-// trials, model_api.hpp bake); the values here are the fit's.
+// APPEARANCE: the parameters of the model's look that an SDSS analog fit
+// could move. A bake may override them (the fit's own trials, model_api.hpp
+// bake); the values here are the published 0.3.0 ones (the fit was rejected).
 namespace milky_way::appearance {
-// FITTED TO SDSS MW ANALOGS (Licquia 2015), 2026-10-22 (owner decision "fit
-// to SDSS analogs"). Data: the SDSS DR17 g, r, i frames of four of the six
-// analogs (objIDs 1237680099167174698 face-on, 1237661068724011075 and
+// STRUCTURE FIT TO SDSS MW ANALOGS (Licquia 2015), 2026-10-22 (owner
+// decision "fit to SDSS analogs"): EVALUATED, REJECTED: did not generalize
+// (held-out SSIM 0.763->0.743, 0.436->0.418). The published 0.3.0 values
+// below are kept. The fit's record, its trials and the decision:
+// tests/appearance-fit-20261022.json (run by OrbPro's
+// test/milky-way-sdss-look.e2e.mjs, MILKY_WAY_FIT=1). Data: the SDSS DR17 g,
+// r, i frames of four of the six analogs (objIDs 1237680099167174698 face-on, 1237661068724011075 and
 // 1237649962993975369 at 45 deg, 1237661850943225872 edge-on), resampled
 // north up at 0.396 arcsec; two held out (1237661152451166321 face-on,
 // 1237667781752455304 edge-on). Model: this module baked with each trial's
@@ -140,11 +143,13 @@ namespace milky_way::appearance {
 // the held-out analogs against the 0.3.0 values (OrbPro E2E, same transfer):
 // face-on log r 0.140 -> 0.140 dex, g-r 0.061 -> 0.053 mag, SSIM 0.763 ->
 // 0.743; edge-on log r 0.164 -> 0.180 dex, minor axis 0.138 -> 0.139 dex, SSIM
-// 0.436 -> 0.418: the fit does not generalize beyond the color.
-inline double young_length_kpc=4.22881; // the young (M_V < -1) light's radial scale length (0.3.0: 2.6)
-inline double central_light=0.685443;   // the bar, bulge and nuclear disc's light, x Portail 2017's (0.3.0: 1)
-inline double bulge_size=0.708838;      // the b/p bulge's in-plane extent, x (1.0, 0.5) kpc (0.3.0: 1)
-inline double bulge_height=0.710074;    // its scale height, x Bland-Hawthorn & Gerhard 2016's 180 pc (0.3.0: 1)
+// 0.436 -> 0.418: the fit does not generalize beyond the color. Its values
+// (rejected): young length 4.22881 kpc, central light 0.685443, bulge extent
+// 0.708838, height 0.710074.
+inline double young_length_kpc=2.6;  // the young (M_V < -1) light's radial scale length: Juric 2008's thin disc
+inline double central_light=1.0;     // the bar, bulge and nuclear disc's light, x Portail 2017's
+inline double bulge_size=1.0;        // the b/p bulge's in-plane extent, x (1.0, 0.5) kpc (BHG16 axis ratio 0.5)
+inline double bulge_height=1.0;      // its scale height, x Bland-Hawthorn & Gerhard 2016's 180 pc
 } // namespace milky_way::appearance
 
 // SDSS g, r, i (0.4.0). The light is drawn in the SDSS bands, as SDSS gri
