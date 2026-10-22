@@ -1,0 +1,276 @@
+{
+  "kind": "source-preflight-only",
+  "moduleParityTested": false,
+  "cidReadbackTested": false,
+  "retrievedAt": "2026-10-22T17:20:34.591646+00:00",
+  "gdalVersion": "GDAL 3.13.3 \"Iowa City\", released 2026/08/13",
+  "sources": [
+    {
+      "name": "worldcover",
+      "url": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N00E006_Map.tif",
+      "rangeProbe": {
+        "status": 206,
+        "contentRange": "bytes 0-1023/2552807",
+        "etag": "\"538b1565852adffcaa05809eadc682e1\"",
+        "headerBytes": 1024,
+        "headerSha256": "7577b2f61911332bd481f88fbac65cf6b005af21918b72d6f65b0a5dfc5e4060"
+      },
+      "units": "dimensionless class code",
+      "observationTime": {
+        "time_start": "2021-01-01T00:00:00Z",
+        "time_end": "2021-12-31T23:59:59Z"
+      },
+      "size": [
+        36000,
+        36000
+      ],
+      "coordinateSystem": {
+        "wkt": "GEOGCRS[\"WGS 84\",\n    ENSEMBLE[\"World Geodetic System 1984 ensemble\",\n        MEMBER[\"World Geodetic System 1984 (Transit)\"],\n        MEMBER[\"World Geodetic System 1984 (G730)\"],\n        MEMBER[\"World Geodetic System 1984 (G873)\"],\n        MEMBER[\"World Geodetic System 1984 (G1150)\"],\n        MEMBER[\"World Geodetic System 1984 (G1674)\"],\n        MEMBER[\"World Geodetic System 1984 (G1762)\"],\n        MEMBER[\"World Geodetic System 1984 (G2139)\"],\n        MEMBER[\"World Geodetic System 1984 (G2296)\"],\n        ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n            LENGTHUNIT[\"metre\",1]],\n        ENSEMBLEACCURACY[2.0]],\n    PRIMEM[\"Greenwich\",0,\n        ANGLEUNIT[\"degree\",0.0174532925199433]],\n    CS[ellipsoidal,2],\n        AXIS[\"geodetic latitude (Lat)\",north,\n            ORDER[1],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        AXIS[\"geodetic longitude (Lon)\",east,\n            ORDER[2],\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n    USAGE[\n        SCOPE[\"Horizontal component of 3D system.\"],\n        AREA[\"World.\"],\n        BBOX[-90,-180,90,180]],\n    ID[\"EPSG\",4326]]",
+        "dataAxisToSRSAxisMapping": [
+          2,
+          1
+        ]
+      },
+      "geoTransform": [
+        6.0,
+        8.33333333333e-05,
+        0.0,
+        3.0,
+        0.0,
+        -8.33333333333e-05
+      ],
+      "metadata": {
+        "": {
+          "algorithm_version": "V2.0.0",
+          "copyright": "ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium",
+          "creation_time": "2022-10-21 07:35:40.236136",
+          "legend": "10  Tree cover\n20  Shrubland\n30  Grassland\n40  Cropland\n50  Built-up\n60  Bare/sparse vegetation\n70  Snow and ice\n80  Permanent water bodies\n90  Herbaceous wetland\n95  Mangroves\n100 Moss and lichen\n",
+          "license": "CC-BY 4.0 - https://creativecommons.org/licenses/by/4.0/",
+          "product_crs": "EPSG:4326",
+          "product_grid": "3x3 degree tiling grid",
+          "product_tile": "N00E006",
+          "product_type": "LandCover Map",
+          "product_version": "V2.0.0",
+          "reference": "https://esa-worldcover.org",
+          "time_end": "2021-12-31T23:59:59Z",
+          "time_start": "2021-01-01T00:00:00Z",
+          "title": "ESA WorldCover product at 10m resolution for year 2021",
+          "AREA_OR_POINT": "Area"
+        },
+        "IMAGE_STRUCTURE": {
+          "LAYOUT": "COG",
+          "COMPRESSION": "DEFLATE",
+          "INTERLEAVE": "BAND"
+        }
+      },
+      "band": {
+        "band": 1,
+        "block": [
+          1024,
+          1024
+        ],
+        "type": "Byte",
+        "colorInterpretation": "Palette",
+        "noDataValue": 0,
+        "overviews": [
+          {
+            "size": [
+              18000,
+              18000
+            ]
+          },
+          {
+            "size": [
+              9000,
+              9000
+            ]
+          },
+          {
+            "size": [
+              4500,
+              4500
+            ]
+          },
+          {
+            "size": [
+              2250,
+              2250
+            ]
+          },
+          {
+            "size": [
+              1125,
+              1125
+            ]
+          },
+          {
+            "size": [
+              562,
+              562
+            ]
+          }
+        ],
+        "metadata": {}
+      },
+      "window": [
+        8760,
+        32040,
+        16,
+        16
+      ],
+      "sampleCount": 256,
+      "minimum": 10,
+      "maximum": 50,
+      "uniqueValues": [
+        10,
+        30,
+        50
+      ],
+      "windowSha256": "959bcec35b02a1bc3604385afc1452fb85168ac1c0d0ff9c2d0e5efb521e6076"
+    },
+    {
+      "name": "canopy-north",
+      "url": "https://dataforgood-fb-data.s3.amazonaws.com/forests/v1/alsgedi_global_v6_float/chm/001311332.tif",
+      "rangeProbe": {
+        "status": 206,
+        "contentRange": "bytes 0-1023/21171908",
+        "etag": "\"9143ea2d142bc8880420cb722f03c4d2-3\"",
+        "headerBytes": 1024,
+        "headerSha256": "5cbfbbf5e6c81398cd3b94e2cbb824cc3ae436d5dcbefbd0729e2cb4353fda62"
+      },
+      "units": "m",
+      "observationTime": {
+        "time_start": null,
+        "time_end": null
+      },
+      "size": [
+        65536,
+        65536
+      ],
+      "coordinateSystem": {
+        "wkt": "PROJCRS[\"WGS 84 / Pseudo-Mercator\",\n    BASEGEOGCRS[\"WGS 84\",\n        ENSEMBLE[\"World Geodetic System 1984 ensemble\",\n            MEMBER[\"World Geodetic System 1984 (Transit)\"],\n            MEMBER[\"World Geodetic System 1984 (G730)\"],\n            MEMBER[\"World Geodetic System 1984 (G873)\"],\n            MEMBER[\"World Geodetic System 1984 (G1150)\"],\n            MEMBER[\"World Geodetic System 1984 (G1674)\"],\n            MEMBER[\"World Geodetic System 1984 (G1762)\"],\n            MEMBER[\"World Geodetic System 1984 (G2139)\"],\n            MEMBER[\"World Geodetic System 1984 (G2296)\"],\n            ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n                LENGTHUNIT[\"metre\",1]],\n            ENSEMBLEACCURACY[2.0]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4326]],\n    CONVERSION[\"Popular Visualisation Pseudo-Mercator\",\n        METHOD[\"Popular Visualisation Pseudo Mercator\",\n            ID[\"EPSG\",1024]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"False easting\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"easting (X)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"northing (Y)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Web mapping and visualisation.\"],\n        AREA[\"World between 85.06\u00b0S and 85.06\u00b0N.\"],\n        BBOX[-85.06,-180,85.06,180]],\n    ID[\"EPSG\",3857]]",
+        "dataAxisToSRSAxisMapping": [
+          1,
+          2
+        ]
+      },
+      "geoTransform": [
+        -10175297.205322662,
+        1.1943285669558747,
+        0.0,
+        16984919.181192447,
+        0.0,
+        -1.19432856695596
+      ],
+      "metadata": {
+        "": {
+          "UNITS": "METERS",
+          "AREA_OR_POINT": "Area"
+        },
+        "IMAGE_STRUCTURE": {
+          "COMPRESSION": "DEFLATE",
+          "INTERLEAVE": "BAND",
+          "PREDICTOR": "2"
+        }
+      },
+      "band": {
+        "band": 1,
+        "block": [
+          65536,
+          1
+        ],
+        "type": "Byte",
+        "colorInterpretation": "Gray",
+        "metadata": {}
+      },
+      "window": [
+        32760,
+        32760,
+        16,
+        16
+      ],
+      "sampleCount": 256,
+      "minimum": 0,
+      "maximum": 0,
+      "uniqueValues": [
+        0
+      ],
+      "windowSha256": "5341e6b2646979a70e57653007a1f310169421ec9bdd9f1a5648f75ade005af1"
+    },
+    {
+      "name": "canopy-west",
+      "url": "https://dataforgood-fb-data.s3.amazonaws.com/forests/v1/alsgedi_global_v6_float/chm/023001111.tif",
+      "rangeProbe": {
+        "status": 206,
+        "contentRange": "bytes 0-1023/675716379",
+        "etag": "\"1aabf7090ca32aa4d2a3cc2009565782-81\"",
+        "headerBytes": 1024,
+        "headerSha256": "14ad6562a5bf29f2146faa98e3c0fab8a9186bda9eeb4f1c3f650852e545f6f7"
+      },
+      "units": "m",
+      "observationTime": {
+        "time_start": null,
+        "time_end": null
+      },
+      "size": [
+        65536,
+        65536
+      ],
+      "coordinateSystem": {
+        "wkt": "PROJCRS[\"WGS 84 / Pseudo-Mercator\",\n    BASEGEOGCRS[\"WGS 84\",\n        ENSEMBLE[\"World Geodetic System 1984 ensemble\",\n            MEMBER[\"World Geodetic System 1984 (Transit)\"],\n            MEMBER[\"World Geodetic System 1984 (G730)\"],\n            MEMBER[\"World Geodetic System 1984 (G873)\"],\n            MEMBER[\"World Geodetic System 1984 (G1150)\"],\n            MEMBER[\"World Geodetic System 1984 (G1674)\"],\n            MEMBER[\"World Geodetic System 1984 (G1762)\"],\n            MEMBER[\"World Geodetic System 1984 (G2139)\"],\n            MEMBER[\"World Geodetic System 1984 (G2296)\"],\n            ELLIPSOID[\"WGS 84\",6378137,298.257223563,\n                LENGTHUNIT[\"metre\",1]],\n            ENSEMBLEACCURACY[2.0]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4326]],\n    CONVERSION[\"Popular Visualisation Pseudo-Mercator\",\n        METHOD[\"Popular Visualisation Pseudo Mercator\",\n            ID[\"EPSG\",1024]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"False easting\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"easting (X)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"northing (Y)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Web mapping and visualisation.\"],\n        AREA[\"World between 85.06\u00b0S and 85.06\u00b0N.\"],\n        BBOX[-85.06,-180,85.06,180]],\n    ID[\"EPSG\",3857]]",
+        "dataAxisToSRSAxisMapping": [
+          1,
+          2
+        ]
+      },
+      "geoTransform": [
+        -13854058.502631625,
+        1.1943285669558747,
+        0.0,
+        5009377.08569731,
+        0.0,
+        -1.1943285669558605
+      ],
+      "metadata": {
+        "": {
+          "UNITS": "METERS",
+          "AREA_OR_POINT": "Area"
+        },
+        "IMAGE_STRUCTURE": {
+          "COMPRESSION": "DEFLATE",
+          "INTERLEAVE": "BAND",
+          "PREDICTOR": "2"
+        }
+      },
+      "band": {
+        "band": 1,
+        "block": [
+          65536,
+          1
+        ],
+        "type": "Byte",
+        "colorInterpretation": "Gray",
+        "metadata": {}
+      },
+      "window": [
+        32760,
+        32760,
+        16,
+        16
+      ],
+      "sampleCount": 256,
+      "minimum": 11,
+      "maximum": 17,
+      "uniqueValues": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "windowSha256": "7e7e14d02bb6978b81deda666bfe751e4fa8406ee1f0eba9e5554f8653bb805b"
+    }
+  ]
+}

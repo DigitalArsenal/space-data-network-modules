@@ -77,15 +77,24 @@ def main():
         assert len(info["bands"]) == 1
         band = info["bands"][0]
         assert band["type"] == "Byte", "Source changed: review the native type"
-        target = directory / "window.bil"
-        gdal("gdal_translate", "-q", "-of", "EHdr", "-srcwin",
-             *map(str, window), "/vsicurl/" + url, str(target))
-        values = target.read_bytes()
+        # Read GDAL's native values directly. EHdr output on the recovery
+        # machine failed while creating its sidecar; XYZ needs no driver
+        # sidecars and does not resample, scale, or change the source window.
+        xyz = gdal("gdal_translate", "-q", "-of", "XYZ", "-srcwin",
+                   *map(str, window), "/vsicurl/" + url, "/vsistdout/")
+        (directory / "window.xyz").write_bytes(xyz)
+        samples = [float(line.split()[2]) for line in xyz.splitlines()]
+        assert all(value.is_integer() and 0 <= value <= 255 for value in samples)
+        values = bytes(int(value) for value in samples)
+        (directory / "window.bin").write_bytes(values)
         assert len(values) == window[2] * window[3]
         after = header_range(url, before["etag"])
         assert before == after, "Source changed during GDAL inspection"
         item = {
             "name": name, "url": url, "rangeProbe": before,
+            "units": "dimensionless class code" if name == "worldcover" else "m",
+            "observationTime": {key: info["metadata"].get("", {}).get(key)
+                                for key in ("time_start", "time_end")},
             "size": info["size"], "coordinateSystem": info["coordinateSystem"],
             "geoTransform": info["geoTransform"], "metadata": info["metadata"],
             "band": {key: value for key, value in band.items() if key != "colorTable"},

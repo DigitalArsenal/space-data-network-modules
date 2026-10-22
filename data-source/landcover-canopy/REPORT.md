@@ -26,15 +26,46 @@ schema tree is `schema/` at SDS commit
 - [Meta/WRI AWS registry](https://registry.opendata.aws/dataforgood-fb-forests/):
   `s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/`,
   `us-east-1`; license field is `https://creativecommons.org/licenses/by/4.0/`.
-  The requested v1 product remains explicitly listed; a v2 listing does not
-  change this task's selected edition.
+  The requested v1 product remains explicitly listed. The selected maps are
+  under the `chm/` subdirectory of that prefix.
 
 ESA credit: © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel
 data (2021) processed by ESA WorldCover consortium.
 
-Canopy citation/attribution will preserve the registry's dataset citation and
-source-imagery credit, and identify the retrieval date. The code/model license
-in HighResCanopyHeight is separate from the map's CC BY 4.0 license.
+Canopy credit: Meta and WRI, High Resolution Canopy Height Maps (2024).
+Source imagery for CHM © 2016 Maxar. Accessed October 22, 2026.
+The registry's license field is exactly
+`https://creativecommons.org/licenses/by/4.0/`. The Apache-2.0 code/model
+license in HighResCanopyHeight is separate from the map's CC BY 4.0 license.
+
+## Source preflight measured after recovery
+
+`python3 data-source/landcover-canopy/tests/source-preflight.py --scratch <durable-directory>`
+passed with GDAL 3.13.3. The earlier EHdr extraction failed; direct XYZ output
+from `gdal_translate -srcwin` succeeded without resampling or scaling.
+See `tests/evidence/source-preflight.json` for URLs, ETags, source metadata,
+pixel windows, retrieval time, and SHA-256 values.
+
+| Source tile | Native window | Samples | Values | GDAL layout |
+| --- | --- | ---: | --- | --- |
+| WorldCover N00E006 | x=8760, y=32040, 16×16 | 256 | 10, 30, 50 | Byte; 1024×1024 blocks; DEFLATE; COG |
+| Canopy 001311332 | x=32760, y=32760, 16×16 | 256 | 0 | Byte; 65536×1 strips; DEFLATE; predictor 2 |
+| Canopy 023001111 | x=32760, y=32760, 16×16 | 256 | 11–17 | Byte; 65536×1 strips; DEFLATE; predictor 2 |
+
+All three source probes returned HTTP 206 for bytes 0–1023 and matched their
+ETags after the GDAL reads. This is **three source windows / 768 samples**, not
+module parity or the requested 20-tile E2E. No dataset was mirrored.
+
+WorldCover codes are dimensionless on EPSG:4326, observation interval
+2021-01-01T00:00:00Z through 2021-12-31T23:59:59Z; its NoData code is 0.
+The inspected canopy files state meters on EPSG:3857 and have no TIFF NoData
+tag or observation epoch. Zero must not be silently recast as missing.
+The registry advertises companion GeoJSON observation dates; these have not
+been inspected. The `float` prefix does not determine the sample type.
+The two inspected canopy files are striped TIFFs, and GDAL reports no COG
+layout marker. Future range planning must support their actual compressed
+strips rather than assuming square COG blocks. This observation is limited
+to these files, not a claim about the entire product.
 
 ## SDS fit check in progress
 
