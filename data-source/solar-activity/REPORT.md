@@ -195,13 +195,32 @@ Both `https://jsoc.stanford.edu/` and the read-only latest HMI continuum
 response. No HTTP status, FITS data, or JSOC fallback success is claimed.
 The probe did not bypass TLS, register an account, or submit an export job.
 
+## Final committed-code E2E rerun
+
+On commit `4ad0f4a1`, the updated E2E captured live sources at
+**2026-10-22 17:27:19.695–17:27:22.973 UTC** and exited **2 (BLOCKED_SCHEMA)**.
+The [final capture](tests/evidence/2026-10-22-AfCFXB/summary.json) retains
+18 HTTP-200 responses. Positions remain **7/7 exact**. Source totals are
+222 region rows, 78 GOES rows, and 697 edited-event rows; current-day counts
+are 7 / 7 / 8, respectively. The edited-event feed changed since the initial
+700-row capture; both original revisions are preserved.
+
+At the unchanged 17:15 UTC target, the latest HMI/AIA 171/193/304 offsets were
+**-10411.900 / -866.650 / -799.158 / -714.872 seconds**. All four images are
+current-day; **0/4** meet the 45/36-second source-cadence bounds; **3/4** meet
+the separate 900-second acquisition interval. The earlier backfill diagnostic
+still establishes 4/4 cadence matches at its explicitly delayed epoch.
+The raw CID round-trip below covers the first two capture directories (44
+source files); the final capture's 18 responses were not part of that earlier
+transport run.
+
 ## Acceptance measurements and commands
 
 | Acceptance line | Measured result |
 | --- | --- |
 | Current-day records published locally and read back by CID | **Not met for typed records:** 0 solar records published/read back. Separately, 44 original source files stored on a real local SDN node and read back by CID byte-for-byte; no typed record or PNM announcement is claimed. |
 | Active-region positions match same day's SRS exactly | **Source check only:** 7/7 exact location and Carrington-longitude matches at the SRS-stated epoch; 0/7 if wrongly joined on issue calendar date. Includes 3 sunspot regions and 4 plages. No published records to compare yet. |
-| Image timestamps within source cadence | **Not met for current slot:** 4/4 current day, 0/4 within source cadence (HMI 45 s; AIA feed 36 s), 0/4 within 15 minutes. Separate fixed three-hour backfill: 4/4 within source cadence; not current-slot freshness. |
+| Image timestamps within source cadence | **Not met for current slot:** 4/4 current day, 0/4 within source cadence (HMI 45 s; AIA feed 36 s), 3/4 within 15 minutes in the final rerun. Separate fixed three-hour backfill: 4/4 within source cadence; not current-slot freshness. |
 
 Numerical source checks state source, units, epoch, frame, tolerance, and
 rationale in `tests/evidence.test.mjs`. Exact position transcription uses zero
@@ -246,7 +265,7 @@ GOMAXPROCS=2, GOMEMLIMIT=1GiB, and exact-child shutdown in `finally`. It uses
 the full native SDN daemon's in-process Kubo; no Docker is involved.
 
 The [raw-file receipt](tests/evidence/source-cid-roundtrip.json) records
-**44/44** successful add-and-CID-read-back checks for the retained NOAA and
+**44/44** successful add-and-CID-read-back checks (13,584,393 bytes) for the retained NOAA and
 Helioviewer source bytes. Each read-back equals the original bytes and SHA-256;
 the receipt identifies the native binary by its SHA-256 and records shutdown.
 The node reports version 1.1.0. This is raw source storage only, with
@@ -274,7 +293,8 @@ blockers.
 
 Files are confined to `data-source/solar-activity/`: README/report, the E2E
 gate, source and image capture scripts, three offline test files, shared
-test-only parsers/capture helpers, and two dated evidence directories. No
+test-only parsers/capture helpers, three dated evidence directories, and a
+raw CID read-back receipt. No
 production manifest, SDK artifact, schema, or host flow has been introduced.
 
 ## Sources and credits

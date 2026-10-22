@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<meta>
+<fits>
+<SIMPLE>1</SIMPLE>
+<BITPIX>32</BITPIX>
+<NAXIS>2</NAXIS>
+<NAXIS1>4096</NAXIS1>
+<NAXIS2>4096</NAXIS2>
+<EXTEND>1</EXTEND>
+<DATE>2026-10-22T15:41:16.000</DATE>
+<DATE-OBS>2026-10-22T14:21:28.100</DATE-OBS>
+<TELESCOP>SDO</TELESCOP>
+<INSTRUME>HMI_FRONT2</INSTRUME>
+<WAVELNTH>6173.00</WAVELNTH>
+<CAMERA>2</CAMERA>
+<BUNIT>DN</BUNIT>
+<ORIGIN>SDO</ORIGIN>
+<CONTENT>CONTINUUM INTENSITY</CONTENT>
+<QUALITY>1024</QUALITY>
+<BLD_VERS>1005</BLD_VERS>
+<HCAMID>3</HCAMID>
+<TOTVALS>12606678</TOTVALS>
+<DATAVALS>8879969</DATAVALS>
+<MISSVALS>3726709</MISSVALS>
+<SATVALS>9374</SATVALS>
+<DATAMIN>32.794434</DATAMIN>
+<DATAMAX>52289.805</DATAMAX>
+<DATAMEDN>38277.869</DATAMEDN>
+<DATAMEAN>34487.992</DATAMEAN>
+<DATARMS>11979.752</DATARMS>
+<DATASKEW>-1.8669654</DATASKEW>
+<DATAKURT>2.8022753</DATAKURT>
+<CTYPE1>HPLN-TAN</CTYPE1>
+<CTYPE2>HPLT-TAN</CTYPE2>
+<CRPIX1>2048.50</CRPIX1>
+<CRPIX2>2048.50</CRPIX2>
+<CRVAL1>0.00000</CRVAL1>
+<CRVAL2>0.00000</CRVAL2>
+<CDELT1>0.60000002</CDELT1>
+<CDELT2>0.60000002</CDELT2>
+<CUNIT1>arcsec</CUNIT1>
+<CUNIT2>arcsec</CUNIT2>
+<CROTA2>0.00000</CROTA2>
+<CRDER1>0.00000</CRDER1>
+<CRDER2>0.00000</CRDER2>
+<CSYSER1>0</CSYSER1>
+<CSYSER2>0</CSYSER2>
+<WCSNAME>Helioprojective-cartesian</WCSNAME>
+<DSUN_OBS>1.4886874e+11</DSUN_OBS>
+<DSUN_REF>1.4959786e+11</DSUN_REF>
+<RSUN_REF>6.9600000e+08</RSUN_REF>
+<CRLN_OBS>9.4461975</CRLN_OBS>
+<CRLT_OBS>5.2900519</CRLT_OBS>
+<HGLN_OBS>0</HGLN_OBS>
+<CAR_ROT>2316</CAR_ROT>
+<OBS_VR>-2755.0237</OBS_VR>
+<OBS_VW>28957.709</OBS_VW>
+<OBS_VN>-706.53790</OBS_VN>
+<RSUN_OBS>964.34497</RSUN_OBS>
+<T_OBS>2026.10.22_14:22:27.568_TAI</T_OBS>
+<T_REC>2026.10.22_14:22:30.000_TAI</T_REC>
+<TRECEPOC>1977.01.01_00:00:00.000_TAI</TRECEPOC>
+<TRECSTEP>45.0000</TRECSTEP>
+<TRECUNIT>secs</TRECUNIT>
+<CADENCE>45.0000</CADENCE>
+<DATASIGN>1</DATASIGN>
+<HFLID>1022</HFLID>
+<HCFTID>10</HCFTID>
+<QLOOK>1</QLOOK>
+<CAL_FSN>264057820</CAL_FSN>
+<LUTQUERY>hmi.lookup_corrected_expanded[264057820][][3][39][46][0][77][6]</LUTQUERY>
+<TSEL>20.0000</TSEL>
+<TFRONT>20.0000</TFRONT>
+<TINTNUM>24</TINTNUM>
+<SINTNUM>10</SINTNUM>
+<DISTCOEF></DISTCOEF>
+<ROTCOEF></ROTCOEF>
+<ODICOEFF>6</ODICOEFF>
+<OROCOEFF>4</OROCOEFF>
+<POLCALM>1</POLCALM>
+<CODEVER0>$Id: HMI_observables.c,v 1.58 2018</CODEVER0>
+<CODEVER1>$Id: interpol_code.c,v 1.6 2017</CODEVER1>
+<CODEVER2>$Id: interpol_code.c,v 1.6 2017</CODEVER2>
+<CODEVER3>$Id: polcal.c,v 1.8 2016</CODEVER3>
+<RECNUM>11280414</RECNUM>
+<DRMS_ID>lm_jps.Ic_45s:11280414:continuum</DRMS_ID>
+<PRIMARYK>T_REC, CAMERA</PRIMARYK>
+<LICENSE>LICENSE</LICENSE>
+<HEADSUM>83lEA3iC13iC83iC</HEADSUM>
+<LONGSTRN>OGIP 1.0</LONGSTRN>
+<BLANK>-2147483648</BLANK>
+<BZERO>0.00000</BZERO>
+<BSCALE>1.00000</BSCALE>
+<CHECKSUM>0Q4A1Q230Q290Q29</CHECKSUM>
+<DATASUM>2112633964</DATASUM>
+<DATE_OBS>2026-10-22T14:21:28.100</DATE_OBS>
+<XCEN>0.0000000</XCEN>
+<YCEN>0.0000000</YCEN>
+<history>
+Polynomial Coefficients used for Doppler velocity correction: 2.388537e+
+02 -1.070713e-02 -1.562867e-05 -9.742782e-10
+FITSHEAD2STRUCT run at: Thu Oct 22 09:36:21 2026
+</history>
+<comment>
+FITS (Flexible Image Transport System) format is defined in 'Astronomy
+and Astrophysics', volume 376, page 359; bibcode: 2001A&amp;A...376..359H
+De-rotation: ON; Un-distortion: ON; Re-centering: ON; Re-sizing: OFF; co
+rrection for cosmic-ray hits; correction front/side intensity implemente
+d for mod L; RSUNerr=5.0 pixels; dpath=/home/jsoc/releases/jsoc-v10.0.6/
+src/lev1.5_hmi/apps; linearity=1 with coefficients updated on 2014/01/15
+; smooth=1; propagate eclipse bit from level 1; use of larger crop radiu
+s look-up tables
+This FITS file may contain long string keyword values that are
+continued over multiple keywords.  The HEASARC convention uses the &amp;
+character at the end of each substring which is then continued
+on the next keyword which has the name CONTINUE.
+FITSHEAD2STRUCT
+</comment>
+</fits>
+<helioviewer>
+<HV_ROTATION>0.00000</HV_ROTATION>
+<HV_JP2GEN_VERSION>0.8</HV_JP2GEN_VERSION>
+<HV_JP2GEN_BRANCH_REVISION>No valid revision number found. Bazaar not installed? Using HV_WRITTENBY manually included revision number: 84 [2011/01/10, https://launchpad.net/jp2gen] : % SPAWN: Error managing child process.:  No such file or directory</HV_JP2GEN_BRANCH_REVISION>
+<HV_HVS_DETAILS_FILENAME>hvs_default_hmi.pro</HV_HVS_DETAILS_FILENAME>
+<HV_HVS_DETAILS_FILENAME_VERSION>1.0</HV_HVS_DETAILS_FILENAME_VERSION>
+<HV_COMMENT>JP2 file created locally at Lockheed LMSAL using hv_hmi_list2jp2_dev at Thu Oct 22 09:36:21 2026.
+Contact Helioviewer LMSAL Franchise (slater@lmsal.com) for more details/questions/comments regarding this JP2 file.
+HVS (Helioviewer setup) file used to create this JP2 file: hvs_default_hmi.pro (version 1.0).
+FITS to JP2 source code provided by ESA/NASA Helioviewer Project [contact the Helioviewer Project at webmaster@helioviewer.org][NASA-GSFC] and is available for download at https://launchpad.net/jp2gen.
+Please contact the source code providers if you suspect an error in the source code.
+Full source code for the entire Helioviewer Project can be found at https://launchpad.net/helioviewer.</HV_COMMENT>
+<HV_SUPPORTED>TRUE</HV_SUPPORTED>
+</helioviewer>
+</meta>

@@ -1,0 +1,537 @@
+{
+  "status": "BLOCKED_SCHEMA",
+  "capturedAt": "2026-10-22T17:27:19.695Z",
+  "completedAt": "2026-10-22T17:27:22.973Z",
+  "evidenceDirectory": "tests/evidence/2026-10-22-AfCFXB",
+  "target": "2026-10-22T17:15:00.000Z",
+  "currentDay": "2026-10-22",
+  "srs": {
+    "issuedAt": "2026-10-22T00:30:00.000Z",
+    "observationDay": "2026-10-21",
+    "positionEpoch": "2026-10-22T00:00:00.000Z",
+    "rows": [
+      {
+        "section": "I",
+        "region": 4551,
+        "location": "S16W85",
+        "carringtonLongitude": 102,
+        "area": 340,
+        "spotClass": "Eko",
+        "longitudinalExtent": 13,
+        "spotCount": 4,
+        "magneticClass": "Beta-Gamma"
+      },
+      {
+        "section": "I",
+        "region": 4557,
+        "location": "N07W55",
+        "carringtonLongitude": 72,
+        "area": 100,
+        "spotClass": "Dso",
+        "longitudinalExtent": 9,
+        "spotCount": 13,
+        "magneticClass": "Beta"
+      },
+      {
+        "section": "I",
+        "region": 4560,
+        "location": "N13W28",
+        "carringtonLongitude": 45,
+        "area": 130,
+        "spotClass": "Dai",
+        "longitudinalExtent": 10,
+        "spotCount": 19,
+        "magneticClass": "Beta-Gamma"
+      },
+      {
+        "section": "IA",
+        "region": 4553,
+        "location": "N06W82",
+        "carringtonLongitude": 99,
+        "area": null,
+        "spotClass": null,
+        "longitudinalExtent": null,
+        "spotCount": null,
+        "magneticClass": null
+      },
+      {
+        "section": "IA",
+        "region": 4554,
+        "location": "N07W68",
+        "carringtonLongitude": 85,
+        "area": null,
+        "spotClass": null,
+        "longitudinalExtent": null,
+        "spotCount": null,
+        "magneticClass": null
+      },
+      {
+        "section": "IA",
+        "region": 4556,
+        "location": "N03W55",
+        "carringtonLongitude": 72,
+        "area": null,
+        "spotClass": null,
+        "longitudinalExtent": null,
+        "spotCount": null,
+        "magneticClass": null
+      },
+      {
+        "section": "IA",
+        "region": 4559,
+        "location": "S20W78",
+        "carringtonLongitude": 95,
+        "area": null,
+        "spotClass": null,
+        "longitudinalExtent": null,
+        "spotCount": null,
+        "magneticClass": null
+      }
+    ]
+  },
+  "positions": {
+    "aligned": {
+      "jsonObservationDay": "2026-10-21",
+      "expected": 7,
+      "available": 7,
+      "matches": 7,
+      "comparisons": [
+        {
+          "region": 4551,
+          "expected": {
+            "location": "S16W85",
+            "carringtonLongitude": 102
+          },
+          "actual": {
+            "location": "S16W85",
+            "carringtonLongitude": 102
+          },
+          "matches": true
+        },
+        {
+          "region": 4557,
+          "expected": {
+            "location": "N07W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N07W55",
+            "carringtonLongitude": 72
+          },
+          "matches": true
+        },
+        {
+          "region": 4560,
+          "expected": {
+            "location": "N13W28",
+            "carringtonLongitude": 45
+          },
+          "actual": {
+            "location": "N13W28",
+            "carringtonLongitude": 45
+          },
+          "matches": true
+        },
+        {
+          "region": 4553,
+          "expected": {
+            "location": "N06W82",
+            "carringtonLongitude": 99
+          },
+          "actual": {
+            "location": "N06W82",
+            "carringtonLongitude": 99
+          },
+          "matches": true
+        },
+        {
+          "region": 4554,
+          "expected": {
+            "location": "N07W68",
+            "carringtonLongitude": 85
+          },
+          "actual": {
+            "location": "N07W68",
+            "carringtonLongitude": 85
+          },
+          "matches": true
+        },
+        {
+          "region": 4556,
+          "expected": {
+            "location": "N03W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N03W55",
+            "carringtonLongitude": 72
+          },
+          "matches": true
+        },
+        {
+          "region": 4559,
+          "expected": {
+            "location": "S20W78",
+            "carringtonLongitude": 95
+          },
+          "actual": {
+            "location": "S20W78",
+            "carringtonLongitude": 95
+          },
+          "matches": true
+        }
+      ],
+      "extraRegions": []
+    },
+    "sameCalendarDate": {
+      "jsonObservationDay": "2026-10-22",
+      "expected": 7,
+      "available": 7,
+      "matches": 0,
+      "comparisons": [
+        {
+          "region": 4551,
+          "expected": {
+            "location": "S16W85",
+            "carringtonLongitude": 102
+          },
+          "actual": {
+            "location": "S15W97",
+            "carringtonLongitude": 101
+          },
+          "matches": false
+        },
+        {
+          "region": 4557,
+          "expected": {
+            "location": "N07W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N07W68",
+            "carringtonLongitude": 73
+          },
+          "matches": false
+        },
+        {
+          "region": 4560,
+          "expected": {
+            "location": "N13W28",
+            "carringtonLongitude": 45
+          },
+          "actual": {
+            "location": "N13W42",
+            "carringtonLongitude": 46
+          },
+          "matches": false
+        },
+        {
+          "region": 4553,
+          "expected": {
+            "location": "N06W82",
+            "carringtonLongitude": 99
+          },
+          "actual": {
+            "location": "N06W97",
+            "carringtonLongitude": 101
+          },
+          "matches": false
+        },
+        {
+          "region": 4554,
+          "expected": {
+            "location": "N07W68",
+            "carringtonLongitude": 85
+          },
+          "actual": {
+            "location": "N07W82",
+            "carringtonLongitude": 86
+          },
+          "matches": false
+        },
+        {
+          "region": 4556,
+          "expected": {
+            "location": "N03W55",
+            "carringtonLongitude": 72
+          },
+          "actual": {
+            "location": "N03W69",
+            "carringtonLongitude": 73
+          },
+          "matches": false
+        },
+        {
+          "region": 4559,
+          "expected": {
+            "location": "S20W78",
+            "carringtonLongitude": 95
+          },
+          "actual": {
+            "location": "S20W92",
+            "carringtonLongitude": 96
+          },
+          "matches": false
+        }
+      ],
+      "extraRegions": []
+    }
+  },
+  "sourceCounts": {
+    "regions": 222,
+    "currentDayRegions": 7,
+    "flares": 78,
+    "currentDayFlares": 7,
+    "flaresWithRegion": 0,
+    "events": 697,
+    "currentDayEvents": 8
+  },
+  "images": [
+    {
+      "instrument": "HMI",
+      "measurement": "continuum",
+      "sourceId": 18,
+      "imageId": "193201145",
+      "requestedAt": "2026-10-22T17:15:00.000Z",
+      "observedAt": "2026-10-22T14:21:28.100Z",
+      "offsetSeconds": -10411.9,
+      "headerCadenceSeconds": 45,
+      "sourceCadenceSeconds": 45,
+      "instrumentCadenceSeconds": 45,
+      "cadenceAuthority": "Embedded JP2 FITS CADENCE",
+      "ageAtCaptureSeconds": 11151.595,
+      "withinSourceCadence": false,
+      "withinAcquisitionInterval": false,
+      "currentDay": true,
+      "metadataTimeDeltaMs": 100,
+      "bytes": 1053801,
+      "sha256": "77cd07a25bddd7fa37c690c4146275cb8b1cda16cf914e363fbd3bfe2ae03145",
+      "fields": {
+        "DATE-OBS": "2026-10-22T14:21:28.100",
+        "DATE_OBS": "2026-10-22T14:21:28.100",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000002",
+        "CDELT2": "0.60000002",
+        "CROTA2": "0.00000",
+        "PC1_1": null,
+        "PC1_2": null,
+        "PC2_1": null,
+        "PC2_2": null,
+        "CD1_1": null,
+        "CD1_2": null,
+        "CD2_1": null,
+        "CD2_2": null,
+        "RSUN_OBS": "964.34497",
+        "CRLN_OBS": "9.4461975",
+        "CRLT_OBS": "5.2900519",
+        "HGLN_OBS": "0",
+        "DSUN_OBS": "1.4886874e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": "45.0000",
+        "QUALITY": "1024",
+        "CONTENT": "CONTINUUM INTENSITY",
+        "TELESCOP": "SDO",
+        "INSTRUME": "HMI_FRONT2",
+        "WAVELNTH": "6173.00",
+        "WAVEUNIT": null,
+        "TIMESYS": null,
+        "T_OBS": "2026.10.22_14:22:27.568_TAI",
+        "T_REC": "2026.10.22_14:22:30.000_TAI"
+      }
+    },
+    {
+      "instrument": "AIA",
+      "measurement": "171",
+      "sourceId": 10,
+      "imageId": "193201997",
+      "requestedAt": "2026-10-22T17:15:00.000Z",
+      "observedAt": "2026-10-22T17:00:33.350Z",
+      "offsetSeconds": -866.65,
+      "headerCadenceSeconds": null,
+      "sourceCadenceSeconds": 36,
+      "instrumentCadenceSeconds": 12,
+      "cadenceAuthority": "https://helioviewer-project.github.io/user_guide/",
+      "ageAtCaptureSeconds": 1606.345,
+      "withinSourceCadence": false,
+      "withinAcquisitionInterval": true,
+      "currentDay": true,
+      "metadataTimeDeltaMs": 350,
+      "bytes": 1077900,
+      "sha256": "bbca0d9492c7dbc7ac2024db8e8ae83706958becf35e54b4aa4bd0a8c4b16d1e",
+      "fields": {
+        "DATE-OBS": "2026-10-22T17:00:33.350",
+        "DATE_OBS": "2026-10-22T17:00:33.350",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000002",
+        "CDELT2": "0.60000002",
+        "CROTA2": "0.00000",
+        "PC1_1": null,
+        "PC1_2": null,
+        "PC2_1": null,
+        "PC2_2": null,
+        "CD1_1": null,
+        "CD1_2": null,
+        "CD2_1": null,
+        "CD2_2": null,
+        "RSUN_OBS": "964.48954",
+        "CRLN_OBS": "7.9858804",
+        "CRLT_OBS": "5.2863402",
+        "HGLN_OBS": null,
+        "DSUN_OBS": "1.4884643e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": null,
+        "QUALITY": "1073741824",
+        "CONTENT": null,
+        "TELESCOP": "SDO",
+        "INSTRUME": "AIA_3",
+        "WAVELNTH": "171",
+        "WAVEUNIT": "angstrom",
+        "TIMESYS": null,
+        "T_OBS": "2026-10-22T17:00:34.350",
+        "T_REC": null
+      }
+    },
+    {
+      "instrument": "AIA",
+      "measurement": "193",
+      "sourceId": 11,
+      "imageId": "193201953",
+      "requestedAt": "2026-10-22T17:15:00.000Z",
+      "observedAt": "2026-10-22T17:01:40.842Z",
+      "offsetSeconds": -799.158,
+      "headerCadenceSeconds": null,
+      "sourceCadenceSeconds": 36,
+      "instrumentCadenceSeconds": 12,
+      "cadenceAuthority": "https://helioviewer-project.github.io/user_guide/",
+      "ageAtCaptureSeconds": 1538.853,
+      "withinSourceCadence": false,
+      "withinAcquisitionInterval": true,
+      "currentDay": true,
+      "metadataTimeDeltaMs": 158,
+      "bytes": 1077889,
+      "sha256": "6bb9a00db40e3872f94d0f4898c54cd2e063d2dc81b184488981afa981524ab6",
+      "fields": {
+        "DATE-OBS": "2026-10-22T17:01:40.842",
+        "DATE_OBS": "2026-10-22T17:01:40.842",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000008",
+        "CDELT2": "0.60000008",
+        "CROTA2": "0.00000",
+        "PC1_1": null,
+        "PC1_2": null,
+        "PC2_1": null,
+        "PC2_2": null,
+        "CD1_1": null,
+        "CD1_2": null,
+        "CD2_1": null,
+        "CD2_2": null,
+        "RSUN_OBS": "964.49032",
+        "CRLN_OBS": "7.9755111",
+        "CRLT_OBS": "5.2863026",
+        "HGLN_OBS": null,
+        "DSUN_OBS": "1.4884631e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": null,
+        "QUALITY": "1073741824",
+        "CONTENT": null,
+        "TELESCOP": "SDO",
+        "INSTRUME": "AIA_2",
+        "WAVELNTH": "193",
+        "WAVEUNIT": "angstrom",
+        "TIMESYS": null,
+        "T_OBS": "2026-10-22T17:01:41.842",
+        "T_REC": null
+      }
+    },
+    {
+      "instrument": "AIA",
+      "measurement": "304",
+      "sourceId": 13,
+      "imageId": "193202016",
+      "requestedAt": "2026-10-22T17:15:00.000Z",
+      "observedAt": "2026-10-22T17:03:05.128Z",
+      "offsetSeconds": -714.872,
+      "headerCadenceSeconds": null,
+      "sourceCadenceSeconds": 36,
+      "instrumentCadenceSeconds": 12,
+      "cadenceAuthority": "https://helioviewer-project.github.io/user_guide/",
+      "ageAtCaptureSeconds": 1454.567,
+      "withinSourceCadence": false,
+      "withinAcquisitionInterval": true,
+      "currentDay": true,
+      "metadataTimeDeltaMs": 128,
+      "bytes": 1078026,
+      "sha256": "65795b623fc88b1dda0c8cd3c5c4fea60fd07a16114abfb2b12bcaa677453c31",
+      "fields": {
+        "DATE-OBS": "2026-10-22T17:03:05.128",
+        "DATE_OBS": "2026-10-22T17:03:05.128",
+        "CTYPE1": "HPLN-TAN",
+        "CTYPE2": "HPLT-TAN",
+        "CUNIT1": "arcsec",
+        "CUNIT2": "arcsec",
+        "CRPIX1": "2048.50",
+        "CRPIX2": "2048.50",
+        "CRVAL1": "0.00000",
+        "CRVAL2": "0.00000",
+        "CDELT1": "0.60000002",
+        "CDELT2": "0.60000002",
+        "CROTA2": "0.00000",
+        "PC1_1": null,
+        "PC1_2": null,
+        "PC2_1": null,
+        "PC2_2": null,
+        "CD1_1": null,
+        "CD1_2": null,
+        "CD2_1": null,
+        "CD2_2": null,
+        "RSUN_OBS": "964.49129",
+        "CRLN_OBS": "7.9624925",
+        "CRLT_OBS": "5.2862554",
+        "HGLN_OBS": null,
+        "DSUN_OBS": "1.4884616e+11",
+        "NAXIS1": "4096",
+        "NAXIS2": "4096",
+        "CADENCE": null,
+        "QUALITY": "1073741824",
+        "CONTENT": null,
+        "TELESCOP": "SDO",
+        "INSTRUME": "AIA_4",
+        "WAVELNTH": "304",
+        "WAVEUNIT": "angstrom",
+        "TIMESYS": null,
+        "T_OBS": "2026-10-22T17:03:06.579",
+        "T_REC": null
+      }
+    }
+  ],
+  "publishedRecords": 0,
+  "cidReadBacks": 0,
+  "blockers": [
+    "SDS oracle has not ratified a typed solar record contract; production implementation stopped per owner instruction.",
+    "Local-node publication, browser parity, and native WasmEdge verification have not run; Docker parity waived by owner on 2026-10-22."
+  ]
+}

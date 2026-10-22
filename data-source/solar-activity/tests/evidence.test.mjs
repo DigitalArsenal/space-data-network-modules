@@ -41,14 +41,17 @@ test('missing and duplicate source rows cannot be counted as exact matches', asy
 });
 
 test('all retained public source bytes match their capture hashes and HTTP receipts', async () => {
-  const provenance = JSON.parse(await text('provenance.json'));
-  assert.equal(provenance.length,17);
-  for (const item of provenance) {
-    const data = await bytes(item.file);
-    assert.equal(data.length,item.bytes,item.file);
-    assert.equal(sha256(data),item.sha256,item.file);
-    assert.equal(item.status,200);
-    assert.match(item.url,/^https:\/\/(services\.swpc\.noaa\.gov|api\.helioviewer\.org)\//);
+  for (const [capture,count] of [['2026-10-22-ts940s',17],['2026-10-22-AfCFXB',18]]) {
+    const root = new URL(`./evidence/${capture}/`,import.meta.url);
+    const provenance = JSON.parse(await fs.readFile(new URL('provenance.json',root)));
+    assert.equal(provenance.length,count);
+    for (const item of provenance) {
+      const data = await fs.readFile(new URL(item.file,root));
+      assert.equal(data.length,item.bytes,item.file);
+      assert.equal(sha256(data),item.sha256,item.file);
+      assert.equal(item.status,200);
+      assert.match(item.url,/^https:\/\/(services\.swpc\.noaa\.gov|api\.helioviewer\.org|helioviewer-project\.github\.io)\//);
+    }
   }
 });
 
