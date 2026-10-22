@@ -1,0 +1,123 @@
+{
+  "programId": "com.digitalarsenal.flows.space-weather",
+  "name": "Licensed space weather",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Hourly GFZ/NOAA licensed space weather for NRLMSISE-00, parsed in WASM and published as attributed SPW. No SET/CSSI or sunspot numbers.",
+  "nodes": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "plan_weather",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "parse_weather",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "plan-request-fetch-request",
+      "fromNodeId": "plan",
+      "fromPortId": "request",
+      "toNodeId": "fetch",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fetch-response-parse-response",
+      "fromNodeId": "fetch",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-records-ingest-spw_records",
+      "fromNodeId": "parse",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "spw_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-meta-ingest-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-report-egress-result",
+      "fromNodeId": "parse",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "hourly",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 3600000,
+      "description": "Refresh observed and forecast drivers hourly."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "hourly",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.space-weather",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}
