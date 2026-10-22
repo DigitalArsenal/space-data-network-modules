@@ -1,0 +1,16 @@
+{
+  "name": "@spacedatanetwork/publication-seal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs && node tests/seal-grant-decrypt.e2e.mjs"
+  },
+  "devDependencies": {
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.9.7",
+    "spacedatastandards.org": "1.249.0"
+  }
+}
