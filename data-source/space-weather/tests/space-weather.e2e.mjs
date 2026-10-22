@@ -63,8 +63,9 @@ try {
   node.config.publishing.allowed_schemas=[]; // Empty means unrestricted, not SPW-only.
   await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));
   const deploy=path.join(process.env.GAUNTLET_CANDIDATE_OPS,'deployment/space-weather-provider-node/deploy/host-config.py');
-  await command('python3',[deploy,node.configPath,'apply'],{stdio:'inherit'});
-  const merged=JSON.parse(execFileSync('python3',['-c','import json,sys,yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))',node.configPath],{encoding:'utf8'}));
+  const python=process.env.SPACEWX_PYTHON||'python3';
+  await command(python,[deploy,node.configPath,'apply'],{stdio:'inherit'});
+  const merged=JSON.parse(execFileSync(python,['-c','import json,sys,yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))',node.configPath],{encoding:'utf8'}));
   assert.deepEqual(merged.publishing.allowed_schemas,[],'Rollout preserves unrestricted publication');
   assert.deepEqual(merged.admin,node.config.admin);assert.deepEqual(merged.network,node.config.network);
   Object.assign(node.config,merged);await fs.writeFile(node.configPath,JSON.stringify(node.config,null,2));
