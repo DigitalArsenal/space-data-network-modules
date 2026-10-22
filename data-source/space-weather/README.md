@@ -1,6 +1,6 @@
 # Licensed space weather over SDN
 
-**WIP: blocked on the SDN cron ingress contract.** The module source comparison passes, but the local node sends an untyped JSON timer frame; the typed flow never starts and publishes nothing. This is not a deployable acceptance result. See `tests/VERIFICATION.md`.
+The node must include SDN commit `1fd9d3203` (2026-10-14), which delivers the SDK TimerTick to scheduled flows. Build the acceptance node from current `origin/main`; canonical stack component checkouts may be stale. See `tests/VERIFICATION.md` for acceptance evidence.
 
 Task `modules-space-weather-source-20261022`. Four anonymous source pulls run in a scheduled WASM flow: GFZ historical and nowcast indices, NOAA SWPC 45-day Ap/F10.7 forecast, and NOAA three-hour Kp forecast. No browser source fetches.
 
@@ -10,4 +10,4 @@ SPW DATE names the source UTC day; F107_OBS is that day's flux (FFM reads the pr
 
 Publication: SPW.fbs / provider `space-weather` / source `gfz-noaa`; source URLs, source-content hashes, license and attribution carried in the signed lane manifest. Per-record PVN follows upstream SDS (coordinator scope split 2026-10-22).
 
-Build: `npm ci && npm run build` in this directory. Acceptance: `node data-source/space-weather/tests/space-weather.e2e.mjs` from modules root (live sources, isolated native node, CID readback). No completion claim until that E2E and the graph gauntlet pass.
+Build: `npm ci && npm run build` in this directory. Acceptance: `node data-source/space-weather/tests/space-weather.e2e.mjs` from modules root, with `SDN_NODE_BINARY` naming a freshly built native daemon, `SDN_JS` its built client checkout, and WasmEdge 0.16.4 on `PATH`. It checks real headless-browser/native byte parity, live sources, an isolated native node and binary SDN CID readback. Docker parity is waived by the owner (2026-10-22). No completion claim until that E2E and the graph gauntlet pass.
