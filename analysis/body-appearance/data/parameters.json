@@ -1006,5 +1006,293 @@
     "doi": "10.1002/2013JE004580",
     "locator": "WAC_HAPKEPARAMMAP_566NM v1.1; PDS band 9, 1-based line 79, sample 16; Fig. 16 methodology",
     "scope": "Direct PDS pixel, 566 nm. This is a local pixel, not a mare/highland average. PDS LRO-L-LROC-5-RDR-V1.0; per-band source bytes and SHA256 in sources.json."
+  },
+  {
+    "model": "jupiter:heng2021:550nm",
+    "parameter": "w",
+    "value": 0.989,
+    "unit": "1",
+    "doi": "10.3847/2041-8213/abe872",
+    "locator": "Table 1, 0.55 micrometer row, posterior median",
+    "scope": "Cassini 2000-2001, 550 nm bin, homogeneous semi-infinite atmospheric model; not Johnson V"
+  },
+  {
+    "model": "jupiter:heng2021:550nm",
+    "parameter": "g1",
+    "value": 0.337,
+    "unit": "1",
+    "doi": "10.3847/2041-8213/abe872",
+    "locator": "Table 1, 0.55 micrometer row, posterior median",
+    "scope": "Cassini 2000-2001, 550 nm bin, homogeneous semi-infinite atmospheric model; not Johnson V"
+  },
+  {
+    "model": "jupiter:heng2021:550nm",
+    "parameter": "g2",
+    "value": -0.685,
+    "unit": "1",
+    "doi": "10.3847/2041-8213/abe872",
+    "locator": "Table 1, 0.55 micrometer row, posterior median",
+    "scope": "Cassini 2000-2001, 550 nm bin, homogeneous semi-infinite atmospheric model; not Johnson V"
+  },
+  {
+    "model": "jupiter:heng2021:550nm",
+    "parameter": "f",
+    "value": 0.927,
+    "unit": "1",
+    "doi": "10.3847/2041-8213/abe872",
+    "locator": "Table 1, 0.55 micrometer row, posterior median",
+    "scope": "Cassini 2000-2001, 550 nm bin, homogeneous semi-infinite atmospheric model; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A0",
+    "value": 1.69,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 0 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A1",
+    "value": 1.59,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 30 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A2",
+    "value": 1.45,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 60 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A3",
+    "value": 1.34,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 90 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A4",
+    "value": 1.37,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 120 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A5",
+    "value": 2.23,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 150 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "A6",
+    "value": 3.09,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm A row, phase 180 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B0",
+    "value": 1.48,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 0 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B1",
+    "value": 1.48,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 30 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B2",
+    "value": 1.46,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 60 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B3",
+    "value": 1.42,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 90 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B4",
+    "value": 1.36,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 120 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B5",
+    "value": 1.34,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 150 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:640nm",
+    "parameter": "B6",
+    "value": 1.31,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 640nm B row, phase 180 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A0",
+    "value": 0.63,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 0 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A1",
+    "value": 0.59,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 30 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A2",
+    "value": 0.56,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 60 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A3",
+    "value": 0.56,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 90 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A4",
+    "value": 1.69,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 120 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A5",
+    "value": 1.86,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 150 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "A6",
+    "value": 3.03,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm A row, phase 180 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B0",
+    "value": 1.11,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 0 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B1",
+    "value": 1.11,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 30 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B2",
+    "value": 1.15,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 60 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B3",
+    "value": 1.18,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 90 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B4",
+    "value": 1.2,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 120 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B5",
+    "value": 1.41,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 150 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+  },
+  {
+    "model": "saturn:dyudina2016:440nm",
+    "parameter": "B6",
+    "value": 1.63,
+    "unit": "1",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "locator": "Table 3, 440nm B row, phase 180 degrees",
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
   }
 ]

@@ -51,6 +51,9 @@ export async function runtimeParity() {
     {name:'offset northern tile',method:'place',values:{...rockRequest(),level:2,x:2,y:0}},
     {name:'solar rotation',method:'rotate',values:{profile:'magnetic',latitude_rad:.7,longitude_rad:2,epoch_tai_s:0,scene_tai_s:86400}},
     {name:'lunar phase',method:'phase_curve',values:{model:'moon:muinonen2010',phase_rad:[0,.1,.5,1,1.5]}},
+    ...['jupiter:heng2021:550nm','saturn:dyudina2016:640nm','saturn:dyudina2016:440nm'].map(model=>({
+      name:model+' absolute disk',method:'disk_photometry',values:{model,phase_rad:[0,.1,.5,1,2],
+        radius_m:1000,sun_distance_au:2,observer_distance_m:1e8,solar_magnitude:0}})),
     {name:'cited asteroid table',method:'parameters',values:{model:'asteroid:S'}},
   ];
   const wasmPath=path.join(root,'dist/isomorphic/module.wasm'),bytes=await fs.readFile(wasmPath),artifactSha256=hash(bytes);

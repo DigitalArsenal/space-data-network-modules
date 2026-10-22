@@ -2,6 +2,7 @@
 #include "wire.hpp"
 #include "models.hpp"
 #include "photometry.hpp"
+#include "disk_photometry.hpp"
 #include "placement.hpp"
 
 extern "C" int parameters() {
@@ -56,6 +57,38 @@ extern "C" int phase_curve() {
   wire::Result r;r.vector("relative_flux",flux);r.vector("dimming_mag",mag,"mag");
   r.text("citation","doi:10.1016/j.icarus.2010.04.003; Eq. (18), Tables 3/4; lunar weights Table 6");
   r.text("normalization","Unity at zero phase; no absolute magnitude or albedo supplied.");return r.emit();
+}
+
+extern "C" int disk_photometry() {
+  using namespace appearance;
+  wire::Request q;
+  if(!q.only({"model","phase_rad","radius_m","sun_distance_au","observer_distance_m","solar_magnitude","surface_albedo"}))
+    return wire::fail("invalid-input","Invalid disk-photometry request.");
+  const auto model=q.text("model");
+  const bool lambert=model=="sphere:lambert",jupiter=model=="jupiter:heng2021:550nm";
+  const bool saturn=model=="saturn:dyudina2016:640nm" || model=="saturn:dyudina2016:440nm";
+  if(!lambert && !jupiter && !saturn)return wire::fail("model-unavailable","No independently sourced disk scattering model for this identifier.");
+  const double radius=q.number("radius_m"),sun=q.number("sun_distance_au"),observer=q.number("observer_distance_m"),solar_mag=q.number("solar_magnitude");
+  const double albedo=q.number("surface_albedo");
+  const auto angles=q.vector("phase_rad");
+  if(!in_range(radius,1,1e9) || !in_range(sun,.001,1e6) || !in_range(observer,100*radius,1e20) ||
+     !in_range(solar_mag,-100,100) || angles.empty() || angles.size()>256 ||
+     (lambert?!in_range(albedo,0,1):q.has("surface_albedo")))
+    return wire::fail("invalid-input","Require finite far-field geometry, matched-band solar magnitude at 1 au, and 1..256 angles; only Lambert accepts surface_albedo.");
+  std::vector<double> disk,ratio,magnitude;
+  for(double angle:angles) {
+    const double limit=lambert?pi:(jupiter?140:150)*pi/180;
+    if(!in_range(angle,0,limit) || angle==pi)return wire::fail("out-of-domain","Phase outside the documented model range or zero-flux endpoint.");
+    const double p=disk_albedo(model,angle,albedo),flux=p*std::pow(radius/observer/sun,2);
+    if(!(flux>0) || !std::isfinite(flux))return wire::fail("out-of-domain","The requested geometry produces no finite positive reflected flux.");
+    disk.push_back(p);ratio.push_back(flux);magnitude.push_back(solar_mag-2.5*std::log10(flux));
+  }
+  wire::Result r;r.vector("disk_albedo",disk);r.vector("solar_flux_ratio",ratio);r.vector("apparent_magnitude",magnitude,"mag");
+  r.text("model",model);
+  r.text("band",lambert?"Caller-defined Lambert band":(jupiter?"550 nm; NOT Johnson V":(model=="saturn:dyudina2016:640nm"?"Pioneer red, 640 nm; NOT Johnson V":"Pioneer blue, 440 nm; NOT Johnson V")));
+  r.text("citation",lambert?"Closed-form Lambert sphere; unit diffuse surface albedo has geometric albedo 2/3":(jupiter?"doi:10.3847/2041-8213/abe872; Table 1, 0.55 um; doi:10.1038/s41550-021-01444-7; Eqs. (6),(23)":"doi:10.3847/0004-637X/822/2/76; Eq. (4), Table 3; piecewise-linear interpolation in phase"));
+  r.text("scope","Static homogeneous sphere; Saturn globe only; supplied radius is the spherical model radius. Solar magnitude must match the model band. No fit to Mallama-Hilton.");
+  return r.emit();
 }
 
 extern "C" int place() {

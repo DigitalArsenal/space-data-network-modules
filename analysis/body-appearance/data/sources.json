@@ -79,5 +79,32 @@
     "sha256": "805e53ab8f921c55e1c5e3dd64bbd567f806cdba56148625afcddfc650b6f9a7",
     "bytes": 2164274,
     "scope": "TEST-ONLY planetary oracle. Eq.(12) Saturn cubic differs from published Fortran by 1e-9; oracle follows paper."
+  },
+  {
+    "id": "heng2021",
+    "doi": "10.3847/2041-8213/abe872",
+    "url": "https://arxiv.org/pdf/2101.09984",
+    "local_download": "heng2021/source.pdf",
+    "sha256": "e62e950bcf4fee249c91fd9de2c49bed48b72efa49758127d2837536b6376338",
+    "bytes": 1255069,
+    "scope": "Table 1 550 nm physical parameters; not a Johnson V calibration"
+  },
+  {
+    "id": "heng2021-theory",
+    "doi": "10.1038/s41550-021-01444-7",
+    "url": "https://arxiv.org/pdf/2103.02673",
+    "local_download": "heng2021-theory/source.pdf",
+    "sha256": "68ba7eb0ac1fae8a1451f94ac69716b84374bb67f1a786fd4ff0f68c05222275",
+    "bytes": 3674849,
+    "scope": "Eqs. (6),(23), disk integration of isotropic multiple scattering"
+  },
+  {
+    "id": "dyudina2016",
+    "doi": "10.3847/0004-637X/822/2/76",
+    "url": "https://arxiv.org/pdf/1511.04415",
+    "local_download": "dyudina2016/source.pdf",
+    "sha256": "856f6e2b320fa904c7d49a762d6951b63a128351aaa092c226aba4c5e720d9f9",
+    "bytes": 688361,
+    "scope": "Eq. (4), Table 3, Pioneer red/blue Saturn Barkstrom coefficients"
   }
 ]

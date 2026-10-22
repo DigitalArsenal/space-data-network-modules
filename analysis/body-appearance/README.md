@@ -6,6 +6,9 @@ until absolute Moon and planetary disk photometry is implemented and validated.
 
 The C++ module contains cited parameter lookup, deterministic rock/crater
 placement, solar differential rotation, and relative H,G1,G2 photometry.
+It also integrates independent Jupiter and Saturn scattering models over a
+sphere and converts their absolute albedo into flux and magnitude. Those narrow
+or Pioneer bands are not a validated Johnson V calibration.
 `dist/isomorphic/module.wasm` is the single artifact for Node, browser and native
 WasmEdge. `codec.js` only encodes/decodes canonical SDS PCE FlatBuffers. There is
 no runtime physics or statistics in JavaScript.
@@ -61,6 +64,7 @@ invoke ABI and embeds the authoring manifest in the WASM artifact.
 | `parameters` | `model` | Cited table entries for that exact named model; unavailable classes fail explicitly. |
 | `rotate` | `profile`, `latitude_rad`, `longitude_rad`, `epoch_tai_s`, `scene_tai_s` | Snodgrass–Ulrich sidereal rate and advanced longitude, wrapped to [0,2π). Optional `frame_rate_rad_s` defaults to zero. |
 | `phase_curve` | `model`, `phase_rad` vector; `G1`, `G2` for `hg1g2` | Relative flux and magnitude dimming. `moon:muinonen2010` selects the published lunar weights. No absolute magnitude or geometric/normal albedo is implied. |
+| `disk_photometry` | `model`, `phase_rad`, `radius_m`, `sun_distance_au`, `observer_distance_m`, `solar_magnitude` | Absolute disk albedo, flux relative to the Sun at 1 au, and apparent magnitude. Solar magnitude must match the model band. |
 | `place` | `body_id`, `level`, `x`, `y`, `seed`, `radius_m` | Body-fixed XYZ meters, diameter meters, azimuth radians and uint32 shape seeds for each requested population. |
 
 Rotation profiles are `magnetic`, `doppler` and `spectroscopic`; selection is
@@ -68,6 +72,18 @@ explicit because their physical tracers differ. Times are TAI seconds from the
 same caller-chosen epoch. Longitude increases in the rotation direction relative
 to the caller's uniformly rotating frame. This is feature advection, not an
 ephemeris or a live space-weather model.
+
+Disk models are `jupiter:heng2021:550nm` (Heng & Li 2021 Table 1; phase
+0–140°), `saturn:dyudina2016:640nm` and `saturn:dyudina2016:440nm`
+(Dyudina et al. 2016 Table 3; phase 0–150°; globe only). A 64×64
+Gauss-Legendre integral covers the illuminated visible sphere. Jupiter uses the
+paper's double Henyey-Greenstein single scattering and isotropic multiple
+scattering. Saturn uses the Barkstrom law, with explicit linear interpolation
+between its 30° parameter knots. These models contain no Mallama–Hilton inputs.
+`sphere:lambert` additionally requires `surface_albedo` and supplies a
+closed-form verification case. Geometry is far-field (observer at least 100
+radii away), with a caller-specified spherical radius; there is no ellipsoid,
+ring, seasonal, or longitudinal correction. At most 256 angles per call.
 
 Tiles are equirectangular: `2^level` cells on each axis, longitude from −π to π
 west to east and latitude from +π/2 to −π/2 north to south. Positions are uniform
@@ -100,10 +116,11 @@ the budget is exceeded. Omitting both populations returns empty vectors.
 
 ## Sources and remaining scope
 
-`data/parameters.json` holds 112 cited values: S/C/V class-average Hapke
+`data/parameters.json` holds 144 cited values: S/C/V class-average Hapke
 parameters, three solar profiles, lunar median roughness/Hurst scales, lunar
 crater coefficients, the Mars rock law, H,G1,G2 basis/weights and two identified
-566 nm LROC Hapke map pixels. Median slopes are labeled as medians, not RMS.
+566 nm LROC Hapke map pixels, and independent Jupiter/Saturn scattering
+coefficients. Median slopes are labeled as medians, not RMS.
 The two map pixels are not asserted to represent whole terrain classes.
 `data/sources.json` records primary download URLs, hashes, byte sizes and limits.
 All physical numbers have DOI and table/equation/dataset-pixel locators.

@@ -27,5 +27,5 @@ test('every shipped table number has units, source and scope',()=>{
   assert.ok(table.length>=30);
   for(const p of table){assert.ok(Number.isFinite(p.value));assert.match(p.doi,/^10\./);assert.ok(p.locator && p.scope && p.unit);}
   // No test-only planet oracle may become part of the runtime source closure.
-  for(const name of ['module.cpp','models.hpp','placement.hpp','wire.hpp'])assert.doesNotMatch(fs.readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),/import.*oracle|include.*oracle|3\.0334[eE]-12/);
+  for(const name of fs.readdirSync(new URL('../src/',import.meta.url)))assert.doesNotMatch(fs.readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),/import.*oracle|include.*oracle|3\.0334[eE]-12/);
 });
