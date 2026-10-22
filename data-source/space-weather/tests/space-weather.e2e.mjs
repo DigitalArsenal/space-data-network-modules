@@ -80,3 +80,6 @@ try {
  const actual=decodeRecords(readback);verifySources(actual,bodies,new Date().toISOString().slice(0,10));
  receipt.publication={provider:info.peer_id,manifestCid:newest.manifest_cid,shardCid:asset.CID,rows:actual.length,license:source.LICENSE,citation:source.CITATION,sha256:hash(readback)};receipt.status='PASS';console.log(`PASS scheduled native flow -> signed SPW publication -> independent SDN CID readback: ${actual.length} days`);
 } catch(error){receipt.status='FAIL';receipt.error=error.stack;process.exitCode=1;console.error(error.stack);}finally{if(harness)await harness.destroy();if(client)await client.stop();if(node)await node.stop();receipt.completedAt=new Date().toISOString();await save();console.log('Evidence: '+evidence);}
+
+// All owned runtimes/nodes are stopped above; terminate residual third-party client timers.
+process.exit(process.exitCode || 0);
