@@ -74,6 +74,11 @@ export async function runtimeParity() {
   await build({entryPoints:[path.join(root,'tests/browser-parity.mjs')],outfile:bundle,bundle:true,platform:'browser',format:'esm',logLevel:'silent'});
   const bundleBytes=await fs.readFile(bundle),errors=[];
   const server=http.createServer((req,res)=>{
+    // The SDK requires cross-origin isolation for the shared-memory
+    // wasi-sequential artifact, even when a browser permits instantiation.
+    res.setHeader('Cross-Origin-Opener-Policy','same-origin');
+    res.setHeader('Cross-Origin-Embedder-Policy','require-corp');
+    res.setHeader('Cross-Origin-Resource-Policy','same-origin');
     if(req.url==='/module.wasm'){res.setHeader('Content-Type','application/wasm');res.end(bytes);}
     else if(req.url==='/test.js'){res.setHeader('Content-Type','application/javascript');res.end(bundleBytes);}
     else if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>Body appearance parity</title><script type="module" src="/test.js"></script>');}
@@ -94,8 +99,11 @@ export async function runtimeParity() {
     assert.deepEqual(errors,[],'headless browser exceptions');
   } finally {if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
   assert.equal(browserReport.artifactSha256,artifactSha256,'unchanged browser artifact');
+  assert.equal(browserReport.crossOriginIsolated,true,'SDK shared-memory browser isolation');
+  assert.equal(browserReport.sharedArrayBuffer,true,'SDK SharedArrayBuffer availability');
   assert.deepEqual(browserReport.outputs,expected,'headless Firefox payload bytes');
   return {status:'pass',artifactSha256,node:process.version,firefox:browserVersion,
+    browserIsolation:{crossOriginIsolated:browserReport.crossOriginIsolated,sharedArrayBuffer:browserReport.sharedArrayBuffer},
     wasmedge:execFileSync(wasmEdgeBinary,['--version'],{encoding:'utf8'}).split('\n')[0],
     comparison:'exact SHA-256 equality of complete typed result payloads',outputs:expected,
     docker:{status:'waived',authority:'Owner 2026-10-22: never start Docker or Docker Desktop'}};

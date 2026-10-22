@@ -44,7 +44,9 @@ Build scratch stays in ignored `.build/`.
 The E2E runs sequential Node, one headless Firefox, and native WasmEdge legs.
 It compares SHA-256 digests of the complete typed outputs, including both
 100,005-object populations, repeated/different seeds, a polar tile, rotation,
-phase and table lookup. Browser and native WasmEdge use unchanged artifact bytes.
+phase, absolute photometry, and table lookup. Browser and native WasmEdge use
+unchanged artifact bytes. The browser server supplies COOP/COEP headers and the
+test verifies `crossOriginIsolated` and `SharedArrayBuffer` availability.
 The owner waived Docker parity on 2026-10-22: **never start Docker or Docker
 Desktop**. The test has no Docker or Chrome launcher.
 
@@ -131,11 +133,15 @@ the budget is exceeded. Omitting both populations returns empty vectors.
 
 ## Sources and remaining scope
 
-`data/parameters.json` holds 166 cited values: S/C/V class-average Hapke
+`data/parameters.json` holds 215 cited values: S/C/V class-average Hapke
 parameters, three solar profiles, lunar median roughness/Hurst scales, lunar
 crater coefficients, the Mars rock law, H,G1,G2 basis/weights and two identified
 566 nm LROC Hapke map pixels, and independent Jupiter/Saturn scattering
-coefficients and ROLO 311g radiometric parameters. Median slopes are labeled as medians, not RMS.
+coefficients, ROLO 311g radiometric parameters, and seven-band geometric
+albedos for each of the seven requested planets (Mallama et al. 2017 Table 7).
+These are geometric albedos, not normal or Bond albedos. Albedo-only identifiers
+are `planet:<lowercase-body>:albedo2017`; they do not imply a phase law.
+Median slopes are labeled as medians, not RMS.
 The two map pixels are not asserted to represent whole terrain classes.
 `data/sources.json` records primary download URLs, hashes, byte sizes and limits.
 All physical numbers have DOI and table/equation/dataset-pixel locators.
@@ -155,7 +161,8 @@ The separate absolute ROLO comparison is same-model implementation verification;
 it does not establish that a separate surface-scattering model predicts ROLO.
 
 Still required: validated Johnson V disk photometry for all seven requested
-planets, independent lunar surface-model validation, all-body albedo/color/roughness tables, D and X/M taxonomic priors and
+planets, independent lunar surface-model validation, normal albedo/color and
+roughness tables, D and X/M taxonomic priors and
 taxonomy/albedo selection, Diviner input mapping, and named-spacecraft
 matched-geometry render/image-similarity and shadow-fraction evidence. Original
 Bandfield 2011 and Golombek–Rapp 1997 downloads remain unavailable after publisher

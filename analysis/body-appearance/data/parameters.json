@@ -1104,7 +1104,7 @@
     "unit": "1",
     "doi": "10.3847/0004-637X/822/2/76",
     "locator": "Table 3, 640nm A row, phase 180 degrees",
-    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V The 180-degree row is extrapolated in the publication, not observed, and the disk method refuses phases above 150 degrees."
   },
   {
     "model": "saturn:dyudina2016:640nm",
@@ -1167,7 +1167,7 @@
     "unit": "1",
     "doi": "10.3847/0004-637X/822/2/76",
     "locator": "Table 3, 640nm B row, phase 180 degrees",
-    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V The 180-degree row is extrapolated in the publication, not observed, and the disk method refuses phases above 150 degrees."
   },
   {
     "model": "saturn:dyudina2016:440nm",
@@ -1230,7 +1230,7 @@
     "unit": "1",
     "doi": "10.3847/0004-637X/822/2/76",
     "locator": "Table 3, 440nm A row, phase 180 degrees",
-    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V The 180-degree row is extrapolated in the publication, not observed, and the disk method refuses phases above 150 degrees."
   },
   {
     "model": "saturn:dyudina2016:440nm",
@@ -1293,7 +1293,7 @@
     "unit": "1",
     "doi": "10.3847/0004-637X/822/2/76",
     "locator": "Table 3, 440nm B row, phase 180 degrees",
-    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V"
+    "scope": "Pioneer band, homogeneous spherical globe without rings; phase interpolation is explicitly linear; not Johnson V The 180-degree row is extrapolated in the publication, not observed, and the disk method refuses phases above 150 degrees."
   },
   {
     "model": "moon:rolo311g:553.8nm",
@@ -1492,5 +1492,446 @@
     "doi": "10.1086/430185",
     "locator": "Table 4, band identifier",
     "scope": "ROLO 311g 553.8 nm; disk-integrated narrow band, not Johnson V; phase 1.55<g<97 deg"
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.087,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.105,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.142,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.172,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.208,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.158,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mercury:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.18,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mercury row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.348,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.658,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.689,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.708,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.584,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.658,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:venus:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.64,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Venus row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.06,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.088,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.17,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.288,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.33,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.25,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:mars:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.285,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Mars row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.358,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.443,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.538,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.495,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.321,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.513,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:jupiter:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.389,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Jupiter row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.203,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.339,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.499,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.568,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.423,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.646,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:saturn:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.543,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Saturn row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.502,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.561,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.488,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.202,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.079,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.264,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:uranus:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.089,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Uranus row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_U",
+    "value": 0.578,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, U column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_B",
+    "value": 0.562,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, B column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_V",
+    "value": 0.442,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, V column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_R",
+    "value": 0.181,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, R column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_I",
+    "value": 0.067,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, I column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_Rc",
+    "value": 0.226,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, Rc column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
+  },
+  {
+    "model": "planet:neptune:albedo2017",
+    "parameter": "geometric_albedo_Ic",
+    "value": 0.072,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "locator": "Table 7, Johnson-Cousins, Neptune row, Ic column",
+    "scope": "Reference geometric albedo in the 2017 study, not normal or Bond albedo; no phase, seasonal, longitudinal or epoch interpolation is implied. Saturn refers to the globe."
   }
 ]

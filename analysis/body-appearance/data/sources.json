@@ -115,5 +115,14 @@
     "sha256": "85a65c23cbf06da3d479795568683223bee4dc10f1c918845344068a48c16fae",
     "bytes": 428623,
     "scope": "AB monochromatic magnitude definition, p.716; use conventional -48.60 sign, correcting the original printed +48.60 typo; verified against SDSS flux-calibration definition."
+  },
+  {
+    "id": "mallama2017-albedos",
+    "doi": "10.1016/j.icarus.2016.09.023",
+    "url": "https://arxiv.org/pdf/1609.05048",
+    "local_download": "mallama2017/source.pdf",
+    "sha256": "7feb8edb372502cee5dc9c6a7656205e3279353bb38f9a98cbecbe8e8d733f91",
+    "bytes": 915468,
+    "scope": "Table 7 measured/reconstructed Johnson-Cousins geometric albedos only. No phase or magnitude polynomial is used as runtime input. Section 8 discusses discrepancies with scattering-model albedos."
   }
 ]

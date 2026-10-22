@@ -8,6 +8,7 @@ import {measure} from './measurements.mjs';
 import {runtimeParity} from './runtime-parity.mjs';
 import {phaseDomains} from './mallama-hilton-oracle.mjs';
 import {measureLunar} from './lunar-measurements.mjs';
+import {planetDiagnostics} from './planet-diagnostics.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const bytes=await fs.readFile(path.join(root,'dist/isomorphic/module.wasm'));
@@ -28,12 +29,15 @@ try {
   report.acceptance.moon=await measureLunar(harness);
   if(report.acceptance.moon.status!=='pass')report.failures.push('Moon absolute disk photometry exceeds 0.1 mag');
 } catch(error) {report.acceptance.moon={status:'fail',error:error.message};report.failures.push(`Moon: ${error.message}`);}
+try {report.planetDiagnostics=await planetDiagnostics(harness);}
+catch(error) {report.planetDiagnostics={error:error.message};report.failures.push(`Planet diagnostics: ${error.message}`);}
 await harness.destroy();
 try {report.acceptance.runtimeParity=await runtimeParity();}
 catch(error) {report.acceptance.runtimeParity={status:'fail',error:error.message};report.failures.push(`Runtime parity: ${error.message}`);}
 report.acceptance.planets=Object.fromEntries(Object.entries(phaseDomains).map(([body,range])=>[body,
-  {status:'fail',phase_domain_deg:range,threshold_mag:.1,samples:0,reason:'No independently sourced and validated absolute disk-photometry implementation.'}]));
-report.failures.push('Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune disk magnitudes are unimplemented');
+  {status:'fail',phase_domain_deg:range,threshold_mag:.1,samples:0,
+    reason:report.planetDiagnostics?.[body]?'Independent scattering model exists in another band; Johnson V absolute calibration is not validated.':'No independently sourced and validated absolute disk-photometry implementation.'}]));
+report.failures.push('Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune absolute Johnson V magnitudes are not validated');
 report.unfinishedScope=['Whole-body photometric/albedo/color tables and roughness RMS baselines',
   'D and X/M taxonomic priors and explicit taxonomy/albedo selection',
   'Diviner rock-abundance input mapping and independently justified lunar rock-size law',

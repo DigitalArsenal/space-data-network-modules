@@ -15,6 +15,7 @@ window.runAppearanceParity = async requests => {
         throw new Error(`${name}: ${response.errorCode}: ${response.errorMessage}`);
       outputs.push({name, sha256: await digest(response.outputs[0].payload), bytes: response.outputs[0].payload.length});
     }
-    return {artifactSha256, outputs};
+    return {artifactSha256, outputs,crossOriginIsolated:window.crossOriginIsolated,
+      sharedArrayBuffer:typeof SharedArrayBuffer==='function'};
   } finally { await harness.destroy(); }
 };

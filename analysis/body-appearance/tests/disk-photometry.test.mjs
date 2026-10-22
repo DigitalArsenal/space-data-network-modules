@@ -55,3 +55,27 @@ test('disk photometry rejects absent models, mismatched inputs and unsupported g
     {observer_distance_m:500},{sun_distance_au:0},{phase_rad:[]},{phase_rad:[-.1]}])
     assert.notEqual((await h.invoke(encodeRequest('disk_photometry',{...q,...change}))).statusCode,0);
 });
+
+test('Jupiter disk integration matches the independent analytic phase solution',async t=>{
+  const h=await createBrowserModuleHarness({wasmSource:bytes,surface:'direct'});t.after(()=>h.destroy());
+  // Heng et al. (2021) doi:10.1038/s41550-021-01444-7, Eqs.(8)-(11),
+  // evaluated directly rather than by the runtime's two-dimensional integral.
+  // Dimensionless disk albedo, static spherical frame, phase angles radians.
+  const w=.989,e=(1-Math.sqrt(1-w))/(1+Math.sqrt(1-w));
+  const P=a=>.927*(1-.337**2)/(1+.337**2+2*.337*Math.cos(a))**1.5+
+    .073*(1-.685**2)/(1+.685**2-2*.685*Math.cos(a))**1.5;
+  const rhoS=a=>P(a)-1+(1+e)**2*(2-e)**2/4;
+  const rhoL=e/2*(1+e)**2*(2-e),rhoC=e*e*(1+e)**2;
+  const geometric=w/8*(P(0)-1)+e/2+e*e/6+e**3/24;
+  const angles=[.02,.3,.8,Math.PI/2,2,2.4];
+  const r=await invoke(h,'disk_photometry',{...geometry,model:'jupiter:heng2021:550nm',phase_rad:angles});
+  for(let i=0;i<angles.length;i++) {
+    const a=angles[i],c=Math.cos(a/2),s=Math.sin(a/2),logCot=Math.log(1/Math.tan(a/4));
+    const single=1-s*s/c*logCot,lambert=(Math.sin(a)+(Math.PI-a)*Math.cos(a))/Math.PI;
+    const correction=-1+5/3*c*c+Math.tan(a/2)*s**3*logCot;
+    const expected=geometric*(12*rhoS(a)*single+16*rhoL*lambert+9*rhoC*correction)/(12*rhoS(0)+16*rhoL+6*rhoC);
+    // 2e-7 relative allows quadrature of limb/terminator gradients, not
+    // measurement uncertainty. Much smaller than 0.1 mag science acceptance.
+    assert.ok(Math.abs(r.disk_albedo[i]/expected-1)<2e-7,`${a}: ${r.disk_albedo[i]} vs ${expected}`);
+  }
+});
