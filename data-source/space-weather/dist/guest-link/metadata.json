@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "wasi-sequential",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_",
+  "methodSymbols": {
+    "plan_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_plan_weather",
+    "parse_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_parse_weather"
+  }
+}

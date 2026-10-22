@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
-import { generateSdsHeader } from '../../analysis/launch-cola/sds-header.mjs';
+import { generateSdsHeader } from '../lowell-astorb/sds-header.mjs';
 
 const root=fileURLToPath(new URL('.',import.meta.url));
 const {header,version}=await generateSdsHeader('SPW',import.meta.url);

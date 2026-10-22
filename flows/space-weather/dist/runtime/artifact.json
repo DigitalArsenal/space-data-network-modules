@@ -1,0 +1,97 @@
+{
+  "programId": "com.digitalarsenal.flows.space-weather",
+  "name": "Licensed space weather",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
+  "nodes": 5,
+  "edges": 6,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "plan_weather",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "parse_weather",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.space-weather",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "version": "0.1.0",
+      "sha256": "4cbb4e749457d865d67ca28f6ff3cfcc8c0f0cba9ae827eb4d9a5b427d1f8a19",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_",
+      "methodSymbols": {
+        "plan_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_plan_weather",
+        "parse_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_parse_weather"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "219919c46aa3c8845ebff7dea2a1a6fa407076e84c84653a624a68c1687e4028",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.5.0",
+      "sha256": "dc47b75f6e0b658ea63c0ef963197e8690bb1018c5b4cfe69b736a6f12cf49ab",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}
