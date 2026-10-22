@@ -10,6 +10,7 @@ import {composeErfaTranslationUnit} from '../../foundation/frames/erfa-amalgamat
 
 const manifest=JSON.parse(await fs.readFile(path.join(packageRoot,'plugin-manifest.json'),'utf8'));
 await generateSdsBindings();
+await import('./generate-catalog-profile.mjs');
 // Explicit provisioned toolchain, or this package's deps. No repository command
 // is needed to select a compiler; outputs and caches stay in this worktree.
 const candidates=[process.env.SDN_LOCAL_EMSDK_DIR,path.join(packageRoot,'deps/emsdk')].filter(Boolean);
