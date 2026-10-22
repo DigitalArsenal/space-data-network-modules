@@ -138,7 +138,11 @@ Gerhard 2013 orientation, Wegg et al. 2015 length, the b/p bulge's axis ratio
 and scale height from Bland-Hawthorn & Gerhard 2016, their sum set by Portail
 et al. 2017's bar/bulge to inner-disc mass ratio (1.88/1.29); the nuclear
 stellar disc (BHG16; Launhardt et al. 2002) at 1.4/18.8 of that light. The old
-light's spiral wave has DS2001's own stellar arm width (143 pc/kpc).
+light's spiral wave has DS2001's own stellar arm width (143 pc/kpc). Half the
+young light is drawn as star complexes on the young arms (Gies 1987: ~70 % of
+O stars in clusters and associations; Efremov 1995: complexes ~600 pc), their
+luminosities dN/dL ~ L^-2 (Kennicutt, Edgar & Hodge 1989); a seeded
+statistical population, its total the smooth model's.
 Dust: Drimmel & Spergel 2001 (its arm dust on the same arms), replaced within
 1.248 kpc by the Edenhofer et al. 2024 map when loaded (local volume only). Reid's fitted radii keep their R0=8.15 kpc fit while the
 observer uses 8.178 kpc. Bulge/bar shapes, the arm extensions, the HII
