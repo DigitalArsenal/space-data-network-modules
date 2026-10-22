@@ -51,7 +51,7 @@ lat=-90+(u['row']+1)*span-(np.arange(384)-halo+.5)*step
 raw=sample(s['url'],p['etag'],lon,lat);base=sample(s['base'],p['baseEtag'],lon,lat)
 valid=np.isfinite(raw);base=np.nan_to_num(base,nan=0)
 if p['stretch']:
-    low,high=p['stretch'];raw=np.clip((raw-low)*254/(high-low)+1,1,255)
+    low,high,target_low,target_high=p['stretch'];raw=np.clip((raw-low)*(target_high-target_low)/(high-low)+target_low,1,255)
 raw=np.where(valid,raw,base);offset=base-raw
 kernel=np.ones(33)/33
 for _ in range(3):

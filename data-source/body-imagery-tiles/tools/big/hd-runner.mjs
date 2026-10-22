@@ -14,7 +14,7 @@ export async function openHdRunner() {
   const h = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(new URL('../../dist/isomorphic/module.wasm', import.meta.url)),
     manifest: JSON.parse(fs.readFileSync(new URL('../../plugin-manifest.json', import.meta.url))),
-    surface:'direct', hostOptions:{config:{jpeg_quality:88,retrieved_at:'2026-10-22T00:00:00.000Z'}},
+    surface:'direct', hostOptions:{config:{jpeg_quality:95,retrieved_at:'2026-10-22T00:00:00.000Z'}},
   });
   return {
     async encode(unit, raster) {

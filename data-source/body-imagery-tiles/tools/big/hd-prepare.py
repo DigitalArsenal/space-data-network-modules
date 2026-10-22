@@ -85,9 +85,9 @@ def prepare(source, level, row, x, count, out, stretch=None):
     if not np.any(valid):
         raise ValueError("source has no coverage in this window")
     if s["naif"] == 499:
-        if not stretch or len(stretch) != 2 or stretch[1] <= stretch[0]:
-            raise ValueError("CTX requires a frozen region-wide --stretch low high")
-        raw = np.clip((raw-stretch[0])*254/(stretch[1]-stretch[0])+1, 1, 255)
+        if not stretch or len(stretch) != 4 or stretch[1] <= stretch[0] or not (0 < stretch[2] < stretch[3] <= 255):
+            raise ValueError("CTX requires a frozen region-wide --stretch source-low source-high target-low target-high")
+        raw = np.clip((raw-stretch[0])*(stretch[3]-stretch[2])/(stretch[1]-stretch[0])+stretch[2], 1, 255)
     base = np.nan_to_num(base, nan=0)
     raw = np.where(valid, raw, base)
     # Local additive radiometric match: gain 1, offset lowpass(base-source).
@@ -124,6 +124,6 @@ if __name__ == "__main__":
     for k in ("level", "row", "x", "tiles"):
         p.add_argument("--"+k, type=int, required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--stretch", nargs=2, type=float)
+    p.add_argument("--stretch", nargs=4, type=float)
     a = p.parse_args()
     prepare(a.source, a.level, a.row, a.x, a.tiles, a.out, a.stretch)

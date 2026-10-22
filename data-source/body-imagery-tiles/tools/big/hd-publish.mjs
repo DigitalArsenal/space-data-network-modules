@@ -63,6 +63,7 @@ await pool(entries,async e=>{
 });
 const polygons=plan.windows.map(w=>{const d=180/2**w.level,a=-180+w.x*d,b=-90+w.row*d;return [[a,b],[a+w.tiles*d,b],[a+w.tiles*d,b+d],[a,b+d],[a,b]];});
 const manifest={naif:s.naif,source:s,levels:plan.levels,coverage:{type:'MultiPolygon',coordinates:polygons.map(p=>[p])},
+  jpegQuality:plan.jpegQuality,
   credit:s.credit,license:s.license,licenseUrl:s.licenseUrl,files:entries.length,bytes:entries.reduce((a,e)=>a+e.bytes,0),ledgerSha256:digest,
   staging,publicationApproved:!staging,verification:gate,baseManifest:`imagery/${s.naif}/MANIFEST.json`};
 // Extension metadata stays with this immutable release; the served base

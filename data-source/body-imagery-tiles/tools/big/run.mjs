@@ -12,10 +12,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SOURCES, prefixOf } from "./sources.mjs";
+import { HD_SOURCES } from "./hd-scope.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i < 0 ? fallback : process.argv[i + 1]; };
 const key = arg("source"), S = SOURCES[key];
+if (HD_SOURCES[key]) {
+  if (!arg("out") || !arg("levels") || !arg("bbox")) throw new Error("HD runs require --out, explicit --levels and --bbox; never a full-pyramid reduction");
+  const steps = [["hd-encode.mjs", ["--source", key, "--out", arg("out"), "--levels", arg("levels"), "--bbox", arg("bbox"), "--workers", arg("workers", "1"), ...(arg("stretch") ? ["--stretch", arg("stretch")] : [])]],
+    ["hd-verify.mjs", ["--dir", arg("out")]]];
+  if (arg("prefix")) steps.push(["hd-publish.mjs", ["--dir", arg("out"), "--prefix", arg("prefix"), "--gate", arg("gate", path.join(arg("out"), "verification.json"))]]);
+  for (const [script, args] of steps) {
+    const result = spawnSync(process.execPath, [path.join(HERE, script), ...args], { stdio: "inherit", env: process.env });
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  }
+  process.exit(0);
+}
 if (!S || !arg("out") || !process.env.R2_AWS) { console.error("usage: R2_AWS=<aws command> run.mjs --source KEY --out DIR [--workers N] [--chunk N]"); process.exit(2); }
 const out = path.resolve(arg("out")), workers = arg("workers", "3"), chunk = Number(arg("chunk", 0));
 const prefix = prefixOf(S), L = S.maxLevel;

@@ -56,3 +56,51 @@ levels (the giants) is one unit and writes root.dtts alone.
 Mercury (199, MESSENGER MDIS BDR 166 m, level 8), Venus (299, Magellan SAR left-look 75 m, level 10), Ceres (2000001, Dawn FC LAMO 35 m, level 7) and Vesta (2000004, Dawn FC LAMO 20 m, level 7), chosen by the unit's NAIF id. Each source states its file's own frame (`lon0_deg`, x0/y0 from the GeoTIFF or PDS label), planetocentric east longitude taken literally; `tests/big.e2e.test.mjs` registers 10 IAU gazetteer features per body within one pixel (Ceres: Kait system, Vesta: Claudia Double Prime, the frame of the console's pck00011). Venus stops at 80 S and 84 N: its no data (and holes) is filled bilinearly from the C3-MDIR 2025 m mosaic (`fill_0` range; C3-MDIR itself ends at 82.4 S, the south pole stays no data). A unit makes up to 256 files (level 10 is 128 a row).
 
 `tools/big/run.mjs --source KEY --out DIR [--chunk N]` encodes, uploads, verifies and reduces a whole pyramid with bounded local disk (`R2_AWS` runs aws against the bucket); `encode.mjs` / `publish.mjs` are its steps.
+
+## Bounded Moon/CTX additions (0.5.0)
+
+`tools/big/hd-sources.json` pins the Moon LO+UVVIS v2 hybrid and USGS Robbins
+CTX MC13, MC23 and MC18 COGs. `tiles_window` accepts an explicit source,
+level, south-origin row, first x, and 1–16 tiles within one output file.
+Its `rows_0` HRSP carries status 200 and a north-first grayscale raster.
+The WASM module performs JPEG encoding and provenance-bearing DTT packing.
+It rejects Moon levels below 9 and CTX levels below 10. No color layer is built.
+
+The GDAL tool reads only the selected region, with conditional range requests
+pinned to the source ETag. CTX uses four frozen regional stretch values:
+source low/high mapped to target low/high, followed by a deterministic local
+offset to THEMIS. Moon uses the same offset to WAC. Three 33-pixel box filters
+and a 64-pixel halo make the offset continuous across file boundaries.
+The HD tools use JPEG quality 95: the initial Jezero quality-88 candidate
+measured 1.913/255 mean absolute error, above the lane's 1.5/255 limit.
+Quality, source validators, transform, raster SHA256 and output SHA256 are
+recorded. Existing global imagery retains its encoding parameters.
+
+```sh
+node tools/big/run.mjs --source mars-ctx-mc13 --out "$WORK/jezero" \
+  --levels 10,11,12,13 --bbox '77.05,18.13,77.4,18.59' \
+  --stretch 'SOURCE_LOW,SOURCE_HIGH,TARGET_LOW,TARGET_HIGH'
+```
+
+Use measured numeric stretch values, as recorded by the deployment's calibration
+files. `run.mjs` invokes bounded encoding then `hd-verify.mjs`, which compares
+max-level JPEGs with independent GDAL full-resolution reads and NumPy sampling.
+An explicit `--prefix staging/imagery-hd/RUN/499` stages a source-verified CTX
+candidate. Staging metadata says `publicationApproved: false`; source fidelity
+does not establish feature registration or reader/UI acceptance. Served CTX
+prefixes are refused pending reader parent fallback and level discovery.
+
+`hd-publish.mjs` validates the exact requested plan and ledger before writing.
+It uses 64 concurrent requests, conditional create-only PUTs, SHA256 round trips
+of every file, and deletes each local tile only after verification. Repeating
+the publish command reads identical existing objects without a PUT. Immutable
+MANIFEST and SHA256SUMS objects live under `PREFIX/releases/LEDGER_SHA/`.
+The base root and manifest are untouched. A full-pyramid run refuses any
+nonempty destination; its publisher also refuses differing existing objects.
+
+`tests/hd.e2e.test.mjs` exercises the artifact, invalid scopes, collision
+preservation, conditional writes and cleanup through the real CLI against an
+isolated filesystem transport. `tests/hd.parity.mjs` runs three operation cases
+through real headless Chromium and native WasmEdge with the SDK hostcall runner.
+Set `HD_E2E_WORK` to persistent scratch and `SDM_CHROME_BINARY` to the headless
+shell. The owner waived the Docker leg on 2026-10-22; no Docker command is used.

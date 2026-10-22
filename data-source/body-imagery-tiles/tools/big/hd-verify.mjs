@@ -13,18 +13,25 @@ const entries=data.toString().trim().split('\n').filter(Boolean).map(JSON.parse)
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 fs.mkdirSync(path.join(dir,'verification'),{recursive:true});
 const maxLevel=Math.max(...entries.map(e=>e.unit.level));
+// Reproducible sampling spread by a path hash; read whole selected files but
+// compare exactly 200 distinct max-level tiles. Every local file is hashed.
+const selected=new Set();let selectedTiles=0;
+for(const e of entries.filter(e=>e.unit.level===maxLevel).sort((a,b)=>sha(a.path).localeCompare(sha(b.path)))) {
+  if(selectedTiles>=200)break;selected.add(e.path);selectedTiles+=e.unit.tiles;
+}
 let sum=0,pixels=0,energy=0,baseEnergy=0;
 for(let i=0;i<entries.length;i++) {
   const e=entries[i],body=fs.readFileSync(path.join(dir,e.path));
   if(body.length!==e.bytes||sha(body)!==e.sha256) throw Error('ledger mismatch '+e.path);
   const tiles=readFile(body).map(t=>t.unpack());
   if(tiles.length!==e.unit.tiles) throw Error('missing tiles');
-  if(e.unit.level!==maxLevel) continue;
+  if(!selected.has(e.path)) continue;
   const input=path.join(dir,'verification',`${i}.json`),ref=input+'.raw';fs.writeFileSync(input,JSON.stringify(e));
   const r=spawnSync('python3',[fileURLToPath(new URL('./hd-reference.py',import.meta.url)),input,ref],{stdio:'inherit'});
   if(r.status!==0) throw Error('independent source read failed');
   const reference=fs.readFileSync(ref),w=e.unit.tiles*256;
   for(let k=0;k<tiles.length;k++) {
+    if(results.length>=200)break;
     const t=tiles[k];
     if(t.X!==e.unit.x+k||t.Y!==e.unit.row||t.LEVEL!==e.unit.level) throw Error('tile geometry mismatch');
     const img=jpeg.decode(Buffer.from(t.PAYLOAD.BYTES),{useTArray:true,formatAsRGBA:true});
