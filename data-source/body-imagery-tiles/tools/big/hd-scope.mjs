@@ -22,6 +22,7 @@ export function planWindows({source,levels,bbox}) {
 }
 export function validateKey(key, naif, levels, prefix=`imagery/${naif}`) {
   if(!/^imagery\/(301|499)$/.test(prefix)&&!/^staging\/imagery-hd\/[a-z0-9-]+\/(301|499)$/.test(prefix)) throw Error('invalid publish prefix');
+  if(!prefix.endsWith('/'+naif)) throw Error('prefix belongs to a different body');
   if(naif===499&&prefix.startsWith('imagery/')) throw Error('CTX requires staging until reader fallback is verified');
   const relative=key.slice(prefix.length+1);
   if(!key.startsWith(prefix+'/')||!/^\d+\/\d+_\d+\.dtts$/.test(relative)) throw Error('only explicitly selected HD tile files may be written');

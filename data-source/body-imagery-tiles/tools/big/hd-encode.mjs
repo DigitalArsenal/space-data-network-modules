@@ -37,7 +37,10 @@ try {
       if(f.path!==name) throw Error('module wrote outside selected window');
       fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.part',f.bytes);fs.renameSync(file+'.part',file);
       const e={path:f.path,bytes:f.bytes.length,sha256:sha(f.bytes),md5:crypto.createHash('md5').update(f.bytes).digest('hex'),unit,provenance};
-      fs.appendFileSync(ledgerPath,JSON.stringify(e)+'\n');
+      const existing=ledger.findIndex(q=>q.path===e.path);
+      if(existing<0) ledger.push(e); else ledger[existing]=e;
+      fs.writeFileSync(ledgerPath+'.part',ledger.map(q=>JSON.stringify(q)).join('\n')+'\n');
+      fs.renameSync(ledgerPath+'.part',ledgerPath);
       console.log(JSON.stringify({encoded:f.path,bytes:e.bytes,sha256:e.sha256}));
     }
     fs.unlinkSync(raw);

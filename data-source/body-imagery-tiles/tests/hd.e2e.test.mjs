@@ -43,7 +43,7 @@ else throw Error('unexpected command '+a.join(' '));
   fs.writeFileSync(path.join(output,'ledger.jsonl'),ledger);
   fs.writeFileSync(path.join(output,'PLAN.json'),JSON.stringify({source:unit.source,levels:[9],bbox:[-22.5,8.4375,-16.875,8.7890625],windows:[unit]}));
   const gate=path.join(dir,'synthetic-storage-gate.json');
-  fs.writeFileSync(gate,JSON.stringify({testFixture:true,ledgerSha256:sha(ledger),pass:true,sampledTiles:200,meanAbs:0,featuresRegistered:10,maxFeatureErrorPixels:0,boundarySeamMeanAbs:0,sharpnessRatio:2}));
+  fs.writeFileSync(gate,JSON.stringify({testFixture:true,ledgerSha256:sha(ledger),pass:true,sourcePass:true,sampledTiles:200,meanAbs:0,featuresRegistered:10,maxFeatureErrorPixels:0,boundarySeamMeanAbs:0,sharpnessRatio:2}));
   const env={...process.env,R2_AWS:aws,TEST_BUCKET:bucket};
   const run=(script,args)=>spawnSync(process.execPath,[path.join(root,'tools/big',script),...args],{env,encoding:'utf8'});
   const prefix='staging/imagery-hd/e2e/301',remote=path.join(bucket,prefix,'9/28_280.dtts');

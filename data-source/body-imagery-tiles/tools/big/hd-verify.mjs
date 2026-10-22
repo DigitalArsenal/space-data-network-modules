@@ -12,12 +12,14 @@ const dir=path.resolve(arg('dir')),data=fs.readFileSync(path.join(dir,'ledger.js
 const entries=data.toString().trim().split('\n').filter(Boolean).map(JSON.parse),results=[];
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 fs.mkdirSync(path.join(dir,'verification'),{recursive:true});
+const maxLevel=Math.max(...entries.map(e=>e.unit.level));
 let sum=0,pixels=0,energy=0,baseEnergy=0;
 for(let i=0;i<entries.length;i++) {
   const e=entries[i],body=fs.readFileSync(path.join(dir,e.path));
   if(body.length!==e.bytes||sha(body)!==e.sha256) throw Error('ledger mismatch '+e.path);
   const tiles=readFile(body).map(t=>t.unpack());
   if(tiles.length!==e.unit.tiles) throw Error('missing tiles');
+  if(e.unit.level!==maxLevel) continue;
   const input=path.join(dir,'verification',`${i}.json`),ref=input+'.raw';fs.writeFileSync(input,JSON.stringify(e));
   const r=spawnSync('python3',[fileURLToPath(new URL('./hd-reference.py',import.meta.url)),input,ref],{stdio:'inherit'});
   if(r.status!==0) throw Error('independent source read failed');

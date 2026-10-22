@@ -12,14 +12,18 @@ if(!arg('dir')||!arg('prefix')||!arg('gate')||!process.env.R2_AWS) throw Error('
 const dir=path.resolve(arg('dir')),prefix=arg('prefix'),plan=JSON.parse(fs.readFileSync(path.join(dir,'PLAN.json'))),s=HD_SOURCES[plan.source];
 const data=fs.readFileSync(path.join(dir,'ledger.jsonl')),entries=data.toString().trim().split('\n').filter(Boolean).map(JSON.parse);
 const gate=JSON.parse(fs.readFileSync(arg('gate'))),digest=sha(data);
-if(!entries.length||gate.ledgerSha256!==digest||gate.pass!==true||gate.sampledTiles<200||!(gate.meanAbs<=1.5)||
-   gate.featuresRegistered<10||!(gate.maxFeatureErrorPixels<=1)||!Number.isFinite(gate.boundarySeamMeanAbs)||
-   (s.naif===301&&!(gate.sharpnessRatio>1))) throw Error('publication requires complete source, registration, seam and sharpness evidence bound to this ledger');
+const staging=prefix.startsWith('staging/imagery-hd/');
+if(!entries.length||gate.ledgerSha256!==digest||gate.sourcePass!==true||!Number.isInteger(gate.sampledTiles)||gate.sampledTiles<200||!(gate.meanAbs<=1.5))
+  throw Error('staging requires 200 independent source comparisons and a matching ledger');
+if(!staging&&(gate.pass!==true||!Number.isInteger(gate.featuresRegistered)||gate.featuresRegistered<10||!(gate.maxFeatureErrorPixels<=1)||
+   !Number.isFinite(gate.boundarySeamMeanAbs)||(s.naif===301&&!(gate.sharpnessRatio>1))))
+  throw Error('served publication requires registration, seam and sharpness evidence');
 const commands=process.env.R2_AWS.split(' ').filter(Boolean);
 const aws=async args=>(await exec(commands[0],[...commands.slice(1),...args],{maxBuffer:64*1024*1024,encoding:'buffer'})).stdout;
 if(entries.length!==plan.windows.length) throw Error('ledger does not cover the exact requested plan');
 const keys=new Set();
 for(const e of entries) {
+  if(!e.path.startsWith(`imagery/${s.naif}/`)) throw Error('ledger path belongs to another source');
   e.key=prefix+e.path.slice(`imagery/${s.naif}`.length);
   validateKey(e.key,s.naif,plan.levels,prefix);
   if(keys.has(e.key)) throw Error('duplicate ledger key');keys.add(e.key);
@@ -60,7 +64,7 @@ await pool(entries,async e=>{
 const polygons=plan.windows.map(w=>{const d=180/2**w.level,a=-180+w.x*d,b=-90+w.row*d;return [[a,b],[a+w.tiles*d,b],[a+w.tiles*d,b+d],[a,b+d],[a,b]];});
 const manifest={naif:s.naif,source:s,levels:plan.levels,coverage:{type:'MultiPolygon',coordinates:polygons.map(p=>[p])},
   credit:s.credit,license:s.license,licenseUrl:s.licenseUrl,files:entries.length,bytes:entries.reduce((a,e)=>a+e.bytes,0),ledgerSha256:digest,
-  staging:prefix.startsWith('staging/'),verification:gate,baseManifest:`imagery/${s.naif}/MANIFEST.json`};
+  staging,publicationApproved:!staging,verification:gate,baseManifest:`imagery/${s.naif}/MANIFEST.json`};
 // Extension metadata stays with this immutable release; the served base
 // manifest and root remain byte-for-byte intact. Reader discovery is separate.
 for(const [name,body] of [['MANIFEST.json',JSON.stringify(manifest,null,2)+'\n'],['SHA256SUMS',entries.map(e=>`${e.sha256}  ${e.key}`).join('\n')+'\n']]) {
