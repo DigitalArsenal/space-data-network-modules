@@ -53,7 +53,7 @@ missing. A scaffold or skipped test is not acceptance.
 - Muinonen et al. (2010), Icarus: H,G1,G2 basis functions and conventions.
 - Snodgrass & Ulrich (1990), ApJ 351:309: surface differential rotation.
 
-## Resume checkpoint (2026-10-22 17:26 UTC)
+## Resume checkpoint (2026-10-22)
 
 The worktree is clean at the start of the resumed lane, and origin contains
 both prior checkpoints (`701ece4c`, `968ee9dc`). Filesystem access is restored.

@@ -8,7 +8,8 @@
     "dist/",
     "plugin-manifest.json",
     "README.md",
-    "data/"
+    "data/",
+    "codec.js"
   ],
   "scripts": {
     "build": "node build.mjs",
@@ -25,5 +26,8 @@
   "dependencies": {
     "flatbuffers": "25.9.23",
     "spacedatastandards.org": "1.220.0"
+  },
+  "sdnModuleCompile": {
+    "threadModel": "wasi-sequential"
   }
 }

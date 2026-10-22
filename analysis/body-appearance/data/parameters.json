@@ -268,5 +268,581 @@
     "doi": "10.1029/2010JE003716",
     "locator": "Table 1, maria column",
     "scope": "Median bidirectional slope at approximately 17 m; Hurst from approximately 57 m to 2.7 km. Median is not RMS."
+  },
+  {
+    "model": "rock:mars",
+    "parameter": "q_intercept",
+    "value": 1.79,
+    "unit": "1/metre",
+    "doi": "10.1029/2021EA001959",
+    "locator": "Section 1, p. 2, exponential model paragraph",
+    "scope": "Golombek-Rapp area law F(D)=k exp(-q D); q=1.79+0.152/k. Mars calibration, not a lunar calibration; original 10.1029/96JE03319 not accessible."
+  },
+  {
+    "model": "rock:mars",
+    "parameter": "q_inverse_abundance",
+    "value": 0.152,
+    "unit": "1/metre",
+    "doi": "10.1029/2021EA001959",
+    "locator": "Section 1, p. 2, exponential model paragraph",
+    "scope": "Golombek-Rapp area law F(D)=k exp(-q D); q=1.79+0.152/k. Mars calibration, not a lunar calibration; original 10.1029/96JE03319 not accessible."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a0",
+    "value": -3.0876,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a1",
+    "value": -3.557528,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a2",
+    "value": 0.781027,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a3",
+    "value": 1.021521,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a4",
+    "value": -0.156012,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a5",
+    "value": -0.444058,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a6",
+    "value": 0.019977,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a7",
+    "value": 0.08685,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a8",
+    "value": -0.005874,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a9",
+    "value": -0.006809,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a10",
+    "value": 0.000825,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "crater:moon:neukum2001",
+    "parameter": "a11",
+    "value": 5.54e-05,
+    "unit": "1",
+    "doi": "10.1023/A:1011989004263",
+    "locator": "Table I, New N(D) (1999) column; Eq. (2)",
+    "scope": "Polynomial in log10 diameter in km; cumulative number per km^2. Valid 0.01 to 300 km. Published a0 retained; runtime uses caller-supplied N(1 km) normalization."
+  },
+  {
+    "model": "moon:muinonen2010",
+    "parameter": "G1",
+    "value": 0.36,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 6, Moon column; Eq. (18)",
+    "scope": "Disk-integrated phase shape fitted to lunar photometry. No absolute radiometric scale or equivalence to ROLO is asserted."
+  },
+  {
+    "model": "moon:muinonen2010",
+    "parameter": "G2",
+    "value": 0.338,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 6, Moon column; Eq. (18)",
+    "scope": "Disk-integrated phase shape fitted to lunar photometry. No absolute radiometric scale or equivalence to ROLO is asserted."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "x0",
+    "value": 7.5,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "y0",
+    "value": 0.75,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "x1",
+    "value": 30,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "y1",
+    "value": 0.33486016,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "x2",
+    "value": 60,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "y2",
+    "value": 0.1341056,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "x3",
+    "value": 90,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "y3",
+    "value": 0.051104756,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "x4",
+    "value": 120,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "y4",
+    "value": 0.021465687,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "x5",
+    "value": 150,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "y5",
+    "value": 0.0036396989,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi1",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "x0",
+    "value": 7.5,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "y0",
+    "value": 0.925,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "x1",
+    "value": 30,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "y1",
+    "value": 0.62884169,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "x2",
+    "value": 60,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "y2",
+    "value": 0.31755495,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "x3",
+    "value": 90,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "y3",
+    "value": 0.12716367,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "x4",
+    "value": 120,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "y4",
+    "value": 0.022373903,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "x5",
+    "value": 150,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "y5",
+    "value": 0.00016505689,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, basis Phi2",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x0",
+    "value": 0,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y0",
+    "value": 1,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x1",
+    "value": 0.3,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y1",
+    "value": 0.83381185,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x2",
+    "value": 1,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y2",
+    "value": 0.57735424,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x3",
+    "value": 2,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y3",
+    "value": 0.42144772,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x4",
+    "value": 4,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y4",
+    "value": 0.2317423,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x5",
+    "value": 8,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y5",
+    "value": 0.10348178,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x6",
+    "value": 12,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y6",
+    "value": 0.061733473,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x7",
+    "value": 20,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y7",
+    "value": 0.016107006,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "x8",
+    "value": 30,
+    "unit": "degree",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "y8",
+    "value": 0,
+    "unit": "1",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, basis Phi3",
+    "scope": "Cubic spline tabulation; x converted from degrees to radians in C++."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "derivative_left",
+    "value": -1.909859317102744,
+    "unit": "1/radian",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, caption",
+    "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
+  },
+  {
+    "model": "hg1g2:phi1",
+    "parameter": "derivative_right",
+    "value": -0.091328612,
+    "unit": "1/radian",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, caption",
+    "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "derivative_left",
+    "value": -0.5729577951308232,
+    "unit": "1/radian",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, caption",
+    "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
+  },
+  {
+    "model": "hg1g2:phi2",
+    "parameter": "derivative_right",
+    "value": -8.6573138e-08,
+    "unit": "1/radian",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 3, caption",
+    "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "derivative_left",
+    "value": -0.10630097,
+    "unit": "1/radian",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, caption",
+    "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
+  },
+  {
+    "model": "hg1g2:phi3",
+    "parameter": "derivative_right",
+    "value": 0,
+    "unit": "1/radian",
+    "doi": "10.1016/j.icarus.2010.04.003",
+    "locator": "Table 4, caption",
+    "scope": "Clamped spline endpoint derivative as printed in the accepted manuscript; left Phi1=-6/pi and Phi2=-9/(5*pi)."
   }
 ]
