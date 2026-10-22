@@ -547,6 +547,18 @@ static Mat6 computeSTMFiniteDifference(const StateVector& state, double dtSec) {
 /// not just the rotation matrix (which would introduce ~510 m/s error at LEO).
 static void eciToEcefMeters(const StateVector& eciKm, double jd,
                             double* outPos, double* outVel) {
+    if (g_catalogDynamics) {
+        ffm::TTEpoch at;
+        StateVector fixed;
+        if (catalogEpoch(jd, at) && g_catalogDynamics->earthFixed(at, eciKm, fixed, false, g_catalogError)) {
+            outPos[0] = fixed.position.x * 1000; outPos[1] = fixed.position.y * 1000; outPos[2] = fixed.position.z * 1000;
+            outVel[0] = fixed.velocity.x * 1000; outVel[1] = fixed.velocity.y * 1000; outVel[2] = fixed.velocity.z * 1000;
+        } else {
+            std::fill(outPos, outPos + 3, std::numeric_limits<double>::quiet_NaN());
+            std::fill(outVel, outVel + 3, std::numeric_limits<double>::quiet_NaN());
+        }
+        return;
+    }
     coords::StateVec sv(
         {eciKm.position.x, eciKm.position.y, eciKm.position.z},
         {eciKm.velocity.x, eciKm.velocity.y, eciKm.velocity.z}
@@ -1037,6 +1049,8 @@ static void mat3ToQuaternion(const double R[3][3], double quat[4]) {
 // =============================================================================
 
 extern "C" {
+int plugin_ensure_coverage(double, int, int);
+int plugin_eval_positions(double, double*, int);
 
 // -----------------------------------------------------------------------------
 // Initialization & Entity Management
@@ -1332,11 +1346,8 @@ int plugin_propagate_path_entity(int entityIndex, double startJD, double stepDay
         for (int i = 0; i < count; i++) {
             double jd = startJD + i * stepDays;
             StateVector sv = propagateEntity(entityIndex, jd);
-            coords::Vec3 cPos = {sv.position.x, sv.position.y, sv.position.z};
-            coords::Vec3 cPosEcef = transformPosition(cPos, coords::Frame::GCRF, coords::Frame::ECEF, jd);
-            outPtr[valid * 3 + 0] = cPosEcef.x * 1000.0;
-            outPtr[valid * 3 + 1] = cPosEcef.y * 1000.0;
-            outPtr[valid * 3 + 2] = cPosEcef.z * 1000.0;
+            double velocity[3];
+            eciToEcefMeters(sv, jd, outPtr + valid * 3, velocity);
             valid++;
         }
     } else {
@@ -1450,11 +1461,8 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
         for (int i = 0; i < count; i++) {
             double jd = timesPtr[i];
             StateVector sv = propagateEntity(entityIndex, jd);
-            coords::Vec3 cPos = {sv.position.x, sv.position.y, sv.position.z};
-            coords::Vec3 cPosEcef = transformPosition(cPos, coords::Frame::GCRF, coords::Frame::ECEF, jd);
-            outPtr[valid * 3 + 0] = cPosEcef.x * 1000.0;
-            outPtr[valid * 3 + 1] = cPosEcef.y * 1000.0;
-            outPtr[valid * 3 + 2] = cPosEcef.z * 1000.0;
+            double velocity[3];
+            eciToEcefMeters(sv, jd, outPtr + valid * 3, velocity);
             valid++;
         }
     } else {
@@ -1505,6 +1513,10 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
 int plugin_propagate_all_positions(double julianDate, double* positionsOut,
                                    int maxCount) {
     if (!propagationReady() || positionsOut == nullptr || maxCount <= 0) return 0;
+    if (g_catalogDynamics) {
+        if (plugin_ensure_coverage(julianDate, 0, std::min(g_entityCount, maxCount)) < 0) return -1;
+        return plugin_eval_positions(julianDate, positionsOut, maxCount);
+    }
 
     int n = g_entityCount;
     if (n > maxCount) n = maxCount;

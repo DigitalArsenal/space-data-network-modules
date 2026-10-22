@@ -9,6 +9,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { browserMemory } from './catalog-memory-evidence.mjs';
+import { residentHarness } from '../tests/lib/residentRuntime.mjs';
+import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { catalogClient } from './catalog-coverage-client.mjs';
 import * as catalog from '../catalog.mjs';
 import { environmentInputs, KERNEL } from '../tests/lib/fullForce.mjs';
@@ -72,6 +74,35 @@ try {
   }
   report.loadEnd = os.loadavg();
   report.numerics = 'PASS';
-  report.browserMemory = await browserMemory({ frames, seeds, epoch, manifest });
+  const parityInstance = makeTable('PRWInstance', { MODULE_ID: 'com.orbpro.ffm', INSTANCE_ID: 'coverage-runtime-parity', GENERATION: 1n });
+  const parityRequests = [
+    encodePluginInvokeRequest({ methodId: 'ingest_state', inputs: [
+      ...seeds.map(seed => frame('state', 'RESIDENT_STATE', catalog.residentState({ instanceId: parityInstance.INSTANCE_ID, handle: seed.handle,
+        epoch: standard.fixtureEpochUtc, state: [...seed.position, ...seed.velocity].map(x => x * 1000), cdAm: seed.cdAm, crAm: .02 }))),
+      { portId: 'configuration', typeRef: TYPE, payload: configuration }, ...environment] }),
+    encodePluginInvokeRequest({ methodId: 'propagate_state', outputStreamCap: seeds.length, inputs: [frame('request', 'RESIDENT_REQUEST', makeTable('PRWResidentRequest', {
+      INSTANCE: parityInstance, ENTITY_HANDLES: seeds.map(s => s.handle), TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
+      TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + 1 }),
+    }))] }),
+  ];
+  const browser = await browserMemory({ frames, seeds, epoch, manifest, parityRequests });
+  report.browserMemory = browser.measurements; save();
+  report.runtimeParity = { browser: browser.parity.map(b => createHash('sha256').update(new Uint8Array(b)).digest('hex')) };
+  for (const bytes of browser.parity) assert.equal(decodePluginInvokeResponse(new Uint8Array(bytes)).statusCode, 0);
+  for (const runtime of ['wasmedge', 'docker-wasmedge']) {
+    const h = await residentHarness(runtime);
+    try {
+      const hashes = [];
+      for (const bytes of parityRequests) {
+        const result = await h.invokeRaw(bytes);
+        assert.equal(decodePluginInvokeResponse(result).statusCode, 0);
+        hashes.push(createHash('sha256').update(result).digest('hex'));
+      }
+      assert.deepEqual(hashes, report.runtimeParity.browser, `${runtime}: shared configured dynamics parity`);
+      report.runtimeParity[runtime] = hashes; save();
+    } finally { await h.destroy(); }
+  }
+  report.diagnosticSurface = 'Entity pointer exports are exercised in browser WASM; SDK process hosts expose canonical PIV methods, whose shared resident dynamics are checked byte-for-byte above.';
+  report.status = 'PASS';
   save();
 } catch (e) { report.failure = e.stack; save(); throw e; }

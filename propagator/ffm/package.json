@@ -24,13 +24,15 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./dist/*": "./dist/*"
+    "./dist/*": "./dist/*",
+    "./catalog-configuration": "./catalog-configuration.mjs"
   },
   "files": [
     "dist/",
     "src/",
     "index.js",
-    "catalog.mjs"
+    "catalog.mjs",
+    "catalog-configuration.mjs"
   ],
   "devDependencies": {
     "esbuild": "0.28.0",

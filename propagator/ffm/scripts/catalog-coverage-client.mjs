@@ -8,7 +8,7 @@ export function catalogClient(h, frames, seeds, epochJD) {
     new Uint8Array(memory.buffer, p, array.byteLength).set(new Uint8Array(array.buffer, array.byteOffset, array.byteLength));
     return p;
   };
-  const text = p => { const b = new Uint8Array(memory.buffer); let end = p; while (b[end]) ++end; return new TextDecoder().decode(b.subarray(p, end)); };
+  const text = p => { const b = new Uint8Array(memory.buffer); let end = p; while (b[end]) ++end; return new TextDecoder().decode(b.slice(p, end)); };
   const check = (value, expected) => { if (value !== expected) throw new Error(`${value}, expected ${expected}: ${text(x.plugin_catalog_error())}`); return value; };
   check(x.plugin_init(), 0);
   const bytes = new Uint8Array(frames.reduce((n, f) => n + f.length, 0));

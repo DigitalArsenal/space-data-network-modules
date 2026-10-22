@@ -6,10 +6,18 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { headlessShell } from '../tests/lib/headlessShell.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
-export async function browserMemory({ frames, seeds, epoch, manifest }) {
+export async function browserMemory({ frames, seeds, epoch, manifest, parityRequests }) {
   const bundle = await build({ stdin: { resolveDir: root, contents: `
     import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
     import { catalogClient } from './scripts/catalog-coverage-client.mjs';
+    window.residentParity = async (manifest, count) => {
+      const h = await createBrowserModuleHarness({ wasmSource: await (await fetch('/module.wasm')).arrayBuffer(), manifest, surface: 'direct' });
+      try {
+        const outputs = [];
+        for (let i = 0; i < count; ++i) outputs.push([...await h.invokeRaw(new Uint8Array(await (await fetch('/parity/' + i)).arrayBuffer()))]);
+        return outputs;
+      } finally { await h.destroy(); }
+    };
     window.measure = async ({ count, seeds, epoch, manifest, frameCount }) => {
       if (!crossOriginIsolated) throw new Error('browser is not cross-origin isolated');
       const wasm = await (await fetch('/module.wasm')).arrayBuffer();
@@ -41,6 +49,7 @@ export async function browserMemory({ frames, seeds, epoch, manifest }) {
     if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><script src="/bundle.js"></script>'); }
     else if (req.url === '/bundle.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(bundle.outputFiles[0].contents); }
     else if (req.url === '/module.wasm') { res.setHeader('Content-Type', 'application/wasm'); res.end(wasm); }
+    else if (/^\/parity\/\d+$/.test(req.url) && parityRequests[Number(req.url.slice(8))]) res.end(parityRequests[Number(req.url.slice(8))]);
     else if (/^\/frame\/\d+$/.test(req.url) && frames[Number(req.url.slice(7))]) res.end(frames[Number(req.url.slice(7))]);
     else { res.statusCode = 404; res.end(); }
   });
@@ -57,6 +66,10 @@ export async function browserMemory({ frames, seeds, epoch, manifest }) {
       if (errors.length) throw new Error(errors.join('\n'));
       rows.push(row); console.log(JSON.stringify(row)); await page.close();
     }
-    return rows;
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    const parity = await page.evaluate(({ manifest, count }) => window.residentParity(manifest, count), { manifest, count: parityRequests.length });
+    await page.close();
+    return { measurements: rows, parity };
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 }
