@@ -217,4 +217,3 @@ export function jp2Xml(bytes) {
   assert.ok(xml, 'No JP2 XML box');
   return xml;
 }
-

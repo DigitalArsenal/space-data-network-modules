@@ -291,7 +291,7 @@ parity leg is waived, not failed or pending. Source captures are deliverable evi
 scratch files under `/tmp`. Schema approval and live-image age remain separate
 blockers.
 
-Files are confined to `data-source/solar-activity/`: README/report, the E2E
+83 added files are confined to `data-source/solar-activity/`: README/report, the E2E
 gate, source and image capture scripts, three offline test files, shared
 test-only parsers/capture helpers, three dated evidence directories, and a
 raw CID read-back receipt. No
