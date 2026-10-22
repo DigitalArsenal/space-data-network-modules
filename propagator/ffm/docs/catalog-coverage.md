@@ -47,3 +47,5 @@ real headless-browser memory at 1k/10k entities, and shared resident PIV parity.
 The diagnostic pointer exports are browser-host surfaces; the SDK process
 harness exposes canonical PIV methods. The existing `scripts/e2e-ffm.mjs`
 separately qualifies resident dynamics against independent study truth.
+Docker WasmEdge is waived by the owner's 2026-10-22 ruling; this E2E runs
+headless Chromium and native WasmEdge without starting Docker.

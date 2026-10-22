@@ -89,7 +89,8 @@ try {
   report.browserMemory = browser.measurements; save();
   report.runtimeParity = { browser: browser.parity.map(b => createHash('sha256').update(new Uint8Array(b)).digest('hex')) };
   for (const bytes of browser.parity) assert.equal(decodePluginInvokeResponse(new Uint8Array(bytes)).statusCode, 0);
-  for (const runtime of ['wasmedge', 'docker-wasmedge']) {
+  report.runtimeParity['docker-wasmedge'] = 'WAIVED: owner ruling 2026-10-22; do not start Docker. Browser and native WasmEdge are required.';
+  for (const runtime of ['wasmedge']) {
     const h = await residentHarness(runtime);
     try {
       const hashes = [];
