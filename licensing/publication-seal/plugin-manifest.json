@@ -1,0 +1,116 @@
+{
+  "pluginId": "com.digitalarsenal.licensing.publication-seal",
+  "name": "Publication Seal",
+  "version": "0.1.0",
+  "description": "Seal opaque file bytes into SDK X25519/HKDF-SHA256/AES-256-GCM protected publications. Release keys arrive only as KMF inputs; entropy comes from WASI random_get.",
+  "pluginFamily": "infrastructure",
+  "capabilities": [],
+  "protocols": [],
+  "timers": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "seal",
+      "displayName": "Seal",
+      "description": "Seal files in input order; ENC CONTEXT is context/name. Failure emits no files.",
+      "inputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "file",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 256,
+          "required": true,
+          "description": "Opaque file CONTENT, including empty files; order corresponds to options.names."
+        },
+        {
+          "portId": "release_key",
+          "acceptedTypeSets": [
+            {
+              "setId": "release_key",
+              "allowedTypes": [
+                {
+                  "schemaName": "KMF.fbs",
+                  "fileIdentifier": "$KMF",
+                  "rootTypeName": "KMF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ROLE DecryptKey; 32-byte X25519 recipient private key in KEY_BYTES."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "options",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "context: nonempty string; names: nonempty StringList, one name per file."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "file",
+          "acceptedTypeSets": [
+            {
+              "setId": "file",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 256,
+          "required": false,
+          "description": "Protected publication bytes, in input order."
+        }
+      ],
+      "maxBatch": 256,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each file is sealed on the calling thread; no shared state or workers."
+  }
+}
