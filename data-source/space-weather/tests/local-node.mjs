@@ -14,6 +14,8 @@ export async function localNode(binary) {
  const config={mode:'full',network:{listen:[`/ip4/127.0.0.1/tcp/${ports.tcp}`,`/ip4/127.0.0.1/tcp/${ports.ws}/ws`],bootstrap:[],enable_relay:false,max_connections:16},
  storage:{path:path.join(dir,'data'),max_size:'1GiB'},setup:{data_path:path.join(dir,'data')},
  admin:{enabled:true,listen_addr:`127.0.0.1:${ports.admin}`,require_auth:true,dev_auto_admin:true,tls_enabled:false,ipfs_api_url:rpc,ipfs_gateway_url:`http://127.0.0.1:${ports.gateway}`},
+ // Public BIP32 test-vector-1 xpub; authorizes only this isolated loopback test node.
+ users:[{xpub:'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8',trust_level:'admin',name:'space-weather acceptance'}],
  peers:{enable_dht:false,enable_mdns:false,trusted_peers:[]},asset_pins:{enabled:false,kubo_repo_path:path.join(dir,'kubo')},
  publishing:{enabled:true,allowed_schemas:['SPW','SPW.fbs'],local_publish_addr:`127.0.0.1:${ports.publish}`,retention:{keep_series:2},auto_publish:[{schema:'SPW.fbs',provider_id:'space-weather',source_name:'gfz-noaa',min_interval:'1s',settle:'1s',max_shard_bytes:1048576}]},
  ingest:{enabled:false,spacetrack_enabled:false,udl_enabled:false},flows:{enabled:true,storage_path:path.join(dir,'flows'),first_fire_when_due:true,services:[],mounts:[]},update:{enabled:false}};

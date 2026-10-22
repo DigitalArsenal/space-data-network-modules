@@ -1,5 +1,7 @@
 # Licensed space weather over SDN
 
+**WIP: blocked on the SDN cron ingress contract.** The module source comparison passes, but the local node sends an untyped JSON timer frame; the typed flow never starts and publishes nothing. This is not a deployable acceptance result. See `tests/VERIFICATION.md`.
+
 Task `modules-space-weather-source-20261022`. Four anonymous source pulls run in a scheduled WASM flow: GFZ historical and nowcast indices, NOAA SWPC 45-day Ap/F10.7 forecast, and NOAA three-hour Kp forecast. No browser source fetches.
 
 GFZ F10.7/Kp/ap/Ap: CC BY 4.0; GFZ Helmholtz Centre for Geosciences, Matzka et al. (2021), doi:10.1029/2020SW002641; F10.7 from DRAO/Natural Resources Canada. Sunspot numbers are omitted. NOAA SWPC products: public domain, https://www.weather.gov/disclaimer. SET JB2008 indices and CSSI/CelesTrak SW are never retrieved or republished by this module.
