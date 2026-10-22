@@ -85,11 +85,11 @@ static std::vector<double> g_catalogBstars;
 static std::string g_catalogError, g_catalogProfile = "diagnostic";
 static uint32_t g_catalogConfigVersion = 0;
 static bool catalogEpoch(double utcJd, ffm::TTEpoch& out) {
-    return ffm::toTT(0, (utcJd - 2451545.0) * 86400.0, utcJd, ffm::timingStandard::UTC, out, g_catalogError);
+    return ffm::toTT(0, (utcJd - 2451545.0) * 86400.0, utcJd, timingStandard::UTC, out, g_catalogError);
 }
 static bool catalogState(int i, double utcJd, StateVector& out, bool clamp = false) {
     ffm::TTEpoch at;
-    return catalogEpoch(utcJd, at) && g_catalogDynamics->evaluate(i, at, out, clamp);
+    return catalogEpoch(utcJd, at) && g_catalogDynamics->evaluatePrepared(i, at, out, clamp);
 }
 
 
@@ -1110,7 +1110,7 @@ int plugin_configure_catalog(const uint8_t* data, int bytes, const double* bstar
         if (bytes - offset < 4) { g_catalogError = "invalid-catalog: Truncated PRW size."; return -1; }
         const size_t length = size_t(flatbuffers::ReadScalar<uint32_t>(data + offset)) + 4;
         if (length > bytes - offset) { g_catalogError = "invalid-catalog: Truncated PRW frame."; return -1; }
-        const ffm::PRW* root = nullptr;
+        const PRW* root = nullptr;
         const auto* frame = data + offset;
         if (!ffm::verifyPrw(frame, length, root, g_catalogError)) return -1;
         bool ok = false;
@@ -1125,16 +1125,16 @@ int plugin_configure_catalog(const uint8_t* data, int bytes, const double* bstar
     }
     auto dynamics = ffm::ResidentDynamics::configure(inputs, ffm::instanceKernels(), g_catalogError);
     if (!dynamics) return -1;
-    const auto* actual = ffm::GetSizePrefixedPRW(inputs.configuration)->EXECUTION_REQUEST()->FORCES();
-    const auto* standard = ffm::GetSizePrefixedPRW(catalogProfile)->EXECUTION_REQUEST()->FORCES();
-    std::unique_ptr<ffm::PRWForceConfigurationT> a(actual->UnPack()), b(standard->UnPack());
+    const auto* actual = GetSizePrefixedPRW(inputs.configuration)->EXECUTION_REQUEST()->FORCES();
+    const auto* standard = GetSizePrefixedPRW(catalogProfile)->EXECUTION_REQUEST()->FORCES();
+    std::unique_ptr<PRWForceConfigurationT> a(actual->UnPack()), b(standard->UnPack());
     // Coefficients are object data. The force/profile selection is invariant
     // under the B*-derived Cd*A/m and the catalog's Cr*A/m.
     a->DRAG_COEFFICIENT = b->DRAG_COEFFICIENT;
     a->REFLECTIVITY_COEFFICIENT = b->REFLECTIVITY_COEFFICIENT;
     flatbuffers::FlatBufferBuilder ab, bb;
-    ab.Finish(ffm::PRWForceConfiguration::Pack(ab, a.get()));
-    bb.Finish(ffm::PRWForceConfiguration::Pack(bb, b.get()));
+    ab.Finish(PRWForceConfiguration::Pack(ab, a.get()));
+    bb.Finish(PRWForceConfiguration::Pack(bb, b.get()));
     g_catalogProfile = ab.GetSize() == bb.GetSize() &&
         std::memcmp(ab.GetBufferPointer(), bb.GetBufferPointer(), ab.GetSize()) == 0 ? "FFM-1" : "custom";
     g_catalogBstars.assign(bstars, bstars + count);

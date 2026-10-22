@@ -7,17 +7,17 @@
   "flags": [
     "-msimd128"
   ],
-  "sha256": "eb83a5c68e8cf6c3e22fa24399c3f4ec6829493351b7d14c573c827260d25b09",
-  "bytes": 2208148,
+  "sha256": "883837d67ee181cb20fabd0557fa67ac9487eafe0e63fbedf4937abe2593700d",
+  "bytes": 2227199,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/worktrees/OrbPro--orbpro-sun-surface-shader-20261016/packages/wasm-engine/deps/emsdk/upstream/bin",
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
     {
       "name": "libc++abi-ww-wasmexcept.a",
       "flags": [
         "-msimd128"
       ],
-      "sha256": "5c1862202829406f74760c004912c2bb3327c8e61c65bee0a6eafe70ea84c534"
+      "sha256": "4e27aa6d5bb01619802a27c00c611100ca10d5eb844f4a7261affcf5560bd51a"
     },
     {
       "name": "libunwind-ww-wasmexcept.a",

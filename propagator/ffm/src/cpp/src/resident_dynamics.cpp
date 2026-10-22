@@ -579,7 +579,7 @@ bool ResidentDynamics::state(size_t i, const TTEpoch& at, StateVector& out, std:
     return true;
 }
 
-bool ResidentDynamics::evaluate(size_t i, const TTEpoch& at, StateVector& out, bool clamp) const {
+bool ResidentDynamics::evaluatePrepared(size_t i, const TTEpoch& at, StateVector& out, bool clamp) const {
     if (i >= objects_.size()) return false;
     const Object& o = *objects_[i];
     if (!o.valid || o.segments.empty()) return false;

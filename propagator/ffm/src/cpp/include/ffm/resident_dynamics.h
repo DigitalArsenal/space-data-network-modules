@@ -48,7 +48,7 @@ public:
     bool state(size_t object, const TTEpoch& at, astro::StateVector& out, std::string& error);
     // Evaluate the prepared PPE coefficients without advancing integration.
     // Optional clamping preserves the entity renderer's coverage-edge contract.
-    bool evaluate(size_t object, const TTEpoch& at, astro::StateVector& out, bool clamp = false) const;
+    bool evaluatePrepared(size_t object, const TTEpoch& at, astro::StateVector& out, bool clamp = false) const;
     // The state and P = Phi P0 Phi^T + Q at `at`, integrated with the
     // template's STM technique and density treatment from the object's epoch,
     // as an execution request with this INITIAL_COVARIANCE and PROCESS_NOISE.
