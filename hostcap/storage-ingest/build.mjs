@@ -39,7 +39,7 @@ const compilation = await compileModuleFromSource({
   // builds against reality instead of against whatever the SDK last guessed.
   // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
   // form of this note lives.
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge (the typed $PIV
   // hostcall); symbols resolve at instantiation.
   allowUndefinedImports: true,

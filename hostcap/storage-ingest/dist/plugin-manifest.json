@@ -618,5 +618,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Serial generic storage host I/O; host owns concurrency."
+  }
 }

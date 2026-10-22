@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
 const modules=fileURLToPath(new URL('../../',import.meta.url)),packageDir=path.join(modules,'data-source/operator-states-public');
 const require=createRequire(path.join(packageDir,'package.json'));
-const {compileModuleFromSource}=await import(pathToFileURL(require.resolve('space-data-module-sdk/compiler')));
+const {compileModuleFromSource,resolveWasiThreadsToolchain}=await import(pathToFileURL(require.resolve('space-data-module-sdk/compiler')));
 const {compileFlowProgram,resolveFlowDependencies}=await import(pathToFileURL(require.resolve('space-data-module-sdk/flow/compiler')));
 const out=path.join(modules,'flows/open-dca/dist');
 process.env.SPACE_DATA_STANDARDS_ROOT=path.dirname(require.resolve('spacedatastandards.org/package.json'));
@@ -50,6 +50,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
  const dependencies=new Map();
  for(const [folder,compilation] of [['data-source/operator-states-public',operator],['data-source/space-weather',weather],['analysis/density-calibration',density]]){const entries=await resolveFlowDependencies({depsPath:path.join(modules,folder)});for(const [id,entry]of entries)dependencies.set(id,{...entry,guestLink:{objectBytes:compilation.guestLink.objectBytes,metadata:compilation.guestLink}});}
  for(const entry of [eop,http,storage])dependencies.set(entry.manifest.pluginId,entry);
+ resolveWasiThreadsToolchain({force:true});
  await compileFlowProgram({flow,dependencies,outDir:path.join(out,'runtime'),standardsRoot:process.env.SPACE_DATA_STANDARDS_ROOT});
  await fs.copyFile(path.join(out,'runtime/flow.json'),path.join(out,'flow.json'));
  }
