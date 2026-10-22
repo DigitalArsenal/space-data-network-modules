@@ -1,11 +1,11 @@
 {
   "task": "body-appearance-module-20261022",
-  "measuredAt": "2026-10-22T17:48:04.243Z",
-  "artifactSha256": "67464aefe176911cf6bf089631b09ed7da9fef83d5b3a508e8744023ca837703",
+  "measuredAt": "2026-10-22T21:07:21.176Z",
+  "artifactSha256": "a89bf2530808a4c4c34cb47d9c3192d8fb87984652ac614fe2e96a4203113635",
   "acceptance": {
     "citations": {
       "status": "pass",
-      "values": 112,
+      "values": 215,
       "uncited": 0,
       "scope": "All shipped table entries; this does not assert that all requested body tables exist."
     },
@@ -30,11 +30,70 @@
       },
       "cfaConvention": "Sum of circular footprints within the diameter interval, not overlap-unioned coverage."
     },
+    "moon": {
+      "status": "pass",
+      "threshold_mag": 0.1,
+      "max_residual_mag": 3.1340642662981877e-15,
+      "max_relative_flux_error": 2.886579864025407e-15,
+      "samples": 10044,
+      "phase_domain_deg": [
+        1.5501,
+        96.9999
+      ],
+      "absolute_calibration": true,
+      "band": "ROLO 553.8 nm; monochromatic-equivalent AB, not Johnson V",
+      "verification": "Same published ROLO model, independently transcribed oracle; no independent Hapke validation is claimed.",
+      "worst": {
+        "phase_deg": 77,
+        "solar_longitude_deg": 69.00000000000001,
+        "observer_latitude_deg": 0,
+        "observer_longitude_deg": -8,
+        "sun_distance_au": 1,
+        "observer_distance_m": 384400000,
+        "residual_mag": 3.1340642662981877e-15
+      },
+      "reference_examples": [
+        {
+          "phase_deg": 2,
+          "disk_reflectance": 0.12912011359922343,
+          "spectral_irradiance_w_m2_nm": 4.899505629807333e-06,
+          "monochromatic_ab_magnitude": -12.850093652310328
+        },
+        {
+          "phase_deg": 5,
+          "disk_reflectance": 0.10756611035727577,
+          "spectral_irradiance_w_m2_nm": 4.081631812281175e-06,
+          "monochromatic_ab_magnitude": -12.6517975651646
+        },
+        {
+          "phase_deg": 30,
+          "disk_reflectance": 0.054518650841101135,
+          "spectral_irradiance_w_m2_nm": 2.068728328063381e-06,
+          "monochromatic_ab_magnitude": -11.913971653446744
+        },
+        {
+          "phase_deg": 60,
+          "disk_reflectance": 0.02654985127123086,
+          "spectral_irradiance_w_m2_nm": 1.0074429316078711e-06,
+          "monochromatic_ab_magnitude": -11.132764135049264
+        },
+        {
+          "phase_deg": 96,
+          "disk_reflectance": 0.008790252776933934,
+          "spectral_irradiance_w_m2_nm": 3.33549063484377e-07,
+          "monochromatic_ab_magnitude": -9.932612313749921
+        }
+      ]
+    },
     "runtimeParity": {
       "status": "pass",
-      "artifactSha256": "67464aefe176911cf6bf089631b09ed7da9fef83d5b3a508e8744023ca837703",
+      "artifactSha256": "a89bf2530808a4c4c34cb47d9c3192d8fb87984652ac614fe2e96a4203113635",
       "node": "v25.4.0",
       "firefox": "155.0",
+      "browserIsolation": {
+        "crossOriginIsolated": true,
+        "sharedArrayBuffer": true
+      },
       "wasmedge": "/Users/tj/.wasmedge/bin/wasmedge version 0.16.4",
       "comparison": "exact SHA-256 equality of complete typed result payloads",
       "outputs": [
@@ -74,6 +133,26 @@
           "bytes": 888
         },
         {
+          "name": "absolute lunar irradiance",
+          "sha256": "8e8801c523d4d63fbd09555be36cae9185e8928e97d44667a65b662118be04cd",
+          "bytes": 1960
+        },
+        {
+          "name": "jupiter:heng2021:550nm absolute disk",
+          "sha256": "e0daa9dca2139dc028b6a887ac188c85f9bcc1b471034ec4747d6b83f7fa6fe4",
+          "bytes": 1376
+        },
+        {
+          "name": "saturn:dyudina2016:640nm absolute disk",
+          "sha256": "008006af4e6e1f41bf23b0608c50a403a36a20e38fef71c39e5235776952c32f",
+          "bytes": 1384
+        },
+        {
+          "name": "saturn:dyudina2016:440nm absolute disk",
+          "sha256": "a8cb614cc54b9b1ad83106096541a08e092d2bc5f1393870819db652244975e0",
+          "bytes": 1384
+        },
+        {
           "name": "cited asteroid table",
           "sha256": "5bc671bdee3d606e6eec02c69593e6cc079a6c9570ee4b67cc7bac08850a0dbc",
           "bytes": 1688
@@ -83,23 +162,6 @@
         "status": "waived",
         "authority": "Owner 2026-10-22: never start Docker or Docker Desktop"
       }
-    },
-    "moon": {
-      "status": "fail",
-      "threshold_mag": 0.1,
-      "absolute_calibration": false,
-      "diagnostic": {
-        "max_residual_mag": 0.1350818752598184,
-        "worst": {
-          "phase_deg": 96,
-          "solar_longitude_sign": 1,
-          "residual_mag": 0.1350818752598184
-        },
-        "samples": 190,
-        "absolute_calibration": false,
-        "band": "ROLO 553.8 nm"
-      },
-      "reason": "Only a normalized H,G1,G2 phase curve is implemented; absolute disk radiometry and matched ROLO geometry/bandpass are missing."
     },
     "planets": {
       "Mercury": {
@@ -140,7 +202,7 @@
         ],
         "threshold_mag": 0.1,
         "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+        "reason": "Independent scattering model exists in another band; Johnson V absolute calibration is not validated."
       },
       "Saturn": {
         "status": "fail",
@@ -150,7 +212,7 @@
         ],
         "threshold_mag": 0.1,
         "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
+        "reason": "Independent scattering model exists in another band; Johnson V absolute calibration is not validated."
       },
       "Uranus": {
         "status": "fail",
@@ -175,8 +237,7 @@
     }
   },
   "failures": [
-    "Moon absolute disk photometry is incomplete",
-    "Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune disk magnitudes are unimplemented"
+    "Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune absolute Johnson V magnitudes are not validated"
   ],
   "measurements": {
     "rock": {
@@ -222,6 +283,44 @@
       "band": "ROLO 553.8 nm"
     }
   },
+  "planetDiagnostics": {
+    "Jupiter": {
+      "model": "jupiter:heng2021:550nm",
+      "model_band": "550 nm; NOT Johnson V",
+      "samples": 131,
+      "phase_domain_deg": [
+        0,
+        130
+      ],
+      "max_phase_shape_residual_mag": 0.28858427250941077,
+      "worst": {
+        "phase_deg": 130,
+        "residual_mag": 0.28858427250941077
+      },
+      "model_geometric_albedo": 0.6087533992029751,
+      "absolute_calibration": false,
+      "matched_band": false,
+      "scope": "Cross-band, zero-phase-normalized diagnostic only. No parameters are fitted to Mallama-Hilton."
+    },
+    "Saturn": {
+      "model": "saturn:dyudina2016:640nm",
+      "model_band": "Pioneer red, 640 nm; NOT Johnson V",
+      "samples": 151,
+      "phase_domain_deg": [
+        0,
+        150
+      ],
+      "max_phase_shape_residual_mag": 0.17012271061089868,
+      "worst": {
+        "phase_deg": 135,
+        "residual_mag": -0.17012271061089868
+      },
+      "model_geometric_albedo": 0.4885855574727433,
+      "absolute_calibration": false,
+      "matched_band": false,
+      "scope": "Cross-band, zero-phase-normalized diagnostic only. No parameters are fitted to Mallama-Hilton."
+    }
+  },
   "unfinishedScope": [
     "Whole-body photometric/albedo/color tables and roughness RMS baselines",
     "D and X/M taxonomic priors and explicit taxonomy/albedo selection",
@@ -229,17 +328,63 @@
     "Named-spacecraft matched-geometry render/image-similarity and shadow-fraction evidence"
   ],
   "status": "fail",
-  "testedCommit": "5db5607dd44ac5a0c1646ec91d395d48f0c28492",
+  "testedCommit": "cf0bb94f82974086356012a3efb045679506ffe3",
   "unitTests": {
-    "passed": 6,
+    "passed": 12,
     "failed": 0,
     "skipped": 0,
     "oraclePublishedExamples": 10,
-    "command": "npm test"
+    "commands": [
+      "node --test tests/sdk_compat.test.mjs",
+      "npm test"
+    ]
+  },
+  "packageIsolation": {
+    "status": "pass",
+    "testOraclePublished": false,
+    "note": "npm pack --dry-run contains only README, codec, cited data, manifest and dist; tests/ and src/ are absent."
   },
   "gauntlet": {
     "status": "not-run",
     "receipt": null,
-    "reason": "The user requires E2E PASS before gauntlet; full science acceptance fails."
-  }
+    "reason": "Owner requires E2E PASS on the committed branch before gauntlet. The seven absolute planetary Johnson V gates remain failures.",
+    "docker": "waived by owner; never started"
+  },
+  "sourceAccess": [
+    {
+      "body": "Mercury",
+      "doi": "10.1006/icar.2001.6723",
+      "url": "https://articles.adsabs.harvard.edu/pdf/2002Icar..155..253M",
+      "result": "read timeout; OpenAlex reports closed access with no repository full text"
+    },
+    {
+      "body": "Venus",
+      "doi": "10.1016/j.icarus.2005.12.014",
+      "url": "https://articles.adsabs.harvard.edu/pdf/2006Icar..182...10M",
+      "result": "read timeout; OpenAlex reports closed access with no repository full text"
+    },
+    {
+      "body": "Mars",
+      "doi": "10.1016/j.icarus.2007.07.011",
+      "url": "https://articles.adsabs.harvard.edu/pdf/2007Icar..192..404M",
+      "result": "HTTP 403; OpenAlex reports closed access with no repository full text"
+    },
+    {
+      "body": "Uranus",
+      "doi": "10.1016/0019-1035(90)90155-3",
+      "url": "https://articles.adsabs.harvard.edu/pdf/1990Icar...84...12P",
+      "result": "HTTP 403; NASA NTRS record 19900041679 has no downloadable files"
+    },
+    {
+      "body": "Neptune",
+      "doi": "10.1029/91JA01087",
+      "url": "https://articles.adsabs.harvard.edu/pdf/1991JGR....9618921P",
+      "result": "HTTP 403; NASA NTRS record 19920029279 has no downloadable files"
+    }
+  ],
+  "requiredToClose": [
+    "Independent, calibrated Johnson V phase-response data or scattering models for Mercury 2-170 deg, Venus 2-179 deg, Mars 0-50 deg, Uranus 0-154 deg, Neptune 0-133 deg. Geometric albedo alone is insufficient.",
+    "A Johnson V Jupiter model validated over 0-130 deg and Saturn globe model over 0-150 deg. The currently implemented source-band models have normalized cross-band residuals 0.2885842725 and 0.1701227106 mag respectively. These are diagnostics, not absolute V acceptance measurements.",
+    "Preserve the test-only boundary: do not copy Mallama-Hilton equations or fit runtime parameters to the test oracle to manufacture a pass."
+  ]
 }

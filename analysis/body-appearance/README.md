@@ -167,3 +167,27 @@ taxonomy/albedo selection, Diviner input mapping, and named-spacecraft
 matched-geometry render/image-similarity and shadow-fraction evidence. Original
 Bandfield 2011 and Golombek–Rapp 1997 downloads remain unavailable after publisher
 403/timeouts; the rock law is verified in Golombek et al. 2021 Section 1.
+
+## Resumed acceptance evidence
+
+The committed report records 215 cited values (zero uncited), 100,005 rocks
+(KS p=0.7446435365, CFA error 1.1448613%) and 100,005 craters
+(KS p=0.7206844027, CFA error 0.4132020%). Absolute lunar ROLO verification
+covers 10,044 geometries with a maximum residual of 3.1341e-15 mag; this
+measures implementation arithmetic, not lunar model uncertainty. All 12 unit
+tests pass. Node, isolated headless Firefox, and native WasmEdge produce exactly
+matching complete typed payloads, including the new absolute photometry.
+
+The E2E remains **FAIL** on all seven planetary absolute Johnson V gates.
+Cross-band normalized phase-shape diagnostics reach 0.2885843 mag for Jupiter
+(131 samples, 0–130°) and 0.1701227 mag for Saturn (151 samples, 0–150°).
+Neither diagnostic supplies a matched-band absolute acceptance value. The other
+five planets have cited geometric albedos but no implemented disk phase model.
+The source access failures and exact missing calibration inputs are preserved
+in the report. Original Mercury/Venus paper requests timed out, Mars/Uranus/
+Neptune ADS requests returned 403, and the Uranus/Neptune NASA records offer no
+download. The available Venus glory paper requires a spherical-atmosphere
+multiple-scattering treatment, which is not implemented here.
+
+The gauntlet has not run because its required E2E-pass precondition is unmet;
+there is no gauntlet receipt. Docker remains waived by the owner.
