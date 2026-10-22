@@ -4193,7 +4193,7 @@ int tile(void) {
             if(!fill_tiffs.empty()) {
                 if(!decode_body_insets(fill_tiffs,boxes,&budget,&fill.grids,&error,json_number(plan,"bodyBackingPosts",0)*json_number(plan,"bodyBackingSpacingM",0))){plugin_set_error("inset-fill-decode",error.c_str());return 422;}
                 f.ok=true;
-            } else f=decode_pds_files(fill_files, boxes, &budget, fill.band_m);
+            } else f=decode_pds_files(fill_files, boxes, &budget, fill.band_m, /*uncovered_nodata=*/true);
             if (f.budget_refused) return 413;
             if (!f.ok) { plugin_set_error("pds-fill-gap", f.error.c_str()); return 422; }
             if (backing_frame) {

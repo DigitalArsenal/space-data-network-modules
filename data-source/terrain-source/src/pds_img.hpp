@@ -469,10 +469,10 @@ const PdsBand* pds_band_holding(const PdsFile& f, uint64_t local_line) {
 // from every file into ONE DemGrid. A polar plan reads one file; a simple
 // cylindrical plan reads every file of the global grid its lines cross (the
 // files must share MAP_RESOLUTION). Heights are metres above the reference
-// sphere. A needed line no file holds, or that a file holding it carries in no
-// range, is refused: a gap would be filled with invented terrain.
+// sphere. Only a fill grid may leave lines outside every file as kNoData;
+// missing range bytes for a line a file covers are always refused.
 DemGrid decode_pds_files(const std::vector<PdsFile>& files, const std::vector<TileExtent>& boxes,
-                         DecodeBudget* budget, double halo_m = 0) {
+                         DecodeBudget* budget, double halo_m = 0, bool uncovered_nodata = false) {
     DemGrid g;
     const PdsLabel& l = files[0].label;
     g.proj = l.projection == "POLAR STEREOGRAPHIC" ? kProjPolarStereo : kProjLinear;
@@ -518,16 +518,16 @@ DemGrid decode_pds_files(const std::vector<PdsFile>& files, const std::vector<Ti
         return true;
     };
     for (uint64_t line = first; line <= last; line++) {
-        bool held = false;
+        bool covered = false, carried = true;
         for (const PdsFile& f : files) {
             uint64_t k = 0;
             if (!local(f, line, &k)) continue;
-            held = true;
+            covered = true;
             if (pds_band_holding(f, k)) continue;
-            held = false;
+            carried = false;
             break;
         }
-        if (!held) {
+        if ((!covered && !uncovered_nodata) || !carried) {
             char message[200];
             std::snprintf(message, sizeof(message),
                           "image line %llu is needed by the plan's extent and no range response carries it",
