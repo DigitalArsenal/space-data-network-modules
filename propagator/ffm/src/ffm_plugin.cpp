@@ -897,8 +897,18 @@ static StateVector propagateEntity(int entityIndex, double targetJD) {
     FFMEntity& entity = g_entities[entityIndex];
 
     StateVector result;
+    if (g_catalogDynamics) {
+        ffm::TTEpoch at, from;
+        const double begin = targetJD >= entity.initialState.epoch
+            ? std::max(entity.initialState.epoch, targetJD - 1800.0 / 86400.0) : targetJD - 1800.0 / 86400.0;
+        if (catalogEpoch(targetJD, at) && catalogEpoch(begin, from) && g_catalogDynamics->activate(g_catalogError) &&
+            g_catalogDynamics->prepare(entityIndex, from, at, g_catalogError) && catalogState(entityIndex, targetJD, result)) return result;
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        result.position = result.velocity = Vec3(nan, nan, nan);
+        return result;
+    }
 
-    if (entity.arcCount > 0) {
+    if (entity.arcCount > 0 || g_catalogDynamics) {
         // Arc-aware path: burns are present
         int arcIdx = findArcIndex(entity, targetJD);
         result = evaluateArc(entity, arcIdx, targetJD);
@@ -1149,6 +1159,20 @@ int plugin_configure_catalog(const uint8_t* data, int bytes, const double* bstar
 const char* plugin_get_profile() { return propagationReady() ? g_catalogProfile.c_str() : "unconfigured"; }
 const char* plugin_catalog_error() { return g_catalogError.c_str(); }
 
+// Host frame conversion uses the configured EOP, including velocity transport.
+int plugin_catalog_transform_state(double utcJd, const double* in, double* out, int inverse) {
+    if (!propagationReady() || !g_catalogDynamics || !in || !out) return -1;
+    ffm::TTEpoch at;
+    StateVector source, target;
+    source.position = Vec3(in[0] / 1000, in[1] / 1000, in[2] / 1000);
+    source.velocity = Vec3(in[3] / 1000, in[4] / 1000, in[5] / 1000);
+    if (!catalogEpoch(utcJd, at) || !g_catalogDynamics->earthFixed(at, source, target, inverse != 0, g_catalogError)) return -1;
+    out[0] = target.position.x * 1000; out[1] = target.position.y * 1000; out[2] = target.position.z * 1000;
+    out[3] = target.velocity.x * 1000; out[4] = target.velocity.y * 1000; out[5] = target.velocity.z * 1000;
+    return 0;
+}
+
+
 // Evaluation-only GCRF SI state, also useful to consumers needing inertial
 // products. No integration and no clamping: uncovered slots are zero.
 int plugin_eval_catalog_states_gcrf(double utcJd, double* out, int maxCount) {
@@ -1303,7 +1327,7 @@ int plugin_propagate_path_entity(int entityIndex, double startJD, double stepDay
     FFMEntity& entity = g_entities[entityIndex];
     int valid = 0;
 
-    if (entity.arcCount > 0) {
+    if (entity.arcCount > 0 || g_catalogDynamics) {
         // Arc-aware: propagate each sample through arc dispatch
         for (int i = 0; i < count; i++) {
             double jd = startJD + i * stepDays;
@@ -1421,7 +1445,7 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
     FFMEntity& entity = g_entities[entityIndex];
     int valid = 0;
 
-    if (entity.arcCount > 0) {
+    if (entity.arcCount > 0 || g_catalogDynamics) {
         // Arc-aware: propagate each sample through arc dispatch
         for (int i = 0; i < count; i++) {
             double jd = timesPtr[i];
@@ -2516,6 +2540,7 @@ int plugin_get_acceleration_breakdown_v2(double jd, double* outPtr, int len) {
 ///   [timeJD, targetEntityIdx, dv_r, dv_t, dv_n] — delta-V in LVLH km/s.
 /// Replaces any existing burns. Builds arc structure for arc-aware propagation.
 void plugin_set_burns(int entityIndex, double* burnsPtr, int count) {
+    if (g_catalogDynamics) { g_catalogError = "unsupported-configuration: Catalog burns belong to a focus instance."; g_forceModelRefused = true; return; }
     if (entityIndex < 0 || entityIndex >= g_entityCount || count <= 0) return;
     ++g_catalogRevision;
     FFMEntity& entity = g_entities[entityIndex];

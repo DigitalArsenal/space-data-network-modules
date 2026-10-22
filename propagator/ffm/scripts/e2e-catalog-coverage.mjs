@@ -8,6 +8,7 @@ import os from 'node:os';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
+import { browserMemory } from './catalog-memory-evidence.mjs';
 import { catalogClient } from './catalog-coverage-client.mjs';
 import * as catalog from '../catalog.mjs';
 import { environmentInputs, KERNEL } from '../tests/lib/fullForce.mjs';
@@ -71,5 +72,6 @@ try {
   }
   report.loadEnd = os.loadavg();
   report.numerics = 'PASS';
+  report.browserMemory = await browserMemory({ frames, seeds, epoch, manifest });
   save();
 } catch (e) { report.failure = e.stack; save(); throw e; }

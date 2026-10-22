@@ -15,7 +15,16 @@ export function catalogClient(h, frames, seeds, epochJD) {
   let at = 0; for (const frame of frames) { bytes.set(frame, at); at += frame.length; }
   check(x.plugin_configure_catalog(copy(bytes), bytes.length, copy(new Float64Array(seeds.map(s => s.bstar))), seeds.length), 0);
   const states = new Float64Array(seeds.flatMap(s => [epochJD, ...s.position, ...s.velocity]));
-  check(x.plugin_init_states(copy(states), seeds.length), seeds.length);
+  const statePtr = copy(states);
+  // Exercise the production ECEF seed entry. The module converts the known
+  // inertial fixtures; no host rotation or velocity transport is introduced.
+  for (let i = 0; i < seeds.length; ++i) {
+    const ptr = statePtr + i * 56 + 8;
+    const row = new Float64Array(memory.buffer, ptr, 6);
+    for (let j = 0; j < 6; ++j) row[j] *= 1000;
+    check(x.plugin_catalog_transform_state(epochJD, ptr, ptr, 0), 0);
+  }
+  check(x.plugin_init_states_ecef(statePtr, seeds.length), seeds.length);
   for (const p of allocated) x.plugin_free(p); allocated.length = 0;
   const out = copy(new Float64Array(seeds.length * 6));
   return {

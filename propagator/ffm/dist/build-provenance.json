@@ -7,8 +7,8 @@
   "flags": [
     "-msimd128"
   ],
-  "sha256": "883837d67ee181cb20fabd0557fa67ac9487eafe0e63fbedf4937abe2593700d",
-  "bytes": 2227199,
+  "sha256": "ae421b309580b8232e9d4427fe0d6ed92666ad610f54c62cfcc76f5641ad5764",
+  "bytes": 2228620,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
