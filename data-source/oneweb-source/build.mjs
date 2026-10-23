@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Build the OneWeb (Eutelsat) LTEF data-source WASM module using a repo-local
- * emsdk toolchain. Mirrors data-source/spacex-starlink-source/build.mjs (the
+ * Build the OneWeb (Eutelsat) LTEF data-source WASM module with the clang
+ * wasm32-wasip1-threads toolchain (wasi-sequential). Mirrors data-source/spacex-starlink-source/build.mjs (the
  * A2.2b template); only the source file, output name, and manifest differ. The
  * shared provider scaffold is common/provider_source.hpp (promoted in A2.2c),
  * resolved via the SDN_COMMON_DIR (-I common) include path.
  *
- * Usage: SDN_LOCAL_EMSDK_DIR=<repo>/licensing/core/deps/emsdk node build.mjs
+ * Usage: node build.mjs (the SDK's resolveWasiThreadsToolchain finds wasm32-wasi-clang++ and the threads sysroot;
+ *        SDN_WASI_CLANGXX / SDN_WASI_SYSROOT / SDN_WASI_RESOURCE_DIR override)
  * Output: dist/oneweb-source.wasm (signed), dist/isomorphic/module.wasm (loadable)
  */
 
@@ -18,29 +19,22 @@ import { signModuleArtifact, verifyModuleArtifact } from "space-data-module-sdk/
 import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
 import createOnewebSourcePluginManifest from "./manifest.js";
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
-import { activateLaneToolchain, recordLaneToolchain } from "../../scripts/lib/emsdk-toolchain.mjs";
+import { resolveWasiThreadsToolchain } from "space-data-module-sdk/compiler";
 
-// THREAD MODEL — declared, never inferred (full rationale in
-// scripts/lib/thread-model.mjs; graph task modules-undeclared-threadmodel-artifacts).
+// THREAD MODEL — declared, never inferred (scripts/lib/thread-model.mjs).
 //
-// This build does NOT go through the SDK compiler — it drives a vendored
-// Emscripten `em++` directly — so `resolveThreadModel` never runs and there is no
-// `compileModuleFromSource` argument to carry a declaration. The module therefore
-// read as "undeclared" in the artifact-reproducibility census with no way to
-// answer, which is a reporting defect, not a build defect: the lane here is fixed
-// by the command line, `-sSTANDALONE_WASM=1 -sPURE_WASI=1` and no `-pthread`.
-//
-// Truth of the SHIPPED artifact 37aac5cd1e56…: unshared linear memory, no
-// `wasi.thread-spawn` import, no `wasi_thread_start` export.
+// This build does NOT go through the SDK compiler — it drives the clang wasm32-wasip1-threads
+// toolchain directly (the SDK's resolveWasiThreadsToolchain) — so the declaration lives here as a
+// literal. wasi-sequential: the repo's one guest object format; the guest never spawns a thread
+// (each invocation turns one frame into the next request or the parsed records on the calling
+// thread), so the artifact carries the shared memory of that target and no wasi.thread-spawn import.
+// The source throws nothing and is compiled with -fno-exceptions.
 //
 // `assertArtifactThreadModel` re-reads the EMITTED wasm at the end of this build
-// and refuses the declaration if the bytes ever contradict it. A declaration
-// nothing verifies is a comment.
-const THREAD_MODEL = "single-thread";
+// and refuses the declaration if the bytes ever contradict it.
+const THREAD_MODEL = "wasi-sequential";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EMSDK_DIR = path.resolve(process.env.SDN_LOCAL_EMSDK_DIR || path.join(__dirname, "deps", "emsdk"));
-const EM_CACHE_DIR = path.join(__dirname, ".emcache");
 const BUILD_DIR = path.join(__dirname, ".build");
 const DIST_DIR = path.join(__dirname, "dist");
 const ISOMORPHIC_DIST_DIR = path.join(DIST_DIR, "isomorphic");
@@ -91,11 +85,7 @@ async function signBuiltModule(wasmPath) {
 
 async function main() {
   console.log("SDN Plugin Build — oneweb-source");
-  const laneToolchain = activateLaneToolchain({
-    moduleDir: "data-source/oneweb-source",
-    extraCandidates: [EMSDK_DIR],
-    emCache: EM_CACHE_DIR,
-  });
+  const toolchain = resolveWasiThreadsToolchain();
   fs.mkdirSync(BUILD_DIR, { recursive: true });
   fs.mkdirSync(DIST_DIR, { recursive: true });
   fs.mkdirSync(ISOMORPHIC_DIST_DIR, { recursive: true });
@@ -126,7 +116,6 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
 
   const srcPath = path.join(SRC_DIR, "oneweb_source.cpp");
   const outWasm = path.join(DIST_DIR, "oneweb-source.wasm");
-  const emxx = path.join(EMSDK_DIR, "upstream", "emscripten", "em++");
 
   if (!fs.existsSync(path.join(SDN_COMMON_DIR, "provider_source.hpp"))) {
     throw new Error(`provider_source.hpp not found under ${SDN_COMMON_DIR} (A2.2c promotion)`);
@@ -144,18 +133,18 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
   if (fs.existsSync(CORE_SDS_GENERATED_DIR)) includes.push(`-I${shellQuote(CORE_SDS_GENERATED_DIR)}`);
 
   run(
-    `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -DSDN_WASI_PLUGIN=1 ` +
+    `${shellQuote(toolchain.clangxx)} ${toolchain.toolchainArgs.map(shellQuote).join(" ")} ` +
+      `-O2 -std=c++17 -fno-exceptions -mbulk-memory -mexec-model=reactor -DSDN_WASI_PLUGIN=1 ` +
       `${includes.join(" ")} ` +
       `${shellQuote(srcPath)} ${shellQuote(manifestExportsPath)} ` +
-      `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 -sINITIAL_MEMORY=16777216 -sALLOW_MEMORY_GROWTH=1 ` +
-      `-sFILESYSTEM=0 -sERROR_ON_UNDEFINED_SYMBOLS=0 ` +
-      `-sEXPORTED_FUNCTIONS="['_plugin_invoke_stream','_plugin_alloc','_plugin_free','_plugin_get_manifest_flatbuffer','_plugin_get_manifest_flatbuffer_size']" ` +
-      `--no-entry -o ${shellQuote(outWasm)}`,
+      `-Wl,--initial-memory=16777216 -Wl,--max-memory=2147483648 -Wl,--allow-undefined ` +
+      ["plugin_invoke_stream", "plugin_alloc", "plugin_free", "plugin_get_manifest_flatbuffer", "plugin_get_manifest_flatbuffer_size"]
+        .map((name) => `-Wl,--export=${name}`).join(" ") +
+      ` -o ${shellQuote(outWasm)}`,
   );
 
   // Refuse a declaration the emitted bytes contradict (see THREAD_MODEL above).
   assertArtifactThreadModel(outWasm, THREAD_MODEL, "data-source/oneweb-source");
-  recordLaneToolchain(DIST_DIR, laneToolchain);
   fs.copyFileSync(outWasm, path.join(ISOMORPHIC_DIST_DIR, "module.wasm"));
   await signBuiltModule(outWasm);
   console.log(`  Runtime artifact (loadable, unsigned): ${path.join(ISOMORPHIC_DIST_DIR, "module.wasm")}`);

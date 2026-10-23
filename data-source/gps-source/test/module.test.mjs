@@ -29,6 +29,11 @@ const REQUIRED_EXPORTS = [
 ];
 const REQUIRED_HOST_IMPORTS = ["call", "response_len", "read_response"];
 
+// The guest is wasi-sequential (clang wasm32-wasip1-threads): libc imports two WASI calls, fd_write (libc++'s abort
+// message) and sched_yield (the threads libc's lock backoff). The production hosts supply full WASI; these raw
+// instantiations answer ENOSYS / success, which the guest never depends on for an answer.
+const WASI_STUB = { wasi_snapshot_preview1: { fd_write: () => 52, sched_yield: () => 0 } };
+
 function loadWasm() {
   assert.ok(fs.existsSync(WASM_PATH), `built module not found at ${WASM_PATH}; run \`node build.mjs\` first`);
   return new Uint8Array(fs.readFileSync(WASM_PATH));
@@ -79,6 +84,7 @@ test("built WASM embeds + returns the real manifest", async () => {
   const loadable = stripWasmCustomSections(loadWasm());
   const stub = () => 0;
   const { instance } = await WebAssembly.instantiate(loadable, {
+    ...WASI_STUB,
     space_data_module_host: { call: stub, response_len: stub, read_response: stub, clear_response: stub, last_status_code: stub },
   });
   const ex = instance.exports;
@@ -223,7 +229,7 @@ async function runPull(config, httpOverride) {
     last_status_code() { return 0; },
   };
 
-  const wasm = await WebAssembly.instantiate(loadable, { space_data_module_host: host });
+  const wasm = await WebAssembly.instantiate(loadable, { ...WASI_STUB, space_data_module_host: host });
   instance = wasm.instance;
   const ex = instance.exports;
 

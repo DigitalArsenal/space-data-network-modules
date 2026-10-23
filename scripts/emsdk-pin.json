@@ -42,8 +42,6 @@
     }
   },
   "laneModules": [
-    "data-source/gps-source",
-    "data-source/oneweb-source",
     "delivery/plugin-delivery"
   ],
   "shippedToolchainEvidence": {
