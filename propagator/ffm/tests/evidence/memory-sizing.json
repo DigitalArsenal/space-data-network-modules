@@ -15,11 +15,26 @@
     }
   },
   "profile": "FFM-1",
-  "retentionSeconds": 1800,
-  "lookaheadSeconds": 300,
+  "retentionSeconds": 1728,
+  "lookaheadSeconds": 120,
+  "pool": {
+    "source": "OrbPro packages/orbpro-integration/propagator.ffm @ 7ad42e4e1c: ffmFrameWorkerPool.js defaults, ffmFrameWorker.js init and loop",
+    "retentionDays": 0.02,
+    "lookaheadSeconds": 120,
+    "ensureChunk": 64,
+    "gridStagger": true,
+    "segmentSeconds": 300
+  },
   "sampleEpochsSeconds": [
+    0,
+    300,
+    600,
+    900,
+    1200,
+    1500,
     1800,
-    3600
+    2100,
+    2400
   ],
   "fixture": "public study SGP4 seeds, repeated cyclically across all eight orbit regimes",
   "metric": "WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum",
@@ -62,21 +77,36 @@
       "role": "catalog",
       "entities": 1000,
       "baseBytes": 28049408,
+      "configuredBytes": 31850496,
       "highWaterBytes": 42598400,
       "samples": [
-        31850496,
+        37158912,
+        37224448,
+        37289984,
+        39845888,
+        39845888,
+        39911424,
         39976960,
+        42598400,
         42598400
       ],
       "outputs": [
-        "297c861dcf0bb8bbb012f2e33a61f21cb97fa430ebbd34c7b5d6030dc3b58f4d",
-        "ec7dbe238340ccfe83e69258aae784a91e7b5569b174f6778574b0f1261ba147"
+        "ec2a4ac1bbe5c4c464cba006273ad23a897be3c664db5f26edb5b30d65411da8",
+        "85947907f050c0a24f5dd9a7dabefa5d700353eeb804f2ab8e2650a96d414ae1",
+        "3cc91edb39ca3b18c4576a92863ed0db2f45f023814097543215c483c5529ca9",
+        "afbb730c58b2680c0776721de4ebea3b05b0efa99da032e640577107370ffefb",
+        "0174022d742121a623983c9acd9208994154634211b67488389202223fd35b92",
+        "171c1322929760f70986ac315e200c4546be9f784b05ad580c11d41e6e3eca9b",
+        "f853264493fcd505ea1829107e238876c743fe6573a0c34bada3e8a0cf29b76d",
+        "2b0382bb21e5f0206cf0ca9bb8ad18d3d1f37e715efedba81786882ef96e50af",
+        "2bb1e95794f89d9ae642a3b661f7e982412ac447304d8dab67772acab12c06ed"
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
       "previousArtifactParity": "bit-identical",
-      "predictedBytes": 42605184.241971925,
-      "relativePredictionError": 0.00015926048799778632
+      "predictedBytes": 42635672.56729724,
+      "relativePredictionError": 0.0008749757572407081,
+      "seededBytes": 37158912
     },
     {
       "runtime": "wasmedge",
@@ -84,115 +114,248 @@
       "entities": 1000,
       "baseBytes": 28049408,
       "highWaterBytes": 42598400,
+      "configuredBytes": 31850496,
+      "samples": [
+        37158912,
+        37224448,
+        37289984,
+        39845888,
+        39845888,
+        39911424,
+        39976960,
+        42598400,
+        42598400
+      ],
       "role": "catalog",
       "outputs": [
-        "297c861dcf0bb8bbb012f2e33a61f21cb97fa430ebbd34c7b5d6030dc3b58f4d",
-        "ec7dbe238340ccfe83e69258aae784a91e7b5569b174f6778574b0f1261ba147"
+        "ec2a4ac1bbe5c4c464cba006273ad23a897be3c664db5f26edb5b30d65411da8",
+        "85947907f050c0a24f5dd9a7dabefa5d700353eeb804f2ab8e2650a96d414ae1",
+        "3cc91edb39ca3b18c4576a92863ed0db2f45f023814097543215c483c5529ca9",
+        "afbb730c58b2680c0776721de4ebea3b05b0efa99da032e640577107370ffefb",
+        "0174022d742121a623983c9acd9208994154634211b67488389202223fd35b92",
+        "171c1322929760f70986ac315e200c4546be9f784b05ad580c11d41e6e3eca9b",
+        "f853264493fcd505ea1829107e238876c743fe6573a0c34bada3e8a0cf29b76d",
+        "2b0382bb21e5f0206cf0ca9bb8ad18d3d1f37e715efedba81786882ef96e50af",
+        "2bb1e95794f89d9ae642a3b661f7e982412ac447304d8dab67772acab12c06ed"
       ],
-      "predictedBytes": 42605184.241971925,
-      "relativePredictionError": 0.00015926048799778632
+      "predictedBytes": 42635672.56729724,
+      "relativePredictionError": 0.0008749757572407081,
+      "seededBytes": 37158912
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 4000,
       "baseBytes": 28049408,
-      "highWaterBytes": 86441984,
+      "configuredBytes": 43122688,
+      "highWaterBytes": 86573056,
       "samples": [
-        43122688,
+        64815104,
+        65077248,
+        65077248,
+        75563008,
+        75563008,
+        75759616,
         76021760,
-        86441984
+        86573056,
+        86573056
       ],
       "outputs": [
-        "5e9783b05d0971b30bb8b4be70cccd610756341e1b37a3360c8463d4cddd7090",
-        "2623ae45010836ba4840df77455053ea22ebd7712ab01afd17ffa508adf832e8"
+        "b038a5f0042998738e1108b00a8f2761f0dbc5f15496655b780ffe3fcb10c200",
+        "452d9a046ddceba6c386afc82bd87a24889c97a4330a0f9e5e35e20833d25afb",
+        "43af0f958d280f78674d8e93439d32521d867d8ab1a01ceb994906c2976a126b",
+        "fdf01fb34d4d4609804831437cdd384c01e40f2df35fbf92aa5d28aa82e4b711",
+        "d24e20e722e8db0a5c4b53af45e58f4e6b14e28b91fb60eda320af6a363d164f",
+        "5b5bc36f9c2a38abdc331133e67fce91cfd50a36970cee5ef9923a55d7c4c4fe",
+        "02d5fd7bdf66220dddec0a7839ea8c47b38800d043c0e4bee615809ab9c6c6ef",
+        "e99b1f6b1677f4c96efe6d36bb2cf3f777c1169b397bdf5db8e490a9bf6f05d9",
+        "71c2a290c61d1af20fe65764948e52e9da243961339295acf563ee63e6b0b5c0"
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "predictedBytes": 86458246.06979312,
-      "relativePredictionError": 0.0001881269846041482
+      "predictedBytes": 86562847.63135183,
+      "relativePredictionError": 0.00011791623306183653,
+      "seededBytes": 64815104
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 4000,
       "baseBytes": 28049408,
-      "highWaterBytes": 86441984,
+      "highWaterBytes": 86573056,
+      "configuredBytes": 43122688,
+      "samples": [
+        64815104,
+        65077248,
+        65077248,
+        75563008,
+        75563008,
+        75759616,
+        76021760,
+        86573056,
+        86573056
+      ],
       "role": "catalog",
       "outputs": [
-        "5e9783b05d0971b30bb8b4be70cccd610756341e1b37a3360c8463d4cddd7090",
-        "2623ae45010836ba4840df77455053ea22ebd7712ab01afd17ffa508adf832e8"
+        "b038a5f0042998738e1108b00a8f2761f0dbc5f15496655b780ffe3fcb10c200",
+        "452d9a046ddceba6c386afc82bd87a24889c97a4330a0f9e5e35e20833d25afb",
+        "43af0f958d280f78674d8e93439d32521d867d8ab1a01ceb994906c2976a126b",
+        "fdf01fb34d4d4609804831437cdd384c01e40f2df35fbf92aa5d28aa82e4b711",
+        "d24e20e722e8db0a5c4b53af45e58f4e6b14e28b91fb60eda320af6a363d164f",
+        "5b5bc36f9c2a38abdc331133e67fce91cfd50a36970cee5ef9923a55d7c4c4fe",
+        "02d5fd7bdf66220dddec0a7839ea8c47b38800d043c0e4bee615809ab9c6c6ef",
+        "e99b1f6b1677f4c96efe6d36bb2cf3f777c1169b397bdf5db8e490a9bf6f05d9",
+        "71c2a290c61d1af20fe65764948e52e9da243961339295acf563ee63e6b0b5c0"
       ],
-      "predictedBytes": 86458246.06979312,
-      "relativePredictionError": 0.0001881269846041482
+      "predictedBytes": 86562847.63135183,
+      "relativePredictionError": 0.00011791623306183653,
+      "seededBytes": 64815104
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 10000,
       "baseBytes": 28049408,
-      "highWaterBytes": 174194688,
+      "configuredBytes": 65798144,
+      "highWaterBytes": 174456832,
       "samples": [
-        65798144,
-        148111360,
-        174194688
+        120127488,
+        120782848,
+        120848384,
+        146931712,
+        146931712,
+        147521536,
+        148176896,
+        174456832,
+        174456832
       ],
       "outputs": [
-        "e2ee3f8a663c5236219ff6332e7b385235f38fce9f3d4bf7aea5621eaf56c466",
-        "053f9525ec316d0cd0bd6457adfacb2a54c59aa40f1ca19a1efa1b726cc7825c"
+        "f45777aabd582b471e9f91a0f3866f678f9c16d8e506ac8f0feeb4fef097a659",
+        "7b496f707be6d23cc87424427f34f5ce3331255c2821306304d5f63d75f748bb",
+        "84275bbb9c39793262a4157a2bfbb7a463ed857a4d4e35862650743523a71d79",
+        "56a496fcbf77254a8633d99cf507143efac90d84dda87423b2835347c435069f",
+        "fb6771b9e29e1a29865fb648ea1d909bd1d61a9d8066245b699f5637d3302821",
+        "48f8c60dd35b37a23b821544687928a7124d2d415b536713a78e6de5fd89de08",
+        "5b9383ce9902a00776d47f128af7cd038932480c811b5f2c18d960b93034d634",
+        "64572e29780c90be9282e00089b718dc55c2409ce79887bfd73b482b575f8ee2",
+        "221179445c4601d981a4a87f57d275de409319bda9b9869100c8ba54742e965b"
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "predictedBytes": 174164369.72543553,
-      "relativePredictionError": 0.00017404821531914234
+      "predictedBytes": 174417197.759461,
+      "relativePredictionError": 0.00022718651992381897,
+      "seededBytes": 120127488
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 10000,
       "baseBytes": 28049408,
-      "highWaterBytes": 174194688,
+      "highWaterBytes": 174456832,
+      "configuredBytes": 65798144,
+      "samples": [
+        120127488,
+        120782848,
+        120848384,
+        146931712,
+        146931712,
+        147521536,
+        148176896,
+        174456832,
+        174456832
+      ],
       "role": "catalog",
       "outputs": [
-        "e2ee3f8a663c5236219ff6332e7b385235f38fce9f3d4bf7aea5621eaf56c466",
-        "053f9525ec316d0cd0bd6457adfacb2a54c59aa40f1ca19a1efa1b726cc7825c"
+        "f45777aabd582b471e9f91a0f3866f678f9c16d8e506ac8f0feeb4fef097a659",
+        "7b496f707be6d23cc87424427f34f5ce3331255c2821306304d5f63d75f748bb",
+        "84275bbb9c39793262a4157a2bfbb7a463ed857a4d4e35862650743523a71d79",
+        "56a496fcbf77254a8633d99cf507143efac90d84dda87423b2835347c435069f",
+        "fb6771b9e29e1a29865fb648ea1d909bd1d61a9d8066245b699f5637d3302821",
+        "48f8c60dd35b37a23b821544687928a7124d2d415b536713a78e6de5fd89de08",
+        "5b9383ce9902a00776d47f128af7cd038932480c811b5f2c18d960b93034d634",
+        "64572e29780c90be9282e00089b718dc55c2409ce79887bfd73b482b575f8ee2",
+        "221179445c4601d981a4a87f57d275de409319bda9b9869100c8ba54742e965b"
       ],
-      "predictedBytes": 174164369.72543553,
-      "relativePredictionError": 0.00017404821531914234
+      "predictedBytes": 174417197.759461,
+      "relativePredictionError": 0.00022718651992381897,
+      "seededBytes": 120127488
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 31814,
       "baseBytes": 28049408,
-      "highWaterBytes": 493027328,
+      "configuredBytes": 148045824,
+      "highWaterBytes": 493813760,
       "samples": [
-        148045824,
-        410058752,
-        493027328
+        320995328,
+        323158016,
+        323289088,
+        406257664,
+        406257664,
+        408223744,
+        410189824,
+        493813760,
+        493813760
       ],
       "outputs": [
-        "63ed7cbfcd07280403114b1373a8b3c4577464fca20c46d6951a991a8aea629e",
-        "bdb967e5b778d866bcb7becbd7cef5c948effa2f0bea6326dbacb5f813a05782"
+        "7f5918fd1a6dc7206b2709f45f22e981b9fd277ba3c5e7c82ced04032a19e0cf",
+        "28904f171c1c947c092ecb3a2409bd9f5621ec190550cca478849dcf034e99a3",
+        "b25f2648f6c49d3046ab71c610eaebba7395c3e78a6de7214e1842463e2b7c92",
+        "9d5e0586cdcd6bfbdea99028f32b23e639ab636668d5590bba0a6f7287037ef0",
+        "d9dca7a18a66a99e6d5f47d468f5777e1f80e56fea76c849acfb4d1bf08035ae",
+        "9760e38dc67bdcd84af54e7e814b414c77f65fdca75da7f6c00fa0033e4e92f8",
+        "78e03f5ae6a852b8bf307edc4f6002a5a6a076e26b283da35e0b1988daa353f0",
+        "c967d540a0ef0774ec7f7f4dee3ceb1b9c6a365d9508b6c94076994b910bc05e",
+        "b84b45b373dd57e03672491175e9df5cfb8c9596c725d21c423c54866e201b41"
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "predictedBytes": 493034599.96279943,
-      "relativePredictionError": 1.4749614040522097e-05
+      "predictedBytes": 493826330.0418899,
+      "relativePredictionError": 0.000025455025574633502,
+      "seededBytes": 320995328,
+      "poolLaneRelativeError": [
+        -0.007435596784168213,
+        -0.013536177012907191
+      ]
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 31814,
       "baseBytes": 28049408,
-      "highWaterBytes": 493027328,
+      "highWaterBytes": 493813760,
+      "configuredBytes": 148045824,
+      "samples": [
+        320995328,
+        323158016,
+        323289088,
+        406257664,
+        406257664,
+        408223744,
+        410189824,
+        493813760,
+        493813760
+      ],
       "role": "catalog",
       "outputs": [
-        "63ed7cbfcd07280403114b1373a8b3c4577464fca20c46d6951a991a8aea629e",
-        "bdb967e5b778d866bcb7becbd7cef5c948effa2f0bea6326dbacb5f813a05782"
+        "7f5918fd1a6dc7206b2709f45f22e981b9fd277ba3c5e7c82ced04032a19e0cf",
+        "28904f171c1c947c092ecb3a2409bd9f5621ec190550cca478849dcf034e99a3",
+        "b25f2648f6c49d3046ab71c610eaebba7395c3e78a6de7214e1842463e2b7c92",
+        "9d5e0586cdcd6bfbdea99028f32b23e639ab636668d5590bba0a6f7287037ef0",
+        "d9dca7a18a66a99e6d5f47d468f5777e1f80e56fea76c849acfb4d1bf08035ae",
+        "9760e38dc67bdcd84af54e7e814b414c77f65fdca75da7f6c00fa0033e4e92f8",
+        "78e03f5ae6a852b8bf307edc4f6002a5a6a076e26b283da35e0b1988daa353f0",
+        "c967d540a0ef0774ec7f7f4dee3ceb1b9c6a365d9508b6c94076994b910bc05e",
+        "b84b45b373dd57e03672491175e9df5cfb8c9596c725d21c423c54866e201b41"
       ],
-      "predictedBytes": 493034599.96279943,
-      "relativePredictionError": 1.4749614040522097e-05
+      "predictedBytes": 493826330.0418899,
+      "relativePredictionError": 0.000025455025574633502,
+      "seededBytes": 320995328,
+      "poolLaneRelativeError": [
+        -0.007435596784168213,
+        -0.013536177012907191
+      ]
     }
   ],
   "docker": "WAIVED by owner 2026-10-22: do not start Docker",
@@ -210,14 +373,30 @@
     ],
     "units": "bytes",
     "method": "least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)",
-    "baseBytes": 27987496.96603152,
-    "perEntityBytes": 14617.6872759404,
+    "baseBytes": 27993280.879279047,
+    "perEntityBytes": 14642.391688018195,
     "focusHighWaterBytes": 28049408
+  },
+  "seededModel": {
+    "units": "bytes",
+    "method": "least squares over the samples taken right after the pool seed sweep; not a sizing basis",
+    "baseBytes": 27975745.84239401,
+    "perEntityBytes": 9210.788410100055
+  },
+  "poolLane": {
+    "task": "orbpro-ffm-pool-ffm1-fast-20261022",
+    "orbproCommit": "5c14cb5d7b",
+    "entities": 31814,
+    "heapBytes": [
+      323400000,
+      325400000
+    ],
+    "tolerance": 0.05
   },
   "requiredMaximumBytes": 754974720,
   "status": "MEASURED",
-  "numericalParity": "All five native/browser role output hashes are identical; the 1000-object raw catalog output is bit-identical to the predecessor. Every decoded focus field is identical; SDS 1.259 RFM NaN-default fields change serialized layout only.",
+  "numericalParity": "At every pool-window step the four catalog roles' output hashes are identical between native and browser, and so are their linear-memory samples; the 1000-object raw catalog output is bit-identical to the predecessor artifact at every step. Every decoded focus field is identical; SDS 1.259 RFM NaN-default fields change serialized layout only.",
   "measurementCommand": "SDN_NODE_BINARY=<node> node propagator/ffm/scripts/e2e-memory-sizing.mjs --measure",
   "sizingRule": "initial=max(16 MiB,page-rounded fitted base,linker minimum); maximum=ceil(largest measured high-water*1.5 / 16 MiB)*16 MiB",
-  "scope": "Linear-memory sizing for the uncorrected FFM-1 reference roles, not host RSS or throughput. Optional DCL nodes are shared across catalog objects; corrected trajectories are verified by e2e-drag-correction."
+  "scope": "Linear-memory sizing for the uncorrected FFM-1 reference roles at the OrbPro browser pool's own coverage window (retention 0.02 d, lookahead 120 s, ensure chunk 64, grid stagger on), not host RSS or throughput. The sizing basis is the high-water over the window: the retained window fills after about 2100 s of pool clock and the heap then stays flat. seededModel is the heap right after the first coverage sweep, the state the pool's own E2E read (323.4-325.4 MB at 31,814 objects, reproduced within 5% in poolLane); it is not a sizing basis. Optional DCL nodes are shared across catalog objects; corrected trajectories are verified by e2e-drag-correction."
 }

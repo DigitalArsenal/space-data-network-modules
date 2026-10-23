@@ -41,9 +41,25 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
 const predecessor = execFileSync('git', ['show', '96a55da80626ae2a5615fed42e3865ddd470ec13:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
+// The browser pool's own coverage window: the defaults of OrbPro
+// packages/orbpro-integration/propagator.ffm at main 7ad42e4e1c
+// (createFfmFrameWorkerPool: retentionDays 0.02, lookaheadSec 120, ensureChunk 64;
+// ffmFrameWorker.js: grid stagger on, plugin_set_ephemeris_retention before the
+// seed, ensure chunks of simStart + lookahead, then of clock + lookahead every loop).
+// Each role seeds like a pool shard, then the clock advances one 300 s segment
+// at a time until the retained window (retention + lookahead) has filled and
+// been pruned, so the high-water is the pool's steady state, not its seeded one.
+const pool = { retentionDays: 0.02, lookaheadSeconds: 120, ensureChunk: 64, gridStagger: true, segmentSeconds: 300 };
+pool.retentionSeconds = pool.retentionDays * 86400;
+pool.steps = Array.from({ length: Math.ceil((pool.retentionSeconds + pool.lookaheadSeconds) / pool.segmentSeconds) + 2 }, (_, i) => i * pool.segmentSeconds);
+// What the pool's own E2E read from a seeded shard (orbpro-ffm-pool-ffm1-fast-20261022,
+// OrbPro 5c14cb5d7b): the full catalog's heap, 323.4-325.4 MB.
+const poolLane = { task: 'orbpro-ffm-pool-ffm1-fast-20261022', orbproCommit: '5c14cb5d7b', entities: 31814, heapBytes: [323.4e6, 325.4e6], tolerance: .05 };
 const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readFileSync(path.join(cache, '../previous.wasm'))),
-  memory: read('dist/build-provenance.json').memory, profile: 'FFM-1', retentionSeconds: 1800, lookaheadSeconds: 300,
-  sampleEpochsSeconds: [1800, 3600], fixture: 'public study SGP4 seeds, repeated cyclically across all eight orbit regimes',
+  memory: read('dist/build-provenance.json').memory, profile: 'FFM-1', retentionSeconds: pool.retentionSeconds, lookaheadSeconds: pool.lookaheadSeconds,
+  pool: { source: 'OrbPro packages/orbpro-integration/propagator.ffm @ 7ad42e4e1c: ffmFrameWorkerPool.js defaults, ffmFrameWorker.js init and loop', retentionDays: pool.retentionDays,
+    lookaheadSeconds: pool.lookaheadSeconds, ensureChunk: pool.ensureChunk, gridStagger: pool.gridStagger, segmentSeconds: pool.segmentSeconds },
+  sampleEpochsSeconds: pool.steps, fixture: 'public study SGP4 seeds, repeated cyclically across all eight orbit regimes',
   metric: 'WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum',
   rows: [], loadStart: os.loadavg(), logicalCpus: os.cpus().length,
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
@@ -61,10 +77,15 @@ const save = () => fs.writeFileSync(path.join(cache, 'result.json'), JSON.string
 // cache. The node keys each compiled flow by the exact artifact hash.
 const nodeBinary = process.env.SDN_NODE_BINARY || 'spacedatanetwork';
 const aotDir = path.join(root, '.sdk-build/memory-sizing/aot');
-const aotLog = execFileSync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
-assert(!/FAILED|Not implemented instructions/.test(aotLog));
-report.aot = { status: 'PASS', command: 'spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm', artifactSha256: report.artifactSha256, log: aotLog.trim() }; save();
+// The prewarm runs beside the setup and the browser roles; only the native roles wait for it.
+const aotReady = execFileAsync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }).then(({ stdout: aotLog }) => {
+  fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
+  assert(!/FAILED|Not implemented instructions/.test(aotLog));
+  report.aot = { status: 'PASS', command: 'spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm', artifactSha256: report.artifactSha256, log: aotLog.trim() }; save();
+  const aotPath = aotLog.split('\n').find(line => line.startsWith(`  flow ${wasmPath}: `))?.slice(`  flow ${wasmPath}: `.length).replace(/ \((?:compiled|already present)\)$/, '');
+  assert(aotPath && fs.existsSync(aotPath), 'prewarm produced no flow AOT artifact');
+  return aotPath;
+});
 // Start the largest role first. Two independent instances per runtime keep
 // the entire E2E within the graph command budget without changing any role.
 async function runRoles(run) {
@@ -111,7 +132,9 @@ static void output(const char *name,uint32_t p,uint32_t n) {
 }
 static void expected(int actual,int wanted) { if(actual!=wanted){fprintf(stderr,"export returned %d expected %d\n",actual,wanted);exit(3);} }
 int main(int argc,char **argv) {
- if(argc!=5)return 2;const int count=atoi(argv[2]);const double epoch=atof(argv[3]);
+ if(argc!=11)return 2;const int count=atoi(argv[2]);const double epoch=atof(argv[3]);
+ const double retentionDays=atof(argv[5]),lookahead=atof(argv[6]),stepSeconds=atof(argv[8]);const int chunk=atoi(argv[7]),steps=atoi(argv[9]),gridStagger=atoi(argv[10]);
+ unsigned samples[256],configured=0;if(steps>256||chunk<1)return 2;
  if(strcmp(WasmEdge_VersionGet(),"0.16.4")){fprintf(stderr,"Wrong WasmEdge: %s\n",WasmEdge_VersionGet());return 2;}
  WasmEdge_ConfigureContext *conf=WasmEdge_ConfigureCreate();
  WasmEdge_ConfigureAddProposal(conf,WasmEdge_Proposal_Threads);WasmEdge_ConfigureAddHostRegistration(conf,WasmEdge_HostRegistration_Wasi);
@@ -136,14 +159,22 @@ int main(int argc,char **argv) {
   for(int i=0;i<count;i++){uint32_t p=states+i*56+8;WasmEdge_Value a[]={D(epoch),I(p),I(p),I(0)};expected(call("plugin_catalog_transform_state",a,4,1),0);}
   WasmEdge_Value seed[]={I(states),I(count)};expected(call("plugin_init_states_ecef",seed,2,1),count);
   release(frames);release(bstar);release(states);uint32_t out=alloc(count*48);
-  for(int i=0;i<2;i++){
-   double seconds=(i+1)*1800;WasmEdge_Value a[]={D(epoch+seconds/86400),I(0),I(count)};expected(call("plugin_ensure_coverage",a,3,1),count);
-   WasmEdge_Value b[]={D(epoch+(seconds-1)/86400),I(out),I(count)};expected(call("plugin_eval_catalog_states_gcrf",b,3,1),count);
+  configured=WasmEdge_MemoryInstanceGetPageSize(mem)*65536;
+  /* The pool shard's own order: grid stagger, retention, then coverage in ensure chunks. */
+  if(gridStagger){WasmEdge_Value g[]={I(1)};call("plugin_set_grid_stagger",g,1,0);}
+  {WasmEdge_Value r[]={D(retentionDays)};call("plugin_set_ephemeris_retention",r,1,0);}
+  for(int i=0;i<steps;i++){
+   const double now=i*stepSeconds;
+   for(int at=0;at<count;at+=chunk){const int n=count-at<chunk?count-at:chunk;WasmEdge_Value a[]={D(epoch+(now+lookahead)/86400),I(at),I(n)};expected(call("plugin_ensure_coverage",a,3,1),n);}
+   WasmEdge_Value b[]={D(epoch+now/86400),I(out),I(count)};expected(call("plugin_eval_catalog_states_gcrf",b,3,1),count);
    snprintf(file,sizeof file,"%s/native-%d-%d.bin",argv[4],count,i);output(file,out,count*48);
+   samples[i]=WasmEdge_MemoryInstanceGetPageSize(mem)*65536;
   }
   release(out);call("plugin_destroy",NULL,0,0);
  }
- printf("{\"runtime\":\"wasmedge\",\"version\":\"%s\",\"entities\":%d,\"baseBytes\":%u,\"highWaterBytes\":%u}\n",WasmEdge_VersionGet(),count,base,WasmEdge_MemoryInstanceGetPageSize(mem)*65536);
+ printf("{\"runtime\":\"wasmedge\",\"version\":\"%s\",\"entities\":%d,\"baseBytes\":%u,\"highWaterBytes\":%u",WasmEdge_VersionGet(),count,base,WasmEdge_MemoryInstanceGetPageSize(mem)*65536);
+ if(count>1){printf(",\"configuredBytes\":%u,\"samples\":[",configured);for(int i=0;i<steps;i++)printf("%s%u",i?",":"",samples[i]);printf("]");}
+ printf("}\n");
  WasmEdge_VMDelete(vm);WasmEdge_ConfigureDelete(conf);return 0;
 }`;
 fs.writeFileSync(path.join(cache, 'measure.c'), nativeSource);
@@ -151,8 +182,6 @@ const wasmedge = process.env.WASMEDGE_ROOT || path.join(os.homedir(), `.local/sh
 const native = path.join(cache, 'measure-native');
 execFileSync('cc', [path.join(cache, 'measure.c'), '-std=c11', '-O2', `-I${wasmedge}/include`, `-L${wasmedge}/lib`, '-lwasmedge', `-Wl,-rpath,${wasmedge}/lib`, '-o', native], { stdio: 'inherit' });
 if (process.platform === 'darwin') execFileSync('install_name_tool', ['-change', '@rpath/libwasmedge.0.dylib', `${wasmedge}/lib/libwasmedge.0.dylib`, native]);
-const aotPath = aotLog.split('\n').find(line => line.startsWith(`  flow ${wasmPath}: `))?.slice(`  flow ${wasmPath}: `.length).replace(/ \((?:compiled|already present)\)$/, '');
-assert(aotPath && fs.existsSync(aotPath), 'prewarm produced no flow AOT artifact');
 fs.writeFileSync(path.join(cache, 'frames.bin'), Buffer.concat(frames));
 focusRequests.forEach((bytes,i) => fs.writeFileSync(path.join(cache, `focus-${i}.piv`), bytes));
 // Two isolated instances, one CPU each; no timing claim is made. Native AOT
@@ -160,6 +189,7 @@ focusRequests.forEach((bytes,i) => fs.writeFileSync(path.join(cache, `focus-${i}
 const nativeController = new AbortController();
 let nativeFailure;
 const nativeWork = (async () => {
+const aotPath = await aotReady;
 const measured = [];
 await runRoles(async count => {
   if (count > 1) {
@@ -168,10 +198,11 @@ await runRoles(async count => {
     // Unit conversion and marshaling; the guest performs frame conversion.
     fs.writeFileSync(path.join(cache, `states-${count}.bin`), Buffer.from(new Float64Array(objects.flatMap(s=>[epoch,...s.position.map(x=>x*1000),...s.velocity.map(x=>x*1000)])).buffer));
   }
-  const {stdout} = await execFileAsync(native, [aotPath, String(count), String(epoch), cache], {encoding:'utf8',maxBuffer:1024*1024,signal:nativeController.signal});
+  const {stdout} = await execFileAsync(native, [aotPath, String(count), String(epoch), cache, String(pool.retentionDays), String(pool.lookaheadSeconds),
+    String(pool.ensureChunk), String(pool.segmentSeconds), String(pool.steps.length), pool.gridStagger ? '1' : '0'], {encoding:'utf8',maxBuffer:1024*1024,signal:nativeController.signal});
   const row = JSON.parse(stdout);
   row.role = count === 1 ? 'resident-focus' : 'catalog';
-  row.outputs = Array.from({length:count===1?3:2}, (_,i)=>sha(fs.readFileSync(path.join(cache, `native-${count}-${i}.bin`))));
+  row.outputs = Array.from({length:count===1?3:pool.steps.length}, (_,i)=>sha(fs.readFileSync(path.join(cache, `native-${count}-${i}.bin`))));
   measured.push(row); console.log(JSON.stringify(row));
 });
 return measured;
@@ -180,12 +211,13 @@ return measured;
 const bundle = await build({ stdin: { resolveDir: root, contents: `
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { catalogClient } from './scripts/catalog-coverage-client.mjs';
-window.measure = async ({ count, seeds, epoch, manifest, focus, previous }) => {
+window.measure = async ({ count, seeds, epoch, manifest, focus, previous, pool }) => {
   if (!crossOriginIsolated) throw new Error('COI required');
   const h = await createBrowserModuleHarness({ wasmSource: await (await fetch(previous ? '/previous.wasm' : '/module.wasm')).arrayBuffer(), manifest, surface: 'direct' });
   let client;
   try {
     const outputs = [], samples = [];
+    let configuredBytes;
     const memory = () => (h.instance.exports.memory ?? h.memory).buffer.byteLength;
     const baseBytes = memory();
     if (focus) {
@@ -197,17 +229,27 @@ window.measure = async ({ count, seeds, epoch, manifest, focus, previous }) => {
       const frames = await Promise.all(Array.from({ length: 4 }, async (_, i) => new Uint8Array(await (await fetch('/frame/' + i)).arrayBuffer())));
       client = catalogClient(h, frames, Array.from({ length: count }, (_, i) => seeds[i % seeds.length]), epoch);
       if (client.profile() !== 'FFM-1') throw new Error('wrong profile');
-      samples.push(memory());
-      for (const seconds of [1800, 3600]) {
-        client.ensure(epoch + seconds / 86400);
-        const states = client.states(epoch + (seconds - 1) / 86400);
+      configuredBytes = memory();
+      // The pool shard's own order: grid stagger, retention, then coverage in ensure chunks.
+      const x = h.instance.exports;
+      if (pool.gridStagger) x.plugin_set_grid_stagger(1);
+      x.plugin_set_ephemeris_retention(pool.retentionDays);
+      const ensure = jd => {
+        for (let at = 0; at < count; at += pool.ensureChunk) {
+          const n = Math.min(pool.ensureChunk, count - at);
+          if (x.plugin_ensure_coverage(jd, at, n) !== n) throw new Error('coverage refused');
+        }
+      };
+      for (const now of pool.steps) {
+        ensure(epoch + (now + pool.lookaheadSeconds) / 86400);
+        const states = client.states(epoch + now / 86400);
         if (!states.every(Number.isFinite)) throw new Error('nonfinite state');
         const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(states.buffer));
         outputs.push(Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join(''));
         samples.push(memory());
       }
     }
-    return { role: focus ? 'resident-focus' : 'catalog', entities: count, baseBytes, highWaterBytes: Math.max(...samples), samples, outputs, crossOriginIsolated, browser: navigator.userAgent };
+    return { role: focus ? 'resident-focus' : 'catalog', entities: count, baseBytes, ...(focus ? {} : { configuredBytes }), highWaterBytes: Math.max(...samples), samples, outputs, crossOriginIsolated, browser: navigator.userAgent };
   } finally { client?.dispose(); await h.destroy(); }
 };` }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
 const server = http.createServer((req, res) => {
@@ -227,7 +269,7 @@ try {
   await runRoles(async count => {
     const page = await browser.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    const options = { count, seeds, epoch, manifest, focus: count === 1 };
+    const options = { count, seeds, epoch, manifest, focus: count === 1, pool };
     const row = await page.evaluate(o => window.measure(o), options);
     const focusOutputs = row.role === 'resident-focus' ? row.outputs.map(b => new Uint8Array(b)) : null;
     if (row.role === 'resident-focus') {
@@ -271,17 +313,34 @@ if (nativeResult.error) throw nativeResult.error;
 for (const row of nativeResult.rows) {
   const browserRow = report.rows.find(r=>r.runtime==='browser'&&r.entities===row.entities);
   assert.deepEqual(row.outputs,browserRow.outputs,`native/browser byte parity at ${row.entities}`);
+  if (row.samples) assert.deepEqual(row.samples,browserRow.samples,`native/browser linear-memory parity at ${row.entities}`);
   report.rows.push(row); save();
 }
 report.rows.sort((a,b)=>a.entities-b.entities||a.runtime.localeCompare(b.runtime));
 const rows = report.rows.filter(r=>r.role==='catalog');
-const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+r.highWaterBytes,0)/rows.length;
-const perEntityBytes=rows.reduce((sum,r)=>sum+(r.entities-meanX)*(r.highWaterBytes-meanY),0)/rows.reduce((sum,r)=>sum+(r.entities-meanX)**2,0);
-const baseBytes=meanY-perEntityBytes*meanX;
-assert(baseBytes>=0&&perEntityBytes>0,'invalid fitted allocation model');
+const leastSquares=value=>{
+  const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+value(r),0)/rows.length;
+  const perEntityBytes=rows.reduce((sum,r)=>sum+(r.entities-meanX)*(value(r)-meanY),0)/rows.reduce((sum,r)=>sum+(r.entities-meanX)**2,0);
+  const baseBytes=meanY-perEntityBytes*meanX;
+  assert(baseBytes>=0&&perEntityBytes>0,'invalid fitted allocation model');
+  return {baseBytes,perEntityBytes};
+};
+const {baseBytes,perEntityBytes}=leastSquares(r=>r.highWaterBytes);
 report.model={calibratedEntityRange:[1000,31814],units:'bytes',method:'least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)',baseBytes,perEntityBytes,
   focusHighWaterBytes:report.rows.find(r=>r.role==='resident-focus').highWaterBytes};
 for(const row of rows){row.predictedBytes=Math.max(report.memory.initialBytes,baseBytes+perEntityBytes*row.entities);row.relativePredictionError=Math.abs(row.predictedBytes-row.highWaterBytes)/row.highWaterBytes;assert(row.relativePredictionError<=.1,'catalog model exceeds 10%');}
+// The seeded state alone is what the pool's own E2E read (sample 0: the shard right
+// after its first coverage sweep, the clock at the seed epoch). The retained window
+// fills as the clock advances, so this is reported against the pool lane, never a sizing basis.
+report.seededModel={units:'bytes',method:'least squares over the samples taken right after the pool seed sweep; not a sizing basis',...leastSquares(r=>r.samples[0])};
+report.poolLane=poolLane;
+for(const row of rows){
+  row.seededBytes=row.samples[0];
+  if(row.entities===poolLane.entities){
+    row.poolLaneRelativeError=poolLane.heapBytes.map(bytes=>(row.seededBytes-bytes)/bytes);
+    assert(row.poolLaneRelativeError.every(error=>Math.abs(error)<=poolLane.tolerance),'seeded heap differs from the pool lane by more than 5%');
+  }
+}
 const largest=Math.max(...report.rows.map(r=>r.highWaterBytes));
 report.requiredMaximumBytes=Math.ceil(largest*1.5/(16*1024*1024))*16*1024*1024;
 report.loadEnd=os.loadavg();save();
@@ -292,6 +351,7 @@ if (!process.argv.includes('--measure')) {
     const prior=recorded.rows.find(r=>r.runtime===row.runtime&&r.entities===row.entities);
     assert(prior,'missing recorded role');
     assert.equal(prior.highWaterBytes,row.highWaterBytes,'recorded high-water changed');
+    assert.deepEqual(prior.samples,row.samples,'recorded pool-window samples changed');
   }
   assert.equal(report.memory.initialBytes,Math.max(16*1024*1024,Math.ceil(Math.max(report.memory.staticMinimumBytes,baseBytes)/65536)*65536),'rebuild with measured base');
   assert.equal(report.memory.maximumBytes,report.requiredMaximumBytes,'rebuild with measured maximum');
@@ -302,6 +362,8 @@ if (!process.argv.includes('--measure')) {
   save();
   report.status='PASS';save();
 }
-console.log(JSON.stringify({model:report.model,requiredMaximumBytes:report.requiredMaximumBytes,status:report.status||'MEASURED'}));
-
-fs.rmSync(aotDir, { recursive: true, force: true });
+console.log(JSON.stringify({model:report.model,seededModel:report.seededModel,poolLaneRelativeError:rows.find(r=>r.entities===poolLane.entities).poolLaneRelativeError,
+  requiredMaximumBytes:report.requiredMaximumBytes,status:report.status||'MEASURED'}));
+// The prewarm cache stays in the ignored .sdk-build tree (about 22 MB): the prewarm is idempotent and keyed
+// by the exact artifact hash, so a second run in this checkout finds it ("already present") and skips the
+// minutes of AOT compilation that would otherwise precede the native roles.
