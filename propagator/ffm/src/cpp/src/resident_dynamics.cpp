@@ -141,14 +141,17 @@ bool nextBreak(const Execution& e, int direction, const TTEpoch& from, TTEpoch& 
     return true;
 }
 
-void record(Branch& b, ffm_fast::Run& run) {
+bool record(Branch& b, ffm_fast::Run& run, std::string& error) {
+    if (propagationStop().active) return prwError(error, propagationStopMessage().c_str());
     Node n;
     n.t = run.time();
     for (int i = 0; i < 6; ++i) n.y[i] = run.state()[i];
     const auto& f = run.derivative();
+    if (propagationStop().active) return prwError(error, propagationStopMessage().c_str());
     for (int i = 0; i < 3; ++i) n.a[i] = f[3 + i];
     auto& nodes = b.current().nodes;
     if (b.direction > 0) nodes.push_back(n); else nodes.push_front(n);
+    return true;
 }
 
 // Starts the span at (spanState, spanStart): to the next restart, or open.
@@ -176,8 +179,9 @@ bool startSpan(Execution& e, Branch& b, const Environment& environment, std::str
     Piece piece;
     piece.spanStart = b.spanStart;
     b.add(std::move(piece));
-    record(b, *b.run);   // the span's first node: its state, with the span's drivers
-    return true;
+    // A failed derivative must not publish a node or disappear at the next
+    // per-object stop reset in the catalog cohort.
+    return record(b, *b.run, error);
 }
 
 // One accepted step of a branch (or the end of its span and the start of the
@@ -209,7 +213,7 @@ bool step(Execution& e, Branch& b, const Environment& environment, std::string& 
         if (propagationStop().active) return prwError(error, propagationStopMessage().c_str());
         if (!run.running(target)) return true;  // ended by the step limits: reported on the next call
     }
-    record(b, run);
+    if (!record(b, run, error)) return false;
     if (run.endedOnBoundary()) {
         // A kink lies within the events' tolerance of this node: it closes
         // the piece and opens the next one.
