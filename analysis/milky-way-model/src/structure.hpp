@@ -166,8 +166,11 @@ inline const std::array<DetailOctave,detail_octaves>& detail() {
 // density log r fell from 0.919 to 0.847 with dust sigma 1.5 everywhere). The
 // dust's structure fades in from fade_inner to fade_outer kpc from the Sun;
 // beyond it nothing measured fixes the clouds' places. The young light's
-// structure does not move the Gaia match (0.919 with young sigma 1.5).
-inline double fade_inner_kpc=1.5,fade_outer_kpc=4.0;
+// structure does not move the Gaia match (0.919 with young sigma 1.5). The
+// fade is the least the Gaia check keeps (density log r, floor 0.9044, with
+// the minor stellar arms at 0.75): 1.5-4 kpc 0.908, 1.25-3 kpc 0.907, 1-2.5
+// kpc 0.9042 (measured 2026-10-22).
+inline double fade_inner_kpc=1.25,fade_outer_kpc=3.0;
 inline double away_from_sun(Vec3 p) {
   const double d=std::hypot(p.x+galactic_constants::solar_radius_kpc,p.y);
   const double t=std::clamp((d-fade_inner_kpc)/(fade_outer_kpc-fade_inner_kpc),0.0,1.0);

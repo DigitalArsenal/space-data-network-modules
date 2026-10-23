@@ -110,15 +110,18 @@ inline Vec3 undrifted(Vec3 p,double age_myr) {
 // at R0), not the masers' narrow Reid widths (0.3.0, which drew the old light
 // as thin concentric rings).
 inline constexpr double stellar_arm_width_per_kpc=0.143;
+inline double minor_stellar_arm=0.75;
 inline double major_arm_wave(Vec3 p) {
   double best=0;
   for(const auto& a:reid_segments) {
-    if(arm_light::finite_segment(a)||(a.family!=2&&a.family!=5)) continue;
+    if(arm_light::finite_segment(a)) continue;
+    const double share=a.family==2||a.family==5?1.0:minor_stellar_arm;
+    if(share<=0) continue;
     arm_light::for_each_hit(a,p,[&](const arm_light::Hit& h) {
       const double width=stellar_arm_width_per_kpc*h.radius;
       const double cutoff=h.radius>populations::arm_cutoff_kpc
         ?std::exp(-std::pow((h.radius-populations::arm_cutoff_kpc)/populations::arm_cutoff_scale_kpc,2)):1.0;
-      best=std::max(best,h.weight*cutoff*std::exp(-(h.separation/width)*(h.separation/width)));
+      best=std::max(best,share*h.weight*cutoff*std::exp(-(h.separation/width)*(h.separation/width)));
     });
   }
   return best;
