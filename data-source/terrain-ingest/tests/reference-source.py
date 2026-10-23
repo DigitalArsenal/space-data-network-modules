@@ -3,12 +3,14 @@
 Units: meters above source sphere; planetographic=planetocentric on a sphere.
 Tolerance: one quantized-mesh height quantum plus 1e-5 m numerical rounding.
 """
-import json,sys,math
+import json,sys,math,hashlib
 import numpy as np
 from osgeo import gdal
 
 gdal.UseExceptions();cfg=json.load(open(sys.argv[1]));queries=json.load(open(sys.argv[2]))
-d=gdal.Open(cfg['sourceFile']);b=d.GetRasterBand(1);gt=d.GetGeoTransform();crs=d.GetSpatialRef()
+original=cfg.get('oracleSourceFile',cfg['sourceFile'])
+with open(original,'rb') as f:assert hashlib.file_digest(f,'sha256').hexdigest()==cfg['sourceSha256'],'original source hash changed'
+d=gdal.Open(original);b=d.GetRasterBand(1);gt=d.GetGeoTransform();crs=d.GetSpatialRef()
 r=crs.GetSemiMajor();center=crs.GetProjParm('central_meridian');w,h=d.RasterXSize,d.RasterYSize
 scale=b.GetScale() or 1;offset=b.GetOffset() or 0
 if cfg['naif'] in (2000001,2000004):offset-=cfg['radiusM']
