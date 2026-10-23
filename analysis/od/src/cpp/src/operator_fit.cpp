@@ -161,7 +161,7 @@ OperatorFitResult fit_operator(const StateSeries& input,const OperatorEnvironmen
         model->clearObjects();
         if(!model->addCatalogState(rows[i-1].state,opt.ballistic_seed,opt.srp_area_mass,true,out.error))return out;
         astro::StateVector predicted;if(!model->state(0,rows[i].tt,predicted,out.error))return out;
-        const double dp=(predicted.position-rows[i].state.position).norm(),dv=(predicted.velocity-rows[i].state.velocity).norm();
+        const double dp=(predicted.position-rows[i].state.position).magnitude(),dv=(predicted.velocity-rows[i].state.velocity).magnitude();
         if(dp>opt.maneuver_position_km || dv>opt.maneuver_velocity_km_s){
             out.maneuvers.push_back({rows[i-1].source.epoch_jd,rows[i].source.epoch_jd,dp,dv});boundaries.push_back(i);
         }

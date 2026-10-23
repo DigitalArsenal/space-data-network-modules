@@ -38,11 +38,17 @@ try {
  ffmIncludes.push(...['third_party/nrlmsise00','third_party/hwm14','foundation/frames/src','higherpop/third_party/erfa'].map(p=>'-I'+path.join(modules,p)));
  const executable=path.join(build,'module.wasm');
  const exports=['_start','_initialize','plugin_alloc','plugin_free','plugin_invoke_stream','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','fit','fit_ffm'];
- const args=[...toolchain.toolchainArgs,'-std=c++17','-O3','-msimd128','-mbulk-memory','-fignore-exceptions','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE','-DOD_REACTOR_BUILD',
-  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds'),
-  ...ffmIncludes,'-DFFM_MODULE_ID="ffm"','-DFFM_MODULE_VERSION="operator-linked"','-DFFM_TYPED_INPUTS_ONLY=1',...sources,'-mexec-model=reactor','-Wl,--initial-memory=67108864','-Wl,--max-memory=2147483648','-Wl,-z,stack-size=2097152',...exports.map(x=>'-Wl,--export='+x),'-o',executable];
- const result=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:600000});
- if(result.status!==0)throw new Error(result.error?.message??result.stderr);
+ const common=[...toolchain.toolchainArgs,'-O3','-msimd128','-mbulk-memory','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE',
+  ...ffmIncludes,'-DFFM_MODULE_ID="ffm"','-DFFM_MODULE_VERSION="operator-linked"','-DFFM_TYPED_INPUTS_ONLY=1',
+  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds')];
+ const run=args=>{const r=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:180000});if(r.status!==0)throw new Error(r.error?.message??r.stderr);};
+ const objects=[];
+ for(const [i,source] of sources.entries()){
+  const object=path.join(build,i+'.o');objects.push(object);console.log('compile '+path.relative(modules,source));
+  const c=source.endsWith('.c');
+  run([...common,...(c?['-x','c']:['-std=c++17',source.startsWith(ffm)?'-fno-exceptions':'-fignore-exceptions']),'-DOD_REACTOR_BUILD','-c',source,'-o',object]);
+ }
+ run([...common,...objects,'-mexec-model=reactor','-Wl,--initial-memory=67108864','-Wl,--max-memory=2147483648','-Wl,-z,stack-size=2097152',...exports.map(x=>'-Wl,--export='+x),'-o',executable]);
  let bytes=new Uint8Array(await fs.readFile(executable));
  bytes=appendWasmCustomSection(bytes,SDS_MANIFEST_SECTION_NAME,manifestBytes);
  assertSequentialArtifact(bytes,{source:executable});

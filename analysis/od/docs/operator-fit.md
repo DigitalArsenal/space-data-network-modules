@@ -15,4 +15,4 @@ remain in memory. The task's E2E is scripts/e2e-operator-fit.mjs; browser/native
 WasmEdge parity and the node's exact-artifact AOT compilation are required.
 Docker is waived by the owner's 2026-10-22 ruling.
 
-Status: implementation and measurements pending; no acceptance claim yet.
+Status: WIP library, typed fit_ffm entry and records implemented. Compilation and E2E measurements pending; no acceptance claim yet.
