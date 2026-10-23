@@ -113,14 +113,14 @@ public:
                const astro::IntegratorConfig& config, Forces& forces, unsigned stepsPerOrbit,
                const astro::StateVector& reference)
         : forces_(forces), epoch_(epoch), config_(config) {
-        if (stepsPerOrbit < 16) throw std::runtime_error("invalid internal Sundman grid");
+        if (stepsPerOrbit < 16) { astro::flagIntegrationFailure("invalid internal Sundman grid"); return; }
         y_ = {initial.position.x, initial.position.y, initial.position.z,
               initial.velocity.x, initial.velocity.y, initial.velocity.z};
         const auto r = reference.position, v = reference.velocity;
         const double radius = r.magnitude(), mu = forces_.mu;
         const double a = 1 / (2 / radius - v.dot(v) / mu);
         const double e = (v.cross(r.cross(v)) * (1 / mu) - r * (1 / radius)).magnitude();
-        if (!(a > 0 && e >= 0 && e < 1)) throw std::runtime_error("Sundman requires a finite elliptic initial orbit");
+        if (!(a > 0 && e >= 0 && e < 1)) { astro::flagIntegrationFailure("Sundman requires a finite elliptic initial orbit"); return; }
         const double meanMotion = std::sqrt(mu / (a * a * a));
         constexpr int count = 4096;
         double sum = 0;
@@ -171,7 +171,7 @@ public:
             if (t_ + dt > target) timeStep(target - t_);
         }
         if (astro::propagationStop().active) return false;
-        if (!(dt > 0) || !std::isfinite(dt)) throw std::runtime_error("non-monotone Sundman physical clock");
+        if (!(dt > 0) || !std::isfinite(dt)) { astro::flagIntegrationFailure("non-monotone Sundman physical clock"); return false; }
         if (const double shorter = events_->cut(t_, dt, next.data())) { landing_ = shorter; return false; }
         if (astro::stopAt(next.data(), epoch_.plusSeconds(t_ + dt))) return false;
         previousY_ = y_; previousT_ = t_;

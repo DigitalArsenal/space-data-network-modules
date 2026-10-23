@@ -34,6 +34,6 @@
   },
   "dependencies": {
     "flatbuffers": "25.9.23",
-    "spacedatastandards.org": "1.217.0"
+    "spacedatastandards.org": "1.261.0"
   }
 }

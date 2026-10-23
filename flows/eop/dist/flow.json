@@ -1,0 +1,173 @@
+{
+  "programId": "com.digitalarsenal.flows.eop",
+  "name": "Earth orientation",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Daily USNO finals2000A (IERS Rapid Service/Prediction Center), parsed in WASM and published as SDS EOP on lane eop/usno-finals2000a. U.S. Government work, public domain.",
+  "nodes": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "methodId": "finals2000a",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "methodId": "route_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "restore",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "methodId": "parse_finals2000a",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "attribute",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "methodId": "attribute_lane",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "plan-request-route-request",
+      "fromNodeId": "plan",
+      "fromPortId": "request",
+      "toNodeId": "route",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "route-request-fetch-request",
+      "fromNodeId": "route",
+      "fromPortId": "request",
+      "toNodeId": "fetch",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fetch-response-restore-response",
+      "fromNodeId": "fetch",
+      "fromPortId": "response",
+      "toNodeId": "restore",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "restore-response-parse-response",
+      "fromNodeId": "restore",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-records-ingest-eop_records",
+      "fromNodeId": "parse",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "eop_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-meta-attribute-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "meta",
+      "toNodeId": "attribute",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "attribute-meta-ingest-meta",
+      "fromNodeId": "attribute",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-unchanged-egress-result",
+      "fromNodeId": "parse",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "daily",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "Refresh the Rapid Service finals2000A once a day."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "daily",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.eop-request",
+    "com.digitalarsenal.flows.eop.lane",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.eop-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

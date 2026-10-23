@@ -2,7 +2,7 @@
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
   "version": "2.0.0",
-  "description": "Full Force Model profile FFM-1 with automatic GJ8 PEC and eccentric-orbit Sundman integration, selected-object batching, and physical reentry handling.",
+  "description": "Full Force Model profile FFM-1 with automatic GJ8 PEC and eccentric-orbit Sundman integration, selected-object batching, and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -80,7 +80,7 @@
         },
         {
           "portId": "space_weather",
-          "description": "Optional PRW.SPACE_WEATHER: daily SDS $SPW rows (CelesTrak space weather) with strictly increasing DATE, covering every day of the arc and the day before it. Drag then reads the model's inputs at each instant: for NRLMSISE-00 the previous day's observed F10.7, the day's 81-day centered average of observed F10.7, the day's Ap and the three-hour Kp; for JACCHIA_ROBERTS the previous day's observed F10.7 and its 81-day centered average and the three-hour Kp 6.7 h earlier. Excludes the request's WEATHER.",
+          "description": "Optional PRW.SPACE_WEATHER: daily SDS $SPW rows (licensed GFZ/NOAA rows from data-source/space-weather) with strictly increasing DATE, covering every day of the arc and the day before it. Drag then reads the model's inputs at each instant: for NRLMSISE-00 the previous day's observed F10.7, the day's 81-day centered average of observed F10.7, the day's Ap and the three-hour Kp; for JACCHIA_ROBERTS the previous day's observed F10.7 and its 81-day centered average and the three-hour Kp 6.7 h earlier. Excludes the request's WEATHER.",
           "acceptedTypeSets": [
             {
               "setId": "sds-prw",
@@ -109,6 +109,26 @@
                   "schemaName": "PRW.fbs",
                   "fileIdentifier": "$PRW",
                   "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "density_correction",
+          "description": "Optional solved DCL LogDensityNodes for NRLMSISE-00: dimensionless s(t), linear between UTC millisecond nodes and held outside; density multiplied by exp(s(t)). No extra forecast decay.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
                   "wireFormat": "flatbuffer"
                 }
               ]
@@ -258,6 +278,26 @@
                   "schemaName": "PRW.fbs",
                   "fileIdentifier": "$PRW",
                   "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "density_correction",
+          "description": "Optional solved DCL LogDensityNodes for NRLMSISE-00: dimensionless s(t), linear between UTC millisecond nodes and held outside; density multiplied by exp(s(t)). No extra forecast decay.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
                   "wireFormat": "flatbuffer"
                 }
               ]

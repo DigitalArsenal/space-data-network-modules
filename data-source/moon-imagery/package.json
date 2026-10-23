@@ -18,7 +18,7 @@
   ],
   "devDependencies": {
     "space-data-module-sdk": "0.9.7",
-    "spacedatastandards.org": "^1.251.0",
+    "spacedatastandards.org": "1.261.0",
     "jpeg-js": "0.4.4"
   },
   "overrides": {

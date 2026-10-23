@@ -40,7 +40,7 @@ namespace od {
 /// FlatBuffer payload bytes (e.g. plugin_input_frame_t::payload). Fails closed
 /// with a precise error_code on an unverifiable buffer, an unsupported
 /// frame/time-system/center, or an empty ephemeris — mirroring parse_oem.
-OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len);
+OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len, bool capture_covariance = false);
 
 /// True when `buf`/`len` carries the "$OEM" file identifier (cheap 8-byte check;
 /// used by the plugin entry to select the FlatBuffer path over the text path).

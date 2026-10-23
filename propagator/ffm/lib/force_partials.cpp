@@ -296,7 +296,8 @@ V drag(const V& r,const V& v,const Vec3& position,const timesys::Instant& jd,con
     const V vr=v-(rotation?V(w.y*r.z-w.z*r.y,w.z*r.x-w.x*r.z,w.x*r.y-w.y*r.x):V());
     const D speed=vr.norm();if(speed.value<1e-6)return V();
     const DragForceConfig d=DragAt(jd,f);
-    return vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
+    const V acceleration = vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
+    return f.densityScaleAt ? acceleration * f.densityScaleAt(jd) : acceleration;
 }
 
 V rtn(const Vec3& dv,const V& r,const V& v) {

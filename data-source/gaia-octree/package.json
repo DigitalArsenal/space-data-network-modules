@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "flatbuffers": "25.9.23",
-    "spacedatastandards.org": "1.254.0"
+    "spacedatastandards.org": "1.261.0"
   },
   "devDependencies": {
     "flatc-wasm": "26.1.38",
