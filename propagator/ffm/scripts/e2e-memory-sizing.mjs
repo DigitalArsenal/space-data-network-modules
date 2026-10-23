@@ -16,7 +16,7 @@ import { chromium } from 'playwright';
 import { analyzeWasmThreadFeatures } from 'space-data-module-sdk/compiler';
 import { headlessShell } from '../tests/lib/headlessShell.mjs';
 import { environmentInputs } from '../tests/lib/fullForce.mjs';
-import { makeTable, encodePrw, sds, TYPE } from '../tests/lib/prwCodec.mjs';
+import { makeTable, encodePrw, decodePrw, sds, TYPE } from '../tests/lib/prwCodec.mjs';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import * as catalog from '../catalog.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -229,16 +229,29 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     const options = { count, seeds, epoch, manifest, focus: count === 1 };
     const row = await page.evaluate(o => window.measure(o), options);
+    const focusOutputs = row.role === 'resident-focus' ? row.outputs.map(b => new Uint8Array(b)) : null;
     if (row.role === 'resident-focus') {
       for (const bytes of row.outputs) assert.equal(decodePluginInvokeResponse(new Uint8Array(bytes)).statusCode, 0);
       row.outputs = row.outputs.map(b => sha(new Uint8Array(b)));
     }
-    // A representative catalog plus the focus role prove the build-only
-    // change preserves output bytes against the packaged predecessor.
+    // The catalog's raw doubles remain byte-identical. SDS 1.259 adds RFM
+    // NaN-default galactic fields: its generated serializer emits them even
+    // for GCRF, growing the focus reply by 64 bytes without changing values.
+    // Compare every decoded PIV/PRW field (including exact state doubles), not
+    // the old/new FlatBuffer layout. Same-artifact runtime parity stays bytewise.
     if (count === 1 || count === 1000) {
       const old = await page.evaluate(o => window.measure(o), { ...options, previous: true });
-      const hashes = count === 1 ? old.outputs.map(b => sha(new Uint8Array(b))) : old.outputs;
-      assert.deepEqual(row.outputs, hashes, 'previous artifact parity'); row.previousArtifactParity = 'bit-identical';
+      if (count === 1) {
+        const decoded = bytes => {
+          const response = decodePluginInvokeResponse(bytes);
+          return { ...response, outputs: response.outputs.map(out => ({ ...out, payload: decodePrw(out.payload) })) };
+        };
+        assert.deepEqual(focusOutputs.map(decoded), old.outputs.map(b => decoded(new Uint8Array(b))), 'previous focus fields changed');
+        row.previousArtifactParity = 'field-identical; SDS 1.259 RFM default fields change serialized layout only';
+      } else {
+        assert.deepEqual(row.outputs, old.outputs, 'previous catalog bytes changed');
+        row.previousArtifactParity = 'bit-identical';
+      }
     }
     if (nativeFailure) throw nativeFailure;
     assert.deepEqual(errors, []); report.rows.push({ runtime: 'browser', ...row }); save();
