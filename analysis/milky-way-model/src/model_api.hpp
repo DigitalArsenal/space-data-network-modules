@@ -34,7 +34,7 @@ extern "C" int bake() {
   struct Override {const char* name;double* value;double lo,hi;};
   const Override overrides[]={{"appearance_young_length_kpc",&appearance::young_length_kpc,1.0,12.0},
     {"appearance_central_light",&appearance::central_light,0.2,3.0},{"appearance_bulge_size",&appearance::bulge_size,0.2,3.0},
-    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0}};
+    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0},{"appearance_arm_dust",&drimmel2001::arm_dust_scale,0.1,30.0}};
   for (const auto& [name,value]:request.values) {
     const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
     const double v=request.number(name.c_str(),NAN);
@@ -304,7 +304,7 @@ extern "C" int face_on_columns() {
   wire::Request request;const auto p=request.vector("points");
   if (!request.ok || p.empty() || p.size()%2 || p.size()>40000 || !finite_vector(p))
     return wire::fail("Expected 1..20000 finite Galactocentric (x, y) points in kpc");
-  if (std::any_of(p.begin(),p.end(),[](double v){return std::abs(v)>20;})) return wire::fail("Point outside the 20 kpc disc");
+  if (std::any_of(p.begin(),p.end(),[](double v){return std::abs(v)>24;})) return wire::fail("Point outside the 24 kpc disc");
   std::vector<double> out[3];
   const double* ratios=model_choices::channel_extinction;
   for (size_t k=0;k<p.size();k+=2) {

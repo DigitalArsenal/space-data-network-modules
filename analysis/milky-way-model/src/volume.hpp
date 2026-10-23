@@ -108,9 +108,11 @@ struct Volume {
   }
 };
 
-// The global volume covers the disc to 20 kpc and 6 kpc above and below it
+// The global volume covers the disc to 24 kpc and 6 kpc above and below it
 // (0.2.0: 16 and 3 kpc, which cut the thick disc's light flat at |z| = 3 kpc
-// and the disc at its rim), at 125 pc in x and y and 48 signed-square planes.
+// and the disc at its rim; 0.4.0: 20 kpc, where the light it cut off drew a
+// box at one 8-bit code edge-on), at 125 pc in x and y and 48 signed-square
+// planes.
 // The local one is the Sun's +-1.25 kpc at 19.5 pc. The global volume bakes
 // the large-scale dust only; a delivered 3D dust map is baked into the local
 // one alone (its 125 pc texels drew the map's clouds as blocks seen from
@@ -126,7 +128,7 @@ inline constexpr double slab_half_kpc=16,slab_half_height_kpc=0.48,slab_blend_z_
 struct NestedVolumes {
   Volume global,slab,local;
   explicit NestedVolumes(Vec3 sun)
-    :global(320,320,48,{-20,-20,-6},{20,20,6},1),
+    :global(384,384,48,{-24,-24,-6},{24,24,6},1),
      slab(512,512,12,{-slab_half_kpc,-slab_half_kpc,-slab_half_height_kpc},{slab_half_kpc,slab_half_kpc,slab_half_height_kpc},1),
      local(128,128,128,sun-Vec3{1.25,1.25,1.25},sun+Vec3{1.25,1.25,1.25}) {}
   template<class Global,class Local> void bake(Global coarse,Local fine) { global.bake(coarse); slab.bake(coarse); local.bake(fine); }
