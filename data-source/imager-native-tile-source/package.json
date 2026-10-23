@@ -1,0 +1,23 @@
+{
+  "name": "@digitalarsenal/sdn-module-imager-native-tile-source",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json"
+  ],
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.7"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.0"
+  }
+}

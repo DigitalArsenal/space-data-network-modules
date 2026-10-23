@@ -1,0 +1,113 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.imager-native-tile-parser",
+  "name": "Geostationary Imager Native Tile Parser Node",
+  "version": "0.1.0",
+  "description": "Parser flow node (typed contracts 1.0, capabilities: none) for geostationary imager observations at the imager's own resolution: each fetched GOES ABI L1b/L2 NetCDF4 file becomes its field on level-5 latitude/longitude tiles (5.625 degrees, 320 x 320 cells of ~2 km; the 0.5 km 0.64 um reflectance 640 x 640 cells of ~1 km from 2 x 2 means), sampled at every cell centre from the fixed grid (bilinear; categories the nearest pixel), as size-prefixed $WXF records one a tile (FIELD_ID <sensor>:<frame ms>:5/<x>/<y>:<field>, the tile's GRID), quantized at the instrument's precision and coded as SDS 1.238 defines; raw per-satellite fields, unblended and uncorrected. One tile row an invocation is one ingest batch (IngestRequest: provider noaa-goes, source <bucket>-tiles5, batch id SHA-256 of the parser version, the file bytes and the row); the rest yielded as backlog. The layout is DigitalArsenal/Cesium_Weather tools/raw_satellite.py native_tiles'; the readers are imager-observation-parser's.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "parse is a single-pass transform over the frames the flow hands it: each file is read once, chunk by chunk, into one field held while its tile rows are emitted, one row an invocation (yielded backlog), each tile one record. No shared mutable state across files, no worker pool and no fan-out inside the guest. This guest never spawns a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "parse",
+      "displayName": "Parse Imager Files into $WXF Native Tiles",
+      "description": "Each file's HttpResponse(s) (the file job echoed in CONTEXT; byte-range parts of one file consecutive, a part an invocation) -> once whole, the field's level-5 tiles a row an invocation: size-prefixed $WXF tile records plus one IngestRequest for the row's batch (provider noaa-goes, source <bucket>-tiles5, reconcile Duplicates, provenance); the rest yielded and resumed without input. A missing part, a response without its job, a non-200 (206 for a ranged part) status or an unreadable file is refused with a named error, never guessed.",
+      "inputPorts": [
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP): STATUS, HEADERS, the NetCDF4 BODY verbatim (or a byte range of it), CONTEXT the file job (a size-prefixed $WXF header record)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000,
+          "required": false,
+          "description": "One HttpResponse per file part, in emission order; each carries its own job. None on a resume: the held field's next tile row (yielded backlog)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "wxf_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (INGQ) for the $WXF batch: SCHEMA, TAGS, RECONCILE Duplicates, PROVENANCE."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF ingest request."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream-wxf",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF FlatBuffer record stream, one record per world band (64 rows) per width per field."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF record stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "imager-observation-parser-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

@@ -1,0 +1,261 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.imager-native-tile-source",
+  "name": "Geostationary Imager Native Tile Source Node",
+  "version": "0.1.0",
+  "description": "Request-builder flow nodes of the native-tile lane (typed contracts 1.0): the hour's first full-disk scan of each wanted GOES ABI L1b/L2 product in NOAA Open Data Dissemination's anonymous public buckets, listed, chosen and fetched (byte ranges above imager_max_part_bytes, one part an invocation) for imager-native-tile-parser (level-5 tiles, source <bucket>-tiles5), and the dataset-publication POST of each stored batch. plan turns a TimerTick into one S3 ListObjectsV2 HttpRequest (HREQ) per (satellite, product folder) of the frame hour, its list job in HREQ.CONTEXT as a size-prefixed $WXF header record (FIELD_ID the wanted fields, SENSOR_ID, DATASET_ID the bucket, SOURCE_URL the folder prefix, VALID_TIME_MS the frame hour); select_files takes the listing HttpResponses (HRSP, the job echoed in CONTEXT) and emits, for each wanted field, the hour's first full-disk scan as GET HttpRequests - byte ranges when a file is larger than imager_max_part_bytes, each response well under the host's 100 MiB cap - each part's file job in CONTEXT as a $WXF header record (FIELD_ID the field, VARIABLE_NAME the NetCDF variable, SENSOR_ID, DATASET_ID, SOURCE_URL, ORIGIN_ID, LICENSE_CLASS, LICENSE_URL, CITATION, VALID_TIME_MS, TILE_INDEX/TILE_COUNT the part), ONE FILE PER INVOCATION, yielding the rest as backlog so the parser holds one file and storage-ingest receives one meta and one record stream at a time; publish_request turns a stored IngestResult (INGR) plus the parser's IngestRequest (INGQ) into the dataset-publication POST for the node's loopback admin endpoint (nothing when imager_publish_url is unset or the batch was refused). Every GET sets if-modified-since at the epoch so the host never turns a repeat listing or a second byte range into an empty 304. Skips and missing files are FlowNotices (FNTC). Node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig on raw \"config\"): imager_live_access (default true), imager_satellites, imager_fields (default the five the world-clouds display reads), imager_frame_time (default the latest hour imager_lag_minutes old), imager_max_part_bytes, timeouts, imager_publish_url; imager_widths is read by the parser. The publication POST's BODY an IngestResult (INGR) FlatBuffer naming the stored batch (SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED / RECONCILED_* counts, ARCHIVED), content-type application/octet-stream, as data-source/nwp-field-source posts it., carried verbatim in HREQ.BODY. No credentials: capabilities none.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns its typed frames into HttpRequest frames in one pass: plan reads the node config once and emits listing requests, select_files parses the listings and queues one entry per file, publish_request pairs one result with one meta. The only state is select_files's queue of pending files, drained one per invocation as the compiled runtime resumes the yielded node; no worker pool and no thread."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "Imager Listing Plan",
+      "description": "TimerTick -> one S3 ListObjectsV2 HttpRequest per (satellite, product folder) of the frame hour, its list job (satellite's sensor and bucket, folder prefix, frame time, wanted fields) in CONTEXT; one Skipped FlowNotice when live access is off. One tick per invocation (a surplus is refused as batched-input-frames).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-timer-tick",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "TimerTick (module-sdk runtime type TICK); its payload is not read."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (HREQ): GET of the S3 ListObjectsV2 URL, header if-modified-since at the epoch, TIMEOUT_MS imager_list_timeout_ms; CONTEXT the list job, a size-prefixed $WXF header record."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000,
+          "required": false,
+          "description": "One listing request per (satellite, product folder), its list job in CONTEXT."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Why a cycle emitted nothing: Skipped (REASON live-access-disabled or nothing-to-list)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "select_files",
+      "displayName": "Imager File Selection",
+      "description": "Listing HttpResponses (each with its list job in CONTEXT) -> for each wanted field the hour's first full-disk scan (scan stamp _s<YYYY><DDD><HH>0, band -M<n>C<band>_ for imagery) as GET HttpRequests, byte ranges when the listed size exceeds imager_max_part_bytes, each part's file job in CONTEXT. One file per invocation; the node yields with the rest as backlog and the runtime resumes it without input. Missing files and failed listings (STATUS other than 200) are one Missing FlowNotice.",
+      "inputPorts": [
+        {
+          "portId": "listings",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpResponse (HRSP): STATUS, the ListObjectsV2 XML BODY, the list job echoed in CONTEXT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000,
+          "required": false,
+          "description": "The listing responses, each echoing its list job in CONTEXT; any number per invocation."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (HREQ): GET of the object, headers if-modified-since at the epoch and range when parted, TIMEOUT_MS imager_file_timeout_ms; CONTEXT the file job, a size-prefixed $WXF header record."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000,
+          "required": false,
+          "description": "The GET request(s) of one file (one per byte-range part), each with its file job in CONTEXT."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "FlowNotice (FNTC)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Which files the listings lacked and which listings failed: one Missing notice (COUNT, ITEMS)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Imager Dataset Publication Request",
+      "description": "A stored IngestResult + the parser's IngestRequest -> one dataset-publication POST (BODY an IngestResult (INGR) FlatBuffer naming the stored batch (SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED / RECONCILED_* counts, ARCHIVED), content-type application/octet-stream, as data-source/nwp-field-source posts it) to imager_publish_url; nothing when it is unset or the result is REFUSED. One pair per invocation.",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestResult (INGR): SCHEMA, BATCH_ID; REFUSED when nothing was stored."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Storage-ingest result."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestRequest (INGQ): SCHEMA, TAGS.PROVIDER_ID / SOURCE_NAME / BATCH_ID."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The parser's ingest request (the carrier of provider and source)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "HttpRequest (HREQ): POST to imager_publish_url, BODY an IngestResult (INGR) FlatBuffer naming the stored batch (SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED / RECONCILED_* counts, ARCHIVED), content-type application/octet-stream, as data-source/nwp-field-source posts it."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The publication POST, or nothing."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "imager-native-tile-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

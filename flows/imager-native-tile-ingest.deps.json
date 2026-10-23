@@ -1,0 +1,6 @@
+{
+  "com.digitalarsenal.data-source.imager-native-tile-source": "../data-source/imager-native-tile-source",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.data-source.imager-native-tile-parser": "../data-source/imager-native-tile-parser",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}
