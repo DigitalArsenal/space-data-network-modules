@@ -16,12 +16,6 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
 const sds = path.dirname(require.resolve('spacedatastandards.org/package.json'));
 assert.equal(require('spacedatastandards.org/package.json').version, '1.261.0');
-// These are the bumped packages with explicit CVR ports. The solar and surface
-// producers are separate lanes; their new records use the shared generator below.
-for (const pkg of ['analysis/rpo-history', 'analysis/reference-states']) {
-  assert.equal(JSON.parse(fs.readFileSync(path.join(root, pkg, 'package.json'))).devDependencies['spacedatastandards.org'], '1.261.0');
-  execFileSync('npm', ['run', 'build'], { cwd: path.join(root, pkg), stdio: 'inherit' });
-}
 const codes = ['CVR', 'SRO', 'SFE', 'SDI', 'SRT'];
 const modules = Object.fromEntries(await Promise.all(codes.map(async code =>
   [code, await import(pathToFileURL(path.join(sds, 'lib/js', code, 'main.js')))])));
@@ -63,6 +57,23 @@ assert.equal(version, '1.261.0');
 for (const code of codes) assert.ok(families.includes(code));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'modules-sds-1261-'));
 try {
+  // Build from copies so this dependency-only E2E cannot overwrite published dist.
+  // Each package retains its own npm dependency tree and its own SDS generator.
+  for (const dir of ['foundation', 'higherpop']) {
+    fs.symlinkSync(path.join(root, dir), path.join(tmp, dir), 'dir');
+  }
+  for (const pkg of ['analysis/rpo-history', 'analysis/reference-states']) {
+    const source = path.join(root, pkg), target = path.join(tmp, pkg);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(source, 'package.json'))).devDependencies['spacedatastandards.org'], '1.261.0');
+    fs.cpSync(source, target, { recursive: true,
+      filter: file => !['node_modules', 'dist'].includes(path.basename(file)) });
+    fs.symlinkSync(path.join(source, 'node_modules'), path.join(target, 'node_modules'), 'dir');
+    execFileSync('npm', ['run', 'build'], { cwd: target, stdio: 'inherit',
+      env: { ...process.env, SPACE_DATA_STANDARDS_ROOT: path.join(source, 'node_modules/spacedatastandards.org') } });
+    const provenance = JSON.parse(fs.readFileSync(path.join(target, 'dist/build-provenance.json')));
+    assert.equal(provenance.spacedatastandards, '1.261.0');
+    console.log(`PASS ${pkg}: regenerated and built against SDS 1.261.0`);
+  }
   fs.writeFileSync(path.join(tmp, 'schemas.h'), header);
   const flatc = await FlatcRunner.init();
   for (const [name, content] of Object.entries(flatc.getEmbeddedRuntime('cpp'))) {
