@@ -90,5 +90,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "convert_time converts one epoch between time scales on the calling thread; no thread is created."
+  }
 }

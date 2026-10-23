@@ -765,5 +765,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one typed decision and its body into exactly one $HTR envelope on the calling thread; no thread is created."
+  }
 }

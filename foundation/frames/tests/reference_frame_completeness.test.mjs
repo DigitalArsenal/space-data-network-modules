@@ -49,7 +49,7 @@ test('published SOFA, Vallado, CSPICE and closed-form reference frames',async t=
         int failures=lane08::frameReferenceChecks(false);
         if(failures) plugin_set_error("reference-failure","Authoritative frame case exceeded tolerance");
         return failures ? 3 : 0;
-      }`,language:'c++',threadModel:'single-thread',outputPath});
+      }`,language:'c++',threadModel:'wasi-sequential',outputPath});
     const loadable=toLoadableWasmBytes(await fs.readFile(outputPath));
     const guest=path.join(dir,'guest.wasm');await fs.writeFile(guest,loadable);
     const wrapper=path.join(dir,'docker-wasmedge');
@@ -58,8 +58,8 @@ test('published SOFA, Vallado, CSPICE and closed-form reference frames',async t=
     await fs.writeFile(wrapper,`#!/usr/bin/env python3\nimport os,sys\nos.execvp('docker',['docker','run','--rm','-i','--network','none','-v',${JSON.stringify(dir+':'+dir+':ro')},'--entrypoint','wasmedge',${JSON.stringify(image)}]+sys.argv[1:])\n`,{mode:0o755});
     const lanes=[
       ['browser/V8',()=>createBrowserModuleHarness({wasmSource:loadable,surface:'direct'})],
-      ['native WasmEdge',()=>loadModule({wasmSource:guest,runtimeKind:'wasmedge',enableThreads:false,wasmEdgeBinary:process.env.SDM_WASMEDGE_BINARY||'wasmedge'})],
-      ['container WasmEdge',()=>loadModule({wasmSource:guest,runtimeKind:'wasmedge',enableThreads:false,wasmEdgeBinary:wrapper})],
+      ['native WasmEdge',()=>loadModule({wasmSource:guest,runtimeKind:'wasmedge',enableThreads:true,wasmEdgeBinary:process.env.SDM_WASMEDGE_BINARY||'wasmedge'})],
+      ['container WasmEdge',()=>loadModule({wasmSource:guest,runtimeKind:'wasmedge',enableThreads:true,wasmEdgeBinary:wrapper})],
     ];
     for(const [name,create] of lanes) {
       const harness=await create();

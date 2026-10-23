@@ -84,15 +84,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared, never inferred (scripts/lib/thread-model.mjs
-  // holds the full rationale; graph task modules-undeclared-threadmodel-artifacts).
-  //
-  // Unchanged by the gmat-08 extension. This module is a pure closed-form
-  // evaluator: it spawns nothing, shares nothing, and has no concurrency to
-  // declare. Adding the $FRM state/rotation operations and the ERFA series does
-  // not change that, and flipping the declared model would change the artifact's
-  // runtime contract for reasons unrelated to the change being made.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
@@ -103,7 +98,7 @@ fsSync.writeFileSync(
       spacedatastandards: sdsVersion,
       erfaSourceFiles: erfa.fileCount,
       erfaRoot: erfa.relativeRoot,
-      threadModel: "single-thread",
+      threadModel: "wasi-sequential",
     },
     null,
     2,

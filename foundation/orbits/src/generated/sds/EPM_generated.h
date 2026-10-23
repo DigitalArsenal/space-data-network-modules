@@ -199,8 +199,14 @@ struct CryptoKey FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetPointer<const ::flatbuffers::String *>(VT_ALGORITHM);
   }
   /// Signature encoding format produced by this key (e.g., "raw-ed25519",
-  /// "compact"). ABSENT means the canonical encoding of ALGORITHM
-  /// (raw-ed25519 for ed25519, compact for secp256k1)
+  /// "der"). ABSENT means the canonical encoding of ALGORITHM: raw-ed25519
+  /// for ed25519 (64 bytes over the content itself); der for secp256k1, a
+  /// strict DER ECDSA signature over ONE SHA-256 of the canonical signing
+  /// content (CANONICAL_SERIALIZATION.md section 4). The signer passes the
+  /// content to a hashing signer, or its single SHA-256 to a digest signer,
+  /// never a digest to a hashing signer: ECDSA over SHA-256(SHA-256(content))
+  /// does not verify. "compact" (65-byte header||r||s) is a ChainProof
+  /// encoding only, never the EPM signature's
   const ::flatbuffers::String *ENCODING() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ENCODING);
   }
@@ -540,7 +546,8 @@ struct ChainProof FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *KEY_PATH() const {
     return GetPointer<const ::flatbuffers::String *>(VT_KEY_PATH);
   }
-  /// Signature over the attestation payload (hex-encoded)
+  /// Signature over the attestation payload (hex-encoded), in the chain's
+  /// own signed-message form (see ALGORITHM)
   const ::flatbuffers::String *SIGNATURE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_SIGNATURE);
   }
@@ -548,11 +555,25 @@ struct ChainProof FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *SIGNED_PAYLOAD() const {
     return GetPointer<const ::flatbuffers::String *>(VT_SIGNED_PAYLOAD);
   }
-  /// Signature algorithm (e.g., "secp256k1-compact-bitcoin", "secp256k1-compact-ethereum", "ed25519")
+  /// Signature algorithm, which fixes the one hash the signature is over:
+  ///   "secp256k1-compact-bitcoin": the Bitcoin signed-message hash
+  ///     SHA-256(SHA-256("\x18Bitcoin Signed Message:\n" || CompactSize(len)
+  ///     || SIGNED_PAYLOAD)), as Bitcoin Core's signmessage signs it (the
+  ///     double SHA-256 is the protocol's own, applied once);
+  ///   "secp256k1-compact-ethereum": the EIP-191 personal_sign hash
+  ///     Keccak-256("\x19Ethereum Signed Message:\n" || decimal(len) ||
+  ///     SIGNED_PAYLOAD), low-S;
+  ///   "ed25519": raw Ed25519 over SIGNED_PAYLOAD itself.
+  /// Both secp256k1 forms are the 65-byte compact recoverable signature
+  /// header||r||s (header 27 + recovery id, +4 for a compressed key; signers
+  /// emit 31 + recovery id). A verifier hashes SIGNED_PAYLOAD with the chain's
+  /// protocol, recovers the key and compares it with PUBLIC_KEY (33-byte
+  /// compressed). Nothing hashes the payload before the protocol hash.
   const ::flatbuffers::String *ALGORITHM() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ALGORITHM);
   }
-  /// Signature encoding format (e.g., "compact", "raw-ed25519")
+  /// Signature encoding format: "compact" for the secp256k1 algorithms
+  /// (65-byte header||r||s), "raw-ed25519" for ed25519
   const ::flatbuffers::String *ENCODING() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ENCODING);
   }
@@ -877,6 +898,7 @@ struct EPMT : public ::flatbuffers::NativeTable {
   EntityType ENTITY_TYPE = EntityType::User;
   std::string SIGNATURE_ALGORITHM{};
   std::vector<std::unique_ptr<DomainProofT>> DOMAIN_PROOFS{};
+  std::string PHOTO{};
   EPMT() = default;
   EPMT(const EPMT &o);
   EPMT(EPMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -909,7 +931,8 @@ struct EPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CHAIN_PROOFS = 38,
     VT_ENTITY_TYPE = 40,
     VT_SIGNATURE_ALGORITHM = 42,
-    VT_DOMAIN_PROOFS = 44
+    VT_DOMAIN_PROOFS = 44,
+    VT_PHOTO = 46
   };
   /// Distinguished Name of the entity
   const ::flatbuffers::String *DN() const {
@@ -1003,6 +1026,15 @@ struct EPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<DomainProof>> *DOMAIN_PROOFS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<DomainProof>> *>(VT_DOMAIN_PROOFS);
   }
+  /// Photo or logo of the entity (the vCard PHOTO property), as an RFC 2397
+  /// data URI carrying a JPEG or PNG image, e.g.
+  /// "data:image/jpeg;base64,/9j/4AAQ…". Every peer that resolves the entity
+  /// fetches the record, so a producer keeps the image small (a few tens of
+  /// kilobytes at most). Signed like every other content field: it
+  /// participates in the canonical preimage (CANONICAL_SERIALIZATION.md)
+  const ::flatbuffers::String *PHOTO() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PHOTO);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1051,6 +1083,8 @@ struct EPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_DOMAIN_PROOFS) &&
            verifier.VerifyVector(DOMAIN_PROOFS()) &&
            verifier.VerifyVectorOfTables(DOMAIN_PROOFS()) &&
+           VerifyOffset(verifier, VT_PHOTO) &&
+           verifier.VerifyString(PHOTO()) &&
            verifier.EndTable();
   }
   EPMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1125,6 +1159,9 @@ struct EPMBuilder {
   void add_DOMAIN_PROOFS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<DomainProof>>> DOMAIN_PROOFS) {
     fbb_.AddOffset(EPM::VT_DOMAIN_PROOFS, DOMAIN_PROOFS);
   }
+  void add_PHOTO(::flatbuffers::Offset<::flatbuffers::String> PHOTO) {
+    fbb_.AddOffset(EPM::VT_PHOTO, PHOTO);
+  }
   explicit EPMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1158,9 +1195,11 @@ inline ::flatbuffers::Offset<EPM> CreateEPM(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ChainProof>>> CHAIN_PROOFS = 0,
     EntityType ENTITY_TYPE = EntityType::User,
     ::flatbuffers::Offset<::flatbuffers::String> SIGNATURE_ALGORITHM = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<DomainProof>>> DOMAIN_PROOFS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<DomainProof>>> DOMAIN_PROOFS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PHOTO = 0) {
   EPMBuilder builder_(_fbb);
   builder_.add_SIGNATURE_TIMESTAMP(SIGNATURE_TIMESTAMP);
+  builder_.add_PHOTO(PHOTO);
   builder_.add_DOMAIN_PROOFS(DOMAIN_PROOFS);
   builder_.add_SIGNATURE_ALGORITHM(SIGNATURE_ALGORITHM);
   builder_.add_CHAIN_PROOFS(CHAIN_PROOFS);
@@ -1211,7 +1250,8 @@ inline ::flatbuffers::Offset<EPM> CreateEPMDirect(
     const std::vector<::flatbuffers::Offset<ChainProof>> *CHAIN_PROOFS = nullptr,
     EntityType ENTITY_TYPE = EntityType::User,
     const char *SIGNATURE_ALGORITHM = nullptr,
-    const std::vector<::flatbuffers::Offset<DomainProof>> *DOMAIN_PROOFS = nullptr) {
+    const std::vector<::flatbuffers::Offset<DomainProof>> *DOMAIN_PROOFS = nullptr,
+    const char *PHOTO = nullptr) {
   auto DN__ = DN ? _fbb.CreateString(DN) : 0;
   auto LEGAL_NAME__ = LEGAL_NAME ? _fbb.CreateString(LEGAL_NAME) : 0;
   auto FAMILY_NAME__ = FAMILY_NAME ? _fbb.CreateString(FAMILY_NAME) : 0;
@@ -1230,6 +1270,7 @@ inline ::flatbuffers::Offset<EPM> CreateEPMDirect(
   auto CHAIN_PROOFS__ = CHAIN_PROOFS ? _fbb.CreateVector<::flatbuffers::Offset<ChainProof>>(*CHAIN_PROOFS) : 0;
   auto SIGNATURE_ALGORITHM__ = SIGNATURE_ALGORITHM ? _fbb.CreateString(SIGNATURE_ALGORITHM) : 0;
   auto DOMAIN_PROOFS__ = DOMAIN_PROOFS ? _fbb.CreateVector<::flatbuffers::Offset<DomainProof>>(*DOMAIN_PROOFS) : 0;
+  auto PHOTO__ = PHOTO ? _fbb.CreateString(PHOTO) : 0;
   return CreateEPM(
       _fbb,
       DN__,
@@ -1252,7 +1293,8 @@ inline ::flatbuffers::Offset<EPM> CreateEPMDirect(
       CHAIN_PROOFS__,
       ENTITY_TYPE,
       SIGNATURE_ALGORITHM__,
-      DOMAIN_PROOFS__);
+      DOMAIN_PROOFS__,
+      PHOTO__);
 }
 
 ::flatbuffers::Offset<EPM> CreateEPM(::flatbuffers::FlatBufferBuilder &_fbb, const EPMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1460,7 +1502,8 @@ inline EPMT::EPMT(const EPMT &o)
         SIGNATURE(o.SIGNATURE),
         SIGNATURE_TIMESTAMP(o.SIGNATURE_TIMESTAMP),
         ENTITY_TYPE(o.ENTITY_TYPE),
-        SIGNATURE_ALGORITHM(o.SIGNATURE_ALGORITHM) {
+        SIGNATURE_ALGORITHM(o.SIGNATURE_ALGORITHM),
+        PHOTO(o.PHOTO) {
   KEYS.reserve(o.KEYS.size());
   for (const auto &KEYS_ : o.KEYS) { KEYS.emplace_back((KEYS_) ? new CryptoKeyT(*KEYS_) : nullptr); }
   CHAIN_PROOFS.reserve(o.CHAIN_PROOFS.size());
@@ -1491,6 +1534,7 @@ inline EPMT &EPMT::operator=(EPMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ENTITY_TYPE, o.ENTITY_TYPE);
   std::swap(SIGNATURE_ALGORITHM, o.SIGNATURE_ALGORITHM);
   std::swap(DOMAIN_PROOFS, o.DOMAIN_PROOFS);
+  std::swap(PHOTO, o.PHOTO);
   return *this;
 }
 
@@ -1524,6 +1568,7 @@ inline void EPM::UnPackTo(EPMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = ENTITY_TYPE(); _o->ENTITY_TYPE = _e; }
   { auto _e = SIGNATURE_ALGORITHM(); if (_e) _o->SIGNATURE_ALGORITHM = _e->str(); }
   { auto _e = DOMAIN_PROOFS(); if (_e) { _o->DOMAIN_PROOFS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->DOMAIN_PROOFS[_i]) { _e->Get(_i)->UnPackTo(_o->DOMAIN_PROOFS[_i].get(), _resolver); } else { _o->DOMAIN_PROOFS[_i] = std::unique_ptr<DomainProofT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->DOMAIN_PROOFS.resize(0); } }
+  { auto _e = PHOTO(); if (_e) _o->PHOTO = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<EPM> CreateEPM(::flatbuffers::FlatBufferBuilder &_fbb, const EPMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1555,6 +1600,7 @@ inline ::flatbuffers::Offset<EPM> EPM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _ENTITY_TYPE = _o->ENTITY_TYPE;
   auto _SIGNATURE_ALGORITHM = _o->SIGNATURE_ALGORITHM.empty() ? 0 : _fbb.CreateString(_o->SIGNATURE_ALGORITHM);
   auto _DOMAIN_PROOFS = _o->DOMAIN_PROOFS.size() ? _fbb.CreateVector<::flatbuffers::Offset<DomainProof>> (_o->DOMAIN_PROOFS.size(), [](size_t i, _VectorArgs *__va) { return CreateDomainProof(*__va->__fbb, __va->__o->DOMAIN_PROOFS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PHOTO = _o->PHOTO.empty() ? 0 : _fbb.CreateString(_o->PHOTO);
   return CreateEPM(
       _fbb,
       _DN,
@@ -1577,7 +1623,8 @@ inline ::flatbuffers::Offset<EPM> EPM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _CHAIN_PROOFS,
       _ENTITY_TYPE,
       _SIGNATURE_ALGORITHM,
-      _DOMAIN_PROOFS);
+      _DOMAIN_PROOFS,
+      _PHOTO);
 }
 
 inline const EPM *GetEPM(const void *buf) {

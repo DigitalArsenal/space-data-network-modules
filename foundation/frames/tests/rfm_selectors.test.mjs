@@ -20,7 +20,7 @@ const RUNTIME = WASMEDGE_BINARY ? 'wasmedge' : 'browser';
 test(`ratified RFM selectors through production FRM invoke (${RUNTIME})`, { concurrency: false }, async t => {
   assert.ok(fs.existsSync(WASM_PATH), 'run npm ci and npm run build before this test');
   const harness = await createStandaloneHarness(RUNTIME, WASM_PATH, {
-    surface: 'direct', enableThreads: false, wasmEdgeBinary: WASMEDGE_BINARY,
+    surface: 'direct', enableThreads: true, wasmEdgeBinary: WASMEDGE_BINARY,
   });
   t.after(() => harness.destroy());
   for (const reference of CASES) {

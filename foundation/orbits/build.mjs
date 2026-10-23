@@ -38,10 +38,10 @@ const compilation = await compileModuleFromSource({
   sourceCode: pieces.join("\n\n"),
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared, never inferred (scripts/lib/thread-model.mjs
-  // holds the full rationale; graph task modules-undeclared-threadmodel-artifacts).
-  // The module spawns nothing and holds no state between invocations.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));

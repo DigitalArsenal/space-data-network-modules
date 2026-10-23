@@ -1950,5 +1950,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method converts one orbit message or element set into one answer on the calling thread; no state survives the invocation and no thread is created."
+  }
 }

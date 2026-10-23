@@ -90,5 +90,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "evaluate_rigid_body_kinematics is a closed-form conversion of one request into one answer on the calling thread; no thread is created."
+  }
 }

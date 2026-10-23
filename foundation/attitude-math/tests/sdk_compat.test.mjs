@@ -56,7 +56,7 @@ test("foundation/attitude-math artifact loads in WasmEdge when available", async
     harness = await loadModule({
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
-      enableThreads: false,
+      enableThreads: true,
     });
   } catch (error) {
     if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {

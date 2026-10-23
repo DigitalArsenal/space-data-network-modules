@@ -90,5 +90,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "interpolate_bspline evaluates one waypoint request into its interpolated samples on the calling thread; no thread is created."
+  }
 }

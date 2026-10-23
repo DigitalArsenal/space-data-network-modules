@@ -108,7 +108,7 @@ test(`FRM BODY_FIXED agrees with NAIF CSPICE (${RUNTIME})`, { concurrency: false
   assert.equal(REFERENCE.cases.length, 7, "reference must cover all seven requested bodies");
   const harness = await createStandaloneHarness(RUNTIME, WASM_PATH, {
     surface: "direct",
-    enableThreads: false,
+    enableThreads: true,
     wasmEdgeBinary: WASMEDGE_BINARY,
   });
   t.after(async () => harness.destroy());

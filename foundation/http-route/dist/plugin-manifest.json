@@ -393,5 +393,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method parses one $HTQ request into exactly one typed routing decision on the calling thread; no thread is created."
+  }
 }

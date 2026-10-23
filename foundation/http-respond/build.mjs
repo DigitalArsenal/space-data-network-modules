@@ -56,7 +56,7 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
 });
 
 // Persist the prefixed guest-link object + metadata for the flow compiler

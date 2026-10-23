@@ -160,5 +160,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "transform_frame_position evaluates the frame rotations for one request and answers it on the calling thread; no state survives the invocation and no thread is created."
+  }
 }

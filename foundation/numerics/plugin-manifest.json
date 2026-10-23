@@ -350,5 +350,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method evaluates one numerical request (root, saturation, discretization, interpolation, Gauss-Markov sequence) into one answer on the calling thread; no thread is created."
+  }
 }
