@@ -56,7 +56,7 @@
       "dependencyId": "com.digitalarsenal.flows.object-covariance.control",
       "pluginId": "com.digitalarsenal.flows.object-covariance.control",
       "version": "0.1.0",
-      "sha256": "84495a6a69d0d1a3f12cf4143ef6482f0459b09f477be023630f68631e1a0674",
+      "sha256": "50f910f260249cceb039b176d4b366cfc90d424c7dde956456b2ab2370565e1e",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

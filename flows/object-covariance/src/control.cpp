@@ -44,6 +44,7 @@ std::vector<Object> batch;                // the batch in hand
 std::map<uint32_t, Bytes> histories;      // its objects' OMM records, size-prefixed, oldest first
 Bytes produced;                           // the batch's records so far
 size_t produced_count = 0;
+std::string batch_license;                // the licence the batch's records carry in their provenance
 const char* str(const flatbuffers::String* s) { return s ? s->c_str() : ""; }
 // A pass's account to the flow's egress and the node's ledger: Unchanged is a success without a batch (the node does not
 // count it as a failed retrieval), Info carries a refusal's reason, which the status code alone cannot.
@@ -151,9 +152,9 @@ template<typename Fn> bool cells(const Bytes& bytes, Fn each, size_t& count) {
 }
 std::string text_of(const uint8_t* cell, size_t size) { return std::string(reinterpret_cast<const char*>(cell)+4, size-4); }
 int start_batch();
-int finish_run() {
+int finish_run(const char* reason = "every object's newest OMM has its covariance") {
  stage = Stage::Idle;
- if (!stored_this_run) notice(R::flowNoticeKind_Unchanged, "every object's newest OMM has its covariance");
+ if (!stored_this_run) notice(R::flowNoticeKind_Unchanged, reason);
  return 0;
 }
 int next_batch() {
@@ -190,6 +191,7 @@ int next_object() {
  R::IngestRequestT meta; meta.SCHEMA="OCM.fbs"; meta.TAGS=std::make_unique<R::SourceTagsT>();
  meta.TAGS->PROVIDER_ID="object-covariance"; meta.TAGS->SOURCE_NAME=source;
  meta.TAGS->BATCH_ID=std::string(position_key)+std::to_string(position_after);
+ meta.TAGS->LICENSE=batch_license;
  meta.RECONCILE=R::reconcileMode_Duplicates;
  flatbuffers::FlatBufferBuilder b; R::FinishIngestRequestBuffer(b,R::IngestRequest::Pack(b,&meta));
  stage=Stage::Ingest;
@@ -206,6 +208,8 @@ int handle_query() {
   const auto* m=status->MESSAGE(); const std::string message=m?std::string(m->begin(),m->end()):"query failed";
   // A record lane has no relation until its first record is stored: no record, no position.
   if (stage==Stage::Mark && message.find("no such table")!=std::string::npos) return max_query();
+  // ...and an OMM lane has none before its first ingest: nothing to derive from yet.
+  if ((stage==Stage::Max || stage==Stage::Stale) && message.find("no such table")!=std::string::npos) return finish_run("no OMM lane yet");
   return fail(message);
  }
  Bytes bytes; std::string error; if (!unpack_chunks(bytes,error)) return fail(error);
@@ -267,6 +271,7 @@ int handle_ocm(const plugin_input_frame_t* f) {
  if (!m||!digits(designator,q,id)||id!=object.id||epoch_key(str(m->START_TIME()))!=object.key||!o->STATE_EPOCHS()||o->STATE_EPOCHS()->size()!=age_count||
      !o->COVARIANCE_DATA()||o->COVARIANCE_DATA()->size()!=21*age_count||!o->COV_REALISM()||o->COV_REALISM()->size()!=age_count||!o->PROVENANCE())
   return fail("OCM does not describe the selected object, epoch and ages");
+ if (!produced_count) batch_license=str(o->PROVENANCE()->LICENSE_ID());
  produced.insert(produced.end(),f->payload,f->payload+f->payload_length); ++produced_count;
  ++at; return next_object();
 }

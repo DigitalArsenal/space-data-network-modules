@@ -27,8 +27,9 @@ tick -> control -> query -> control -> query -> control -> covariance -> control
    position, in arrival order, one `ROW_NUMBER()` pass over `OMM@celestrak-gp`.
    The first run is position 0, so the same query serves the first pass over the
    catalog and every later increment.
-3. In batches of 256, at most 4 batches per run (about a thousand objects, a few
-   minutes):
+3. In batches of 256, at most 4 batches per run (the host's drain bound of 1000
+   iterations ends a run after about three, some 750 objects; a batch not yet
+   ingested is redone by the next run):
    - one pass over the OMM lane returns the histories of the whole batch (the
      lane is not indexed by object, so a pass per object would cost a pass over
      the lane each);
