@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "checkedAt": "2026-10-23T16:23:17.039Z",
+  "evidence": "tests/evidence/2026-10-23-EnUSFG",
+  "srsPositionMatches": "4/4",
+  "typedRecordsPublishedAndReadBack": {
+    "SRO": 4,
+    "SFE": 822,
+    "SDI": 4
+  },
+  "sampleCids": {
+    "SRO": "bafkreiaxinkk557o6xemhkqnrnqggatuxmleqtxrdvdyhrx3xnkccagbkm",
+    "SDI": [
+      "bafkreidyzas3eoofwbvivwqqyg3r5bi727o2m2o7xbpub6zg3rmjupcql4",
+      "bafkreied4cfjybwlfehj2frhd5oxzksjgsndxikddjtxbyij3aggxhzvyi",
+      "bafkreihr22qfa54kjioryohb4kac7vhyafcpjl4rkazonslhfire2t6pwu",
+      "bafkreienyituzceinzs2dyjeut7trlwzm2wxxxovy5fjr4arog7kntnody"
+    ]
+  },
+  "imageOffsetsSeconds": [
+    -17,
+    -14.652,
+    16.842,
+    5.128
+  ]
+}

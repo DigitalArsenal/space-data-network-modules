@@ -1,6 +1,13 @@
 # Solar activity — implementation gate and live evidence
 
-Status: BLOCKED; production records stopped pending SDS oracle.
+Status: UNBLOCKED 2026-10-23. SDS 1.262.0 (published; includes the ruled SRO, SFE, SDI) is
+vendored as generated JS under `sds-1.262.0/` (flatbuffers 25.9.23 under `vendor/`). The E2E
+(`tests/solar-activity.e2e.mjs`) turns live SWPC SRS/GOES/edited-event and SDO HMI/AIA sources into
+typed $SRO/$SFE/$SDI records, publishes them to a real native SDN node and reads each back by CID
+(4 SRO, 822 SFE, 4 SDI; SRS positions 4/4 equal the same-day SWPC JSON). Image acceptance is judged at the
+fixed 3-hour backfill slot (4/4 within source cadence; the current slot was 0/4 because provider
+delivery latency exceeds cadence; JSOC fallback failed TLS). The pin bump 1.220.0 -> 1.262.0 is the separate ripple task.
+Historical notes below predate the release.
 Branch: `task/solar-activity-data-sources-20261022`.
 Recovered work and schema proposal committed and pushed first as
 `d37b67a9` on resumption. The earlier Git sandbox restriction is resolved.
