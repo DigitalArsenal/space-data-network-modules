@@ -1,6 +1,7 @@
 // Orchestration only. All orbit, frame and covariance math stays in gp-error-model.
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -15,12 +16,21 @@ namespace R = sdn::runtime;
 using Bytes = std::vector<uint8_t>;
 constexpr size_t page_size = 128, max_history_bytes = 32 * 1024 * 1024;
 constexpr const char* source = "celestrak-gp-object-covariance";
+// The store's relations: <CODE>@<source> per source; the unified view <CODE> names a record's _source as <CODE>@<source>.
+constexpr const char* omm_table = "\"OMM@celestrak-gp\"";
+constexpr const char* ocm_lane = "OCM@celestrak-gp-object-covariance";
+// The record's rows: the set's covariance at these ages (days) past its epoch. Age 0 is the first row, so the record's
+// START_TIME is the OMM's epoch; later rows carry the growth of the covariance with the set's age.
+constexpr double ages[] = {0, 0.5, 1, 2, 3, 5, 7};
+constexpr size_t age_count = sizeof ages / sizeof ages[0];
+// The module reads historyDays = 30 before the set in force; fetch one day more, up to a second past it (republished sets).
+constexpr double history_seconds = 31 * 86400.0;
 enum class Stage { Idle, Covariances, Candidates, History, Calculation, Ingest };
 Stage stage = Stage::Idle;
 uint64_t request_id = 0, covariance_offset = 0;
 uint32_t after_object = 0;
 size_t current = 0;
-struct Object { uint32_t id; std::string epoch; };
+struct Object { uint32_t id; std::string epoch; double timestamp; };
 std::vector<Object> objects;
 std::map<uint32_t, std::string> newest_covariance;
 std::string pending_epoch;
@@ -61,10 +71,10 @@ int query(std::string sql, Stage next) {
  return push("query","FSO.fbs","$FSO","FSO",b.GetBufferPointer(),b.GetSize());
 }
 int covariance_page() {
- return query("SELECT _data FROM OCM WHERE _source = '"+std::string(source)+"' ORDER BY _rowid LIMIT 128 OFFSET "+std::to_string(covariance_offset),Stage::Covariances);
+ return query("SELECT _data FROM OCM WHERE _source = '"+std::string(ocm_lane)+"' ORDER BY _rowid LIMIT 128 OFFSET "+std::to_string(covariance_offset),Stage::Covariances);
 }
 int candidate_page() {
- return query("SELECT _data FROM (SELECT _data, NORAD_CAT_ID, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY USER_DEFINED_EPOCH_TIMESTAMP DESC, _rowid DESC) AS rank FROM OMM WHERE _source = 'celestrak-gp' AND NORAD_CAT_ID > "+std::to_string(after_object)+") WHERE rank = 1 ORDER BY NORAD_CAT_ID LIMIT 128",Stage::Candidates);
+ return query("SELECT _data FROM (SELECT _data, NORAD_CAT_ID, ROW_NUMBER() OVER (PARTITION BY NORAD_CAT_ID ORDER BY USER_DEFINED_EPOCH_TIMESTAMP DESC, _rowid DESC) AS rank FROM "+std::string(omm_table)+" WHERE NORAD_CAT_ID > "+std::to_string(after_object)+") WHERE rank = 1 ORDER BY NORAD_CAT_ID LIMIT 128",Stage::Candidates);
 }
 int next_object() {
  while (current < objects.size()) {
@@ -72,9 +82,10 @@ int next_object() {
   if (key.empty()) return fail("OMM has a non-UTC or malformed epoch");
   auto found=newest_covariance.find(o.id);
   if (found!=newest_covariance.end() && found->second>=key) { ++current; continue; }
-  // Read the complete object's history; the numerical module owns its causal
-  // window and refuses sets after the selected epoch. Never cap it silently.
-  return query("SELECT _data FROM OMM WHERE _source = 'celestrak-gp' AND NORAD_CAT_ID = "+std::to_string(o.id)+" ORDER BY USER_DEFINED_EPOCH_TIMESTAMP, _rowid",Stage::History);
+  // Read the object's history window (the module's historyDays and a day more, up to a second past the set in force);
+  // the module owns the causal window and refuses sets after the selected epoch.
+  char window[96]; std::snprintf(window,sizeof window," AND USER_DEFINED_EPOCH_TIMESTAMP >= %.6f AND USER_DEFINED_EPOCH_TIMESTAMP <= %.6f",o.timestamp-history_seconds,o.timestamp+1.0);
+  return query("SELECT _data FROM "+std::string(omm_table)+" WHERE NORAD_CAT_ID = "+std::to_string(o.id)+window+" ORDER BY USER_DEFINED_EPOCH_TIMESTAMP, _rowid",Stage::History);
  }
  if (objects.empty()) { stage=Stage::Idle; return 0; }
  after_object=objects.back().id; objects.clear(); current=0; return candidate_page();
@@ -127,7 +138,7 @@ int handle_query() {
   if (!records(bytes,[&](const uint8_t* p,size_t n){
    flatbuffers::Verifier check(p,n); if (!VerifySizePrefixedOCMBuffer(check)) return false;
    const auto* o=GetSizePrefixedOCM(p); const auto* m=o->METADATA();
-   if (!m || !o->COVARIANCE_DATA() || !o->COV_REALISM() || !o->PROVENANCE()) return false;
+   if (!m || !o->STATE_EPOCHS() || !o->COV_REALISM() || !o->PROVENANCE()) return false;
    auto id=object_id(str(m->OBJECT_DESIGNATOR())); auto epoch=epoch_key(str(m->START_TIME()));
    if (!id||epoch.empty()) return false;
    auto& newest=newest_covariance[id]; if (epoch>newest) newest=epoch; return true;
@@ -139,7 +150,7 @@ int handle_query() {
   if (!records(bytes,[&](const uint8_t* p,size_t n){
    flatbuffers::Verifier check(p,n); if (!VerifySizePrefixedOMMBuffer(check)) return false;
    const auto* o=GetSizePrefixedOMM(p); if (!o->NORAD_CAT_ID()) return false;
-   objects.push_back({o->NORAD_CAT_ID(),str(o->EPOCH())}); return true;
+   objects.push_back({o->NORAD_CAT_ID(),str(o->EPOCH()),o->USER_DEFINED_EPOCH_TIMESTAMP()}); return true;
   },count)) return fail("invalid OMM candidate stream");
   return next_object();
  }
@@ -155,9 +166,11 @@ int handle_query() {
   if (epoch<=epoch_key(object.epoch)) causal.insert(causal.end(),p,p+n); return true;
  },count) || causal.empty()) return fail("invalid or empty causal history");
  ERMT request; request.CALIBRATED_COVARIANCES=std::make_unique<ERMCalibratedCovariancesT>();
- auto o=std::make_unique<ERMCalibrationObjectT>(); o->ID="NORAD:"+std::to_string(object.id);
- o->SET_NORAD_CAT_ID=object.id; o->SET_EPOCH=object.epoch; o->AGE_DAYS=0;
- request.CALIBRATED_COVARIANCES->OBJECTS.push_back(std::move(o));
+ for (const double age:ages) {
+  auto o=std::make_unique<ERMCalibrationObjectT>(); o->ID="NORAD:"+std::to_string(object.id)+"@"+std::to_string(age);
+  o->SET_NORAD_CAT_ID=object.id; o->SET_EPOCH=object.epoch; o->AGE_DAYS=age;
+  request.CALIBRATED_COVARIANCES->OBJECTS.push_back(std::move(o));
+ }
  flatbuffers::FlatBufferBuilder b; FinishSizePrefixedERMBuffer(b,ERM::Pack(b,&request));
  stage=Stage::Calculation;
  int rc=push("elements","OMM.fbs","$OMM","OMM",causal.data(),causal.size());
@@ -169,8 +182,9 @@ int handle_ocm(const plugin_input_frame_t* f) {
  if (!VerifySizePrefixedOCMBuffer(check)) return fail("expected one size-prefixed OCM");
  const auto* o=GetSizePrefixedOCM(f->payload); const auto* m=o->METADATA();
  const auto& object=objects[current];
- if (!m||object_id(str(m->OBJECT_DESIGNATOR()))!=object.id || std::string(str(m->START_TIME()))!=object.epoch ||
-     !o->COVARIANCE_DATA()||o->COVARIANCE_DATA()->size()!=21 || !o->COV_REALISM()||o->COV_REALISM()->size()!=1 || !o->PROVENANCE()) return fail("OCM does not describe the selected object and epoch");
+ if (!m||object_id(str(m->OBJECT_DESIGNATOR()))!=object.id || epoch_key(str(m->START_TIME()))!=epoch_key(object.epoch) ||
+     !o->STATE_EPOCHS()||o->STATE_EPOCHS()->size()!=age_count || !o->COVARIANCE_DATA()||o->COVARIANCE_DATA()->size()!=21*age_count ||
+     !o->COV_REALISM()||o->COV_REALISM()->size()!=age_count || !o->PROVENANCE()) return fail("OCM does not describe the selected object, epoch and ages");
  R::IngestRequestT meta; meta.SCHEMA="OCM.fbs"; meta.TAGS=std::make_unique<R::SourceTagsT>();
  meta.TAGS->PROVIDER_ID="object-covariance"; meta.TAGS->SOURCE_NAME=source;
  meta.TAGS->BATCH_ID="NORAD:"+std::to_string(object.id)+"@"+object.epoch;

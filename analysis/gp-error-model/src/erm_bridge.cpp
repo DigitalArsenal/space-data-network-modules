@@ -1360,6 +1360,10 @@ std::unique_ptr<ERMAttachReportT> attach_report_in(const J& j) {
           v.SCALE_FACTOR = num(l, "scaleFactor", std::nan(""));
           v.CALIBRATION = calibration_in(str(l, "calibration"));
           v.EVIDENCE = str(l, "evidence");
+          v.HISTORY_SAMPLES = static_cast<uint32_t>(unum(l, "historySamples"));
+          v.HISTORY_SETS = static_cast<uint32_t>(unum(l, "historySets"));
+          v.HISTORY_WINDOW = str(l, "historyWindow");
+          v.SHRINKAGE_WEIGHT = num(l, "shrinkageWeight", std::nan(""));
           x->ROWS.push_back(std::move(y));
         }
       if (has(o, "notes"))

@@ -34,7 +34,8 @@ record (size-prefixed), with the arm of the port set:
 | `attach_covariance.models` | `MODEL` records, any number |
 | `object_covariance.elements` / `.models` (optional) / `.request` / `.covariance` / `.report` | `$OMM` / `MODEL` (`ElementSetModel`; defaults to embedded E14 S3-KC) / `CALIBRATED_COVARIANCES` (`OBJECTS`) / `CALIBRATED_COVARIANCES` (`RESULTS`) / `ATTACH_REPORT` |
 
-The products are `$OMM`, `$OCM` and `$MNV` with `$CVR` and `$PVN`, unchanged.
+The products are `$OMM`, `$OCM` and `$MNV` with `$CVR` and `$PVN`; `object_covariance` also gives an `$OCM`
+when its node config names a source (below).
 The recipes of `attach_covariance` and `attribute_maneuvers` are node config
 (`plugin.getConfig`, one `ModuleConfig`; see below). `scripts/erm-codec.mjs`
 renders the records in the readable form this README describes (the form of
@@ -384,7 +385,8 @@ for requests, as in `age_of`; pair ages remain strictly below that edge.
 Refusals contain no covariance. SGP4 propagation failures at a requested
 prediction epoch fail the invocation explicitly.
 
-EMPIRICAL uses ScaledFit, method `empirical-history-shrunk`, and is always
+EMPIRICAL carries rule EmpiricalHistoryShrunk (SDS 1.261.0 `covarianceRule` 5; 0.9.0 and
+earlier wrote 2, ScaledFit, which is an orbit fit's rule), method `empirical-history-shrunk`, and is always
 **Uncalibrated**. POPULATION uses SourceModel/PooledModel and the corresponding
 `attach_covariance` method name (`e14-s3-kc` / `e14-s3-kc-pooled`). Its calibration
 flag is computed from the population cell's own numbers: mean d²/3 in
@@ -393,17 +395,42 @@ The model's decision string does not control the verdict. There is no source
 lineage in this request, so this describes the population cell's test only;
 it does not assert that the current object's source lineage was tested.
 
-The CVR has RULE, MODEL_ID, REGIME, AGE_DAYS, SAMPLES (retained history pairs
-in the containing bin), OBJECTS (their distinct older sets), and SCALE_FACTOR
-(the interpolated shrinkage weight, zero for POPULATION). The population
-verdict uses the model cell's own counts before those CVR fields are filled
-with history counts. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
-TEST_WINDOW. EVIDENCE names the method and default thresholds; NOTES explains
+The report's CVR keeps what the console reads from it: SAMPLES (retained history
+pairs in the containing bin), OBJECTS (their distinct older sets) and
+SCALE_FACTOR (the interpolated history weight w, zero for POPULATION and for a
+refusal). Beside them it carries the SDS 1.261.0 evidence of the empirical
+rule, EMPIRICAL rows only: HISTORY_SAMPLES and HISTORY_SETS (the same pairs and
+sets), HISTORY_WINDOW (the ISO 8601 interval from the oldest element set the
+fit used to the set in force) and SHRINKAGE_WEIGHT (alpha = 1 - w, the
+population prior's share in `(1 - alpha) H + alpha P_prior`). EVIDENCE names the
+estimator, the configuration, the bin that holds the age, and each bin the
+blend interpolated between with its share, distinct older sets n, pairs m and
+history weight w, so the blend can be rebuilt; for POPULATION it is the
+model's own evidence. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
+TEST_WINDOW. NOTES explains
 each failed empirical condition, including insufficient sets, insufficient bin
-support, age outside history, and missing model. The empirical residuals compare
+support, age outside history, and missing model (their rule is 5 now, 2 before). The empirical residuals compare
 against later element sets, **not truth**. They can share errors and understate
 true uncertainty; no empirical coverage or calibration claim is made (the
 paper's section 6 caveat).
+
+**The `ocm` product (node reactor).** With `object.source` in the node config (`id`,
+`kind`, `originator`, `provider`, `lineage`, `licence {class, id}`: the shape of
+`attach_covariance`'s `source`; optional `object.producer`, `object.created`),
+`object_covariance` also gives `ocm`: one size-prefixed `$OCM` per distinct
+(`SET_NORAD_CAT_ID`, `SET_EPOCH` text) of the request, one row per entry in
+epoch order. `METADATA.OBJECT_DESIGNATOR` is the NORAD ID, `START_TIME` and
+`STATE_EPOCHS[0]` the first row's epoch (a request at age 0 puts the set's epoch there),
+`STATE_DATA` the set's GCRF state at each row's epoch (km, km/s),
+`COVARIANCE_DATA` the covariance port's GCRF matrix (21-value lower triangle, km², km²/s, km²/s²;
+`COV_REF_FRAME` GCRF, the value of `covarianceInertial` divided by 1e6), one CVR per row in `COV_REALISM` and
+the source in `PROVENANCE`. A row's CVR is the record's meaning of SDS 1.261.0:
+EmpiricalHistoryShrunk with SAMPLES and OBJECTS 0 (no held-out test), SCALE_FACTOR NaN and the HISTORY_* evidence
+above; or SourceModel/PooledModel with the population cell's own held-out counts. An entry that has no
+covariance (NO_SET, OUTSIDE, NO_MODEL, or an SGP4 failure at the epoch, which fails the call without `object.source`) still has its row,
+with NaN covariance (and NaN state without a set) and a CVR with rule 0 whose EVIDENCE says why, so a caller that
+stores the record as its cursor always advances. The `ocm` frame is pushed before `covariance` and `report`; without
+`object.source` there is none. `flows/object-covariance` runs this method on the node for every new OMM.
 
 **Who calls it.** The SpaceAware console runs it in a worker of its own for every
 GP/OMM object whose source carries no covariance (`covariance/derivedCovariance.ts`):
@@ -522,11 +549,12 @@ scaling, and the scaled covariance has not itself been tested.
 | Source | `PROVENANCE`: `SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR`, `PROVIDER_ID`, `PRODUCER`, `LICENSE_CLASS`, `LICENSE_ID`, `LINEAGE` | the same `PROVENANCE` |
 | Message's creator | `HEADER.ORIGINATOR` and `METADATA.TECH_ORG`: the recipe's `producer` | `ORIGINATOR`: the recipe's `producer` |
 
-A CVR holds `RULE` (1 to 4: Operator, ScaledFit, SourceModel, PooledModel),
+A CVR holds `RULE` (1 to 5: Operator, ScaledFit, SourceModel, PooledModel, EmpiricalHistoryShrunk),
 `MODEL_ID` (the model, or for ScaledFit the realism entry's class), `REGIME`,
 `AGE_DAYS`, `HORIZON_DAYS`, `MEASURED_LINEAGE`, `TEST_WINDOW` (an ISO 8601
 interval), `MEAN_D2_OVER_3`, `COVERAGE_95`, `SAMPLES`, `OBJECTS`, `SCALE_FACTOR`,
-`CALIBRATION` and `EVIDENCE`. Fields a rule has no value for are NaN, 0 or empty.
+`CALIBRATION`, `EVIDENCE`, and for rule 5 `HISTORY_SAMPLES`, `HISTORY_SETS`,
+`HISTORY_WINDOW` and `SHRINKAGE_WEIGHT`. Fields a rule has no value for are NaN, 0 or empty.
 Nothing about the source or the covariance rides in `USER_DEFINED_PARAMETERS`,
 `COMMENT` or `TAGS`.
 
