@@ -1,0 +1,178 @@
+{
+  "programId": "com.digitalarsenal.flows.object-covariance",
+  "name": "Object covariance reactor",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "allowCycles": true,
+  "description": "Bounded feedback advances one object at a time. OCM records are the durable cursor. New OMM epoch only; all covariance math runs in gp-error-model.",
+  "nodes": [
+    {
+      "nodeId": "control",
+      "pluginId": "com.digitalarsenal.flows.object-covariance.control",
+      "methodId": "advance",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "covariance",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "object_covariance",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "control-query-query-query",
+      "fromNodeId": "control",
+      "fromPortId": "query",
+      "toNodeId": "query",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "query-records-control-rows",
+      "fromNodeId": "query",
+      "fromPortId": "records",
+      "toNodeId": "control",
+      "toPortId": "rows",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64
+    },
+    {
+      "edgeId": "query-status-control-status",
+      "fromNodeId": "query",
+      "fromPortId": "status",
+      "toNodeId": "control",
+      "toPortId": "status",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-elements-covariance-elements",
+      "fromNodeId": "control",
+      "fromPortId": "elements",
+      "toNodeId": "covariance",
+      "toPortId": "elements",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-request-covariance-request",
+      "fromNodeId": "control",
+      "fromPortId": "request",
+      "toNodeId": "covariance",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "covariance-ocm-control-ocm",
+      "fromNodeId": "covariance",
+      "fromPortId": "ocm",
+      "toNodeId": "control",
+      "toPortId": "ocm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "covariance-report-egress-report",
+      "fromNodeId": "covariance",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "report",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-records-ingest-ocm_records",
+      "fromNodeId": "control",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "ocm_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-meta-ingest-meta",
+      "fromNodeId": "control",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "ingest-result-control-stored",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "control",
+      "toPortId": "stored",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    },
+    {
+      "edgeId": "control-notice-egress-result",
+      "fromNodeId": "control",
+      "fromPortId": "notice",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "refresh",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 300000
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "refresh",
+      "targetNodeId": "control",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.flows.object-covariance.control",
+    "com.digitalarsenal.hostcap.flatsql-query",
+    "com.digitalarsenal.analysis.gp-error-model",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

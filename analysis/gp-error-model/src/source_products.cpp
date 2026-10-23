@@ -218,7 +218,11 @@ struct Label {
   std::string method, model_id, regime, verdict, calibration, basis, window, evidence, measured_lineage;
   int age_index = -1;
   double age_days = NAN, horizon = NAN, mean_d2 = NAN, coverage = NAN, scale = NAN;
-  uint64_t samples = 0, objects = 0;
+  uint64_t samples = 0, objects = 0;  // the held-out test: samples and distinct objects of the cell's verdict
+  // EmpiricalHistoryShrunk's fitting evidence (SDS 1.261.0 CVR): the object's own history, never the held-out test.
+  uint64_t history_samples = 0, history_sets = 0;
+  std::string history_window;       // ISO 8601 UTC start/end of the element-set epochs the history fit used
+  double shrinkage_weight = NAN;    // alpha, the population prior's share of (1 - alpha) H + alpha P_prior
   bool calibrated() const { return calibration == "CALIBRATED"; }
 };
 
@@ -243,6 +247,10 @@ Json label_json(const Label& l) {
   if (l.samples) j["samples"] = l.samples;
   if (l.objects) j["objects"] = l.objects;
   if (std::isfinite(l.scale)) j["scaleFactor"] = l.scale;
+  if (l.history_samples) j["historySamples"] = l.history_samples;
+  if (l.history_sets) j["historySets"] = l.history_sets;
+  if (!l.history_window.empty()) j["historyWindow"] = l.history_window;
+  if (std::isfinite(l.shrinkage_weight)) j["shrinkageWeight"] = l.shrinkage_weight;
   if (!l.window.empty()) j["window"] = l.window;
   if (!l.evidence.empty()) j["evidence"] = l.evidence;
   if (!l.measured_lineage.empty()) j["measuredLineage"] = l.measured_lineage;
@@ -893,7 +901,7 @@ std::string interval_of(std::string window) {
 // One row's label as a CVR: the rule, the model or factor it came from, the cell and the numbers of its test, the verdict.
 std::unique_ptr<CVRT> realism_of(const Label& l) {
   auto c = std::make_unique<CVRT>();
-  c->RULE = static_cast<covarianceRule>(l.rule);  // 1 to 4: Operator, ScaledFit, SourceModel, PooledModel
+  c->RULE = static_cast<covarianceRule>(l.rule);  // 1 to 5: Operator, ScaledFit, SourceModel, PooledModel, EmpiricalHistoryShrunk
   c->MODEL_ID = l.model_id;
   c->REGIME = l.regime;
   c->AGE_DAYS = l.age_days;
@@ -907,17 +915,22 @@ std::unique_ptr<CVRT> realism_of(const Label& l) {
   c->SCALE_FACTOR = l.scale;
   c->CALIBRATION = l.calibrated() ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
   c->EVIDENCE = l.evidence;
+  c->HISTORY_SAMPLES = static_cast<uint32_t>(std::min<uint64_t>(l.history_samples, UINT32_MAX));
+  c->HISTORY_SETS = static_cast<uint32_t>(std::min<uint64_t>(l.history_sets, UINT32_MAX));
+  c->HISTORY_WINDOW = l.history_window;
+  c->SHRINKAGE_WEIGHT = l.shrinkage_weight;
   return c;
 }
 
+// message_id: the message's identifier; empty makes "<source>/<key>/<first epoch>/<method>".
 std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const std::string& name, const std::string& object_id,
-                               uint32_t norad, const Product& p) {
+                               uint32_t norad, const Product& p, const std::string& message_id = std::string()) {
   auto ocm = std::make_unique<OCMT>();
   ocm->HEADER = std::make_unique<HeaderT>();
   ocm->HEADER->CCSDS_OCM_VERS = "3.0";
   ocm->HEADER->CREATION_DATE = r.created;
   ocm->HEADER->ORIGINATOR = r.producer;  // the message's creator; the source's originator is PROVENANCE.ORIGINATOR
-  ocm->HEADER->MESSAGE_ID = r.a.id + "/" + key + "/" + p.rows.front().text + "/" + p.method;
+  ocm->HEADER->MESSAGE_ID = message_id.empty() ? r.a.id + "/" + key + "/" + p.rows.front().text + "/" + p.method : message_id;
   ocm->METADATA = std::make_unique<MetadataT>();
   MetadataT& meta = *ocm->METADATA;
   meta.OBJECT_NAME = name;

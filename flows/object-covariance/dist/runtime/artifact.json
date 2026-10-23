@@ -1,0 +1,131 @@
+{
+  "programId": "com.digitalarsenal.flows.object-covariance",
+  "name": "Object covariance reactor",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
+  "nodes": 5,
+  "edges": 12,
+  "triggers": 1,
+  "capabilities": [
+    "clock",
+    "storage_ingest",
+    "storage_query"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "control",
+      "pluginId": "com.digitalarsenal.flows.object-covariance.control",
+      "methodId": "advance",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "covariance",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "object_covariance",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.flows.object-covariance.control",
+      "pluginId": "com.digitalarsenal.flows.object-covariance.control",
+      "version": "0.1.0",
+      "sha256": "84495a6a69d0d1a3f12cf4143ef6482f0459b09f477be023630f68631e1a0674",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e6f626a6563742d636f76617269616e63652e636f6e74726f6c_",
+      "methodSymbols": {
+        "advance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e6f626a6563742d636f76617269616e63652e636f6e74726f6c_advance"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "version": "0.3.1",
+      "sha256": "55b298c4e6cc7d6bcfd984c0134ecbc322e9e1c423b0fc5e4aa3ad8b18ae8a58",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_",
+      "methodSymbols": {
+        "query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_query",
+        "sandbox_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_sandbox_query"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.gp-error-model",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "version": "0.10.0",
+      "sha256": "e9fa64b2c25d12a3ad81e365155003241f69e7c6476294cca04945c4d9b64abe",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_",
+      "methodSymbols": {
+        "accumulate": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_accumulate",
+        "finalize": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_finalize",
+        "scale_model": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_scale_model",
+        "screening_evaluation": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_screening_evaluation",
+        "ffm_arcs": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_ffm_arcs",
+        "ffm_coverage": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_ffm_coverage",
+        "common_epoch": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_common_epoch",
+        "map_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_map_covariance",
+        "screening_cases": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_screening_cases",
+        "pair_statistics": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_pair_statistics",
+        "fit_calibration": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_fit_calibration",
+        "calibrate_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_calibrate_covariance",
+        "dcp_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_dcp_covariance",
+        "noise_responses": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_noise_responses",
+        "attach_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attach_covariance",
+        "attribute_maneuvers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attribute_maneuvers",
+        "fit_elements": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_fit_elements",
+        "element_residuals": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_element_residuals",
+        "object_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_object_covariance",
+        "source_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_source_covariance"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.0",
+      "sha256": "8be7af7d2047c764371f546e621a8a6d40727620edad8e6cc96bb44d2e7e858b",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

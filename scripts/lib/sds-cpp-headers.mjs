@@ -96,3 +96,19 @@ export async function generateSdsHeader(family, from, createFlatc) {
   const gen = await flatcWith(closure, from, createFlatc);
   return gen(family, ["--preserve-case", "--cpp", "--gen-object-api", "--no-warnings"]);
 }
+
+// A module's source with each `#include "<CODE>_generated.h"` of `codes` replaced by that standard's own header
+// (generateSdsHeader): the include guard renamed (every SDS header is "main_generated.h"), the flatc version
+// static_assert relaxed, as the SDK does for its runtime headers. For a module whose source names the unscoped
+// enumerators flatc writes without `--scoped-enums` (flatSqlNodeStatus_COMPLETE); generateSdsHeaders serves scoped ones.
+export async function inlineSdsHeaders(sourceCode, codes, from, createFlatc) {
+  let out = sourceCode;
+  for (const code of codes) {
+    const header = (await generateSdsHeader(code, from, createFlatc))
+      .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
+      .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, "")
+      .replace(/#include "main_generated\.h"\n/g, "");
+    out = out.replace(new RegExp(`^#include "${code}_generated\\.h".*$`, "m"), () => header);
+  }
+  return out;
+}
