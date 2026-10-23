@@ -4,6 +4,7 @@
 #include "stellar_populations.hpp"
 #include "dust_map.hpp"
 #include "eye_color.hpp"
+#include "look.hpp"
 
 namespace milky_way {
 
@@ -68,7 +69,8 @@ inline const double* channel_ratios() {return eye::on()?eye::extinction_ratios()
 struct StellarComponents { double thin,thick,arms,bulge,bar; };
 // wave: the old disc's spiral density wave (DS2001 stellar arms, K amplitude);
 // young: the bright young population's arm pattern, including its floor.
-struct ArmPatterns { double wave=0,young=0; };
+// intermediate: the intermediate-age stars' wave on the minor arms (0.5).
+struct ArmPatterns { double wave=0,young=0,intermediate=0; };
 
 inline double arm_width_kpc(const ArmSegment& a,double radius) {
   // Reid 2019 section 3: dw/dR=42 pc/kpc, adopted from Reid et al. 2014.
@@ -110,25 +112,30 @@ inline Vec3 undrifted(Vec3 p,double age_myr) {
 // at R0), not the masers' narrow Reid widths (0.3.0, which drew the old light
 // as thin concentric rings).
 inline constexpr double stellar_arm_width_per_kpc=0.143;
-// The minor arms' (Sagittarius-Carina, Norma) share of the stellar wave.
-// Gaia's optical sky wants more than GLIMPSE's old stars: G light carries
-// intermediate-age stars, which follow all four arms. The Gaia check's
-// density log r against this share (floor 0.9044): 0 -> 0.868, 0.5 ->
-// 0.897, 0.75 -> 0.908, 1 -> 0.916 (measured 2026-10-22). 0.75 is the least
-// it keeps; an intermediate-age population of its own would let the old
-// wave be two-armed.
+// The minor arms' (Sagittarius-Carina, Norma-Outer) stellar wave, as a share
+// of B_K, carried by INTERMEDIATE-AGE stars (0.5; stellar_populations.hpp,
+// intermediate colors): Gaia's optical sky wants stellar light on the minor
+// arms that GLIMPSE's old giants do not show. The Gaia check's density log r
+// against this share (floor 0.9044, 0.5's first build, the share then drawn
+// in the old disc's color): 0 -> 0.868, 0.5 -> 0.897, 0.75 -> 0.908, 1 ->
+// 0.916 (measured 2026-10-22). 0.75 is the least it keeps.
 inline double minor_stellar_arm=0.75;
-inline double major_arm_wave(Vec3 p) {
-  double best=0;
+// The arms' extent (0.5): Reid et al. (2019)'s, as the gas and young light's
+// (reid_arms.hpp, arm_light: the coverage, continued to 17 kpc and faded),
+// not DS2001's dust-arm cut-off g(R_a) (r_m 6.71, r_a 2.07 kpc), which ended
+// the stellar arms near 9 kpc; Reid's masers trace Perseus and the Outer arm
+// to 12-15 kpc.
+// The major (old, x[0]) and minor (intermediate-age, x[1]) waves at p.
+inline std::array<double,2> stellar_arm_waves(Vec3 p) {
+  std::array<double,2> best{0,0};
   for(const auto& a:reid_segments) {
     if(arm_light::finite_segment(a)) continue;
-    const double share=a.family==2||a.family==5?1.0:minor_stellar_arm;
+    const int k=a.family==2||a.family==5?0:1;
+    const double share=k==0?1.0:minor_stellar_arm;
     if(share<=0) continue;
     arm_light::for_each_hit(a,p,[&](const arm_light::Hit& h) {
       const double width=stellar_arm_width_per_kpc*h.radius;
-      const double cutoff=h.radius>populations::arm_cutoff_kpc
-        ?std::exp(-std::pow((h.radius-populations::arm_cutoff_kpc)/populations::arm_cutoff_scale_kpc,2)):1.0;
-      best=std::max(best,share*h.weight*cutoff*std::exp(-(h.separation/width)*(h.separation/width)));
+      best[k]=std::max(best[k],share*h.weight*std::exp(-(h.separation/width)*(h.separation/width)));
     });
   }
   return best;
@@ -140,7 +147,8 @@ inline double young_pattern(Vec3 p) {
 }
 
 inline ArmPatterns arm_patterns(Vec3 p) {
-  return {populations::arm_amplitude_k*major_arm_wave(undrifted(p,populations::drift_age_k_myr)),young_pattern(p)};
+  const auto waves=stellar_arm_waves(undrifted(p,populations::drift_age_k_myr));
+  return {populations::arm_amplitude_k*waves[0],young_pattern(p),populations::arm_amplitude_k*waves[1]};
 }
 
 // Flynn 2006: the bright (M_V<-1) stars are 20% of the local mid-plane
@@ -227,7 +235,7 @@ inline StellarComponents stellar_components(Vec3 p,ArmPatterns pattern,double ba
   const double young=(1-young_clumped)*young_amplitude()*pattern.young*populations::young_hole(radius)/young_hole_sun
     *std::exp((galactic_constants::solar_radius_kpc-radius)/appearance::young_length_kpc
               -height/populations::h_bright_kpc);
-  const double arms=thin*pattern.wave+young;
+  const double arms=thin*(pattern.wave+pattern.intermediate)+young;
   // Wegg & Gerhard (2013), MNRAS 435,1874, doi:10.1093/mnras/stt1376:
   // boxy/peanut morphology and orientation ~27 degrees; Wegg, Gerhard &
   // Portail (2015), MNRAS 450,4050, doi:10.1093/mnras/stv745: long-bar
@@ -453,10 +461,14 @@ inline Field literature(Vec3 p,bool local_dust) {
   const auto c=stellar_components(p,pattern);
   // The young light: its smooth share, modulated by the multi-scale structure
   // (structure.hpp), and its star complexes.
-  const double young=(c.arms-c.thin*pattern.wave)*structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)+complexes::light(p);
-  const double disc=c.thin+c.thick+c.thin*pattern.wave;
+  // LOOK GOOD (look.hpp: display gains on the modeled components; 1 for
+  // TRUE PHYSICS, the default and every check's).
+  const double young=look::young_gain()*((c.arms-c.thin*(pattern.wave+pattern.intermediate))
+    *structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)+complexes::light(p));
+  const double disc=c.thin+c.thick+c.thin*pattern.wave*look::major_arm_gain();
+  const double intermediate=c.thin*pattern.intermediate;
   const double central=c.bulge+c.bar;
-  const double nebulae=hii::light(p);
+  const double nebulae=look::hii_gain()*hii::light(p);
   using namespace colors;
   // DS2001's dust, modulated by the same structure (gas and star formation
   // share their clouds); a delivered 3D dust map is data and stays as it is.
@@ -468,10 +480,11 @@ inline Field literature(Vec3 p,bool local_dust) {
   // The channels: SDSS r, g, i, or for the eye Y, Z, X (eye_color.hpp).
   const auto& e=eye::bands();const bool eye_on=eye::on();
   const sdss::Bands& db=eye_on?e.disc:disc_bands;const sdss::Bands& cb=eye_on?e.central:central_bands;
-  const sdss::Bands& yb=eye_on?e.young:young_bands;const sdss::Bands& hb=eye_on?e.hii:hii_bands;
-  return {db.r*disc+cb.r*central+yb.r*young+hb.r*nebulae,
-          db.g*disc+cb.g*central+yb.g*young+hb.g*nebulae,
-          db.i*disc+cb.i*central+yb.i*young+hb.i*nebulae,dust};
+  const sdss::Bands& yb=eye_on?e.young:young_bands;const sdss::Bands& hb=eye_on?look::hii_eye():hii_bands;
+  const sdss::Bands& ib=eye_on?e.intermediate:intermediate_bands;
+  return {db.r*disc+cb.r*central+yb.r*young+hb.r*nebulae+ib.r*intermediate,
+          db.g*disc+cb.g*central+yb.g*young+hb.g*nebulae+ib.g*intermediate,
+          db.i*disc+cb.i*central+yb.i*young+hb.i*nebulae+ib.i*intermediate,dust};
 }
 inline Field literature(Vec3 p) {return literature(p,true);}
 
@@ -479,8 +492,8 @@ inline Field literature(Vec3 p) {return literature(p,true);}
 inline double literature_g(Vec3 p) {
   const auto pattern=arm_patterns(p);
   const auto c=stellar_components(p,pattern);
-  const double young=c.arms-c.thin*pattern.wave;
-  return c.thin+c.thick+c.thin*pattern.wave+young*structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)
+  const double young=c.arms-c.thin*(pattern.wave+pattern.intermediate);
+  return c.thin+c.thick+c.thin*(pattern.wave+pattern.intermediate)+young*structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)
     +c.bulge+c.bar+hii::light(p)+complexes::light(p);
 }
 

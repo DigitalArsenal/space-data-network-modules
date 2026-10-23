@@ -190,13 +190,21 @@ inline std::array<double,2> domain(const ArmSegment& a) {
   return {lo-out,hi+in};
 }
 // 1 inside the coverage; beyond it, 1 falling to 0 over the extension's last
-// light_fade_deg (Scutum's observed far-side continuation is not faded).
+// light_fade_deg. Scutum's observed far-side continuation is not faded by
+// azimuth; 0.5 fades it by radius over its last 2 kpc to the 16 kpc end
+// (0.4 ended it there, a radial edge across the young light).
+inline constexpr double scutum_fade_from_kpc=14.0,scutum_end_kpc=16.0;
+// The finite segments (3-kpc, Local) fade along the arm beyond their
+// coverage, a Gaussian of end_fade_kpc in arc length (0.4 ended them in a
+// hard cap, a straight stripe in the young light); a MODEL CHOICE.
+inline constexpr double end_fade_kpc=0.8;
 inline double weight(const ArmSegment& a,double beta) {
   if(finite_segment(a)) return 1;
   const auto d=domain(a);
   const double fade=light_fade_deg*galactic_constants::radians_per_degree;
   double w=1;
   if(beta<coverage_lo(a)&&a.family!=2) w*=smoothstep(d[0],std::min(coverage_lo(a),d[0]+fade),beta);
+  if(beta<coverage_lo(a)&&a.family==2) w*=1-smoothstep(scutum_fade_from_kpc,scutum_end_kpc,radius(a,beta));
   if(beta>coverage_hi(a)) w*=1-smoothstep(std::max(coverage_hi(a),d[1]-fade),d[1],beta);
   return w;
 }
@@ -210,7 +218,14 @@ template<class F> inline void for_each_hit(const ArmSegment& a,Vec3 p,F f) {
   constexpr double turn=2*galactic_constants::pi;
   if(finite_segment(a)) {
     const double beta=model_beta(a,beta0),ra=arm_radius_kpc(a,beta);
-    f(Hit{std::hypot(p.x+ra*std::cos(beta),p.y-ra*std::sin(beta)),ra,cos_pitch(a,beta),1.0});
+    // The overshoot past the coverage, in arc length at the arm's radius.
+    const auto dom=arm_beta_domain(a);
+    double unwrapped=beta0;unwrapped+=turn*std::round(((dom[0]+dom[1])/2-unwrapped)/turn);
+    const double past=std::max({0.0,dom[0]-unwrapped,unwrapped-dom[1]})*ra/end_fade_kpc;
+    // The distance across the arm at the clamped end, its along-arm part
+    // carried by the fade instead of the cap.
+    const double across=past>0?std::abs(r-ra)*cos_pitch(a,beta):std::hypot(p.x+ra*std::cos(beta),p.y-ra*std::sin(beta));
+    f(Hit{across,ra,cos_pitch(a,beta),std::exp(-past*past)});
     return;
   }
   const auto d=domain(a);

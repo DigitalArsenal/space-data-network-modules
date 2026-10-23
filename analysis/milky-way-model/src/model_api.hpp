@@ -38,13 +38,13 @@ extern "C" int bake() {
     {"appearance_structure_young_sigma",&structure::young_sigma,0.0,3.0},{"appearance_structure_dust_sigma",&structure::dust_sigma,0.0,3.0},
     {"appearance_structure_lane_sigma",&structure::lane_sigma,0.0,3.0},
     {"appearance_structure_fade_inner",&structure::fade_inner_kpc,0.0,4.0},{"appearance_structure_fade_outer",&structure::fade_outer_kpc,0.1,6.0},
-    {"display_basis",&eye::basis,0.0,1.0}};
-  eye::basis=0;
+    {"display_basis",&eye::basis,0.0,1.0},{"look_good",&look::on,0.0,1.0}};
+  eye::basis=0;look::on=0;
   for (const auto& [name,value]:request.values) {
     const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
     const double v=request.number(name.c_str(),NAN);
     if (o==std::end(overrides) || !std::isfinite(v) || v<o->lo || v>o->hi)
-      return wire::fail("bake takes only appearance_* overrides within their fit bounds and display_basis (0 SDSS r,g,i; 1 CIE X,Y,Z); deliver a 3D dust map with load_dust_map first");
+      return wire::fail("bake takes only appearance_* overrides within their fit bounds, display_basis (0 SDSS r,g,i; 1 CIE X,Y,Z) and look_good (0 TRUE PHYSICS; 1 LOOK GOOD); deliver a 3D dust map with load_dust_map first");
     *o->value=v;
   }
   const auto& loaded=dust_map::grid();
@@ -68,6 +68,17 @@ extern "C" int bake() {
   r.text("dust_map",loaded.ready?(loaded.dataset+": "+loaded.source+"; "+loaded.license).c_str():"none");
   r.number("dust_map_radius",loaded.ready?loaded.radius:0,"kpc");
   r.vector("sun",{sun.x,sun.y,sun.z},"kpc");
+  // The bar as the model draws it (bulge_bar_shapes): its angle from the
+  // Sun-centre line, the near end toward positive longitude (Wegg & Gerhard
+  // 2013), its half-length (the long bar, Wegg, Gerhard & Portail 2015), and
+  // the near end's unit vector in the Galactocentric frame.
+  r.number("bar_angle_deg",model_choices::bar_angle_rad/galactic_constants::radians_per_degree,"deg from the Sun-centre line, near end at l > 0 (Wegg & Gerhard 2013)");
+  r.number("bar_half_length_kpc",model_choices::bar_half_length_kpc,"kpc (Wegg, Gerhard & Portail 2015 long bar)");
+  r.vector("bar_near_end_axis",{-std::cos(model_choices::bar_angle_rad),std::sin(model_choices::bar_angle_rad),0.0},"Galactocentric unit vector");
+  r.text("display_mode",look::active()?"beauty":"physical");
+  r.vector("look_good_gains",{look::young_gain(),look::hii_gain(),look::active()?look::hii_saturation:1.0,look::major_arm_gain(),look::disc_display()},
+    "young gain, HII gain, HII saturation, major-arm wave gain, eye display luminance of the solar-circle disc (look.hpp)");
+  r.number("look_good_softening",look::softening(display::q),"asinh Q of the eye display");
   r.vector("appearance",{appearance::young_length_kpc,appearance::central_light,appearance::bulge_size,appearance::bulge_height},
     "young length kpc, central light, bulge size, bulge height (fitted to SDSS MW analogs, Licquia 2015)");
   // Renderer fields. Each light channel's optical depth per kpc is this
@@ -92,7 +103,30 @@ extern "C" int bake() {
   // The eye: the same stretch on the luminance, no desaturation (the
   // chromaticity kept), one count scale for X, Y and Z (eye_color.hpp).
   const double eye_counts=eye::counts_per_unit(counts);
-  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma,eye::on()?1.0:display::saturation},"Q,alpha per count,gamma,saturation");
+  // The eye's exposure (0.5): alpha such that the face-on disc at the solar
+  // circle (the median of 24 columns at R0, the model's own light and dust)
+  // shows at the display luminance look::disc_display() through the stretch
+  // and gamma; the SDSS transfer keeps its fitted alpha (the checks').
+  double alpha=display::alpha_per_count;
+  if(eye::on()) {
+    std::vector<double> ys;
+    for(int k=0;k<24;++k) {
+      const double phi=2*galactic_constants::pi*k/24,x=galactic_constants::solar_radius_kpc*std::cos(phi),y=galactic_constants::solar_radius_kpc*std::sin(phi);
+      double light=0,transmit=1;
+      const double* ratios=model_choices::channel_ratios();
+      for(double z=1.5;z>-1.5;) {
+        const double dz=std::abs(z)<0.6?0.005:0.05,zm=z-dz/2;
+        const Field f=literature({x,y,zm});const double kb=std::max(0.0,f.kappa)*ratios[0],tau=kb*dz;
+        light+=transmit*std::max(0.0,f.r)*(tau>1e-10?-std::expm1(-tau)/kb:dz);transmit*=std::exp(-tau);z-=dz;
+      }
+      ys.push_back(light);
+    }
+    std::nth_element(ys.begin(),ys.begin()+12,ys.end());
+    const double q=look::softening(display::q);
+    const double intensity=ys[12]*eye_counts,stretched=std::pow(look::disc_display(),1/display::gamma);
+    alpha=std::sinh(q*stretched)/(q*intensity);
+  }
+  r.vector("display_asinh",{eye::on()?look::softening(display::q):display::q,alpha,display::gamma,eye::on()?1.0:display::saturation},"Q,alpha per count,gamma,saturation");
   if(eye::on()) r.vector("display_counts_per_unit",{eye_counts,eye_counts,eye_counts},"SDSS-transfer counts per 0.396 arcsec pixel per Y,Z,X unit (the old disc's luminance at its SDSS intensity)");
   else r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
   r.vector("display_band_weights",{display::weights[0],display::weights[1],display::weights[2]},"r,g,i");

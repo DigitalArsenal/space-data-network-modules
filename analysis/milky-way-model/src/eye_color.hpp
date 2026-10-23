@@ -91,14 +91,15 @@ inline XYZ nebular() {
 // The four populations' XYZ, as bands in the renderer's channel slots:
 // .r = Y (the central channel, luminance), .g = Z (the blue), .i = X.
 inline sdss::Bands slots(const XYZ& c) {return {c.z,c.y,c.x};}
-struct Set {sdss::Bands disc,central,young,hii;};
+struct Set {sdss::Bands disc,central,young,hii,intermediate;};
 inline const Set& bands() {
   // One scale for all four (the old disc's Y its r light), so the volumes'
   // half floats hold them as they hold r, g, i.
   static const Set set=[] {
     const XYZ disc=integrate(colors::disc_bands);const double k=colors::disc_bands.r/disc.y;
     auto scaled=[&](XYZ c){return slots({c.x*k,c.y*k,c.z*k});};
-    return Set{scaled(disc),scaled(integrate(colors::central_bands)),scaled(integrate(colors::young_bands)),scaled(nebular())};
+    return Set{scaled(disc),scaled(integrate(colors::central_bands)),scaled(integrate(colors::young_bands)),scaled(nebular()),
+               scaled(integrate(colors::intermediate_bands))};
   }();
   return set;
 }
