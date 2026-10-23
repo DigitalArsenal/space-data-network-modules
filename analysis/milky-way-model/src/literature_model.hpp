@@ -326,6 +326,20 @@ inline double next_uniform(uint64_t& s) {
 // then returns the knot's luminosity draw, L_min = 1).
 struct Spec {unsigned count;uint64_t seed;double min_kpc,max_kpc,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,drift_myr,min_density;
   double cluster_sigma=0;bool sized_by_light=false;double size_power=0.5;};
+// The cell grid: each knot listed in every cell within 3 sigma of it.
+inline void index(Population& p) {
+  p.n=int(2*half_kpc/cell_kpc);
+  p.cells.assign(size_t(p.n)*p.n,{});
+  for(uint32_t i=0;i<p.knots.size();++i) {
+    const auto& g=p.knots[i];const double reach=3*g.sigma;
+    const int x0=std::max(0,int((g.c.x-reach+half_kpc)/cell_kpc)),x1=std::min(p.n-1,int((g.c.x+reach+half_kpc)/cell_kpc));
+    const int y0=std::max(0,int((g.c.y-reach+half_kpc)/cell_kpc)),y1=std::min(p.n-1,int((g.c.y+reach+half_kpc)/cell_kpc));
+    for(int y=y0;y<=y1;++y) for(int x=x0;x<=x1;++x) p.cells[size_t(y)*p.n+x].push_back(i);
+  }
+}
+// A knot's total light: A (2 pi)^(3/2) sigma^3.
+inline double total(const Knot& k) {return k.amplitude*std::pow(2*galactic_constants::pi,1.5)*k.sigma*k.sigma*k.sigma;}
+inline double total(const Population& p) {double t=0;for(const auto& k:p.knots) t+=total(k);return t;}
 // `brightness(r, seed)`: a knot's amplitude at radius r, drawing from `seed`.
 template<class Brightness> Population build(const Spec& spec,Brightness brightness) {
   Population p;uint64_t seed=spec.seed;
@@ -352,14 +366,7 @@ template<class Brightness> Population build(const Spec& spec,Brightness brightne
     if(spec.sized_by_light) sigma=std::min(spec.sigma_hi_kpc,spec.sigma_lo_kpc*std::pow(amplitude,spec.size_power));
     p.knots.push_back({{c.x,c.y,spec.layer_kpc*g1},sigma,amplitude,amplitude});
   }
-  p.n=int(2*half_kpc/cell_kpc);
-  p.cells.resize(size_t(p.n)*p.n);
-  for(uint32_t i=0;i<p.knots.size();++i) {
-    const auto& g=p.knots[i];const double reach=3*g.sigma;
-    const int x0=std::max(0,int((g.c.x-reach+half_kpc)/cell_kpc)),x1=std::min(p.n-1,int((g.c.x+reach+half_kpc)/cell_kpc));
-    const int y0=std::max(0,int((g.c.y-reach+half_kpc)/cell_kpc)),y1=std::min(p.n-1,int((g.c.y+reach+half_kpc)/cell_kpc));
-    for(int y=y0;y<=y1;++y) for(int x=x0;x<=x1;++x) p.cells[size_t(y)*p.n+x].push_back(i);
-  }
+  index(p);
   return p;
 }
 // The knots' summed emissivity at p (each A exp(-|p-c|^2 / 2 sigma^2), to 3 sigma).
@@ -414,6 +421,33 @@ inline const knots::Population& population() {
 }
 // The regions' G emissivity at p (model units).
 inline double light(Vec3 p) {return knots::light(population(),p);}
+// THE IONIZING CLUSTERS (0.5.1, owner 2026-10-23: "white core with faded to
+// purple"): each region's lines are lit by its young cluster, which stands
+// at its center as a compact blue-white core (young light, colors young).
+// Its G light is the region's nebular G light times the continuum to lines
+// ratio of the equivalent widths the module gives giant HII regions
+// (stellar_populations.hpp: H-alpha 1000 A and [OIII] with H-beta 500 A, of
+// G's ~4400 A: 4400 / 1500), taken from the star complexes' share of the
+// young light, so the young total stands. Its size: half the nebula's
+// sigma, no finer than half the slab's 62.5 pc texel, the finest the bake
+// samples (a core between texel centers would be missed); the clusters of
+// giant regions spread over tens of parsecs (Wright et al. 2023, PPVII,
+// section 2).
+inline constexpr double core_to_nebula=colors::big_g_fwhm_a/(colors::hii_g_ew_a+colors::hii_r_ew_a),core_sigma_min_kpc=0.03125;
+inline const knots::Population& clusters() {
+  static const knots::Population pop=[] {
+    knots::Population c;
+    for(const auto& k:population().knots) {
+      const double sigma=std::max(0.5*k.sigma,core_sigma_min_kpc);
+      c.knots.push_back({k.c,sigma,core_to_nebula*k.amplitude*std::pow(k.sigma/sigma,3),k.luminosity});
+    }
+    knots::index(c);
+    return c;
+  }();
+  return pop;
+}
+// The clusters' G emissivity at p (young light, model units).
+inline double cluster_light(Vec3 p) {return knots::light(clusters(),p);}
 } // namespace hii
 
 // STAR COMPLEXES: the young population's clumps. Most young massive stars
@@ -465,7 +499,9 @@ inline const knots::Population& complexes::population() {
         luminosity_sum+=l;
         return l;
       });
-    const double scale=clumped*young_total/luminosity_sum;
+    // The clumped young light less the HII regions' ionizing clusters (0.5.1).
+    // (hii_population reports the clusters' share of it.)
+    const double scale=std::max(0.0,clumped*young_total-knots::total(hii::clusters()))/luminosity_sum;
     for(auto& k:pop.knots) k.amplitude*=scale/(std::pow(2*galactic_constants::pi,1.5)*k.sigma*k.sigma*k.sigma);
     return pop;
   }();
@@ -486,7 +522,7 @@ inline Field literature(Vec3 p,bool local_dust) {
   // LOOK GOOD (look.hpp: display gains on the modeled components; 1 for
   // TRUE PHYSICS, the default and every check's).
   const double young=look::young_gain()*((c.arms-c.thin*(pattern.wave+pattern.intermediate))
-    *structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)+complexes::light(p));
+    *structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)+complexes::light(p)+hii::cluster_light(p));
   const double disc=c.thin+c.thick+c.thin*pattern.wave*look::major_arm_gain();
   const double intermediate=c.thin*pattern.intermediate*(pattern.intermediate_major>0?look::major_arm_gain():1.0);
   const double central=c.bulge+c.bar;
@@ -516,7 +552,7 @@ inline double literature_g(Vec3 p) {
   const auto c=stellar_components(p,pattern);
   const double young=c.arms-c.thin*(pattern.wave+pattern.intermediate);
   return c.thin+c.thick+c.thin*(pattern.wave+pattern.intermediate)+young*structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)
-    +c.bulge+c.bar+hii::light(p)+complexes::light(p);
+    +c.bulge+c.bar+hii::light(p)+hii::cluster_light(p)+complexes::light(p);
 }
 
 // The Gaia G light of a field's r, g, i channels (oracle_metrics.hpp).

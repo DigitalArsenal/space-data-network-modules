@@ -412,6 +412,9 @@ extern "C" int hii_population() {
   for(const auto& k:pop.knots) {l.push_back(k.luminosity);s.push_back(k.sigma);}
   wire::Result r;r.vector("luminosity",l,"L / L_min");r.vector("sigma_kpc",s,"kpc");
   r.number("count",double(pop.knots.size()),"regions");
+  r.number("cluster_light",knots::total(hii::clusters()),"G light of the ionizing clusters (model units)");
+  r.number("nebular_light",knots::total(pop),"G light of the nebulae (model units)");
+  r.number("complexes_light",knots::total(complexes::population()),"G light of the star complexes, the clumped young light less the clusters (model units)");
   r.text("basis","dN/dL ~ L^-2 over 1-100 (Kennicutt, Edgar & Hodge 1989); sigma = 30 pc (L/L_min)^(1/3), at most 140 pc (Stromgren 1939)");
   return r.emit();
 }
