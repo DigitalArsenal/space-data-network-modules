@@ -27,7 +27,8 @@ assert.equal(names.length,limit,'Required public fixtures unavailable');
 const wasm=fs.readFileSync(wasmPath),manifest=JSON.parse(fs.readFileSync(path.join(root,'plugin-manifest.json')));
 const report={status:'RUNNING',sha256:createHash('sha256').update(wasm).digest('hex'),rows:[],docker:'WAIVED by owner 2026-10-22',freshFilePrediction:'Not measured: historical fixture corpus has one issuance per satellite; fit RMS is forecast reproduction only.'};
 const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'operator-fit-e2e-'));
-let server,browser,native;
+let server,native;
+const browsers=[];
 const save=()=>{fs.mkdirSync(path.dirname(reportPath),{recursive:true});fs.writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');};
 function decoded(response){assert.equal(response.statusCode,0,response.errorMessage);return response.outputs.filter(o=>o.portId==='ocm').map(o=>{const c=OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(o.payload)).unpack();return {record:c,user:Object.fromEntries(c.USER_DEFINED_PARAMETERS.map(p=>[p.PARAM_NAME,p.PARAM_VALUE]))};});}
 try{
@@ -36,43 +37,101 @@ try{
  const assets=new Map([['/module.wasm',wasm],['/harness.js',bundle.outputFiles[0].contents]]);
  server=http.createServer((req,res)=>{res.setHeader('Cross-Origin-Opener-Policy','same-origin');res.setHeader('Cross-Origin-Embedder-Policy','require-corp');if(req.url==='/'){res.end('<!doctype html><title>Operator fit E2E</title>');return;}const b=assets.get(req.url);res.statusCode=b?200:404;res.setHeader('Content-Type',req.url.endsWith('.js')?'text/javascript':'application/octet-stream');res.end(b);});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- browser=await chromium.launch({headless:true,executablePath:headlessShell()});const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.address().port}`);
- await page.evaluate(async manifest=>{if(!crossOriginIsolated)throw Error('COI required');const {createBrowserModuleHarness}=await import('/harness.js');window.make=async config=>createBrowserModuleHarness({wasmSource:new Uint8Array(await(await fetch('/module.wasm')).arrayBuffer()),manifest,surface:'direct',hostOptions:{config}});},manifest);
- const cdp=await browser.newBrowserCDPSession();
- const cpu=async()=> (await cdp.send('SystemInfo.getProcessInfo')).processInfo.reduce((sum,p)=>sum+p.cpuTime,0);
- const run=async(request,config)=>{
-  const descriptors=request.inputs.map((f,i)=>{const url=`/input-${i}`;assets.set(url,f.payload);return {...f,payload:undefined,url};});
-  return page.evaluate(async({descriptors,config,methodId})=>{const h=await window.make(config);try{const inputs=[];for(const {url,...f} of descriptors)inputs.push({...f,payload:new Uint8Array(await(await fetch(url)).arrayBuffer())});const r=await h.invoke({methodId,inputs});return {...r,errorMessage:r.statusCode?JSON.stringify({message:r.errorMessage,host:h.bridge?.getLastEnvelope()}):r.errorMessage,outputs:r.outputs.map(o=>({...o,payload:Array.from(o.payload)}))};}finally{await h.destroy();}},{descriptors,config,methodId:request.methodId}).then(r=>({...r,outputs:r.outputs.map(o=>({...o,payload:new Uint8Array(o.payload)}))}));
- };
+ let serial=0;
+ const errors=[];
+ async function worker(){
+  const browser=await chromium.launch({headless:true,executablePath:headlessShell()});browsers.push(browser);
+  const page=await browser.newPage();page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await page.evaluate(async manifest=>{
+   if(!crossOriginIsolated)throw Error('COI required');
+   const {createBrowserModuleHarness}=await import('/harness.js');
+   window.make=async config=>createBrowserModuleHarness({wasmSource:new Uint8Array(await(await fetch('/module.wasm')).arrayBuffer()),manifest,surface:'direct',hostOptions:{config}});
+  },manifest);
+  const cdp=await browser.newBrowserCDPSession();
+  const cpu=async()=> (await cdp.send('SystemInfo.getProcessInfo')).processInfo.reduce((sum,p)=>sum+p.cpuTime,0);
+  const run=async(request,config)=>{
+   const id=serial++;
+   const descriptors=request.inputs.map((f,i)=>{const url=`/input-${id}-${i}`;assets.set(url,f.payload);return {...f,payload:undefined,url};});
+   try{
+    const response=await page.evaluate(async({descriptors,config,methodId})=>{
+     const h=await window.make(config);
+     try{
+      const inputs=[];
+      for(const {url,...f} of descriptors)inputs.push({...f,payload:new Uint8Array(await(await fetch(url)).arrayBuffer())});
+      const r=await h.invoke({methodId,inputs});
+      return {...r,outputs:r.outputs.map(o=>({...o,payload:Array.from(o.payload)}))};
+     }finally{await h.destroy();}
+    },{descriptors,config,methodId:request.methodId});
+    return {...response,outputs:response.outputs.map(o=>({...o,payload:new Uint8Array(o.payload)}))};
+   }finally{for(const {url} of descriptors)assets.delete(url);}
+  };
+  return {run,cpu,version:browser.version()};
+ }
+ const primary=await worker(),{run,cpu}=primary;
  report.referenceFrameGate=await referenceFrameGate(root,run);console.log('REFERENCE_RMS frame gate passed');save();
- report.costContext={cpus:os.cpus().length,cpuModel:os.cpus()[0].model,loadAverage:os.loadavg(),browser:browser.version(),cpuMeasurement:'CDP cumulative CPU seconds for this owned browser and its children; includes invocation overhead'};
- const config={sampleSeconds:600,maxIterations:12,ballisticPrior:.02,dataSource:'SpaceX public MEME'};
- for(const name of names){
+ report.costContext={cpus:os.cpus().length,cpuModel:os.cpus()[0].model,loadAverage:os.loadavg(),browser:primary.version,cpuMeasurement:'CDP cumulative CPU seconds for this owned browser and its children; includes invocation overhead'};
+ const config={sampleSeconds:600,maxIterations:6,ballisticPrior:.02,dataSource:'SpaceX public MEME'};
+ async function measure(name,host,concurrent){
   const bytes=fs.readFileSync(path.join(dir,name));const text=bytes.toString('utf8');const match=/ephemeris_start:(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)/.exec(text);assert(match,'MEME start metadata');const epoch=match[1]+'T'+match[2];
   const base={methodId:'fit_ffm',inputs:[fil(bytes,name),configuration(epoch),...env.inputs]};
+  let first;
   for(const correction of [false,true]){
    const request=correction?{...base,inputs:[...base.inputs,dcl(epoch,0.6931471805599453)]}:base;
-   const cpuStart=await cpu(),start=performance.now(),result=await run(request,config),elapsed=(performance.now()-start)/1000,cpuSeconds=(await cpu())-cpuStart;
-   const segments=decoded(result);const row={file:name,dca:correction?'constant ln(2) mechanics':'absent',wallSeconds:elapsed,cpuSeconds,segments:segments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG),kappa:Number(s.user.KAPPA_GIVEN_B_PRIOR),samples:s.record.ORBIT_DETERMINATION.OD_OBSERVATIONS_USED,iterations:Number(s.user.FIT_ITERATIONS),convergence:s.record.ORBIT_DETERMINATION.OD_CONVERGENCE_CRITERIA,operatorCovariance:s.user.COVARIANCE_RULE,formalCovariance:!!s.user.FORMAL_COVARIANCE_LTM}))};
+   const cpuStart=await host.cpu(),start=performance.now(),result=await host.run(request,config),elapsed=(performance.now()-start)/1000,cpuSeconds=(await host.cpu())-cpuStart;
+   const segments=decoded(result);const row={file:name,dca:correction?'constant ln(2) mechanics':'absent',wallSeconds:elapsed,cpuSeconds,concurrent,maxIterations:config.maxIterations,segments:segments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG),kappa:Number(s.user.KAPPA_GIVEN_B_PRIOR),samples:s.record.ORBIT_DETERMINATION.OD_OBSERVATIONS_USED,iterations:Number(s.user.FIT_ITERATIONS),convergence:s.record.ORBIT_DETERMINATION.OD_CONVERGENCE_CRITERIA,operatorCovariance:s.user.COVARIANCE_RULE,formalCovariance:!!s.user.FORMAL_COVARIANCE_LTM}))};
    row.rmsKm=Math.sqrt(row.segments.reduce((sum,s)=>sum+s.samples*s.rmsKm*s.rmsKm,0)/row.segments.reduce((sum,s)=>sum+s.samples,0));
    report.rows.push(row);console.log(JSON.stringify(row));save();
-   if(name===names[0]&&!correction){
+   if(!correction)first={base,epoch,result,segments,row};
+  }
+  return first;
+ }
+ const first=await measure(names[0],primary,false);
+ const pending=names.slice(1);
+ async function corpus(){
+  await Promise.all(Array.from({length:Math.min(Number(process.env.OD_WORKERS||8),pending.length)},async()=>{
+   const host=await worker();
+   while(pending.length){const name=pending.shift();await measure(name,host,true);}
+  }));
+ }
+ async function features(){
+  const {base,epoch,segments,row}=first;
+
+    const warmKeys=['warmX','warmY','warmZ','warmVx','warmVy','warmVz'];
+    const warm={...config,warmStart:true,ballisticSeed:Number(segments[0].user.B_EFF_M2_KG),...Object.fromEntries(warmKeys.map((k,i)=>[k,segments[0].record.STATE_DATA[i]]))};
+    const warmCpu=await cpu(),warmStart=performance.now(),warmResult=await run(base,warm);
+    report.warmReplay={cpuSeconds:(await cpu())-warmCpu,wallSeconds:(performance.now()-warmStart)/1000,rmsKm:Number(decoded(warmResult)[0].user.FIT_RMS_KM),kind:'same-epoch replay; previous-cycle state must first be propagated to the new source epoch by FFM'};
+    assert(report.warmReplay.rmsKm<=row.rmsKm+1e-4);
     const refused=await run(base,{...config,fitWindowSeconds:172801});assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/blend-join/);report.joinRefusal='PASS';console.log('Join refusal passed');
-    const planted=await plantedManeuver(epoch,env);const event=await run({methodId:'fit_ffm',inputs:[planted,configuration(epoch),...env.inputs]},config);
+    const planted=await plantedManeuver(epoch,env);const event=await run({methodId:'fit_ffm',inputs:[planted.kvn,configuration(epoch),...env.inputs]},config);
     assert.equal(decoded(event).length,2,'Maneuver must split the fit into two segments');assert.equal(event.outputs.filter(o=>o.portId==='mnv').length,1);report.maneuverSegmentation='PASS';console.log('Planted maneuver split into two segments');save();
+    const eventSegments=decoded(event);
+    assert.equal(eventSegments[0].user.COVARIANCE_RULE,'1: operator supplied');
+    report.maneuverFits=eventSegments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG)}));
+    const typed=await run({methodId:'fit_ffm',inputs:[planted.typed,configuration(epoch),...env.inputs]},config);
+    assert.deepEqual(decoded(typed).map(s=>s.record),eventSegments.map(s=>s.record),'OEM KVN/FlatBuffer fit and covariance parity');
+    report.oemCovariance='PASS GCRF covariance retained identically from KVN and typed OEM';
+    const corrected=await run({methodId:'fit_ffm',inputs:[planted.kvn,configuration(epoch),...env.inputs,dcl(epoch,0.6931471805599453)]},{...config,ballisticSeed:.0015});
+    const adjusted=decoded(corrected);
+    for(let i=0;i<adjusted.length;++i){
+     const b=Number(eventSegments[i].user.B_EFF_M2_KG),twice=2*Number(adjusted[i].user.B_EFF_M2_KG);
+     assert(b>.0001,'Planted physical B must remain observable');assert(Math.abs(b-twice)<1e-5,'Constant doubled density must halve B_eff');
+     assert(Math.abs(Number(eventSegments[i].user.FIT_RMS_KM)-Number(adjusted[i].user.FIT_RMS_KM))<1e-4);
+    }
+    report.dcaMechanics='PASS constant exp(s)=2 halves nonzero B_eff, same fitted trajectory';save();
     const parityConfig={...config,fitWindowSeconds:7200,maxIterations:3};
     const parityRequest={...base,inputs:[...base.inputs,dcl(epoch,0.6931471805599453)]};
     const browserParity=await run(parityRequest,parityConfig);
     native=await loadModule({wasmSource:wasmPath,manifest,runtimeKind:'wasmedge',surface:'direct',config:parityConfig});
     console.log('Native WasmEdge parity running (2h, 3 iterations, DCA)');
     const other=await native.invoke(parityRequest);const hashes=r=>r.outputs.map(o=>[o.portId,createHash('sha256').update(o.payload).digest('hex')]);assert.equal(other.statusCode,0,other.errorMessage);assert.deepEqual(hashes(other),hashes(browserParity));report.parity='byte-identical headless browser/native WasmEdge; 2h, 3 iterations, constant DCA';await native.destroy();native=null;console.log('Native parity passed');save();
-   }
-  }
  }
+ await Promise.all([corpus(),features()]);
  assert.deepEqual(errors,[]);
  for(const dca of ['absent','constant ln(2) mechanics']){const rms=report.rows.filter(r=>r.dca===dca).map(r=>r.rmsKm).sort((a,b)=>a-b);const median=rms[Math.floor(rms.length/2)];assert(median<.6,`${dca}: median ${median} km`);(report.medians??={})[dca]=median;}
+ assert.equal(createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),report.sha256,'Artifact must remain frozen throughout the E2E');
  const aot=execFileSync(process.env.SDN_NODE_BINARY||'/opt/data/sdn-archive/bin/spacedatanetwork',['prewarm-aot','--cache-dir',path.join(scratch,'aot'),'--flow',wasmPath],{encoding:'utf8',timeout:180000,maxBuffer:8*1024*1024});assert(!/FAILED|Not implemented instructions/.test(aot));report.aot='PASS exact artifact, node WasmEdge 0.16.4';
  assert(report.maneuverSegmentation==='PASS','Planted-maneuver segmentation evidence is required');
  report.status='PASS';
 }catch(error){report.status='FAIL';report.error=error.stack;throw error;}
-finally{await native?.destroy();await browser?.close();if(server?.listening)await new Promise(resolve=>server.close(resolve));fs.rmSync(scratch,{recursive:true,force:true});save();}
+finally{await native?.destroy();await Promise.all(browsers.map(b=>b.close()));if(server?.listening)await new Promise(resolve=>server.close(resolve));fs.rmSync(scratch,{recursive:true,force:true});save();}

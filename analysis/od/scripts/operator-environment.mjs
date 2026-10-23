@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import * as fb from 'flatbuffers';
 import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
 import * as F from 'spacedatastandards.org/lib/js/FIL/main.js';
+import * as O from 'spacedatastandards.org/lib/js/OEM/main.js';
 import * as D from 'spacedatastandards.org/lib/js/DCL/main.js';
 import {SPW} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {EOP} from 'spacedatastandards.org/lib/js/EOP/EOP.js';
@@ -63,6 +64,14 @@ export async function plantedManeuver(epoch,env){
   assert.equal(output.SAMPLES.length,seconds.length);
   const header='CCSDS_OEM_VERS = 2.0\nMETA_START\nOBJECT_NAME = PLANTED-MANEUVER\nOBJECT_ID = SYNTHETIC\nCENTER_NAME = EARTH\nREF_FRAME = GCRF\nTIME_SYSTEM = UTC\nMETA_STOP\n';
   const lines=output.SAMPLES.map((s,i)=>{const p=s.STATE.STATE.POSITION,v=s.STATE.STATE.VELOCITY;return label(seconds[i])+' '+[p.X,p.Y,p.Z,v.X,v.Y,v.Z].map(x=>x/1000).join(' ');});
-  return fil(new TextEncoder().encode(header+lines.join('\n')+'\n'),'planted.oem');
+  const covariance='COVARIANCE_START\nEPOCH = '+label(0)+'\nCOV_REF_FRAME = GCRF\n0.01\n0 0.02\n0 0 0.03\n0 0 0 0.000001\n0 0 0 0 0.000002\n0 0 0 0 0 0.000003\nCOVARIANCE_STOP\n';
+  const kvn=fil(new TextEncoder().encode(header+lines.join('\n')+'\n'+covariance),'planted.oem');
+  const ot=(name,fields)=>Object.assign(new O[name+'T'](),fields);
+  const frame=ot('RFM',{REFERENCE_FRAME_type:O.RFMUnion.CelestialFrameWrapper,REFERENCE_FRAME:ot('CelestialFrameWrapper',{frame:O.CelestialFrame.GCRF})});
+  const block=ot('ephemerisDataBlock',{OBJECT:ot('CAT',{OBJECT_NAME:'PLANTED-MANEUVER',OBJECT_ID:'SYNTHETIC'}),CENTER_NAME:'EARTH',REFERENCE_FRAME:frame,TIME_SYSTEM:O.timingStandard.UTC,
+    EPHEMERIS_DATA_LINES:output.SAMPLES.map((s,i)=>{const p=s.STATE.STATE.POSITION,v=s.STATE.STATE.VELOCITY;return ot('ephemerisDataLine',{EPOCH:label(seconds[i]),X:p.X/1000,Y:p.Y/1000,Z:p.Z/1000,X_DOT:v.X/1000,Y_DOT:v.Y/1000,Z_DOT:v.Z/1000});}),
+    COVARIANCE_MATRIX_LINES:[ot('covarianceMatrixLine',{EPOCH:label(0),COV_REFERENCE_FRAME:frame,CX_X:.01,CY_Y:.02,CZ_Z:.03,CX_DOT_X_DOT:.000001,CY_DOT_Y_DOT:.000002,CZ_DOT_Z_DOT:.000003})]});
+  const b=new fb.Builder(4096);b.finish(ot('OEM',{EPHEMERIS_DATA_BLOCK:[block]}).pack(b),'$OEM');
+  return {kvn,typed:input('oem','OEM',b.asUint8Array().slice())};
  }finally{await h.destroy();}
 }
