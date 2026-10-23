@@ -3,6 +3,10 @@
   "name": "CelesTrak Space Weather Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow, space weather. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:spw emits the SW-All.csv HttpRequest (4 MiB budget); hostcap/http-request fetches it; celestrak-parser:parse_spw normalizes it into an $SPW record stream with its IngestRequest (batch = sha256 of the payload, reconcile Current; the runner's 7-day stale-source gate fails the batch in-wasm; archived as celestrak/SW-All.csv), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source hostcall. After the store celestrak-request:publish_request joins the IngestResult with the parser's IngestRequest and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST, its body the IngestResult. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304), publication (the publication HttpResponse). All decisions live in-wasm.",
   "capabilities": [
     "http",
@@ -26,8 +30,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

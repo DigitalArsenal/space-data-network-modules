@@ -133,7 +133,7 @@ the modules' manifests and to the flow:
 
 ```sh
 npm run check   # flow check
-npm run build   # flow compile -> dist/ (single-thread Emception link of the modules' guest-link objects)
+npm run build   # flow compile -> dist/ (wasi-sequential link of the modules' guest-link objects)
 npm test        # the flow in the SDK's JS flow host, compared byte for byte with the module chain
 ```
 

@@ -345,5 +345,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "record_event folds each incoming frame into the status board's running counters in arrival order; the counters carry state from one event to the next, so the node runs on one thread and creates none."
+  }
 }

@@ -3,6 +3,10 @@
   "name": "SDN Record Retention Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Hourly rolling-window retention (typed contracts 1.0): the host-cron timer's TimerTick enters data-source/record-retention expire, which asks the node (storage.expire, an SDS $PIV hostcall) to delete each configured lane's records that arrived on the node more than window_hours ago (node config; default 72 h over WXF from provider noaa-ncep), through the store's record index. Owner 2026-10-12, the weather node: a rolling 3-day window, configurable, never an archive. Each lane pass's FlowNotice (FNTC: Expired / Missing / Skipped) ends at the flow egress. No JSON.",
   "capabilities": [
     "storage_write"

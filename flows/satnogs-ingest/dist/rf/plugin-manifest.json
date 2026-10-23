@@ -3,6 +3,10 @@
   "name": "SatNOGS RF Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow, RF spectrum (typed contracts 1.0: every edge carries one FlatBuffer type, no JSON and no base64 between nodes): a cron TIMER (TimerTick) enters at satnogs-source:request, which emits ONE whole-table HttpRequest GET of the SatNOGS DB transmitters API (bulk, never a pagination walk) carrying the identifying User-Agent the source-policy.json fetch discipline mandates, its parse job in CONTEXT (one size-prefixed IngestRequest: schema, provider, source name and URL, reconcile None, archive naming). hostcap/http-request answers one HttpResponse (the BODY verbatim, the CONTEXT echoed); satnogs-source:parse reads the job from it, decodes ~4,994 transmitter rows into a size-prefixed $RFB record stream (batch = sha256 of the payload; Hz -> MHz per the normative RFB units rule; one record per LINK_DIRECTION so a Transceiver/Transponder becomes an UPLINK+DOWNLINK pair sharing ID_TRANSMITTER) with its IngestRequest and the HttpResponse as the raw document, and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source hostcall (IngestResult on egress 'result'). SatNOGS DB is CC-BY-SA-4.0: every record carries the attribution in CITATION and the batch's source tags carry LICENSE, LICENSE_URL, CITATION and SHARE_ALIKE, keeping the share-alike obligation contained to its own licence-marked batch. HTTP 304 Not Modified is a successful run with nothing new: parse emits one FlowNotice (Unchanged, not-modified) straight to egress 'notice' and no meta/records/raw frames, so storage-ingest never fires. All decisions live in-wasm; the host supplies only the http and storage connectors.",
   "capabilities": [
     "http",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

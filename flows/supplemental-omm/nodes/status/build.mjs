@@ -60,8 +60,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL - declared: the node counts on the calling thread, spawns nothing and shares nothing.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   allowUndefinedImports: true,
 });
 if (!compilation.report?.ok) throw new Error(`SDK validation failed:\n${JSON.stringify(compilation.report?.issues ?? [], null, 2)}`);

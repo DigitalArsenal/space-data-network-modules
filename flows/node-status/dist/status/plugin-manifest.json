@@ -3,6 +3,10 @@
   "name": "SDN Node Status Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "M1 node-status flow (mount GET /api/v1/node/status): a $HTQ HttpRequest enters on the http-request trigger; foundation/http-route route_node_status decides it as an $APR (GET/HEAD -> route status, anything else STATUS 405); hostcap/node-status reads the node through the policy-mediated READ-ONLY node_status_read.status hostcall (typed $PIV, capability node_status_read; node.peerId and clock.now stamp NODE_ID / GENERATED_AT_MS) and answers an $NHS beside the $APR (or the $APR with STATUS 503 when the host fails); foundation/http-respond respond renders the $HTR (200 / 405 / 503): the $NHS verbatim as FlatBuffers by default, or as JSON when the request asks for it. No ETag: the snapshot changes on every call. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
     "clock",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     }
   ],
   "externalInterfaces": [

@@ -3,6 +3,10 @@
   "name": "S3-Compatible Object Store API",
   "version": "0.1.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Mounted at /api/v1/storage/objects (typed contracts 1.0: FlatBuffers only; every answer is the $APR result record, whose BODY is the object bytes for GET and a $FIL listing for a list). The ONE http trigger delivers the $HTQ request to storage/object-s3 serve, which routes PUT|GET|HEAD|DELETE /objects/<store>/<bucket>/<key> and GET /objects/<store>/<bucket> (list) into an $APR task for sign; sign builds the SigV4-signed request, hostcap/http-request performs it, finish reads the response, and foundation/http-respond answers. A put above multipartThreshold (16 MiB) runs the multipart stages (sign emits CreateMultipartUpload and forwards the task on held; split emits one signed UploadPart per partSize slice; assemble emits CompleteMultipartUpload, or AbortMultipartUpload and a refusal when any part failed; a third http-request node and a second finish node read the completion). Exactly one of the result, refusal and failure emitters answers per exchange, so two bodies can never race into the responder. Every route is NOT anonymous (an admin session): the endpoint is caller-chosen, so an anonymous caller could point a stored credential at any host. object-s3 holds only the secrets READ grant and the clock, http-request holds only http, and the credential lanes are written by the separate storage-credentials flow. The host owns no store list and no schedule - it mounts a route and moves bytes; zero new capabilities.",
   "capabilities": [
     "clock",

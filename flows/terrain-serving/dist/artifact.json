@@ -4,11 +4,11 @@
   "version": "0.2.0",
   "artifact": {
     "file": "runtime.wasm",
-    "sha256": "25d5ca0bafdec74288c36fb87324607cb4f82309408cc2c0bbfff5aadb23286e",
-    "bytes": 250174
+    "sha256": "f17c3188f0a1fedcac562dbf788fe809e1a30d78ad365d9170e58fc3f2d053ee",
+    "bytes": 281898
   },
-  "compiler": "space-data-module flow compile (isomorphic, emception)",
-  "threadModel": "single-thread",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
   "nodes": 5,
   "edges": 8,
   "triggers": 1,
@@ -59,8 +59,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.terrain-source",
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
-      "version": "0.2.0",
-      "sha256": "589f1d8f3fcfb7cccb0e3b5a784cb31388ba3cc7b05603248c13fcdec2943548",
+      "version": "0.8.1",
+      "sha256": "dc23530fb74b08e806d012157587e1cb2355aadb938d3c27fe2289057b94697b",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -70,15 +70,16 @@
         "tile": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f75726365_tile",
         "layer_json": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f75726365_layer_json",
         "route": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f75726365_route",
-        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f75726365_respond"
+        "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f75726365_respond",
+        "pack": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e7465727261696e2d736f75726365_pack"
       }
     },
     {
       "kind": "node",
       "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "version": "0.3.0",
-      "sha256": "3e5d6eeed33af9a61e05c881f768148a58a7fa1a0b47c6d723082c3f7078193d",
+      "version": "0.3.1",
+      "sha256": "55b298c4e6cc7d6bcfd984c0134ecbc322e9e1c423b0fc5e4aa3ad8b18ae8a58",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

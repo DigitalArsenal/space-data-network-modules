@@ -30,10 +30,11 @@ import { publishedStandardsRoot } from "../../data-source/osm-source/sds-headers
 // under modules that never declared, and the artifact guard then refuses to
 // rebuild them at all. This flow composes guests rather than compiling one, so
 // the declaration is checked against what the compiler actually produced —
-// stampArtifactRecord refuses a dist whose artifact.json disagrees. Measured on
-// both runtimes: non-shared memory with a maximum set, no tag section, no
-// pthread or wasi-thread import.
-const THREAD_MODEL = "single-thread";
+// stampArtifactRecord refuses a dist whose artifact.json disagrees. Every
+// module it links is wasi-sequential (clang wasm32-wasip1-threads, the repo's
+// one guest object format), so the linked runtime is too: one shared memory
+// with a maximum set, no wasi.thread-spawn import, no wasi_thread_start export.
+const THREAD_MODEL = "wasi-sequential";
 
 const packageRoot = fileURLToPath(new URL("./", import.meta.url));
 const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT

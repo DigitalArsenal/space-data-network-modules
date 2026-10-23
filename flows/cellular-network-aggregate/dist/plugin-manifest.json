@@ -3,6 +3,10 @@
   "name": "Cellular Network Aggregation",
   "version": "0.4.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Signed isomorphic graph, mounted at /api/v1/cellular (typed contracts 1.0: FlatBuffers only, no JSON and no base64 between nodes; JSON exists only as the client's own request body and, on request, the responder's rendering). The ONE http trigger delivers the $HTQ request to cell-tower-ingest:cache_plan, which picks exactly ONE lane. THE CACHE LANE (the default for an /aggregate read): $FSO FlatSQL queries for this dataset's DEFAULT query and for the ingest resume marks; hostcap/flatsql-query answers both as $FSB chunks, and cell-tower-ingest:cache_freshness reassembles the stored $TBS rows verbatim and answers them through foundation/http-respond respond as an $APR decision (with the x-sdn-cache, -freshness, -stale and -providers headers) plus the dataset's $DAV availability (KNOWN/AVAILABLE/FRESH, published-at from the $IRM mark) and the $TBS records - the answer says honestly whether the cache is empty, ingesting or complete. One SELECT and a byte forward; no provider is contacted. THE LIVE LANE (every other route, and any request carrying REFRESH:true): the $HTQ goes byte-for-byte to cell-tower-source:route, which reads the caller's PROVIDERS and tbsMergeMethod and fans out one HttpRequest (HREQ) per provider URL, each carrying the $APR run contract in CONTEXT; hostcap/http-request answers each with an HttpResponse (HRSP) echoing it, so attribution is by CONTEXT, never by position; parse normalizes each body into single-source $TBS reports; deconflict merges them under the caller's method and answers $APR + $DAV + the $TBS stream. Refusals are the $APR with STATUS. THE CREDENTIAL LANE: /providers builds the catalog as a $QRP projection page and /credentials/<providerId> a PUT/DELETE $APR task, both finished by cell-tower-credentials, the ONE node holding a credential capability (secrets.* and keyslot.unwrap through typed $PIV hostcalls), which answers through foundation/http-respond respond_query. THE TILE LANE (graph tasks sdn-cellular-density-tiles / upstream-modules-2): cache_plan forwards any /tiles path verbatim to tile_plan BEFORE the aggregate test can claim it; tile_plan routes and refuses (z outside [0,18] or x/y outside [0,2^z) is a 400 $APR, never a clamp) and emits the tile-scoped $FSO reads; tile_meta answers the layer's capability envelope and tile ONE bounded Web Mercator XYZ tile, both as $QRP projection pages through respond_query (points: LATITUDE/LONGITUDE rows; above the 4096 budget a 16x16 density grid of lon/lat/count rows; TOTAL_COUNT the tile's true population, TRUNCATED a deterministic sample, PARTIAL a capped or unscoped read, STORED/AS_OF_MS/STALE the store's honesty block from the resume mark). Exactly one of the cache, live, credential and tile lanes emits per request, so two bodies can never race into a responder. The host owns no schedule, no provider list, no merge policy, no cache policy and no record semantics - it mounts a route and moves bytes; zero new capabilities.",
   "capabilities": [
     "clock",
@@ -22,8 +26,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     },
     {
       "pluginId": "com.digitalarsenal.data-source.cell-tower-source",
@@ -42,8 +46,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     }
   ],
   "externalInterfaces": [

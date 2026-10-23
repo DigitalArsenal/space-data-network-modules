@@ -3,6 +3,10 @@
   "name": "SDN Provider Latest Dataset Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Gateway provider-latest-dataset flow (mount GET /api/v1/peers/{peerId}/{standard}/latest, loop G.4): foundation/http-route discover decides the request as an $APR (latest_dataset + peerId + standard); hostcap/p2p-discovery latest_dataset reads p2p.latest_dataset (typed $PIV, capability p2p_read; delivered out of band by host body reference - DAV BODY_REF_TOKEN -> $HTR BODY_REF - unless JSON is asked for, then inline) and answers a $DAV beside the $APR, with the batch's records on its standard's <code>_records port when the node serves it (STATUS 404 not-published / not-served, 503 dataset-unavailable with the $DAV); foundation/http-respond respond renders the $HTR: [$DAV][records] as one FlatBuffers stream by default, the records as JSON on request ($OMM), 304 on the $DAV ETAG. foundation/discovery-shape and foundation/omm-json are retired. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
     "clock",

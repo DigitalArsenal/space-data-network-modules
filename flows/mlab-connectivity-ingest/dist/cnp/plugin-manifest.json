@@ -3,6 +3,10 @@
   "name": "M-Lab Starlink Connectivity Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow, constellation network performance (typed contracts 1.0: every edge carries one FlatBuffers type; no JSON or base64 travels between nodes): a cron TIMER tick (TimerTick) enters at mlab-starlink-connectivity:request, which emits ONE whole-file HttpRequest GET of the M-Lab statistics-pipeline per-ASN export (https://statistics.measurementlab.net/v0/asn/14593/<YEAR>/histogram_daily_stats.json) carrying an identifying User-Agent and no credentials of any kind — this lane is HTTPS only, never BigQuery — and its parse job in CONTEXT (one size-prefixed IngestRequest skeleton: schema, provider, source name and URL, reconcile None, archive naming). hostcap/http-request answers the HttpResponse with the job echoed, so request and job are never paired by position. mlab-starlink-connectivity:parse collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream (batch = sha256 of the payload; Mbps and ms verbatim, never converted; distribution statistics only, never an invented scalar; REGION omitted because the per-ASN export carries no geographic key), the IngestRequest and the HttpResponse verbatim as the raw document, and hostcap/storage-ingest persists the batch through the policy-mediated storage.ingest_with_source hostcall (typed $PIV), archiving the raw body as mlab/histogram_daily_stats.json. M-Lab test data is CC0: every CNPMetric provenance carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false, and the batch's source tags carry LICENSE CC0-1.0 with the citation, which is what keeps a future CC BY-NC cross-check legally separable. Egress: result (IngestResult), notice (FlowNotice). HTTP 304 Not Modified is a successful run with nothing new, not a failed fetch: the host presents the ETag / Last-Modified it recorded from the last 2xx for this URL, and when M-Lab answers 304 the parse node emits one FlowNotice (Unchanged, not-modified) on its 'unchanged' port straight to the egress notice port and no meta/records/raw frames, so storage-ingest never fires and no batch is stored or announced. All decisions live in-wasm; the host supplies only the http and storage connectors.",
   "capabilities": [
     "http",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

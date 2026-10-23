@@ -3,6 +3,10 @@
   "name": "CelesTrak SATCAT Reference Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow for the CelesTrak SATCAT reference tables. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-reference:satcat_reference emits BOTH table fetches (launch sites and owners/sources, 2 MiB budget each); two hostcap/http-request nodes fetch, two celestrak-reference:parse_satcat_reference nodes read the HTML tables into $SIT (launch sites) and $LCC (legacy owner codes) record streams - the job's DATASET_ID decides which - with their IngestRequests (batch = sha256 of each page, reconcile Current since only the newest table is meaningful; archived as celestrak/launchsites.html and celestrak/sources.html), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source hostcall. Egress: result (IngestResults), notice (FlowNotice Unchanged on HTTP 304). All decisions live in-wasm.",
   "capabilities": [
     "http",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

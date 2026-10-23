@@ -3,6 +3,10 @@
   "name": "SDN Node Activity Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "M2 node-activity flow (mount GET /api/v1/node/activity): foundation/http-route route_node_activity decides the $HTQ request as an $APR (GET/HEAD -> route activity + the limit clamped [1,256], default 50; anything else STATUS 405); hostcap/node-activity reads the log through the READ-ONLY node_activity_read.activity hostcall (typed $PIV, capability node_activity_read) and answers an $NEV beside the $APR (or STATUS 503); foundation/http-respond respond renders the $HTR: the $NEV verbatim as FlatBuffers by default, JSON on request. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
     "clock",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     }
   ],
   "externalInterfaces": [

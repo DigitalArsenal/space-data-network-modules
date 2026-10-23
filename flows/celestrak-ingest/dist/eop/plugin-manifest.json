@@ -3,6 +3,10 @@
   "name": "CelesTrak Earth Orientation Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow, Earth orientation. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:eop emits the EOP-All.csv HttpRequest (4 MiB budget; the host presents its recorded ETag / Last-Modified validators); celestrak-parser:parse_eop normalizes it into an $EOP record stream (arcsecond columns to radians in the double-precision _HP fields with float32 copies, DAT to TAI_MINUS_UTC_SECONDS, DATA_TYPE O/P, series FINALS2000A, IAU_2000A; batch = sha256 of the payload; the 7-day stale gate on the newest OBSERVED row fails the batch in-wasm) with its IngestRequest (reconcile Current: each whole-history snapshot supersedes the previous one; archived as celestrak/EOP-All.csv), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source hostcall. After the store celestrak-request:publish_request joins the IngestResult with the parser's IngestRequest and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST, its body the IngestResult. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304: nothing stored), publication (the publication HttpResponse). All decisions live in-wasm.",
   "capabilities": [
     "http",
@@ -26,8 +30,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

@@ -3,6 +3,10 @@
   "name": "CelesTrak GP Ingest Flow",
   "version": "0.3.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow, GP catalog. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:gp emits the full-catalog CSV HttpRequest (64 MiB response budget); hostcap/http-request fetches it; celestrak-parser:parse_gp normalizes it into $OMM and $MPE record streams, each with an IngestRequest (SourceTags attribution, batch = sha256 of the payload, reconcile Duplicates, wasm-authored Provenance; the payload archived once, with the OMM batch, as celestrak/catalog.csv from the raw HttpResponse); two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source hostcall and answer IngestResults. After each store celestrak-request:publish_request joins that IngestResult with the parser's IngestRequest and, only when node CONFIG carries celestrak_publish_url, emits the loopback dataset-publication POST (its body the IngestResult naming the batch) that a second hostcap/http-request node drives. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304: nothing stored), publication (the publication HttpResponse). The optional host-query cache-warming branch is not wired; native reads materialize query responses on demand. All decisions live in-wasm; the host contributes timers, HTTP egress and guarded persistence only.",
   "capabilities": [
     "http",
@@ -26,8 +30,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

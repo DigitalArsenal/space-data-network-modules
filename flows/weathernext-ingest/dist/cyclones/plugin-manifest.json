@@ -3,6 +3,10 @@
   "name": "Global Ensemble Forecast Cyclone Track Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow for the tropical-cyclone tracks of a machine-learned global ensemble weather forecast (typed contracts 1.0): the host cron TimerTick enters at weathernext-source:cyclone_request, which (only when node CONFIG sets weathernext_live_access and weathernext_cyclone_url) emits the track CSV HttpRequest GET carrying its parse job in CONTEXT as a size-prefixed $TCT header record (model, ensemble size, wind averaging period, origin, dataset, source URL, licence); hostcap/http-request fetches it and echoes the CONTEXT; weathernext-parser:parse_cyclone_tracks emits one $TCT per (storm, member), the batch's IngestRequest (batch = sha256 of the CSV bytes, ARCHIVE weathernext / cyclone-tracks.csv) and the HttpResponse itself on raw; hostcap/storage-ingest persists the batch (IngestRequest on meta, the stream on tct_records, the HttpResponse on raw, whose BODY it archives) through the policy-mediated storage.ingest_with_source hostcall. IngestResults and Skipped FlowNotices land on the egress sink. After each store, weathernext-source:publish_request joins the IngestResult with the IngestRequest and (only when node CONFIG carries weathernext_publish_url, and not for a REFUSED batch) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its HttpResponse also lands on egress. Every edge carries one concrete FlatBuffer type; no JSON frames between nodes.",
   "capabilities": [
     "http",
@@ -27,8 +31,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

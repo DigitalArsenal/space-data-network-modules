@@ -3,6 +3,10 @@
   "name": "CelesTrak SOCRATES Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow, SOCRATES conjunctions. Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-request:socrates fans out to BOTH sort files (sort-minRange.csv and sort-maxProb.csv, 8 MiB budget each); two hostcap/http-request nodes fetch them, two celestrak-parser:parse_socrates nodes normalize each into a $CSM record stream (nested CAT identities with the status suffix split into OPS_STATUS_CODE, TCA as unix seconds with the published fraction; batch = sha256 of the payload) with its IngestRequest (own source tags, reconcile Current: each sort file is a snapshot of the current conjunction list; archived under celestrak/), and two hostcap/storage-ingest nodes persist them. After each store celestrak-request:publish_request joins the IngestResult with the parser's IngestRequest and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST, its body the IngestResult. Egress: result (IngestResult), notice (FlowNotice Unchanged on HTTP 304: nothing stored), publication (the publication HttpResponses). All decisions live in-wasm.",
   "capabilities": [
     "http",
@@ -26,8 +30,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

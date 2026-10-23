@@ -3,6 +3,10 @@
   "name": "Geostationary Imager Observation Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Hourly ingest of geostationary imager observations from NOAA Open Data Dissemination's anonymous public buckets (GOES-East and GOES-West ABI L1b/L2 NetCDF4) as raw per-satellite $WXF world products (owner 2026-10-07: SDN carries raw per-satellite fields; the world-clouds display derives the rest), on typed contracts 1.0 (no JSON frames). timer (TimerTick) -> plan (one S3 listing HttpRequest per satellite and product folder of the frame hour, its list job in HREQ.CONTEXT as a $WXF header record) -> http -> select_files (the listing HttpResponses echo their jobs; the hour's first full-disk scan of each wanted field; byte ranges above 64 MiB; each part's file job in CONTEXT; ONE FILE PER INVOCATION, the rest yielded as backlog) -> http -> parse (the field's world product at the imager_widths widths, 64-row band records, quantized at the instrument's precision, SDS 1.238 encodings; an IngestRequest per batch) -> storage-ingest (wxf_records) -> publish_request -> http (dataset publication, only when imager_publish_url is set; its body is the stored batch's IngestResult (INGR)). Skips and missing files are FlowNotices at the egress. Nodes are listed in pipeline order: the runtime's fair ready-node cursor then carries each file through parse and storage-ingest before select_files resumes with the next, so the parser holds one file and storage-ingest receives one meta and one record stream at a time. Memory: measured 566 MiB of linear memory for a cycle with the full-disk 0.5 km band (143 MB, three ranges) - run the service with memory_pages 16384 (1 GiB); the default 1024 (64 MiB) cannot hold one full-disk file. Cadence: hourly (set retrieval_interval to 1h; the host's default window is 3 h).",
   "capabilities": [
     "http",
@@ -26,8 +30,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

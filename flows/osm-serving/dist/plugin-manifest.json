@@ -3,6 +3,10 @@
   "name": "OSM Context Epoch Serving Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "The OSM context epoch, named (mount /api/v1/osm/, config-mounted on the sdn-server lane; plan \"OpenStreetMap on SDN\" phase 3, owner decision 2026-09-03: hosted as FlatGeobuf). A $HTQ HttpRequest enters on the http-request trigger; osm-source:route answers with exactly one $HTR. \"tileset.json\" => the epoch record the off-fleet builder wrote (tools/osm-context/build-fgb.mjs), rendered from the typed config in the builder's key order, with PAYLOAD.CID from config key osm_epoch_cid and EPOCH_BASE_PATH relative to this node's origin (<osm_gateway_path><cid>/), public max-age=60, strong ETag, 304 on If-None-Match, CORS *. \"\" or \"catalogue.json\" => the camelCase discovery document. Without osm_epoch_record + osm_epoch_cid the record route answers 503 naming the keys. Anything else 404 no-store; non-GET/HEAD 405. The FlatGeobuf bytes are served by the node's IPFS gateway under the named CID, never by this flow; clients range-read them. TYPED CONTRACTS 1.0: every frame is a FlatBuffer ($HTQ in, $HTR out) - no JSON control frames. Bridge linkage: the only host crossing is plugin.getConfig, an SDS $PIV invocation answered with one ModuleConfig (MCFG; osm_epoch_record as a TableList of one table).",
   "capabilities": [],
   "dependencies": [

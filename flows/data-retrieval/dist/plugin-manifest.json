@@ -3,6 +3,10 @@
   "name": "SDN Data Retrieval Flow",
   "version": "0.3.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "HTTP data-retrieval flow (mount /api/v1/data): foundation/http-route route decides the $HTQ request as a $QRP - \"/<code>/bulk\" -> \"bulk\" (any SDS standard: SCHEMA_NAME, SOURCE_NAME, TIME_PROFILE, PROFILE_EPOCH_MS, LIMIT, representation, If-None-Match), \"/query\" -> \"query\" (SQL + typed PARAMETERS), anything else -> \"refusal\" (a $QRP Error straight to the responder); data-source/retrieval omm_bulk resolves the epoch profile (request > config > defaults) and reads storage.flatsql_epoch_stream, data_query runs storage.flatsql_query_stream (typed $PIV hostcalls, capability storage_query; ?profile=all reads every record of the lane through storage.flatsql_query_stream; records are delivered out of band by host body reference - QRP BODY_REF_TOKEN -> $HTR BODY_REF - unless JSON is asked for, then inline), each answering the $QRP request beside a $QRP page (the page header with RECORD_COUNT and the FNV-1a entity tag, then the records verbatim); foundation/http-respond respond_query renders the $HTR (200 / 304 / refusal status): the page stream verbatim as FlatBuffers by default, the records as JSON on request ($OMM). engineLinkage bridge: the retrieval node reaches the store over the storage hostcall bridge; FlatSQL is an independently signed node, never linked into this artifact. foundation/decision-gate and foundation/omm-json are retired: the router's typed ports dispatch and the responder renders the client JSON itself. Typed contracts 1.0: every edge carries one SDS FlatBuffers type; no JSON travels between nodes (JSON exists only as the client representation http-respond renders on request).",
   "capabilities": [
     "clock",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.foundation.http-respond",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
     }
   ],
   "externalInterfaces": [

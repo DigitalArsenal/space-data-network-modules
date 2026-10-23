@@ -3,6 +3,10 @@
   "name": "Global Ensemble Forecast Cloud-Cover Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow for the cloud-cover fields of a machine-learned global ensemble weather forecast served as Zarr v3 objects (typed contracts 1.0): the host cron TimerTick enters at weathernext-source:plan, which (only when node CONFIG sets weathernext_live_access) emits one HttpRequest GET per (array x lead x chunk) carrying the chunk's parse job in CONTEXT as a size-prefixed $WXF header record (field, model, init/lead/valid time, member, variable, the tile's GRID and TILE_INDEX/TILE_COUNT, dtype, codec chain, origin, dataset, source URL, licence); hostcap/http-request fetches every chunk in order and echoes each CONTEXT in its HttpResponse; weathernext-parser:parse_cloud_chunks reads each response's own job (no positional pairing), decodes each chunk through its declared codec chain (chunk extents and dimension order from the same node config) and emits one size-prefixed $WXF tile per chunk plus the batch's IngestRequest (batch = sha256 of the concatenated chunk bodies, licence-bearing provenance); hostcap/storage-ingest persists the batch (IngestRequest on meta, the stream on wxf_records) through the policy-mediated storage.ingest_with_source hostcall. IngestResults and Skipped FlowNotices land on the egress sink. After each store, weathernext-source:publish_request joins the IngestResult with the IngestRequest and (only when node CONFIG carries weathernext_publish_url, and not for a REFUSED batch) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its HttpResponse also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; its token rides only the request HEADERS. Every edge carries one concrete FlatBuffer type; no JSON frames between nodes.",
   "capabilities": [
     "http",
@@ -27,8 +31,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

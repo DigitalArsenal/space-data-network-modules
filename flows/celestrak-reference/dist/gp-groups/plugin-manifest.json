@@ -3,6 +3,10 @@
   "name": "CelesTrak GP Groups Ingest Flow",
   "version": "0.2.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Per-provider ingest flow for the CelesTrak GP group queries (47 GROUP tokens plus the gpz / gpz-plus SPECIAL queries, overridable via node CONFIG celestrak_gp_groups). Typed contracts 1.0 (FlatBuffers only, no JSON and no base64): the timer's TimerTick enters the request builder; each HttpRequest carries its job - one size-prefixed $ICN (Ingest Connector) record naming the lane, the URL, the origin, the dataset and the usage terms - in CONTEXT, which hostcap/http-request echoes in the HttpResponse, so the parser reads its job from the response itself and nothing is paired by position. celestrak-reference:gp_groups emits one HttpRequest per group, each carrying its own $ICN (CONNECTOR_ID celestrak-gp-groups/<TOKEN>, the group URL); hostcap/http-request answers one HttpResponse per request; celestrak-reference:parse_gp_groups reads each response's group from its CONTEXT, re-resolves the group plan from the same node CONFIG and refuses the snapshot unless exactly one response per planned group arrived (any order; output and batch in plan order), then emits one $EGP (Entity Group, QUERY_SNAPSHOT membership over the group's OMM rows) per group with its IngestRequest (batch = sha256 of the concatenated payloads, reconcile Current for a complete snapshot, Duplicates when some groups answered 304; the concatenation archived as celestrak/gp-groups.csv through a raw HttpResponse); hostcap/storage-ingest persists through the policy-mediated storage.ingest_with_source hostcall. The optional OMM re-emission lane (node CONFIG celestrak_gp_groups_emit_omm) stores the group rows as $OMM when enabled. Egress: result (IngestResults), notice (FlowNotice Unchanged naming the groups that answered 304). All decisions live in-wasm.",
   "capabilities": [
     "http",
@@ -21,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [

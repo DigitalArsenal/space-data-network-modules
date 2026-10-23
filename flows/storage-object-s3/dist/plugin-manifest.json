@@ -3,6 +3,10 @@
   "name": "S3-Compatible Object Store",
   "version": "0.1.0",
   "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
   "description": "Object-store operations over any S3-compatible store (typed contracts 1.0: FlatBuffers only). One manual trigger delivers $APR operation tasks (ROUTE put | get | head | delete | list; PARAMETERS store, endpoint, region, bucket, key, ...) to storage/object-s3 sign, which turns each into a SigV4-signed HttpRequest for hostcap/http-request; the response is read by finish into a $APR result (and a $FIL listing for list). A put above multipartThreshold (16 MiB) runs the multipart stages: sign emits CreateMultipartUpload and forwards the task on held, http-request answers, split reads the UploadId and emits one signed UploadPart per partSize slice, a second http-request node answers the parts, assemble emits CompleteMultipartUpload (or AbortMultipartUpload and a refusal when any part failed), a third answers it, and a second finish node reads that response as the put's result. The credential never leaves the node: object-s3 holds only the secrets read grant and the clock, http-request holds only http, and the credential lane is written by storage/credentials, a separate artifact with the separate write grant.",
   "capabilities": [
     "clock",

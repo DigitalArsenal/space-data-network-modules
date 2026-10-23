@@ -112,7 +112,7 @@ test("the flow declares the capability set it is approved for, and no more", () 
   // epoch 0 through clock.now), and a linked flow inherits its parts' capabilities - this flow's `query` node never
   // calls it. Approving the flow now means approving clock as well.
   assert.deepEqual(artifact.capabilities, ["clock", "storage_query"]);
-  assert.equal(artifact.threadModel, "single-thread");
+  assert.equal(artifact.threadModel, "wasi-sequential");
 });
 
 // The gate manifest is committed, so "the acceptance gate runs on this flow"
