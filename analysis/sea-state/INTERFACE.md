@@ -118,6 +118,11 @@ try {
 }
 ```
 
+Measured example result: `hs_m=2.582278037108178`, `tp_s=8.035488465237414`,
+`regime="fully-developed"`, `gamma=1`. The original TS gives 2.1414040472536495 m
+and 7.305662402366851 s for the same wind: corrections +0.4408739898545284 m
+and +0.7298260628705631 s before any marine override.
+
 Keep a harness alive across weather updates in production; teardown on owner
 shutdown. Native WasmEdge uses the SDK isomorphic loader against the exact
 same artifact. Docker parity is waived by the owner, not executed.
