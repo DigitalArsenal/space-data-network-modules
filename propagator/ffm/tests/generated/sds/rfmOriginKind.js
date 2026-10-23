@@ -5,5 +5,6 @@ export var rfmOriginKind = /*#__PURE__*/ function(rfmOriginKind) {
     rfmOriginKind[rfmOriginKind["LIBRATION_POINT"] = 3] = "LIBRATION_POINT";
     rfmOriginKind[rfmOriginKind["SPACE_OBJECT"] = 4] = "SPACE_OBJECT";
     rfmOriginKind[rfmOriginKind["GROUND_SITE"] = 5] = "GROUND_SITE";
+    rfmOriginKind[rfmOriginKind["GALACTIC_CENTER"] = 6] = "GALACTIC_CENTER";
     return rfmOriginKind;
 }({});
