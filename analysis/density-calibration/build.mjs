@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgamation.mjs';
-import { generateSdsHeader } from '../../scripts/lib/sds-cpp-headers.mjs';
+import { generateSdsHeaders } from '../../scripts/lib/sds-cpp-headers.mjs';
 
 // One translation unit: the SDS standards' generated C++ headers for the $DCL
 // frames (scripts/lib/sds-cpp-headers.mjs, with the object API of DCL and
@@ -17,11 +17,20 @@ import { generateSdsHeader } from '../../scripts/lib/sds-cpp-headers.mjs';
 // propagator/sgp4's Vallado SGP4 (the element sets' trajectories for the
 // decay methods; as analysis/epoch-state compiles it) and this module's source.
 const root = fileURLToPath(new URL('.', import.meta.url));
+// FFM owns the typed force/propagation implementation; this consumer links
+// only that surface using the SDK EH-free compiler contract.
+const {generateSdsBindings}=await import('../../propagator/ffm/generate-sds-bindings.mjs');
+await generateSdsBindings();
+process.env.SDN_WASI_CLANGXX=path.join(root,'build-driver.mjs');
+process.env.SDN_WASI_CLANG=process.env.SDN_WASI_CLANGXX;
+await fs.chmod(process.env.SDN_WASI_CLANGXX,0o755);
 const jb2008Header = path.resolve(root, '../../propagator/ffm/lib/jb2008.h');
 const egm2008Header = path.resolve(root, '../../propagator/ffm/lib/egm2008_data.h');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const msisDir = path.resolve(root, '../../third_party/nrlmsise00');
 const erfa = await composeErfaTranslationUnit();
+await fs.mkdir(path.join(root,'.sdk-build'),{recursive:true});
+await fs.writeFile(path.join(root,'.sdk-build/erfa.cpp'),erfa.source);
 const jb2008 = await fs.readFile(jb2008Header, 'utf8');
 const egm2008 = await fs.readFile(egm2008Header, 'utf8');
 // SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that
@@ -39,34 +48,28 @@ const msisModel = (await fs.readFile(path.join(msisDir, 'nrlmsise-00.c'), 'latin
 if (!msisModel.includes(mallocCast)) throw new Error('nrlmsise-00.c no longer has the malloc call this build casts');
 const msis = ['#include <math.h>', '#include <stdio.h>', '#include <stdlib.h>', 'namespace nrlmsise00 {', msisHeader, msisData, msisModel.replace(mallocCast, 'u=(double*)malloc(sizeof(double)*(unsigned int)n);'), '}'].join('\n');
 // The SDS headers: DCL and the standards its schema includes, each once, after the ones it includes.
-const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL('../../../spacedatastandards.org/', import.meta.url));
-const ordered = [];
-async function visit(code) {
-  if (ordered.includes(code)) return;
-  const schema = await fs.readFile(path.join(standardsRoot, 'schema', code, 'main.fbs'), 'utf8');
-  for (const [, dep] of schema.matchAll(/^include\s+"\.\.\/([A-Z0-9]+)\/main\.fbs";/gm)) await visit(dep);
-  if (!ordered.includes(code)) ordered.push(code);
-}
-await visit('DCL');
-const sdsHeaders = (await Promise.all(ordered.map(async (code) => (await generateSdsHeader(code, import.meta.url))
-  .replaceAll('FLATBUFFERS_GENERATED_MAIN_H_', `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
-  .replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/, '')
-  .replace(/^#include "main_generated\.h"\s*$/gm, '')))).join('\n');
-const source = (await fs.readFile(path.join(root, 'src/density_calibration.cpp'), 'utf8')).replace(/^#include "DCL_generated\.h".*$/m, () => sdsHeaders);
+const {header:sdsHeaders,version:sdsVersion,families:ordered}=await generateSdsHeaders(['DCL'],import.meta.url);
+const sha=await fs.readFile(path.join(root,'../../files/orbit-products/src/sha256.hpp'),'utf8');
+const energyArcs=await fs.readFile(path.join(root,'src/open_dca_energy_arcs.hpp'),'utf8');
+const commonMode=await fs.readFile(path.join(root,'src/open_dca_common_mode.hpp'),'utf8');
+const source = (await fs.readFile(path.join(root, 'src/density_calibration.cpp'), 'utf8'))
+  .replace(/^#include "DCL_generated\.h".*$/m, () => sdsHeaders.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g,''))
+  .replace('#include "open_dca_common_mode.hpp"',()=>commonMode)
+  .replace('#include "open_dca_energy_arcs.hpp"',()=>energyArcs);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-const result = await compileModuleFromSource({
+export const compilation = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', erfa.source, jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
+  sourceCode: ['#include "space_data_module_invoke.h"', '#include "erfa.h"', jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', sha, source].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',stackSize:2*1024*1024,
 });
-if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
+if (!compilation.report?.ok) throw new Error('Density calibration validation failed',{cause:compilation.report?.issues});
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   erfaSourceFiles: erfa.fileCount, jb2008: 'propagator/ffm/lib/jb2008.h', nrlmsise00: 'third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
-  sdsHeaders: ordered.map((code) => `schema/${code}/main.fbs (scripts/lib/sds-cpp-headers.mjs)`), threadModel: 'single-thread',
+  sdsHeaders: ordered.map((code) => `schema/${code}/main.fbs (scripts/lib/sds-cpp-headers.mjs)`), threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath}`);

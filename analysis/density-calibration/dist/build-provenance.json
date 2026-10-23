@@ -16,14 +16,14 @@
     "schema/PPE/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/NCD/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/EOP/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
+    "schema/PVN/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/SPW/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/PRW/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/MET/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/CVR/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
-    "schema/PVN/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/OMM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/OEM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/DCL/main.fbs (scripts/lib/sds-cpp-headers.mjs)"
   ],
-  "threadModel": "single-thread"
+  "threadModel": "wasi-sequential"
 }

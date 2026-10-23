@@ -74,18 +74,25 @@ struct FfmMergedTides {
                 }
         }
         if (f.useSolidTides) {
-            try {
+#if defined(__cpp_exceptions)
+            try
+#endif
+            {
                 node.usable = FillSolidTideField(jd, f, EarthAxesAt(jd, f), solid);
                 for (int n = 2; n <= 4; ++n)
                     for (int m = 0; m <= n; ++m) {
                         node.C[ffm::gravityRow(n) + m] += solid.Cnm[n][m];
                         node.S[ffm::gravityRow(n) + m] += solid.Snm[n][m];
                     }
-            } catch (const std::exception&) {
+            }
+#if defined(__cpp_exceptions)
+            catch (const std::exception&) {
                 // A callback may throw only at a neighboring node. The
                 // exact fallback evaluates and validates the requested epoch.
                 node.usable = false;
             }
+#endif
+            if (astro::propagationStop().active) node.usable = false;
         }
         node.index = index; node.valid = true;
         return node;
