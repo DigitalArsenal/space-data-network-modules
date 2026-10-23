@@ -139,20 +139,23 @@ inline double field(double x,double y,bool ridged=false,double z=0) {
 // disc (as raw_moments), seed and phase. Wright et al. 2023's associations
 // reach down to "tens of parsecs"; the renderer evaluates the same noise.
 inline constexpr int detail_octaves=2;
-struct DetailOctave {double lambda,amplitude,mean,variance,seed,phase;};
+// mean, variance: the ridged term's (the dust); smooth_*: the plain term's
+// (the young light).
+struct DetailOctave {double lambda,amplitude,mean,variance,seed,phase,smooth_mean,smooth_variance;};
 inline const std::array<DetailOctave,detail_octaves>& detail() {
   static const std::array<DetailOctave,detail_octaves> out=[] {
     std::array<DetailOctave,detail_octaves> d{};
     for(int k=0;k<detail_octaves;++k) {
       const int o=octaves+k;
-      double sum=0,sum2=0;long n=0;
+      double sum=0,sum2=0,plain=0,plain2=0;long n=0;
       for(double y=-16;y<16;y+=0.05) for(double x=-16;x<16;x+=0.05) {
         if(std::hypot(x,y)>16) continue;
         const double v=amplitude(o)*octave(x,y,0,o,uint32_t(seed),true);sum+=v;sum2+=v*v;++n;
+        const double u=amplitude(o)*octave(x,y,0,o,uint32_t(seed),false);plain+=u;plain2+=u*u;
       }
-      const double mean=sum/n;
+      const double mean=sum/n,smooth=plain/n;
       d[k]={longest_kpc/std::pow(2.0,o),amplitude(o),mean,std::max(0.0,sum2/n-mean*mean),
-            double(uint32_t(seed)+uint32_t(o)*7919u),0.37*o};
+            double(uint32_t(seed)+uint32_t(o)*7919u),0.37*o,smooth,std::max(0.0,plain2/n-smooth*smooth)};
     }
     return d;
   }();

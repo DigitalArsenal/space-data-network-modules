@@ -110,6 +110,17 @@ extern "C" int bake() {
       v.insert(v.end(),{o.lambda,o.amplitude,o.mean,o.variance,double(s>>16),double(s&0xffffu),o.phase});
     }
     r.vector("structure_detail",v,"std,elongation,dust sigma,sun x,sun y,fade inner,fade outer kpc; per octave lambda kpc,amplitude,mean,variance,seed hi16,seed lo16,phase");
+    // The young light's share of the same octaves (the plain, not ridged,
+    // term: structure::field(.., false)): its field's standard deviation and
+    // sigma, per octave the plain term's mean and variance; and the baked
+    // channels of one unit of young light and of the old disc's, so a
+    // renderer can tell a sample's young light from the rest.
+    const auto& e=eye::bands();const bool eye_on=eye::on();
+    const sdss::Bands& yb=eye_on?e.young:colors::young_bands;const sdss::Bands& db=eye_on?e.disc:colors::disc_bands;
+    std::vector<double> y{structure::moments(false)[1],structure::young_sigma};
+    for(const auto& o:structure::detail()) y.insert(y.end(),{o.smooth_mean,o.smooth_variance});
+    y.insert(y.end(),{yb.r,yb.g,yb.i,db.r,db.g,db.i});
+    r.vector("structure_detail_young",y,"std,young sigma; per octave plain mean,variance; young light channels 0-2; old disc channels 0-2");
   }
   r.vector("display_nanomaggies_per_count",{display::nanomaggies_per_count[0],display::nanomaggies_per_count[1],
     display::nanomaggies_per_count[2]},"nanomaggies per SDSS count, r,g,i");
