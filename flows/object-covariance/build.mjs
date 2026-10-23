@@ -9,6 +9,7 @@ const root=fileURLToPath(new URL('.',import.meta.url)), modules=path.resolve(roo
 const require=createRequire(import.meta.url);
 process.env.SPACE_DATA_STANDARDS_ROOT=path.dirname(require.resolve('spacedatastandards.org/package.json'));
 const out=path.join(root,'dist'),manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
+await fs.mkdir(path.join(out,'control/isomorphic'),{recursive:true});
 const {header,version}=await generateSdsHeaders(['FSO','FSB','OMM','OCM','ERM'],import.meta.url);
 const control=await compileModuleFromSource({manifest,sourceCode:header+'\n'+await fs.readFile(path.join(root,'src/control.cpp'),'utf8'),language:'c++',outputPath:path.join(out,'control/isomorphic/module.wasm'),threadModel:'single-thread',allowUndefinedImports:true});
 if(!control.report?.ok)throw new Error('Controller artifact rejected',{cause:control.report?.issues});
