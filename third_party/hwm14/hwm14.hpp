@@ -24,6 +24,8 @@ public:
     // Loads the embedded NRL data files after checking their SHA-256.
     Model();
     ~Model();
+    // False when embedded coefficient validation or loading failed.
+    bool valid() const { return valid_; }
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;
 
@@ -70,6 +72,7 @@ public:
 
 private:
     ModelData* d_;
+    bool valid_ = false;
 };
 
 // Associated Legendre and vector spherical harmonic basis (ALFBASIS) for

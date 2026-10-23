@@ -1,0 +1,297 @@
+{
+  "programId": "com.digitalarsenal.flows.open-dca",
+  "name": "Open DCA NRLMSISE-00",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
+  "nodes": 23,
+  "edges": 24,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "operator-plan",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "plan_operator",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "operator-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "operator-parse",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "parse_operator",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "prepare",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "prepare_operator_states",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "eop-plan",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "methodId": "finals2000a",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "eop-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "eop-parse",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "methodId": "parse_finals2000a",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "eop-wrap",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "wrap_eop",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "weather-plan",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "plan_weather",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "weather-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "weather-parse",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "parse_weather",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "weather-wrap",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "wrap_weather",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fit",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "fit_energy_arcs",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "solve",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "calibrate_log_density",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "publish_correction",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "operator-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "operator-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "weather-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "weather-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "eop-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "eop-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.operator-states-public",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "version": "0.1.0",
+      "sha256": "a5c125a98b2eb501c1582cad0a01189ee54975eee73f9e2867866bb849c3cb0d",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_",
+      "methodSymbols": {
+        "plan_operator": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_plan_operator",
+        "parse_operator": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_parse_operator",
+        "wrap_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_wrap_weather",
+        "wrap_eop": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_wrap_eop",
+        "publish_correction": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_publish_correction",
+        "route_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_route_request",
+        "restore_response": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f70657261746f722d7374617465732d7075626c6963_restore_response"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "219919c46aa3c8845ebff7dea2a1a6fa407076e84c84653a624a68c1687e4028",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.density-calibration",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "version": "0.6.0",
+      "sha256": "14a2d54ac5f1deb63044624207ea356e47e0dcd810a2fda5d86edfd454c559f9",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_",
+      "methodSymbols": {
+        "evaluate": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_evaluate",
+        "calibrate": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_calibrate",
+        "decay": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_decay",
+        "calibrate_decay": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_calibrate_decay",
+        "energy": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_energy",
+        "drag_work": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_drag_work",
+        "calibrate_log_density": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_calibrate_log_density",
+        "fit_energy_arcs": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_fit_energy_arcs",
+        "prepare_operator_states": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e64656e736974792d63616c6962726174696f6e_prepare_operator_states"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.eop-request",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "version": "0.2.0",
+      "sha256": "6d2716ec13113991fce1a414c46b67e25d98e860d64d9107d71e372fa286eb08",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_",
+      "methodSymbols": {
+        "finals2000a": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_finals2000a",
+        "c04": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_c04",
+        "paris": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_paris"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.eop-parser",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "version": "0.2.0",
+      "sha256": "5050078097a77f12a68493931081c7d341667e4e21e212360780aa8430246a16",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_",
+      "methodSymbols": {
+        "parse_finals2000a": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_parse_finals2000a",
+        "parse_c04": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_parse_c04",
+        "parse_paris": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_parse_paris"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.space-weather",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "version": "0.2.0",
+      "sha256": "80fff2cfc5dd74eecc83068c00f1dc78f428989cba56db073e836564522613ed",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_",
+      "methodSymbols": {
+        "plan_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_plan_weather",
+        "parse_weather": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e73706163652d77656174686572_parse_weather"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.0",
+      "sha256": "8be7af7d2047c764371f546e621a8a6d40727620edad8e6cc96bb44d2e7e858b",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

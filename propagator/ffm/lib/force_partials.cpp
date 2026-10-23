@@ -1,5 +1,6 @@
 #include "force_partials.h"
 #include "astrodynamics.h"
+#include "reentry.h"
 #include "environment_models.h"
 #include "time_convert.h"
 #include "shadow.h"
@@ -89,7 +90,13 @@ V inlineGravity(const V& r,const GravityFieldCoefficients& f) {
     // The inline production longitude is singular on the pole. A zonal-only
     // field has the regular polynomial limit, and can be evaluated there.
     if(rxy.value<1e-12 && r.norm().value>=100){
-        if(f.maxOrder>0)throw std::invalid_argument("ANALYTIC STM: inline tesseral gravity at polar coordinate singularity; use loaded field or FINITE_DIFFERENCE");
+        if(f.maxOrder>0) {
+#if defined(__cpp_exceptions)
+            throw std::invalid_argument("ANALYTIC STM: inline tesseral gravity at polar coordinate singularity; use loaded field or FINITE_DIFFERENCE");
+#else
+            flagForceFailure(); return V(NAN, NAN, NAN);
+#endif
+        }
         V a=pointMass(r,f.mu,100);
         for(int n=2;n<=f.maxDegree;++n)a=a+zonal(r,f.mu,f.referenceRadius,n,-f.Cnm[n][0]*std::sqrt(2.0*n+1));
         return a;
@@ -289,7 +296,8 @@ V drag(const V& r,const V& v,const Vec3& position,const timesys::Instant& jd,con
     const V vr=v-(rotation?V(w.y*r.z-w.z*r.y,w.z*r.x-w.x*r.z,w.x*r.y-w.y*r.x):V());
     const D speed=vr.norm();if(speed.value<1e-6)return V();
     const DragForceConfig d=DragAt(jd,f);
-    return vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
+    const V acceleration = vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
+    return f.densityScaleAt ? acceleration * f.densityScaleAt(jd) : acceleration;
 }
 
 V rtn(const Vec3& dv,const V& r,const V& v) {
@@ -464,7 +472,13 @@ const char* ValidateAccelerationPartials(const Vec3& position,const ForceModelSe
 }
 
 AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3& velocity,const timesys::Instant& jd,ForceModelSet& f,DensityGradient gradient) {
-    if(const char* error=ValidateAccelerationPartials(position,f))throw std::invalid_argument(error);
+    if(const char* error=ValidateAccelerationPartials(position,f)) {
+#if defined(__cpp_exceptions)
+        throw std::invalid_argument(error);
+#else
+        flagForceFailure(); AccelerationPartials invalid; invalid.acceleration=Vec3(NAN,NAN,NAN); return invalid;
+#endif
+    }
     const V r=positionSeed(position),v=velocitySeed(velocity);
     V a=centralGravity(r,jd,f);
     if(f.useGRGM1200A)a=a+inlineGravity(r,initGRGM1200A(std::min<uint16_t>(f.grgm1200a.truncationDegree,20),std::min<uint16_t>(f.grgm1200a.truncationOrder,20)));
@@ -501,8 +515,13 @@ AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3
 
 Mat6 ImpulsiveManeuverJacobian(const Vec3& position,const Vec3& velocity,const ImpulsiveManeuverDef& maneuver) {
     Mat6 result=Mat6::identity();if(!maneuver.inRTN)return result;
-    if(position.magnitude()==0 || position.cross(velocity).magnitude()==0)
+    if(position.magnitude()==0 || position.cross(velocity).magnitude()==0) {
+#if defined(__cpp_exceptions)
         throw std::invalid_argument("RTN impulse STM requires nonzero radius and angular momentum");
+#else
+        flagForceFailure(); return result;
+#endif
+    }
     const V jump=rtn(maneuver.deltaV,positionSeed(position),velocitySeed(velocity));
     const D components[]={jump.x,jump.y,jump.z};
     for(int i=0;i<3;++i)for(int j=0;j<6;++j)result.m[i+3][j]+=components[i].d[j];

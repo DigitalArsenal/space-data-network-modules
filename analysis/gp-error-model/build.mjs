@@ -30,7 +30,7 @@ const defaultModelSource = `static const unsigned char kDefaultModelErm[] = {\n$
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
-const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'MNV', 'ERM'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'CDM', 'PRW', 'MNV', 'ERM'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
@@ -44,7 +44,7 @@ const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
 const bridge = await fs.readFile(path.join(root, 'src', 'erm_bridge.cpp'), 'utf8');
-const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'object_covariance.cpp', 'fit_elements.cpp']
+const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp', 'object_covariance.cpp', 'source_covariance.cpp', 'fit_elements.cpp']
   .map(async (f) => (f === 'object_covariance.cpp' ? defaultModelSource + '\n\n' : '') + await fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
@@ -60,7 +60,7 @@ const result = await compileModuleFromSource({
     '#undef pi', lambert, sha256, bridge, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
   // attach_covariance and attribute_maneuvers read their recipes through the sync space_data_module_host hostcall bridge
   // (plugin.getConfig, typedHostcall.hpp); its symbols resolve at instantiation.
   allowUndefinedImports: true,
@@ -79,6 +79,6 @@ await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.string
   spacedatastandards: version, sdsFamilies: families, erfaSourceFiles: erfa.fileCount,
   axisEngine: 'foundation/frames/src/axis_engine.hpp', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
   lambert: 'analysis/lambert-izzo/include/lambert_izzo/solver.hpp',
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

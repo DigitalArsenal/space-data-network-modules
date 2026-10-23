@@ -518,7 +518,10 @@ std::vector<TTEpoch> driverBreaks(const Execution& e,const TTEpoch& lo,const TTE
             if(!toTT(whole,s-whole,2451545.0+s/86400.0,timingStandard::UTC,tt,ignored))continue;
             if(elapsedSeconds(lo,tt)>0&&elapsedSeconds(tt,hi)>0)out.push_back(tt);
         }
+    if(e.densityCorrectionBreaks)for(const auto& tt:*e.densityCorrectionBreaks)
+        if(elapsedSeconds(lo,tt)>0&&elapsedSeconds(tt,hi)>0)out.push_back(tt);
     std::sort(out.begin(),out.end(),[](const TTEpoch& a,const TTEpoch& b){return elapsedSeconds(a,b)>0;});
+    out.erase(std::unique(out.begin(),out.end(),[](const TTEpoch& a,const TTEpoch& b){return elapsedSeconds(a,b)==0;}),out.end());
     return out;
 }
 // The breaks strictly between from and to, in the direction of travel.
@@ -619,6 +622,10 @@ bool loadEnvironment(const PrwEnvironment& frames,bool own,Environment& out,std:
         const std::string reason=out.weather->add(root->SPACE_WEATHER()->ROWS());
         if(!reason.empty())return prwError(error,("invalid-space-weather: "+reason).c_str());
     }
+    if(frames.densityCorrectionSize) {
+        out.densityCorrection=std::make_shared<DensityCorrection>();
+        if(!out.densityCorrection->load(frames.densityCorrection,frames.densityCorrectionSize,error))return false;
+    }
     if(frames.jb2008IndicesSize) {
         const PRW* root=nullptr;if(!verifyPrw(jb2008,frames.jb2008IndicesSize,root,error))return false;
         if(!root->JB2008_INDICES())return prwError(error,"invalid-prw-arm: jb2008_indices requires JB2008_INDICES.");
@@ -630,6 +637,17 @@ bool loadEnvironment(const PrwEnvironment& frames,bool own,Environment& out,std:
 }
 bool attachEnvironment(Execution& execution,const Environment& environment,bool requestWeather,std::string& error) {
     const auto& jb2008=environment.jb2008;const auto& weather=environment.weather;const auto& earth=environment.earth;
+    execution.densityCorrectionBreaks.reset();
+    execution.forces.densityScaleAt={};
+    if(const auto& correction=environment.densityCorrection) {
+        if(!execution.forces.useDrag||execution.forces.dragModel!=ForceModel::DragModelType::NRLMSISE00)
+            return prwError(error,"unsupported-density-correction: Log-density correction requires NRLMSISE-00 drag.");
+        if(!correction->identity) {
+            execution.forces.densityScaleAt=[correction](const timesys::Instant& at){return correction->factor(at);};
+            if(!correction->knots.empty())execution.densityCorrectionBreaks=
+                std::shared_ptr<const std::vector<TTEpoch>>(correction,&correction->knots);
+        }
+    }
     const bool jb2008Model=execution.forces.useDrag&&execution.forces.dragModel==ForceModel::DragModelType::JB2008;
     if(jb2008Model!=bool(jb2008))return prwError(error,jb2008Model?"jb2008-indices-required: JB2008 reads the jb2008_indices input.":"unsupported-jb2008-indices: jb2008_indices applies to the JB2008 atmosphere.");
     if(jb2008) {

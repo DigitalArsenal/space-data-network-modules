@@ -1,0 +1,581 @@
+{
+  "pluginId": "com.digitalarsenal.flows.object-covariance",
+  "name": "Object covariance reactor",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
+  "description": "Bounded feedback advances one object at a time. OCM records are the durable cursor. New OMM epoch only; all covariance math runs in gp-error-model.",
+  "capabilities": [
+    "clock",
+    "storage_ingest",
+    "storage_query"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.flows.object-covariance.control",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "minVersion": "0.3.1",
+      "maxVersion": "0.3.1"
+    },
+    {
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "minVersion": "0.10.0",
+      "maxVersion": "0.10.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "flatsql-query-stream",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_query",
+      "resource": "storage://flatsql",
+      "description": "Host FlatSQL engine queries as SDS $PIV hostcalls: storage.flatsql_query_stream (operator surface, unsandboxed, auth-gated at the wall), storage.query_sandboxed and storage.query_surface (the public read-only surface).",
+      "properties": {
+        "hostOps": [
+          "storage.flatsql_query_stream",
+          "storage.query_sandboxed",
+          "storage.query_surface"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-clock",
+      "kind": "host-service",
+      "direction": "input",
+      "capability": "clock",
+      "resource": "host://clock",
+      "description": "clock.now defaults a profile query's epoch to now (Go node built-in; capability-gated on the SDK hosts).",
+      "properties": {
+        "hostOps": [
+          "clock.now"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall, sent as an SDS $PIV invocation (StorageIngestParams + raw records/archive + list provenance; sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "refresh",
+      "displayName": "Flow trigger refresh",
+      "description": "Compiled-flow ingress for trigger \"refresh\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-erm",
+              "allowedTypes": [
+                {
+                  "schemaName": "ERM.fbs",
+                  "fileIdentifier": "$ERM",
+                  "rootTypeName": "ERM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "ATTACH_REPORT with per-object CVR rows and empirical refusal reasons. An empirical row's rule is EmpiricalHistoryShrunk (SDS 1.261.0) with HISTORY_SAMPLES, HISTORY_SETS, HISTORY_WINDOW and SHRINKAGE_WEIGHT beside the OBJECTS, SAMPLES and SCALE_FACTOR the console reads."
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestResult (module-sdk runtime type INGR): SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, RECONCILED_DUPLICATES, RECONCILED_OLD_BATCHES, ARCHIVED; or REFUSED saying why the batch was not stored (a value over its aligned bound, or a host refusal)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "EXACTLY ONE IngestResult per invocation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "MNV.fbs",
+      "fileIdentifier": "$MNV",
+      "rootTypeName": "MNV"
+    },
+    {
+      "schemaName": "ERM.fbs",
+      "fileIdentifier": "$ERM",
+      "rootTypeName": "ERM"
+    },
+    {
+      "schemaName": "CDM.fbs",
+      "fileIdentifier": "$CDM",
+      "rootTypeName": "CDM"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_object_covariance-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "control",
+      "pluginId": "com.digitalarsenal.flows.object-covariance.control",
+      "methodId": "advance",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "query",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "covariance",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "object_covariance",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "control-query-query-query",
+      "fromNodeId": "control",
+      "fromPortId": "query",
+      "toNodeId": "query",
+      "toPortId": "query",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "query-records-control-rows",
+      "fromNodeId": "query",
+      "fromPortId": "records",
+      "toNodeId": "control",
+      "toPortId": "rows",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSB.fbs",
+          "fileIdentifier": "$FSB",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSB",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "query-status-control-status",
+      "fromNodeId": "query",
+      "fromPortId": "status",
+      "toNodeId": "control",
+      "toPortId": "status",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FSO.fbs",
+          "fileIdentifier": "$FSO",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FSO",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-elements-covariance-elements",
+      "fromNodeId": "control",
+      "fromPortId": "elements",
+      "toNodeId": "covariance",
+      "toPortId": "elements",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-request-covariance-request",
+      "fromNodeId": "control",
+      "fromPortId": "request",
+      "toNodeId": "covariance",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "ERM.fbs",
+          "fileIdentifier": "$ERM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "ERM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "covariance-ocm-control-ocm",
+      "fromNodeId": "covariance",
+      "fromPortId": "ocm",
+      "toNodeId": "control",
+      "toPortId": "ocm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OCM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "covariance-report-egress-report",
+      "fromNodeId": "covariance",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "report",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "ERM.fbs",
+          "fileIdentifier": "$ERM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "ERM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-records-ingest-ocm_records",
+      "fromNodeId": "control",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "ocm_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OCM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-meta-ingest-meta",
+      "fromNodeId": "control",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-result-control-stored",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "control",
+      "toPortId": "stored",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "control-notice-egress-result",
+      "fromNodeId": "control",
+      "fromPortId": "notice",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "FlowNotice.fbs",
+          "fileIdentifier": "FNTC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "FlowNotice",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "refresh",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 300000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "refresh",
+      "targetNodeId": "control",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}

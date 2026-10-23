@@ -4,9 +4,22 @@ Pure C++/WASM request builder. Choose a method to switch the upstream source:
 
 | Method | Default GET | Parser method |
 | --- | --- | --- |
-| `finals2000a` | `https://datacenter.iers.org/data/9/finals2000A.all` | `parse_finals2000a` |
+| `finals2000a` | `https://maia.usno.navy.mil/ser7/finals2000A.all` | `parse_finals2000a` |
 | `c04` | `https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now` | `parse_c04` |
 | `paris` | `https://hpiers.obspm.fr/iers/eop/eopc04/eopc04_IAU2000.62-now` | `parse_paris` |
+
+The finals2000A file comes directly from its producer, the U.S. Naval
+Observatory (USNO), IERS Rapid Service/Prediction Center. It is U.S. Government
+work in the public domain. The IERS datacenter mirrors this product but rejects
+automated requests from the provider node; USNO is the production source.
+
+`flows/open-dca` and `flows/eop` embed this request builder. Their request nodes
+call `finals2000a`, paired with `parse_finals2000a`; no flow calls `c04` or `paris`.
+`flows/eop` publishes the parsed finals2000A as SDS EOP records.
+The live-source E2E checks that finals2000A covers the last 32 days plus a
+48-hour forecast. C04 is therefore not required by this flow. The optional C04
+methods retain their contracts, but their Paris endpoints timed out from
+host-02 on 2026-10-23 and are not used by the deployed flow.
 
 Typed contracts 1.0: FlatBuffers only, no JSON and no base64. Each invocation
 consumes exactly one `tick`, a `TimerTick` (TICK; its fields are not read; a

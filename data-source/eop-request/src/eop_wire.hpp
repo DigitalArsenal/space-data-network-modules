@@ -21,8 +21,8 @@ struct Source {
   const char* format;
 };
 static const Source sources[] = {
-    {"IERS finals2000A Bulletin A columns",
-     "https://datacenter.iers.org/data/9/finals2000A.all", "finals2000a"},
+    {"USNO IERS Rapid Service/Prediction Center finals2000A Bulletin A columns",
+     "https://maia.usno.navy.mil/ser7/finals2000A.all", "finals2000a"},
     {"IERS EOP 20 C04",
      "https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now", "c04"},
     {"Paris Observatory EOP 20 C04 legacy IAU2000 format",

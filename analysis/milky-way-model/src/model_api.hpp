@@ -29,7 +29,19 @@ extern "C" int bake() {
   using namespace milky_way;
   wire::Request request;
   if (!request.ok) return wire::fail("Expected one $PCE request");
-  if (!request.values.empty()) return wire::fail("bake takes no values; deliver a 3D dust map with load_dust_map first");
+  // The only values a bake takes: overrides of the appearance table (the
+  // SDSS analog fit's trials), each within its fit bounds.
+  struct Override {const char* name;double* value;double lo,hi;};
+  const Override overrides[]={{"appearance_young_length_kpc",&appearance::young_length_kpc,1.0,12.0},
+    {"appearance_central_light",&appearance::central_light,0.2,3.0},{"appearance_bulge_size",&appearance::bulge_size,0.2,3.0},
+    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0},{"appearance_arm_dust",&drimmel2001::arm_dust_scale,0.1,30.0}};
+  for (const auto& [name,value]:request.values) {
+    const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
+    const double v=request.number(name.c_str(),NAN);
+    if (o==std::end(overrides) || !std::isfinite(v) || v<o->lo || v>o->hi)
+      return wire::fail("bake takes only appearance_* overrides within their fit bounds; deliver a 3D dust map with load_dust_map first");
+    *o->value=v;
+  }
   const auto& loaded=dust_map::grid();
   if (loaded.nz && !loaded.ready) return wire::fail("A 3D dust map is partly loaded; deliver every plane or none");
   volumes=std::make_unique<NestedVolumes>(sun);
@@ -39,9 +51,9 @@ extern "C" int bake() {
   detail=std::make_unique<Volume>(32,32,32,Vec3{0,0,0},Vec3{1,1,1});
   uint64_t seed=20261016;
   for (auto& v:detail->rgba) v=to_half(float(random_uniform(seed)));
-  wire::Result r;volume_result(r,"global",volumes->global);volume_result(r,"local",volumes->local);
-  volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
-  r.text("channels","G,BP,RP relative emissivity per kpc; G extinction optical depth per kpc");
+  wire::Result r;volume_result(r,"global",volumes->global);volume_result(r,"slab",volumes->slab);
+  volume_result(r,"local",volumes->local);volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
+  r.text("channels","SDSS r,g,i relative emissivity per kpc; G extinction optical depth per kpc");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
   r.text("calibration",loaded.ready
     ?"Local 3D dust map inside its coverage, Drimmel & Spergel 2001 disk, arm dust and local segment beyond; spiral light from DS2001 B_K and Flynn 2006; independent of Gaia"
@@ -49,23 +61,33 @@ extern "C" int bake() {
   r.text("dust_map",loaded.ready?(loaded.dataset+": "+loaded.source+"; "+loaded.license).c_str():"none");
   r.number("dust_map_radius",loaded.ready?loaded.radius:0,"kpc");
   r.vector("sun",{sun.x,sun.y,sun.z},"kpc");
-  // Additive renderer fields. BP and RP optical depth per kpc are these
-  // multiples of the G channel (Wang & Chen 2019 Table 3).
-  r.vector("extinction_ratios",{model_choices::bp_to_g_extinction,model_choices::rp_to_g_extinction},"A_BP/A_G,A_RP/A_G");
-  // The display's white (literature_model.hpp, display_white): the renderer
-  // divides each band by it, so the local disc's light is drawn white.
-  const auto white=display_white();
-  r.vector("display_white",{white[0],white[1],white[2]},"G,BP,RP");
-  r.number("display_saturation",colors::display_saturation);
-  // One G unit (emissivity per kpc x kpc) in physical units: the model's own
-  // local mid-plane emissivity carries Flynn et al. 2006's 0.056 Lsun,V pc^-3.
-  const double local=literature({-galactic_constants::solar_radius_kpc,0,0}).r;
+  r.vector("appearance",{appearance::young_length_kpc,appearance::central_light,appearance::bulge_size,appearance::bulge_height},
+    "young length kpc, central light, bulge size, bulge height (fitted to SDSS MW analogs, Licquia 2015)");
+  // Renderer fields. Each light channel's optical depth per kpc is this
+  // multiple of the G optical depth channel (Wang & Chen 2019 Table 3).
+  r.vector("extinction_ratios",{model_choices::channel_extinction[0],model_choices::channel_extinction[1],
+    model_choices::channel_extinction[2]},"A_r/A_G,A_g/A_G,A_i/A_G");
+  // One unit of each band (emissivity per kpc x kpc) in physical units: the
+  // model's own local mid-plane G emissivity carries Flynn et al. 2006's
+  // 0.056 Lsun,V pc^-3; a band unit is the G unit's light at zero color term
+  // (stellar_populations.hpp, sdss), so all three share its zero point.
+  const double local=literature_g({-galactic_constants::solar_radius_kpc,0,0});
   const double column=populations::unit_column_lsun_v_pc2/local;
   const double mu_g=populations::sun_absolute_v+21.572-2.5*std::log10(column)+populations::g_minus_v_local();
   r.number("radiance_scale",std::pow(10.0,-0.4*mu_g),"G=0 (Vega) flux arcsec^-2");
-  r.number("radiance_scale_mag_arcsec2",mu_g,"mag_G arcsec^-2");
+  r.number("radiance_scale_mag_arcsec2",mu_g,"mag_G arcsec^-2 = mag_r, mag_g, mag_i (AB) arcsec^-2 per band unit");
   r.number("radiance_scale_lsun_v_pc2",column,"Lsun,V pc^-2");
-  r.text("radiance_scale_basis","Flynn et al. 2006 Table 4 local V luminosity density 0.056 Lsun pc^-3 at the model's local mid-plane G emissivity; M_V,sun=4.81 (Willmer 2018); G-V of (V-I)=0.82 by Gaia EDR3 Table 5.7");
+  r.text("radiance_scale_basis","Flynn et al. 2006 Table 4 local V luminosity density 0.056 Lsun pc^-3 at the model's local mid-plane G emissivity; M_V,sun=4.81 (Willmer 2018); G-V of (V-I)=0.82 by Gaia EDR3 Table 5.7; SDSS g, r, i by Riello et al. 2021 Table C.2");
+  // The display (stellar_populations.hpp, display): the SDSS ImgCutout
+  // transfer, Lupton et al. (2004) asinh stretch of the r, g, i light in
+  // band-weighted SDSS counts, then a gamma.
+  const auto counts=display::counts_per_unit(mu_g);
+  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma,display::saturation},"Q,alpha per count,gamma,saturation");
+  r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
+  r.vector("display_band_weights",{display::weights[0],display::weights[1],display::weights[2]},"r,g,i");
+  r.vector("display_nanomaggies_per_count",{display::nanomaggies_per_count[0],display::nanomaggies_per_count[1],
+    display::nanomaggies_per_count[2]},"nanomaggies per SDSS count, r,g,i");
+  r.text("display_asinh_basis",display::basis);
   return r.emit();
 }
 
@@ -213,7 +235,7 @@ extern "C" int face_on_metrics() {
   r.vector("arc_profile",f.arc_profile,"G units");
   r.number("bar_a2",f.bar_a2);r.number("bar_phase",f.bar_phase_deg,"deg");
   r.number("bar_expected_phase",f.bar_expected_deg,"deg");
-  r.number("lane_bp_rp",f.lane_color,"mag");r.number("disc_bp_rp",f.disc_color,"mag");
+  r.number("lane_g_i",f.lane_color,"mag");r.number("disc_g_i",f.disc_color,"mag");
   r.number("lane_reddening",f.lane_color-f.disc_color,"mag");
   r.number("lane_pixels",double(f.lane_pixels));r.number("disc_pixels",double(f.disc_pixels));
   r.number("lane_tau_threshold",f.lane_tau_threshold);
@@ -267,5 +289,40 @@ extern "C" int arm_curves() {
     r.vector((p+"_extended_xy").c_str(),drawn,"kpc");
   }
   r.text("source","Reid et al. 2019, ApJ 885, 131, Table 2 (central values)");
+  return r.emit();
+}
+
+// The model's own face-on light: at each (x, y) the r, g and i radiance of a
+// vertical column from z = +6 to -6 kpc, integrated from the model itself
+// (literature(), no baked volume) as the renderer integrates a ray: per step
+// light gained T j (1 - e^-tau) / tau, transmittance falling by e^-tau, each
+// band with its extinction ratio to G; 5 pc steps within 0.6 kpc of the
+// plane, 50 pc beyond. The reference the renderer's face-on frames are
+// measured against (how much of a profile's width is the model's).
+extern "C" int face_on_columns() {
+  using namespace milky_way;
+  wire::Request request;const auto p=request.vector("points");
+  if (!request.ok || p.empty() || p.size()%2 || p.size()>40000 || !finite_vector(p))
+    return wire::fail("Expected 1..20000 finite Galactocentric (x, y) points in kpc");
+  if (std::any_of(p.begin(),p.end(),[](double v){return std::abs(v)>24;})) return wire::fail("Point outside the 24 kpc disc");
+  std::vector<double> out[3];
+  const double* ratios=model_choices::channel_extinction;
+  for (size_t k=0;k<p.size();k+=2) {
+    double light[3]={0,0,0},transmit[3]={1,1,1};
+    for (double z=6.0;z>-6.0;) {
+      const double dz=std::min(z+6.0,std::abs(z)<0.6?0.005:0.05),zm=z-dz/2;
+      const Field f=literature({p[k],p[k+1],zm});
+      const double emission[3]={std::max(0.0,f.r),std::max(0.0,f.g),std::max(0.0,f.b)},kappa=std::max(0.0,f.kappa);
+      for (int b=0;b<3;++b) {
+        const double kb=kappa*ratios[b],tau=kb*dz;
+        light[b]+=transmit[b]*emission[b]*(tau>1e-10?-std::expm1(-tau)/kb:dz);
+        transmit[b]*=std::exp(-tau);
+      }
+      z-=dz;
+    }
+    for (int b=0;b<3;++b) out[b].push_back(light[b]);
+  }
+  wire::Result r;r.vector("r",out[0],"band units");r.vector("g",out[1],"band units");r.vector("i",out[2],"band units");
+  r.text("method","vertical columns of literature() with dust, 5 pc steps within 0.6 kpc of the plane, 50 pc beyond");
   return r.emit();
 }

@@ -31,7 +31,7 @@ async function faceOn(invoke, harness, report, check) {
   check('face-on bar visible (A2 >= 0.25, aligned within 10 deg)', f.bar_a2 >= 0.25 && phase <= 10,
     `A2=${f.bar_a2}, phase=${f.bar_phase}, expected=${f.bar_expected_phase}`);
   check('face-on dust lanes redder than the disc', f.lane_reddening > 0,
-    `lanes BP-RP=${f.lane_bp_rp}, disc=${f.disc_bp_rp}, reddening=${f.lane_reddening} mag (${f.lane_pixels} of ${f.disc_pixels} px)`);
+    `lanes g-i=${f.lane_g_i}, disc=${f.disc_g_i}, reddening=${f.lane_reddening} mag (${f.lane_pixels} of ${f.disc_pixels} px)`);
   report.lines.push(`Face-on 48 kpc: arm/interarm=${f.arm_contrast?.toFixed(3)} (${f.arm_contrast_mag?.toFixed(3)} mag), arc max/min=${f.arc_max_over_min?.toFixed(3)}, bar A2=${f.bar_a2?.toFixed(3)} phase=${f.bar_phase?.toFixed(1)}/${f.bar_expected_phase?.toFixed(1)}, lane reddening=${f.lane_reddening?.toFixed(4)} mag`);
   if (typeof OffscreenCanvas !== 'function' || !(f.face_on_layout?.[0] > 0)) return;
   const n = f.face_on_layout[2], rgb = new Float32Array(harness.memory.buffer, f.face_on_layout[0], n * n * 3);
@@ -116,9 +116,9 @@ export async function runE2E(runtime) {
     check('model label', bake.label === 'model', bake.label);
     check('detail tile layout', Array.isArray(bake.noise_layout) && bake.noise_layout.length === 7 &&
       bake.noise_layout[0] > 0 && bake.noise_layout[1] > 0, JSON.stringify(bake.noise_layout));
-    // Additive renderer fields: BP/RP extinction ratios and the absolute radiance scale.
-    check('BP/RP extinction ratios', Array.isArray(bake.extinction_ratios) && bake.extinction_ratios.length === 2 &&
-      bake.extinction_ratios[0] > 1 && bake.extinction_ratios[1] < 1, JSON.stringify(bake.extinction_ratios));
+    // Renderer fields: r, g, i extinction ratios to G and the absolute radiance scale.
+    check('r, g, i extinction ratios to G', Array.isArray(bake.extinction_ratios) && bake.extinction_ratios.length === 3 &&
+      bake.extinction_ratios[1] > bake.extinction_ratios[0] && bake.extinction_ratios[0] > bake.extinction_ratios[2], JSON.stringify(bake.extinction_ratios));
     check('absolute radiance scale', bake.radiance_scale > 0 && bake.radiance_scale_mag_arcsec2 > 18 &&
       bake.radiance_scale_mag_arcsec2 < 26, `mu_G=${bake.radiance_scale_mag_arcsec2} mag arcsec^-2, column=${bake.radiance_scale_lsun_v_pc2} Lsun,V pc^-2`);
     report.radiance = {radiance_scale: bake.radiance_scale, mu_g: bake.radiance_scale_mag_arcsec2,

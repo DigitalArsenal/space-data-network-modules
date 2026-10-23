@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -15,6 +15,15 @@
     "OEM",
     "ATM",
     "OCM",
+    "PNM",
+    "EPM",
+    "CDM",
+    "FRM",
+    "PCE",
+    "NCD",
+    "EOP",
+    "SPW",
+    "PRW",
     "MNV",
     "ERM"
   ],
@@ -22,5 +31,5 @@
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
   "lambert": "analysis/lambert-izzo/include/lambert_izzo/solver.hpp",
-  "threadModel": "single-thread"
+  "threadModel": "wasi-sequential"
 }

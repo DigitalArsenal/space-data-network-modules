@@ -20,7 +20,18 @@ Elmegreen et al. 2011, ApJ 737, 32, doi:10.1088/0004-637X/737/1/32.
 Querejeta et al. 2024, arXiv:2405.05364.
 Wang & Chen 2019, ApJ 877, 116, doi:10.3847/1538-4357/ab1c61.
 Willmer 2018, ApJS 236, 47, doi:10.3847/1538-4365/aabfdf.
-Gaia EDR3 documentation section 5.5.1 (Riello et al. 2021, A&A 649, A3).
+Gaia EDR3 documentation section 5.5.1 (Riello et al. 2021, A&A 649, A3),
+including Table C.2 (Gaia - SDSS12).
+Lupton et al. 2004, PASP 116, 133, doi:10.1086/382245.
+Bland-Hawthorn & Gerhard 2016, ARA&A 54, 529, doi:10.1146/annurev-astro-081915-023441.
+Launhardt, Zylka & Mezger 2002, A&A 384, 112.
+Gies 1987, ApJS 64, 545. Efremov 1995, ARA&A 33, 19.
+Kennicutt, Edgar & Hodge 1989, ApJ 337, 761.
+Wright et al. 2023, Protostars and Planets VII, arXiv:2203.10007.
+Holwerda et al. 2005, AJ 129, 1396 (cited for a tension, not used).
+Display transfer fitted to SDSS DR17 frames and SkyServer ImgCutout JPEGs of
+six Milky Way analogs (Licquia, Newman & Bershady 2015, ApJ 809, 96); SDSS
+data, sdss.org. The images are not redistributed with this module.
 Solar/frame constants have their own citations in galactic_constants.hpp.
 
 Test-only ESA/Gaia/DPAC all-sky display maps: CC BY-SA 3.0 IGO, attribution and

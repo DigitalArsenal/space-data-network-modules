@@ -1,0 +1,1078 @@
+{
+  "pluginId": "com.digitalarsenal.flows.open-dca",
+  "name": "Open DCA NRLMSISE-00",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
+  },
+  "description": "Scheduled private Planet energy fits and aggregate E13 log-density correction publication. Raw operator states never enter SDN storage.",
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall (SDS $PIV). Go server host: 100 MiB response ceiling lowered per request by MAX_BYTES (exceeding it is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall, sent as an SDS $PIV invocation (StorageIngestParams + raw records/archive + list provenance; sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "daily",
+      "displayName": "Flow trigger daily",
+      "description": "Compiled-flow ingress for trigger \"daily\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestResult (module-sdk runtime type INGR): SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, RECONCILED_DUPLICATES, RECONCILED_OLD_BATCHES, ARCHIVED; or REFUSED saying why the batch was not stored (a value over its aligned bound, or a host refusal)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "EXACTLY ONE IngestResult per invocation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "DCL.fbs",
+      "fileIdentifier": "$DCL",
+      "rootTypeName": "DCL",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ICN.fbs",
+      "fileIdentifier": "$ICN",
+      "rootTypeName": "ICN"
+    },
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_open_dca-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "operator-plan",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "plan_operator",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "operator-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "operator-parse",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "parse_operator",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "prepare",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "prepare_operator_states",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "eop-plan",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "methodId": "finals2000a",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "eop-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "eop-parse",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "methodId": "parse_finals2000a",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "eop-wrap",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "wrap_eop",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "weather-plan",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "plan_weather",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "weather-fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "weather-parse",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "methodId": "parse_weather",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "weather-wrap",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "wrap_weather",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "fit",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "fit_energy_arcs",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "solve",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "methodId": "calibrate_log_density",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "publish_correction",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "operator-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "operator-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "weather-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "weather-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "eop-route",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "route_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "eop-restore",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "methodId": "restore_response",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "operator-plan-request-operator-fetch-request",
+      "fromNodeId": "operator-plan",
+      "fromPortId": "request",
+      "toNodeId": "operator-route",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "operator-fetch-response-operator-parse-response",
+      "fromNodeId": "operator-restore",
+      "fromPortId": "response",
+      "toNodeId": "operator-parse",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "operator-parse-operator_states-prepare-operator_states",
+      "fromNodeId": "operator-parse",
+      "fromPortId": "operator_states",
+      "toNodeId": "prepare",
+      "toPortId": "operator_states",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OEM.fbs",
+          "fileIdentifier": "$OEM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OEM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "operator-parse-kernel-fit-kernel",
+      "fromNodeId": "operator-parse",
+      "fromPortId": "kernel",
+      "toNodeId": "fit",
+      "toPortId": "kernel",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "PRW.fbs",
+          "fileIdentifier": "$PRW",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "PRW",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "eop-plan-request-eop-fetch-request",
+      "fromNodeId": "eop-plan",
+      "fromPortId": "request",
+      "toNodeId": "eop-route",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "eop-fetch-response-eop-parse-response",
+      "fromNodeId": "eop-restore",
+      "fromPortId": "response",
+      "toNodeId": "eop-parse",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "eop-parse-records-eop-wrap-records",
+      "fromNodeId": "eop-parse",
+      "fromPortId": "records",
+      "toNodeId": "eop-wrap",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "EOP.fbs",
+          "fileIdentifier": "$EOP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "EOP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "eop-wrap-earth_orientation-fit-earth_orientation",
+      "fromNodeId": "eop-wrap",
+      "fromPortId": "earth_orientation",
+      "toNodeId": "fit",
+      "toPortId": "earth_orientation",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "PRW.fbs",
+          "fileIdentifier": "$PRW",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "PRW",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "prepare-request-fit-request",
+      "fromNodeId": "prepare",
+      "fromPortId": "request",
+      "toNodeId": "fit",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "DCL.fbs",
+          "fileIdentifier": "$DCL",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DCL",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "weather-plan-request-weather-fetch-request",
+      "fromNodeId": "weather-plan",
+      "fromPortId": "request",
+      "toNodeId": "weather-route",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "weather-fetch-response-weather-parse-response",
+      "fromNodeId": "weather-restore",
+      "fromPortId": "response",
+      "toNodeId": "weather-parse",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "weather-parse-records-weather-wrap-records",
+      "fromNodeId": "weather-parse",
+      "fromPortId": "records",
+      "toNodeId": "weather-wrap",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "SPW.fbs",
+          "fileIdentifier": "$SPW",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "SPW",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "weather-wrap-space_weather-fit-space_weather",
+      "fromNodeId": "weather-wrap",
+      "fromPortId": "space_weather",
+      "toNodeId": "fit",
+      "toPortId": "space_weather",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "PRW.fbs",
+          "fileIdentifier": "$PRW",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "PRW",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "fit-arcs-solve-request",
+      "fromNodeId": "fit",
+      "fromPortId": "arcs",
+      "toNodeId": "solve",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "DCL.fbs",
+          "fileIdentifier": "$DCL",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DCL",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "solve-calibration-publish-calibration",
+      "fromNodeId": "solve",
+      "fromPortId": "calibration",
+      "toNodeId": "publish",
+      "toPortId": "calibration",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "DCL.fbs",
+          "fileIdentifier": "$DCL",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DCL",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-records-ingest-dcl_records",
+      "fromNodeId": "publish",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "dcl_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "DCL.fbs",
+          "fileIdentifier": "$DCL",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "DCL",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-meta-ingest-meta",
+      "fromNodeId": "publish",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "operator-route-request-operator-fetch-request",
+      "fromNodeId": "operator-route",
+      "fromPortId": "request",
+      "toNodeId": "operator-fetch",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "operator-fetch-response-operator-restore-response",
+      "fromNodeId": "operator-fetch",
+      "fromPortId": "response",
+      "toNodeId": "operator-restore",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "weather-route-request-weather-fetch-request",
+      "fromNodeId": "weather-route",
+      "fromPortId": "request",
+      "toNodeId": "weather-fetch",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "weather-fetch-response-weather-restore-response",
+      "fromNodeId": "weather-fetch",
+      "fromPortId": "response",
+      "toNodeId": "weather-restore",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "eop-route-request-eop-fetch-request",
+      "fromNodeId": "eop-route",
+      "fromPortId": "request",
+      "toNodeId": "eop-fetch",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "eop-fetch-response-eop-restore-response",
+      "fromNodeId": "eop-fetch",
+      "fromPortId": "response",
+      "toNodeId": "eop-restore",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "daily",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "daily",
+      "targetNodeId": "operator-plan",
+      "targetPortId": "tick"
+    },
+    {
+      "triggerId": "daily",
+      "targetNodeId": "weather-plan",
+      "targetPortId": "tick"
+    },
+    {
+      "triggerId": "daily",
+      "targetNodeId": "eop-plan",
+      "targetPortId": "tick"
+    },
+    {
+      "triggerId": "daily",
+      "targetNodeId": "eop-wrap",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}
