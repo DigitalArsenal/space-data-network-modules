@@ -163,7 +163,7 @@ bool execute(const PRWExecutionRequest* request,const Environment& environment,P
     if(first.secondsSince(last)>0)std::swap(first,last);
     for(const auto& t:execution.samplesTT){const auto at=t.instant();if(at.secondsSince(last)>0)last=at;if(at.secondsSince(first)<0)first=at;}
     if(!environmentCovers(execution,environment,first,last,error))return false;
-    if(environment.weather&&!execution.massDynamics)execution.breaks=driverBreaks(execution);
+    if((environment.weather||execution.densityCorrectionBreaks != nullptr)&&!execution.massDynamics)execution.breaks=driverBreaks(execution);
     auto result=std::make_unique<PRWExecutionResultT>();
     if(execution.variational&&!execution.massDynamics&&execution.stateOnly) {
         if(!evaluateStatesInOrder(execution,request,*result,error))return false;
@@ -246,10 +246,11 @@ bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size
         astro::clearCallStop();
         ok=execute(request->EXECUTION_REQUEST(),environment,response,error);
         // The trajectory ended (lib/reentry.h): the request fails there, by name.
-        if(astro::callStop().active){error=stopError(astro::callStop());return false;}
+        if(astro::callStop().active){error=std::string(astro::callStop().code)=="invalid-force" ? astro::propagationStopMessage(astro::callStop()) : stopError(astro::callStop());return false;}
     }
     else if(environment.earth)return prwError(error,"unsupported-earth-orientation: Earth orientation applies to execution requests.");
     else if(environment.jb2008)return prwError(error,"unsupported-jb2008-indices: JB2008 indices apply to execution requests.");
+    else if(environment.densityCorrection)return prwError(error,"unsupported-density-correction: Density correction applies to execution requests.");
     else if(environment.weather)return prwError(error,"unsupported-space-weather: Space weather applies to execution requests.");
     else if(request->EPHEMERIS_REQUEST())ok=ephemeris(request->EPHEMERIS_REQUEST(),response,error);
     else if(request->ATMOSPHERE_REQUEST())ok=atmosphere(request->ATMOSPHERE_REQUEST(),response,error);

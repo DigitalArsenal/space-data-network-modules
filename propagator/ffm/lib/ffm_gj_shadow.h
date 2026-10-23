@@ -154,6 +154,7 @@ template<class Eval> inline Point step(Core& core, const Forces& f, const GjCloc
         trajectory=corrected; roots=std::move(correctedRoots);
     }
     core=saved; sunlit=originalBranch;
-    throw std::runtime_error("GJ corrected shadow events did not converge");
+    astro::flagIntegrationFailure("GJ corrected shadow events did not converge");
+    return old;
 }
 } // namespace ffm_fast::gjshadow

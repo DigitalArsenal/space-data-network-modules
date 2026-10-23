@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
@@ -9,7 +10,7 @@ const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "storage_ingest_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+const standardsRoot = path.dirname(createRequire(import.meta.url).resolve("spacedatastandards.org/package.json"));
 
 process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
@@ -38,7 +39,7 @@ const compilation = await compileModuleFromSource({
   // builds against reality instead of against whatever the SDK last guessed.
   // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
   // form of this note lives.
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge (the typed $PIV
   // hostcall); symbols resolve at instantiation.
   allowUndefinedImports: true,

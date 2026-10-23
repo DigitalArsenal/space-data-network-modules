@@ -54,18 +54,18 @@
          "wireFormat": "flatbuffer"
         }
        ],
-       "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://datacenter.iers.org/data/9/finals2000A.all, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID finals2000a)."
+       "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://maia.usno.navy.mil/ser7/finals2000A.all, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID finals2000a)."
       }
      ],
      "minStreams": 1,
      "maxStreams": 1,
      "required": true,
-     "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://datacenter.iers.org/data/9/finals2000A.all, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID finals2000a)."
+     "description": "HttpRequest (HREQ) for hostcap/http-request: GET https://maia.usno.navy.mil/ser7/finals2000A.all, TIMEOUT_MS 90000, MAX_BYTES 16777216, CONTEXT the job (size-prefixed $ICN, DATASET_ID finals2000a)."
     }
    ],
    "maxBatch": 1,
    "drainPolicy": "single-shot",
-   "description": "TimerTick -> the finals2000a HttpRequest carrying its $ICN job in CONTEXT; networking and storage are host concerns."
+   "description": "TimerTick -> USNO IERS Rapid Service/Prediction Center finals2000A (U.S. Government work, public domain), carrying its $ICN job in CONTEXT; networking and storage are host concerns."
   },
   {
    "methodId": "c04",

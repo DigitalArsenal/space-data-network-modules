@@ -1,0 +1,223 @@
+{
+  "artifactSha256": "4dc525a1c04d93106065920f1437509ceb8e8def49d1c53976ed9c313736d611",
+  "previousArtifactSha256": "a108e6ebb1e67d6d74c78111bde24750fcd01c877bee20a1eb4355cfdceaecab",
+  "memory": {
+    "staticMinimumBytes": 23825072,
+    "initialBytes": 28049408,
+    "maximumBytes": 754974720,
+    "wasmSection": {
+      "source": "declared",
+      "flags": 3,
+      "min": 428,
+      "max": 11520,
+      "shared": true,
+      "growable": true
+    }
+  },
+  "profile": "FFM-1",
+  "retentionSeconds": 1800,
+  "lookaheadSeconds": 300,
+  "sampleEpochsSeconds": [
+    1800,
+    3600
+  ],
+  "fixture": "public study SGP4 seeds, repeated cyclically across all eight orbit regimes",
+  "metric": "WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum",
+  "rows": [
+    {
+      "runtime": "browser",
+      "role": "resident-focus",
+      "entities": 1,
+      "baseBytes": 28049408,
+      "highWaterBytes": 28049408,
+      "samples": [
+        28049408,
+        28049408,
+        28049408
+      ],
+      "outputs": [
+        "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+        "c9088690ae0ffc42bfbe0b364bb54bf8fe3486a416b42114945b54928e07698f",
+        "4b40cd068d6acd838f752b6ff1d5e45c1e1f1d2d324b08a358d2769554c63f94"
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "previousArtifactParity": "field-identical; SDS 1.259 RFM default fields change serialized layout only"
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 1,
+      "baseBytes": 28049408,
+      "highWaterBytes": 28049408,
+      "role": "resident-focus",
+      "outputs": [
+        "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+        "c9088690ae0ffc42bfbe0b364bb54bf8fe3486a416b42114945b54928e07698f",
+        "4b40cd068d6acd838f752b6ff1d5e45c1e1f1d2d324b08a358d2769554c63f94"
+      ]
+    },
+    {
+      "runtime": "browser",
+      "role": "catalog",
+      "entities": 1000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 42598400,
+      "samples": [
+        31850496,
+        39976960,
+        42598400
+      ],
+      "outputs": [
+        "297c861dcf0bb8bbb012f2e33a61f21cb97fa430ebbd34c7b5d6030dc3b58f4d",
+        "ec7dbe238340ccfe83e69258aae784a91e7b5569b174f6778574b0f1261ba147"
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "previousArtifactParity": "bit-identical",
+      "predictedBytes": 42605184.241971925,
+      "relativePredictionError": 0.00015926048799778632
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 1000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 42598400,
+      "role": "catalog",
+      "outputs": [
+        "297c861dcf0bb8bbb012f2e33a61f21cb97fa430ebbd34c7b5d6030dc3b58f4d",
+        "ec7dbe238340ccfe83e69258aae784a91e7b5569b174f6778574b0f1261ba147"
+      ],
+      "predictedBytes": 42605184.241971925,
+      "relativePredictionError": 0.00015926048799778632
+    },
+    {
+      "runtime": "browser",
+      "role": "catalog",
+      "entities": 4000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 86441984,
+      "samples": [
+        43122688,
+        76021760,
+        86441984
+      ],
+      "outputs": [
+        "5e9783b05d0971b30bb8b4be70cccd610756341e1b37a3360c8463d4cddd7090",
+        "2623ae45010836ba4840df77455053ea22ebd7712ab01afd17ffa508adf832e8"
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "predictedBytes": 86458246.06979312,
+      "relativePredictionError": 0.0001881269846041482
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 4000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 86441984,
+      "role": "catalog",
+      "outputs": [
+        "5e9783b05d0971b30bb8b4be70cccd610756341e1b37a3360c8463d4cddd7090",
+        "2623ae45010836ba4840df77455053ea22ebd7712ab01afd17ffa508adf832e8"
+      ],
+      "predictedBytes": 86458246.06979312,
+      "relativePredictionError": 0.0001881269846041482
+    },
+    {
+      "runtime": "browser",
+      "role": "catalog",
+      "entities": 10000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 174194688,
+      "samples": [
+        65798144,
+        148111360,
+        174194688
+      ],
+      "outputs": [
+        "e2ee3f8a663c5236219ff6332e7b385235f38fce9f3d4bf7aea5621eaf56c466",
+        "053f9525ec316d0cd0bd6457adfacb2a54c59aa40f1ca19a1efa1b726cc7825c"
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "predictedBytes": 174164369.72543553,
+      "relativePredictionError": 0.00017404821531914234
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 10000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 174194688,
+      "role": "catalog",
+      "outputs": [
+        "e2ee3f8a663c5236219ff6332e7b385235f38fce9f3d4bf7aea5621eaf56c466",
+        "053f9525ec316d0cd0bd6457adfacb2a54c59aa40f1ca19a1efa1b726cc7825c"
+      ],
+      "predictedBytes": 174164369.72543553,
+      "relativePredictionError": 0.00017404821531914234
+    },
+    {
+      "runtime": "browser",
+      "role": "catalog",
+      "entities": 31814,
+      "baseBytes": 28049408,
+      "highWaterBytes": 493027328,
+      "samples": [
+        148045824,
+        410058752,
+        493027328
+      ],
+      "outputs": [
+        "63ed7cbfcd07280403114b1373a8b3c4577464fca20c46d6951a991a8aea629e",
+        "bdb967e5b778d866bcb7becbd7cef5c948effa2f0bea6326dbacb5f813a05782"
+      ],
+      "crossOriginIsolated": true,
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "predictedBytes": 493034599.96279943,
+      "relativePredictionError": 1.4749614040522097e-05
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 31814,
+      "baseBytes": 28049408,
+      "highWaterBytes": 493027328,
+      "role": "catalog",
+      "outputs": [
+        "63ed7cbfcd07280403114b1373a8b3c4577464fca20c46d6951a991a8aea629e",
+        "bdb967e5b778d866bcb7becbd7cef5c948effa2f0bea6326dbacb5f813a05782"
+      ],
+      "predictedBytes": 493034599.96279943,
+      "relativePredictionError": 1.4749614040522097e-05
+    }
+  ],
+  "docker": "WAIVED by owner 2026-10-22: do not start Docker",
+  "aot": {
+    "status": "PASS",
+    "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
+    "artifactSha256": "4dc525a1c04d93106065920f1437509ceb8e8def49d1c53976ed9c313736d611",
+    "runtime": "WasmEdge 0.16.4; node spacedatanetwork 1.1.0",
+    "execution": "Every native row executed the exact flow artifact produced by node prewarm-aot."
+  },
+  "model": {
+    "calibratedEntityRange": [
+      1000,
+      31814
+    ],
+    "units": "bytes",
+    "method": "least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)",
+    "baseBytes": 27987496.96603152,
+    "perEntityBytes": 14617.6872759404,
+    "focusHighWaterBytes": 28049408
+  },
+  "requiredMaximumBytes": 754974720,
+  "status": "MEASURED",
+  "numericalParity": "All five native/browser role output hashes are identical; the 1000-object raw catalog output is bit-identical to the predecessor. Every decoded focus field is identical; SDS 1.259 RFM NaN-default fields change serialized layout only.",
+  "measurementCommand": "SDN_NODE_BINARY=<node> node propagator/ffm/scripts/e2e-memory-sizing.mjs --measure",
+  "sizingRule": "initial=max(16 MiB,page-rounded fitted base,linker minimum); maximum=ceil(largest measured high-water*1.5 / 16 MiB)*16 MiB",
+  "scope": "Linear-memory sizing for the uncorrected FFM-1 reference roles, not host RSS or throughput. Optional DCL nodes are shared across catalog objects; corrected trajectories are verified by e2e-drag-correction."
+}

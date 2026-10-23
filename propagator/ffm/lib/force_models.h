@@ -821,6 +821,9 @@ struct ForceModelSet {
     /// starting from `weather`, which it then overrides.
     std::function<void(double jdUtc, SpaceWeatherData& weather)> weatherAt;
 
+    /// DCL common-mode density multiplier at the actual force epoch. Empty = 1.
+    std::function<double(const timesys::Instant&)> densityScaleAt;
+
     /// Two-part UT1 Julian date at the TT instant, from the same Earth orientation
     /// data as earthFixedRotation (the solid tides' GMST). Empty: UT1 = UTC.
     std::function<timesys::Instant::Date(const timesys::Instant& instant)> jdUt1At;

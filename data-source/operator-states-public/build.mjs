@@ -1,0 +1,16 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
+import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
+const root=fileURLToPath(new URL('.',import.meta.url));
+const {header,version}=await generateSdsHeaders(['DCL'],import.meta.url);
+const source=await fs.readFile(path.join(root,'src/operator_states.cpp'),'utf8');
+const sha=await fs.readFile(path.join(root,'../../files/orbit-products/src/sha256.hpp'),'utf8');
+const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
+const outputPath=path.join(root,'dist/isomorphic/module.wasm');await fs.mkdir(path.dirname(outputPath),{recursive:true});
+export const compilation=await compileModuleFromSource({manifest,sourceCode:`${header.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g,'')}\n${sha}\n${source}`,language:'c++',outputPath,threadModel:'wasi-sequential',allowUndefinedImports:true});
+if(!compilation.report?.ok)throw new Error('Operator input validation failed',{cause:compilation.report?.issues});
+await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(root,'dist/plugin-manifest.json'));
+await fs.writeFile(path.join(root,'dist/build-provenance.txt'),`spacedatastandards.org=${version}\nthreadModel=wasi-sequential\n`);
+console.log(`Built ${outputPath}`);

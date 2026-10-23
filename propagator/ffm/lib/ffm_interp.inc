@@ -66,7 +66,13 @@ inline Instant utcMidnightTt(double midnight) {
     double tai1, tai2, tt1, tt2;
     if (eraUtctai(midnight, 0.0, &tai1, &tai2) < 0 ||
         eraTaitt(tai1, tai2, &tt1, &tt2) != 0)
+        {
+#if defined(__cpp_exceptions)
         throw std::runtime_error("interp UTC-midnight conversion failed");
+#else
+        astro::flagForceFailure(); return {NAN, NAN};
+#endif
+    }
     return {tt1, tt2};
 }
 inline void boundaries(const Instant& jd, Instant& lo, Instant& hi) {
@@ -81,10 +87,17 @@ inline void boundaries(const Instant& jd, Instant& lo, Instant& hi) {
     if (dayLo.secondsSince(lo) > 0) lo = dayLo;
     if (dayHi.secondsSince(hi) < 0) hi = dayHi;
     if (!(hi.secondsSince(lo) > 0) || jd.secondsSince(lo) < 0 || jd.secondsSince(hi) > 0)
+        {
+#if defined(__cpp_exceptions)
         throw std::runtime_error("invalid interpolation window");
+#else
+        astro::flagForceFailure(); return;
+#endif
+    }
 }
 inline void initialize(Window& w, const Instant& jd) {
     boundaries(jd, w.lo, w.hi);
+    if (astro::propagationStop().active) { w.valid=false; return; }
     w.valid = true;
     w.tt.half = w.hi.secondsSince(w.lo) * 0.5;
     w.tt.lastJd = {NAN, NAN};
@@ -104,7 +117,13 @@ inline void initialize(Window& w, const Instant& jd) {
         long double product = 1;
         for (int j = 0; j <= Degree; ++j) if (i != j)
             product *= static_cast<long double>(c.x[i]) - c.x[j];
-        if (product == 0) throw std::runtime_error("interp window too short for distinct time nodes");
+        if (product == 0) {
+#if defined(__cpp_exceptions)
+        throw std::runtime_error("interp window too short for distinct time nodes");
+#else
+        astro::flagForceFailure(); w.valid=false; return;
+#endif
+    }
         c.weight[i] = static_cast<double>(1 / product);
         largest = std::max(largest, std::abs(c.weight[i]));
     }
@@ -148,15 +167,25 @@ template<class Fill>
 bool interpolate(const Instant& jd, const Forces& f, Channel channel, int count, double* out, Fill exact) {
     if (!active(f)) return false;
     if (count < 1 || count > MaxComponents)
+        {
+#if defined(__cpp_exceptions)
         throw std::runtime_error("invalid interpolation channel width");
+#else
+        astro::flagForceFailure(); return false;
+#endif
+    }
     Window& w = window(jd, f);
+    if (!w.valid || astro::propagationStop().active) return false;
     ChannelData& c = w.channels[channel];
     if (c.rejected) return false;
     if (!c.fitted || c.count != count) {
         // The requested epoch can be covered even when a fitting node is
         // outside a supplied provider's range. Reject that channel/window
         // once and let the caller evaluate its actual epoch exactly.
-        try {
+#if defined(__cpp_exceptions)
+        try
+#endif
+        {
             ExactScope exactScope;
             c.count = count;
             for (int i = 0; i <= Degree; ++i) {
@@ -172,10 +201,14 @@ bool interpolate(const Instant& jd, const Forces& f, Channel channel, int count,
                     return false;
                 }
             }
-        } catch (const std::exception&) {
+        }
+#if defined(__cpp_exceptions)
+        catch (const std::exception&) {
             c.rejected = true;
             return false;
         }
+#endif
+        if (astro::propagationStop().active) return false;
         c.fitted = true;
     }
     if (!same(c.lastJd, jd)) {

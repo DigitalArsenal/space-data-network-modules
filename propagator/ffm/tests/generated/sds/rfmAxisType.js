@@ -32,5 +32,6 @@ export var rfmAxisType = /*#__PURE__*/ function(rfmAxisType) {
     rfmAxisType[rfmAxisType["ORBITAL_VELOCITY_NORMAL_CONORMAL"] = 30] = "ORBITAL_VELOCITY_NORMAL_CONORMAL";
     rfmAxisType[rfmAxisType["ORBITAL_RADIAL_TRANSVERSE_NORMAL"] = 31] = "ORBITAL_RADIAL_TRANSVERSE_NORMAL";
     rfmAxisType[rfmAxisType["ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL"] = 32] = "ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL";
+    rfmAxisType[rfmAxisType["GALACTIC"] = 33] = "GALACTIC";
     return rfmAxisType;
 }({});

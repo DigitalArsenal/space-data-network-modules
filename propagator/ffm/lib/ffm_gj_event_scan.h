@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <limits>
 #include <map>
-#include <stdexcept>
+#include "reentry.h"
 #include <string>
 #include <utility>
 #include <vector>
@@ -97,7 +97,7 @@ std::vector<Root> collect(Eval&& eval, double duration_seconds,
                           const Options& options = {}, std::size_t* evaluations = nullptr) {
     if (!(duration_seconds > 0) || !std::isfinite(duration_seconds)) return {};
     if (!(options.time_tolerance > 0) || !(options.max_interval_seconds > 0))
-        throw std::runtime_error("invalid shadow scan tolerance or interval");
+        { astro::flagIntegrationFailure("invalid shadow scan tolerance or interval"); return {}; }
     const int intervals = std::max(16, std::max(options.min_intervals,
         int(std::ceil(duration_seconds/options.max_interval_seconds))));
     const double u_tolerance = options.time_tolerance/duration_seconds;
@@ -108,12 +108,13 @@ std::vector<Root> collect(Eval&& eval, double duration_seconds,
         const auto raw = eval(u);
         const std::array<double,3> g{{raw[0],raw[1],raw[2]}};
         if (!std::isfinite(g[0]) || !std::isfinite(g[1]) || !std::isfinite(g[2]))
-            throw std::runtime_error("nonfinite shadow switching function");
+            astro::flagIntegrationFailure("nonfinite shadow switching function");
         if (evaluations) ++*evaluations;
         return samples.emplace(u,g).first->second;
     };
     std::vector<double> grid(intervals+1);
     for (int i=0; i<=intervals; ++i) { grid[i] = double(i)/intervals; sample(grid[i]); }
+    if (astro::propagationStop().active) return {};
     for (int k=0; k<3; ++k) {
         std::vector<std::pair<double,double>> searched;
         auto extremum = [&](double a, double b, double initial, double sign) {
@@ -145,6 +146,7 @@ std::vector<Root> collect(Eval&& eval, double duration_seconds,
     }
 
     std::vector<Root> roots;
+    if (astro::propagationStop().active) return {};
     for (int k=0; k<3; ++k) {
         // Freeze the sample coordinates before bisection adds more samples.
         std::vector<std::pair<double,double>> values;
@@ -196,6 +198,7 @@ std::vector<Root> collect(Eval&& eval, double duration_seconds,
         }
         if (!duplicate) unique.push_back(root);
     }
+    if (astro::propagationStop().active) return {};
     return unique;
 }
 

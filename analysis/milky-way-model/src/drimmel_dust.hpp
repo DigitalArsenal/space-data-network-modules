@@ -4,6 +4,17 @@
 // Drimmel & Spergel 2001 dust, adapted to Reid arm centers. This model is
 // independent of the Gaia display-map oracle; see tests/ORACLES.md.
 namespace milky_way::drimmel2001 {
+// The arm dust's density, x DS2001's rho_a (a bake may override it,
+// `appearance_arm_dust`, model_api.hpp). It stays DS2001's: face-on it gives
+// the arms A_I ~ 0.4 mag at R0, below the 0.5-4 mag Holwerda et al. (2005,
+// AJ 129, 1396, abstract) measure through other spirals' arms, so the arms'
+// dust lanes barely show face-on. x4 (A_I ~ 1.1, inside their range) keeps
+// the Gaia sky check (density log r 0.921) and the arm/interarm contrast in g
+// (1.395 against 1.383 mag at x1; OrbPro milky-way-sdss-look E2E,
+// 2026-10-22), and its lanes are still faint at a screen-filling framing:
+// not adopted, DS2001's own fit to the Galaxy's dust is kept, the tension
+// left as measured.
+inline double arm_dust_scale=1.0;
 inline double local_dust(Vec3 p) {
   // Drimmel & Spergel 2001 Eq.18, Tables 1/2. Preserve the dimensionless
   // geometry in their R_sun=8 kpc frame, rescaled to the production R_sun.
@@ -52,7 +63,7 @@ inline double dust(Vec3 p,unsigned variant=3,double stellar_arms=0) {
       const double ha=(.080+.0146*std::pow(std::max(0.0,ra-5.48),2))*reduction;
       const double taper=std::exp(-std::pow(std::max(0.0,ra-6.71)/2.07,2));
       // DS uses the largest contribution, not an additive overlap of arms.
-      arms=std::max(arms,hit.weight*61/scale*taper*std::exp(-std::pow(separation/w,2)-std::pow(z/ha,2)));
+      arms=std::max(arms,arm_dust_scale*hit.weight*61/scale*taper*std::exp(-std::pow(separation/w,2)-std::pow(z/ha,2)));
     });
   }
   return .789*.018*(disk+arms+(variant==3?local_dust(p):0));

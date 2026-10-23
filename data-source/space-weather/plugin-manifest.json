@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.space-weather",
   "name": "Licensed space weather",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GFZ CC BY 4.0 and NOAA public-domain space weather for NRLMSISE-00. Source parsing, forecast selection and 81-day averages in WASM; typed generic HTTP and storage connectors. No SET, CSSI or sunspot-number publication.",
   "pluginFamily": "data_source",
   "capabilities": [],

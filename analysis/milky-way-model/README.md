@@ -65,6 +65,7 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `verify_legacy` | none, after legacy bake | Maximum/RMS RGB error and sample count |
 | `load_dust_map` | port `rows`: 1-64 `$PCE` rows of data-source/dust-map-3d (one z plane each) | planes loaded, ready |
 | `bake` | none (uses a fully loaded dust map) | Literature-model volumes, detail tile, `extinction_ratios`, `radiance_scale*`, `display_asinh`, `display_counts_per_unit`, `display_band_weights`, `display_nanomaggies_per_count`, `dust_map` |
+| `face_on_columns` | `points` (x, y kpc pairs) | The model's own face-on r, g, i light (no baked volume), the reference the renderer's frames are measured against |
 | `arm_curves` | none | Each Reid 2019 Table 2 segment as a polyline (kpc): `arm_<i>_measured_xy` over its measured coverage, `arm_<i>_extended_xy` over the arm the light follows |
 | `face_on_metrics` | none, after bake | Face-on 48 kpc r/g/i image layout, arm/interarm contrast, bar A2, lane g-i |
 | `extinction` | `points`: packed xyz | `a_g`, `e_bp_rp`, magnitudes |
@@ -73,10 +74,13 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `calibrate` | retired method ID | Explicit error; Gaia dust fitting cannot mutate the literature bake |
 | `ridge_metrics` | `masers`: [longitude deg, latitude deg, parallax mas, family]; `maser_segments`, `maser_excluded`, `parallax_errors` (mas); independent `published_arms` Table 2 rows | Curve agreement, per-segment raw RMS and chi-square, propagated perpendicular errors, diagnostic baked-ridge distances |
 
-Global volume: 320 × 320 × 48 over [-20,20] × [-20,20] × [-6,6] kpc (125 pc
-in x and y), its large-scale dust only. Local volume: uniform 128³ over the
-Sun ±1.25 kpc (20 pc), with the delivered 3D dust map. Both are RGBA16F, x
-fastest, then y, then z. Literature channels are relative SDSS r/g/i
+Global volume: 384 × 384 × 48 over [-24,24] × [-24,24] × [-6,6] kpc (125 pc
+in x and y), its large-scale dust only; the light tapers to zero inside it,
+by 23.5 kpc in R and 5.6 kpc in z. Slab (0.4.1): 512 × 512 × 12 over the thin
+disc, [-16,16] × [-16,16] × [-0.48,0.48] kpc (62.5 pc, signed-square z),
+replacing the global volume inside it with a blend at its edges. Local
+volume: uniform 128³ over the Sun ±1.25 kpc (20 pc), with the delivered 3D
+dust map. All are RGBA16F, x fastest, then y, then z. Literature channels are relative SDSS r/g/i
 emissivity per kpc and G extinction optical depth per kpc. Each band's optical
 depth is `extinction_ratios` [A_r/A_G, A_g/A_G, A_i/A_G] times G (Wang & Chen
 2019). A band unit is the light of one G unit at zero color term, so all three

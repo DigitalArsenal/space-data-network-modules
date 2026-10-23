@@ -34,7 +34,7 @@ extern "C" int bake() {
   struct Override {const char* name;double* value;double lo,hi;};
   const Override overrides[]={{"appearance_young_length_kpc",&appearance::young_length_kpc,1.0,12.0},
     {"appearance_central_light",&appearance::central_light,0.2,3.0},{"appearance_bulge_size",&appearance::bulge_size,0.2,3.0},
-    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0}};
+    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0},{"appearance_arm_dust",&drimmel2001::arm_dust_scale,0.1,30.0}};
   for (const auto& [name,value]:request.values) {
     const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
     const double v=request.number(name.c_str(),NAN);
@@ -51,8 +51,8 @@ extern "C" int bake() {
   detail=std::make_unique<Volume>(32,32,32,Vec3{0,0,0},Vec3{1,1,1});
   uint64_t seed=20261016;
   for (auto& v:detail->rgba) v=to_half(float(random_uniform(seed)));
-  wire::Result r;volume_result(r,"global",volumes->global);volume_result(r,"local",volumes->local);
-  volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
+  wire::Result r;volume_result(r,"global",volumes->global);volume_result(r,"slab",volumes->slab);
+  volume_result(r,"local",volumes->local);volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
   r.text("channels","SDSS r,g,i relative emissivity per kpc; G extinction optical depth per kpc");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
   r.text("calibration",loaded.ready
@@ -289,5 +289,40 @@ extern "C" int arm_curves() {
     r.vector((p+"_extended_xy").c_str(),drawn,"kpc");
   }
   r.text("source","Reid et al. 2019, ApJ 885, 131, Table 2 (central values)");
+  return r.emit();
+}
+
+// The model's own face-on light: at each (x, y) the r, g and i radiance of a
+// vertical column from z = +6 to -6 kpc, integrated from the model itself
+// (literature(), no baked volume) as the renderer integrates a ray: per step
+// light gained T j (1 - e^-tau) / tau, transmittance falling by e^-tau, each
+// band with its extinction ratio to G; 5 pc steps within 0.6 kpc of the
+// plane, 50 pc beyond. The reference the renderer's face-on frames are
+// measured against (how much of a profile's width is the model's).
+extern "C" int face_on_columns() {
+  using namespace milky_way;
+  wire::Request request;const auto p=request.vector("points");
+  if (!request.ok || p.empty() || p.size()%2 || p.size()>40000 || !finite_vector(p))
+    return wire::fail("Expected 1..20000 finite Galactocentric (x, y) points in kpc");
+  if (std::any_of(p.begin(),p.end(),[](double v){return std::abs(v)>24;})) return wire::fail("Point outside the 24 kpc disc");
+  std::vector<double> out[3];
+  const double* ratios=model_choices::channel_extinction;
+  for (size_t k=0;k<p.size();k+=2) {
+    double light[3]={0,0,0},transmit[3]={1,1,1};
+    for (double z=6.0;z>-6.0;) {
+      const double dz=std::min(z+6.0,std::abs(z)<0.6?0.005:0.05),zm=z-dz/2;
+      const Field f=literature({p[k],p[k+1],zm});
+      const double emission[3]={std::max(0.0,f.r),std::max(0.0,f.g),std::max(0.0,f.b)},kappa=std::max(0.0,f.kappa);
+      for (int b=0;b<3;++b) {
+        const double kb=kappa*ratios[b],tau=kb*dz;
+        light[b]+=transmit[b]*emission[b]*(tau>1e-10?-std::expm1(-tau)/kb:dz);
+        transmit[b]*=std::exp(-tau);
+      }
+      z-=dz;
+    }
+    for (int b=0;b<3;++b) out[b].push_back(light[b]);
+  }
+  wire::Result r;r.vector("r",out[0],"band units");r.vector("g",out[1],"band units");r.vector("i",out[2],"band units");
+  r.text("method","vertical columns of literature() with dust, 5 pc steps within 0.6 kpc of the plane, 50 pc beyond");
   return r.emit();
 }

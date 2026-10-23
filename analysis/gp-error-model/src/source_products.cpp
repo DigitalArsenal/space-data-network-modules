@@ -381,6 +381,7 @@ struct Row {
   double x[6] = {};
 };
 struct CovLine {
+  std::string frame_name;  // OEM per-matrix override; otherwise block frame.
   Instant t;
   std::string text;
   std::array<double, 21> c{};
@@ -467,6 +468,7 @@ bool read_oem_blocks(const RawRecord& raw, std::vector<Block>* blocks, std::stri
         CovLine c;
         if (!parse_instant(line->EPOCH(), &c.t)) { *error = "a covariance line has no valid EPOCH"; return false; }
         c.text = line->EPOCH()->str();
+        c.frame_name = frame_name_of(line->COV_REFERENCE_FRAME());
         const double v[21] = {line->CX_X(), line->CY_X(), line->CY_Y(), line->CZ_X(), line->CZ_Y(), line->CZ_Z(), line->CX_DOT_X(),
                               line->CX_DOT_Y(), line->CX_DOT_Z(), line->CX_DOT_X_DOT(), line->CY_DOT_X(), line->CY_DOT_Y(), line->CY_DOT_Z(),
                               line->CY_DOT_X_DOT(), line->CY_DOT_Y_DOT(), line->CZ_DOT_X(), line->CZ_DOT_Y(), line->CZ_DOT_Z(),
