@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {compileModuleFromSource, cleanupCompilation} from 'space-data-module-sdk/compiler';
 import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
@@ -20,7 +20,7 @@ for (const candidate of candidates) {
 if (!emsdk) throw new Error('An existing repo-local deps/emsdk with upstream/bin/clang++ is required.');
 process.env.SDN_WASI_CLANG=path.join(emsdk,'upstream/bin/clang');
 process.env.SDN_WASI_CLANGXX=path.join(emsdk,'upstream/bin/clang++');
-const scratch=path.join(root,'.build');await fs.mkdir(scratch,{recursive:true});process.env.TMPDIR=scratch;
+const scratch=process.env.SEA_STATE_SCRATCH || path.join(root,'.build');await fs.mkdir(scratch,{recursive:true});process.env.TMPDIR=scratch;
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
 const sdkPackage=path.join(sdk,'package.json');
 const createFlatc=createRequire(sdkPackage)('flatc-wasm/module');
