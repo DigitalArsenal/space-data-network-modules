@@ -265,7 +265,15 @@ inline double next_uniform(uint64_t& s) {
 // light on the arm tangents seen from the Sun beyond what Gaia's all-sky
 // map shows: the oracle's density log r was 0.894 at 0.5 (1.2 widths) and
 // 0.911 at 0.25, against 0.922 at 0.15 (0.3.0: 0.909; measured 2026-10-22).
-struct Spec {unsigned count;uint64_t seed;double min_kpc,max_kpc,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,drift_myr,min_density;};
+// cluster_sigma (0.5): candidates also accepted with the young multi-scale
+// structure's modulation at that sigma (structure.hpp) over exp(1.5 sigma)
+// (capped at 1), so the knots cluster where the flocculent field is bright:
+// star formation is hierarchical, the complexes the largest level of the same
+// turbulent structure (Elmegreen & Efremov 1996, ApJ 466, 802; Elmegreen et
+// al. 2003 section 6). sized_by_light: a knot's sigma is sigma_lo sqrt(L/L_min)
+// (constant mean surface brightness, a MODEL CHOICE), capped at sigma_hi.
+struct Spec {unsigned count;uint64_t seed;double min_kpc,max_kpc,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,drift_myr,min_density;
+  double cluster_sigma=0;bool sized_by_light=false;};
 // `brightness(r, seed)`: a knot's amplitude at radius r, drawing from `seed`.
 template<class Brightness> Population build(const Spec& spec,Brightness brightness) {
   Population p;uint64_t seed=spec.seed;
@@ -280,13 +288,17 @@ template<class Brightness> Population build(const Spec& spec,Brightness brightne
     const double density=planar_arm_density(arm);
     const double accept=(density<spec.min_density?0.0:std::min(1.0,density/peak_density))*std::min(1.0,profile)
       *model_choices::disc_edge(r);
-    if(next_uniform(seed)>accept) continue;
+    const double clustered=accept>0&&spec.cluster_sigma>0
+      ?std::min(1.0,structure::modulation(c.x,c.y,spec.cluster_sigma)/std::exp(1.5*spec.cluster_sigma)):1.0;
+    if(next_uniform(seed)>accept*clustered) continue;
     // Box-Muller for the layer (and a normal deviate for the brightness).
     const double u1=std::max(1e-12,next_uniform(seed)),u2=next_uniform(seed);
     const double g1=std::sqrt(-2*std::log(u1))*std::cos(2*galactic_constants::pi*u2);
     const double g2=std::sqrt(-2*std::log(u1))*std::sin(2*galactic_constants::pi*u2);
-    const double sigma=spec.sigma_lo_kpc+(spec.sigma_hi_kpc-spec.sigma_lo_kpc)*next_uniform(seed);
-    p.knots.push_back({{c.x,c.y,spec.layer_kpc*g1},sigma,brightness(r,g2,seed)});
+    double sigma=spec.sigma_lo_kpc+(spec.sigma_hi_kpc-spec.sigma_lo_kpc)*next_uniform(seed);
+    const double amplitude=brightness(r,g2,seed);
+    if(spec.sized_by_light) sigma=std::min(spec.sigma_hi_kpc,spec.sigma_lo_kpc*std::sqrt(amplitude));
+    p.knots.push_back({{c.x,c.y,spec.layer_kpc*g1},sigma,amplitude});
   }
   p.n=int(2*half_kpc/cell_kpc);
   p.cells.resize(size_t(p.n)*p.n);
@@ -347,12 +359,14 @@ inline double light(Vec3 p) {return knots::light(population(),p);}
 namespace complexes {
 inline constexpr double clumped=model_choices::young_clumped,luminosity_range=100;
 inline constexpr unsigned count=1500;
-// 0.4.1: compact, on the ridges (0.4.0: 0.09-0.22 kpc and anywhere the arms'
-// density let them, which scattered them between the arms): OB associations
-// "range from tens to several hundreds of parsecs" (Wright et al. 2023,
-// Protostars and Planets VII, arXiv:2203.10007, section 2); sigma 30-80 pc
-// (FWHM 70-190 pc), points at a screen-filling framing.
-inline constexpr double sigma_lo_kpc=0.03,sigma_hi_kpc=0.08,layer_kpc=0.06;
+// OB associations "range from tens to several hundreds of parsecs" (Wright
+// et al. 2023, Protostars and Planets VII, arXiv:2203.10007, section 2): 0.5
+// sizes them by their light (knots::Spec sized_by_light), sigma 30 pc for the
+// faintest to 300 pc for the brightest over the luminosity function's two
+// decades, and clusters them with the young structure (cluster_sigma, the
+// young light's sigma). 0.4.1: sigma 30-80 pc uniform, placed by the arms'
+// density alone, which read as scattered dots of one size.
+inline constexpr double sigma_lo_kpc=0.03,sigma_hi_kpc=0.30,layer_kpc=0.06;
 inline const knots::Population& population();
 inline double light(Vec3 p) {return knots::light(population(),p);}
 } // namespace complexes
@@ -373,7 +387,8 @@ inline const knots::Population& complexes::population() {
     }
     // dN/dL ~ L^-2 on [1, luminosity_range]: L = 1 / (1 - u (1 - 1/range)).
     double luminosity_sum=0;
-    auto pop=knots::build({count,20261022,2.0,15.0,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,populations::drift_age_j_myr,0.15},
+    auto pop=knots::build({count,20261022,2.0,15.0,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,populations::drift_age_j_myr,0.15,
+        structure::young_sigma,true},
       [&](double,double,uint64_t& seed) {
         const double l=1/(1-knots::next_uniform(seed)*(1-1/luminosity_range));
         luminosity_sum+=l;
