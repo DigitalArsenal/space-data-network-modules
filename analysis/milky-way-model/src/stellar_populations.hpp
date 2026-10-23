@@ -222,10 +222,13 @@ inline constexpr double i_per_big_g_extinction=a_i_per_a_v/populations::a_g_per_
 
 namespace milky_way::colors {
 inline const sdss::Bands disc_bands=sdss::per_g(1.0),central_bands=sdss::per_g(1.23),young_bands=sdss::per_g(-0.15);
-// The intermediate-age stars (0.5: the minor arms' stellar wave): A and F
-// dwarfs, BP-RP = 0.45, an F0V on the dwarf sequence (Pecaut & Mamajek 2013
-// table; a MODEL CHOICE of type).
-inline const sdss::Bands intermediate_bands=sdss::per_g(0.45);
+// The intermediate-age stars (0.5: the minor arms' stellar wave): the
+// integrated light of a ~1-2 Gyr population, its turn-off dwarfs and its
+// giants together, BP-RP = 0.75 (a MODEL CHOICE of that color). Bluer
+// (BP-RP 0.45, an F0V) took the Galaxy's integrated g-r to 0.613 and M_r to
+// -21.39, outside Licquia et al. 2015 (OrbPro milky-way-sdss-look E2E,
+// 2026-10-23).
+inline const sdss::Bands intermediate_bands=sdss::per_g(0.75);
 inline constexpr double hii_g_ew_a=500,hii_r_ew_a=1000,g_fwhm_a=1400,r_fwhm_a=1400,big_g_fwhm_a=4400;
 inline const sdss::Bands hii_bands=[] {
   const double big_g=1+(hii_g_ew_a+hii_r_ew_a)/big_g_fwhm_a;

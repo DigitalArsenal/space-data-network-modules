@@ -100,9 +100,10 @@ count scale). 0 (the default) bakes SDSS r, g, i, the bands of every check.
 Extinction ratios follow the basis (eye: CCM89 over the old disc's spectrum).
 
 Arms (0.5.0): the old stars' density wave sits on Scutum-Centaurus and
-Perseus (Drimmel 2000; Benjamin et al. 2005; Churchwell et al. 2009) over
-Reid's extents (not DS2001's dust-arm cut-off); the minor arms carry an
-intermediate-age population (BP-RP 0.45) at 0.75 of B_K (the least Gaia's
+Perseus (Drimmel 2000; Benjamin et al. 2005; Churchwell et al. 2009) to
+DS2001's K-band extent, continued beyond it to Reid's extents in
+intermediate-age stars (Poggio et al. 2021); the minor arms carry that
+intermediate-age population (BP-RP 0.75) at 0.75 of B_K (the least Gaia's
 optical sky keeps); gas, dust and young stars keep all of Reid's arms. Arm
 ends fade (Scutum by radius to 16 kpc; the 3-kpc and Local segments along the
 arm past their coverage).

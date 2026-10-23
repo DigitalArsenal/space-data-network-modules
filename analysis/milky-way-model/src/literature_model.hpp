@@ -121,13 +121,20 @@ inline constexpr double stellar_arm_width_per_kpc=0.143;
 // 0.916 (measured 2026-10-22). 0.75 is the least it keeps.
 inline double minor_stellar_arm=0.75;
 // The arms' extent (0.5): Reid et al. (2019)'s, as the gas and young light's
-// (reid_arms.hpp, arm_light: the coverage, continued to 17 kpc and faded),
-// not DS2001's dust-arm cut-off g(R_a) (r_m 6.71, r_a 2.07 kpc), which ended
-// the stellar arms near 9 kpc; Reid's masers trace Perseus and the Outer arm
-// to 12-15 kpc.
-// The major (old, x[0]) and minor (intermediate-age, x[1]) waves at p.
+// (reid_arms.hpp, arm_light: the coverage, continued to 17 kpc and faded;
+// Reid's masers trace Perseus and the Outer arm to 12-15 kpc). The OLD
+// stars' two arms keep DS2001's fitted K-band extent, their cut-off g(R_a)
+// (r_m 6.71, r_a 2.07 kpc); beyond it Scutum-Centaurus and Perseus continue
+// in INTERMEDIATE-AGE stars (the minor arms' share, 1 - g(R_a) of it): Gaia
+// traces the arms in its upper-main-sequence stars (Poggio et al. 2021, A&A
+// 651, A104). Old waves carried past the cut-off put Perseus's wing on the
+// Sun (0.30 of B_K), which Flynn's local census then takes from the whole
+// disc: M_r -21.37, outside Licquia et al. 2015 (measured 2026-10-23).
+// The major (old, x[0]) and minor (intermediate-age, x[1]) waves at p: as
+// DS2001, the arm of largest contribution alone, given to the population of
+// its arm (a sum of both would count the overlap of their wings twice).
 inline std::array<double,2> stellar_arm_waves(Vec3 p) {
-  std::array<double,2> best{0,0};
+  double best=0;int which=0;
   for(const auto& a:reid_segments) {
     if(arm_light::finite_segment(a)) continue;
     const int k=a.family==2||a.family==5?0:1;
@@ -135,10 +142,17 @@ inline std::array<double,2> stellar_arm_waves(Vec3 p) {
     if(share<=0) continue;
     arm_light::for_each_hit(a,p,[&](const arm_light::Hit& h) {
       const double width=stellar_arm_width_per_kpc*h.radius;
-      best[k]=std::max(best[k],share*h.weight*std::exp(-(h.separation/width)*(h.separation/width)));
+      const double shape=h.weight*std::exp(-(h.separation/width)*(h.separation/width));
+      if(k==1) {if(share*shape>best) {best=share*shape;which=1;} return;}
+      // A major arm: old stars to DS2001's K-band cut-off, intermediate-age
+      // stars beyond it (the minor arms' share).
+      const double cutoff=h.radius>populations::arm_cutoff_kpc
+        ?std::exp(-std::pow((h.radius-populations::arm_cutoff_kpc)/populations::arm_cutoff_scale_kpc,2)):1.0;
+      if(cutoff*shape>best) {best=cutoff*shape;which=0;}
+      if((1-cutoff)*minor_stellar_arm*shape>best) {best=(1-cutoff)*minor_stellar_arm*shape;which=1;}
     });
   }
-  return best;
+  return which==0?std::array<double,2>{best,0}:std::array<double,2>{0,best};
 }
 
 inline double young_pattern(Vec3 p) {
@@ -155,9 +169,15 @@ inline ArmPatterns arm_patterns(Vec3 p) {
 // light; relative to the Juric thin disc's local mid-plane density (1) they
 // are bright/old-thin = 0.262 there. The Sun's own young pattern value fixes
 // the amplitude, so the Sun's neighborhood keeps the measured fraction.
+// 0.5: the old thin disc at the Sun is its smooth density times its arm
+// waves there (1 + wave + intermediate), which Flynn's old-thin census counts.
+inline ArmPatterns arm_patterns(Vec3 p);
 inline double young_amplitude() {
-  static const double amplitude=populations::rho_bright/populations::rho_old_thin
-    /young_pattern({-galactic_constants::solar_radius_kpc,0,0});
+  static const double amplitude=[] {
+    const Vec3 sun{-galactic_constants::solar_radius_kpc,0,0};
+    const auto waves=arm_patterns(sun);
+    return populations::rho_bright/populations::rho_old_thin*(1+waves.wave+waves.intermediate)/young_pattern(sun);
+  }();
   return amplitude;
 }
 
