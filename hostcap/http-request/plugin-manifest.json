@@ -93,5 +93,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Each request frame becomes one http.request hostcall answered on the calling thread; the host runs independent requests in parallel and this module creates no threads."
+  }
 }

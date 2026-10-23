@@ -39,21 +39,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred.
-  //
-  // This node is single-threaded: it spawns nothing, shares nothing, and holds
-  // only the frames of the invocation it is serving. The artifact this repo has
-  // been shipping already carries `threadModel: single-thread`
-  // (dist/guest-link/metadata.json) — it was simply never DECLARED, so it rode
-  // the SDK's inference. That inference has since moved to EMSCRIPTEN_PTHREADS
-  // for runtimeTargets [browser, wasmedge], at which point the build starts
-  // claiming a pthreads contract the emitted wasm does not have and the SDK's
-  // isomorphic-pthreads artifact guard correctly REFUSES it ("does not import
-  // the wasi thread-spawn host function ... must not ship"). Declaring the truth
-  // builds against reality instead of against whatever the SDK last guessed.
-  // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
-  // form of this note lives.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // The module imports the sync space_data_module_host hostcall bridge; those
   // symbols resolve at instantiation (SDK harness bridge / Go node bridge).
   allowUndefinedImports: true,

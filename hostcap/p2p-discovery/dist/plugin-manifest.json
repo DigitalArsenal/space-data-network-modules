@@ -723,5 +723,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Each method makes one p2p_read hostcall and answers it on the calling thread; the host runs independent invocations in parallel and this module creates no threads."
+  }
 }

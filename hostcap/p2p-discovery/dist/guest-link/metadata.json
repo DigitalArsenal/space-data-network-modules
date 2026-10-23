@@ -2,7 +2,7 @@
   "version": 1,
   "format": "wasm-object",
   "language": "c++",
-  "threadModel": "single-thread",
+  "threadModel": "wasi-sequential",
   "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_",
   "methodSymbols": {
     "peers_snapshot": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e7032702d646973636f76657279_peers_snapshot",

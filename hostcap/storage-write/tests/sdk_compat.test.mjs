@@ -38,7 +38,7 @@ async function twinWasm() {
     const outputPath = path.join(dir, "module.wasm");
     const compilation = await compileModuleFromSource({
       manifest, sourceCode: fs.readFileSync(fileURLToPath(new URL("../src/storage_write_module.cpp", import.meta.url)), "utf8"),
-      language: "c++", outputPath, threadModel: "single-thread", allowUndefinedImports: true,
+      language: "c++", outputPath, threadModel: "wasi-sequential", allowUndefinedImports: true,
     });
     assert.equal(compilation.report?.ok, true, JSON.stringify(compilation.report?.issues ?? []));
     const bytes = fs.readFileSync(outputPath);

@@ -183,5 +183,9 @@
       "fileIdentifier": "INGR",
       "rootTypeName": "IngestResult"
     }
-  ]
+  ],
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "store() appends records to the in-wasm FlatSQL store in arrival order, each insert depending on the store left by the previous one; the guest creates no threads."
+  }
 }
