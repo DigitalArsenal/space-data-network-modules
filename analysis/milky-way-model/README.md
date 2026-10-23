@@ -86,7 +86,26 @@ The bake publishes `structure_detail`, the dust field's two octaves below the
 slab's texels (31 and 16 pc: wavelength, amplitude, mean, variance, seed,
 phase, with the field's standard deviation, the dust sigma and the fade), for
 a renderer to continue the same field where its pixels resolve it.
-Overrides: `appearance_structure_young_sigma`, `appearance_structure_dust_sigma`.
+Overrides: `appearance_structure_young_sigma`, `appearance_structure_dust_sigma`,
+`appearance_structure_lane_sigma`, `appearance_structure_fade_inner`/`_outer`.
+`structure_detail_young` carries the young light's share of the same octaves
+and the baked channels of one unit of young and of old disc light.
+
+Display basis (0.5.0): the bake value `display_basis` 1 bakes CIE Y, Z, X
+(`src/eye_color.hpp`: each stellar population a Planck spectrum at the
+temperature of its SDSS g-r; HII regions their Case B Balmer, [OIII] and
+[NII] lines; through the CIE 1931 functions) for an sRGB display with the
+fitted asinh stretch on luminance (`display_basis` "eye", saturation 1, one
+count scale). 0 (the default) bakes SDSS r, g, i, the bands of every check.
+Extinction ratios follow the basis (eye: CCM89 over the old disc's spectrum).
+
+Arms (0.5.0): the old stars' density wave sits on Scutum-Centaurus and
+Perseus (Drimmel 2000; Benjamin et al. 2005; Churchwell et al. 2009), the
+minor arms at 0.75 of it (the least Gaia's optical sky keeps); gas, dust and
+young stars keep all of Reid's arms. Arm dust lanes take Reid's widths, x12
+DS2001's density (Holwerda et al. 2005's face-on arm A_I). HII regions follow
+the KEH89 luminosity function with Stromgren sizes (`hii_population`).
+`face_on_columns` also returns `tau_g`, the vertical G optical depth.
 
 Global volume: 384 × 384 × 48 over [-24,24] × [-24,24] × [-6,6] kpc (125 pc
 in x and y), its large-scale dust only; the light tapers to zero inside it,
