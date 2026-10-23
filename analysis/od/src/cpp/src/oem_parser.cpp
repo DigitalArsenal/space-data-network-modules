@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -61,13 +62,17 @@ bool looks_like_oem(const std::string& content) {
            head.find("META_START") != std::string::npos;
 }
 
-OEMParseResult parse_oem(const std::string& content) {
+OEMParseResult parse_oem(const std::string& content, bool capture_covariance) {
     OEMParseResult result;
     StateSeries& series = result.series;
 
     std::istringstream stream(content);
     std::string line;
 
+    bool in_covariance=false;
+    int covariance_row=0;
+    double covariance_epoch=0, covariance[21]{};
+    std::string covariance_frame;
     bool in_meta = false;
     bool in_data = false;
     int segment_count = 0;
@@ -83,6 +88,35 @@ OEMParseResult parse_oem(const std::string& content) {
         std::string t = trim(line);
         if (t.empty()) continue;
         if (t.rfind("COMMENT", 0) == 0) continue;
+
+        if(capture_covariance && t=="COVARIANCE_START"){
+            in_covariance=true;covariance_row=0;covariance_epoch=0;covariance_frame=series.meta.source_frame;continue;
+        }
+        if(capture_covariance && t=="COVARIANCE_STOP"){
+            if(covariance_row!=0 && covariance_row!=6)return fail("invalid-covariance","Incomplete OEM covariance");
+            in_covariance=false;continue;
+        }
+        if(in_covariance){
+            const auto eq=t.find('=');
+            if(eq!=std::string::npos){
+                const auto key=to_upper(trim(t.substr(0,eq))),value=trim(t.substr(eq+1));
+                if(key=="EPOCH"){
+                    if(covariance_row!=0 && covariance_row!=6)return fail("invalid-covariance","Incomplete OEM covariance");
+                    const auto time=time_system_to_utc(time_upper,iso_to_jd(value));
+                    if(!time.ok)return fail(time.error_code.c_str(),time.error_message);
+                    covariance_epoch=time.jd_utc;covariance_row=0;covariance_frame=series.meta.source_frame;
+                }else if(key=="COV_REF_FRAME")covariance_frame=to_upper(value);
+                continue;
+            }
+            if(!covariance_epoch || covariance_row>=6)return fail("invalid-covariance","OEM covariance requires EPOCH and six lower-triangular rows");
+            std::istringstream values(t);
+            const int start=covariance_row*(covariance_row+1)/2;
+            for(int k=0;k<=covariance_row;++k)if(!(values>>covariance[start+k]) || !std::isfinite(covariance[start+k]))return fail("invalid-covariance","Non-finite or incomplete OEM covariance row");
+            if(++covariance_row==6)for(auto& point:series.samples)if(std::abs(point.epoch_jd-covariance_epoch)<1e-9){
+                std::copy(covariance,covariance+21,point.covariance);point.has_covariance=true;point.covariance_frame=covariance_frame;
+            }
+            continue;
+        }
 
         if (t == "META_START") {
             in_meta = true;
@@ -248,6 +282,7 @@ OEMParseResult parse_oem(const std::string& content) {
     // full-state); position_only is set only when every sample was position-only.
     series.meta.position_only = (full_state_lines == 0 && pos_only_lines > 0);
     series.meta.segment_count = segment_count;
+    if(in_covariance)return fail("invalid-covariance","Unterminated OEM covariance block");
     result.ok = true;
     return result;
 }

@@ -37,7 +37,7 @@ struct OEMParseResult {
 
 /// Parse a CCSDS OEM KVN document. All valid segments are concatenated into one
 /// TEME series; identity metadata is taken from the first segment.
-OEMParseResult parse_oem(const std::string& content);
+OEMParseResult parse_oem(const std::string& content, bool capture_covariance = false);
 
 /// Cheap content sniff: does this look like a CCSDS OEM KVN document?
 bool looks_like_oem(const std::string& content);

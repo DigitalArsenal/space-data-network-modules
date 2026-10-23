@@ -60,19 +60,29 @@ bool evaluate(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const
 }
 // The operator covariance is kept independently of the formal fit covariance.
 // UVW is inertial RTN, the same convention as gp-error-model source_covariance.
-void source_covariance(const Sample& s, OperatorSegment& result) {
-    if(!s.source.has_covariance || !publishable_covariance(s.source.covariance))return;
+bool source_covariance(const Sample& s, OperatorSegment& result, std::string& error) {
+    if(!s.source.has_covariance)return true;
+    if(!publishable_covariance(s.source.covariance)){error="invalid-operator-covariance";return false;}
     namespace ax=sdn::frames;
-    ax::Mat3 axes;
+    ax::Mat3 axes,r;
     const auto& p=s.state.position;const auto& v=s.state.velocity;
-    if(!ax::triadFromPrimarySecondary({p.x,p.y,p.z},{v.x,v.y,v.z},&axes))return;
-    const auto r=ax::transpose(axes);
+    const auto& frame=s.source.covariance_frame;
+    if(frame=="UVW" || frame=="RTN" || frame=="RIC" || frame=="RSW" || frame=="RSW_INERTIAL"){
+        if(!ax::triadFromPrimarySecondary({p.x,p.y,p.z},{v.x,v.y,v.z},&axes)){error="degenerate-covariance-axes";return false;}
+        r=ax::transpose(axes);
+    }else if(frame=="EME2000" || frame=="J2000"){
+        double bias[3][3],precession[3][3],combined[3][3];eraBp00(2451545.,0,bias,precession,combined);
+        for(int i=0;i<3;++i)for(int j=0;j<3;++j)r.m[i][j]=bias[j][i];
+    }else if(frame!="GCRF" && frame!="ICRF"){
+        error="unsupported-covariance-frame: "+frame;return false;
+    }
     Eigen::Matrix<double,6,6> rotation=Eigen::Matrix<double,6,6>::Zero(),cov;
     for(int i=0;i<3;++i)for(int j=0;j<3;++j)rotation(i,j)=rotation(i+3,j+3)=r.m[i][j];
     for(int i=0,k=0;i<6;++i)for(int j=0;j<=i;++j)cov(i,j)=cov(j,i)=s.source.covariance[k++];
     cov=(rotation*cov*rotation.transpose()).eval();
     for(int i=0,k=0;i<6;++i)for(int j=0;j<=i;++j)result.operator_covariance[k++]=cov(i,j);
     result.has_operator_covariance=publishable_covariance(result.operator_covariance.data());
+    return result.has_operator_covariance;
 }
 bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const OperatorFitOptions& opt,
          OperatorSegment& result,std::string& error) {
@@ -130,8 +140,7 @@ bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const Oper
     for(int k=0;k<6;++k)result.state[k]=p[k];
     result.ballistic=p[6];result.rms_km=std::sqrt(residual.squaredNorm()/rows.size());
     for(size_t i=0;i<rows.size();++i){const double r=residual.segment<3>(3*i).norm();result.residuals_km.push_back(r);result.maximum_km=std::max(result.maximum_km,r);}
-    source_covariance(rows.front(),result);
-    return true;
+    return source_covariance(rows.front(),result,error);
 }
 }
 OperatorFitResult fit_operator(const StateSeries& input,const OperatorEnvironment& env,const OperatorFitOptions& opt) {

@@ -16,6 +16,7 @@ import * as fb from 'flatbuffers';
 import {OCM} from 'spacedatastandards.org/lib/js/OCM/OCM.js';
 import {loadModule} from 'space-data-module-sdk/host/isomorphic';
 import {headlessShell} from '../../../propagator/ffm/tests/lib/headlessShell.mjs';
+import {referenceFrameGate} from './operator-reference.mjs';
 import {environment,configuration,fil,dcl,plantedManeuver} from './operator-environment.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),wasmPath=path.join(root,'dist/isomorphic/module.wasm');
 const reportPath=process.env.OD_REPORT||path.join(root,'.build-operator/e2e.json');
@@ -37,30 +38,39 @@ try{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({headless:true,executablePath:headlessShell()});const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.address().port}`);
  await page.evaluate(async manifest=>{if(!crossOriginIsolated)throw Error('COI required');const {createBrowserModuleHarness}=await import('/harness.js');window.make=async config=>createBrowserModuleHarness({wasmSource:new Uint8Array(await(await fetch('/module.wasm')).arrayBuffer()),manifest,surface:'direct',hostOptions:{config}});},manifest);
+ const cdp=await browser.newBrowserCDPSession();
+ const cpu=async()=> (await cdp.send('SystemInfo.getProcessInfo')).processInfo.reduce((sum,p)=>sum+p.cpuTime,0);
  const run=async(request,config)=>{
   const descriptors=request.inputs.map((f,i)=>{const url=`/input-${i}`;assets.set(url,f.payload);return {...f,payload:undefined,url};});
-  return page.evaluate(async({descriptors,config})=>{const h=await window.make(config);try{const inputs=[];for(const {url,...f} of descriptors)inputs.push({...f,payload:new Uint8Array(await(await fetch(url)).arrayBuffer())});const r=await h.invoke({methodId:'fit_ffm',inputs});return {...r,errorMessage:r.statusCode?JSON.stringify({message:r.errorMessage,host:h.bridge?.getLastEnvelope()}):r.errorMessage,outputs:r.outputs.map(o=>({...o,payload:Array.from(o.payload)}))};}finally{await h.destroy();}},{descriptors,config}).then(r=>({...r,outputs:r.outputs.map(o=>({...o,payload:new Uint8Array(o.payload)}))}));
+  return page.evaluate(async({descriptors,config,methodId})=>{const h=await window.make(config);try{const inputs=[];for(const {url,...f} of descriptors)inputs.push({...f,payload:new Uint8Array(await(await fetch(url)).arrayBuffer())});const r=await h.invoke({methodId,inputs});return {...r,errorMessage:r.statusCode?JSON.stringify({message:r.errorMessage,host:h.bridge?.getLastEnvelope()}):r.errorMessage,outputs:r.outputs.map(o=>({...o,payload:Array.from(o.payload)}))};}finally{await h.destroy();}},{descriptors,config,methodId:request.methodId}).then(r=>({...r,outputs:r.outputs.map(o=>({...o,payload:new Uint8Array(o.payload)}))}));
  };
+ report.referenceFrameGate=await referenceFrameGate(root,run);console.log('REFERENCE_RMS frame gate passed');save();
+ report.costContext={cpus:os.cpus().length,cpuModel:os.cpus()[0].model,loadAverage:os.loadavg(),browser:browser.version(),cpuMeasurement:'CDP cumulative CPU seconds for this owned browser and its children; includes invocation overhead'};
  const config={sampleSeconds:600,maxIterations:12,ballisticPrior:.02,dataSource:'SpaceX public MEME'};
  for(const name of names){
   const bytes=fs.readFileSync(path.join(dir,name));const text=bytes.toString('utf8');const match=/ephemeris_start:(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)/.exec(text);assert(match,'MEME start metadata');const epoch=match[1]+'T'+match[2];
   const base={methodId:'fit_ffm',inputs:[fil(bytes,name),configuration(epoch),...env.inputs]};
   for(const correction of [false,true]){
    const request=correction?{...base,inputs:[...base.inputs,dcl(epoch,0.6931471805599453)]}:base;
-   const start=performance.now(),result=await run(request,config),elapsed=(performance.now()-start)/1000;
-   const segments=decoded(result);const row={file:name,dca:correction?'constant ln(2) mechanics':'absent',wallSeconds:elapsed,segments:segments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG),kappa:Number(s.user.KAPPA_GIVEN_B_PRIOR),samples:s.record.ORBIT_DETERMINATION.OBS_USED,formalCovariance:!!s.user.FORMAL_COVARIANCE_LTM}))};
+   const cpuStart=await cpu(),start=performance.now(),result=await run(request,config),elapsed=(performance.now()-start)/1000,cpuSeconds=(await cpu())-cpuStart;
+   const segments=decoded(result);const row={file:name,dca:correction?'constant ln(2) mechanics':'absent',wallSeconds:elapsed,cpuSeconds,segments:segments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG),kappa:Number(s.user.KAPPA_GIVEN_B_PRIOR),samples:s.record.ORBIT_DETERMINATION.OD_OBSERVATIONS_USED,iterations:Number(s.user.FIT_ITERATIONS),convergence:s.record.ORBIT_DETERMINATION.OD_CONVERGENCE_CRITERIA,operatorCovariance:s.user.COVARIANCE_RULE,formalCovariance:!!s.user.FORMAL_COVARIANCE_LTM}))};
+   row.rmsKm=Math.sqrt(row.segments.reduce((sum,s)=>sum+s.samples*s.rmsKm*s.rmsKm,0)/row.segments.reduce((sum,s)=>sum+s.samples,0));
    report.rows.push(row);console.log(JSON.stringify(row));save();
    if(name===names[0]&&!correction){
-    const refused=await run(base,{...config,fitWindowSeconds:172801});assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/blend-join/);report.joinRefusal='PASS';
+    const refused=await run(base,{...config,fitWindowSeconds:172801});assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/blend-join/);report.joinRefusal='PASS';console.log('Join refusal passed');
     const planted=await plantedManeuver(epoch,env);const event=await run({methodId:'fit_ffm',inputs:[planted,configuration(epoch),...env.inputs]},config);
-    assert.equal(decoded(event).length,2,'Maneuver must split the fit into two segments');assert.equal(event.outputs.filter(o=>o.portId==='mnv').length,1);report.maneuverSegmentation='PASS';
-    native=await loadModule({wasmSource:wasmPath,manifest,runtimeKind:'wasmedge',surface:'direct',config});
-    const other=await native.invoke(request);const hashes=r=>r.outputs.map(o=>[o.portId,createHash('sha256').update(o.payload).digest('hex')]);assert.equal(other.statusCode,0,other.errorMessage);assert.deepEqual(hashes(other),hashes(result));report.parity='byte-identical headless browser/native WasmEdge';await native.destroy();native=null;
+    assert.equal(decoded(event).length,2,'Maneuver must split the fit into two segments');assert.equal(event.outputs.filter(o=>o.portId==='mnv').length,1);report.maneuverSegmentation='PASS';console.log('Planted maneuver split into two segments');save();
+    const parityConfig={...config,fitWindowSeconds:7200,maxIterations:3};
+    const parityRequest={...base,inputs:[...base.inputs,dcl(epoch,0.6931471805599453)]};
+    const browserParity=await run(parityRequest,parityConfig);
+    native=await loadModule({wasmSource:wasmPath,manifest,runtimeKind:'wasmedge',surface:'direct',config:parityConfig});
+    console.log('Native WasmEdge parity running (2h, 3 iterations, DCA)');
+    const other=await native.invoke(parityRequest);const hashes=r=>r.outputs.map(o=>[o.portId,createHash('sha256').update(o.payload).digest('hex')]);assert.equal(other.statusCode,0,other.errorMessage);assert.deepEqual(hashes(other),hashes(browserParity));report.parity='byte-identical headless browser/native WasmEdge; 2h, 3 iterations, constant DCA';await native.destroy();native=null;console.log('Native parity passed');save();
    }
   }
  }
  assert.deepEqual(errors,[]);
- for(const dca of ['absent','constant ln(2) mechanics']){const rms=report.rows.filter(r=>r.dca===dca).flatMap(r=>r.segments.map(s=>s.rmsKm)).sort((a,b)=>a-b);const median=rms[Math.floor(rms.length/2)];assert(median<.6,`${dca}: median ${median} km`);(report.medians??={})[dca]=median;}
+ for(const dca of ['absent','constant ln(2) mechanics']){const rms=report.rows.filter(r=>r.dca===dca).map(r=>r.rmsKm).sort((a,b)=>a-b);const median=rms[Math.floor(rms.length/2)];assert(median<.6,`${dca}: median ${median} km`);(report.medians??={})[dca]=median;}
  const aot=execFileSync(process.env.SDN_NODE_BINARY||'/opt/data/sdn-archive/bin/spacedatanetwork',['prewarm-aot','--cache-dir',path.join(scratch,'aot'),'--flow',wasmPath],{encoding:'utf8',timeout:180000,maxBuffer:8*1024*1024});assert(!/FAILED|Not implemented instructions/.test(aot));report.aot='PASS exact artifact, node WasmEdge 0.16.4';
  assert(report.maneuverSegmentation==='PASS','Planted-maneuver segmentation evidence is required');
  report.status='PASS';

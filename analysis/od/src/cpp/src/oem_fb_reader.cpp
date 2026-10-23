@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 #include <string>
 
 // macOS <math.h> defines the legacy SVID matherr macros (DOMAIN/SING/OVERFLOW/
@@ -149,7 +150,7 @@ bool is_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
     return OEMBufferHasIdentifier(buf);
 }
 
-OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
+OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len, bool capture_covariance) {
     OEMParseResult result;
     StateSeries& series = result.series;
 
@@ -322,6 +323,21 @@ OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
             return fail("empty-ephemeris",
                         "$OEM block has neither EPHEMERIS_DATA_LINES nor a compact "
                         "EPHEMERIS_DATA+STEP_SIZE.");
+        }
+    }
+
+    if(capture_covariance)for(const auto* block:*oem->EPHEMERIS_DATA_BLOCK()){
+        if(!block || !block->COVARIANCE_MATRIX_LINES())continue;
+        for(const auto* c:*block->COVARIANCE_MATRIX_LINES()){
+            if(!c || !c->EPOCH())return fail("invalid-covariance","OEM covariance requires an epoch");
+            const auto time=time_system_to_utc(time_system_token(block->TIME_SYSTEM()),iso_to_jd(c->EPOCH()->str()));
+            if(!time.ok)return fail(time.error_code.c_str(),time.error_message);
+            const auto* frame=c->COV_REFERENCE_FRAME()?c->COV_REFERENCE_FRAME():block->COV_REFERENCE_FRAME()?block->COV_REFERENCE_FRAME():block->REFERENCE_FRAME();
+            const double lower[]={c->CX_X(),c->CY_X(),c->CY_Y(),c->CZ_X(),c->CZ_Y(),c->CZ_Z(),c->CX_DOT_X(),c->CX_DOT_Y(),c->CX_DOT_Z(),c->CX_DOT_X_DOT(),c->CY_DOT_X(),c->CY_DOT_Y(),c->CY_DOT_Z(),c->CY_DOT_X_DOT(),c->CY_DOT_Y_DOT(),c->CZ_DOT_X(),c->CZ_DOT_Y(),c->CZ_DOT_Z(),c->CZ_DOT_X_DOT(),c->CZ_DOT_Y_DOT(),c->CZ_DOT_Z_DOT()};
+            for(double value:lower)if(!std::isfinite(value))return fail("invalid-covariance","Non-finite OEM covariance");
+            for(auto& point:series.samples)if(std::abs(point.epoch_jd-time.jd_utc)<1e-9){
+                std::copy(lower,lower+21,point.covariance);point.has_covariance=true;point.covariance_frame=to_upper(rfm_frame_token(frame));
+            }
         }
     }
 

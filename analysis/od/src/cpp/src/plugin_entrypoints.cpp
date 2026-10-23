@@ -124,7 +124,7 @@ int fit_ffm(void) {
     const auto* oem=find_input_frame("oem");const auto* meme=find_input_frame("meme");
     if(bool(oem)==bool(meme)){plugin_set_error("invalid-input","Supply exactly one OEM or MEME file");return 1;}
     if(oem){
-        auto parsed=od::read_oem_flatbuffer(oem->payload,oem->payload_length);
+        auto parsed=od::read_oem_flatbuffer(oem->payload,oem->payload_length,true);
         if(!parsed.ok){plugin_set_error(parsed.error_code.c_str(),parsed.error_message.c_str());return 1;}
         series=std::move(parsed.series);
     }else{
@@ -134,7 +134,7 @@ int fit_ffm(void) {
         if(!content){plugin_set_error("invalid-input","Empty FIL");return 1;}
         const std::string text(reinterpret_cast<const char*>(content->data()),content->size());
         if(od::looks_like_oem(text)){
-            auto parsed=od::parse_oem(text);if(!parsed.ok){plugin_set_error(parsed.error_code.c_str(),parsed.error_message.c_str());return 1;}series=std::move(parsed.series);
+            auto parsed=od::parse_oem(text,true);if(!parsed.ok){plugin_set_error(parsed.error_code.c_str(),parsed.error_message.c_str());return 1;}series=std::move(parsed.series);
         }else{
             auto parsed=od::parse_meme(text);
             if(GetFIL(meme->payload)->NAME()){

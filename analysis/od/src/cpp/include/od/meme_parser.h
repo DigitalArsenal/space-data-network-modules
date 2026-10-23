@@ -38,6 +38,7 @@ struct EphemerisPoint {
     double vx, vy, vz;        // Velocity (km/s)
     double covariance[21];     // Lower triangular 6×6 (pos+vel)
     bool has_covariance = false;
+    std::string covariance_frame = "UVW"; // OEM may identify inertial axes explicitly
 };
 
 /// MEME file metadata
