@@ -17,13 +17,13 @@
 //    arms (Scutum-Centaurus, Perseus) x 3;
 //  - exposure: the eye display's solar-circle disc at display luminance 0.45
 //    (TRUE PHYSICS 0.38; model_api.hpp, display), through an asinh of
-//    softening Q 4 (TRUE PHYSICS: the fitted 8.295), a gentler compression
+//    softening Q 6 (TRUE PHYSICS: the fitted 8.295), a gentler compression
 //    that keeps more of the arms' contrast.
 namespace milky_way::look {
 inline double on=0;
 inline bool active() {return on>=0.5;}
 inline constexpr double young_gain_value=3.0,hii_gain_value=3.0,hii_saturation=1.8,major_arm_gain_value=3.0;
-inline constexpr double disc_display_physical=0.38,disc_display_look_good=0.45,softening_look_good=4.0;
+inline constexpr double disc_display_physical=0.38,disc_display_look_good=0.45,softening_look_good=6.0;
 inline double young_gain() {return active()?young_gain_value:1.0;}
 inline double hii_gain() {return active()?hii_gain_value:1.0;}
 inline double major_arm_gain() {return active()?major_arm_gain_value:1.0;}

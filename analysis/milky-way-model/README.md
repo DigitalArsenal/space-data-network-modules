@@ -100,9 +100,22 @@ count scale). 0 (the default) bakes SDSS r, g, i, the bands of every check.
 Extinction ratios follow the basis (eye: CCM89 over the old disc's spectrum).
 
 Arms (0.5.0): the old stars' density wave sits on Scutum-Centaurus and
-Perseus (Drimmel 2000; Benjamin et al. 2005; Churchwell et al. 2009), the
-minor arms at 0.75 of it (the least Gaia's optical sky keeps); gas, dust and
-young stars keep all of Reid's arms. Arm dust lanes take Reid's widths, x12
+Perseus (Drimmel 2000; Benjamin et al. 2005; Churchwell et al. 2009) over
+Reid's extents (not DS2001's dust-arm cut-off); the minor arms carry an
+intermediate-age population (BP-RP 0.45) at 0.75 of B_K (the least Gaia's
+optical sky keeps); gas, dust and young stars keep all of Reid's arms. Arm
+ends fade (Scutum by radius to 16 kpc; the 3-kpc and Local segments along the
+arm past their coverage).
+
+Display mode (0.5.0): the bake value `look_good` 1 (LOOK GOOD, the star
+field's switch) applies the documented display gains of `src/look.hpp` to
+the modeled components (young x3, HII x3 and saturation 1.8, the major arms'
+wave x3, the eye exposure); 0 (TRUE PHYSICS, the default and every check's)
+the measured light. The eye exposure puts the face-on solar-circle disc at
+display luminance 0.38 (LOOK GOOD 0.45, asinh Q 6). The bake publishes
+`display_mode`, `look_good_gains`, `look_good_softening`, and the bar as
+drawn: `bar_angle_deg` (27, near end at l > 0), `bar_half_length_kpc` (5.0),
+`bar_near_end_axis`. Arm dust lanes take Reid's widths, x12
 DS2001's density (Holwerda et al. 2005's face-on arm A_I). HII regions follow
 the KEH89 luminosity function with Stromgren sizes (`hii_population`).
 `face_on_columns` also returns `tau_g`, the vertical G optical depth.
