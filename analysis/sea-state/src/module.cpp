@@ -20,6 +20,8 @@ extern "C" int sea_state() {
   wire::Result r;
   r.number("hs_m",s.hs,"m"); r.number("tp_s",s.tp,"s"); r.number("fp_hz",s.fp,"Hz");
   r.number("m0_m2",s.m0,"m2"); r.number("alpha",s.alpha); r.number("gamma",s.gamma);
+  r.number("hs_uncapped_m",s.hs_uncapped,"m"); r.number("alpha_uncapped",s.alpha_uncapped);
+  r.number("energy_scale",s.energy_scale);
   r.number("sigma_a",.07); r.number("sigma_b",.09);
   r.number("wind_speed_19_5m_mps",s.wind19,"m/s");
   r.number("effective_fetch_m",s.effective_fetch,"m"); r.number("dimensionless_fetch",s.dimensionless_fetch);

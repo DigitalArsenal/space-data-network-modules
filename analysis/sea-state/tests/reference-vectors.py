@@ -37,10 +37,10 @@ def pm(u):
     u19=u/(10/19.5)**(1/7)
     variance=.0081*u19**4/(4*.74*G**2)
     fp=G/u19/(5/(4*.74))**.25/(2*m.pi)
-    return dict(hs_m=4*m.sqrt(variance),m0_m2=variance,fp_hz=fp,tp_s=1/fp,alpha=.0081,gamma=1)
+    return dict(hs_m=4*m.sqrt(variance),m0_m2=variance,fp_hz=fp,tp_s=1/fp,alpha=.0081,gamma=1,hs_uncapped_m=4*m.sqrt(variance),alpha_uncapped=.0081,energy_scale=1)
 
 def ref(u,fetch=0,duration=0):
-    if u==0: return dict(hs_m=0,m0_m2=0,fp_hz=0,tp_s=0,alpha=0,gamma=1,regime='calm')
+    if u==0: return dict(hs_m=0,m0_m2=0,fp_hz=0,tp_s=0,alpha=0,gamma=1,regime='calm',hs_uncapped_m=0,alpha_uncapped=0,energy_scale=1)
     p=pm(u)
     xf=G*fetch/u**2 if fetch else m.inf
     # Independent duration inversion via bisection of group-velocity travel
@@ -61,7 +61,9 @@ def ref(u,fetch=0,duration=0):
     alpha=.076*x**(-.22)
     fp=3.5*G/u*x**(-.33)
     variance=alpha*G**2/(2*m.pi)**4/fp**4*I
-    return dict(hs_m=4*m.sqrt(variance),m0_m2=variance,fp_hz=fp,tp_s=1/fp,alpha=alpha,gamma=3.3,
+    scale=min(1,p['m0_m2']/variance)
+    return dict(hs_m=4*m.sqrt(variance*scale),m0_m2=variance*scale,fp_hz=fp,tp_s=1/fp,alpha=alpha*scale,gamma=3.3,
+                hs_uncapped_m=4*m.sqrt(variance),alpha_uncapped=alpha,energy_scale=scale,
                 regime='duration-limited' if xt<xf else 'fetch-limited')
 
 winds=[0,2,5,8,10,12,15,20,25,30,70]

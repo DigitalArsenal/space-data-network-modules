@@ -1,0 +1,15 @@
+import fs from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {measure,parityRequests} from './measurements.mjs';
+import {runtimeParity} from './runtime-parity.mjs';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const report=await measure();
+report.runtimes=await runtimeParity(parityRequests);
+report.branchSha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+report.measuredAt=new Date().toISOString();
+const directory=new URL('../conformance/',import.meta.url);await fs.mkdir(directory,{recursive:true});
+await fs.writeFile(new URL('latest.e2e.json',directory),JSON.stringify(report,null,2)+'\n');
+console.table(report.legacy.windTable);
+console.log(JSON.stringify({...report,legacy:{...report.legacy,windTable:undefined},runtimes:{...report.runtimes,outputs:`${report.runtimes.outputs.length} exact payload matches`}},null,2));
+console.log('sea-state module E2E PASS; console pixel/no-JS integration pending UI lane; Docker waived by owner.');

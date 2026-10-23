@@ -40,9 +40,14 @@ model. Fetch=0 and duration=0 are *unlimited* sentinels, not zero growth.
 
 At the fetch where fp reaches the height-converted PM fp, switch to the PM
 parameters alpha=0.0081 and gamma=1. This is a model splice, not a JONSWAP
-claim. Its Hs discontinuity is measured in the E2E report. No blending or
-hidden fit conceals it. The PM limit caps peak-period growth; the test also
-checks the developing branch stays below the PM height for this profile.
+claim. The unmodified JONSWAP integral overshoots the PM height by 25.196% just
+below this splice for the chosen wind profile (measured by independent
+quadrature). Apply energy_scale=min(1,m0_PM/m0_JONSWAP) before the splice,
+scaling alpha and m0 together. This explicit energy cap removes the Hs jump;
+the spectral shape still changes from gamma=3.3 to 1 at the frequency limit.
+Return hs_uncapped_m, alpha_uncapped, and energy_scale so the adjustment is
+visible. The FFT must use the returned effective alpha, not recalculate it.
+Tests measure both the uncapped overshoot and the capped transition.
 
 The calm limit has hs=tp=fp=m0=alpha=0 and gamma=1; fp=0 means no peak.
 Marine overrides affect only engine fields, never the wind-sea spectrum.
@@ -53,8 +58,10 @@ The render-only floor/clamps/chop are inherited console policy, not physics.
 Tests specify SI units, local sea-surface vertical and bearings clockwise
 from true north (coming-from), and a stationary model with no epoch/time scale.
 The PM table uses an independently expressed analytic integral and peak.
-JONSWAP references use an independent adaptive quadrature in linear frequency;
+JONSWAP references use an independent adaptive quadrature in inverse frequency;
 the guest uses fixed Simpson quadrature in log frequency plus an analytic tail.
 Duration references integrate the group travel time independently. Numerical
 agreement does not establish forecast skill outside the original observations.
 The 0..70 m/s test range includes substantial empirical extrapolation.
+
+Source PDF SHA-256: JONSWAP `15a9143bac2bbef648143b64efa3e0aa0cb491e586558269a48df1b83e794db1`; SPM `e597c02c8c6b770662b98bfd84a571ec9ab7c013a9f3a7f3acfd133be9a6564f`.

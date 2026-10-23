@@ -16,6 +16,7 @@ struct Input {
 struct State {
   double wind = 0, wind19 = 0, hs = 0, tp = 0, fp = 0, m0 = 0;
   double alpha = 0, gamma = 1, effective_fetch = 0, dimensionless_fetch = 0;
+  double hs_uncapped = 0, alpha_uncapped = 0, energy_scale = 1;
   const char* regime = "calm";
   double swell_height, swell_period, swell_from, wind_from, chop;
 };
@@ -55,6 +56,7 @@ inline State evaluate(const Input& in) {
     s.fp = std::pow(4*pm_beta/5,.25)*gravity/(2*pi*s.wind19);
     s.hs = 2*std::sqrt(pm_alpha/pm_beta)*s.wind19*s.wind19/gravity;
     s.regime = "fully-developed";
+    const double pm_variance = s.hs*s.hs/16;
     const double x_pm = std::pow(3.5*gravity/(s.wind*s.fp),1/.33);
     const double x_fetch = in.fetch > 0 ? gravity*in.fetch/(s.wind*s.wind) : std::numeric_limits<double>::infinity();
     // Explicit approximation: integrate dt=dF/cg(fp(F)), cg=g/(4*pi*fp).
@@ -69,8 +71,19 @@ inline State evaluate(const Input& in) {
       s.fp = 3.5*gravity/s.wind*std::pow(x,-.33);
       s.gamma = 3.3;
       s.m0 = s.alpha*gravity*gravity/std::pow(2*pi*s.fp,4)*shape_integral(s.gamma);
+      s.hs_uncapped = 4*std::sqrt(s.m0);
+      s.alpha_uncapped = s.alpha;
+      // Explicit energy saturation, not another empirical fit. Keep alpha
+      // consistent with the capped spectrum consumed by the FFT host.
+      s.energy_scale = std::min(1.0,pm_variance/s.m0);
+      s.alpha *= s.energy_scale;
+      s.m0 *= s.energy_scale;
       s.hs = 4*std::sqrt(s.m0);
-    } else s.m0 = s.hs*s.hs/16;
+    } else {
+      s.m0 = pm_variance;
+      s.hs_uncapped = s.hs;
+      s.alpha_uncapped = s.alpha;
+    }
     s.tp = 1/s.fp;
   }
   // Existing console rendering policy, kept separate from spectral quantities.
