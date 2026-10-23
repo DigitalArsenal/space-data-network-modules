@@ -29,6 +29,7 @@ try {
  sources.push(path.join(cpp,'deps/vallado-sgp4/SGP4.cpp'));
  const modules=path.resolve(root,'../..'),ffm=path.join(modules,'propagator/ffm');
  const ffmManifest=JSON.parse(await fs.readFile(path.join(ffm,'plugin-manifest.json')));
+ const cIdentity=value=>{if(!/^[A-Za-z0-9_.-]+$/.test(value))throw new Error('Invalid FFM build identity');return '"'+value+'"';};
  const ffmUnits=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76','ffm_gravity'];
  sources.push(...ffmUnits.map(n=>path.join(ffm,'lib',n+'.cpp')));
  sources.push(...['prw_dynamics','resident_dynamics','kernel_store'].map(n=>path.join(ffm,'src/cpp/src',n+'.cpp')));
@@ -39,7 +40,7 @@ try {
  const executable=path.join(build,'module.wasm');
  const exports=['_start','_initialize','plugin_alloc','plugin_free','plugin_invoke_stream','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','fit','fit_ffm'];
  const common=[...toolchain.toolchainArgs,'-O3','-fno-c++-static-destructors','-msimd128','-mbulk-memory','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE',
-  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,'-DFFM_MODULE_ID='+JSON.stringify(ffmManifest.pluginId),'-DFFM_MODULE_VERSION='+JSON.stringify(ffmManifest.version),'-DFFM_TYPED_INPUTS_ONLY=1',
+  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,'-DFFM_MODULE_ID='+cIdentity(ffmManifest.pluginId),'-DFFM_MODULE_VERSION='+cIdentity(ffmManifest.version),'-DFFM_TYPED_INPUTS_ONLY=1',
   '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds')];
  const run=args=>{const r=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:180000});if(r.status!==0)throw new Error(r.error?.message??r.stderr);};
  const objects=[];
