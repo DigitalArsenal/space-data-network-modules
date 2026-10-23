@@ -8,7 +8,9 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { analyzeWasmThreadFeatures } from 'space-data-module-sdk/compiler';
@@ -59,76 +61,6 @@ const aotLog = execFileSync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '
 fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
 assert(!/FAILED|Not implemented instructions/.test(aotLog));
 report.aot = { status: 'PASS', command: 'spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm', artifactSha256: report.artifactSha256, log: aotLog.trim() }; save();
-const bundle = await build({ stdin: { resolveDir: root, contents: `
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
-import { catalogClient } from './scripts/catalog-coverage-client.mjs';
-window.measure = async ({ count, seeds, epoch, manifest, focus, previous }) => {
-  if (!crossOriginIsolated) throw new Error('COI required');
-  const h = await createBrowserModuleHarness({ wasmSource: await (await fetch(previous ? '/previous.wasm' : '/module.wasm')).arrayBuffer(), manifest, surface: 'direct' });
-  let client;
-  try {
-    const outputs = [], samples = [];
-    const memory = () => (h.instance.exports.memory ?? h.memory).buffer.byteLength;
-    const baseBytes = memory();
-    if (focus) {
-      for (let i = 0; i < 3; ++i) {
-        outputs.push([...await h.invokeRaw(new Uint8Array(await (await fetch('/focus/' + i)).arrayBuffer()))]);
-        samples.push(memory());
-      }
-    } else {
-      const frames = await Promise.all(Array.from({ length: 4 }, async (_, i) => new Uint8Array(await (await fetch('/frame/' + i)).arrayBuffer())));
-      client = catalogClient(h, frames, Array.from({ length: count }, (_, i) => seeds[i % seeds.length]), epoch);
-      if (client.profile() !== 'FFM-1') throw new Error('wrong profile');
-      samples.push(memory());
-      for (const seconds of [1800, 3600]) {
-        client.ensure(epoch + seconds / 86400);
-        const states = client.states(epoch + (seconds - 1) / 86400);
-        if (!states.every(Number.isFinite)) throw new Error('nonfinite state');
-        const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(states.buffer));
-        outputs.push(Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join(''));
-        samples.push(memory());
-      }
-    }
-    return { role: focus ? 'resident-focus' : 'catalog', entities: count, baseBytes, highWaterBytes: Math.max(...samples), samples, outputs, crossOriginIsolated, browser: navigator.userAgent };
-  } finally { client?.dispose(); await h.destroy(); }
-};` }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
-const server = http.createServer((req, res) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin'); res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-  if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); return res.end('<!doctype html><script src="/bundle.js"></script>'); }
-  if (req.url === '/bundle.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(bundle.outputFiles[0].contents); }
-  if (req.url === '/module.wasm') return res.end(wasm);
-  if (req.url === '/previous.wasm') return res.end(fs.readFileSync(path.join(cache, '../previous.wasm')));
-  const match = /^\/(frame|focus)\/(\d+)$/.exec(req.url);
-  if (match) return res.end((match[1] === 'frame' ? frames : focusRequests)[+match[2]]);
-  res.statusCode = 404; res.end();
-});
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-let browser;
-try {
-  browser = await chromium.launch({ executablePath: headlessShell(), headless: true });
-  for (const count of [1, 1000, 4000, 10000, 31814]) {
-    const page = await browser.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    const options = { count, seeds, epoch, manifest, focus: count === 1 };
-    const row = await page.evaluate(o => window.measure(o), options);
-    if (row.role === 'resident-focus') {
-      for (const bytes of row.outputs) assert.equal(decodePluginInvokeResponse(new Uint8Array(bytes)).statusCode, 0);
-      row.outputs = row.outputs.map(b => sha(new Uint8Array(b)));
-    }
-    // A representative catalog plus the focus role prove the build-only
-    // change preserves output bytes against the packaged predecessor.
-    if (count === 1 || count === 1000) {
-      const old = await page.evaluate(o => window.measure(o), { ...options, previous: true });
-      const hashes = count === 1 ? old.outputs.map(b => sha(new Uint8Array(b))) : old.outputs;
-      assert.deepEqual(row.outputs, hashes, 'previous artifact parity'); row.previousArtifactParity = 'bit-identical';
-    }
-    assert.deepEqual(errors, []); report.rows.push({ runtime: 'browser', ...row }); save();
-    console.log(JSON.stringify({ runtime: 'browser', entities: count, highWaterBytes: row.highWaterBytes })); await page.close();
-  }
-} finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
-// Native role execution and fitted-model verification are below. Outputs are
-// written outside tracked paths so the exact candidate remains immutable.
-save();
 const nativeSource = String.raw`
 #include <wasmedge/wasmedge.h>
 #include <stdint.h>
@@ -201,6 +133,10 @@ const aotPath = aotLog.split('\n').find(line => line.startsWith(`  flow ${wasmPa
 assert(aotPath && fs.existsSync(aotPath), 'prewarm produced no flow AOT artifact');
 fs.writeFileSync(path.join(cache, 'frames.bin'), Buffer.concat(frames));
 focusRequests.forEach((bytes,i) => fs.writeFileSync(path.join(cache, `focus-${i}.piv`), bytes));
+// Two isolated instances, one CPU each; no timing claim is made. Native AOT
+// and Chromium can measure their own linear memory concurrently.
+const nativeWork = (async () => {
+const measured = [];
 for (const count of [1, 1000, 4000, 10000, 31814]) {
   if (count > 1) {
     const objects = Array.from({length:count},(_,i)=>seeds[i%seeds.length]);
@@ -208,13 +144,91 @@ for (const count of [1, 1000, 4000, 10000, 31814]) {
     // Unit conversion and marshaling; the guest performs frame conversion.
     fs.writeFileSync(path.join(cache, `states-${count}.bin`), Buffer.from(new Float64Array(objects.flatMap(s=>[epoch,...s.position.map(x=>x*1000),...s.velocity.map(x=>x*1000)])).buffer));
   }
-  const row = JSON.parse(execFileSync(native, [aotPath, String(count), String(epoch), cache], {encoding:'utf8',maxBuffer:1024*1024}));
+  const {stdout} = await execFileAsync(native, [aotPath, String(count), String(epoch), cache], {encoding:'utf8',maxBuffer:1024*1024});
+  const row = JSON.parse(stdout);
   row.role = count === 1 ? 'resident-focus' : 'catalog';
   row.outputs = Array.from({length:count===1?3:2}, (_,i)=>sha(fs.readFileSync(path.join(cache, `native-${count}-${i}.bin`))));
-  const browserRow = report.rows.find(r=>r.runtime==='browser'&&r.entities===count);
-  assert.deepEqual(row.outputs,browserRow.outputs,`native/browser byte parity at ${count}`);
-  assert.equal(row.highWaterBytes,browserRow.highWaterBytes,`native/browser memory parity at ${count}`);
-  report.rows.push(row); save(); console.log(JSON.stringify(row));
+  measured.push(row); console.log(JSON.stringify(row));
+}
+return measured;
+})().then(rows => ({rows}), error => ({error}));
+
+const bundle = await build({ stdin: { resolveDir: root, contents: `
+import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import { catalogClient } from './scripts/catalog-coverage-client.mjs';
+window.measure = async ({ count, seeds, epoch, manifest, focus, previous }) => {
+  if (!crossOriginIsolated) throw new Error('COI required');
+  const h = await createBrowserModuleHarness({ wasmSource: await (await fetch(previous ? '/previous.wasm' : '/module.wasm')).arrayBuffer(), manifest, surface: 'direct' });
+  let client;
+  try {
+    const outputs = [], samples = [];
+    const memory = () => (h.instance.exports.memory ?? h.memory).buffer.byteLength;
+    const baseBytes = memory();
+    if (focus) {
+      for (let i = 0; i < 3; ++i) {
+        outputs.push([...await h.invokeRaw(new Uint8Array(await (await fetch('/focus/' + i)).arrayBuffer()))]);
+        samples.push(memory());
+      }
+    } else {
+      const frames = await Promise.all(Array.from({ length: 4 }, async (_, i) => new Uint8Array(await (await fetch('/frame/' + i)).arrayBuffer())));
+      client = catalogClient(h, frames, Array.from({ length: count }, (_, i) => seeds[i % seeds.length]), epoch);
+      if (client.profile() !== 'FFM-1') throw new Error('wrong profile');
+      samples.push(memory());
+      for (const seconds of [1800, 3600]) {
+        client.ensure(epoch + seconds / 86400);
+        const states = client.states(epoch + (seconds - 1) / 86400);
+        if (!states.every(Number.isFinite)) throw new Error('nonfinite state');
+        const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(states.buffer));
+        outputs.push(Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join(''));
+        samples.push(memory());
+      }
+    }
+    return { role: focus ? 'resident-focus' : 'catalog', entities: count, baseBytes, highWaterBytes: Math.max(...samples), samples, outputs, crossOriginIsolated, browser: navigator.userAgent };
+  } finally { client?.dispose(); await h.destroy(); }
+};` }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
+const server = http.createServer((req, res) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin'); res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); return res.end('<!doctype html><script src="/bundle.js"></script>'); }
+  if (req.url === '/bundle.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(bundle.outputFiles[0].contents); }
+  if (req.url === '/module.wasm') return res.end(wasm);
+  if (req.url === '/previous.wasm') return res.end(fs.readFileSync(path.join(cache, '../previous.wasm')));
+  const match = /^\/(frame|focus)\/(\d+)$/.exec(req.url);
+  if (match) return res.end((match[1] === 'frame' ? frames : focusRequests)[+match[2]]);
+  res.statusCode = 404; res.end();
+});
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+let browser;
+try {
+  browser = await chromium.launch({ executablePath: headlessShell(), headless: true });
+  for (const count of [1, 1000, 4000, 10000, 31814]) {
+    const page = await browser.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    const options = { count, seeds, epoch, manifest, focus: count === 1 };
+    const row = await page.evaluate(o => window.measure(o), options);
+    if (row.role === 'resident-focus') {
+      for (const bytes of row.outputs) assert.equal(decodePluginInvokeResponse(new Uint8Array(bytes)).statusCode, 0);
+      row.outputs = row.outputs.map(b => sha(new Uint8Array(b)));
+    }
+    // A representative catalog plus the focus role prove the build-only
+    // change preserves output bytes against the packaged predecessor.
+    if (count === 1 || count === 1000) {
+      const old = await page.evaluate(o => window.measure(o), { ...options, previous: true });
+      const hashes = count === 1 ? old.outputs.map(b => sha(new Uint8Array(b))) : old.outputs;
+      assert.deepEqual(row.outputs, hashes, 'previous artifact parity'); row.previousArtifactParity = 'bit-identical';
+    }
+    assert.deepEqual(errors, []); report.rows.push({ runtime: 'browser', ...row }); save();
+    console.log(JSON.stringify({ runtime: 'browser', entities: count, highWaterBytes: row.highWaterBytes })); await page.close();
+  }
+} finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+// Native role execution and fitted-model verification are below. Outputs are
+// written outside tracked paths so the exact candidate remains immutable.
+save();
+const nativeResult = await nativeWork;
+if (nativeResult.error) throw nativeResult.error;
+for (const row of nativeResult.rows) {
+  const browserRow = report.rows.find(r=>r.runtime==='browser'&&r.entities===row.entities);
+  assert.deepEqual(row.outputs,browserRow.outputs,`native/browser byte parity at ${row.entities}`);
+  report.rows.push(row); save();
 }
 const rows = report.rows.filter(r=>r.role==='catalog');
 const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+r.highWaterBytes,0)/rows.length;
