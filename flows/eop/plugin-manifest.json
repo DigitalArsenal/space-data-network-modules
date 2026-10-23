@@ -3,7 +3,7 @@
   "pluginId": "com.digitalarsenal.flows.eop.lane",
   "name": "Earth orientation lane glue",
   "version": "0.1.0",
-  "description": "Bytes in, bytes out, between eop-request, the host's HTTP hook, eop-parser and the host's ingest hook: a full-response validator on the request, an optional node-owned archive mirror (eop_archive_url), and the lane's identity and licence on the parser's IngestRequest. No parsing, no network, no clock and no physics.",
+  "description": "Bytes in, bytes out, between eop-request, the host's HTTP hook, eop-parser and the host's ingest hook: a full-response validator on the request, an optional node-owned archive mirror (eop_archive_url), and the lane's identity and license on the parser's IngestRequest. No parsing, no network, no clock and no physics.",
   "pluginFamily": "infrastructure",
   "capabilities": [],
   "externalInterfaces": [],
@@ -118,7 +118,7 @@
     },
     {
       "methodId": "attribute_lane",
-      "displayName": "Name the lane and its licence",
+      "displayName": "Name the lane and its license",
       "inputPorts": [
         {
           "portId": "meta",

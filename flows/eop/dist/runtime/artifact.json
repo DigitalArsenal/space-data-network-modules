@@ -92,7 +92,7 @@
       "dependencyId": "com.digitalarsenal.flows.eop.lane",
       "pluginId": "com.digitalarsenal.flows.eop.lane",
       "version": "0.1.0",
-      "sha256": "f71e520391e6627f804e15f7749bbbdf2ec75dc6f85e069a6a271089e48dc7ab",
+      "sha256": "ab6a29fcaac5e904dfb3aa1e4a989722a45a9335cef1aea026ae14d1dc48389d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

@@ -13,8 +13,9 @@ Observatory (USNO), IERS Rapid Service/Prediction Center. It is U.S. Government
 work in the public domain. The IERS datacenter mirrors this product but rejects
 automated requests from the provider node; USNO is the production source.
 
-Only `flows/open-dca` embeds this request builder. Its `eop-plan` calls
-`finals2000a`, paired with `parse_finals2000a`; no flow calls `c04` or `paris`.
+`flows/open-dca` and `flows/eop` embed this request builder. Their request nodes
+call `finals2000a`, paired with `parse_finals2000a`; no flow calls `c04` or `paris`.
+`flows/eop` publishes the parsed finals2000A as SDS EOP records.
 The live-source E2E checks that finals2000A covers the last 32 days plus a
 48-hour forecast. C04 is therefore not required by this flow. The optional C04
 methods retain their contracts, but their Paris endpoints timed out from

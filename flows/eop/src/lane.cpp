@@ -7,7 +7,7 @@
 //                     stored. When the node keeps a mirror of the file (config eop_archive_url, loopback or HTTPS), the
 //                     request is aimed at it.
 //   restore_response  The mirror's response carries the request it answered; the parser sees the response of the file.
-//   attribute_lane    The parser's IngestRequest names the batch and the file. The lane's identity and the licence the
+//   attribute_lane    The parser's IngestRequest names the batch and the file. The lane's identity and the license the
 //                     host publishes with the batch are added, and a newer edition replaces the stored one.
 //
 // Method names avoid the words of libc++'s pragmas: the SDK renames every method symbol with a -D macro of the same name.
@@ -95,7 +95,7 @@ extern "C" int attribute_lane() {
   fb::Verifier verifier(frame->payload, frame->payload_length);
   NEED(R::VerifyIngestRequestBuffer(verifier), "Expected an IngestRequest.");
   auto meta = std::unique_ptr<R::IngestRequestT>(R::GetIngestRequest(frame->payload)->UnPack());
-  // The licence below is the Rapid Service's, and only its finals2000A batch may carry it.
+  // The license below is the Rapid Service's, and only its finals2000A batch may carry it.
   NEED(meta->SCHEMA == "EOP.fbs" && meta->TAGS && meta->PROVENANCE && meta->PROVENANCE->PARSER == "eop-parser" &&
            meta->PROVENANCE->PARSER_VERSION == "finals2000a" && meta->TAGS->SOURCE_URL.rfind(source_prefix, 0) == 0,
        "Only eop-parser's finals2000A batch from the U.S. Naval Observatory is published on this lane.");
