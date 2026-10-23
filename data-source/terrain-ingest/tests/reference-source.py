@@ -39,4 +39,11 @@ for q in queries:
  if error>q['quantum']+1e-5 or q['flag']!=flag:
   fail+=1
   if len(examples)<10:examples.append(dict(q,expected=expected,expectedFlag=flag,errorM=error,errorQuanta=quanta,sourceX=ix,sourceY=iy))
-print(json.dumps({'tested':len(queries),'failed':fail,'maxErrorQuanta':maxq,'classes':counts,'examples':examples,'oracle':'GDAL original scalar pixel + independent cell-distance feather'}))
+extra={}
+if cfg['naif']==199:
+ extra['longitudeOrigin']={'pass':center==180 and fail==0, 'centralMeridianDeg':center, 'testedPackedPosts':len(queries), 'method':'GDAL CRS central meridian and original source pixels independently resolve every packed post longitude'}
+if cfg['naif']==2000001:
+ equatorY=int(math.floor(gt[3]/(-gt[5])));raw=b.ReadAsArray(0,equatorY-1,w,2);valid=raw[np.isfinite(raw)&(raw!=nodata)].astype(float)*(b.GetScale() or 1)+(b.GetOffset() or 0)
+ extra['equatorialRadiusM']=float(valid.max())
+ extra['equator']={'method':'Original GDAL pixels in two equatorial rows; radius = DN * scale + offset','posts':int(valid.size),'minimumRadiusM':float(valid.min()),'maximumRadiusM':float(valid.max()),'meanRadiusM':float(valid.mean())}
+print(json.dumps({**extra,'tested':len(queries),'failed':fail,'maxErrorQuanta':maxq,'classes':counts,'examples':examples,'oracle':'GDAL original scalar pixel + independent cell-distance feather'}))

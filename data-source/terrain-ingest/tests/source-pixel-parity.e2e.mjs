@@ -1,4 +1,4 @@
-// Real Pluto source bytes through shipped, no-host-bridge parity, and native
+// Real source bytes through shipped, no-host-bridge parity, and native
 // WasmEdge artifacts. Store exact typed frames for the real-browser replay.
 import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';
@@ -12,7 +12,8 @@ const manifest=JSON.parse(fs.readFileSync(path.join(root,'plugin-manifest.json')
 let inputs;
 const lane=await createRasterLane(cfg,{onTileInputs:x=>{inputs=x;}});
 let records;
-try {records=await lane.tile([{level:7,x:240,y:64,childAvailability:0}]);}finally{await lane.destroy();}
+const level=cfg.maxLevel;
+try {records=await lane.tile([{level,x:Math.floor(1.875*2**level),y:2**(level-1),childAvailability:0}]);}finally{await lane.destroy();}
 const frames=inputs.map((x,i)=>{const file=`input-${i}.bin`;fs.writeFileSync(path.join(scratch,file),x.payload);return {...x,payload:undefined,file};});
 fs.writeFileSync(path.join(scratch,'records.bin'),records);fs.writeFileSync(path.join(scratch,'frames.json'),JSON.stringify(frames));
 const checks=[];
