@@ -13,8 +13,8 @@ await fs.mkdir(path.join(out,'control/isomorphic'),{recursive:true});
 const {header,version}=await generateSdsHeaders(['FSO','FSB','OMM','OCM','ERM'],import.meta.url);
 const control=await compileModuleFromSource({manifest,sourceCode:header+'\n'+await fs.readFile(path.join(root,'src/control.cpp'),'utf8'),language:'c++',outputPath:path.join(out,'control/isomorphic/module.wasm'),threadModel:'single-thread',allowUndefinedImports:true});
 if(!control.report?.ok)throw new Error('Controller artifact rejected',{cause:control.report?.issues});
-await fs.writeFile(path.join(out,'control/plugin-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
-await fs.writeFile(path.join(out,'control/provenance.json'),JSON.stringify({sds:version,threadModel:'single-thread'},null,2)+'\n');
+await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(out,'control/plugin-manifest.json'));
+await fs.writeFile(path.join(out,'control/provenance.txt'),`spacedatastandards.org=${version}\nthreadModel=single-thread\n`);
 if(process.argv.includes('--control-only'))process.exit(0);
 const gp=JSON.parse(await fs.readFile(path.join(modules,'analysis/gp-error-model/plugin-manifest.json'),'utf8'));
 if(!gp.methods.find(m=>m.methodId==='object_covariance')?.outputPorts.some(p=>p.portId==='ocm'))
