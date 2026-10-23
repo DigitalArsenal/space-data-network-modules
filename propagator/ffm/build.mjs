@@ -19,7 +19,12 @@ if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SD
 // Pilot builds can raise the ceiling to measure the largest role. The release
 // limits are recorded in the evidence and checked again on the final artifact.
 const staticMinimumBytes=23825072; // wasm-ld measurement, includes the 2 MiB stack.
-const memory={staticMinimumBytes,initialBytes:Math.max(16*1024*1024,Math.ceil(staticMinimumBytes/65536)*65536),maximumBytes:Number(process.env.FFM_MEASUREMENT_MAX_BYTES||402653184)};
+const evidencePath=path.join(packageRoot,'tests/evidence/memory-sizing.json');
+const sizing=fsSync.existsSync(evidencePath)?JSON.parse(fsSync.readFileSync(evidencePath,'utf8')):null;
+if(!sizing&&!process.env.FFM_MEASUREMENT_MAX_BYTES)throw new Error('Provision memory-sizing evidence or set FFM_MEASUREMENT_MAX_BYTES for a pilot measurement.');
+const measuredBase=Math.max(staticMinimumBytes,sizing?.model.baseBytes||0);
+const measuredMaximum=sizing?Math.ceil(Math.max(...sizing.rows.map(row=>row.highWaterBytes))*1.5/(16*1024*1024))*16*1024*1024:0;
+const memory={staticMinimumBytes,initialBytes:Math.max(16*1024*1024,Math.ceil(measuredBase/65536)*65536),maximumBytes:Number(process.env.FFM_MEASUREMENT_MAX_BYTES||measuredMaximum)};
 if(!Number.isSafeInteger(memory.maximumBytes)||memory.maximumBytes<memory.initialBytes||memory.maximumBytes%65536)throw new Error('Invalid FFM memory ceiling');
 const units=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76'].map(n=>path.join(packageRoot,`lib/${n}.cpp`));
 units.push(path.join(packageRoot,'lib/ffm_gravity.cpp'));
