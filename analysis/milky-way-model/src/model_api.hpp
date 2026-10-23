@@ -34,7 +34,8 @@ extern "C" int bake() {
   struct Override {const char* name;double* value;double lo,hi;};
   const Override overrides[]={{"appearance_young_length_kpc",&appearance::young_length_kpc,1.0,12.0},
     {"appearance_central_light",&appearance::central_light,0.2,3.0},{"appearance_bulge_size",&appearance::bulge_size,0.2,3.0},
-    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0},{"appearance_arm_dust",&drimmel2001::arm_dust_scale,0.1,30.0}};
+    {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0},{"appearance_arm_dust",&drimmel2001::arm_dust_scale,0.1,30.0},
+    {"appearance_structure_young_sigma",&structure::young_sigma,0.0,3.0},{"appearance_structure_dust_sigma",&structure::dust_sigma,0.0,3.0}};
   for (const auto& [name,value]:request.values) {
     const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
     const double v=request.number(name.c_str(),NAN);

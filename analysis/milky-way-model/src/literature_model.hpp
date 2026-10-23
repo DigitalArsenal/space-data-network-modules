@@ -395,13 +395,17 @@ inline const knots::Population& complexes::population() {
 inline Field literature(Vec3 p,bool local_dust) {
   const auto pattern=arm_patterns(p);
   const auto c=stellar_components(p,pattern);
-  // The young light: its smooth share and its star complexes.
-  const double young=c.arms-c.thin*pattern.wave+complexes::light(p);
+  // The young light: its smooth share, modulated by the multi-scale structure
+  // (structure.hpp), and its star complexes.
+  const double young=(c.arms-c.thin*pattern.wave)*structure::modulation(p.x,p.y,structure::young_sigma)+complexes::light(p);
   const double disc=c.thin+c.thick+c.thin*pattern.wave;
   const double central=c.bulge+c.bar;
   const double nebulae=hii::light(p);
   using namespace colors;
-  const double dust=local_dust?dust_map::blend(p,drimmel2001::dust(p)):drimmel2001::dust(p);
+  // DS2001's dust, modulated by the same structure (gas and star formation
+  // share their clouds); a delivered 3D dust map is data and stays as it is.
+  const double modelled=drimmel2001::dust(p)*structure::modulation(p.x,p.y,structure::dust_sigma*structure::away_from_sun(p),true);
+  const double dust=local_dust?dust_map::blend(p,modelled):modelled;
   return {disc_bands.r*disc+central_bands.r*central+young_bands.r*young+hii_bands.r*nebulae,
           disc_bands.g*disc+central_bands.g*central+young_bands.g*young+hii_bands.g*nebulae,
           disc_bands.i*disc+central_bands.i*central+young_bands.i*young+hii_bands.i*nebulae,dust};
@@ -412,7 +416,9 @@ inline Field literature(Vec3 p) {return literature(p,true);}
 inline double literature_g(Vec3 p) {
   const auto pattern=arm_patterns(p);
   const auto c=stellar_components(p,pattern);
-  return c.thin+c.thick+c.arms+c.bulge+c.bar+hii::light(p)+complexes::light(p);
+  const double young=c.arms-c.thin*pattern.wave;
+  return c.thin+c.thick+c.thin*pattern.wave+young*structure::modulation(p.x,p.y,structure::young_sigma)
+    +c.bulge+c.bar+hii::light(p)+complexes::light(p);
 }
 
 // The Gaia G light of a field's r, g, i channels (oracle_metrics.hpp).

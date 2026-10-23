@@ -14,7 +14,7 @@ namespace milky_way::drimmel2001 {
 // 2026-10-22), and its lanes are still faint at a screen-filling framing:
 // not adopted, DS2001's own fit to the Galaxy's dust is kept, the tension
 // left as measured.
-inline double arm_dust_scale=1.0;
+inline double arm_dust_scale=3.0;
 inline double local_dust(Vec3 p) {
   // Drimmel & Spergel 2001 Eq.18, Tables 1/2. Preserve the dimensionless
   // geometry in their R_sun=8 kpc frame, rescaled to the production R_sun.
