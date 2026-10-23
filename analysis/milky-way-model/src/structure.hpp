@@ -84,19 +84,27 @@ inline const std::array<double,octaves>& amplitudes() {
 // A field of x and y alone stands in columns through the dust layer, which
 // oblique rays smear into streaks wherever the layer (~0.1 kpc) is thicker
 // than the wavelength; on the kiloparsec octaves the layer moves it little.
-inline double octave(double x,double y,double z,int o,uint32_t s,bool ridged) {
-  const double r=std::hypot(x,y),phi=std::atan2(y,x);
-  const double lambda=longest_kpc/std::pow(2.0,o),c=r/(elongation*lambda);
-  const double off=z/lambda/std::sqrt(1+1/(elongation*elongation));
-  const double n=noise(r/lambda+0.37*o+off/elongation,(c-off)*std::cos(phi),(c-off)*std::sin(phi),s+uint32_t(o)*7919u);
+// At radius r with the azimuth's cosine and sine (x / r, y / r, as the
+// renderer forms them), so a sum over octaves forms them once.
+inline double octave_at(double r,double cos_phi,double sin_phi,double z,int o,uint32_t s,bool ridged) {
+  static const double normal=1/std::sqrt(1+1/(elongation*elongation));
+  const double lambda=std::ldexp(longest_kpc,-o),c=r/(elongation*lambda);
+  const double off=z/lambda*normal;
+  const double n=noise(r/lambda+0.37*o+off/elongation,(c-off)*cos_phi,(c-off)*sin_phi,s+uint32_t(o)*7919u);
   return ridged?1-2*std::abs(n):n;
+}
+inline double octave(double x,double y,double z,int o,uint32_t s,bool ridged) {
+  const double r=std::hypot(x,y);
+  return octave_at(r,r>0?x/r:1.0,r>0?y/r:0.0,z,o,s,ridged);
 }
 // The raw sum at the disc point (x, y) (kpc); `ridged`: each octave as
 // 1 - 2|n| (its zero crossings as ridges), the filamentary form of the same
 // octave amplitudes (Musgrave's ridged multifractal without the cascade).
 inline double raw(double x,double y,uint32_t s,bool ridged=false,double z=0) {
+  const double r=std::hypot(x,y),cos_phi=r>0?x/r:1.0,sin_phi=r>0?y/r:0.0;
+  const auto& a=amplitudes();
   double sum=0;
-  for(int o=0;o<octaves;++o) sum+=amplitudes()[o]*octave(x,y,z,o,s,ridged);
+  for(int o=0;o<octaves;++o) sum+=a[o]*octave_at(r,cos_phi,sin_phi,z,o,s,ridged);
   return sum;
 }
 // Its mean and standard deviation over the disc (a 0.05 kpc grid within 16
