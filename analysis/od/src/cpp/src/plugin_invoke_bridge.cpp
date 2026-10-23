@@ -18,6 +18,7 @@ extern "C" __attribute__((weak)) void emscripten_notify_memory_growth(int) {}
 #include "space_data_module_invoke.h"
 
 extern "C" int fit(void);
+extern "C" int fit_ffm(void);
 
 namespace {
 
@@ -135,7 +136,16 @@ static const char *kMethod_fit_output_ports[] = {
   "omm", "ocm", "obd", "tle",
 };
 
+static const AcceptedTypeRef kPrwTypes[] = {{false,"PRW.fbs","$PRW",0u,true,"PRW"}};
+static const AcceptedTypeRef kDclTypes[] = {{false,"DCL.fbs","$DCL",0u,true,"DCL"}};
+static const PortRequirement kFfmInputs[] = {
+ {"meme",false,kMethod_fit_meme_types,1u},{"oem",false,kMethod_fit_oem_types,2u},
+ {"configuration",true,kPrwTypes,1u},{"kernel",true,kPrwTypes,1u},
+ {"earth_orientation",true,kPrwTypes,1u},{"space_weather",true,kPrwTypes,1u},{"density_correction",false,kDclTypes,1u}
+};
+static const char* kFfmOutputs[]={"omm","ocm","obd","mnv"};
 static const MethodDescriptor kMethodTable[] = {
+ {"fit_ffm",&fit_ffm,kFfmInputs,7u,kFfmOutputs,4u,false,nullptr,nullptr},
   {
     "fit",
     &fit,

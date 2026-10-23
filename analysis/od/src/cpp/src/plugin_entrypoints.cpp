@@ -1,4 +1,9 @@
 #include "od/plugin_runtime.h"
+#include "od/operator_fit.h"
+#include "od/oem_parser.h"
+#include "od/oem_fb_reader.h"
+#include "od/omm_fb_builder.h"
+#include "od/obd_fb_builder.h"
 
 #include "plugin_manifest_bytes.h"
 #include "space_data_module_invoke.h"
@@ -96,6 +101,64 @@ const uint8_t* plugin_get_manifest_flatbuffer(void) {
 EMSCRIPTEN_KEEPALIVE
 uint32_t plugin_get_manifest_flatbuffer_size(void) {
     return od_plugin_manifest_bytes_len;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int fit_ffm(void) {
+    plugin_reset_output_state();
+    const auto config=sdm_piv::get_config();
+    if(!config.ok()){plugin_set_error("config-unavailable",config.error_message().c_str());return 1;}
+    od::OperatorFitOptions options;
+    options.end_seconds=config.number("fitWindowSeconds",172800);
+    options.sample_seconds=config.number("sampleSeconds",600);
+    options.ballistic_seed=config.number("ballisticSeed",.003);
+    options.ballistic_prior=config.number("ballisticPrior",0);
+    options.srp_area_mass=config.number("srpAreaOverMass",.02);
+    options.max_iterations=int(config.number("maxIterations",12));
+    options.maneuver_velocity_km_s=config.number("maneuverVelocityKmS",.001);
+    options.maneuver_position_km=config.number("maneuverPositionKm",.1);
+    options.warm_start=config.boolean("warmStart");
+    const char* keys[]={"warmX","warmY","warmZ","warmVx","warmVy","warmVz"};
+    for(int i=0;i<6;++i)options.warm_state[i]=config.number(keys[i],0);
+    od::StateSeries series;
+    const auto* oem=find_input_frame("oem");const auto* meme=find_input_frame("meme");
+    if(bool(oem)==bool(meme)){plugin_set_error("invalid-input","Supply exactly one OEM or MEME file");return 1;}
+    if(oem){
+        auto parsed=od::read_oem_flatbuffer(oem->payload,oem->payload_length);
+        if(!parsed.ok){plugin_set_error(parsed.error_code.c_str(),parsed.error_message.c_str());return 1;}
+        series=std::move(parsed.series);
+    }else{
+        flatbuffers::Verifier v(meme->payload,meme->payload_length);
+        if(!VerifyFILBuffer(v)){plugin_set_error("invalid-input","Expected FIL");return 1;}
+        const auto* content=GetFIL(meme->payload)->CONTENT();
+        if(!content){plugin_set_error("invalid-input","Empty FIL");return 1;}
+        const std::string text(reinterpret_cast<const char*>(content->data()),content->size());
+        if(od::looks_like_oem(text)){
+            auto parsed=od::parse_oem(text);if(!parsed.ok){plugin_set_error(parsed.error_code.c_str(),parsed.error_message.c_str());return 1;}series=std::move(parsed.series);
+        }else{
+            auto parsed=od::parse_meme(text);
+            if(GetFIL(meme->payload)->NAME()){
+                const auto identity=od::parse_meme_filename(GetFIL(meme->payload)->NAME()->str());
+                parsed.header.norad_cat_id=identity.norad_cat_id;parsed.header.object_name=identity.object_name;parsed.header.cospar_id=identity.cospar_id;
+            }
+            series=od::meme_state_series(parsed);
+        }
+    }
+    series.meta.data_source=std::string(config.string("dataSource"));
+    od::OperatorEnvironment env;
+    auto buffer=[&](const char* port){const auto* f=find_input_frame(port);return f?od::OperatorBuffer{f->payload,f->payload_length}:od::OperatorBuffer{};};
+    env.configuration=buffer("configuration");env.kernel=buffer("kernel");env.earth_orientation=buffer("earth_orientation");env.space_weather=buffer("space_weather");env.density_correction=buffer("density_correction");
+    auto result=od::fit_operator(series,env,options);
+    if(!result.error.empty()){plugin_set_error("operator-fit-failed",result.error.c_str());return 1;}
+    for(const auto& m:result.maneuvers)if(!push_record("mnv","MNV.fbs","$MNV","MNV",od::operator_mnv(m,series.meta)))return 1;
+    for(const auto& segment:result.segments){
+        od::FitterConfig gp;gp.fit_window_sec=std::min(11520.,(segment.source.samples.back().epoch_jd-segment.source.samples.front().epoch_jd)*86400);gp.max_iterations=options.max_iterations;
+        const auto fit=od::fit_sgp4_series(segment.source,gp);
+        if(!push_record("ocm","OCM.fbs","$OCM","OCM",od::operator_ocm(segment,options,env.density_correction.size!=0)) ||
+           !push_record("omm","OMM.fbs","$OMM","OMM",od::build_omm_flatbuffer(fit.elements)) ||
+           !push_record("obd","OBD.fbs","$OBD","OBD",od::build_obd_flatbuffer(fit.elements,gp.fit_window_sec/86400)))return 1;
+    }
+    return 0;
 }
 
 EMSCRIPTEN_KEEPALIVE

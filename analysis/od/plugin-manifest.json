@@ -178,6 +178,265 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_ffm",
+      "displayName": "Fit operator-seeded FFM-1 Fast state and effective ballistic coefficient",
+      "inputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "One SDS OEM FlatBuffer, carried as a FlatBuffer or aligned-binary frame."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One SDS OEM ephemeris per invocation. Supply exactly one OEM or text ephemeris frame."
+        },
+        {
+          "portId": "meme",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-fil",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One SDS $FIL whose CONTENT is the text ephemeris (SpaceX MEME or CCSDS OEM KVN; CONFIG inputFormat selects, else sniffed)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A text ephemeris file as an SDS $FIL. Supply exactly one $OEM or $FIL ephemeris."
+        },
+        {
+          "portId": "configuration",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "kernel",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "space_weather",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "density_correction",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Fitted supplemental-GP elements, carried as an aligned-binary frame containing a size-prefixed SDS OMM."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 0,
+          "required": false,
+          "description": "One size-prefixed SDS OMM."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Epoch state and optional formal fit covariance, with explicit availability and interpretation."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 0,
+          "required": false,
+          "description": "One size-prefixed SDS OCM with fit uncertainty status."
+        },
+        {
+          "portId": "obd",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "OD run results, carried as FlatBuffers or aligned-binary frames containing a size-prefixed SDS OBD."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 0,
+          "required": false,
+          "description": "The fit ($OBD, METHOD DIFFERENTIAL_CORRECTION, METHOD_SOURCE SDN-OD: WRMS = position RMS km, NUM_ITERATIONS, FIT_SPAN days; SENSORS[0].SENSOR_ID = CONFIG dataSource when given) and, when CONFIG names a reference element set (refEpoch + refMeanMotion ...), that set scored by the same SGP4 over the same points (METHOD GENERAL_PERTURBATIONS, METHOD_SOURCE reference, WRMS = its RMS km)."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 0,
+          "description": "Detected discontinuities; one per event interval."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "schemasUsed": [
