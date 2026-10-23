@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
+import { analyzeWasmThreadFeatures } from 'space-data-module-sdk/compiler';
 import { headlessShell } from '../tests/lib/headlessShell.mjs';
 import { environmentInputs } from '../tests/lib/fullForce.mjs';
 import { makeTable, encodePrw, sds, TYPE } from '../tests/lib/prwCodec.mjs';
@@ -43,6 +44,12 @@ const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readF
   sampleEpochsSeconds: [1800, 3600], fixture: 'public study SGP4 seeds, repeated cyclically across all eight orbit regimes',
   rows: [], loadStart: os.loadavg(), logicalCpus: os.cpus().length,
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
+assert.deepEqual(WebAssembly.Module.exports(await WebAssembly.compile(wasm)), WebAssembly.Module.exports(await WebAssembly.compile(predecessor)), 'exports changed');
+const memorySection = analyzeWasmThreadFeatures(wasm).sharedMemory;
+assert(memorySection?.growable);
+assert.equal(memorySection.min*65536, report.memory.initialBytes);
+assert.equal(memorySection.max*65536, report.memory.maximumBytes);
+report.memory.wasmSection = memorySection;
 const save = () => fs.writeFileSync(path.join(cache, 'result.json'), JSON.stringify(report, null, 2) + '\n');
 // Compile through the actual node's production flow prewarmer into a private
 // cache. A fresh cache per artifact proves compilation, not a cache hit.
