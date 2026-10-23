@@ -24,7 +24,8 @@ export async function createRasterLane(config,{wasmPath=path.join(sourceRoot,'di
     const probe=await source.invoke({methodId:'tile',inputs:[plan,{portId:'options',typeRef:TYPE.MCFG,payload:encodeModuleConfig({...tileOptions,sourcePixelRangesOnly:true})},granuleFrame('dem',Buffer.alloc(0),200)]});
     if(probe.statusCode===413&&addresses.length>1) {
       const middle=Math.floor(addresses.length/2);
-      return Buffer.concat([await tile(addresses.slice(0,middle)),await tile(addresses.slice(middle))]);
+      const left=await tile(addresses.slice(0,middle));if(global.gc)global.gc();
+      const right=await tile(addresses.slice(middle));if(global.gc)global.gc();return Buffer.concat([left,right]);
     }
     if(probe.statusCode!==0)throw Error(`range plan: ${probe.errorCode}: ${probe.errorMessage}`);
     const request=decodeFlowNotice(probe.outputs.find(o=>o.portId==='report').payload);
@@ -89,6 +90,7 @@ async function main() {
         fs.writeFileSync(target+'.part',file.bytes);fs.renameSync(target+'.part',target);bytes+=file.bytes.length;
       }
       count++;if(global.gc)global.gc();
+      if(process.resourceUsage().maxRSS*1024>=2_000_000_000)throw Error('encoder exceeded the 2 GB RSS acceptance limit');
       if(count%10===0||block.index===0)console.log(JSON.stringify({worker,block:block.index,count,bytes,peakRssBytes:process.resourceUsage().maxRSS*1024}));
     }
   }finally{await lane.destroy();}

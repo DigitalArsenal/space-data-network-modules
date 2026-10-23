@@ -9,12 +9,13 @@ import {decodeQuantizedMesh} from '../../terrain-source/tests/helpers.mjs';
 const [configPath,output,receipt]=process.argv.slice(2);assert.ok(receipt,'config out receipt required');
 const cfg=JSON.parse(fs.readFileSync(configPath));const root=path.join(output,`terrain/${cfg.naif}`);
 let state=20261023;const random=n=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)%n;};
-const files=[];for(const e of fs.readdirSync(root,{withFileTypes:true})) {
- if(e.isDirectory())for(const name of fs.readdirSync(path.join(root,e.name)))if(name.endsWith('.dtts.gz'))files.push(`${e.name}/${name}`);
- else if(e.name==='root.dtts.gz')files.push(e.name);
+const files=[];
+for(const e of fs.readdirSync(root,{withFileTypes:true})) {
+ if(e.isDirectory()) {
+  for(const name of fs.readdirSync(path.join(root,e.name)))if(name.endsWith('.dtts.gz'))files.push(`${e.name}/${name}`);
+ } else if(e.name==='root.dtts.gz')files.push(e.name);
 }
-// Braces matter: keep the root in addition to every level directory.
-if(!files.includes('root.dtts.gz'))files.push('root.dtts.gz');files.sort();
+files.sort();
 const inventory=files.map(name=>{const bytes=fs.readFileSync(path.join(root,name));return {key:`terrain/${cfg.naif}/${name}`,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};});
 const expected=1+Array.from({length:cfg.maxLevel-2},(_,i)=>2**(2*(i+3)-3)).reduce((a,b)=>a+b,0);
 assert.equal(files.length,expected,'complete pack pyramid required');
