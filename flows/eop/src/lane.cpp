@@ -42,9 +42,12 @@ const plugin_input_frame_t* input(const char* port) {
   const int32_t index = plugin_find_input_index(port, 0);
   return index < 0 ? nullptr : plugin_get_input_frame(static_cast<uint32_t>(index));
 }
+int push(const char* port, const char* schema, const char* identifier, const char* root, const uint8_t* data, size_t size) {
+  return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data,
+                               static_cast<uint32_t>(size)) < 0 ? 1 : 0;
+}
 int push(const char* port, const char* schema, const char* identifier, const char* root, const fb::FlatBufferBuilder& b) {
-  return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0,
-                               b.GetBufferPointer(), static_cast<uint32_t>(b.GetSize())) < 0 ? 1 : 0;
+  return push(port, schema, identifier, root, b.GetBufferPointer(), b.GetSize());
 }
 }  // namespace
 extern "C" int route_request() {
@@ -75,19 +78,23 @@ extern "C" int restore_response() {
   NEED(frame && frame->payload, "An HttpResponse is required.");
   fb::Verifier verifier(frame->payload, frame->payload_length);
   NEED(R::VerifyHttpResponseBuffer(verifier), "Expected an HttpResponse.");
-  auto response = std::unique_ptr<R::HttpResponseT>(R::GetHttpResponse(frame->payload)->UnPack());
-  // Only a mirrored request put its own bytes in CONTEXT; the parser's job (a size-prefixed $ICN) is never an HttpRequest.
-  if (response->CONTEXT.size() > 8) {
-    fb::Verifier context(response->CONTEXT.data(), response->CONTEXT.size());
-    if (R::VerifyHttpRequestBuffer(context)) {
-      auto original = std::unique_ptr<R::HttpRequestT>(R::GetHttpRequest(response->CONTEXT.data())->UnPack());
+  const auto* answered = R::GetHttpResponse(frame->payload);
+  // Only a mirrored request put its own bytes in CONTEXT (the parser's job, a size-prefixed $ICN, is never an HttpRequest).
+  // Any other response, the file itself, goes on exactly as it came.
+  const auto* context = answered->CONTEXT();
+  if (context && context->size() > 8) {
+    fb::Verifier original_verifier(context->data(), context->size());
+    if (R::VerifyHttpRequestBuffer(original_verifier)) {
+      auto response = std::unique_ptr<R::HttpResponseT>(answered->UnPack());
+      auto original = std::unique_ptr<R::HttpRequestT>(R::GetHttpRequest(context->data())->UnPack());
       response->URL = original->URL;
       response->CONTEXT = original->CONTEXT;
+      fb::FlatBufferBuilder b;
+      R::FinishHttpResponseBuffer(b, R::HttpResponse::Pack(b, response.get()));
+      return push("response", "HttpResponse.fbs", "HRSP", "HttpResponse", b);
     }
   }
-  fb::FlatBufferBuilder b;
-  R::FinishHttpResponseBuffer(b, R::HttpResponse::Pack(b, response.get()));
-  return push("response", "HttpResponse.fbs", "HRSP", "HttpResponse", b);
+  return push("response", "HttpResponse.fbs", "HRSP", "HttpResponse", frame->payload, frame->payload_length);
 }
 extern "C" int attribute_lane() {
   const auto* frame = input("meta");
