@@ -1,0 +1,57 @@
+[
+  {
+    "file": "mercury-180-east.tif",
+    "reference": "mercury-180-east-tif.f64",
+    "mask": "mercury-180-east-tif.valid"
+  },
+  {
+    "file": "mercury-180-east.cub",
+    "reference": "mercury-180-east-cub.f64",
+    "mask": "mercury-180-east-cub.valid"
+  },
+  {
+    "file": "venus-equator.tif",
+    "reference": "venus-equator-tif.f64",
+    "mask": "venus-equator-tif.valid"
+  },
+  {
+    "file": "titan-equator.cub",
+    "reference": "titan-equator-cub.f64",
+    "mask": "titan-equator-cub.valid"
+  },
+  {
+    "file": "ceres-equator.tif",
+    "reference": "ceres-equator-tif.f64",
+    "mask": "ceres-equator-tif.valid"
+  },
+  {
+    "file": "vesta-equator.tif",
+    "reference": "vesta-equator-tif.f64",
+    "mask": "vesta-equator-tif.valid"
+  },
+  {
+    "file": "pluto-equator.tif",
+    "reference": "pluto-equator-tif.f64",
+    "mask": "pluto-equator-tif.valid"
+  },
+  {
+    "file": "pluto-pole.tif",
+    "reference": "pluto-pole-tif.f64",
+    "mask": "pluto-pole-tif.valid"
+  },
+  {
+    "file": "charon-equator.tif",
+    "reference": "charon-equator-tif.f64",
+    "mask": "charon-equator-tif.valid"
+  },
+  {
+    "file": "nodata-float.tif",
+    "reference": "nodata-float-tif.f64",
+    "mask": "nodata-float-tif.valid"
+  },
+  {
+    "file": "nodata-float.cub",
+    "reference": "nodata-float-cub.f64",
+    "mask": "nodata-float-cub.valid"
+  }
+]

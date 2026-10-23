@@ -7,6 +7,7 @@ GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery (owner 2026-10-13:
 | --- | --- | --- |
 | `describe` | `descriptor`, `ranges` | `info`: one size-prefixed `$GDI` (FORMAT GEOTIFF, EPSG:4326 footprint polygon, source EPSG in KEYWORDS); `levels`: the level table |
 | `render` | `descriptor`, `ranges`, `request` (window in EPSG:4326, size, stretch) | `image`: RGBA; `stats`: the stretch used |
+| `samples` | `descriptor`, `ranges`, `request` (native pixel window) | `layout`: scalar metadata; `values`: Float64 physical values; `valid`: source validity mask |
 
 Either method answers on `need` instead when the bytes it was given do not
 cover what it reads: float64 `(offset, length)` pairs, merged across gaps up to
@@ -46,3 +47,28 @@ ports with a stated media type). Port layouts are in `plugin-manifest.json`.
 Build: `npm ci && node build.mjs`. Tests: `node --test tests/*.test.mjs`. Every
 fixture is written by GDAL and every expectation is GDAL's own exact warp of
 it (`tests/make-fixtures.py`, run with GDAL 3.13 and PROJ 9).
+
+`samples` is the numeric terrain input. Its request is Float64 LE
+`[1, x, y, width, height]`, with zero-based native pixel coordinates and at
+most 4,194,304 pixels. It reads a single scalar band from lossless TIFF codecs
+or an attached ISIS3 cube (`BandSequential` or `Tile`, `SignedWord` or `Real`,
+either byte order). It does not project or resample. Planetary TIFFs therefore
+do not require an Earth EPSG code. Each decoded chunk is limited to 64 MiB.
+
+The output `layout` is Float64 LE
+`[1, width, height, bits, sampleFormat, scale, offset, nodata, hasNodata]`.
+`values` contains Float64 `DN * scale + offset`, including GDAL band scale and
+offset or ISIS Base and Multiplier. `valid` contains one byte per pixel:
+1 for a valid sample, 0 for TIFF NoData or an ISIS special pixel. Invalid
+values are zero and must always be interpreted with their validity byte.
+These values are source physical units: Ceres' offset produces absolute
+radius; converting that radius to height belongs to the terrain ingest.
+
+`read-samples.mjs` supplies bounded local-file range I/O. Numerical checks:
+`node tests/scalar.e2e.mjs --native` runs the same artifact through the SDK
+browser harness and native WasmEdge. `tests/scalar-browser.e2e.mjs` also runs
+in real Chromium headless shell; set `HEADLESS_SHELL` and
+`BODY_TERRAIN_SCRATCH` (durable scratch). The committed source crops, GDAL
+physical-value/mask references, and provenance are under
+`data-source/terrain-ingest/tests/fixtures/body-raster`. These checks establish
+source-reader parity; they do not establish packed-tile or console acceptance.

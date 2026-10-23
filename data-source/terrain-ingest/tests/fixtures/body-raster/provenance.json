@@ -1,6 +1,6 @@
 {
   "extracted": "2026-10-23",
-  "oracle": "GDAL 3.13 gdal_translate -srcwin (source pixels, no resampling); -unscale -ot Float64 -of ENVI for physical-value reference; -of ISIS3 -co DATA_LOCATION=LABEL -co TILED=YES for the independently encoded cube",
+  "oracle": "GDAL 3.13 gdal_translate -srcwin (source pixels, no resampling); -unscale -ot Float64 -of ENVI for physical-value reference; -of ISIS3 -co DATA_LOCATION=LABEL -co TILED=YES for the independently encoded cube; gdal_translate -b mask -ot Byte -of ENVI independently extracts validity",
   "tolerance": "exact numerical equality; these Int16 values and the 0.5 scale are exactly representable",
   "sources": [
     {
@@ -14,8 +14,7 @@
       ],
       "files": [
         "mercury-180-east.tif",
-        "mercury-180-east.cub",
-        "mercury-physical.f64"
+        "mercury-180-east.cub"
       ],
       "terms": "CC BY 4.0 per owner; USGS metadata requests author citation",
       "metadata": "https://astrogeology.usgs.gov/search/map/mercury_messenger_global_dem_665m",
@@ -33,8 +32,7 @@
         32
       ],
       "files": [
-        "venus-equator.tif",
-        "venus-physical.f64"
+        "venus-equator.tif"
       ],
       "terms": "public domain; Please cite authors",
       "metadata": "https://astrogeology.usgs.gov/search/map/Venus/Magellan/RadarProperties/Venus_Magellan_Topography_Global_4641m_v02.cub.xml",
@@ -44,14 +42,119 @@
     }
   ],
   "sha256": {
+    "cases.json": "b84ae44db5bf7a6bf6cd2f58e331f7db30418d05cebea34cf7adffb38b9214e4",
+    "ceres-equator-tif.f64": "75a322ab46446fad5a9b2dca6799d0f3729aec307b80e02f2d71513928076dce",
+    "ceres-equator-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "ceres-equator.tif": "4955d9694f339d5e63fb17c468089c3a359533186adf2dffe1141a7b0687a889",
+    "charon-equator-tif.f64": "c977132a43699f3d6ec530036dac39617821b9ae5bad02f74067170180ee46f3",
+    "charon-equator-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "charon-equator.tif": "f8592f339792ffbc065242e112336cc13babee27a9d92eac79f29d431690c9f4",
+    "mercury-180-east-cub.f64": "370cb2aad208e9896536c9c31bc44f315e22509984e4493cb3b5efdc461a120e",
+    "mercury-180-east-cub.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "mercury-180-east-tif.f64": "370cb2aad208e9896536c9c31bc44f315e22509984e4493cb3b5efdc461a120e",
+    "mercury-180-east-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
     "mercury-180-east.cub": "a48418f71f5e09c455eb411c3bf0d7c241dfcb903113431406d571ea57c846d6",
     "mercury-180-east.tif": "973b87b29801fae19c3936fdbfa423abd2c3a95646f20c95f46e373be78d8497",
-    "mercury-physical.f64": "370cb2aad208e9896536c9c31bc44f315e22509984e4493cb3b5efdc461a120e",
-    "mercury-physical.f64.aux.xml": "e75beee7941c4ad4829470b4bf33a53d5b41769345fb6f6d486a6c1096da068b",
-    "mercury-physical.hdr": "487a50406679117fea6db7bf30d92a2f1163bc4431ab2337909fe565833bcbee",
+    "nodata-float-cub.f64": "fc113c25facb3f8be8791971f96ee2c6b932e5752c35bb68b101d4ab8ac2615c",
+    "nodata-float-cub.valid": "dccf2447b69ab0d90319551ed7e69ed1d6e9a9102b5c442ec77b6cb67ed6710e",
+    "nodata-float-tif.f64": "c7106b7b261250df0f625b70910076418eed676bf290a1e3fb127a5689461d7f",
+    "nodata-float-tif.valid": "dccf2447b69ab0d90319551ed7e69ed1d6e9a9102b5c442ec77b6cb67ed6710e",
+    "nodata-float.cub": "7611d1e8c2f0dda1d9e522cc27c6e6a58b919671fc6ce2ea32a3a2567f041a0b",
+    "nodata-float.tif": "5c5ea6e25647b1cbe1dd89b4f27d92911031076985be52758eea503872a6366d",
+    "pluto-equator-tif.f64": "744709cd225029176772135c99adc8968ead4abbb5d3f576e738eb7c15e495b4",
+    "pluto-equator-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "pluto-equator.tif": "bd2b41fbda57545df1ac2e84fc7dd226f38260d27d79aa8f6f75b88199a1e103",
+    "pluto-pole-tif.f64": "18eaba7b2b0cfd24a0478807c2661f136b5e9dbf21bd00c42e374a2d8039383d",
+    "pluto-pole-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "pluto-pole.tif": "25ceeec4c46170ff801a5d4fd1c985cc0e7a8354283459157db3fbb58b138061",
+    "titan-equator-cub.f64": "c01dc6aea27c4deb87a32a496586f82dacec625b27ac3d2174ffd4087bcc0fb4",
+    "titan-equator-cub.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "titan-equator.cub": "55cec998affff6c6e419fd36e1bd324b97645e3a3c80e570dc4f58e9fa0aa10a",
+    "venus-equator-tif.f64": "f09e888f415ae9a0d3ed7dd19573c0cd6d3413edfca4703825389067d9df0a39",
+    "venus-equator-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
     "venus-equator.tif": "7de886384046a6b8ddb639fde828278594609bda7d2138531284c8356c6ab4ab",
-    "venus-physical.f64": "f09e888f415ae9a0d3ed7dd19573c0cd6d3413edfca4703825389067d9df0a39",
-    "venus-physical.f64.aux.xml": "e75beee7941c4ad4829470b4bf33a53d5b41769345fb6f6d486a6c1096da068b",
-    "venus-physical.hdr": "9c0193e8d826d95604f161a9494124ee04d3766fbe7826c3fa4d21e457435f68"
+    "vesta-equator-tif.f64": "aa03c0e2e8b54e8a99a4173303ec01201c1fab042c506785ad7c6963977f8dae",
+    "vesta-equator-tif.valid": "5f4ecdb7b71c3e403983fe405cddcdc2f2576b655fdb3e80d94a6f7c32e58bc2",
+    "vesta-equator.tif": "e34bc5e8881d25406e995071275e77f25b702cba0d95df2cf73502a3d5b22906"
+  },
+  "moreSources": [
+    {
+      "file": "titan-equator.cub",
+      "url": "https://ecommons.cornell.edu/server/api/core/bitstreams/bebcb917-2790-4fed-ae3c-c47491d3c5c1/content",
+      "window": [
+        720,
+        360,
+        32,
+        32
+      ],
+      "terms": "CC0 1.0, Cornell doi:10.7298/m4dv-gv95"
+    },
+    {
+      "file": "ceres-equator.tif",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016.tif",
+      "window": [
+        10800,
+        5400,
+        32,
+        32
+      ],
+      "terms": "USGS/PDS primary catalog access None; cite authors; publication license review remains pending"
+    },
+    {
+      "file": "vesta-equator.tif",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Vesta_Dawn_HAMO_DTM_DLR_Global_48ppd.tif",
+      "window": [
+        8640,
+        4320,
+        32,
+        32
+      ],
+      "terms": "USGS/PDS primary catalog access None; cite authors; publication license review remains pending"
+    },
+    {
+      "file": "pluto-equator.tif",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+      "window": [
+        12444,
+        6222,
+        32,
+        32
+      ],
+      "terms": "USGS/PDS primary catalog access None; cite authors; publication license review remains pending"
+    },
+    {
+      "file": "pluto-pole.tif",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+      "window": [
+        0,
+        0,
+        32,
+        32
+      ],
+      "terms": "USGS/PDS primary catalog access None; cite authors; publication license review remains pending"
+    },
+    {
+      "file": "charon-equator.tif",
+      "url": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Charon_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+      "window": [
+        6346,
+        3173,
+        32,
+        32
+      ],
+      "terms": "USGS/PDS primary catalog access None; cite authors; publication license review remains pending"
+    }
+  ],
+  "maskFixture": {
+    "source": "files/geotiff/tests/make-fixtures.py, Float32 -9999 NoData rectangle [10:60,10:60]",
+    "window": [
+      0,
+      0,
+      32,
+      32
+    ],
+    "missingPixels": 484,
+    "oracle": "GDAL mask band, including its independent conversion to ISIS special Real pixels",
+    "isisAuthority": "https://github.com/DOI-USGS/ISIS3/blob/dev/isis/src/core/include/SpecialPixel.h"
   }
 }

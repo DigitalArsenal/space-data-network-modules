@@ -17,11 +17,7 @@ fs.mkdirSync(scratch, {recursive: true});
 const executablePath = process.env.HEADLESS_SHELL;
 assert.ok(executablePath && /(?:chrome-)?headless[-_]shell$/.test(executablePath) && fs.existsSync(executablePath), 'HEADLESS_SHELL must name Chromium headless shell');
 assert.ok(os.loadavg()[0] < 25, 'load must be below 25 before starting the browser');
-const cases = [
-  ['mercury-180-east.tif', 'mercury-physical.f64'],
-  ['mercury-180-east.cub', 'mercury-physical.f64'],
-  ['venus-equator.tif', 'venus-physical.f64'],
-];
+const cases = JSON.parse(fs.readFileSync(path.join(fixtures,'cases.json')));
 const entry = `
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import * as flatbuffers from 'flatbuffers';
@@ -34,8 +30,8 @@ window.run = async () => {
   const h=await createBrowserModuleHarness({wasmSource:await get('/module.wasm'),manifest,surface:'direct'});
   const report=[];
   try {
-    for (const [name, oracle] of cases) {
-      const file=await get('/fixtures/'+name), expected=new Float64Array((await get('/fixtures/'+oracle)).buffer);
+    for (const {file:name, reference:oracle, mask} of cases) {
+      const file=await get('/fixtures/'+name), expected=new Float64Array((await get('/fixtures/'+oracle)).buffer), expectedMask=await get('/fixtures/'+mask);
       const b=new flatbuffers.Builder(128), title=b.createString('Planetary raster');
       NCD.startNCD(b);NCD.addFormat(b,255);NCD.addProviderDefinedFormatName(b,title);NCD.addSourceByteLength(b,BigInt(file.length));NCD.finishSizePrefixedNCDBuffer(b,NCD.endNCD(b));
       const ranges=new Uint8Array(file.length+16), v=new DataView(ranges.buffer);v.setUint32(0,1,true);v.setBigUint64(4,0n,true);v.setUint32(12,file.length,true);ranges.set(file,16);
@@ -48,8 +44,13 @@ window.run = async () => {
       const bytes=(port)=>Uint8Array.from(r.outputs.find(o=>o.portId===port).payload);
       const values=new Float64Array(bytes('values').buffer), valid=bytes('valid');
       if(values.length!==expected.length)throw new Error(name+': wrong output length');
-      for(let i=0;i<expected.length;++i)if(valid[i]!==1||values[i]!==expected[i])throw new Error(name+': wrong sample '+i);
-      report.push({file:name,exactPosts:values.length});
+      let missing=0;
+      for(let i=0;i<expected.length;++i) {
+        const ok=expectedMask[i]===0?0:1;
+        if(valid[i]!==ok||values[i]!== (ok?expected[i]:0))throw new Error(name+': wrong sample '+i);
+        if(!ok)missing++;
+      }
+      report.push({file:name,exactPosts:values.length,missing});
     }
   }finally{await h.destroy();}
   document.body.textContent=JSON.stringify(report,null,2);
@@ -59,7 +60,7 @@ const bundle = await build({stdin: {contents: entry, resolveDir: root}, bundle: 
 const files = new Map([
   ['/module.wasm', path.join(root, 'dist/isomorphic/module.wasm')],
   ['/manifest.json', path.join(root, 'plugin-manifest.json')],
-  ...[...new Set(cases.flat())].map(name => ['/fixtures/' + name, path.join(fixtures, name)]),
+  ...[...new Set(cases.flatMap(c=>[c.file,c.reference,c.mask]))].map(name => ['/fixtures/' + name, path.join(fixtures, name)]),
 ]);
 const server = http.createServer((req, res) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
