@@ -1,8 +1,13 @@
-# Orbit Determination SupGP Module
+# Orbit Determination Module
 
 This module fits SGP4 mean elements to operator ephemeris samples and returns
 SDS records only: `$OMM` (the elements), `$OCM` (epoch state, covariance or its
 explicit absence) and `$OBD` (the OD run, with the fit RMS as `WRMS` in km).
+
+The `fit_ffm` method adds an operator-seeded FFM Fast state + B_eff fit, with
+DCL drag, fixed SRP, maneuver segmentation and a strict 48-hour boundary. See
+[operator fit](docs/operator-fit.md) for its inputs, covariance and cost contract.
+The original `fit` method described below remains the SGP4 path.
 
 ## Contract (FlatBuffers only)
 
