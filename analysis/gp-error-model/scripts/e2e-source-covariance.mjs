@@ -47,24 +47,25 @@ if(await fs.readFile(path.join(cache,'oracle.key'),'utf8').catch(()=>null)!==ora
 const oracle=await createBrowserModuleHarness({wasmSource:await fs.readFile(oraclePath),manifest:oracleManifest,surface:'direct'});
 const or=await oracle.invoke({methodId:'reference_covariances',inputs:[]});oracle.destroy();assert.equal(or.statusCode,0,or.errorMessage);
 const refs=Object.fromEntries(decode('ERM',or.outputs[0].payload).CALIBRATED_COVARIANCES.RESULTS.map(r=>[r.ID,r]));
+const after='2020-01-01T00:01:00Z';
 const epoch='2020-01-01T00:00:00Z', later='2020-01-02T00:00:00Z', before='2019-12-31T23:59:00Z';
 const instant=iso=>table('TIMInstant',{TIME_SYSTEM:P.timingStandard.UTC,EPOCH_FORMAT:P.timEpochRepresentation.ISO8601,ISO8601:iso});
 const cs=()=>table('RFMCoordinateSystem',{NAME:'GCRF',AXIS_TYPE:P.rfmAxisType.ICRF,ORIGIN:table('RFMOrigin',{KIND:P.rfmOriginKind.CELESTIAL_BODY,CELESTIAL_BODY_ID:399})});
 const instance=()=>table('PRWInstance',{MODULE_ID:'com.orbpro.ffm',INSTANCE_ID:'source-covariance-e2e',GENERATION:1n});
 const vector=values=>table('FRMVector3',{X:values[0],Y:values[1],Z:values[2]});
 function state(at=epoch) {return table('PRWResidentState',{INSTANCE:instance(),ENTITY_HANDLE:1,CATALOG_NUMBER:99999,OBJECT_ID:'synthetic-reference',
-  STATE:table('FRMStateVector',{REPRESENTATION:P.frmStateRepresentation.CARTESIAN,POSITION:vector([7000000,0,0]),VELOCITY:vector([1200,7200,2400]),EPOCH:at,EPOCH_TIME_SYSTEM:'UTC',COORDINATE_SYSTEM_NAME:'GCRF'}),COORDINATE_SYSTEM:cs()});}
+  STATE:table('FRMStateVector',{REPRESENTATION:P.frmStateRepresentation.CARTESIAN,POSITION:vector([8000000,0,0]),VELOCITY:vector([1200,7200,2400]),EPOCH:at,EPOCH_TIME_SYSTEM:'UTC',COORDINATE_SYSTEM_NAME:'GCRF'}),COORDINATE_SYSTEM:cs()});}
 const eop=()=>table('PRWEarthOrientation',{ROWS:[58849,58850].map(MJD=>table('EOP',{MJD,X_POLE_WANDER_RADIANS:3.7e-7,Y_POLE_WANDER_RADIANS:1.4e-6,UT1_MINUS_UTC_SECONDS:-.1771554,TAI_MINUS_UTC_SECONDS:37}))});
 function request(clock=epoch,at=epoch,earth=true) {return frame('request','PRW',{RESIDENT_STATE:state(at),RESIDENT_REQUEST:table('PRWResidentRequest',{INSTANCE:instance(),TARGET_EPOCH:instant(clock),TARGET_COORDINATE_SYSTEM:cs(),ENTITY_HANDLES:[1]}),...(earth?{EARTH_ORIENTATION:eop()}:{})});}
 const rfm=(code,name)=>make(code,'RFM',{NAME:name});
 function ocm(axes,epochs=[epoch],cov=refs.GCRF.COVARIANCE_RTN) {return frame('ocm','OCM',{
   METADATA:make('OCM','Metadata',{CATALOG_NAME:'99999',INTERNATIONAL_DESIGNATOR:'synthetic-reference',TIME_SYSTEM:'UTC',START_TIME:epochs[0]}),
   TRAJ_REF_FRAME:rfm('OCM','GCRF'),COV_REF_FRAME:rfm('OCM',axes),STATE_EPOCHS:epochs,STATE_VECTOR_SIZE:6,
-  STATE_DATA:epochs.flatMap(()=>[7000,0,0,1.2,7.2,2.4]),COV_SIZE:6,COVARIANCE_DATA:epochs.flatMap(()=>cov)});}
+  STATE_DATA:epochs.flatMap(()=>[8000,0,0,1.2,7.2,2.4]),COV_SIZE:6,COVARIANCE_DATA:epochs.flatMap((_,i)=>epochs.length===2?(i?refs.SOURCE_HIGH:refs.SOURCE_LOW).COVARIANCE_RTN:cov)});}
 const fields=['CX_X','CY_X','CY_Y','CZ_X','CZ_Y','CZ_Z','CX_DOT_X','CX_DOT_Y','CX_DOT_Z','CX_DOT_X_DOT','CY_DOT_X','CY_DOT_Y','CY_DOT_Z','CY_DOT_X_DOT','CY_DOT_Y_DOT','CZ_DOT_X','CZ_DOT_Y','CZ_DOT_Z','CZ_DOT_X_DOT','CZ_DOT_Y_DOT','CZ_DOT_Z_DOT'];
-function oem(axes,epochs=[before,later],override=false) {return frame('oem','OEM',{EPHEMERIS_DATA_BLOCK:[make('OEM','ephemerisDataBlock',{
+function oem(axes,epochs=[before,after],override=false) {return frame('oem','OEM',{EPHEMERIS_DATA_BLOCK:[make('OEM','ephemerisDataBlock',{
   OBJECT:make('OEM','CAT',{NORAD_CAT_ID:99999}),REFERENCE_FRAME:rfm('OEM','GCRF'),COV_REFERENCE_FRAME:rfm('OEM',override?'unsupported-sentinel':axes),TIME_SYSTEM:schema.OEM.timingStandard.UTC,
-  COVARIANCE_MATRIX_LINES:epochs.map((EPOCH,i)=>make('OEM','covarianceMatrixLine',{EPOCH,...Object.fromEntries(fields.map((f,k)=>[f,refs.GCRF.COVARIANCE_RTN[k]])),...(override?{COV_REFERENCE_FRAME:rfm('OEM',axes)}:{})}))})]});}
+  COVARIANCE_MATRIX_LINES:epochs.map((EPOCH,i)=>make('OEM','covarianceMatrixLine',{EPOCH,...Object.fromEntries(fields.map((f,k)=>[f,(epochs.length===2?(i?refs.SOURCE_HIGH:refs.SOURCE_LOW):refs.GCRF).COVARIANCE_RTN[k]])),...(override?{COV_REFERENCE_FRAME:rfm('OEM',axes)}:{})}))})]});}
 const cdm=()=>frame('cdm','CDM',{TCA:epoch,OBJECT1:make('CDM','CDMObject',{OBJECT:make('CDM','CAT',{NORAD_CAT_ID:99999}),REFERENCE_FRAME:rfm('CDM','GCRF'),COVARIANCE:refs.GCRF.COVARIANCE_RTN})});
 const harness=await createBrowserModuleHarness({wasmSource:wasm,manifest:rootManifest,surface:'direct'});
 const cases=[];let worst=0,comparisonCount=0;
@@ -85,7 +86,7 @@ try {
     await invoke(`OCM-${axes}`,[ocm(axes),request()],refs[key].COVARIANCE_INERTIAL);
   await invoke('OEM-interior',[oem('RTN'),request()],refs.RTN.COVARIANCE_INERTIAL);
   await invoke('OEM-line-frame',[oem('TNW',[epoch],true),request()],refs.TNW.COVARIANCE_INERTIAL);
-  await invoke('OCM-interior',[ocm('RTN',[before,later]),request()],refs.RTN.COVARIANCE_INERTIAL);
+  await invoke('OCM-interior',[ocm('RTN',[before,after]),request()],refs.RTN.COVARIANCE_INERTIAL);
   await invoke('CDM-object',[cdm(),request(later)],refs.RTN.COVARIANCE_INERTIAL);
   await invoke('outside-span',[oem('RTN',[epoch,later]),request(before,before)],null,/outside covariance span/);
   await invoke('wrong-state-epoch',[ocm('RTN'),request(later,later)],null,/covariance epoch/);

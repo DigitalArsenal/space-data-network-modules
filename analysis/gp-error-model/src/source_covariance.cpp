@@ -40,8 +40,8 @@ std::string orientation(const PRWEarthOrientationT* table, const Instant& t, ax:
   out->dX = (1-f)*a.X_CELESTIAL_POLE_OFFSET_RADIANS + f*b.X_CELESTIAL_POLE_OFFSET_RADIANS;
   out->dY = (1-f)*a.Y_CELESTIAL_POLE_OFFSET_RADIANS + f*b.Y_CELESTIAL_POLE_OFFSET_RADIANS;
   // Interpolate UT1-TAI across a leap, then restore TAI-UTC at the epoch.
-  out->dut1 = (1-f)*(a.UT1_MINUS_UTC_SECONDS-a.TAI_MINUS_UTC_SECONDS) +
-      f*(b.UT1_MINUS_UTC_SECONDS-b.TAI_MINUS_UTC_SECONDS) + a.TAI_MINUS_UTC_SECONDS;
+  out->dut1 = (1-f)*(double(a.UT1_MINUS_UTC_SECONDS)-a.TAI_MINUS_UTC_SECONDS) +
+      f*(double(b.UT1_MINUS_UTC_SECONDS)-b.TAI_MINUS_UTC_SECONDS) + a.TAI_MINUS_UTC_SECONDS;
   out->lengthOfDay = (1-f)*a.LENGTH_OF_DAY_CORRECTION_SECONDS + f*b.LENGTH_OF_DAY_CORRECTION_SECONDS;
   return {};
 }

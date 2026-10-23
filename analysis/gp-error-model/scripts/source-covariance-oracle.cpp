@@ -53,6 +53,11 @@ extern "C" int reference_covariances() {
     for(int a=0;a<6;++a)for(int b=0;b<=a;++b)row->COVARIANCE_RTN.push_back(p[a][b]/1e6);
     out.CALIBRATED_COVARIANCES->RESULTS.push_back(std::move(row));
   }
+  for (int variant=0;variant<2;++variant) {
+    auto row=std::make_unique<ERMCalibratedCovarianceT>();row->ID=variant?"SOURCE_HIGH":"SOURCE_LOW";
+    for(int a=0;a<6;++a)for(int b=0;b<=a;++b)row->COVARIANCE_RTN.push_back(p[a][b]*(variant?1.5:.5)/1e6);
+    out.CALIBRATED_COVARIANCES->RESULTS.push_back(std::move(row));
+  }
   flatbuffers::FlatBufferBuilder builder;FinishSizePrefixedERMBuffer(builder,ERM::Pack(builder,&out));
   return plugin_push_output_ex("reference","ERM.fbs","$ERM",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"ERM",0,0,builder.GetBufferPointer(),builder.GetSize())<0?1:0;
 }
