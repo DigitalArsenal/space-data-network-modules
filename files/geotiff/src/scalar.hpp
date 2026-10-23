@@ -165,7 +165,7 @@ inline bool cubeWindow(tiff::Sparse& src,uint64_t size,const Window& w,Result& o
           const double dn=sample(tmp,c.bits,c.format);
           // ISIS reserves all SignedWord values below -32752 and Real values
           // below VALID_MIN4 (including Null/LRS/LIS/HIS/HRS).
-          const bool special=c.format==2?dn < -32752:dn < -3.4028226550889044521e38;
+          const bool special=c.format==2?dn < -32752:dn < -3.4028224522648084150e38;
           out.put(size_t(y-w.y)*w.w+x-w.x,dn,special);
         }
     }

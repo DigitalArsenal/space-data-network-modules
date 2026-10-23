@@ -1,0 +1,57 @@
+{
+  "extracted": "2026-10-23",
+  "oracle": "GDAL 3.13 gdal_translate -srcwin (source pixels, no resampling); -unscale -ot Float64 -of ENVI for physical-value reference; -of ISIS3 -co DATA_LOCATION=LABEL -co TILED=YES for the independently encoded cube",
+  "tolerance": "exact numerical equality; these Int16 values and the 0.5 scale are exactly representable",
+  "sources": [
+    {
+      "body": "Mercury",
+      "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif",
+      "sourceWindow": [
+        11520,
+        5760,
+        32,
+        32
+      ],
+      "files": [
+        "mercury-180-east.tif",
+        "mercury-180-east.cub",
+        "mercury-physical.f64"
+      ],
+      "terms": "CC BY 4.0 per owner; USGS metadata requests author citation",
+      "metadata": "https://astrogeology.usgs.gov/search/map/mercury_messenger_global_dem_665m",
+      "datumRadiusM": 2439400,
+      "units": "meters above datum; original Int16 DN x 0.5",
+      "longitude": "east-positive; central meridian 180 degrees; crop starts at 180 E"
+    },
+    {
+      "body": "Venus",
+      "source": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif",
+      "sourceWindow": [
+        4096,
+        2048,
+        32,
+        32
+      ],
+      "files": [
+        "venus-equator.tif",
+        "venus-physical.f64"
+      ],
+      "terms": "public domain; Please cite authors",
+      "metadata": "https://astrogeology.usgs.gov/search/map/Venus/Magellan/RadarProperties/Venus_Magellan_Topography_Global_4641m_v02.cub.xml",
+      "datumRadiusM": 6051000,
+      "units": "meters above datum; Int16 DN",
+      "longitude": "east-positive; central meridian 0 degrees; crop starts at 0 E"
+    }
+  ],
+  "sha256": {
+    "mercury-180-east.cub": "a48418f71f5e09c455eb411c3bf0d7c241dfcb903113431406d571ea57c846d6",
+    "mercury-180-east.tif": "973b87b29801fae19c3936fdbfa423abd2c3a95646f20c95f46e373be78d8497",
+    "mercury-physical.f64": "370cb2aad208e9896536c9c31bc44f315e22509984e4493cb3b5efdc461a120e",
+    "mercury-physical.f64.aux.xml": "e75beee7941c4ad4829470b4bf33a53d5b41769345fb6f6d486a6c1096da068b",
+    "mercury-physical.hdr": "487a50406679117fea6db7bf30d92a2f1163bc4431ab2337909fe565833bcbee",
+    "venus-equator.tif": "7de886384046a6b8ddb639fde828278594609bda7d2138531284c8356c6ab4ab",
+    "venus-physical.f64": "f09e888f415ae9a0d3ed7dd19573c0cd6d3413edfca4703825389067d9df0a39",
+    "venus-physical.f64.aux.xml": "e75beee7941c4ad4829470b4bf33a53d5b41769345fb6f6d486a6c1096da068b",
+    "venus-physical.hdr": "9c0193e8d826d95604f161a9494124ee04d3766fbe7826c3fa4d21e457435f68"
+  }
+}

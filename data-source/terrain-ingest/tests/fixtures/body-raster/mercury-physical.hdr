@@ -1,0 +1,17 @@
+ENVI
+description = {
+data-source/terrain-ingest/tests/fixtures/body-raster/mercury-physical.f64}
+samples = 32
+lines   = 32
+bands   = 1
+header offset = 0
+file type = ENVI Standard
+data type = 5
+interleave = bsq
+byte order = 0
+map info = {Equirectangular, 1, 1, -9.31322574615479e-10, 5.02914190292358e-08, 665.24315270546, 665.24315270546}
+coordinate system string = {PROJCS["Equirectangular_Mercury",GEOGCS["GCS_Mercury",DATUM["D_Mercury",SPHEROID["Mercury_localRadius",2439400.0,0.0]],PRIMEM["Reference_Meridian",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Equidistant_Cylindrical"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",180.0],PARAMETER["Standard_Parallel_1",0.0],UNIT["Meter",1.0]]}
+band names = {
+Band 1}
+data ignore value = -32768
+default bands = {1}
