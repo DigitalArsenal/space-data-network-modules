@@ -9,7 +9,9 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import * as flatbuffers from 'flatbuffers';
@@ -100,6 +102,19 @@ const server = http.createServer((req, res) => {
 const report = { artifactSha256: sha(wasm), memory: read('dist/build-provenance.json').memory, cases: [],
   reference: 'SDS 1.259.0 DCL LogDensityNodes; closed-form factors 1, 2, 4, 8; GCRF SI, UTC; relative acceleration tolerance 1e-12',
   docker: 'WAIVED by owner 2026-10-22' };
+const regressionController = new AbortController();
+const regressionWork = process.argv.includes('--correction-only') ? null : Promise.all(
+  ['e2e-ffm.mjs', 'e2e-catalog-coverage.mjs'].map(async script => {
+    try {
+      const { stdout, stderr } = await execFileAsync(process.execPath, [path.join(root, 'scripts', script)],
+        { cwd: root, maxBuffer: 32 * 1024 * 1024, signal: regressionController.signal });
+      fs.writeFileSync(path.join(cache, script + '.log'), stdout + stderr);
+      return script;
+    } catch (error) {
+      fs.writeFileSync(path.join(cache, script + '.log'), (error.stdout || '') + (error.stderr || ''));
+      throw error;
+    }
+  })).then(scripts => ({ scripts }), error => ({ error }));
 let browser;
 try {
   const aot = execFileSync(process.env.SDN_NODE_BINARY || path.join(root, '.sdk-build/spacedatanetwork'),
@@ -159,16 +174,28 @@ try {
   try { for (let i = 0; i < requests.length; i++) assert.equal(sha(await native.invokeRaw(requests[i])), sha(new Uint8Array(refused[i])), 'invalid input parity'); }
   finally { await native.destroy(); }
   report.invalidRecordsRefused = invalid.length;
-  assert.deepEqual(errors, []); report.status = 'PASS';
+  assert.deepEqual(errors, []);
+  if (regressionWork) {
+    // Memory is measured once by e2e-memory-sizing on this exact artifact;
+    // bind that committed evidence here without repeating the full catalog run.
+    const sizing = read('tests/evidence/memory-sizing.json');
+    assert.equal(sizing.artifactSha256, report.artifactSha256, 'memory evidence must name this artifact');
+    assert.equal(sizing.memory.initialBytes, report.memory.initialBytes);
+    assert.equal(sizing.memory.maximumBytes, report.memory.maximumBytes);
+    assert.equal(sizing.rows.length, 10);
+    for (const row of sizing.rows) assert(row.highWaterBytes * 1.5 <= report.memory.maximumBytes);
+    const regressions = await regressionWork;
+    if (regressions.error) throw regressions.error;
+    report.regressions = Object.fromEntries(regressions.scripts.map(name => [name, 'PASS']));
+    report.memoryEvidence = 'Exact-artifact measured browser/native roles; tests/evidence/memory-sizing.json';
+  }
+  report.status = 'PASS';
 } catch (error) { report.failure = error.stack; throw error; }
 finally {
   await browser?.close(); if (server.listening) await new Promise(resolve => server.close(resolve));
   fs.writeFileSync(path.join(cache, 'result.json'), JSON.stringify(report, null, 2) + '\n');
-  if (report.failure || process.argv.includes('--correction-only')) fs.rmSync(aotDir, { recursive: true, force: true });
-}
-if (!process.argv.includes('--correction-only')) {
-  execFileSync(process.execPath, [path.join(root, 'scripts/e2e-memory-sizing.mjs')], {
-    cwd: root, stdio: 'inherit', env: { ...process.env, SDN_NODE_BINARY: process.env.SDN_NODE_BINARY || path.join(root, '.sdk-build/spacedatanetwork') },
-  });
+  if (report.failure) regressionController.abort();
+  if (regressionWork) await regressionWork;
+  fs.rmSync(aotDir, { recursive: true, force: true });
 }
 console.log('PASS drag correction: closed-form force ratios, zero identity, catalog/resident trajectories, browser/native byte parity and exact-artifact AOT.');
