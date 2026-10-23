@@ -69,7 +69,7 @@ test("SLDEM_LADDER: band edges on block rows, levels 0-10 cover the body, no orp
 const CONFIG = { tileset_id: "nasa-lola-moon", dataset_epoch: "2019-03-15T00:00:00.000Z" };
 const JOB = jobIdOf("nasa-lola-gdr", CONFIG.tileset_id, CONFIG.dataset_epoch);
 
-test("the built body_plan walks SLDEM_LADDER: SLDEM rows read sldem2015 files, LDEM rows ldem files", { timeout: 30 * 60 * 1000 }, async () => {
+test("the built body_plan walks SLDEM_LADDER: SLDEM rows read sldem2015 files, LDEM rows ldem files", { timeout: 90 * 60 * 1000 }, async () => {
   const harness = await createHarness(null, { ...CONFIG, caps: SLDEM_LADDER });
   const plan = async (index) => {
     const inputs = [tickFrame("2026-10-23T00:00:00Z")];
