@@ -70,7 +70,8 @@ struct StellarComponents { double thin,thick,arms,bulge,bar; };
 // wave: the old disc's spiral density wave (DS2001 stellar arms, K amplitude);
 // young: the bright young population's arm pattern, including its floor.
 // intermediate: the intermediate-age stars' wave on the minor arms (0.5).
-struct ArmPatterns { double wave=0,young=0,intermediate=0; };
+// intermediate_major: 1 when that wave is a major arm's continuation.
+struct ArmPatterns { double wave=0,young=0,intermediate=0,intermediate_major=0; };
 
 inline double arm_width_kpc(const ArmSegment& a,double radius) {
   // Reid 2019 section 3: dw/dR=42 pc/kpc, adopted from Reid et al. 2014.
@@ -133,7 +134,7 @@ inline double minor_stellar_arm=0.75;
 // The major (old, x[0]) and minor (intermediate-age, x[1]) waves at p: as
 // DS2001, the arm of largest contribution alone, given to the population of
 // its arm (a sum of both would count the overlap of their wings twice).
-inline std::array<double,2> stellar_arm_waves(Vec3 p) {
+inline std::array<double,3> stellar_arm_waves(Vec3 p) {
   double best=0;int which=0;
   for(const auto& a:reid_segments) {
     if(arm_light::finite_segment(a)) continue;
@@ -149,10 +150,11 @@ inline std::array<double,2> stellar_arm_waves(Vec3 p) {
       const double cutoff=h.radius>populations::arm_cutoff_kpc
         ?std::exp(-std::pow((h.radius-populations::arm_cutoff_kpc)/populations::arm_cutoff_scale_kpc,2)):1.0;
       if(cutoff*shape>best) {best=cutoff*shape;which=0;}
-      if((1-cutoff)*minor_stellar_arm*shape>best) {best=(1-cutoff)*minor_stellar_arm*shape;which=1;}
+      if((1-cutoff)*minor_stellar_arm*shape>best) {best=(1-cutoff)*minor_stellar_arm*shape;which=2;}
     });
   }
-  return which==0?std::array<double,2>{best,0}:std::array<double,2>{0,best};
+  // x[2]: 1 when the intermediate wave x[1] is a major arm's.
+  return which==0?std::array<double,3>{best,0,0}:std::array<double,3>{0,best,which==2?1.0:0.0};
 }
 
 inline double young_pattern(Vec3 p) {
@@ -162,7 +164,7 @@ inline double young_pattern(Vec3 p) {
 
 inline ArmPatterns arm_patterns(Vec3 p) {
   const auto waves=stellar_arm_waves(undrifted(p,populations::drift_age_k_myr));
-  return {populations::arm_amplitude_k*waves[0],young_pattern(p),populations::arm_amplitude_k*waves[1]};
+  return {populations::arm_amplitude_k*waves[0],young_pattern(p),populations::arm_amplitude_k*waves[1],waves[2]};
 }
 
 // Flynn 2006: the bright (M_V<-1) stars are 20% of the local mid-plane
@@ -486,7 +488,7 @@ inline Field literature(Vec3 p,bool local_dust) {
   const double young=look::young_gain()*((c.arms-c.thin*(pattern.wave+pattern.intermediate))
     *structure::modulation(p.x,p.y,structure::young_sigma,false,p.z)+complexes::light(p));
   const double disc=c.thin+c.thick+c.thin*pattern.wave*look::major_arm_gain();
-  const double intermediate=c.thin*pattern.intermediate;
+  const double intermediate=c.thin*pattern.intermediate*(pattern.intermediate_major>0?look::major_arm_gain():1.0);
   const double central=c.bulge+c.bar;
   const double nebulae=look::hii_gain()*hii::light(p);
   using namespace colors;

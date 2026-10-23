@@ -13,8 +13,9 @@
 //  - hii_gain: the HII regions' light x 3, and their eye color's
 //    chromaticity pushed from the D65 white point by hii_saturation 1.8 (Y
 //    kept);
-//  - major_arm_gain: the old disc's density wave on the two GLIMPSE major
-//    arms (Scutum-Centaurus, Perseus) x 3;
+//  - major_arm_gain: the stellar wave on the two GLIMPSE major arms
+//    (Scutum-Centaurus, Perseus: their old stars and, beyond DS2001's
+//    K-band extent, their intermediate-age continuation) x 3;
 //  - exposure: the eye display's solar-circle disc at display luminance 0.45
 //    (TRUE PHYSICS 0.38; model_api.hpp, display), through an asinh of
 //    softening Q 6 (TRUE PHYSICS: the fitted 8.295), a gentler compression
