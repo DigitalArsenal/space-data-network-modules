@@ -152,6 +152,12 @@ bool interpolate_bins(const std::vector<std::pair<double, double>>& bins, const 
 }
 
 
+// Shared CCSDS covariance interpolation; selection of the bracketing epochs is
+// the caller's responsibility. Both callers refuse extrapolation.
+void interpolate_covariance(const double a[36], const double b[36], double fraction, double out[36]) {
+  for (int k = 0; k < 36; ++k) out[k] = (1 - fraction) * a[k] + fraction * b[k];
+}
+
 // A side given as ephemeris samples and an epoch: position and velocity by Lagrange interpolation through the
 // degree + 1 samples nearest the epoch (the container's rule, e.g. a CCSDS OEM's INTERPOLATION_DEGREE), the
 // covariance linear between the two samples that bracket it (a sample's own at its epoch). No extrapolation:
@@ -202,7 +208,7 @@ std::string interpolate_side(const nlohmann::json& side, nlohmann::json* out) {
       std::copy(ca, ca + 36, cb);
     }
     std::vector<double> c(36);
-    for (int k = 0; k < 36; ++k) c[k] = (1 - f) * ca[k] + f * cb[k];
+    interpolate_covariance(ca, cb, f, c.data());
     (*out)["covariance"] = c;
   }
   (*out)["interpolated"] = {{"degree", static_cast<int>(m) - 1}, {"from", start}, {"samples", m}};
