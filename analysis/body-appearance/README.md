@@ -191,3 +191,14 @@ multiple-scattering treatment, which is not implemented here.
 
 The gauntlet has not run because its required E2E-pass precondition is unmet;
 there is no gauntlet receipt. Docker remains waived by the owner.
+
+## Resume checkpoint, 2026-10-23
+
+The coordinator resumed this lane from clean commit `67d5337a`, confirmed equal
+to the origin branch. Initial machine checks reported 87 GiB available and
+1-minute load 9.48. The completed ROLO implementation and recorded placement
+and parity evidence are retained. Remaining work starts with independent
+planetary phase-response and Johnson V calibration, not a refit to the
+Mallama–Hilton test oracle. The canonical SDK checkout on this machine is
+`spacedatanetwork-stack/repos/ancillary-packages/space-data-module-sdk`; the
+sibling path in the repository instructions is absent. Docker remains forbidden.
