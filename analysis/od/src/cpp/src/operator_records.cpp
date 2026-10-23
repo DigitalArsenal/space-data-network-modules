@@ -32,6 +32,7 @@ std::vector<uint8_t> operator_ocm(const OperatorSegment& s,const OperatorFitOpti
       {"COVARIANCE_RULE",s.has_operator_covariance?"1: operator supplied":"formal only; operator covariance unavailable"},
       {"FORMAL_COVARIANCE_FRAME","GCRF"},{"FORMAL_COVARIANCE_UNITS","products of km and km/s; lower triangular"},
       {"FORMAL_COVARIANCE_INTERPRETATION","unweighted fit uncertainty; not calibrated prediction uncertainty"},
+      {"FORMAL_COVARIANCE_CONDITIONING",s.ballistic>0?"state and B_eff jointly estimated":"state conditional on active B_eff = 0 bound"},
       {"FIT_INTERPRETATION","operator forecast reproduction, not independent prediction accuracy"},
       {"NET_DRAG_BOUND","B_eff >= 0; boundary solutions are not unconstrained estimates"}};
     if(s.has_formal_covariance)r.user.push_back({"FORMAL_COVARIANCE_LTM",values(s.formal_covariance)});

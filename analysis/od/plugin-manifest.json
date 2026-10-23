@@ -1,7 +1,7 @@
 {
   "pluginId": "orbit-determination",
   "name": "Orbit Determination Plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to an operator ephemeris: an SDS $OEM FlatBuffer, or a text ephemeris file (SpaceX MEME or CCSDS OEM KVN) carried as an SDS $FIL. Both fit the same core and emit the same records: $OMM elements, $OCM epoch state with explicit covariance availability, epoch, frame and units, and $OBD OD results (the fit, plus the scored reference element set when one is configured). Labels, iteration limit, text format, the reference element set and the opt-in two-line set ($FIL) come from node CONFIG (plugin.getConfig).",
   "pluginFamily": "orbit_determination",
   "capabilities": [],

@@ -96,8 +96,16 @@ bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const Oper
         const M7 normal=j.transpose()*j;
         M7 damped=normal;
         for(int k=0;k<7;++k)damped(k,k)+=lambda*std::max(normal(k,k),1e-20);
-        const V7 delta=damped.ldlt().solve(j.transpose()*residual);
+        const V7 rhs=j.transpose()*residual;
+        V7 delta=damped.ldlt().solve(rhs);
         if(!delta.allFinite()){error="singular-fit";return false;}
+        // Solve the active constraint, rather than clipping an unconstrained
+        // step and leaving the correlated epoch-state correction unchanged.
+        if(p[6]+delta[6]*scale[6]<0){
+            delta[6]=-p[6]/scale[6];
+            delta.head<6>()=damped.topLeftCorner<6,6>().ldlt().solve(
+                rhs.head<6>()-damped.block<6,1>(0,6)*delta[6]);
+        }
         V7 next=p+delta.cwiseProduct(scale);
         next[6]=std::max(0.,next[6]); // FFM's nonnegative net-drag contract
         Eigen::VectorXd candidate;
@@ -109,11 +117,13 @@ bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const Oper
         }else{lambda*=10;if(lambda>1e10)break;}
     }
     if(!jacobian())return false;
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(j,Eigen::ComputeThinV);
+    const int free_parameters=p[6]>0?7:6;
+    Eigen::MatrixXd free_j=j.leftCols(free_parameters);
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(free_j,Eigen::ComputeThinV);
     const auto singular=svd.singularValues();
-    if(singular[6]>singular[0]*1e-10 && residual.size()>7 && p[6]>0){
-        const M7 cov=scale.asDiagonal()*svd.matrixV()*singular.array().square().inverse().matrix().asDiagonal()*
-            svd.matrixV().transpose()*scale.asDiagonal()*(residual.squaredNorm()/(residual.size()-7));
+    if(singular[free_parameters-1]>singular[0]*1e-10 && residual.size()>free_parameters){
+        const Eigen::MatrixXd cov=scale.head(free_parameters).asDiagonal()*svd.matrixV()*singular.array().square().inverse().matrix().asDiagonal()*
+            svd.matrixV().transpose()*scale.head(free_parameters).asDiagonal()*(residual.squaredNorm()/(residual.size()-free_parameters));
         for(int i=0,k=0;i<6;++i)for(int q=0;q<=i;++q)result.formal_covariance[k++]=cov(i,q);
         result.has_formal_covariance=result.converged && publishable_covariance(result.formal_covariance.data());
     }
@@ -127,10 +137,12 @@ bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const Oper
 OperatorFitResult fit_operator(const StateSeries& input,const OperatorEnvironment& env,const OperatorFitOptions& opt) {
     OperatorFitResult out;
     if(!(opt.end_seconds>0) || opt.end_seconds>172800){out.error="blend-join: fitting across the 48-hour join is refused";return out;}
-    if(!(opt.sample_seconds>0 && opt.sample_seconds<=600) || !(opt.ballistic_seed>=0) || !(opt.srp_area_mass>=0) ||
+    if(!(opt.sample_seconds>0 && opt.sample_seconds<=600) || !(opt.ballistic_seed>=0) || !std::isfinite(opt.ballistic_seed) ||
+       !(opt.srp_area_mass>=0) || !std::isfinite(opt.srp_area_mass) || !std::isfinite(opt.ballistic_prior) || opt.ballistic_prior<0 ||
        opt.max_iterations<1 || opt.max_iterations>100 || !(opt.maneuver_velocity_km_s>0) || !(opt.maneuver_position_km>0)) {
         out.error="invalid-fit-options";return out;
     }
+    if(opt.warm_start)for(double x:opt.warm_state)if(!std::isfinite(x)){out.error="invalid-warm-state";return out;}
     if(input.meta.position_only || (input.meta.source_frame!="EME2000" && input.meta.source_frame!="J2000" && input.meta.source_frame!="GCRF")) {
         out.error="unsupported-frame: operator FFM requires full EME2000/J2000/GCRF states";return out;
     }
@@ -150,6 +162,19 @@ OperatorFitResult fit_operator(const StateSeries& input,const OperatorEnvironmen
     in.environment.earthOrientation=env.earth_orientation.data;in.environment.earthOrientationSize=env.earth_orientation.size;
     in.environment.spaceWeather=env.space_weather.data;in.environment.spaceWeatherSize=env.space_weather.size;
     in.environment.densityCorrection=env.density_correction.data;in.environment.densityCorrectionSize=env.density_correction.size;
+    const PRW* configuration=nullptr;
+    if(!ffm::verifyPrw(in.configuration,in.configurationSize,configuration,out.error))return out;
+    const auto* request=configuration->EXECUTION_REQUEST();
+    const auto* forces=request?request->FORCES():nullptr;
+    if(!forces || !forces->ENABLE_DRAG() || forces->ATMOSPHERE_MODEL()!=prwAtmosphereFamily::NRLMSISE00 ||
+       !forces->ENABLE_SRP() || forces->RADIATION_PRESSURE_MODEL()!=prwRadiationPressureFamily::CANNONBALL ||
+       forces->GRAVITY_CHOICE()!=prwGravitySelection::EGM2008 || !forces->HAS_MAXIMUM_DEGREE() || forces->MAXIMUM_DEGREE()!=70 ||
+       !forces->HAS_MAXIMUM_ORDER() || forces->MAXIMUM_ORDER()!=70 || !forces->ENABLE_THIRD_BODY() ||
+       forces->SOLID_TIDES()!=prwSolidTideModel::IERS_2010 || forces->OCEAN_TIDES()!=prwOceanTideModel::FES2004 ||
+       forces->EARTH_RADIATION()!=prwEarthRadiationModel::KNOCKE || forces->RELATIVITY()!=prwRelativityTerms::IERS_2010 ||
+       !env.kernel.size || !env.earth_orientation.size || !env.space_weather.size){
+        out.error="unsupported-force-profile: operator fitting requires full FFM-1 EGM2008 70x70, tides, radiation, relativity, NRLMSISE-00 and environment inputs";return out;
+    }
     auto model=ffm::ResidentDynamics::configure(in,ffm::instanceKernels(),out.error);if(!model)return out;
     std::vector<size_t> boundaries{0};
     // One-step prediction from each observed state localizes a discontinuity;

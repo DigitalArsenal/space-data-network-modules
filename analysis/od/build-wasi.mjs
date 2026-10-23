@@ -3,7 +3,6 @@
 // point is a different ABI and must never overwrite this artifact.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -29,6 +28,7 @@ try {
  const sources=['meme_parser','frame_transform','oem_parser','oem_fb_reader','omm_fb_builder','obd_fb_builder','ocm_fb_builder','sgp4_fitter','plugin_runtime','plugin_entrypoints','plugin_invoke_bridge','operator_fit','operator_records','operator_mnv','noexcept_stubs'].map(x=>path.join(cpp,'src',x+'.cpp'));
  sources.push(path.join(cpp,'deps/vallado-sgp4/SGP4.cpp'));
  const modules=path.resolve(root,'../..'),ffm=path.join(modules,'propagator/ffm');
+ const ffmManifest=JSON.parse(await fs.readFile(path.join(ffm,'plugin-manifest.json')));
  const ffmUnits=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76','ffm_gravity'];
  sources.push(...ffmUnits.map(n=>path.join(ffm,'lib',n+'.cpp')));
  sources.push(...['prw_dynamics','resident_dynamics','kernel_store'].map(n=>path.join(ffm,'src/cpp/src',n+'.cpp')));
@@ -39,16 +39,14 @@ try {
  const executable=path.join(build,'module.wasm');
  const exports=['_start','_initialize','plugin_alloc','plugin_free','plugin_invoke_stream','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','fit','fit_ffm'];
  const common=[...toolchain.toolchainArgs,'-O3','-fno-c++-static-destructors','-msimd128','-mbulk-memory','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE',
-  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,'-DFFM_MODULE_ID="ffm"','-DFFM_MODULE_VERSION="operator-linked"','-DFFM_TYPED_INPUTS_ONLY=1',
+  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,'-DFFM_MODULE_ID='+JSON.stringify(ffmManifest.pluginId),'-DFFM_MODULE_VERSION='+JSON.stringify(ffmManifest.version),'-DFFM_TYPED_INPUTS_ONLY=1',
   '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds')];
  const run=args=>{const r=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:180000});if(r.status!==0)throw new Error(r.error?.message??r.stderr);};
  const objects=[];
  for(const [i,source] of sources.entries()){
   const object=path.join(build,i+'.o');objects.push(object);console.log('compile '+path.relative(modules,source));
   const c=source.endsWith('.c');
-  const stamp=createHash('sha256').update(await fs.readFile(source)).update(JSON.stringify(common)).update(source.endsWith('plugin_entrypoints.cpp')?await fs.readFile(path.join(build,'plugin_manifest_bytes.h')):'').digest('hex');
-  if(await fs.readFile(object+'.sha','utf8').catch(()=>null)===stamp)continue;
-  run([...common,...(c?['-x','c']:['-std=c++17',source.startsWith(ffm)?'-fno-exceptions':'-fignore-exceptions']),'-DOD_REACTOR_BUILD','-c',source,'-o',object]);await fs.writeFile(object+'.sha',stamp);
+  run([...common,...(c?['-x','c']:['-std=c++17',source.startsWith(ffm)?'-fno-exceptions':'-fignore-exceptions']),'-DOD_REACTOR_BUILD','-c',source,'-o',object]);
  }
  run([...common,...objects,'-mexec-model=reactor','-Wl,--initial-memory=67108864','-Wl,--max-memory=2147483648','-Wl,-z,stack-size=2097152',...exports.map(x=>'-Wl,--export='+x),'-o',executable]);
  let bytes=new Uint8Array(await fs.readFile(executable));

@@ -20,7 +20,7 @@ struct OperatorSegment {
     std::array<double,6> state{};
     std::array<double,21> operator_covariance{}, formal_covariance{};
     bool has_operator_covariance=false, has_formal_covariance=false, converged=false;
-    double ballistic=0, rms_km=0, maximum_km=0, cpu_seconds=0;
+    double ballistic=0, rms_km=0, maximum_km=0;
     int iterations=0;
     std::vector<double> residuals_km;
 };
