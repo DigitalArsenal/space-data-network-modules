@@ -44,6 +44,7 @@ fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readFileSync(path.join(cache, '../previous.wasm'))),
   memory: read('dist/build-provenance.json').memory, profile: 'FFM-1', retentionSeconds: 1800, lookaheadSeconds: 300,
   sampleEpochsSeconds: [1800, 3600], fixture: 'public study SGP4 seeds, repeated cyclically across all eight orbit regimes',
+  metric: 'WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum',
   rows: [], loadStart: os.loadavg(), logicalCpus: os.cpus().length,
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
 assert.deepEqual(WebAssembly.Module.exports(await WebAssembly.compile(wasm)), WebAssembly.Module.exports(await WebAssembly.compile(predecessor)), 'exports changed');
@@ -238,7 +239,8 @@ const rows = report.rows.filter(r=>r.role==='catalog');
 const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+r.highWaterBytes,0)/rows.length;
 const perEntityBytes=rows.reduce((sum,r)=>sum+(r.entities-meanX)*(r.highWaterBytes-meanY),0)/rows.reduce((sum,r)=>sum+(r.entities-meanX)**2,0);
 const baseBytes=meanY-perEntityBytes*meanX;
-report.model={method:'least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)',baseBytes,perEntityBytes,
+assert(baseBytes>=0&&perEntityBytes>0,'invalid fitted allocation model');
+report.model={calibratedEntityRange:[1000,31814],units:'bytes',method:'least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)',baseBytes,perEntityBytes,
   focusHighWaterBytes:report.rows.find(r=>r.role==='resident-focus').highWaterBytes};
 for(const row of rows){row.predictedBytes=Math.max(report.memory.initialBytes,baseBytes+perEntityBytes*row.entities);row.relativePredictionError=Math.abs(row.predictedBytes-row.highWaterBytes)/row.highWaterBytes;assert(row.relativePredictionError<=.1,'catalog model exceeds 10%');}
 const largest=Math.max(...report.rows.map(r=>r.highWaterBytes));
@@ -252,6 +254,7 @@ if (!process.argv.includes('--measure')) {
     assert(prior,'missing recorded role');
     assert.equal(prior.highWaterBytes,row.highWaterBytes,'recorded high-water changed');
   }
+  assert.equal(report.memory.initialBytes,Math.max(16*1024*1024,Math.ceil(Math.max(report.memory.staticMinimumBytes,baseBytes)/65536)*65536),'rebuild with measured base');
   assert.equal(report.memory.maximumBytes,report.requiredMaximumBytes,'rebuild with measured maximum');
   for(const row of report.rows)assert(row.highWaterBytes*1.5<=report.memory.maximumBytes);
   for(const script of ['e2e-ffm.mjs','e2e-catalog-coverage.mjs']) {
