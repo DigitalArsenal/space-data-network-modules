@@ -163,7 +163,7 @@ bool execute(const PRWExecutionRequest* request,const Environment& environment,P
     if(first.secondsSince(last)>0)std::swap(first,last);
     for(const auto& t:execution.samplesTT){const auto at=t.instant();if(at.secondsSince(last)>0)last=at;if(at.secondsSince(first)<0)first=at;}
     if(!environmentCovers(execution,environment,first,last,error))return false;
-    if((environment.weather||!execution.densityCorrectionBreaks.empty())&&!execution.massDynamics)execution.breaks=driverBreaks(execution);
+    if((environment.weather||execution.densityCorrectionBreaks != nullptr)&&!execution.massDynamics)execution.breaks=driverBreaks(execution);
     auto result=std::make_unique<PRWExecutionResultT>();
     if(execution.variational&&!execution.massDynamics&&execution.stateOnly) {
         if(!evaluateStatesInOrder(execution,request,*result,error))return false;

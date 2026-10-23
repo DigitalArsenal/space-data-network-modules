@@ -59,7 +59,8 @@ struct Execution {
     // fall differently across a change differ by about a centimeter a day in
     // LEO. Finite burns are integrated without these restarts.
     std::vector<TTEpoch> breaks;
-    std::vector<TTEpoch> densityCorrectionBreaks;
+    // Shared across the catalog, never copied once per entity.
+    std::shared_ptr<const std::vector<TTEpoch>> densityCorrectionBreaks;
     std::shared_ptr<std::array<double,2>> driverSpan;
 };
 // The variational path without mass dynamics visits the request's epochs in

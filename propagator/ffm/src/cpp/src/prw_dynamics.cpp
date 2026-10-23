@@ -518,7 +518,7 @@ std::vector<TTEpoch> driverBreaks(const Execution& e,const TTEpoch& lo,const TTE
             if(!toTT(whole,s-whole,2451545.0+s/86400.0,timingStandard::UTC,tt,ignored))continue;
             if(elapsedSeconds(lo,tt)>0&&elapsedSeconds(tt,hi)>0)out.push_back(tt);
         }
-    for(const auto& tt:e.densityCorrectionBreaks)
+    if(e.densityCorrectionBreaks)for(const auto& tt:*e.densityCorrectionBreaks)
         if(elapsedSeconds(lo,tt)>0&&elapsedSeconds(tt,hi)>0)out.push_back(tt);
     std::sort(out.begin(),out.end(),[](const TTEpoch& a,const TTEpoch& b){return elapsedSeconds(a,b)>0;});
     out.erase(std::unique(out.begin(),out.end(),[](const TTEpoch& a,const TTEpoch& b){return elapsedSeconds(a,b)==0;}),out.end());
@@ -637,14 +637,15 @@ bool loadEnvironment(const PrwEnvironment& frames,bool own,Environment& out,std:
 }
 bool attachEnvironment(Execution& execution,const Environment& environment,bool requestWeather,std::string& error) {
     const auto& jb2008=environment.jb2008;const auto& weather=environment.weather;const auto& earth=environment.earth;
-    execution.densityCorrectionBreaks.clear();
+    execution.densityCorrectionBreaks.reset();
     execution.forces.densityScaleAt={};
     if(const auto& correction=environment.densityCorrection) {
         if(!execution.forces.useDrag||execution.forces.dragModel!=ForceModel::DragModelType::NRLMSISE00)
             return prwError(error,"unsupported-density-correction: Log-density correction requires NRLMSISE-00 drag.");
         if(!correction->identity) {
             execution.forces.densityScaleAt=[correction](const timesys::Instant& at){return correction->factor(at);};
-            execution.densityCorrectionBreaks=correction->knots;
+            if(!correction->knots.empty())execution.densityCorrectionBreaks=
+                std::shared_ptr<const std::vector<TTEpoch>>(correction,&correction->knots);
         }
     }
     const bool jb2008Model=execution.forces.useDrag&&execution.forces.dragModel==ForceModel::DragModelType::JB2008;

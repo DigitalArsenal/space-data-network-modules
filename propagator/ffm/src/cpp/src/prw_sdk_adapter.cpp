@@ -22,7 +22,6 @@ int fail(const std::string& error) {
 }
 int emit(const char* port, const std::vector<uint8_t>& bytes, uint64_t sequence, bool final) {
   const int index=plugin_push_output_typed(port,"PRW.fbs","$PRW",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"PRW",0,0,0,bytes.data(),bytes.size());
-  if(plugin_find_input_index("density_correction",1)>=0)return fail("invalid-density-correction: Supply one density_correction record.");
   if(index<0)return fail("output-capacity: SDK refused PRW response");
   plugin_set_output_stream_frame(index,sequence,final);
   return 0;
