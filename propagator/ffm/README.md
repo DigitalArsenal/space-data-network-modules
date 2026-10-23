@@ -126,6 +126,30 @@ same axes as the density) and rotated back to GCRF; every drag model and
 - The analytic STM still refuses winds (their position gradient is not
   analytic here); select the finite-difference STM.
 
+### Published open-DCA density correction
+
+`invoke` execution requests and configured `ingest_state` accept an optional
+`density_correction` port carrying the published SDS 1.259.0 `$DCL` record.
+The calibration must be `Solved`, name `NRLMSIS00E`, and use
+`CORRECTION.FORM = LogDensityNodes`. `NODE_TIMES_MS` are strictly increasing
+UTC Unix milliseconds; `NODE_LOG_DENSITY_SCALE_DIMENSIONLESS` contains one
+finite dimensionless value per node. Temperature, altitude and harmonic
+arrays must be empty. Invalid records fail with `invalid-density-correction`;
+using a correction with another atmosphere or disabled drag is refused.
+
+Drag density is NRLMSISE-00 density times `exp(s(t))`. The module linearly
+interpolates the published log-density nodes in UTC, holds their endpoint
+values outside the span, and applies no additional forecast decay. The same
+factor enters the analytic density gradient and ballistic sensitivities.
+Absent and all-zero corrections use identical forces and integration steps.
+Changes in the node slope form integration boundaries.
+
+The catalog bootstrap accepts a size-prefixed `$DCL` frame alongside its
+size-prefixed PRW configuration/environment frames. The SDK port accepts
+ordinary or size-prefixed DCL. `plugin_catalog_drag_acceleration(utcJd, slot,
+statePtr, outPtr)` diagnoses the configured object's drag at a supplied GCRF
+state (six SI doubles), returning three m/s² values without advancing it.
+
 ### Radiation pressure
 
 Cannonball radiation pressure uses IAU 2015 Resolution B3's nominal solar

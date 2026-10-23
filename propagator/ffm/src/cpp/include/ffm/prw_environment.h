@@ -4,6 +4,7 @@
 // JB2008 drivers (PRW.JB2008_INDICES), each read as its model reads it.
 #include "ffm/prw_codec.h"
 #include "ffm/prw_execution.h"
+#include "ffm/density_correction.h"
 #include "astrodynamics.h"
 #include "EOP_generated.h"
 extern "C" {
@@ -203,6 +204,7 @@ struct Environment {
     std::shared_ptr<EarthRotation> earth;
     std::shared_ptr<SpaceWeatherTable> weather;
     std::shared_ptr<JB2008IndicesTable> jb2008;
+    std::shared_ptr<DensityCorrection> densityCorrection;
     std::vector<std::shared_ptr<std::vector<uint8_t>>> owned;
 };
 // own: copy the frames first (a resident instance keeps them).
