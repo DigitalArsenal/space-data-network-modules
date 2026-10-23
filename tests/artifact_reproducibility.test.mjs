@@ -121,7 +121,7 @@ test("every module with a build.mjs declares a thread model", () => {
 test("NEGATIVE CONTROL: a module that stops declaring its thread model FAILS", () => {
   withBuildScript(
     (source) => {
-      const stripped = source.replace('  threadModel: "single-thread",\n', "");
+      const stripped = source.replace('  threadModel: "wasi-sequential",\n', "");
       assert.notEqual(stripped, source, `${DECLARATION_PROBE} must contain the declaration to remove`);
       return stripped;
     },
@@ -135,10 +135,10 @@ test("NEGATIVE CONTROL: a module that stops declaring its thread model FAILS", (
 });
 
 test("NEGATIVE CONTROL: a declaration the committed bytes contradict FAILS", () => {
-  // The artifact has unshared memory and no wasi.thread-spawn import, so claiming
+  // The artifact is wasi-sequential: no wasi.thread-spawn import, so claiming
   // the pthreads contract is a lie the bytes can refute without a rebuild.
   withBuildScript(
-    (source) => source.replace('threadModel: "single-thread"', 'threadModel: "emscripten-pthreads"'),
+    (source) => source.replace('threadModel: "wasi-sequential"', 'threadModel: "emscripten-pthreads"'),
     () => {
       const result = runChecker();
       assert.equal(result.ok, false, "a declaration contradicted by the bytes must fail");
@@ -150,7 +150,7 @@ test("NEGATIVE CONTROL: a declaration the committed bytes contradict FAILS", () 
 
 test("NEGATIVE CONTROL: a thread model the compiler does not understand FAILS", () => {
   withBuildScript(
-    (source) => source.replace('threadModel: "single-thread"', 'threadModel: "mostly-single"'),
+    (source) => source.replace('threadModel: "wasi-sequential"', 'threadModel: "mostly-single"'),
     () => {
       const result = runChecker();
       assert.equal(result.ok, false, "an unrecognised thread model must fail");
