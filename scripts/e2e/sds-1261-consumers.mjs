@@ -19,7 +19,11 @@ assert.equal(require('spacedatastandards.org/package.json').version, '1.261.0');
 const codes = ['CVR', 'SRO', 'SFE', 'SDI', 'SRT'];
 const modules = Object.fromEntries(await Promise.all(codes.map(async code =>
   [code, await import(pathToFileURL(path.join(sds, 'lib/js', code, 'main.js')))])));
-const table = (m, type, fields) => Object.assign(new m[`${type}T`](), fields);
+const table = (m, type, fields) => {
+  const row = new m[`${type}T`]();
+  for (const field of Object.keys(fields)) assert.ok(Object.hasOwn(row, field), `${type}.${field}`);
+  return Object.assign(row, fields);
+};
 const provenance = m => table(m, 'PVN', {
   SOURCE_ID: 'sds-1261-wire-fixture', PRODUCER: 'modules-sds-consumer-e2e',
   LICENSE_ID: 'CC0-1.0', LINEAGE: 'synthetic schema contract fixture',
@@ -50,7 +54,9 @@ const records = {
     CLASS_LEGEND: [table(T, 'SRTClass', { CODE: 10, LABEL: 'Tree cover', COLOR_RGBA: 0x006400ff })],
     AFFINE_TRANSFORM: [0, 1, 0, 1, 0, -1], GRID_WIDTH: 1, GRID_HEIGHT: 1,
     PAYLOAD_FORMAT: T.srtPayloadFormat.SAMPLES_ROW_MAJOR_LE,
-    PAYLOAD: table(T, 'DTTPayloadRef', {}), PROVENANCE: table(T, 'DTTProvenance', {}) }),
+    PAYLOAD: table(T, 'DTTPayloadRef', { BYTES: [10], MEDIA_TYPE: 'application/octet-stream' }),
+    PROVENANCE: table(T, 'DTTProvenance', { DATASET_ID: 'synthetic-srt',
+      DATASET_EPOCH: epoch, RETRIEVED_AT: epoch, LICENSE: 'CC0-1.0' }) }),
 };
 const { header, version, families } = await generateSdsHeaders(codes, import.meta.url);
 assert.equal(version, '1.261.0');
@@ -72,7 +78,10 @@ try {
       env: { ...process.env, SPACE_DATA_STANDARDS_ROOT: path.join(source, 'node_modules/spacedatastandards.org') } });
     const provenance = JSON.parse(fs.readFileSync(path.join(target, 'dist/build-provenance.json')));
     assert.equal(provenance.spacedatastandards, '1.261.0');
-    console.log(`PASS ${pkg}: regenerated and built against SDS 1.261.0`);
+    execFileSync(process.env.SDN_NODE_BIN || 'spacedatanetwork', ['prewarm-aot',
+      '--cache-dir', path.join(tmp, 'aot-cache'),
+      '--flow', path.join(target, 'dist/isomorphic/module.wasm')], { stdio: 'inherit' });
+    console.log(`PASS ${pkg}: SDS 1.261.0 build and node prewarm-aot`);
   }
   fs.writeFileSync(path.join(tmp, 'schemas.h'), header);
   const flatc = await FlatcRunner.init();
