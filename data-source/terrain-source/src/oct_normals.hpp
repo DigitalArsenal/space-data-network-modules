@@ -71,6 +71,15 @@ void lattice_oct_normals(const std::vector<Vec3>& halo, uint32_t grid, std::vect
             const double len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
             const Vec3& p = at(j, i);
             const double plen = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            // A pole is one point but a whole lattice row: the halo row past it
+            // folds back across the pole, so the cross-pole cell is wound
+            // inside out and cancels the radial part of the sum. The normal at
+            // a pole is the body's axis, the same in every tile meeting it.
+            if (plen > 0 && std::hypot(p.x, p.y) <= 1e-9 * plen) {
+                oct_encode(0.0, 0.0, p.z > 0 ? 1.0 : -1.0,
+                           &(*out)[(static_cast<size_t>(j) * grid + static_cast<size_t>(i)) * 2]);
+                continue;
+            }
             // A post every incident triangle of which is degenerate (none on a
             // real lattice) falls back to the radial direction.
             const Vec3 u = len > 0 ? Vec3{n.x / len, n.y / len, n.z / len}
