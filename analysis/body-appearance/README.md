@@ -33,7 +33,7 @@ node --test tests/sdk_compat.test.mjs
 npm test
 # Optional: FIREFOX_BINARY=/absolute/path/to/an/installed/headless/Firefox
 # Optional: WASMEDGE_BINARY=/absolute/path/to/wasmedge
-npm run test:e2e
+/Users/tj/software/terrain-work/lanes/headless-run npm run test:e2e
 ```
 
 `build.mjs` uses SDK 0.8.27 `compileModuleFromSource` with `wasi-sequential` and
@@ -238,3 +238,18 @@ the equator-on projected area with an equivalent sphere. Detailed ellipsoidal
 scattering and seasonal changes are not included. The committed
 `conformance/acceptance-report.json` contains the fresh full E2E measurements,
 source access results, and exact remaining requirements.
+
+## Coordinator continuation, 2026-10-23
+
+The planetary acceptance authority is Mallama & Hilton (2018), arXiv
+1808.01973, Johnson V, including its Saturn and Neptune extensions. No substitute
+oracle or additional model is required for acceptance. The earlier explicit
+restriction that these equations remain test-only is retained: a self-comparison
+against a runtime copy would not measure the independent prediction requested
+in the task. The published paper and code are already downloaded and readable;
+source access is not the current planetary blocker.
+
+All commands that open a headless browser must run through the coordinator's
+`/Users/tj/software/terrain-work/lanes/headless-run` wrapper. The gauntlet uses
+`/Users/tj/software/terrain-work/lanes/gauntlet-run`, which holds its own browser
+lock. No Chrome, windowed browser, Docker, or Docker Desktop is launched.
