@@ -1,0 +1,21 @@
+{
+  "name": "@digitalarsenal/sdn-flow-object-covariance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/local-node.e2e.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.9",
+    "spacedatastandards.org": "1.259.0",
+    "flatc-wasm": "26.1.38",
+    "flatbuffers": "25.9.23",
+    "esbuild": "0.27.7",
+    "playwright": "1.63.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.1"
+  }
+}
