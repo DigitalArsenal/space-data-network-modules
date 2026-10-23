@@ -38,7 +38,7 @@ inline void integrate(const NestedVolumes& volumes,Vec3 target,float* rgb,float*
   const double top=volumes.global.maximum.z,bottom=volumes.global.minimum.z;
   double z=top;
   double light[3]={0,0,0},transmit[3]={1,1,1},tau_total=0;
-  const double* ratios=model_choices::channel_extinction;
+  const double* ratios=model_choices::channel_ratios();
   while(z>bottom) {
     // Steps in z: 5 pc through the dust and young layers, 50 pc beyond.
     const double dz=std::min(z-bottom,std::abs(z)<0.6?0.005:0.05);

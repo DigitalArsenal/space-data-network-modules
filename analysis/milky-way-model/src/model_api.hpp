@@ -35,12 +35,16 @@ extern "C" int bake() {
   const Override overrides[]={{"appearance_young_length_kpc",&appearance::young_length_kpc,1.0,12.0},
     {"appearance_central_light",&appearance::central_light,0.2,3.0},{"appearance_bulge_size",&appearance::bulge_size,0.2,3.0},
     {"appearance_bulge_height",&appearance::bulge_height,0.2,3.0},{"appearance_arm_dust",&drimmel2001::arm_dust_scale,0.1,30.0},
-    {"appearance_structure_young_sigma",&structure::young_sigma,0.0,3.0},{"appearance_structure_dust_sigma",&structure::dust_sigma,0.0,3.0}};
+    {"appearance_structure_young_sigma",&structure::young_sigma,0.0,3.0},{"appearance_structure_dust_sigma",&structure::dust_sigma,0.0,3.0},
+    {"appearance_structure_lane_sigma",&structure::lane_sigma,0.0,3.0},
+    {"appearance_structure_fade_inner",&structure::fade_inner_kpc,0.0,4.0},{"appearance_structure_fade_outer",&structure::fade_outer_kpc,0.1,6.0},
+    {"display_basis",&eye::basis,0.0,1.0}};
+  eye::basis=0;
   for (const auto& [name,value]:request.values) {
     const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
     const double v=request.number(name.c_str(),NAN);
     if (o==std::end(overrides) || !std::isfinite(v) || v<o->lo || v>o->hi)
-      return wire::fail("bake takes only appearance_* overrides within their fit bounds; deliver a 3D dust map with load_dust_map first");
+      return wire::fail("bake takes only appearance_* overrides within their fit bounds and display_basis (0 SDSS r,g,i; 1 CIE X,Y,Z); deliver a 3D dust map with load_dust_map first");
     *o->value=v;
   }
   const auto& loaded=dust_map::grid();
@@ -54,7 +58,9 @@ extern "C" int bake() {
   for (auto& v:detail->rgba) v=to_half(float(random_uniform(seed)));
   wire::Result r;volume_result(r,"global",volumes->global);volume_result(r,"slab",volumes->slab);
   volume_result(r,"local",volumes->local);volume_result(r,"noise",*detail);r.text("label","model");r.text("noise_label","model");
-  r.text("channels","SDSS r,g,i relative emissivity per kpc; G extinction optical depth per kpc");
+  r.text("channels",eye::on()?"CIE Y,Z,X relative emissivity per kpc (eye); G extinction optical depth per kpc"
+    :"SDSS r,g,i relative emissivity per kpc; G extinction optical depth per kpc");
+  r.text("display_basis",eye::on()?"eye":"sdss");
   r.text("frame","Galactocentric origin; +x Galactic l=0, +y l=90, +z NGP; static J2000 orientation");
   r.text("calibration",loaded.ready
     ?"Local 3D dust map inside its coverage, Drimmel & Spergel 2001 disk, arm dust and local segment beyond; spiral light from DS2001 B_K and Flynn 2006; independent of Gaia"
@@ -66,8 +72,8 @@ extern "C" int bake() {
     "young length kpc, central light, bulge size, bulge height (fitted to SDSS MW analogs, Licquia 2015)");
   // Renderer fields. Each light channel's optical depth per kpc is this
   // multiple of the G optical depth channel (Wang & Chen 2019 Table 3).
-  r.vector("extinction_ratios",{model_choices::channel_extinction[0],model_choices::channel_extinction[1],
-    model_choices::channel_extinction[2]},"A_r/A_G,A_g/A_G,A_i/A_G");
+  const double* ratios=model_choices::channel_ratios();
+  r.vector("extinction_ratios",{ratios[0],ratios[1],ratios[2]},eye::on()?"A_Y/A_G,A_Z/A_G,A_X/A_G (CCM89)":"A_r/A_G,A_g/A_G,A_i/A_G");
   // One unit of each band (emissivity per kpc x kpc) in physical units: the
   // model's own local mid-plane G emissivity carries Flynn et al. 2006's
   // 0.056 Lsun,V pc^-3; a band unit is the G unit's light at zero color term
@@ -83,8 +89,12 @@ extern "C" int bake() {
   // transfer, Lupton et al. (2004) asinh stretch of the r, g, i light in
   // band-weighted SDSS counts, then a gamma.
   const auto counts=display::counts_per_unit(mu_g);
-  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma,display::saturation},"Q,alpha per count,gamma,saturation");
-  r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
+  // The eye: the same stretch on the luminance, no desaturation (the
+  // chromaticity kept), one count scale for X, Y and Z (eye_color.hpp).
+  const double eye_counts=eye::counts_per_unit(counts);
+  r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma,eye::on()?1.0:display::saturation},"Q,alpha per count,gamma,saturation");
+  if(eye::on()) r.vector("display_counts_per_unit",{eye_counts,eye_counts,eye_counts},"SDSS-transfer counts per 0.396 arcsec pixel per Y,Z,X unit (the old disc's luminance at its SDSS intensity)");
+  else r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
   r.vector("display_band_weights",{display::weights[0],display::weights[1],display::weights[2]},"r,g,i");
   // The dust structure's sub-slab octaves (structure.hpp, detail), for the
   // renderer to continue below the slab's texels: the ridged field's
@@ -322,7 +332,7 @@ extern "C" int face_on_columns() {
     return wire::fail("Expected 1..20000 finite Galactocentric (x, y) points in kpc");
   if (std::any_of(p.begin(),p.end(),[](double v){return std::abs(v)>24;})) return wire::fail("Point outside the 24 kpc disc");
   std::vector<double> out[3];
-  const double* ratios=model_choices::channel_extinction;
+  const double* ratios=model_choices::channel_ratios();
   for (size_t k=0;k<p.size();k+=2) {
     double light[3]={0,0,0},transmit[3]={1,1,1};
     for (double z=6.0;z>-6.0;) {

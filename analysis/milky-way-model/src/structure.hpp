@@ -38,6 +38,11 @@ inline constexpr double break_kpc=0.3,longest_kpc=8.0,elongation=3.0;
 inline constexpr int octaves=8; // 8 kpc ... 62.5 pc
 inline constexpr uint64_t seed=20261022;
 inline double young_sigma=1.5,dust_sigma=2.0;
+// The arm dust's lanes take a gentler sigma than the interarm dust, so the
+// lane stays continuous along its arm with structure on it, while the
+// interarm dust breaks into the sheared feathers and spurs between the arms
+// (a MODEL CHOICE of the split; appearance_structure_lane_sigma).
+inline double lane_sigma=1.0;
 
 inline uint32_t hash3(int32_t x,int32_t y,int32_t z,uint32_t s) {
   uint32_t h=uint32_t(x)*0x8da6b343u^uint32_t(y)*0xd8163841u^uint32_t(z)*0xcb1ab31fu^s*0x9e3779b9u;
@@ -159,7 +164,7 @@ inline const std::array<DetailOctave,detail_octaves>& detail() {
 // dust's structure fades in from fade_inner to fade_outer kpc from the Sun;
 // beyond it nothing measured fixes the clouds' places. The young light's
 // structure does not move the Gaia match (0.919 with young sigma 1.5).
-inline constexpr double fade_inner_kpc=1.5,fade_outer_kpc=4.0;
+inline double fade_inner_kpc=1.5,fade_outer_kpc=4.0;
 inline double away_from_sun(Vec3 p) {
   const double d=std::hypot(p.x+galactic_constants::solar_radius_kpc,p.y);
   const double t=std::clamp((d-fade_inner_kpc)/(fade_outer_kpc-fade_inner_kpc),0.0,1.0);

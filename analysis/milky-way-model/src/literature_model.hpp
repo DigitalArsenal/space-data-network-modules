@@ -3,6 +3,7 @@
 #include "drimmel_dust.hpp"
 #include "stellar_populations.hpp"
 #include "dust_map.hpp"
+#include "eye_color.hpp"
 
 namespace milky_way {
 
@@ -60,6 +61,8 @@ inline constexpr double bp_to_g_extinction=populations::bp_per_g_extinction;
 inline constexpr double rp_to_g_extinction=populations::rp_per_g_extinction;
 inline constexpr double channel_extinction[3]={sdss::r_per_big_g_extinction,
   sdss::g_per_big_g_extinction,sdss::i_per_big_g_extinction};
+// The baked channels' extinction to G: SDSS r, g, i, or the eye's Y, Z, X.
+inline const double* channel_ratios() {return eye::on()?eye::extinction_ratios().data():channel_extinction;}
 } // namespace model_choices
 
 struct StellarComponents { double thin,thick,arms,bulge,bar; };
@@ -94,8 +97,14 @@ inline Vec3 undrifted(Vec3 p,double age_myr) {
 }
 
 // DS2001: the arm of largest exp(-(d/w)^2) contributes, with the dust arms'
-// cut-off g(R_a). Four major families (Norma-Outer, Scutum-Centaurus,
-// Sagittarius-Carina, Perseus), as DS2001's four arms. The stellar arms'
+// cut-off g(R_a). 0.5: TWO stellar arms, Scutum-Centaurus and Perseus. The
+// old stars' arms are two: Drimmel (2000), A&A 358, L13, from COBE/DIRBE
+// K-band emission against a four-armed dust pattern; Benjamin et al. (2005),
+// ApJ 630, L149, and Churchwell et al. (2009), PASP 121, 213, from Spitzer
+// GLIMPSE star counts (Scutum-Centaurus and Perseus major; Sagittarius-Carina
+// and Norma minor, mainly gas, dust and young stars, which keep all of
+// Reid's arms here). The amplitude stays DS2001's Table 3 B_K = 1.28 (0.4:
+// all four families). The stellar arms'
 // half width is DS2001's own, w*_K = c*_K R_a with c*_K = 143 pc/kpc (Table
 // 3), the width B_K was fitted with: broad waves in the old light (1.1 kpc
 // at R0), not the masers' narrow Reid widths (0.3.0, which drew the old light
@@ -104,7 +113,7 @@ inline constexpr double stellar_arm_width_per_kpc=0.143;
 inline double major_arm_wave(Vec3 p) {
   double best=0;
   for(const auto& a:reid_segments) {
-    if(arm_light::finite_segment(a)) continue;
+    if(arm_light::finite_segment(a)||(a.family!=2&&a.family!=5)) continue;
     arm_light::for_each_hit(a,p,[&](const arm_light::Hit& h) {
       const double width=stellar_arm_width_per_kpc*h.radius;
       const double cutoff=h.radius>populations::arm_cutoff_kpc
@@ -419,11 +428,18 @@ inline Field literature(Vec3 p,bool local_dust) {
   using namespace colors;
   // DS2001's dust, modulated by the same structure (gas and star formation
   // share their clouds); a delivered 3D dust map is data and stays as it is.
-  const double modelled=drimmel2001::dust(p)*structure::modulation(p.x,p.y,structure::dust_sigma*structure::away_from_sun(p),true,p.z);
+  const auto parts=drimmel2001::dust_parts(p);
+  const double near=structure::away_from_sun(p);
+  const double modelled=parts.disc*structure::modulation(p.x,p.y,structure::dust_sigma*near,true,p.z)
+    +parts.arms*structure::modulation(p.x,p.y,structure::lane_sigma*near,true,p.z)+parts.local;
   const double dust=local_dust?dust_map::blend(p,modelled):modelled;
-  return {disc_bands.r*disc+central_bands.r*central+young_bands.r*young+hii_bands.r*nebulae,
-          disc_bands.g*disc+central_bands.g*central+young_bands.g*young+hii_bands.g*nebulae,
-          disc_bands.i*disc+central_bands.i*central+young_bands.i*young+hii_bands.i*nebulae,dust};
+  // The channels: SDSS r, g, i, or for the eye Y, Z, X (eye_color.hpp).
+  const auto& e=eye::bands();const bool eye_on=eye::on();
+  const sdss::Bands& db=eye_on?e.disc:disc_bands;const sdss::Bands& cb=eye_on?e.central:central_bands;
+  const sdss::Bands& yb=eye_on?e.young:young_bands;const sdss::Bands& hb=eye_on?e.hii:hii_bands;
+  return {db.r*disc+cb.r*central+yb.r*young+hb.r*nebulae,
+          db.g*disc+cb.g*central+yb.g*young+hb.g*nebulae,
+          db.i*disc+cb.i*central+yb.i*young+hb.i*nebulae,dust};
 }
 inline Field literature(Vec3 p) {return literature(p,true);}
 
