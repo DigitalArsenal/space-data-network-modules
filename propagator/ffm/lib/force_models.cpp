@@ -9,6 +9,7 @@
 #include "force_models.h"
 #include "environment_models.h"
 #include "astrodynamics.h"
+#include "reentry.h"
 #include "atmosphere.h"
 #include "atmosphere_winds.h"
 #include "time_convert.h"
@@ -140,7 +141,11 @@ Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, doub
     Vec3 vAtm = coRotatingAtmosphere ? axes.spin().cross(position) * OMEGA_EARTH : Vec3();
     if (includeWinds) {
         if (weather == nullptr) {
+#if defined(__cpp_exceptions)
             throw std::invalid_argument("includeWinds: this drag model has no space-weather input for HWM14");
+#else
+            flagForceFailure(); return Vec3(NAN, NAN, NAN);
+#endif
         }
         vAtm += axes.inertial(
             HorizontalWindEarthFixed(axes.fixed(position), jdUt, *weather, windDisturbance));

@@ -246,7 +246,7 @@ bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size
         astro::clearCallStop();
         ok=execute(request->EXECUTION_REQUEST(),environment,response,error);
         // The trajectory ended (lib/reentry.h): the request fails there, by name.
-        if(astro::callStop().active){error=stopError(astro::callStop());return false;}
+        if(astro::callStop().active){error=std::string(astro::callStop().code)=="invalid-force" ? astro::propagationStopMessage(astro::callStop()) : stopError(astro::callStop());return false;}
     }
     else if(environment.earth)return prwError(error,"unsupported-earth-orientation: Earth orientation applies to execution requests.");
     else if(environment.jb2008)return prwError(error,"unsupported-jb2008-indices: JB2008 indices apply to execution requests.");

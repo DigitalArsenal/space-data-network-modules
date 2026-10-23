@@ -5540,6 +5540,9 @@ bool validateTLE(const TLE& tle, const TLEUpdateConfig& config) {
     return true;
 }
 
+// Typed module consumers receive validated SDS records from retrieval modules.
+// Legacy text/network parsers are not part of that link.
+#ifndef FFM_TYPED_INPUTS_ONLY
 TLE parseTLE(const std::vector<std::string>& lines) {
     TLE tle;
 
@@ -6831,6 +6834,8 @@ std::vector<LeapSecondEntry> parseLeapSecondResponse(const HttpResponse& respons
 
     return leapSeconds;
 }
+
+#endif // FFM_TYPED_INPUTS_ONLY
 
 EOPData interpolateEOPData(const IERSDataSet& data, double mjd) {
     EOPData result;
