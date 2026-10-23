@@ -342,14 +342,15 @@ extern "C" int face_on_columns() {
   if (!request.ok || p.empty() || p.size()%2 || p.size()>40000 || !finite_vector(p))
     return wire::fail("Expected 1..20000 finite Galactocentric (x, y) points in kpc");
   if (std::any_of(p.begin(),p.end(),[](double v){return std::abs(v)>24;})) return wire::fail("Point outside the 24 kpc disc");
-  std::vector<double> out[3];
+  std::vector<double> out[3],tau_g;
   const double* ratios=model_choices::channel_ratios();
   for (size_t k=0;k<p.size();k+=2) {
-    double light[3]={0,0,0},transmit[3]={1,1,1};
+    double light[3]={0,0,0},transmit[3]={1,1,1},column=0;
     for (double z=6.0;z>-6.0;) {
       const double dz=std::min(z+6.0,std::abs(z)<0.6?0.005:0.05),zm=z-dz/2;
       const Field f=literature({p[k],p[k+1],zm});
       const double emission[3]={std::max(0.0,f.r),std::max(0.0,f.g),std::max(0.0,f.b)},kappa=std::max(0.0,f.kappa);
+      column+=kappa*dz;
       for (int b=0;b<3;++b) {
         const double kb=kappa*ratios[b],tau=kb*dz;
         light[b]+=transmit[b]*emission[b]*(tau>1e-10?-std::expm1(-tau)/kb:dz);
@@ -358,8 +359,25 @@ extern "C" int face_on_columns() {
       z-=dz;
     }
     for (int b=0;b<3;++b) out[b].push_back(light[b]);
+    tau_g.push_back(column);
   }
   wire::Result r;r.vector("r",out[0],"band units");r.vector("g",out[1],"band units");r.vector("i",out[2],"band units");
+  r.vector("tau_g",tau_g,"the vertical column's G optical depth");
+  r.number("a_i_per_tau_g",2.5*std::log10(std::exp(1.0))*sdss::i_per_big_g_extinction,"A_i (mag) per unit tau_G (Wang & Chen 2019)");
   r.text("method","vertical columns of literature() with dust, 5 pc steps within 0.6 kpc of the plane, 50 pc beyond");
+  return r.emit();
+}
+
+// The HII regions as built (literature_model.hpp, hii): each region's
+// luminosity draw (the luminosity function's L, L_min = 1) and Gaussian
+// sigma (kpc), for the luminosity function and size checks.
+extern "C" int hii_population() {
+  using namespace milky_way;
+  const auto& pop=hii::population();
+  std::vector<double> l,s;
+  for(const auto& k:pop.knots) {l.push_back(k.luminosity);s.push_back(k.sigma);}
+  wire::Result r;r.vector("luminosity",l,"L / L_min");r.vector("sigma_kpc",s,"kpc");
+  r.number("count",double(pop.knots.size()),"regions");
+  r.text("basis","dN/dL ~ L^-2 over 1-100 (Kennicutt, Edgar & Hodge 1989); sigma = 30 pc (L/L_min)^(1/3), at most 140 pc (Stromgren 1939)");
   return r.emit();
 }

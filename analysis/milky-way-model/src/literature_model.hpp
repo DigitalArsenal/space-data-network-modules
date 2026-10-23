@@ -270,7 +270,9 @@ inline StellarComponents stellar_components(Vec3 p) {
 // disc's edge, a Gaussian layer in z, sizes uniform in [sigma_lo, sigma_hi];
 // a 0.5 kpc cell grid finds the knots near a point.
 namespace knots {
-struct Knot {Vec3 c;double sigma,amplitude;};
+// luminosity: the knot's draw from its population's luminosity function
+// (its intrinsic light, before the radial profile and normalization).
+struct Knot {Vec3 c;double sigma,amplitude,luminosity=1;};
 struct Population {std::vector<Knot> knots;std::vector<std::vector<uint32_t>> cells;int n=0;};
 inline constexpr double cell_kpc=0.5,half_kpc=16.0;
 inline double next_uniform(uint64_t& s) {
@@ -289,10 +291,11 @@ inline double next_uniform(uint64_t& s) {
 // (capped at 1), so the knots cluster where the flocculent field is bright:
 // star formation is hierarchical, the complexes the largest level of the same
 // turbulent structure (Elmegreen & Efremov 1996, ApJ 466, 802; Elmegreen et
-// al. 2003 section 6). sized_by_light: a knot's sigma is sigma_lo sqrt(L/L_min)
-// (constant mean surface brightness, a MODEL CHOICE), capped at sigma_hi.
+// al. 2003 section 6). sized_by_light: a knot's sigma is
+// sigma_lo (L/L_min)^size_power, capped at sigma_hi (the brightness functor
+// then returns the knot's luminosity draw, L_min = 1).
 struct Spec {unsigned count;uint64_t seed;double min_kpc,max_kpc,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,drift_myr,min_density;
-  double cluster_sigma=0;bool sized_by_light=false;};
+  double cluster_sigma=0;bool sized_by_light=false;double size_power=0.5;};
 // `brightness(r, seed)`: a knot's amplitude at radius r, drawing from `seed`.
 template<class Brightness> Population build(const Spec& spec,Brightness brightness) {
   Population p;uint64_t seed=spec.seed;
@@ -316,8 +319,8 @@ template<class Brightness> Population build(const Spec& spec,Brightness brightne
     const double g2=std::sqrt(-2*std::log(u1))*std::sin(2*galactic_constants::pi*u2);
     double sigma=spec.sigma_lo_kpc+(spec.sigma_hi_kpc-spec.sigma_lo_kpc)*next_uniform(seed);
     const double amplitude=brightness(r,g2,seed);
-    if(spec.sized_by_light) sigma=std::min(spec.sigma_hi_kpc,spec.sigma_lo_kpc*std::sqrt(amplitude));
-    p.knots.push_back({{c.x,c.y,spec.layer_kpc*g1},sigma,amplitude});
+    if(spec.sized_by_light) sigma=std::min(spec.sigma_hi_kpc,spec.sigma_lo_kpc*std::pow(amplitude,spec.size_power));
+    p.knots.push_back({{c.x,c.y,spec.layer_kpc*g1},sigma,amplitude,amplitude});
   }
   p.n=int(2*half_kpc/cell_kpc);
   p.cells.resize(size_t(p.n)*p.n);
@@ -346,18 +349,37 @@ inline double light(const Population& pop,Vec3 p) {
 // HII REGIONS: the knots of nebular light along the arms. Reid et al. (2019)
 // fit the arms to masers in high-mass star-forming regions, so the regions
 // sit on the fitted arms (unsheared), over the young disc's radial profile
-// (Robin 2003 young hole, Juric 2008 scale length) and a thin layer. The
-// count, sizes, layer and brightness are MODEL CHOICES of the scale of the
-// giant complexes the WISE catalogue of Galactic HII regions lists (Anderson
-// et al. 2014, ApJS 212, 1), not their places; seed 20261019.
+// (Robin 2003 young hole, Juric 2008 scale length) and a thin layer. 0.5:
+// their luminosities follow the HII luminosity function of spirals, dN/dL ~
+// L^-2 (Kennicutt, Edgar & Hodge 1989, ApJ 337, 761) over two decades; their
+// sizes a Stromgren sphere's at one density, sigma ~ L^(1/3) (Stromgren 1939,
+// ApJ 89, 526: R^3 ~ Q / n^2), 30 pc for the faintest, capped at 140 pc
+// (0.4: lognormal brightness, sizes uniform in 50-120 pc). The count, the
+// smallest size, the layer and the total light (0.4's, kept) are MODEL
+// CHOICES of the scale of the giant regions the WISE catalogue of Galactic
+// HII regions lists (Anderson et al. 2014, ApJS 212, 1), not their places;
+// seed 20261019.
 namespace hii {
-inline constexpr double peak=1.2,spread_ln=0.8;
+inline constexpr double peak=1.2,luminosity_range=100,sigma_lo_kpc=0.03,sigma_hi_kpc=0.14;
+// 0.4's mean light per region (peak x the mean sigma^3 of 50-120 pc).
+inline constexpr double light_per_region=peak*(0.12*0.12*0.12*0.12-0.05*0.05*0.05*0.05)/(4*0.07);
 inline const knots::Population& population() {
-  static const knots::Population pop=knots::build({700,20261019,3.0,14.5,0.06,0.05,0.12,0,0.15},
-    [](double r,double g,uint64_t&) {
-      return peak*std::exp(spread_ln*g-0.5*spread_ln*spread_ln)
+  static const knots::Population pop=[] {
+    double luminosity_sum=0;
+    auto pop=knots::build({700,20261019,3.0,14.5,0.06,sigma_lo_kpc,sigma_hi_kpc,0,0.15,0,true,1.0/3},
+      [&](double,double,uint64_t& seed) {
+        const double l=1/(1-knots::next_uniform(seed)*(1-1/luminosity_range));
+        luminosity_sum+=l;
+        return l;
+      });
+    const double mean=luminosity_sum/pop.knots.size();
+    for(auto& k:pop.knots) {
+      const double r=std::hypot(k.c.x,k.c.y);
+      k.amplitude=light_per_region*k.luminosity/mean/(k.sigma*k.sigma*k.sigma)
         *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc);
-    });
+    }
+    return pop;
+  }();
   return pop;
 }
 // The regions' G emissivity at p (model units).

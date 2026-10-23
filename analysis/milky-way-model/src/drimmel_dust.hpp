@@ -5,16 +5,15 @@
 // independent of the Gaia display-map oracle; see tests/ORACLES.md.
 namespace milky_way::drimmel2001 {
 // The arm dust's density, x DS2001's rho_a (a bake may override it,
-// `appearance_arm_dust`, model_api.hpp). It stays DS2001's: face-on it gives
-// the arms A_I ~ 0.4 mag at R0, below the 0.5-4 mag Holwerda et al. (2005,
-// AJ 129, 1396, abstract) measure through other spirals' arms, so the arms'
-// dust lanes barely show face-on. x4 (A_I ~ 1.1, inside their range) keeps
-// the Gaia sky check (density log r 0.921) and the arm/interarm contrast in g
-// (1.395 against 1.383 mag at x1; OrbPro milky-way-sdss-look E2E,
-// 2026-10-22), and its lanes are still faint at a screen-filling framing:
-// not adopted, DS2001's own fit to the Galaxy's dust is kept, the tension
-// left as measured.
-inline double arm_dust_scale=3.0;
+// `appearance_arm_dust`, model_api.hpp). 0.5: x12, the least that puts the
+// arms' face-on A_I (their mean transmission over 3-14 kpc, as background
+// counts measure it) inside the 0.5-4 mag Holwerda et al. (2005, AJ 129,
+// 1396) measure through other spirals' arms: x3 0.25, x7 0.38, x12 0.52 mag.
+// The Gaia sky check improves with it (density log r 0.908 at x3, 0.930 at
+// x7, 0.924 at x12; OrbPro milky-way-sdss-look E2E, 2026-10-22). It departs
+// from DS2001's own amplitude, fitted to DIRBE's far-infrared emission at
+// 1.5 deg, which this model does not re-check: a tension, stated.
+inline double arm_dust_scale=12.0;
 inline double local_dust(Vec3 p) {
   // Drimmel & Spergel 2001 Eq.18, Tables 1/2. Preserve the dimensionless
   // geometry in their R_sun=8 kpc frame, rescaled to the production R_sun.
