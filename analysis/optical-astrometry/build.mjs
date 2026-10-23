@@ -41,7 +41,7 @@ const result = await compileModuleFromSource({
   ].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
   // plugin.getConfig: the hostcall bridge's symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
@@ -54,6 +54,6 @@ await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.string
   lambert: 'analysis/lambert-izzo/include/lambert_izzo/solver.hpp',
   sources: [...before, ...after].map((n) => `src/${n}.cpp`),
   moduleSdk: JSON.parse(fsSync.readFileSync(path.join(root, 'node_modules/space-data-module-sdk/package.json'), 'utf8')).version,
-  threadModel: 'single-thread', wasmSha256: crypto.createHash('sha256').update(wasm).digest('hex'),
+  threadModel: 'wasi-sequential', wasmSha256: crypto.createHash('sha256').update(wasm).digest('hex'),
 }, null, 2)}\n`);
 console.log(`Built ${path.relative(root, outputPath)} (${wasm.length} bytes) against spacedatastandards.org@${version}`);

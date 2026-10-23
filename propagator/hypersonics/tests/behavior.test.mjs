@@ -28,11 +28,7 @@ function assertClose(actual, expected, tolerance, label) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`hypersonic state batch evaluates Mach, q, and heating on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -99,11 +95,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`NRLMSISE00 atmosphere model is rejected with a clear error on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -137,11 +129,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`US76_EXPONENTIAL_EXTENSION extends honestly above 86 km on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }

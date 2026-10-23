@@ -111,5 +111,9 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
-  ]
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one $XTC or $PPS request into its one answer on the calling thread; the scenario steps are evaluated in order and no thread or worker is created."
+  }
 }

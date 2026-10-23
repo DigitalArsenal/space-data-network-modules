@@ -47,5 +47,9 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
-  ]
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "simulate_launch_ascent evaluates the trajectory samples of one request in order on the calling thread; no thread is created."
+  }
 }

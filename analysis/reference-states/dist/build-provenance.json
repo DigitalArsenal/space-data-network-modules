@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -16,5 +16,5 @@
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "eopTable": "foundation/frames/src/eop_table.hpp",
-  "threadModel": "single-thread"
+  "threadModel": "wasi-sequential"
 }

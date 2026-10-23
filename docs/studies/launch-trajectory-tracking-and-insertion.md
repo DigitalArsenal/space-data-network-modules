@@ -201,7 +201,7 @@ Apsis altitudes are measured above the WGS 84 equatorial radius.
 
 ## Module
 
-`com.digitalarsenal.analysis.launch-trajectory` 0.1.0 is pure, single-thread
+`com.digitalarsenal.analysis.launch-trajectory` 0.1.0 is pure, wasi-sequential (never spawns a thread)
 and has no capabilities.
 
 | Method | In | Out |

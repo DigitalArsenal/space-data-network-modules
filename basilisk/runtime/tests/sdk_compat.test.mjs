@@ -129,7 +129,7 @@ test("built artifact loads through WasmEdge server path", async (t) => {
     harness = await loadModule({
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
-      enableThreads: false,
+      enableThreads: true,
     });
     response = await harness.invoke(createInvokeRequest());
   } catch (error) {

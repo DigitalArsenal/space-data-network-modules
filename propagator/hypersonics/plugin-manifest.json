@@ -60,5 +60,9 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
-  ]
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "evaluate_hypersonic_state_batch evaluates one batch of trajectory samples on the calling thread; no thread is created."
+  }
 }

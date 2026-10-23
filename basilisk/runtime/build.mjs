@@ -76,12 +76,10 @@ const compilation = await compileModuleFromSource({
   manifest,
   sourceCode,
   language: "c++",
-  // THREAD MODEL, declared (scripts/lib/thread-model.mjs). The guest is a
-  // single-shot pure transform that never spawns a thread, and the artifact it
-  // replaces (c4d392e1, 2026-06-12) was this lane: unshared memory, no
-  // wasi.thread-spawn import. Left to inference, runtimeTargets [wasmedge]
-  // selects the wasi-threads model, whose artifact guard refuses such a guest.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
 });
 
 try {

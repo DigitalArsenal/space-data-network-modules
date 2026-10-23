@@ -25,7 +25,7 @@ const result = await compileModuleFromSource({
     header, frames, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
   // plugin.getConfig (sdm_piv::get_config) imports the sync hostcall bridge;
   // its symbols resolve at instantiation (SDK harness / Go node bridge).
   allowUndefinedImports: true,
@@ -34,6 +34,6 @@ if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   spacedatastandards: version, sdsFamilies: families, sources: ['../../foundation/frames/include/rtn_curvilinear.hpp', ...files.map((f) => `src/${f}`)],
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

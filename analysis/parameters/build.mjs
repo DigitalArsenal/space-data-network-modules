@@ -145,7 +145,7 @@ fsSync.writeFileSync(
       referenceRosterCommit: roster.generatedFrom.commit,
       referenceRosterSha256: roster.generatedFrom.sha256,
       erfaSourceFiles: erfa.fileCount,
-      threadModel: "single-thread",
+      threadModel: "wasi-sequential",
     },
     null,
     2,

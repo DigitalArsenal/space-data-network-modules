@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "MET",
     "MPE",
@@ -24,5 +24,5 @@
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
-  "threadModel": "single-thread"
+  "threadModel": "wasi-sequential"
 }

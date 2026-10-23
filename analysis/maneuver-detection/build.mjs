@@ -33,7 +33,7 @@ const result = await compileModuleFromSource({
   sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#define JSON_NOEXCEPTION 1', `#define MODULE_PRODUCER ${JSON.stringify(`${manifest.pluginId} ${manifest.version}`)}`, json, header, ...sgp4, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
   // plugin.getConfig (sdm_piv::get_config) imports the sync hostcall bridge;
   // its symbols resolve at instantiation (SDK harness / Go node bridge).
   allowUndefinedImports: true,
@@ -50,6 +50,6 @@ await fs.writeFile(path.join(guestLinkDir, 'metadata.json'), `${JSON.stringify({
   symbolPrefix: result.guestLink.symbolPrefix, methodSymbols: result.guestLink.methodSymbols,
 }, null, 2)}\n`);
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp', threadModel: 'single-thread',
+  spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp', threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

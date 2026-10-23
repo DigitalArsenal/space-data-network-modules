@@ -70,19 +70,11 @@ const REENTRY_REQUEST = {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`reentry trajectory chains zero-copy into hypersonics on ${runtimeKind}`, async (t) => {
-    const reentry = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      REENTRY_WASM,
-      t,
-    );
+    const reentry = await createStandaloneHarnessOrSkip(runtimeKind, REENTRY_WASM, t, { enableThreads: true });
     if (!reentry) {
       return;
     }
-    const hypersonics = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      HYPERSONICS_WASM,
-      t,
-    );
+    const hypersonics = await createStandaloneHarnessOrSkip(runtimeKind, HYPERSONICS_WASM, t, { enableThreads: true });
     if (!hypersonics) {
       await reentry.destroy();
       return;

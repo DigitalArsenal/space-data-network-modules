@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -9,6 +9,6 @@
     "OMM"
   ],
   "gateStatusVersion": "2026-07-13",
-  "threadModel": "single-thread",
-  "wasmSha256": "00dde60e01fad9f831d5adea79ca0e99f3b2c2cc147ef612c4681499574f9632"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "638fed87e669ddac5575d152af018483fd850a9c697c72b03759764c8c6ad5bd"
 }

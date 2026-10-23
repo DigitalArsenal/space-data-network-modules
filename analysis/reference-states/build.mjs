@@ -42,7 +42,7 @@ const result = await compileModuleFromSource({
   ].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
   // The sync space_data_module_host hostcall bridge for plugin.getConfig; symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
@@ -51,6 +51,6 @@ await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   spacedatastandards: version, sdsFamilies: families, erfaSourceFiles: erfa.fileCount,
   axisEngine: 'foundation/frames/src/axis_engine.hpp', eopTable: 'foundation/frames/src/eop_table.hpp',
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

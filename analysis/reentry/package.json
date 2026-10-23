@@ -12,6 +12,6 @@
     "space-data-module-sdk": "0.8.25"
   },
   "sdnModuleCompile": {
-    "threadModel": "single-thread"
+    "threadModel": "wasi-sequential"
   }
 }

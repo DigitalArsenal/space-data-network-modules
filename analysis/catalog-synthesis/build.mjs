@@ -20,9 +20,10 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { generateSdsHeaders } from "../../scripts/lib/sds-cpp-headers.mjs";
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
 
-// THREAD MODEL - declared, never inferred (scripts/lib/thread-model.mjs): one pass on the calling thread, nothing
-// spawned.
-const THREAD_MODEL = "single-thread";
+// THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+// thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+// every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+const THREAD_MODEL = "wasi-sequential";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(root, "../..");

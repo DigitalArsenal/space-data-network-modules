@@ -31,13 +31,13 @@ const result = await compileModuleFromSource({
   sourceCode: [header, erfa.source, bodyModels, axisEngine, estimationHeader, estimationSource, source].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   spacedatastandards: version, sdsFamilies: families, erfaSourceFiles: erfa.fileCount,
   axisEngine: 'foundation/frames/src/axis_engine.hpp', measurementModel: 'analysis/estimation/src/estimation.cpp',
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

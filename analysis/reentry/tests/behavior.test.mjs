@@ -98,11 +98,7 @@ function inertialSpecificEnergy(sample) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`reentry simulation composes atmosphere and hypersonics samples on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -159,11 +155,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`reentry module integrates a physical entry-corridor trajectory on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -281,11 +273,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`ballistic entry matches the Allen-Eggers closed form (NACA Report 1381) on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -379,11 +367,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`Apollo 11 class lunar-return entry produces published-range load factors on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -477,11 +461,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`vacuum coast preserves inertial orbital energy on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -529,11 +509,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`generated samples are kinematically smooth on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -592,11 +568,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`initialState seeds a continuing phase exactly from terminalState on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -662,11 +634,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`Crew Dragon entry hits the published drogue-deploy gate on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }

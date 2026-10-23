@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "FIL",
     "PHB",
@@ -51,7 +51,7 @@
     "src/records.cpp",
     "src/module.cpp"
   ],
-  "moduleSdk": "0.9.7",
-  "threadModel": "single-thread",
-  "wasmSha256": "11668a41a7b5d02f01fcc3e2adcbfb8815d2982d3120ee40e26600e8f94e95a7"
+  "moduleSdk": "0.9.10",
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "8cfa77e8b3a9ddd9b88d43d468d32f685a2eab0465286ad21bdcbf5816686873"
 }

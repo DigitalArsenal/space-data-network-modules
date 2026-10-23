@@ -103,11 +103,7 @@ function cloneRequest(overrides = {}) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`launch ascent simulation composes atmosphere and hypersonics samples on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -172,11 +168,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`launch ascent integrates to a closed-loop SECO on the target orbit on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -253,11 +245,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`launch ascent matches Crew Dragon Demo-1 published telemetry checkpoints on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -388,11 +376,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`launch ascent upper-stage throttle materially changes the achieved orbit on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -461,11 +445,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`explicit staged boost continues past target-orbit energy on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -572,11 +552,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`explicit staged boost remains orbital with maximum booster scaling on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -647,11 +623,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`Sandcastle staged boost request reaches the farthest physical trajectory at UI max boosters on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -734,11 +706,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`failed explicit staged boost terminates at impact instead of tunneling through Earth on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -804,11 +772,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`vacuum coast preserves inertial orbital energy on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -863,11 +827,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`generated ascent samples are kinematically smooth on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }
@@ -910,11 +870,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`initialState seeds a continuing phase exactly from terminalState on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(
-      runtimeKind,
-      WASM_PATH,
-      t,
-    );
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, { enableThreads: true });
     if (!harness) {
       return;
     }

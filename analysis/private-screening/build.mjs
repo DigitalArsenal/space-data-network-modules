@@ -23,13 +23,13 @@ const result = await compileModuleFromSource({
     sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
   language: 'c++',
   outputPath,
-  threadModel: 'single-thread',
+  threadModel: 'wasi-sequential',
   // The sync space_data_module_host hostcall bridge for plugin.getConfig; symbols resolve at instantiation.
   allowUndefinedImports: true,
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  spacedatastandards: version, sdsFamilies: families, sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp', threadModel: 'single-thread',
+  spacedatastandards: version, sdsFamilies: families, sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp', threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

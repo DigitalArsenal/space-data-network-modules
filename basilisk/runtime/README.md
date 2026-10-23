@@ -61,7 +61,7 @@ artifact, backed by upstream Basilisk numerical tests and explicit tolerances.
 
 `build.mjs` inlines the generated SDS headers of `$PPS` and the standards it
 includes (ACM, BUS, OEM and theirs, in include order) and compiles `src/module.cpp` with `space-data-module-sdk` 0.9.3
-(`package.json` devDependency; link it at `node_modules/space-data-module-sdk`) (declared thread model `single-thread`) and signs the
+(`package.json` devDependency; link it at `node_modules/space-data-module-sdk`) (declared thread model `wasi-sequential`) and signs the
 artifact with the development module signing key, found in the stack's
 `space-data-module-sdk` checkout or at `SDM_MODULE_SIGNING_KEYPAIR_PATH`.
 

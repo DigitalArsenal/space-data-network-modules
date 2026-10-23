@@ -84,5 +84,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "compute_dop forms one geometry matrix from one receiver and its visible satellites and inverts it on the calling thread; no state survives the invocation and no thread is created."
+  }
 }

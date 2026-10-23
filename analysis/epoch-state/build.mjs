@@ -85,7 +85,7 @@ const compilation = await compileModuleFromSource({
   outputPath,
   // Pure closed-form evaluation: nothing spawned, nothing shared. One synchronous hostcall, plugin.getConfig
   // (typedHostcall.hpp, SDS $PIV), for the ages.
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge for plugin.getConfig; resolved at instantiation.
   allowUndefinedImports: true,
 });
@@ -121,7 +121,7 @@ await fs.writeFile(
       erfaSourceFiles: erfa.fileCount,
       axisEngine: "foundation/frames/src/axis_engine.hpp",
       sgp4: "propagator/sgp4/src/cpp/src/SGP4.cpp",
-      threadModel: "single-thread",
+      threadModel: "wasi-sequential",
     },
     null,
     2,
