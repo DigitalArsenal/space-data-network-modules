@@ -521,6 +521,11 @@ inline const knots::Population& complexes::population() {
   return pop;
 }
 
+// DIAGNOSTIC (0.5.1): the bake value `diagnostic_nebulae_only` 1 bakes the
+// HII regions' nebular light alone (with the dust), for a check of their
+// color as drawn; 0, the default, everything.
+namespace diagnostic {inline double nebulae_only=0;}
+
 // The light in SDSS r, g and i (channels in that order: the central band
 // first, as the renderer's luminance and the arm ridges use it, then the
 // blue and the red), each population in its own color
@@ -553,6 +558,7 @@ inline Field literature(Vec3 p,bool local_dust) {
   const sdss::Bands& db=eye_on?e.disc:disc_bands;const sdss::Bands& cb=eye_on?e.central:central_bands;
   const sdss::Bands& yb=eye_on?e.young:young_bands;const sdss::Bands& hb=eye_on?look::hii_eye():hii_bands;
   const sdss::Bands& ib=eye_on?e.intermediate:intermediate_bands;
+  if(diagnostic::nebulae_only>=0.5) return {hb.r*nebulae,hb.g*nebulae,hb.i*nebulae,dust};
   return {db.r*disc+cb.r*central+yb.r*young+hb.r*nebulae+ib.r*intermediate,
           db.g*disc+cb.g*central+yb.g*young+hb.g*nebulae+ib.g*intermediate,
           db.i*disc+cb.i*central+yb.i*young+hb.i*nebulae+ib.i*intermediate,dust};
