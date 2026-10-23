@@ -20,10 +20,10 @@ import { makeTable, encodePrw, sds, TYPE } from '../tests/lib/prwCodec.mjs';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import * as catalog from '../catalog.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const cache = path.join(root, '.sdk-build/memory-sizing'); fs.mkdirSync(cache, { recursive: true });
 const read = p => JSON.parse(fs.readFileSync(path.join(root, p)));
 const sha = b => createHash('sha256').update(b).digest('hex');
 const wasmPath = path.join(root, 'dist/isomorphic/module.wasm'), wasm = fs.readFileSync(wasmPath);
+const cache = path.join(root, '.sdk-build/memory-sizing', sha(wasm)); fs.mkdirSync(cache, { recursive: true });
 const seeds = read('tests/fixtures/seeds.json'), standard = read('tests/fixtures/standard.json');
 const epoch = Date.parse(standard.fixtureEpochUtc + 'Z') / 86400000 + 2440587.5;
 const manifest = read('plugin-manifest.json'), environment = environmentInputs();
@@ -56,7 +56,7 @@ const save = () => fs.writeFileSync(path.join(cache, 'result.json'), JSON.string
 // Compile through the actual node's production flow prewarmer into a private
 // cache. The node keys each compiled flow by the exact artifact hash.
 const nodeBinary = process.env.SDN_NODE_BINARY || 'spacedatanetwork';
-const aotDir = path.join(cache, 'aot');
+const aotDir = path.join(root, '.sdk-build/memory-sizing/aot');
 const aotLog = execFileSync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
 assert(!/FAILED|Not implemented instructions/.test(aotLog));
@@ -135,6 +135,8 @@ fs.writeFileSync(path.join(cache, 'frames.bin'), Buffer.concat(frames));
 focusRequests.forEach((bytes,i) => fs.writeFileSync(path.join(cache, `focus-${i}.piv`), bytes));
 // Two isolated instances, one CPU each; no timing claim is made. Native AOT
 // and Chromium can measure their own linear memory concurrently.
+const nativeController = new AbortController();
+let nativeFailure;
 const nativeWork = (async () => {
 const measured = [];
 for (const count of [1, 1000, 4000, 10000, 31814]) {
@@ -144,14 +146,14 @@ for (const count of [1, 1000, 4000, 10000, 31814]) {
     // Unit conversion and marshaling; the guest performs frame conversion.
     fs.writeFileSync(path.join(cache, `states-${count}.bin`), Buffer.from(new Float64Array(objects.flatMap(s=>[epoch,...s.position.map(x=>x*1000),...s.velocity.map(x=>x*1000)])).buffer));
   }
-  const {stdout} = await execFileAsync(native, [aotPath, String(count), String(epoch), cache], {encoding:'utf8',maxBuffer:1024*1024});
+  const {stdout} = await execFileAsync(native, [aotPath, String(count), String(epoch), cache], {encoding:'utf8',maxBuffer:1024*1024,signal:nativeController.signal});
   const row = JSON.parse(stdout);
   row.role = count === 1 ? 'resident-focus' : 'catalog';
   row.outputs = Array.from({length:count===1?3:2}, (_,i)=>sha(fs.readFileSync(path.join(cache, `native-${count}-${i}.bin`))));
   measured.push(row); console.log(JSON.stringify(row));
 }
 return measured;
-})().then(rows => ({rows}), error => ({error}));
+})().then(rows => ({rows}), error => { nativeFailure=error; return {error}; });
 
 const bundle = await build({ stdin: { resolveDir: root, contents: `
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
@@ -197,7 +199,7 @@ const server = http.createServer((req, res) => {
   res.statusCode = 404; res.end();
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-let browser;
+let browser, browserFinished=false;
 try {
   browser = await chromium.launch({ executablePath: headlessShell(), headless: true });
   for (const count of [1, 1000, 4000, 10000, 31814]) {
@@ -216,10 +218,12 @@ try {
       const hashes = count === 1 ? old.outputs.map(b => sha(new Uint8Array(b))) : old.outputs;
       assert.deepEqual(row.outputs, hashes, 'previous artifact parity'); row.previousArtifactParity = 'bit-identical';
     }
+    if (nativeFailure) throw nativeFailure;
     assert.deepEqual(errors, []); report.rows.push({ runtime: 'browser', ...row }); save();
     console.log(JSON.stringify({ runtime: 'browser', entities: count, highWaterBytes: row.highWaterBytes })); await page.close();
   }
-} finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+  browserFinished=true;
+} finally { if (!browserFinished) nativeController.abort(); await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 // Native role execution and fitted-model verification are below. Outputs are
 // written outside tracked paths so the exact candidate remains immutable.
 save();
@@ -241,6 +245,13 @@ const largest=Math.max(...report.rows.map(r=>r.highWaterBytes));
 report.requiredMaximumBytes=Math.ceil(largest*1.5/(16*1024*1024))*16*1024*1024;
 report.loadEnd=os.loadavg();save();
 if (!process.argv.includes('--measure')) {
+  const recorded=read('tests/evidence/memory-sizing.json');
+  assert.equal(recorded.artifactSha256,report.artifactSha256,'evidence names a different artifact');
+  for(const row of report.rows) {
+    const prior=recorded.rows.find(r=>r.runtime===row.runtime&&r.entities===row.entities);
+    assert(prior,'missing recorded role');
+    assert.equal(prior.highWaterBytes,row.highWaterBytes,'recorded high-water changed');
+  }
   assert.equal(report.memory.maximumBytes,report.requiredMaximumBytes,'rebuild with measured maximum');
   for(const row of report.rows)assert(row.highWaterBytes*1.5<=report.memory.maximumBytes);
   for(const script of ['e2e-ffm.mjs','e2e-catalog-coverage.mjs']) {
