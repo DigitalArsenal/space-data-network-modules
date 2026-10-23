@@ -10,7 +10,7 @@ no host application logic or separate watermark is needed. A failed calculation
 or ingest remains eligible on the next tick. An object with no new OMM produces
 no record.
 
-The output lane is `OCM.fbs / object-covariance / celestrak-gp`. Each record has
+The output lane is `OCM.fbs / object-covariance / celestrak-gp-object-covariance`. Each record has
 NORAD `METADATA.OBJECT_DESIGNATOR`, UTC `METADATA.START_TIME` equal to the new
 OMM epoch, one GCRF state and covariance row, `COV_REALISM`, and `PROVENANCE`.
 The matrix uses SDS units (km and km/s); comparison with the method's ERM SI
@@ -34,3 +34,8 @@ Initial artifact check: gp-error-model 0.8.1 portable SHA-256
 `f3d06fd4840686a893753fa8fdd19d30b39caa745d23cc2dd867d462886f2778`
 successfully AOT-compiled with native `wasmedgec` 0.16.4. Final node
 `prewarm-aot` acceptance remains required for the completed flow.
+
+Controller build and node prewarm-aot passed on the exact portable artifact
+`7fcff0ffff716efa7dac96b77f5c7626b4a3a58a10fd21497006715fd1990ea2`.
+The declared E2E currently stops at its prerequisite check: object_covariance
+has no OCM port. No end-to-end or deployment success is claimed.

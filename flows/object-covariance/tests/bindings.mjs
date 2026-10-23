@@ -7,7 +7,7 @@ const require=createRequire(import.meta.url);
 export async function bindings(directory) {
  const sds=path.dirname(require.resolve('spacedatastandards.org/package.json'));
  const file=path.join(directory,'sds-bindings.mjs');
- const names=['OMM','OCM','ERM','QRP'];
+ const names=['OMM','OCM','ERM','QRP','DPM'];
  await build({stdin:{contents:names.map(n=>`export * as ${n} from ${JSON.stringify(path.join(sds,'lib/ts',n,'main.ts'))};`).join('\n')+"\nexport * as flatbuffers from 'flatbuffers';",resolveDir:path.dirname(require.resolve('flatbuffers/package.json')),loader:'ts'},bundle:true,platform:'node',format:'esm',outfile:file,logLevel:'silent'});
  return import(pathToFileURL(file));
 }
@@ -18,7 +18,7 @@ export function frames(bytes) {
   out.push(bytes.subarray(at-4,at+size));at+=size;
  }return out;
 }
-export function unpack(api,code,bytes) {return api[code][code][`getSizePrefixedRootAs${code}`](new api.flatbuffers.ByteBuffer(bytes)).unpack();}
+export function unpack(api,code,bytes) {const prefixed=Buffer.from(bytes).subarray(8,12).toString()==='$'+code;return api[code][code][`${prefixed?'getSizePrefixedRootAs':'getRootAs'}${code}`](new api.flatbuffers.ByteBuffer(bytes)).unpack();}
 export function pack(api,code,object) {const b=new api.flatbuffers.Builder();b.finishSizePrefixed(object.pack(b),'$'+code);return Buffer.from(b.asUint8Array());}
 export async function scan(api,base,schema,source) {
  const result=[];let cursor='';
