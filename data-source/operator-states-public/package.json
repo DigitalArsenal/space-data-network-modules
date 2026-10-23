@@ -1,0 +1,22 @@
+{
+  "name": "@digitalarsenal/sdn-module-operator-states-public",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node ../../flows/open-dca/tests/open-dca.e2e.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.32",
+    "playwright": "1.63.0",
+    "space-data-module-sdk": "0.9.9",
+    "spacedatastandards.org": "1.259.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.1"
+  }
+}

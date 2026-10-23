@@ -15,8 +15,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.space-weather",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
@@ -25,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "minVersion": "0.5.0",
-      "maxVersion": "0.5.0"
+      "minVersion": "0.6.0",
+      "maxVersion": "0.6.0"
     }
   ],
   "externalInterfaces": [
