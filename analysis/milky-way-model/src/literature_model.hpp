@@ -110,6 +110,13 @@ inline Vec3 undrifted(Vec3 p,double age_myr) {
 // at R0), not the masers' narrow Reid widths (0.3.0, which drew the old light
 // as thin concentric rings).
 inline constexpr double stellar_arm_width_per_kpc=0.143;
+// The minor arms' (Sagittarius-Carina, Norma) share of the stellar wave.
+// Gaia's optical sky wants more than GLIMPSE's old stars: G light carries
+// intermediate-age stars, which follow all four arms. The Gaia check's
+// density log r against this share (floor 0.9044): 0 -> 0.868, 0.5 ->
+// 0.897, 0.75 -> 0.908, 1 -> 0.916 (measured 2026-10-22). 0.75 is the least
+// it keeps; an intermediate-age population of its own would let the old
+// wave be two-armed.
 inline double minor_stellar_arm=0.75;
 inline double major_arm_wave(Vec3 p) {
   double best=0;
