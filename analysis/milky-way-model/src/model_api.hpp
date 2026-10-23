@@ -86,6 +86,21 @@ extern "C" int bake() {
   r.vector("display_asinh",{display::q,display::alpha_per_count,display::gamma,display::saturation},"Q,alpha per count,gamma,saturation");
   r.vector("display_counts_per_unit",{counts[0],counts[1],counts[2]},"weighted SDSS counts per 0.396 arcsec pixel per r,g,i unit");
   r.vector("display_band_weights",{display::weights[0],display::weights[1],display::weights[2]},"r,g,i");
+  // The dust structure's sub-slab octaves (structure.hpp, detail), for the
+  // renderer to continue below the slab's texels: the ridged field's
+  // standard deviation, the shear's elongation, the dust sigma, the Sun's
+  // (x, y) and the fade's radii about it (kpc), then per octave its
+  // wavelength (kpc), amplitude, mean, variance, seed (high and low 16 bits:
+  // a float holds neither whole) and phase.
+  {
+    std::vector<double> v{structure::moments(true)[1],structure::elongation,structure::dust_sigma,
+      -galactic_constants::solar_radius_kpc,0.0,structure::fade_inner_kpc,structure::fade_outer_kpc};
+    for(const auto& o:structure::detail()) {
+      const uint32_t s=uint32_t(o.seed);
+      v.insert(v.end(),{o.lambda,o.amplitude,o.mean,o.variance,double(s>>16),double(s&0xffffu),o.phase});
+    }
+    r.vector("structure_detail",v,"std,elongation,dust sigma,sun x,sun y,fade inner,fade outer kpc; per octave lambda kpc,amplitude,mean,variance,seed hi16,seed lo16,phase");
+  }
   r.vector("display_nanomaggies_per_count",{display::nanomaggies_per_count[0],display::nanomaggies_per_count[1],
     display::nanomaggies_per_count[2]},"nanomaggies per SDSS count, r,g,i");
   r.text("display_asinh_basis",display::basis);

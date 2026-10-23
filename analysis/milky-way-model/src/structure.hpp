@@ -63,30 +63,40 @@ inline double noise(double x,double y,double z,uint32_t s) {
   const double y0=x00+v*(x10-x00),y1=x01+v*(x11-x01);
   return y0+w*(y1-y0);
 }
-// Octave amplitudes: variance ~ k^(2 - beta), beta 2 above the break, 8/3 below.
+// Octave o's amplitude: variance ~ k^(2 - beta), beta 2 above the break,
+// 8/3 below.
+inline double amplitude(int o) {
+  const double lambda=longest_kpc/std::pow(2.0,o);
+  return lambda>=break_kpc?1.0:std::pow(lambda/break_kpc,1.0/3.0);
+}
 inline const std::array<double,octaves>& amplitudes() {
   static const std::array<double,octaves> a=[] {
     std::array<double,octaves> out{};
-    for(int o=0;o<octaves;++o) {
-      const double lambda=longest_kpc/std::pow(2.0,o);
-      out[o]=lambda>=break_kpc?1.0:std::pow(lambda/break_kpc,1.0/3.0);
-    }
+    for(int o=0;o<octaves;++o) out[o]=amplitude(o);
     return out;
   }();
   return a;
 }
+// Octave o's raw term at (x, y, z): its noise on the sheared cylinder, ridged
+// (1 - 2|n|) or not. Three-dimensional: the height moves the sample off the
+// disc's sheet in noise space along the sheet's unit normal, z / lambda
+// lattice units, so clouds decorrelate over a wavelength in z as across it.
+// A field of x and y alone stands in columns through the dust layer, which
+// oblique rays smear into streaks wherever the layer (~0.1 kpc) is thicker
+// than the wavelength; on the kiloparsec octaves the layer moves it little.
+inline double octave(double x,double y,double z,int o,uint32_t s,bool ridged) {
+  const double r=std::hypot(x,y),phi=std::atan2(y,x);
+  const double lambda=longest_kpc/std::pow(2.0,o),c=r/(elongation*lambda);
+  const double off=z/lambda/std::sqrt(1+1/(elongation*elongation));
+  const double n=noise(r/lambda+0.37*o+off/elongation,(c-off)*std::cos(phi),(c-off)*std::sin(phi),s+uint32_t(o)*7919u);
+  return ridged?1-2*std::abs(n):n;
+}
 // The raw sum at the disc point (x, y) (kpc); `ridged`: each octave as
 // 1 - 2|n| (its zero crossings as ridges), the filamentary form of the same
 // octave amplitudes (Musgrave's ridged multifractal without the cascade).
-inline double raw(double x,double y,uint32_t s,bool ridged=false) {
-  const double r=std::hypot(x,y),phi=std::atan2(y,x);
+inline double raw(double x,double y,uint32_t s,bool ridged=false,double z=0) {
   double sum=0;
-  for(int o=0;o<octaves;++o) {
-    const double lambda=longest_kpc/std::pow(2.0,o);
-    const double c=r/(elongation*lambda);
-    const double n=noise(r/lambda+0.37*o,c*std::cos(phi),c*std::sin(phi),s+uint32_t(o)*7919u);
-    sum+=amplitudes()[o]*(ridged?1-2*std::abs(n):n);
-  }
+  for(int o=0;o<octaves;++o) sum+=amplitudes()[o]*octave(x,y,z,o,s,ridged);
   return sum;
 }
 // Its mean and standard deviation over the disc (a 0.05 kpc grid within 16
@@ -100,11 +110,40 @@ inline std::array<double,2> raw_moments(bool ridged) {
   const double mean=sum/n;
   return {mean,std::sqrt(std::max(1e-12,sum2/n-mean*mean))};
 }
-// The unit-variance, zero-mean field S at the disc point (x, y).
-inline double field(double x,double y,bool ridged=false) {
+inline const std::array<double,2>& moments(bool ridged) {
   static const auto smooth=raw_moments(false),ridges=raw_moments(true);
-  const auto& m=ridged?ridges:smooth;
-  return (raw(x,y,uint32_t(seed),ridged)-m[0])/m[1];
+  return ridged?ridges:smooth;
+}
+// The unit-variance, zero-mean field S at the disc point (x, y).
+inline double field(double x,double y,bool ridged=false,double z=0) {
+  const auto& m=moments(ridged);
+  return (raw(x,y,uint32_t(seed),ridged,z)-m[0])/m[1];
+}
+// SUB-SLAB DETAIL: the dust field's octaves below the volumes' finest (the
+// slab's 62.5 pc texels), 31 and 16 pc, the same spectrum continued, for the
+// renderer to add where a pixel resolves them (GalaxyFS): per octave its
+// wavelength (kpc), amplitude, the ridged term's mean and variance over the
+// disc (as raw_moments), seed and phase. Wright et al. 2023's associations
+// reach down to "tens of parsecs"; the renderer evaluates the same noise.
+inline constexpr int detail_octaves=2;
+struct DetailOctave {double lambda,amplitude,mean,variance,seed,phase;};
+inline const std::array<DetailOctave,detail_octaves>& detail() {
+  static const std::array<DetailOctave,detail_octaves> out=[] {
+    std::array<DetailOctave,detail_octaves> d{};
+    for(int k=0;k<detail_octaves;++k) {
+      const int o=octaves+k;
+      double sum=0,sum2=0;long n=0;
+      for(double y=-16;y<16;y+=0.05) for(double x=-16;x<16;x+=0.05) {
+        if(std::hypot(x,y)>16) continue;
+        const double v=amplitude(o)*octave(x,y,0,o,uint32_t(seed),true);sum+=v;sum2+=v*v;++n;
+      }
+      const double mean=sum/n;
+      d[k]={longest_kpc/std::pow(2.0,o),amplitude(o),mean,std::max(0.0,sum2/n-mean*mean),
+            double(uint32_t(seed)+uint32_t(o)*7919u),0.37*o};
+    }
+    return d;
+  }();
+  return out;
 }
 // Near the Sun the sky is measured (Gaia's all-sky maps, the local 3D dust
 // map): a statistical dust field there contradicts it (the Gaia check's
@@ -119,7 +158,7 @@ inline double away_from_sun(Vec3 p) {
   return t*t*(3-2*t);
 }
 // The mean-preserving lognormal modulation exp(sigma S - sigma^2 / 2).
-inline double modulation(double x,double y,double sigma,bool ridged=false) {
-  return sigma>0?std::exp(sigma*field(x,y,ridged)-0.5*sigma*sigma):1.0;
+inline double modulation(double x,double y,double sigma,bool ridged=false,double z=0) {
+  return sigma>0?std::exp(sigma*field(x,y,ridged,z)-0.5*sigma*sigma):1.0;
 }
 } // namespace milky_way::structure
