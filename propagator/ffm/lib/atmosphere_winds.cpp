@@ -22,6 +22,7 @@ const hwm14::Model& model() {
 void HorizontalWindNorthEast(double latDeg, double lonDeg, double altKm, double jdUtc,
                              const SpaceWeatherData& weather, bool disturbance,
                              double* northMs, double* eastMs) {
+    if (!model().valid()) { flagForceFailure(); *northMs = *eastMs = NAN; return; }
     int year = 0, doy = 1;
     double sec = 0.0;
     jdToYearDoySec(jdUtc, year, doy, sec);

@@ -79,43 +79,44 @@ std::string sha256Hex(const unsigned char* data, std::size_t size) {
     return out;
 }
 
-const EmbeddedFile& embedded(const char* name) {
+const EmbeddedFile* embedded(const char* name) {
     std::size_t count = 0;
     const EmbeddedFile* files = embeddedFiles(&count);
     for (std::size_t i = 0; i < count; ++i) {
-        if (std::strcmp(files[i].name, name) == 0) return files[i];
+        if (std::strcmp(files[i].name, name) == 0) return &files[i];
     }
-    throw std::runtime_error(std::string("hwm14: missing embedded data file ") + name);
+    return nullptr;
 }
 
 // Little-endian readers for FORTRAN stream and sequential files.
 class Reader {
 public:
-    Reader(const unsigned char* data, std::size_t size) : p_(data), end_(data + size) {}
-    int32_t i32() { int32_t v; take(&v, 4); return v; }
-    float f32() { float v; take(&v, 4); return v; }
-    double f64() { double v; take(&v, 8); return v; }
+    Reader(const unsigned char* data, std::size_t size, bool& ok) : p_(data), end_(data + size), ok_(ok) {}
+    int32_t i32() { int32_t v = 0; take(&v, 4); return v; }
+    float f32() { float v = 0; take(&v, 4); return v; }
+    double f64() { double v = 0; take(&v, 8); return v; }
     // FORTRAN unformatted sequential record: 4-byte length, payload, 4-byte length.
     Reader record() {
         const int32_t n = i32();
         if (n < 0 || static_cast<std::size_t>(end_ - p_) < static_cast<std::size_t>(n) + 4u) {
-            throw std::runtime_error("hwm14: truncated record");
+            ok_ = false; return Reader(end_, 0, ok_);
         }
-        Reader r(p_, static_cast<std::size_t>(n));
+        Reader r(p_, static_cast<std::size_t>(n), ok_);
         p_ += n;
-        if (i32() != n) throw std::runtime_error("hwm14: record markers disagree");
+        if (i32() != n) ok_ = false;
         return r;
     }
     bool atEnd() const { return p_ == end_; }
 
 private:
     void take(void* out, std::size_t n) {
-        if (static_cast<std::size_t>(end_ - p_) < n) throw std::runtime_error("hwm14: truncated data");
+        if (static_cast<std::size_t>(end_ - p_) < n) { ok_ = false; std::memset(out, 0, n); return; }
         std::memcpy(out, p_, n);
         p_ += n;
     }
     const unsigned char* p_;
     const unsigned char* end_;
+    bool& ok_;
 };
 
 // FORTRAN parameters.
@@ -235,10 +236,8 @@ struct ModelData {
 
 namespace {
 
-void verify(const EmbeddedFile& f) {
-    if (sha256Hex(f.bytes, f.size) != f.sha256) {
-        throw std::runtime_error(std::string("hwm14: SHA-256 mismatch for ") + f.name);
-    }
+bool verify(const EmbeddedFile* f) {
+    return f && sha256Hex(f->bytes, f->size) == f->sha256;
 }
 
 // initqwm's parity(): fills tparm and zeroes parts of mparm, in place.
@@ -291,10 +290,12 @@ void parity(const int order[8], double* mparm, double* tparm) {
     for (int l = 1; l <= tmaxl; ++l) block(l, tmaxn, tmaxs);
 }
 
-void loadQwm(ModelData& d) {
-    const EmbeddedFile& f = embedded("hwm123114.bin");
-    verify(f);
-    Reader r(f.bytes, f.size);  // access='stream': no record markers
+bool loadQwm(ModelData& d) {
+    const EmbeddedFile* fileData = embedded("hwm123114.bin");
+    if (!verify(fileData)) return false;
+    const EmbeddedFile& f = *fileData;
+    bool ok = true;
+    Reader r(f.bytes, f.size, ok);  // access='stream': no record markers
     d.nbf = r.i32(); d.maxs = r.i32(); d.maxm = r.i32(); d.maxl = r.i32(); d.maxn = r.i32(); d.ncomp = r.i32();
     d.nlev = r.i32(); d.p = r.i32();
     d.nnode = d.nlev + d.p;
@@ -314,7 +315,7 @@ void loadQwm(ModelData& d) {
     }
     for (double& v : d.e1) v = r.f64();
     for (double& v : d.e2) v = r.f64();
-    if (!r.atEnd()) throw std::runtime_error("hwm14: unexpected trailing QWM data");
+    if (!ok || !r.atEnd()) return false;
     for (int i = 0; i <= lastLevel; ++i) {
         parity(&d.order[static_cast<std::size_t>(i) * d.ncomp], &d.mparm[static_cast<std::size_t>(i) * d.nbf],
                &d.tparm[static_cast<std::size_t>(i) * d.nbf]);
@@ -322,12 +323,15 @@ void loadQwm(ModelData& d) {
     d.alttns = d.vnode[d.nlev - 2];
     d.altsym = d.vnode[d.nlev - 1];
     d.altiso = d.vnode[d.nlev];
+    return true;
 }
 
-void loadDwm(ModelData& d) {
-    const EmbeddedFile& f = embedded("dwm07b104i.dat");
-    verify(f);
-    Reader file(f.bytes, f.size);  // form='unformatted' sequential records
+bool loadDwm(ModelData& d) {
+    const EmbeddedFile* fileData = embedded("dwm07b104i.dat");
+    if (!verify(fileData)) return false;
+    const EmbeddedFile& f = *fileData;
+    bool ok = true;
+    Reader file(f.bytes, f.size, ok);  // form='unformatted' sequential records
     Reader h = file.record();
     d.dwmNterm = h.i32(); d.dwmMmax = h.i32(); d.dwmNmax = h.i32();
     Reader t = file.record();
@@ -338,15 +342,18 @@ void loadDwm(ModelData& d) {
     for (float& v : d.coeff) v = c.f32();
     Reader w = file.record();
     d.twidth = w.f32();
-    if (!file.atEnd()) throw std::runtime_error("hwm14: unexpected trailing DWM data");
+    if (!ok || !file.atEnd()) return false;
     const int nmax = d.dwmNmax, mmax = d.dwmMmax;
     d.nvshterm = (((nmax + 1) * (nmax + 2) - (nmax - mmax) * (nmax - mmax + 1)) / 2 - 1) * 4 - 2 * nmax;
+    return true;
 }
 
-void loadQd(ModelData& d) {
-    const EmbeddedFile& f = embedded("gd2qd.dat");
-    verify(f);
-    Reader file(f.bytes, f.size);
+bool loadQd(ModelData& d) {
+    const EmbeddedFile* fileData = embedded("gd2qd.dat");
+    if (!verify(fileData)) return false;
+    const EmbeddedFile& f = *fileData;
+    bool ok = true;
+    Reader file(f.bytes, f.size, ok);
     Reader h = file.record();
     d.qdNmax = h.i32(); d.qdMmax = h.i32(); d.qdNterm = h.i32(); d.qdEpoch = h.f32(); d.qdAlt = h.f32();
     Reader c = file.record();
@@ -357,9 +364,10 @@ void loadQd(ModelData& d) {
     for (double& v : d.xcoeff) v = c.f64();
     for (double& v : d.ycoeff) v = c.f64();
     for (double& v : d.zcoeff) v = c.f64();
-    if (!file.atEnd()) throw std::runtime_error("hwm14: unexpected trailing QD data");
+    if (!ok || !file.atEnd()) return false;
     d.normadj.resize(d.qdNmax + 1);
     for (int n = 0; n <= d.qdNmax; ++n) d.normadj[n] = std::sqrt(static_cast<double>(n * (n + 1)));
+    return true;
 }
 
 // vertwght's knot-span search. FORTRAN never terminates for u < V(p); the port
@@ -443,10 +451,8 @@ float dotf(const float* a, const float* b, int n, int strideB) {
 }  // namespace
 
 Model::Model() : d_(new ModelData) {
-    try {
-        loadQwm(*d_);
-        loadDwm(*d_);
-        loadQd(*d_);
+    {
+        if (!loadQwm(*d_) || !loadDwm(*d_) || !loadQd(*d_)) return;
         // inithwm: the geo basis arrays are sized before gd2qd is initialised,
         // so nmaxqdc/mmaxqdc are still 0 there.
         d_->nmaxgeo = std::max(d_->maxn, 0);
@@ -457,20 +463,19 @@ Model::Model() : d_(new ModelData) {
         // gd2qd and mltcalc write with the QD degree into arrays shaped
         // (0:nmaxgeo, 0:mmaxgeo); the release data make those shapes equal.
         if (d_->qdNmax != d_->nmaxgeo || d_->qdMmax != d_->mmaxgeo) {
-            throw std::runtime_error("hwm14: QD and QWM basis sizes differ; port assumes the release data");
+            return;
         }
-    } catch (...) {
-        delete d_;
-        throw;
+        valid_ = true;
     }
 }
 
 Model::~Model() { delete d_; }
 
-float Model::dwmTransitionWidth() const { return d_->twidth; }
+float Model::dwmTransitionWidth() const { return valid_ ? d_->twidth : NAN; }
 
 void Model::hwm14(int iyd, float sec, float alt, float glat, float glon, float stl, float f107a,
                   float f107, const float ap[2], float w[2]) const {
+    if (!valid_) { w[0] = w[1] = NAN; return; }
     hwmqt(iyd, sec, alt, glat, glon, stl, f107a, f107, ap, w);
     if (ap[1] >= 0.0f) {
         float dw[2];
@@ -482,6 +487,7 @@ void Model::hwm14(int iyd, float sec, float alt, float glat, float glon, float s
 
 void Model::hwmqt(int iyd, float sec, float alt, float glat, float glon, float /*stl*/,
                   float /*f107a*/, float /*f107*/, const float* /*ap*/, float w[2]) const {
+    if (!valid_) { w[0] = w[1] = NAN; return; }
     const ModelData& d = *d_;
     const double input1 = static_cast<double>(iyd % 1000);
     const double input2 = static_cast<double>(sec);
@@ -624,6 +630,7 @@ void Model::hwmqt(int iyd, float sec, float alt, float glat, float glon, float /
 
 void Model::gd2qd(float glatin, float glon, float* qlat, float* qlon, float* f1e, float* f1n,
                   float* f2e, float* f2n) const {
+    if (!valid_) { *qlat = *qlon = *f1e = *f1n = *f2e = *f2n = NAN; return; }
     const ModelData& d = *d_;
     const double glat = static_cast<double>(glatin);
     const int ld = d.nmaxgeo + 1;
@@ -677,6 +684,7 @@ void Model::gd2qd(float glatin, float glon, float* qlat, float* qlon, float* f1e
 }
 
 float Model::mltcalc(float qlat, float qlon, float day, float ut) const {
+    if (!valid_) return NAN;
     (void)qlat;
     const ModelData& d = *d_;
     const double asunglat =
@@ -760,6 +768,7 @@ float Model::latwgt2(float mlat, float mlt, float kp0, float twidth) {
 }
 
 void Model::dwm07b(float mlt, float mlat, float kp, float* mmpwind, float* mzpwind) const {
+    if (!valid_) { *mmpwind = *mzpwind = NAN; return; }
     const ModelData& d = *d_;
     const int nmax = d.dwmNmax, mmax = d.dwmMmax, ld = nmax + 1;
     std::vector<double> dp(static_cast<std::size_t>(ld) * (mmax + 1), 0.0);
@@ -817,11 +826,13 @@ void Model::dwm07b(float mlt, float mlat, float kp, float* mmpwind, float* mzpwi
 
 void Model::dwm07(int iyd, float sec, float alt, float glat, float glon, const float ap[2],
                   float dw[2]) const {
+    if (!valid_) { dw[0] = dw[1] = NAN; return; }
     dwm07kp(iyd, sec, alt, glat, glon, ap2kp(ap[1]), dw);
 }
 
 void Model::dwm07kp(int iyd, float sec, float alt, float glat, float glon, float kp,
                     float dw[2]) const {
+    if (!valid_) { dw[0] = dw[1] = NAN; return; }
     float mlat, mlon, f1e, f1n, f2e, f2n;
     gd2qd(glat, glon, &mlat, &mlon, &f1e, &f1n, &f2e, &f2n);
     const float day = static_cast<float>(iyd % 1000);
