@@ -1,15 +1,15 @@
 {
-  "artifactSha256": "d7cbfd869bfa6045a59b56a946b0316d0fa74cc6b330c9b15286fd981f2988e3",
+  "artifactSha256": "a108e6ebb1e67d6d74c78111bde24750fcd01c877bee20a1eb4355cfdceaecab",
   "previousArtifactSha256": "b8efb44320d3cea37a155cb2edd07004d0bca567a8b9cc347ba21dbab576f7a7",
   "memory": {
     "staticMinimumBytes": 23825072,
-    "initialBytes": 23855104,
-    "maximumBytes": 1073741824,
+    "initialBytes": 28049408,
+    "maximumBytes": 754974720,
     "wasmSection": {
       "source": "declared",
       "flags": 3,
-      "min": 364,
-      "max": 16384,
+      "min": 428,
+      "max": 11520,
       "shared": true,
       "growable": true
     }
@@ -22,12 +22,13 @@
     3600
   ],
   "fixture": "public study SGP4 seeds, repeated cyclically across all eight orbit regimes",
+  "metric": "WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum",
   "rows": [
     {
       "runtime": "browser",
       "role": "resident-focus",
       "entities": 1,
-      "baseBytes": 23855104,
+      "baseBytes": 28049408,
       "highWaterBytes": 28049408,
       "samples": [
         28049408,
@@ -44,10 +45,23 @@
       "previousArtifactParity": "bit-identical"
     },
     {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 1,
+      "baseBytes": 28049408,
+      "highWaterBytes": 28049408,
+      "role": "resident-focus",
+      "outputs": [
+        "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+        "9397138f1005fb11beba5161875adc33e02cf698877e57e7f4f5de8d12163c17",
+        "2c83ad1a4f8a348157b39bc94a7a55e42408f9d70e657e8415f059df8022605f"
+      ]
+    },
+    {
       "runtime": "browser",
       "role": "catalog",
       "entities": 1000,
-      "baseBytes": 23855104,
+      "baseBytes": 28049408,
       "highWaterBytes": 42598400,
       "samples": [
         31784960,
@@ -60,13 +74,29 @@
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "previousArtifactParity": "bit-identical"
+      "previousArtifactParity": "bit-identical",
+      "predictedBytes": 42587272.36259483,
+      "relativePredictionError": 0.0002612219568146219
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 1000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 42598400,
+      "role": "catalog",
+      "outputs": [
+        "297c861dcf0bb8bbb012f2e33a61f21cb97fa430ebbd34c7b5d6030dc3b58f4d",
+        "ec7dbe238340ccfe83e69258aae784a91e7b5569b174f6778574b0f1261ba147"
+      ],
+      "predictedBytes": 42587272.36259483,
+      "relativePredictionError": 0.0002612219568146219
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 4000,
-      "baseBytes": 23855104,
+      "baseBytes": 28049408,
       "highWaterBytes": 86376448,
       "samples": [
         43057152,
@@ -78,13 +108,29 @@
         "2623ae45010836ba4840df77455053ea22ebd7712ab01afd17ffa508adf832e8"
       ],
       "crossOriginIsolated": true,
-      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "predictedBytes": 86390248.8574064,
+      "relativePredictionError": 0.0001597756995795045
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 4000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 86376448,
+      "role": "catalog",
+      "outputs": [
+        "5e9783b05d0971b30bb8b4be70cccd610756341e1b37a3360c8463d4cddd7090",
+        "2623ae45010836ba4840df77455053ea22ebd7712ab01afd17ffa508adf832e8"
+      ],
+      "predictedBytes": 86390248.8574064,
+      "relativePredictionError": 0.0001597756995795045
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 10000,
-      "baseBytes": 23855104,
+      "baseBytes": 28049408,
       "highWaterBytes": 173998080,
       "samples": [
         65601536,
@@ -96,13 +142,29 @@
         "053f9525ec316d0cd0bd6457adfacb2a54c59aa40f1ca19a1efa1b726cc7825c"
       ],
       "crossOriginIsolated": true,
-      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "predictedBytes": 173996201.8470295,
+      "relativePredictionError": 1.0794101696368373e-05
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 10000,
+      "baseBytes": 28049408,
+      "highWaterBytes": 173998080,
+      "role": "catalog",
+      "outputs": [
+        "e2ee3f8a663c5236219ff6332e7b385235f38fce9f3d4bf7aea5621eaf56c466",
+        "053f9525ec316d0cd0bd6457adfacb2a54c59aa40f1ca19a1efa1b726cc7825c"
+      ],
+      "predictedBytes": 173996201.8470295,
+      "relativePredictionError": 1.0794101696368373e-05
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 31814,
-      "baseBytes": 23855104,
+      "baseBytes": 28049408,
       "highWaterBytes": 492503040,
       "samples": [
         147521536,
@@ -114,33 +176,48 @@
         "bdb967e5b778d866bcb7becbd7cef5c948effa2f0bea6326dbacb5f813a05782"
       ],
       "crossOriginIsolated": true,
-      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "predictedBytes": 492502244.9329693,
+      "relativePredictionError": 1.6143393363173217e-06
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "0.16.4",
+      "entities": 31814,
+      "baseBytes": 28049408,
+      "highWaterBytes": 492503040,
+      "role": "catalog",
+      "outputs": [
+        "63ed7cbfcd07280403114b1373a8b3c4577464fca20c46d6951a991a8aea629e",
+        "bdb967e5b778d866bcb7becbd7cef5c948effa2f0bea6326dbacb5f813a05782"
+      ],
+      "predictedBytes": 492502244.9329693,
+      "relativePredictionError": 1.6143393363173217e-06
     }
   ],
-  "loadStart": [
-    23.29541015625,
-    18.85205078125,
-    15.5263671875
-  ],
-  "logicalCpus": 28,
   "docker": "WAIVED by owner 2026-10-22: do not start Docker",
   "aot": {
     "status": "PASS",
     "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
-    "artifactSha256": "d7cbfd869bfa6045a59b56a946b0316d0fa74cc6b330c9b15286fd981f2988e3",
-    "log": "prewarming FlatSQL AOT artifacts into /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/.sdk-build/memory-sizing/aot\n  flatsql engine: /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/.sdk-build/memory-sizing/aot/flatsql-48dbf9473b5a4a50-we0.16.4-arm64.aot.wasm (already present)\n[2026-10-22 21:26:49.553] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:49.554] [error] calling stack:1\n[2026-10-22 21:26:49.854] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:49.854] [error] calling stack:1\n[2026-10-22 21:26:49.876] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:49.876] [error] calling stack:1\n[2026-10-22 21:26:49.898] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:49.898] [error] calling stack:1\n[2026-10-22 21:26:50.069] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:50.069] [error] calling stack:5, 5, 5\n[2026-10-22 21:26:50.371] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:50.371] [error] calling stack:5, 5, 5\n[2026-10-22 21:26:50.393] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:50.393] [error] calling stack:5, 5, 5\n[2026-10-22 21:26:50.414] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-22 21:26:50.414] [error] calling stack:5, 5, 5\n  flatsql-link shim: /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/.sdk-build/memory-sizing/aot/flatsqllink-up-8d83e69b087c5b8c-we0.16.4-arm64.aot.wasm (already present)\n  partition-store engine (flatsql@3.7.1): /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/.sdk-build/memory-sizing/aot/fsqlps-intr-up-aa1ed58de773347c-we0.16.4-arm64.aot.wasm (already present)\n  format-4 engine (flatsql@3.7.1): /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/.sdk-build/memory-sizing/aot/fsqlp4-intr-up-7ae31439a7e79f90-we0.16.4-arm64.aot.wasm (already present)\n  flow /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/dist/isomorphic/module.wasm: /Users/tj/software/worktrees/modules--ffm-memory-measured-sizing-20261022/propagator/ffm/.sdk-build/memory-sizing/aot/flowmount-_Users_tj_software_worktrees_modules__ffm_memory_c16dc406_up-d7cbfd869bfa6045-we0.16.4-arm64.aot.wasm (compiled)"
+    "artifactSha256": "a108e6ebb1e67d6d74c78111bde24750fcd01c877bee20a1eb4355cfdceaecab",
+    "runtime": "WasmEdge 0.16.4; node spacedatanetwork 1.1.0",
+    "execution": "Every native row executed the exact flow artifact produced by node prewarm-aot."
   },
   "model": {
-    "method": "least squares over catalog roles",
-    "units": "bytes",
     "calibratedEntityRange": [
       1000,
       31814
     ],
+    "units": "bytes",
+    "method": "least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)",
     "baseBytes": 27986280.197657645,
     "perEntityBytes": 14600.992164937186,
     "focusHighWaterBytes": 28049408
   },
   "requiredMaximumBytes": 754974720,
-  "status": "PILOT: browser measurement complete; native retry and release-artifact measurements pending"
+  "status": "MEASURED",
+  "numericalParity": "All five native/browser role output hashes are identical; focus and 1000-object browser outputs are bit-identical to the predecessor.",
+  "measurementCommand": "SDN_NODE_BINARY=<node> node propagator/ffm/scripts/e2e-memory-sizing.mjs --measure",
+  "sizingRule": "initial=max(16 MiB,page-rounded fitted base,linker minimum); maximum=ceil(largest measured high-water*1.5 / 16 MiB)*16 MiB",
+  "scope": "Linear-memory sizing, not host RSS, worker throughput or a performance claim."
 }
