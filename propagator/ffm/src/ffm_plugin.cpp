@@ -1201,7 +1201,11 @@ int plugin_catalog_drag_acceleration(double utcJd, int slot, const double* state
     value.position = Vec3(state[0] / 1000, state[1] / 1000, state[2] / 1000);
     value.velocity = Vec3(state[3] / 1000, state[4] / 1000, state[5] / 1000);
     Vec3 drag;
-    if (!catalogEpoch(utcJd, at) || !g_catalogDynamics->dragAcceleration(slot, at, value, drag, g_catalogError)) return -1;
+    // Split before adding TT-UTC: adding 0.184 s to a large UTC seconds
+    // value would lose nanoseconds and bias a rapidly varying correction.
+    const auto utc = ffm::normalizeTT(0, (utcJd - 2451545.0) * 86400.0);
+    if (!ffm::toTT(utc.whole, utc.fraction, utcJd, timingStandard::UTC, at, g_catalogError) ||
+        !g_catalogDynamics->dragAcceleration(slot, at, value, drag, g_catalogError)) return -1;
     out[0] = drag.x * 1000; out[1] = drag.y * 1000; out[2] = drag.z * 1000;
     return 0;
 }
