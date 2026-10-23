@@ -8,8 +8,8 @@
     "-msimd128",
     "-fno-exceptions"
   ],
-  "sha256": "1331f8575b9eaea2582f77a9a7fcf80151d1892b1787477071cef5911c239d52",
-  "bytes": 2218207,
+  "sha256": "4dc525a1c04d93106065920f1437509ceb8e8def49d1c53976ed9c313736d611",
+  "bytes": 2218484,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/worktrees/OrbPro--orbpro-ffm-pool-ffm1-fast-20261022/packages/wasm-engine/deps/emsdk/upstream/bin",
   "memory": {
