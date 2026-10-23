@@ -7,7 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <stdexcept>
+#include "reentry.h"
 namespace ffm_fast::gj {
 using Real = double;
 using Row = std::array<Real, 9>;
@@ -51,10 +51,10 @@ public:
     std::array<Point<D>,9> history;
     int startupIterations=0;
     bool startupConverged=false;
-    explicit Integrator(Real step):h(step){if(!(h>0))throw std::runtime_error("GJ step must be positive");}
+    explicit Integrator(Real step):h(step){if(!(h>0))astro::flagIntegrationFailure("GJ step must be positive");}
     const Point<D>& current()const{return history.back();}
     Point<D>& current(){return history.back();}
-    void resetSums(){if(history.size()!=9)throw std::runtime_error("GJ needs nine history points");const auto& c=coefficients();for(size_t d=0;d<D;++d){sum1[d]=current().v[d]/h-dotHistory(c.bc,history,d);sum2[d]=current().r[d]/(h*h)-dotHistory(c.ac,history,d);}}
+    void resetSums(){static_assert(std::tuple_size<decltype(history)>::value==9,"GJ needs nine history points");const auto& c=coefficients();for(size_t d=0;d<D;++d){sum1[d]=current().v[d]/h-dotHistory(c.bc,history,d);sum2[d]=current().r[d]/(h*h)-dotHistory(c.ac,history,d);}}
     template<class Eval> int initialize(const std::array<Point<D>,9>&seed,Eval&&eval,Real tolerance=2e-15L,int maxIterations=24){
         const auto&c=coefficients();auto p=seed;const auto anchor=seed[4];startupConverged=false;
         for(startupIterations=1;startupIterations<=maxIterations;++startupIterations){

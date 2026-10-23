@@ -35,7 +35,7 @@ class GjRun {
         a+=gjforces::calendarCorrection(forces_,r,v,at,calendarDay_);
         if (selectedBranch) a+=gjforces::srpCorrection(forces_,at,r,v,sunlit_);
         if (!std::isfinite(a.x) || !std::isfinite(a.y) || !std::isfinite(a.z))
-            throw std::runtime_error("nonfinite GJ acceleration");
+            { astro::flagIntegrationFailure("nonfinite GJ acceleration"); return {}; }
         return {a.x,a.y,a.z};
     }
     static void rkDerivative(double x,const double* y,double* f,void* opaque) {
@@ -52,14 +52,14 @@ class GjRun {
         const int direction=target>p.x?1:-1;
         double x=p.x, h=direction*std::min(std::abs(target-x),core_.h/2);
         for (int attempts=0; direction*(target-x)>1e-12; ++attempts) {
-            if (attempts>=100000) throw std::runtime_error("GJ startup RK attempt limit");
+            if (attempts>=100000) { astro::flagIntegrationFailure("GJ startup RK attempt limit"); return p; }
             h=direction*std::min({std::abs(h),std::abs(target-x),core_.h/2});
             rkDerivative(x,y,k,this);
             astro::rk_detail::rkf78StepFrom<6>(x,h,y,k,next,error,rkDerivative,this);
             if (astro::propagationStop().active) return p;
             double norm=0;
             for (int j=0;j<6;++j) norm=std::max(norm,std::abs(error[j])/(1e-13*(1+std::max(std::abs(y[j]),std::abs(next[j])))));
-            if (!std::isfinite(norm)) throw std::runtime_error("nonfinite GJ startup RK error");
+            if (!std::isfinite(norm)) { astro::flagIntegrationFailure("nonfinite GJ startup RK error"); return p; }
             if (norm>1 && std::abs(h)>1e-8) { h*=std::max(.1,.8*std::pow(norm,-1./8)); continue; }
             std::copy(next,next+6,y); x+=h;
             h*=norm>1e-12?std::min(2.,.8*std::pow(norm,-1./8)):2.;
@@ -75,6 +75,8 @@ class GjRun {
         const auto previousStop=astro::propagationStop(), previousCallStop=astro::callStop();
         auto historyStopped=[&]() {
             if (!astro::propagationStop().active) return false;
+            if (std::string(astro::propagationStop().code) != "reentry" &&
+                std::string(astro::propagationStop().code) != "invalid-state") return true;
             astro::propagationStop()=previousStop;
             astro::callStop()=previousCallStop;
             startupOutOfDomain_=true;
@@ -95,7 +97,7 @@ class GjRun {
         if (historyStopped()) return false;
         core_.initialize(nodes,eval,2e-13,64);
         if (historyStopped()) return false;
-        if (!core_.startupConverged) throw std::runtime_error("GJ startup corrector did not converge");
+        if (!core_.startupConverged) { astro::flagIntegrationFailure("GJ startup corrector did not converge"); return false; }
         // Convert centered ordinates into nine backward nodes ending at the
         // requested lattice point, without consuming future output.
         std::reverse(core_.history.begin(),core_.history.end()); core_.h=-core_.h; core_.resetSums();
