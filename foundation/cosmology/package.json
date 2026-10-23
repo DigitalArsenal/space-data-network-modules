@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "flatbuffers": "25.9.23",
-    "spacedatastandards.org": "1.220.0"
+    "spacedatastandards.org": "1.261.0"
   },
   "devDependencies": {
     "esbuild": "0.28.0",

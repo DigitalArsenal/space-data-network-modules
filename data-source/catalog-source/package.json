@@ -12,7 +12,7 @@
     "esbuild": "0.25.12",
     "flatbuffers": "25.9.23",
     "space-data-module-sdk": "0.9.7",
-    "spacedatastandards.org": "1.249.0"
+    "spacedatastandards.org": "1.261.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.0"

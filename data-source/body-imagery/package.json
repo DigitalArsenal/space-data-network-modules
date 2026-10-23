@@ -12,7 +12,7 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "26.1.32",
     "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.247.0",
+    "spacedatastandards.org": "1.261.0",
     "jpeg-js": "0.4.4"
   }
 }
