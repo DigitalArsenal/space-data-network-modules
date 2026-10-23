@@ -22,7 +22,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Each method reads its frames, makes a handful of synchronous typed hostcalls (secrets.get, clock.nowIso) and emits signed requests or results. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Each method reads its frames, makes a handful of synchronous typed hostcalls (secrets.get, clock.nowIso) and emits signed requests or results. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

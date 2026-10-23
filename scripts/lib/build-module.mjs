@@ -1,6 +1,8 @@
 // The shared build of the storage and terrain-source-watch modules (build tooling, not module source): compile one C++
-// source on the SDK's single-thread STANDALONE_WASM lane with the SDS C++ headers it names inlined, then persist what the
-// flow compiler links (dist/guest-link) beside the module and its manifest. Each package's build.mjs is a call to this.
+// source on the thread model the package's build.mjs declares, with the SDS C++ headers it names inlined, then persist
+// what the flow compiler links (dist/guest-link) beside the module and its manifest. Each package's build.mjs is a call
+// to this, and states its threadModel as a string literal (scripts/lib/thread-model.mjs: declared, never inferred, and
+// never a helper default).
 //
 // Typed contracts: the SDS standards' generated C++ headers are inlined with their include guards renamed (every SDS
 // header is "main_generated.h") and the flatc version assert relaxed, as foundation/http-route does. The runtime headers
@@ -13,7 +15,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url)); // <modules>/scripts/lib
 
-export async function buildModule({ packageRoot, sourceFile, standards, httpAbi = false, inlineHeaders = [], label }) {
+export async function buildModule({ packageRoot, sourceFile, standards, httpAbi = false, inlineHeaders = [], label, threadModel }) {
+  if (!threadModel) throw new Error(`${label}: threadModel is declared by the module's build.mjs, never inferred (scripts/lib/thread-model.mjs)`);
   const require = createRequire(path.join(packageRoot, "package.json"));
   const importSdk = (name) => import(pathToFileURL(require.resolve(`space-data-module-sdk/${name}`)).href);
   const { compileModuleFromSource } = await importSdk("compiler");
@@ -56,8 +59,7 @@ export async function buildModule({ packageRoot, sourceFile, standards, httpAbi 
     sourceCode: parts.join("\n\n"),
     language: "c++",
     outputPath,
-    // One hostcall at a time, no shared state: the single-thread STANDALONE_WASM lane.
-    threadModel: "single-thread",
+    threadModel,
     // Imports the sync space_data_module_host bridge (typedHostcall.hpp, sdm_piv); symbols resolve at instantiation.
     allowUndefinedImports: true,
   });
@@ -65,8 +67,8 @@ export async function buildModule({ packageRoot, sourceFile, standards, httpAbi 
   const guestLinkDir = path.join(distRoot, "guest-link");
   await fs.mkdir(guestLinkDir, { recursive: true });
   await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
-  const { format, language, threadModel, symbolPrefix, methodSymbols } = compilation.guestLink;
-  await fs.writeFile(path.join(guestLinkDir, "metadata.json"), `${JSON.stringify({ version: 1, format, language, threadModel, symbolPrefix, methodSymbols }, null, 2)}\n`);
+  const { format, language, threadModel: linkThreadModel, symbolPrefix, methodSymbols } = compilation.guestLink;
+  await fs.writeFile(path.join(guestLinkDir, "metadata.json"), `${JSON.stringify({ version: 1, format, language, threadModel: linkThreadModel, symbolPrefix, methodSymbols }, null, 2)}\n`);
   await fs.copyFile(manifestPath, path.join(guestLinkDir, "plugin-manifest.json"));
   await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 

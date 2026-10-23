@@ -7,5 +7,8 @@ await buildModule({
   sourceFile: "object_s3_module.cpp",
   standards: ["APR", "FIL"], // tasks and results are $APR, listings $FIL; HREQ / HRSP are the SDK runtime types
   httpAbi: true, // serve reads the $HTQ envelope
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format.
+  threadModel: "wasi-sequential",
   label: "storage/object-s3",
 });
