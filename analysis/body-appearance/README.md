@@ -2,13 +2,16 @@
 
 Partial implementation for `body-appearance-module-20261022`. This is **not a
 completed or validated all-body appearance model**. The required E2E gate fails
-until planetary Johnson V disk photometry is implemented and validated.
+until the planetary Johnson V disk models meet the accuracy gate.
 
 The C++ module contains cited parameter lookup, deterministic rock/crater
 placement, solar differential rotation, and relative H,G1,G2 photometry.
 It also integrates independent Jupiter and Saturn scattering models over a
-sphere and converts their absolute albedo into flux and magnitude. Those narrow
-or Pioneer bands are not a validated Johnson V calibration.
+sphere and converts their absolute albedo into flux and magnitude. The original
+narrow or Pioneer bands are not a Johnson V calibration. A separate synthetic Jupiter
+V model now integrates published spectral scattering parameters, the V energy
+response and the solar spectrum; its measured 0.15325 mag residual fails the
+required 0.1 mag limit.
 The Moon has absolute ROLO 311g spectral irradiance at 553.8 nm, checked against
 an independently transcribed ROLO oracle with both signs of solar longitude,
 observer libration, and distance scaling.
@@ -69,7 +72,7 @@ invoke ABI and embeds the authoring manifest in the WASM artifact.
 | `parameters` | `model` | Cited table entries for that exact named model; unavailable classes fail explicitly. |
 | `rotate` | `profile`, `latitude_rad`, `longitude_rad`, `epoch_tai_s`, `scene_tai_s` | Snodgrass–Ulrich sidereal rate and advanced longitude, wrapped to [0,2π). Optional `frame_rate_rad_s` defaults to zero. |
 | `phase_curve` | `model`, `phase_rad` vector; `G1`, `G2` for `hg1g2` | Relative flux and magnitude dimming. `moon:muinonen2010` selects the published lunar weights. No absolute magnitude or geometric/normal albedo is implied. |
-| `disk_photometry` | `model`, `phase_rad`, `radius_m`, `sun_distance_au`, `observer_distance_m`, `solar_magnitude` | Absolute disk albedo, flux relative to the Sun at 1 au, and apparent magnitude. Solar magnitude must match the model band. |
+| `disk_photometry` | `model`, `phase_rad`, `radius_m`, `sun_distance_au`, `observer_distance_m`; `solar_magnitude` except for the calibrated V model | Absolute disk albedo, flux relative to the Sun at 1 au, and apparent magnitude. Solar magnitude must match the model band; `jupiter:heng2021:V` supplies its own cited solar magnitude and rejects an override. |
 | `lunar_irradiance` | `model`, `phase_rad`, `solar_longitude_rad`, `observer_latitude_rad`, `observer_longitude_rad`, `sun_distance_au`, `observer_distance_m` | Absolute spectral irradiance in W/m²/nm, disk reflectance, solar flux ratio, and monochromatic-equivalent AB magnitude. |
 | `place` | `body_id`, `level`, `x`, `y`, `seed`, `radius_m` | Body-fixed XYZ meters, diameter meters, azimuth radians and uint32 shape seeds for each requested population. |
 
@@ -85,7 +88,9 @@ Disk models are `jupiter:heng2021:550nm` (Heng & Li 2021 Table 1; phase
 Gauss-Legendre integral covers the illuminated visible sphere. Jupiter uses the
 paper's double Henyey-Greenstein single scattering and isotropic multiple
 scattering. Saturn uses the Barkstrom law, with explicit linear interpolation
-between its 30° parameter knots. These models contain no Mallama–Hilton inputs.
+between its 30° parameter knots. These models contain no Mallama–Hilton inputs. The synthetic
+`jupiter:heng2021:V` variant also covers 0–140°; its spectral integration is
+described below.
 `sphere:lambert` additionally requires `surface_albedo` and supplies a
 closed-form verification case. Geometry is far-field (observer at least 100
 radii away), with a caller-specified spherical radius; there is no ellipsoid,
@@ -138,7 +143,9 @@ parameters, three solar profiles, lunar median roughness/Hurst scales, lunar
 crater coefficients, the Mars rock law, H,G1,G2 basis/weights and two identified
 566 nm LROC Hapke map pixels, and independent Jupiter/Saturn scattering
 coefficients, ROLO 311g radiometric parameters, and seven-band geometric
-albedos for each of the seven requested planets (Mallama et al. 2017 Table 7).
+albedos for each of the seven requested planets (Mallama et al. 2017 Table 7),
+24 Jupiter spectral scattering fits, the V response, and 197 solar spectrum
+samples with native FITS row provenance.
 These are geometric albedos, not normal or Bond albedos. Albedo-only identifiers
 are `planet:<lowercase-body>:albedo2017`; they do not imply a phase law.
 Median slopes are labeled as medians, not RMS.
@@ -160,8 +167,8 @@ Its residual cannot be reported as passing the required absolute 0.1 mag gate.
 The separate absolute ROLO comparison is same-model implementation verification;
 it does not establish that a separate surface-scattering model predicts ROLO.
 
-Still required: validated Johnson V disk photometry for all seven requested
-planets, independent lunar surface-model validation, normal albedo/color and
+Still required: Johnson V disk photometry meeting the 0.1 mag gate for all seven
+requested planets, independent lunar surface-model validation, normal albedo/color and
 roughness tables, D and X/M taxonomic priors and
 taxonomy/albedo selection, Diviner input mapping, and named-spacecraft
 matched-geometry render/image-similarity and shadow-fraction evidence. Original
@@ -170,24 +177,30 @@ Bandfield 2011 and Golombek–Rapp 1997 downloads remain unavailable after publi
 
 ## Resumed acceptance evidence
 
-The committed report records 215 cited values (zero uncited), 100,005 rocks
+The committed report records 727 cited values (zero uncited), 100,005 rocks
 (KS p=0.7446435365, CFA error 1.1448613%) and 100,005 craters
 (KS p=0.7206844027, CFA error 0.4132020%). Absolute lunar ROLO verification
 covers 10,044 geometries with a maximum residual of 3.1341e-15 mag; this
-measures implementation arithmetic, not lunar model uncertainty. All 12 unit
+measures implementation arithmetic, not lunar model uncertainty. All 13 unit
 tests pass. Node, isolated headless Firefox, and native WasmEdge produce exactly
-matching complete typed payloads, including the new absolute photometry.
+matching complete typed payloads for all 13 parity requests, including
+absolute lunar irradiance and synthetic Jupiter V photometry.
 
 The E2E remains **FAIL** on all seven planetary absolute Johnson V gates.
+Jupiter is measured at 1,043 phase samples over 0–130°; the maximum absolute
+residual is 0.15324716 mag. The other six V models remain unavailable.
 Cross-band normalized phase-shape diagnostics reach 0.2885843 mag for Jupiter
 (131 samples, 0–130°) and 0.1701227 mag for Saturn (151 samples, 0–150°).
 Neither diagnostic supplies a matched-band absolute acceptance value. The other
 five planets have cited geometric albedos but no implemented disk phase model.
 The source access failures and exact missing calibration inputs are preserved
-in the report. Original Mercury/Venus paper requests timed out, Mars/Uranus/
-Neptune ADS requests returned 403, and the Uranus/Neptune NASA records offer no
-download. The available Venus glory paper requires a spherical-atmosphere
-multiple-scattering treatment, which is not implemented here.
+in the report. Resumed Mercury, Venus, and Mars paper requests each timed out
+after 25 seconds with no bytes. Earlier Uranus/Neptune ADS requests returned 403, and their NASA
+records offer no download. The newly read Irwin et al. 2025 Uranus study
+(doi:10.1093/mnras/staf800) provides its underlying data by author request,
+not as a tabulated Johnson V phase dataset in the paper. The available Venus
+glory paper requires a spherical-atmosphere multiple-scattering treatment, which
+is not implemented here.
 
 The gauntlet has not run because its required E2E-pass precondition is unmet;
 there is no gauntlet receipt. Docker remains waived by the owner.
@@ -217,10 +230,11 @@ V magnitude -26.75 itself; a caller `solar_magnitude` override is rejected.
 The surface quadrature and spectral integration are separate. An independent
 analytic sphere solution followed by Simpson spectral integration checks the
 combined result to 2e-7 relative albedo (implementation accuracy only).
-The preliminary absolute comparison over 0-130 degrees found a maximum
+The full E2E comparison at 1,043 phase samples over 0-130 degrees found a maximum
 residual of 0.15324716 mag at 130 degrees, so the required 0.1 mag gate still
 fails. The geometric albedo is 0.60557202; the opposition residual is
 -0.13424954 mag. Test geometry uses the IAU nominal Jupiter radii to preserve
 the equator-on projected area with an equivalent sphere. Detailed ellipsoidal
-scattering and seasonal changes are not included. A fresh full E2E report will
-supersede the older committed evidence above.
+scattering and seasonal changes are not included. The committed
+`conformance/acceptance-report.json` contains the fresh full E2E measurements,
+source access results, and exact remaining requirements.

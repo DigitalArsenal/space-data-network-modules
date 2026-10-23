@@ -1,11 +1,11 @@
 {
   "task": "body-appearance-module-20261022",
-  "measuredAt": "2026-10-22T21:07:21.176Z",
-  "artifactSha256": "a89bf2530808a4c4c34cb47d9c3192d8fb87984652ac614fe2e96a4203113635",
+  "measuredAt": "2026-10-23T11:40:41.564Z",
+  "artifactSha256": "e1424af4d12ec0efca707d0dcb2bc5bfb99fa7e9964bac3a188c68cda27bb76d",
   "acceptance": {
     "citations": {
       "status": "pass",
-      "values": 215,
+      "values": 727,
       "uncited": 0,
       "scope": "All shipped table entries; this does not assert that all requested body tables exist."
     },
@@ -85,9 +85,145 @@
         }
       ]
     },
+    "planets": {
+      "Mercury": {
+        "status": "fail",
+        "phase_domain_deg": [
+          2,
+          170
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "max_residual_mag": null,
+        "reason": "No independently sourced and validated absolute Johnson V disk-photometry implementation."
+      },
+      "Venus": {
+        "status": "fail",
+        "phase_domain_deg": [
+          2,
+          179
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "max_residual_mag": null,
+        "reason": "No independently sourced and validated absolute Johnson V disk-photometry implementation."
+      },
+      "Mars": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          50
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "max_residual_mag": null,
+        "reason": "No independently sourced and validated absolute Johnson V disk-photometry implementation."
+      },
+      "Jupiter": {
+        "status": "fail",
+        "model": "jupiter:heng2021:V",
+        "phase_domain_deg": [
+          0,
+          130
+        ],
+        "threshold_mag": 0.1,
+        "samples": 1043,
+        "max_residual_mag": 0.15324715572835323,
+        "worst": {
+          "phase_deg": 130,
+          "module_magnitude": -6.713731055140585,
+          "oracle_magnitude": -6.866978210868938,
+          "residual_mag": 0.15324715572835323
+        },
+        "absolute_calibration": true,
+        "matched_band": true,
+        "model_geometric_albedo": 0.6055720165547196,
+        "band": "Johnson V: Bessell 1990 energy response and CALSPEC Sun",
+        "geometry": {
+          "radius_m": 69134117.25045747,
+          "sun_distance_au": 1,
+          "observer_distance_m": 149597870700
+        },
+        "geometry_source": "doi:10.3847/0004-6256/152/2/41 Table 1 and Section 4; projected-area-equivalent sphere, equator-on",
+        "epoch": "Static Cassini-derived scattering parameters; no secular correction",
+        "tolerance_rationale": "Task acceptance requires an absolute residual below 0.1 mag throughout the observed phase domain.",
+        "reference_examples": [
+          {
+            "phase_deg": 0,
+            "module_magnitude": -9.529249544658903,
+            "oracle_magnitude": -9.395,
+            "residual_mag": -0.13424954465890337
+          },
+          {
+            "phase_deg": 12,
+            "module_magnitude": -9.404398160921186,
+            "oracle_magnitude": -9.310736,
+            "residual_mag": -0.09366216092118584
+          },
+          {
+            "phase_deg": 30,
+            "module_magnitude": -9.144549129651832,
+            "oracle_magnitude": -9.101650108712638,
+            "residual_mag": -0.04289902093919373
+          },
+          {
+            "phase_deg": 60,
+            "module_magnitude": -8.690625786914627,
+            "oracle_magnitude": -8.635608325743807,
+            "residual_mag": -0.05501746117082007
+          },
+          {
+            "phase_deg": 90,
+            "module_magnitude": -8.032244706518526,
+            "oracle_magnitude": -7.9858585847807415,
+            "residual_mag": -0.046386121737784336
+          },
+          {
+            "phase_deg": 130,
+            "module_magnitude": -6.713731055140585,
+            "oracle_magnitude": -6.866978210868938,
+            "residual_mag": 0.15324715572835323
+          }
+        ],
+        "scope": "Independent spectral-scattering prediction, with no magnitude offset or phase normalization fitted to Mallama-Hilton."
+      },
+      "Saturn": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          150
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "max_residual_mag": null,
+        "reason": "No independently sourced and validated absolute Johnson V disk-photometry implementation."
+      },
+      "Uranus": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          154
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "max_residual_mag": null,
+        "reason": "No independently sourced and validated absolute Johnson V disk-photometry implementation."
+      },
+      "Neptune": {
+        "status": "fail",
+        "phase_domain_deg": [
+          0,
+          133
+        ],
+        "threshold_mag": 0.1,
+        "samples": 0,
+        "max_residual_mag": null,
+        "reason": "No independently sourced and validated absolute Johnson V disk-photometry implementation."
+      }
+    },
     "runtimeParity": {
       "status": "pass",
-      "artifactSha256": "a89bf2530808a4c4c34cb47d9c3192d8fb87984652ac614fe2e96a4203113635",
+      "artifactSha256": "e1424af4d12ec0efca707d0dcb2bc5bfb99fa7e9964bac3a188c68cda27bb76d",
       "node": "v25.4.0",
       "firefox": "155.0",
       "browserIsolation": {
@@ -138,6 +274,11 @@
           "bytes": 1960
         },
         {
+          "name": "Jupiter absolute Johnson V",
+          "sha256": "28cfb16189e0312f8cd59c36cc16f2b192a216ecd46475218259790718d91ea3",
+          "bytes": 1480
+        },
+        {
           "name": "jupiter:heng2021:550nm absolute disk",
           "sha256": "e0daa9dca2139dc028b6a887ac188c85f9bcc1b471034ec4747d6b83f7fa6fe4",
           "bytes": 1376
@@ -162,82 +303,16 @@
         "status": "waived",
         "authority": "Owner 2026-10-22: never start Docker or Docker Desktop"
       }
-    },
-    "planets": {
-      "Mercury": {
-        "status": "fail",
-        "phase_domain_deg": [
-          2,
-          170
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
-      },
-      "Venus": {
-        "status": "fail",
-        "phase_domain_deg": [
-          2,
-          179
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
-      },
-      "Mars": {
-        "status": "fail",
-        "phase_domain_deg": [
-          0,
-          50
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
-      },
-      "Jupiter": {
-        "status": "fail",
-        "phase_domain_deg": [
-          0,
-          130
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "Independent scattering model exists in another band; Johnson V absolute calibration is not validated."
-      },
-      "Saturn": {
-        "status": "fail",
-        "phase_domain_deg": [
-          0,
-          150
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "Independent scattering model exists in another band; Johnson V absolute calibration is not validated."
-      },
-      "Uranus": {
-        "status": "fail",
-        "phase_domain_deg": [
-          0,
-          154
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
-      },
-      "Neptune": {
-        "status": "fail",
-        "phase_domain_deg": [
-          0,
-          133
-        ],
-        "threshold_mag": 0.1,
-        "samples": 0,
-        "reason": "No independently sourced and validated absolute disk-photometry implementation."
-      }
     }
   },
   "failures": [
-    "Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune absolute Johnson V magnitudes are not validated"
+    "Mercury: No independently sourced and validated absolute Johnson V disk-photometry implementation.",
+    "Venus: No independently sourced and validated absolute Johnson V disk-photometry implementation.",
+    "Mars: No independently sourced and validated absolute Johnson V disk-photometry implementation.",
+    "Jupiter: absolute Johnson V residual 0.15324715572835323 mag exceeds 0.1 mag",
+    "Saturn: No independently sourced and validated absolute Johnson V disk-photometry implementation.",
+    "Uranus: No independently sourced and validated absolute Johnson V disk-photometry implementation.",
+    "Neptune: No independently sourced and validated absolute Johnson V disk-photometry implementation."
   ],
   "measurements": {
     "rock": {
@@ -328,26 +403,28 @@
     "Named-spacecraft matched-geometry render/image-similarity and shadow-fraction evidence"
   ],
   "status": "fail",
-  "testedCommit": "cf0bb94f82974086356012a3efb045679506ffe3",
+  "testedCommit": "9da6705273c186c4426a053d7643232f46c3ae98",
   "unitTests": {
-    "passed": 12,
+    "passed": 13,
     "failed": 0,
     "skipped": 0,
     "oraclePublishedExamples": 10,
     "commands": [
-      "node --test tests/sdk_compat.test.mjs",
+      "node --test tests/sdk_compat.test.mjs tests/band-photometry.test.mjs",
       "npm test"
     ]
   },
   "packageIsolation": {
     "status": "pass",
     "testOraclePublished": false,
-    "note": "npm pack --dry-run contains only README, codec, cited data, manifest and dist; tests/ and src/ are absent."
+    "note": "npm pack --dry-run contains only README, codec, cited data, manifest and dist; tests/ and src/ are absent.",
+    "checkedFiles": 9,
+    "report": "/Users/tj/software/terrain-work/body-look/codex-appearance/resume-20261023-module-pack.json"
   },
   "gauntlet": {
     "status": "not-run",
     "receipt": null,
-    "reason": "Owner requires E2E PASS on the committed branch before gauntlet. The seven absolute planetary Johnson V gates remain failures.",
+    "reason": "Owner requires E2E PASS on the committed branch before gauntlet. Jupiter measures 0.15324715572835323 mag maximum absolute Johnson V residual; six other planetary V models are missing.",
     "docker": "waived by owner; never started"
   },
   "sourceAccess": [
@@ -355,19 +432,22 @@
       "body": "Mercury",
       "doi": "10.1006/icar.2001.6723",
       "url": "https://articles.adsabs.harvard.edu/pdf/2002Icar..155..253M",
-      "result": "read timeout; OpenAlex reports closed access with no repository full text"
+      "result": "2026-10-23 resumed shell download: curl exit 28, 25-second timeout with zero bytes received; HTTP code 000.",
+      "previousResult": "read timeout; OpenAlex reports closed access with no repository full text"
     },
     {
       "body": "Venus",
       "doi": "10.1016/j.icarus.2005.12.014",
       "url": "https://articles.adsabs.harvard.edu/pdf/2006Icar..182...10M",
-      "result": "read timeout; OpenAlex reports closed access with no repository full text"
+      "result": "2026-10-23 resumed shell download: curl exit 28, 25-second timeout with zero bytes received; HTTP code 000.",
+      "previousResult": "read timeout; OpenAlex reports closed access with no repository full text"
     },
     {
       "body": "Mars",
       "doi": "10.1016/j.icarus.2007.07.011",
       "url": "https://articles.adsabs.harvard.edu/pdf/2007Icar..192..404M",
-      "result": "HTTP 403; OpenAlex reports closed access with no repository full text"
+      "result": "2026-10-23 resumed shell download: curl exit 28, 25-second timeout with zero bytes received; HTTP code 000.",
+      "previousResult": "HTTP 403; OpenAlex reports closed access with no repository full text"
     },
     {
       "body": "Uranus",
@@ -382,9 +462,31 @@
       "result": "HTTP 403; NASA NTRS record 19920029279 has no downloadable files"
     }
   ],
+  "sourceReview": [
+    {
+      "body": "Uranus",
+      "doi": "10.1093/mnras/staf800",
+      "url": "https://ora.ox.ac.uk/objects/uuid%3Abb9fb0ab-ef02-492f-a2ad-8eefe44887d8/files/r9593tw89w",
+      "sha256": "8efc151e5c9c0e98e23fa7aef1378ca23350c8ef6cc0e1f0b2876962a29757ef",
+      "result": "Journal PDF downloaded; model-comparison and Data Availability sections read. Section 3 compares NEMESIS predictions with Voyager/ISS and IRIS; filter-dependent photometric discrepancies are discussed. Data Availability states that underlying data are shared on reasonable request to the corresponding author. No tabulated Johnson V phase-response dataset was supplied by this PDF."
+    }
+  ],
   "requiredToClose": [
-    "Independent, calibrated Johnson V phase-response data or scattering models for Mercury 2-170 deg, Venus 2-179 deg, Mars 0-50 deg, Uranus 0-154 deg, Neptune 0-133 deg. Geometric albedo alone is insufficient.",
-    "A Johnson V Jupiter model validated over 0-130 deg and Saturn globe model over 0-150 deg. The currently implemented source-band models have normalized cross-band residuals 0.2885842725 and 0.1701227106 mag respectively. These are diagnostics, not absolute V acceptance measurements.",
-    "Preserve the test-only boundary: do not copy Mallama-Hilton equations or fit runtime parameters to the test oracle to manufacture a pass."
-  ]
+    "An independently justified Jupiter Johnson V model meeting 0.1 mag throughout 0-130 degrees. The new Heng/CALSPEC/Bessell prediction has maximum absolute residual 0.15324715572835323 mag, and opposition residual -0.13424954465890337 mag. Do not fit an offset or phase correction to the oracle.",
+    "Independent calibrated Johnson V phase-response data or physical scattering models for Mercury 2-170 degrees, Venus 2-179 degrees, Mars 0-50 degrees, Saturn globe 0-150 degrees, Uranus 0-154 degrees, Neptune 0-133 degrees. Geometric albedo alone is insufficient.",
+    "Preserve the test-only boundary: Mallama-Hilton equations, coefficient tables and sampled oracle curves must not become runtime or build inputs.",
+    "Whole-body photometric/albedo/color tables and roughness RMS baselines",
+    "D and X/M taxonomic priors and explicit taxonomy/albedo selection",
+    "Diviner rock-abundance input mapping and independently justified lunar rock-size law",
+    "Named-spacecraft matched-geometry render/image-similarity and shadow-fraction evidence"
+  ],
+  "machine": {
+    "initial_available_gib": 87,
+    "latest_available_gib": 83,
+    "initial_load_1min": 9.48,
+    "e2e_start_load_1min": 17.1,
+    "benchmarks": "Not run; load at E2E start was above the owner threshold of 15. E2E was a correctness/parity run, not an FPS or timing benchmark.",
+    "docker": "Never started; owner waiver retained.",
+    "browser": "One headless Firefox at a time; closed by the parity harness."
+  }
 }
