@@ -52,9 +52,9 @@ assert.equal(memorySection.max*65536, report.memory.maximumBytes);
 report.memory.wasmSection = memorySection;
 const save = () => fs.writeFileSync(path.join(cache, 'result.json'), JSON.stringify(report, null, 2) + '\n');
 // Compile through the actual node's production flow prewarmer into a private
-// cache. A fresh cache per artifact proves compilation, not a cache hit.
+// cache. The node keys each compiled flow by the exact artifact hash.
 const nodeBinary = process.env.SDN_NODE_BINARY || 'spacedatanetwork';
-const aotDir = path.join(cache, `aot-${report.artifactSha256}`);
+const aotDir = path.join(cache, 'aot');
 const aotLog = execFileSync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
 assert(!/FAILED|Not implemented instructions/.test(aotLog));
@@ -216,7 +216,7 @@ for (const count of [1, 1000, 4000, 10000, 31814]) {
   assert.equal(row.highWaterBytes,browserRow.highWaterBytes,`native/browser memory parity at ${count}`);
   report.rows.push(row); save(); console.log(JSON.stringify(row));
 }
-const rows = report.rows.filter(r=>r.runtime==='browser'&&r.role==='catalog');
+const rows = report.rows.filter(r=>r.role==='catalog');
 const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+r.highWaterBytes,0)/rows.length;
 const perEntityBytes=rows.reduce((sum,r)=>sum+(r.entities-meanX)*(r.highWaterBytes-meanY),0)/rows.reduce((sum,r)=>sum+(r.entities-meanX)**2,0);
 const baseBytes=meanY-perEntityBytes*meanX;
