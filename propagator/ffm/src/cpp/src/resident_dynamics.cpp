@@ -158,7 +158,7 @@ bool record(Branch& b, ffm_fast::Run& run, std::string& error) {
 // Starts the span at (spanState, spanStart): to the next restart, or open.
 bool startSpan(Execution& e, Branch& b, const Environment& environment, std::string& error) {
     const bool automatic = b.direction > 0 && !ffm_fast::fixedStep(e.integrator);
-    b.bounded = (environment.weather || environment.densityCorrection || automatic) && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
+    b.bounded = (environment.weather || !e.densityCorrectionBreaks.empty() || automatic) && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
     const auto here = b.spanStart.instant();
     const auto there = b.bounded ? b.spanEnd.instant() : here.plusSeconds(b.direction*86400.0);
     if (!environmentCovers(e, environment, here, there, error) || !preflightKernel(e, there, error)) return false;
@@ -626,7 +626,7 @@ bool ResidentDynamics::covariance(size_t i, const TTEpoch& at, const Mat6& p0, c
     e.target = timesys::ttToTdb(at.jdTt());
     if (!environmentCovers(e, environment_, e.initialTT.instant(), e.targetTT.instant(), error) ||
         !preflightKernel(e, e.targetTT.instant(), error)) return false;
-    if (environment_.weather || environment_.densityCorrection) e.breaks = driverBreaks(e);
+    if (environment_.weather || !e.densityCorrectionBreaks.empty()) e.breaks = driverBreaks(e);
     Cursor c;
     c.state = e.initial;
     c.tt = e.initialTT;

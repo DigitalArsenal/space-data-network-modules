@@ -26,6 +26,7 @@ const wasmPath = path.join(root, 'dist/isomorphic/module.wasm');
 const wasm = fs.readFileSync(wasmPath), manifest = read('plugin-manifest.json');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const cache = path.join(root, '.sdk-build/drag-correction'); fs.mkdirSync(cache, { recursive: true });
+const aotDir = path.join(root, '.sdk-build/memory-sizing/aot');
 const seed = read('tests/fixtures/seeds.json')[0], standard = read('tests/fixtures/standard.json');
 const epochMs = Date.parse(standard.fixtureEpochUtc + 'Z'), epoch = epochMs / 86400000 + 2440587.5;
 const offsets = [0, 675, 1012.5, 1350, 1687.5, 2025, 2700]; // exact binary Julian-day fractions
@@ -102,7 +103,7 @@ const report = { artifactSha256: sha(wasm), memory: read('dist/build-provenance.
 let browser;
 try {
   const aot = execFileSync(process.env.SDN_NODE_BINARY || path.join(root, '.sdk-build/spacedatanetwork'),
-    ['prewarm-aot', '--cache-dir', path.join(cache, 'aot'), '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    ['prewarm-aot', '--cache-dir', aotDir, '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   assert(!/FAILED|Not implemented instructions/.test(aot));
   fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aot);
   report.aot = { status: 'PASS', runtime: 'WasmEdge 0.16.4', artifactSha256: sha(wasm) };
@@ -163,7 +164,7 @@ try {
 finally {
   await browser?.close(); if (server.listening) await new Promise(resolve => server.close(resolve));
   fs.writeFileSync(path.join(cache, 'result.json'), JSON.stringify(report, null, 2) + '\n');
-  fs.rmSync(path.join(cache, 'aot'), { recursive: true, force: true });
+  if (report.failure || process.argv.includes('--correction-only')) fs.rmSync(aotDir, { recursive: true, force: true });
 }
 if (!process.argv.includes('--correction-only')) {
   execFileSync(process.execPath, [path.join(root, 'scripts/e2e-memory-sizing.mjs')], {

@@ -259,8 +259,7 @@ double density(const Vec3& r,const timesys::Instant& jd,const ForceModelSet& f,c
         case DragModelType::HarrisPriester:{const auto sun=getSunPosition(jd);return computeHarrisPriester(r,sun.valid?sun.position:Vec3(1,0,0),f.harrisPriesterExponent).density;}
         case DragModelType::NRLMSISE00:{
             AtmosphereConfig c;c.model=AtmosphereModelType::NRLMSISE00;c.includeWinds=f.drag.includeWinds;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.diurnalVariation=f.nrlmsise00.diurnalVariation;c.geomagneticEffects=f.nrlmsise00.geomagneticActivity;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;
-            const double rho = computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;
-            return f.densityScaleAt ? rho * f.densityScaleAt(jd) : rho;
+            return computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;
         }
         case DragModelType::USSA1976:
             if(alt<f.drag.minAltitude || alt>f.drag.maxAltitude)return 0;
@@ -297,7 +296,8 @@ V drag(const V& r,const V& v,const Vec3& position,const timesys::Instant& jd,con
     const V vr=v-(rotation?V(w.y*r.z-w.z*r.y,w.z*r.x-w.x*r.z,w.x*r.y-w.y*r.x):V());
     const D speed=vr.norm();if(speed.value<1e-6)return V();
     const DragForceConfig d=DragAt(jd,f);
-    return vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
+    const V acceleration = vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
+    return f.densityScaleAt ? acceleration * f.densityScaleAt(jd) : acceleration;
 }
 
 V rtn(const Vec3& dv,const V& r,const V& v) {

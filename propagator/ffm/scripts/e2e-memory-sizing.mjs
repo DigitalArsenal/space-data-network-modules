@@ -39,7 +39,7 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
   ...[1800, 3600].map(seconds => encodePluginInvokeRequest({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
     makeTable('PRWResidentRequest', { INSTANCE: instance, ENTITY_HANDLES: [seeds[0].handle], TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
-const predecessor = execFileSync('git', ['show', 'f1c7b8942b7a9ded85566f240cbaaeffca1293db:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+const predecessor = execFileSync('git', ['show', '96a55da80626ae2a5615fed42e3865ddd470ec13:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readFileSync(path.join(cache, '../previous.wasm'))),
   memory: read('dist/build-provenance.json').memory, profile: 'FFM-1', retentionSeconds: 1800, lookaheadSeconds: 300,
@@ -47,7 +47,10 @@ const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readF
   metric: 'WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum',
   rows: [], loadStart: os.loadavg(), logicalCpus: os.cpus().length,
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
-assert.deepEqual(WebAssembly.Module.exports(await WebAssembly.compile(wasm)), WebAssembly.Module.exports(await WebAssembly.compile(predecessor)), 'exports changed');
+const predecessorExports = WebAssembly.Module.exports(await WebAssembly.compile(predecessor));
+const currentExports = WebAssembly.Module.exports(await WebAssembly.compile(wasm));
+assert.deepEqual(currentExports.filter(e => e.name !== 'plugin_catalog_drag_acceleration'), predecessorExports, 'existing exports changed');
+assert(currentExports.some(e => e.name === 'plugin_catalog_drag_acceleration' && e.kind === 'function'), 'missing configured-drag diagnostic');
 const memorySection = analyzeWasmThreadFeatures(wasm).sharedMemory;
 assert(memorySection?.growable);
 assert.equal(memorySection.min*65536, report.memory.initialBytes);
@@ -283,3 +286,5 @@ if (!process.argv.includes('--measure')) {
   report.status='PASS';save();
 }
 console.log(JSON.stringify({model:report.model,requiredMaximumBytes:report.requiredMaximumBytes,status:report.status||'MEASURED'}));
+
+fs.rmSync(aotDir, { recursive: true, force: true });
