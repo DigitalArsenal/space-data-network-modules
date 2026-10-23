@@ -243,8 +243,12 @@ try {
       const old = await page.evaluate(o => window.measure(o), { ...options, previous: true });
       if (count === 1) {
         const decoded = bytes => {
-          const response = decodePluginInvokeResponse(bytes);
-          return { ...response, outputs: response.outputs.map(out => ({ ...out, payload: decodePrw(out.payload) })) };
+          const { payloadArena, arenaLease, outputFrames, outputs, ...status } = decodePluginInvokeResponse(bytes);
+          // Arena leases and serialized size/offset describe the wire layout.
+          return { ...status, outputs: outputs.map(out => {
+            const { payload, arenaLease, size, offset, ...metadata } = out;
+            return { ...metadata, payload: decodePrw(payload) };
+          }) };
         };
         assert.deepEqual(focusOutputs.map(decoded), old.outputs.map(b => decoded(new Uint8Array(b))), 'previous focus fields changed');
         row.previousArtifactParity = 'field-identical; SDS 1.259 RFM default fields change serialized layout only';
