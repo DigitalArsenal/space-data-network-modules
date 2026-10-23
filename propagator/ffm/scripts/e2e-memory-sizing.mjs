@@ -36,9 +36,11 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
   ...[1800, 3600].map(seconds => encodePluginInvokeRequest({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
     makeTable('PRWResidentRequest', { INSTANCE: instance, ENTITY_HANDLES: [seeds[0].handle], TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
+const predecessor = execFileSync('git', ['show', 'f1c7b8942b7a9ded85566f240cbaaeffca1293db:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readFileSync(path.join(cache, '../previous.wasm'))),
   memory: read('dist/build-provenance.json').memory, profile: 'FFM-1', retentionSeconds: 1800, lookaheadSeconds: 300,
-  sampleEpochsSeconds: [1800, 3600], fixture: 'public study SGP4 seeds, repeated cyclically across all seven orbit regimes',
+  sampleEpochsSeconds: [1800, 3600], fixture: 'public study SGP4 seeds, repeated cyclically across all eight orbit regimes',
   rows: [], loadStart: os.loadavg(), logicalCpus: os.cpus().length,
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
 const save = () => fs.writeFileSync(path.join(cache, 'result.json'), JSON.stringify(report, null, 2) + '\n');
