@@ -46,3 +46,23 @@ export async function environment(){
  return {provenance,inputs:[input('kernel','PRW',kernel),prw('earth_orientation','EARTH_ORIENTATION',table('PRWEarthOrientation',{ROWS:rows})),prw('space_weather','SPACE_WEATHER',table('PRWSpaceWeatherTable',{ROWS:spw}))]};
 }
 export function configuration(epoch){return prw('configuration','EXECUTION_REQUEST',fullForceRequest({epoch,state:[7000000,0,0,0,7500,0],cdAm:.003,crAm:.02}));}
+// Independent test fixture: a known 10 m/s impulse executed by the published
+// FFM propagator. The host only labels the requested UTC samples as OEM KVN.
+export async function plantedManeuver(epoch,env){
+ const start=Date.parse(epoch+'Z'),label=s=>new Date(start+s*1000).toISOString().replace('Z','');
+ const instant=s=>table('TIMInstant',{TIME_SYSTEM:P.timingStandard.UTC,EPOCH_FORMAT:P.timEpochRepresentation.ISO8601,ISO8601:label(s)});
+ const seconds=Array.from({length:73},(_,i)=>i*600);
+ const request=fullForceRequest({epoch,state:[7000000,0,0,0,7500,1000],target:label(43200),cdAm:.003,crAm:.02});
+ request.SAMPLE_EPOCHS=seconds.map(instant);
+ request.IMPULSES=[table('PRWImpulse',{EPOCH:instant(21900),DELTA_V:table('FRMVector3',{X:0,Y:10,Z:0}),VECTOR_BASIS:P.prwSteeringBasis.INTEGRATION_FRAME})];
+ const h=await harness('propagator/ffm');
+ try{
+  const r=await h.invoke({methodId:'invoke',inputs:[prw('request','EXECUTION_REQUEST',request),...env.inputs]});assert.equal(r.statusCode,0,r.errorMessage);
+  const payload=r.outputs.find(o=>o.portId==='response').payload;
+  const output=P.PRW.getSizePrefixedRootAsPRW(new fb.ByteBuffer(payload)).unpack().EXECUTION_RESULT;
+  assert.equal(output.SAMPLES.length,seconds.length);
+  const header='CCSDS_OEM_VERS = 2.0\nMETA_START\nOBJECT_NAME = PLANTED-MANEUVER\nOBJECT_ID = SYNTHETIC\nCENTER_NAME = EARTH\nREF_FRAME = GCRF\nTIME_SYSTEM = UTC\nMETA_STOP\n';
+  const lines=output.SAMPLES.map((s,i)=>{const p=s.STATE.STATE.POSITION,v=s.STATE.STATE.VELOCITY;return label(seconds[i])+' '+[p.X,p.Y,p.Z,v.X,v.Y,v.Z].map(x=>x/1000).join(' ');});
+  return fil(new TextEncoder().encode(header+lines.join('\n')+'\n'),'planted.oem');
+ }finally{await h.destroy();}
+}

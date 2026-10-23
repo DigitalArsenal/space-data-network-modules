@@ -423,6 +423,12 @@
                   "schemaName": "MNV.fbs",
                   "fileIdentifier": "$MNV",
                   "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }

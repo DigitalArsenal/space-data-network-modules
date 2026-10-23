@@ -16,7 +16,7 @@ import * as fb from 'flatbuffers';
 import {OCM} from 'spacedatastandards.org/lib/js/OCM/OCM.js';
 import {loadModule} from 'space-data-module-sdk/host/isomorphic';
 import {headlessShell} from '../../../propagator/ffm/tests/lib/headlessShell.mjs';
-import {environment,configuration,fil,dcl} from './operator-environment.mjs';
+import {environment,configuration,fil,dcl,plantedManeuver} from './operator-environment.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),wasmPath=path.join(root,'dist/isomorphic/module.wasm');
 const reportPath=process.env.OD_REPORT||path.join(root,'.build-operator/e2e.json');
 const limit=Number(process.env.OD_FIXTURE_LIMIT||25);
@@ -39,7 +39,7 @@ try{
  await page.evaluate(async manifest=>{if(!crossOriginIsolated)throw Error('COI required');const {createBrowserModuleHarness}=await import('/harness.js');window.make=async config=>createBrowserModuleHarness({wasmSource:new Uint8Array(await(await fetch('/module.wasm')).arrayBuffer()),manifest,surface:'direct',hostOptions:{config}});},manifest);
  const run=async(request,config)=>{
   const descriptors=request.inputs.map((f,i)=>{const url=`/input-${i}`;assets.set(url,f.payload);return {...f,payload:undefined,url};});
-  return page.evaluate(async({descriptors,config})=>{const h=await window.make(config);try{const inputs=[];for(const {url,...f} of descriptors)inputs.push({...f,payload:new Uint8Array(await(await fetch(url)).arrayBuffer())});const r=await h.invoke({methodId:'fit_ffm',inputs});return {...r,outputs:r.outputs.map(o=>({...o,payload:Array.from(o.payload)}))};}finally{await h.destroy();}},{descriptors,config}).then(r=>({...r,outputs:r.outputs.map(o=>({...o,payload:new Uint8Array(o.payload)}))}));
+  return page.evaluate(async({descriptors,config})=>{const h=await window.make(config);try{const inputs=[];for(const {url,...f} of descriptors)inputs.push({...f,payload:new Uint8Array(await(await fetch(url)).arrayBuffer())});const r=await h.invoke({methodId:'fit_ffm',inputs});return {...r,errorMessage:r.statusCode?JSON.stringify({message:r.errorMessage,host:h.bridge?.getLastEnvelope()}):r.errorMessage,outputs:r.outputs.map(o=>({...o,payload:Array.from(o.payload)}))};}finally{await h.destroy();}},{descriptors,config}).then(r=>({...r,outputs:r.outputs.map(o=>({...o,payload:new Uint8Array(o.payload)}))}));
  };
  const config={sampleSeconds:600,maxIterations:12,ballisticPrior:.02,dataSource:'SpaceX public MEME'};
  for(const name of names){
@@ -52,6 +52,8 @@ try{
    report.rows.push(row);console.log(JSON.stringify(row));save();
    if(name===names[0]&&!correction){
     const refused=await run(base,{...config,fitWindowSeconds:172801});assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/blend-join/);report.joinRefusal='PASS';
+    const planted=await plantedManeuver(epoch,env);const event=await run({methodId:'fit_ffm',inputs:[planted,configuration(epoch),...env.inputs]},config);
+    assert.equal(decoded(event).length,2,'Maneuver must split the fit into two segments');assert.equal(event.outputs.filter(o=>o.portId==='mnv').length,1);report.maneuverSegmentation='PASS';
     native=await loadModule({wasmSource:wasmPath,manifest,runtimeKind:'wasmedge',surface:'direct',config});
     const other=await native.invoke(request);const hashes=r=>r.outputs.map(o=>[o.portId,createHash('sha256').update(o.payload).digest('hex')]);assert.equal(other.statusCode,0,other.errorMessage);assert.deepEqual(hashes(other),hashes(result));report.parity='byte-identical headless browser/native WasmEdge';await native.destroy();native=null;
    }

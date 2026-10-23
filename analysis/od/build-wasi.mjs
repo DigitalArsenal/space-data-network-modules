@@ -39,14 +39,14 @@ try {
  const executable=path.join(build,'module.wasm');
  const exports=['_start','_initialize','plugin_alloc','plugin_free','plugin_invoke_stream','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','fit','fit_ffm'];
  const common=[...toolchain.toolchainArgs,'-O3','-fno-c++-static-destructors','-msimd128','-mbulk-memory','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE',
-  '-I'+build,...ffmIncludes,'-DFFM_MODULE_ID="ffm"','-DFFM_MODULE_VERSION="operator-linked"','-DFFM_TYPED_INPUTS_ONLY=1',
+  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,'-DFFM_MODULE_ID="ffm"','-DFFM_MODULE_VERSION="operator-linked"','-DFFM_TYPED_INPUTS_ONLY=1',
   '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.join(cpp,'deps/vallado-sgp4'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds')];
  const run=args=>{const r=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:180000});if(r.status!==0)throw new Error(r.error?.message??r.stderr);};
  const objects=[];
  for(const [i,source] of sources.entries()){
   const object=path.join(build,i+'.o');objects.push(object);console.log('compile '+path.relative(modules,source));
   const c=source.endsWith('.c');
-  const stamp=createHash('sha256').update(await fs.readFile(source)).update(JSON.stringify(common)).update(await fs.readFile(path.join(build,'plugin_manifest_bytes.h'))).digest('hex');
+  const stamp=createHash('sha256').update(await fs.readFile(source)).update(JSON.stringify(common)).update(source.endsWith('plugin_entrypoints.cpp')?await fs.readFile(path.join(build,'plugin_manifest_bytes.h')):'').digest('hex');
   if(await fs.readFile(object+'.sha','utf8').catch(()=>null)===stamp)continue;
   run([...common,...(c?['-x','c']:['-std=c++17',source.startsWith(ffm)?'-fno-exceptions':'-fignore-exceptions']),'-DOD_REACTOR_BUILD','-c',source,'-o',object]);await fs.writeFile(object+'.sha',stamp);
  }
