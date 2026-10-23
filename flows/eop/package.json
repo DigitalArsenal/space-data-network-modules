@@ -13,7 +13,7 @@
     "flatc-wasm": "26.1.32",
     "playwright": "1.63.0",
     "space-data-module-sdk": "0.9.9",
-    "spacedatastandards.org": "1.259.0"
+    "spacedatastandards.org": "1.261.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.1"

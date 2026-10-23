@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.220.0"
+    "spacedatastandards.org": "1.261.0"
   },
   "sdn-module": "./dist/isomorphic/module.wasm",
   "exports": {
