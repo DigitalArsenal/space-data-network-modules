@@ -383,6 +383,26 @@ inline double light(const Population& pop,Vec3 p) {
 }
 } // namespace knots
 
+// The clumped young light: the clumped share (model_choices::young_clumped)
+// of the smooth model's young light, integrated over the disc (columns
+// 2 h_bright of the exponential layer, 0.1 kpc cells): the star complexes'
+// and the HII regions' ionizing clusters' light together.
+inline double clumped_young_light() {
+  static const double total=[] {
+    const double hole_sun=populations::young_hole(galactic_constants::solar_radius_kpc);
+    double young_total=0;
+    constexpr double cell=0.1;
+    for(double y=-knots::half_kpc+cell/2;y<knots::half_kpc;y+=cell) for(double x=-knots::half_kpc+cell/2;x<knots::half_kpc;x+=cell) {
+      const double r=std::hypot(x,y);
+      young_total+=young_amplitude()*young_pattern({x,y,0})*populations::young_hole(r)/hole_sun
+        *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc)*model_choices::disc_edge(r)
+        *2*populations::h_bright_kpc*cell*cell;
+    }
+    return model_choices::young_clumped*young_total;
+  }();
+  return total;
+}
+
 // HII REGIONS: the knots of nebular light along the arms. Reid et al. (2019)
 // fit the arms to masers in high-mass star-forming regions, so the regions
 // sit on the fitted arms (unsheared), over the young disc's radial profile
@@ -424,22 +444,25 @@ inline double light(Vec3 p) {return knots::light(population(),p);}
 // THE IONIZING CLUSTERS (0.5.1, owner 2026-10-23: "white core with faded to
 // purple"): each region's lines are lit by its young cluster, which stands
 // at its center as a compact blue-white core (young light, colors young).
-// Its G light is the region's nebular G light times the continuum to lines
-// ratio of the equivalent widths the module gives giant HII regions
-// (stellar_populations.hpp: H-alpha 1000 A and [OIII] with H-beta 500 A, of
-// G's ~4400 A: 4400 / 1500), taken from the star complexes' share of the
-// young light, so the young total stands. Its size: half the nebula's
-// sigma, no finer than half the slab's 62.5 pc texel, the finest the bake
-// samples (a core between texel centers would be missed); the clusters of
-// giant regions spread over tens of parsecs (Wright et al. 2023, PPVII,
-// section 2).
-inline constexpr double core_to_nebula=colors::big_g_fwhm_a/(colors::hii_g_ew_a+colors::hii_r_ew_a),core_sigma_min_kpc=0.03125;
+// Their G light: a share `cluster_share` of the clumped young light (a
+// MODEL CHOICE: the part of the young, M_V < -1, light in stars still young
+// enough to ionize, under ~10 Myr, against a B5V's ~100 Myr), split among the
+// regions as their nebular light (each region's lines in proportion to its
+// cluster's ionizing light); the star complexes keep the rest, so the young
+// total stands. (The equivalent widths' continuum, 4400 / 1500 of the lines,
+// would take more than all the clumped young light at the nebulae's light.)
+// Its size: half the slab's 62.5 pc texel, the finest the bake samples (a
+// core between texel centers would be missed); the clusters themselves are
+// a few to tens of parsecs (Wright et al. 2023, PPVII, section 2), finer
+// than the volumes resolve.
+inline constexpr double cluster_share=0.4,core_sigma_kpc=0.03125;
 inline const knots::Population& clusters() {
   static const knots::Population pop=[] {
     knots::Population c;
+    const double per_nebular=cluster_share*clumped_young_light()/knots::total(population());
     for(const auto& k:population().knots) {
-      const double sigma=std::max(0.5*k.sigma,core_sigma_min_kpc);
-      c.knots.push_back({k.c,sigma,core_to_nebula*k.amplitude*std::pow(k.sigma/sigma,3),k.luminosity});
+      const double sigma=core_sigma_kpc;
+      c.knots.push_back({k.c,sigma,per_nebular*k.amplitude*std::pow(k.sigma/sigma,3),k.luminosity});
     }
     knots::index(c);
     return c;
@@ -481,15 +504,6 @@ inline double light(Vec3 p) {return knots::light(population(),p);}
 // (columns 2 h_bright of the exponential layer, 0.1 kpc cells).
 inline const knots::Population& complexes::population() {
   static const knots::Population pop=[] {
-    static const double hole_sun=populations::young_hole(galactic_constants::solar_radius_kpc);
-    double young_total=0;
-    constexpr double cell=0.1;
-    for(double y=-knots::half_kpc+cell/2;y<knots::half_kpc;y+=cell) for(double x=-knots::half_kpc+cell/2;x<knots::half_kpc;x+=cell) {
-      const double r=std::hypot(x,y);
-      young_total+=young_amplitude()*young_pattern({x,y,0})*populations::young_hole(r)/hole_sun
-        *std::exp((galactic_constants::solar_radius_kpc-r)/appearance::young_length_kpc)*model_choices::disc_edge(r)
-        *2*populations::h_bright_kpc*cell*cell;
-    }
     // dN/dL ~ L^-2 on [1, luminosity_range]: L = 1 / (1 - u (1 - 1/range)).
     double luminosity_sum=0;
     auto pop=knots::build({count,20261022,2.0,15.0,layer_kpc,sigma_lo_kpc,sigma_hi_kpc,populations::drift_age_j_myr,0.15,
@@ -500,8 +514,7 @@ inline const knots::Population& complexes::population() {
         return l;
       });
     // The clumped young light less the HII regions' ionizing clusters (0.5.1).
-    // (hii_population reports the clusters' share of it.)
-    const double scale=std::max(0.0,clumped*young_total-knots::total(hii::clusters()))/luminosity_sum;
+    const double scale=(clumped_young_light()-knots::total(hii::clusters()))/luminosity_sum;
     for(auto& k:pop.knots) k.amplitude*=scale/(std::pow(2*galactic_constants::pi,1.5)*k.sigma*k.sigma*k.sigma);
     return pop;
   }();
