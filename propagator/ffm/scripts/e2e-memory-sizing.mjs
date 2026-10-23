@@ -120,3 +120,110 @@ try {
 // Native role execution and fitted-model verification are below. Outputs are
 // written outside tracked paths so the exact candidate remains immutable.
 save();
+const nativeSource = String.raw`
+#include <wasmedge/wasmedge.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+static WasmEdge_VMContext *vm;
+static WasmEdge_MemoryInstanceContext *mem;
+static void ok(WasmEdge_Result r) { if (!WasmEdge_ResultOK(r)) { fprintf(stderr,"%s\n",WasmEdge_ResultGetMessage(r)); exit(1); } }
+static int32_t call(const char *name,WasmEdge_Value *args,int argc,int result) {
+ WasmEdge_String n=WasmEdge_StringCreateByCString(name); WasmEdge_Value value;
+ ok(WasmEdge_VMExecute(vm,n,args,argc,result?&value:NULL,result)); WasmEdge_StringDelete(n);
+ return result?WasmEdge_ValueGetI32(value):0;
+}
+#define I(x) WasmEdge_ValueGenI32((int32_t)(x))
+#define D(x) WasmEdge_ValueGenF64(x)
+static uint32_t alloc(uint32_t n) { WasmEdge_Value a[]={I(n)}; uint32_t p=call("plugin_alloc",a,1,1); if(!p)exit(2); return p; }
+static void release(uint32_t p) { WasmEdge_Value a[]={I(p)}; call("plugin_free",a,1,0); }
+static uint32_t input(const char *name,uint32_t *n) {
+ FILE *f=fopen(name,"rb"); if(!f){perror(name);exit(2);} fseek(f,0,SEEK_END);*n=ftell(f);rewind(f);
+ unsigned char *b=malloc(*n);if(fread(b,1,*n,f)!=*n)exit(2);fclose(f);
+ uint32_t p=alloc(*n);ok(WasmEdge_MemoryInstanceSetData(mem,b,p,*n));free(b);return p;
+}
+static void output(const char *name,uint32_t p,uint32_t n) {
+ unsigned char *b=malloc(n);ok(WasmEdge_MemoryInstanceGetData(mem,b,p,n));FILE*f=fopen(name,"wb");if(!f)exit(2);if(fwrite(b,1,n,f)!=n)exit(2);fclose(f);free(b);
+}
+static void expected(int actual,int wanted) { if(actual!=wanted){fprintf(stderr,"export returned %d expected %d\n",actual,wanted);exit(3);} }
+int main(int argc,char **argv) {
+ if(argc!=5)return 2;const int count=atoi(argv[2]);const double epoch=atof(argv[3]);
+ if(strcmp(WasmEdge_VersionGet(),"0.16.4")){fprintf(stderr,"Wrong WasmEdge: %s\n",WasmEdge_VersionGet());return 2;}
+ WasmEdge_ConfigureContext *conf=WasmEdge_ConfigureCreate();
+ WasmEdge_ConfigureAddProposal(conf,WasmEdge_Proposal_Threads);WasmEdge_ConfigureAddHostRegistration(conf,WasmEdge_HostRegistration_Wasi);
+ vm=WasmEdge_VMCreate(conf,NULL);ok(WasmEdge_VMLoadWasmFromFile(vm,argv[1]));ok(WasmEdge_VMValidate(vm));ok(WasmEdge_VMInstantiate(vm));
+ WasmEdge_String n=WasmEdge_StringCreateByCString("memory");mem=WasmEdge_ModuleInstanceFindMemory(WasmEdge_VMGetActiveModule(vm),n);WasmEdge_StringDelete(n);if(!mem)return 2;
+ call("__wasm_call_ctors",NULL,0,0);const unsigned base=WasmEdge_MemoryInstanceGetPageSize(mem)*65536;
+ char file[4096];
+ if(count==1) {
+  for(int i=0;i<3;i++){
+   snprintf(file,sizeof file,"%s/focus-%d.piv",argv[4],i);uint32_t size,p=input(file,&size),sz=alloc(4);
+   uint32_t zero=0;ok(WasmEdge_MemoryInstanceSetData(mem,(uint8_t*)&zero,sz,4));WasmEdge_Value a[]={I(p),I(size),I(sz)};
+   uint32_t out=call("plugin_invoke_stream",a,3,1),len;ok(WasmEdge_MemoryInstanceGetData(mem,(uint8_t*)&len,sz,4));if(!out||!len)return 3;
+   snprintf(file,sizeof file,"%s/native-1-%d.bin",argv[4],i);output(file,out,len);release(out);release(sz);release(p);
+  }
+ } else {
+  expected(call("plugin_init",NULL,0,1),0);
+  uint32_t framesN,bstarN,statesN;
+  snprintf(file,sizeof file,"%s/frames.bin",argv[4]);uint32_t frames=input(file,&framesN);
+  snprintf(file,sizeof file,"%s/bstar-%d.bin",argv[4],count);uint32_t bstar=input(file,&bstarN);
+  WasmEdge_Value config[]={I(frames),I(framesN),I(bstar),I(count)};expected(call("plugin_configure_catalog",config,4,1),0);
+  snprintf(file,sizeof file,"%s/states-%d.bin",argv[4],count);uint32_t states=input(file,&statesN);
+  for(int i=0;i<count;i++){uint32_t p=states+i*56+8;WasmEdge_Value a[]={D(epoch),I(p),I(p),I(0)};expected(call("plugin_catalog_transform_state",a,4,1),0);}
+  WasmEdge_Value seed[]={I(states),I(count)};expected(call("plugin_init_states_ecef",seed,2,1),count);
+  release(frames);release(bstar);release(states);uint32_t out=alloc(count*48);
+  for(int i=0;i<2;i++){
+   double seconds=(i+1)*1800;WasmEdge_Value a[]={D(epoch+seconds/86400),I(0),I(count)};expected(call("plugin_ensure_coverage",a,3,1),count);
+   WasmEdge_Value b[]={D(epoch+(seconds-1)/86400),I(out),I(count)};expected(call("plugin_eval_catalog_states_gcrf",b,3,1),count);
+   snprintf(file,sizeof file,"%s/native-%d-%d.bin",argv[4],count,i);output(file,out,count*48);
+  }
+  release(out);call("plugin_destroy",NULL,0,0);
+ }
+ printf("{\"runtime\":\"wasmedge\",\"version\":\"%s\",\"entities\":%d,\"baseBytes\":%u,\"highWaterBytes\":%u}\n",WasmEdge_VersionGet(),count,base,WasmEdge_MemoryInstanceGetPageSize(mem)*65536);
+ WasmEdge_VMDelete(vm);WasmEdge_ConfigureDelete(conf);return 0;
+}`;
+fs.writeFileSync(path.join(cache, 'measure.c'), nativeSource);
+const wasmedge = process.env.WASMEDGE_ROOT || path.join(os.homedir(), `.local/share/spacedatanetwork/wasmedge-sdk/0.16.4-${process.platform}-${process.arch}`);
+const native = path.join(cache, 'measure-native');
+execFileSync('cc', [path.join(cache, 'measure.c'), '-std=c11', '-O2', `-I${wasmedge}/include`, `-L${wasmedge}/lib`, '-lwasmedge', `-Wl,-rpath,${wasmedge}/lib`, '-o', native], { stdio: 'inherit' });
+if (process.platform === 'darwin') execFileSync('install_name_tool', ['-change', '@rpath/libwasmedge.0.dylib', `${wasmedge}/lib/libwasmedge.0.dylib`, native]);
+const aotPath = aotLog.split('\n').find(line => line.startsWith(`  flow ${wasmPath}: `))?.slice(`  flow ${wasmPath}: `.length).replace(/ \((?:compiled|already present)\)$/, '');
+assert(aotPath && fs.existsSync(aotPath), 'prewarm produced no flow AOT artifact');
+fs.writeFileSync(path.join(cache, 'frames.bin'), Buffer.concat(frames));
+focusRequests.forEach((bytes,i) => fs.writeFileSync(path.join(cache, `focus-${i}.piv`), bytes));
+for (const count of [1, 1000, 4000, 10000, 31814]) {
+  if (count > 1) {
+    const objects = Array.from({length:count},(_,i)=>seeds[i%seeds.length]);
+    fs.writeFileSync(path.join(cache, `bstar-${count}.bin`), Buffer.from(new Float64Array(objects.map(s=>s.bstar)).buffer));
+    // Unit conversion and marshaling; the guest performs frame conversion.
+    fs.writeFileSync(path.join(cache, `states-${count}.bin`), Buffer.from(new Float64Array(objects.flatMap(s=>[epoch,...s.position.map(x=>x*1000),...s.velocity.map(x=>x*1000)])).buffer));
+  }
+  const row = JSON.parse(execFileSync(native, [aotPath, String(count), String(epoch), cache], {encoding:'utf8',maxBuffer:1024*1024}));
+  row.role = count === 1 ? 'resident-focus' : 'catalog';
+  row.outputs = Array.from({length:count===1?3:2}, (_,i)=>sha(fs.readFileSync(path.join(cache, `native-${count}-${i}.bin`))));
+  const browserRow = report.rows.find(r=>r.runtime==='browser'&&r.entities===count);
+  assert.deepEqual(row.outputs,browserRow.outputs,`native/browser byte parity at ${count}`);
+  assert.equal(row.highWaterBytes,browserRow.highWaterBytes,`native/browser memory parity at ${count}`);
+  report.rows.push(row); save(); console.log(JSON.stringify(row));
+}
+const rows = report.rows.filter(r=>r.runtime==='browser'&&r.role==='catalog');
+const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+r.highWaterBytes,0)/rows.length;
+const perEntityBytes=rows.reduce((sum,r)=>sum+(r.entities-meanX)*(r.highWaterBytes-meanY),0)/rows.reduce((sum,r)=>sum+(r.entities-meanX)**2,0);
+const baseBytes=meanY-perEntityBytes*meanX;
+report.model={method:'least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)',baseBytes,perEntityBytes,
+  focusHighWaterBytes:report.rows.find(r=>r.role==='resident-focus').highWaterBytes};
+for(const row of rows){row.predictedBytes=Math.max(report.memory.initialBytes,baseBytes+perEntityBytes*row.entities);row.relativePredictionError=Math.abs(row.predictedBytes-row.highWaterBytes)/row.highWaterBytes;assert(row.relativePredictionError<=.1,'catalog model exceeds 10%');}
+const largest=Math.max(...report.rows.map(r=>r.highWaterBytes));
+report.requiredMaximumBytes=Math.ceil(largest*1.5/(16*1024*1024))*16*1024*1024;
+report.loadEnd=os.loadavg();save();
+if (!process.argv.includes('--measure')) {
+  assert.equal(report.memory.maximumBytes,report.requiredMaximumBytes,'rebuild with measured maximum');
+  for(const row of report.rows)assert(row.highWaterBytes*1.5<=report.memory.maximumBytes);
+  for(const script of ['e2e-ffm.mjs','e2e-catalog-coverage.mjs']) {
+    execFileSync(process.execPath,[path.join(root,'scripts',script)],{cwd:root,stdio:'inherit'});
+    report[script]='PASS';save();
+  }
+  report.status='PASS';save();
+}
+console.log(JSON.stringify({model:report.model,requiredMaximumBytes:report.requiredMaximumBytes,status:report.status||'MEASURED'}));
