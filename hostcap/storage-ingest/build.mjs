@@ -39,7 +39,11 @@ const compilation = await compileModuleFromSource({
   // builds against reality instead of against whatever the SDK last guessed.
   // Same fix, same reasoning as hostcap/http-request (7fefaf4), where the long
   // form of this note lives.
-  threadModel: "wasi-sequential",
+  // single-thread (Emscripten), as http-request and every module a flow links it with: 99486391 ("WIP: prepare WASI
+  // flow linking") switched this one alone to wasi-sequential, and no flow linking both compiled (mixed-guest-thread-
+  // models). Move them together - graph/checks/flow-link-models.mjs (a required modules gauntlet check) refuses a flow
+  // that mixes them. (flows/open-dca builds its own wasi-sequential copies of both and is not affected.)
+  threadModel: "single-thread",
   // Imports the sync space_data_module_host hostcall bridge (the typed $PIV
   // hostcall); symbols resolve at instantiation.
   allowUndefinedImports: true,
