@@ -4037,8 +4037,8 @@ int tile(void) {
         }
         const auto requests=raster.requests();uint64_t source_bytes=0;
         for(const auto& r:requests)source_bytes+=r.second;
-        if(source_bytes>128u*1024u*1024u) {plugin_set_error("source-pixel-budget","split this plan: required source rows exceed 128 MiB");return 413;}
-        if(!http_input_at("dem",0).present) {
+        if(source_bytes>32u*1024u*1024u) {plugin_set_error("source-pixel-budget","split this plan: required source rows exceed 32 MiB");return 413;}
+        if(json_bool(plan,"sourcePixelRangesOnly",false)) {
             sdn::runtime::FlowNoticeT notice;notice.KIND=sdn::runtime::flowNoticeKind_Info;
             notice.SOURCE_NAME=tileset_id;notice.REASON="source-pixel-ranges";notice.COUNT=requests.size();
             for(const auto& r:requests)notice.ITEMS.push_back(std::to_string(r.first)+":"+std::to_string(r.second));
@@ -4312,7 +4312,7 @@ int tile(void) {
     // the invariant one: this dataset widens its LONGITUDE spacing above 50
     // degrees, so an east-west figure would describe the latitude band and not
     // the dataset.
-    double source_post_spacing = 0.0;
+    double source_post_spacing = raster.active ? raster.spacing : 0.0;
     // HOW MANY SOURCE POSTS LIE ALONG ONE TILE EDGE, which is the number that
     // says whether `maxGridSize` resolves the dataset or smooths it. It no
     // longer decides what the ACCURACY figure means — that is measured at the
