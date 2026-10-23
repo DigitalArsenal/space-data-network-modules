@@ -23,7 +23,7 @@ extern "C" int bake_legacy() {
   using namespace milky_way;
   wire::Request request;if (!request.ok) return wire::fail("Expected one $PCE request");
   volumes=std::make_unique<NestedVolumes>(sun); volumes->bake(legacy);legacy_active=true;
-  wire::Result r; volume_result(r,"global",volumes->global);volume_result(r,"local",volumes->local);
+  wire::Result r; volume_result(r,"global",volumes->global);volume_result(r,"slab",volumes->slab);volume_result(r,"local",volumes->local);
   r.text("label","model");r.text("channels","legacy RGB emissivity per kpc; extinction optical depth per kpc");return r.emit();
 }
 extern "C" int verify_legacy() {
