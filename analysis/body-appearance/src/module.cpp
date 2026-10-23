@@ -3,6 +3,7 @@
 #include "models.hpp"
 #include "photometry.hpp"
 #include "disk_photometry.hpp"
+#include "band_photometry.hpp"
 #include "placement.hpp"
 
 extern "C" int parameters() {
@@ -103,10 +104,12 @@ extern "C" int disk_photometry() {
   if(!q.only({"model","phase_rad","radius_m","sun_distance_au","observer_distance_m","solar_magnitude","surface_albedo"}))
     return wire::fail("invalid-input","Invalid disk-photometry request.");
   const auto model=q.text("model");
-  const bool lambert=model=="sphere:lambert",jupiter=model=="jupiter:heng2021:550nm";
+  const bool lambert=model=="sphere:lambert",jupiter=model=="jupiter:heng2021:550nm",johnson_v=model=="jupiter:heng2021:V";
   const bool saturn=model=="saturn:dyudina2016:640nm" || model=="saturn:dyudina2016:440nm";
-  if(!lambert && !jupiter && !saturn)return wire::fail("model-unavailable","No independently sourced disk scattering model for this identifier.");
-  const double radius=q.number("radius_m"),sun=q.number("sun_distance_au"),observer=q.number("observer_distance_m"),solar_mag=q.number("solar_magnitude");
+  if(!lambert && !jupiter && !saturn && !johnson_v)return wire::fail("model-unavailable","No independently sourced disk scattering model for this identifier.");
+  if(johnson_v && q.has("solar_magnitude"))return wire::fail("invalid-input","The calibrated V model supplies its cited solar magnitude; it cannot be overridden.");
+  const double radius=q.number("radius_m"),sun=q.number("sun_distance_au"),observer=q.number("observer_distance_m");
+  const double solar_mag=johnson_v?parameter("solar:calspec2015","V_magnitude"):q.number("solar_magnitude");
   const double albedo=q.number("surface_albedo");
   const auto angles=q.vector("phase_rad");
   if(!in_range(radius,1,1e9) || !in_range(sun,.001,1e6) || !in_range(observer,100*radius,1e20) ||
@@ -115,16 +118,16 @@ extern "C" int disk_photometry() {
     return wire::fail("invalid-input","Require finite far-field geometry, matched-band solar magnitude at 1 au, and 1..256 angles; only Lambert accepts surface_albedo.");
   std::vector<double> disk,ratio,magnitude;
   for(double angle:angles) {
-    const double limit=lambert?pi:(jupiter?140:150)*pi/180;
+    const double limit=lambert?pi:((jupiter || johnson_v)?140:150)*pi/180;
     if(!in_range(angle,0,limit) || angle==pi)return wire::fail("out-of-domain","Phase outside the documented model range or zero-flux endpoint.");
-    const double p=disk_albedo(model,angle,albedo),flux=p*std::pow(radius/observer/sun,2);
+    const double p=johnson_v?jupiter_v_disk_albedo(angle):disk_albedo(model,angle,albedo),flux=p*std::pow(radius/observer/sun,2);
     if(!(flux>0) || !std::isfinite(flux))return wire::fail("out-of-domain","The requested geometry produces no finite positive reflected flux.");
     disk.push_back(p);ratio.push_back(flux);magnitude.push_back(solar_mag-2.5*std::log10(flux));
   }
   wire::Result r;r.vector("disk_albedo",disk);r.vector("solar_flux_ratio",ratio);r.vector("apparent_magnitude",magnitude,"mag");
   r.text("model",model);
-  r.text("band",lambert?"Caller-defined Lambert band":(jupiter?"550 nm; NOT Johnson V":(model=="saturn:dyudina2016:640nm"?"Pioneer red, 640 nm; NOT Johnson V":"Pioneer blue, 440 nm; NOT Johnson V")));
-  r.text("citation",lambert?"Closed-form Lambert sphere; unit diffuse surface albedo has geometric albedo 2/3":(jupiter?"doi:10.3847/2041-8213/abe872; Table 1, 0.55 um; doi:10.1038/s41550-021-01444-7; Eqs. (6),(23)":"doi:10.3847/0004-637X/822/2/76; Eq. (4), Table 3; piecewise-linear interpolation in phase"));
+  r.text("band",johnson_v?"Johnson V: Bessell 1990 energy response, CALSPEC Sun":(lambert?"Caller-defined Lambert band":(jupiter?"550 nm; NOT Johnson V":(model=="saturn:dyudina2016:640nm"?"Pioneer red, 640 nm; NOT Johnson V":"Pioneer blue, 440 nm; NOT Johnson V"))));
+  r.text("citation",johnson_v?"doi:10.3847/2041-8213/abe872 Table 1, 470-700 nm; doi:10.1086/132749 Table 2; doi:10.1086/118016 Tables 1-3, CALSPEC sun_reference_stis_002.fits":(lambert?"Closed-form Lambert sphere; unit diffuse surface albedo has geometric albedo 2/3":(jupiter?"doi:10.3847/2041-8213/abe872; Table 1, 0.55 um; doi:10.1038/s41550-021-01444-7; Eqs. (6),(23)":"doi:10.3847/0004-637X/822/2/76; Eq. (4), Table 3; piecewise-linear interpolation in phase")));
   r.text("scope","Static homogeneous sphere; Saturn globe only; supplied radius is the spherical model radius. Solar magnitude must match the model band. No fit to Mallama-Hilton.");
   return r.emit();
 }

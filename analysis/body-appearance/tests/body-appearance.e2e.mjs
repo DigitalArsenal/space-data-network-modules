@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';
 import {measure} from './measurements.mjs';
 import {runtimeParity} from './runtime-parity.mjs';
-import {phaseDomains} from './mallama-hilton-oracle.mjs';
+import {measurePlanets} from './planet-measurements.mjs';
 import {measureLunar} from './lunar-measurements.mjs';
 import {planetDiagnostics} from './planet-diagnostics.mjs';
 
@@ -31,13 +31,14 @@ try {
 } catch(error) {report.acceptance.moon={status:'fail',error:error.message};report.failures.push(`Moon: ${error.message}`);}
 try {report.planetDiagnostics=await planetDiagnostics(harness);}
 catch(error) {report.planetDiagnostics={error:error.message};report.failures.push(`Planet diagnostics: ${error.message}`);}
+try {
+  report.acceptance.planets=await measurePlanets(harness);
+  for(const [body,result] of Object.entries(report.acceptance.planets))
+    if(result.status!=='pass')report.failures.push(`${body}: ${result.max_residual_mag===null?result.reason:`absolute Johnson V residual ${result.max_residual_mag} mag exceeds 0.1 mag`}`);
+} catch(error) {report.failures.push(`Planet measurements: ${error.message}`);report.acceptance.planets={status:'fail',error:error.message};}
 await harness.destroy();
 try {report.acceptance.runtimeParity=await runtimeParity();}
 catch(error) {report.acceptance.runtimeParity={status:'fail',error:error.message};report.failures.push(`Runtime parity: ${error.message}`);}
-report.acceptance.planets=Object.fromEntries(Object.entries(phaseDomains).map(([body,range])=>[body,
-  {status:'fail',phase_domain_deg:range,threshold_mag:.1,samples:0,
-    reason:report.planetDiagnostics?.[body]?'Independent scattering model exists in another band; Johnson V absolute calibration is not validated.':'No independently sourced and validated absolute disk-photometry implementation.'}]));
-report.failures.push('Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune absolute Johnson V magnitudes are not validated');
 report.unfinishedScope=['Whole-body photometric/albedo/color tables and roughness RMS baselines',
   'D and X/M taxonomic priors and explicit taxonomy/albedo selection',
   'Diviner rock-abundance input mapping and independently justified lunar rock-size law',

@@ -133,7 +133,7 @@ the budget is exceeded. Omitting both populations returns empty vectors.
 
 ## Sources and remaining scope
 
-`data/parameters.json` holds 215 cited values: S/C/V class-average Hapke
+`data/parameters.json` holds 727 cited values: S/C/V class-average Hapke
 parameters, three solar profiles, lunar median roughness/Hurst scales, lunar
 crater coefficients, the Mars rock law, H,G1,G2 basis/weights and two identified
 566 nm LROC Hapke map pixels, and independent Jupiter/Saturn scattering
@@ -202,3 +202,25 @@ planetary phase-response and Johnson V calibration, not a refit to the
 Mallama–Hilton test oracle. The canonical SDK checkout on this machine is
 `spacedatanetwork-stack/repos/ancillary-packages/space-data-module-sdk`; the
 sibling path in the repository instructions is absent. Docker remains forbidden.
+
+## Synthetic Jupiter V continuation
+
+`jupiter:heng2021:V` now combines the 24 independent Heng & Li 2021 Table 1
+spectral scattering fits at 470-700 nm with Bessell 1990 Table 2's V energy
+response and the CALSPEC solar reference spectrum. All 197 solar samples
+bracketing that interval retain their FITS row locators and exact unit
+conversions. The flux integral uses linear spectral interpolation, split at
+every native solar and filter knot. It applies no magnitude offset or phase
+normalization fitted to Mallama-Hilton. This model supplies the cited solar
+V magnitude -26.75 itself; a caller `solar_magnitude` override is rejected.
+
+The surface quadrature and spectral integration are separate. An independent
+analytic sphere solution followed by Simpson spectral integration checks the
+combined result to 2e-7 relative albedo (implementation accuracy only).
+The preliminary absolute comparison over 0-130 degrees found a maximum
+residual of 0.15324716 mag at 130 degrees, so the required 0.1 mag gate still
+fails. The geometric albedo is 0.60557202; the opposition residual is
+-0.13424954 mag. Test geometry uses the IAU nominal Jupiter radii to preserve
+the equator-on projected area with an equivalent sphere. Detailed ellipsoidal
+scattering and seasonal changes are not included. A fresh full E2E report will
+supersede the older committed evidence above.

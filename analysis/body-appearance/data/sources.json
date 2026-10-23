@@ -87,7 +87,7 @@
     "local_download": "heng2021/source.pdf",
     "sha256": "e62e950bcf4fee249c91fd9de2c49bed48b72efa49758127d2837536b6376338",
     "bytes": 1255069,
-    "scope": "Table 1 550 nm physical parameters; not a Johnson V calibration"
+    "scope": "Table 1, 470-700 nm posterior medians visually transcribed; independent spectral scattering parameters, not fitted to Mallama-Hilton."
   },
   {
     "id": "heng2021-theory",
@@ -124,5 +124,50 @@
     "sha256": "7feb8edb372502cee5dc9c6a7656205e3279353bb38f9a98cbecbe8e8d733f91",
     "bytes": 915468,
     "scope": "Table 7 measured/reconstructed Johnson-Cousins geometric albedos only. No phase or magnitude polynomial is used as runtime input. Section 8 discusses discrepancies with scattering-model albedos."
+  },
+  {
+    "id": "bessell1990",
+    "doi": "10.1086/132749",
+    "url": "https://articles.adsabs.harvard.edu/pdf/1990PASP..102.1181B",
+    "local_download": "bessell1990/source.pdf",
+    "sha256": "2ef2e7d2eada21def6851244fad1a6d354c15710d021f5b5519c004118a69b86",
+    "bytes": 2029901,
+    "scope": "Table 2, V energy response, visually transcribed; 470-700 nm."
+  },
+  {
+    "id": "bessell2012",
+    "doi": "10.1086/664083",
+    "url": "https://arxiv.org/pdf/1112.2698",
+    "local_download": "bessell2012/source.pdf",
+    "sha256": "5152b4e6f064483f3407d672eef491f025b9b3f076d69959e13cf33094c7d357",
+    "bytes": 2054407,
+    "scope": "Appendix A: distinguishes energy and photon response; no second wavelength weighting for an energy response."
+  },
+  {
+    "id": "colina1996",
+    "doi": "10.1086/118016",
+    "url": "https://articles.adsabs.harvard.edu/pdf/1996AJ....112..307C",
+    "local_download": "colina1996/source.pdf",
+    "sha256": "7a3ecf18463919976e678c768a82b99753f3e3282ddd9610f8be069ebbbc4e3a",
+    "bytes": 879134,
+    "scope": "Tables 1-3: solar reference spectrum provenance, optical coverage and Johnson V magnitude -26.75."
+  },
+  {
+    "id": "calspec-sun",
+    "doi": "10.1086/118016",
+    "url": "https://ssb.stsci.edu/cdbs/calspec/sun_reference_stis_002.fits",
+    "local_download": "calspec-sun/sun_reference_stis_002.fits",
+    "sha256": "a50b70a5c6515322cee14a3fe8060d9e4d7260912ae8d3e85b7fa88302130ab3",
+    "bytes": 37440,
+    "scope": "Read FITS headers and SCI rows bracketing 470-700 nm. Data only, not executed. Wavelength /10 to nm; flux *0.01 to W/m2/nm."
+  },
+  {
+    "id": "prsa2016-iau",
+    "doi": "10.3847/0004-6256/152/2/41",
+    "url": "https://arxiv.org/pdf/1605.09788",
+    "local_download": "prsa2016-iau/source.pdf",
+    "sha256": "2b7bcd88a5169f3a18caae9326f3c51905721cd3b7c034d1de45f7b85d6f4a99",
+    "bytes": 122423,
+    "scope": "TEST geometry: Table 1 nominal equatorial and polar Jupiter radii; Section 4 exact astronomical unit. Effective spherical radius is derived as sqrt(Re*Rp) for equator-on projected area."
   }
 ]
