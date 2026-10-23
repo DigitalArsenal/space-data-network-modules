@@ -131,28 +131,30 @@ History history(const std::vector<ElementSet>& sets, const ElementSet& anchor, c
   return out;
 }
 // What an EmpiricalHistoryShrunk CVR's EVIDENCE must let a reader rebuild: the estimator, its configuration, the bin that
-// holds the requested age, and every bin the blend interpolated between with its interpolation share and history weight.
-std::string empirical_evidence(const Settings& cfg, const Options& options, int bin, const History& h,
-                               const std::vector<double>& share, const std::vector<double>& weights) {
-  char text[1024];
-  std::snprintf(text, sizeof text, "%s/1: second moment about zero of the object's older/newer SGP4 residual pairs in the later set's RTN axes, "
-                "pairs clipped at 5 robust sigma of position; w = n/(n+shrinkage) once n >= minimumBinSets (n distinct older sets of the bin, m its pairs); "
-                "historyDays=%g maxAgeDays=%g minimumSets=%g minimumBinSets=%g shrinkage=%g; containing bin %d [%g,%g] d; "
-                "blend, linear between populated bin centres, alpha = 1 - sum(share*w):",
-                kMethod, cfg.history_days, cfg.max_age_days, cfg.minimum_sets, cfg.minimum_bin_sets, cfg.shrinkage, bin,
-                options.ages[bin].first, options.ages[bin].second);
+// holds the requested age, and every bin the blend interpolated between with its share of the interpolation, the distinct
+// older sets n and pairs m it retained and its history weight w: "<method>/1 clip=5 historyDays=.. maxAgeDays=.. minimumSets=..
+// minimumBinSets=.. shrinkage=.. bin=<index> blend=<bin>:<share>:<n>:<m>:<w> ...". The estimator is the second moment about
+// zero of the object's older/newer SGP4 residual pairs in the later set's RTN axes, pairs more than clip robust sigma of
+// position from the bin's median rejected; w = n/(n+shrinkage) once n >= minimumBinSets; alpha = 1 - sum(share*w).
+std::string empirical_evidence(const Settings& cfg, int bin, const History& h, const std::vector<double>& share,
+                               const std::vector<double>& weights) {
+  char text[256];
+  std::snprintf(text, sizeof text, "%s/1 clip=5 historyDays=%g maxAgeDays=%g minimumSets=%g minimumBinSets=%g shrinkage=%g bin=%d blend=",
+                kMethod, cfg.history_days, cfg.max_age_days, cfg.minimum_sets, cfg.minimum_bin_sets, cfg.shrinkage, bin);
   std::string out = text;
+  bool first = true;
   for (size_t b = 0; b < share.size(); ++b) {
     if (!(share[b] > 0)) continue;
-    std::snprintf(text, sizeof text, " bin %zu share %.6g n %zu m %zu w %.6g;", b, share[b], h.bins[b].sets, h.bins[b].samples, weights[b]);
+    std::snprintf(text, sizeof text, "%s%zu:%.6g:%zu:%zu:%.6g", first ? "" : " ", b, share[b], h.bins[b].sets, h.bins[b].samples, weights[b]);
     out += text;
+    first = false;
   }
   return out;
 }
 // One record: the entries of a request that share SET_NORAD_CAT_ID and SET_EPOCH, one state-and-covariance row each.
 struct Group {
   uint32_t norad;
-  std::string epoch;
+  std::string epoch, request;  // the request id of the group's first entry names the request that made the record
   std::vector<sp::OutRow> rows;
 };
 // The set's GCRF state at its epoch + age (km, km/s). The reason is empty on success.
@@ -306,7 +308,7 @@ extern "C" int object_covariance() {
           label.history_samples = h.bins[bin].samples; label.history_sets = h.bins[bin].sets;
           label.history_window = h.window;
           label.shrinkage_weight = 1.0 - weight[0];
-          label.evidence = empirical_evidence(cfg, options, bin, h, share, weights);
+          label.evidence = empirical_evidence(cfg, bin, h, share, weights);
           factor = 1;
         } else {
           label.evidence = model.evidence;
@@ -361,7 +363,7 @@ extern "C" int object_covariance() {
       for (int k = 0; k < 3; ++k) { out.x[k] = r[k]; out.x[3 + k] = v[k]; }
       out.label = label;
       auto at = std::find_if(groups.begin(), groups.end(), [&](const Group& g) { return g.norad == norad && g.epoch == epoch; });
-      if (at == groups.end()) { groups.push_back({norad, epoch, {}}); at = groups.end() - 1; }
+      if (at == groups.end()) { groups.push_back({norad, epoch, id, {}}); at = groups.end() - 1; }
       at->rows.push_back(std::move(out));
     }
     row["status"] = status;
@@ -381,7 +383,13 @@ extern "C" int object_covariance() {
     p.state_frame = p.cov_frame = gcrf_frame(); p.state_frame_name = p.cov_frame_name = "GCRF";
     p.axes = sp::CovAxes::State;
     p.rows = std::move(g.rows);
-    const std::vector<uint8_t> ocm = sp::build_ocm(recipe, sp::key_of(g.norad, "", ""), "", "", g.norad, p);
+    // The message id is the record's key, in a form a reader finds without decoding the record: the lane's store exposes a
+    // record's body only, so a reader of the lane searches the bytes for "object-covariance|" and reads what follows:
+    // "object-covariance|<object key>|<first epoch>|<method>|<id of the request that made it>". A caller that stores the
+    // record as its cursor puts its position in that request id.
+    const std::string key = sp::key_of(g.norad, "", "");
+    const std::vector<uint8_t> ocm = sp::build_ocm(recipe, key, "", "", g.norad, p,
+        "object-covariance|" + key + "|" + p.rows.front().text + "|" + p.method + "|" + g.request);
     ocm_stream.insert(ocm_stream.end(), ocm.begin(), ocm.end());
   }
   if (!ocm_stream.empty() &&

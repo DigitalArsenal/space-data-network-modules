@@ -922,14 +922,15 @@ std::unique_ptr<CVRT> realism_of(const Label& l) {
   return c;
 }
 
+// message_id: the message's identifier; empty makes "<source>/<key>/<first epoch>/<method>".
 std::vector<uint8_t> build_ocm(const Recipe& r, const std::string& key, const std::string& name, const std::string& object_id,
-                               uint32_t norad, const Product& p) {
+                               uint32_t norad, const Product& p, const std::string& message_id = std::string()) {
   auto ocm = std::make_unique<OCMT>();
   ocm->HEADER = std::make_unique<HeaderT>();
   ocm->HEADER->CCSDS_OCM_VERS = "3.0";
   ocm->HEADER->CREATION_DATE = r.created;
   ocm->HEADER->ORIGINATOR = r.producer;  // the message's creator; the source's originator is PROVENANCE.ORIGINATOR
-  ocm->HEADER->MESSAGE_ID = r.a.id + "/" + key + "/" + p.rows.front().text + "/" + p.method;
+  ocm->HEADER->MESSAGE_ID = message_id.empty() ? r.a.id + "/" + key + "/" + p.rows.front().text + "/" + p.method : message_id;
   ocm->METADATA = std::make_unique<MetadataT>();
   MetadataT& meta = *ocm->METADATA;
   meta.OBJECT_NAME = name;

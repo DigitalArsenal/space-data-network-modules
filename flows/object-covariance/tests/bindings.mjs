@@ -24,7 +24,7 @@ export async function scan(api,base,schema,source) {
  const result=[];let cursor='';
  do {
   const q=new api.QRP.QRPT();Object.assign(q,{SCHEMA_NAME:schema,SOURCE_NAME:source,LIMIT:20000,CURSOR:cursor});
-  const r=await fetch(base+'/api/v1/data/scan',{method:'POST',headers:{'Content-Type':'application/x-flatbuffers'},body:pack(api,'QRP',q),signal:AbortSignal.timeout(30000)});
+  const r=await fetch(base+'/api/v1/data/scan',{method:'POST',headers:{'Content-Type':'application/vnd.sdn.flatbuffers.stream'},body:pack(api,'QRP',q),signal:AbortSignal.timeout(30000)});
   if(!r.ok)throw Error(`Scan ${schema} returned ${r.status}`);
   cursor='';for(const f of frames(Buffer.from(await r.arrayBuffer()))) {
    if(f.subarray(8,12).toString()==='$QRP')cursor=unpack(api,'QRP',f).NEXT_CURSOR||'';else result.push(f);

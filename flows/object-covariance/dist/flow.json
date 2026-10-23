@@ -141,6 +141,15 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 2
+    },
+    {
+      "edgeId": "control-notice-egress-result",
+      "fromNodeId": "control",
+      "fromPortId": "notice",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 2
     }
   ],
   "triggers": [

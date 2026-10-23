@@ -405,8 +405,12 @@ fit used to the set in force) and SHRINKAGE_WEIGHT (alpha = 1 - w, the
 population prior's share in `(1 - alpha) H + alpha P_prior`). EVIDENCE names the
 estimator, the configuration, the bin that holds the age, and each bin the
 blend interpolated between with its share, distinct older sets n, pairs m and
-history weight w, so the blend can be rebuilt; for POPULATION it is the
-model's own evidence. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
+history weight w, so the blend can be rebuilt:
+`empirical-history-shrunk/1 clip=5 historyDays=30 maxAgeDays=8 minimumSets=8 minimumBinSets=12 shrinkage=30 bin=2 blend=<bin>:<share>:<n>:<m>:<w> ...`
+(the estimator is the second moment about zero of the older/newer residual
+pairs in the later set's RTN axes, pairs beyond `clip` robust sigma of position
+rejected; w = n/(n+shrinkage) once n >= minimumBinSets; alpha = 1 - sum(share*w));
+for POPULATION it is the model's own evidence. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
 TEST_WINDOW. NOTES explains
 each failed empirical condition, including insufficient sets, insufficient bin
 support, age outside history, and missing model (their rule is 5 now, 2 before). The empirical residuals compare
@@ -423,8 +427,10 @@ epoch order. `METADATA.OBJECT_DESIGNATOR` is the NORAD ID, `START_TIME` and
 `STATE_EPOCHS[0]` the first row's epoch (a request at age 0 puts the set's epoch there),
 `STATE_DATA` the set's GCRF state at each row's epoch (km, km/s),
 `COVARIANCE_DATA` the covariance port's GCRF matrix (21-value lower triangle, km², km²/s, km²/s²;
-`COV_REF_FRAME` GCRF, the value of `covarianceInertial` divided by 1e6), one CVR per row in `COV_REALISM` and
-the source in `PROVENANCE`. A row's CVR is the record's meaning of SDS 1.261.0:
+`COV_REF_FRAME` GCRF, the value of `covarianceInertial` divided by 1e6), one CVR per row in `COV_REALISM`, the
+source in `PROVENANCE` and `HEADER.MESSAGE_ID` `object-covariance|<object key>|<first epoch>|<method>|<ID of the group's first
+request entry>`: a reader of a lane whose store exposes only a record's body searches the bytes for `object-covariance|`
+for the key, and a caller that stores the record as its cursor puts its position in that request ID. A row's CVR is the record's meaning of SDS 1.261.0:
 EmpiricalHistoryShrunk with SAMPLES and OBJECTS 0 (no held-out test), SCALE_FACTOR NaN and the HISTORY_* evidence
 above; or SourceModel/PooledModel with the population cell's own held-out counts. An entry that has no
 covariance (NO_SET, OUTSIDE, NO_MODEL, or an SGP4 failure at the epoch, which fails the call without `object.source`) still has its row,
