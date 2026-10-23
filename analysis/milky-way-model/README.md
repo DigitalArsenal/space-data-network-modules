@@ -74,9 +74,23 @@ in `foundation/frames/src/galactic.hpp`; the local header only adapts units.
 | `calibrate` | retired method ID | Explicit error; Gaia dust fitting cannot mutate the literature bake |
 | `ridge_metrics` | `masers`: [longitude deg, latitude deg, parallax mas, family]; `maser_segments`, `maser_excluded`, `parallax_errors` (mas); independent `published_arms` Table 2 rows | Curve agreement, per-segment raw RMS and chi-square, propagated perpendicular errors, diagnostic baked-ridge distances |
 
+Multi-scale structure (0.5.0, `src/structure.hpp`): a deterministic,
+three-dimensional gradient-noise field (seed 20261022), 8 kpc to 62.5 pc,
+sheared 3:1 along the rotation, whose 2D spectrum follows Elmegreen,
+Elmegreen & Leitner 2003 (k^-2 above a 300 pc break, k^-8/3 below), modulates
+the young light (lognormal, sigma 1.5) and, in its ridged (filamentary) form,
+the dust (sigma 2.0), mean-preserving. The dust's structure fades in from 1.5
+to 4 kpc from the Sun, where Gaia's sky fixes the clouds. Star complexes
+cluster with the young field and are sized by their light (sigma 30-300 pc).
+The bake publishes `structure_detail`, the dust field's two octaves below the
+slab's texels (31 and 16 pc: wavelength, amplitude, mean, variance, seed,
+phase, with the field's standard deviation, the dust sigma and the fade), for
+a renderer to continue the same field where its pixels resolve it.
+Overrides: `appearance_structure_young_sigma`, `appearance_structure_dust_sigma`.
+
 Global volume: 384 × 384 × 48 over [-24,24] × [-24,24] × [-6,6] kpc (125 pc
 in x and y), its large-scale dust only; the light tapers to zero inside it,
-by 23.5 kpc in R and 5.6 kpc in z. Slab (0.4.1): 512 × 512 × 12 over the thin
+by 23.5 kpc in R and 5.6 kpc in z. Slab (since 0.4.1): 512 × 512 × 12 over the thin
 disc, [-16,16] × [-16,16] × [-0.48,0.48] kpc (62.5 pc, signed-square z),
 replacing the global volume inside it with a blend at its edges. Local
 volume: uniform 128³ over the Sun ±1.25 kpc (20 pc), with the delivered 3D
