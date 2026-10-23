@@ -1136,6 +1136,10 @@ int plugin_configure_catalog(const uint8_t* data, int bytes, const double* bstar
         if (length > bytes - offset) { g_catalogError = "invalid-catalog: Truncated PRW frame."; return -1; }
         const PRW* root = nullptr;
         const auto* frame = data + offset;
+        if (length >= 12 && std::memcmp(frame + 8, "$DCL", 4) == 0) {
+            if (!once(inputs.environment.densityCorrection, inputs.environment.densityCorrectionSize, frame, length)) return -1;
+            offset += length; continue;
+        }
         if (!ffm::verifyPrw(frame, length, root, g_catalogError)) return -1;
         bool ok = false;
         if (root->EXECUTION_REQUEST()) ok = once(inputs.configuration, inputs.configurationSize, frame, length);
@@ -1186,6 +1190,25 @@ int plugin_catalog_transform_state(double utcJd, const double* in, double* out, 
     return 0;
 }
 
+
+// Configured resident dynamics at an explicit GCRF SI state. Diagnostic only;
+// this does not alter the object's trajectory or polynomial coverage.
+int plugin_catalog_drag_acceleration(double utcJd, int slot, const double* state, double* out) {
+    if (!propagationReady() || !g_catalogDynamics || !state || !out || slot < 0) return -1;
+    for (int i = 0; i < 6; ++i) if (!std::isfinite(state[i])) return -1;
+    ffm::TTEpoch at;
+    StateVector value;
+    value.position = Vec3(state[0] / 1000, state[1] / 1000, state[2] / 1000);
+    value.velocity = Vec3(state[3] / 1000, state[4] / 1000, state[5] / 1000);
+    Vec3 drag;
+    // Split before adding TT-UTC: adding 0.184 s to a large UTC seconds
+    // value would lose nanoseconds and bias a rapidly varying correction.
+    const auto utc = ffm::normalizeTT(0, (utcJd - 2451545.0) * 86400.0);
+    if (!ffm::toTT(utc.whole, utc.fraction, utcJd, timingStandard::UTC, at, g_catalogError) ||
+        !g_catalogDynamics->dragAcceleration(slot, at, value, drag, g_catalogError)) return -1;
+    out[0] = drag.x * 1000; out[1] = drag.y * 1000; out[2] = drag.z * 1000;
+    return 0;
+}
 
 // Evaluation-only GCRF SI state, also useful to consumers needing inertial
 // products. No integration and no clamping: uncovered slots are zero.
@@ -3443,6 +3466,7 @@ bool ingestPortable(const std::vector<ResidentInput>& inputs, bool configured, s
         else if (in.port == "kernel") ok = once(in, dynamicsInputs.kernel, dynamicsInputs.kernelSize);
         else if (in.port == "earth_orientation") ok = once(in, dynamicsInputs.environment.earthOrientation, dynamicsInputs.environment.earthOrientationSize);
         else if (in.port == "space_weather") ok = once(in, dynamicsInputs.environment.spaceWeather, dynamicsInputs.environment.spaceWeatherSize);
+        else if (in.port == "density_correction") ok = once(in, dynamicsInputs.environment.densityCorrection, dynamicsInputs.environment.densityCorrectionSize);
         else if (in.port == "jb2008_indices") ok = once(in, dynamicsInputs.environment.jb2008Indices, dynamicsInputs.environment.jb2008IndicesSize);
         else return residentFailure(error, "invalid-request", "Unknown ingest_state input port.");
         if (!ok) return false;

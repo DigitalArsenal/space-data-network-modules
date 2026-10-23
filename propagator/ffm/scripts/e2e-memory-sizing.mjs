@@ -16,7 +16,7 @@ import { chromium } from 'playwright';
 import { analyzeWasmThreadFeatures } from 'space-data-module-sdk/compiler';
 import { headlessShell } from '../tests/lib/headlessShell.mjs';
 import { environmentInputs } from '../tests/lib/fullForce.mjs';
-import { makeTable, encodePrw, sds, TYPE } from '../tests/lib/prwCodec.mjs';
+import { makeTable, encodePrw, decodePrw, sds, TYPE } from '../tests/lib/prwCodec.mjs';
 import { encodePluginInvokeRequest, decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import * as catalog from '../catalog.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -39,7 +39,7 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
   ...[1800, 3600].map(seconds => encodePluginInvokeRequest({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
     makeTable('PRWResidentRequest', { INSTANCE: instance, ENTITY_HANDLES: [seeds[0].handle], TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
-const predecessor = execFileSync('git', ['show', 'f1c7b8942b7a9ded85566f240cbaaeffca1293db:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+const predecessor = execFileSync('git', ['show', '96a55da80626ae2a5615fed42e3865ddd470ec13:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readFileSync(path.join(cache, '../previous.wasm'))),
   memory: read('dist/build-provenance.json').memory, profile: 'FFM-1', retentionSeconds: 1800, lookaheadSeconds: 300,
@@ -47,7 +47,10 @@ const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readF
   metric: 'WebAssembly linear-memory page high-water; 65536 bytes/page; includes static data, stack and allocator; excludes host RSS and reserved maximum',
   rows: [], loadStart: os.loadavg(), logicalCpus: os.cpus().length,
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
-assert.deepEqual(WebAssembly.Module.exports(await WebAssembly.compile(wasm)), WebAssembly.Module.exports(await WebAssembly.compile(predecessor)), 'exports changed');
+const predecessorExports = WebAssembly.Module.exports(await WebAssembly.compile(predecessor));
+const currentExports = WebAssembly.Module.exports(await WebAssembly.compile(wasm));
+assert.deepEqual(currentExports.filter(e => e.name !== 'plugin_catalog_drag_acceleration'), predecessorExports, 'existing exports changed');
+assert(currentExports.some(e => e.name === 'plugin_catalog_drag_acceleration' && e.kind === 'function'), 'missing configured-drag diagnostic');
 const memorySection = analyzeWasmThreadFeatures(wasm).sharedMemory;
 assert(memorySection?.growable);
 assert.equal(memorySection.min*65536, report.memory.initialBytes);
@@ -226,16 +229,33 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     const options = { count, seeds, epoch, manifest, focus: count === 1 };
     const row = await page.evaluate(o => window.measure(o), options);
+    const focusOutputs = row.role === 'resident-focus' ? row.outputs.map(b => new Uint8Array(b)) : null;
     if (row.role === 'resident-focus') {
       for (const bytes of row.outputs) assert.equal(decodePluginInvokeResponse(new Uint8Array(bytes)).statusCode, 0);
       row.outputs = row.outputs.map(b => sha(new Uint8Array(b)));
     }
-    // A representative catalog plus the focus role prove the build-only
-    // change preserves output bytes against the packaged predecessor.
+    // The catalog's raw doubles remain byte-identical. SDS 1.259 adds RFM
+    // NaN-default galactic fields: its generated serializer emits them even
+    // for GCRF, growing the focus reply by 64 bytes without changing values.
+    // Compare every decoded PIV/PRW field (including exact state doubles), not
+    // the old/new FlatBuffer layout. Same-artifact runtime parity stays bytewise.
     if (count === 1 || count === 1000) {
       const old = await page.evaluate(o => window.measure(o), { ...options, previous: true });
-      const hashes = count === 1 ? old.outputs.map(b => sha(new Uint8Array(b))) : old.outputs;
-      assert.deepEqual(row.outputs, hashes, 'previous artifact parity'); row.previousArtifactParity = 'bit-identical';
+      if (count === 1) {
+        const decoded = bytes => {
+          const { payloadArena, arenaLease, outputFrames, outputs, ...status } = decodePluginInvokeResponse(bytes);
+          // Arena leases and serialized size/offset describe the wire layout.
+          return { ...status, outputs: outputs.map(out => {
+            const { payload, arenaLease, size, offset, ...metadata } = out;
+            return { ...metadata, payload: decodePrw(payload) };
+          }) };
+        };
+        assert.deepEqual(focusOutputs.map(decoded), old.outputs.map(b => decoded(new Uint8Array(b))), 'previous focus fields changed');
+        row.previousArtifactParity = 'field-identical; SDS 1.259 RFM default fields change serialized layout only';
+      } else {
+        assert.deepEqual(row.outputs, old.outputs, 'previous catalog bytes changed');
+        row.previousArtifactParity = 'bit-identical';
+      }
     }
     if (nativeFailure) throw nativeFailure;
     assert.deepEqual(errors, []); report.rows.push({ runtime: 'browser', ...row }); save();
@@ -283,3 +303,5 @@ if (!process.argv.includes('--measure')) {
   report.status='PASS';save();
 }
 console.log(JSON.stringify({model:report.model,requiredMaximumBytes:report.requiredMaximumBytes,status:report.status||'MEASURED'}));
+
+fs.rmSync(aotDir, { recursive: true, force: true });

@@ -44,7 +44,9 @@ int resident(const char* method, const char* port) {
 extern "C" int invoke(void) {
   const int index=plugin_find_input_index("request",0);const int kernelIndex=plugin_find_input_index("kernel",0);
   const int eopIndex=plugin_find_input_index("earth_orientation",0);const int weatherIndex=plugin_find_input_index("space_weather",0);
+  const int correctionIndex=plugin_find_input_index("density_correction",0);
   const int jb2008Index=plugin_find_input_index("jb2008_indices",0);
+  if(plugin_find_input_index("density_correction",1)>=0)return fail("invalid-density-correction: Supply one density_correction record.");
   if(index<0)return fail("invalid-request: missing request");
   if(plugin_find_input_index("earth_orientation",1)>=0)return fail("invalid-earth-orientation: Supply one earth_orientation record.");
   if(plugin_find_input_index("space_weather",1)>=0)return fail("invalid-space-weather: Supply one space_weather record.");
@@ -52,7 +54,9 @@ extern "C" int invoke(void) {
   const auto* request=plugin_get_input_frame(index);const auto* kernel=kernelIndex<0?nullptr:plugin_get_input_frame(kernelIndex);
   const auto* eop=eopIndex<0?nullptr:plugin_get_input_frame(eopIndex);const auto* weather=weatherIndex<0?nullptr:plugin_get_input_frame(weatherIndex);
   const auto* jb2008=jb2008Index<0?nullptr:plugin_get_input_frame(jb2008Index);
+  const auto* correction=correctionIndex<0?nullptr:plugin_get_input_frame(correctionIndex);
   ffm::PrwEnvironment environment;
+  if(correction){environment.densityCorrection=correction->payload;environment.densityCorrectionSize=correction->payload_length;}
   if(eop){environment.earthOrientation=eop->payload;environment.earthOrientationSize=eop->payload_length;}
   if(weather){environment.spaceWeather=weather->payload;environment.spaceWeatherSize=weather->payload_length;}
   if(jb2008){environment.jb2008Indices=jb2008->payload;environment.jb2008IndicesSize=jb2008->payload_length;}

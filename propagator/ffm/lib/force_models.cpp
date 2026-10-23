@@ -1699,6 +1699,7 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, const time
         case DragModelType::NRLMSISE00:
             totalAcc += NRLMSISE00(position, velocity, atmosphereJD, weather,
                                    drag, forceSet.nrlmsise00, &axes);
+            if (forceSet.densityScaleAt) totalAcc = totalAcc * forceSet.densityScaleAt(jd);
             break;
         case DragModelType::HarrisPriester:
             totalAcc += HarrisPriester(position, velocity, jd, drag,
