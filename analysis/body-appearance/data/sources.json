@@ -169,5 +169,32 @@
     "sha256": "2b7bcd88a5169f3a18caae9326f3c51905721cd3b7c034d1de45f7b85d6f4a99",
     "bytes": 122423,
     "scope": "TEST geometry: Table 1 nominal equatorial and polar Jupiter radii; Section 4 exact astronomical unit. Effective spherical radius is derived as sqrt(Re*Rp) for equator-on projected area."
+  },
+  {
+    "id": "mallama2018-Ap_Mag_V3.f90",
+    "doi": "10.1016/j.ascom.2018.08.002",
+    "url": "https://sourceforge.net/projects/planetary-magnitudes/files/Ap_Mag_Current_Version/Ap_Mag_V3.f90/download",
+    "local_download": "mallama-code/Ap_Mag_V3.f90",
+    "sha256": "79aeb6fbc1bd50f19254b114a447f4d4c6069f93c476038fe638183c6abd1b5b",
+    "bytes": 69939,
+    "scope": "TEST ONLY. Published code/fixtures read as data; downloaded program never executed. Supports Section 3 oracle and published numerical examples."
+  },
+  {
+    "id": "mallama2018-Ap_Mag_Input_V3.txt",
+    "doi": "10.1016/j.ascom.2018.08.002",
+    "url": "https://sourceforge.net/projects/planetary-magnitudes/files/Ap_Mag_Current_Version/Ap_Mag_Input_V3.txt/download",
+    "local_download": "mallama-code/Ap_Mag_Input_V3.txt",
+    "sha256": "01793127e2f35e0fb85dbac03fedee8b355c4099336d79814fa362061c458c94",
+    "bytes": 6672,
+    "scope": "TEST ONLY. Published code/fixtures read as data; downloaded program never executed. Supports Section 3 oracle and published numerical examples."
+  },
+  {
+    "id": "mallama2018-Ap_Mag_Output_V3.txt",
+    "doi": "10.1016/j.ascom.2018.08.002",
+    "url": "https://sourceforge.net/projects/planetary-magnitudes/files/Ap_Mag_Current_Version/Ap_Mag_Output_V3.txt/download",
+    "local_download": "mallama-code/Ap_Mag_Output_V3.txt",
+    "sha256": "ec9c8634f86d57c076953753b0f5e66e676544416a413b65dbb08d4ff79b27ba",
+    "bytes": 10424,
+    "scope": "TEST ONLY. Published code/fixtures read as data; downloaded program never executed. Supports Section 3 oracle and published numerical examples."
   }
 ]

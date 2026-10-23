@@ -8,7 +8,9 @@
 export const phaseDomains=Object.freeze({Mercury:[2,170],Venus:[2,179],Mars:[0,50],Jupiter:[0,130],Saturn:[0,150],Uranus:[0,154],Neptune:[0,133]});
 export function planetMagnitude(body,phaseDeg,{r=1,delta=1,year=2014,uranusLatitudeDeg=0,saturnRings=false,ringLatitudeDeg=0,marsLongitudeCorrection=0,marsSeasonCorrection=0}={}) {
   const a=phaseDeg,range=phaseDomains[body];
-  if(!range || !Number.isFinite(a) || a<range[0] || a>range[1] || !(r>0 && delta>0))throw new RangeError('Outside documented oracle domain');
+  if(!range || ![a,r,delta,year,uranusLatitudeDeg,ringLatitudeDeg,marsLongitudeCorrection,marsSeasonCorrection].every(Number.isFinite) ||
+     a<range[0] || a>range[1] || !(r>0 && delta>0) || Math.abs(uranusLatitudeDeg)>90 || typeof saturnRings!=='boolean')
+    throw new RangeError('Outside documented oracle domain');
   let m;
   if(body==='Mercury')m=-.613+.063280*a-.0016336*a**2+.000033644*a**3-.00000034265*a**4+1.6893e-9*a**5-3.0334e-12*a**6;
   if(body==='Venus')m=a<=163.7?-4.384-.001044*a+.0003687*a**2-.000002814*a**3+8.938e-9*a**4:236.05828-2.81914*a+.00839034*a*a;

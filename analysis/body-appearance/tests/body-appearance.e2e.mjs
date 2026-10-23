@@ -3,17 +3,22 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';
 import {measure} from './measurements.mjs';
 import {runtimeParity} from './runtime-parity.mjs';
 import {measurePlanets} from './planet-measurements.mjs';
 import {measureLunar} from './lunar-measurements.mjs';
 import {planetDiagnostics} from './planet-diagnostics.mjs';
+import {measureOracle} from './oracle-measurements.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const bytes=await fs.readFile(path.join(root,'dist/isomorphic/module.wasm'));
 const report={task:'body-appearance-module-20261022',measuredAt:new Date().toISOString(),
+  testedCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),
   artifactSha256:createHash('sha256').update(bytes).digest('hex'),acceptance:{},failures:[]};
+report.oracleVerification=measureOracle();
+if(report.oracleVerification.status!=='pass')report.failures.push('Test oracle disagrees with published examples');
 const table=JSON.parse(await fs.readFile(path.join(root,'data/parameters.json'),'utf8'));
 const missing=table.filter(p=>!Number.isFinite(p.value)||!/^10\./.test(p.doi)||!p.locator||!p.unit||!p.scope);
 report.acceptance.citations={status:missing.length?'fail':'pass',values:table.length,uncited:missing.length,
