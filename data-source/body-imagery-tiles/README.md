@@ -91,9 +91,11 @@ does not establish feature registration or reader/UI acceptance. Served CTX
 prefixes are refused pending reader parent fallback and level discovery.
 
 `hd-publish.mjs` validates the exact requested plan and ledger before writing.
-It uses 64 concurrent requests, conditional create-only PUTs, SHA256 round trips
-of every file, and deletes each local tile only after verification. Repeating
-the publish command reads identical existing objects without a PUT. Immutable
+It uses a 64-operation pool, conditional create-only PUTs, SHA256 round trips
+of every file, and deletes each local tile only after verification. Shared CLI admission
+spaces process starts by at least 100 ms and waits when host load reaches 25.
+This bounds process-start bursts without changing the transfer pool size.
+Repeating the publish command reads identical existing objects without a PUT. Immutable
 MANIFEST and SHA256SUMS objects live under `PREFIX/releases/LEDGER_SHA/`.
 The base root and manifest are untouched. A full-pyramid run refuses any
 nonempty destination; its publisher also refuses differing existing objects.

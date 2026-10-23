@@ -20,6 +20,7 @@ test('HD WASM, CLI scopes, conditional publication and verified cleanup',async()
   fs.writeFileSync(aws,`#!/usr/bin/env node
 import fs from 'node:fs';import path from 'node:path';
 const a=process.argv.slice(2),get=k=>a[a.indexOf(k)+1],root=process.env.TEST_BUCKET;
+fs.appendFileSync(path.join(root,'calls.jsonl'),JSON.stringify({time:Date.now(),args:a})+'\\n');
 const key=p=>path.join(root,p.replace('s3://spaceaware/',''));
 if(a[0]==='s3'&&a[1]==='cp'){const p=key(a[2]);if(!fs.existsSync(p)){console.error('404 NoSuchKey');process.exit(1)}process.stdout.write(fs.readFileSync(p));}
 else if(a[1]==='put-object'){const p=key(get('--key'));if(get('--if-none-match')!=='*')throw Error('unconditional put');fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,fs.readFileSync(get('--body')),{flag:'wx'});fs.appendFileSync(path.join(root,'puts.log'),get('--key')+'\\n');process.stdout.write('{}');}
@@ -74,7 +75,35 @@ else throw Error('unexpected command '+a.join(' '));
   const puts=fs.readFileSync(path.join(bucket,'puts.log'),'utf8');
   assert.equal(run('hd-publish.mjs',args).status,0,'resume reads already published objects');
   assert.equal(fs.readFileSync(path.join(bucket,'puts.log'),'utf8'),puts,'resume issues no PUT');
+  // Exercise real parallel CLI transport, including its process-start pacing,
+  // with independently encoded windows and verified local cleanup.
+  const batch=path.join(dir,'batch');fs.mkdirSync(batch);
+  const batchRunner=await openHdRunner(),batchRows=[];
+  try {
+    for(let k=0;k<8;k++) {
+      const u={...unit,x:unit.x+16*k,tiles:1};
+      const [b]=await batchRunner.encode(u,raster.subarray(0,65536));
+      const file=path.join(batch,b.path);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,b.bytes);
+      batchRows.push({path:b.path,bytes:b.bytes.length,sha256:sha(b.bytes),unit:u});
+    }
+  } finally {await batchRunner.destroy();}
+  const batchLedger=batchRows.map(r=>JSON.stringify(r)).join('\n')+'\n';
+  fs.writeFileSync(path.join(batch,'ledger.jsonl'),batchLedger);
+  fs.writeFileSync(path.join(batch,'PLAN.json'),JSON.stringify({source:unit.source,levels:[9],windows:batchRows.map(r=>r.unit)}));
+  fs.writeFileSync(gate,JSON.stringify({...validGate,ledgerSha256:sha(batchLedger)}));
+  const batchPrefix='staging/imagery-hd/paced-e2e/301';
+  const paced=run('hd-publish.mjs',['--dir',batch,'--prefix',batchPrefix,'--gate',gate]);
+  assert.equal(paced.status,0,paced.stderr);
+  const calls=fs.readFileSync(path.join(bucket,'calls.jsonl'),'utf8').trim().split('\n').map(JSON.parse)
+    .filter(c=>c.args[0]==='s3'&&c.args[2].startsWith('s3://spaceaware/'+batchPrefix+'/9/')).slice(0,8);
+  assert.equal(calls.length,8);
+  const launchSpan=Math.max(...calls.map(c=>c.time))-Math.min(...calls.map(c=>c.time));
+  assert.ok(launchSpan>=500,`eight preflight CLI starts must be paced (observed ${launchSpan} ms; 200 ms startup jitter allowance)`);
+  for(const row of batchRows) {
+    assert.equal(sha(fs.readFileSync(path.join(bucket,batchPrefix+row.path.slice('imagery/301'.length)))),row.sha256);
+    assert.equal(fs.existsSync(path.join(batch,row.path)),false);
+  }
   const rejected=run('run.mjs',['--source','mercury-mdis-bdr','--out',output]);
   assert.notEqual(rejected.status,0);assert.match(rejected.stderr,/already contains published/);
-  console.log(JSON.stringify({deterministicInvokes:2,rejectedInvalidWindows:5,rejectedInvalidEvidence:invalidGates.length,conflictingObjectsPreserved:1,roundTripFiles:1,resumePuts:0,fullPyramidRefusals:1,scope:'synthetic storage E2E only'}));
+  console.log(JSON.stringify({deterministicInvokes:2,rejectedInvalidWindows:5,rejectedInvalidEvidence:invalidGates.length,conflictingObjectsPreserved:1,roundTripFiles:9,pacedPreflightFiles:8,pacedPreflightSpanMs:launchSpan,resumePuts:0,fullPyramidRefusals:1,scope:'synthetic storage E2E only'}));
 });

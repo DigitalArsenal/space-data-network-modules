@@ -3,10 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
 import {HD_SOURCES,validateKey} from './hd-scope.mjs';
-const exec=promisify(execFile),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+import {createAwsRunner} from './hd-aws.mjs';
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const arg=(k,d)=>{const i=process.argv.indexOf('--'+k);return i<0?d:process.argv[i+1]};
 if(!arg('dir')||!arg('prefix')||!arg('gate')||!process.env.R2_AWS) throw Error('usage: R2_AWS=wrapper hd-publish --dir DIR --prefix PREFIX --gate verification.json');
 const dir=path.resolve(arg('dir')),prefix=arg('prefix'),plan=JSON.parse(fs.readFileSync(path.join(dir,'PLAN.json'))),s=HD_SOURCES[plan.source];
@@ -19,8 +18,7 @@ if(!entries.length||gate.ledgerSha256!==digest||gate.sourcePass!==true||!Number.
 if(!staging&&(gate.pass!==true||!Number.isInteger(gate.featuresRegistered)||gate.featuresRegistered<10||!boundedError(gate.maxFeatureErrorPixels,1)||
    !boundedError(gate.boundarySeamMeanAbs,255)||(s.naif===301&&!(Number.isFinite(gate.sharpnessRatio)&&gate.sharpnessRatio>1))))
   throw Error('served publication requires registration, seam and sharpness evidence');
-const commands=process.env.R2_AWS.split(' ').filter(Boolean);
-const aws=async args=>(await exec(commands[0],[...commands.slice(1),...args],{maxBuffer:64*1024*1024,encoding:'buffer'})).stdout;
+const aws=createAwsRunner(process.env.R2_AWS);
 if(entries.length!==plan.windows.length) throw Error('ledger does not cover the exact requested plan');
 const keys=new Set();
 for(const e of entries) {
