@@ -179,6 +179,30 @@ int32_t loadImage(FileInput& in, image::Image& im) {
 
 }  // namespace
 
+extern "C" int samples() {
+  FileInput in;
+  if(const int status=readFile(&in))return status;
+  const auto* frame=inputFrame("request");
+  if(!frame || frame->payload_length!=5*sizeof(double))return fail("invalid-window","samples needs float64 [1, x, y, width, height]");
+  double a[5];std::memcpy(a,frame->payload,sizeof(a));
+  if(a[0]!=1)return fail("invalid-window","unknown scalar request version");
+  for(size_t i=1;i<5;++i)if(!std::isfinite(a[i])||a[i]<0||a[i]>10000000||a[i]!=std::floor(a[i]))return fail("invalid-window","window coordinates must be nonnegative integers");
+  const scalar::Window w{uint32_t(a[1]),uint32_t(a[2]),uint32_t(a[3]),uint32_t(a[4])};
+  const uint8_t* magic=in.sparse.view(0,4);
+  if(!magic)return pushNeed(in.sparse);
+  scalar::Result out;
+  const bool isTiff=(magic[0]=='I'&&magic[1]=='I')||(magic[0]=='M'&&magic[1]=='M');
+  const bool ok=isTiff?scalar::tiffWindow(in.sparse,w,out):scalar::cubeWindow(in.sparse,in.size,w,out);
+  if(!ok) {
+    if(!in.sparse.need.empty())return pushNeed(in.sparse);
+    return fail("unreadable-elevation",out.error,422);
+  }
+  const double layout[]={1,double(out.width),double(out.height),double(out.bits),double(out.format),out.scale,out.offset,out.nodata,out.hasNodata?1.0:0.0};
+  if(const int status=push("layout",layout,sizeof(layout)))return status;
+  if(const int status=push("values",out.values.data(),out.values.size()*sizeof(double)))return status;
+  return push("valid",out.valid.data(),out.valid.size());
+}
+
 extern "C" int describe() {
   FileInput in;
   if (int32_t status = readFile(&in)) return status;

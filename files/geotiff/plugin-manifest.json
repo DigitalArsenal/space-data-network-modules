@@ -1,8 +1,8 @@
 {
  "pluginId": "com.digitalarsenal.files.geotiff",
- "name": "GeoTIFF imagery",
- "version": "0.2.0",
- "description": "GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery. describe reads the header (classic or BigTIFF, either byte order) into one SDS $GDI (format, EPSG:4326 footprint, source EPSG) and a level table; render draws a window given in EPSG:4326 as RGBA from the coarsest level at least as fine as the window's pixels, through the file's projection (EPSG:4326, Web Mercator 3857, UTM on WGS84 or GRS80). Compression none, LZW, PackBits, DEFLATE (miniz) and JPEG with JPEGTables (stb_image); 8-, 16- and 32-bit integer and 32-bit float samples with the horizontal and floating-point predictors; gray, RGB, YCbCr-in-JPEG and palette images; alpha bands, internal masks and GDAL no-data. Both methods take an SDS $NCD descriptor of the file and the byte ranges the caller has (raw), and name the ranges they still need.",
+ "name": "GeoTIFF imagery and raster samples",
+ "version": "0.3.0",
+ "description": "GeoTIFF and Cloud-Optimized GeoTIFF images as globe imagery. describe reads the header (classic or BigTIFF, either byte order) into one SDS $GDI (format, EPSG:4326 footprint, source EPSG) and a level table; render draws a window given in EPSG:4326 as RGBA from the coarsest level at least as fine as the window's pixels, through the file's projection (EPSG:4326, Web Mercator 3857, UTM on WGS84 or GRS80). Compression none, LZW, PackBits, DEFLATE (miniz) and JPEG with JPEGTables (stb_image); 8-, 16- and 32-bit integer and 32-bit float samples with the horizontal and floating-point predictors; gray, RGB, YCbCr-in-JPEG and palette images; alpha bands, internal masks and GDAL no-data. Both methods take an SDS $NCD descriptor of the file and the byte ranges the caller has (raw), and name the ranges they still need. samples reads a numeric pixel window from a one-band lossless GeoTIFF or attached ISIS3 cube, preserving scale/offset and a validity mask without an imagery stretch.",
  "pluginFamily": "parser",
  "capabilities": [],
  "externalInterfaces": [],
@@ -268,6 +268,175 @@
         "kind": "intra-flow-control-frame",
         "mediaType": "application/vnd.sdn.geotiff.stretch+f64",
         "detail": "float64 little-endian [lo0, hi0, lo1, hi1, lo2, hi2]: the stretch the image was drawn with (NaN for 8-bit and palette data, which draw as stored). A caller pins it for every window of one layer so tiles match. A control frame between the caller and this module, never persisted."
+       }
+      }
+     ]
+    },
+    {
+     "portId": "need",
+     "displayName": "need",
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "Byte ranges of the file the call needs and was not given, float64 little-endian (offset, length) pairs, merged; the caller fetches them and calls again with them added. Present only when ranges are missing, and then the only output.",
+     "acceptedTypeSets": [
+      {
+       "setId": "need-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "intra-flow-control-frame",
+        "mediaType": "application/vnd.sdn.geotiff.byte-ranges+f64",
+        "detail": "Byte ranges of the file the call needs and was not given, float64 little-endian (offset, length) pairs, merged; the caller fetches them and calls again with them added. Present only when ranges are missing, and then the only output. A control frame between the caller and this module, never persisted."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "methodId": "samples",
+   "displayName": "Read scalar pixels",
+   "maxBatch": 1,
+   "drainPolicy": "single-shot",
+   "inputPorts": [
+    {
+     "portId": "descriptor",
+     "displayName": "descriptor",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Size-prefixed SDS $NCD with SOURCE_BYTE_LENGTH for the GeoTIFF or attached ISIS3 cube.",
+     "acceptedTypeSets": [
+      {
+       "setId": "sds-ncd",
+       "allowedTypes": [
+        {
+         "schemaName": "NCD.fbs",
+         "fileIdentifier": "$NCD",
+         "rootTypeName": "NCD"
+        }
+       ],
+       "description": "SDS $NCD container descriptor of the GeoTIFF."
+      }
+     ]
+    },
+    {
+     "portId": "ranges",
+     "displayName": "ranges",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Pieces of the TIFF or BigTIFF file (image/tiff) the caller has: [u32le count] then per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\".",
+     "acceptedTypeSets": [
+      {
+       "setId": "tiff-byte-ranges-v1",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.tiff-byte-ranges",
+        "detail": "Pieces of the TIFF or BigTIFF file (image/tiff) the caller has: [u32le count] then per range [u64le offset][u32le length][bytes]. A Cloud-Optimized GeoTIFF starts with its header range; the method names any other range it needs on port \"need\"."
+       }
+      }
+     ]
+    },
+    {
+     "portId": "request",
+     "displayName": "request",
+     "minStreams": 1,
+     "maxStreams": 1,
+     "required": true,
+     "description": "Float64 LE [1, x, y, width, height], zero-based native pixel window; at most 4,194,304 pixels.",
+     "acceptedTypeSets": [
+      {
+       "setId": "request-raw",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.raster-pixel-window",
+        "detail": "Float64 LE [1, x, y, width, height], zero-based native pixel window; at most 4,194,304 pixels."
+       }
+      }
+     ]
+    }
+   ],
+   "outputPorts": [
+    {
+     "portId": "layout",
+     "displayName": "layout",
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "Float64 LE [1,width,height,bits,sampleFormat,scale,offset,nodata,hasNodata]. Sample format uses TIFF codes 1 unsigned, 2 signed, 3 floating point.",
+     "acceptedTypeSets": [
+      {
+       "setId": "layout-raw",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.raster-scalar-layout",
+        "detail": "Float64 LE [1,width,height,bits,sampleFormat,scale,offset,nodata,hasNodata]. Sample format uses TIFF codes 1 unsigned, 2 signed, 3 floating point."
+       }
+      }
+     ]
+    },
+    {
+     "portId": "values",
+     "displayName": "values",
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "Float64 LE physical samples in row order: DN * scale + offset. Invalid samples contain zero and MUST be read with valid.",
+     "acceptedTypeSets": [
+      {
+       "setId": "values-raw",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.raster-float64",
+        "detail": "Float64 LE physical samples in row order: DN * scale + offset. Invalid samples contain zero and MUST be read with valid."
+       }
+      }
+     ]
+    },
+    {
+     "portId": "valid",
+     "displayName": "valid",
+     "minStreams": 0,
+     "maxStreams": 1,
+     "required": false,
+     "description": "One byte per sample: 1 valid, 0 source NoData or ISIS special pixel.",
+     "acceptedTypeSets": [
+      {
+       "setId": "valid-raw",
+       "allowedTypes": [
+        {
+         "acceptsAnyFlatbuffer": true
+        }
+       ],
+       "wildcardJustification": {
+        "kind": "foreign-wire-format",
+        "mediaType": "application/vnd.sdn.raster-validity",
+        "detail": "One byte per sample: 1 valid, 0 source NoData or ISIS special pixel."
        }
       }
      ]

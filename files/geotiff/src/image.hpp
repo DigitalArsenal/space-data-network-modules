@@ -94,7 +94,7 @@ inline uint64_t geoKey(const std::vector<uint64_t>& dir, uint64_t key) {
   return 0;
 }
 
-inline bool load(Image& im) {
+inline bool load(Image& im, bool georeference = true) {
   tiff::File& f = im.file;
   if (!f.open()) return false;
   im.spp = uint32_t(f.uint(0, 277, 1));
@@ -161,6 +161,18 @@ inline bool load(Image& im) {
       if (im.masks[m].w == lv.w && im.masks[m].h == lv.h) lv.mask = int(m);
   std::sort(im.levels.begin(), im.levels.end(), [](const Level& a, const Level& b) { return a.w > b.w; });
 
+  // Scalar readers use pixel windows and must not require an Earth EPSG code.
+  // Read no-data before the optional projection so the two readers share it.
+  const uint8_t* nd = nullptr;
+  size_t ndLen = 0;
+  if (f.tag(0, 42113) && f.bytes(0, 42113, &nd, &ndLen) && ndLen > 0) {
+    std::string text(reinterpret_cast<const char*>(nd), ndLen);
+    char* end = nullptr;
+    const double v = std::strtod(text.c_str(), &end);
+    if (end != text.c_str()) { im.hasNodata = true; im.nodata = v; }
+  }
+  if (!georeference) return !im.missing();
+
   // Georeferencing: GeoKeys, then the model transformation or tie point + pixel scale.
   std::vector<uint64_t> keys;
   if (!f.uints(0, 34735, &keys)) return im.missing() ? false : im.fail("it has no georeferencing (no GeoTIFF keys)");
@@ -192,17 +204,6 @@ inline bool load(Image& im) {
   im.inv[4] = -im.gt[4] / det; im.inv[5] = im.gt[1] / det;
   im.inv[0] = -(im.inv[1] * im.gt[0] + im.inv[2] * im.gt[3]);
   im.inv[3] = -(im.inv[4] * im.gt[0] + im.inv[5] * im.gt[3]);
-  const uint8_t* nd = nullptr;
-  size_t ndLen = 0;
-  if (f.tag(0, 42113) && f.bytes(0, 42113, &nd, &ndLen) && ndLen > 0) {
-    std::string text(reinterpret_cast<const char*>(nd), ndLen);
-    char* end = nullptr;
-    const double v = std::strtod(text.c_str(), &end);
-    if (end != text.c_str()) {
-      im.hasNodata = true;
-      im.nodata = v;
-    }
-  }
   return !im.missing();
 }
 

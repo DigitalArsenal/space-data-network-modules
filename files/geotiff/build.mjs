@@ -55,7 +55,7 @@ const sourceCode = [
   ["#define MINIZ_NO_ARCHIVE_APIS 1", "#define MINIZ_NO_STDIO 1", "#define MINIZ_NO_TIME 1", "#define MINIZ_NO_ZLIB_APIS 1", "#define MINIZ_NO_ZLIB_COMPATIBLE_NAMES 1", "#define MINIZ_NO_DEFLATE_APIS 1", vendored("vendor/miniz-3.1.2/miniz.h")].join("\n"),
   minizC.slice(include.length + 1),
   ["#define STBI_ONLY_JPEG", "#define STBI_NO_STDIO", "#define STBI_NO_LINEAR", "#define STBI_NO_HDR", "#define STBI_NO_SIMD", "#define STBI_NO_THREAD_LOCALS", "#define STBI_ASSERT(x) ((void)0)", "#define STB_IMAGE_IMPLEMENTATION", vendored("vendor/stb_image-2.30/stb_image.h")].join("\n"),
-  ...["tiff.hpp", "codecs.hpp", "project.hpp", "image.hpp", "geotiff.cpp"].map(local),
+  ...["tiff.hpp", "codecs.hpp", "project.hpp", "image.hpp", "scalar.hpp", "geotiff.cpp"].map(local),
 ].join("\n");
 
 const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
