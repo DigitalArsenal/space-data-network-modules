@@ -36,7 +36,7 @@ npm test
 /Users/tj/software/terrain-work/lanes/headless-run npm run test:e2e
 ```
 
-`build.mjs` uses SDK 0.8.27 `compileModuleFromSource` with `wasi-sequential` and
+`build.mjs` uses SDK 0.9.10 `compileModuleFromSource` with `wasi-sequential` and
 the native clang++ driver inside **repo-local** `deps/emsdk`. This bounded pure
 transform has a manifest `sequentialJustification`. No system Emscripten is
 invoked. The SDK resolves the WASI sysroot and runtime libraries separately;
@@ -154,7 +154,7 @@ The two map pixels are not asserted to represent whole terrain classes.
 All physical numbers have DOI and table/equation/dataset-pixel locators.
 
 Mallama & Hilton 2018 equations exist **only in tests/**. The published Fortran
-was read as data and not executed. Ten published numerical examples validate
+was read as data and not executed. Fourteen published numerical examples validate
 the test oracle; its Saturn cubic follows the paper's printed coefficient,
 which differs from the published Fortran by 1e-9. It is never a runtime or build
 input. The independent ROLO transcription remains in tests, while the shipped
@@ -253,3 +253,11 @@ All commands that open a headless browser must run through the coordinator's
 `/Users/tj/software/terrain-work/lanes/headless-run` wrapper. The gauntlet uses
 `/Users/tj/software/terrain-work/lanes/gauntlet-run`, which holds its own browser
 lock. No Chrome, windowed browser, Docker, or Docker Desktop is launched.
+
+
+The 2026-10-23 gauntlet requires SDK >=0.9.2. This module is pinned to 0.9.10;
+verification reused the already installed, clean SDK checkout at commit
+`e4f2db38822fc58b18ae0737abffd39753633325`, without running npm install.
+The compiler still comes from the module's repo-local emsdk. Human-readable
+build provenance is `dist/build-provenance.md`; C++ literal generation uses
+fixed-width octal escapes for UTF-8 bytes, separate from runtime FlatBuffers.

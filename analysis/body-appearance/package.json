@@ -18,7 +18,7 @@
     "check:compliance": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.27",
+    "space-data-module-sdk": "0.9.10",
     "flatc-wasm": "26.1.38",
     "esbuild": "0.28.0",
     "playwright": "1.56.1"
