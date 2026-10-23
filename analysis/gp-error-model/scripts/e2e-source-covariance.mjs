@@ -72,7 +72,9 @@ const cases=[];let worst=0,comparisonCount=0;
 function close(a,b,label) {assert.equal(a.length,b.length,label);let scale=Math.max(...b.map(Math.abs));for(let i=0;i<a.length;++i) {const error=Math.abs(a[i]-b[i])/scale;assert(Number.isFinite(error),label);worst=Math.max(worst,error);assert(error<=1e-12,`${label} cell ${i}: ${a[i]} vs ${b[i]} rel=${error}`);}++comparisonCount;}
 async function invoke(id,inputs,expected=null,reason=null) {
   const result=await harness.invoke({methodId:'source_covariance',inputs});
-  cases.push({id,request:{methodId:'source_covariance',inputs:inputs.map(({payload,...r})=>({...r,payloadBase64:Buffer.from(payload).toString('base64')}))},expect:reason?'guest-error':'ok'});
+  // Refusals are nonzero statusCode fields in successful invoke envelopes,
+  // not process exits/traps. Parity compares the complete envelope bytes.
+  cases.push({id,request:{methodId:'source_covariance',inputs:inputs.map(({payload,...r})=>({...r,payloadBase64:Buffer.from(payload).toString('base64')}))},expect:'ok'});
   if(reason) {assert.notEqual(result.statusCode,0,id);assert.match(result.errorMessage,reason);return;}
   assert.equal(result.statusCode,0,`${id}: ${result.errorCode} ${result.errorMessage}`);
   const s=decode('PRW',result.outputs.find(f=>f.portId==='state').payload).RESIDENT_STATE;
@@ -102,9 +104,15 @@ try {
     const independent=state();independent.ENTITY_HANDLE=2;independent.COVARIANCE=table('PRWStateMatrix',{DIMENSION:6,VALUES:refs.RTN.COVARIANCE_INERTIAL});
     const ingest=await ffm.invoke({methodId:'ingest_state_gravity_only',inputs:[frame('state','PRW',{RESIDENT_STATE:attached}),frame('state','PRW',{RESIDENT_STATE:independent})]});
     assert.equal(ingest.statusCode,0,`FFM ingest: ${ingest.errorMessage}`);
-    const propagated=await ffm.invoke({methodId:'propagate_state',inputs:[frame('request','PRW',{RESIDENT_REQUEST:table('PRWResidentRequest',{INSTANCE:instance(),TARGET_EPOCH:instant(later),TARGET_COORDINATE_SYSTEM:cs(),ENTITY_HANDLES:[1,2]})})]});
-    assert.equal(propagated.statusCode,0,`FFM propagate: ${propagated.errorMessage}`);
-    const results=propagated.outputs.map(f=>decode('PRW',f.payload).RESIDENT_STATE);assert.equal(results.length,2);
+    const propagation={methodId:'propagate_state',outputStreamCap:2,inputs:[frame('request','PRW',{RESIDENT_REQUEST:table('PRWResidentRequest',{INSTANCE:instance(),TARGET_EPOCH:instant(later),TARGET_COORDINATE_SYSTEM:cs(),ENTITY_HANDLES:[1,2]})})]};
+    const results=[];
+    for (;;) {
+      const propagated=await ffm.invoke(propagation);
+      assert.equal(propagated.statusCode,0,`FFM propagate: ${propagated.errorMessage}`);
+      results.push(...propagated.outputs.map(f=>decode('PRW',f.payload).RESIDENT_STATE));
+      if (!propagated.yielded) break;
+    }
+    assert.equal(results.length,2);
     close(results[0].COVARIANCE.VALUES,results[1].COVARIANCE.VALUES,'FFM resident 1 day composition');
     assert.notDeepEqual(results[0].COVARIANCE.VALUES,attached.COVARIANCE.VALUES,'FFM must actually carry covariance');
   } finally {ffm.destroy();}
