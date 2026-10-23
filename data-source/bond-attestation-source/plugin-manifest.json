@@ -75,5 +75,9 @@
       "rootTypeName": "WHA"
     }
   ],
-  "threadModel": "single-thread"
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one frame (the WHA request or one http.request answer) into the next request or the attestation on the calling thread; the host runs the HTTP calls and this module creates no threads."
+  }
 }

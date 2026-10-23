@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "parse is a single-pass transform over the frames the flow hands it: each file is read once, chunk by chunk, into one field and its world product, and each band becomes one record. No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across files is the flow's, through the http connector node. This guest never spawns a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "parse is a single-pass transform over the frames the flow hands it: each file is read once, chunk by chunk, into one field and its world product, and each band becomes one record. No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across files is the flow's, through the http connector node. This guest never spawns a thread, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

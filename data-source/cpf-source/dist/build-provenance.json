@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -16,6 +16,6 @@
   "sources": [
     "src/cpf_source.cpp"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "4d2c897f732c109fd31d362f5e79b412b0ec7165e9d23c460581079094f9cc18"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "4edab160c53d71af0b830cffa424f7193d51d9460080f4f8a60b87fa1338f06f"
 }

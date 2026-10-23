@@ -25,13 +25,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // Single-thread pending the fleet migration off legacy Emscripten; blocked
-  // by flowCompiler mixed-guest-thread-models against hostcap/* (Janus
-  // 2026-08-26). A pure transform is INSIDE the threads law — threads are
-  // forbidden here, not merely unused — and the standalone single-thread lane
-  // is the compliant form until the cutover task
-  // modules-wasi-sequential-cutover-off-legacy-emscripten lands.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   allowUndefinedImports: true,
 });
 

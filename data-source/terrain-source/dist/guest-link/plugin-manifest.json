@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Both methods are single-pass transforms over the frames the flow hands them: decode the DEM granules covering one output tile and encode one quantized mesh, or render one layer.json body. Tiles are processed one at a time, there is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Both methods are single-pass transforms over the frames the flow hands them: decode the DEM granules covering one output tile and encode one quantized mesh, or render one layer.json body. Tiles are processed one at a time, there is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

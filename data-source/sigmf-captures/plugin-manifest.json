@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Both methods are pure single-pass transforms over one fetched JSON document: `request` builds one HttpRequest from node CONFIG, and `parse` walks the archive's capture documents once, emitting one $IQC record per document into a single append-only stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of the metadata index. This guest can never spawn a thread, so it compiles on the single-thread STANDALONE_WASM lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Both methods are pure single-pass transforms over one fetched JSON document: `request` builds one HttpRequest from node CONFIG, and `parse` walks the archive's capture documents once, emitting one $IQC record per document into a single append-only stream. There is no shared mutable state, no worker pool, no fan-out and nothing for a second thread to do; the whole cost is one linear scan of the metadata index. This guest can never spawn a thread, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

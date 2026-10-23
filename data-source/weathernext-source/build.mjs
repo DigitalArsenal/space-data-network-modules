@@ -42,12 +42,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. One control frame in,
-  // a handful of synchronous hostcalls (plugin.getConfig, secrets.get) in a
-  // fixed order, HttpRequest / FlowNotice frames out; no shared state, provably no thread.
-  // Same single-thread STANDALONE_WASM lane as celestrak-request and
-  // cell-tower-credentials.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
   // plugin.getConfig and the secrets.get capability op; symbols resolve at
   // instantiation.

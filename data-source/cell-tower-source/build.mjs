@@ -88,21 +88,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred.
-  //
-  // All three methods are pure single-pass transforms and this guest provably
-  // never spawns a thread (manifest.sequentialJustification records why), so it
-  // carries no pthreads contract. Same single-thread STANDALONE_WASM lane every
-  // other flow node in this producer uses (data-source/satnogs-source,
-  // data-source/celestrak-*, hostcap/*): no `-pthread`, no shared memory,
-  // growable linear memory, isomorphic across the browser harness and WasmEdge.
-  //
-  // NOT "wasi-sequential", for the reason satnogs-source recorded: that lane
-  // emits a SHARED, NON-GROWABLE 2-page (128 KB) memory, which cannot hold a
-  // provider table. This module aggregates SEVERAL provider bodies at once, so
-  // it needs growable memory even more than satnogs does. Revisit when the SDK
-  // sequential lane sizes its memory (Janus).
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge; symbols resolve at
   // instantiation.
   allowUndefinedImports: true,

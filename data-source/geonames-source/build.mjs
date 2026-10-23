@@ -78,15 +78,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. All three methods are
-  // pure single-pass transforms and this guest provably never spawns a thread
-  // (manifest.sequentialJustification records why), so it carries no pthreads
-  // contract. Declaring it keeps the SDK's isomorphic-pthreads artifact guard
-  // from being handed a claim the emitted wasm does not honour.
-  //
-  // NOT "wasi-sequential": that lane emits a SHARED, NON-GROWABLE 2-page
-  // (128 KB) memory, and this module inflates a multi-megabyte gazetteer.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge; symbols resolve at
   // instantiation.
   allowUndefinedImports: true,

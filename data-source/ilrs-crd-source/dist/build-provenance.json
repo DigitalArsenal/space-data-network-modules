@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TDM"
@@ -11,6 +11,6 @@
   "sources": [
     "src/ilrs_crd_source.cpp"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "5856d75a32d2b3111c99af7d670363cbc0e767f65366b8315ae08cc88238398d"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "1671b59287d5e3dc6d732bb43c57e8cf2f48cf350d9cd590a0eb5cbeb009f7da"
 }

@@ -42,10 +42,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. Typed frames in, one plugin.getConfig hostcall, HttpRequest
-  // frames out; select_files keeps its backlog between invocations (the runtime resumes a yielded node), still one
-  // thread. Same single-thread STANDALONE_WASM lane as celestrak-request and weathernext-source.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge for the builtin plugin.getConfig; symbols resolve at
   // instantiation.
   allowUndefinedImports: true,

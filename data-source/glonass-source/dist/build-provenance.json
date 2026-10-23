@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -16,6 +16,6 @@
   "sources": [
     "src/glonass_source.cpp"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "4de8e86d92d4c20e735ebb4bf345d34b38c42a7c2f3de0503483bbeab1d1ed5f"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "db7e375ca038074fb54d21b951aab1c37876ea81339bb28995d70078c31ab6fa"
 }

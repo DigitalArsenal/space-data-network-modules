@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -27,6 +27,6 @@
     "src/runtime_contracts.hpp",
     "src/deep_space_spacecraft.cpp"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "fe950d1b0658c3e79009cd51c67360c8809bb6823dffd97a778e02c0d66f0511"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "6ead93bac487e9f3e280d81895fe1001c3fdd89c344fdf21ce2aefe3c61da581"
 }

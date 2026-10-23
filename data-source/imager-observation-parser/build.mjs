@@ -60,10 +60,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. parse is a single-pass transform over the frames the flow
-  // hands it (manifest sequentialJustification) and never spawns a thread: the single-thread STANDALONE_WASM lane
-  // with growable memory, like every other parser node here (a full-disk field needs a few hundred MB).
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge for the builtin plugin.getConfig (imager_widths, an SDS
   // $PIV invocation); symbols resolve at instantiation.
   allowUndefinedImports: true,

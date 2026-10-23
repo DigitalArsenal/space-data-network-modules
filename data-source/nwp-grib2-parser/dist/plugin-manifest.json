@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "parse is a single-pass transform over the frames the flow hands it: each response's GRIB2 messages are read once and each becomes its record(s). No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across leads and byte ranges is the flow's, through the http connector node. This guest never spawns a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "parse is a single-pass transform over the frames the flow hands it: each response's GRIB2 messages are read once and each becomes its record(s). No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across leads and byte ranges is the flow's, through the http connector node. This guest never spawns a thread, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

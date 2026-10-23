@@ -42,7 +42,7 @@ const compilation = await compileModuleFromSource({
   sourceCode: `#define TERRAIN_SOURCE_NO_HOST_BRIDGE 1\n${sourceCode}`,
   language: "c++",
   outputPath,
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
   allowUndefinedImports: true,
 });
 if (!compilation.report?.ok) {

@@ -19,6 +19,6 @@ await buildSourceModule({
     "../../files/orbit-products/src/sha256.hpp",
     "src/runtime_contracts.hpp", "src/deep_space_spacecraft.cpp",
   ],
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
   allowUndefinedImports: true, // plugin.getConfig through the typed $PIV bridge
 });

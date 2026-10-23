@@ -76,9 +76,9 @@ test("every port names ONE concrete FlatBuffer type: HRSP in, $GNP / HRSP / FNTC
   });
 });
 
-test("the guest-link metadata declares single-thread", () => {
+test("the guest-link metadata declares wasi-sequential", () => {
   const metadata = JSON.parse(
     fs.readFileSync(fileURLToPath(new URL("../dist/guest-link/metadata.json", import.meta.url)), "utf8"),
   );
-  assert.equal(metadata.threadModel, "single-thread");
+  assert.equal(metadata.threadModel, "wasi-sequential");
 });

@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "route is a single-pass transform over one request frame: parse, match the mount prefix, render one small JSON body from configuration, hash it for the ETag. No shared mutable state beyond the once-per-instance config cache, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "route is a single-pass transform over one request frame: parse, match the mount prefix, render one small JSON body from configuration, hash it for the ETag. No shared mutable state beyond the once-per-instance config cache, no worker pool and no fan-out inside the guest, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

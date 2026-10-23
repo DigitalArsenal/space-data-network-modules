@@ -106,11 +106,11 @@ test("the manifest declares capabilities [] and both runtime targets", () => {
   assert.equal(MANIFEST.pluginId, "com.digitalarsenal.data-source.terrain-ingest");
 });
 
-test("the guest-link metadata declares single-thread", () => {
+test("the guest-link metadata declares wasi-sequential", () => {
   const metadata = JSON.parse(
     fs.readFileSync(fileURLToPath(new URL("../dist/guest-link/metadata.json", import.meta.url)), "utf8"),
   );
-  assert.equal(metadata.threadModel, "single-thread");
+  assert.equal(metadata.threadModel, "wasi-sequential");
 });
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 {
-  "spacedatastandards": "1.249.0",
-  "standardsRoot": "/private/tmp/claude-501/-Users-tj-Cesium-Weather/2a455fdc-3b3d-48e5-883a-54ae2b62d382/scratchpad/work/sds-root/node_modules/spacedatastandards.org",
+  "spacedatastandards": "1.261.0+1792716949507",
+  "standardsRoot": "/Users/tj/software/process-fix/wasi/spacedatastandards.org",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -13,6 +13,6 @@
     "LCC",
     "CAT"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "6aa6b40a2e7baa55275b9624bc91217718f2d52d20a082c1982c78c2c437089d"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "dbfcd2953bc15fc721e313884947fc15ba145b94719b33ae6c811eac1f67b41f"
 }

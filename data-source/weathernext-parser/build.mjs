@@ -51,12 +51,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred. This guest is a pure
-  // single-pass transform over the frames it is handed (manifest
-  // sequentialJustification records why) and provably never spawns a thread,
-  // so it compiles on the single-thread STANDALONE_WASM lane like every other
-  // flow node (celestrak-parser, satnogs-source, hostcap/*).
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge for the builtin plugin.getConfig (the chunk extents, the
   // dimension order and the provider id); symbols resolve at instantiation.
   allowUndefinedImports: true,

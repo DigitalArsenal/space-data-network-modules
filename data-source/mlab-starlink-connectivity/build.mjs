@@ -51,21 +51,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL — declared explicitly, never inferred.
-  //
-  // This guest is a pure single-pass transform and provably never spawns a
-  // thread (manifest.sequentialJustification records why), so it carries no
-  // pthreads contract and compiles on the SAME single-thread STANDALONE_WASM
-  // lane as data-source/satnogs-source and every other flow node the celestrak
-  // producer runs: no `-pthread`, no shared memory, growable linear memory,
-  // isomorphic across the browser harness and the node's WasmEdge.
-  //
-  // NOT "wasi-sequential": SDK 0.8.5's sequential lane emits a SHARED,
-  // NON-GROWABLE 2-page (128 KB) memory (no `-Wl,--max-memory`, and on the
-  // wasm32-wasip1-threads triple wasm-ld pins max == initial), which cannot
-  // hold one cycle's payload. Tracked for Janus as
-  // module-sdk-wasi-sequential-max-memory.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // Imports the sync space_data_module_host hostcall bridge for the builtin
   // plugin.getConfig (an SDS $PIV invocation through typedHostcall.hpp);
   // symbols resolve at instantiation.

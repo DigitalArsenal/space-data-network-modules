@@ -136,7 +136,7 @@ node --test tests/sdk_compat.test.mjs
 SDN_RUN_EOP_PARITY=1 node --test tests/*.test.mjs
 ```
 
-The build uses the SDK's explicit `single-thread` emception profile. Its
+The build uses the SDK's explicit `wasi-sequential` profile (clang wasm32-wasip1-threads). Its
 primary artifact is `dist/isomorphic/module.wasm`, with guest-link artifacts
 for composition. The browser parity runner requires pinned `esbuild`, Chrome,
 native WasmEdge 0.16.4, and Docker's pinned WasmEdge 0.16.4 image.

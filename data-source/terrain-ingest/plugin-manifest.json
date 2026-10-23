@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Every method is a single-pass transform over the frames the flow hands it: it formats a query, a bounded plan with its requests, an attribution frame or a mark. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Every method is a single-pass transform over the frames the flow hands it: it formats a query, a bounded plan with its requests, an attribution frame or a mark. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

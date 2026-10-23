@@ -13,7 +13,7 @@ and this module never sees them.
 Cloned from `data-source/terrain-source`'s catalogue route: one method,
 `route`, `$HTQ` in, `$HTR` out, config read once per instance as one ModuleConfig (MCFG) over the
 `plugin.getConfig` SDS $PIV hostcall (or handed in as the same ModuleConfig on the optional `config` port), capabilities
-`[]`, single-thread, browser + wasmedge.
+`[]`, wasi-sequential, browser + wasmedge.
 
 ## Routes (mount `/api/v1/osm/`, `flows/osm-serving.flow.json`, anonymous)
 
@@ -37,7 +37,7 @@ Cloned from `data-source/terrain-source`'s catalogue route: one method,
 
 ```
 npm ci
-npm run build        # dist/isomorphic/module.wasm + guest-link (SDK compiler, single-thread)
+npm run build        # dist/isomorphic/module.wasm + guest-link (SDK compiler, wasi-sequential)
 npm test             # tests/serve.test.mjs (routes, ETag/304, 503, 404/405), tests/sdk_compat.test.mjs
 ```
 

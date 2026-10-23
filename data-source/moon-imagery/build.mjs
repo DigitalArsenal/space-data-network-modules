@@ -19,6 +19,6 @@ await buildSourceModule({
   extraHeaders: ["data-source/body-imagery/src/jpeg_encoder.hpp", "data-source/moon-imagery/src/stb_config.hpp",
     "data-source/body-imagery/vendor/stb_image-2.30/stb_image.h"],
   sources: ["src/moon_imagery_module.cpp"],
-  threadModel: "single-thread",
+  threadModel: "wasi-sequential",
   allowUndefinedImports: true,
 });

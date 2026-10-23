@@ -26,7 +26,7 @@ export async function build(root,pieces,codes){
  await fs.rm(path.join(root,'dist'),{recursive:true,force:true});
  await fs.mkdir(path.dirname(outputPath),{recursive:true});
  // Single thread: one invocation's frames, nothing spawned or shared.
- const result=await compileModuleFromSource({manifest,sourceCode,language:'c++',outputPath,threadModel:'single-thread'});
+ const result=await compileModuleFromSource({manifest,sourceCode,language:'c++',outputPath,threadModel:'wasi-sequential'});
  if(!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
  const guest=path.join(root,'dist/guest-link');await fs.mkdir(guest,{recursive:true});
  await fs.writeFile(path.join(guest,'module-link.o'),result.guestLink.objectBytes);

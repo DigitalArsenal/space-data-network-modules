@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Every method is a single pass over the frames of one invocation: the request builders read the node config once and emit request frames; the parsers decode each response once into records. There is no shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across group queries is the flow's, through the http connector node. This guest can never spawn a thread, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "Every method is a single pass over the frames of one invocation: the request builders read the node config once and emit request frames; the parsers decode each response once into records. There is no shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across group queries is the flow's, through the http connector node. This guest can never spawn a thread, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "schemasUsed": [

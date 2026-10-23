@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "One method over one control frame: read the node config, make at most a handful of synchronous hostcalls in a fixed order (plugin.getConfig, then secrets.get in bearer mode), emit HttpRequest / FlowNotice frames. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+    "detail": "One method over one control frame: read the node config, make at most a handful of synchronous hostcalls in a fixed order (plugin.getConfig, then secrets.get in bearer mode), emit HttpRequest / FlowNotice frames. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

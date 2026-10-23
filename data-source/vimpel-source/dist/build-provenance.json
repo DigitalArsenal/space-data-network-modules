@@ -1,6 +1,6 @@
 {
-  "spacedatastandards": "1.249.0",
-  "standardsRoot": "/Users/tj/software/worktrees/space-data-network-modules--modules-hostcap-typed-20261013/data-source/vimpel-source/node_modules/spacedatastandards.org",
+  "spacedatastandards": "1.261.0+1792716949507",
+  "standardsRoot": "/Users/tj/software/process-fix/wasi/spacedatastandards.org",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -12,6 +12,6 @@
     "OEM",
     "OIL"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "2ff1cd72e01ab8f519b3d6629d95460177de3b12a9d4f83504cda41356fd2649"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "4132f09a46cf1f36a2373b9459b297376bd361bdb15abbfcf1f0112b4849d48a"
 }

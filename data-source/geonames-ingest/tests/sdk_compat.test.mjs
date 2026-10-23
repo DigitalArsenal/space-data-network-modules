@@ -59,13 +59,13 @@ test("geonames-ingest imports only WASI + the sync hostcall bridge", async () =>
   assert.deepEqual(Array.from(new Set(inspection.imports.map((e) => e.module))).sort(), ["space_data_module_host", "wasi_snapshot_preview1"]);
 });
 
-test("the manifest declares capabilities [] and both runtime targets; the guest-link metadata single-thread", () => {
+test("the manifest declares capabilities [] and both runtime targets; the guest-link metadata wasi-sequential", () => {
   const manifest = readManifest();
   assert.deepEqual(manifest.capabilities, []);
   assert.deepEqual(manifest.runtimeTargets, ["browser", "wasmedge"]);
   assert.equal(manifest.pluginId, "com.digitalarsenal.data-source.geonames-ingest");
   const metadata = JSON.parse(fs.readFileSync(fileURLToPath(new URL("../dist/guest-link/metadata.json", import.meta.url)), "utf8"));
-  assert.equal(metadata.threadModel, "single-thread");
+  assert.equal(metadata.threadModel, "wasi-sequential");
 });
 
 // ---------------------------------------------------------------------------

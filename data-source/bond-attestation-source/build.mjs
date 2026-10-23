@@ -31,8 +31,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // Declared, never inferred (scripts/lib/thread-model.mjs): unshared memory, no wasi-threads.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // The sync space_data_module_host hostcall bridge resolves at instantiation (SDK harness / Go node bridge).
   allowUndefinedImports: true,
 });

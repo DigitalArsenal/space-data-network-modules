@@ -144,5 +144,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one TimerTick into the one $OEM it emits, built from the checked-in ephemeris on the calling thread; no thread is created."
+  }
 }

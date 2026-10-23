@@ -14,7 +14,8 @@ await buildSourceModule({
   extraHeaders: ["files/orbit-products/src/sha256.hpp", "files/orbit-products/src/ephemeris_series.hpp", "files/orbit-products/src/sp3.hpp"],
   common: ["civil_time.hpp"],
   sources: ["src/sp3_precise_source.cpp"],
-  // THREAD MODEL: declared, never inferred (scripts/lib/thread-model.mjs). The parser spawns nothing and shares nothing.
-  // single-thread, as the source parsers and the source-products flow's nodes are: a flow links one thread model.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
 });

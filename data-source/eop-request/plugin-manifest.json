@@ -181,5 +181,9 @@
    "fileIdentifier": "$ICN",
    "rootTypeName": "ICN"
   }
- ]
+ ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one TimerTick into one HttpRequest on the calling thread; nothing survives the invocation and no thread is created."
+  }
 }

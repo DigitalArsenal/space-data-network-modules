@@ -60,10 +60,10 @@ SDN_RUN_EOP_PARITY=1 node --test tests/*.test.mjs
 
 The build inlines the SDS `$ICN` header from
 `$SPACE_DATA_STANDARDS_ROOT/lib/cpp/ICN/main_generated.h` (include guard
-renamed) and uses `compileModuleFromSource` with an explicit `single-thread`
-profile and the SDK's pinned emception backend. It emits the same standalone
+renamed) and uses `compileModuleFromSource` with an explicit `wasi-sequential`
+profile (clang wasm32-wasip1-threads, the repo's one guest object format). It emits the same standalone
 `dist/isomorphic/module.wasm` for browser and WasmEdge, plus guest-link objects
-for the established flow compiler. No machine-global Emscripten is invoked.
+for the established flow compiler.
 Parity requires Chrome, `wasmedge` 0.16.4 on PATH, Docker, and the SDK's pinned
 `space-data-module-sdk/parity-wasmedge:0.16.4` image. `esbuild` is pinned for the
 SDK's browser parity runner.

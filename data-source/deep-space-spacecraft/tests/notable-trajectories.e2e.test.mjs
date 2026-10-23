@@ -324,7 +324,7 @@ extern "C" int parse_reference() {
   try {
     built = await compileModuleFromSource({ manifest: helperManifest,
       sourceCode: ["#define JSON_NOEXCEPTION 1", ...headers, source].join("\n"),
-      language: "c++", outputPath, threadModel: "single-thread" });
+      language: "c++", outputPath, threadModel: "wasi-sequential" });
   } finally {
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpdir;
@@ -568,7 +568,7 @@ async function fixtureHarness(t) {
   process.env.TMPDIR = temporary;
   let built;
   try {
-    built = await compileModuleFromSource({ manifest: helperManifest, language: "c++", outputPath, threadModel: "single-thread",
+    built = await compileModuleFromSource({ manifest: helperManifest, language: "c++", outputPath, threadModel: "wasi-sequential",
       sourceCode: '#define JSON_NOEXCEPTION 1\n#include "space_data_module_invoke.h"\n' + source });
   } finally {
     if (previous === undefined) delete process.env.TMPDIR;

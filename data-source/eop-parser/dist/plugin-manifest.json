@@ -380,5 +380,9 @@
    "fileIdentifier": "$ICN",
    "rootTypeName": "ICN"
   }
- ]
+ ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method parses one HttpResponse body into its $EOP records in one pass on the calling thread; no state survives the invocation and no thread is created."
+  }
 }

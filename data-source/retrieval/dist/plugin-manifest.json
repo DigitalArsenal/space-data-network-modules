@@ -212,5 +212,9 @@
       "target": "browser,wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns one $QRP request into one engine query and its one $QRP answer on the calling thread; no state survives the invocation and no thread is created."
+  }
 }

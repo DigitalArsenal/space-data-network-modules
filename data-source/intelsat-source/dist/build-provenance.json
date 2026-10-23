@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.261.0+1792716949507",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -16,6 +16,6 @@
   "sources": [
     "src/intelsat_source.cpp"
   ],
-  "threadModel": "single-thread",
-  "wasmSha256": "d75702e2aaed12bd06f18b4e6c81e320d224bf2fa8d427e7a8876adfe0a9c135"
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "be8547f2a6e3da12466466a328d09603d29cc2d620bc75668857f1da36c6cb65"
 }

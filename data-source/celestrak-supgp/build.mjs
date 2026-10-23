@@ -47,9 +47,10 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  // THREAD MODEL - declared, never inferred (scripts/lib/thread-model.mjs): each method turns one frame into the next
-  // on the calling thread and spawns nothing.
-  threadModel: "single-thread",
+  // THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+  // thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+  // every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+  threadModel: "wasi-sequential",
   // plugin.getConfig is a typed hostcall (sdm_piv): its space_data_module_host imports are resolved by the host.
   allowUndefinedImports: true,
 });

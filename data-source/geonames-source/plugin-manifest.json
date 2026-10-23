@@ -15,7 +15,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "All three methods are single-pass transforms over the frames the flow hands them: inflate one archive member, decode tab-separated rows (joined against the lookup files) into records, decode tombstone rows into a list. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+    "detail": "All three methods are single-pass transforms over the frames the flow hands them: inflate one archive member, decode tab-separated rows (joined against the lookup files) into records, decode tombstone rows into a list. There is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles wasi-sequential rather than claiming a wasi-threads contract it does not honour."
   },
   "externalInterfaces": [],
   "methods": [

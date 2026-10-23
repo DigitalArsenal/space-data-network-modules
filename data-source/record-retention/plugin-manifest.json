@@ -99,5 +99,9 @@
       "target": "wasmedge"
     }
   ],
-  "abiVersion": 1
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Each invocation sends its targets to the host's storage.expire hostcall one after another on the calling thread; the host runs independent invocations in parallel and this module creates no threads."
+  }
 }

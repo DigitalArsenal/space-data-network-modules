@@ -83,14 +83,14 @@ test("the manifest declares capabilities [] and both runtime targets", () => {
   assert.equal(responseType.rootTypeName, "HttpResponse");
 });
 
-test("the guest-link metadata declares single-thread", () => {
+test("the guest-link metadata declares wasi-sequential", () => {
   const metadata = JSON.parse(
     fs.readFileSync(
       fileURLToPath(new URL("../dist/guest-link/metadata.json", import.meta.url)),
       "utf8",
     ),
   );
-  assert.equal(metadata.threadModel, "single-thread");
+  assert.equal(metadata.threadModel, "wasi-sequential");
 });
 
 test("every port names ONE concrete FlatBuffer type (typed contracts 1.0: no JSON lane, no wildcard)", () => {

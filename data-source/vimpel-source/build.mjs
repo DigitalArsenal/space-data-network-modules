@@ -32,8 +32,10 @@ const sourceCode = [
 const outputPath = path.join(root, "dist/isomorphic/module.wasm");
 await fs.rm(path.join(root, "dist"), { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-// THREAD MODEL: declared, never inferred. The parser spawns nothing and shares nothing.
-const result = await compileModuleFromSource({ manifest, sourceCode, language: "c++", outputPath, threadModel: "single-thread" });
+// THREAD MODEL: wasi-sequential, declared, never inferred (scripts/lib/thread-model.mjs). The guest never spawns a
+// thread (manifest sequentialJustification); clang wasm32-wasip1-threads is the repo's one guest object format, so
+// every flow links its modules' guest-link objects together (graph/checks/flow-link-models.mjs).
+const result = await compileModuleFromSource({ manifest, sourceCode, language: "c++", outputPath, threadModel: "wasi-sequential" });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues ?? result.report));
 await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));
 const guest = path.join(root, "dist/guest-link");
@@ -42,5 +44,5 @@ await fs.writeFile(path.join(guest, "module-link.o"), result.guestLink.objectByt
 const { format, language, threadModel, symbolPrefix, methodSymbols } = result.guestLink;
 await fs.writeFile(path.join(guest, "metadata.json"), `${JSON.stringify({ version: 1, format, language, threadModel, symbolPrefix, methodSymbols }, null, 2)}\n`);
 const wasm = await fs.readFile(outputPath);
-await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT, sdsFamilies: families, threadModel: "single-thread", wasmSha256: createHash("sha256").update(wasm).digest("hex") }, null, 2)}\n`);
+await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT, sdsFamilies: families, threadModel: "wasi-sequential", wasmSha256: createHash("sha256").update(wasm).digest("hex") }, null, 2)}\n`);
 console.log(`PASS SDK build ${manifest.pluginId} -> dist/isomorphic/module.wasm`);
