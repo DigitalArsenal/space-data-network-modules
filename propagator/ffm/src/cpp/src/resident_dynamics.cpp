@@ -132,7 +132,8 @@ bool nextBreak(const Execution& e, int direction, const TTEpoch& from, TTEpoch& 
         e.forces.dragModel == ForceModel::DragModelType::NRLMSISE00 && !e.forces.drag.includeWinds;
     const double search = (daily ? 26 : 6) * 3600.0;
     auto breaks = direction > 0 ? driverBreaks(e, from, plus(from, search)) : driverBreaks(e, plus(from, -search), from);
-    if (daily) breaks.erase(std::remove_if(breaks.begin(), breaks.end(), [](const TTEpoch& at) {
+    if (daily) breaks.erase(std::remove_if(breaks.begin(), breaks.end(), [&](const TTEpoch& at) {
+        for(const auto& knot:e.densityCorrectionBreaks)if(elapsedSeconds(at,knot)==0)return false;
         const double day = at.instant().utc().jd() - .5;
         return std::abs(day - std::round(day)) > 1e-7;
     }), breaks.end());
@@ -157,7 +158,7 @@ bool record(Branch& b, ffm_fast::Run& run, std::string& error) {
 // Starts the span at (spanState, spanStart): to the next restart, or open.
 bool startSpan(Execution& e, Branch& b, const Environment& environment, std::string& error) {
     const bool automatic = b.direction > 0 && !ffm_fast::fixedStep(e.integrator);
-    b.bounded = (environment.weather || automatic) && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
+    b.bounded = (environment.weather || environment.densityCorrection || automatic) && nextBreak(e, b.direction, b.spanStart, b.spanEnd);
     const auto here = b.spanStart.instant();
     const auto there = b.bounded ? b.spanEnd.instant() : here.plusSeconds(b.direction*86400.0);
     if (!environmentCovers(e, environment, here, there, error) || !preflightKernel(e, there, error)) return false;
@@ -571,6 +572,16 @@ bool ResidentDynamics::add(const PRWResidentState* record, std::string& error) {
     return true;
 }
 
+bool ResidentDynamics::dragAcceleration(size_t i, const TTEpoch& at, const StateVector& state, Vec3& out, std::string& error) {
+    if (i >= objects_.size() || !objects_[i]->valid) return prwError(error, "invalid-catalog: Invalid object slot.");
+    Execution e = objects_[i]->execution;
+    if (!attachEnvironment(e, environment_, requestWeather_, error) ||
+        !environmentCovers(e, environment_, at.instant(), at.instant(), error) || !activate(error)) return false;
+    const auto& f = e.forces;
+    out = ForceModel::DragAccelerationWith(state.position, state.velocity, at.instant(), f, ForceModel::DragAt(at.instant(), f));
+    return std::isfinite(out.x) && std::isfinite(out.y) && std::isfinite(out.z) || prwError(error, "invalid-force: Non-finite drag acceleration.");
+}
+
 bool ResidentDynamics::state(size_t i, const TTEpoch& at, StateVector& out, std::string& error) {
     Object& o = *objects_.at(i);
     if (elapsedSeconds(o.execution.initialTT, at) == 0) { out = o.execution.initial; return true; }
@@ -615,7 +626,7 @@ bool ResidentDynamics::covariance(size_t i, const TTEpoch& at, const Mat6& p0, c
     e.target = timesys::ttToTdb(at.jdTt());
     if (!environmentCovers(e, environment_, e.initialTT.instant(), e.targetTT.instant(), error) ||
         !preflightKernel(e, e.targetTT.instant(), error)) return false;
-    if (environment_.weather) e.breaks = driverBreaks(e);
+    if (environment_.weather || environment_.densityCorrection) e.breaks = driverBreaks(e);
     Cursor c;
     c.state = e.initial;
     c.tt = e.initialTT;

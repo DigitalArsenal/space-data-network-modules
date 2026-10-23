@@ -14,6 +14,7 @@ struct PrwEnvironment {
     const uint8_t* earthOrientation = nullptr; size_t earthOrientationSize = 0;
     const uint8_t* spaceWeather = nullptr; size_t spaceWeatherSize = 0;
     const uint8_t* jb2008Indices = nullptr; size_t jb2008IndicesSize = 0;
+    const uint8_t* densityCorrection = nullptr; size_t densityCorrectionSize = 0;
 };
 bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,
                       const PrwEnvironment& environment,

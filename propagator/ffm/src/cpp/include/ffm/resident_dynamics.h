@@ -41,6 +41,9 @@ public:
     bool earthFixed(const TTEpoch& at, const astro::StateVector& in, astro::StateVector& out,
                     bool inverse, std::string& error);
     size_t size() const { return objects_.size(); }
+    // Diagnose the configured object's drag at a supplied GCRF state, without advancing it.
+    bool dragAcceleration(size_t object, const TTEpoch& at, const astro::StateVector& state,
+                          astro::Vec3& out, std::string& error);
     // The instance's kernel as the active ephemeris, at the start of each call.
     bool activate(std::string& error);
 

@@ -1,6 +1,6 @@
 {
   "sdk": "0.9.5",
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.259.0",
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
@@ -8,8 +8,8 @@
     "-msimd128",
     "-fno-exceptions"
   ],
-  "sha256": "a108e6ebb1e67d6d74c78111bde24750fcd01c877bee20a1eb4355cfdceaecab",
-  "bytes": 2182614,
+  "sha256": "cb3b0b23fc967b47cd29998ccc0939d8ae1fb01f2fd95adcfa90093205d57641",
+  "bytes": 2218092,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/worktrees/OrbPro--orbpro-ffm-pool-ffm1-fast-20261022/packages/wasm-engine/deps/emsdk/upstream/bin",
   "memory": {

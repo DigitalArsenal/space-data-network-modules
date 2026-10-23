@@ -259,7 +259,8 @@ double density(const Vec3& r,const timesys::Instant& jd,const ForceModelSet& f,c
         case DragModelType::HarrisPriester:{const auto sun=getSunPosition(jd);return computeHarrisPriester(r,sun.valid?sun.position:Vec3(1,0,0),f.harrisPriesterExponent).density;}
         case DragModelType::NRLMSISE00:{
             AtmosphereConfig c;c.model=AtmosphereModelType::NRLMSISE00;c.includeWinds=f.drag.includeWinds;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.diurnalVariation=f.nrlmsise00.diurnalVariation;c.geomagneticEffects=f.nrlmsise00.geomagneticActivity;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;
-            return computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;
+            const double rho = computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;
+            return f.densityScaleAt ? rho * f.densityScaleAt(jd) : rho;
         }
         case DragModelType::USSA1976:
             if(alt<f.drag.minAltitude || alt>f.drag.maxAltitude)return 0;
