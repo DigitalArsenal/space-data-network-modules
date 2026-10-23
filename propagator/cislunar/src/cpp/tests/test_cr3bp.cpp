@@ -153,8 +153,15 @@ void testCR3BPPropagation() {
 void testRichardsonGuess() {
     auto system = cislunar::earthMoonSystem();
 
-    auto guess = cislunar::richardsonHaloGuess(
-        system.mu, cislunar::LagrangePoint::L2, 0.05, true);
+    cislunar::CR3BPState guess;
+    const bool l2Ok = cislunar::richardsonHaloGuess(
+        system.mu, cislunar::LagrangePoint::L2, 0.05, true, guess);
+    assert(l2Ok);
+    cislunar::CR3BPState unused;
+    const bool l4Ok = cislunar::richardsonHaloGuess(
+        system.mu, cislunar::LagrangePoint::L4, 0.05, true, unused);
+    assert(!l4Ok);  // Richardson's expansion is about L1/L2 only: an error return, not a throw
+    (void)l2Ok; (void)l4Ok;
 
     std::cout << "  Richardson L2 halo guess: x=" << guess.x
               << " y=" << guess.y
@@ -238,8 +245,10 @@ void testStationKeepingEstimate() {
     cislunar::PeriodicOrbitResult orbit;
     orbit.period = 6.5;
     orbit.jacobi = 3.1;
-    orbit.initialState = cislunar::richardsonHaloGuess(
-        system.mu, cislunar::LagrangePoint::L2, 0.03, true);
+    const bool guessOk = cislunar::richardsonHaloGuess(
+        system.mu, cislunar::LagrangePoint::L2, 0.03, true, orbit.initialState);
+    assert(guessOk);
+    (void)guessOk;
     for (int i = 0; i < 6; ++i) {
         orbit.monodromy[i][i] = (i == 0) ? 1.08 : 0.99;
     }

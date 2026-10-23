@@ -42,7 +42,7 @@ test("the artifact answers through the WasmEdge server path", async (t) => {
   let harness;
   let response;
   try {
-    harness = await loadModule({ wasmSource: fileURLToPath(WASM_PATH), runtimeKind: "wasmedge", enableThreads: false });
+    harness = await loadModule({ wasmSource: fileURLToPath(WASM_PATH), runtimeKind: "wasmedge", enableThreads: true });
     response = await harness.invoke(lagrangeRequest());
   } catch (error) {
     if (isUnavailable(error)) {

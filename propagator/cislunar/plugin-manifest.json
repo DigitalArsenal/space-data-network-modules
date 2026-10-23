@@ -47,5 +47,9 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot"
     }
-  ]
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "invoke answers one $TBP request on the calling thread; each propagation integrates its own state in order and no thread is created."
+  }
 }

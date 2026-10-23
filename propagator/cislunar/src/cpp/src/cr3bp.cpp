@@ -3,7 +3,6 @@
 
 #include <cmath>
 #include <algorithm>
-#include <stdexcept>
 #include <numeric>
 
 namespace cislunar {
@@ -119,7 +118,7 @@ double pseudoPotential(double x, double y, double z, double mu) {
 // Lagrange Points
 // ===========================================================================
 
-double computeCollinearPoint(double mu, LagrangePoint point) {
+bool computeCollinearPoint(double mu, LagrangePoint point, double& x) {
     // Solve the quintic equation for collinear equilibrium points
     // Using Newton-Raphson iteration
     double x0;
@@ -137,7 +136,7 @@ double computeCollinearPoint(double mu, LagrangePoint point) {
             x0 = -1.0 - (5.0/12.0) * mu;
             break;
         default:
-            throw std::runtime_error("computeCollinearPoint: only L1, L2, L3");
+            return false;  // L4/L5 are triangular, not collinear
     }
 
     // Newton-Raphson
@@ -167,7 +166,8 @@ double computeCollinearPoint(double mu, LagrangePoint point) {
         if (std::abs(delta) < 1e-15) break;
     }
 
-    return x0;
+    x = x0;
+    return true;
 }
 
 std::array<LagrangePointResult, 5> computeLagrangePoints(double mu) {
@@ -176,7 +176,8 @@ std::array<LagrangePointResult, 5> computeLagrangePoints(double mu) {
     // Collinear points
     for (int i = 0; i < 3; ++i) {
         LagrangePoint lp = static_cast<LagrangePoint>(i);
-        double x = computeCollinearPoint(mu, lp);
+        double x = 0.0;
+        computeCollinearPoint(mu, lp, x);  // i < 3: always collinear
         results[i].point = lp;
         results[i].position = {x, 0.0, 0.0};
         results[i].jacobi = jacobiConstant({x, 0, 0, 0, 0, 0}, mu);
@@ -408,19 +409,21 @@ XCrossingResult propagateToXCrossing(
 // Richardson Third-Order Halo Orbit Guess
 // ===========================================================================
 
-CR3BPState richardsonHaloGuess(
-    double mu, LagrangePoint point, double Az, bool northern) {
+bool richardsonHaloGuess(
+    double mu, LagrangePoint point, double Az, bool northern, CR3BPState& guess) {
+
+    // Richardson's expansion is about L1 or L2 only.
+    if (point != LagrangePoint::L1 && point != LagrangePoint::L2) return false;
 
     // Compute Lagrange point position
-    double xL = computeCollinearPoint(mu, point);
+    double xL = 0.0;
+    computeCollinearPoint(mu, point, xL);
     double gamma = 0.0;
 
     if (point == LagrangePoint::L1) {
         gamma = (1.0 - mu) - xL;  // distance from smaller body to L1
-    } else if (point == LagrangePoint::L2) {
-        gamma = xL - (1.0 - mu);  // distance from smaller body to L2
     } else {
-        throw std::runtime_error("Richardson guess only for L1/L2");
+        gamma = xL - (1.0 - mu);  // distance from smaller body to L2
     }
 
     // Legendre polynomial coefficients (cn = (1/gamma^3) * partial derivatives)
@@ -459,15 +462,15 @@ CR3BPState richardsonHaloGuess(
     double vy0 = kappa * omega * Ax;
 
     // Scale by gamma and shift to rotating frame centered on barycenter
-    CR3BPState state;
-    state.x = xL + gamma * x0;
-    state.y = 0.0;
-    state.z = gamma * z0;
-    state.vx = 0.0;
-    state.vy = gamma * vy0;
-    state.vz = 0.0;
+    guess = CR3BPState{};
+    guess.x = xL + gamma * x0;
+    guess.y = 0.0;
+    guess.z = gamma * z0;
+    guess.vx = 0.0;
+    guess.vy = gamma * vy0;
+    guess.vz = 0.0;
 
-    return state;
+    return true;
 }
 
 // ===========================================================================
@@ -480,18 +483,21 @@ PeriodicOrbitResult computePeriodicOrbit(
 
     double mu = system.mu;
 
-    // Get initial guess
-    CR3BPState guess = richardsonHaloGuess(
-        mu, config.point, config.amplitude,
-        config.family == OrbitFamily::HALO_NORTH);
+    PeriodicOrbitResult result;
+    result.family = config.family;
+    result.converged = false;
+
+    // Get initial guess (L1/L2 only; any other point is answered not converged, 0 iterations)
+    CR3BPState guess;
+    if (!richardsonHaloGuess(
+            mu, config.point, config.amplitude,
+            config.family == OrbitFamily::HALO_NORTH, guess)) {
+        return result;
+    }
 
     // Single-shooting differential correction
     // Target: y=0 crossing with vx=0, vz=0 (perpendicular crossing)
     CR3BPState current = guess;
-
-    PeriodicOrbitResult result;
-    result.family = config.family;
-    result.converged = false;
 
     for (int iter = 0; iter < config.maxIterations; ++iter) {
         auto crossing = propagateToXCrossing(current, mu);

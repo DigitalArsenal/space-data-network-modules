@@ -41,7 +41,8 @@ std::array<LagrangePointResult, 5> computeLagrangePoints(double mu);
 
 /// Compute a single collinear Lagrange point (L1, L2, or L3).
 /// Uses Newton-Raphson on the quintic equation.
-double computeCollinearPoint(double mu, LagrangePoint point);
+/// @returns false (x untouched) when `point` is not collinear (L4/L5).
+bool computeCollinearPoint(double mu, LagrangePoint point, double& x);
 
 /// Compute linear stability at a Lagrange point.
 StabilityResult computeStability(double mu, LagrangePoint point);
@@ -89,11 +90,13 @@ PeriodicOrbitResult computePeriodicOrbit(
 /// Generate a Richardson third-order analytic initial guess for halo orbits.
 /// Reference: Richardson (1980), "Analytic Construction of Periodic Orbits
 /// about the Collinear Points"
-CR3BPState richardsonHaloGuess(
+/// @returns false (guess untouched) when `point` is not L1 or L2.
+bool richardsonHaloGuess(
     double mu,
     LagrangePoint point,
     double Az,
-    bool northern = true);
+    bool northern,
+    CR3BPState& guess);
 
 /// Compute an NRHO (Near-Rectilinear Halo Orbit) for the Gateway mission.
 /// @param config  NRHO parameters (perilune/apolune altitudes)

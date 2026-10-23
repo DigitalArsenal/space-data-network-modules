@@ -458,7 +458,9 @@ void answer_halo_guess(fb::FlatBufferBuilder& b, const TBP* req, const CR3BPSyst
     if (point != LagrangePoint::L1 && point != LagrangePoint::L2)
         return a.invalid("unsupported-libration-point", "The Richardson first guess is for L1 and L2 only.");
     const bool northern = o->FAMILY() != tbpOrbitFamily_HaloSouthern;
-    const auto s = richardsonHaloGuess(sys.mu, point, o->AMPLITUDE(), northern);
+    CR3BPState s;
+    if (!richardsonHaloGuess(sys.mu, point, o->AMPLITUDE(), northern, s))
+        return a.invalid("unsupported-libration-point", "The Richardson first guess is for L1 and L2 only.");
     const auto initial = wire_state(b, s);
     const auto orbit = CreatetbpPeriodicOrbit(b, northern ? tbpOrbitFamily_HaloNorthern : tbpOrbitFamily_HaloSouthern,
                                               wire_point(point), o->AMPLITUDE(), 0.0, 0.0, initial);
