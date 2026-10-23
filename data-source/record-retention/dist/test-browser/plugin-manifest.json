@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.record-retention",
   "name": "SDN Record Retention",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Keeps a rolling window of records on the node (default 72 hours) and deletes what falls out of it (typed contracts 1.0). Each target names a standard and its lane (provider and/or sources); the node's storage.expire host op (SDS $PIV: StorageExpireParams -> StorageExpireResult) deletes the lane's records that arrived on the node more than window_hours ago, paging the store's record index. Each lane pass is reported as a FlowNotice (FNTC): Expired (COUNT deleted, SCHEMA / PROVIDER_ID / SOURCE_NAME, AT_MS the cutoff), Missing (records the index listed that were no longer stored) or Skipped (max_deletes spent). Node CONFIG through plugin.getConfig (one ModuleConfig, read by dotted path): window_hours, batch, max_deletes, targets.<i>.schema / provider_id / sources.<j>. Default target: WXF from provider noaa-ncep. Owner 2026-10-12: a rolling 3-day window on the weather node, configurable, never an archive. No JSON.",
   "pluginFamily": "data_source",
   "capabilities": [],

@@ -11,7 +11,8 @@
  *
  * Owner 2026-10-12, the weather node: "we only need to keep a rolling window
  * of 3 days, we should NOT be archiving more than that (configurable in the
- * module but the default is 3 days)".
+ * module but the default is 3 days)". Owner 2026-10-23: the satellites' native tiles (imager-native-tile-ingest,
+ * ~1.2 GB a satellite-hour) kept 24 hours beside the 3-day world products - a target's own window_hours.
  *
  *   in   "tick"    optional TimerTick (TICK, module-sdk runtime type); its payload is not read.
  *   out  "report"  FlowNotice (FNTC) frames, one per lane pass:
@@ -23,7 +24,8 @@
  * Node CONFIG (plugin.getConfig, one ModuleConfig on raw "config"; nested values read by dotted path), every key
  * optional:
  *   window_hours (72), batch (500), max_deletes (100000),
- *   targets.<i>.schema ("WXF.fbs"), targets.<i>.provider_id, targets.<i>.sources.<j>
+ *   targets.<i>.schema ("WXF.fbs"), targets.<i>.provider_id, targets.<i>.sources.<j>, targets.<i>.window_hours (the
+ *   target's own window; absent, window_hours)
  * The compiled default target: WXF from provider noaa-ncep, 72 hours. A target
  * names a provider, sources, or both (the host refuses a whole standard).
  *
@@ -145,6 +147,7 @@ struct Target {
     std::string schema = "WXF.fbs";
     std::string provider = "noaa-ncep";
     std::vector<std::string> sources;  // empty: every source of the provider
+    double window_hours = 0;           // this target's window (0: the module's window_hours)
 };
 
 int push_notice(R::flowNoticeKind kind, const Target& t, const std::string& source, uint64_t count,
@@ -197,6 +200,7 @@ int expire(void) {
         t.sources = config.strings(prefix + ".sources");
         if (!t.sources.empty()) any = true;
         if (!any) break;
+        if (config.number(prefix + ".window_hours", &d) && d > 0) t.window_hours = d;
         targets.push_back(t);
     }
     if (targets.empty()) targets.push_back(Target());
@@ -207,10 +211,16 @@ int expire(void) {
         plugin_set_error("retention-clock-failed", "clock.now hostcall failed.");
         return 502;
     }
-    const double cutoff = static_cast<double>(now_value->UNIX_MS) - window_hours * 3600e3;
-    const uint64_t cutoff_ms = cutoff > 0 ? static_cast<uint64_t>(std::llround(cutoff)) : 0;
-    char window[64];
-    std::snprintf(window, sizeof(window), "rolling window %.6g h", window_hours);
+    // (each target's cutoff from its own window, else the module's)
+    const auto cutoff_of = [&](const Target& t) {
+        const double cutoff = static_cast<double>(now_value->UNIX_MS) - (t.window_hours > 0 ? t.window_hours : window_hours) * 3600e3;
+        return cutoff > 0 ? static_cast<uint64_t>(std::llround(cutoff)) : uint64_t(0);
+    };
+    const auto window_of = [&](const Target& t) {
+        char window[64];
+        std::snprintf(window, sizeof(window), "rolling window %.6g h", t.window_hours > 0 ? t.window_hours : window_hours);
+        return std::string(window);
+    };
 
     for (const Target& t : targets) {
         if (t.provider.empty() && t.sources.empty()) {
@@ -221,6 +231,8 @@ int expire(void) {
 
     long deleted = 0;
     for (const Target& t : targets) {
+        const uint64_t cutoff_ms = cutoff_of(t);
+        const std::string window = window_of(t);
         const std::vector<std::string> lanes = t.sources.empty() ? std::vector<std::string>{std::string()} : t.sources;
         for (const std::string& source : lanes) {
             if (deleted >= max_deletes) {
@@ -251,7 +263,7 @@ int expire(void) {
             const uint64_t lane_deleted = result ? result->DELETED : 0;
             const uint64_t lane_missing = result ? result->MISSING : 0;
             deleted += static_cast<long>(lane_deleted);
-            const std::string reason = std::string(window) + (result && result->CAPPED ? "; max_deletes reached" : "");
+            const std::string reason = window + (result && result->CAPPED ? "; max_deletes reached" : "");
             if (push_notice(R::flowNoticeKind_Expired, t, source, lane_deleted, reason, cutoff_ms) < 0) return 500;
             if (lane_missing > 0 &&
                 push_notice(R::flowNoticeKind_Missing, t, source, lane_missing, "listed by the record index, no longer stored", cutoff_ms) < 0) {

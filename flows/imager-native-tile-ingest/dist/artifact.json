@@ -1,0 +1,140 @@
+{
+  "programId": "com.digitalarsenal.flows.imager-native-tile-ingest",
+  "name": "Geostationary Imager Native Tile Ingest Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 9,
+  "edges": 13,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.imager-native-tile-source",
+      "methodId": "plan",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_list",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "select",
+      "pluginId": "com.digitalarsenal.data-source.imager-native-tile-source",
+      "methodId": "select_files",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_files",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.imager-native-tile-parser",
+      "methodId": "parse",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish_wxf",
+      "pluginId": "com.digitalarsenal.data-source.imager-native-tile-source",
+      "methodId": "publish_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish_http_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.imager-native-tile-source",
+      "pluginId": "com.digitalarsenal.data-source.imager-native-tile-source",
+      "version": "0.1.0",
+      "sha256": "57462254aef33d648ac5f3314dc06b92061ac343f6b0660e10230494f21f212f",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e696d616765722d6e61746976652d74696c652d736f75726365_",
+      "methodSymbols": {
+        "plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e696d616765722d6e61746976652d74696c652d736f75726365_plan",
+        "select_files": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e696d616765722d6e61746976652d74696c652d736f75726365_select_files",
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e696d616765722d6e61746976652d74696c652d736f75726365_publish_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "3f9e2db331348abe85a2a378fdc3dfae9a06ba94d0198a6a5767ae29145d3384",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.imager-native-tile-parser",
+      "pluginId": "com.digitalarsenal.data-source.imager-native-tile-parser",
+      "version": "0.1.0",
+      "sha256": "6b36b85633cd1975e4b16e123dc16de73af7ef5e228fcf6dd6d5840d6ffd1039",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e696d616765722d6e61746976652d74696c652d706172736572_",
+      "methodSymbols": {
+        "parse": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e696d616765722d6e61746976652d74696c652d706172736572_parse"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.0",
+      "sha256": "853253237487c6dcdad6f9477006e9c93b87b4fc00062765933de576175db661",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}
