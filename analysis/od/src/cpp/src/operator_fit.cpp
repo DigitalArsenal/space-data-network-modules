@@ -5,7 +5,6 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
-#include <ctime>
 #include <limits>
 
 namespace od {
@@ -77,7 +76,6 @@ void source_covariance(const Sample& s, OperatorSegment& result) {
 }
 bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const OperatorFitOptions& opt,
          OperatorSegment& result,std::string& error) {
-    const auto begin=std::clock();
     V7 p=parameters(rows.front(),opt.ballistic_seed);
     if(opt.warm_start)for(int i=0;i<6;++i)p[i]=opt.warm_state[i];
     Eigen::VectorXd residual;
@@ -117,13 +115,12 @@ bool fit(ffm::ResidentDynamics& model,const std::vector<Sample>& rows,const Oper
         const M7 cov=scale.asDiagonal()*svd.matrixV()*singular.array().square().inverse().matrix().asDiagonal()*
             svd.matrixV().transpose()*scale.asDiagonal()*(residual.squaredNorm()/(residual.size()-7));
         for(int i=0,k=0;i<6;++i)for(int q=0;q<=i;++q)result.formal_covariance[k++]=cov(i,q);
-        result.has_formal_covariance=publishable_covariance(result.formal_covariance.data());
+        result.has_formal_covariance=result.converged && publishable_covariance(result.formal_covariance.data());
     }
     for(int k=0;k<6;++k)result.state[k]=p[k];
     result.ballistic=p[6];result.rms_km=std::sqrt(residual.squaredNorm()/rows.size());
     for(size_t i=0;i<rows.size();++i){const double r=residual.segment<3>(3*i).norm();result.residuals_km.push_back(r);result.maximum_km=std::max(result.maximum_km,r);}
     source_covariance(rows.front(),result);
-    result.cpu_seconds=double(std::clock()-begin)/CLOCKS_PER_SEC;
     return true;
 }
 }

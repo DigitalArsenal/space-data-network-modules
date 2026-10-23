@@ -8,3 +8,5 @@ src/cpp/build-wasm/
 node_modules/
 .build-threads/
 src/cpp/build-guestlink/
+
+.build-operator/
