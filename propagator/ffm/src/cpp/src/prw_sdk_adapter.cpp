@@ -3,7 +3,6 @@
 #include "ffm/prw_resident.h"
 #include <algorithm>
 #include <cstring>
-#include <exception>
 #include <cerrno>
 #include <cmath>
 #include <climits>
@@ -32,14 +31,14 @@ int resident(const char* method, const char* port) {
   uint64_t sequence=0;
   for(uint32_t i=0;i<plugin_get_input_count();++i){const auto* frame=plugin_get_input_frame(i);input.push_back({frame->port_id?frame->port_id:"",frame->payload,frame->payload_length});sequence=frame->sequence;}
   std::vector<std::vector<uint8_t>> output;uint64_t backlog=0;bool yielded=false;std::string error;
-  try {
+  {
     // SDK 0.8.18 does not expose OUTPUT_STREAM_CAP to methods. One output per
     // invocation honors every nonzero cap and leaves continuation explicit.
     if(!ffm::processPrwResident(method,input,1,output,backlog,yielded,error))return fail(error);
     for(size_t i=0;i<output.size();++i)if(emit(port,output[i],sequence+i,!yielded&&i+1==output.size()))return 1;
     plugin_set_backlog_remaining(static_cast<uint32_t>(std::min<uint64_t>(backlog,UINT32_MAX)));
     plugin_set_yielded(yielded);return 0;
-  }catch(const std::exception& e){return fail(std::string("unsupported-configuration: ")+e.what());}
+  }
 }
 }
 extern "C" int invoke(void) {
@@ -58,11 +57,11 @@ extern "C" int invoke(void) {
   if(weather){environment.spaceWeather=weather->payload;environment.spaceWeatherSize=weather->payload_length;}
   if(jb2008){environment.jb2008Indices=jb2008->payload;environment.jb2008IndicesSize=jb2008->payload_length;}
   std::vector<uint8_t> output;std::string error;
-  try {
+  {
     if(!ffm::processPrwInvoke(request->payload,request->payload_length,kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,
                                environment,output,error))return fail(error);
     return emit("response",output,request->sequence,true);
-  }catch(const std::exception& e){return fail(std::string("unsupported-configuration: ")+e.what());}
+  }
 }
 extern "C" int ingest_state(void){return resident("ingest_state","state");}
 extern "C" int ingest_state_gravity_only(void){return resident("ingest_state_gravity_only","state");}

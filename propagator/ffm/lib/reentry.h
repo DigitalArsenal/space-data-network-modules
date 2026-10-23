@@ -35,6 +35,7 @@ struct PropagationStop {
     const char* code = "";   // "reentry" or "invalid-state"
     double jd = 0;           // the integration clock at the state (TDB Julian date)
     double heightKm = 0;     // the state's height above the ellipsoid (reentry)
+    const char* detail = nullptr;
 };
 
 /// The current integration's stop. Each integration clears it when it starts
@@ -56,6 +57,14 @@ inline void clearCallStop() { callStop() = PropagationStop(); clearPropagationSt
 // reentry. Never turn an unsupported force into a successful zero force.
 inline void flagForceFailure() {
     propagationStop() = PropagationStop{true, "invalid-force", 0, NAN};
+    if (!callStop().active) callStop() = propagationStop();
+}
+
+// Numerical/configuration failures share the explicit stop channel. Static
+// messages survive until the caller copies the diagnostic into its response.
+inline void flagIntegrationFailure(const char* detail) {
+    if (!propagationStop().active)
+        propagationStop() = PropagationStop{true, "propagation-failed", 0, NAN, detail};
     if (!callStop().active) callStop() = propagationStop();
 }
 
@@ -85,6 +94,7 @@ inline bool stopAt(const double* y, const timesys::Instant& instant) {
 /// A stop as text (the integrators' error message): its code and, for a
 /// reentry, the height and the integration clock.
 inline std::string propagationStopMessage(const PropagationStop& stop = propagationStop()) {
+    if (stop.detail) return std::string(stop.code) + ": " + stop.detail;
     char text[200];
     if (std::string(stop.code) == "reentry")
         std::snprintf(text, sizeof text, "reentry: the trajectory descends below %.0f km geodetic altitude (%.1f km) at TDB JD %.6f; "

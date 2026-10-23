@@ -4,7 +4,7 @@
 #include "hwm14.hpp"
 
 #include <cmath>
-#include <stdexcept>
+#include "reentry.h"
 
 namespace astro {
 
@@ -22,6 +22,7 @@ const hwm14::Model& model() {
 void HorizontalWindNorthEast(double latDeg, double lonDeg, double altKm, double jdUtc,
                              const SpaceWeatherData& weather, bool disturbance,
                              double* northMs, double* eastMs) {
+    if (!model().valid()) { flagForceFailure(); *northMs = *eastMs = NAN; return; }
     int year = 0, doy = 1;
     double sec = 0.0;
     jdToYearDoySec(jdUtc, year, doy, sec);
@@ -36,9 +37,7 @@ void HorizontalWindNorthEast(double latDeg, double lonDeg, double altKm, double 
     double north = quiet[0], east = quiet[1];
     if (disturbance) {
         if (!(weather.kp3h >= 0.0 && weather.kp3h <= 9.0)) {
-            throw std::invalid_argument(
-                "HWM14 disturbance winds need the 3-hour Kp of the epoch (SpaceWeatherData.kp3h); "
-                "supply it or request quiet-time winds only");
+            flagForceFailure(); *northMs = *eastMs = NAN; return;
         }
         float dw[2];
         model().dwm07kp(iyd, ut, alt, lat, lon, static_cast<float>(weather.kp3h), dw);
