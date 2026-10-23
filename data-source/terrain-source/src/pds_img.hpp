@@ -666,3 +666,154 @@ bool body_sample(const std::vector<DemGrid>& grids, double lon, double lat, doub
     }
     return sample_dem(grids, lon, lat, out, nodata, clamped);
 }
+
+// Exact source-pixel sampling for verified, contiguous, uncompressed scalar
+// rasters. The publisher verifies every source strip and its SHA-256 before
+// supplying this layout. Byte ranges remain original source bytes. This path
+// never changes the PDS/bilinear samplers above.
+struct BodyRasterPixels {
+    struct Range { uint64_t first, size; const uint8_t* data; };
+    bool active = false;
+    uint32_t width=0, height=0, bits=0, feather=0;
+    uint64_t first=0, file_bytes=0, row_bytes=0;
+    double radius=0, origin_x=0, origin_y=0, spacing=0, center=0;
+    double scale=1, offset=0, nodata=0;
+    bool floating=false;
+    std::vector<HttpFrame> frames;
+    std::vector<Range> ranges;
+    std::map<long,std::vector<std::pair<long,long>>> holes;
+    std::map<long,bool> needed_rows;
+    std::string error;
+
+    bool configure(const std::string& cfg, double sphere) {
+        active=json_string(cfg,"bodySampling","")=="source-pixel";
+        if(!active)return true;
+        const auto number=[&](const char* k,double fallback=0){return json_number(cfg,k,fallback);};
+        const double w=number("rasterWidth"),h=number("rasterHeight"),b=number("rasterBits");
+        const double f=number("rasterFirstByte"),sz=number("rasterFileBytes"),band=number("featherPixels",16);
+        if(w<2||w>100000||h<2||h>100000||w!=std::floor(w)||h!=std::floor(h)||
+           (b!=16&&b!=32)||f<0||f!=std::floor(f)||sz<=f||sz!=std::floor(sz)||
+           band<1||band>64||band!=std::floor(band)) {error="invalid scalar raster geometry";return false;}
+        width=w;height=h;bits=b;first=f;file_bytes=sz;feather=band;row_bytes=uint64_t(width)*(bits/8);
+        radius=number("rasterRadiusM");spacing=number("rasterSpacingM");center=number("rasterCenterLongitude");
+        origin_x=number("rasterOriginX");origin_y=number("rasterOriginY");
+        scale=number("rasterScale",1);offset=number("rasterOffsetM");nodata=number("rasterNoData");
+        floating=json_string(cfg,"rasterType","")=="float32";
+        if(radius!=sphere||!(spacing>0)||!std::isfinite(spacing)||!std::isfinite(scale)||!std::isfinite(offset)||
+           first+row_bytes*height>file_bytes||(bits==32&&!floating)||
+           std::fabs(width*spacing-2*kPolarPi*radius)>2*spacing||
+           std::fabs(height*spacing-kPolarPi*radius)>2*spacing) {error="raster is not the stated global reference sphere";return false;}
+        return true;
+    }
+    double line(double lat) const {return (origin_y-lat*radius*kPolarPi/180)/spacing-.5;}
+    double column(double lon) const {
+        double d=std::fmod(lon-center+180,360);if(d<0)d+=360;d-=180;
+        return (d*radius*kPolarPi/180-origin_x)/spacing-.5;
+    }
+    void require_lat(double lat) {
+        const long y=static_cast<long>(std::floor(line(lat)+.5));
+        for(long j=std::max<long>(0,y-long(feather)-1);j<=std::min<long>(height-1,y+feather+1);j++)needed_rows[j]=true;
+    }
+    std::vector<std::pair<uint64_t,uint64_t>> requests() const {
+        std::vector<std::pair<uint64_t,uint64_t>> out;
+        for(const auto& r:needed_rows) {
+            const uint64_t at=first+uint64_t(r.first)*row_bytes;
+            if(!out.empty()&&out.back().first+out.back().second==at)out.back().second+=row_bytes;
+            else out.push_back({at,row_bytes});
+        }
+        return out;
+    }
+    bool add_range(uint64_t at,uint64_t n,uint64_t total,const uint8_t* p) {
+        if(total!=file_bytes||at<first||n==0||at>file_bytes||n>file_bytes-at||
+           (at-first)%row_bytes||n%row_bytes||at+n>first+row_bytes*height) {error="source range does not match verified row layout";return false;}
+        ranges.push_back({at,n,p});return true;
+    }
+    bool parse_frame(const HttpFrame& f) {
+        if(f.invalid||f.status!=206){error="source pixels require successful HTTP 206 ranges";return false;}
+        unsigned long long a,b,t;
+        if(!f.content_range.empty()) {
+            if(std::sscanf(f.content_range.c_str(),"bytes %llu-%llu/%llu",&a,&b,&t)!=3||b<a||b-a+1!=f.body.size())return false;
+            return add_range(a,f.body.size(),t,reinterpret_cast<const uint8_t*>(f.body.data()));
+        }
+        const std::string prefix="multipart/byteranges; boundary=";
+        if(f.content_type.rfind(prefix,0)!=0){error="expected multipart/byteranges response";return false;}
+        const std::string boundary="--"+f.content_type.substr(prefix.size());
+        if(boundary.size()<3||boundary.size()>72){error="invalid multipart boundary";return false;}
+        size_t pos=0;
+        while(pos<f.body.size()) {
+            if(f.body.compare(pos,boundary.size(),boundary)!=0){error="invalid multipart boundary position";return false;}
+            pos+=boundary.size();
+            if(f.body.compare(pos,4,"--\r\n")==0)return pos+4==f.body.size();
+            if(f.body.compare(pos,2,"\r\n")!=0)return false;
+            pos+=2;const size_t end=f.body.find("\r\n\r\n",pos);
+            if(end==std::string::npos||end-pos>1024)return false;
+            const std::string header=f.body.substr(pos,end-pos);
+            const size_t cr=header.find("Content-Range: bytes ");
+            if(cr==std::string::npos||std::sscanf(header.c_str()+cr,"Content-Range: bytes %llu-%llu/%llu",&a,&b,&t)!=3||b<a)return false;
+            pos=end+4;const uint64_t n=b-a+1;
+            if(n>f.body.size()-pos||!add_range(a,n,t,reinterpret_cast<const uint8_t*>(f.body.data()+pos)))return false;
+            pos+=n;if(f.body.compare(pos,2,"\r\n")!=0)return false;pos+=2;
+        }
+        return false;
+    }
+    const uint8_t* row(long y) const {
+        const uint64_t at=first+uint64_t(y)*row_bytes;
+        for(const auto& r:ranges)if(at>=r.first&&at-r.first+row_bytes<=r.size)return r.data+(at-r.first);
+        return nullptr;
+    }
+    double value(const uint8_t* p,long x) const {
+        p+=x*(bits/8);
+        if(!floating)return static_cast<int16_t>(uint16_t(p[0])|(uint16_t(p[1])<<8));
+        float v;std::memcpy(&v,p,4);return v;
+    }
+    bool valid(double v) const {return std::isfinite(v)&&v!=nodata;}
+    bool prepare() {
+        for(const auto& r:needed_rows) {
+            const uint8_t* p=row(r.first);if(!p){error="required source row missing";return false;}
+            auto& intervals=holes[r.first];long start=-1;
+            for(long x=0;x<width;x++) {
+                const bool missing=!valid(value(p,x));
+                if(missing&&start<0)start=x;
+                if(!missing&&start>=0){intervals.push_back({start,x-1});start=-1;}
+            }
+            if(start>=0)intervals.push_back({start,width-1});
+        }
+        return true;
+    }
+    // Distance to absent pixel CELLS, not their centers: smoothstep reaches
+    // zero at the actual valid/absent boundary. Wrap longitude; poles close
+    // on the sphere with the same taper, avoiding longitude-dependent poles.
+    double distance(double x,double y) const {
+        double best=std::min<double>(feather,std::max(0.0,std::min(y+.5,height-.5-y)));
+        const long j0=std::max<long>(0,static_cast<long>(std::floor(y-feather-.5)));
+        const long j1=std::min<long>(height-1,static_cast<long>(std::ceil(y+feather+.5)));
+        for(long j=j0;j<=j1;j++) {
+            const auto hit=holes.find(j);if(hit==holes.end())return 0;
+            const double dy=std::max(0.0,std::fabs(y-j)-.5);if(dy>=best)continue;
+            for(int wrap=-1;wrap<=1;wrap++) {
+                const double cx=x+wrap*double(width);
+                const auto& runs=hit->second;
+                auto it=std::lower_bound(runs.begin(),runs.end(),cx-best-.5,
+                    [](const std::pair<long,long>& r,double a){return r.second<a;});
+                for(;it!=runs.end()&&it->first-.5<cx+best;it++) {
+                    const double dx=std::max(0.0,std::max(it->first-.5-cx,cx-it->second-.5));
+                    best=std::min(best,std::sqrt(dx*dx+dy*dy));
+                }
+            }
+        }
+        return best;
+    }
+    bool sample(double lon,double lat,double* out,uint8_t* mask) const {
+        const double x=column(lon),y=line(lat);
+        long ix=static_cast<long>(std::floor(x+.5));ix=(ix%long(width)+width)%width;
+        const long iy=std::max<long>(0,std::min<long>(height-1,static_cast<long>(std::floor(y+.5))));
+        const uint8_t* p=row(iy);if(!p)return false;
+        const double dn=value(p,ix);*out=0;*mask=0;
+        if(!valid(dn)||std::fabs(lat)>=90)return true;
+        const double d=distance(x,y);
+        if(d<=0)return true;
+        const double h=dn*scale+offset;
+        if(d>=feather){*out=h;*mask=1;return true;}
+        const double t=d/feather;*out=h*t*t*(3-2*t);*mask=2;return true;
+    }
+};

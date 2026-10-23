@@ -1737,6 +1737,7 @@ struct HttpFrame {
     long status = 0;
     std::string body;
     std::string error;
+    std::string content_type;
     std::string content_range;  // a body's PDS product is read by whole-line ranges
 };
 
@@ -1763,6 +1764,7 @@ HttpFrame http_input_at(const char* port_id, uint32_t ordinal) {
             std::string name = h->NAME()->str();
             for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             if (name == "content-range") f.content_range = h->VALUE()->str();
+            if (name == "content-type") f.content_type = h->VALUE()->str();
         }
     }
     return f;
@@ -1833,6 +1835,7 @@ struct TileExtent {
 #include "body_inset_decode.hpp"
 
 struct BodyFill {
+    const BodyRasterPixels* raster = nullptr;
     bool active = false, fill_edges = true, primary_datum = false, fill_datum = false;
     double lat_min = -90, lat_max = 90, band_m = 0, radius_m = 0;
     std::vector<DemGrid> grids, datum;
@@ -1853,6 +1856,7 @@ struct BodyFill {
 
     bool sample(const std::vector<DemGrid>& primary, double lon, double lat, double* h,
                 bool* nodata, bool* clamped, BodyFillStats* stats = nullptr) const {
+        if (raster) { uint8_t mask=0; *nodata=false; *clamped=false; return raster->sample(lon,lat,h,&mask); }
         if (!active) return surface(primary, primary_datum, lon, lat, h, nodata, clamped);
         double p = 0, f = 0;
         bool pn = false, pc = false, fn = false, fc = false;
@@ -2047,6 +2051,7 @@ struct MeshBody {
     BodyShape shape = kEarthShape;
     const std::vector<uint8_t>* oct_normals = nullptr;
     bool water_extension = true;
+    const std::vector<uint8_t>* source_mask = nullptr;
 };
 
 // Quantized-mesh topology serialization, shared by the mesh writer and lossless reconstruction.
@@ -2205,6 +2210,7 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
     }
     std::vector<uint32_t> indices = tile_mesh.indices;
 
+    std::vector<uint8_t> source_mask;
     std::vector<uint8_t> normals;  // in the renumbered vertex order, when the body carries them
 
     // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the index
@@ -2228,6 +2234,10 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
                 normals[static_cast<size_t>(remap[v]) * 2] = lattice[static_cast<size_t>(v) * 2];
                 normals[static_cast<size_t>(remap[v]) * 2 + 1] = lattice[static_cast<size_t>(v) * 2 + 1];
             }
+        }
+        if(body.source_mask && body.source_mask->size()==n_verts) {
+            source_mask.resize(n_verts);
+            for(uint32_t v=0;v<n_verts;v++)source_mask[remap[v]]=(*body.source_mask)[v];
         }
         qu.swap(pu); qv.swap(pv); qh.swap(ph);
         heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
@@ -2278,6 +2288,14 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
         put_u8(&mesh, 1);
         put_u32(&mesh, static_cast<uint32_t>(normals.size()));
         mesh.insert(mesh.end(), normals.begin(), normals.end());
+    }
+    if(!source_mask.empty()) {
+        // Quantized-mesh's standard metadata extension (id 4), UTF-8 JSON.
+        // One ASCII flag per FINAL vertex: 0 sphere, 1 source, 2 feather.
+        std::string flags;flags.reserve(source_mask.size());for(auto v:source_mask)flags+=char('0'+v);
+        const std::string metadata="{\"sourcePixelMask\":\""+flags+"\",\"sourcePixelMaskLegend\":\"0=sphere,1=source,2=feather\"}";
+        put_u8(&mesh,4);put_u32(&mesh,metadata.size()+4);put_u32(&mesh,metadata.size());
+        mesh.insert(mesh.end(),metadata.begin(),metadata.end());
     }
     if (!body.water_extension) return;
     // Watermask extension (extensionId 2): one byte uniform, or the raster.
@@ -4004,8 +4022,36 @@ int tile(void) {
     DecodeBudget budget;
     std::vector<DemGrid> granules;
     BodyFill fill;
+    BodyRasterPixels raster;
+    if (!raster.configure(plan,body.shape.a) || (raster.active && !body.active)) {
+        plugin_set_error("invalid-source-pixel-options",raster.error.c_str());return 422;
+    }
     uint32_t responses = 0, absent_granules = 0;
-    if (body.active) {
+    if (raster.active) {
+        // All geometry and source byte selection is computed by this guest.
+        for(const auto& job:jobs)for(int64_t j=-1;j<=sample_grid;j++) {
+            double lat,lon;
+            body_lattice_post(job.level,sample_grid,int64_t(job.y)*(sample_grid-1)+j,
+                              int64_t(job.x)*(sample_grid-1),&lat,&lon);
+            raster.require_lat(lat);
+        }
+        const auto requests=raster.requests();uint64_t source_bytes=0;
+        for(const auto& r:requests)source_bytes+=r.second;
+        if(source_bytes>128u*1024u*1024u) {plugin_set_error("source-pixel-budget","split this plan: required source rows exceed 128 MiB");return 413;}
+        if(!http_input_at("dem",0).present) {
+            sdn::runtime::FlowNoticeT notice;notice.KIND=sdn::runtime::flowNoticeKind_Info;
+            notice.SOURCE_NAME=tileset_id;notice.REASON="source-pixel-ranges";notice.COUNT=requests.size();
+            for(const auto& r:requests)notice.ITEMS.push_back(std::to_string(r.first)+":"+std::to_string(r.second));
+            ::flatbuffers::FlatBufferBuilder nb(4096);
+            sdn::runtime::FinishFlowNoticeBuffer(nb,sdn::runtime::FlowNotice::Pack(nb,&notice));
+            return plugin_push_output_ex("report","FlowNotice.fbs",sdn::runtime::FlowNoticeIdentifier(),
+                PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"FlowNotice",0,0,nb.GetBufferPointer(),nb.GetSize())<0?500:0;
+        }
+        for(uint32_t i=0;i<kBodyDemFrames;i++) {auto f=http_input_at("dem",i);if(!f.present)break;raster.frames.push_back(std::move(f));}
+        for(const auto& f:raster.frames)if(!raster.parse_frame(f)){plugin_set_error("source-pixel-ranges",raster.error.c_str());return 422;}
+        if(!raster.prepare()){plugin_set_error("source-pixel-ranges",raster.error.c_str());return 422;}
+        fill.raster=&raster;responses=raster.frames.size();
+    } else if (body.active) {
         // A BODY'S PDS PRODUCT: the "dem" frames are, per file of the product,
         // its PDS3 label and then whole-line ranges of its image (pds_img.hpp),
         // in the order the planner asked for them. The window is the union
@@ -4390,6 +4436,7 @@ int tile(void) {
         // has.
         std::vector<uint8_t> post_absent(n_verts, 0), post_nodata(n_verts, 0),
             post_clamped(n_verts, 0), post_bridged(n_verts, 0);
+        std::vector<uint8_t> source_mask(n_verts, 0);
         for (uint32_t j = 0; j < sample_grid; j++) {  // j = 0 at the SOUTH edge
             const double lat = lattice_lat(job.level, job.y, j, sample_grid);
             for (uint32_t i = 0; i < sample_grid; i++) {
@@ -4417,6 +4464,10 @@ int tile(void) {
                 } else if (nodata) {
                     post_nodata[v] = 1;
                     h = 0.0;
+                }
+                if(raster.active) {
+                    if(!raster.sample(lon,lat,&h,&source_mask[v])){plugin_set_error("source-pixel-gap","required source post missing");return 422;}
+                    post_nodata[v]=source_mask[v]==0?1:0;
                 }
                 heights[v] = h;
             }
@@ -4692,10 +4743,11 @@ int tile(void) {
             if (body.active) {
                 cand_shape = edge_matched_mesh(sample_grid, cand, body_edges);
                 cand_heights.resize(cand_shape.size());
-                std::vector<uint8_t> cand_normals(cand_shape.size() * 2);
+                std::vector<uint8_t> cand_normals(cand_shape.size() * 2), cand_mask(cand_shape.size());
                 for (size_t v = 0; v < cand_shape.size(); v++) {
                     const size_t from = static_cast<size_t>(cand_shape.row[v]) * sample_grid + cand_shape.col[v];
                     cand_heights[v] = heights[from];
+                    cand_mask[v] = source_mask[from];
                     cand_normals[v * 2] = lattice_normals[from * 2];
                     cand_normals[v * 2 + 1] = lattice_normals[from * 2 + 1];
                 }
@@ -4703,6 +4755,7 @@ int tile(void) {
                 mesh_body.shape = body.shape;
                 mesh_body.oct_normals = &cand_normals;
                 mesh_body.water_extension = false;
+                if(raster.active)mesh_body.source_mask=&cand_mask;
                 encode_mesh(job, cand_shape, cand_heights, water_raster, false, &cand_mesh, mesh_body);
             } else {
                 encode_quantized_mesh(job, cand, ext, cand_heights, water_raster,
