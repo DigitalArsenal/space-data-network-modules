@@ -35,8 +35,22 @@ inline double tabulated_phase_parameter(const std::string& model,const char* nam
   return (1-fraction)*parameter(model,std::string(name)+std::to_string(lower))+
     fraction*parameter(model,std::string(name)+std::to_string(lower+1));
 }
-inline double disk_albedo(const std::string& model,double phase,double lambert_albedo=1) {
+template<class ProjectedRadiance>
+inline double integrate_disk(double phase,const ProjectedRadiance& project) {
   static const DiskQuadrature quadrature;
+  double total=0;
+  for(int i=0;i<DiskQuadrature::n;i++) {
+    const double latitude=(quadrature.x[i]+1)*pi/4,c=std::cos(latitude);
+    for(int j=0;j<DiskQuadrature::n;j++) {
+      const double longitude=phase-pi/2+(quadrature.x[j]+1)*(pi-phase)/2;
+      const double mu=c*std::cos(longitude),mu0=c*std::cos(longitude-phase);
+      const double projected=project(mu,mu0);
+      total+=projected*c*quadrature.weight[i]*quadrature.weight[j];
+    }
+  }
+  return total*(pi-phase)/4;
+}
+inline double disk_albedo(const std::string& model,double phase,double lambert_albedo=1) {
   const bool jupiter=model=="jupiter:heng2021:550nm",lambert=model=="sphere:lambert";
   double w=0,epsilon=0,particle=0,A=0,B=0;
   if(jupiter) {
@@ -46,12 +60,7 @@ inline double disk_albedo(const std::string& model,double phase,double lambert_a
   } else if(!lambert) {
     A=tabulated_phase_parameter(model,"A",phase);B=tabulated_phase_parameter(model,"B",phase);
   }
-  double total=0;
-  for(int i=0;i<DiskQuadrature::n;i++) {
-    const double latitude=(quadrature.x[i]+1)*pi/4,c=std::cos(latitude);
-    for(int j=0;j<DiskQuadrature::n;j++) {
-      const double longitude=phase-pi/2+(quadrature.x[j]+1)*(pi-phase)/2;
-      const double mu=c*std::cos(longitude),mu0=c*std::cos(longitude-phase);
+  return integrate_disk(phase,[&](double mu,double mu0) {
       double projected;
       if(lambert)projected=lambert_albedo*mu*mu0;
       else if(jupiter) {
@@ -63,9 +72,7 @@ inline double disk_albedo(const std::string& model,double phase,double lambert_a
         // evaluation to avoid a spurious limb singularity in I/F.
         projected=A*std::pow(mu*mu0/(mu+mu0),B);
       }
-      total+=projected*c*quadrature.weight[i]*quadrature.weight[j];
-    }
-  }
-  return total*(pi-phase)/4;
+      return projected;
+  });
 }
 }
