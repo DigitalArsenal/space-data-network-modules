@@ -18,7 +18,8 @@ const emsdk=candidates.find(p=>fsSync.existsSync(path.join(p,'upstream/bin/clang
 if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SDN_LOCAL_EMSDK_DIR. This build never invokes emcc.');
 // Pilot builds can raise the ceiling to measure the largest role. The release
 // limits are recorded in the evidence and checked again on the final artifact.
-const memory={initialBytes:16*1024*1024,maximumBytes:Number(process.env.FFM_MEASUREMENT_MAX_BYTES||402653184)};
+const staticMinimumBytes=23825072; // wasm-ld measurement, includes the 2 MiB stack.
+const memory={staticMinimumBytes,initialBytes:Math.max(16*1024*1024,Math.ceil(staticMinimumBytes/65536)*65536),maximumBytes:Number(process.env.FFM_MEASUREMENT_MAX_BYTES||402653184)};
 if(!Number.isSafeInteger(memory.maximumBytes)||memory.maximumBytes<memory.initialBytes||memory.maximumBytes%65536)throw new Error('Invalid FFM memory ceiling');
 const units=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76'].map(n=>path.join(packageRoot,`lib/${n}.cpp`));
 units.push(path.join(packageRoot,'lib/ffm_gravity.cpp'));
