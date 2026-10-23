@@ -678,7 +678,7 @@ struct BodyRasterPixels {
     uint64_t first=0, file_bytes=0, row_bytes=0;
     double radius=0, origin_x=0, origin_y=0, spacing=0, center=0;
     double scale=1, offset=0, nodata=0;
-    bool floating=false;
+    bool floating=false, sphere_at_poles=true;
     std::vector<HttpFrame> frames;
     std::vector<Range> ranges;
     std::map<long,std::vector<std::pair<long,long>>> holes;
@@ -699,6 +699,7 @@ struct BodyRasterPixels {
         origin_x=number("rasterOriginX");origin_y=number("rasterOriginY");
         scale=number("rasterScale",1);offset=number("rasterOffsetM");nodata=number("rasterNoData");
         floating=json_string(cfg,"rasterType","")=="float32";
+        sphere_at_poles=json_bool(cfg,"sphereAtPoles",true);
         if(radius!=sphere||!(spacing>0)||!std::isfinite(spacing)||!std::isfinite(scale)||!std::isfinite(offset)||
            first+row_bytes*height>file_bytes||(bits==32&&!floating)||
            std::fabs(width*spacing-2*kPolarPi*radius)>2*spacing||
@@ -784,7 +785,7 @@ struct BodyRasterPixels {
     // zero at the actual valid/absent boundary. Wrap longitude; poles close
     // on the sphere with the same taper, avoiding longitude-dependent poles.
     double distance(double x,double y) const {
-        double best=std::min<double>(feather,std::max(0.0,std::min(y+.5,height-.5-y)));
+        double best=sphere_at_poles?std::min<double>(feather,std::max(0.0,std::min(y+.5,height-.5-y))):feather;
         const long j0=std::max<long>(0,static_cast<long>(std::floor(y-feather-.5)));
         const long j1=std::min<long>(height-1,static_cast<long>(std::ceil(y+feather+.5)));
         for(long j=j0;j<=j1;j++) {
@@ -804,12 +805,15 @@ struct BodyRasterPixels {
         return best;
     }
     bool sample(double lon,double lat,double* out,uint8_t* mask) const {
-        const double x=column(lon),y=line(lat);
+        // Longitude is undefined at a pole. A fully observed pole uses one
+        // canonical original pixel, preventing both cracks and false peaks
+        // on irregular bodies whose polar radius differs from the sphere.
+        const double x=(!sphere_at_poles&&std::fabs(lat)>=90)?0:column(lon),y=line(lat);
         long ix=static_cast<long>(std::floor(x+.5));ix=(ix%long(width)+width)%width;
         const long iy=std::max<long>(0,std::min<long>(height-1,static_cast<long>(std::floor(y+.5))));
         const uint8_t* p=row(iy);if(!p)return false;
         const double dn=value(p,ix);*out=0;*mask=0;
-        if(!valid(dn)||std::fabs(lat)>=90)return true;
+        if(!valid(dn)||(sphere_at_poles&&std::fabs(lat)>=90))return true;
         const double d=distance(x,y);
         if(d<=0)return true;
         const double h=dn*scale+offset;

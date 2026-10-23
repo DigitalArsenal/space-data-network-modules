@@ -14,14 +14,16 @@ d=gdal.Open(original);b=d.GetRasterBand(1);gt=d.GetGeoTransform();crs=d.GetSpati
 r=crs.GetSemiMajor();center=crs.GetProjParm('central_meridian');w,h=d.RasterXSize,d.RasterYSize
 scale=b.GetScale() or 1;offset=b.GetOffset() or 0
 if cfg['naif'] in (2000001,2000004):offset-=cfg['radiusM']
+sphere_poles=cfg['options'].get('sphereAtPoles',True)
 nodata=b.GetNoDataValue();band=cfg['options']['featherPixels'];fail=0;maxq=0;examples=[];counts={0:0,1:0,2:0}
 for q in queries:
  delta=(q['lon']-center+180)%360-180
  x=(math.radians(delta)*r-gt[0])/gt[1]-.5;y=(gt[3]-math.radians(q['lat'])*r)/(-gt[5])-.5
+ if not sphere_poles and abs(q['lat'])>=90:x=0
  ix=math.floor(x+.5)%w;iy=max(0,min(h-1,math.floor(y+.5)))
  dn=float(b.ReadAsArray(ix,iy,1,1)[0,0]);expected=0.;flag=0
- if math.isfinite(dn) and dn!=nodata and abs(q['lat'])<90:
-  distance=min(band,max(0,min(y+.5,h-.5-y)))
+ if math.isfinite(dn) and dn!=nodata and (not sphere_poles or abs(q['lat'])<90):
+  distance=min(band,max(0,min(y+.5,h-.5-y))) if sphere_poles else band
   # Independent brute-force footprint; only 35x35 source cells per query.
   xs=np.arange(math.floor(x-band-1),math.ceil(x+band+1)+1,dtype=np.int64)
   ys=np.arange(max(0,math.floor(y-band-1)),min(h-1,math.ceil(y+band+1))+1,dtype=np.int64)

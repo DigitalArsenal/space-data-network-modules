@@ -41,7 +41,20 @@ for(let k=0;k<20000&&(k<4000||counts.source<1000);k++) {
  queries.push({lon,lat,height,quantum,flag,level:t.LEVEL,x:t.X,y:t.Y,vertex:v});
 }
 assert.ok(counts.source>=1000,`need >=1000 measured posts, got ${counts.source}`);
-assert.ok(counts.sphere>0);assert.ok(counts.feather>0);
+if([999,901].includes(cfg.naif)){assert.ok(counts.sphere>0);assert.ok(counts.feather>0);}
+// Every root pole vertex is checked independently, including the irregular
+// body's measured polar radius. This catches a false reference-sphere spike.
+if(cfg.options.sphereAtPoles===false)for(const record of splitSized(zlib.gunzipSync(fs.readFileSync(path.join(root,'root.dtts.gz'))))) {
+ const t=dttOf(record.subarray(4)).unpack();if(t.LEVEL!==0)continue;
+ const qm=decodeQuantizedMesh(decodeEdgeMatchedPlanes(Buffer.from(t.PAYLOAD.BYTES)));
+ const ext=Buffer.from(qm.extensions.find(e=>e.id===4).bytes);
+ const flags=JSON.parse(ext.subarray(4,4+ext.readUInt32LE(0)).toString()).sourcePixelMask;
+ const quantum=(qm.header.maxHeight-qm.header.minHeight)/32767;
+ for(let v=0;v<qm.vertexCount;v++)if(qm.v[v]===0||qm.v[v]===32767){
+  const flag=Number(flags[v]);counts[['sphere','source','feather'][flag]]++;
+  queries.push({lon:-180+t.X*180+qm.u[v]/32767*180,lat:qm.v[v]===0?-90:90,height:qm.header.minHeight+qm.h[v]*quantum,quantum,flag,level:0,x:t.X,y:t.Y,vertex:v});
+ }
+}
 const queryFile=receipt+'.queries.json';fs.writeFileSync(queryFile,JSON.stringify(queries));
 const reference=fileURLToPath(new URL('reference-source.py',import.meta.url));
 const oracle=JSON.parse(execFileSync('python3',[reference,configPath,queryFile],{encoding:'utf8',maxBuffer:4*1024*1024}));
