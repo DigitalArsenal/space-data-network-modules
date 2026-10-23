@@ -16,3 +16,9 @@ The UI worktree is read-only in this lane. Console wiring, its no-JS-physics
 gate, and actual console pixel comparison belong to the Claude lane. This
 module's tests will measure numerical agreement and explicitly report the
 source correction rather than claim an unmeasured pixel result.
+
+Checkpoint (2026-10-23): read the lane handoff, task, ocean study, console
+implementation/tests, stack design principles, and canonical SDK contract.
+The module will separate the numerical sea-state kernel, binary PCE adapter,
+and SDK build/runtime verification. Primary-source verification precedes
+choosing the wind-height conversion and fetch/duration equations.
