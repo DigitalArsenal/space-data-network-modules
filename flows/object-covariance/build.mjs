@@ -18,7 +18,7 @@ const sdsVersion=JSON.parse(await fs.readFile(path.join(process.env.SPACE_DATA_S
 // header of `codes` ahead of it (scoped enumerators), or `inline` standards' own headers in place of their includes.
 async function compile({folder,manifest,source,codes=[],inline=[],target,justification}) {
  const original=path.join(modules,folder);
- manifest=JSON.parse(JSON.stringify(manifest));
+ manifest=structuredClone(manifest);
  if(justification)manifest.sequentialJustification=justification;
  await fs.mkdir(path.join(target,'dist/isomorphic'),{recursive:true});
  const {header}=codes.length?await generateSdsHeaders(codes,import.meta.url):{header:''};
