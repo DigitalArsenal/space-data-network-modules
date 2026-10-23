@@ -26,8 +26,8 @@ try{
  const capture=JSON.parse(await fs.readFile(path.join(dir,'capture.json')));
  // A real-source replay can cross UTC midnight. The current timer's complete
  // URL window is enforced by the archive-miss check below; source timestamps
- // remain intact, and the published correction must still be from this run's day.
- const runDay=receipt.started.slice(0,10),captureAge=Date.parse(receipt.started)-capture.issue;
+ // remain intact, and the published correction must still originate in this run.
+ const runStarted=Date.parse(receipt.started),captureAge=runStarted-capture.issue;
  assert(captureAge>=0&&captureAge<86400000,'Capture must be less than 24 hours old');
  receipt.inputs=await verifyInputs(dir);await save();
  const sources=new Map();for(const group of capture.groups)for(let i=0;i<group.requests;i++){const r=decodeHttpResponse(await fs.readFile(path.join(dir,`${group.name}-${i}.fb`)));sources.set('/'+hash(r.url),r);}
@@ -68,7 +68,7 @@ try{
  const fetchCid=async cid=>Buffer.from(await sdn.fetchCIDBytesFromHelia(client.helia,cid,{providerAddrs:addrs,maxBytes:1048576}));const mb=await fetchCid(pub.manifestCid),manifest=(mb.subarray(8,12).toString()==='$DPM'?DPM.getSizePrefixedRootAsDPM:DPM.getRootAsDPM)(new ByteBuffer(mb)).unpack();assert.equal(manifest.PROVIDER_PEER_ID,info.peer_id);assert(manifest.PROVIDER_SIGNATURE.length);
  const source=manifest.SOURCES.find(s=>s.SOURCE_NAME==='planet-nrlmsise00');assert.match(source.LICENSE,/CC-BY-NC-4.0/);assert.match(source.CITATION,/Planet/);
  const asset=manifest.ASSETS.find(a=>a.CID===pub.shardCid&&a.SCHEMA_NAME==='DCL.fbs');assert(asset);let bytes=await fetchCid(pub.shardCid);assert.equal(hash(bytes),asset.BYTE_SHA256.toLowerCase());if(bytes[0]===31&&bytes[1]===139)bytes=gunzipSync(bytes);
- assert.equal(bytes.readUInt32LE(0)+4,bytes.length,'Exactly one aggregate');const actual=S.DCL.getSizePrefixedRootAsDCL(new ByteBuffer(bytes)).unpack();assert.equal(actual.OBJECTS.length,0);assert.equal(actual.STATES,null);assert.equal(actual.CORRECTION.FORM,S.dclCorrectionForm.LogDensityNodes);assert(actual.PROVENANCE);assert.match(actual.PROVENANCE.LINEAGE,/earth_orientation-typed-sha256=/);assert.equal(new Date(Number(actual.CREATED_AT_MS)).toISOString().slice(0,10),runDay);
+ assert.equal(bytes.readUInt32LE(0)+4,bytes.length,'Exactly one aggregate');const actual=S.DCL.getSizePrefixedRootAsDCL(new ByteBuffer(bytes)).unpack();assert.equal(actual.OBJECTS.length,0);assert.equal(actual.STATES,null);assert.equal(actual.CORRECTION.FORM,S.dclCorrectionForm.LogDensityNodes);assert(actual.PROVENANCE);assert.match(actual.PROVENANCE.LINEAGE,/earth_orientation-typed-sha256=/);assert(Number(actual.CREATED_AT_MS)>=runStarted&&Number(actual.CREATED_AT_MS)<=Date.now(),'Published correction must originate in this scheduled run');
  console.log('DCL publication read by CID; comparing full independent offline E13 run');await fs.writeFile(path.join(evidence,'published.dclfb'),bytes);
  const reference=await offline(dir),cutoff=Number(actual.CREATED_AT_MS)-6*3600000,arcs=reference.arcs.filter(a=>a.endMs<=cutoff&&a.startMs>=cutoff-30*86400000),anchorMs=Math.round(Math.floor(cutoff/86400000)*86400000+arcCenterOffsetMs(arcs));
  const expected=solveCommonMode(arcs,{anchorMs,nodeHours:24,baseline:{kind:'randomWalk',stepSigma:0.005},smoothSigma:0.05,huberK:1.5,iterations:60,tolerance:1e-5,minDovesPerNode:6,minNodeInfo:1.5,scaleSweeps:8});assert(expected.converged);
