@@ -78,7 +78,7 @@ static int32_t call(const char *name,WasmEdge_Value *args,int argc,int result) {
 #define I(x) WasmEdge_ValueGenI32((int32_t)(x))
 #define D(x) WasmEdge_ValueGenF64(x)
 static uint32_t alloc(uint32_t n) { WasmEdge_Value a[]={I(n)}; uint32_t p=call("plugin_alloc",a,1,1); if(!p)exit(2); return p; }
-static void release(uint32_t p) { WasmEdge_Value a[]={I(p)}; call("plugin_free",a,1,0); }
+static void release(uint32_t p) { WasmEdge_Value a[]={I(p),I(0)}; call("plugin_free",a,2,0); }
 static uint32_t input(const char *name,uint32_t *n) {
  FILE *f=fopen(name,"rb"); if(!f){perror(name);exit(2);} fseek(f,0,SEEK_END);*n=ftell(f);rewind(f);
  unsigned char *b=malloc(*n);if(fread(b,1,*n,f)!=*n)exit(2);fclose(f);
