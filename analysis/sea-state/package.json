@@ -8,6 +8,8 @@
     "dist/",
     "plugin-manifest.json",
     "README.md",
+    "INTERFACE.md",
+    "SOURCES.md",
     "codec.js"
   ],
   "scripts": {
