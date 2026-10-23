@@ -62,6 +62,24 @@ const aotLog = execFileSync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '
 fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
 assert(!/FAILED|Not implemented instructions/.test(aotLog));
 report.aot = { status: 'PASS', command: 'spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm', artifactSha256: report.artifactSha256, log: aotLog.trim() }; save();
+// Start the largest role first. Two independent instances per runtime keep
+// the entire E2E within the graph command budget without changing any role.
+async function runRoles(run) {
+  const queue=[31814,1,1000,4000,10000];
+  const worker=async()=>{while(queue.length)await run(queue.shift());};
+  await Promise.all([worker(),worker()]);
+}
+const regressionWork=process.argv.includes('--measure')?null:Promise.all(
+  ['e2e-ffm.mjs','e2e-catalog-coverage.mjs'].map(async script=>{
+    try {
+      const {stdout,stderr}=await execFileAsync(process.execPath,[path.join(root,'scripts',script)],{cwd:root,maxBuffer:32*1024*1024});
+      fs.writeFileSync(path.join(cache,script+'.log'),stdout+stderr);
+      return script;
+    } catch(error) {
+      fs.writeFileSync(path.join(cache,script+'.log'),(error.stdout||'')+(error.stderr||''));
+      throw error;
+    }
+  })).then(scripts=>({scripts}),error=>({error}));
 const nativeSource = String.raw`
 #include <wasmedge/wasmedge.h>
 #include <stdint.h>
@@ -140,7 +158,7 @@ const nativeController = new AbortController();
 let nativeFailure;
 const nativeWork = (async () => {
 const measured = [];
-for (const count of [1, 1000, 4000, 10000, 31814]) {
+await runRoles(async count => {
   if (count > 1) {
     const objects = Array.from({length:count},(_,i)=>seeds[i%seeds.length]);
     fs.writeFileSync(path.join(cache, `bstar-${count}.bin`), Buffer.from(new Float64Array(objects.map(s=>s.bstar)).buffer));
@@ -152,7 +170,7 @@ for (const count of [1, 1000, 4000, 10000, 31814]) {
   row.role = count === 1 ? 'resident-focus' : 'catalog';
   row.outputs = Array.from({length:count===1?3:2}, (_,i)=>sha(fs.readFileSync(path.join(cache, `native-${count}-${i}.bin`))));
   measured.push(row); console.log(JSON.stringify(row));
-}
+});
 return measured;
 })().then(rows => ({rows}), error => { nativeFailure=error; return {error}; });
 
@@ -203,7 +221,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser, browserFinished=false;
 try {
   browser = await chromium.launch({ executablePath: headlessShell(), headless: true });
-  for (const count of [1, 1000, 4000, 10000, 31814]) {
+  await runRoles(async count => {
     const page = await browser.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     const options = { count, seeds, epoch, manifest, focus: count === 1 };
@@ -222,7 +240,7 @@ try {
     if (nativeFailure) throw nativeFailure;
     assert.deepEqual(errors, []); report.rows.push({ runtime: 'browser', ...row }); save();
     console.log(JSON.stringify({ runtime: 'browser', entities: count, highWaterBytes: row.highWaterBytes })); await page.close();
-  }
+  });
   browserFinished=true;
 } finally { if (!browserFinished) nativeController.abort(); await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 // Native role execution and fitted-model verification are below. Outputs are
@@ -235,6 +253,7 @@ for (const row of nativeResult.rows) {
   assert.deepEqual(row.outputs,browserRow.outputs,`native/browser byte parity at ${row.entities}`);
   report.rows.push(row); save();
 }
+report.rows.sort((a,b)=>a.entities-b.entities||a.runtime.localeCompare(b.runtime));
 const rows = report.rows.filter(r=>r.role==='catalog');
 const meanX=rows.reduce((sum,r)=>sum+r.entities,0)/rows.length,meanY=rows.reduce((sum,r)=>sum+r.highWaterBytes,0)/rows.length;
 const perEntityBytes=rows.reduce((sum,r)=>sum+(r.entities-meanX)*(r.highWaterBytes-meanY),0)/rows.reduce((sum,r)=>sum+(r.entities-meanX)**2,0);
@@ -257,10 +276,10 @@ if (!process.argv.includes('--measure')) {
   assert.equal(report.memory.initialBytes,Math.max(16*1024*1024,Math.ceil(Math.max(report.memory.staticMinimumBytes,baseBytes)/65536)*65536),'rebuild with measured base');
   assert.equal(report.memory.maximumBytes,report.requiredMaximumBytes,'rebuild with measured maximum');
   for(const row of report.rows)assert(row.highWaterBytes*1.5<=report.memory.maximumBytes);
-  for(const script of ['e2e-ffm.mjs','e2e-catalog-coverage.mjs']) {
-    execFileSync(process.execPath,[path.join(root,'scripts',script)],{cwd:root,stdio:'inherit'});
-    report[script]='PASS';save();
-  }
+  const regressions=await regressionWork;
+  if(regressions.error)throw regressions.error;
+  for(const script of regressions.scripts)report[script]='PASS';
+  save();
   report.status='PASS';save();
 }
 console.log(JSON.stringify({model:report.model,requiredMaximumBytes:report.requiredMaximumBytes,status:report.status||'MEASURED'}));
