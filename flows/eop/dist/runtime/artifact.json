@@ -1,0 +1,151 @@
+{
+  "programId": "com.digitalarsenal.flows.eop",
+  "name": "Earth orientation",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
+  "nodes": 8,
+  "edges": 9,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "methodId": "finals2000a",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "methodId": "route_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "restore",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "methodId": "restore_response",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "methodId": "parse_finals2000a",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "attribute",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "methodId": "attribute_lane",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.eop-request",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "version": "0.2.0",
+      "sha256": "5c4410eb8b9b3d638fe0c9c9930a13ce3090732e509ed2dbd7db5a149d65c437",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_",
+      "methodSymbols": {
+        "finals2000a": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_finals2000a",
+        "c04": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_c04",
+        "paris": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d72657175657374_paris"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.flows.eop.lane",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "version": "0.1.0",
+      "sha256": "f71e520391e6627f804e15f7749bbbdf2ec75dc6f85e069a6a271089e48dc7ab",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e656f702e6c616e65_",
+      "methodSymbols": {
+        "route_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e656f702e6c616e65_route_request",
+        "restore_response": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e656f702e6c616e65_restore_response",
+        "attribute_lane": "sdm_guest_636f6d2e6469676974616c617273656e616c2e666c6f77732e656f702e6c616e65_attribute_lane"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "fedae9f80de2177a6491ac60f03875cefe98bf6ee8e8d2533ea10d5656117ee3",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.eop-parser",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "version": "0.2.0",
+      "sha256": "bc9e0280f1ba67fa946c4caa931bb996c7d0b35cf666c68564ce9a5ac06ac490",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_",
+      "methodSymbols": {
+        "parse_finals2000a": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_parse_finals2000a",
+        "parse_c04": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_parse_c04",
+        "parse_paris": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e656f702d706172736572_parse_paris"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.0",
+      "sha256": "b3f1679593a82dd6071cda0798e924978551558113845ecfd72cccf23fd40a26",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}
