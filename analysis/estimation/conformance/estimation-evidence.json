@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "family": "estimation",
   "artifact": {
-    "sha256": "40aba72864d1aae9345726db3e438bf3cb251cf3089b802a5fd675cc53716ac1",
-    "moduleSdk": "0.8.17",
-    "spacedatastandards": "1.203.0"
+    "sha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d",
+    "moduleSdk": "0.8.25",
+    "spacedatastandards": "1.261.0"
   },
   "authority": {
     "orekitCommit": "cc18cc16de92ef36159114113cfbb042ae88d0db",
@@ -18,21 +18,20 @@
   "runtime": {
     "digestEncoding": "SDK command stdout including invoke result bytes",
     "browser": {
-      "outputSha256": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
+      "outputSha256": "b5b7a68eded32913a75adf8b7a9a64b4a3c338fdf3de1310387f137792de1e92"
     },
     "wasmedge": {
       "version": "0.16.4",
-      "outputSha256": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
+      "outputSha256": "b5b7a68eded32913a75adf8b7a9a64b4a3c338fdf3de1310387f137792de1e92"
     },
     "container": {
-      "version": "0.16.4",
-      "outputSha256": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
+      "waived": "waived by the owner 2026-10-22 (no Docker)"
     },
     "threads": {
-      "1": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be",
-      "2": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be",
-      "4": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be",
-      "8": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
+      "1": "b5b7a68eded32913a75adf8b7a9a64b4a3c338fdf3de1310387f137792de1e92",
+      "2": "b5b7a68eded32913a75adf8b7a9a64b4a3c338fdf3de1310387f137792de1e92",
+      "4": "b5b7a68eded32913a75adf8b7a9a64b4a3c338fdf3de1310387f137792de1e92",
+      "8": "b5b7a68eded32913a75adf8b7a9a64b4a3c338fdf3de1310387f137792de1e92"
     }
   },
   "batch": {
