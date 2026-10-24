@@ -774,13 +774,19 @@ table RecoveryEpoch {
   decision_epoch:EstimationEpoch;
 }
 
-// Osculating Keplerian chief at an epoch. HCW uses the semi-major axis;
-// SS-J2 the semi-major axis and inclination; TH and YA all four.
+// The chief's osculating Keplerian reference at an epoch (relative_state
+// reports it). HCW uses the semi-major axis; SS-J2 the semi-major axis and
+// inclination; TH and YA all five fields.
 table ChiefReference {
   semi_major_axis_m:double;
   eccentricity:double;
   inclination_rad:double;
   true_anomaly_rad:double;
+  // TH and YA advance the chief by the angle its radius vector sweeps between
+  // two references, (argument_of_perigee + true_anomaly) at the end minus at
+  // the start: the sum is well conditioned for any eccentricity, while the
+  // osculating perigee and anomaly of a perturbed chief each wander.
+  argument_of_perigee_rad:double;
 }
 
 // State layout everywhere: [R, T, N, Rdot, Tdot, Ndot], SI, deputy relative to

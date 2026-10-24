@@ -2,7 +2,7 @@
 
 // Relative-navigation extended Kalman filters on the full relative state
 // (extension v5). The state is the deputy about the chief on the chief's CCSDS
-// RTN axes, [R, T, N, Rdot, Tdot, Ndot] in metres and metres per second, the
+// RTN axes, [R, T, N, Rdot, Tdot, Ndot] in meters and meters per second, the
 // rates being those of the rotating frame. The four models are the filter's
 // own linear dynamics and never a truth model:
 //
@@ -41,6 +41,9 @@ struct ChiefReference {
   double eccentricity{0.0};
   double inclination_rad{0.0};
   double true_anomaly_rad{0.0};
+  // TH and YA advance the chief by the angle its radius vector sweeps,
+  // (argument of perigee + true anomaly) at the end minus at the start.
+  double argument_of_perigee_rad{0.0};
 };
 
 struct RelativeConstants {

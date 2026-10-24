@@ -364,7 +364,8 @@ axes (R = r/|r|, N = r x v/|r x v|, T = N x R). The rates are those of the
 rotating frame, the quantities the four models propagate. `relative_state`
 converts inertial chief and deputy states to that state (rates
 `Rt(v_d - v_c) - omega x rho`, `omega = h/r^2` along N) and returns the chief's
-osculating semi-major axis, eccentricity, inclination and true anomaly.
+osculating semi-major axis, eccentricity, inclination, true anomaly and
+argument of perigee.
 
 | `RelativeModel` | The filter's own linear dynamics |
 | --- | --- |
@@ -375,12 +376,23 @@ osculating semi-major axis, eccentricity, inclination and true anomaly.
 
 The circular-chief models refuse eccentricity above 0.05; the eccentric models
 accept up to 0.95. Each observation is the full relative state, its row-major
-6x6 covariance and the chief's osculating reference at its epoch. The
-prediction runs from the previous reference (semi-major axis, eccentricity,
-inclination) to the new one (true anomaly); process noise is white
-acceleration, `STATE_NOISE_COMPENSATION` with one spectral density per RTN
-axis; the update is the Joseph form with `H = I`. Angles-only and vision
-navigation are not supported.
+6x6 covariance and the chief's osculating reference at its epoch
+(`relative_state` reports it: semi-major axis, eccentricity, inclination, true
+anomaly, argument of perigee). The prediction runs from the previous reference
+to the new one. TH and YA advance the chief by the angle its radius vector
+sweeps, the argument of perigee plus the true anomaly at the end minus at the
+start: that sum is well conditioned at any eccentricity, while the osculating
+perigee and anomaly of a perturbed chief each wander (0.01 rad at e = 0.1).
+Process noise is white acceleration, `STATE_NOISE_COMPENSATION` with one
+spectral density per RTN axis; the update is the Joseph form with `H = I`.
+Angles-only and vision navigation are not supported.
+
+`curvilinear` (in `RelativeNavConfig` and `RelativeStateRequest`) puts every
+state and covariance on the wire in curvilinear RTN: the radial offset
+`|r_d| - |r_c|`, the along-track and cross-track arc lengths at the chief's
+radius (`r_c` times the in-plane and out-of-plane angles) and their rates. The
+filter converts to rectilinear RTN for its linear models and back, mapping
+covariances through the Jacobian (first order).
 
 **Innovation recovery** is opt-in and off by default (an absent table or
 `enabled = false`; the numerics are then the plain filter's, byte for byte).
@@ -500,7 +512,15 @@ node --test tests/sdk_compat.test.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 node tests/refresh-evidence.mjs
 npm test
+node tests/relative-nav-recovery.e2e.mjs
+PATH="$HOME/.wasmedge/bin:$PATH" node tests/relnav-parity.mjs
 ```
+
+The relative-navigation and recovery tests build the module from the working
+tree and the local `Estimation.fbs` into the ignored `tests/.generated` tree
+(`node build.mjs --out <dir>` does the same), so they run before the standards
+release that publishes the extension v5 schema; `relnav-parity.mjs` runs in a
+browser and goes through `headless-run`.
 
 The test provider is an ignored fixture, also built by `npm test`'s pretest hook.
 Its physics is C++ WASM. Production artifacts never include that provider.

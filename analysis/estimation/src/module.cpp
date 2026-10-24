@@ -1482,6 +1482,7 @@ core::ChiefReference chief_from_wire(const wire::ChiefReference* source) {
   out.eccentricity = source->eccentricity();
   out.inclination_rad = source->inclination_rad();
   out.true_anomaly_rad = source->true_anomaly_rad();
+  out.argument_of_perigee_rad = source->argument_of_perigee_rad();
   return out;
 }
 
@@ -1491,6 +1492,7 @@ std::unique_ptr<wire::ChiefReferenceT> chief_to_wire(const core::ChiefReference&
   out->eccentricity = source.eccentricity;
   out->inclination_rad = source.inclination_rad;
   out->true_anomaly_rad = source.true_anomaly_rad;
+  out->argument_of_perigee_rad = source.argument_of_perigee_rad;
   return out;
 }
 

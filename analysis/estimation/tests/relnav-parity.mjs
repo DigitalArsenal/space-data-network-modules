@@ -28,7 +28,7 @@ function generator(seed) {
 }
 
 const epochOf = (seconds) => new A.EstimationEpochT(EPOCH_JD, seconds);
-const chiefOf = (c) => Object.assign(new A.ChiefReferenceT(), { semiMajorAxisM: c.semiMajorAxisM, eccentricity: c.eccentricity, inclinationRad: c.inclinationRad, trueAnomalyRad: c.trueAnomalyRad });
+const chiefOf = (c) => Object.assign(new A.ChiefReferenceT(), { semiMajorAxisM: c.semiMajorAxisM, eccentricity: c.eccentricity, inclinationRad: c.inclinationRad, trueAnomalyRad: c.trueAnomalyRad, argumentOfPerigeeRad: c.argumentOfPerigeeRad });
 const diagonal = (values) => values.flatMap((v, i) => Array.from({ length: values.length }, (_, j) => (i === j ? v : 0)));
 
 async function main() {

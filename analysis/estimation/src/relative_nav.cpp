@@ -13,10 +13,6 @@ constexpr double kTwoPi = 2.0 * kPi;
 // rather than silently applying a circular model to an eccentric orbit.
 constexpr double kCircularChiefEccentricityLimit = 0.05;
 constexpr double kEccentricChiefEccentricityLimit = 0.95;
-// Below this eccentricity the osculating true anomaly of a perturbed chief is
-// not smooth (the perigee direction is ill-defined), so the end-of-interval
-// phase comes from Kepler's equation instead of the observation's reference.
-constexpr double kReliableAnomalyEccentricity = 0.02;
 // True-anomaly step of the Tschauner-Hempel integration (RK4).
 constexpr double kIntegrationStep = 0.002;
 constexpr double kMaximumIntegrationSteps = 1.0e6;
@@ -85,18 +81,6 @@ double mean_anomaly(double e, double nu) {
   return eccentric - e * std::sin(eccentric);
 }
 
-// True anomaly after the mean anomaly advances by `delta_mean` from `nu0`.
-double advance_true_anomaly(double e, double nu0, double delta_mean) {
-  const double target = mean_anomaly(e, wrap_two_pi(nu0)) + delta_mean;
-  double eccentric = target;
-  for (int i = 0; i < 50; ++i) {
-    const double step = (eccentric - e * std::sin(eccentric) - target) / (1.0 - e * std::cos(eccentric));
-    eccentric -= step;
-    if (std::abs(step) < 1.0e-15) break;
-  }
-  return 2.0 * std::atan2(std::sqrt(1.0 + e) * std::sin(0.5 * eccentric), std::sqrt(1.0 - e) * std::cos(0.5 * eccentric));
-}
-
 // ---- Constant-coefficient family (HCW and SS-J2) -------------------------
 //
 // In-plane: xdd = (w2 - 4 a^2 + 4 a^2 ... ) written in its integrated form
@@ -146,8 +130,9 @@ bool eccentric_geometry(const RelativeConstants& constants, const ChiefReference
                         const ChiefReference& to, double dt, Eccentric* g, std::string* error) {
   const double e = from.eccentricity, a = from.semi_major_axis_m;
   if (!(a > 0.0) || !(e >= 0.0) || e > kEccentricChiefEccentricityLimit ||
-      !std::isfinite(from.true_anomaly_rad) || !std::isfinite(to.true_anomaly_rad)) {
-    *error = "eccentric-chief models need a positive semi-major axis, an eccentricity in [0, 0.95] and finite true anomalies";
+      !std::isfinite(from.true_anomaly_rad) || !std::isfinite(to.true_anomaly_rad) ||
+      !std::isfinite(from.argument_of_perigee_rad) || !std::isfinite(to.argument_of_perigee_rad)) {
+    *error = "eccentric-chief models need a positive semi-major axis, an eccentricity in [0, 0.95] and finite anomalies and arguments of perigee";
     return false;
   }
   const double mu = constants.gravitational_parameter_m3_s2;
@@ -155,9 +140,12 @@ bool eccentric_geometry(const RelativeConstants& constants, const ChiefReference
   const double n = std::sqrt(mu / (a * a * a));
   g->e = e;
   g->k = std::sqrt(mu / (p * p * p));
+  // The chief sweeps (argument of perigee + true anomaly) between the two
+  // references; that sum stays well conditioned for a nearly circular orbit,
+  // where the osculating perigee and anomaly are not individually smooth.
   g->nu0 = wrap_two_pi(from.true_anomaly_rad);
-  g->nu1 = wrap_two_pi(e < kReliableAnomalyEccentricity ? advance_true_anomaly(e, g->nu0, n * dt)
-                                                         : to.true_anomaly_rad);
+  g->nu1 = wrap_two_pi(g->nu0 + (to.argument_of_perigee_rad + to.true_anomaly_rad) -
+                       (from.argument_of_perigee_rad + from.true_anomaly_rad));
   double delta_mean = mean_anomaly(e, g->nu1) - mean_anomaly(e, g->nu0);
   if (delta_mean < 0.0) delta_mean += kTwoPi;
   double delta_nu = g->nu1 - g->nu0;
@@ -644,6 +632,14 @@ bool inertial_to_rtn(double mu, const Vector6& chief, const Vector6& deputy,
   reference->eccentricity = std::sqrt(dot3(ecc, ecc));
   reference->inclination_rad = std::acos(std::max(-1.0, std::min(1.0, h[2] / hn)));
   reference->true_anomaly_rad = std::atan2(std::sqrt(p / mu) * rv / rn, p / rn - 1.0);
+  // Argument of latitude from the ascending node (the x axis for an equatorial
+  // orbit), and the argument of perigee as its difference from the anomaly.
+  double node[3] = {-normal[1], normal[0], 0.0};
+  const double node_norm = std::sqrt(node[0] * node[0] + node[1] * node[1]);
+  if (node_norm > 1.0e-12) { node[0] /= node_norm; node[1] /= node_norm; } else { node[0] = 1.0; node[1] = 0.0; node[2] = 0.0; }
+  const double across[3] = {normal[1] * node[2] - normal[2] * node[1], normal[2] * node[0] - normal[0] * node[2], normal[0] * node[1] - normal[1] * node[0]};
+  const double latitude = std::atan2(dot3(r, across), dot3(r, node));
+  reference->argument_of_perigee_rad = std::remainder(latitude - reference->true_anomaly_rad, 2.0 * relnav::kPi);
   return true;
 }
 
