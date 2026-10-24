@@ -1,0 +1,405 @@
+{
+  "ok": true,
+  "fixture": "files/orbit-products 0.2.0 interchange methods",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "688f22ee2dba278d19e4029e8aedf1aa46fffd9910428f7d7ed40c9eeb583ad3",
+  "moduleSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 18,
+      "durationMs": 1188
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 18,
+      "durationMs": 5224
+    }
+  ],
+  "cases": [
+    "eof-read-S1A_AUX_POEORB_V20240108_overlap",
+    "eof-read-S1A_AUX_POEORB_V20240109_overlap",
+    "eof-read-S1A_AUX_RESORB_V20240109_excerpt",
+    "eof-read-window",
+    "eof-refused-unit",
+    "eof-refused-count",
+    "eof-refused-unknown-element",
+    "eof-refused-empty-selection",
+    "ck-read-msl_surf_rover_tlm_0179_0269_v1.bc",
+    "ck-read-msl_ra_straight_v1.bc",
+    "ck-read-msl_hga_zero_v1.bc",
+    "ck-read-insight_ida_enc_180505_181127_v1.bc",
+    "ck-read-one-instrument",
+    "ck-refused-type2",
+    "ck-refused-wrong-clock",
+    "ck-write-synthetic",
+    "ck-refused-write-b2a",
+    "ck-refused-write-time-system"
+  ],
+  "comparisons": 54,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "eof-read-S1A_AUX_POEORB_V20240108_overlap",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3dd9872c6c4712a0d03e801695bd2dd9eed2fdfc2592eebdf9fedd028d411d06",
+      "stdoutLength": 68096
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-read-S1A_AUX_POEORB_V20240109_overlap",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "06b22ea97562fecaaf52ac91604e0661dfd191276cbee5245d0633a0c4f0b4e8",
+      "stdoutLength": 68096
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-read-S1A_AUX_RESORB_V20240109_excerpt",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "848392ada117aae6c6547d79390f1fab7bc6a3921136060a08092940f87d9132",
+      "stdoutLength": 51520
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-read-window",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "2d0fa78b5db8ef102f5a4794b54f2cc1f8f86f75a0a96dcc44b2e8197f6fa046",
+      "stdoutLength": 2304
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-refused-unit",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "203272520c6ca247eb0c9ec1cffd53bbea08380bbbdb646dd2851a27ece62225",
+      "stdoutLength": 144
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-refused-count",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9680d1830ff060553c368c853623ba98c7486de927db36509e09370673595945",
+      "stdoutLength": 188
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-refused-unknown-element",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f3348b9621be8482698cfcaa4904a573c1e956d754cdd66e6005336d6ee93da",
+      "stdoutLength": 168
+    },
+    {
+      "lane": "browser",
+      "caseId": "eof-refused-empty-selection",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "53f585dc715c23b24ba58b2c84728786981d194680c20ff55681944a21870de5",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-read-msl_surf_rover_tlm_0179_0269_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0c89e38210a973a627cdbf3d50ca819dcda51f7f5c8312af7ed6307c27ded904",
+      "stdoutLength": 12424
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-read-msl_ra_straight_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1bb8594adf27d795867aa7bc160f048d989bd7a2e5ee5a77f4c48507d7cad7ee",
+      "stdoutLength": 22232
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-read-msl_hga_zero_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "253d5f8e728dd6eb6218786aefd18563c7f1e91d39b493b47012d63adeaa3028",
+      "stdoutLength": 7160
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-read-insight_ida_enc_180505_181127_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "04e20e7b03408e0cae9f37b6e336bec8c31b265bdbb864936c9512b1fc2d747e",
+      "stdoutLength": 18824
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-read-one-instrument",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "97f1f18a35b6703274dc708b85b69ced5a84bfd686d5fd7a049bdcee838155d5",
+      "stdoutLength": 20256
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-refused-type2",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d0ba42a823afc9ed34b7210901ab0a4ba56ed27ef4f3ea59589271ecf8686cb6",
+      "stdoutLength": 252
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-refused-wrong-clock",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e20b995d2bfcb96738ceab1a316aa6a925ec6448e36fe0032383f14631809f32",
+      "stdoutLength": 232
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-write-synthetic",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "363c32be552a8a8f83e2101f61d11fff488848faced24baa7c6b93d2e0d6faae",
+      "stdoutLength": 22440
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-refused-write-b2a",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "dc1676f7a8ede5f9a9df28dc2f34e6e09e36b6ad33f32b9d8ae1c19351760a4c",
+      "stdoutLength": 216
+    },
+    {
+      "lane": "browser",
+      "caseId": "ck-refused-write-time-system",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "90cdb8c50eb68cad5f461fc7121764f0181e1f20444cdf47d0ce8310d9eb8f1d",
+      "stdoutLength": 208
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-read-S1A_AUX_POEORB_V20240108_overlap",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3dd9872c6c4712a0d03e801695bd2dd9eed2fdfc2592eebdf9fedd028d411d06",
+      "stdoutLength": 68096
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-read-S1A_AUX_POEORB_V20240109_overlap",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "06b22ea97562fecaaf52ac91604e0661dfd191276cbee5245d0633a0c4f0b4e8",
+      "stdoutLength": 68096
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-read-S1A_AUX_RESORB_V20240109_excerpt",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "848392ada117aae6c6547d79390f1fab7bc6a3921136060a08092940f87d9132",
+      "stdoutLength": 51520
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-read-window",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "2d0fa78b5db8ef102f5a4794b54f2cc1f8f86f75a0a96dcc44b2e8197f6fa046",
+      "stdoutLength": 2304
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-refused-unit",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "203272520c6ca247eb0c9ec1cffd53bbea08380bbbdb646dd2851a27ece62225",
+      "stdoutLength": 144
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-refused-count",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9680d1830ff060553c368c853623ba98c7486de927db36509e09370673595945",
+      "stdoutLength": 188
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-refused-unknown-element",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1f3348b9621be8482698cfcaa4904a573c1e956d754cdd66e6005336d6ee93da",
+      "stdoutLength": 168
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "eof-refused-empty-selection",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "53f585dc715c23b24ba58b2c84728786981d194680c20ff55681944a21870de5",
+      "stdoutLength": 148
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-read-msl_surf_rover_tlm_0179_0269_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "0c89e38210a973a627cdbf3d50ca819dcda51f7f5c8312af7ed6307c27ded904",
+      "stdoutLength": 12424
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-read-msl_ra_straight_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1bb8594adf27d795867aa7bc160f048d989bd7a2e5ee5a77f4c48507d7cad7ee",
+      "stdoutLength": 22232
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-read-msl_hga_zero_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "253d5f8e728dd6eb6218786aefd18563c7f1e91d39b493b47012d63adeaa3028",
+      "stdoutLength": 7160
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-read-insight_ida_enc_180505_181127_v1.bc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "04e20e7b03408e0cae9f37b6e336bec8c31b265bdbb864936c9512b1fc2d747e",
+      "stdoutLength": 18824
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-read-one-instrument",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "97f1f18a35b6703274dc708b85b69ced5a84bfd686d5fd7a049bdcee838155d5",
+      "stdoutLength": 20256
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-refused-type2",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d0ba42a823afc9ed34b7210901ab0a4ba56ed27ef4f3ea59589271ecf8686cb6",
+      "stdoutLength": 252
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-refused-wrong-clock",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e20b995d2bfcb96738ceab1a316aa6a925ec6448e36fe0032383f14631809f32",
+      "stdoutLength": 232
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-write-synthetic",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "363c32be552a8a8f83e2101f61d11fff488848faced24baa7c6b93d2e0d6faae",
+      "stdoutLength": 22440
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-refused-write-b2a",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "dc1676f7a8ede5f9a9df28dc2f34e6e09e36b6ad33f32b9d8ae1c19351760a4c",
+      "stdoutLength": 216
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ck-refused-write-time-system",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "90cdb8c50eb68cad5f461fc7121764f0181e1f20444cdf47d0ce8310d9eb8f1d",
+      "stdoutLength": 208
+    }
+  ],
+  "dockerLeg": "waived by the owner, 2026-10-22"
+}

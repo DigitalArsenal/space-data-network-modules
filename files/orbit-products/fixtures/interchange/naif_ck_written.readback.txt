@@ -1,0 +1,1 @@
+CSPICE CSPICE_N0067 read 265 records of 2 segments: worst rotation difference 2.195e-16 rad; worst angular velocity difference 4.337e-19 rad/s; worst tick difference 3.906e-03 ticks

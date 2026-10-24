@@ -19,6 +19,13 @@ const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
  * way. ONE implementation, included by whoever needs it — a second OEM parser
  * next to the first is the drift these packages are split to avoid. */
 const ccsdsSrc = path.join(packageRoot, "..", "ccsds-messages", "src");
+/* The XML engine is the sibling package's vendored pugixml, for the same reason:
+ * one XML reader in the repository, included by whoever reads XML. Built
+ * without exceptions, XPath and the STL stream API, as it is there. */
+const pugixmlRoot = path.join(packageRoot, "..", "ccsds-messages", "third_party", "pugixml");
+/* The SCLK kernel is a SPICE text kernel; the repository reads those in one
+ * place, propagator/solar-system-bodies, and a CK's clock is read there too. */
+const textKernelPath = path.join(packageRoot, "..", "..", "propagator", "solar-system-bodies", "src", "text_kernel.hpp");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 
@@ -99,7 +106,13 @@ function stripLocalIncludes(source) {
     .replace(/^#include "oem_projection\.hpp"\n/gm, "")
     .replace(/^#include "kvn\.hpp"\n/gm, "")
     .replace(/^#include "\.\.\/\.\.\/ccsds-messages\/src\/kvn\.hpp"\n/gm, "")
-    .replace(/^#include "vcm\.hpp"\n/gm, "");
+    .replace(/^#include "vcm\.hpp"\n/gm, "")
+    .replace(/^#include "sentinel_eof\.hpp"\n/gm, "")
+    .replace(/^#include "ncd_frame\.hpp"\n/gm, "")
+    .replace(/^#include "naif_sclk\.hpp"\n/gm, "")
+    .replace(/^#include "naif_ck\.hpp"\n/gm, "")
+    .replace(/^#include "text_kernel\.hpp"\n/gm, "")
+    .replace(/^#include "pugi(xml|config)\.hpp"\n/gm, "");
 }
 
 /*
@@ -117,6 +130,12 @@ function stripLocalIncludes(source) {
  * package that speaks that ABI, over these same headers.
  */
 const pieces = [
+  "#define PUGIXML_NO_EXCEPTIONS\n#define PUGIXML_NO_XPATH\n#define PUGIXML_NO_STL\n",
+  stripLocalIncludes(await read(path.join(pugixmlRoot, "pugiconfig.hpp"))),
+  stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.hpp"))),
+  stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.cpp"))),
+  // math.h may define these as macros; the SDS headers have members of the same names.
+  "#undef DOMAIN\n#undef SING\n#undef OVERFLOW\n#undef UNDERFLOW\n#undef TLOSS\n#undef PLOSS\n",
   stripSdsCrossIncludes(headers.RFM),
   stripSdsCrossIncludes(headers.TIM),
   stripSdsCrossIncludes(headers.IDM),
@@ -128,9 +147,12 @@ const pieces = [
   stripSdsCrossIncludes(headers.NCD),
   stripSdsCrossIncludes(headers.OPM),
   stripSdsCrossIncludes(headers.ATM),
+  stripSdsCrossIncludes(headers.CVR),
+  stripSdsCrossIncludes(headers.PVN),
   stripSdsCrossIncludes(headers.OCM),
   stripSdsCrossIncludes(headers.MET),
   stripSdsCrossIncludes(headers.VCM),
+  stripSdsCrossIncludes(headers.AEM),
   await read(path.join(packageRoot,"../../foundation/orbits/src/state_representations.hpp")),
   await read(path.join(srcRoot,"vimpel.hpp")),
   await read(path.join(srcRoot, "ses_i11.hpp")),
@@ -144,9 +166,17 @@ const pieces = [
   stripLocalIncludes(await read(path.join(srcRoot, "sp3.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "oem_projection.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "containers.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "sentinel_eof.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "spk_write.hpp"))),
+  stripLocalIncludes(await read(textKernelPath)),
+  stripLocalIncludes(await read(path.join(srcRoot, "naif_sclk.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "naif_ck.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "ncd_frame.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "orbit_products_module.cpp"))),
   await read(path.join(srcRoot, "vimpel_module.cpp")),
   await read(path.join(srcRoot, "ses_i11_module.cpp")),
+  await read(path.join(srcRoot, "sentinel_eof_module.cpp")),
+  await read(path.join(srcRoot, "naif_ck_module.cpp")),
   await read(path.join(srcRoot, "vcm.hpp")),
   stripLocalIncludes(await read(path.join(srcRoot, "vcm_ocm.hpp"))),
   await read(path.join(srcRoot, "vcm_module.cpp")),
@@ -191,8 +221,8 @@ fsSync.writeFileSync(
     {
       spacedatastandards: sdsVersion,
       threadModel: "wasi-sequential",
-      records: { in: ["$NCD", "$VCM"], out: ["$OEM", "$NCD", "$OPM", "$OCM"] },
-      formats: ["SPK_DAF", "SP3_C", "SP3_D", "CODE_500", "SCENARIO_EPOCH_EPHEMERIS_TEXT", "CCSDS_OEM_KVN", "vimpel-orbits-text", "ses-i11", "vcm-v2-text"],
+      records: { in: ["$NCD", "$VCM", "$AEM"], out: ["$OEM", "$NCD", "$OPM", "$OCM", "$AEM"] },
+      formats: ["SPK_DAF", "SP3_C", "SP3_D", "CODE_500", "SCENARIO_EPOCH_EPHEMERIS_TEXT", "CCSDS_OEM_KVN", "vimpel-orbits-text", "ses-i11", "vcm-v2-text", "sentinel-eof", "naif-ck", "naif-sclk"],
     },
     null,
     2,

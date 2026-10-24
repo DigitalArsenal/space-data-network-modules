@@ -1,0 +1,6 @@
+{
+  "spacedatastandards": "1.261.0",
+  "threadModel": "wasi-sequential",
+  "records": { "in": ["$NCD"], "out": ["$GNO", "$OEM", "$NCD"] },
+  "formats": ["rinex-obs", "rinex-nav"]
+}

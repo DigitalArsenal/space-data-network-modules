@@ -1,0 +1,31 @@
+{
+  "name": "@digitalarsenal/sdn-module-files-rinex",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    ".": "./index.js",
+    "./dist/*": "./dist/*",
+    "./src/*": "./src/*"
+  },
+  "files": [
+    "dist/",
+    "index.js",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:e2e": "node tests/interchange.e2e.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "flatbuffers": "^25.9.23",
+    "flatc-wasm": "^26.1.32",
+    "space-data-module-sdk": "0.9.12",
+    "spacedatastandards.org": "1.261.0"
+  }
+}

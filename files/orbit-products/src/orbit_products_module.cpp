@@ -9,7 +9,7 @@
  * parameters, the Code-500 header. A reader that emits only the first half
  * makes the second half unrecoverable, and a writer downstream then invents a
  * header rather than reproducing one. Both methods here emit the descriptor;
- * `read_container` additionally materialises the states.
+ * `read_container` additionally materializes the states.
  *
  * HOW THE BYTES ARRIVE, AND WHY THIS SHAPE
  *
@@ -73,6 +73,7 @@
 #include "space_data_module_invoke.h"
 
 #include "sha256.hpp"
+#include "ncd_frame.hpp"
 
 namespace {
 
@@ -87,118 +88,6 @@ std::string upper_ascii(const std::string& s) {
     return out;
 }
 
-uint32_t read_u32le(const uint8_t* p) {
-    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
-           (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
-}
-
-/* ------------------------------------------------------------------------ */
-/* The input frame                                                           */
-/* ------------------------------------------------------------------------ */
-
-struct ContainerFrame {
-    /* An aligned copy of `[u32le n][$NCD]`. FlatBuffers built size-prefixed
-     * align their 8-byte scalars counting the prefix, so the descriptor must
-     * sit at an allocator-aligned address for the accessors to read it. The
-     * container BODY is left where it arrived: every reader here goes through
-     * memcpy, so it has no alignment requirement of its own and copying a
-     * half-gigabyte kernel to satisfy one that does not exist would be the
-     * module's whole runtime cost. */
-    std::vector<uint8_t> descriptor_bytes;
-    const NCD* descriptor = nullptr;
-    const uint8_t* body = nullptr;
-    size_t body_length = 0;
-};
-
-/* Returns 0 on success, or an invoke status; sets the plugin error itself. */
-int32_t decode_container_frame(const char* method, ContainerFrame* out) {
-    const int32_t index = plugin_find_input_index("container", 0);
-    const plugin_input_frame_t* frame =
-        index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
-    if (!frame || !frame->payload || frame->payload_length == 0) {
-        char message[256];
-        std::snprintf(message, sizeof(message),
-                      "%s requires a frame on port \"container\".", method);
-        plugin_set_error("missing-container-frame", message);
-        return 400;
-    }
-
-    const uint8_t* payload = frame->payload;
-    const size_t payload_length = static_cast<size_t>(frame->payload_length);
-    if (payload_length < 12) {
-        plugin_set_error("malformed-container-frame",
-                         "The frame is too short to hold a size-prefixed $NCD descriptor.");
-        return 400;
-    }
-
-    const uint32_t descriptor_length = read_u32le(payload);
-    /* The prefix is the descriptor's length, so 4 + it is where the container
-     * starts. A prefix that overruns the frame is a frame that is not what it
-     * declares, and is refused before anything reads past it. */
-    if (descriptor_length < 8 ||
-        static_cast<uint64_t>(descriptor_length) + 4u > payload_length) {
-        plugin_set_error("malformed-container-frame",
-                         "The $NCD size prefix overruns the frame; the descriptor and the "
-                         "container bytes must arrive in one frame as "
-                         "[u32le n][$NCD][container].");
-        return 400;
-    }
-
-    const size_t prefixed_length = 4u + static_cast<size_t>(descriptor_length);
-    out->descriptor_bytes.assign(payload, payload + prefixed_length);
-    ::flatbuffers::Verifier verifier(out->descriptor_bytes.data(), out->descriptor_bytes.size());
-    if (!::flatbuffers::BufferHasIdentifier(out->descriptor_bytes.data(), NCDIdentifier(), true) ||
-        !VerifySizePrefixedNCDBuffer(verifier)) {
-        plugin_set_error("bad-ncd",
-                         "The frame does not open with a verifiable size-prefixed $NCD buffer.");
-        return 400;
-    }
-    out->descriptor = GetSizePrefixedNCD(out->descriptor_bytes.data());
-
-    out->body = payload + prefixed_length;
-    out->body_length = payload_length - prefixed_length;
-    if (out->body_length == 0) {
-        plugin_set_error("missing-container-bytes",
-                         "The frame carries an $NCD descriptor and no container. $NCD describes "
-                         "a file rather than carrying one, so the described bytes must follow "
-                         "the descriptor in the same frame; this module has no fetch capability "
-                         "and will not resolve SOURCE_CID on its own.");
-        return 400;
-    }
-
-    /* The declared identity is checked against the bytes that arrived, not
-     * assumed to match them. This is what SOURCE_SHA256 is for. */
-    if (out->descriptor->SOURCE_BYTE_LENGTH() != 0 &&
-        out->descriptor->SOURCE_BYTE_LENGTH() != static_cast<uint64_t>(out->body_length)) {
-        char message[256];
-        std::snprintf(message, sizeof(message),
-                      "SOURCE_BYTE_LENGTH is %llu but the frame carries %llu container bytes.",
-                      static_cast<unsigned long long>(out->descriptor->SOURCE_BYTE_LENGTH()),
-                      static_cast<unsigned long long>(out->body_length));
-        plugin_set_error("descriptor-length-mismatch", message);
-        return 400;
-    }
-    if (out->descriptor->SOURCE_SHA256() && out->descriptor->SOURCE_SHA256()->size() > 0) {
-        const std::string declared = out->descriptor->SOURCE_SHA256()->str();
-        std::string lowered;
-        lowered.reserve(declared.size());
-        for (char c : declared) {
-            lowered.push_back(c >= 'A' && c <= 'F' ? static_cast<char>(c + 32) : c);
-        }
-        const std::string actual = ephem::sha256_hex(out->body, out->body_length);
-        if (lowered != actual) {
-            char message[256];
-            std::snprintf(message, sizeof(message),
-                          "SOURCE_SHA256 declares %.16s... but the container bytes hash to "
-                          "%.16s...; the descriptor does not describe this file.",
-                          lowered.c_str(), actual.c_str());
-            plugin_set_error("descriptor-hash-mismatch", message);
-            return 400;
-        }
-    }
-    return 0;
-}
-
 /* ------------------------------------------------------------------------ */
 /* Format discrimination                                                     */
 /* ------------------------------------------------------------------------ */
@@ -206,7 +95,7 @@ int32_t decode_container_frame(const char* method, ContainerFrame* out) {
 /*
  * `$NCD`'s roster is wider than this reader: it names OEM/AEM/TDM in XML and
  * attitude containers this module does not project onto `$OEM`. A member we do
- * not read is refused BY NAME rather than folded into a neighbour, because a
+ * not read is refused BY NAME rather than folded into a neighbor, because a
  * silently substituted reader produces numbers from the wrong parser.
  */
 bool ephem_format_for(ncdContainerFormat declared, ephem::Format* out, const char** why) {
@@ -479,7 +368,7 @@ bool time_system_for(const std::string& name, timingStandard* out) {
  * only. `$RFM.NAME` always carries the container's own spelling; the union is
  * set only where the spelling IS a roster member, because a near-match here
  * ("ITRF2014" is not "ITRF2000") is wrong by the difference between two
- * realisations and reads as authoritative.
+ * realizations and reads as authoritative.
  */
 bool celestial_frame_for(const std::string& name, CelestialFrame* out) {
     struct Row { const char* token; CelestialFrame value; };
@@ -910,7 +799,7 @@ void build_descriptor(const Loaded& loaded, const uint8_t* body, size_t body_len
                 static_cast<uint32_t>(s.interp_degree > 0 ? s.interp_degree : 0);
             c->NUMBER_OF_EPHEMERIS_POINTS = static_cast<uint32_t>(s.rows.size());
             /* DISTANCE_UNIT and SEGMENT_BOUNDARY_TIMES stay unset: the reader
-             * normalises the file's declared unit to kilometres on the way in
+             * normalizes the file's declared unit to kilometers on the way in
              * and carries no segmentation, so this module cannot state either
              * without re-parsing the text with a second parser. Writing
              * "Kilometers" here because that is what the SERIES holds would be

@@ -6,7 +6,7 @@
  * Before this script the build read `lib/cpp/FRM/main_generated.h` out of a
  * sibling spacedatastandards.org GIT CHECKOUT. That is exactly the local-copy
  * lane the law forbids: the bytes a module compiled against were whatever the
- * neighbouring working tree happened to hold, reproducible nowhere else, and
+ * neighboring working tree happened to hold, reproducible nowhere else, and
  * unresolvable from a private task worktree at all. The published package ships
  * `schema/<FAMILY>/main.fbs` and no generated C++, so the headers are generated
  * here with the pinned `flatc-wasm`, from the pinned package version.
@@ -33,7 +33,7 @@ const standardsRoot = path.join(
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
 // Families this module references directly, plus their transitive includes.
-export const SCHEMA_FAMILIES = ["RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "OPM", "ATM", "OCM", "MET", "VCM"];
+export const SCHEMA_FAMILIES = ["RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "OPM", "ATM", "CVR", "PVN", "OCM", "MET", "VCM", "AEM"];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
