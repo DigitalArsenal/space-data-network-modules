@@ -72,10 +72,10 @@ test('the plain path steps across penumbrae at 300 s and agrees with the variati
 
 test('a backward request on a forward-only integrator is refused', async (t) => {
   const h = await harness(); t.after(() => h.destroy());
-  for (const method of ['RK4', 'RKDP87', 'BS']) {
+  for (const method of ['RK4', 'BS']) {
     const response = await h.invoke({ methodId: 'invoke', inputs: requestInputs(C, { edit: (exec) => {
       exec.SAMPLE_EPOCHS = []; exec.TARGET_EPOCH = isoUtc(at(-1));
-      exec.INTEGRATOR.ALGORITHM = sds.prwSolverAlgorithm[method]; exec.INTEGRATOR.INITIAL_STEP_SECONDS = 10;
+      exec.INTEGRATOR.ALGORITHM = sds.pcfIntegratorAlgorithm[method]; exec.INTEGRATOR.INITIAL_STEP_SECONDS = 10;
     } }) });
     assert.notEqual(response.statusCode, 0, `${method} answered a backward request`);
     assert.match(response.errorMessage, /did not reach the target epoch/, method);

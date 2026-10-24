@@ -205,25 +205,27 @@ struct RelativeOrbitalElements {
 // Numerical Integration Types
 // =============================================================================
 
-// Integration method enumeration (Phase 11.1 Extended)
+// The integrators FFM implements, each selected by PCFIntegratorSettings.ALGORITHM
+// (ffm::dynamics::parseIntegrator maps that enum onto this one and nothing else does).
 enum class IntegrationMethod {
-    RK4,                // 4th order Runge-Kutta (fixed step)
-    RKF45,              // Runge-Kutta-Fehlberg 4(5) adaptive
-    RKF78,              // Runge-Kutta-Fehlberg 7(8) adaptive
-    RK78,               // 7(8) Dormand-Prince (alias for RKDP78)
-    RKDP87,             // Dormand-Prince 8(7)
-    RK89,               // 8(9) Prince-Dormand
+    RK4,                // classical 4th order Runge-Kutta, fixed step
+    RKF45,              // Cash and Karp 1990 4(5)
+    RKF78,              // Fehlberg 1968 7(8)
+    RK78,               // the same Fehlberg 7(8) pair, the catalog default
+    RKDP87,             // Prince and Dormand 1981 RK8(7)13M (lib/rk_engine.h)
+    DOPRI5,             // Dormand and Prince 1980 5(4)
+    RK65,               // Prince and Dormand 1981 RK6(5)8M
+    RKV98,              // Verner 2010 9(8) in 16 stages
+    RKN1210,            // Dormand, El-Mikkawy and Prince 1987 Runge-Kutta-Nystrom 12(10)
     ABM,                // Adams-Bashforth-Moulton multi-step
     BS,                 // Bulirsch-Stoer extrapolation
     GaussJackson8,      // 8th order Gauss-Jackson
-    GaussJackson12,     // 12th order Gauss-Jackson
-    Cowell,             // Cowell's method (rectangular coords)
+    Cowell,             // Cowell's method (rectangular coordinates): Cash-Karp 4(5)
     Encke,              // Encke's method (perturbed deviation)
     GaussVOP,           // Gauss variational equations
     EquinoctialVOP,     // Equinoctial elements VOP
     Dromo,              // DROMO regularized formulation
-    Stiefel,            // Stiefel-Scheifele regularization
-    KeplerianSTM        // State transition matrix propagation
+    Stiefel             // Stiefel-Scheifele regularization
 };
 
 // Integrator configuration

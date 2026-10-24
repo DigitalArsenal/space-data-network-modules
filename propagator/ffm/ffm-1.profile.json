@@ -75,7 +75,7 @@
     ],
     "spaceWeather": "Daily F10.7/F10.7a/Ap, 3-h Kp (CSSI layout, read as Orekit's CssiSpaceWeatherData): previous-day observed F10.7, current-day centered 81-day observed F10.7 average and daily Ap, current 3-hour Kp.",
     "weather": null,
-    "winds": "HWM14 when DragForceConfig.includeWinds is enabled; false by default and not selectable in PRWForceConfiguration.",
+    "winds": "HWM14 when DragForceConfig.includeWinds is enabled; false by default and not selectable in PCFForceModel.",
     "cdAreaOverMass_m2_kg": 0.01,
     "bstarRule": "The C++ export plugin_drag_area_over_mass_from_bstar returns 2 * B* / 0.15696615 for finite positive B* (1/Earth radii), in m\u00b2/kg; zero, negative or nonfinite B* uses cdAreaOverMass_m2_kg.",
     "areaOverMassRate_m2_kg_s": 0,
@@ -160,7 +160,7 @@
   "reentry": "Every state, STM and finite-burn propagation path stops at the first evaluated state below 100 km geodetic altitude with the named reentry flag (propagator/ffm/lib/reentry.h:11,31,71-73); height is measured about the GCRF pole rather than the ITRF pole (line 20).",
   "poleTide": {
     "enabled": false,
-    "selection": "ForceModelSet.usePoleTide remains false; PRWForceConfiguration has no pole-tide selector. The separate CreateHighFidelityForceModel helper enables it."
+    "selection": "ForceModelSet.usePoleTide remains false; PCFForceModel has no pole-tide selector. The separate CreateHighFidelityForceModel helper enables it."
   },
   "inTrackAcceleration": {
     "value_m_s2": 0,
@@ -182,8 +182,8 @@
       "propagator/ffm/src/cpp/src/prw_dynamics.cpp:109",
       "propagator/ffm/lib/egm2008_data.h:6",
       "propagator/ffm/lib/force_models.h:529",
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:50",
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:193"
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:69",
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:263"
     ],
     "thirdBodies": [
       "propagator/ffm/catalog.mjs:75",
@@ -199,7 +199,7 @@
       "propagator/ffm/lib/shadow.h:1",
       "propagator/ffm/lib/force_models.h:202",
       "propagator/ffm/src/cpp/src/prw_dynamics.cpp:63",
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:214"
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:286"
     ],
     "drag": [
       "propagator/ffm/catalog.mjs:14",
@@ -210,8 +210,8 @@
       "propagator/ffm/src/cpp/include/ffm/prw_environment.h:101",
       "propagator/ffm/src/cpp/include/ffm/prw_environment.h:150",
       "propagator/ffm/lib/force_models.h:268",
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:138",
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:177"
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:200",
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:246"
     ],
     "solidTides": [
       "propagator/ffm/catalog.mjs:80",
@@ -232,7 +232,7 @@
       "propagator/ffm/catalog.mjs:81",
       "propagator/ffm/src/cpp/src/prw_dynamics.cpp:233",
       "propagator/ffm/lib/force_models.h:469",
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:245"
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:317"
     ],
     "frames": [
       "propagator/ffm/catalog.mjs:36",
@@ -285,7 +285,7 @@
       "propagator/ffm/lib/force_models.cpp:1894"
     ],
     "inTrackAcceleration": [
-      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PRWForceConfiguration.js:162",
+      "propagator/ffm/node_modules/spacedatastandards.org/lib/js/PRW/PCFForceModel.js:229",
       "propagator/ffm/src/cpp/src/prw_dynamics.cpp:273"
     ]
   }

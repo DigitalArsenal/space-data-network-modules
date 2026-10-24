@@ -1,6 +1,6 @@
 import * as flatbuffers from 'flatbuffers';
 import { PRWSpeciesDensity, PRWSpeciesDensityT } from './PRWSpeciesDensity.js';
-import { prwAtmosphereFamily } from './prwAtmosphereFamily.js';
+import { pcfAtmosphereFamily } from './pcfAtmosphereFamily.js';
 export class PRWAtmosphereResult {
     bb = null;
     bb_pos = 0;
@@ -18,7 +18,7 @@ export class PRWAtmosphereResult {
     }
     ATMOSPHERE_MODEL() {
         const offset = this.bb.__offset(this.bb_pos, 4);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwAtmosphereFamily.UNSPECIFIED;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfAtmosphereFamily.UNSPECIFIED;
     }
     VARIANT(optionalEncoding) {
         const offset = this.bb.__offset(this.bb_pos, 6);
@@ -68,7 +68,7 @@ export class PRWAtmosphereResult {
         builder.startObject(11);
     }
     static addAtmosphereModel(builder, ATMOSPHERE_MODEL) {
-        builder.addFieldInt8(0, ATMOSPHERE_MODEL, prwAtmosphereFamily.UNSPECIFIED);
+        builder.addFieldInt8(0, ATMOSPHERE_MODEL, pcfAtmosphereFamily.UNSPECIFIED);
     }
     static addVariant(builder, VARIANTOffset) {
         builder.addFieldOffset(1, VARIANTOffset, 0);
@@ -158,7 +158,7 @@ export class PRWAtmosphereResultT {
     SCALE_HEIGHT_M;
     HAS_SCALE_HEIGHT_M;
     NUMBER_DENSITIES;
-    constructor(ATMOSPHERE_MODEL = prwAtmosphereFamily.UNSPECIFIED, VARIANT = null, ALTITUDE_M = 0.0, DENSITY_KG_M3 = 0.0, TEMPERATURE_K = 0.0, HAS_TEMPERATURE_K = false, EXOSPHERIC_TEMPERATURE_K = 0.0, HAS_EXOSPHERIC_TEMPERATURE_K = false, SCALE_HEIGHT_M = 0.0, HAS_SCALE_HEIGHT_M = false, NUMBER_DENSITIES = []){
+    constructor(ATMOSPHERE_MODEL = pcfAtmosphereFamily.UNSPECIFIED, VARIANT = null, ALTITUDE_M = 0.0, DENSITY_KG_M3 = 0.0, TEMPERATURE_K = 0.0, HAS_TEMPERATURE_K = false, EXOSPHERIC_TEMPERATURE_K = 0.0, HAS_EXOSPHERIC_TEMPERATURE_K = false, SCALE_HEIGHT_M = 0.0, HAS_SCALE_HEIGHT_M = false, NUMBER_DENSITIES = []){
         this.ATMOSPHERE_MODEL = ATMOSPHERE_MODEL;
         this.VARIANT = VARIANT;
         this.ALTITUDE_M = ALTITUDE_M;

@@ -20,6 +20,22 @@
 namespace astro {
 namespace shadow {
 
+// c - (b + a) and c - (b - a): c the angle between the directions to the Sun's and the
+// Earth's centres, a and b their apparent radii, at t seconds of the clock whose t = 0 is
+// `epoch` and the state y (km, km/s). Positive outside the penumbra and outside the umbra
+// respectively; the switching functions of the boundaries.
+inline void boundaryFunctions(const ForceModel::ForceModelSet& forces, const timesys::Instant& epoch,
+                              double t, const double* y, double g[2]) {
+    const Vec3 r(y[0], y[1], y[2]);
+    const Vec3 s = forces.sunPositionProvided ? forces.sunPosition : getSunPosition(epoch.plusSeconds(t)).position;
+    const Vec3 d = s - r;
+    const double a = std::asin(std::min(1.0, SUN_RADIUS_KM / d.magnitude()));
+    const double b = std::asin(std::min(1.0, RE_EARTH / r.magnitude()));
+    const double c = std::atan2(r.cross(d).magnitude(), -r.dot(d));
+    g[0] = c - (a + b);
+    g[1] = c - (b - a);
+}
+
 class BoundaryEvents {
 public:
     // epoch: two-part TT at t = 0 of the loop's clock; y0: the state at t0.
@@ -63,19 +79,7 @@ public:
     double tolerance = 1e-3;  // seconds
 
 private:
-    // c - (b + a) and c - (b - a): c the angle between the directions to the
-    // Sun's and the Earth's centres, a and b their apparent radii. Positive
-    // outside the penumbra and outside the umbra respectively.
-    void values(double t, const double* y, double g[2]) const {
-        const Vec3 r(y[0], y[1], y[2]);
-        const Vec3 s = forces_->sunPositionProvided ? forces_->sunPosition : getSunPosition(epoch_.plusSeconds(t)).position;
-        const Vec3 d = s - r;
-        const double a = std::asin(std::min(1.0, SUN_RADIUS_KM / d.magnitude()));
-        const double b = std::asin(std::min(1.0, RE_EARTH / r.magnitude()));
-        const double c = std::atan2(r.cross(d).magnitude(), -r.dot(d));
-        g[0] = c - (a + b);
-        g[1] = c - (b - a);
-    }
+    void values(double t, const double* y, double g[2]) const { boundaryFunctions(*forces_, epoch_, t, y, g); }
 
     const ForceModel::ForceModelSet* forces_;
     timesys::Instant epoch_;

@@ -36,7 +36,7 @@ const stripIncludes = (source) =>
 // transitively. They are emitted in dependency order and their cross-family
 // include lines removed, because a single translation unit resolves by ORDER.
 const ORDERED_FAMILIES = [
-  "RFM", "FRM", "PCE", "EVL", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD",
+  "RFM", "FRM", "PCE", "EVL", "PVN", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "MEM",
 ];
 const schemaHeaders = ORDERED_FAMILIES.map((family, index) =>
   index === 0 ? headers[family] : stripIncludes(headers[family]),
@@ -94,7 +94,7 @@ const sourceCode = [
   crosswalkHeader,
   eventLocator,
   ephemerisSource,
-  await createAccessEvaluatorSource({ acwHeader: headers.ACW }),
+  await createAccessEvaluatorSource({ acwHeader: stripIncludes(headers.ACW) }),
   implementationSource,
 ].join("\n\n");
 

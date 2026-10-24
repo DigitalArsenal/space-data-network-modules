@@ -1179,22 +1179,6 @@ int plugin_propagate_path_times(int entityIndex, double* timesPtr, int count,
 // Configuration (all increment g_configVersion to invalidate entity caches)
 // -----------------------------------------------------------------------------
 
-/// Set integrator type.
-/// 0=RK4, 1=RKF45, 2=RK78, 3=GaussJackson8, 4=Cowell, 5=Encke
-void plugin_set_integrator(int type) {
-    switch (type) {
-        case 0: g_integratorType = IntegrationMethod::RK4; break;
-        case 1: g_integratorType = IntegrationMethod::RKF45; break;
-        case 2: g_integratorType = IntegrationMethod::RK78; break;
-        case 3: g_integratorType = IntegrationMethod::GaussJackson8; break;
-        case 4: g_integratorType = IntegrationMethod::Cowell; break;
-        case 5: g_integratorType = IntegrationMethod::Encke; break;
-        default: g_integratorType = IntegrationMethod::RK78; break;
-    }
-    g_integratorConfig.method = g_integratorType;
-    g_configVersion++;
-}
-
 /// Load state vector from packed doubles (low-level API for STM/covariance).
 /// Input: [epochJD, rx, ry, rz, vx, vy, vz] in km, km/s (ECI/GCRF)
 void plugin_set_state(double* statePtr) {

@@ -1155,14 +1155,14 @@ int plugin_configure_catalog(const uint8_t* data, int bytes, const double* bstar
     if (!dynamics) return -1;
     const auto* actual = GetSizePrefixedPRW(inputs.configuration)->EXECUTION_REQUEST()->FORCES();
     const auto* standard = GetSizePrefixedPRW(catalogProfile)->EXECUTION_REQUEST()->FORCES();
-    std::unique_ptr<PRWForceConfigurationT> a(actual->UnPack()), b(standard->UnPack());
+    std::unique_ptr<PCFForceModelT> a(actual->UnPack()), b(standard->UnPack());
     // Coefficients are object data. The force/profile selection is invariant
     // under the B*-derived Cd*A/m and the catalog's Cr*A/m.
     a->DRAG_COEFFICIENT = b->DRAG_COEFFICIENT;
     a->REFLECTIVITY_COEFFICIENT = b->REFLECTIVITY_COEFFICIENT;
     flatbuffers::FlatBufferBuilder ab, bb;
-    ab.Finish(PRWForceConfiguration::Pack(ab, a.get()));
-    bb.Finish(PRWForceConfiguration::Pack(bb, b.get()));
+    ab.Finish(PCFForceModel::Pack(ab, a.get()));
+    bb.Finish(PCFForceModel::Pack(bb, b.get()));
     g_catalogProfile = ab.GetSize() == bb.GetSize() &&
         std::memcmp(ab.GetBufferPointer(), bb.GetBufferPointer(), ab.GetSize()) == 0 ? "FFM-1" : "custom";
     g_catalogBstars.assign(bstars, bstars + count);
@@ -1742,22 +1742,6 @@ int plugin_init_states_ecef(double* statesPtr, int count) {
 // -----------------------------------------------------------------------------
 // Configuration (all increment g_configVersion to invalidate entity caches)
 // -----------------------------------------------------------------------------
-
-/// Set integrator type.
-/// 0=RK4, 1=RKF45, 2=RK78, 3=GaussJackson8, 4=Cowell, 5=Encke
-void plugin_set_integrator(int type) {
-    switch (type) {
-        case 0: g_integratorType = IntegrationMethod::RK4; break;
-        case 1: g_integratorType = IntegrationMethod::RKF45; break;
-        case 2: g_integratorType = IntegrationMethod::RK78; break;
-        case 3: g_integratorType = IntegrationMethod::GaussJackson8; break;
-        case 4: g_integratorType = IntegrationMethod::Cowell; break;
-        case 5: g_integratorType = IntegrationMethod::Encke; break;
-        default: g_integratorType = IntegrationMethod::RK78; break;
-    }
-    g_integratorConfig.method = g_integratorType;
-    g_configVersion++;
-}
 
 /// Load state vector from packed doubles (low-level API for STM/covariance).
 /// Input: [epochJD, rx, ry, rz, vx, vy, vz] in km, km/s (ECI/GCRF)

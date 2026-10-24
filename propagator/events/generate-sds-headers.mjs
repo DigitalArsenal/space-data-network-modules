@@ -30,7 +30,7 @@ const standardsRoot = path.join(
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
 // Families this module references directly, plus their transitive includes.
-export const SCHEMA_FAMILIES = ["RFM", "FRM", "PCE", "EVL", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "ACW"];
+export const SCHEMA_FAMILIES = ["RFM", "FRM", "PCE", "EVL", "PVN", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "MEM", "ACW"];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];

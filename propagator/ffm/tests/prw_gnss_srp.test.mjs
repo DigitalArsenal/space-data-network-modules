@@ -42,8 +42,8 @@ test('PRW refuses radiation pressure selections that do not describe one model',
   const h = await harness(); t.after(() => h.destroy());
   const [boxWing, ecom] = [REFERENCE.cases.find((c) => c.model === 'boxwing'), REFERENCE.cases.find((c) => c.model === 'ecom2')];
   const refused = async (c, edit) => (await h.invoke({ methodId: 'invoke', inputs: inputs(c, edit) })).errorMessage ?? '';
-  assert.match(await refused(boxWing, (e) => { e.FORCES.GNSS_BLOCK = sds.prwGnssSpacecraftBlock.UNSPECIFIED; }), /GNSS_BOX_WING needs GNSS_BLOCK/);
-  assert.match(await refused(ecom, (e) => { e.FORCES.GNSS_BLOCK = sds.prwGnssSpacecraftBlock.GPS_IIF; }), /GNSS_BLOCK applies to/);
+  assert.match(await refused(boxWing, (e) => { e.FORCES.GNSS_BLOCK = sds.pcfGnssSpacecraftBlock.UNSPECIFIED; }), /GNSS_BOX_WING needs GNSS_BLOCK/);
+  assert.match(await refused(ecom, (e) => { e.FORCES.GNSS_BLOCK = sds.pcfGnssSpacecraftBlock.GPS_IIF; }), /GNSS_BLOCK applies to/);
   assert.match(await refused(boxWing, (e) => { e.FORCES.ENABLE_SRP = false; }), /set ENABLE_SRP/);
   assert.match(await refused(boxWing, (e) => { Object.assign(e, { INCLUDE_STM: true, DYNAMIC_PARAMETERS: [sds.prwDynamicParameter.SRP_AREA_OVER_MASS] }); }), /RADIATION_PRESSURE_MODEL must be CANNONBALL/);
   assert.match(await refused(boxWing, (e) => { Object.assign(e, { INCLUDE_STM: true, DYNAMIC_PARAMETERS: [sds.prwDynamicParameter.ECOM2_D0] }); }), /ECOM2 enabled/);

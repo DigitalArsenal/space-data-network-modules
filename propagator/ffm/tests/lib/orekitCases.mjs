@@ -83,17 +83,17 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
   exec.SAMPLE_EPOCHS = epochs.map(isoUtc);
   exec.TARGET_EPOCH = isoUtc(epochs.at(-1));
   // Forces added with PRW SDS 1.240.0.
-  if (c.relativity) exec.FORCES.RELATIVITY = [sds.prwRelativityTerms.NONE, sds.prwRelativityTerms.SCHWARZSCHILD, sds.prwRelativityTerms.IERS_2010][c.relativity];
-  if (c.solidTides) exec.FORCES.SOLID_TIDES = sds.prwSolidTideModel.IERS_2010;
+  if (c.relativity) exec.FORCES.RELATIVITY = [sds.pcfRelativityTerms.NONE, sds.pcfRelativityTerms.SCHWARZSCHILD, sds.pcfRelativityTerms.IERS_2010][c.relativity];
+  if (c.solidTides) exec.FORCES.SOLID_TIDES = sds.pcfSolidTideModel.IERS_2010;
   if (c.inTrackAccelerationMS2) Object.assign(exec.FORCES, { IN_TRACK_ACCELERATION_M_S2: c.inTrackAccelerationMS2, HAS_IN_TRACK_ACCELERATION_M_S2: true });
   if (c.dragAreaOverMassRateM2KgS) Object.assign(exec.FORCES, { DRAG_AREA_OVER_MASS_RATE_M2_KG_S: c.dragAreaOverMassRateM2KgS, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: true });
   if (c.spaceWeather === 'cssi') exec.FORCES.WEATHER = null;
-  if (c.atmosphere === 'JB2008') Object.assign(exec.FORCES, { ATMOSPHERE_MODEL: sds.prwAtmosphereFamily.JB2008, WEATHER: null });
+  if (c.atmosphere === 'JB2008') Object.assign(exec.FORCES, { ATMOSPHERE_MODEL: sds.pcfAtmosphereFamily.JB2008, WEATHER: null });
   if (c.tesseralDegree !== undefined) Object.assign(exec.FORCES, { MAXIMUM_TESSERAL_DEGREE: c.tesseralDegree, HAS_MAXIMUM_TESSERAL_DEGREE: true });
   // Forces added with PRW SDS 1.243.0: Knocke Earth radiation on the
   // cannonball's Cr*A/m, FES2004 ocean tides.
-  if (c.earthRadiation) Object.assign(exec.FORCES, { EARTH_RADIATION: sds.prwEarthRadiationModel.KNOCKE, EARTH_RADIATION_RESOLUTION_DEG: c.earthRadiationResolutionDeg });
-  if (c.oceanTidesDegree) Object.assign(exec.FORCES, { OCEAN_TIDES: sds.prwOceanTideModel.FES2004, OCEAN_TIDE_MAXIMUM_DEGREE: c.oceanTidesDegree, OCEAN_TIDE_MAXIMUM_ORDER: c.oceanTidesDegree });
+  if (c.earthRadiation) Object.assign(exec.FORCES, { EARTH_RADIATION: sds.pcfEarthRadiationModel.KNOCKE, EARTH_RADIATION_RESOLUTION_DEG: c.earthRadiationResolutionDeg });
+  if (c.oceanTidesDegree) Object.assign(exec.FORCES, { OCEAN_TIDES: sds.pcfOceanTideModel.FES2004, OCEAN_TIDE_MAXIMUM_DEGREE: c.oceanTidesDegree, OCEAN_TIDE_MAXIMUM_ORDER: c.oceanTidesDegree });
   // Jacobian cases: the STM with the VCM parameters appended, analytic, with
   // the density gradient (Orekit differentiates the density too).
   if (c.parameters) Object.assign(exec, {

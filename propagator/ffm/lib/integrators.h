@@ -491,8 +491,8 @@ StateVector RKF78(const StateVector& initialState, double dt,
                   const IntegratorConfig& config,
                   ForceModel::ForceModelSet& forceSet);
 
-/// RKDP87 - Dormand-Prince 8(7) adaptive step
-/// Higher-order variant with excellent stability
+/// RKDP87 - Prince and Dormand RK8(7)13M, one step (the pair is lib/rk_engine.h's). Its
+/// propagation, with those of DOPRI5, RK65, RKV98 and RKN1210, is PropagateEngine's.
 /// @param state Current state
 /// @param t Current time
 /// @param h Step size
@@ -501,18 +501,6 @@ StateVector RKF78(const StateVector& initialState, double dt,
 /// @return Step result
 StepResult RKDP87(const std::array<double, 6>& state, double t, double h,
                   DerivativeFunc deriv, void* params);
-
-/// RKDP87 adaptive propagation to target time
-/// @param initialState Initial Cartesian state
-/// @param targetTime Target time (seconds from epoch)
-/// @param config Integrator configuration
-/// @param deriv Derivative function
-/// @param params User parameters
-/// @return Propagation result
-PropagateResult RKDP87Propagate(const StateVector& initialState, double targetTime,
-                                const IntegratorConfig& config,
-                                DerivativeFunc deriv, void* params,
-                                shadow::BoundaryEvents* events = nullptr);
 
 /// Bulirsch-Stoer extrapolation method - single step
 /// Very high accuracy through polynomial/rational extrapolation
@@ -588,14 +576,6 @@ IntegratorState GaussJackson8Init(const StateVector& initialState, double h,
 /// @return Propagation result
 PropagateResult GaussJackson8Propagate(const StateVector& initialState, double targetTime,
                                         double h, DerivativeFunc deriv, void* params);
-
-/// Gauss-Jackson 12th order predictor-corrector
-/// Higher-order variant for increased accuracy
-/// @param state Integrator state with history
-/// @param deriv Derivative function
-/// @param params User parameters
-/// @return Step result
-StepResult GaussJackson12(IntegratorState& state, DerivativeFunc deriv, void* params);
 
 // -----------------------------------------------------------------------------
 // Gauss VOP - Classical Keplerian Element Variation of Parameters

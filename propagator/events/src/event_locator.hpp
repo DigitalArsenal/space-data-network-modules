@@ -45,6 +45,12 @@ constexpr double kPi = 3.14159265358979323846264338327950288;
 /// Speed of light in vacuum, m/s. Exact by the SI definition of the metre.
 constexpr double kSpeedOfLight = 299792458.0;
 
+/// An angle wrapped to (-pi, pi].
+inline double wrapPi(double x) {
+  const double twoPi = 2.0 * kPi;
+  return x - twoPi * std::floor(x / twoPi + 0.5);
+}
+
 // ---------------------------------------------------------------------------
 // The state source — THE port.
 //
@@ -208,6 +214,17 @@ inline bool brentRoot(Fn evaluate, double lower, double upper, double gLower, do
   return false;
 }
 
+/// Does g go through zero between `previous` and `value`, and which way? `jumpLimit` > 0
+/// names a periodic function: a change larger than the limit is its wrap, not a crossing.
+inline bool crossing(double previous, double value, double jumpLimit, Direction* direction) {
+  const bool up = previous < 0.0 && value >= 0.0;
+  const bool down = previous > 0.0 && value <= 0.0;
+  if (!up && !down) return false;
+  if (jumpLimit > 0.0 && std::fabs(value - previous) > jumpLimit) return false;
+  if (direction != nullptr) *direction = up ? Direction::INCREASING : Direction::DECREASING;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // The runner.
 // ---------------------------------------------------------------------------
@@ -224,6 +241,10 @@ struct ScanRequest {
   /// Stop after this many events. Zero means "every event in the span"; one is
   /// the propagate-to-condition case.
   int32_t maxEvents = 0;
+  /// Positive for a PERIODIC event function (an angle wrapped to (-pi, pi]): a change of g
+  /// across one scan step larger than this is the wrap, not a crossing, and is not refined.
+  /// Zero for a function without a wrap.
+  double jumpLimit = 0.0;
 };
 
 /// Locate every sign change of `eventFunction` over the request's span.
@@ -288,9 +309,11 @@ inline Status scan(StateSourceFn stateSource, void* stateContext, EventFn eventF
       return sourceRefused ? Status::STATE_SOURCE_REFUSED : Status::EVENT_FUNCTION_REFUSED;
     }
 
-    const bool crossed = (previousValue < 0.0 && value >= 0.0) ||
-                         (previousValue > 0.0 && value <= 0.0) ||
-                         (previousValue == 0.0 && value != 0.0);
+    const bool crossed = ((previousValue < 0.0 && value >= 0.0) ||
+                          (previousValue > 0.0 && value <= 0.0) ||
+                          (previousValue == 0.0 && value != 0.0)) &&
+                         !(request.jumpLimit > 0.0 &&
+                           std::fabs(value - previousValue) > request.jumpLimit);
     if (crossed) {
       // The crossing direction is a property of the EVENT, in forward time, not
       // of the order the scan happened to visit the interval in. On a backward
@@ -659,6 +682,10 @@ struct StoppingContext {
   ScalarFn scalar = nullptr;
   void* scalarContext = nullptr;
   double goal = 0.0;
+  /// The scalar is an angle that wraps (a true anomaly, a node): g is then the angle minus the
+  /// goal wrapped to (-pi, pi], and the scan must refuse the wrap's jump (ScanRequest.jumpLimit =
+  /// pi). Without it the wrap itself would be reported as a crossing.
+  bool periodic = false;
 };
 
 inline int32_t stoppingFunction(void* context, double secondsFromEpoch, const double state[6],
@@ -669,7 +696,99 @@ inline int32_t stoppingFunction(void* context, double secondsFromEpoch, const do
   if (stopping->scalar(stopping->scalarContext, secondsFromEpoch, state, &value) != 0) {
     return 1;
   }
-  *g = value - stopping->goal;
+  *g = stopping->periodic ? wrapPi(value - stopping->goal) : value - stopping->goal;
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// LOCATOR 7 — an orbital angle reaches a target.
+//
+// g is the true anomaly (or the argument of latitude) minus the target, wrapped to
+// (-pi, pi]. The wrap is a jump of 2 pi at the antipode of the target, which is not a root:
+// a caller passes jumpLimit = pi (ScanRequest.jumpLimit) and the runner refuses it. The
+// angle is a property of the osculating conic of the state, in whatever units the state and
+// the gravitational parameter share; a circular orbit has no true anomaly and an
+// equatorial one no node, and both refuse rather than return an invented angle.
+// ---------------------------------------------------------------------------
+
+struct OrbitAngleContext {
+  /// Gravitational parameter, in the units of the state (m^3/s^2 for metres, km^3/s^2 for
+  /// kilometres).
+  double mu = 0.0;
+  /// The pole the argument of latitude is measured about.
+  double pole[3] = {0.0, 0.0, 1.0};
+  /// The target angle, radians.
+  double target = 0.0;
+  /// The argument of latitude when true, else the true anomaly.
+  bool argumentOfLatitude = false;
+};
+
+/// The osculating true anomaly, radians in (-pi, pi], or false for a state without one.
+inline bool osculatingTrueAnomaly(const double state[6], double mu, double* anomaly) {
+  const detail::V3 r = detail::of(state);
+  const detail::V3 v = detail::of(state + 3);
+  const detail::V3 h = detail::cross(r, v);
+  const double rMagnitude = detail::norm(r);
+  if (!(mu > 0.0) || !(rMagnitude > 0.0) || !(detail::norm(h) > 0.0)) return false;
+  const detail::V3 eccentricity =
+      detail::sub(detail::scale(detail::cross(v, h), 1.0 / mu), detail::scale(r, 1.0 / rMagnitude));
+  const double e = detail::norm(eccentricity);
+  if (!(e > 1e-9)) return false;
+  const detail::V3 p = detail::scale(eccentricity, 1.0 / e);
+  const detail::V3 q = detail::cross(detail::unit(h), p);
+  *anomaly = std::atan2(detail::dot(r, q), detail::dot(r, p));
+  return true;
+}
+
+/// The osculating argument of latitude about `pole`, radians in (-pi, pi].
+inline bool osculatingArgumentOfLatitude(const double state[6], const double pole[3],
+                                         double* argument) {
+  const detail::V3 r = detail::of(state);
+  const detail::V3 v = detail::of(state + 3);
+  const detail::V3 h = detail::unit(detail::cross(r, v));
+  const detail::V3 node = detail::cross(detail::of(pole), h);
+  if (!(detail::norm(node) > 1e-9) || !(detail::norm(h) > 0.0)) return false;
+  const detail::V3 n = detail::unit(node);
+  *argument = std::atan2(detail::dot(detail::cross(n, r), h), detail::dot(n, r));
+  return true;
+}
+
+inline int32_t orbitAngleFunction(void* context, double /*secondsFromEpoch*/,
+                                  const double state[6], double* g) {
+  const OrbitAngleContext* angle = static_cast<const OrbitAngleContext*>(context);
+  if (angle == nullptr || g == nullptr) return 1;
+  double value = 0.0;
+  const bool ok = angle->argumentOfLatitude
+                      ? osculatingArgumentOfLatitude(state, angle->pole, &value)
+                      : osculatingTrueAnomaly(state, angle->mu, &value);
+  if (!ok) return 1;
+  *g = wrapPi(value - angle->target);
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// LOCATOR 8 — a maximum or minimum of the geocentric latitude.
+//
+// sin(latitude) = z / r with z along the pole, so its rate is (zdot r^2 - z (r . v)) / r^3
+// and the extremum is the zero of g = zdot r^2 - z (r . v). The rate falls through zero at
+// a maximum (DECREASING) and rises through it at a minimum (INCREASING). No catalog
+// parameter is this rate, so the extremum is a locator of its own.
+// ---------------------------------------------------------------------------
+
+struct PoleContext {
+  double pole[3] = {0.0, 0.0, 1.0};
+};
+
+inline int32_t latitudeRateFunction(void* context, double /*secondsFromEpoch*/,
+                                    const double state[6], double* g) {
+  const PoleContext* axes = static_cast<const PoleContext*>(context);
+  if (axes == nullptr || g == nullptr) return 1;
+  const detail::V3 r = detail::of(state);
+  const detail::V3 v = detail::of(state + 3);
+  const detail::V3 pole = detail::unit(detail::of(axes->pole));
+  const double z = detail::dot(r, pole);
+  const double zRate = detail::dot(v, pole);
+  *g = zRate * detail::dot(r, r) - z * detail::dot(r, v);
   return 0;
 }
 

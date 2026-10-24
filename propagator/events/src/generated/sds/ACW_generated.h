@@ -13,6 +13,9 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "MEM_generated.h"
+#include "EOP_generated.h"
+
 struct ACWStateSample;
 struct ACWStateSampleBuilder;
 struct ACWStateSampleT;
@@ -45,6 +48,26 @@ struct ACWObserverTrajectory;
 struct ACWObserverTrajectoryBuilder;
 struct ACWObserverTrajectoryT;
 
+struct ACWTargetSignature;
+struct ACWTargetSignatureBuilder;
+struct ACWTargetSignatureT;
+
+struct ACWTarget;
+struct ACWTargetBuilder;
+struct ACWTargetT;
+
+struct ACWSensor;
+struct ACWSensorBuilder;
+struct ACWSensorT;
+
+struct ACWSensorAccess;
+struct ACWSensorAccessBuilder;
+struct ACWSensorAccessT;
+
+struct ACWTrack;
+struct ACWTrackBuilder;
+struct ACWTrackT;
+
 struct ACWRequest;
 struct ACWRequestBuilder;
 struct ACWRequestT;
@@ -65,29 +88,40 @@ enum acwOperationCode : int8_t {
   acwOperationCode_UNKNOWN = 0,
   /// Compute access windows from pre-sampled target Cartesian states.
   acwOperationCode_COMPUTE_ACCESS_WINDOWS = 1,
+  /// Simulate sensor observations of TARGETS by SENSORS: schedule tracks
+  /// inside the ACCESS windows (computed per sensor and target by
+  /// COMPUTE_ACCESS_WINDOWS with that sensor's constraints), generate each
+  /// measurement from the
+  /// truth states with its MEMErrorModel noise and bias, apply the detection
+  /// test, and add false alarms. The observations are emitted as separate
+  /// $RDO (RADAR), $EOO (OPTICAL, LASER_RANGING) and $RFO (PASSIVE_RF)
+  /// records; the result lists the tracks.
+  acwOperationCode_SIMULATE_OBSERVATIONS = 2,
   acwOperationCode_MIN = acwOperationCode_UNKNOWN,
-  acwOperationCode_MAX = acwOperationCode_COMPUTE_ACCESS_WINDOWS
+  acwOperationCode_MAX = acwOperationCode_SIMULATE_OBSERVATIONS
 };
 
-inline const acwOperationCode (&EnumValuesacwOperationCode())[2] {
+inline const acwOperationCode (&EnumValuesacwOperationCode())[3] {
   static const acwOperationCode values[] = {
     acwOperationCode_UNKNOWN,
-    acwOperationCode_COMPUTE_ACCESS_WINDOWS
+    acwOperationCode_COMPUTE_ACCESS_WINDOWS,
+    acwOperationCode_SIMULATE_OBSERVATIONS
   };
   return values;
 }
 
 inline const char * const *EnumNamesacwOperationCode() {
-  static const char * const names[3] = {
+  static const char * const names[4] = {
     "UNKNOWN",
     "COMPUTE_ACCESS_WINDOWS",
+    "SIMULATE_OBSERVATIONS",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameacwOperationCode(acwOperationCode e) {
-  if (::flatbuffers::IsOutRange(e, acwOperationCode_UNKNOWN, acwOperationCode_COMPUTE_ACCESS_WINDOWS)) return "";
+  if (::flatbuffers::IsOutRange(e, acwOperationCode_UNKNOWN, acwOperationCode_SIMULATE_OBSERVATIONS)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesacwOperationCode()[index];
 }
@@ -334,12 +368,61 @@ inline const char *EnumNameacwLightingCondition(acwLightingCondition e) {
   return EnumNamesacwLightingCondition()[index];
 }
 
+/// Sensing phenomenology of a simulated sensor.
+enum acwSensorPhenomenology : uint8_t {
+  acwSensorPhenomenology_UNSPECIFIED = 0,
+  /// Monostatic radar: range, range rate, two-way Doppler, azimuth,
+  /// elevation.
+  acwSensorPhenomenology_RADAR = 1,
+  /// Passive optical: right ascension and declination, magnitude.
+  acwSensorPhenomenology_OPTICAL = 2,
+  /// Passive RF: angles and the received (one-way) frequency of a target's
+  /// emitter.
+  acwSensorPhenomenology_PASSIVE_RF = 3,
+  /// Satellite laser ranging: two-way range.
+  acwSensorPhenomenology_LASER_RANGING = 4,
+  acwSensorPhenomenology_MIN = acwSensorPhenomenology_UNSPECIFIED,
+  acwSensorPhenomenology_MAX = acwSensorPhenomenology_LASER_RANGING
+};
+
+inline const acwSensorPhenomenology (&EnumValuesacwSensorPhenomenology())[5] {
+  static const acwSensorPhenomenology values[] = {
+    acwSensorPhenomenology_UNSPECIFIED,
+    acwSensorPhenomenology_RADAR,
+    acwSensorPhenomenology_OPTICAL,
+    acwSensorPhenomenology_PASSIVE_RF,
+    acwSensorPhenomenology_LASER_RANGING
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesacwSensorPhenomenology() {
+  static const char * const names[6] = {
+    "UNSPECIFIED",
+    "RADAR",
+    "OPTICAL",
+    "PASSIVE_RF",
+    "LASER_RANGING",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameacwSensorPhenomenology(acwSensorPhenomenology e) {
+  if (::flatbuffers::IsOutRange(e, acwSensorPhenomenology_UNSPECIFIED, acwSensorPhenomenology_LASER_RANGING)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesacwSensorPhenomenology()[index];
+}
+
 struct ACWStateSampleT : public ::flatbuffers::NativeTable {
   typedef ACWStateSample TableType;
   double JULIAN_DATE_TT = 0.0;
   double POSITION_X_M = 0.0;
   double POSITION_Y_M = 0.0;
   double POSITION_Z_M = 0.0;
+  double VELOCITY_X_MPS = 0.0;
+  double VELOCITY_Y_MPS = 0.0;
+  double VELOCITY_Z_MPS = 0.0;
 };
 
 /// Target Cartesian state sample in an Earth-fixed frame.
@@ -350,7 +433,10 @@ struct ACWStateSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_JULIAN_DATE_TT = 4,
     VT_POSITION_X_M = 6,
     VT_POSITION_Y_M = 8,
-    VT_POSITION_Z_M = 10
+    VT_POSITION_Z_M = 10,
+    VT_VELOCITY_X_MPS = 12,
+    VT_VELOCITY_Y_MPS = 14,
+    VT_VELOCITY_Z_MPS = 16
   };
   /// Sample epoch as Julian Date in TT.
   double JULIAN_DATE_TT() const {
@@ -368,6 +454,17 @@ struct ACWStateSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double POSITION_Z_M() const {
     return GetField<double>(VT_POSITION_Z_M, 0.0);
   }
+  /// Earth-fixed velocity, meters per second. Required for range-rate,
+  /// Doppler and frequency measurements (SIMULATE_OBSERVATIONS).
+  double VELOCITY_X_MPS() const {
+    return GetField<double>(VT_VELOCITY_X_MPS, 0.0);
+  }
+  double VELOCITY_Y_MPS() const {
+    return GetField<double>(VT_VELOCITY_Y_MPS, 0.0);
+  }
+  double VELOCITY_Z_MPS() const {
+    return GetField<double>(VT_VELOCITY_Z_MPS, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -375,6 +472,9 @@ struct ACWStateSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_POSITION_X_M, 8) &&
            VerifyField<double>(verifier, VT_POSITION_Y_M, 8) &&
            VerifyField<double>(verifier, VT_POSITION_Z_M, 8) &&
+           VerifyField<double>(verifier, VT_VELOCITY_X_MPS, 8) &&
+           VerifyField<double>(verifier, VT_VELOCITY_Y_MPS, 8) &&
+           VerifyField<double>(verifier, VT_VELOCITY_Z_MPS, 8) &&
            verifier.EndTable();
   }
   ACWStateSampleT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -398,6 +498,15 @@ struct ACWStateSampleBuilder {
   void add_POSITION_Z_M(double POSITION_Z_M) {
     fbb_.AddElement<double>(ACWStateSample::VT_POSITION_Z_M, POSITION_Z_M, 0.0);
   }
+  void add_VELOCITY_X_MPS(double VELOCITY_X_MPS) {
+    fbb_.AddElement<double>(ACWStateSample::VT_VELOCITY_X_MPS, VELOCITY_X_MPS, 0.0);
+  }
+  void add_VELOCITY_Y_MPS(double VELOCITY_Y_MPS) {
+    fbb_.AddElement<double>(ACWStateSample::VT_VELOCITY_Y_MPS, VELOCITY_Y_MPS, 0.0);
+  }
+  void add_VELOCITY_Z_MPS(double VELOCITY_Z_MPS) {
+    fbb_.AddElement<double>(ACWStateSample::VT_VELOCITY_Z_MPS, VELOCITY_Z_MPS, 0.0);
+  }
   explicit ACWStateSampleBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -414,8 +523,14 @@ inline ::flatbuffers::Offset<ACWStateSample> CreateACWStateSample(
     double JULIAN_DATE_TT = 0.0,
     double POSITION_X_M = 0.0,
     double POSITION_Y_M = 0.0,
-    double POSITION_Z_M = 0.0) {
+    double POSITION_Z_M = 0.0,
+    double VELOCITY_X_MPS = 0.0,
+    double VELOCITY_Y_MPS = 0.0,
+    double VELOCITY_Z_MPS = 0.0) {
   ACWStateSampleBuilder builder_(_fbb);
+  builder_.add_VELOCITY_Z_MPS(VELOCITY_Z_MPS);
+  builder_.add_VELOCITY_Y_MPS(VELOCITY_Y_MPS);
+  builder_.add_VELOCITY_X_MPS(VELOCITY_X_MPS);
   builder_.add_POSITION_Z_M(POSITION_Z_M);
   builder_.add_POSITION_Y_M(POSITION_Y_M);
   builder_.add_POSITION_X_M(POSITION_X_M);
@@ -1207,6 +1322,820 @@ inline ::flatbuffers::Offset<ACWObserverTrajectory> CreateACWObserverTrajectoryD
 
 ::flatbuffers::Offset<ACWObserverTrajectory> CreateACWObserverTrajectory(::flatbuffers::FlatBufferBuilder &_fbb, const ACWObserverTrajectoryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct ACWTargetSignatureT : public ::flatbuffers::NativeTable {
+  typedef ACWTargetSignature TableType;
+  double RCS_M2 = 0.0;
+  double DIAMETER_M = 0.0;
+  double GEOMETRIC_ALBEDO = 0.0;
+  double EMITTER_FREQUENCY_HZ = 0.0;
+  double EMITTER_EIRP_DBW = 0.0;
+};
+
+/// Observable signature of a simulated target.
+struct ACWTargetSignature FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ACWTargetSignatureT NativeTableType;
+  typedef ACWTargetSignatureBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_RCS_M2 = 4,
+    VT_DIAMETER_M = 6,
+    VT_GEOMETRIC_ALBEDO = 8,
+    VT_EMITTER_FREQUENCY_HZ = 10,
+    VT_EMITTER_EIRP_DBW = 12
+  };
+  /// Radar cross-section, square meters (RADAR).
+  double RCS_M2() const {
+    return GetField<double>(VT_RCS_M2, 0.0);
+  }
+  /// Diameter, meters, and geometric albedo of the diffuse sphere that sets
+  /// the magnitude, in the band of EOO.MAG (OPTICAL).
+  double DIAMETER_M() const {
+    return GetField<double>(VT_DIAMETER_M, 0.0);
+  }
+  double GEOMETRIC_ALBEDO() const {
+    return GetField<double>(VT_GEOMETRIC_ALBEDO, 0.0);
+  }
+  /// Emitter carrier frequency, hertz, and EIRP toward the sensor, dBW
+  /// (PASSIVE_RF). A frequency of 0 means the target does not emit.
+  double EMITTER_FREQUENCY_HZ() const {
+    return GetField<double>(VT_EMITTER_FREQUENCY_HZ, 0.0);
+  }
+  double EMITTER_EIRP_DBW() const {
+    return GetField<double>(VT_EMITTER_EIRP_DBW, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_RCS_M2, 8) &&
+           VerifyField<double>(verifier, VT_DIAMETER_M, 8) &&
+           VerifyField<double>(verifier, VT_GEOMETRIC_ALBEDO, 8) &&
+           VerifyField<double>(verifier, VT_EMITTER_FREQUENCY_HZ, 8) &&
+           VerifyField<double>(verifier, VT_EMITTER_EIRP_DBW, 8) &&
+           verifier.EndTable();
+  }
+  ACWTargetSignatureT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ACWTargetSignatureT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ACWTargetSignature> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetSignatureT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ACWTargetSignatureBuilder {
+  typedef ACWTargetSignature Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_RCS_M2(double RCS_M2) {
+    fbb_.AddElement<double>(ACWTargetSignature::VT_RCS_M2, RCS_M2, 0.0);
+  }
+  void add_DIAMETER_M(double DIAMETER_M) {
+    fbb_.AddElement<double>(ACWTargetSignature::VT_DIAMETER_M, DIAMETER_M, 0.0);
+  }
+  void add_GEOMETRIC_ALBEDO(double GEOMETRIC_ALBEDO) {
+    fbb_.AddElement<double>(ACWTargetSignature::VT_GEOMETRIC_ALBEDO, GEOMETRIC_ALBEDO, 0.0);
+  }
+  void add_EMITTER_FREQUENCY_HZ(double EMITTER_FREQUENCY_HZ) {
+    fbb_.AddElement<double>(ACWTargetSignature::VT_EMITTER_FREQUENCY_HZ, EMITTER_FREQUENCY_HZ, 0.0);
+  }
+  void add_EMITTER_EIRP_DBW(double EMITTER_EIRP_DBW) {
+    fbb_.AddElement<double>(ACWTargetSignature::VT_EMITTER_EIRP_DBW, EMITTER_EIRP_DBW, 0.0);
+  }
+  explicit ACWTargetSignatureBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ACWTargetSignature> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ACWTargetSignature>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ACWTargetSignature> CreateACWTargetSignature(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double RCS_M2 = 0.0,
+    double DIAMETER_M = 0.0,
+    double GEOMETRIC_ALBEDO = 0.0,
+    double EMITTER_FREQUENCY_HZ = 0.0,
+    double EMITTER_EIRP_DBW = 0.0) {
+  ACWTargetSignatureBuilder builder_(_fbb);
+  builder_.add_EMITTER_EIRP_DBW(EMITTER_EIRP_DBW);
+  builder_.add_EMITTER_FREQUENCY_HZ(EMITTER_FREQUENCY_HZ);
+  builder_.add_GEOMETRIC_ALBEDO(GEOMETRIC_ALBEDO);
+  builder_.add_DIAMETER_M(DIAMETER_M);
+  builder_.add_RCS_M2(RCS_M2);
+  return builder_.Finish();
+}
+
+::flatbuffers::Offset<ACWTargetSignature> CreateACWTargetSignature(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetSignatureT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ACWTargetT : public ::flatbuffers::NativeTable {
+  typedef ACWTarget TableType;
+  std::string TARGET_ID{};
+  uint32_t NORAD_CAT_ID = 0;
+  std::string OBJECT_ID{};
+  std::vector<std::unique_ptr<ACWStateSampleT>> STATES{};
+  std::unique_ptr<ACWTargetSignatureT> SIGNATURE{};
+  ACWTargetT() = default;
+  ACWTargetT(const ACWTargetT &o);
+  ACWTargetT(ACWTargetT&&) FLATBUFFERS_NOEXCEPT = default;
+  ACWTargetT &operator=(ACWTargetT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One simulated target: truth states and signature.
+struct ACWTarget FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ACWTargetT NativeTableType;
+  typedef ACWTargetBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TARGET_ID = 4,
+    VT_NORAD_CAT_ID = 6,
+    VT_OBJECT_ID = 8,
+    VT_STATES = 10,
+    VT_SIGNATURE = 12
+  };
+  const ::flatbuffers::String *TARGET_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_ID);
+  }
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
+  }
+  /// International designator.
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  }
+  /// Truth Earth-fixed states with velocity, in the frame and time scale of
+  /// ACWRequest.STATES.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>> *STATES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>> *>(VT_STATES);
+  }
+  const ACWTargetSignature *SIGNATURE() const {
+    return GetPointer<const ACWTargetSignature *>(VT_SIGNATURE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_TARGET_ID) &&
+           verifier.VerifyString(TARGET_ID()) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
+           VerifyOffset(verifier, VT_OBJECT_ID) &&
+           verifier.VerifyString(OBJECT_ID()) &&
+           VerifyOffset(verifier, VT_STATES) &&
+           verifier.VerifyVector(STATES()) &&
+           verifier.VerifyVectorOfTables(STATES()) &&
+           VerifyOffset(verifier, VT_SIGNATURE) &&
+           verifier.VerifyTable(SIGNATURE()) &&
+           verifier.EndTable();
+  }
+  ACWTargetT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ACWTargetT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ACWTarget> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ACWTargetBuilder {
+  typedef ACWTarget Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TARGET_ID(::flatbuffers::Offset<::flatbuffers::String> TARGET_ID) {
+    fbb_.AddOffset(ACWTarget::VT_TARGET_ID, TARGET_ID);
+  }
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(ACWTarget::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
+  }
+  void add_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID) {
+    fbb_.AddOffset(ACWTarget::VT_OBJECT_ID, OBJECT_ID);
+  }
+  void add_STATES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>>> STATES) {
+    fbb_.AddOffset(ACWTarget::VT_STATES, STATES);
+  }
+  void add_SIGNATURE(::flatbuffers::Offset<ACWTargetSignature> SIGNATURE) {
+    fbb_.AddOffset(ACWTarget::VT_SIGNATURE, SIGNATURE);
+  }
+  explicit ACWTargetBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ACWTarget> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ACWTarget>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ACWTarget> CreateACWTarget(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_ID = 0,
+    uint32_t NORAD_CAT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>>> STATES = 0,
+    ::flatbuffers::Offset<ACWTargetSignature> SIGNATURE = 0) {
+  ACWTargetBuilder builder_(_fbb);
+  builder_.add_SIGNATURE(SIGNATURE);
+  builder_.add_STATES(STATES);
+  builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
+  builder_.add_TARGET_ID(TARGET_ID);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<ACWTarget> CreateACWTargetDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *TARGET_ID = nullptr,
+    uint32_t NORAD_CAT_ID = 0,
+    const char *OBJECT_ID = nullptr,
+    const std::vector<::flatbuffers::Offset<ACWStateSample>> *STATES = nullptr,
+    ::flatbuffers::Offset<ACWTargetSignature> SIGNATURE = 0) {
+  auto TARGET_ID__ = TARGET_ID ? _fbb.CreateString(TARGET_ID) : 0;
+  auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
+  auto STATES__ = STATES ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>>(*STATES) : 0;
+  return CreateACWTarget(
+      _fbb,
+      TARGET_ID__,
+      NORAD_CAT_ID,
+      OBJECT_ID__,
+      STATES__,
+      SIGNATURE);
+}
+
+::flatbuffers::Offset<ACWTarget> CreateACWTarget(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ACWSensorT : public ::flatbuffers::NativeTable {
+  typedef ACWSensor TableType;
+  std::string SENSOR_ID{};
+  std::string HOST_ID{};
+  acwSensorPhenomenology PHENOMENOLOGY = acwSensorPhenomenology_UNSPECIFIED;
+  std::vector<std::unique_ptr<MEMErrorModelT>> ERROR_MODELS{};
+  std::unique_ptr<ACWConstraintSetT> CONSTRAINTS{};
+  double OBSERVATION_INTERVAL_S = 0.0;
+  double TRACK_DURATION_S = 0.0;
+  double REVISIT_INTERVAL_S = 0.0;
+  uint32_t MAX_SIMULTANEOUS_TRACKS = 1;
+  double REFERENCE_SNR_DB = 0.0;
+  double REFERENCE_RANGE_M = 0.0;
+  double REFERENCE_RCS_M2 = 1.0;
+  double DETECTION_THRESHOLD_DB = 0.0;
+  double RECEIVER_G_OVER_T_DB_PER_K = 0.0;
+  double RECEIVER_BANDWIDTH_HZ = 0.0;
+  double LIMITING_MAGNITUDE = 0.0;
+  double MAX_HOST_SUN_ELEVATION_RAD = 0.0;
+  double FALSE_ALARM_RATE_PER_HOUR = 0.0;
+  double TRANSMIT_FREQUENCY_HZ = 0.0;
+  ACWSensorT() = default;
+  ACWSensorT(const ACWSensorT &o);
+  ACWSensorT(ACWSensorT&&) FLATBUFFERS_NOEXCEPT = default;
+  ACWSensorT &operator=(ACWSensorT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// A simulated sensor hosted by a ground station or an observer trajectory.
+struct ACWSensor FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ACWSensorT NativeTableType;
+  typedef ACWSensorBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SENSOR_ID = 4,
+    VT_HOST_ID = 6,
+    VT_PHENOMENOLOGY = 8,
+    VT_ERROR_MODELS = 10,
+    VT_CONSTRAINTS = 12,
+    VT_OBSERVATION_INTERVAL_S = 14,
+    VT_TRACK_DURATION_S = 16,
+    VT_REVISIT_INTERVAL_S = 18,
+    VT_MAX_SIMULTANEOUS_TRACKS = 20,
+    VT_REFERENCE_SNR_DB = 22,
+    VT_REFERENCE_RANGE_M = 24,
+    VT_REFERENCE_RCS_M2 = 26,
+    VT_DETECTION_THRESHOLD_DB = 28,
+    VT_RECEIVER_G_OVER_T_DB_PER_K = 30,
+    VT_RECEIVER_BANDWIDTH_HZ = 32,
+    VT_LIMITING_MAGNITUDE = 34,
+    VT_MAX_HOST_SUN_ELEVATION_RAD = 36,
+    VT_FALSE_ALARM_RATE_PER_HOUR = 38,
+    VT_TRANSMIT_FREQUENCY_HZ = 40
+  };
+  const ::flatbuffers::String *SENSOR_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SENSOR_ID);
+  }
+  /// ACWGroundStation.STATION_ID or ACWObserverTrajectory.OBSERVER_ID of the
+  /// host.
+  const ::flatbuffers::String *HOST_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_HOST_ID);
+  }
+  acwSensorPhenomenology PHENOMENOLOGY() const {
+    return static_cast<acwSensorPhenomenology>(GetField<uint8_t>(VT_PHENOMENOLOGY, 0));
+  }
+  /// The measurements each observation carries, one error model per
+  /// measurement type (noise, bias, bias uncertainty, correlation time,
+  /// media and light-time options).
+  const ::flatbuffers::Vector<::flatbuffers::Offset<MEMErrorModel>> *ERROR_MODELS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<MEMErrorModel>> *>(VT_ERROR_MODELS);
+  }
+  /// Visibility for this sensor, the constraints its ACCESS windows were
+  /// computed with. When absent, ACWRequest.CONSTRAINTS apply.
+  const ACWConstraintSet *CONSTRAINTS() const {
+    return GetPointer<const ACWConstraintSet *>(VT_CONSTRAINTS);
+  }
+  /// Seconds between observations within a track.
+  double OBSERVATION_INTERVAL_S() const {
+    return GetField<double>(VT_OBSERVATION_INTERVAL_S, 0.0);
+  }
+  /// Longest track, seconds; 0 tracks the whole access window.
+  double TRACK_DURATION_S() const {
+    return GetField<double>(VT_TRACK_DURATION_S, 0.0);
+  }
+  /// Shortest time between the end of one track of a target and the start
+  /// of the next, seconds.
+  double REVISIT_INTERVAL_S() const {
+    return GetField<double>(VT_REVISIT_INTERVAL_S, 0.0);
+  }
+  /// Targets tracked at once.
+  uint32_t MAX_SIMULTANEOUS_TRACKS() const {
+    return GetField<uint32_t>(VT_MAX_SIMULTANEOUS_TRACKS, 1);
+  }
+  /// RADAR: signal-to-noise ratio, dB, of a REFERENCE_RCS_M2 target at
+  /// REFERENCE_RANGE_M; SNR scales with RCS and with range to the -4th power.
+  double REFERENCE_SNR_DB() const {
+    return GetField<double>(VT_REFERENCE_SNR_DB, 0.0);
+  }
+  double REFERENCE_RANGE_M() const {
+    return GetField<double>(VT_REFERENCE_RANGE_M, 0.0);
+  }
+  double REFERENCE_RCS_M2() const {
+    return GetField<double>(VT_REFERENCE_RCS_M2, 1.0);
+  }
+  /// RADAR and PASSIVE_RF: smallest detected signal-to-noise ratio, dB.
+  double DETECTION_THRESHOLD_DB() const {
+    return GetField<double>(VT_DETECTION_THRESHOLD_DB, 0.0);
+  }
+  /// PASSIVE_RF: receiver figure of merit, dB/K, and noise bandwidth, hertz.
+  double RECEIVER_G_OVER_T_DB_PER_K() const {
+    return GetField<double>(VT_RECEIVER_G_OVER_T_DB_PER_K, 0.0);
+  }
+  double RECEIVER_BANDWIDTH_HZ() const {
+    return GetField<double>(VT_RECEIVER_BANDWIDTH_HZ, 0.0);
+  }
+  /// OPTICAL: faintest magnitude detected, in the band of EOO.MAG; 0 applies
+  /// no magnitude limit.
+  double LIMITING_MAGNITUDE() const {
+    return GetField<double>(VT_LIMITING_MAGNITUDE, 0.0);
+  }
+  /// OPTICAL: highest Sun elevation at the host for a detection, radians
+  /// (ground-based darkness); requires SUN_STATES. Observations scheduled
+  /// in brighter sky are lost.
+  double MAX_HOST_SUN_ELEVATION_RAD() const {
+    return GetField<double>(VT_MAX_HOST_SUN_ELEVATION_RAD, 0.0);
+  }
+  /// Uncorrelated detections per hour of tracking, reported with UCT set.
+  double FALSE_ALARM_RATE_PER_HOUR() const {
+    return GetField<double>(VT_FALSE_ALARM_RATE_PER_HOUR, 0.0);
+  }
+  /// RADAR: transmitted carrier frequency, hertz. A DOPPLER error model
+  /// measures the echo's two-way shift relative to it, reported as $RDO
+  /// DOPPLER with DOPPLER_FREQUENCY set to this value.
+  double TRANSMIT_FREQUENCY_HZ() const {
+    return GetField<double>(VT_TRANSMIT_FREQUENCY_HZ, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_SENSOR_ID) &&
+           verifier.VerifyString(SENSOR_ID()) &&
+           VerifyOffset(verifier, VT_HOST_ID) &&
+           verifier.VerifyString(HOST_ID()) &&
+           VerifyField<uint8_t>(verifier, VT_PHENOMENOLOGY, 1) &&
+           VerifyOffset(verifier, VT_ERROR_MODELS) &&
+           verifier.VerifyVector(ERROR_MODELS()) &&
+           verifier.VerifyVectorOfTables(ERROR_MODELS()) &&
+           VerifyOffset(verifier, VT_CONSTRAINTS) &&
+           verifier.VerifyTable(CONSTRAINTS()) &&
+           VerifyField<double>(verifier, VT_OBSERVATION_INTERVAL_S, 8) &&
+           VerifyField<double>(verifier, VT_TRACK_DURATION_S, 8) &&
+           VerifyField<double>(verifier, VT_REVISIT_INTERVAL_S, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MAX_SIMULTANEOUS_TRACKS, 4) &&
+           VerifyField<double>(verifier, VT_REFERENCE_SNR_DB, 8) &&
+           VerifyField<double>(verifier, VT_REFERENCE_RANGE_M, 8) &&
+           VerifyField<double>(verifier, VT_REFERENCE_RCS_M2, 8) &&
+           VerifyField<double>(verifier, VT_DETECTION_THRESHOLD_DB, 8) &&
+           VerifyField<double>(verifier, VT_RECEIVER_G_OVER_T_DB_PER_K, 8) &&
+           VerifyField<double>(verifier, VT_RECEIVER_BANDWIDTH_HZ, 8) &&
+           VerifyField<double>(verifier, VT_LIMITING_MAGNITUDE, 8) &&
+           VerifyField<double>(verifier, VT_MAX_HOST_SUN_ELEVATION_RAD, 8) &&
+           VerifyField<double>(verifier, VT_FALSE_ALARM_RATE_PER_HOUR, 8) &&
+           VerifyField<double>(verifier, VT_TRANSMIT_FREQUENCY_HZ, 8) &&
+           verifier.EndTable();
+  }
+  ACWSensorT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ACWSensorT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ACWSensor> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ACWSensorBuilder {
+  typedef ACWSensor Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SENSOR_ID(::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID) {
+    fbb_.AddOffset(ACWSensor::VT_SENSOR_ID, SENSOR_ID);
+  }
+  void add_HOST_ID(::flatbuffers::Offset<::flatbuffers::String> HOST_ID) {
+    fbb_.AddOffset(ACWSensor::VT_HOST_ID, HOST_ID);
+  }
+  void add_PHENOMENOLOGY(acwSensorPhenomenology PHENOMENOLOGY) {
+    fbb_.AddElement<uint8_t>(ACWSensor::VT_PHENOMENOLOGY, static_cast<uint8_t>(PHENOMENOLOGY), 0);
+  }
+  void add_ERROR_MODELS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<MEMErrorModel>>> ERROR_MODELS) {
+    fbb_.AddOffset(ACWSensor::VT_ERROR_MODELS, ERROR_MODELS);
+  }
+  void add_CONSTRAINTS(::flatbuffers::Offset<ACWConstraintSet> CONSTRAINTS) {
+    fbb_.AddOffset(ACWSensor::VT_CONSTRAINTS, CONSTRAINTS);
+  }
+  void add_OBSERVATION_INTERVAL_S(double OBSERVATION_INTERVAL_S) {
+    fbb_.AddElement<double>(ACWSensor::VT_OBSERVATION_INTERVAL_S, OBSERVATION_INTERVAL_S, 0.0);
+  }
+  void add_TRACK_DURATION_S(double TRACK_DURATION_S) {
+    fbb_.AddElement<double>(ACWSensor::VT_TRACK_DURATION_S, TRACK_DURATION_S, 0.0);
+  }
+  void add_REVISIT_INTERVAL_S(double REVISIT_INTERVAL_S) {
+    fbb_.AddElement<double>(ACWSensor::VT_REVISIT_INTERVAL_S, REVISIT_INTERVAL_S, 0.0);
+  }
+  void add_MAX_SIMULTANEOUS_TRACKS(uint32_t MAX_SIMULTANEOUS_TRACKS) {
+    fbb_.AddElement<uint32_t>(ACWSensor::VT_MAX_SIMULTANEOUS_TRACKS, MAX_SIMULTANEOUS_TRACKS, 1);
+  }
+  void add_REFERENCE_SNR_DB(double REFERENCE_SNR_DB) {
+    fbb_.AddElement<double>(ACWSensor::VT_REFERENCE_SNR_DB, REFERENCE_SNR_DB, 0.0);
+  }
+  void add_REFERENCE_RANGE_M(double REFERENCE_RANGE_M) {
+    fbb_.AddElement<double>(ACWSensor::VT_REFERENCE_RANGE_M, REFERENCE_RANGE_M, 0.0);
+  }
+  void add_REFERENCE_RCS_M2(double REFERENCE_RCS_M2) {
+    fbb_.AddElement<double>(ACWSensor::VT_REFERENCE_RCS_M2, REFERENCE_RCS_M2, 1.0);
+  }
+  void add_DETECTION_THRESHOLD_DB(double DETECTION_THRESHOLD_DB) {
+    fbb_.AddElement<double>(ACWSensor::VT_DETECTION_THRESHOLD_DB, DETECTION_THRESHOLD_DB, 0.0);
+  }
+  void add_RECEIVER_G_OVER_T_DB_PER_K(double RECEIVER_G_OVER_T_DB_PER_K) {
+    fbb_.AddElement<double>(ACWSensor::VT_RECEIVER_G_OVER_T_DB_PER_K, RECEIVER_G_OVER_T_DB_PER_K, 0.0);
+  }
+  void add_RECEIVER_BANDWIDTH_HZ(double RECEIVER_BANDWIDTH_HZ) {
+    fbb_.AddElement<double>(ACWSensor::VT_RECEIVER_BANDWIDTH_HZ, RECEIVER_BANDWIDTH_HZ, 0.0);
+  }
+  void add_LIMITING_MAGNITUDE(double LIMITING_MAGNITUDE) {
+    fbb_.AddElement<double>(ACWSensor::VT_LIMITING_MAGNITUDE, LIMITING_MAGNITUDE, 0.0);
+  }
+  void add_MAX_HOST_SUN_ELEVATION_RAD(double MAX_HOST_SUN_ELEVATION_RAD) {
+    fbb_.AddElement<double>(ACWSensor::VT_MAX_HOST_SUN_ELEVATION_RAD, MAX_HOST_SUN_ELEVATION_RAD, 0.0);
+  }
+  void add_FALSE_ALARM_RATE_PER_HOUR(double FALSE_ALARM_RATE_PER_HOUR) {
+    fbb_.AddElement<double>(ACWSensor::VT_FALSE_ALARM_RATE_PER_HOUR, FALSE_ALARM_RATE_PER_HOUR, 0.0);
+  }
+  void add_TRANSMIT_FREQUENCY_HZ(double TRANSMIT_FREQUENCY_HZ) {
+    fbb_.AddElement<double>(ACWSensor::VT_TRANSMIT_FREQUENCY_HZ, TRANSMIT_FREQUENCY_HZ, 0.0);
+  }
+  explicit ACWSensorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ACWSensor> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ACWSensor>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ACWSensor> CreateACWSensor(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> HOST_ID = 0,
+    acwSensorPhenomenology PHENOMENOLOGY = acwSensorPhenomenology_UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<MEMErrorModel>>> ERROR_MODELS = 0,
+    ::flatbuffers::Offset<ACWConstraintSet> CONSTRAINTS = 0,
+    double OBSERVATION_INTERVAL_S = 0.0,
+    double TRACK_DURATION_S = 0.0,
+    double REVISIT_INTERVAL_S = 0.0,
+    uint32_t MAX_SIMULTANEOUS_TRACKS = 1,
+    double REFERENCE_SNR_DB = 0.0,
+    double REFERENCE_RANGE_M = 0.0,
+    double REFERENCE_RCS_M2 = 1.0,
+    double DETECTION_THRESHOLD_DB = 0.0,
+    double RECEIVER_G_OVER_T_DB_PER_K = 0.0,
+    double RECEIVER_BANDWIDTH_HZ = 0.0,
+    double LIMITING_MAGNITUDE = 0.0,
+    double MAX_HOST_SUN_ELEVATION_RAD = 0.0,
+    double FALSE_ALARM_RATE_PER_HOUR = 0.0,
+    double TRANSMIT_FREQUENCY_HZ = 0.0) {
+  ACWSensorBuilder builder_(_fbb);
+  builder_.add_TRANSMIT_FREQUENCY_HZ(TRANSMIT_FREQUENCY_HZ);
+  builder_.add_FALSE_ALARM_RATE_PER_HOUR(FALSE_ALARM_RATE_PER_HOUR);
+  builder_.add_MAX_HOST_SUN_ELEVATION_RAD(MAX_HOST_SUN_ELEVATION_RAD);
+  builder_.add_LIMITING_MAGNITUDE(LIMITING_MAGNITUDE);
+  builder_.add_RECEIVER_BANDWIDTH_HZ(RECEIVER_BANDWIDTH_HZ);
+  builder_.add_RECEIVER_G_OVER_T_DB_PER_K(RECEIVER_G_OVER_T_DB_PER_K);
+  builder_.add_DETECTION_THRESHOLD_DB(DETECTION_THRESHOLD_DB);
+  builder_.add_REFERENCE_RCS_M2(REFERENCE_RCS_M2);
+  builder_.add_REFERENCE_RANGE_M(REFERENCE_RANGE_M);
+  builder_.add_REFERENCE_SNR_DB(REFERENCE_SNR_DB);
+  builder_.add_REVISIT_INTERVAL_S(REVISIT_INTERVAL_S);
+  builder_.add_TRACK_DURATION_S(TRACK_DURATION_S);
+  builder_.add_OBSERVATION_INTERVAL_S(OBSERVATION_INTERVAL_S);
+  builder_.add_MAX_SIMULTANEOUS_TRACKS(MAX_SIMULTANEOUS_TRACKS);
+  builder_.add_CONSTRAINTS(CONSTRAINTS);
+  builder_.add_ERROR_MODELS(ERROR_MODELS);
+  builder_.add_HOST_ID(HOST_ID);
+  builder_.add_SENSOR_ID(SENSOR_ID);
+  builder_.add_PHENOMENOLOGY(PHENOMENOLOGY);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<ACWSensor> CreateACWSensorDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SENSOR_ID = nullptr,
+    const char *HOST_ID = nullptr,
+    acwSensorPhenomenology PHENOMENOLOGY = acwSensorPhenomenology_UNSPECIFIED,
+    const std::vector<::flatbuffers::Offset<MEMErrorModel>> *ERROR_MODELS = nullptr,
+    ::flatbuffers::Offset<ACWConstraintSet> CONSTRAINTS = 0,
+    double OBSERVATION_INTERVAL_S = 0.0,
+    double TRACK_DURATION_S = 0.0,
+    double REVISIT_INTERVAL_S = 0.0,
+    uint32_t MAX_SIMULTANEOUS_TRACKS = 1,
+    double REFERENCE_SNR_DB = 0.0,
+    double REFERENCE_RANGE_M = 0.0,
+    double REFERENCE_RCS_M2 = 1.0,
+    double DETECTION_THRESHOLD_DB = 0.0,
+    double RECEIVER_G_OVER_T_DB_PER_K = 0.0,
+    double RECEIVER_BANDWIDTH_HZ = 0.0,
+    double LIMITING_MAGNITUDE = 0.0,
+    double MAX_HOST_SUN_ELEVATION_RAD = 0.0,
+    double FALSE_ALARM_RATE_PER_HOUR = 0.0,
+    double TRANSMIT_FREQUENCY_HZ = 0.0) {
+  auto SENSOR_ID__ = SENSOR_ID ? _fbb.CreateString(SENSOR_ID) : 0;
+  auto HOST_ID__ = HOST_ID ? _fbb.CreateString(HOST_ID) : 0;
+  auto ERROR_MODELS__ = ERROR_MODELS ? _fbb.CreateVector<::flatbuffers::Offset<MEMErrorModel>>(*ERROR_MODELS) : 0;
+  return CreateACWSensor(
+      _fbb,
+      SENSOR_ID__,
+      HOST_ID__,
+      PHENOMENOLOGY,
+      ERROR_MODELS__,
+      CONSTRAINTS,
+      OBSERVATION_INTERVAL_S,
+      TRACK_DURATION_S,
+      REVISIT_INTERVAL_S,
+      MAX_SIMULTANEOUS_TRACKS,
+      REFERENCE_SNR_DB,
+      REFERENCE_RANGE_M,
+      REFERENCE_RCS_M2,
+      DETECTION_THRESHOLD_DB,
+      RECEIVER_G_OVER_T_DB_PER_K,
+      RECEIVER_BANDWIDTH_HZ,
+      LIMITING_MAGNITUDE,
+      MAX_HOST_SUN_ELEVATION_RAD,
+      FALSE_ALARM_RATE_PER_HOUR,
+      TRANSMIT_FREQUENCY_HZ);
+}
+
+::flatbuffers::Offset<ACWSensor> CreateACWSensor(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ACWSensorAccessT : public ::flatbuffers::NativeTable {
+  typedef ACWSensorAccess TableType;
+  std::string SENSOR_ID{};
+  std::string TARGET_ID{};
+  std::vector<std::unique_ptr<ACWAccessWindowT>> WINDOWS{};
+  ACWSensorAccessT() = default;
+  ACWSensorAccessT(const ACWSensorAccessT &o);
+  ACWSensorAccessT(ACWSensorAccessT&&) FLATBUFFERS_NOEXCEPT = default;
+  ACWSensorAccessT &operator=(ACWSensorAccessT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Access windows of one sensor to one target (SIMULATE_OBSERVATIONS input).
+struct ACWSensorAccess FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ACWSensorAccessT NativeTableType;
+  typedef ACWSensorAccessBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SENSOR_ID = 4,
+    VT_TARGET_ID = 6,
+    VT_WINDOWS = 8
+  };
+  const ::flatbuffers::String *SENSOR_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SENSOR_ID);
+  }
+  const ::flatbuffers::String *TARGET_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_ID);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ACWAccessWindow>> *WINDOWS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWAccessWindow>> *>(VT_WINDOWS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_SENSOR_ID) &&
+           verifier.VerifyString(SENSOR_ID()) &&
+           VerifyOffset(verifier, VT_TARGET_ID) &&
+           verifier.VerifyString(TARGET_ID()) &&
+           VerifyOffset(verifier, VT_WINDOWS) &&
+           verifier.VerifyVector(WINDOWS()) &&
+           verifier.VerifyVectorOfTables(WINDOWS()) &&
+           verifier.EndTable();
+  }
+  ACWSensorAccessT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ACWSensorAccessT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ACWSensorAccess> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorAccessT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ACWSensorAccessBuilder {
+  typedef ACWSensorAccess Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SENSOR_ID(::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID) {
+    fbb_.AddOffset(ACWSensorAccess::VT_SENSOR_ID, SENSOR_ID);
+  }
+  void add_TARGET_ID(::flatbuffers::Offset<::flatbuffers::String> TARGET_ID) {
+    fbb_.AddOffset(ACWSensorAccess::VT_TARGET_ID, TARGET_ID);
+  }
+  void add_WINDOWS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWAccessWindow>>> WINDOWS) {
+    fbb_.AddOffset(ACWSensorAccess::VT_WINDOWS, WINDOWS);
+  }
+  explicit ACWSensorAccessBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ACWSensorAccess> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ACWSensorAccess>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ACWSensorAccess> CreateACWSensorAccess(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWAccessWindow>>> WINDOWS = 0) {
+  ACWSensorAccessBuilder builder_(_fbb);
+  builder_.add_WINDOWS(WINDOWS);
+  builder_.add_TARGET_ID(TARGET_ID);
+  builder_.add_SENSOR_ID(SENSOR_ID);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<ACWSensorAccess> CreateACWSensorAccessDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SENSOR_ID = nullptr,
+    const char *TARGET_ID = nullptr,
+    const std::vector<::flatbuffers::Offset<ACWAccessWindow>> *WINDOWS = nullptr) {
+  auto SENSOR_ID__ = SENSOR_ID ? _fbb.CreateString(SENSOR_ID) : 0;
+  auto TARGET_ID__ = TARGET_ID ? _fbb.CreateString(TARGET_ID) : 0;
+  auto WINDOWS__ = WINDOWS ? _fbb.CreateVector<::flatbuffers::Offset<ACWAccessWindow>>(*WINDOWS) : 0;
+  return CreateACWSensorAccess(
+      _fbb,
+      SENSOR_ID__,
+      TARGET_ID__,
+      WINDOWS__);
+}
+
+::flatbuffers::Offset<ACWSensorAccess> CreateACWSensorAccess(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorAccessT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ACWTrackT : public ::flatbuffers::NativeTable {
+  typedef ACWTrack TableType;
+  std::string SENSOR_ID{};
+  std::string TARGET_ID{};
+  double START_JULIAN_DATE_TT = 0.0;
+  double END_JULIAN_DATE_TT = 0.0;
+  uint32_t SCHEDULED_COUNT = 0;
+  uint32_t DETECTED_COUNT = 0;
+  std::string LOSS_REASON{};
+};
+
+/// One simulated track: a sensor's scheduled look at a target.
+struct ACWTrack FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ACWTrackT NativeTableType;
+  typedef ACWTrackBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SENSOR_ID = 4,
+    VT_TARGET_ID = 6,
+    VT_START_JULIAN_DATE_TT = 8,
+    VT_END_JULIAN_DATE_TT = 10,
+    VT_SCHEDULED_COUNT = 12,
+    VT_DETECTED_COUNT = 14,
+    VT_LOSS_REASON = 16
+  };
+  const ::flatbuffers::String *SENSOR_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SENSOR_ID);
+  }
+  const ::flatbuffers::String *TARGET_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_ID);
+  }
+  double START_JULIAN_DATE_TT() const {
+    return GetField<double>(VT_START_JULIAN_DATE_TT, 0.0);
+  }
+  double END_JULIAN_DATE_TT() const {
+    return GetField<double>(VT_END_JULIAN_DATE_TT, 0.0);
+  }
+  /// Observations scheduled in the track.
+  uint32_t SCHEDULED_COUNT() const {
+    return GetField<uint32_t>(VT_SCHEDULED_COUNT, 0);
+  }
+  /// Observations that passed the detection test and were emitted.
+  uint32_t DETECTED_COUNT() const {
+    return GetField<uint32_t>(VT_DETECTED_COUNT, 0);
+  }
+  /// Why scheduled observations were not detected (for example "SNR",
+  /// "MAGNITUDE"); empty when all were.
+  const ::flatbuffers::String *LOSS_REASON() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LOSS_REASON);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_SENSOR_ID) &&
+           verifier.VerifyString(SENSOR_ID()) &&
+           VerifyOffset(verifier, VT_TARGET_ID) &&
+           verifier.VerifyString(TARGET_ID()) &&
+           VerifyField<double>(verifier, VT_START_JULIAN_DATE_TT, 8) &&
+           VerifyField<double>(verifier, VT_END_JULIAN_DATE_TT, 8) &&
+           VerifyField<uint32_t>(verifier, VT_SCHEDULED_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_DETECTED_COUNT, 4) &&
+           VerifyOffset(verifier, VT_LOSS_REASON) &&
+           verifier.VerifyString(LOSS_REASON()) &&
+           verifier.EndTable();
+  }
+  ACWTrackT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ACWTrackT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ACWTrack> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTrackT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ACWTrackBuilder {
+  typedef ACWTrack Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SENSOR_ID(::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID) {
+    fbb_.AddOffset(ACWTrack::VT_SENSOR_ID, SENSOR_ID);
+  }
+  void add_TARGET_ID(::flatbuffers::Offset<::flatbuffers::String> TARGET_ID) {
+    fbb_.AddOffset(ACWTrack::VT_TARGET_ID, TARGET_ID);
+  }
+  void add_START_JULIAN_DATE_TT(double START_JULIAN_DATE_TT) {
+    fbb_.AddElement<double>(ACWTrack::VT_START_JULIAN_DATE_TT, START_JULIAN_DATE_TT, 0.0);
+  }
+  void add_END_JULIAN_DATE_TT(double END_JULIAN_DATE_TT) {
+    fbb_.AddElement<double>(ACWTrack::VT_END_JULIAN_DATE_TT, END_JULIAN_DATE_TT, 0.0);
+  }
+  void add_SCHEDULED_COUNT(uint32_t SCHEDULED_COUNT) {
+    fbb_.AddElement<uint32_t>(ACWTrack::VT_SCHEDULED_COUNT, SCHEDULED_COUNT, 0);
+  }
+  void add_DETECTED_COUNT(uint32_t DETECTED_COUNT) {
+    fbb_.AddElement<uint32_t>(ACWTrack::VT_DETECTED_COUNT, DETECTED_COUNT, 0);
+  }
+  void add_LOSS_REASON(::flatbuffers::Offset<::flatbuffers::String> LOSS_REASON) {
+    fbb_.AddOffset(ACWTrack::VT_LOSS_REASON, LOSS_REASON);
+  }
+  explicit ACWTrackBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ACWTrack> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ACWTrack>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ACWTrack> CreateACWTrack(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_ID = 0,
+    double START_JULIAN_DATE_TT = 0.0,
+    double END_JULIAN_DATE_TT = 0.0,
+    uint32_t SCHEDULED_COUNT = 0,
+    uint32_t DETECTED_COUNT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LOSS_REASON = 0) {
+  ACWTrackBuilder builder_(_fbb);
+  builder_.add_END_JULIAN_DATE_TT(END_JULIAN_DATE_TT);
+  builder_.add_START_JULIAN_DATE_TT(START_JULIAN_DATE_TT);
+  builder_.add_LOSS_REASON(LOSS_REASON);
+  builder_.add_DETECTED_COUNT(DETECTED_COUNT);
+  builder_.add_SCHEDULED_COUNT(SCHEDULED_COUNT);
+  builder_.add_TARGET_ID(TARGET_ID);
+  builder_.add_SENSOR_ID(SENSOR_ID);
+  return builder_.Finish();
+}
+
+inline ::flatbuffers::Offset<ACWTrack> CreateACWTrackDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SENSOR_ID = nullptr,
+    const char *TARGET_ID = nullptr,
+    double START_JULIAN_DATE_TT = 0.0,
+    double END_JULIAN_DATE_TT = 0.0,
+    uint32_t SCHEDULED_COUNT = 0,
+    uint32_t DETECTED_COUNT = 0,
+    const char *LOSS_REASON = nullptr) {
+  auto SENSOR_ID__ = SENSOR_ID ? _fbb.CreateString(SENSOR_ID) : 0;
+  auto TARGET_ID__ = TARGET_ID ? _fbb.CreateString(TARGET_ID) : 0;
+  auto LOSS_REASON__ = LOSS_REASON ? _fbb.CreateString(LOSS_REASON) : 0;
+  return CreateACWTrack(
+      _fbb,
+      SENSOR_ID__,
+      TARGET_ID__,
+      START_JULIAN_DATE_TT,
+      END_JULIAN_DATE_TT,
+      SCHEDULED_COUNT,
+      DETECTED_COUNT,
+      LOSS_REASON__);
+}
+
+::flatbuffers::Offset<ACWTrack> CreateACWTrack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTrackT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct ACWRequestT : public ::flatbuffers::NativeTable {
   typedef ACWRequest TableType;
   acwOperationCode OPERATION = acwOperationCode_UNKNOWN;
@@ -1223,6 +2152,13 @@ struct ACWRequestT : public ::flatbuffers::NativeTable {
   double ROOT_TOLERANCE_S = 0.1;
   std::vector<std::unique_ptr<ACWStateSampleT>> SUN_STATES{};
   std::vector<std::unique_ptr<ACWStateSampleT>> MOON_STATES{};
+  std::vector<std::unique_ptr<ACWTargetT>> TARGETS{};
+  std::vector<std::unique_ptr<ACWSensorT>> SENSORS{};
+  std::vector<std::unique_ptr<ACWSensorAccessT>> ACCESS{};
+  std::vector<std::unique_ptr<EOPT>> EARTH_ORIENTATION{};
+  uint64_t RANDOM_SEED = 0;
+  double START_JULIAN_DATE_TT = 0.0;
+  double END_JULIAN_DATE_TT = 0.0;
   ACWRequestT() = default;
   ACWRequestT(const ACWRequestT &o);
   ACWRequestT(ACWRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1247,7 +2183,14 @@ struct ACWRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_EVALUATION_MODE = 24,
     VT_ROOT_TOLERANCE_S = 26,
     VT_SUN_STATES = 28,
-    VT_MOON_STATES = 30
+    VT_MOON_STATES = 30,
+    VT_TARGETS = 32,
+    VT_SENSORS = 34,
+    VT_ACCESS = 36,
+    VT_EARTH_ORIENTATION = 38,
+    VT_RANDOM_SEED = 40,
+    VT_START_JULIAN_DATE_TT = 42,
+    VT_END_JULIAN_DATE_TT = 44
   };
   acwOperationCode OPERATION() const {
     return static_cast<acwOperationCode>(GetField<int8_t>(VT_OPERATION, 0));
@@ -1308,6 +2251,38 @@ struct ACWRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>> *MOON_STATES() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>> *>(VT_MOON_STATES);
   }
+  /// Targets to observe (SIMULATE_OBSERVATIONS).
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ACWTarget>> *TARGETS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWTarget>> *>(VT_TARGETS);
+  }
+  /// Sensors that observe them (SIMULATE_OBSERVATIONS).
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ACWSensor>> *SENSORS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWSensor>> *>(VT_SENSORS);
+  }
+  /// Where each sensor can see each target (SIMULATE_OBSERVATIONS); a pair
+  /// without an entry is never observed.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ACWSensorAccess>> *ACCESS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWSensorAccess>> *>(VT_ACCESS);
+  }
+  /// Earth orientation parameters for celestial directions (right ascension
+  /// and declination). When absent, polar motion, UT1-UTC and celestial pole
+  /// offsets are zero.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<EOP>> *EARTH_ORIENTATION() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<EOP>> *>(VT_EARTH_ORIENTATION);
+  }
+  /// Seed for measurement noise, biases and false alarms; one seed
+  /// reproduces the same observations.
+  uint64_t RANDOM_SEED() const {
+    return GetField<uint64_t>(VT_RANDOM_SEED, 0);
+  }
+  /// Simulation span as Julian Dates in TT; 0 uses the span of the target
+  /// states.
+  double START_JULIAN_DATE_TT() const {
+    return GetField<double>(VT_START_JULIAN_DATE_TT, 0.0);
+  }
+  double END_JULIAN_DATE_TT() const {
+    return GetField<double>(VT_END_JULIAN_DATE_TT, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1341,6 +2316,21 @@ struct ACWRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_MOON_STATES) &&
            verifier.VerifyVector(MOON_STATES()) &&
            verifier.VerifyVectorOfTables(MOON_STATES()) &&
+           VerifyOffset(verifier, VT_TARGETS) &&
+           verifier.VerifyVector(TARGETS()) &&
+           verifier.VerifyVectorOfTables(TARGETS()) &&
+           VerifyOffset(verifier, VT_SENSORS) &&
+           verifier.VerifyVector(SENSORS()) &&
+           verifier.VerifyVectorOfTables(SENSORS()) &&
+           VerifyOffset(verifier, VT_ACCESS) &&
+           verifier.VerifyVector(ACCESS()) &&
+           verifier.VerifyVectorOfTables(ACCESS()) &&
+           VerifyOffset(verifier, VT_EARTH_ORIENTATION) &&
+           verifier.VerifyVector(EARTH_ORIENTATION()) &&
+           verifier.VerifyVectorOfTables(EARTH_ORIENTATION()) &&
+           VerifyField<uint64_t>(verifier, VT_RANDOM_SEED, 8) &&
+           VerifyField<double>(verifier, VT_START_JULIAN_DATE_TT, 8) &&
+           VerifyField<double>(verifier, VT_END_JULIAN_DATE_TT, 8) &&
            verifier.EndTable();
   }
   ACWRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1394,6 +2384,27 @@ struct ACWRequestBuilder {
   void add_MOON_STATES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>>> MOON_STATES) {
     fbb_.AddOffset(ACWRequest::VT_MOON_STATES, MOON_STATES);
   }
+  void add_TARGETS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWTarget>>> TARGETS) {
+    fbb_.AddOffset(ACWRequest::VT_TARGETS, TARGETS);
+  }
+  void add_SENSORS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWSensor>>> SENSORS) {
+    fbb_.AddOffset(ACWRequest::VT_SENSORS, SENSORS);
+  }
+  void add_ACCESS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWSensorAccess>>> ACCESS) {
+    fbb_.AddOffset(ACWRequest::VT_ACCESS, ACCESS);
+  }
+  void add_EARTH_ORIENTATION(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<EOP>>> EARTH_ORIENTATION) {
+    fbb_.AddOffset(ACWRequest::VT_EARTH_ORIENTATION, EARTH_ORIENTATION);
+  }
+  void add_RANDOM_SEED(uint64_t RANDOM_SEED) {
+    fbb_.AddElement<uint64_t>(ACWRequest::VT_RANDOM_SEED, RANDOM_SEED, 0);
+  }
+  void add_START_JULIAN_DATE_TT(double START_JULIAN_DATE_TT) {
+    fbb_.AddElement<double>(ACWRequest::VT_START_JULIAN_DATE_TT, START_JULIAN_DATE_TT, 0.0);
+  }
+  void add_END_JULIAN_DATE_TT(double END_JULIAN_DATE_TT) {
+    fbb_.AddElement<double>(ACWRequest::VT_END_JULIAN_DATE_TT, END_JULIAN_DATE_TT, 0.0);
+  }
   explicit ACWRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1420,10 +2431,24 @@ inline ::flatbuffers::Offset<ACWRequest> CreateACWRequest(
     acwEvaluationMode EVALUATION_MODE = acwEvaluationMode_DISCRETE,
     double ROOT_TOLERANCE_S = 0.1,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>>> SUN_STATES = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>>> MOON_STATES = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWStateSample>>> MOON_STATES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWTarget>>> TARGETS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWSensor>>> SENSORS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWSensorAccess>>> ACCESS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<EOP>>> EARTH_ORIENTATION = 0,
+    uint64_t RANDOM_SEED = 0,
+    double START_JULIAN_DATE_TT = 0.0,
+    double END_JULIAN_DATE_TT = 0.0) {
   ACWRequestBuilder builder_(_fbb);
+  builder_.add_END_JULIAN_DATE_TT(END_JULIAN_DATE_TT);
+  builder_.add_START_JULIAN_DATE_TT(START_JULIAN_DATE_TT);
+  builder_.add_RANDOM_SEED(RANDOM_SEED);
   builder_.add_ROOT_TOLERANCE_S(ROOT_TOLERANCE_S);
   builder_.add_MIN_ELEVATION_OVERRIDE_RAD(MIN_ELEVATION_OVERRIDE_RAD);
+  builder_.add_EARTH_ORIENTATION(EARTH_ORIENTATION);
+  builder_.add_ACCESS(ACCESS);
+  builder_.add_SENSORS(SENSORS);
+  builder_.add_TARGETS(TARGETS);
   builder_.add_MOON_STATES(MOON_STATES);
   builder_.add_SUN_STATES(SUN_STATES);
   builder_.add_OBSERVERS(OBSERVERS);
@@ -1454,7 +2479,14 @@ inline ::flatbuffers::Offset<ACWRequest> CreateACWRequestDirect(
     acwEvaluationMode EVALUATION_MODE = acwEvaluationMode_DISCRETE,
     double ROOT_TOLERANCE_S = 0.1,
     const std::vector<::flatbuffers::Offset<ACWStateSample>> *SUN_STATES = nullptr,
-    const std::vector<::flatbuffers::Offset<ACWStateSample>> *MOON_STATES = nullptr) {
+    const std::vector<::flatbuffers::Offset<ACWStateSample>> *MOON_STATES = nullptr,
+    const std::vector<::flatbuffers::Offset<ACWTarget>> *TARGETS = nullptr,
+    const std::vector<::flatbuffers::Offset<ACWSensor>> *SENSORS = nullptr,
+    const std::vector<::flatbuffers::Offset<ACWSensorAccess>> *ACCESS = nullptr,
+    const std::vector<::flatbuffers::Offset<EOP>> *EARTH_ORIENTATION = nullptr,
+    uint64_t RANDOM_SEED = 0,
+    double START_JULIAN_DATE_TT = 0.0,
+    double END_JULIAN_DATE_TT = 0.0) {
   auto GROUND_STATIONS__ = GROUND_STATIONS ? _fbb.CreateVector<::flatbuffers::Offset<ACWGroundStation>>(*GROUND_STATIONS) : 0;
   auto STATES__ = STATES ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>>(*STATES) : 0;
   auto TARGET_STATION_ID__ = TARGET_STATION_ID ? _fbb.CreateString(TARGET_STATION_ID) : 0;
@@ -1463,6 +2495,10 @@ inline ::flatbuffers::Offset<ACWRequest> CreateACWRequestDirect(
   auto OBSERVERS__ = OBSERVERS ? _fbb.CreateVector<::flatbuffers::Offset<ACWObserverTrajectory>>(*OBSERVERS) : 0;
   auto SUN_STATES__ = SUN_STATES ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>>(*SUN_STATES) : 0;
   auto MOON_STATES__ = MOON_STATES ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>>(*MOON_STATES) : 0;
+  auto TARGETS__ = TARGETS ? _fbb.CreateVector<::flatbuffers::Offset<ACWTarget>>(*TARGETS) : 0;
+  auto SENSORS__ = SENSORS ? _fbb.CreateVector<::flatbuffers::Offset<ACWSensor>>(*SENSORS) : 0;
+  auto ACCESS__ = ACCESS ? _fbb.CreateVector<::flatbuffers::Offset<ACWSensorAccess>>(*ACCESS) : 0;
+  auto EARTH_ORIENTATION__ = EARTH_ORIENTATION ? _fbb.CreateVector<::flatbuffers::Offset<EOP>>(*EARTH_ORIENTATION) : 0;
   return CreateACWRequest(
       _fbb,
       OPERATION,
@@ -1478,7 +2514,14 @@ inline ::flatbuffers::Offset<ACWRequest> CreateACWRequestDirect(
       EVALUATION_MODE,
       ROOT_TOLERANCE_S,
       SUN_STATES__,
-      MOON_STATES__);
+      MOON_STATES__,
+      TARGETS__,
+      SENSORS__,
+      ACCESS__,
+      EARTH_ORIENTATION__,
+      RANDOM_SEED,
+      START_JULIAN_DATE_TT,
+      END_JULIAN_DATE_TT);
 }
 
 ::flatbuffers::Offset<ACWRequest> CreateACWRequest(::flatbuffers::FlatBufferBuilder &_fbb, const ACWRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1731,6 +2774,8 @@ struct ACWResultT : public ::flatbuffers::NativeTable {
   std::string TRACE_ID{};
   acwEvaluationMode EVALUATION_MODE = acwEvaluationMode_DISCRETE;
   std::vector<std::string> CONSTRAINT_LABELS{};
+  std::vector<std::unique_ptr<ACWTrackT>> TRACKS{};
+  uint32_t OBSERVATION_COUNT = 0;
   ACWResultT() = default;
   ACWResultT(const ACWResultT &o);
   ACWResultT(ACWResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1747,7 +2792,9 @@ struct ACWResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_WINDOWS = 8,
     VT_TRACE_ID = 10,
     VT_EVALUATION_MODE = 12,
-    VT_CONSTRAINT_LABELS = 14
+    VT_CONSTRAINT_LABELS = 14,
+    VT_TRACKS = 16,
+    VT_OBSERVATION_COUNT = 18
   };
   acwResultStatus STATUS() const {
     return static_cast<acwResultStatus>(GetField<int8_t>(VT_STATUS, 0));
@@ -1770,6 +2817,14 @@ struct ACWResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *CONSTRAINT_LABELS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_CONSTRAINT_LABELS);
   }
+  /// Tracks scheduled by SIMULATE_OBSERVATIONS.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<ACWTrack>> *TRACKS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ACWTrack>> *>(VT_TRACKS);
+  }
+  /// Observations emitted, including false alarms.
+  uint32_t OBSERVATION_COUNT() const {
+    return GetField<uint32_t>(VT_OBSERVATION_COUNT, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1785,6 +2840,10 @@ struct ACWResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_CONSTRAINT_LABELS) &&
            verifier.VerifyVector(CONSTRAINT_LABELS()) &&
            verifier.VerifyVectorOfStrings(CONSTRAINT_LABELS()) &&
+           VerifyOffset(verifier, VT_TRACKS) &&
+           verifier.VerifyVector(TRACKS()) &&
+           verifier.VerifyVectorOfTables(TRACKS()) &&
+           VerifyField<uint32_t>(verifier, VT_OBSERVATION_COUNT, 4) &&
            verifier.EndTable();
   }
   ACWResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1814,6 +2873,12 @@ struct ACWResultBuilder {
   void add_CONSTRAINT_LABELS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> CONSTRAINT_LABELS) {
     fbb_.AddOffset(ACWResult::VT_CONSTRAINT_LABELS, CONSTRAINT_LABELS);
   }
+  void add_TRACKS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWTrack>>> TRACKS) {
+    fbb_.AddOffset(ACWResult::VT_TRACKS, TRACKS);
+  }
+  void add_OBSERVATION_COUNT(uint32_t OBSERVATION_COUNT) {
+    fbb_.AddElement<uint32_t>(ACWResult::VT_OBSERVATION_COUNT, OBSERVATION_COUNT, 0);
+  }
   explicit ACWResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1832,8 +2897,12 @@ inline ::flatbuffers::Offset<ACWResult> CreateACWResult(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWAccessWindow>>> WINDOWS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> TRACE_ID = 0,
     acwEvaluationMode EVALUATION_MODE = acwEvaluationMode_DISCRETE,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> CONSTRAINT_LABELS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> CONSTRAINT_LABELS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ACWTrack>>> TRACKS = 0,
+    uint32_t OBSERVATION_COUNT = 0) {
   ACWResultBuilder builder_(_fbb);
+  builder_.add_OBSERVATION_COUNT(OBSERVATION_COUNT);
+  builder_.add_TRACKS(TRACKS);
   builder_.add_CONSTRAINT_LABELS(CONSTRAINT_LABELS);
   builder_.add_TRACE_ID(TRACE_ID);
   builder_.add_WINDOWS(WINDOWS);
@@ -1850,11 +2919,14 @@ inline ::flatbuffers::Offset<ACWResult> CreateACWResultDirect(
     const std::vector<::flatbuffers::Offset<ACWAccessWindow>> *WINDOWS = nullptr,
     const char *TRACE_ID = nullptr,
     acwEvaluationMode EVALUATION_MODE = acwEvaluationMode_DISCRETE,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *CONSTRAINT_LABELS = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *CONSTRAINT_LABELS = nullptr,
+    const std::vector<::flatbuffers::Offset<ACWTrack>> *TRACKS = nullptr,
+    uint32_t OBSERVATION_COUNT = 0) {
   auto ERROR_MESSAGE__ = ERROR_MESSAGE ? _fbb.CreateString(ERROR_MESSAGE) : 0;
   auto WINDOWS__ = WINDOWS ? _fbb.CreateVector<::flatbuffers::Offset<ACWAccessWindow>>(*WINDOWS) : 0;
   auto TRACE_ID__ = TRACE_ID ? _fbb.CreateString(TRACE_ID) : 0;
   auto CONSTRAINT_LABELS__ = CONSTRAINT_LABELS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*CONSTRAINT_LABELS) : 0;
+  auto TRACKS__ = TRACKS ? _fbb.CreateVector<::flatbuffers::Offset<ACWTrack>>(*TRACKS) : 0;
   return CreateACWResult(
       _fbb,
       STATUS,
@@ -1862,7 +2934,9 @@ inline ::flatbuffers::Offset<ACWResult> CreateACWResultDirect(
       WINDOWS__,
       TRACE_ID__,
       EVALUATION_MODE,
-      CONSTRAINT_LABELS__);
+      CONSTRAINT_LABELS__,
+      TRACKS__,
+      OBSERVATION_COUNT);
 }
 
 ::flatbuffers::Offset<ACWResult> CreateACWResult(::flatbuffers::FlatBufferBuilder &_fbb, const ACWResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1951,6 +3025,9 @@ inline void ACWStateSample::UnPackTo(ACWStateSampleT *_o, const ::flatbuffers::r
   { auto _e = POSITION_X_M(); _o->POSITION_X_M = _e; }
   { auto _e = POSITION_Y_M(); _o->POSITION_Y_M = _e; }
   { auto _e = POSITION_Z_M(); _o->POSITION_Z_M = _e; }
+  { auto _e = VELOCITY_X_MPS(); _o->VELOCITY_X_MPS = _e; }
+  { auto _e = VELOCITY_Y_MPS(); _o->VELOCITY_Y_MPS = _e; }
+  { auto _e = VELOCITY_Z_MPS(); _o->VELOCITY_Z_MPS = _e; }
 }
 
 inline ::flatbuffers::Offset<ACWStateSample> CreateACWStateSample(::flatbuffers::FlatBufferBuilder &_fbb, const ACWStateSampleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1965,12 +3042,18 @@ inline ::flatbuffers::Offset<ACWStateSample> ACWStateSample::Pack(::flatbuffers:
   auto _POSITION_X_M = _o->POSITION_X_M;
   auto _POSITION_Y_M = _o->POSITION_Y_M;
   auto _POSITION_Z_M = _o->POSITION_Z_M;
+  auto _VELOCITY_X_MPS = _o->VELOCITY_X_MPS;
+  auto _VELOCITY_Y_MPS = _o->VELOCITY_Y_MPS;
+  auto _VELOCITY_Z_MPS = _o->VELOCITY_Z_MPS;
   return CreateACWStateSample(
       _fbb,
       _JULIAN_DATE_TT,
       _POSITION_X_M,
       _POSITION_Y_M,
-      _POSITION_Z_M);
+      _POSITION_Z_M,
+      _VELOCITY_X_MPS,
+      _VELOCITY_Y_MPS,
+      _VELOCITY_Z_MPS);
 }
 
 inline ACWElevationMaskPointT *ACWElevationMaskPoint::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -2309,6 +3392,316 @@ inline ::flatbuffers::Offset<ACWObserverTrajectory> ACWObserverTrajectory::Pack(
       _BLACKOUT_WINDOWS);
 }
 
+inline ACWTargetSignatureT *ACWTargetSignature::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<ACWTargetSignatureT>(new ACWTargetSignatureT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ACWTargetSignature::UnPackTo(ACWTargetSignatureT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = RCS_M2(); _o->RCS_M2 = _e; }
+  { auto _e = DIAMETER_M(); _o->DIAMETER_M = _e; }
+  { auto _e = GEOMETRIC_ALBEDO(); _o->GEOMETRIC_ALBEDO = _e; }
+  { auto _e = EMITTER_FREQUENCY_HZ(); _o->EMITTER_FREQUENCY_HZ = _e; }
+  { auto _e = EMITTER_EIRP_DBW(); _o->EMITTER_EIRP_DBW = _e; }
+}
+
+inline ::flatbuffers::Offset<ACWTargetSignature> CreateACWTargetSignature(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetSignatureT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ACWTargetSignature::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ACWTargetSignature> ACWTargetSignature::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetSignatureT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ACWTargetSignatureT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _RCS_M2 = _o->RCS_M2;
+  auto _DIAMETER_M = _o->DIAMETER_M;
+  auto _GEOMETRIC_ALBEDO = _o->GEOMETRIC_ALBEDO;
+  auto _EMITTER_FREQUENCY_HZ = _o->EMITTER_FREQUENCY_HZ;
+  auto _EMITTER_EIRP_DBW = _o->EMITTER_EIRP_DBW;
+  return CreateACWTargetSignature(
+      _fbb,
+      _RCS_M2,
+      _DIAMETER_M,
+      _GEOMETRIC_ALBEDO,
+      _EMITTER_FREQUENCY_HZ,
+      _EMITTER_EIRP_DBW);
+}
+
+inline ACWTargetT::ACWTargetT(const ACWTargetT &o)
+      : TARGET_ID(o.TARGET_ID),
+        NORAD_CAT_ID(o.NORAD_CAT_ID),
+        OBJECT_ID(o.OBJECT_ID),
+        SIGNATURE((o.SIGNATURE) ? new ACWTargetSignatureT(*o.SIGNATURE) : nullptr) {
+  STATES.reserve(o.STATES.size());
+  for (const auto &STATES_ : o.STATES) { STATES.emplace_back((STATES_) ? new ACWStateSampleT(*STATES_) : nullptr); }
+}
+
+inline ACWTargetT &ACWTargetT::operator=(ACWTargetT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(TARGET_ID, o.TARGET_ID);
+  std::swap(NORAD_CAT_ID, o.NORAD_CAT_ID);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(STATES, o.STATES);
+  std::swap(SIGNATURE, o.SIGNATURE);
+  return *this;
+}
+
+inline ACWTargetT *ACWTarget::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<ACWTargetT>(new ACWTargetT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ACWTarget::UnPackTo(ACWTargetT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TARGET_ID(); if (_e) _o->TARGET_ID = _e->str(); }
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
+  { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
+  { auto _e = STATES(); if (_e) { _o->STATES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->STATES[_i]) { _e->Get(_i)->UnPackTo(_o->STATES[_i].get(), _resolver); } else { _o->STATES[_i] = std::unique_ptr<ACWStateSampleT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->STATES.resize(0); } }
+  { auto _e = SIGNATURE(); if (_e) { if(_o->SIGNATURE) { _e->UnPackTo(_o->SIGNATURE.get(), _resolver); } else { _o->SIGNATURE = std::unique_ptr<ACWTargetSignatureT>(_e->UnPack(_resolver)); } } else if (_o->SIGNATURE) { _o->SIGNATURE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<ACWTarget> CreateACWTarget(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ACWTarget::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ACWTarget> ACWTarget::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTargetT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ACWTargetT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TARGET_ID = _o->TARGET_ID.empty() ? 0 : _fbb.CreateString(_o->TARGET_ID);
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
+  auto _OBJECT_ID = _o->OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->OBJECT_ID);
+  auto _STATES = _o->STATES.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>> (_o->STATES.size(), [](size_t i, _VectorArgs *__va) { return CreateACWStateSample(*__va->__fbb, __va->__o->STATES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _SIGNATURE = _o->SIGNATURE ? CreateACWTargetSignature(_fbb, _o->SIGNATURE.get(), _rehasher) : 0;
+  return CreateACWTarget(
+      _fbb,
+      _TARGET_ID,
+      _NORAD_CAT_ID,
+      _OBJECT_ID,
+      _STATES,
+      _SIGNATURE);
+}
+
+inline ACWSensorT::ACWSensorT(const ACWSensorT &o)
+      : SENSOR_ID(o.SENSOR_ID),
+        HOST_ID(o.HOST_ID),
+        PHENOMENOLOGY(o.PHENOMENOLOGY),
+        CONSTRAINTS((o.CONSTRAINTS) ? new ACWConstraintSetT(*o.CONSTRAINTS) : nullptr),
+        OBSERVATION_INTERVAL_S(o.OBSERVATION_INTERVAL_S),
+        TRACK_DURATION_S(o.TRACK_DURATION_S),
+        REVISIT_INTERVAL_S(o.REVISIT_INTERVAL_S),
+        MAX_SIMULTANEOUS_TRACKS(o.MAX_SIMULTANEOUS_TRACKS),
+        REFERENCE_SNR_DB(o.REFERENCE_SNR_DB),
+        REFERENCE_RANGE_M(o.REFERENCE_RANGE_M),
+        REFERENCE_RCS_M2(o.REFERENCE_RCS_M2),
+        DETECTION_THRESHOLD_DB(o.DETECTION_THRESHOLD_DB),
+        RECEIVER_G_OVER_T_DB_PER_K(o.RECEIVER_G_OVER_T_DB_PER_K),
+        RECEIVER_BANDWIDTH_HZ(o.RECEIVER_BANDWIDTH_HZ),
+        LIMITING_MAGNITUDE(o.LIMITING_MAGNITUDE),
+        MAX_HOST_SUN_ELEVATION_RAD(o.MAX_HOST_SUN_ELEVATION_RAD),
+        FALSE_ALARM_RATE_PER_HOUR(o.FALSE_ALARM_RATE_PER_HOUR),
+        TRANSMIT_FREQUENCY_HZ(o.TRANSMIT_FREQUENCY_HZ) {
+  ERROR_MODELS.reserve(o.ERROR_MODELS.size());
+  for (const auto &ERROR_MODELS_ : o.ERROR_MODELS) { ERROR_MODELS.emplace_back((ERROR_MODELS_) ? new MEMErrorModelT(*ERROR_MODELS_) : nullptr); }
+}
+
+inline ACWSensorT &ACWSensorT::operator=(ACWSensorT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SENSOR_ID, o.SENSOR_ID);
+  std::swap(HOST_ID, o.HOST_ID);
+  std::swap(PHENOMENOLOGY, o.PHENOMENOLOGY);
+  std::swap(ERROR_MODELS, o.ERROR_MODELS);
+  std::swap(CONSTRAINTS, o.CONSTRAINTS);
+  std::swap(OBSERVATION_INTERVAL_S, o.OBSERVATION_INTERVAL_S);
+  std::swap(TRACK_DURATION_S, o.TRACK_DURATION_S);
+  std::swap(REVISIT_INTERVAL_S, o.REVISIT_INTERVAL_S);
+  std::swap(MAX_SIMULTANEOUS_TRACKS, o.MAX_SIMULTANEOUS_TRACKS);
+  std::swap(REFERENCE_SNR_DB, o.REFERENCE_SNR_DB);
+  std::swap(REFERENCE_RANGE_M, o.REFERENCE_RANGE_M);
+  std::swap(REFERENCE_RCS_M2, o.REFERENCE_RCS_M2);
+  std::swap(DETECTION_THRESHOLD_DB, o.DETECTION_THRESHOLD_DB);
+  std::swap(RECEIVER_G_OVER_T_DB_PER_K, o.RECEIVER_G_OVER_T_DB_PER_K);
+  std::swap(RECEIVER_BANDWIDTH_HZ, o.RECEIVER_BANDWIDTH_HZ);
+  std::swap(LIMITING_MAGNITUDE, o.LIMITING_MAGNITUDE);
+  std::swap(MAX_HOST_SUN_ELEVATION_RAD, o.MAX_HOST_SUN_ELEVATION_RAD);
+  std::swap(FALSE_ALARM_RATE_PER_HOUR, o.FALSE_ALARM_RATE_PER_HOUR);
+  std::swap(TRANSMIT_FREQUENCY_HZ, o.TRANSMIT_FREQUENCY_HZ);
+  return *this;
+}
+
+inline ACWSensorT *ACWSensor::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<ACWSensorT>(new ACWSensorT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ACWSensor::UnPackTo(ACWSensorT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SENSOR_ID(); if (_e) _o->SENSOR_ID = _e->str(); }
+  { auto _e = HOST_ID(); if (_e) _o->HOST_ID = _e->str(); }
+  { auto _e = PHENOMENOLOGY(); _o->PHENOMENOLOGY = _e; }
+  { auto _e = ERROR_MODELS(); if (_e) { _o->ERROR_MODELS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->ERROR_MODELS[_i]) { _e->Get(_i)->UnPackTo(_o->ERROR_MODELS[_i].get(), _resolver); } else { _o->ERROR_MODELS[_i] = std::unique_ptr<MEMErrorModelT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->ERROR_MODELS.resize(0); } }
+  { auto _e = CONSTRAINTS(); if (_e) { if(_o->CONSTRAINTS) { _e->UnPackTo(_o->CONSTRAINTS.get(), _resolver); } else { _o->CONSTRAINTS = std::unique_ptr<ACWConstraintSetT>(_e->UnPack(_resolver)); } } else if (_o->CONSTRAINTS) { _o->CONSTRAINTS.reset(); } }
+  { auto _e = OBSERVATION_INTERVAL_S(); _o->OBSERVATION_INTERVAL_S = _e; }
+  { auto _e = TRACK_DURATION_S(); _o->TRACK_DURATION_S = _e; }
+  { auto _e = REVISIT_INTERVAL_S(); _o->REVISIT_INTERVAL_S = _e; }
+  { auto _e = MAX_SIMULTANEOUS_TRACKS(); _o->MAX_SIMULTANEOUS_TRACKS = _e; }
+  { auto _e = REFERENCE_SNR_DB(); _o->REFERENCE_SNR_DB = _e; }
+  { auto _e = REFERENCE_RANGE_M(); _o->REFERENCE_RANGE_M = _e; }
+  { auto _e = REFERENCE_RCS_M2(); _o->REFERENCE_RCS_M2 = _e; }
+  { auto _e = DETECTION_THRESHOLD_DB(); _o->DETECTION_THRESHOLD_DB = _e; }
+  { auto _e = RECEIVER_G_OVER_T_DB_PER_K(); _o->RECEIVER_G_OVER_T_DB_PER_K = _e; }
+  { auto _e = RECEIVER_BANDWIDTH_HZ(); _o->RECEIVER_BANDWIDTH_HZ = _e; }
+  { auto _e = LIMITING_MAGNITUDE(); _o->LIMITING_MAGNITUDE = _e; }
+  { auto _e = MAX_HOST_SUN_ELEVATION_RAD(); _o->MAX_HOST_SUN_ELEVATION_RAD = _e; }
+  { auto _e = FALSE_ALARM_RATE_PER_HOUR(); _o->FALSE_ALARM_RATE_PER_HOUR = _e; }
+  { auto _e = TRANSMIT_FREQUENCY_HZ(); _o->TRANSMIT_FREQUENCY_HZ = _e; }
+}
+
+inline ::flatbuffers::Offset<ACWSensor> CreateACWSensor(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ACWSensor::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ACWSensor> ACWSensor::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ACWSensorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SENSOR_ID = _o->SENSOR_ID.empty() ? 0 : _fbb.CreateString(_o->SENSOR_ID);
+  auto _HOST_ID = _o->HOST_ID.empty() ? 0 : _fbb.CreateString(_o->HOST_ID);
+  auto _PHENOMENOLOGY = _o->PHENOMENOLOGY;
+  auto _ERROR_MODELS = _o->ERROR_MODELS.size() ? _fbb.CreateVector<::flatbuffers::Offset<MEMErrorModel>> (_o->ERROR_MODELS.size(), [](size_t i, _VectorArgs *__va) { return CreateMEMErrorModel(*__va->__fbb, __va->__o->ERROR_MODELS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _CONSTRAINTS = _o->CONSTRAINTS ? CreateACWConstraintSet(_fbb, _o->CONSTRAINTS.get(), _rehasher) : 0;
+  auto _OBSERVATION_INTERVAL_S = _o->OBSERVATION_INTERVAL_S;
+  auto _TRACK_DURATION_S = _o->TRACK_DURATION_S;
+  auto _REVISIT_INTERVAL_S = _o->REVISIT_INTERVAL_S;
+  auto _MAX_SIMULTANEOUS_TRACKS = _o->MAX_SIMULTANEOUS_TRACKS;
+  auto _REFERENCE_SNR_DB = _o->REFERENCE_SNR_DB;
+  auto _REFERENCE_RANGE_M = _o->REFERENCE_RANGE_M;
+  auto _REFERENCE_RCS_M2 = _o->REFERENCE_RCS_M2;
+  auto _DETECTION_THRESHOLD_DB = _o->DETECTION_THRESHOLD_DB;
+  auto _RECEIVER_G_OVER_T_DB_PER_K = _o->RECEIVER_G_OVER_T_DB_PER_K;
+  auto _RECEIVER_BANDWIDTH_HZ = _o->RECEIVER_BANDWIDTH_HZ;
+  auto _LIMITING_MAGNITUDE = _o->LIMITING_MAGNITUDE;
+  auto _MAX_HOST_SUN_ELEVATION_RAD = _o->MAX_HOST_SUN_ELEVATION_RAD;
+  auto _FALSE_ALARM_RATE_PER_HOUR = _o->FALSE_ALARM_RATE_PER_HOUR;
+  auto _TRANSMIT_FREQUENCY_HZ = _o->TRANSMIT_FREQUENCY_HZ;
+  return CreateACWSensor(
+      _fbb,
+      _SENSOR_ID,
+      _HOST_ID,
+      _PHENOMENOLOGY,
+      _ERROR_MODELS,
+      _CONSTRAINTS,
+      _OBSERVATION_INTERVAL_S,
+      _TRACK_DURATION_S,
+      _REVISIT_INTERVAL_S,
+      _MAX_SIMULTANEOUS_TRACKS,
+      _REFERENCE_SNR_DB,
+      _REFERENCE_RANGE_M,
+      _REFERENCE_RCS_M2,
+      _DETECTION_THRESHOLD_DB,
+      _RECEIVER_G_OVER_T_DB_PER_K,
+      _RECEIVER_BANDWIDTH_HZ,
+      _LIMITING_MAGNITUDE,
+      _MAX_HOST_SUN_ELEVATION_RAD,
+      _FALSE_ALARM_RATE_PER_HOUR,
+      _TRANSMIT_FREQUENCY_HZ);
+}
+
+inline ACWSensorAccessT::ACWSensorAccessT(const ACWSensorAccessT &o)
+      : SENSOR_ID(o.SENSOR_ID),
+        TARGET_ID(o.TARGET_ID) {
+  WINDOWS.reserve(o.WINDOWS.size());
+  for (const auto &WINDOWS_ : o.WINDOWS) { WINDOWS.emplace_back((WINDOWS_) ? new ACWAccessWindowT(*WINDOWS_) : nullptr); }
+}
+
+inline ACWSensorAccessT &ACWSensorAccessT::operator=(ACWSensorAccessT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SENSOR_ID, o.SENSOR_ID);
+  std::swap(TARGET_ID, o.TARGET_ID);
+  std::swap(WINDOWS, o.WINDOWS);
+  return *this;
+}
+
+inline ACWSensorAccessT *ACWSensorAccess::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<ACWSensorAccessT>(new ACWSensorAccessT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ACWSensorAccess::UnPackTo(ACWSensorAccessT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SENSOR_ID(); if (_e) _o->SENSOR_ID = _e->str(); }
+  { auto _e = TARGET_ID(); if (_e) _o->TARGET_ID = _e->str(); }
+  { auto _e = WINDOWS(); if (_e) { _o->WINDOWS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->WINDOWS[_i]) { _e->Get(_i)->UnPackTo(_o->WINDOWS[_i].get(), _resolver); } else { _o->WINDOWS[_i] = std::unique_ptr<ACWAccessWindowT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->WINDOWS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<ACWSensorAccess> CreateACWSensorAccess(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorAccessT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ACWSensorAccess::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ACWSensorAccess> ACWSensorAccess::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWSensorAccessT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ACWSensorAccessT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SENSOR_ID = _o->SENSOR_ID.empty() ? 0 : _fbb.CreateString(_o->SENSOR_ID);
+  auto _TARGET_ID = _o->TARGET_ID.empty() ? 0 : _fbb.CreateString(_o->TARGET_ID);
+  auto _WINDOWS = _o->WINDOWS.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWAccessWindow>> (_o->WINDOWS.size(), [](size_t i, _VectorArgs *__va) { return CreateACWAccessWindow(*__va->__fbb, __va->__o->WINDOWS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreateACWSensorAccess(
+      _fbb,
+      _SENSOR_ID,
+      _TARGET_ID,
+      _WINDOWS);
+}
+
+inline ACWTrackT *ACWTrack::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::unique_ptr<ACWTrackT>(new ACWTrackT());
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ACWTrack::UnPackTo(ACWTrackT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SENSOR_ID(); if (_e) _o->SENSOR_ID = _e->str(); }
+  { auto _e = TARGET_ID(); if (_e) _o->TARGET_ID = _e->str(); }
+  { auto _e = START_JULIAN_DATE_TT(); _o->START_JULIAN_DATE_TT = _e; }
+  { auto _e = END_JULIAN_DATE_TT(); _o->END_JULIAN_DATE_TT = _e; }
+  { auto _e = SCHEDULED_COUNT(); _o->SCHEDULED_COUNT = _e; }
+  { auto _e = DETECTED_COUNT(); _o->DETECTED_COUNT = _e; }
+  { auto _e = LOSS_REASON(); if (_e) _o->LOSS_REASON = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<ACWTrack> CreateACWTrack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTrackT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ACWTrack::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ACWTrack> ACWTrack::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ACWTrackT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ACWTrackT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SENSOR_ID = _o->SENSOR_ID.empty() ? 0 : _fbb.CreateString(_o->SENSOR_ID);
+  auto _TARGET_ID = _o->TARGET_ID.empty() ? 0 : _fbb.CreateString(_o->TARGET_ID);
+  auto _START_JULIAN_DATE_TT = _o->START_JULIAN_DATE_TT;
+  auto _END_JULIAN_DATE_TT = _o->END_JULIAN_DATE_TT;
+  auto _SCHEDULED_COUNT = _o->SCHEDULED_COUNT;
+  auto _DETECTED_COUNT = _o->DETECTED_COUNT;
+  auto _LOSS_REASON = _o->LOSS_REASON.empty() ? 0 : _fbb.CreateString(_o->LOSS_REASON);
+  return CreateACWTrack(
+      _fbb,
+      _SENSOR_ID,
+      _TARGET_ID,
+      _START_JULIAN_DATE_TT,
+      _END_JULIAN_DATE_TT,
+      _SCHEDULED_COUNT,
+      _DETECTED_COUNT,
+      _LOSS_REASON);
+}
+
 inline ACWRequestT::ACWRequestT(const ACWRequestT &o)
       : OPERATION(o.OPERATION),
         TARGET_STATION_ID(o.TARGET_STATION_ID),
@@ -2317,7 +3710,10 @@ inline ACWRequestT::ACWRequestT(const ACWRequestT &o)
         REFRACTION_MODEL((o.REFRACTION_MODEL) ? new ACWRefractionModelT(*o.REFRACTION_MODEL) : nullptr),
         CONSTRAINTS((o.CONSTRAINTS) ? new ACWConstraintSetT(*o.CONSTRAINTS) : nullptr),
         EVALUATION_MODE(o.EVALUATION_MODE),
-        ROOT_TOLERANCE_S(o.ROOT_TOLERANCE_S) {
+        ROOT_TOLERANCE_S(o.ROOT_TOLERANCE_S),
+        RANDOM_SEED(o.RANDOM_SEED),
+        START_JULIAN_DATE_TT(o.START_JULIAN_DATE_TT),
+        END_JULIAN_DATE_TT(o.END_JULIAN_DATE_TT) {
   GROUND_STATIONS.reserve(o.GROUND_STATIONS.size());
   for (const auto &GROUND_STATIONS_ : o.GROUND_STATIONS) { GROUND_STATIONS.emplace_back((GROUND_STATIONS_) ? new ACWGroundStationT(*GROUND_STATIONS_) : nullptr); }
   STATES.reserve(o.STATES.size());
@@ -2330,6 +3726,14 @@ inline ACWRequestT::ACWRequestT(const ACWRequestT &o)
   for (const auto &SUN_STATES_ : o.SUN_STATES) { SUN_STATES.emplace_back((SUN_STATES_) ? new ACWStateSampleT(*SUN_STATES_) : nullptr); }
   MOON_STATES.reserve(o.MOON_STATES.size());
   for (const auto &MOON_STATES_ : o.MOON_STATES) { MOON_STATES.emplace_back((MOON_STATES_) ? new ACWStateSampleT(*MOON_STATES_) : nullptr); }
+  TARGETS.reserve(o.TARGETS.size());
+  for (const auto &TARGETS_ : o.TARGETS) { TARGETS.emplace_back((TARGETS_) ? new ACWTargetT(*TARGETS_) : nullptr); }
+  SENSORS.reserve(o.SENSORS.size());
+  for (const auto &SENSORS_ : o.SENSORS) { SENSORS.emplace_back((SENSORS_) ? new ACWSensorT(*SENSORS_) : nullptr); }
+  ACCESS.reserve(o.ACCESS.size());
+  for (const auto &ACCESS_ : o.ACCESS) { ACCESS.emplace_back((ACCESS_) ? new ACWSensorAccessT(*ACCESS_) : nullptr); }
+  EARTH_ORIENTATION.reserve(o.EARTH_ORIENTATION.size());
+  for (const auto &EARTH_ORIENTATION_ : o.EARTH_ORIENTATION) { EARTH_ORIENTATION.emplace_back((EARTH_ORIENTATION_) ? new EOPT(*EARTH_ORIENTATION_) : nullptr); }
 }
 
 inline ACWRequestT &ACWRequestT::operator=(ACWRequestT o) FLATBUFFERS_NOEXCEPT {
@@ -2347,6 +3751,13 @@ inline ACWRequestT &ACWRequestT::operator=(ACWRequestT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ROOT_TOLERANCE_S, o.ROOT_TOLERANCE_S);
   std::swap(SUN_STATES, o.SUN_STATES);
   std::swap(MOON_STATES, o.MOON_STATES);
+  std::swap(TARGETS, o.TARGETS);
+  std::swap(SENSORS, o.SENSORS);
+  std::swap(ACCESS, o.ACCESS);
+  std::swap(EARTH_ORIENTATION, o.EARTH_ORIENTATION);
+  std::swap(RANDOM_SEED, o.RANDOM_SEED);
+  std::swap(START_JULIAN_DATE_TT, o.START_JULIAN_DATE_TT);
+  std::swap(END_JULIAN_DATE_TT, o.END_JULIAN_DATE_TT);
   return *this;
 }
 
@@ -2373,6 +3784,13 @@ inline void ACWRequest::UnPackTo(ACWRequestT *_o, const ::flatbuffers::resolver_
   { auto _e = ROOT_TOLERANCE_S(); _o->ROOT_TOLERANCE_S = _e; }
   { auto _e = SUN_STATES(); if (_e) { _o->SUN_STATES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SUN_STATES[_i]) { _e->Get(_i)->UnPackTo(_o->SUN_STATES[_i].get(), _resolver); } else { _o->SUN_STATES[_i] = std::unique_ptr<ACWStateSampleT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SUN_STATES.resize(0); } }
   { auto _e = MOON_STATES(); if (_e) { _o->MOON_STATES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->MOON_STATES[_i]) { _e->Get(_i)->UnPackTo(_o->MOON_STATES[_i].get(), _resolver); } else { _o->MOON_STATES[_i] = std::unique_ptr<ACWStateSampleT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->MOON_STATES.resize(0); } }
+  { auto _e = TARGETS(); if (_e) { _o->TARGETS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->TARGETS[_i]) { _e->Get(_i)->UnPackTo(_o->TARGETS[_i].get(), _resolver); } else { _o->TARGETS[_i] = std::unique_ptr<ACWTargetT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->TARGETS.resize(0); } }
+  { auto _e = SENSORS(); if (_e) { _o->SENSORS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SENSORS[_i]) { _e->Get(_i)->UnPackTo(_o->SENSORS[_i].get(), _resolver); } else { _o->SENSORS[_i] = std::unique_ptr<ACWSensorT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SENSORS.resize(0); } }
+  { auto _e = ACCESS(); if (_e) { _o->ACCESS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->ACCESS[_i]) { _e->Get(_i)->UnPackTo(_o->ACCESS[_i].get(), _resolver); } else { _o->ACCESS[_i] = std::unique_ptr<ACWSensorAccessT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->ACCESS.resize(0); } }
+  { auto _e = EARTH_ORIENTATION(); if (_e) { _o->EARTH_ORIENTATION.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EARTH_ORIENTATION[_i]) { _e->Get(_i)->UnPackTo(_o->EARTH_ORIENTATION[_i].get(), _resolver); } else { _o->EARTH_ORIENTATION[_i] = std::unique_ptr<EOPT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EARTH_ORIENTATION.resize(0); } }
+  { auto _e = RANDOM_SEED(); _o->RANDOM_SEED = _e; }
+  { auto _e = START_JULIAN_DATE_TT(); _o->START_JULIAN_DATE_TT = _e; }
+  { auto _e = END_JULIAN_DATE_TT(); _o->END_JULIAN_DATE_TT = _e; }
 }
 
 inline ::flatbuffers::Offset<ACWRequest> CreateACWRequest(::flatbuffers::FlatBufferBuilder &_fbb, const ACWRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2397,6 +3815,13 @@ inline ::flatbuffers::Offset<ACWRequest> ACWRequest::Pack(::flatbuffers::FlatBuf
   auto _ROOT_TOLERANCE_S = _o->ROOT_TOLERANCE_S;
   auto _SUN_STATES = _o->SUN_STATES.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>> (_o->SUN_STATES.size(), [](size_t i, _VectorArgs *__va) { return CreateACWStateSample(*__va->__fbb, __va->__o->SUN_STATES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _MOON_STATES = _o->MOON_STATES.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWStateSample>> (_o->MOON_STATES.size(), [](size_t i, _VectorArgs *__va) { return CreateACWStateSample(*__va->__fbb, __va->__o->MOON_STATES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _TARGETS = _o->TARGETS.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWTarget>> (_o->TARGETS.size(), [](size_t i, _VectorArgs *__va) { return CreateACWTarget(*__va->__fbb, __va->__o->TARGETS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _SENSORS = _o->SENSORS.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWSensor>> (_o->SENSORS.size(), [](size_t i, _VectorArgs *__va) { return CreateACWSensor(*__va->__fbb, __va->__o->SENSORS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _ACCESS = _o->ACCESS.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWSensorAccess>> (_o->ACCESS.size(), [](size_t i, _VectorArgs *__va) { return CreateACWSensorAccess(*__va->__fbb, __va->__o->ACCESS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _EARTH_ORIENTATION = _o->EARTH_ORIENTATION.size() ? _fbb.CreateVector<::flatbuffers::Offset<EOP>> (_o->EARTH_ORIENTATION.size(), [](size_t i, _VectorArgs *__va) { return CreateEOP(*__va->__fbb, __va->__o->EARTH_ORIENTATION[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _RANDOM_SEED = _o->RANDOM_SEED;
+  auto _START_JULIAN_DATE_TT = _o->START_JULIAN_DATE_TT;
+  auto _END_JULIAN_DATE_TT = _o->END_JULIAN_DATE_TT;
   return CreateACWRequest(
       _fbb,
       _OPERATION,
@@ -2412,7 +3837,14 @@ inline ::flatbuffers::Offset<ACWRequest> ACWRequest::Pack(::flatbuffers::FlatBuf
       _EVALUATION_MODE,
       _ROOT_TOLERANCE_S,
       _SUN_STATES,
-      _MOON_STATES);
+      _MOON_STATES,
+      _TARGETS,
+      _SENSORS,
+      _ACCESS,
+      _EARTH_ORIENTATION,
+      _RANDOM_SEED,
+      _START_JULIAN_DATE_TT,
+      _END_JULIAN_DATE_TT);
 }
 
 inline ACWAccessWindowT *ACWAccessWindow::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -2482,9 +3914,12 @@ inline ACWResultT::ACWResultT(const ACWResultT &o)
         ERROR_MESSAGE(o.ERROR_MESSAGE),
         TRACE_ID(o.TRACE_ID),
         EVALUATION_MODE(o.EVALUATION_MODE),
-        CONSTRAINT_LABELS(o.CONSTRAINT_LABELS) {
+        CONSTRAINT_LABELS(o.CONSTRAINT_LABELS),
+        OBSERVATION_COUNT(o.OBSERVATION_COUNT) {
   WINDOWS.reserve(o.WINDOWS.size());
   for (const auto &WINDOWS_ : o.WINDOWS) { WINDOWS.emplace_back((WINDOWS_) ? new ACWAccessWindowT(*WINDOWS_) : nullptr); }
+  TRACKS.reserve(o.TRACKS.size());
+  for (const auto &TRACKS_ : o.TRACKS) { TRACKS.emplace_back((TRACKS_) ? new ACWTrackT(*TRACKS_) : nullptr); }
 }
 
 inline ACWResultT &ACWResultT::operator=(ACWResultT o) FLATBUFFERS_NOEXCEPT {
@@ -2494,6 +3929,8 @@ inline ACWResultT &ACWResultT::operator=(ACWResultT o) FLATBUFFERS_NOEXCEPT {
   std::swap(TRACE_ID, o.TRACE_ID);
   std::swap(EVALUATION_MODE, o.EVALUATION_MODE);
   std::swap(CONSTRAINT_LABELS, o.CONSTRAINT_LABELS);
+  std::swap(TRACKS, o.TRACKS);
+  std::swap(OBSERVATION_COUNT, o.OBSERVATION_COUNT);
   return *this;
 }
 
@@ -2512,6 +3949,8 @@ inline void ACWResult::UnPackTo(ACWResultT *_o, const ::flatbuffers::resolver_fu
   { auto _e = TRACE_ID(); if (_e) _o->TRACE_ID = _e->str(); }
   { auto _e = EVALUATION_MODE(); _o->EVALUATION_MODE = _e; }
   { auto _e = CONSTRAINT_LABELS(); if (_e) { _o->CONSTRAINT_LABELS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CONSTRAINT_LABELS[_i] = _e->Get(_i)->str(); } } else { _o->CONSTRAINT_LABELS.resize(0); } }
+  { auto _e = TRACKS(); if (_e) { _o->TRACKS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->TRACKS[_i]) { _e->Get(_i)->UnPackTo(_o->TRACKS[_i].get(), _resolver); } else { _o->TRACKS[_i] = std::unique_ptr<ACWTrackT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->TRACKS.resize(0); } }
+  { auto _e = OBSERVATION_COUNT(); _o->OBSERVATION_COUNT = _e; }
 }
 
 inline ::flatbuffers::Offset<ACWResult> CreateACWResult(::flatbuffers::FlatBufferBuilder &_fbb, const ACWResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2528,6 +3967,8 @@ inline ::flatbuffers::Offset<ACWResult> ACWResult::Pack(::flatbuffers::FlatBuffe
   auto _TRACE_ID = _o->TRACE_ID.empty() ? 0 : _fbb.CreateString(_o->TRACE_ID);
   auto _EVALUATION_MODE = _o->EVALUATION_MODE;
   auto _CONSTRAINT_LABELS = _o->CONSTRAINT_LABELS.size() ? _fbb.CreateVectorOfStrings(_o->CONSTRAINT_LABELS) : 0;
+  auto _TRACKS = _o->TRACKS.size() ? _fbb.CreateVector<::flatbuffers::Offset<ACWTrack>> (_o->TRACKS.size(), [](size_t i, _VectorArgs *__va) { return CreateACWTrack(*__va->__fbb, __va->__o->TRACKS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _OBSERVATION_COUNT = _o->OBSERVATION_COUNT;
   return CreateACWResult(
       _fbb,
       _STATUS,
@@ -2535,7 +3976,9 @@ inline ::flatbuffers::Offset<ACWResult> ACWResult::Pack(::flatbuffers::FlatBuffe
       _WINDOWS,
       _TRACE_ID,
       _EVALUATION_MODE,
-      _CONSTRAINT_LABELS);
+      _CONSTRAINT_LABELS,
+      _TRACKS,
+      _OBSERVATION_COUNT);
 }
 
 inline ACWT::ACWT(const ACWT &o)

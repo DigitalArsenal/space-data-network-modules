@@ -1,15 +1,22 @@
 import * as flatbuffers from 'flatbuffers';
-import { PRWEcom2, PRWEcom2T } from './PRWEcom2.js';
-import { PRWSpaceWeather, PRWSpaceWeatherT } from './PRWSpaceWeather.js';
-import { prwAtmosphereFamily } from './prwAtmosphereFamily.js';
-import { prwEarthRadiationModel } from './prwEarthRadiationModel.js';
-import { prwGnssSpacecraftBlock } from './prwGnssSpacecraftBlock.js';
-import { prwGravitySelection } from './prwGravitySelection.js';
-import { prwOceanTideModel } from './prwOceanTideModel.js';
-import { prwRadiationPressureFamily } from './prwRadiationPressureFamily.js';
-import { prwRelativityTerms } from './prwRelativityTerms.js';
-import { prwSolidTideModel } from './prwSolidTideModel.js';
-export class PRWForceConfiguration {
+import { PCFEcom2, PCFEcom2T } from './PCFEcom2.js';
+import { PCFEmpiricalTerms, PCFEmpiricalTermsT } from './PCFEmpiricalTerms.js';
+import { PCFSpaceWeather, PCFSpaceWeatherT } from './PCFSpaceWeather.js';
+import { evlShadowModel } from './evlShadowModel.js';
+import { pcfAtmosphereFamily } from './pcfAtmosphereFamily.js';
+import { pcfDensityCorrection } from './pcfDensityCorrection.js';
+import { pcfEarthRadiationModel } from './pcfEarthRadiationModel.js';
+import { pcfEphemerisKind } from './pcfEphemerisKind.js';
+import { pcfGnssSpacecraftBlock } from './pcfGnssSpacecraftBlock.js';
+import { pcfGravitySelection } from './pcfGravitySelection.js';
+import { pcfNeutralWind } from './pcfNeutralWind.js';
+import { pcfOceanTideModel } from './pcfOceanTideModel.js';
+import { pcfRadiationPressureFamily } from './pcfRadiationPressureFamily.js';
+import { pcfRelativityTerms } from './pcfRelativityTerms.js';
+import { pcfSolidTideModel } from './pcfSolidTideModel.js';
+import { pcfWeatherExtension } from './pcfWeatherExtension.js';
+import { pcfWeatherSource } from './pcfWeatherSource.js';
+export class PCFForceModel {
     bb = null;
     bb_pos = 0;
     __init(i, bb) {
@@ -17,16 +24,16 @@ export class PRWForceConfiguration {
         this.bb = bb;
         return this;
     }
-    static getRootAsPRWForceConfiguration(bb, obj) {
-        return (obj || new PRWForceConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    static getRootAsPCFForceModel(bb, obj) {
+        return (obj || new PCFForceModel()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
-    static getSizePrefixedRootAsPRWForceConfiguration(bb, obj) {
+    static getSizePrefixedRootAsPCFForceModel(bb, obj) {
         bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-        return (obj || new PRWForceConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+        return (obj || new PCFForceModel()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
     GRAVITY_CHOICE() {
         const offset = this.bb.__offset(this.bb_pos, 4);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwGravitySelection.INFER_FLAGS;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfGravitySelection.INFER_FLAGS;
     }
     ENABLE_POINT_MASS() {
         const offset = this.bb.__offset(this.bb_pos, 6);
@@ -110,11 +117,11 @@ export class PRWForceConfiguration {
     }
     ATMOSPHERE_MODEL() {
         const offset = this.bb.__offset(this.bb_pos, 42);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwAtmosphereFamily.NRLMSISE00;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfAtmosphereFamily.NRLMSISE00;
     }
     WEATHER(obj) {
         const offset = this.bb.__offset(this.bb_pos, 44);
-        return offset ? (obj || new PRWSpaceWeather()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+        return offset ? (obj || new PCFSpaceWeather()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
     }
     EPHEMERIS_SOURCE(optionalEncoding) {
         const offset = this.bb.__offset(this.bb_pos, 46);
@@ -122,11 +129,11 @@ export class PRWForceConfiguration {
     }
     SOLID_TIDES() {
         const offset = this.bb.__offset(this.bb_pos, 48);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwSolidTideModel.NONE;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfSolidTideModel.NONE;
     }
     RELATIVITY() {
         const offset = this.bb.__offset(this.bb_pos, 50);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwRelativityTerms.NONE;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfRelativityTerms.NONE;
     }
     IN_TRACK_ACCELERATION_M_S2() {
         const offset = this.bb.__offset(this.bb_pos, 52);
@@ -154,19 +161,19 @@ export class PRWForceConfiguration {
     }
     RADIATION_PRESSURE_MODEL() {
         const offset = this.bb.__offset(this.bb_pos, 64);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwRadiationPressureFamily.CANNONBALL;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfRadiationPressureFamily.CANNONBALL;
     }
     GNSS_BLOCK() {
         const offset = this.bb.__offset(this.bb_pos, 66);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwGnssSpacecraftBlock.UNSPECIFIED;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfGnssSpacecraftBlock.UNSPECIFIED;
     }
     ECOM2(obj) {
         const offset = this.bb.__offset(this.bb_pos, 68);
-        return offset ? (obj || new PRWEcom2()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+        return offset ? (obj || new PCFEcom2()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
     }
     EARTH_RADIATION() {
         const offset = this.bb.__offset(this.bb_pos, 70);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwEarthRadiationModel.NONE;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfEarthRadiationModel.NONE;
     }
     EARTH_RADIATION_RESOLUTION_DEG() {
         const offset = this.bb.__offset(this.bb_pos, 72);
@@ -182,7 +189,7 @@ export class PRWForceConfiguration {
     }
     OCEAN_TIDES() {
         const offset = this.bb.__offset(this.bb_pos, 78);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwOceanTideModel.NONE;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfOceanTideModel.NONE;
     }
     OCEAN_TIDE_MAXIMUM_DEGREE() {
         const offset = this.bb.__offset(this.bb_pos, 80);
@@ -192,11 +199,51 @@ export class PRWForceConfiguration {
         const offset = this.bb.__offset(this.bb_pos, 82);
         return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
     }
-    static startPRWForceConfiguration(builder) {
-        builder.startObject(40);
+    CENTRAL_BODY_NAIF_ID() {
+        const offset = this.bb.__offset(this.bb_pos, 84);
+        return offset ? this.bb.readInt32(this.bb_pos + offset) : 399;
+    }
+    EPHEMERIS_KIND() {
+        const offset = this.bb.__offset(this.bb_pos, 86);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfEphemerisKind.UNSPECIFIED;
+    }
+    SHADOW_MODEL() {
+        const offset = this.bb.__offset(this.bb_pos, 88);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : evlShadowModel.UNSPECIFIED;
+    }
+    WEATHER_SOURCE() {
+        const offset = this.bb.__offset(this.bb_pos, 90);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfWeatherSource.UNSPECIFIED;
+    }
+    WEATHER_EXTENSION() {
+        const offset = this.bb.__offset(this.bb_pos, 92);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfWeatherExtension.UNSPECIFIED;
+    }
+    DENSITY_CORRECTION() {
+        const offset = this.bb.__offset(this.bb_pos, 94);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfDensityCorrection.NONE;
+    }
+    DENSITY_CORRECTION_RELAXATION_HOURS() {
+        const offset = this.bb.__offset(this.bb_pos, 96);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    HAS_DENSITY_CORRECTION_RELAXATION_HOURS() {
+        const offset = this.bb.__offset(this.bb_pos, 98);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
+    NEUTRAL_WIND() {
+        const offset = this.bb.__offset(this.bb_pos, 100);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfNeutralWind.NONE;
+    }
+    EMPIRICAL_TERMS(obj) {
+        const offset = this.bb.__offset(this.bb_pos, 102);
+        return offset ? (obj || new PCFEmpiricalTerms()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    }
+    static startPCFForceModel(builder) {
+        builder.startObject(50);
     }
     static addGravityChoice(builder, GRAVITY_CHOICE) {
-        builder.addFieldInt8(0, GRAVITY_CHOICE, prwGravitySelection.INFER_FLAGS);
+        builder.addFieldInt8(0, GRAVITY_CHOICE, pcfGravitySelection.INFER_FLAGS);
     }
     static addEnablePointMass(builder, ENABLE_POINT_MASS) {
         builder.addFieldInt8(1, +ENABLE_POINT_MASS, +true);
@@ -263,7 +310,7 @@ export class PRWForceConfiguration {
         builder.addFieldFloat64(18, DRAG_COEFFICIENT, 2.2);
     }
     static addAtmosphereModel(builder, ATMOSPHERE_MODEL) {
-        builder.addFieldInt8(19, ATMOSPHERE_MODEL, prwAtmosphereFamily.NRLMSISE00);
+        builder.addFieldInt8(19, ATMOSPHERE_MODEL, pcfAtmosphereFamily.NRLMSISE00);
     }
     static addWeather(builder, WEATHEROffset) {
         builder.addFieldOffset(20, WEATHEROffset, 0);
@@ -272,10 +319,10 @@ export class PRWForceConfiguration {
         builder.addFieldOffset(21, EPHEMERIS_SOURCEOffset, 0);
     }
     static addSolidTides(builder, SOLID_TIDES) {
-        builder.addFieldInt8(22, SOLID_TIDES, prwSolidTideModel.NONE);
+        builder.addFieldInt8(22, SOLID_TIDES, pcfSolidTideModel.NONE);
     }
     static addRelativity(builder, RELATIVITY) {
-        builder.addFieldInt8(23, RELATIVITY, prwRelativityTerms.NONE);
+        builder.addFieldInt8(23, RELATIVITY, pcfRelativityTerms.NONE);
     }
     static addInTrackAccelerationMS2(builder, IN_TRACK_ACCELERATION_M_S2) {
         builder.addFieldFloat64(24, IN_TRACK_ACCELERATION_M_S2, 0.0);
@@ -296,16 +343,16 @@ export class PRWForceConfiguration {
         builder.addFieldInt8(29, +HAS_MAXIMUM_TESSERAL_DEGREE, +false);
     }
     static addRadiationPressureModel(builder, RADIATION_PRESSURE_MODEL) {
-        builder.addFieldInt8(30, RADIATION_PRESSURE_MODEL, prwRadiationPressureFamily.CANNONBALL);
+        builder.addFieldInt8(30, RADIATION_PRESSURE_MODEL, pcfRadiationPressureFamily.CANNONBALL);
     }
     static addGnssBlock(builder, GNSS_BLOCK) {
-        builder.addFieldInt8(31, GNSS_BLOCK, prwGnssSpacecraftBlock.UNSPECIFIED);
+        builder.addFieldInt8(31, GNSS_BLOCK, pcfGnssSpacecraftBlock.UNSPECIFIED);
     }
     static addEcom2(builder, ECOM2Offset) {
         builder.addFieldOffset(32, ECOM2Offset, 0);
     }
     static addEarthRadiation(builder, EARTH_RADIATION) {
-        builder.addFieldInt8(33, EARTH_RADIATION, prwEarthRadiationModel.NONE);
+        builder.addFieldInt8(33, EARTH_RADIATION, pcfEarthRadiationModel.NONE);
     }
     static addEarthRadiationResolutionDeg(builder, EARTH_RADIATION_RESOLUTION_DEG) {
         builder.addFieldFloat64(34, EARTH_RADIATION_RESOLUTION_DEG, 15.0);
@@ -317,7 +364,7 @@ export class PRWForceConfiguration {
         builder.addFieldInt8(36, +HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, +false);
     }
     static addOceanTides(builder, OCEAN_TIDES) {
-        builder.addFieldInt8(37, OCEAN_TIDES, prwOceanTideModel.NONE);
+        builder.addFieldInt8(37, OCEAN_TIDES, pcfOceanTideModel.NONE);
     }
     static addOceanTideMaximumDegree(builder, OCEAN_TIDE_MAXIMUM_DEGREE) {
         builder.addFieldInt16(38, OCEAN_TIDE_MAXIMUM_DEGREE, 30);
@@ -325,13 +372,43 @@ export class PRWForceConfiguration {
     static addOceanTideMaximumOrder(builder, OCEAN_TIDE_MAXIMUM_ORDER) {
         builder.addFieldInt16(39, OCEAN_TIDE_MAXIMUM_ORDER, 30);
     }
-    static endPRWForceConfiguration(builder) {
+    static addCentralBodyNaifId(builder, CENTRAL_BODY_NAIF_ID) {
+        builder.addFieldInt32(40, CENTRAL_BODY_NAIF_ID, 399);
+    }
+    static addEphemerisKind(builder, EPHEMERIS_KIND) {
+        builder.addFieldInt8(41, EPHEMERIS_KIND, pcfEphemerisKind.UNSPECIFIED);
+    }
+    static addShadowModel(builder, SHADOW_MODEL) {
+        builder.addFieldInt8(42, SHADOW_MODEL, evlShadowModel.UNSPECIFIED);
+    }
+    static addWeatherSource(builder, WEATHER_SOURCE) {
+        builder.addFieldInt8(43, WEATHER_SOURCE, pcfWeatherSource.UNSPECIFIED);
+    }
+    static addWeatherExtension(builder, WEATHER_EXTENSION) {
+        builder.addFieldInt8(44, WEATHER_EXTENSION, pcfWeatherExtension.UNSPECIFIED);
+    }
+    static addDensityCorrection(builder, DENSITY_CORRECTION) {
+        builder.addFieldInt8(45, DENSITY_CORRECTION, pcfDensityCorrection.NONE);
+    }
+    static addDensityCorrectionRelaxationHours(builder, DENSITY_CORRECTION_RELAXATION_HOURS) {
+        builder.addFieldFloat64(46, DENSITY_CORRECTION_RELAXATION_HOURS, 0.0);
+    }
+    static addHasDensityCorrectionRelaxationHours(builder, HAS_DENSITY_CORRECTION_RELAXATION_HOURS) {
+        builder.addFieldInt8(47, +HAS_DENSITY_CORRECTION_RELAXATION_HOURS, +false);
+    }
+    static addNeutralWind(builder, NEUTRAL_WIND) {
+        builder.addFieldInt8(48, NEUTRAL_WIND, pcfNeutralWind.NONE);
+    }
+    static addEmpiricalTerms(builder, EMPIRICAL_TERMSOffset) {
+        builder.addFieldOffset(49, EMPIRICAL_TERMSOffset, 0);
+    }
+    static endPCFForceModel(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 46);
         return offset;
     }
     unpack() {
-        return new PRWForceConfigurationT(this.GRAVITY_CHOICE(), this.ENABLE_POINT_MASS(), this.GRAVITATIONAL_PARAMETER(), this.ENABLE_J2(), this.ENABLE_J3(), this.ENABLE_J4(), this.ENABLE_HIGHER_ZONALS(), this.MAXIMUM_DEGREE(), this.HAS_MAXIMUM_DEGREE(), this.MAXIMUM_ORDER(), this.HAS_MAXIMUM_ORDER(), this.ENABLE_THIRD_BODY(), this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength()), this.ENABLE_SRP(), this.ENABLE_DRAG(), this.INITIAL_MASS_KG(), this.AREA_M2(), this.REFLECTIVITY_COEFFICIENT(), this.DRAG_COEFFICIENT(), this.ATMOSPHERE_MODEL(), this.WEATHER() !== null ? this.WEATHER().unpack() : null, this.EPHEMERIS_SOURCE(), this.SOLID_TIDES(), this.RELATIVITY(), this.IN_TRACK_ACCELERATION_M_S2(), this.HAS_IN_TRACK_ACCELERATION_M_S2(), this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.MAXIMUM_TESSERAL_DEGREE(), this.HAS_MAXIMUM_TESSERAL_DEGREE(), this.RADIATION_PRESSURE_MODEL(), this.GNSS_BLOCK(), this.ECOM2() !== null ? this.ECOM2().unpack() : null, this.EARTH_RADIATION(), this.EARTH_RADIATION_RESOLUTION_DEG(), this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG(), this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(), this.OCEAN_TIDES(), this.OCEAN_TIDE_MAXIMUM_DEGREE(), this.OCEAN_TIDE_MAXIMUM_ORDER());
+        return new PCFForceModelT(this.GRAVITY_CHOICE(), this.ENABLE_POINT_MASS(), this.GRAVITATIONAL_PARAMETER(), this.ENABLE_J2(), this.ENABLE_J3(), this.ENABLE_J4(), this.ENABLE_HIGHER_ZONALS(), this.MAXIMUM_DEGREE(), this.HAS_MAXIMUM_DEGREE(), this.MAXIMUM_ORDER(), this.HAS_MAXIMUM_ORDER(), this.ENABLE_THIRD_BODY(), this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength()), this.ENABLE_SRP(), this.ENABLE_DRAG(), this.INITIAL_MASS_KG(), this.AREA_M2(), this.REFLECTIVITY_COEFFICIENT(), this.DRAG_COEFFICIENT(), this.ATMOSPHERE_MODEL(), this.WEATHER() !== null ? this.WEATHER().unpack() : null, this.EPHEMERIS_SOURCE(), this.SOLID_TIDES(), this.RELATIVITY(), this.IN_TRACK_ACCELERATION_M_S2(), this.HAS_IN_TRACK_ACCELERATION_M_S2(), this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.MAXIMUM_TESSERAL_DEGREE(), this.HAS_MAXIMUM_TESSERAL_DEGREE(), this.RADIATION_PRESSURE_MODEL(), this.GNSS_BLOCK(), this.ECOM2() !== null ? this.ECOM2().unpack() : null, this.EARTH_RADIATION(), this.EARTH_RADIATION_RESOLUTION_DEG(), this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG(), this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(), this.OCEAN_TIDES(), this.OCEAN_TIDE_MAXIMUM_DEGREE(), this.OCEAN_TIDE_MAXIMUM_ORDER(), this.CENTRAL_BODY_NAIF_ID(), this.EPHEMERIS_KIND(), this.SHADOW_MODEL(), this.WEATHER_SOURCE(), this.WEATHER_EXTENSION(), this.DENSITY_CORRECTION(), this.DENSITY_CORRECTION_RELAXATION_HOURS(), this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS(), this.NEUTRAL_WIND(), this.EMPIRICAL_TERMS() !== null ? this.EMPIRICAL_TERMS().unpack() : null);
     }
     unpackTo(_o) {
         _o.GRAVITY_CHOICE = this.GRAVITY_CHOICE();
@@ -374,9 +451,19 @@ export class PRWForceConfiguration {
         _o.OCEAN_TIDES = this.OCEAN_TIDES();
         _o.OCEAN_TIDE_MAXIMUM_DEGREE = this.OCEAN_TIDE_MAXIMUM_DEGREE();
         _o.OCEAN_TIDE_MAXIMUM_ORDER = this.OCEAN_TIDE_MAXIMUM_ORDER();
+        _o.CENTRAL_BODY_NAIF_ID = this.CENTRAL_BODY_NAIF_ID();
+        _o.EPHEMERIS_KIND = this.EPHEMERIS_KIND();
+        _o.SHADOW_MODEL = this.SHADOW_MODEL();
+        _o.WEATHER_SOURCE = this.WEATHER_SOURCE();
+        _o.WEATHER_EXTENSION = this.WEATHER_EXTENSION();
+        _o.DENSITY_CORRECTION = this.DENSITY_CORRECTION();
+        _o.DENSITY_CORRECTION_RELAXATION_HOURS = this.DENSITY_CORRECTION_RELAXATION_HOURS();
+        _o.HAS_DENSITY_CORRECTION_RELAXATION_HOURS = this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS();
+        _o.NEUTRAL_WIND = this.NEUTRAL_WIND();
+        _o.EMPIRICAL_TERMS = this.EMPIRICAL_TERMS() !== null ? this.EMPIRICAL_TERMS().unpack() : null;
     }
 }
-export class PRWForceConfigurationT {
+export class PCFForceModelT {
     GRAVITY_CHOICE;
     ENABLE_POINT_MASS;
     GRAVITATIONAL_PARAMETER;
@@ -417,7 +504,17 @@ export class PRWForceConfigurationT {
     OCEAN_TIDES;
     OCEAN_TIDE_MAXIMUM_DEGREE;
     OCEAN_TIDE_MAXIMUM_ORDER;
-    constructor(GRAVITY_CHOICE = prwGravitySelection.INFER_FLAGS, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0.0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1000.0, AREA_M2 = 10.0, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = prwAtmosphereFamily.NRLMSISE00, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = prwSolidTideModel.NONE, RELATIVITY = prwRelativityTerms.NONE, IN_TRACK_ACCELERATION_M_S2 = 0.0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false, RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily.CANNONBALL, GNSS_BLOCK = prwGnssSpacecraftBlock.UNSPECIFIED, ECOM2 = null, EARTH_RADIATION = prwEarthRadiationModel.NONE, EARTH_RADIATION_RESOLUTION_DEG = 15.0, EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false, OCEAN_TIDES = prwOceanTideModel.NONE, OCEAN_TIDE_MAXIMUM_DEGREE = 30, OCEAN_TIDE_MAXIMUM_ORDER = 30){
+    CENTRAL_BODY_NAIF_ID;
+    EPHEMERIS_KIND;
+    SHADOW_MODEL;
+    WEATHER_SOURCE;
+    WEATHER_EXTENSION;
+    DENSITY_CORRECTION;
+    DENSITY_CORRECTION_RELAXATION_HOURS;
+    HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
+    NEUTRAL_WIND;
+    EMPIRICAL_TERMS;
+    constructor(GRAVITY_CHOICE = pcfGravitySelection.INFER_FLAGS, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0.0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1000.0, AREA_M2 = 10.0, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = pcfAtmosphereFamily.NRLMSISE00, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = pcfSolidTideModel.NONE, RELATIVITY = pcfRelativityTerms.NONE, IN_TRACK_ACCELERATION_M_S2 = 0.0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false, RADIATION_PRESSURE_MODEL = pcfRadiationPressureFamily.CANNONBALL, GNSS_BLOCK = pcfGnssSpacecraftBlock.UNSPECIFIED, ECOM2 = null, EARTH_RADIATION = pcfEarthRadiationModel.NONE, EARTH_RADIATION_RESOLUTION_DEG = 15.0, EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false, OCEAN_TIDES = pcfOceanTideModel.NONE, OCEAN_TIDE_MAXIMUM_DEGREE = 30, OCEAN_TIDE_MAXIMUM_ORDER = 30, CENTRAL_BODY_NAIF_ID = 399, EPHEMERIS_KIND = pcfEphemerisKind.UNSPECIFIED, SHADOW_MODEL = evlShadowModel.UNSPECIFIED, WEATHER_SOURCE = pcfWeatherSource.UNSPECIFIED, WEATHER_EXTENSION = pcfWeatherExtension.UNSPECIFIED, DENSITY_CORRECTION = pcfDensityCorrection.NONE, DENSITY_CORRECTION_RELAXATION_HOURS = 0.0, HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false, NEUTRAL_WIND = pcfNeutralWind.NONE, EMPIRICAL_TERMS = null){
         this.GRAVITY_CHOICE = GRAVITY_CHOICE;
         this.ENABLE_POINT_MASS = ENABLE_POINT_MASS;
         this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
@@ -458,53 +555,74 @@ export class PRWForceConfigurationT {
         this.OCEAN_TIDES = OCEAN_TIDES;
         this.OCEAN_TIDE_MAXIMUM_DEGREE = OCEAN_TIDE_MAXIMUM_DEGREE;
         this.OCEAN_TIDE_MAXIMUM_ORDER = OCEAN_TIDE_MAXIMUM_ORDER;
+        this.CENTRAL_BODY_NAIF_ID = CENTRAL_BODY_NAIF_ID;
+        this.EPHEMERIS_KIND = EPHEMERIS_KIND;
+        this.SHADOW_MODEL = SHADOW_MODEL;
+        this.WEATHER_SOURCE = WEATHER_SOURCE;
+        this.WEATHER_EXTENSION = WEATHER_EXTENSION;
+        this.DENSITY_CORRECTION = DENSITY_CORRECTION;
+        this.DENSITY_CORRECTION_RELAXATION_HOURS = DENSITY_CORRECTION_RELAXATION_HOURS;
+        this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS = HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
+        this.NEUTRAL_WIND = NEUTRAL_WIND;
+        this.EMPIRICAL_TERMS = EMPIRICAL_TERMS;
     }
     pack(builder) {
-        const THIRD_BODY_IDS = PRWForceConfiguration.createThirdBodyIdsVector(builder, this.THIRD_BODY_IDS);
+        const THIRD_BODY_IDS = PCFForceModel.createThirdBodyIdsVector(builder, this.THIRD_BODY_IDS);
         const WEATHER = this.WEATHER !== null ? this.WEATHER.pack(builder) : 0;
         const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
         const ECOM2 = this.ECOM2 !== null ? this.ECOM2.pack(builder) : 0;
-        PRWForceConfiguration.startPRWForceConfiguration(builder);
-        PRWForceConfiguration.addGravityChoice(builder, this.GRAVITY_CHOICE);
-        PRWForceConfiguration.addEnablePointMass(builder, this.ENABLE_POINT_MASS);
-        PRWForceConfiguration.addGravitationalParameter(builder, this.GRAVITATIONAL_PARAMETER);
-        PRWForceConfiguration.addEnableJ2(builder, this.ENABLE_J2);
-        PRWForceConfiguration.addEnableJ3(builder, this.ENABLE_J3);
-        PRWForceConfiguration.addEnableJ4(builder, this.ENABLE_J4);
-        PRWForceConfiguration.addEnableHigherZonals(builder, this.ENABLE_HIGHER_ZONALS);
-        PRWForceConfiguration.addMaximumDegree(builder, this.MAXIMUM_DEGREE);
-        PRWForceConfiguration.addHasMaximumDegree(builder, this.HAS_MAXIMUM_DEGREE);
-        PRWForceConfiguration.addMaximumOrder(builder, this.MAXIMUM_ORDER);
-        PRWForceConfiguration.addHasMaximumOrder(builder, this.HAS_MAXIMUM_ORDER);
-        PRWForceConfiguration.addEnableThirdBody(builder, this.ENABLE_THIRD_BODY);
-        PRWForceConfiguration.addThirdBodyIds(builder, THIRD_BODY_IDS);
-        PRWForceConfiguration.addEnableSrp(builder, this.ENABLE_SRP);
-        PRWForceConfiguration.addEnableDrag(builder, this.ENABLE_DRAG);
-        PRWForceConfiguration.addInitialMassKg(builder, this.INITIAL_MASS_KG);
-        PRWForceConfiguration.addAreaM2(builder, this.AREA_M2);
-        PRWForceConfiguration.addReflectivityCoefficient(builder, this.REFLECTIVITY_COEFFICIENT);
-        PRWForceConfiguration.addDragCoefficient(builder, this.DRAG_COEFFICIENT);
-        PRWForceConfiguration.addAtmosphereModel(builder, this.ATMOSPHERE_MODEL);
-        PRWForceConfiguration.addWeather(builder, WEATHER);
-        PRWForceConfiguration.addEphemerisSource(builder, EPHEMERIS_SOURCE);
-        PRWForceConfiguration.addSolidTides(builder, this.SOLID_TIDES);
-        PRWForceConfiguration.addRelativity(builder, this.RELATIVITY);
-        PRWForceConfiguration.addInTrackAccelerationMS2(builder, this.IN_TRACK_ACCELERATION_M_S2);
-        PRWForceConfiguration.addHasInTrackAccelerationMS2(builder, this.HAS_IN_TRACK_ACCELERATION_M_S2);
-        PRWForceConfiguration.addDragAreaOverMassRateM2KgS(builder, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
-        PRWForceConfiguration.addHasDragAreaOverMassRateM2KgS(builder, this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
-        PRWForceConfiguration.addMaximumTesseralDegree(builder, this.MAXIMUM_TESSERAL_DEGREE);
-        PRWForceConfiguration.addHasMaximumTesseralDegree(builder, this.HAS_MAXIMUM_TESSERAL_DEGREE);
-        PRWForceConfiguration.addRadiationPressureModel(builder, this.RADIATION_PRESSURE_MODEL);
-        PRWForceConfiguration.addGnssBlock(builder, this.GNSS_BLOCK);
-        PRWForceConfiguration.addEcom2(builder, ECOM2);
-        PRWForceConfiguration.addEarthRadiation(builder, this.EARTH_RADIATION);
-        PRWForceConfiguration.addEarthRadiationResolutionDeg(builder, this.EARTH_RADIATION_RESOLUTION_DEG);
-        PRWForceConfiguration.addEarthRadiationAreaOverMassM2Kg(builder, this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
-        PRWForceConfiguration.addHasEarthRadiationAreaOverMassM2Kg(builder, this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
-        PRWForceConfiguration.addOceanTides(builder, this.OCEAN_TIDES);
-        PRWForceConfiguration.addOceanTideMaximumDegree(builder, this.OCEAN_TIDE_MAXIMUM_DEGREE);
-        PRWForceConfiguration.addOceanTideMaximumOrder(builder, this.OCEAN_TIDE_MAXIMUM_ORDER);
-        return PRWForceConfiguration.endPRWForceConfiguration(builder);
+        const EMPIRICAL_TERMS = this.EMPIRICAL_TERMS !== null ? this.EMPIRICAL_TERMS.pack(builder) : 0;
+        PCFForceModel.startPCFForceModel(builder);
+        PCFForceModel.addGravityChoice(builder, this.GRAVITY_CHOICE);
+        PCFForceModel.addEnablePointMass(builder, this.ENABLE_POINT_MASS);
+        PCFForceModel.addGravitationalParameter(builder, this.GRAVITATIONAL_PARAMETER);
+        PCFForceModel.addEnableJ2(builder, this.ENABLE_J2);
+        PCFForceModel.addEnableJ3(builder, this.ENABLE_J3);
+        PCFForceModel.addEnableJ4(builder, this.ENABLE_J4);
+        PCFForceModel.addEnableHigherZonals(builder, this.ENABLE_HIGHER_ZONALS);
+        PCFForceModel.addMaximumDegree(builder, this.MAXIMUM_DEGREE);
+        PCFForceModel.addHasMaximumDegree(builder, this.HAS_MAXIMUM_DEGREE);
+        PCFForceModel.addMaximumOrder(builder, this.MAXIMUM_ORDER);
+        PCFForceModel.addHasMaximumOrder(builder, this.HAS_MAXIMUM_ORDER);
+        PCFForceModel.addEnableThirdBody(builder, this.ENABLE_THIRD_BODY);
+        PCFForceModel.addThirdBodyIds(builder, THIRD_BODY_IDS);
+        PCFForceModel.addEnableSrp(builder, this.ENABLE_SRP);
+        PCFForceModel.addEnableDrag(builder, this.ENABLE_DRAG);
+        PCFForceModel.addInitialMassKg(builder, this.INITIAL_MASS_KG);
+        PCFForceModel.addAreaM2(builder, this.AREA_M2);
+        PCFForceModel.addReflectivityCoefficient(builder, this.REFLECTIVITY_COEFFICIENT);
+        PCFForceModel.addDragCoefficient(builder, this.DRAG_COEFFICIENT);
+        PCFForceModel.addAtmosphereModel(builder, this.ATMOSPHERE_MODEL);
+        PCFForceModel.addWeather(builder, WEATHER);
+        PCFForceModel.addEphemerisSource(builder, EPHEMERIS_SOURCE);
+        PCFForceModel.addSolidTides(builder, this.SOLID_TIDES);
+        PCFForceModel.addRelativity(builder, this.RELATIVITY);
+        PCFForceModel.addInTrackAccelerationMS2(builder, this.IN_TRACK_ACCELERATION_M_S2);
+        PCFForceModel.addHasInTrackAccelerationMS2(builder, this.HAS_IN_TRACK_ACCELERATION_M_S2);
+        PCFForceModel.addDragAreaOverMassRateM2KgS(builder, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+        PCFForceModel.addHasDragAreaOverMassRateM2KgS(builder, this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+        PCFForceModel.addMaximumTesseralDegree(builder, this.MAXIMUM_TESSERAL_DEGREE);
+        PCFForceModel.addHasMaximumTesseralDegree(builder, this.HAS_MAXIMUM_TESSERAL_DEGREE);
+        PCFForceModel.addRadiationPressureModel(builder, this.RADIATION_PRESSURE_MODEL);
+        PCFForceModel.addGnssBlock(builder, this.GNSS_BLOCK);
+        PCFForceModel.addEcom2(builder, ECOM2);
+        PCFForceModel.addEarthRadiation(builder, this.EARTH_RADIATION);
+        PCFForceModel.addEarthRadiationResolutionDeg(builder, this.EARTH_RADIATION_RESOLUTION_DEG);
+        PCFForceModel.addEarthRadiationAreaOverMassM2Kg(builder, this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+        PCFForceModel.addHasEarthRadiationAreaOverMassM2Kg(builder, this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+        PCFForceModel.addOceanTides(builder, this.OCEAN_TIDES);
+        PCFForceModel.addOceanTideMaximumDegree(builder, this.OCEAN_TIDE_MAXIMUM_DEGREE);
+        PCFForceModel.addOceanTideMaximumOrder(builder, this.OCEAN_TIDE_MAXIMUM_ORDER);
+        PCFForceModel.addCentralBodyNaifId(builder, this.CENTRAL_BODY_NAIF_ID);
+        PCFForceModel.addEphemerisKind(builder, this.EPHEMERIS_KIND);
+        PCFForceModel.addShadowModel(builder, this.SHADOW_MODEL);
+        PCFForceModel.addWeatherSource(builder, this.WEATHER_SOURCE);
+        PCFForceModel.addWeatherExtension(builder, this.WEATHER_EXTENSION);
+        PCFForceModel.addDensityCorrection(builder, this.DENSITY_CORRECTION);
+        PCFForceModel.addDensityCorrectionRelaxationHours(builder, this.DENSITY_CORRECTION_RELAXATION_HOURS);
+        PCFForceModel.addHasDensityCorrectionRelaxationHours(builder, this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS);
+        PCFForceModel.addNeutralWind(builder, this.NEUTRAL_WIND);
+        PCFForceModel.addEmpiricalTerms(builder, EMPIRICAL_TERMS);
+        return PCFForceModel.endPCFForceModel(builder);
     }
 }

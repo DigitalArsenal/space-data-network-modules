@@ -467,6 +467,7 @@ std::unique_ptr<ResidentDynamics> ResidentDynamics::configure(const Inputs& in, 
     if (!decodeResidentState(initial, probe, error, &axes)) return nullptr;
     if (axes != coords::Frame::GCRF) { prwError(error, "unsupported-frame: A resident configuration uses Earth-centered ICRF axes (GCRF)."); return nullptr; }
     if (!parseExecution(request, d->environment_.earth != nullptr, d->template_, error)) return nullptr;
+    if (!d->template_.events.empty()) { prwError(error, "unsupported-events: A resident configuration does not locate events; use an execution request."); return nullptr; }
     const auto method = d->template_.integrator.method;
     if (method != IntegrationMethod::RK78 && method != IntegrationMethod::RKF78) {
         prwError(error, "unsupported-integrator: Resident trajectories integrate with RK78 or RKF78 (dense output from their accepted steps).");
@@ -475,7 +476,7 @@ std::unique_ptr<ResidentDynamics> ResidentDynamics::configure(const Inputs& in, 
     d->requestWeather_ = request->FORCES()->WEATHER() != nullptr;
     if (!attachEnvironment(d->template_, d->environment_, d->requestWeather_, error)) return nullptr;
     d->gravitationalParameter_ = request->FORCES()->GRAVITATIONAL_PARAMETER();
-    d->cannonball_ = request->FORCES()->RADIATION_PRESSURE_MODEL() == prwRadiationPressureFamily::CANNONBALL;
+    d->cannonball_ = request->FORCES()->RADIATION_PRESSURE_MODEL() == pcfRadiationPressureFamily::CANNONBALL;
     return d;
 }
 

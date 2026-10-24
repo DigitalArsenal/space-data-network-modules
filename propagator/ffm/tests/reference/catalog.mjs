@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 import * as flatbuffers from 'flatbuffers';
 import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
 
-if (!('EARTH_RADIATION' in new P.PRWForceConfigurationT()) || !('OCEAN_TIDES' in new P.PRWForceConfigurationT()))
+if (!('EARTH_RADIATION' in new P.PCFForceModelT()) || !('OCEAN_TIDES' in new P.PCFForceModelT()))
   throw new Error('propagator/ffm catalog records need spacedatastandards.org 1.243.0 or later (npm ci in propagator/ffm).');
 
 export const TYPE = Object.freeze({ schemaName: 'PRW.fbs', fileIdentifier: '$PRW', rootTypeName: 'PRW', wireFormat: 'flatbuffer' });
@@ -64,22 +64,22 @@ export function fullForceRequest({ epoch, state, target, targetScale = 'UTC', cd
   return table('PRWExecutionRequest', {
     INITIAL: table('PRWResidentState', { STATE: stateVector(epoch, state), COORDINATE_SYSTEM: gcrf() }),
     TARGET_EPOCH: instant(target ?? epoch, target ? targetScale : 'UTC'),
-    INTEGRATOR: table('PRWIntegratorSettings', {
-      ALGORITHM: P.prwSolverAlgorithm.RK78, INITIAL_STEP_SECONDS: it.initialStep, MINIMUM_STEP_SECONDS: it.minStep,
+    INTEGRATOR: table('PCFIntegratorSettings', {
+      ALGORITHM: P.pcfIntegratorAlgorithm.RK78, INITIAL_STEP_SECONDS: it.initialStep, MINIMUM_STEP_SECONDS: it.minStep,
       MAXIMUM_STEP_SECONDS: it.maxStep, ABSOLUTE_TOLERANCES: Array(6).fill(it.tolerance * 1000), RELATIVE_TOLERANCE: it.tolerance,
       MAXIMUM_STEPS: it.maxSteps,
     }),
-    FORCES: table('PRWForceConfiguration', {
-      GRAVITY_CHOICE: P.prwGravitySelection.EGM2008, ENABLE_POINT_MASS: true, GRAVITATIONAL_PARAMETER: GM,
+    FORCES: table('PCFForceModel', {
+      GRAVITY_CHOICE: P.pcfGravitySelection.EGM2008, ENABLE_POINT_MASS: true, GRAVITATIONAL_PARAMETER: GM,
       ENABLE_J2: false, MAXIMUM_DEGREE: 70, HAS_MAXIMUM_DEGREE: true, MAXIMUM_ORDER: 70, HAS_MAXIMUM_ORDER: true,
       ENABLE_THIRD_BODY: true, THIRD_BODY_IDS: [10, 301, 2, 4, 5],
-      ENABLE_SRP: true, RADIATION_PRESSURE_MODEL: P.prwRadiationPressureFamily.CANNONBALL,
-      ENABLE_DRAG: true, ATMOSPHERE_MODEL: P.prwAtmosphereFamily.NRLMSISE00,
+      ENABLE_SRP: true, RADIATION_PRESSURE_MODEL: P.pcfRadiationPressureFamily.CANNONBALL,
+      ENABLE_DRAG: true, ATMOSPHERE_MODEL: P.pcfAtmosphereFamily.NRLMSISE00,
       INITIAL_MASS_KG: 1, AREA_M2: 1, DRAG_COEFFICIENT: cdAm, REFLECTIVITY_COEFFICIENT: crAm,
       EPHEMERIS_SOURCE: 'JPL_SPK',
-      SOLID_TIDES: P.prwSolidTideModel.IERS_2010, RELATIVITY: P.prwRelativityTerms.IERS_2010,
-      EARTH_RADIATION: P.prwEarthRadiationModel.KNOCKE, EARTH_RADIATION_RESOLUTION_DEG: 15,
-      OCEAN_TIDES: P.prwOceanTideModel.FES2004, OCEAN_TIDE_MAXIMUM_DEGREE: 30, OCEAN_TIDE_MAXIMUM_ORDER: 30,
+      SOLID_TIDES: P.pcfSolidTideModel.IERS_2010, RELATIVITY: P.pcfRelativityTerms.IERS_2010,
+      EARTH_RADIATION: P.pcfEarthRadiationModel.KNOCKE, EARTH_RADIATION_RESOLUTION_DEG: 15,
+      OCEAN_TIDES: P.pcfOceanTideModel.FES2004, OCEAN_TIDE_MAXIMUM_DEGREE: 30, OCEAN_TIDE_MAXIMUM_ORDER: 30,
     }),
     // The resident covariance: analytic STM with the density gradient.
     STM_TECHNIQUE: P.prwDerivativeTechnique.ANALYTIC,

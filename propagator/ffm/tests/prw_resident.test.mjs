@@ -151,7 +151,7 @@ test('PRW resident invalidates diagnostic configuration and burn mutations',
   {skip:residentRuntime!=='browser'?'SDK process harness intentionally exposes only public PIV methods, not diagnostic C exports':false},async t=>{
   const h=await harness(t);
   success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed())));
-  h.instance.exports.plugin_set_integrator(2);
+  h.instance.exports.plugin_set_relativity(0, 0, 0);
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch(1n,[31]))),'stale-instance');
   success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n))));
   h.instance.exports.plugin_clear_burns(0);

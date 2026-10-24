@@ -149,7 +149,7 @@ test('the configured profile refuses what it cannot carry', async (t) => {
   refused(await ingest(h, [...states()]), 'missing-required-input');   // the manifest requires the port
   refused(await ingest(h, [...states(), configuration((r) => { r.SAMPLE_EPOCHS = [isoInstant(EPOCH_TT, 'TT')]; }), ...env]), 'unsupported-configuration');
   refused(await ingest(h, [...states(), configuration((r) => { r.INCLUDE_STM = true; }), ...env]), 'unsupported-configuration');
-  refused(await ingest(h, [...states(), configuration((r) => { r.INTEGRATOR.ALGORITHM = sds.prwSolverAlgorithm.RKF45; }), ...env]), 'unsupported-integrator');
+  refused(await ingest(h, [...states(), configuration((r) => { r.INTEGRATOR.ALGORITHM = sds.pcfIntegratorAlgorithm.RKF45; }), ...env]), 'unsupported-integrator');
   refused(await ingest(h, [...states(), configuration((r) => { r.FORCES.ENABLE_DRAG = false; }), ...env.filter((f) => f.portId !== 'space_weather')]), 'unsupported-configuration');
   refused(await ingest(h, [...states(1n, OBJECTS, { DRAG_AREA_OVER_MASS_RATE_M2_KG_S: 1e-9, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: true }), configuration(), ...env]), 'unsupported-configuration');
   refused(await ingest(h, [...states(), configuration(), ...env, env[0]]), 'invalid-request');

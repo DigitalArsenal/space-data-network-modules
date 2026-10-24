@@ -10,6 +10,8 @@
 #include "astrodynamics.h"
 #include "shadow_events.h"
 #include "reentry.h"
+#include "rk_engine.h"
+#include "integrator_events.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -465,29 +467,32 @@ PropagateResult ABMPropagate(const StateVector& initialState, double targetTime,
                              double h, int order,
                              DerivativeFunc deriv, void* params) {
     PropagateResult result;
+    // The multistep grid is uniform, so the step is the one that divides the span into whole
+    // steps, at least `order` of them (the RK4 startup takes order - 1).
+    const int clamped = std::min(8, std::max(1, order));
+    const double span = std::abs(targetTime);
+    if (!(span > 0.0) || !(std::abs(h) > 0.0)) {
+        result.finalState = initialState;
+        return result;
+    }
+    const uint32_t count = static_cast<uint32_t>(std::max<double>(clamped, std::ceil(span / std::abs(h) - 1e-9)));
+    const double step = targetTime / count;
 
-    ABMIntegratorState abm = ABMInit(initialState, h, order, deriv, params);
-
-    uint32_t maxSteps = static_cast<uint32_t>(std::abs(targetTime) / std::abs(h)) + 1000;
-    result.steps = order - 1;  // Startup steps
-
-    while (abm.t < targetTime && result.steps < maxSteps) {
+    ABMIntegratorState abm = ABMInit(initialState, step, clamped, deriv, params);
+    result.steps = clamped - 1;  // Startup steps
+    for (uint32_t i = clamped - 1; i < count; ++i) {
         StepResult stepRes = ABM(abm, deriv, params);
         result.steps++;
-
         double errNorm = 0.0;
-        for (int i = 0; i < 6; i++) {
-            errNorm = std::max(errNorm, stepRes.error[i]);
-        }
+        for (int k = 0; k < 6; ++k) errNorm = std::max(errNorm, stepRes.error[k]);
         result.maxError = std::max(result.maxError, errNorm);
     }
 
     result.finalState.position = Vec3(abm.y[0], abm.y[1], abm.y[2]);
     result.finalState.velocity = Vec3(abm.y[3], abm.y[4], abm.y[5]);
-    result.finalState.epoch = initialState.epoch + abm.t / 86400.0;
-    result.totalTime = abm.t;
-    result.success = (result.steps < maxSteps);
-
+    result.finalState.epoch = initialState.epoch + targetTime / 86400.0;
+    result.totalTime = targetTime;  // count whole steps of targetTime / count
+    result.success = true;
     return result;
 }
 
@@ -961,82 +966,6 @@ StepResult RKDP87(const std::array<double, 6>& state, double t, double h,
     return result;
 }
 
-PropagateResult RKDP87Propagate(const StateVector& initialState, double targetTime,
-                                const IntegratorConfig& config,
-                                DerivativeFunc deriv, void* params,
-                               shadow::BoundaryEvents* events) {
-    PropagateResult result;
-    result.finalState = initialState;
-
-    std::array<double, 6> y = {
-        initialState.position.x, initialState.position.y, initialState.position.z,
-        initialState.velocity.x, initialState.velocity.y, initialState.velocity.z
-    };
-
-    double t = 0.0;
-    double h = config.initialStep;
-
-    uint32_t maxAttempts = config.maxSteps * 10;  // Allow rejections but prevent infinite loop
-    uint32_t attempts = 0;
-
-    while (t < targetTime && result.steps < config.maxSteps && attempts < maxAttempts) {
-        attempts++;
-
-        if (t + h > targetTime) {
-            h = targetTime - t;
-        }
-
-        StepResult stepRes = RKDP87(y, t, h, deriv, params);
-
-        // Compute error norm
-        double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
-                                          config.absTolerance, config.relTolerance);
-
-        // A step across a shadow boundary is shortened to end on it.
-        if (errNorm <= 1.0 && events) {
-            if (const double shorter = events->cut(t, h, stepRes.state.data())) {
-                h = shorter;
-                continue;
-            }
-        }
-        if (errNorm <= 1.0) {
-            // Accept step
-            y = stepRes.state;
-            t = stepRes.time;
-            if (events) events->taken(t, y.data());
-            result.steps++;
-            result.maxError = std::max(result.maxError, errNorm);
-
-            // Compute optimal step size (order 8)
-            h = ComputeOptimalStep(h, errNorm, 8);
-            h = std::min(config.maxStep, std::max(config.minStep, h));
-            if (events) h = events->next(h);
-        } else {
-            // Reject step
-            result.rejections++;
-            h = ComputeOptimalStep(h, errNorm, 8, 0.9, 0.1, 1.0);
-            h = std::max(config.minStep, h);
-
-            // If at minimum step and still rejecting, force acceptance to make progress
-            if (h <= config.minStep * 1.01 && result.rejections > 10) {
-                y = stepRes.state;
-                t = stepRes.time;
-                if (events) events->taken(t, y.data());
-                result.steps++;
-                result.maxError = std::max(result.maxError, errNorm);
-            }
-        }
-    }
-
-    result.finalState.position = Vec3(y[0], y[1], y[2]);
-    result.finalState.velocity = Vec3(y[3], y[4], y[5]);
-    result.finalState.epoch = initialState.epoch + t / 86400.0;
-    result.totalTime = t;
-    result.success = (result.steps < config.maxSteps);
-
-    return result;
-}
-
 StepResult BulirschStoer(const std::array<double, 6>& state, double t, double h,
                          DerivativeFunc deriv, void* params,
                          int maxSubdivisions) {
@@ -1221,54 +1150,29 @@ IntegratorState GaussJackson8Init(const StateVector& initialState, double h,
 PropagateResult GaussJackson8Propagate(const StateVector& initialState, double targetTime,
                                         double h, DerivativeFunc deriv, void* params) {
     PropagateResult result;
+    // A uniform grid: whole steps of targetTime / count, at least the eight the RK4 startup
+    // and the first corrector need.
+    constexpr uint32_t startup = 8;
+    const double span = std::abs(targetTime);
+    if (!(span > 0.0) || !(std::abs(h) > 0.0)) {
+        result.finalState = initialState;
+        return result;
+    }
+    const uint32_t count = static_cast<uint32_t>(std::max<double>(startup, std::ceil(span / std::abs(h) - 1e-9)));
+    const double step = targetTime / count;
 
-    IntegratorState state = GaussJackson8Init(initialState, h, deriv, params);
-    result.steps = 8;  // Startup steps
-
-    while (state.t < targetTime && result.steps < 100000) {
-        StepResult stepRes = GaussJackson8(state, deriv, params);
+    IntegratorState state = GaussJackson8Init(initialState, step, deriv, params);
+    result.steps = startup - 1;  // the RK4 startup steps
+    for (uint32_t i = startup - 1; i < count; ++i) {
+        GaussJackson8(state, deriv, params);
         result.steps++;
     }
 
     result.finalState.position = Vec3(state.y[0], state.y[1], state.y[2]);
     result.finalState.velocity = Vec3(state.y[3], state.y[4], state.y[5]);
-    result.finalState.epoch = initialState.epoch + state.t / 86400.0;
-    result.totalTime = state.t;
-    result.success = (result.steps < 100000);
-
-    return result;
-}
-
-StepResult GaussJackson12(IntegratorState& state, DerivativeFunc deriv, void* params) {
-    // NOTE: GJ12 is not yet fully implemented. The summed difference table
-    // approach for 12th order requires 12 history points and careful
-    // predictor/corrector coefficient handling. Currently delegates to RKF78
-    // which provides comparable accuracy per step at the cost of more
-    // function evaluations (13 per step vs 1 for a true GJ12 corrector step).
-    // TODO: Implement full Gauss-Jackson 12th order with summed differences.
-
-    StepResult result;
-    constexpr int N = 6;
-    double h = state.h;
-
-    StepResult rkRes = RKF78(state.y, state.t, h, deriv, params);
-
-    state.y = rkRes.state;
-    state.t += h;
-
-    // Shift history
-    for (int i = 7; i > 0; i--) {
-        state.fHistory[i] = state.fHistory[i-1];
-    }
-    deriv(state.t, state.y.data(), state.fHistory[0].data(), params);
-
-    result.state = state.y;
-    result.time = state.t;
-    result.stepUsed = h;
-    result.accepted = true;
-    result.evaluations = 13;
-    result.error = rkRes.error;
-
+    result.finalState.epoch = initialState.epoch + targetTime / 86400.0;
+    result.totalTime = targetTime;
+    result.success = true;
     return result;
 }
 
@@ -1874,39 +1778,84 @@ ForceRun::ForceRun(const StateVector& initial, int direction, const IntegratorCo
 }
 ForceRun::~ForceRun() = default;
 
+bool VelocityIndependent(const ForceModel::ForceModelSet& forces) {
+    return !forces.useDrag && !forces.useRelativisticCorrection && !forces.useEmpiricalAccel &&
+           !forces.hasFiniteManeuver && !forces.useContributions;
+}
+
 PropagateResult PropagateWithResult(const StateVector& initialState, double dt,
                                     const IntegratorConfig& config,
                                     ForceModel::ForceModelSet& forceSet) {
+    return PropagateWithEvents(initialState, dt, config, forceSet, nullptr, nullptr);
+}
+
+PropagateResult PropagateWithEvents(const StateVector& initialState, double dt,
+                                    const IntegratorConfig& config,
+                                    ForceModel::ForceModelSet& forceSet,
+                                    const std::vector<EventSpec>* events, EventOutcome* outcome) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
     wrapper.epoch = ForceModel::IntegrationEpoch(forceSet, initialState.epoch);
+    if (outcome) *outcome->epoch = wrapper.epoch;
 
     // The adaptive methods end their steps on the Earth's shadow boundaries.
     const double y0[6] = {initialState.position.x, initialState.position.y, initialState.position.z,
                           initialState.velocity.x, initialState.velocity.y, initialState.velocity.z};
-    shadow::BoundaryEvents events(forceSet, wrapper.epoch, 0.0, y0);
-    shadow::BoundaryEvents* boundaries = events.active() ? &events : nullptr;
+    shadow::BoundaryEvents boundaryEvents(forceSet, wrapper.epoch, 0.0, y0);
+    shadow::BoundaryEvents* boundaries = boundaryEvents.active() ? &boundaryEvents : nullptr;
     PropagateResult result;
-    switch (config.method) {
-        case IntegrationMethod::RK4:
-            result = RK4Propagate(initialState, dt, config.initialStep, forceModelDerivative, &wrapper);
-            break;
-        case IntegrationMethod::RKF45:
-            result = RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-            break;
-        case IntegrationMethod::RKF78:
-        case IntegrationMethod::RK78:
-            result = RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-            break;
-        case IntegrationMethod::RKDP87:
-            result = RKDP87Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-            break;
-        case IntegrationMethod::BS:
-            result = BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper, BSConfig(), boundaries);
-            break;
-        default:
-            result = RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
-            break;
+    const bool located = events != nullptr && !events->empty();
+    const auto refuse = [&](const std::string& message) {
+        PropagateResult refused;
+        refused.finalState = initialState;
+        refused.success = false;
+        refused.errorMessage = message;
+        return refused;
+    };
+    if (config.method == IntegrationMethod::RKN1210 && !VelocityIndependent(forceSet))
+        return refuse("RKN1210 integrates r'' = a(t, r); this force set depends on velocity "
+                      "(drag, relativity, empirical acceleration or thrust).");
+    if (located)
+        for (const EventSpec& event : *events)
+            if (!event.g) return refuse("An event function is not bound.");
+    if (located && !engineSupports(config.method))
+        return refuse("Events are located by the one-step integrators; this method has no "
+                      "continuous extension in this build.");
+    // The one-step methods run the engine loop when events are asked for; the pairs of
+    // lib/rk_engine.h and RKN1210 always do.
+    const bool engine = located || rk::pairFor(config.method) != nullptr ||
+                        config.method == IntegrationMethod::RKN1210;
+    if (engine) {
+        result = PropagateEngine(initialState, dt, config, forceModelDerivative, &wrapper, boundaries,
+                                 located ? events : nullptr, located ? outcome : nullptr);
+    } else {
+        switch (config.method) {
+            case IntegrationMethod::RK4:
+                result = RK4Propagate(initialState, dt, config.initialStep, forceModelDerivative, &wrapper);
+                break;
+            case IntegrationMethod::RKF45:
+            case IntegrationMethod::Cowell:
+                result = RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+                break;
+            case IntegrationMethod::RKF78:
+            case IntegrationMethod::RK78:
+                result = RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
+                break;
+            case IntegrationMethod::BS:
+                result = BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper, BSConfig(), boundaries);
+                break;
+            case IntegrationMethod::ABM:
+                result = ABMPropagate(initialState, dt, config.initialStep, 4, forceModelDerivative, &wrapper);
+                break;
+            case IntegrationMethod::GaussJackson8:
+                result = GaussJackson8Propagate(initialState, dt, config.initialStep, forceModelDerivative, &wrapper);
+                break;
+            default:
+                // Encke, Gauss VOP and equinoctial VOP integrate a reduced force model
+                // (ForceModelConfig), and DROMO and Stiefel do not reach the requested epoch to
+                // the integration tolerance; FFM does not stand in another integrator for them.
+                return refuse("This integrator is not offered: it integrates a reduced force model or does not reach the requested epoch.");
+        }
     }
     // The trajectory ended (reentry.h): the integration failed there.
     if (propagationStop().active) {
