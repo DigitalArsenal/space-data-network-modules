@@ -1,4 +1,4 @@
-// THE PUBLISHED MOON RELIEF WITHOUT SLDEM2015'S BAD LOLA SHOTS (terrain/301 version lola-sldem2015-despike-v1-20261024;
+// THE PUBLISHED MOON RELIEF WITHOUT SLDEM2015'S BAD LOLA SHOTS (terrain/301 version lola-sldem2015-despike-v2-20261024;
 // moon-relief-hadley-pit-20261024). SLDEM2015_512 inherits isolated bad LOLA shots: posts tens to hundreds of metres
 // off the surface, one or two posts wide. terrain-source removes them (body_despike.hpp); read back as the console
 // reads it:
@@ -23,7 +23,7 @@ import { decodeEdgeMatchedPlanes } from "../../terrain-source/tools/edge-matched
 import { decodeQuantizedMesh } from "../../terrain-source/tests/helpers.mjs";
 
 const BASE = "https://terrain.spacedatanetwork.org/terrain/301";
-const VERSION = process.env.TERRAIN_301_VERSION ?? "lola-sldem2015-despike-v1-20261024";
+const VERSION = process.env.TERRAIN_301_VERSION ?? "lola-sldem2015-despike-v2-20261024";
 const LOCAL = process.env.TERRAIN_301_DIR;
 
 async function get(url, headers = {}) {
@@ -37,7 +37,9 @@ async function get(url, headers = {}) {
 async function file(name) {
   const local = LOCAL && path.join(LOCAL, "terrain/301", name);
   if (local && fs.existsSync(local)) return fs.readFileSync(local);
-  return get(`${BASE}/${name}?v=${VERSION}`);
+  // A local check reads published files at the PREVIOUS version: asking the edge for an unpublished version would
+  // cache the old bytes under the new version's key.
+  return get(`${BASE}/${name}?v=${LOCAL ? process.env.TERRAIN_301_PREVIOUS ?? "lola-sldem2015-pole-axis-v1-20261023" : VERSION}`);
 }
 
 test("the published MANIFEST names this version", { timeout: 5 * 60 * 1000, skip: Boolean(LOCAL) }, async () => {
