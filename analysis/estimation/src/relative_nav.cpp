@@ -13,6 +13,10 @@ constexpr double kTwoPi = 2.0 * kPi;
 // rather than silently applying a circular model to an eccentric orbit.
 constexpr double kCircularChiefEccentricityLimit = 0.05;
 constexpr double kEccentricChiefEccentricityLimit = 0.95;
+// Below this eccentricity the osculating true anomaly of a perturbed chief is
+// not smooth (the perigee direction is ill-defined), so the end-of-interval
+// phase comes from Kepler's equation instead of the observation's reference.
+constexpr double kReliableAnomalyEccentricity = 0.02;
 // True-anomaly step of the Tschauner-Hempel integration (RK4).
 constexpr double kIntegrationStep = 0.002;
 constexpr double kMaximumIntegrationSteps = 1.0e6;
@@ -81,6 +85,18 @@ double mean_anomaly(double e, double nu) {
   return eccentric - e * std::sin(eccentric);
 }
 
+// True anomaly after the mean anomaly advances by `delta_mean` from `nu0`.
+double advance_true_anomaly(double e, double nu0, double delta_mean) {
+  const double target = mean_anomaly(e, wrap_two_pi(nu0)) + delta_mean;
+  double eccentric = target;
+  for (int i = 0; i < 50; ++i) {
+    const double step = (eccentric - e * std::sin(eccentric) - target) / (1.0 - e * std::cos(eccentric));
+    eccentric -= step;
+    if (std::abs(step) < 1.0e-15) break;
+  }
+  return 2.0 * std::atan2(std::sqrt(1.0 + e) * std::sin(0.5 * eccentric), std::sqrt(1.0 - e) * std::cos(0.5 * eccentric));
+}
+
 // ---- Constant-coefficient family (HCW and SS-J2) -------------------------
 //
 // In-plane: xdd = (w2 - 4 a^2 + 4 a^2 ... ) written in its integrated form
@@ -140,7 +156,8 @@ bool eccentric_geometry(const RelativeConstants& constants, const ChiefReference
   g->e = e;
   g->k = std::sqrt(mu / (p * p * p));
   g->nu0 = wrap_two_pi(from.true_anomaly_rad);
-  g->nu1 = wrap_two_pi(to.true_anomaly_rad);
+  g->nu1 = wrap_two_pi(e < kReliableAnomalyEccentricity ? advance_true_anomaly(e, g->nu0, n * dt)
+                                                         : to.true_anomaly_rad);
   double delta_mean = mean_anomaly(e, g->nu1) - mean_anomaly(e, g->nu0);
   if (delta_mean < 0.0) delta_mean += kTwoPi;
   double delta_nu = g->nu1 - g->nu0;
@@ -392,10 +409,11 @@ bool jacobian(const Map& map, const Vector6& at_state, Matrix6* out) {
 template <typename Map>
 bool map_belief(const Map& map, const Vector6& state, const Matrix6& covariance, Vector6* out_state,
                 Matrix6* out_covariance) {
+  if (!map(state, out_state)) return false;
+  if (out_covariance == nullptr) return true;
   Matrix6 j{};
-  if (!map(state, out_state) || !jacobian(map, state, &j)) return false;
-  if (out_covariance != nullptr)
-    *out_covariance = symmetrize(multiply(multiply(j, covariance), transpose(j)));
+  if (!jacobian(map, state, &j)) return false;
+  *out_covariance = symmetrize(multiply(multiply(j, covariance), transpose(j)));
   return true;
 }
 

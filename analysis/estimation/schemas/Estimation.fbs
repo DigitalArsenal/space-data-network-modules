@@ -853,6 +853,8 @@ table RelativeStateRequest {
   // 6 per pair.
   chief_states:[double] (required);
   deputy_states:[double] (required);
+  // true: the states are returned in curvilinear RTN (see RelativeNavConfig).
+  curvilinear:bool = false;
 }
 
 table RelativeStateResult {

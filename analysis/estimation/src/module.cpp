@@ -1604,6 +1604,15 @@ extern "C" int relative_state(void) {
     core::ChiefReference reference;
     if (!core::inertial_to_rtn(request->gravitational_parameter_m3_s2(), chief, deputy, &relative, &reference))
       return fail("bad-relative-state", "the chief state must be a bound orbit about a positive gravitational parameter");
+    if (request->curvilinear()) {
+      core::RelativeConstants constants;
+      constants.gravitational_parameter_m3_s2 = request->gravitational_parameter_m3_s2();
+      core::Vector6 curvilinear{};
+      core::Matrix6 unused{};
+      if (!core::rectilinear_to_curvilinear(constants, reference, relative, unused, &curvilinear, nullptr))
+        return fail("bad-relative-state", "the deputy has no curvilinear coordinates about this chief");
+      relative = curvilinear;
+    }
     out.states.insert(out.states.end(), relative.begin(), relative.end());
     out.chiefs.push_back(chief_to_wire(reference));
   }
