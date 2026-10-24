@@ -1830,6 +1830,7 @@ struct TileExtent {
 
 #include "pds_img.hpp"
 #include "body_fill.hpp"
+#include "body_despike.hpp"
 #include "body_inset_decode.hpp"
 
 struct BodyFill {
@@ -4155,7 +4156,20 @@ int tile(void) {
         if(!tiffs.empty()) {
             if(!decode_body_insets(tiffs,boxes,&budget,&granules,&error,mask_frame?0:fill.band_m)){plugin_set_error("inset-decode",error.c_str());return 422;}
             g.ok=true;
-        } else g = decode_pds_files(files, boxes, &budget, fill.band_m);
+        } else {
+            // A despiked product decodes kBodyDespikeRadius more posts round the extent (the plan asks for them).
+            const double despike_m = json_number(plan, "bodyDespikeM", 0);
+            const double spacing = files[0].label.a_axis_m * kPolarPi / 180 / files[0].label.ppd;
+            g = decode_pds_files(files, boxes, &budget, fill.band_m + (despike_m > 0 ? kBodyDespikeRadius * spacing : 0));
+            if (g.ok && g.covers && despike_m > 0 && g.proj == kProjLinear) {
+                double west = 1e300, east = -1e300;
+                for (const TileExtent& b : boxes) { west = std::min(west, b.west); east = std::max(east, b.east); }
+                // Stored column k holds global column k + off_x, centred on origin_lon + (k + off_x) * scale_lon.
+                const long c0 = static_cast<long>(std::floor((west - g.origin_lon) / g.scale_lon)) - g.off_x - 2;
+                const long c1 = static_cast<long>(std::ceil((east - g.origin_lon) / g.scale_lon)) - g.off_x + 3;
+                body_despike(&g.samples, g.width, g.height, c0, c1, despike_m, kNoData);
+            }
+        }
         if (g.budget_refused) return 413;
         if (!g.ok) {
             plugin_set_error("pds-band-gap", g.error.c_str());

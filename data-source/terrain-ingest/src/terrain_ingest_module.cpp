@@ -1894,6 +1894,7 @@ int body_plan(void) {
             auto layouts=std::make_unique<R::ConfigEntryT>();layouts->KEY="bodyTiffLayouts";layouts->KIND=R::configValueKind_String;layouts->STRING_VALUE=tiff_layouts;entries.push_back(std::move(layouts));
         }
         if(mask_frame)entries.push_back(number("bodyMaskFrame",static_cast<double>(mask_frame)));
+        if (body_despike_m(product) > 0) entries.push_back(number("bodyDespikeM", body_despike_m(product)));
         // The level-0 RMS target (15 m at level 7), judged as RMS over the source posts.
         entries.push_back(number("levelZeroErrorM", json_number_or(config, "level_zero_error_m", 1920)));
         auto metric = std::make_unique<R::ConfigEntryT>();

@@ -615,16 +615,24 @@ PolarStereo body_polar(const Body& body, const BodyProduct& p) {
     return s;
 }
 
+// Products whose isolated bad shots terrain-source removes (body_despike.hpp), and the core threshold in metres.
+// SLDEM2015 inherits single bad LOLA shots: Hadley 26.137N 3.585E stands 150 m below the flat 5 m NAC DTM there.
+double body_despike_m(const BodyProduct& p) { return std::string(p.key) == "sldem2015_512" ? 40.0 : 0.0; }
+
+// The extra lines (and columns) round a despiked product's extent: terrain-source's stencil radius (9) plus its
+// decoder's pad (2) and one for rounding.
+double body_despike_lines(const BodyProduct& p) { return body_despike_m(p) > 0 ? 12.0 : 0.0; }
+
 // The product lines a tile needs, with the halo and three lines of margin (a superset of what terrain-source's
-// decoder asks for, which uses two).
+// decoder asks for, which uses two), and the despike margin of a despiked product.
 bool body_tile_lines(const Body& body, const BodyProduct& p, long level, long x, long y, double max_grid, double* lo,
                      double* hi) {
     const double size = tile_size_deg(level), halo = body_halo_deg(level, max_grid);
     const double west = -180.0 + x * size - halo, east = -180.0 + (x + 1) * size + halo;
     const double south = std::max(-90.0, -90.0 + y * size - halo), north = std::min(90.0, -90.0 + (y + 1) * size + halo);
     if (!p.polar) {
-        *lo = (90.0 - north) * p.ppd - 0.5 - 3.0;
-        *hi = (90.0 - south) * p.ppd - 0.5 + 3.0;
+        *lo = (90.0 - north) * p.ppd - 0.5 - 3.0 - body_despike_lines(p);
+        *hi = (90.0 - south) * p.ppd - 0.5 + 3.0 + body_despike_lines(p);
         return true;
     }
     double s_lo = 0, s_hi = 0;
@@ -846,7 +854,8 @@ void body_units_in(const Body& body, const std::vector<BodyCap>& caps, double ma
                             // Only the files this run's columns (and the normals' halo, plus one source post) fall
                             // in: a 64-block run of level 10 is 45 degrees of a product cut into 90-degree files.
                             const double span = tile_size_deg(level);
-                            const double margin = body_halo_deg(level, max_grid) + 1.0 / c.product->ppd;
+                            const double margin = body_halo_deg(level, max_grid) +
+                                                  (1.0 + body_despike_lines(*c.product)) / c.product->ppd;
                             out->lon_west = -180.0 + static_cast<double>(b0 * 4) * span - margin;
                             out->lon_east = -180.0 + static_cast<double>(std::min(cols, b1 * 4)) * span + margin;
                         }
