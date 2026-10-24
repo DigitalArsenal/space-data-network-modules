@@ -1554,7 +1554,6 @@ extern "C" int run_relative_navigation(void) {
   wire::EstimationEnvelopeT reply;
   reply.relative_result = std::make_unique<wire::RelativeNavResultT>();
   wire::RelativeNavResultT& out = *reply.relative_result;
-  out.status = wire::EstimationStatus::OK;
   if (request->trace_id() != nullptr) out.trace_id = request->trace_id()->str();
   out.history.reserve(result.epochs.size());
   for (const core::RelativeEpoch& e : result.epochs) {
@@ -1596,7 +1595,6 @@ extern "C" int relative_state(void) {
   wire::EstimationEnvelopeT reply;
   reply.relative_state_result = std::make_unique<wire::RelativeStateResultT>();
   wire::RelativeStateResultT& out = *reply.relative_state_result;
-  out.status = wire::EstimationStatus::OK;
   for (std::size_t k = 0; k < count / 6; ++k) {
     core::Vector6 chief{}, deputy{}, relative{};
     for (int i = 0; i < 6; ++i) {
