@@ -110,15 +110,19 @@ struct ContainerFrame {
     size_t body_length = 0;
 };
 
-/* Returns 0 on success, or an invoke status; sets the plugin error itself. */
-int32_t decode_container_frame(const char* method, ContainerFrame* out) {
-    const int32_t index = plugin_find_input_index("container", 0);
+/* Returns 0 on success, or an invoke status; sets the plugin error itself.
+ * `port` is the input port the frame arrives on: "container" for the file a
+ * method reads, and a method with a second framed file (a CK's spacecraft clock
+ * kernel) names that port too. */
+int32_t decode_container_frame(const char* method, ContainerFrame* out,
+                               const char* port = "container") {
+    const int32_t index = plugin_find_input_index(port, 0);
     const plugin_input_frame_t* frame =
         index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
     if (!frame || !frame->payload || frame->payload_length == 0) {
         char message[256];
         std::snprintf(message, sizeof(message),
-                      "%s requires a frame on port \"container\".", method);
+                      "%s requires a frame on port \"%s\".", method, port);
         plugin_set_error("missing-container-frame", message);
         return 400;
     }

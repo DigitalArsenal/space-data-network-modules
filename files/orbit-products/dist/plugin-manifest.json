@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.files.orbit-products",
   "name": "Orbit Products Reader",
-  "version": "0.1.4",
-  "description": "Reads the four ephemeris CONTAINERS this stack round-trips \u2014 SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris \u2014 plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN. Converts public-format Vimpel osculating element tables to analytic J2000 epoch OPM states with source provenance; no differenced velocity or covariance is invented. Converts SP Vector/Covariance Messages, legacy V2.0 text or superseded $VCM records, to $OCM without deriving uncertainty or splitting the ballistic coefficient.",
+  "version": "0.2.0",
+  "description": "Reads the four ephemeris CONTAINERS this stack round-trips \u2014 SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris \u2014 plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN. Converts public-format Vimpel osculating element tables to analytic J2000 epoch OPM states with source provenance; no differenced velocity or covariance is invented. Converts SP Vector/Covariance Messages, legacy V2.0 text or superseded $VCM records, to $OCM without deriving uncertainty or splitting the ballistic coefficient. Reads ESA Sentinel-1/2/3 Earth Explorer orbit files (EOF) to an Earth-fixed $OEM, and reads and writes NAIF CK type 3 kernels as $AEM against a supplied spacecraft clock kernel; every request option travels in an $NCD or in the record itself.",
   "tagline": "SPK, SP3, Code-500, STK and CCSDS-OEM containers in; $OEM states and an $NCD descriptor out.",
   "pluginFamily": "parser",
   "capabilities": [],
@@ -32,7 +32,13 @@
     "sds",
     "space-data",
     "vcm",
-    "ocm"
+    "ocm",
+    "sentinel",
+    "eof",
+    "ck",
+    "sclk",
+    "aem",
+    "attitude"
   ],
   "methods": [
     {
@@ -515,6 +521,344 @@
           ]
         }
       ]
+    },
+    {
+      "methodId": "normalize_sentinel_eof",
+      "displayName": "Read a Sentinel orbit file (EOF)",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "An ESA Earth Explorer orbit file (Sentinel-1/2/3 AUX_POEORB, AUX_RESORB, AUX_PREORB) as a size-prefixed SDS $NCD with FORMAT PROVIDER_DEFINED and PROVIDER_DEFINED_FORMAT_NAME \"sentinel-eof\", followed immediately by the file's exact bytes in the same frame. The $NCD is also the request: START_TIME and STOP_TIME, when set, select the inclusive window of states read, stated on the file's own Time_Reference. SOURCE_SHA256 and SOURCE_BYTE_LENGTH are checked against the bytes when declared.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described file's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM with one block in the file's own Earth-fixed frame (FIXED_EARTH, the file names no realization), kilometres and kilometres per second, one state per OSV with the epoch text the file wrote on its Time_Reference (no time-scale conversion). OBJECT_NAME is the mission the file names; no catalog number is supplied. The block COMMENT declares what $OEM has no column for: the per-OSV TAI and UT1 stamps, the orbit number and the Quality flag counts.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "description": "SDS $OEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD recording the source: the internal file name, the producing system and creator, the creation date, the frame and time reference the file named, the file type and validity as the one segment, the coverage read and the SHA-256 of the bytes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "normalize_naif_ck",
+      "displayName": "Read a NAIF CK (type 3)",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A NAIF CK (DAF/CK) as a size-prefixed SDS $NCD with FORMAT PROVIDER_DEFINED and PROVIDER_DEFINED_FORMAT_NAME \"naif-ck\", followed immediately by the kernel's exact bytes. The $NCD is also the request: START_TIME and STOP_TIME select the inclusive window of records on the clock's time system, and SEGMENTS entries select the segments whose NAME and/or TARGET_NAIF_ID (the instrument) match; no entries selects every segment. A selected segment that is not CK type 3 is refused by name.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described file's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "sclk",
+          "displayName": "sclk",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The spacecraft clock kernel (type 1 SCLK text kernel) as a size-prefixed SDS $NCD with FORMAT PROVIDER_DEFINED and PROVIDER_DEFINED_FORMAT_NAME \"naif-sclk\", followed immediately by the kernel's exact bytes. SEGMENTS[0].TARGET_NAIF_ID, when set, is the spacecraft clock id (-76); without it the clock is NAIF's rule, the instrument id divided by 1000.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described file's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "attitude",
+          "displayName": "attitude",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $AEM with one segment per CK interpolation interval: ATTITUDE_DIR A2B, REF_FRAME_A the segment's reference frame (a NAIF built-in name or the decimal frame code), REF_FRAME_B the instrument code, ATTITUDE_TYPE QUATERNION or QUATERNION/ANGVEL, one explicit epoch per record on the clock's time system (TDB or TT, no conversion), the quaternion as CCSDS (Q1 Q2 Q3 QC) from A to B (the NAIF vector part negated) and the angular velocity in deg/s expressed in REF_FRAME_A.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-aem-attitude",
+              "description": "SDS $AEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM"
+                },
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD recording the file: the internal file name, the comment area, every segment with its instrument, frame, type, addresses and span, the coverage read and the SHA-256 of the bytes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "write_naif_ck",
+      "displayName": "Write a NAIF CK (type 3)",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "attitude",
+          "displayName": "attitude",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $AEM to write as a CK, one CK segment per AEM segment. REF_FRAME_A is the reference frame (a NAIF built-in inertial name or a decimal frame code), REF_FRAME_B the instrument (a nonzero decimal code), OBJECT_NAME the segment identifier (at most 40 printable characters), ATTITUDE_DIR A2B, ATTITUDE_TYPE QUATERNION or QUATERNION/ANGVEL with ANGVEL_FRAME REF_FRAME_A, TIME_SYSTEM the clock's, one explicit epoch per line. A compact-form segment, a B2A direction, another attitude type, a non-unit quaternion and a TIME_SYSTEM that is not the clock's are each refused by name.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-aem-attitude",
+              "description": "SDS $AEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM"
+                },
+                {
+                  "schemaName": "AEM.fbs",
+                  "fileIdentifier": "$AEM",
+                  "rootTypeName": "AEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "sclk",
+          "displayName": "sclk",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The spacecraft clock kernel, framed as for normalize_naif_ck. Its time system (TDB or TT) is the one the $AEM epochs must be stated on.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described file's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $NCD: INTERNAL_FILE_NAME (at most 60 printable characters) and COMMENT_AREA become the kernel's internal name and comment area. FORMAT, when set, must be PROVIDER_DEFINED \"naif-ck\".",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The kernel in the frame normalize_naif_ck reads: a size-prefixed SDS $NCD (the written segments, addresses and the SHA-256 of the kernel) followed immediately by the kernel's exact bytes, DAF/CK, LTL-IEEE, type 3, one interval per segment.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described file's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "schemasUsed": [
@@ -557,6 +901,11 @@
       "schemaName": "VCM.fbs",
       "fileIdentifier": "$VCM",
       "rootTypeName": "VCM"
+    },
+    {
+      "schemaName": "AEM.fbs",
+      "fileIdentifier": "$AEM",
+      "rootTypeName": "AEM"
     }
   ],
   "buildArtifacts": [

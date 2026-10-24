@@ -4,13 +4,15 @@
   "records": {
     "in": [
       "$NCD",
-      "$VCM"
+      "$VCM",
+      "$AEM"
     ],
     "out": [
       "$OEM",
       "$NCD",
       "$OPM",
-      "$OCM"
+      "$OCM",
+      "$AEM"
     ]
   },
   "formats": [
@@ -22,6 +24,9 @@
     "CCSDS_OEM_KVN",
     "vimpel-orbits-text",
     "ses-i11",
-    "vcm-v2-text"
+    "vcm-v2-text",
+    "sentinel-eof",
+    "naif-ck",
+    "naif-sclk"
   ]
 }
