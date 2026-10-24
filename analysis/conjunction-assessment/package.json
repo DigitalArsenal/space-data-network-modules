@@ -33,7 +33,7 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.261.0",
+    "spacedatastandards.org": "1.264.0",
     "tar": "^7.5.13"
   },
   "overrides": {
