@@ -1,5 +1,5 @@
 {
-  "_comment": "Public sources of the planetary data FFM embeds and of the truth its planetary E2E scores against. scripts/fetch-planetary-sources.mjs downloads each into <dir>/<directory>/ and refuses a file whose SHA-256 differs. Nothing downloaded is executed. License and redistribution notes are as the publishers state them; the bytes committed to the repository are only the derived, reduced products listed under embedded in lib/data/planetary/SOURCES.json and the truth fixtures in tests/fixtures/planetary/.",
+  "_comment": "Public sources of the planetary data FFM embeds and of the truth its planetary E2E scores against. scripts/fetch-planetary-sources.mjs downloads each into <dir>/<directory>/ and refuses a file whose SHA-256 differs. Nothing downloaded is executed. License and redistribution notes are as the publishers state them; the bytes committed to the repository are only the derived, reduced products listed under embedded in lib/data/planetary/SOURCES.json and the truth fixtures in tests/fixtures/planetary/. fixtures lists the committed derived bytes with their SHA-256; scripts/fetch-planetary-sources.mjs verifies them too.",
   "sources": {
     "grgm660prim": {
       "directory": "src-pds-grail-grgm660prim",
@@ -130,6 +130,112 @@
       "citation": "NASA General Mission Analysis Tool R2026a, application/data/atmosphere/mars/MarsExponentialAtmosphereData.txt; the user guide does not state how the numbers were derived",
       "license": "Apache License 2.0 (NASA GMAT)",
       "redistribution": "redistributable with the license notice (NOTICE.md); the repository commits the 150 rows as lib/mars_atmosphere_data.h"
+    }
+  },
+  "fixtures": {
+    "de440-2018-04-11_2018-05-17.bsp": {
+      "kind": "kernel excerpt",
+      "source": "de440s",
+      "sha256": "aafdfc4a39ed2da9fc1dc2978f09981c9b5a9a1be9acf6114119e5756c006860",
+      "window": [
+        "2018-04-11",
+        "2018-05-17"
+      ],
+      "derivation": "tests/fixtures/planetary/make-kernel-excerpt.py: NAIF spksub_c copies the DE440s records of each segment for the window, no refit"
+    },
+    "de440-2021-01-21_2021-02-17.bsp": {
+      "kind": "kernel excerpt",
+      "source": "de440s",
+      "sha256": "08ef12dcd9d9127a4eeb28062a79bebb03f6a8b179c25adecb6a3f681944d79a",
+      "window": [
+        "2021-01-21",
+        "2021-02-17"
+      ],
+      "derivation": "tests/fixtures/planetary/make-kernel-excerpt.py: NAIF spksub_c copies the DE440s records of each segment for the window, no refit"
+    },
+    "lro-2026-03-20.json": {
+      "kind": "truth",
+      "source": "lro-reconstructed",
+      "target": -85,
+      "center": 301,
+      "frame": "J2000",
+      "start": "2026-03-20T00:00:00",
+      "stop": "2026-03-24T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "fc9119d97164bb64e5e497acaaf2f5cdd79c3481589da10b4c3e5434f64676d1",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "lro-2026-03-27.json": {
+      "kind": "truth",
+      "source": "lro-reconstructed",
+      "target": -85,
+      "center": 301,
+      "frame": "J2000",
+      "start": "2026-03-27T00:00:00",
+      "stop": "2026-03-31T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "48c949e8de18dd19b34a7f66cdbc010c181f27e2d5353fd9c21da44f6f2879fb",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "lro-2026-04-03.json": {
+      "kind": "truth",
+      "source": "lro-reconstructed",
+      "target": -85,
+      "center": 301,
+      "frame": "J2000",
+      "start": "2026-04-03T00:00:00",
+      "stop": "2026-04-07T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "d5466c52038f265928d553535c2f5503230665dd4f8847025fd59e5d5ac6a0ad",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "maven-2021-01-22.json": {
+      "kind": "truth",
+      "source": "maven-reconstructed",
+      "target": -202,
+      "center": 4,
+      "frame": "J2000",
+      "start": "2021-01-22T00:00:00",
+      "stop": "2021-01-26T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "22c0f2f98c44119c5bad0e80d05d4e77b33e39c988bcf5d590b9184e97a99270",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "maven-2021-02-12.json": {
+      "kind": "truth",
+      "source": "maven-reconstructed",
+      "target": -202,
+      "center": 4,
+      "frame": "J2000",
+      "start": "2021-02-12T00:00:00",
+      "stop": "2021-02-16T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "80ced8cf2de5fdccc28948764acfa0873b411a5a7b67eb8f562fd697e6ed12bd",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "mro-2018-04-12.json": {
+      "kind": "truth",
+      "source": "mro-reconstructed",
+      "target": -74,
+      "center": 4,
+      "frame": "J2000",
+      "start": "2018-04-12T00:00:00",
+      "stop": "2018-04-16T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "da23df0c6ba062db5339dd909ebc85695f2ee29fcdc4db1ddf6e8a6643838b1c",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "mro-2018-05-12.json": {
+      "kind": "truth",
+      "source": "mro-reconstructed",
+      "target": -74,
+      "center": 4,
+      "frame": "J2000",
+      "start": "2018-05-12T00:00:00",
+      "stop": "2018-05-16T00:00:00",
+      "stepSeconds": 300.0,
+      "sha256": "60efe3361f34131c04821cbe10420c74d2b4680c75b8a480a59e0dd89f62cc2b",
+      "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
     }
   }
 }

@@ -41,3 +41,12 @@ for (const name of wanted) {
   }
   console.log(`${name}: ${spec.file} ${bytes.length} bytes verified`);
 }
+// The committed derived fixtures (tests/fixtures/planetary) against the hashes recorded for them.
+if (!names.length) {
+  const fixtures = path.join(here, '../tests/fixtures/planetary');
+  for (const [file, spec] of Object.entries(manifest.fixtures ?? {})) {
+    const found = sha(fs.readFileSync(path.join(fixtures, file)));
+    if (found !== spec.sha256) throw new Error(`fixture ${file}: SHA-256 ${found} differs from the recorded ${spec.sha256}`);
+  }
+  console.log(`${Object.keys(manifest.fixtures ?? {}).length} committed fixtures verified`);
+}
