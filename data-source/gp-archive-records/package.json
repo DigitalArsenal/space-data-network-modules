@@ -18,7 +18,7 @@
     "test:parity": "SDN_RUN_GP_ARCHIVE_RECORDS_PARITY=1 node --test tests/parity.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.7"
+    "space-data-module-sdk": "0.9.12"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.0"

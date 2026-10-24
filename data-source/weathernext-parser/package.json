@@ -18,7 +18,7 @@
     "fixtures": "node tests/fixtures/generate-fixtures.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.7"
+    "space-data-module-sdk": "0.9.12"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.0"

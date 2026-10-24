@@ -12,7 +12,7 @@
     "e2e": "npm --prefix ../../storage run provision && npm ci --ignore-scripts && node tools/generate-sources.mjs --check && node --test tests/terrain-source-watch.e2e.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.7"
+    "space-data-module-sdk": "0.9.12"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.0"
