@@ -116,8 +116,8 @@ for (const [name, lat, lon] of SITES) {
   });
 }
 
-// Rupes Recta: the plateau step across the scarp, per 1/512 degree row (the despike-v2 publish: RECTA_BEFORE_M).
-const RECTA_BEFORE_M = Number(process.env.RECTA_BEFORE_M ?? "NaN");
+// Rupes Recta: the plateau step across the scarp, per 1/512 degree row (the despike-v2 publish drew 381.3 m).
+const RECTA_BEFORE_M = 381.3;
 test("Rupes Recta keeps its relief (a north-south scarp is not a stripe)", { timeout: 20 * 60 * 1000 }, async () => {
   const st = 1 / 512, rows = 100, cols = 160, latTop = -21.65, lonLeft = 352.31 - 360 - 80 / 512;
   const z = await relief(latTop, lonLeft, rows, cols, st);
