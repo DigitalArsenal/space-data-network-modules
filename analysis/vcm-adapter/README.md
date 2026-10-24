@@ -155,8 +155,9 @@ weighted RMS above 1); and `parameterRows` both ways (the six element rows
 identical, the B sigma 5.14 x B as printed and 4.25 % as a fraction, and a
 fractional B row written back unchanged).
 
-`tests/parity.mjs`: read, ocm and write byte-identical in the browser,
-WasmEdge and Docker WasmEdge (`conformance/parity.json`).
+`tests/parity.mjs`: read, ocm and write byte-identical in the browser and
+native WasmEdge (`conformance/parity.json`); the owner waived the Docker leg on
+2026-10-22.
 
 ```sh
 npm run build   # SDN_WASI_* toolchain environment as for propagator/ffm
