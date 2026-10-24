@@ -31,3 +31,23 @@ test("damaged RINEX observation files are refused by name or read, never a trap"
   assert.equal(read + refused, 600);
   assert.ok(refused > 300, `${refused} refused`);
 });
+
+test("damaged RINEX navigation files are refused by name or read, never a trap", { skip: !ready }, async () => {
+  const h = await harness(root);
+  const text = fs.readFileSync(path.join(root, "fixtures", "BRDC00IGS_R_20250190000_01D_MN.even-hours.rnx"), "latin1");
+  const records = text.split("\n");
+  const base = Uint8Array.from(Buffer.from(`${records.slice(0, records.findIndex((l) => l.includes("END OF HEADER")) + 1 + 8 * 6).join("\n")}\n`, "latin1"));
+  const mutate = mutator(41);
+  let read = 0;
+  let refused = 0;
+  for (let i = 0; i < 600; i++) {
+    const r = await h.invoke({ methodId: "evaluate_navigation", inputs: [input("container", NCD_TYPE, frame(mutate(base), { formatName: "rinex-nav", declareHash: false }))] });
+    if (r.statusCode === 0) read++;
+    else {
+      assert.ok(typeof r.errorCode === "string" && r.errorCode.length > 0, `#${i}: a failure with no name`);
+      refused++;
+    }
+  }
+  assert.equal(read + refused, 600);
+  assert.ok(refused > 200, `${refused} refused`);
+});

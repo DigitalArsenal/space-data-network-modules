@@ -12,7 +12,9 @@
 //                  CCSDS quaternion to 3.3e-16. A kernel this module writes is read back by CSPICE (spiceypy) to 1e-12
 //                  rad and by the module.
 //   RINEX          every observation of an IGS station file (RINEX 3.05, six constellations) equals georinex's, value
-//                  and indicators, to the bit. Navigation is refused by name (SDS has no broadcast-ephemeris record).
+//                  and indicators, to the bit. Broadcast navigation (SDS has no record that can keep it, so it is
+//                  evaluated, not kept): 14,302 GPS, Galileo and BeiDou states equal an independent IS-GPS-200
+//                  evaluation to 4e-8 m, and GPS and Galileo lie at the meter level from the CODE MGEX final SP3.
 //   Options        every request option (window, satellite systems, segments, the spacecraft clock) is a field of
 //                  an $NCD or of the record; the tests build them with the SDS FlatBuffers, never a JSON options file.
 //   Robustness     seeded mutations of every reader's input are refused by name or read, never a trap.
@@ -33,7 +35,8 @@ const filesRoot = path.resolve(here, "..", "..");
 const SUITES = [
   { pkg: "orbit-products", tests: ["tests/sentinel_eof.test.mjs", "tests/naif_ck.test.mjs", "tests/interchange_fuzz.test.mjs"],
     measured: [/S1A POEORB adjacent days/, /RESORB .* against POEORB/, /NAIF-published CK records read/, /module round trip/, /CSPICE .* read \d+ records/] },
-  { pkg: "rinex", tests: ["tests/rinex_obs.test.mjs", "tests/rinex_fuzz.test.mjs"], measured: [/observations in \d+ epochs.*identical to georinex/] },
+  { pkg: "rinex", tests: ["tests/rinex_obs.test.mjs", "tests/rinex_nav.test.mjs", "tests/rinex_fuzz.test.mjs"],
+    measured: [/observations in \d+ epochs.*identical to georinex/, /broadcast states .* against the independent IS-GPS-200/, /broadcast against CODE MGEX final SP3, GPS/, /broadcast against CODE MGEX final SP3, Galileo/] },
 ];
 
 let failed = false;

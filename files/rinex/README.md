@@ -1,15 +1,18 @@
 # files/rinex
 
-RINEX 3.02 to 3.05 GNSS **observation** files read into SDS `$GNO`, one record per epoch, with an `$NCD`
-descriptor that records the file. One space data module: bytes in, records out, no capabilities, one
-`dist/isomorphic/module.wasm`.
+RINEX 3.02 to 3.05 GNSS **observation** files read into SDS `$GNO`, one record per epoch, and **broadcast
+navigation** files evaluated into SDS `$OEM`, each with an `$NCD` descriptor that records the file. One space data
+module: bytes in, records out, no capabilities, one `dist/isomorphic/module.wasm`.
 
 | Method | In | Out |
 | --- | --- | --- |
 | `read_observations` | `container`: `[u32le n][$NCD][the file's exact bytes]` | `observations` (`$GNO`, one frame per epoch), `descriptor` (`$NCD`) |
+| `evaluate_navigation` | `container`, as above (`"rinex-nav"`) | `ephemeris` (`$OEM`, one block per satellite), `descriptor` (`$NCD`) |
 
-Navigation files are **refused by name** (`navigation-not-in-sds`): SDS has no record that can keep a
-broadcast ephemeris. See "What SDS needs" below.
+**A broadcast ephemeris cannot be kept.** SDS has no record for one (`$NAV` is the Naval Vessel record), so the
+parameters have nowhere to go: `read_observations` refuses a navigation file by name (`navigation-not-in-sds`), and
+`evaluate_navigation` gives what the parameters mean, the satellite's position and velocity, which `$OEM` can hold.
+See "What SDS needs" below for the record to add.
 
 ## The request is a FlatBuffer
 
@@ -43,10 +46,41 @@ neither record has a place for are **named in a `COMMENT_AREA` line**, with coun
 antenna offsets, `SYS / PHASE SHIFT`, `GLONASS SLOT / FRQ #`, `SIGNAL STRENGTH UNIT`, `LEAP SECONDS`,
 `# OF SATELLITES`, `PRN / # OF OBS`.
 
+## Navigation: evaluated, not kept
+
+`evaluate_navigation` reads the 8-line Keplerian broadcast records of GPS (`G`), QZSS (`J`), Galileo (`E`) and BeiDou
+(`C`) and evaluates each by the ICD algorithm (IS-GPS-200 table 20-IV; the Galileo OS SIS ICD and the BeiDou ICD define
+the same algorithm with their own constants: GPS and QZSS mu 3.986005e14 and Earth rotation 7.2921151467e-5, Galileo
+mu 3.986004418e14 and 7.2921151467e-5, BeiDou mu 3.986004418e14 and 7.292115e-5), with the velocity as the exact
+derivative of the same terms. Each satellite becomes one `$OEM` block: kilometers and kilometers per second in the
+system's Earth-fixed frame (`WGS84`, `GTRF`, `CGCS2000`), every 300 s, from the message whose Toe is nearest within
++-7200 s (an epoch with none is a gap), on the system's own time (`GPS`, `GST`, `QZSS`, `BDT`; no scale is converted).
+Request options travel in the `$NCD` as for observations: `START_TIME` and `STOP_TIME`, and `SEGMENTS[].NAME` = `G E C J`.
+
+**Not evaluated, and declared in the descriptor's `COMMENT_AREA` with counts rather than dropped:** GLONASS and SBAS
+(a state vector that is integrated, not a Keplerian set), IRNSS, BeiDou GEO (the ICD rotates the orbit plane by -5
+degrees for them), and any message whose health word is not 0. Asking for `R`, `S` or `I` in `SEGMENTS` is
+`evaluation-not-implemented`.
+
+Measured (`tests/rinex_nav.test.mjs`, the IGS combined broadcast file `BRDC00IGS` of 2025-01-19, RINEX 3.04, every
+second hour for 30 GPS, 8 Galileo, 6 BeiDou and the QZSS satellites it holds; `fixtures/PROVENANCE.md`):
+
+| Claim | Authority | Result |
+| --- | --- | --- |
+| 14,302 states (G 9,990, E 2,434, C 1,878) | `tests/reference/nav_reference.py`: IS-GPS-200 written out again in Python, the records read with Python's `float()`, the absolute Toe from the week field | worst position difference **4.1e-8 m**; velocity 3.1e-6 m/s against the reference's central difference |
+| GPS against the precise orbit | CODE MGEX final SP3 of the day, every 30 minutes, read by `files/orbit-products` | 1,470 states of 30 satellites: median 1.67 m, 95th percentile 2.65 m, rms 1.79 m, max 3.81 m |
+| Galileo against the precise orbit | the same | 382 states of 8 satellites: median 0.88 m, 95th percentile 2.23 m, rms 1.41 m, **max 12.64 m** (E07 at 14:00, then 7.1 m at 14:30; E09 5.9 m; the cause is not investigated: the independent evaluation agrees with the module on the same parameters) |
+
+A broadcast set is of the antenna phase center and the SP3 of the center of mass, so a meter or two is the truth, not
+zero. BeiDou is held to the independent evaluation only: its time (BDT) is 14 s behind the SP3's GPST labels, so its
+epochs are not on the SP3's grid. georinex 1.16.2 was tried as the reader for the reference and misaligns the Galileo
+and BeiDou health and accuracy words on a merged file, so the reference reads the records itself.
+
 ## Refusals
 
 Named, never traps, nothing completed with a guess. `unsupported-rinex-version` (outside 3.02 to 3.05, with the
-version it was), `wrong-rinex-type`, `navigation-not-in-sds`, `unsupported-epoch-flag` (any flag but 0: an event
+version it was), `wrong-rinex-type`, `navigation-not-in-sds` (`read_observations` given a navigation file),
+`bad-navigation-record` (a broadcast record that is not 8 lines of 4 numbers), `evaluation-not-implemented`, `unsupported-epoch-flag` (any flag but 0: an event
 changes what the header or the indicators mean), `unsupported-observation-type` (`I` ionosphere phase delay
 and `X` channel number have no member of `$GNO`'s observation types; a file that declares one is refused
 rather than read with columns missing), `inconsistent-message` (an epoch's count disagrees with the lines),
@@ -65,18 +99,22 @@ marks, for example E19 L5Q at 00:07:30, so the columns are the authority for ind
 (window, systems) are set through the `$NCD` in the same test; the mutations of the file and the frame that the test makes are each refused with the code named above.
 
 `tests/parity.mjs`: the browser (headless Chrome) and native WasmEdge 0.16.4 lanes give byte-identical
-outputs and the same exit class on all 12 cases (`conformance/parity.json`, the artifact's SHA-256 recorded).
+outputs and the same exit class on all 18 cases (`conformance/parity.json`, the artifact's SHA-256 recorded).
 The Docker leg is waived by the owner (2026-10-22).
 
-`node tests/interchange.e2e.mjs` runs this package's suite and the two interchange suites of
+`tests/rinex_fuzz.test.mjs` and `tests/interchange_fuzz.test.mjs` (orbit-products): seeded mutations of every reader's
+input are refused by name or read, never a trap (21,000 more were run once at authoring time, with two seeds).
+
+`node tests/interchange.e2e.mjs` runs this package's suite and the interchange suites of
 `files/orbit-products` and checks the parity records are for the artifacts in `dist/`.
 
 ## What SDS needs
 
 `spacedatastandards.org` 1.262.0 (the latest) has no record for a GNSS broadcast navigation message: `$NAV`
 is the **Naval Vessel** record (hull, propulsion, damage control). RINEX navigation therefore cannot be
-kept, and `read_observations` refuses it by name until a record exists. These are the exact additions; they
-were **not** made here (SDS is not edited from this lane).
+kept, and `read_observations` refuses it by name until a record exists (its positions are what
+`evaluate_navigation` gives). These are the exact additions; they were **not** made here (SDS is not edited from this
+lane).
 
 ```fbs
 // ---- new family GNM: GNSS broadcast navigation message (one satellite, one message) ----

@@ -53,7 +53,9 @@ function stripLocalIncludes(source) {
   return source
     .replace(/^#include "sha256\.hpp"\n/gm, "")
     .replace(/^#include "ncd_frame\.hpp"\n/gm, "")
-    .replace(/^#include "rinex_obs\.hpp"\n/gm, "");
+    .replace(/^#include "rinex_text\.hpp"\n/gm, "")
+    .replace(/^#include "rinex_obs\.hpp"\n/gm, "")
+    .replace(/^#include "rinex_nav\.hpp"\n/gm, "");
 }
 
 /* ONE TRANSLATION UNIT in dependency order: $OEM pulls RFM, TIM, CAT and PPE;
@@ -71,7 +73,9 @@ const pieces = [
   stripSdsCrossIncludes(headers.GNO),
   stripLocalIncludes(await read(path.join(productsSrc, "sha256.hpp"))),
   stripLocalIncludes(await read(path.join(productsSrc, "ncd_frame.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "rinex_text.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "rinex_obs.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "rinex_nav.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "rinex_module.cpp"))),
 ];
 

@@ -48,3 +48,12 @@ Each file is identical to the original at its URL (sha256 below).
 `tests/lib/ck_synthetic.mjs`; `naif_ck_written.readback.txt` is CSPICE's reading of it
 (`tests/reference/ck_readback.py`). The test fails if the module's bytes ever differ from the committed kernel
 (`INTERCHANGE_REGENERATE=1` rewrites both).
+
+## CODE MGEX final orbit (the precise reference for the broadcast ephemerides)
+
+`../COD0MGXFIN_20250190000_01D_05M_ORB.48ep.sp3`: the CODE (AIUB) multi-GNSS final orbit of 2025-01-19 from
+`ftp://igs.gnsswhu.cn/pub/gps/products/2350/COD0MGXFIN_20250190000_01D_05M_ORB.SP3.gz` (sha256
+`e18b018289dfd7695fdf8efe7cdb303c0dc9dee229312755ca270e8bb1f2a5ef`; IGS/MGEX products are open, acknowledge CODE and
+the IGS), the epochs whose minute is 0 or 30 (49 of 288), lines byte for byte; the header's number of epochs (288 to 49)
+and epoch interval (300 s to 1800 s) are rewritten to match. 368,181 bytes. The 3-epoch excerpt beside it
+(`COD0MGXFIN_20250190000_01D_05M_ORB.3ep.sp3`) is the older fixture of the SP3 reader tests.

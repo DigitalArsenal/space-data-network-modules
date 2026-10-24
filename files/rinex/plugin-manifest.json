@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.files.rinex",
   "name": "RINEX Reader",
-  "version": "0.1.0",
-  "description": "Reads RINEX 3.02 to 3.05 GNSS observation files into SDS $GNO, one record per epoch, with every observation as the file wrote it (the three-character observation code, the value, the loss-of-lock and signal-strength indicators) and an $NCD descriptor that records the file. Strict and named: a version outside 3.02-3.05, an epoch flag other than 0, an observation type $GNO cannot name, a count that disagrees with the lines, a malformed column are each refused by name, never read with a guess. Every request option (time window, satellite systems) travels in the $NCD that frames the file; none is passed in a JSON options file. Navigation messages are refused until SDS carries a broadcast-ephemeris record.",
+  "version": "0.2.0",
+  "description": "Reads RINEX 3.02 to 3.05 GNSS observation files into SDS $GNO, one record per epoch, with every observation as the file wrote it (the three-character observation code, the value, the loss-of-lock and signal-strength indicators) and an $NCD descriptor that records the file. Strict and named: a version outside 3.02-3.05, an epoch flag other than 0, an observation type $GNO cannot name, a count that disagrees with the lines, a malformed column are each refused by name, never read with a guess. Every request option (time window, satellite systems) travels in the $NCD that frames the file; none is passed in a JSON options file. Broadcast navigation messages cannot be kept as parameters until SDS carries a broadcast-ephemeris record; their positions are evaluated by the ICD algorithm (GPS, QZSS, Galileo, BeiDou MEO and IGSO) into $OEM instead.",
   "tagline": "RINEX observation files in; $GNO per epoch and an $NCD descriptor out.",
   "pluginFamily": "parser",
   "capabilities": [],
@@ -24,7 +24,10 @@
     "rinex",
     "gnss",
     "observations",
+    "navigation",
+    "broadcast-ephemeris",
     "gno",
+    "oem",
     "ncd",
     "sds",
     "space-data"
@@ -101,6 +104,100 @@
           "maxStreams": 1,
           "required": true,
           "description": "SDS $NCD recording the file: the format version, program and run-by, creation date, marker name as the internal file name, the header comments and a line naming the header records neither record carries, the time system, the span read, one segment per satellite system read (NAME the system letter, with its first and last epoch) and the SHA-256 of the bytes. The reply can be edited and sent back as the request.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "evaluate_navigation",
+      "displayName": "Evaluate RINEX broadcast ephemerides",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A RINEX 3.02 to 3.05 navigation file as a size-prefixed SDS $NCD with FORMAT PROVIDER_DEFINED and PROVIDER_DEFINED_FORMAT_NAME \"rinex-nav\", followed immediately by the file's exact bytes in the same frame. The $NCD is also the request: START_TIME and STOP_TIME select the inclusive window of evaluation epochs on the satellites' own time systems, and SEGMENTS entries whose NAME is G, E, C or J select those systems; no entries evaluates every system this method can (R, S and I are named in the descriptor, not evaluated; asking for one is refused).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described file's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM with one block per satellite: positions and velocities in kilometers and kilometers per second in the system's Earth-fixed frame (WGS84 for GPS and QZSS, GTRF for Galileo, CGCS2000 for BeiDou), evaluated by the ICD algorithm (IS-GPS-200 table 20-IV) every 300 s from the broadcast message whose Toe is nearest within 7200 s, on the system's own time (GPS, GST, QZSS, BDT; no scale converted). The parameters are not kept: SDS has no broadcast-ephemeris record.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "description": "SDS $OEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $NCD recording the file: version, program, creation date, comments, how many messages were evaluated and which were not and why (GLONASS and SBAS state vectors, IRNSS, BeiDou GEO, unhealthy messages), one segment per system evaluated and the SHA-256 of the bytes.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-descriptor",

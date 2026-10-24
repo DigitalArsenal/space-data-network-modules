@@ -31,12 +31,21 @@ add("obs-refused-epoch-flag", obs(enc(text.replace("> 2025 01 19 00 01 00.000000
 add("obs-refused-iono-type", obs(enc(text.replace("I    4 C5A D5A L5A S5A", "I    4 C5A D5A I5A S5A"))));
 add("nav-refused-not-in-sds", obs(new Uint8Array(fs.readFileSync(path.join(root, "fixtures", "BRDC00WRD_R_20250190000_01D_GN.head.rnx")))));
 add("nav-refused-version-4", obs(new Uint8Array(fs.readFileSync(path.join(root, "fixtures", "BRD400DLR_S_20250190000_01D_MN.head.rnx")))));
+const NAV = new Uint8Array(fs.readFileSync(path.join(root, "fixtures", "BRDC00IGS_R_20250190000_01D_MN.even-hours.rnx")));
+const navText = fs.readFileSync(path.join(root, "fixtures", "BRDC00IGS_R_20250190000_01D_MN.even-hours.rnx"), "latin1");
+const nav = (data, extra = {}) => ({ methodId: "evaluate_navigation", inputs: [input("container", NCD_TYPE, frame(data, { formatName: "rinex-nav", ...extra }))] });
+add("nav-evaluate-all", nav(NAV));
+add("nav-evaluate-galileo", nav(NAV, { segments: [{ name: "E" }] }));
+add("nav-evaluate-window", nav(NAV, { segments: [{ name: "G" }], startTime: "2025-01-19T06:00:00", stopTime: "2025-01-19T07:00:00" }));
+add("nav-refused-glonass", nav(NAV, { segments: [{ name: "R" }] }));
+add("nav-refused-version", nav(enc(navText.replace(/^ {5}3\.04/, "     2.11"))));
+add("nav-refused-cut-record", nav(enc(navText.replace(/\nE02 [^\n]*\n[^\n]*\n/, (m) => `${m.split("\n").slice(0, 2).join("\n")}\n`))));
 add("obs-refused-count", obs(enc(text.replace("> 2025 01 19 00 01 00.0000000  0 50", "> 2025 01 19 00 01 00.0000000  0 49"))));
 add("obs-refused-empty-selection", obs(bytes, { startTime: "2030-01-01T00:00:00" }));
 add("obs-refused-bad-selection", obs(bytes, { segments: [{ name: "GPS" }] }));
 
 const plan = await normalizeParityFixture({
-  name: "files/rinex 0.1.0 methods",
+  name: "files/rinex 0.2.0 methods",
   cases: cases.map((c) => ({ ...c, expect: "ok", request: { ...c.request,
     inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString("hex") })) } })),
 });

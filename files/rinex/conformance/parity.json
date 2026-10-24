@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "files/rinex 0.1.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "626fa273cc26c0c19b138ee216e19ea6012906278e190b06cf95f86bf6e90245",
-  "moduleSha256": "f1cb711176ed6862d748b726715f8383c1438959cdc7aecdf51e9572efa2033c",
+  "artifactSha256": "b778d0b7264529fc7e71b3c09e4516b2452941160a99a1dd0cf90673d6d66630",
+  "moduleSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 12,
-      "durationMs": 662
+      "runs": 18,
+      "durationMs": 1075
     },
     {
       "lane": "wasmedge",
-      "runs": 12,
-      "durationMs": 5596
+      "runs": 18,
+      "durationMs": 14598
     }
   ],
   "cases": [
@@ -27,11 +27,17 @@
     "obs-refused-iono-type",
     "nav-refused-not-in-sds",
     "nav-refused-version-4",
+    "nav-evaluate-all",
+    "nav-evaluate-galileo",
+    "nav-evaluate-window",
+    "nav-refused-glonass",
+    "nav-refused-version",
+    "nav-refused-cut-record",
     "obs-refused-count",
     "obs-refused-empty-selection",
     "obs-refused-bad-selection"
   ],
-  "comparisons": 36,
+  "comparisons": 54,
   "failures": [],
   "runs": [
     {
@@ -141,6 +147,78 @@
       "spawnCount": null,
       "stdoutSha256": "a62bd94b0b9812b3d794cb465ba61dc4038f9e6d6e23524576019e20a67e1af0",
       "stdoutLength": 216
+    },
+    {
+      "lane": "browser",
+      "caseId": "nav-evaluate-all",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "75fab32947ac777dc8781faf7a2d8209559b7599232b254204bc030d725fcc03",
+      "stdoutLength": 1338840
+    },
+    {
+      "lane": "browser",
+      "caseId": "nav-evaluate-galileo",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "545aeb4b8ef1fd8b4c7a7e039b518175ecc14e29ec0278a7acb22e937b059da0",
+      "stdoutLength": 229336
+    },
+    {
+      "lane": "browser",
+      "caseId": "nav-evaluate-window",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "aad2002ba1c171d013cf868c9fd44db79ad0f02e896ad93f68ae0b2b34f1ff7e",
+      "stdoutLength": 52144
+    },
+    {
+      "lane": "browser",
+      "caseId": "nav-refused-glonass",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "bd80056d08e09c50042f85fe9f728ec7b24889f3a2d892dcd561b3dd2f912154",
+      "stdoutLength": 264
+    },
+    {
+      "lane": "browser",
+      "caseId": "nav-refused-version",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "c935221bab1979e5b46eec0cb495aa759de1ff7b42cb49753c287c18bc0b9770",
+      "stdoutLength": 216
+    },
+    {
+      "lane": "browser",
+      "caseId": "nav-refused-cut-record",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "5f2ac03d3e65fc83f4d928eeb1d493317700c3dc39aa2969e1fe2f07a87d78ea",
+      "stdoutLength": 156
     },
     {
       "lane": "browser",
@@ -285,6 +363,78 @@
       "spawnCount": null,
       "stdoutSha256": "a62bd94b0b9812b3d794cb465ba61dc4038f9e6d6e23524576019e20a67e1af0",
       "stdoutLength": 216
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "nav-evaluate-all",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "75fab32947ac777dc8781faf7a2d8209559b7599232b254204bc030d725fcc03",
+      "stdoutLength": 1338840
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "nav-evaluate-galileo",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "545aeb4b8ef1fd8b4c7a7e039b518175ecc14e29ec0278a7acb22e937b059da0",
+      "stdoutLength": 229336
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "nav-evaluate-window",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "aad2002ba1c171d013cf868c9fd44db79ad0f02e896ad93f68ae0b2b34f1ff7e",
+      "stdoutLength": 52144
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "nav-refused-glonass",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "bd80056d08e09c50042f85fe9f728ec7b24889f3a2d892dcd561b3dd2f912154",
+      "stdoutLength": 264
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "nav-refused-version",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "c935221bab1979e5b46eec0cb495aa759de1ff7b42cb49753c287c18bc0b9770",
+      "stdoutLength": 216
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "nav-refused-cut-record",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
+      "spawnCount": null,
+      "stdoutSha256": "5f2ac03d3e65fc83f4d928eeb1d493317700c3dc39aa2969e1fe2f07a87d78ea",
+      "stdoutLength": 156
     },
     {
       "lane": "wasmedge",
