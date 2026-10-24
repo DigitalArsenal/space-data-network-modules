@@ -134,7 +134,8 @@ test("a file this reader cannot stand behind is refused by name", { skip: !ready
     ["unsupported-rinex-version", mutate(/^     3\.05/, "     2.11")],
     ["unsupported-rinex-version", mutate(/^     3\.05/, "     3.01")],
     ["unsupported-rinex-version", mutate(/^     3\.05/, "     4.00")],
-    ["wrong-rinex-type", mutate("OBSERVATION DATA    M (MIXED)", "NAVIGATION DATA     M (MIXED)")],
+    ["wrong-rinex-type", mutate("OBSERVATION DATA    M (MIXED)", "METEOROLOGICAL DATA M (MIXED)")],
+    ["navigation-not-in-sds", mutate("OBSERVATION DATA    M (MIXED)", "NAVIGATION DATA     M (MIXED)")],
     ["unsupported-epoch-flag", mutate("> 2025 01 19 00 01 00.0000000  0 50", "> 2025 01 19 00 01 00.0000000  1 50")],
     ["unsupported-epoch-flag", mutate("> 2025 01 19 00 01 00.0000000  0 50", "> 2025 01 19 00 01 00.0000000  4 50")],
     ["unsupported-observation-type", mutate("I    4 C5A D5A L5A S5A", "I    4 C5A D5A I5A S5A")],
@@ -157,6 +158,18 @@ test("a file this reader cannot stand behind is refused by name", { skip: !ready
   assert.equal((await read(h, bytes.slice(0, bytes.length - 700))).errorCode, "truncated");
   assert.equal((await read(h, enc("not rinex\n"))).errorCode, "bad-rinex");
   assert.equal((await read(h, enc(text.replace("LEICA GR50", "LEICA GR50é")))).errorCode, "bad-encoding");
+});
+
+test("navigation files are refused by name until SDS has a record for broadcast ephemerides", { skip: !ready }, async () => {
+  const h = await harness(root);
+  // The first records of the published IGS and BKG broadcast files: RINEX 3.05 GPS, RINEX 3.04 mixed, RINEX 4.02 (out of range).
+  for (const [name, code] of [["BRDC00WRD_R_20250190000_01D_GN.head.rnx", "navigation-not-in-sds"], ["BRDC00IGS_R_20250190000_01D_MN.head.rnx", "navigation-not-in-sds"],
+    ["BRD400DLR_S_20250190000_01D_MN.head.rnx", "unsupported-rinex-version"]]) {
+    const r = await read(h, new Uint8Array(fs.readFileSync(path.join(FIX, name))));
+    assert.equal(r.errorCode, code, `${name}: ${r.errorMessage}`);
+    assert.equal(r.outputs.length, 0);
+    if (code === "navigation-not-in-sds") assert.match(r.errorMessage, /\$NAV is the Naval Vessel record/);
+  }
 });
 
 test("the descriptor must name this format and match the bytes", { skip: !ready }, async () => {

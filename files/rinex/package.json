@@ -22,9 +22,10 @@
     "test:e2e": "node tests/interchange.e2e.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.25.12",
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "0.8.25",
+    "space-data-module-sdk": "0.9.12",
     "spacedatastandards.org": "1.261.0"
   }
 }

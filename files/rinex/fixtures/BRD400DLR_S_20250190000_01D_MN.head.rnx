@@ -1,0 +1,18 @@
+     4.02           NAVIGATION DATA     M                   RINEX VERSION / TYPE
+BCEmerge            congo               20260415 130319 GMT PGM / RUN BY / DATE 
+Merged GPS/GLO/GAL/BDS/QZS/SBAS/IRNSS navigation file       COMMENT             
+based on CONGO and IGS tracking data                        COMMENT             
+DLR/GSOC: O. Montenbruck; P. Steigenberger                  COMMENT             
+https://doi.org/10.57677/BRD400DLR                          DOI                 
+      106                                                   MERGED FILE         
+    18    18  1929     7                                    LEAP SECONDS        
+                                                            END OF HEADER       
+> STO C25 CNVX
+    2025 01 18 23 20 00 BDGA                                                    
+     6.048300000000e+05-1.085572876036e-08 1.953992523340e-14 2.134523027081e-19
+> STO C25 CNVX
+    2025 01 19 00 20 00 BDGA                                                    
+     3.630000000000e+03-1.053558662534e-08 3.508304757815e-14 2.134523027081e-19
+> STO C25 CNVX
+    2025 01 19 01 20 00 BDGA                                                    
+     7.230000000000e+

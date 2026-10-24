@@ -223,6 +223,13 @@ inline bool parse_observations(const char* bytes, size_t length, File* out, Refu
                 std::snprintf(text, sizeof(text), "RINEX version %.2f is not one of 3.02, 3.03, 3.04 or 3.05.", version);
                 return fail(r, "unsupported-rinex-version", where + text);
             }
+            if (type == 'N') {
+                return fail(r, "navigation-not-in-sds",
+                            where + "this is a navigation file. SDS has no record for GNSS broadcast ephemerides ($NAV is the Naval "
+                                    "Vessel record), so the broadcast parameters would have no place to be kept, and a file whose "
+                                    "parameters cannot be kept is refused rather than read lossily. The record to add is in the "
+                                    "package README (SDS additions).");
+            }
             if (type != 'O') {
                 return fail(r, "wrong-rinex-type",
                             where + std::string("the file type is \"") + type + "\", not O (observation data).");
