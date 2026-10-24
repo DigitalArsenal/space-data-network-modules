@@ -8,9 +8,11 @@
 //   2. At the scan's worst SLDEM2015_512 spikes and pits (300-620 m off their 5x5 median), the published relief is
 //      within 25 m of its 5x5 median; over 0.35 x 0.35 degrees at Apollo 11, 15 and 17 no post is more than 40 m off it.
 // Published files are read from terrain.spacedatanetwork.org, or first from TERRAIN_301_DIR (a local
-// <dir>/terrain/301 tree, to check an encode before it is published). The NAC DTM's lines come from PDS by byte range.
+// <dir>/terrain/301 tree, to check an encode before it is published). The NAC DTM is a checksummed fixture of its PDS
+// image lines (tests/fixtures/nac-dtm-apollo15-2-hadley.json: product LIDVID, label md5, lines and samples).
 
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -23,7 +25,6 @@ import { decodeQuantizedMesh } from "../../terrain-source/tests/helpers.mjs";
 const BASE = "https://terrain.spacedatanetwork.org/terrain/301";
 const VERSION = process.env.TERRAIN_301_VERSION ?? "lola-sldem2015-despike-v1-20261024";
 const LOCAL = process.env.TERRAIN_301_DIR;
-const NAC = "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/APOLLO15_2/NAC_DTM_APOLLO15_2_E260N0036";
 
 async function get(url, headers = {}) {
   for (let k = 0; ; k++) {
@@ -97,25 +98,20 @@ function residual5(z, rows, cols) {
 }
 
 test("Hadley: the level-10 relief is the NAC DTM's flat mare, not SLDEM2015's 150 m pit", { timeout: 20 * 60 * 1000 }, async () => {
-  // The DTM's geometry from its PDS4 label: bounding box (pixel edges), line/sample counts, the image offset.
-  const label = (await get(`${NAC}.xml`)).toString("utf8");
-  const num = (tag) => Number(label.match(new RegExp(`<cart:${tag}[^>]*>([^<]+)<`))[1]);
-  const north = num("north_bounding_coordinate"), south = num("south_bounding_coordinate");
-  const west = num("west_bounding_coordinate"), east = num("east_bounding_coordinate");
-  const elements = [...label.matchAll(/<elements>(\d+)<\/elements>/g)].map((m) => Number(m[1]));
-  const offsets = [...label.matchAll(/<offset unit="byte">(\d+)<\/offset>/g)].map((m) => Number(m[1]));
-  const [lines, samples] = elements, base = offsets[1];
-  assert.match(label, /IEEE754LSBSingle/);
-  const dlat = (north - south) / lines, dlon = (east - west) / samples;
-  // DTM lines over 26.11-26.17 N.
-  const l0 = Math.floor((north - 26.17) / dlat), l1 = Math.ceil((north - 26.11) / dlat);
-  const buf = await get(`${NAC}.IMG`, { Range: `bytes=${base + l0 * samples * 4}-${base + l1 * samples * 4 - 1}` });
+  // The DTM's lines over the box: a checksummed fixture (fixtures/nac-dtm-apollo15-2-hadley.json names the PDS product,
+  // its label's md5 and the image lines and samples it holds), not a live PDS read.
+  const fx = JSON.parse(fs.readFileSync(new URL("./fixtures/nac-dtm-apollo15-2-hadley.json", import.meta.url), "utf8"));
+  const buf = zlib.gunzipSync(fs.readFileSync(new URL("./fixtures/nac-dtm-apollo15-2-hadley.f32.gz", import.meta.url)));
+  assert.equal(crypto.createHash("sha256").update(buf).digest("hex"), fx.fixture.sha256_raw, "fixture checksum");
+  const { north, south, west, east } = fx.bounding;
+  const dlat = (north - south) / fx.file_lines, dlon = (east - west) / fx.file_samples;
+  const l0 = fx.fixture.first_line, s0 = fx.fixture.first_sample, samples = fx.fixture.samples;
   /** The DTM's mean over the 59 m post centred on (lat, lon). */
   const nac = (lat, lon) => {
     const h = 1 / 1024, vals = [];
     for (let i = Math.ceil((north - lat - h) / dlat - 0.5); i <= Math.floor((north - lat + h) / dlat - 0.5); i++)
       for (let j = Math.ceil((lon - h - west) / dlon - 0.5); j <= Math.floor((lon + h - west) / dlon - 0.5); j++) {
-        const v = buf.readFloatLE(((i - l0) * samples + j) * 4);
+        const v = buf.readFloatLE(((i - l0) * samples + (j - s0)) * 4);
         if (v > -1e30) vals.push(v);
       }
     return vals.reduce((s, v) => s + v, 0) / vals.length;

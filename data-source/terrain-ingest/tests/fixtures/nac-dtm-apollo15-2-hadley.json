@@ -1,0 +1,31 @@
+{
+ "source_url": "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/APOLLO15_2/NAC_DTM_APOLLO15_2_E260N0036.IMG",
+ "label_url": "https://pds.mcp.nasa.gov/data/store/img/lunar_reconnaissance_orbiter/pds4/lroc/lro-l-lroc-5-rdr/LROLRC_2001/DATA/SDP/NAC_DTM/APOLLO15_2/NAC_DTM_APOLLO15_2_E260N0036.xml",
+ "lidvid": "urn:nasa:pds:lro-l-lroc-5-rdr:lrolrc_2001_data:sdp.nac_dtm.apollo15_2.nac_dtm_apollo15_2_e260n0036::2.0",
+ "product_version_id": "1.9",
+ "creation_date_time": "2019-08-27T08:47:28",
+ "file_size": 127404864,
+ "file_md5_from_label": "4642df798eccdd88cc44b9eb805fc4f4",
+ "etag": null,
+ "etag_note": "not recorded: the moon-nac-sites lane fetched the range without keeping response headers, and pds.mcp.nasa.gov answered HEAD with 429 (retry-after 3600) on 2026-10-24; the label md5 above pins the file",
+ "fetched_by": "moon-nac-sites lane 2026-10-24 (byte ranges of image lines 3098-5646, samples 801-2984), copied here by moon-relief-hadley-pit-20261024",
+ "image_offset_bytes": 11936,
+ "file_lines": 10673,
+ "file_samples": 2984,
+ "data_type": "IEEE754LSBSingle",
+ "missing_constant": -3.4028226550889045e+38,
+ "bounding": {
+  "north": 26.87079391,
+  "south": 25.1110939,
+  "west": 3.29288009,
+  "east": 3.84027177
+ },
+ "fixture": {
+  "first_line": 4280,
+  "lines": 305,
+  "first_sample": 1428,
+  "samples": 328,
+  "encoding": "gzip of row-major little-endian float32 heights (m above the 1737.4 km sphere)",
+  "sha256_raw": "7aea7fd3160efca078a91aaac29aa9af05097ca9c4e8826cb4a92b5222cd4528"
+ }
+}
