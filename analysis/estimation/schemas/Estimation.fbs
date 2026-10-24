@@ -718,6 +718,12 @@ enum RelativeModel : ubyte {
   YAMANAKA_ANKERSEN = 3
 }
 
+// Measurement model of the relative filters. The observation is the full
+// relative state with its covariance; innovation recovery needs it.
+enum RelativeMeasurementModel : ubyte {
+  FULL_STATE = 0
+}
+
 enum RecoveryStrategy : ubyte {
   // A candidate track starts at the suspicious observation; recover when later
   // observations disagree with the held track and agree with the candidate.
@@ -783,6 +789,7 @@ table ChiefReference {
 // four models propagate.
 table RelativeNavConfig {
   model:RelativeModel;
+  measurement_model:RelativeMeasurementModel = FULL_STATE;
   epoch:EstimationEpoch (required);
   state:[double] (required);
   // Row-major 6x6.
@@ -792,7 +799,9 @@ table RelativeNavConfig {
   // SCHWEIGHART_SEDWICK_J2 only.
   j2:double;
   equatorial_radius_m:double;
-  // White acceleration, one spectral density per RTN axis (m^2/s^3).
+  // NONE, or STATE_NOISE_COMPENSATION: white acceleration with one spectral
+  // density per RTN axis (m^2/s^3) in acceleration_psd.
+  process_noise:ProcessNoiseKind;
   acceleration_psd:[double] (required);
   recovery:InnovationRecoveryOptions;
 }
