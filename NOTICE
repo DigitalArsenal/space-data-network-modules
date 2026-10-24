@@ -38,13 +38,13 @@ License text lists the files that carry the terms.
 | third_party/nrlmsise00/ | NRLMSISE-00 C source package 20041227, Naval Research Laboratory (J. M. Picone, A. E. Hedin, D. P. Drob), C port by Dominik Brodowski | LicenseRef-Public-Domain | third_party/nrlmsise00/README.md |
 | higherpop/third_party/erfa/ | ERFA, derived with permission from the IAU SOFA library, Copyright 2013-2023 NumFOCUS Foundation; used by the builds of analysis/association, analysis/conjunction-assessment, analysis/density-calibration, analysis/epoch-state, analysis/gp-error-model, analysis/observation-simulator, analysis/od, analysis/optical-astrometry, analysis/parameters, analysis/reference-states, analysis/targeting, analysis/vcm-adapter, foundation/frames, propagator/events, propagator/ffm and propagator/sgp4-xp | BSD-3-Clause | higherpop/third_party/erfa/LICENSE.txt |
 | analysis/conjunction-assessment/src/cpp/include/nlohmann/, propagator/ffm/src/cpp/include/nlohmann/, propagator/sgp4/src/cpp/include/nlohmann/ | JSON for Modern C++ 3.11.3, Copyright 2013-2023 Niels Lohmann | MIT | NOTICE |
-| foundation/attitude-math/, foundation/frames/, foundation/math-bspline/, foundation/numerics/, foundation/orbits/, propagator/atmosphere/, propagator/ffm/lib/, basilisk/runtime/ | Ports of Basilisk code and formulas, Copyright Autonomous Vehicle Systems Lab, University of Colorado at Boulder; basilisk/runtime contains no Basilisk source and its tests compare against upstream Basilisk | ISC | foundation/attitude-math/src/attitude_math_module.cpp, foundation/frames/src/frames_module.cpp, foundation/math-bspline/src/bspline_module.cpp, foundation/numerics/src/numerics_module.cpp, NOTICE |
+| foundation/attitude-math/, foundation/frames/, foundation/math-bspline/, foundation/numerics/, foundation/orbits/, propagator/atmosphere/, propagator/ffm/lib/, basilisk/runtime/ | Ports of Basilisk code and formulas, Copyright Autonomous Vehicle Systems Lab, University of Colorado at Boulder; basilisk/runtime, the seed of the Basilisk runtime module family, contains no Basilisk source | ISC | foundation/attitude-math/src/attitude_math_module.cpp, foundation/frames/src/frames_module.cpp, foundation/math-bspline/src/bspline_module.cpp, foundation/numerics/src/numerics_module.cpp, NOTICE |
 | analysis/lambert-izzo/ | izzos-lambert v2.0.0 (lambert_izzo), Copyright 2026 Sarkis Melkonian; the module wraps it | MIT OR Apache-2.0 | LICENSE, analysis/lambert-izzo/NOTICE |
 | analysis/milky-way-model/ | adapts OrbPro GalaxyFS.glsl, Copyright 2011-2026 CesiumJS Contributors | Apache-2.0 | analysis/milky-way-model/LICENSE |
-| propagator/ffm/tests/fixtures/orekit/, files/orbit-products/fixtures/ | Orekit 13.1 reference outputs, CS GROUP (in files/orbit-products/fixtures/: stk_02674_*.e and the Orekit cross-check dumps) | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt, LICENSES/NOTICE-Orekit.txt |
+| propagator/ffm/tests/fixtures/orekit/, files/orbit-products/fixtures/, propagator/ffm/lib/jb2008.h | Orekit 13.1, CS GROUP: reference outputs (in files/orbit-products/fixtures/: stk_02674_*.e and the Orekit cross-check dumps) and propagator/ffm/lib/jb2008.h, a line-for-line C++ port of Orekit's JB2008, Copyright 2002-2025 CS GROUP | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt, LICENSES/NOTICE-Orekit.txt |
 | analysis/estimation/tests/fixtures/ | Hipparchus fixtures, The Hipparchus project | Apache-2.0 | analysis/estimation/tests/fixtures/hipparchus-LICENSE.txt, analysis/estimation/tests/fixtures/hipparchus-NOTICE.txt |
-| propagator/ffm/tests/fixtures/gmat/, propagator/ffm/tests/evidence/gmat/ | NASA GMAT R2026a reference outputs, Copyright United States Government as represented by the Administrator of NASA | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt |
-| propagator/ffm/tests/fixtures/tudat/, analysis/maneuver/vectors/tudat-extract.json | Tudat and tudatpy reference outputs, Delft University of Technology | BSD-3-Clause | LICENSES/BSD-3-Clause-Tudat.txt |
+| propagator/ffm/tests/fixtures/gmat/, propagator/ffm/tests/evidence/gmat/, propagator/ffm/lib/jacchia_roberts.h | NASA GMAT R2026a: reference outputs and propagator/ffm/lib/jacchia_roberts.h, a C++ port of JacchiaRobertsAtmosphere.cpp; Copyright 2002-2026 United States Government as represented by the Administrator of NASA | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt |
+| propagator/ffm/tests/fixtures/tudat/, analysis/maneuver/vectors/tudat-extract.json, propagator/ffm/lib/force_models.h, propagator/ffm/lib/force_models.cpp, propagator/ffm/lib/integrators.h, propagator/ffm/lib/integrators.cpp | Tudat and tudatpy, Delft University of Technology: reference outputs, and the four propagator/ffm/lib files whose headers call them a TudatPy port | BSD-3-Clause | LICENSES/BSD-3-Clause-Tudat.txt |
 | analysis/maneuver/vectors/hapsira-extract.json | hapsira (poliastro) reference values | MIT | LICENSES/MIT-hapsira.txt |
 
 LicenseRef identifiers
@@ -58,9 +58,9 @@ LicenseRef identifiers
 - LicenseRef-US-Government-Work: a work of Naval Research Laboratory employees
   within their duties (17 U.S.C. 105); the package carries no license text.
   NOTICE.md has the open questions on HWM14.
-- LicenseRef-Public-Domain: the author's dedication, in the file headers or the
-  README named in License text.
-- LicenseRef-Unstated: the upstream release grants no license in the tree.
+- LicenseRef-Public-Domain: the author's dedication, in the file or README named
+  in License text.
+- LicenseRef-Unstated: no license text or grant accompanies the code.
 
 NOTICES REPRODUCED HERE
 
