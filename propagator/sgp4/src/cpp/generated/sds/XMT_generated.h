@@ -17,6 +17,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CVR_generated.h"
 #include "MNV_generated.h"
 #include "PRW_generated.h"
+#include "PCF_generated.h"
 
 struct XMTRecordRef;
 struct XMTRecordRefBuilder;
@@ -4637,8 +4638,8 @@ struct XMTEpochFitPolicyT : public ::flatbuffers::NativeTable {
   typedef XMTEpochFitPolicy TableType;
   std::string PROPAGATOR_ID{};
   std::string PROPAGATOR_ARTIFACT_SHA256{};
-  std::unique_ptr<PRWForceConfigurationT> FORCE_MODEL{};
-  std::unique_ptr<PRWIntegratorSettingsT> INTEGRATOR{};
+  std::unique_ptr<PCFForceModelT> FORCE_MODEL{};
+  std::unique_ptr<PCFIntegratorSettingsT> INTEGRATOR{};
   std::string FORCE_MODEL_LIMITATION{};
   std::string FRAME_TRANSFORMATION_REF{};
   uint8_t HOLDOUT_STRIDE = 0;
@@ -4677,7 +4678,7 @@ struct XMTEpochFitPolicy FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_POSITION_REGULARIZATION_KM = 28,
     VT_VELOCITY_REGULARIZATION_KM_S = 30
   };
-  /// Propagator module identifier, e.g. "com.orbpro.hpop".
+  /// Propagator module identifier, e.g. "com.orbpro.ffm".
   const ::flatbuffers::String *PROPAGATOR_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PROPAGATOR_ID);
   }
@@ -4686,12 +4687,12 @@ struct XMTEpochFitPolicy FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     return GetPointer<const ::flatbuffers::String *>(VT_PROPAGATOR_ARTIFACT_SHA256);
   }
   /// Force model the trajectories were propagated with.
-  const PRWForceConfiguration *FORCE_MODEL() const {
-    return GetPointer<const PRWForceConfiguration *>(VT_FORCE_MODEL);
+  const PCFForceModel *FORCE_MODEL() const {
+    return GetPointer<const PCFForceModel *>(VT_FORCE_MODEL);
   }
   /// Integrator settings, when stated.
-  const PRWIntegratorSettings *INTEGRATOR() const {
-    return GetPointer<const PRWIntegratorSettings *>(VT_INTEGRATOR);
+  const PCFIntegratorSettings *INTEGRATOR() const {
+    return GetPointer<const PCFIntegratorSettings *>(VT_INTEGRATOR);
   }
   /// Known limitations of the force model (human-readable).
   const ::flatbuffers::String *FORCE_MODEL_LIMITATION() const {
@@ -4773,10 +4774,10 @@ struct XMTEpochFitPolicyBuilder {
   void add_PROPAGATOR_ARTIFACT_SHA256(::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_ARTIFACT_SHA256) {
     fbb_.AddOffset(XMTEpochFitPolicy::VT_PROPAGATOR_ARTIFACT_SHA256, PROPAGATOR_ARTIFACT_SHA256);
   }
-  void add_FORCE_MODEL(::flatbuffers::Offset<PRWForceConfiguration> FORCE_MODEL) {
+  void add_FORCE_MODEL(::flatbuffers::Offset<PCFForceModel> FORCE_MODEL) {
     fbb_.AddOffset(XMTEpochFitPolicy::VT_FORCE_MODEL, FORCE_MODEL);
   }
-  void add_INTEGRATOR(::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR) {
+  void add_INTEGRATOR(::flatbuffers::Offset<PCFIntegratorSettings> INTEGRATOR) {
     fbb_.AddOffset(XMTEpochFitPolicy::VT_INTEGRATOR, INTEGRATOR);
   }
   void add_FORCE_MODEL_LIMITATION(::flatbuffers::Offset<::flatbuffers::String> FORCE_MODEL_LIMITATION) {
@@ -4824,8 +4825,8 @@ inline ::flatbuffers::Offset<XMTEpochFitPolicy> CreateXMTEpochFitPolicy(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PROPAGATOR_ARTIFACT_SHA256 = 0,
-    ::flatbuffers::Offset<PRWForceConfiguration> FORCE_MODEL = 0,
-    ::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR = 0,
+    ::flatbuffers::Offset<PCFForceModel> FORCE_MODEL = 0,
+    ::flatbuffers::Offset<PCFIntegratorSettings> INTEGRATOR = 0,
     ::flatbuffers::Offset<::flatbuffers::String> FORCE_MODEL_LIMITATION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> FRAME_TRANSFORMATION_REF = 0,
     uint8_t HOLDOUT_STRIDE = 0,
@@ -4863,8 +4864,8 @@ inline ::flatbuffers::Offset<XMTEpochFitPolicy> CreateXMTEpochFitPolicyDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *PROPAGATOR_ID = nullptr,
     const char *PROPAGATOR_ARTIFACT_SHA256 = nullptr,
-    ::flatbuffers::Offset<PRWForceConfiguration> FORCE_MODEL = 0,
-    ::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR = 0,
+    ::flatbuffers::Offset<PCFForceModel> FORCE_MODEL = 0,
+    ::flatbuffers::Offset<PCFIntegratorSettings> INTEGRATOR = 0,
     const char *FORCE_MODEL_LIMITATION = nullptr,
     const char *FRAME_TRANSFORMATION_REF = nullptr,
     uint8_t HOLDOUT_STRIDE = 0,
@@ -6837,8 +6838,8 @@ inline ::flatbuffers::Offset<XMTIntegrateReport> XMTIntegrateReport::Pack(::flat
 inline XMTEpochFitPolicyT::XMTEpochFitPolicyT(const XMTEpochFitPolicyT &o)
       : PROPAGATOR_ID(o.PROPAGATOR_ID),
         PROPAGATOR_ARTIFACT_SHA256(o.PROPAGATOR_ARTIFACT_SHA256),
-        FORCE_MODEL((o.FORCE_MODEL) ? new PRWForceConfigurationT(*o.FORCE_MODEL) : nullptr),
-        INTEGRATOR((o.INTEGRATOR) ? new PRWIntegratorSettingsT(*o.INTEGRATOR) : nullptr),
+        FORCE_MODEL((o.FORCE_MODEL) ? new PCFForceModelT(*o.FORCE_MODEL) : nullptr),
+        INTEGRATOR((o.INTEGRATOR) ? new PCFIntegratorSettingsT(*o.INTEGRATOR) : nullptr),
         FORCE_MODEL_LIMITATION(o.FORCE_MODEL_LIMITATION),
         FRAME_TRANSFORMATION_REF(o.FRAME_TRANSFORMATION_REF),
         HOLDOUT_STRIDE(o.HOLDOUT_STRIDE),
@@ -6880,8 +6881,8 @@ inline void XMTEpochFitPolicy::UnPackTo(XMTEpochFitPolicyT *_o, const ::flatbuff
   (void)_resolver;
   { auto _e = PROPAGATOR_ID(); if (_e) _o->PROPAGATOR_ID = _e->str(); }
   { auto _e = PROPAGATOR_ARTIFACT_SHA256(); if (_e) _o->PROPAGATOR_ARTIFACT_SHA256 = _e->str(); }
-  { auto _e = FORCE_MODEL(); if (_e) { if(_o->FORCE_MODEL) { _e->UnPackTo(_o->FORCE_MODEL.get(), _resolver); } else { _o->FORCE_MODEL = std::unique_ptr<PRWForceConfigurationT>(_e->UnPack(_resolver)); } } else if (_o->FORCE_MODEL) { _o->FORCE_MODEL.reset(); } }
-  { auto _e = INTEGRATOR(); if (_e) { if(_o->INTEGRATOR) { _e->UnPackTo(_o->INTEGRATOR.get(), _resolver); } else { _o->INTEGRATOR = std::unique_ptr<PRWIntegratorSettingsT>(_e->UnPack(_resolver)); } } else if (_o->INTEGRATOR) { _o->INTEGRATOR.reset(); } }
+  { auto _e = FORCE_MODEL(); if (_e) { if(_o->FORCE_MODEL) { _e->UnPackTo(_o->FORCE_MODEL.get(), _resolver); } else { _o->FORCE_MODEL = std::unique_ptr<PCFForceModelT>(_e->UnPack(_resolver)); } } else if (_o->FORCE_MODEL) { _o->FORCE_MODEL.reset(); } }
+  { auto _e = INTEGRATOR(); if (_e) { if(_o->INTEGRATOR) { _e->UnPackTo(_o->INTEGRATOR.get(), _resolver); } else { _o->INTEGRATOR = std::unique_ptr<PCFIntegratorSettingsT>(_e->UnPack(_resolver)); } } else if (_o->INTEGRATOR) { _o->INTEGRATOR.reset(); } }
   { auto _e = FORCE_MODEL_LIMITATION(); if (_e) _o->FORCE_MODEL_LIMITATION = _e->str(); }
   { auto _e = FRAME_TRANSFORMATION_REF(); if (_e) _o->FRAME_TRANSFORMATION_REF = _e->str(); }
   { auto _e = HOLDOUT_STRIDE(); _o->HOLDOUT_STRIDE = _e; }
@@ -6904,8 +6905,8 @@ inline ::flatbuffers::Offset<XMTEpochFitPolicy> XMTEpochFitPolicy::Pack(::flatbu
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const XMTEpochFitPolicyT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _PROPAGATOR_ID = _o->PROPAGATOR_ID.empty() ? 0 : _fbb.CreateString(_o->PROPAGATOR_ID);
   auto _PROPAGATOR_ARTIFACT_SHA256 = _o->PROPAGATOR_ARTIFACT_SHA256.empty() ? 0 : _fbb.CreateString(_o->PROPAGATOR_ARTIFACT_SHA256);
-  auto _FORCE_MODEL = _o->FORCE_MODEL ? CreatePRWForceConfiguration(_fbb, _o->FORCE_MODEL.get(), _rehasher) : 0;
-  auto _INTEGRATOR = _o->INTEGRATOR ? CreatePRWIntegratorSettings(_fbb, _o->INTEGRATOR.get(), _rehasher) : 0;
+  auto _FORCE_MODEL = _o->FORCE_MODEL ? CreatePCFForceModel(_fbb, _o->FORCE_MODEL.get(), _rehasher) : 0;
+  auto _INTEGRATOR = _o->INTEGRATOR ? CreatePCFIntegratorSettings(_fbb, _o->INTEGRATOR.get(), _rehasher) : 0;
   auto _FORCE_MODEL_LIMITATION = _o->FORCE_MODEL_LIMITATION.empty() ? 0 : _fbb.CreateString(_o->FORCE_MODEL_LIMITATION);
   auto _FRAME_TRANSFORMATION_REF = _o->FRAME_TRANSFORMATION_REF.empty() ? 0 : _fbb.CreateString(_o->FRAME_TRANSFORMATION_REF);
   auto _HOLDOUT_STRIDE = _o->HOLDOUT_STRIDE;

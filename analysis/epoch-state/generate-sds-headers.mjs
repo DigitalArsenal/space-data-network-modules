@@ -4,9 +4,9 @@
  * (else node_modules/spacedatastandards.org): schema/<FAMILY>/main.fbs, compiled here with flatc-wasm, so every
  * family comes from one SDS release (the $PRW window arms are newer than any published C++ binding).
  *
- * SCHEMA_FAMILIES is in dependency order: $MPE needs MET; $OEM needs RFM, TIM, CAT (PLD -> IDM, LCC) and PPE; $OMM
- * needs RFM, TIM, MET, CVR and PVN; $PRW needs FRM, TIM, PCE, PPE, NCD, EOP and SPW. build.mjs concatenates the
- * headers in this order into one translation unit.
+ * The families come back in dependency order (every family after the families its schema includes), from the
+ * `include` lines of the schemas themselves: $MPE, $OEM, $OMM and $PRW with everything they include. build.mjs
+ * concatenates the headers in this order into one translation unit.
  */
 
 import fs from "node:fs";
@@ -20,10 +20,8 @@ const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
   : path.join(packageRoot, "node_modules", "spacedatastandards.org");
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
-export const SCHEMA_FAMILIES = [
-  "MET", "MPE", "RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "CVR", "PVN", "OMM",
-  "FRM", "PCE", "NCD", "EOP", "SPW", "PRW",
-];
+// The standards the module reads and writes; the families they include come with them.
+const ROOT_FAMILIES = ["MPE", "OEM", "OMM", "PRW"];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
@@ -77,12 +75,21 @@ export async function generateSdsHeaders() {
     );
   }
 
-  const emitted = {};
-  for (const family of SCHEMA_FAMILIES) {
+  const families = [];
+  const visit = (family) => {
+    if (families.includes(family)) return;
     const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
     if (!fs.existsSync(schemaPath)) {
       throw new Error(`${family} schema not found in spacedatastandards.org@${version}`);
     }
+    schemaIncludeFamilies(schemaPath).forEach(visit);
+    families.push(family);
+  };
+  ROOT_FAMILIES.forEach(visit);
+
+  const emitted = {};
+  for (const family of families) {
+    const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
     const rc = flatc.callMain([
       "--cpp", "--cpp-std", "c++17", "--gen-object-api", "--preserve-case", "--no-warnings",
       "-I", "/schemas", "-o", "/out_cpp", `/schemas/${family}/main.fbs`,
@@ -96,13 +103,13 @@ export async function generateSdsHeaders() {
     fs.writeFileSync(path.join(outDir, `${family}_generated.h`), header);
     emitted[family] = header;
   }
-  return { version, headers: emitted, outDir };
+  return { version, families, headers: emitted, outDir };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   generateSdsHeaders()
-    .then(({ version }) => {
-      console.log(`Generated SDS headers ${SCHEMA_FAMILIES.join(", ")} from spacedatastandards.org@${version}`);
+    .then(({ version, families }) => {
+      console.log(`Generated SDS headers ${families.join(", ")} from spacedatastandards.org@${version}`);
     })
     .catch((error) => {
       console.error(error?.stack ?? String(error));

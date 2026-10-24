@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
-import { generateSdsHeaders, SCHEMA_FAMILIES } from "./generate-sds-headers.mjs";
+import { generateSdsHeaders } from "./generate-sds-headers.mjs";
 import { composeErfaTranslationUnit } from "../../foundation/frames/erfa-amalgamation.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -16,7 +16,7 @@ const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-const { version: sdsVersion, headers } = await generateSdsHeaders();
+const { version: sdsVersion, families, headers } = await generateSdsHeaders();
 
 // One translation unit: the family headers go in dependency order, so their
 // cross-family includes are dropped rather than resolved.
@@ -25,7 +25,7 @@ const { version: sdsVersion, headers } = await generateSdsHeaders();
 // name and different in layout, so the copy kept could be another module's. Each module keeps its own.
 const sdsHeaders = [
   '#include "flatbuffers/flatbuffers.h"\nnamespace {',
-  ...SCHEMA_FAMILIES.map((family) =>
+  ...families.map((family) =>
     headers[family]
       .replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, "")
       .replaceAll('#include "flatbuffers/flatbuffers.h"\n', "")
@@ -117,7 +117,7 @@ await fs.writeFile(
   `${JSON.stringify(
     {
       spacedatastandards: sdsVersion,
-      sdsFamilies: SCHEMA_FAMILIES,
+      sdsFamilies: families,
       erfaSourceFiles: erfa.fileCount,
       axisEngine: "foundation/frames/src/axis_engine.hpp",
       sgp4: "propagator/sgp4/src/cpp/src/SGP4.cpp",

@@ -1167,16 +1167,16 @@ int read(void) {
     initial.MASS_KG = 1000.0;
     const Utc target = fromUnix(unixSeconds(m.epoch) + o.arcSeconds);
     request->TARGET_EPOCH = isoInstant(iso(target));
-    request->INTEGRATOR = std::make_unique<PRWIntegratorSettingsT>();
+    request->INTEGRATOR = std::make_unique<PCFIntegratorSettingsT>();
     auto& integrator = *request->INTEGRATOR;
-    integrator.ALGORITHM = prwSolverAlgorithm::RK78;
+    integrator.ALGORITHM = pcfIntegratorAlgorithm::RK78;
     integrator.INITIAL_STEP_SECONDS = 30.0;
     integrator.MINIMUM_STEP_SECONDS = 1e-3;
     integrator.MAXIMUM_STEP_SECONDS = 300.0;
     integrator.ABSOLUTE_TOLERANCES.assign(6, 1e-10);
     integrator.RELATIVE_TOLERANCE = 1e-13;
     integrator.MAXIMUM_STEPS = 1000000;
-    request->FORCES = std::make_unique<PRWForceConfigurationT>();
+    request->FORCES = std::make_unique<PCFForceModelT>();
     auto& forces = *request->FORCES;
     forces.GRAVITATIONAL_PARAMETER = mu * 1e9;
     forces.ENABLE_POINT_MASS = true;
@@ -1186,15 +1186,15 @@ int read(void) {
     forces.ENABLE_HIGHER_ZONALS = false;
     const std::string geo = upper(m.geopotential);
     if (m.zonals >= 2) {
-        forces.GRAVITY_CHOICE = geo.find("EGM-96") != std::string::npos || geo.find("EGM96") != std::string::npos ? prwGravitySelection::EGM96 : prwGravitySelection::EGM2008;
-        if (forces.GRAVITY_CHOICE == prwGravitySelection::EGM2008) notes.push_back("geopotential " + m.geopotential + " is not embedded; EGM2008 stands in");
+        forces.GRAVITY_CHOICE = geo.find("EGM-96") != std::string::npos || geo.find("EGM96") != std::string::npos ? pcfGravitySelection::EGM96 : pcfGravitySelection::EGM2008;
+        if (forces.GRAVITY_CHOICE == pcfGravitySelection::EGM2008) notes.push_back("geopotential " + m.geopotential + " is not embedded; EGM2008 stands in");
         forces.MAXIMUM_DEGREE = uint16_t(std::max(m.zonals, m.tesserals));
         forces.HAS_MAXIMUM_DEGREE = true;
         forces.MAXIMUM_ORDER = uint16_t(m.tesserals);
         forces.HAS_MAXIMUM_ORDER = true;
         if (m.tesserals < m.zonals) { forces.MAXIMUM_TESSERAL_DEGREE = uint16_t(m.tesserals); forces.HAS_MAXIMUM_TESSERAL_DEGREE = true; }
     } else {
-        forces.GRAVITY_CHOICE = prwGravitySelection::POINT_MASS;
+        forces.GRAVITY_CHOICE = pcfGravitySelection::POINT_MASS;
     }
     if (m.lunarSolar) { forces.ENABLE_THIRD_BODY = true; forces.THIRD_BODY_IDS = {10, 301}; }
     forces.INITIAL_MASS_KG = 1000.0;
@@ -1207,23 +1207,23 @@ int read(void) {
     const std::string drag = upper(m.drag);
     forces.ENABLE_DRAG = m.b > 0 && drag.find("NONE") == std::string::npos && drag.find("OFF") == std::string::npos;
     if (drag.find("JB") != std::string::npos) {
-        forces.ATMOSPHERE_MODEL = prwAtmosphereFamily::JB2008;
+        forces.ATMOSPHERE_MODEL = pcfAtmosphereFamily::JB2008;
         notes.push_back("drag " + m.drag + " runs JB2008, which reads the jb2008_indices input (SET SOLFSMY/DTCFILE rows); a VCM does not carry them");
     } else if (drag.find("JAC") != std::string::npos) {
-        forces.ATMOSPHERE_MODEL = prwAtmosphereFamily::JACCHIA_ROBERTS;
+        forces.ATMOSPHERE_MODEL = pcfAtmosphereFamily::JACCHIA_ROBERTS;
     } else {
-        forces.ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00;
+        forces.ATMOSPHERE_MODEL = pcfAtmosphereFamily::NRLMSISE00;
     }
     forces.EPHEMERIS_SOURCE = o.ephemerisSource;
-    if (forces.ENABLE_DRAG && forces.ATMOSPHERE_MODEL != prwAtmosphereFamily::JB2008) {
-        forces.WEATHER = std::make_unique<PRWSpaceWeatherT>();
+    if (forces.ENABLE_DRAG && forces.ATMOSPHERE_MODEL != pcfAtmosphereFamily::JB2008) {
+        forces.WEATHER = std::make_unique<PCFSpaceWeatherT>();
         forces.WEATHER->EPOCH = isoInstant(iso(m.epoch));
         forces.WEATHER->F107 = m.f10;
         forces.WEATHER->F107_AVERAGE = m.avgF10;
         forces.WEATHER->AP_INDEX = m.avgAp;
         forces.WEATHER->KP_INDEX = kpFromAp(m.avgAp);
     }
-    if (m.solidTides) forces.SOLID_TIDES = prwSolidTideModel::IERS_2010;
+    if (m.solidTides) forces.SOLID_TIDES = pcfSolidTideModel::IERS_2010;
     if (m.inTrackThrust) { forces.IN_TRACK_ACCELERATION_M_S2 = m.thrust; forces.HAS_IN_TRACK_ACCELERATION_M_S2 = true; }
     if (m.bdot != 0 && forces.ENABLE_DRAG) { forces.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = m.bdot; forces.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = true; }
     request->INCLUDE_STM = true;

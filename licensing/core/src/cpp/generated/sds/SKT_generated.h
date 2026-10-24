@@ -17,11 +17,48 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 
 struct SKTPoint;
 
+struct SKTPoint3D;
+
 struct SKT;
 struct SKTBuilder;
 struct SKTT;
 
-/// Celestial frame a tile's HEALPix grid is laid on.
+/// How a layer divides into tiles.
+/// Append new values only; never reorder or reuse existing values.
+enum class sktPartitionScheme : uint8_t {
+  /// HEALPix pixels in the NESTED scheme, addressed by ORDER and PIXEL.
+  HEALPIX = 0,
+  /// Cubic nodes of an octree in heliocentric ICRS axes, parsecs, addressed
+  /// by OCTREE_LEVEL and OCTREE_KEY.
+  OCTREE_HELIO_ICRS = 1,
+  MIN = HEALPIX,
+  MAX = OCTREE_HELIO_ICRS
+};
+
+inline const sktPartitionScheme (&EnumValuessktPartitionScheme())[2] {
+  static const sktPartitionScheme values[] = {
+    sktPartitionScheme::HEALPIX,
+    sktPartitionScheme::OCTREE_HELIO_ICRS
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessktPartitionScheme() {
+  static const char * const names[3] = {
+    "HEALPIX",
+    "OCTREE_HELIO_ICRS",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesktPartitionScheme(sktPartitionScheme e) {
+  if (::flatbuffers::IsOutRange(e, sktPartitionScheme::HEALPIX, sktPartitionScheme::OCTREE_HELIO_ICRS)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessktPartitionScheme()[index];
+}
+
+/// Celestial frame a tile's HEALPix grid and point positions are laid on.
 /// Append new values only; never reorder or reuse existing values.
 enum class sktCelestialFrame : uint8_t {
   UNSPECIFIED = 0,
@@ -70,7 +107,7 @@ enum class sktPayloadKind : uint8_t {
   POINT_SOURCES = 1,
   /// Pixel map of a diffuse quantity.
   DIFFUSE_MAP = 2,
-  /// Pixel map of localisation probability per pixel; the values of a
+  /// Pixel map of localization probability per pixel; the values of a
   /// complete layer at one order sum to 1.
   PROBABILITY_MAP = 3,
   MIN = UNSPECIFIED,
@@ -142,8 +179,8 @@ inline const char *EnumNamesktRefinement(sktRefinement e) {
 /// Append new values only; never reorder or reuse existing values.
 enum class sktPlaceKind : uint8_t {
   UNSPECIFIED = 0,
-  /// Barycentric catalogue place at EPOCH: proper motion applied from the
-  /// catalogue epoch, nothing else.
+  /// Barycentric catalog place at EPOCH: proper motion applied from the
+  /// catalog epoch, nothing else.
   CATALOG = 1,
   /// Astrometric place for the observer named by OBSERVER_ID at EPOCH:
   /// space motion and parallax applied, no aberration or deflection.
@@ -186,9 +223,9 @@ inline const char *EnumNamesktPlaceKind(sktPlaceKind e) {
 /// What the COLOR slot of every point in a tile holds.
 /// Append new values only; never reorder or reuse existing values.
 enum class sktColorEncoding : uint8_t {
-  /// No colour; COLOR is 0.
+  /// No color; COLOR is 0.
   NONE = 0,
-  /// Colour index COLOR_BLUE_BAND_ID minus COLOR_RED_BAND_ID in
+  /// Color index COLOR_BLUE_BAND_ID minus COLOR_RED_BAND_ID in
   /// millimagnitudes, offset by 32768 (COLOR = index_mmag + 32768). 0 means
   /// unknown.
   COLOR_INDEX = 1,
@@ -342,7 +379,7 @@ enum class sktStretchFunction : uint8_t {
   LOGARITHMIC = 3,
   /// Inverse hyperbolic sine with softening STRETCH_SOFTENING.
   ASINH = 4,
-  /// Histogram equalisation over PERCENTILE_VALUES.
+  /// Histogram equalization over PERCENTILE_VALUES.
   HISTOGRAM_EQUALIZED = 5,
   MIN = UNSPECIFIED,
   MAX = HISTOGRAM_EQUALIZED
@@ -444,13 +481,13 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) SKTPoint FLATBUFFERS_FINAL_CLASS {
   int16_t MAG() const {
     return ::flatbuffers::EndianScalar(MAG_);
   }
-  /// Colour, encoded as the tile's COLOR_ENCODING states.
+  /// Color, encoded as the tile's COLOR_ENCODING states.
   uint16_t COLOR() const {
     return ::flatbuffers::EndianScalar(COLOR_);
   }
   /// Bit flags. 0: variable. 1: member of a multiple system. 2: PMRA/PMDEC
-  /// not usable. 3: PARALLAX not usable. 4: MAG is modelled, not measured.
-  /// 5: ROW refers to a `$CSO` rather than a `$STR`. 6: a neighbour lies
+  /// not usable. 3: PARALLAX not usable. 4: MAG is modeled, not measured.
+  /// 5: ROW refers to a `$CSO` rather than a `$STR`. 6: a neighbor lies
   /// within the confusion radius. 7: extended source. 8-15: reserved, 0.
   uint16_t FLAGS() const {
     return ::flatbuffers::EndianScalar(FLAGS_);
@@ -465,6 +502,88 @@ FLATBUFFERS_STRUCT_END(SKTPoint, 24);
 
 struct SKTPoint::Traits {
   using type = SKTPoint;
+};
+
+/// One point source placed in 3D in an octree node, packed for drawing (24
+/// bytes).
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) SKTPoint3D FLATBUFFERS_FINAL_CLASS {
+ private:
+  float X_PC_;
+  float Y_PC_;
+  float Z_PC_;
+  int16_t ABS_MAG_;
+  uint16_t COLOR_;
+  uint16_t DIST_FRAC_UNC_;
+  uint16_t FLAGS_;
+  uint32_t ROW_;
+
+ public:
+  struct Traits;
+  SKTPoint3D()
+      : X_PC_(0),
+        Y_PC_(0),
+        Z_PC_(0),
+        ABS_MAG_(0),
+        COLOR_(0),
+        DIST_FRAC_UNC_(0),
+        FLAGS_(0),
+        ROW_(0) {
+  }
+  SKTPoint3D(float _X_PC, float _Y_PC, float _Z_PC, int16_t _ABS_MAG, uint16_t _COLOR, uint16_t _DIST_FRAC_UNC, uint16_t _FLAGS, uint32_t _ROW)
+      : X_PC_(::flatbuffers::EndianScalar(_X_PC)),
+        Y_PC_(::flatbuffers::EndianScalar(_Y_PC)),
+        Z_PC_(::flatbuffers::EndianScalar(_Z_PC)),
+        ABS_MAG_(::flatbuffers::EndianScalar(_ABS_MAG)),
+        COLOR_(::flatbuffers::EndianScalar(_COLOR)),
+        DIST_FRAC_UNC_(::flatbuffers::EndianScalar(_DIST_FRAC_UNC)),
+        FLAGS_(::flatbuffers::EndianScalar(_FLAGS)),
+        ROW_(::flatbuffers::EndianScalar(_ROW)) {
+  }
+  /// ICRS X of the star minus the node's CENTER_X_PC, parsecs.
+  float X_PC() const {
+    return ::flatbuffers::EndianScalar(X_PC_);
+  }
+  /// ICRS Y of the star minus the node's CENTER_Y_PC, parsecs.
+  float Y_PC() const {
+    return ::flatbuffers::EndianScalar(Y_PC_);
+  }
+  /// ICRS Z of the star minus the node's CENTER_Z_PC, parsecs.
+  float Z_PC() const {
+    return ::flatbuffers::EndianScalar(Z_PC_);
+  }
+  /// Absolute magnitude in the tile's band, the magnitude at 10 parsecs with
+  /// extinction removed, millimagnitudes. -32768 when unknown.
+  int16_t ABS_MAG() const {
+    return ::flatbuffers::EndianScalar(ABS_MAG_);
+  }
+  /// Color, encoded as the tile's COLOR_ENCODING states (for BP - RP:
+  /// COLOR_INDEX with COLOR_BLUE_BAND_ID BP and COLOR_RED_BAND_ID RP).
+  uint16_t COLOR() const {
+    return ::flatbuffers::EndianScalar(COLOR_);
+  }
+  /// Fractional distance uncertainty, the `$STR` (DISTANCE_HI_PC -
+  /// DISTANCE_LO_PC) / DISTANCE_PC, in units of 1/10000. 65535 when unknown
+  /// or 6.5535 or more.
+  uint16_t DIST_FRAC_UNC() const {
+    return ::flatbuffers::EndianScalar(DIST_FRAC_UNC_);
+  }
+  /// Bit flags, with SKTPoint's meanings. 0: variable. 1: member of a
+  /// multiple system. 4: ABS_MAG is modeled, not measured. 5: ROW refers to
+  /// a `$CSO` rather than a `$STR`. 6: a neighbor lies within the confusion
+  /// radius. 7: extended source. 2, 3 and 8-15: reserved, 0.
+  uint16_t FLAGS() const {
+    return ::flatbuffers::EndianScalar(FLAGS_);
+  }
+  /// Index of the source's full record in the tile's row collection
+  /// (ROW_COLLECTION_CID), from 0. 0xFFFFFFFF when the tile has none.
+  uint32_t ROW() const {
+    return ::flatbuffers::EndianScalar(ROW_);
+  }
+};
+FLATBUFFERS_STRUCT_END(SKTPoint3D, 24);
+
+struct SKTPoint3D::Traits {
+  using type = SKTPoint3D;
 };
 
 struct SKTT : public ::flatbuffers::NativeTable {
@@ -519,9 +638,20 @@ struct SKTT : public ::flatbuffers::NativeTable {
   std::string PRODUCED_AT{};
   std::string CITATION{};
   std::string LICENSE_URL{};
+  sktPartitionScheme PARTITION = sktPartitionScheme::HEALPIX;
+  uint8_t OCTREE_LEVEL = 0;
+  uint64_t OCTREE_KEY = 0;
+  double CENTER_X_PC = std::numeric_limits<double>::quiet_NaN();
+  double CENTER_Y_PC = std::numeric_limits<double>::quiet_NaN();
+  double CENTER_Z_PC = std::numeric_limits<double>::quiet_NaN();
+  double HALF_SIZE_PC = std::numeric_limits<double>::quiet_NaN();
+  float ABS_MAG_BRIGHTEST = std::numeric_limits<float>::quiet_NaN();
+  float ABS_MAG_FAINTEST = std::numeric_limits<float>::quiet_NaN();
+  std::vector<SKTPoint3D> POINTS_3D{};
 };
 
-/// Sky Tile: one HEALPix tile of an all-sky point-source or diffuse-map layer.
+/// Sky Tile: one HEALPix pixel or heliocentric octree node of a point-source
+/// or diffuse-map layer.
 struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef SKTT NativeTableType;
   typedef SKTBuilder Builder;
@@ -576,14 +706,25 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PRODUCER_VERSION = 96,
     VT_PRODUCED_AT = 98,
     VT_CITATION = 100,
-    VT_LICENSE_URL = 102
+    VT_LICENSE_URL = 102,
+    VT_PARTITION = 104,
+    VT_OCTREE_LEVEL = 106,
+    VT_OCTREE_KEY = 108,
+    VT_CENTER_X_PC = 110,
+    VT_CENTER_Y_PC = 112,
+    VT_CENTER_Z_PC = 114,
+    VT_HALF_SIZE_PC = 116,
+    VT_ABS_MAG_BRIGHTEST = 118,
+    VT_ABS_MAG_FAINTEST = 120,
+    VT_POINTS_3D = 122
   };
   /// Stable identifier of the layer: equal across every tile of one
-  /// (producer, source catalogue or survey, band, place, epoch).
+  /// (producer, source catalog or survey, band, place, epoch).
   const ::flatbuffers::String *LAYER_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_LAYER_ID);
   }
-  /// Frame the HEALPix grid and the point positions are stated in.
+  /// Frame the HEALPix grid and the point positions are stated in; ICRS for
+  /// an OCTREE_HELIO_ICRS layer.
   sktCelestialFrame FRAME() const {
     return static_cast<sktCelestialFrame>(GetField<uint8_t>(VT_FRAME, 1));
   }
@@ -595,13 +736,13 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t PIXEL() const {
     return GetField<uint64_t>(VT_PIXEL, 0);
   }
-  /// Deepest order of the layer, when the producer knows it; 255 when
-  /// unstated.
+  /// Deepest ORDER (HEALPix) or OCTREE_LEVEL (octree) of the layer, when the
+  /// producer knows it; 255 when unstated.
   uint8_t MAX_ORDER() const {
     return GetField<uint8_t>(VT_MAX_ORDER, 255);
   }
-  /// Which of the four children exist (bit i for child 4 * PIXEL + i). 0 on
-  /// a leaf.
+  /// Which children exist: bit i for HEALPix child 4 * PIXEL + i (bits
+  /// 0-3), or for octree child 8 * OCTREE_KEY + i (bits 0-7). 0 on a leaf.
   uint8_t CHILD_MASK() const {
     return GetField<uint8_t>(VT_CHILD_MASK, 0);
   }
@@ -622,15 +763,15 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *BAND_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_BAND_ID);
   }
-  /// Effective wavelength of the band, nanometres (vacuum).
+  /// Effective wavelength of the band, nanometers (vacuum).
   double WAVELENGTH_EFF_NM() const {
     return GetField<double>(VT_WAVELENGTH_EFF_NM, std::numeric_limits<double>::quiet_NaN());
   }
-  /// Short edge of a band-integrated map, nanometres.
+  /// Short edge of a band-integrated map, nanometers.
   double WAVELENGTH_MIN_NM() const {
     return GetField<double>(VT_WAVELENGTH_MIN_NM, std::numeric_limits<double>::quiet_NaN());
   }
-  /// Long edge of a band-integrated map, nanometres.
+  /// Long edge of a band-integrated map, nanometers.
   double WAVELENGTH_MAX_NM() const {
     return GetField<double>(VT_WAVELENGTH_MAX_NM, std::numeric_limits<double>::quiet_NaN());
   }
@@ -647,11 +788,11 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<double>(VT_EPOCH, std::numeric_limits<double>::quiet_NaN());
   }
   /// Observer an ASTROMETRIC or APPARENT tile was computed for (a site, a
-  /// spacecraft or the geocentre), as the producer names it.
+  /// spacecraft or the geocenter), as the producer names it.
   const ::flatbuffers::String *OBSERVER_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_OBSERVER_ID);
   }
-  /// Number of points in the payload.
+  /// Number of points in the payload (POINTS or POINTS_3D).
   uint32_t POINT_COUNT() const {
     return GetField<uint32_t>(VT_POINT_COUNT, 0);
   }
@@ -664,15 +805,15 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   float MAG_LIMIT() const {
     return GetField<float>(VT_MAG_LIMIT, std::numeric_limits<float>::quiet_NaN());
   }
-  /// What each point's COLOR holds.
+  /// What each point's COLOR holds (POINTS and POINTS_3D alike).
   sktColorEncoding COLOR_ENCODING() const {
     return static_cast<sktColorEncoding>(GetField<uint8_t>(VT_COLOR_ENCODING, 0));
   }
-  /// Bluer band of a COLOR_INDEX colour.
+  /// Bluer band of a COLOR_INDEX color.
   const ::flatbuffers::String *COLOR_BLUE_BAND_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_COLOR_BLUE_BAND_ID);
   }
-  /// Redder band of a COLOR_INDEX colour.
+  /// Redder band of a COLOR_INDEX color.
   const ::flatbuffers::String *COLOR_RED_BAND_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_COLOR_RED_BAND_ID);
   }
@@ -756,15 +897,15 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t PAYLOAD_BYTES() const {
     return GetField<uint64_t>(VT_PAYLOAD_BYTES, 0);
   }
-  /// Start of the observations the tile summarises, ISO 8601 UTC.
+  /// Start of the observations the tile summarizes, ISO 8601 UTC.
   const ::flatbuffers::String *OBSERVATION_START() const {
     return GetPointer<const ::flatbuffers::String *>(VT_OBSERVATION_START);
   }
-  /// End of the observations the tile summarises, ISO 8601 UTC.
+  /// End of the observations the tile summarizes, ISO 8601 UTC.
   const ::flatbuffers::String *OBSERVATION_END() const {
     return GetPointer<const ::flatbuffers::String *>(VT_OBSERVATION_END);
   }
-  /// Verbatim names of the catalogues or surveys the tile was derived from.
+  /// Verbatim names of the catalogs or surveys the tile was derived from.
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *SOURCE_NAMES() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_SOURCE_NAMES);
   }
@@ -784,9 +925,50 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *CITATION() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CITATION);
   }
-  /// URL of the licence or terms of the source data.
+  /// URL of the license or terms of the source data.
   const ::flatbuffers::String *LICENSE_URL() const {
     return GetPointer<const ::flatbuffers::String *>(VT_LICENSE_URL);
+  }
+  /// How the layer divides into tiles.
+  sktPartitionScheme PARTITION() const {
+    return static_cast<sktPartitionScheme>(GetField<uint8_t>(VT_PARTITION, 0));
+  }
+  /// Octree level of the node; the root is 0, at most 21.
+  uint8_t OCTREE_LEVEL() const {
+    return GetField<uint8_t>(VT_OCTREE_LEVEL, 0);
+  }
+  /// Morton key of the node at OCTREE_LEVEL, 3 bits per level.
+  uint64_t OCTREE_KEY() const {
+    return GetField<uint64_t>(VT_OCTREE_KEY, 0);
+  }
+  /// ICRS X of the node's center, parsecs from the Sun.
+  double CENTER_X_PC() const {
+    return GetField<double>(VT_CENTER_X_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// ICRS Y of the node's center, parsecs from the Sun.
+  double CENTER_Y_PC() const {
+    return GetField<double>(VT_CENTER_Y_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// ICRS Z of the node's center, parsecs from the Sun.
+  double CENTER_Z_PC() const {
+    return GetField<double>(VT_CENTER_Z_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Half the edge length of the node's cube, parsecs.
+  double HALF_SIZE_PC() const {
+    return GetField<double>(VT_HALF_SIZE_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Brightest absolute magnitude in the node.
+  float ABS_MAG_BRIGHTEST() const {
+    return GetField<float>(VT_ABS_MAG_BRIGHTEST, std::numeric_limits<float>::quiet_NaN());
+  }
+  /// Faintest absolute magnitude in the node; with its ancestors, the layer
+  /// is complete to this limit inside the node's cube.
+  float ABS_MAG_FAINTEST() const {
+    return GetField<float>(VT_ABS_MAG_FAINTEST, std::numeric_limits<float>::quiet_NaN());
+  }
+  /// Packed points of an octree node, brightest absolute magnitude first.
+  const ::flatbuffers::Vector<const SKTPoint3D *> *POINTS_3D() const {
+    return GetPointer<const ::flatbuffers::Vector<const SKTPoint3D *> *>(VT_POINTS_3D);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -863,6 +1045,17 @@ struct SKT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(CITATION()) &&
            VerifyOffset(verifier, VT_LICENSE_URL) &&
            verifier.VerifyString(LICENSE_URL()) &&
+           VerifyField<uint8_t>(verifier, VT_PARTITION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_OCTREE_LEVEL, 1) &&
+           VerifyField<uint64_t>(verifier, VT_OCTREE_KEY, 8) &&
+           VerifyField<double>(verifier, VT_CENTER_X_PC, 8) &&
+           VerifyField<double>(verifier, VT_CENTER_Y_PC, 8) &&
+           VerifyField<double>(verifier, VT_CENTER_Z_PC, 8) &&
+           VerifyField<double>(verifier, VT_HALF_SIZE_PC, 8) &&
+           VerifyField<float>(verifier, VT_ABS_MAG_BRIGHTEST, 4) &&
+           VerifyField<float>(verifier, VT_ABS_MAG_FAINTEST, 4) &&
+           VerifyOffset(verifier, VT_POINTS_3D) &&
+           verifier.VerifyVector(POINTS_3D()) &&
            verifier.EndTable();
   }
   SKTT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1024,6 +1217,36 @@ struct SKTBuilder {
   void add_LICENSE_URL(::flatbuffers::Offset<::flatbuffers::String> LICENSE_URL) {
     fbb_.AddOffset(SKT::VT_LICENSE_URL, LICENSE_URL);
   }
+  void add_PARTITION(sktPartitionScheme PARTITION) {
+    fbb_.AddElement<uint8_t>(SKT::VT_PARTITION, static_cast<uint8_t>(PARTITION), 0);
+  }
+  void add_OCTREE_LEVEL(uint8_t OCTREE_LEVEL) {
+    fbb_.AddElement<uint8_t>(SKT::VT_OCTREE_LEVEL, OCTREE_LEVEL, 0);
+  }
+  void add_OCTREE_KEY(uint64_t OCTREE_KEY) {
+    fbb_.AddElement<uint64_t>(SKT::VT_OCTREE_KEY, OCTREE_KEY, 0);
+  }
+  void add_CENTER_X_PC(double CENTER_X_PC) {
+    fbb_.AddElement<double>(SKT::VT_CENTER_X_PC, CENTER_X_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_CENTER_Y_PC(double CENTER_Y_PC) {
+    fbb_.AddElement<double>(SKT::VT_CENTER_Y_PC, CENTER_Y_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_CENTER_Z_PC(double CENTER_Z_PC) {
+    fbb_.AddElement<double>(SKT::VT_CENTER_Z_PC, CENTER_Z_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_HALF_SIZE_PC(double HALF_SIZE_PC) {
+    fbb_.AddElement<double>(SKT::VT_HALF_SIZE_PC, HALF_SIZE_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ABS_MAG_BRIGHTEST(float ABS_MAG_BRIGHTEST) {
+    fbb_.AddElement<float>(SKT::VT_ABS_MAG_BRIGHTEST, ABS_MAG_BRIGHTEST, std::numeric_limits<float>::quiet_NaN());
+  }
+  void add_ABS_MAG_FAINTEST(float ABS_MAG_FAINTEST) {
+    fbb_.AddElement<float>(SKT::VT_ABS_MAG_FAINTEST, ABS_MAG_FAINTEST, std::numeric_limits<float>::quiet_NaN());
+  }
+  void add_POINTS_3D(::flatbuffers::Offset<::flatbuffers::Vector<const SKTPoint3D *>> POINTS_3D) {
+    fbb_.AddOffset(SKT::VT_POINTS_3D, POINTS_3D);
+  }
   explicit SKTBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1087,8 +1310,23 @@ inline ::flatbuffers::Offset<SKT> CreateSKT(
     ::flatbuffers::Offset<::flatbuffers::String> PRODUCER_VERSION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PRODUCED_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CITATION = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> LICENSE_URL = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> LICENSE_URL = 0,
+    sktPartitionScheme PARTITION = sktPartitionScheme::HEALPIX,
+    uint8_t OCTREE_LEVEL = 0,
+    uint64_t OCTREE_KEY = 0,
+    double CENTER_X_PC = std::numeric_limits<double>::quiet_NaN(),
+    double CENTER_Y_PC = std::numeric_limits<double>::quiet_NaN(),
+    double CENTER_Z_PC = std::numeric_limits<double>::quiet_NaN(),
+    double HALF_SIZE_PC = std::numeric_limits<double>::quiet_NaN(),
+    float ABS_MAG_BRIGHTEST = std::numeric_limits<float>::quiet_NaN(),
+    float ABS_MAG_FAINTEST = std::numeric_limits<float>::quiet_NaN(),
+    ::flatbuffers::Offset<::flatbuffers::Vector<const SKTPoint3D *>> POINTS_3D = 0) {
   SKTBuilder builder_(_fbb);
+  builder_.add_HALF_SIZE_PC(HALF_SIZE_PC);
+  builder_.add_CENTER_Z_PC(CENTER_Z_PC);
+  builder_.add_CENTER_Y_PC(CENTER_Y_PC);
+  builder_.add_CENTER_X_PC(CENTER_X_PC);
+  builder_.add_OCTREE_KEY(OCTREE_KEY);
   builder_.add_PAYLOAD_BYTES(PAYLOAD_BYTES);
   builder_.add_STRETCH_SOFTENING(STRETCH_SOFTENING);
   builder_.add_WHITE_POINT(WHITE_POINT);
@@ -1100,6 +1338,9 @@ inline ::flatbuffers::Offset<SKT> CreateSKT(
   builder_.add_WAVELENGTH_MIN_NM(WAVELENGTH_MIN_NM);
   builder_.add_WAVELENGTH_EFF_NM(WAVELENGTH_EFF_NM);
   builder_.add_PIXEL(PIXEL);
+  builder_.add_POINTS_3D(POINTS_3D);
+  builder_.add_ABS_MAG_FAINTEST(ABS_MAG_FAINTEST);
+  builder_.add_ABS_MAG_BRIGHTEST(ABS_MAG_BRIGHTEST);
   builder_.add_LICENSE_URL(LICENSE_URL);
   builder_.add_CITATION(CITATION);
   builder_.add_PRODUCED_AT(PRODUCED_AT);
@@ -1125,6 +1366,8 @@ inline ::flatbuffers::Offset<SKT> CreateSKT(
   builder_.add_OBSERVER_ID(OBSERVER_ID);
   builder_.add_BAND_ID(BAND_ID);
   builder_.add_LAYER_ID(LAYER_ID);
+  builder_.add_OCTREE_LEVEL(OCTREE_LEVEL);
+  builder_.add_PARTITION(PARTITION);
   builder_.add_STRETCH(STRETCH);
   builder_.add_MAP_QUANTITY(MAP_QUANTITY);
   builder_.add_MAP_ENCODING(MAP_ENCODING);
@@ -1198,7 +1441,17 @@ inline ::flatbuffers::Offset<SKT> CreateSKTDirect(
     const char *PRODUCER_VERSION = nullptr,
     const char *PRODUCED_AT = nullptr,
     const char *CITATION = nullptr,
-    const char *LICENSE_URL = nullptr) {
+    const char *LICENSE_URL = nullptr,
+    sktPartitionScheme PARTITION = sktPartitionScheme::HEALPIX,
+    uint8_t OCTREE_LEVEL = 0,
+    uint64_t OCTREE_KEY = 0,
+    double CENTER_X_PC = std::numeric_limits<double>::quiet_NaN(),
+    double CENTER_Y_PC = std::numeric_limits<double>::quiet_NaN(),
+    double CENTER_Z_PC = std::numeric_limits<double>::quiet_NaN(),
+    double HALF_SIZE_PC = std::numeric_limits<double>::quiet_NaN(),
+    float ABS_MAG_BRIGHTEST = std::numeric_limits<float>::quiet_NaN(),
+    float ABS_MAG_FAINTEST = std::numeric_limits<float>::quiet_NaN(),
+    const std::vector<SKTPoint3D> *POINTS_3D = nullptr) {
   auto LAYER_ID__ = LAYER_ID ? _fbb.CreateString(LAYER_ID) : 0;
   auto BAND_ID__ = BAND_ID ? _fbb.CreateString(BAND_ID) : 0;
   auto OBSERVER_ID__ = OBSERVER_ID ? _fbb.CreateString(OBSERVER_ID) : 0;
@@ -1220,6 +1473,7 @@ inline ::flatbuffers::Offset<SKT> CreateSKTDirect(
   auto PRODUCED_AT__ = PRODUCED_AT ? _fbb.CreateString(PRODUCED_AT) : 0;
   auto CITATION__ = CITATION ? _fbb.CreateString(CITATION) : 0;
   auto LICENSE_URL__ = LICENSE_URL ? _fbb.CreateString(LICENSE_URL) : 0;
+  auto POINTS_3D__ = POINTS_3D ? _fbb.CreateVectorOfStructs<SKTPoint3D>(*POINTS_3D) : 0;
   return CreateSKT(
       _fbb,
       LAYER_ID__,
@@ -1271,7 +1525,17 @@ inline ::flatbuffers::Offset<SKT> CreateSKTDirect(
       PRODUCER_VERSION__,
       PRODUCED_AT__,
       CITATION__,
-      LICENSE_URL__);
+      LICENSE_URL__,
+      PARTITION,
+      OCTREE_LEVEL,
+      OCTREE_KEY,
+      CENTER_X_PC,
+      CENTER_Y_PC,
+      CENTER_Z_PC,
+      HALF_SIZE_PC,
+      ABS_MAG_BRIGHTEST,
+      ABS_MAG_FAINTEST,
+      POINTS_3D__);
 }
 
 ::flatbuffers::Offset<SKT> CreateSKT(::flatbuffers::FlatBufferBuilder &_fbb, const SKTT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1335,6 +1599,16 @@ inline void SKT::UnPackTo(SKTT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PRODUCED_AT(); if (_e) _o->PRODUCED_AT = _e->str(); }
   { auto _e = CITATION(); if (_e) _o->CITATION = _e->str(); }
   { auto _e = LICENSE_URL(); if (_e) _o->LICENSE_URL = _e->str(); }
+  { auto _e = PARTITION(); _o->PARTITION = _e; }
+  { auto _e = OCTREE_LEVEL(); _o->OCTREE_LEVEL = _e; }
+  { auto _e = OCTREE_KEY(); _o->OCTREE_KEY = _e; }
+  { auto _e = CENTER_X_PC(); _o->CENTER_X_PC = _e; }
+  { auto _e = CENTER_Y_PC(); _o->CENTER_Y_PC = _e; }
+  { auto _e = CENTER_Z_PC(); _o->CENTER_Z_PC = _e; }
+  { auto _e = HALF_SIZE_PC(); _o->HALF_SIZE_PC = _e; }
+  { auto _e = ABS_MAG_BRIGHTEST(); _o->ABS_MAG_BRIGHTEST = _e; }
+  { auto _e = ABS_MAG_FAINTEST(); _o->ABS_MAG_FAINTEST = _e; }
+  { auto _e = POINTS_3D(); if (_e) { _o->POINTS_3D.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->POINTS_3D[_i] = *_e->Get(_i); } } else { _o->POINTS_3D.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SKT> CreateSKT(::flatbuffers::FlatBufferBuilder &_fbb, const SKTT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1395,6 +1669,16 @@ inline ::flatbuffers::Offset<SKT> SKT::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PRODUCED_AT = _o->PRODUCED_AT.empty() ? 0 : _fbb.CreateString(_o->PRODUCED_AT);
   auto _CITATION = _o->CITATION.empty() ? 0 : _fbb.CreateString(_o->CITATION);
   auto _LICENSE_URL = _o->LICENSE_URL.empty() ? 0 : _fbb.CreateString(_o->LICENSE_URL);
+  auto _PARTITION = _o->PARTITION;
+  auto _OCTREE_LEVEL = _o->OCTREE_LEVEL;
+  auto _OCTREE_KEY = _o->OCTREE_KEY;
+  auto _CENTER_X_PC = _o->CENTER_X_PC;
+  auto _CENTER_Y_PC = _o->CENTER_Y_PC;
+  auto _CENTER_Z_PC = _o->CENTER_Z_PC;
+  auto _HALF_SIZE_PC = _o->HALF_SIZE_PC;
+  auto _ABS_MAG_BRIGHTEST = _o->ABS_MAG_BRIGHTEST;
+  auto _ABS_MAG_FAINTEST = _o->ABS_MAG_FAINTEST;
+  auto _POINTS_3D = _o->POINTS_3D.size() ? _fbb.CreateVectorOfStructs(_o->POINTS_3D) : 0;
   return CreateSKT(
       _fbb,
       _LAYER_ID,
@@ -1446,7 +1730,17 @@ inline ::flatbuffers::Offset<SKT> SKT::Pack(::flatbuffers::FlatBufferBuilder &_f
       _PRODUCER_VERSION,
       _PRODUCED_AT,
       _CITATION,
-      _LICENSE_URL);
+      _LICENSE_URL,
+      _PARTITION,
+      _OCTREE_LEVEL,
+      _OCTREE_KEY,
+      _CENTER_X_PC,
+      _CENTER_Y_PC,
+      _CENTER_Z_PC,
+      _HALF_SIZE_PC,
+      _ABS_MAG_BRIGHTEST,
+      _ABS_MAG_FAINTEST,
+      _POINTS_3D);
 }
 
 inline const SKT *GetSKT(const void *buf) {

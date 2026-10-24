@@ -307,8 +307,8 @@ test('read -> FFM -> ocm -> write -> read round trip', async (t) => {
   const report = reportOf(out(read, 'report'));
   const request = decodePrw(out(read, 'request')).EXECUTION_REQUEST;
   assert.equal(request.INITIAL.COORDINATE_SYSTEM.AXIS_TYPE, sds.rfmAxisType.MEAN_EQUATOR_EQUINOX_J2000);
-  assert.equal(request.FORCES.GRAVITY_CHOICE, sds.prwGravitySelection.EGM96);
-  assert.equal(request.FORCES.ATMOSPHERE_MODEL, sds.prwAtmosphereFamily.JACCHIA_ROBERTS);
+  assert.equal(request.FORCES.GRAVITY_CHOICE, sds.pcfGravitySelection.EGM96);
+  assert.equal(request.FORCES.ATMOSPHERE_MODEL, sds.pcfAtmosphereFamily.JACCHIA_ROBERTS);
   assert.equal(request.INITIAL_COVARIANCE.DIMENSION, 7);
   const run = ok(await ffm.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(read, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(read, 'earth_orientation') }] }));
   const result = decodePrw(out(run, 'response')).EXECUTION_RESULT;
