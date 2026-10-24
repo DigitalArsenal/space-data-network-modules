@@ -26,7 +26,7 @@ struct ExactScope {
     ExactScope(const ExactScope&) = delete;
     ExactScope& operator=(const ExactScope&) = delete;
 };
-inline bool active(const Forces& f) { return f.oceanTideCache && f.earthFixedRotation && !bypassDepth; }
+inline bool active(const Forces& f) { return f.oceanTideCache && f.centralBodyFixedRotation && !bypassDepth; }
 
 struct ChannelData {
     bool fitted = false, rejected = false;

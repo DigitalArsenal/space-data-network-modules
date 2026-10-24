@@ -11,6 +11,7 @@
 #include "../../../../../files/orbit-products/src/sha256.hpp"
 #include "ffm/prw_dynamics.h"
 #include "ffm/kernel_store.h"
+#include "planetary_fields.h"
 // build.mjs defines both from plugin-manifest.json, the manifest the SDK embeds
 // as $PLG, so VERSION_QUERY and the PLG identity cannot disagree.
 #if !defined(FFM_MODULE_ID) || !defined(FFM_MODULE_VERSION)
@@ -183,6 +184,9 @@ void encodeEvents(const Execution& execution,const PRWExecutionRequest* request,
 }
 bool execute(const PRWExecutionRequest* request,const Environment& environment,PRWT& response,std::string& error) {
     Execution execution;if(!parseExecution(request,environment.earth!=nullptr,execution,error))return false;
+    // About the Moon or Mars the trajectory ends at the body's surface (lib/reentry.h), not at the Earth's Karman line.
+    if(execution.forces.centralBodyNaifId!=399)
+        astro::centralBodyStop()=astro::CentralBodyStop{planetary::bodyRadiusKm(execution.forces.centralBodyNaifId),planetary::bodyName(execution.forces.centralBodyNaifId)};
     if(!attachEnvironment(execution,environment,request->FORCES()->WEATHER()!=nullptr,error))return false;
     auto first=execution.initialTT.instant(),last=execution.targetTT.instant();
     if(first.secondsSince(last)>0)std::swap(first,last);

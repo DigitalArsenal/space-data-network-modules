@@ -30,6 +30,18 @@ namespace astro {
 
 constexpr double REENTRY_ALTITUDE_KM = 100.0;
 
+// About the Moon or Mars the trajectory ends where it reaches the body's surface sphere, an impact (the
+// geodetic altitude line above is the Earth's). The request sets it for the call; clearCallStop() restores the
+// Earth's rule.
+struct CentralBodyStop {
+    double impactRadiusKm = 0;   // 0: the Earth's Karman line
+    const char* name = "Earth";
+};
+inline CentralBodyStop& centralBodyStop() {
+    static CentralBodyStop stop;
+    return stop;
+}
+
 struct PropagationStop {
     bool active = false;
     const char* code = "";   // "reentry" or "invalid-state"
@@ -51,7 +63,7 @@ inline PropagationStop& callStop() {
     static PropagationStop stop;
     return stop;
 }
-inline void clearCallStop() { callStop() = PropagationStop(); clearPropagationStop(); }
+inline void clearCallStop() { callStop() = PropagationStop(); clearPropagationStop(); centralBodyStop() = CentralBodyStop(); }
 
 // EH-free typed consumers fail through the same per-call stop channel as
 // reentry. Never turn an unsupported force into a successful zero force.
@@ -81,6 +93,13 @@ inline bool stopAt(const double* y, const timesys::Instant& instant) {
         if (!callStop().active) callStop() = stop;
         return true;
     }
+    if (centralBodyStop().impactRadiusKm > 0) {
+        const double radius = centralBodyStop().impactRadiusKm;
+        if (r2 >= radius * radius) return false;
+        stop = PropagationStop{true, "impact", jd, std::sqrt(r2) - radius};
+        if (!callStop().active) callStop() = stop;
+        return true;
+    }
     constexpr double clear = RE_EARTH + REENTRY_ALTITUDE_KM;   // above the line at every latitude
     if (r2 >= clear * clear) return false;
     double latitude, longitude, height;
@@ -99,6 +118,9 @@ inline std::string propagationStopMessage(const PropagationStop& stop = propagat
     if (std::string(stop.code) == "reentry")
         std::snprintf(text, sizeof text, "reentry: the trajectory descends below %.0f km geodetic altitude (%.1f km) at TDB JD %.6f; "
                       "FFM ends it there.", REENTRY_ALTITUDE_KM, stop.heightKm, stop.jd);
+    else if (std::string(stop.code) == "impact")
+        std::snprintf(text, sizeof text, "impact: the trajectory reaches the surface of %s (%.1f km below radius %.2f km) at TDB JD %.6f; "
+                      "FFM ends it there.", centralBodyStop().name, -stop.heightKm, centralBodyStop().impactRadiusKm, stop.jd);
     else if (std::string(stop.code) == "invalid-force")
         std::snprintf(text, sizeof text, "invalid-force: unsupported or singular force evaluation.");
     else

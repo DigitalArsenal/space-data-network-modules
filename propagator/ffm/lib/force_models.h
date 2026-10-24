@@ -160,6 +160,7 @@ Vec3 GRGM1200A(const Vec3& position, const GRGM1200AForceConfig& config = GRGM12
 /// Third body perturbation configuration
 struct ThirdBodyPerturbConfig {
     bool includeSun{true};
+    bool includeEarth{false};  ///< a third body only of a force set whose central body is not the Earth
     bool includeMoon{true};
     bool includeMercury{false};
     bool includeVenus{false};
@@ -205,6 +206,9 @@ enum class SRPModelType {
 struct SRPForceConfig {
     SRPModelType model{SRPModelType::Cannonball};
     ShadowModelType shadowModel{ShadowModelType::Conical};
+    /// Radius of the occulting central body whose shadow the cannonball sees (km): the Earth's unless the force
+    /// set flies about the Moon or Mars.
+    double occulterRadiusKm{RE_EARTH};
 
     double mass{1000.0};            ///< Spacecraft mass (kg)
     double area{10.0};              ///< Cross-sectional area (m^2)
@@ -239,7 +243,8 @@ Vec3 SolarRadiation(const Vec3& satPosition, const Vec3& satVelocity, const Vec3
 
 /// Cannonball SRP with shadow factor output
 Vec3 SolarRadiationCannonball(const Vec3& satPosition, const Vec3& sunPosition,
-                              double mass, double area, double Cr, double& shadowFactor);
+                              double mass, double area, double Cr, double& shadowFactor,
+                              double occulterRadiusKm = RE_EARTH);
 
 // -----------------------------------------------------------------------------
 // 7. Atmospheric Drag - Exponential/NRLMSISE-00
@@ -806,15 +811,26 @@ enum class GravityMode : uint8_t {
     SphericalHarmonics = 4, ///< the built-in low-degree field
     EGM2008 = 5,            ///< the vendored EGM2008 coefficient set
     LoadedField = 6,        ///< a field read from a potential file
+    PlanetaryField = 7,     ///< the embedded field of the central body (the Moon's GRGM660PRIM, Mars's MRO120F)
+};
+
+/// The embedded planetary field a PlanetaryField set evaluates (lib/planetary_fields.h): the central body's NAIF ID,
+/// the truncation, and the highest degree whose tesseral and sectorial terms (order >= 1) are kept.
+struct PlanetaryFieldConfig {
+    int body{0};
+    uint16_t degree{0};
+    uint16_t order{0};
+    uint16_t tesseralDegree{UINT16_MAX};
 };
 
 struct ForceModelSet {
-    /// Authoritative GCRF -> Earth-fixed rotation (row-major) at a two-part TT
-    /// instant, supplied by a caller that holds Earth orientation data (the PRW
+    /// Authoritative GCRF -> central-body-fixed rotation (row-major) at a two-part TT
+    /// instant. About the Earth, supplied by a caller that holds Earth orientation data (the PRW
     /// execution request's earth_orientation input: IERS 2010, IAU 2006/2000A,
-    /// CIO based, with polar motion and UT1). Empty: the built-in IAU-1976/1980
-    /// + GAST approximation, without polar motion and with UT1 = UTC.
-    std::function<void(const timesys::Instant& instant, double m[3][3])> earthFixedRotation;
+    /// CIO based, with polar motion and UT1); empty: the built-in IAU-1976/1980
+    /// + GAST approximation, without polar motion and with UT1 = UTC. About the Moon or Mars,
+    /// the body's own axes (planetary::bodyFixedRotation), which a PlanetaryField set requires.
+    std::function<void(const timesys::Instant& instant, double m[3][3])> centralBodyFixedRotation;
 
     /// Space weather at a UTC Julian date (an execution request's
     /// space_weather input). When set, drag reads it at every evaluation,
@@ -825,7 +841,7 @@ struct ForceModelSet {
     std::function<double(const timesys::Instant&)> densityScaleAt;
 
     /// Two-part UT1 Julian date at the TT instant, from the same Earth orientation
-    /// data as earthFixedRotation (the solid tides' GMST). Empty: UT1 = UTC.
+    /// data as centralBodyFixedRotation (the solid tides' GMST). Empty: UT1 = UTC.
     std::function<timesys::Instant::Date(const timesys::Instant& instant)> jdUt1At;
 
     /// Rate of change of the drag ballistic coefficient Cd*A/m (m^2/kg/s)
@@ -833,6 +849,12 @@ struct ForceModelSet {
     /// Cd*A/m + rate * (t - epoch) (DragAt).
     double dragAreaOverMassRate{0.0};
     timesys::Instant dragRateEpochTT;
+
+    /// The body the set flies about: 399 (the Earth), 301 (the Moon) or 499 (Mars). Positions, the Sun, the
+    /// third bodies and the shadow are those of this body; the Earth-only models (drag, tides, Earth radiation,
+    /// relativity, the closed-form zonals) are refused for the others by the request parser.
+    int centralBodyNaifId{399};
+    PlanetaryFieldConfig planetary;
 
     // Gravity
     bool usePointMass{true};
@@ -955,6 +977,23 @@ Vec3 CentralBodyGravity(const Vec3& position, const timesys::Instant& jd, const 
 /// The same model evaluated at an Earth-fixed position, in Earth-fixed axes.
 Vec3 EarthFixedGravity(const Vec3& earthFixed, const ForceModelSet& forceSet);
 
+// ---- Sets about the Moon or Mars (lib/central_body.cpp) --------------------------------------------------------
+
+/// A body's state relative to the set's central body (km, km/s, GCRF axes) at a TT instant, read from the planetary
+/// kernel. Mars's center is the Mars system barycenter of the short DE440 kernel (planetary::kernelCenterId).
+EphemerisState BodyAboutCentral(const ForceModelSet& forces, int naifId, const timesys::Instant& at);
+
+/// The Sun relative to the central body: the geocentric Sun about the Earth, the kernel's Sun about the others.
+EphemerisState SunAboutCentralBody(const ForceModelSet& forces, const timesys::Instant& at);
+
+/// The point-mass third bodies of a set about the Moon or Mars, direct minus indirect term as ThirdBody() for the Earth:
+/// the Sun, the Earth (and the Moon about Mars) and the planets, positions from the kernel, GM from DE440.
+Vec3 ThirdBodyAboutCentral(const ForceModelSet& forces, const Vec3& satPosition, const timesys::Instant& at);
+
+/// The embedded planetary field's harmonic acceleration (degree 2 up, the central term excluded) at a position in the
+/// body-fixed axes (km), km/s^2.
+Vec3 PlanetaryHarmonics(const Vec3& bodyFixedPosition, const PlanetaryFieldConfig& config);
+
 /// True when the force set's central body field is Earth-fixed (see above).
 bool EarthFixedField(const ForceModelSet& forceSet);
 
@@ -968,7 +1007,7 @@ GravityFieldCoefficients InlineFieldCoefficients(const SphericalHarmonicsConfig&
 /// UTC stands in for UT1 (|UT1-UTC| < 0.9 s); no polar motion or frame bias.
 void GcrfToEarthFixed(const timesys::Instant& jd, double m[3][3]);
 
-/// The force set's GCRF -> Earth-fixed rotation: its earthFixedRotation when
+/// The force set's GCRF -> Earth-fixed rotation: its centralBodyFixedRotation when
 /// supplied, else GcrfToEarthFixed(jd).
 void GcrfToEarthFixed(const timesys::Instant& jd, const ForceModelSet& forceSet, double m[3][3]);
 

@@ -1,5 +1,6 @@
 #include "ffm/prw_dynamics.h"
 #include "shadow_events.h"
+#include "planetary_fields.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -119,6 +120,27 @@ bool parseRadiationPressure(const PCFForceModel* in,ForceModel::SRPForceConfig& 
 }
 bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
     if(!in)return prwError(error,"invalid-forces: Missing force configuration.");
+    // The central body: the Earth, or the Moon or Mars with their embedded fields and axes (lib/planetary_fields.h).
+    const int center=in->CENTRAL_BODY_NAIF_ID();
+    const bool earth=center==399;
+    if(!earth&&!planetary::supportedCentralBody(center))
+        return prwError(error,"unsupported-central-body: CENTRAL_BODY_NAIF_ID has an embedded field and axes for the Earth (399), the Moon (301) and Mars (499) only.");
+    out.centralBodyNaifId=center;
+    if(!earth) {
+        // The Earth's models are named in the request; about another body they are refused, not applied to it.
+        const char* earthOnly=nullptr;
+        if(in->SOLID_TIDES()!=pcfSolidTideModel::NONE)earthOnly="SOLID_TIDES";
+        else if(in->OCEAN_TIDES()!=pcfOceanTideModel::NONE)earthOnly="OCEAN_TIDES";
+        else if(in->EARTH_RADIATION()!=pcfEarthRadiationModel::NONE)earthOnly="EARTH_RADIATION";
+        else if(in->RELATIVITY()!=pcfRelativityTerms::NONE)earthOnly="RELATIVITY";
+        else if(in->WEATHER()||in->WEATHER_SOURCE()!=pcfWeatherSource::UNSPECIFIED||in->WEATHER_EXTENSION()!=pcfWeatherExtension::UNSPECIFIED)earthOnly="WEATHER";
+        else if(in->DENSITY_CORRECTION()!=pcfDensityCorrection::NONE)earthOnly="DENSITY_CORRECTION";
+        else if(in->NEUTRAL_WIND()!=pcfNeutralWind::NONE)earthOnly="NEUTRAL_WIND";
+        else if(in->RADIATION_PRESSURE_MODEL()==pcfRadiationPressureFamily::GNSS_BOX_WING||in->ECOM2())earthOnly="the GNSS radiation pressure models";
+        if(earthOnly)return prwError(error,(std::string("unsupported-central-body: ")+earthOnly+" model the Earth; a request about "+planetary::bodyName(center)+" does not use them.").c_str());
+        if(in->ENABLE_DRAG())
+            return prwError(error,(std::string("unsupported-atmosphere: FFM has no atmosphere model for ")+planetary::bodyName(center)+".").c_str());
+    }
     out.usePointMass=in->ENABLE_POINT_MASS();out.mu=in->GRAVITATIONAL_PARAMETER()*1e-9;
     out.useSphericalHarmonics=in->ENABLE_J2()||in->ENABLE_J3()||in->ENABLE_J4()||in->ENABLE_HIGHER_ZONALS();
     out.sphericalHarmonics.includeJ2=in->ENABLE_J2();out.sphericalHarmonics.includeJ3=in->ENABLE_J3();out.sphericalHarmonics.includeJ4=in->ENABLE_J4();out.sphericalHarmonics.includeHigherZonals=in->ENABLE_HIGHER_ZONALS();out.sphericalHarmonics.mu=out.mu;
@@ -152,6 +174,7 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
     out.sphericalHarmonics.maxOrder=0;out.egm2008.truncationOrder=0;
     switch(in->GRAVITY_CHOICE()) {
     case pcfGravitySelection::INFER_FLAGS:
+        if(!earth)return prwError(error,"unsupported-gravity: INFER_FLAGS is the Earth's legacy flag selection; about another body select POINT_MASS or its field.");
         if(in->HAS_MAXIMUM_TESSERAL_DEGREE())return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE applies to SPHERICAL_HARMONICS, EGM2008 and EGM96.");
         out.gravityMode=ForceModel::GravityMode::Infer;
         if(in->HAS_MAXIMUM_DEGREE())out.sphericalHarmonics.maxDegree=in->MAXIMUM_DEGREE();
@@ -164,6 +187,7 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
         out.gravityMode=ForceModel::GravityMode::PointMass;break;
     case pcfGravitySelection::J2_ONLY:
     case pcfGravitySelection::J2_TO_J4:
+        if(!earth)return prwError(error,"unsupported-gravity: J2_ONLY and J2_TO_J4 are the Earth's EGM2008 zonals; about another body select its field.");
         if(in->HAS_MAXIMUM_DEGREE()||in->HAS_MAXIMUM_ORDER()||in->HAS_MAXIMUM_TESSERAL_DEGREE())
             return prwError(error,"invalid-forces: J2_ONLY and J2_TO_J4 fix their own degree; select SPHERICAL_HARMONICS for another truncation.");
         if(!field(in->GRAVITY_CHOICE()==pcfGravitySelection::J2_ONLY?2:4,0,ForceModel::EmbeddedEarthField::EGM2008))return false;
@@ -171,10 +195,37 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
     case pcfGravitySelection::SPHERICAL_HARMONICS:
     case pcfGravitySelection::EGM2008:
     case pcfGravitySelection::EGM96:
+    case pcfGravitySelection::GRGM660PRIM: {
         if(!in->HAS_MAXIMUM_DEGREE()||!in->HAS_MAXIMUM_ORDER())
             return prwError(error,"invalid-forces: A field selection states both MAXIMUM_DEGREE and MAXIMUM_ORDER.");
-        if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER(),in->GRAVITY_CHOICE()==pcfGravitySelection::EGM96?ForceModel::EmbeddedEarthField::EGM96:ForceModel::EmbeddedEarthField::EGM2008))return false;
+        const auto choice=in->GRAVITY_CHOICE();
+        if(earth) {
+            if(choice==pcfGravitySelection::GRGM660PRIM)return prwError(error,"unsupported-gravity: GRGM660PRIM is the Moon's field; set CENTRAL_BODY_NAIF_ID 301.");
+            if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER(),choice==pcfGravitySelection::EGM96?ForceModel::EmbeddedEarthField::EGM96:ForceModel::EmbeddedEarthField::EGM2008))return false;
+            break;
+        }
+        // About the Moon or Mars the body's embedded field answers: GRGM660PRIM (the Moon, named), or SPHERICAL_HARMONICS
+        // for the central body's own field (the Moon's GRGM660PRIM, Mars's MRO120F); the Earth's names are refused.
+        if(choice==pcfGravitySelection::EGM2008||choice==pcfGravitySelection::EGM96)
+            return prwError(error,"unsupported-gravity: EGM2008 and EGM96 are Earth fields; about the Moon or Mars select SPHERICAL_HARMONICS (GRGM660PRIM for the Moon).");
+        if(choice==pcfGravitySelection::GRGM660PRIM&&center!=planetary::MOON)
+            return prwError(error,"unsupported-gravity: GRGM660PRIM is the Moon's field; set CENTRAL_BODY_NAIF_ID 301.");
+        const int degree=in->MAXIMUM_DEGREE(),order=in->MAXIMUM_ORDER(),highest=planetary::fieldInfo(center).degree;
+        if(degree<2||degree>highest)
+            return prwError(error,(std::string("unsupported-gravity: The embedded ")+planetary::bodyName(center)+" field supports degrees two through "+std::to_string(highest)+".").c_str());
+        if(order<0||order>degree)return prwError(error,"unsupported-gravity: Field order must be between zero and the degree.");
+        int tesseral=UINT16_MAX;
+        if(in->HAS_MAXIMUM_TESSERAL_DEGREE()) {
+            if(in->MAXIMUM_TESSERAL_DEGREE()>degree)return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE must not exceed MAXIMUM_DEGREE.");
+            tesseral=in->MAXIMUM_TESSERAL_DEGREE();
+        }
+        out.gravityMode=ForceModel::GravityMode::PlanetaryField;
+        out.planetary.body=center;out.planetary.degree=uint16_t(degree);out.planetary.order=uint16_t(order);out.planetary.tesseralDegree=uint16_t(tesseral);
+        out.useSphericalHarmonics=false;
+        // The field is in the body's own axes: the Moon's principal axes (DE440's libration), Mars's (the label's model).
+        out.centralBodyFixedRotation=[center](const timesys::Instant& at,double m[3][3]){planetary::bodyFixedRotation(center,at,m);};
         break;
+    }
     default:return prwError(error,"unsupported-gravity: Unknown gravity selection.");
     }
     if(!nonnegative(out.mu) || ((out.usePointMass||out.useSphericalHarmonics||out.gravityMode!=ForceModel::GravityMode::Infer)&&out.mu==0))
@@ -186,23 +237,31 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
     // Tesseral terms are Earth-fixed: they need Earth orientation data.
     const bool tesseral=(out.gravityMode==ForceModel::GravityMode::EGM2008&&out.egm2008.truncationOrder>0)||
         (out.gravityMode==ForceModel::GravityMode::Infer&&out.useSphericalHarmonics&&out.sphericalHarmonics.maxOrder>0);
-    if(tesseral&&!hasEarthOrientation)
+    if(tesseral&&!hasEarthOrientation&&earth)
         return prwError(error,"eop-data-required: Tesseral gravity requires Earth orientation data on the earth_orientation input.");
     out.useThirdBody=in->ENABLE_THIRD_BODY();
     out.thirdBody.includeSun=out.thirdBody.includeMoon=out.thirdBody.includeMercury=out.thirdBody.includeVenus=out.thirdBody.includeMars=out.thirdBody.includeJupiter=out.thirdBody.includeSaturn=out.thirdBody.includeUranus=out.thirdBody.includeNeptune=false;
-    if(in->THIRD_BODY_IDS())for(const auto id:*in->THIRD_BODY_IDS())switch(id) {
+    out.thirdBody.includeEarth=false;
+    if(in->THIRD_BODY_IDS())for(const auto id:*in->THIRD_BODY_IDS()) {
+        // The central body is not its own third body; the Earth is one of the Moon's and Mars's (a point mass).
+        if(id==center||(center==planetary::MARS&&id==4)||(center==planetary::MOON&&id==301))
+            return prwError(error,"unsupported-third-body: The central body is not a third body.");
+        switch(id) {
         case 10:out.thirdBody.includeSun=true;break;case 301:out.thirdBody.includeMoon=true;break;
+        case 399:out.thirdBody.includeEarth=true;break;
         case 1:out.thirdBody.includeMercury=true;break;case 2:out.thirdBody.includeVenus=true;break;
         case 4:out.thirdBody.includeMars=true;break;case 5:out.thirdBody.includeJupiter=true;break;
         case 6:out.thirdBody.includeSaturn=true;break;case 7:out.thirdBody.includeUranus=true;break;
         case 8:out.thirdBody.includeNeptune=true;break;
         default:return prwError(error,"unsupported-third-body: Unsupported NAIF force-body ID.");
+        }
     }
     out.useSRP=in->ENABLE_SRP();out.useDrag=in->ENABLE_DRAG();
     out.srp.mass=out.drag.mass=in->INITIAL_MASS_KG();out.srp.area=out.drag.area=in->AREA_M2();out.srp.Cr=in->REFLECTIVITY_COEFFICIENT();out.drag.Cd=in->DRAG_COEFFICIENT();
     if(!positive(out.drag.mass)||!nonnegative(out.drag.area)||!nonnegative(out.srp.Cr)||!nonnegative(out.drag.Cd))
         return prwError(error,"invalid-forces: Spacecraft mass, area, Cd and Cr are invalid.");
     if(!parseRadiationPressure(in,out.srp,error))return false;
+    out.srp.occulterRadiusKm=planetary::bodyRadiusKm(center);
     switch(in->ATMOSPHERE_MODEL()) {
         case pcfAtmosphereFamily::NRLMSISE00:out.dragModel=ForceModel::DragModelType::NRLMSISE00;break;
         case pcfAtmosphereFamily::EXPONENTIAL:out.dragModel=ForceModel::DragModelType::Exponential;break;
@@ -310,6 +369,7 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
     }
     if(!in->EPHEMERIS_SOURCE()||in->EPHEMERIS_SOURCE()->size()==0)return prwError(error,"ephemeris-source: An explicit ephemeris source is required.");
     const auto source=in->EPHEMERIS_SOURCE()->str();
+    if(!earth&&source=="Analytical")return prwError(error,"missing-kernel: A request about the Moon or Mars reads the planetary kernel; set EPHEMERIS_SOURCE JPL_SPK and supply the kernel input.");
     if(source=="Analytical")Ephemeris::selectEphemerisSource(Ephemeris::EphemerisSource::Analytical);
     else if(source!=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource()))return prwError(error,"ephemeris-source: Requested ephemeris source does not match the supplied kernel.");
     return true;
@@ -591,7 +651,9 @@ bool parseEvents(const PRWExecutionRequest* in,Execution& out,std::string& error
 bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error) {
     if(!in||!in->INITIAL()||!in->INITIAL()->VALID())return prwError(error,"invalid-state: Execution requires a valid initial state.");
     coords::Frame axes=coords::Frame::GCRF;
-    if(!decodeResidentState(in->INITIAL(),out.initial,error,&axes)||!decodeStateEpochTT(in->INITIAL(),out.initialTT,error))return false;
+    // The state's origin is the force set's central body (the Earth unless the request flies about the Moon or Mars).
+    const int center=in->FORCES()?in->FORCES()->CENTRAL_BODY_NAIF_ID():399;
+    if(!decodeResidentState(in->INITIAL(),out.initial,error,&axes,center)||!decodeStateEpochTT(in->INITIAL(),out.initialTT,error))return false;
     if(axes==coords::Frame::J2000) {
         out.meanJ2000=true;double rp[3][3],rbp[3][3];eraBp00(2451545.0,0.0,out.bias,rp,rbp);
         out.initial.position=toGcrf(out,out.initial.position);out.initial.velocity=toGcrf(out,out.initial.velocity);
@@ -697,6 +759,8 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
             out.burns.push_back(std::move(burn));
         }
     }
+    if(center!=399&&(in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.impulses.empty()||!out.burns.empty()||!out.parameters.empty()||out.noise.enabled))
+        return prwError(error,"unsupported-configuration: A request about the Moon or Mars propagates the state, its samples and its events; the transition matrix, covariance, impulses, finite burns, dynamic parameters and process noise are the Earth's.");
     out.variational=in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.samples.empty()||!out.impulses.empty();
     out.stateOnly=!in->INCLUDE_STM()&&!out.covariance&&!out.massCovariance&&!out.massDynamics&&out.impulses.empty()&&out.burns.empty()&&out.parameters.empty();
     return parseEvents(in,out,error);
@@ -704,6 +768,17 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
 bool preflightKernel(const Execution& in,const timesys::Instant& target,std::string& error) {
     if(Ephemeris::selectedEphemerisSource()==Ephemeris::EphemerisSource::Analytical)return true;
     const auto& f=in.forces;const auto& b=f.thirdBody;
+    if(f.centralBodyNaifId!=399) {
+        const int center=f.centralBodyNaifId;
+        // The libration records end a day inside the span they hold, so no stage of a step reads past them.
+        for(const auto& at:{in.initialTT.instant(),target})
+            if(!planetary::orientationCovers(center,at)){error=std::string("orientation-out-of-range: The ")+planetary::bodyName(center)+"'s orientation model does not cover the arc (the Moon's DE440 libration holds 2000-01-02 to 2049-12-31).";return false;}
+        const std::pair<int,bool> bodies[]={{10,f.useSRP||(f.useThirdBody&&b.includeSun)},{399,f.useThirdBody&&b.includeEarth},{301,f.useThirdBody&&b.includeMoon&&center!=301},{1,f.useThirdBody&&b.includeMercury},{2,f.useThirdBody&&b.includeVenus},{4,f.useThirdBody&&b.includeMars&&center!=499},{5,f.useThirdBody&&b.includeJupiter},{6,f.useThirdBody&&b.includeSaturn},{7,f.useThirdBody&&b.includeUranus},{8,f.useThirdBody&&b.includeNeptune}};
+        for(const auto& body:bodies)if(body.second&&(!ForceModel::BodyAboutCentral(f,body.first,in.initialTT.instant()).valid||!ForceModel::BodyAboutCentral(f,body.first,target).valid)) {
+            error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;
+        }
+        return true;
+    }
     const std::pair<int,bool> bodies[]={{10,f.useSRP||(f.useThirdBody&&b.includeSun)},{301,f.useThirdBody&&b.includeMoon},{1,f.useThirdBody&&b.includeMercury},{2,f.useThirdBody&&b.includeVenus},{4,f.useThirdBody&&b.includeMars},{5,f.useThirdBody&&b.includeJupiter},{6,f.useThirdBody&&b.includeSaturn},{7,f.useThirdBody&&b.includeUranus},{8,f.useThirdBody&&b.includeNeptune}};
     for(const auto& body:bodies)if(body.second&&(!Ephemeris::getKernelState(body.first,399,in.initialTT.instant()).valid||!Ephemeris::getKernelState(body.first,399,target).valid)) {
         error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;
@@ -938,6 +1013,8 @@ bool bindSecondTrajectory(Execution& execution,const Environment& environment,st
 }
 }
 bool attachEnvironment(Execution& execution,const Environment& environment,bool requestWeather,std::string& error) {
+    if(execution.forces.centralBodyNaifId!=399&&(environment.earth||environment.weather||environment.jb2008||environment.densityCorrection))
+        return prwError(error,"unsupported-environment: earth_orientation, space_weather, jb2008_indices and the density correction are the Earth's inputs; a request about the Moon or Mars carries none.");
     if(!bindSecondTrajectory(execution,environment,error))return false;
     const auto& jb2008=environment.jb2008;const auto& weather=environment.weather;const auto& earth=environment.earth;
     execution.densityCorrectionBreaks.reset();
@@ -970,7 +1047,7 @@ bool attachEnvironment(Execution& execution,const Environment& environment,bool 
         };
     }
     if(earth) {
-        execution.forces.earthFixedRotation=[earth](const timesys::Instant& instant,double m[3][3]){earth->matrix(instant,m);};
+        execution.forces.centralBodyFixedRotation=[earth](const timesys::Instant& instant,double m[3][3]){earth->matrix(instant,m);};
         execution.forces.jdUt1At=[earth](const timesys::Instant& instant){return earth->ut1(instant);};
     }
     return true;

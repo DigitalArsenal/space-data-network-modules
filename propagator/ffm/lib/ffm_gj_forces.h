@@ -42,7 +42,7 @@ inline Vec3 calendarCorrection(const Forces& original, const Vec3& r, const Vec3
     double m[3][3];
     astro::ForceModel::GcrfToEarthFixed(at, original, m);
     for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) matrix[3*i+j] = m[i][j];
-    f.earthFixedRotation = [matrix](const timesys::Instant&, double out[3][3]) {
+    f.centralBodyFixedRotation = [matrix](const timesys::Instant&, double out[3][3]) {
         for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) out[i][j] = matrix[3*i+j];
     };
     const auto shifted = timesys::Instant::fromUtc(utc + double(shift));

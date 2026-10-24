@@ -58,6 +58,12 @@ inline std::string formatEpoch(double jd) {
 inline std::string stopError(const astro::PropagationStop& stop, const std::string& object = std::string()) {
     const std::string when = formatEpoch(timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(stop.jd)))) + " UTC";
     std::string text = std::string(stop.code) + ": " + (object.empty() ? std::string() : object + ": ");
+    if (std::string(stop.code) == "impact") {
+        char surface[160];
+        std::snprintf(surface, sizeof surface, "the trajectory reaches the surface of %s (%.1f km below radius %.2f km) at ",
+                      astro::centralBodyStop().name, -stop.heightKm, astro::centralBodyStop().impactRadiusKm);
+        return text + surface + when + "; FFM ends it there.";
+    }
     if (std::string(stop.code) != "reentry") return text + "the integration produced a non-finite state at " + when + ".";
     char height[120];
     std::snprintf(height, sizeof height, "the trajectory descends below %.0f km geodetic altitude (%.1f km) at ",
@@ -244,18 +250,22 @@ inline bool decodeEpoch(const TIMInstant* instant, double& tdb, double& utc, std
 }
 // meanJ2000: also accept mean equator and equinox of J2000.0 axes (EME2000,
 // a VCM's "J2K"), as coords::Frame::J2000; the caller rotates by the frame bias.
-inline bool decodeFrame(const RFMCoordinateSystem* frame, coords::Frame& result, std::string& error, bool meanJ2000 = false) {
+// centralBody: the NAIF ID of the force set's central body, which the frame's origin must be (the Earth unless the
+// request flies about the Moon or Mars).
+inline bool decodeFrame(const RFMCoordinateSystem* frame, coords::Frame& result, std::string& error, bool meanJ2000 = false, int centralBody = 399) {
     if(!frame || !frame->NAME() || frame->NAME()->size()==0 || !frame->ORIGIN())
         return prwError(error,"invalid-frame: A named coordinate system and explicit origin are required.");
-    if(frame->ORIGIN()->KIND()!=rfmOriginKind::CELESTIAL_BODY || frame->ORIGIN()->CELESTIAL_BODY_ID()!=399)
-        return prwError(error,"unsupported-frame: FFM integration requires the Earth center (NAIF 399).");
+    if(frame->ORIGIN()->KIND()!=rfmOriginKind::CELESTIAL_BODY || frame->ORIGIN()->CELESTIAL_BODY_ID()!=centralBody)
+        return prwError(error,centralBody==399?"unsupported-frame: FFM integration requires the Earth center (NAIF 399).":
+            "unsupported-frame: The state's origin must be the force set's central body (CENTRAL_BODY_NAIF_ID).");
     if(frame->OBJECT_REFERENCED_AXES() || frame->LOCAL_ALIGNED_CONSTRAINED_AXES() || frame->KERNEL_FRAME_NAME() || frame->KERNEL_FRAME_ID() || frame->EOP_DATA_SET_CID())
         return prwError(error,"unsupported-frame: Additional axis-definition controls are unsupported.");
     if(frame->AXIS_TYPE()==rfmAxisType::ICRF) {result=coords::Frame::GCRF;return true;}
     if(meanJ2000 && frame->AXIS_TYPE()==rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000) {result=coords::Frame::J2000;return true;}
     if(frame->AXIS_TYPE()==rfmAxisType::BODY_FIXED || frame->AXIS_TYPE()==rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE)
-        return prwError(error,"eop-data-required: This invocation has no authoritative Earth orientation data for the requested axes.");
-    return prwError(error,meanJ2000?"unsupported-frame: This profile requires Earth-centered ICRF (GCRF) or mean J2000 (EME2000) axes.":"unsupported-frame: This profile requires Earth-centered ICRF axes (GCRF).");
+        return prwError(error,centralBody==399?"eop-data-required: This invocation has no authoritative Earth orientation data for the requested axes.":
+            "unsupported-frame: A request about the Moon or Mars states its state in ICRF axes.");
+    return prwError(error,meanJ2000?"unsupported-frame: This profile requires ICRF (GCRF) or mean J2000 (EME2000) axes about the central body.":"unsupported-frame: This profile requires ICRF axes (GCRF) about the central body.");
 }
 inline bool readVector(const FRMVector3* in, astro::Vec3& out, double scale, std::string& error) {
     if(!in || !std::isfinite(in->X()) || !std::isfinite(in->Y()) || !std::isfinite(in->Z()))
@@ -264,10 +274,10 @@ inline bool readVector(const FRMVector3* in, astro::Vec3& out, double scale, std
 }
 // axes: when given, EME2000 is accepted too and the decoded axes are stored
 // there; the state is returned as given, in those axes.
-inline bool decodeResidentState(const PRWResidentState* in, astro::StateVector& out, std::string& error, coords::Frame* axes = nullptr) {
+inline bool decodeResidentState(const PRWResidentState* in, astro::StateVector& out, std::string& error, coords::Frame* axes = nullptr, int centralBody = 399) {
     if(!in || !in->STATE())return prwError(error,"invalid-state: Missing FRM state.");
     coords::Frame frame;
-    if(!decodeFrame(in->COORDINATE_SYSTEM(),frame,error,axes!=nullptr))return false;
+    if(!decodeFrame(in->COORDINATE_SYSTEM(),frame,error,axes!=nullptr,centralBody))return false;
     if(axes)*axes=frame;
     const auto* s=in->STATE();
     if(s->REPRESENTATION()!=frmStateRepresentation::CARTESIAN || (s->ELEMENTS() && s->ELEMENTS()->size()))

@@ -95,7 +95,7 @@ void run(const Job& job, const std::string& variants, const std::vector<uint8_t>
     for (const char variant : variants) {
         ffm::Execution e;
         if (!ffm::parseExecution(request, true, e, error)) throw std::runtime_error(error);
-        e.forces.earthFixedRotation = [earth](const timesys::Instant& jd, double m[3][3]) { earth->matrix(jd, m); };
+        e.forces.centralBodyFixedRotation = [earth](const timesys::Instant& jd, double m[3][3]) { earth->matrix(jd, m); };
         e.forces.jdUt1At = [earth](const timesys::Instant& jd) { return earth->ut1(jd); };
         const bool boxWing = job.block != "III" && (variant == 'B' || variant == 'D');
         if (boxWing) {

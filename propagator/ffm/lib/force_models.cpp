@@ -472,14 +472,15 @@ Vec3 ThirdBody(const Vec3& satPosition, const timesys::Instant& jd, const ThirdB
 // =============================================================================
 
 Vec3 SolarRadiationCannonball(const Vec3& satPosition, const Vec3& sunPosition,
-                              double mass, double area, double Cr, double& shadowFactor) {
+                              double mass, double area, double Cr, double& shadowFactor,
+                              double occulterRadiusKm) {
     Vec3 satSun = sunPosition - satPosition;
     double sunDist = satSun.magnitude();
     Vec3 sunDir = satSun.normalized();
 
     // Shadow check
     ShadowGeometry shadow = computeShadowGeometry(satPosition, sunPosition,
-                                                   RE_EARTH, ShadowModelType::Conical);
+                                                   occulterRadiusKm, ShadowModelType::Conical);
     shadowFactor = 1.0 - shadow.shadowFraction;
 
     if (shadowFactor < 1e-6) {
@@ -506,7 +507,7 @@ Vec3 SolarRadiationModel(const Vec3& satPosition, const Vec3& sunPosition, const
     if (config.model == SRPModelType::Cannonball) {
         double shadowFactor;
         return SolarRadiationCannonball(satPosition, sunPosition,
-                                        config.mass, config.area, config.Cr, shadowFactor);
+                                        config.mass, config.area, config.Cr, shadowFactor, config.occulterRadiusKm);
     }
     if (config.model == SRPModelType::GnssBoxWing) {
         // lib/gnss_srp.h, under the conical shadow of lib/shadow.h.
@@ -1277,7 +1278,7 @@ namespace {
 bool FfmCombinedGravity(const Vec3& position, const timesys::Instant& jd, const ForceModelSet& f, Vec3& gravity) {
     const bool egmMode = f.gravityMode == GravityMode::EGM2008 ||
         (f.gravityMode == GravityMode::Infer && !(f.useLoadedField && f.loadedField) && f.useEGM2008);
-    if (!egmMode || !f.oceanTideCache || (f.useSolidTides && !f.earthFixedRotation)) return false;
+    if (!egmMode || !f.oceanTideCache || (f.useSolidTides && !f.centralBodyFixedRotation)) return false;
     const auto& egm = egm2008Field(f.egm2008);
     const EarthAxes axes = EarthAxesAt(jd, f);
     const Vec3 fixed = axes.fixed(position);
@@ -1604,7 +1605,7 @@ void GcrfToEarthFixed(const timesys::Instant& jd, const ForceModelSet& forceSet,
     if (ffm_time::current && ffm_interp::interpolate(jd, forceSet, ffm_interp::Rotation, 9, &m[0][0],
         [&](const timesys::Instant& t, double* out) {
             auto matrix = reinterpret_cast<double (*)[3]>(out);
-            if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(t, matrix);
+            if (forceSet.centralBodyFixedRotation) forceSet.centralBodyFixedRotation(t, matrix);
             else GcrfToEarthFixed(t, matrix);
         })) return;
     // FFM Fast C3a: the memo is destroyed when ComputeTotalAcceleration returns.
@@ -1613,7 +1614,7 @@ void GcrfToEarthFixed(const timesys::Instant& jd, const ForceModelSet& forceSet,
         std::memcpy(m, memo->rotation, sizeof memo->rotation);
         return;
     }
-    if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(jd, m);
+    if (forceSet.centralBodyFixedRotation) forceSet.centralBodyFixedRotation(jd, m);
     else GcrfToEarthFixed(jd, m);
     if (memo) { std::memcpy(memo->rotation, m, sizeof memo->rotation); memo->rotationValid = true; }
 }
@@ -1625,6 +1626,7 @@ bool EarthFixedField(const ForceModelSet& forceSet) {
         case GravityMode::SphericalHarmonics:
         case GravityMode::EGM2008:
         case GravityMode::LoadedField:
+        case GravityMode::PlanetaryField:
             return true;
         default:
             return false;  // the point mass, and the J2 / J2-J4 closed forms about inertial z
@@ -1680,6 +1682,10 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
         case GravityMode::LoadedField:
             if (forceSet.loadedField) return LoadedFieldGravity(position, *forceSet.loadedField);
             return PointMass(position, forceSet.mu);
+        // The central term with the set's GM, the embedded planetary field's harmonics with the field's own (the
+        // Moon's GRGM660PRIM, Mars's MRO120F), as the Earth's EGM2008 above.
+        case GravityMode::PlanetaryField:
+            return PointMass(position, forceSet.mu) + PlanetaryHarmonics(position, forceSet.planetary);
         case GravityMode::SphericalHarmonics:
         default:
             return SphericalHarmonics(position, forceSet.sphericalHarmonics);
@@ -1750,7 +1756,8 @@ double JacchiaRobertsDensityAt(const Vec3& position, const timesys::Instant& jdT
 
 Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd, const ForceModelSet& forceSet,
                      const SRPForceConfig& srp) {
-    const Vec3 sunPos = forceSet.sunPositionProvided ? forceSet.sunPosition : getSunPosition(jd).position;
+    const Vec3 sunPos = forceSet.sunPositionProvided ? forceSet.sunPosition
+        : forceSet.centralBodyNaifId == 399 ? getSunPosition(jd).position : SunAboutCentralBody(forceSet, jd).position;
     return SolarRadiation(position, velocity, sunPos, srp);
 }
 
@@ -1766,7 +1773,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const 
         if (forceSet.sunPositionProvided) {
             sunPos = forceSet.sunPosition;
         } else {
-            EphemerisState sun = getSunPosition(jd);
+            EphemerisState sun = forceSet.centralBodyNaifId == 399 ? getSunPosition(jd) : SunAboutCentralBody(forceSet, jd);
             sunPos = sun.position;
             forceSet.sunPosition = sunPos;
         }
@@ -1786,7 +1793,8 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const 
 
     // 5. Third Body
     if (forceSet.useThirdBody) {
-        totalAcc += ThirdBody(position, jd, forceSet.thirdBody);
+        totalAcc += forceSet.centralBodyNaifId == 399 ? ThirdBody(position, jd, forceSet.thirdBody)
+                                                       : ThirdBodyAboutCentral(forceSet, position, jd);
     }
 
     // 6. Solar Radiation Pressure

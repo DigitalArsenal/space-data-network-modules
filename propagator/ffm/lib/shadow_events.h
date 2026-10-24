@@ -1,4 +1,4 @@
-// The Earth's penumbra and umbra boundaries (the conical model of
+// The central body's (the Earth's unless the set flies about the Moon or Mars) penumbra and umbra boundaries (the conical model of
 // lib/shadow.h) as switching functions of the state, for the adaptive step
 // loops. Radiation pressure has a kink at each boundary. An embedded error
 // estimate sees a kink only through the stages that straddle it, so a long
@@ -27,10 +27,10 @@ namespace shadow {
 inline void boundaryFunctions(const ForceModel::ForceModelSet& forces, const timesys::Instant& epoch,
                               double t, const double* y, double g[2]) {
     const Vec3 r(y[0], y[1], y[2]);
-    const Vec3 s = forces.sunPositionProvided ? forces.sunPosition : getSunPosition(epoch.plusSeconds(t)).position;
+    const Vec3 s = forces.sunPositionProvided ? forces.sunPosition : ForceModel::SunAboutCentralBody(forces, epoch.plusSeconds(t)).position;
     const Vec3 d = s - r;
     const double a = std::asin(std::min(1.0, SUN_RADIUS_KM / d.magnitude()));
-    const double b = std::asin(std::min(1.0, RE_EARTH / r.magnitude()));
+    const double b = std::asin(std::min(1.0, forces.srp.occulterRadiusKm / r.magnitude()));
     const double c = std::atan2(r.cross(d).magnitude(), -r.dot(d));
     g[0] = c - (a + b);
     g[1] = c - (b - a);
