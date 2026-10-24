@@ -72,6 +72,7 @@ export async function lane(kind) {
   if (!harnesses[kind]) harnesses[kind] = await createStandaloneHarness(kind, WASM, { surface: kind === 'browser' ? 'direct' : 'command', enableThreads: true });
   return harnesses[kind];
 }
+export const destroyLanes = async () => { for (const h of Object.values(harnesses)) await h.destroy?.(); };
 // Runs a request on a lane; returns { samples: [[x y z vx vy vz] km, km/s ...], final, steps } or { error }.
 export async function run(kind, exec, kernel) {
   const h = await lane(kind);

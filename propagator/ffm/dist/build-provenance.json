@@ -8,8 +8,8 @@
     "-msimd128",
     "-fno-exceptions"
   ],
-  "sha256": "f2877a377ad682bf45f136455b3662c09afcd9871e8eaf3e83d3422594766d35",
-  "bytes": 2293075,
+  "sha256": "be67d87c96d7dbb9be27609bad72bf12ec9d8b71a7cd4bf783e12d551baab1fe",
+  "bytes": 4672020,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "memory": {
@@ -37,6 +37,8 @@
     "lib/time_convert.cpp",
     "lib/us76.cpp",
     "lib/ffm_gravity.cpp",
+    "lib/planetary_fields.cpp",
+    "lib/central_body.cpp",
     "../../third_party/hwm14/hwm14.cpp",
     "../../third_party/hwm14/hwm14_data.cpp",
     "../../third_party/nrlmsise00/nrlmsise-00.c",
