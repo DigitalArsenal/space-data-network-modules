@@ -11,6 +11,10 @@
 // results, solves the small normal equations of the fit and subtracts; every trajectory is integrated by the module.
 // This is conformance tooling: it lives only under tests/ and says so (graph/checks/no-js-physics).
 //
+//   0. the embedded fields, the two bodies' axes and the third-body harmonic term against oracles that share no code with FFM
+//      (tests/fixtures/planetary/oracles.json, written by make-oracles.py): CSPICE's lunar libration frame, the PDS tables'
+//      float64 coefficients through an independent Legendre recursion and potential differences, an independent evaluation of MRO120F's
+//      label formula; the C++ is the module's own sources built natively;
 //   1. LRO, two windows: the state and the radiation-pressure coefficient fitted to the first day, predicted over the next
 //      three, error by day; and the same arc at field degrees 2 to 360 (one window), so the field shows in the error;
 //   2. MRO and MAVEN: state, radiation pressure and drag (Mars's banded exponential atmosphere) fitted to the first day,
@@ -25,6 +29,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { destroyLanes, dist, KERNELS, MARS, MOON, readTruth, request, run } from './lib/planetary.mjs';
 import { sds } from './lib/prwCodec.mjs';
+import { buildNative, run as runNative } from './lib/nativeBuild.mjs';
 import fs from 'node:fs';
 
 process.env.PATH = `${process.env.HOME}/.wasmedge/bin:${process.env.PATH}`;
@@ -103,6 +108,56 @@ const fmt = (rows) => rows.map((r, d) => `day ${d + 1} rms ${r.rms.toFixed(1)} m
 
 const MOON_GM = 4902.7998069317;     // GRGM660PRIM's own GM (its PDS header), km^3/s^2
 const MARS_GM = 42828.3748574;       // the GM of Mars alone in the MRO120F label, km^3/s^2
+
+// ---- 0. fields, axes and the third-body term against independent oracles ----------------------------------------------
+console.log('0. Embedded fields, axes and the third-body harmonic term against independent oracles');
+{
+  const oracles = JSON.parse(fs.readFileSync(new URL('./fixtures/planetary/oracles.json', import.meta.url), 'utf8'));
+  const lib = ['planetary_fields', 'ffm_gravity', 'time_convert'].map((n) => `lib/${n}.cpp`);
+  const planetary = await buildNative('planetary', ['tests/planetary_native.cpp', ...lib]);
+  const third = buildNative('third-body', ['tests/third_body_harmonics_native.cpp', '../../third_party/hwm14/hwm14.cpp', '../../third_party/hwm14/hwm14_data.cpp', '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
+    ...['astrodynamics', 'coords', 'ephemeris', 'environment_models', 'force_models', 'atmosphere_winds', 'nrlmsise00', 'time_convert', 'us76', 'atmosphere_plugin', 'ffm_gravity', 'planetary_fields', 'central_body', 'integrators', 'force_partials', 'rk_engine', 'integrator_events', 'variational', 'finite_burn'].map((n) => `lib/${n}.cpp`)]);
+  try {
+    // Axes. The Moon's libration frame against CSPICE (pxform J2000 -> MOON_PA_DE440): bar 1e-9 on every element, measured 4e-11
+    // (the two read the same Chebyshev records; the difference is the driver's instant, a single-double Julian date, 4e-5 s at
+    // JD 2.46e6, times the Moon's 2.7e-6 rad/s). Mars's label model against a separate implementation of the same formula: 5e-9,
+    // measured 1.0e-9 (the same instant quantization times Mars's 7.1e-5 rad/s; the formulas agree to roundoff), and against
+    // IAU_MARS (a different, independent estimate of the pole and spin) within 1.5 arcsec of pole and 3.5 of rotation, measured 0.8 and 2.5.
+    const ets = oracles.rotation.epochsTdbSeconds;
+    for (const [body, key] of [[301, 'moon'], [499, 'mars']]) {
+      const lines = (await runNative(planetary.binary, ['rotation', body, ...ets])).trim().split('\n');
+      const worst = Math.max(...lines.flatMap((line, i) => line.split(' ').slice(1).map((v, j) => Math.abs(Number(v) - oracles.rotation[key][i][j]))));
+      check(worst < (key === 'moon' ? 1e-9 : 5e-9), `${key} axes differ from the oracle by ${worst}`);
+      console.log(`  ${key} axes: largest element difference ${worst.toExponential(1)} over ${ets.length} epochs`);
+    }
+    check(oracles.rotation.marsVsIau.every((x) => x.poleArcsec < 1.5 && x.rotationArcsec < 3.5), 'MRO120F axes drift from IAU_MARS by more than 1.5 / 3.5 arcsec');
+    // Fields. The harmonic acceleration at body-fixed positions against the independent evaluation: relative 5e-8, measured 1.9e-8
+    // at most (the tables are float32, relative 6e-8 per coefficient; the oracle differences the potential over 8 m).
+    for (const f of oracles.fields) {
+      const lines = (await runNative(planetary.binary, ['gravity', f.body, f.degree, f.order, f.tesseral, ...f.points.flat()])).trim().split('\n');
+      const worst = Math.max(...lines.map((line, i) => { const a = line.split(' ').map(Number), b = f.acceleration[i]; return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) / Math.hypot(...b); }));
+      check(worst < 5e-8, `field ${f.body} ${f.degree}x${f.order}: relative difference ${worst}`);
+      console.log(`  field of ${f.body === 301 ? 'GRGM660PRIM' : 'MRO120F'} ${f.degree}x${f.order} (tesseral ${f.tesseral}): ${f.points.length} points, relative difference ${worst.toExponential(1)}`);
+    }
+    // Extended third-body gravity: the Moon's harmonics on a GEO satellite minus their value at the Earth's center, against the
+    // oracle (relative 1e-6, measured 3e-8), and its size against the Moon's point-mass tide it adds to.
+    const thirdBinary = await third;
+    try {
+      for (const t of oracles.thirdBody) {
+        const out = (await runNative(thirdBinary.binary, [new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url).pathname, t.central, t.degree, t.degree, t.etTdb, ...t.satellite])).trim().split('\n').map((l) => l.split(' ').map(Number));
+        const [h, pm] = out, norm = (v) => Math.hypot(...v);
+        const diff = norm(h.map((v, i) => v - t.harmonic[i])) / norm(t.harmonic), ratio = norm(h) / norm(pm);
+        check(diff < 1e-6, `third body, degree ${t.degree}: relative difference ${diff}`);
+        check(ratio > 1e-9 && ratio < 1e-6, `third body, degree ${t.degree}: harmonic/point-mass ${ratio} is outside 1e-9..1e-6`);
+        console.log(`  Moon's harmonics (degree ${t.degree}) on a GEO satellite: ${(norm(h) * 1000).toExponential(2)} m/s^2 against the point-mass tide ${(norm(pm) * 1000).toExponential(2)} m/s^2 (ratio ${ratio.toExponential(1)}), oracle difference ${diff.toExponential(1)}`);
+      }
+      const lunar = (await runNative(thirdBinary.binary, [new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url).pathname, 301, 4, 4, 8.3e8, 1838, 0, 0])).trim().split('\n').map((l) => l.split(' ').map(Number));
+      const ratio = Math.hypot(...lunar[0]) / Math.hypot(...lunar[1]);
+      check(ratio > 1e-9 && ratio < 1e-5, `Earth's harmonics on a lunar orbiter: harmonic/point-mass ${ratio} is outside 1e-9..1e-5`);
+      console.log(`  Earth's harmonics (degree 4) on a lunar orbiter: ${(Math.hypot(...lunar[0]) * 1000).toExponential(2)} m/s^2 against the point-mass tide ${(Math.hypot(...lunar[1]) * 1000).toExponential(2)} m/s^2 (ratio ${ratio.toExponential(1)})`);
+    } finally { thirdBinary.dispose(); }
+  } finally { planetary.dispose(); }
+}
 
 // ---- 1. LRO -------------------------------------------------------------------------------------------------------
 console.log('1. LRO about the Moon (GRGM660PRIM, DE440 libration, Sun and Earth, radiation pressure)');

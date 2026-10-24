@@ -612,6 +612,41 @@ against 1e-14; it is 6-9 m in LEO at 1e-11 and 46-157 m at 1e-10. A
 conjunction screen needs meter-level positions; 1e-12 keeps the integration
 there and costs a fifth to a quarter more than 1e-11 in LEO.
 
+## Planetary central bodies: the Moon and Mars
+
+`PCFForceModel.CENTRAL_BODY_NAIF_ID` 301 (the Moon) or 499 (Mars) makes the request fly about that body. The state's origin
+is the central body, its axes ICRF (or EME2000), and the `kernel` input is the DE440 short kernel
+(`EPHEMERIS_SOURCE` `JPL_SPK`; `Analytical` is refused). Positions of the Sun, the Earth, the Moon and the planets are the
+kernel's, relative to the central body; the third bodies are point masses (GM from DE440). The trajectory ends where it
+reaches the body's surface sphere (`impact`). Only the state, its samples and its events are propagated: the transition
+matrix, covariance, impulses, finite burns, dynamic parameters and process noise are the Earth's and are refused by name.
+
+| | Moon | Mars |
+| --- | --- | --- |
+| Field | `GRAVITY_CHOICE` `GRGM660PRIM` (or `SPHERICAL_HARMONICS`), degree 2 to 660: GRGM660PRIM (Lemoine et al. 2013), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `SPHERICAL_HARMONICS`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
+| Axes | DE440 lunar libration (principal-axes frame, the Chebyshev records of `moon_pa_de440_200625.bpc`), 2000-01-02 to 2049-12-31; outside it `orientation-out-of-range` | the Mars-fixed frame of MRO120F's PDS label: N, J fixed; PSI, I, PHI secular; PHI's seasonal spin terms (1, 1/2, 1/3, 1/4 Mars year from January 1999); the nutation corrections of Konopliv et al. 2006 are not in the label and not applied |
+| Atmosphere | none (drag refused) | `ATMOSPHERE_MODEL` `EXPONENTIAL`: the banded exponential profile NASA GMAT R2026a ships (Vallado 8.6), 0 to 2980 km above the reference ellipsoid (3396.19, 3376.20 km), turning with the planet at 350.891985314 deg/day. One mean profile: no solar-cycle, seasonal, diurnal, latitude or dust variation; scale the coefficient |
+| Radiation pressure | cannonball, conical shadow of the Moon | cannonball, conical shadow of Mars |
+
+`GRAVITATIONAL_PARAMETER` sets the central term and the field's own GM its harmonics, as for the Earth's EGM2008. The field
+tables are float32 reductions of the PDS tables (relative 6e-8, under 1e-11 of the acceleration). `SPHERICAL_HARMONICS` about the
+Moon or Mars selects the body's embedded field; EGM2008, EGM96, `J2_ONLY`, `J2_TO_J4` and `INFER_FLAGS` are the Earth's and are
+refused. Mars's center is the Mars system barycenter of the short DE440 kernel (Phobos and Deimos displace it by under 0.2 m);
+Phobos and Deimos are not modeled. The Earth's models (tides, Earth radiation, relativity, space weather, GNSS radiation
+pressure) are refused for the other bodies.
+
+Extended third-body gravity (`ForceModelSet::thirdBodyField`, `ForceModel::ThirdBodyHarmonics`): the harmonics (degree 2 up) of
+the Moon's field on an Earth orbiter, or of the Earth's EGM2008 on a lunar orbiter, minus the same field's acceleration at the
+frame origin, added to the point masses of the third-body list. The request wire has no field for its degree yet, so it is set by
+native callers.
+
+Sources, licenses, redistribution and hashes: `scripts/planetary-sources.json` (`node scripts/fetch-planetary-sources.mjs <dir>`
+downloads and verifies them; `node scripts/generate-planetary-data.mjs <dir>` writes `lib/data/planetary`). Truth and tests:
+`tests/planetary.e2e.mjs` fits the state and the radiation-pressure and drag coefficients to the first day of NAIF's reconstructed
+LRO, MRO and MAVEN states and predicts the next three (measured error by day in the file's header comments and output; LRO
+window 2026-03-27: 6.9, 8.8, 33, 97 m; MRO: 0.7, 1.9, 10, 27 m; MAVEN: 5.7, 17, 82, 160 m); the field's degree is visible in the
+error (29 km, 1.6 km, 117 m, 115 m at degrees 2, 20, 100, 200 on one LRO window).
+
 ## Integrators and events
 
 The integrator and the events are chosen in the request: `PCFIntegratorSettings.ALGORITHM`

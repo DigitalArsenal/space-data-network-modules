@@ -236,6 +236,11 @@
       "stepSeconds": 300.0,
       "sha256": "60efe3361f34131c04821cbe10420c74d2b4680c75b8a480a59e0dd89f62cc2b",
       "derivation": "tests/fixtures/planetary/extract-truth.py: NAIF spkez, geometric, no light time, no fitting; the states are the SPK's"
+    },
+    "oracles.json": {
+      "kind": "oracle",
+      "sha256": "53ab90667c9a5b73d6106fcee9e74f3ee5406024027554a64aa1f454b077a604",
+      "derivation": "tests/fixtures/planetary/make-oracles.py: CSPICE lunar libration frame, an independent Legendre recursion and potential differences over the PDS tables, an independent evaluation of the MRO120F label formula; shares no code with FFM"
     }
   }
 }
