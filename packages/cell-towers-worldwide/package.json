@@ -8,5 +8,5 @@
     "test": "node --test tests/*.test.mjs",
     "check:registry": "node scripts/check-registry.mjs"
   },
-  "license": "MIT"
+  "license": "Apache-2.0"
 }
