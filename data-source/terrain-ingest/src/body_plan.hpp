@@ -619,8 +619,10 @@ PolarStereo body_polar(const Body& body, const BodyProduct& p) {
 // SLDEM2015 inherits single bad LOLA shots: Hadley 26.137N 3.585E stands 150 m below the flat 5 m NAC DTM there.
 double body_despike_m(const BodyProduct& p) { return std::string(p.key) == "sldem2015_512" ? 40.0 : 0.0; }
 
-// Products whose north-south track stripes terrain-source removes (body_destripe.hpp): all of SLDEM2015.
-bool body_destripe(const BodyProduct& p) { return std::strncmp(p.key, "sldem2015_", 10) == 0; }
+// Products whose north-south track stripes terrain-source removes (body_destripe.hpp). Only SLDEM2015_512 carries
+// them: its E-W/N-S kink p90 ratio is 1.8-3.1x at Bessel, Dawes, Hadley and Mare Tranquillitatis against 0.8-1.2x in
+// SLDEM2015_256 and _128, where the filter would take real relief (it drops their ratio to 0.7-0.9x).
+bool body_destripe(const BodyProduct& p) { return std::string(p.key) == "sldem2015_512"; }
 
 // The extra lines (and columns) round a filtered product's extent: terrain-source's despike radius (9) and destripe
 // radius (5 lines; it reads 3 columns), which add, plus its decoder's pad (2) and one for rounding.
