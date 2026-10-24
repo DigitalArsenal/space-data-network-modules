@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // SDN-AP 2h.3: heliocentric cruise segments. The set is the epoch state with
 // mu_eff = mu_Sun (1 - beta) (radial SRP, the lightness number), the DE440
-// planets (Venus, the Earth-Moon barycentre, Mars, Jupiter, Saturn as system
+// planets (Venus, the Earth-Moon barycenter, Mars, Jupiter, Saturn as system
 // point masses, tabulated every 6 h over the segment) and an RTN acceleration
 // a0 + a1 t (thrust arcs; DESIGN 2h.3); RK4 on the ICRF Sun-centred state (km, s)
 // at 1800 s, the node steps cut into parts inside a planet's sphere of influence

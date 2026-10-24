@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// Exports: the OrbPro propagator ABI (Earth-fixed metres) and the module's
+// Exports: the OrbPro propagator ABI (Earth-fixed meters) and the module's
 // structure-of-arrays batch entries (sdnap_*).
 // -----------------------------------------------------------------------------
 

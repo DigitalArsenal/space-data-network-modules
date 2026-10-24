@@ -489,7 +489,7 @@ inline void sdnap_drag_rates(const double* y, const Frame& fr, const Kepler& k, 
   kernel::Pair kp{};
   const bool use_kernel = sdn::environment().kernel && kernel::prepare() && kernel::acquire_pair(d50, kp);
   // the density is taken at the osculating radius: the mean orbit's plus the first-order J2 short-period terms (the
-  // arrangement of SPEC 3.4 / the SGP4 final step), whose constant part sets the mean height a few hundred metres off
+  // arrangement of SPEC 3.4 / the SGP4 final step), whose constant part sets the mean height a few hundred meters off
   // the mean elements' (at 53 deg -0.43 km at 300 km: about 1 % of the density, which fitted B_eff took up)
   const double p_mean = a * eta * eta, cj2 = kJ2 / (4.0 * p_mean), th = ag.ci;
   auto osc_scale = [&](double cn, double sn) {
@@ -1145,7 +1145,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
   const double th2 = th * th;
   const double u = k.argp + nu;
   const double c = kJ2 / (4.0 * p), d = kJ2 / (4.0 * p * p);
-  // Q = (nu - M) + e sin nu, nu - M the equation of the centre in (-pi, pi].
+  // Q = (nu - M) + e sin nu, nu - M the equation of the center in (-pi, pi].
   double eoc = nu - k.m;
   eoc -= kTwoPi * std::floor((eoc + kPi) / kTwoPi);
   const double Qw = eoc + e * snu;

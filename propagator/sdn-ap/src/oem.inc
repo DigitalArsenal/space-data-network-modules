@@ -327,7 +327,7 @@ static int lunar_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap
 }
 
 /// SDN-AP 2h.2 / 2h.3 / 2h.5: a segment set ($OMM with MEAN_ELEMENT_THEORY SDNAP and USER_DEFINED_SDNAP_REGIME
-/// CISLUNAR, about the Earth or the Moon, or HELIO, about the Sun) on the grids: states about the set's centre in ICRF
+/// CISLUNAR, about the Earth or the Moon, or HELIO, about the Sun) on the grids: states about the set's center in ICRF
 /// axes; 1 when the record is not such a set (the caller goes on), 0 done, or a named refusal (3).
 static int segment_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap::oem::Grid>& grids, size_t& budget) {
   using namespace sdnap;

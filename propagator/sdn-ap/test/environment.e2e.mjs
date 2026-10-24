@@ -2,7 +2,7 @@
 // SDN-AP environment E2E: real space weather and an open-DCA common mode, read as FFM reads them.
 // - $SPW: the experiment lane's environment (a size-prefixed $PRW whose SPACE_WEATHER holds GFZ/SWPC $SPW rows), loaded
 //   through the load_environment method; checked against FFM's reading at UTC instants: F10.7 the observed flux of the day
-//   before, F10.7a the 81-day centred mean and Ap the daily Ap of the day.
+//   before, F10.7a the 81-day centered mean and Ap the daily Ap of the day.
 // - $DCL: no open-DCA $DCL has been published yet, so a synthetic one (Solved, NRLMSISE-00 baseline, LogDensityNodes every
 //   3 h) is built with the SDS 1.261.0 builders and loaded through sdnap_load_density_correction and through the invoke
 //   surface (load_environment's 'density_correction' port, the same loader); s(t) must follow FFM's
@@ -141,7 +141,7 @@ if (refused.statusCode === 0 || refused.errorCode !== "invalid-density-correctio
 
 // --- a real density correction: E13's open-DCA reference check (test B, 2026-04-01..07-31), Swarm A's measured
 // log-density offsets from NRLMSISE-00 per 12 h window, carried as an SDS $DCL (Solved, NRLMSISE-00, LogDensityNodes at
-// the window centres) and loaded through the port. SDN-AP drag through the shared kernel and the direct path must
+// the window centers) and loaded through the port. SDN-AP drag through the shared kernel and the direct path must
 // scale by exp(s(t)) exactly, and the kernel must agree with the direct path within 1 % (DESIGN 2a.7).
 const REAL = arg("--real-dcl", "/opt/data/sdn-archive/e13-open-dca/density/testB-msis/swarmA.json");
 let realCheck = null;
@@ -165,7 +165,7 @@ if (fs.existsSync(REAL)) {
   DCL.addStatus(rb, dclStatus.Solved);
   DCL.finishDCLBuffer(rb, DCL.endDCL(rb));
   const realBytes = rb.asUint8Array();
-  // one SDN-AP row near Swarm A (430 km, 87.4 deg) at three window centres
+  // one SDN-AP row near Swarm A (430 km, 87.4 deg) at three window centers
   const centres = [40, 120, 200].map((k) => wins[k]);
   const rowAt = (w) => ({ epochWhole: Math.floor(w.startMs / 86400000) + 2440587.5, epochFrac: ((w.startMs % 86400000) + 6 * 3600000) / 86400000,
     meanMotion: 15.56, ecc: 0.0005, inc: 87.35, raan: 100, argp: 90, ma: 0, bterm: 0.01, agom: 0, norad: 39452, theory: 16 });

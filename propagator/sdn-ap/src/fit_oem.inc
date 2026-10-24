@@ -173,7 +173,7 @@ inline double period_minutes(const ephemerisDataBlock* blk) {
 }
 
 /// Whether a block's orbit lies beyond the reach of the averaged theories (documented rule): the first state's
-/// osculating apocentre about the centre beyond 250,000 km for the Earth (the Moon's attraction no longer a small
+/// osculating apocentre about the center beyond 250,000 km for the Earth (the Moon's attraction no longer a small
 /// perturbation) or 10,000 km for the Moon (the Earth's tide over 1 % of the lunar gravity), or an open orbit. A block
 /// whose first state carries no velocity stays with the averaged theory.
 inline bool beyond_reach(const ephemerisDataBlock* blk, int center) {
@@ -756,7 +756,7 @@ static int fit_blocks(bool sdnap_mode) {
           rr.insert(rr.end(), all[k].r, all[k].r + 3);
         }
         if (t_fit.size() < 8) return 1;
-        // starting set from the first state (velocity from the neighbours when absent)
+        // starting set from the first state (velocity from the neighbors when absent)
         fitoem::Sample s0 = e0;
         if (!s0.has_v && first + 1 < n) {
           const fitoem::Sample& s1 = all[first + 1];
@@ -979,7 +979,7 @@ static int fit_blocks(bool sdnap_mode) {
         }
       }
       if (!(res.rms_km <= po.implausible_rms_km)) {
-        // the theory does not hold across the arc (a burn, a transfer, a hand-off between centres): no set is
+        // the theory does not hold across the arc (a burn, a transfer, a hand-off between centers): no set is
         // better than one that cannot propagate (the lane's Artemis II window: 38,030 km)
         char why[200];
         std::snprintf(why, sizeof why, "The fit's RMS is %.3f km, beyond the %.0f km bound of an Earth set (FIT.IMPLAUSIBLE_RMS_KM): the arc does not hold one set.", res.rms_km,

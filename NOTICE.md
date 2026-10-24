@@ -1,7 +1,7 @@
 # Notices for data and derived material
 
 Test fixtures, reference vectors and derived code in this repository come from
-the sources below. Licence texts are in [LICENSES/](LICENSES/). Data this
+the sources below. License texts are in [LICENSES/](LICENSES/). Data this
 repository may not redistribute is not in the tree; the tests that use it read
 it from `$SDN_MODULES_PRIVATE_FIXTURES` (`tests/lib/privateFixtures.mjs`) and
 skip without it. Synthetic fixtures say so in their `PROVENANCE.md` and are
@@ -9,7 +9,7 @@ written by scripts in the same directory.
 
 ## Software and reference outputs
 
-| Source | Licence | Where | Copy of the licence |
+| Source | License | Where | Copy of the license |
 | --- | --- | --- | --- |
 | Orekit 13.1 (CS GROUP) | Apache-2.0 | `propagator/ffm/tests/fixtures/orekit/` (reference outputs, `OrekitReference.java`, `OrekitGnssSrpReference.java`), `files/orbit-products/fixtures/stk_02674_*.e` and the Orekit cross-check dumps, Orekit values in `analysis/*/vectors` and fixtures | [LICENSES/Apache-2.0-Orekit.txt](LICENSES/Apache-2.0-Orekit.txt), [NOTICE-Orekit.txt](LICENSES/NOTICE-Orekit.txt) |
 | Hipparchus | Apache-2.0 | `analysis/estimation/tests/fixtures/hipparchus-*` | in that directory (`hipparchus-LICENSE.txt`, `hipparchus-NOTICE.txt`) |
@@ -18,7 +18,7 @@ written by scripts in the same directory.
 | hapsira (poliastro) | MIT | `analysis/maneuver/vectors/hapsira-extract.json` | [LICENSES/MIT-hapsira.txt](LICENSES/MIT-hapsira.txt) |
 | Nyx Space | AGPL-3.0 for the code; its outputs are not covered | `propagator/ffm/tests/fixtures/nyx/nyx-reference.json` (outputs) | none needed |
 | US Space Force SGP4 and SGP4-XP (Sgp4Prop WebAssembly 9.1.1.0, Astro Standards v9.1, XP build). Copyright 2015 United States Government as represented by the Administrator of US Space Force. All Rights Reserved. | US Space Force Open Source Agreement for SGP4: use for any purpose; redistribution in binary form with the copyright notice, the Agreement and its disclaimer; no endorsement by the US Space Force or its contributors; export of goods or technical data from the United States may require a license from the U.S. Government | `propagator/sgp4-xp/third_party/ussf-sgp4/` (the library, unmodified, and the JavaScript runtime the tests compare it with), joined into `propagator/sgp4-xp/dist/isomorphic/module.wasm` and into the OD node of `flows/supplemental-omm` (`nodes/od`) (the custom section `ussf-sgp4-notice` of each holds the notice and the Agreement) | [propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt](propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt), [NOTICE.md](propagator/sgp4-xp/third_party/ussf-sgp4/NOTICE.md) |
-| HWM14, the Horizontal Wind Model 2014 (release HWM14.123114), by Douglas Drob and John Emmert, Naval Research Laboratory (the authors the NRL code header names) | a work of the US Government (17 U.S.C. § 105), not subject to copyright in the US (owner ruling 2026-10-24); the journal's CC BY-NC-ND covers the article, not the NRL code | `third_party/hwm14/` (`nrl/` is NRL's own release, from the Internet Archive capture of map.nrl.navy.mil; the C++ port and its data beside it) | citation: Drob et al. (2015), Earth and Space Science 2, 301-319; Emmert et al. (2008), J. Geophys. Res. 113 |
+| HWM14, U.S. Naval Research Laboratory (D. P. Drob, J. T. Emmert) | Public domain: a U.S. Government work, not subject to copyright in the United States (17 U.S.C. § 105). NRL released the FORTRAN source as public-domain software; NRL's public directory and NASA CCMC distribute it freely. | `third_party/hwm14/nrl/` (NRL's release, unchanged) and our C++ port | none needed; see `third_party/hwm14/README.md` |
 | ERFA | BSD-3-Clause | `higherpop/third_party/erfa/` (also compiled into `propagator/sdn-ap/dist/isomorphic/module.wasm`) | in that directory; `propagator/sdn-ap/LICENSES/ERFA.txt` |
 | pugixml 1.15 (Arseny Kapoulkine) | MIT | `files/ccsds-messages/third_party/pugixml/` (compiled into the module) | in that directory (`LICENSE.md`, `PROVENANCE.md`) |
 | SDN-AP spec vectors: element sets made for the specification and what the unmodified US Space Force Sgp4Prop library (9.9 native, 9.1.1.0 WebAssembly) returns for them, run as a black box | US Space Force Open Source Agreement for SGP4 (above); the library is not in `propagator/sdn-ap/` | `propagator/sdn-ap/spec-vectors/vectors.json`, the probe values of `propagator/sdn-ap/SPEC.md` | [propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt](propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt) |
@@ -39,7 +39,7 @@ written by scripts in the same directory.
 | GRAIL GRGM660PRIM lunar gravity (NASA GSFC, PDS Geosciences Node) and the NAIF kernels `moon_pa_de440_200625.bpc` and `de440s.bsp` | NASA PDS public data, no restrictions; NAIF rules | not in the tree: `propagator/sdn-ap` reads them at build time (`SDNAP_HAC_ROOT`, pinned by SHA-256; `tools/fetch-build-data.mjs` fetches and verifies them) and compiles refitted tables into its `dist/isomorphic/module.wasm` | Lemoine et al. (2013), GRGM660PRIM; JPL DE440 (Park et al. 2021), NASA/JPL NAIF |
 | NOAA GOES-19 ABI, GFS/GEFS | open, no restrictions (NOAA NODD) | `data-source/imager-observation-parser`, `nwp-*` fixtures | GOES-19 ABI and GFS/GEFS data courtesy of NOAA via NOAA Open Data Dissemination |
 | OpenStreetMap | ODbL 1.0 | `data-source/cell-tower-source/tests/fixtures/overpass-berlin.sample.json` | (c) OpenStreetMap contributors |
-| FCC ULS, ACMA RRL, ANFR, BAKOM | public domain; ACMA RRL licence; Licence Ouverte 2.0; opendata.swiss open use | `data-source/cell-tower-source/tests/fixtures/` | see `PROVENANCE.md` there |
+| FCC ULS, ACMA RRL, ANFR, BAKOM | public domain; ACMA RRL license; License Ouverte 2.0; opendata.swiss open use | `data-source/cell-tower-source/tests/fixtures/` | see `PROVENANCE.md` there |
 | GeoNames | CC BY 4.0 | `data-source/geonames-source/tests/fixtures/` | GeoNames, www.geonames.org |
 | M-Lab NDT | CC0 | `data-source/mlab-starlink-connectivity/tests/fixtures/` | The M-Lab NDT Data Set |
 | shahar603 Telemetry-Data | The Unlicense | `analysis/launch-trajectory/tests/fixtures/` ("telemetry") | shahar603/Telemetry-Data |

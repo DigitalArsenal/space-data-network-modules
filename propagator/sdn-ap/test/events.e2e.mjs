@@ -223,7 +223,7 @@ for (const [label, dv] of (process.env.QUICK ? [] : [["V 1 mm/s", [0, 1e-6, 0]],
   check(err.every((x, d) => x <= 1.1 * err0[d] + 0.05), `M22 ${label}: ${err.map((x) => x.toFixed(3))} against ${err0.map((x) => x.toFixed(3))}`);
   check(out.PRE_EVENT() !== null && out.POST_EVENT() !== null && Math.abs(out.DELTA_VEL() - Math.hypot(...dv)) < 1e-12, `M22 ${label}: the $MNV record`);
 }
-// M23: 60-minute burns of 1 m/s along V, U and W, centred at the end of the fit arc: the finite-burn map adds no more
+// M23: 60-minute burns of 1 m/s along V, U and W, centered at the end of the fit arc: the finite-burn map adds no more
 // error than the centroid impulse (days 1-3 summed), and along V stays within 10 % (+ 100 m) of the burn-free error
 for (const [label, axis] of [["V", 1], ["U", 0], ["W", 2]]) {
   const D = 3600, dir = [0, 0, 0];

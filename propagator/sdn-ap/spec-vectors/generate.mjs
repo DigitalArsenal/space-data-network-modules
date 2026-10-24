@@ -579,7 +579,7 @@ export async function build() {
     const st = await o.propagate(lines, [0, 720, 1440]);
     S('8').push({ name, lines, minutes: [0, 720, 1440], mean: st.map((s) => s.out.slice(15, 21)), osculating: st.map((s) => s.out.slice(21, 27)) });
   }
-  // 8.3: long-period regime (epoch period >= 1100 min) and its neighbour, epoch states with mean and osculating output
+  // 8.3: long-period regime (epoch period >= 1100 min) and its neighbor, epoch states with mean and osculating output
   for (const mm of [1.0027, 1.3, 1.6]) for (const ecc of [0.0003, 0.1, 0.4]) for (const inc of [0.05, 30]) {
     const lines = xpLines({ mm, ecc, inc, raan: 80, argp: 10, ma: 200 });
     const [st] = await o.propagate(lines, [0]);

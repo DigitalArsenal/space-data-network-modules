@@ -38,7 +38,7 @@ inline Environment& environment() {
 
 /// Daily space weather from $SPW rows, read as FFM reads them (NRLMSISE-00's
 /// driver at a UTC instant on day d: F10.7 the observed flux of day d - 1,
-/// F10.7a the 81-day centred mean of day d, Ap the daily Ap of day d).
+/// F10.7a the 81-day centered mean of day d, Ap the daily Ap of day d).
 struct SpwDay {
   double f107_obs, f107_center81, ap_avg;
   int32_t mjd;

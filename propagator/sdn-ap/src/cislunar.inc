@@ -2,7 +2,7 @@
 // SDN-AP 2h.2 / 2h.5: cislunar segments, a baseline to measure the DESIGN's
 // synodic series against. The segment is the J2000 epoch state about the Moon
 // or the Earth with the other body and the Sun as point masses (DE440,
-// tabulated hourly over the segment and interpolated), the centre's J2
+// tabulated hourly over the segment and interpolated), the center's J2
 // (the Moon's about its epoch pole), radial SRP (AGOM) and a constant RTN
 // acceleration;
 // RK4 at a fixed 60 s step. Not yet: Richardson's base, the Sundman-phase series.
@@ -20,7 +20,7 @@ struct Seg {
   double r0[3] = {}, v0[3] = {};
   double agom = 0.0;         // m^2/kg
   double rtn[3] = {0, 0, 0};  // km/s^2
-  // hourly table of the third bodies relative to the centre (J2000 km): [k][0..2] the other body, [k][3..5] the Sun
+  // hourly table of the third bodies relative to the center (J2000 km): [k][0..2] the other body, [k][3..5] the Sun
   std::vector<double> tab;
   double tab_t0 = 0.0, tab_dt = 3600.0;
 };
@@ -210,7 +210,7 @@ inline double fit_from(Seg& s, double et_arc, const double* t_fit, const double*
   return np == 0 ? 0.0 : fit(s, t.data(), pos_fit + 3 * first, nfit - first, 40, np);
 }
 
-/// The segment set of an arc (2h.2 / 2h.5): `base` carries the centre and the Moon's pole; np 6 (state), 7 (+ AGOM)
+/// The segment set of an arc (2h.2 / 2h.5): `base` carries the center and the Moon's pole; np 6 (state), 7 (+ AGOM)
 /// or 10 (+ RTN); with `segment` the rule of segment::choose_segment (at least 6 h). out: the kept set (epoch
 /// et_arc + t_fit[first]); returns its RMS (km, < 0 on refusal) and first.
 inline double fit_segmented(const Seg& base, double et_arc, const double* t_fit, const double* pos_fit, const double* vel_fit, int nfit,

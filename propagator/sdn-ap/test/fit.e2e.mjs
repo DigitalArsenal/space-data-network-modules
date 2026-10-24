@@ -317,7 +317,7 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     return packOem(t);
   })();
   {
-    // a template that names another centre is refused by name
+    // a template that names another center is refused by name
     const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(lunarGrid)).unpack();
     t.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME = "EARTH";
     const r = await command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: lunarOmm }, { portId: "grid", typeRef: oemType, payload: packOem(t) }] });
@@ -338,8 +338,8 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
       const back = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p2.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
       let max = 0;
       traj.EPHEMERIS_DATA_LINES.forEach((L, k) => { max = Math.max(max, Math.hypot(back[k].X - L.X, back[k].Y - L.Y, back[k].Z - L.Z) * 1e3); });
-      console.log(`lunar round trip: ${traj.EPHEMERIS_DATA_LINES.length} states, centre ${traj.CENTER_NAME} / ${e.CENTER_NAME()}, axes ${traj.REFERENCE_FRAME.NAME}; ${e.COMMENT().replace(/^.*?; (\d+ states)/, "$1")}; refit vs truth max |dr| ${max.toFixed(3)} m`);
-      check(traj.CENTER_NAME === "MOON" && e.CENTER_NAME() === "MOON" && traj.REFERENCE_FRAME.NAME === "ICRF", "lunar centre or axes");
+      console.log(`lunar round trip: ${traj.EPHEMERIS_DATA_LINES.length} states, center ${traj.CENTER_NAME} / ${e.CENTER_NAME()}, axes ${traj.REFERENCE_FRAME.NAME}; ${e.COMMENT().replace(/^.*?; (\d+ states)/, "$1")}; refit vs truth max |dr| ${max.toFixed(3)} m`);
+      check(traj.CENTER_NAME === "MOON" && e.CENTER_NAME() === "MOON" && traj.REFERENCE_FRAME.NAME === "ICRF", "lunar center or axes");
       check(max <= 20.0, `lunar round trip: ${max} m`);
       // a maneuver-like break at 12 h (the second half from a set whose mean motion is 2e-4 higher): the fit must
       // segment (the latest clean segment: USER_DEFINED_SDNAP_MANEUVER_BEFORE_SECONDS from 12 h to 18 h) instead of
@@ -371,9 +371,9 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
 
 // --- SDN-AP segment sets (2h.2 / 2h.3 / 2h.5): an NRHO-like Moon-centred set (apolune 70,300 km: beyond the averaged
 // theory's reach), an Earth orbit reaching the Moon (apogee 425,000 km) and a thrusting Sun-centred cruise set, each
-// through propagate on an ICRF grid of its centre, fitted back by fit SDNAP (routed by the reach rule to a segment
+// through propagate on an ICRF grid of its center, fitted back by fit SDNAP (routed by the reach rule to a segment
 // fit) and propagated again: the round trip within 20 m; the sets carry SEMI_MAJOR_AXIS, GM and the regime; a grid of
-// another centre and the batch refuse them by name
+// another center and the batch refuse them by name
 {
   const segmentSet = ({ centre, gm, a, e, i, raan, argp, ma, params }) => {
     const b = new flatbuffers.Builder(1024);
@@ -438,7 +438,7 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     let max = 0, n = 0;
     for (const L of traj.EPHEMERIS_DATA_LINES) { const q = byEpoch.get(L.EPOCH); if (!q) continue; ++n; max = Math.max(max, Math.hypot(q.X - L.X, q.Y - L.Y, q.Z - L.Z) * 1e3); }
     console.log(`${c.label}: ${traj.EPHEMERIS_DATA_LINES.length} states; set ${e.CENTER_NAME()} ${u.SDNAP_REGIME}, a ${e.SEMI_MAJOR_AXIS().toFixed(1)} km, GM ${e.GM()}; ${e.COMMENT().replace(/^.*?\); /, "")}; round trip max |dr| ${max.toFixed(3)} m over ${n}`);
-    check(traj.CENTER_NAME === c.centre && back.CENTER_NAME === c.centre && e.CENTER_NAME() === c.centre && traj.REFERENCE_FRAME.NAME === "ICRF", `${c.label}: centre or axes`);
+    check(traj.CENTER_NAME === c.centre && back.CENTER_NAME === c.centre && e.CENTER_NAME() === c.centre && traj.REFERENCE_FRAME.NAME === "ICRF", `${c.label}: center or axes`);
     check(e.MEAN_ELEMENT_THEORY() === 4 && u.THEORY === undefined && u.SDNAP_REGIME === c.regime && e.GM() > 0 && e.SEMI_MAJOR_AXIS() !== 0, `${c.label}: regime ${u.SDNAP_REGIME}`);
     check(n >= traj.EPHEMERIS_DATA_LINES.length / 4 && max <= 20.0, `${c.label} round trip: ${max} m over ${n}`);
     if (c.centre === "EARTH") {

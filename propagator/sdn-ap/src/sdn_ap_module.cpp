@@ -8,7 +8,7 @@
 //   - SGP4    the public SGP4/SDP4 (STR#3, Vallado et al. 2006), type 0 sets;
 //   - SGP4XP  the US Space Force SGP4-XP theory, type 4 sets, written clean
 //             room (side B) from the public change list and SPEC.md;
-//   - SDN-AP  SDN's own theory (labelled as its own, never "SGP4-XP").
+//   - SDN-AP  SDN's own theory (labeled as its own, never "SGP4-XP").
 //
 // Parts (inlined in this order by build.mjs):
 //   constants.inc  gravity models, theory identifiers

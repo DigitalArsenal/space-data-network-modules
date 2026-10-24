@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-**Licence note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
+**License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
 same agreement as `Licenses/SGP4_Open_License.txt`). Its section 2.A grants Use, Distribution, Reproduction,
 Redistribution and Display; it does not grant Modification. This document therefore holds no code of the library and
@@ -328,7 +328,7 @@ The density is log10 rho(h, T_inf) (rho in g/cm^3) on a fixed grid, bilinear in 
   interpolated. Above 2500 km, rho = 1e-20 kg/m^3. Both reach the rates: drag
   nodes down to -10 km at the epoch give the library's n-dot to 1e-13 with this rule, and above 2500 km the drag
   part of n-dot is linear in B and nonzero (MEO at 20,200 km: 5.5e-14 rev/day^2 for B = 0.01).
-- **Node values, 10-85 km** (observed behaviour): log10 (g/cm^3) of the U.S. Standard Atmosphere 1976 density at
+- **Node values, 10-85 km** (observed behavior): log10 (g/cm^3) of the U.S. Standard Atmosphere 1976 density at
   the geometric height, the density as the 1976 tables print it (five significant digits) and its logarithm kept to
   nine decimals, independent of T_inf; for example 0.41351 kg/m^3 at 10 km gives -3.383513983 *[lit: U.S. Standard
   Atmosphere 1976; study: all 16 nodes follow this to 5e-10, while the model's own unrounded densities differ by up
@@ -363,11 +363,11 @@ The density is log10 rho(h, T_inf) (rho in g/cm^3) on a fixed grid, bilinear in 
   9.0e-4, median 5.5e-4). The library's entries reproduce all 379 to 2.3e-7, so an entry held 0.001 away from the
   printed value shows as a miss of about the recorded size. Of the 37 cells side B marks as printed with a final
   zero, only 160 km, 1100 K is held away (next item).
-- **Observed behaviour, 160 km and 1100 K** *[probe 3.9, 3.10, 3.11]*: the library's entry is one unit above the
+- **Observed behavior, 160 km and 1100 K** *[probe 3.9, 3.10, 3.11]*: the library's entry is one unit above the
   printed Table 6 value in the third decimal. With that entry the 28 vectors on the 160 km row (3.9, and 3.10 at 2026 days
   250.5 to 330.5 with the node right ascension every 90 deg) are reproduced to 7e-8; with the printed value they are
   missed by 1.7e-4 to 5e-4.
-- **Observed behaviour, further entries** *[probe 3.12]*: 39 more row probes of the 3.11 kind (24 cells of side B's
+- **Observed behavior, further entries** *[probe 3.12]*: 39 more row probes of the 3.11 kind (24 cells of side B's
   refreshed heavy-drag list and its 16 remaining override cells, at the year, date and node right ascension where each
   cell weighs most; recorded weight 9.2e-5 to 8.9e-4). The library's entry is one unit above the printed value in the
   third decimal at 92 km (650, 700, 750 and 800 K), 94 km (700 K), 125 km (850 K), 130 km (650 K), 320 km (1250 K),
@@ -780,7 +780,7 @@ places) *[study; lit: IAU 1976 system]*. Positions:
   - obliquity epsilon = 23.4392635861111 - 0.0130253805555555 T - 1.30555555555555e-7 T^2
     + 5.02777777777776e-7 T^3;
   - true anomaly nu = M + (2e - e^3/4 + 5e^5/96) sin M + (5e^2/4 - 11e^4/24) sin 2M + (13e^3/12 - 43e^5/64) sin 3M
-    + (103e^4/96) sin 4M + (1097e^5/960) sin 5M (the classical equation of the centre to e^5);
+    + (103e^4/96) sin 4M + (1097e^5/960) sin 5M (the classical equation of the center to e^5);
   - ecliptic longitude lambda = nu + varpi; unit vector (cos lambda, sin lambda cos epsilon, sin lambda sin epsilon)
     in the mean equator and equinox of date;
   - distance r = A (r/a) with A = 149597870 km, converted to Earth radii with R_E, and the classical expansion
@@ -1118,7 +1118,7 @@ and e >= 0.5) are not used for type 4.
 
 ### 6.1 Resonant terms per class
 
-A term is labelled (l, m, p, q). Its resonant angle is
+A term is labeled (l, m, p, q). Its resonant angle is
 
     psi_lmpq = (l - 2p) omega + (l - 2p + q) M + m (Omega - theta_G(t)),   theta_G(t) = theta_G(epoch) + omega_E t
 
@@ -1355,7 +1355,7 @@ leaves the elliptic range.
 **Short-period corrections.** Units R_E and minutes; a = (k_e / n)^(2/3), n the interpolated mean motion
 (rad/min), e, i, M, Omega, omega the mean elements after step 3, eta = sqrt(1 - e^2), p = a eta^2,
 r = p / (1 + e cos nu), theta = cos i, u = omega + nu, and the abbreviations
-c = J2 / (4 p), d = J2 / (4 p^2), Q = (nu - M) + e sin nu with nu - M the equation of the centre reduced to
+c = J2 / (4 p), d = J2 / (4 p^2), Q = (nu - M) + e sin nu with nu - M the equation of the center reduced to
 (-pi, pi], n_a = k_e / a^(3/2):
 
 - Delta r = c [ (1 - theta^2) cos 2u - (e cos nu / (1 + eta) + 2 r / (a eta) + 1)(3 theta^2 - 1) ]
@@ -1478,7 +1478,7 @@ The 9.1.1.0 WebAssembly build is a C translation of the 9.1 Fortran; its own rel
 against the Fortran baseline traced to the SHADOW computation.
 
 *[probe 11.1]* Over 50 XP element sets (LEO, sun-synchronous, MEO, GEO, HEO; to 14 days) the two legs agree to
-2 micrometres in GEO, 0.1 m sun-synchronous, 2.1 m LEO, 3.7 m MEO and 15 m HEO. With AGOM set to zero the
+2 micrometers in GEO, 0.1 m sun-synchronous, 2.1 m LEO, 3.7 m MEO and 15 m HEO. With AGOM set to zero the
 differences fall below 1e-6 m in every regime, and for the MEO and LEO cases setting either AGOM or B to zero
 removes them: the versions differ only in the non-gravitational (shadow-dependent) path. **This specification
 follows 9.9.**

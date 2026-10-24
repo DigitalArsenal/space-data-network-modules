@@ -21,7 +21,7 @@ enum Theory : int32_t {
   kTheorySdnAp = 16,   ///< SDN-AP: SDN's own theory (labelled as its own, never "SGP4-XP").
 };
 
-/// Zonal gravity model of a theory (normalised to Earth radii and minutes).
+/// Zonal gravity model of a theory (normalized to Earth radii and minutes).
 struct Gravity {
   double mu;             ///< km^3/s^2
   double radius_km;      ///< equatorial radius, km

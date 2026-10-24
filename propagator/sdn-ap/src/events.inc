@@ -122,7 +122,7 @@ struct Boundary {
   double sinc = 1.0;  ///< the arc-loss factor applied (1 for an impulse)
 };
 
-/// The maneuver map: the post-maneuver set of `pre` for a burn centred `t_c` minutes after its epoch, Delta v
+/// The maneuver map: the post-maneuver set of `pre` for a burn centered `t_c` minutes after its epoch, Delta v
 /// (km/s, UVW of the pre-maneuver state at t_c) spread over `duration_s` seconds (0: an impulse). The post set's
 /// epoch is t_c. False when a map does not converge.
 inline bool maneuver_map(const Elements& pre, double t_c, const double* dv_uvw, double duration_s, Elements& post, Boundary& b) {

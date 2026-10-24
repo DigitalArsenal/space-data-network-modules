@@ -146,7 +146,7 @@ async function nrlmsise() {
 // open modules repository's vendored copy (higherpop/third_party/erfa, the copy foundation/frames amalgamates) and
 // PINNED like NRLMSISE-00: every file used must match the SHA-256 recorded here (the copy at modules commit 7d59ae21),
 // or the build fails. Compiled: the closure of eraPnm06a, eraGst06, eraUtctai and eraTaitt, numerics unmodified (the
-// per-file erfa*.h includes are dropped and the headers emitted once, as foundation/frames does). The licence is
+// per-file erfa*.h includes are dropped and the headers emitted once, as foundation/frames does). The license is
 // carried: LICENSES/ERFA.txt in the package and dist/LICENSES/ERFA.txt beside the module must equal the pinned
 // LICENSE.txt, and dist/build-provenance.txt records it.
 const ERFA_PIN = Object.freeze({
@@ -374,7 +374,7 @@ async function lunar() {
   const { coef, records, maxErr } = pa, D = days * 86400;
   if (process.env.SDNAP_PA_PROBE) console.log(`PA refit ${days} d, degree ${N}: max error ${maxErr.map((x) => x.toExponential(2))} rad, ${coef.length} doubles`);
   if (Math.max(...maxErr) > 1e-8) throw new Error(`lunar orientation refit error ${maxErr} rad`);
-  // the geocentric Moon and Sun from DE440 (DAF/SPK type 2; ints: target, centre, frame, type, start, end)
+  // the geocentric Moon and Sun from DE440 (DAF/SPK type 2; ints: target, center, frame, type, start, end)
   const spk = dafType2(await read(LUNAR_PIN.ephemeris), "DAF/SPK ", (ints) => ints[2] === 1);
   const body = (target, centre) => spk.filter((g) => g.ints[0] === target && g.ints[1] === centre);
   const moonEmb = body(301, 3), earthEmb = body(399, 3), embSsb = body(3, 0), sunSsb = body(10, 0);

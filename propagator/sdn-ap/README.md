@@ -7,7 +7,7 @@ with three theories:
 |---|---|---|
 | SGP4 | type 0 | SPACETRACK REPORT No. 3; Vallado et al. 2006 (AFSPC mode) |
 | SGP4XP | type 4: BTERM, AGOM (m^2/kg) | the US Space Force SGP4-XP theory, clean room (side B): the public change list, then SPEC.md section by section |
-| SDN-AP | SDN's own | SDN's improved theory, labelled as its own |
+| SDN-AP | SDN's own | SDN's improved theory, labeled as its own |
 
 License: Apache-2.0 ([LICENSE](LICENSE)); [NOTICE](NOTICE) names what the build compiles and reads.
 
@@ -30,7 +30,7 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
 ## Interface
 
 - Propagator ABI: `plugin_init_omm`, `plugin_init`, `plugin_propagate`, `plugin_propagate_batch`,
-  `plugin_entity_count`, `plugin_destroy`; Earth-fixed metres. `OrbProOMMRecord`s are read as SGP4XP sets
+  `plugin_entity_count`, `plugin_destroy`; Earth-fixed meters. `OrbProOMMRecord`s are read as SGP4XP sets
   (BTERM in `bstar`, AGOM in `mean_motion_ddot`) unless `sdnap_set_omm_theory(0)` selects SGP4.
 - Batch, structure of arrays: `sdnap_init_elements(rows, count)` (168-byte `ElementRow`s, split Julian epoch,
   theory per row, SDN-AP flags); `sdnap_propagate_soa(jdWhole, jdFrac, first, count, frame, out, status)` and
@@ -84,13 +84,13 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   e > 1, a < 0, the hyperbolic mean anomaly), MEAN_ELEMENT_THEORY SDNAP, USER_DEFINED_SDNAP_REGIME CISLUNAR or
   HELIO, the force-model parameters (SDNAP_AGOM; SDNAP_BETA, SDNAP_RTN_R/T/N, SDNAP_RTN_RATE_R/T/N),
   SDNAP_MANEUVER_BEFORE_SECONDS when the set's epoch was carried past a maneuver or a sphere-of-influence passage
-  and SDNAP_ARC_END_SECONDS. `propagate` writes such a set's states about its centre in ICRF axes on a grid whose
+  and SDNAP_ARC_END_SECONDS. `propagate` writes such a set's states about its center in ICRF axes on a grid whose
   CENTER_NAME is absent or the set's (else grid-center-mismatch); `ingest_omm` refuses it (unsupported-theory). A
   Sun-centred block ending inside a planet's sphere of influence is refused (inside-sphere-of-influence).
 - Third-party code, read from the open modules repository (this repository vendors nothing) and pinned by SHA-256
   in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.txt` records the path, commits and
   hashes): NRLMSISE-00 (Brodowski's public-domain port) and ERFA (BSD-3-Clause, derived with permission from IAU
-  SOFA; licence carried in `LICENSES/ERFA.txt` and `dist/LICENSES/ERFA.txt`).
+  SOFA; license carried in `LICENSES/ERFA.txt` and `dist/LICENSES/ERFA.txt`).
 
 ## SDN-AP (DESIGN: orbit-accuracy-experiments, experiments/sdn-gp-starlink-ffm-match at ab0824d)
 
@@ -161,7 +161,7 @@ DE440 principal-axis frame frozen at the epoch; the $OMM carries them referred t
   2022-2029: max 5.9e-9 rad against the kernel (10 mm at the surface); the DE440 geocentric Moon and Sun (NAIF
   de440s.bsp: Moon - Earth about the EMB; Sun - EMB - Earth) refitted over the same span to 16-day records of degree 18
   (max 1.6 m) and 32-day records of degree 12 (max 3.3 km); the heliocentric planets (system barycentres minus the
-  Sun) over 2012-2029: Venus 64 d / degree 14 (2.6 m), the Earth-Moon barycentre 64 d / 12 (39 m), Mars 128 d / 14
+  Sun) over 2012-2029: Venus 64 d / degree 14 (2.6 m), the Earth-Moon barycenter 64 d / 12 (39 m), Mars 128 d / 14
   (0.12 km), Jupiter and Saturn 128 d / 12 (0.25 km); errors recorded in `dist/build-provenance.txt`.
 - Rates: every GRGM660PRIM term to degree 70 whose angle has no mean anomaly (|q| <= 2), F and G held at the epoch,
   evaluated in the PA frame of the time (the DE440 pole and spin from the refit; the rates carried back to the
@@ -186,7 +186,7 @@ The averaged degree: 10 / 30 / 50 / 70 gives LRO day 3 6.5 / 3.7 / 1.95 / 1.83 k
 ## SDN-AP heliocentric cruise segments (DESIGN 2h.3 / 2h.5; `fit` (THEORY SDNAP) and `propagate`, CENTER_NAME SUN)
 
 `src/helio.inc`: the ICRF Sun-centred epoch state with mu_eff = mu_Sun (1 - beta) (radial SRP), the DE440 planets
-(Venus, the Earth-Moon barycentre, Mars, Jupiter, Saturn; system GMs; tabulated every 6 h over the segment) and an
+(Venus, the Earth-Moon barycenter, Mars, Jupiter, Saturn; system GMs; tabulated every 6 h over the segment) and an
 RTN acceleration a0 + a1 t (thrust arcs, and what the planets leave); RK4 at 1800 s on a fixed node grid, each node
 step cut into parts of 2 % of the distance over the speed inside a planet's sphere of influence a_p (m_p /
 M_Sun)^(2/5). Levenberg-Marquardt with Jacobi scaling, weak priors on beta and the RTN terms. Hand-offs: the arc is
@@ -206,7 +206,7 @@ the segment start by bisection (Psyche day 15 16.7 -> 19.4).
 ## SDN-AP cislunar segments (DESIGN 2h.2 / 2h.5; `fit` (THEORY SDNAP) and `propagate`, CENTER_NAME MOON or EARTH)
 
 `src/cislunar.inc`: the ICRF epoch state about the Moon or the Earth; the other body and the Sun as DE440 point masses
-(tabulated hourly per segment), the centre's J2 (the Moon's about its pole at the epoch), radial SRP (AGOM); RK4 at
+(tabulated hourly per segment), the center's J2 (the Moon's about its pole at the epoch), radial SRP (AGOM); RK4 at
 60 s on a fixed node grid (a state-dependent step makes the finite-difference Jacobian discontinuous). The
 segmentation rule of src/segment.inc with segments of at least 6 h. Not yet: Richardson's base and the
 Sundman-phase series. From the truth state with no fit, the SPEC 5 Sun and Moon series put CAPSTONE 341 km off at
@@ -390,7 +390,7 @@ LRU sweep that rebuilt them for every object, 2.8 s per object).
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
   GCRF and EME2000 grids; the default 48 h span; a size-prefixed `$OMM`; the lunar round trip and maneuver
   segmentation; the segment sets (an NRHO-like Moon-centred set, an Earth orbit reaching the Moon, a thrusting cruise
-  set) through propagate, fit (THEORY SDNAP) and propagate again (within 20 m), a grid of another centre refused
+  set) through propagate, fit (THEORY SDNAP) and propagate again (within 20 m), a grid of another center refused
   (grid-center-mismatch) and the batch refusing a segment set (unsupported-theory).
 - `test/environment.e2e.mjs`: `$SPW` and `$DCL` read as FFM reads them.
 - `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `fit` (THEORY SDNAP) and its set on the grid,

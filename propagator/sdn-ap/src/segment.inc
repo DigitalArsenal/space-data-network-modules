@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // SDN-AP 2h.5: what the segment sets share (cislunar and heliocentric). A
-// segment set is an epoch state about its centre, carried in an $OMM as the
+// segment set is an epoch state about its center, carried in an $OMM as the
 // osculating elements of that state (SEMI_MAJOR_AXIS and GM given; e > 1 with
 // a < 0 and the hyperbolic mean anomaly for an open orbit), its force-model
 // parameters in USER_DEFINED_*; states come from RK4 on a fixed node grid from
