@@ -49,6 +49,19 @@ FieldInfo fieldInfo(int naifId);
 /// Degree 2 to the embedded degree, order 0 to the degree.
 const ExtendedGravityField& embeddedField(int naifId, int degree, int order, int tesseralDegree);
 
+/// Mars's banded-exponential atmosphere (lib/mars_atmosphere_data.h, the table NASA GMAT R2026a ships; the model
+/// form is Vallado 8.6): the density (kg/m^3) at an altitude above the reference ellipsoid (km), rho_i exp(-(h - h_i)/H_i)
+/// in the band whose bottom h_i is the highest at or below h; below the table's first band the first band answers, above
+/// its last the last band continues. A single mean profile: no solar-cycle, seasonal, diurnal, latitude or dust variation.
+double marsDensityKgM3(double altitudeKm);
+
+/// The altitude (km) of a Mars-fixed position (km) above Mars's reference ellipsoid (radii 3396.19 and 3376.20 km,
+/// NAIF pck00011.tpc): the position's distance minus the ellipsoid's radius at its geocentric latitude.
+double marsAltitudeKm(double x, double y, double z);
+
+/// The body's spin rate about its pole (rad/s): Mars's 350.891985314 degrees a day of the MRO120F frame.
+double spinRateRadPerSec(int naifId);
+
 /// True when the body's orientation model holds the instant (the Moon's libration covers 2000 to 2050).
 bool orientationCovers(int naifId, const timesys::Instant& tt);
 

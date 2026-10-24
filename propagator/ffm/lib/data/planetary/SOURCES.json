@@ -118,6 +118,17 @@
       "citation": "NAIF MAVEN kernels",
       "license": "NAIF/NASA public data",
       "redistribution": "redistributable; not committed, the E2E commits sampled states"
+    },
+    "mars-exponential-atmosphere": {
+      "directory": "src-nasa-gmat-mars-atmosphere",
+      "file": "MarsExponentialAtmosphereData.txt",
+      "url": "https://raw.githubusercontent.com/nasa/GMAT/R2026a/application/data/atmosphere/mars/MarsExponentialAtmosphereData.txt",
+      "sha256": "376cd96341c3eaf20f9cdc9e39b43b1fa2e65aa61550df4349b96c26ed6ed027",
+      "bytes": 6366,
+      "title": "Mars banded-exponential atmosphere table as NASA GMAT R2026a ships it: altitude of the band's bottom (km), density there (kg/m^3), scale height (km), 0 to 2980 km; the model form is Vallado, Fundamentals of Astrodynamics and Applications, section 8.6 (GMAT user guide, Exponential atmosphere)",
+      "citation": "NASA General Mission Analysis Tool R2026a, application/data/atmosphere/mars/MarsExponentialAtmosphereData.txt; the user guide does not state how the numbers were derived",
+      "license": "Apache License 2.0 (NASA GMAT)",
+      "redistribution": "redistributable with the license notice (NOTICE.md); the repository commits the 150 rows as lib/mars_atmosphere_data.h"
     }
   },
   "embedded": {
@@ -146,6 +157,12 @@
       "startTdbSeconds": -43200,
       "lengthSeconds": 691200,
       "segmentCount": 40000
+    },
+    "mars_atmosphere_data.h": {
+      "bytes": 8487,
+      "sha256": "905518e7ba36893939be341176ed98ccbb37d03559db9504a89c771ae8349be1",
+      "source": "mars-exponential-atmosphere",
+      "rows": 150
     }
   }
 }

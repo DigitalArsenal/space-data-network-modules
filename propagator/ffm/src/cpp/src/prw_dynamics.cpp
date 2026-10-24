@@ -138,8 +138,11 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
         else if(in->NEUTRAL_WIND()!=pcfNeutralWind::NONE)earthOnly="NEUTRAL_WIND";
         else if(in->RADIATION_PRESSURE_MODEL()==pcfRadiationPressureFamily::GNSS_BOX_WING||in->ECOM2())earthOnly="the GNSS radiation pressure models";
         if(earthOnly)return prwError(error,(std::string("unsupported-central-body: ")+earthOnly+" model the Earth; a request about "+planetary::bodyName(center)+" does not use them.").c_str());
-        if(in->ENABLE_DRAG())
+        // Mars has one atmosphere, the banded exponential profile (planetary::marsDensityKgM3); the Moon has none.
+        if(in->ENABLE_DRAG()&&center!=planetary::MARS)
             return prwError(error,(std::string("unsupported-atmosphere: FFM has no atmosphere model for ")+planetary::bodyName(center)+".").c_str());
+        if(in->ENABLE_DRAG()&&in->ATMOSPHERE_MODEL()!=pcfAtmosphereFamily::EXPONENTIAL)
+            return prwError(error,"unsupported-atmosphere: About Mars select ATMOSPHERE_MODEL EXPONENTIAL, the banded exponential profile; NRLMSISE00, JB2008 and the others model the Earth.");
     }
     out.usePointMass=in->ENABLE_POINT_MASS();out.mu=in->GRAVITATIONAL_PARAMETER()*1e-9;
     out.useSphericalHarmonics=in->ENABLE_J2()||in->ENABLE_J3()||in->ENABLE_J4()||in->ENABLE_HIGHER_ZONALS();

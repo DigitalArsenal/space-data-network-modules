@@ -823,6 +823,14 @@ struct PlanetaryFieldConfig {
     uint16_t tesseralDegree{UINT16_MAX};
 };
 
+/// A third body's harmonic field, not only its point mass, acting on the satellite (extended third-body gravity):
+/// the Moon's GRGM660PRIM on an Earth orbiter, the Earth's EGM2008 (degree 2 to 70) on a lunar orbiter. degree 0
+/// (the default) is the point mass alone, which the third-body list already holds.
+struct ThirdBodyFieldConfig {
+    uint16_t degree{0};
+    uint16_t order{0};
+};
+
 struct ForceModelSet {
     /// Authoritative GCRF -> central-body-fixed rotation (row-major) at a two-part TT
     /// instant. About the Earth, supplied by a caller that holds Earth orientation data (the PRW
@@ -855,6 +863,9 @@ struct ForceModelSet {
     /// relativity, the closed-form zonals) are refused for the others by the request parser.
     int centralBodyNaifId{399};
     PlanetaryFieldConfig planetary;
+    /// The harmonics (degree 2 up) of the Moon's field on an Earth orbiter, or of the Earth's on a lunar orbiter, at
+    /// this truncation, added to their point masses; ThirdBodyHarmonics below. Degree 0: point masses only.
+    ThirdBodyFieldConfig thirdBodyField;
 
     // Gravity
     bool usePointMass{true};
@@ -989,6 +1000,19 @@ EphemerisState SunAboutCentralBody(const ForceModelSet& forces, const timesys::I
 /// The point-mass third bodies of a set about the Moon or Mars, direct minus indirect term as ThirdBody() for the Earth:
 /// the Sun, the Earth (and the Moon about Mars) and the planets, positions from the kernel, GM from DE440.
 Vec3 ThirdBodyAboutCentral(const ForceModelSet& forces, const Vec3& satPosition, const timesys::Instant& at);
+
+/// Drag about Mars: its banded-exponential atmosphere (planetary::marsDensityKgM3) turning with the planet, the
+/// Earth's models being refused for the other bodies by the request parser.
+Vec3 PlanetaryDrag(const ForceModelSet& forces, const Vec3& position, const Vec3& velocity,
+                   const timesys::Instant& jd, const DragForceConfig& drag);
+
+/// The extended third-body gravity: the harmonic part (degree 2 up) of the other body's field acting on the satellite,
+/// minus the same field's acceleration at the frame's origin (the central body's center), so that the frame stays in
+/// free fall exactly as the point-mass term's indirect part does. The other body is the Moon for a set about the
+/// Earth (GRGM660PRIM in the DE440 principal-axes frame) and the Earth for a set about the Moon (EGM2008 in the
+/// classical IAU 1976/1980 Earth-fixed axes, without Earth orientation data), read from the planetary kernel.
+Vec3 ThirdBodyHarmonics(int centralBodyNaifId, const ThirdBodyFieldConfig& field, const Vec3& satPosition,
+                        const timesys::Instant& at);
 
 /// The embedded planetary field's harmonic acceleration (degree 2 up, the central term excluded) at a position in the
 /// body-fixed axes (km), km/s^2.

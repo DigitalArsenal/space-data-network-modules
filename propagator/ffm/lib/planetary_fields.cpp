@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "erfa.h"
+#include "mars_atmosphere_data.h"
 
 namespace astro {
 namespace planetary {
@@ -206,6 +207,29 @@ const ExtendedGravityField& embeddedField(int naifId, int degree, int order, int
     }
     cachedBody = naifId; cachedDegree = degree; cachedOrder = order; cachedTesseral = tesseralDegree;
     return field;
+}
+
+double marsDensityKgM3(double altitudeKm) {
+    constexpr size_t count = sizeof kMarsBands / sizeof kMarsBands[0];
+    if (!(altitudeKm > 0)) altitudeKm = 0;
+    size_t band = 0;
+    while (band + 1 < count && kMarsBands[band + 1].altitudeKm <= altitudeKm) ++band;
+    const AtmosphereBand& b = kMarsBands[band];
+    return b.densityKgM3 * std::exp(-(altitudeKm - b.altitudeKm) / b.scaleHeightKm);
+}
+
+double marsAltitudeKm(double x, double y, double z) {
+    constexpr double a = 3396.19, b = 3376.20;
+    const double r = std::sqrt(x * x + y * y + z * z);
+    if (!(r > 0)) return -a;
+    const double sinPhi = z / r, cosPhi = std::sqrt(x * x + y * y) / r;
+    const double ellipsoid = a * b / std::sqrt(b * b * cosPhi * cosPhi + a * a * sinPhi * sinPhi);
+    return r - ellipsoid;
+}
+
+double spinRateRadPerSec(int naifId) {
+    constexpr double kMarsDegPerDay = 350.891985314;   // MRO120F, the label's dPHI/dt
+    return naifId == MARS ? kMarsDegPerDay * kDegToRad / 86400.0 : 0.0;
 }
 
 bool orientationCovers(int naifId, const timesys::Instant& tt) {

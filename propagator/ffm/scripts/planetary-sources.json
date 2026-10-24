@@ -37,7 +37,10 @@
       "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc",
       "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
       "bytes": 12863488,
-      "window": { "start": "2000-01-01T00:00:00Z", "stop": "2050-01-01T00:00:00Z" },
+      "window": {
+        "start": "2000-01-01T00:00:00Z",
+        "stop": "2050-01-01T00:00:00Z"
+      },
       "title": "DE440 lunar principal-axis libration angles (binary PCK)",
       "citation": "Park et al. 2021, Astron. J. 161:105, doi:10.3847/1538-3881/abd414; NAIF generic kernels",
       "license": "NAIF/JPL public data; no use restriction stated",
@@ -116,6 +119,17 @@
       "citation": "NAIF MAVEN kernels",
       "license": "NAIF/NASA public data",
       "redistribution": "redistributable; not committed, the E2E commits sampled states"
+    },
+    "mars-exponential-atmosphere": {
+      "directory": "src-nasa-gmat-mars-atmosphere",
+      "file": "MarsExponentialAtmosphereData.txt",
+      "url": "https://raw.githubusercontent.com/nasa/GMAT/R2026a/application/data/atmosphere/mars/MarsExponentialAtmosphereData.txt",
+      "sha256": "376cd96341c3eaf20f9cdc9e39b43b1fa2e65aa61550df4349b96c26ed6ed027",
+      "bytes": 6366,
+      "title": "Mars banded-exponential atmosphere table as NASA GMAT R2026a ships it: altitude of the band's bottom (km), density there (kg/m^3), scale height (km), 0 to 2980 km; the model form is Vallado, Fundamentals of Astrodynamics and Applications, section 8.6 (GMAT user guide, Exponential atmosphere)",
+      "citation": "NASA General Mission Analysis Tool R2026a, application/data/atmosphere/mars/MarsExponentialAtmosphereData.txt; the user guide does not state how the numbers were derived",
+      "license": "Apache License 2.0 (NASA GMAT)",
+      "redistribution": "redistributable with the license notice (NOTICE.md); the repository commits the 150 rows as lib/mars_atmosphere_data.h"
     }
   }
 }
