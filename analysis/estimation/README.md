@@ -353,6 +353,71 @@ Authority:
   the 2025 decay; the set-membership filter keeps the truth inside its bound
   and flags an impossible observation.
 
+## Relative navigation and innovation recovery (extension v5)
+
+`run_relative_navigation` runs an extended Kalman filter on the full relative
+state of a deputy about a chief. Every option travels in the typed `$EST`
+request (`relative_request`); diagnostics return in typed records.
+
+State, `[R, T, N, Rdot, Tdot, Ndot]` in m and m/s, on the chief's CCSDS RTN
+axes (R = r/|r|, N = r x v/|r x v|, T = N x R). The rates are those of the
+rotating frame, the quantities the four models propagate. `relative_state`
+converts inertial chief and deputy states to that state (rates
+`Rt(v_d - v_c) - omega x rho`, `omega = h/r^2` along N) and returns the chief's
+osculating semi-major axis, eccentricity, inclination and true anomaly.
+
+| `RelativeModel` | The filter's own linear dynamics |
+| --- | --- |
+| `HILL_CLOHESSY_WILTSHIRE` | Clohessy and Wiltshire (1960), circular chief; closed-form transition from the chief's semi-major axis. |
+| `SCHWEIGHART_SEDWICK_J2` | Schweighart and Sedwick (2002, J. Guid. Control Dyn. 25:1073), the homogeneous mean-J2 equations centered on the chief: `s = 3 J2 (Re/r)^2 (1 + 3 cos 2i)/8`, `c = sqrt(1 + s)`, in-plane `x'' = (5c^2 - 2) n^2 x + 2 n c y'`, `y'' = -2 n c x'`, cross-track frequency `n c + (3/2) J2 n (Re/r)^2 cos^2 i`; closed form. |
+| `TSCHAUNER_HEMPEL` | Tschauner and Hempel (1965), eccentric Keplerian chief; the equations `x'' = 3x/rho + 2y'`, `y'' = -2x'`, `z'' = -z` (`rho = 1 + e cos nu`, positions scaled by rho, primes in true anomaly) are integrated (RK4, 0.002 rad). |
+| `YAMANAKA_ANKERSEN` | Yamanaka and Ankersen (2002, J. Guid. Control Dyn. 25:60), the closed-form transition of the same equations from four fundamental solutions and `J = integral d nu / rho^2`. |
+
+The circular-chief models refuse eccentricity above 0.05; the eccentric models
+accept up to 0.95. Each observation is the full relative state, its row-major
+6x6 covariance and the chief's osculating reference at its epoch. The
+prediction runs from the previous reference (semi-major axis, eccentricity,
+inclination) to the new one (true anomaly); process noise is white
+acceleration, `STATE_NOISE_COMPENSATION` with one spectral density per RTN
+axis; the update is the Joseph form with `H = I`. Angles-only and vision
+navigation are not supported.
+
+**Innovation recovery** is opt-in and off by default (an absent table or
+`enabled = false`; the numerics are then the plain filter's, byte for byte).
+`InnovationRecoveryOptions` is a field of `RelativeNavConfig` and of
+`SequentialOptions` (the EKF with six-component `POSITION_VELOCITY`
+observations; it excludes smoothing, clock states, adaptive Q and R inflation,
+and the joint NIS gate replaces the component gate).
+
+- The gate compares the raw NIS with the chi-square quantile (6 degrees of
+  freedom) at `nis_probability` (default 0.999). A suspicious observation is
+  **held**: the prediction stands and the filter waits for the next observation.
+  No future observation and no replay is used.
+- `PREDICTIVE_CONSISTENCY` starts a candidate track at the suspicious
+  observation (its state and covariance) and carries it with the same dynamics
+  and process noise. A later observation that is again above the gate against
+  the held track and at or below it against the candidate counts toward
+  `confirmation_count` (default 2, at least 2). `PERSISTENCE` counts
+  consecutive above-gate observations.
+- At the count the filter **reinitializes**: the state is the observation and
+  the covariance `covariance_inflation` (default 4) times its R. A pending
+  discrepancy expires when the next observation is more than
+  `max_gap_seconds` (default 120) away.
+- `RecoveryEpoch` per observation: classification (`NOMINAL`,
+  `PENDING_DISCREPANCY`, `UNRESOLVED_DISCREPANCY`, `TRANSIENT_DISCREPANCY`,
+  `PERSISTENT_DISCREPANCY`), action (`ACCEPTED`, `HELD`, `REINITIALIZED`), the
+  raw NIS (also when held), the threshold, the candidate NIS, the count, and
+  the acquisition (first observation of the discrepancy) and decision epochs.
+  Held observations of the absolute EKF are in `rejected_observation_indices`.
+
+A persistent discrepancy is evidence of a changed track, not proof of a
+maneuver: a sensor bias, a wrong association or model error can look the same.
+Nothing here declares a maneuver; the records are kept apart from maneuver
+hypotheses. During a hold the covariance describes the no-change prediction,
+not a mixture over unknown maneuvers, and can understate the error. A
+continuing burn can violate the candidate's coast prediction and delay
+`PREDICTIVE_CONSISTENCY`; known commanded burns belong in the propagation.
+
 ## Append-only invoke contract v1
 
 [`schemas/Estimation.fbs`](schemas/Estimation.fbs) is the module-local invoke
@@ -386,6 +451,16 @@ Additions:
   `BatchFitResult` suffix fields `measurement_parameter_count`,
   `consider_covariance`, `bound_status`, `covariance_rtn`,
   `consider_covariance_rtn`, `regularizations`.
+- Extension v5 (relative navigation and innovation recovery): enums
+  `RelativeModel`, `RelativeMeasurementModel`, `RecoveryStrategy`,
+  `RecoveryClassification`, `RecoveryAction`; tables `InnovationRecoveryOptions`,
+  `RecoveryEpoch`, `ChiefReference`, `RelativeNavConfig`, `RelativeObservation`,
+  `RelativeNavRequest`, `RelativeNavEpoch`, `RelativeNavResult`,
+  `RelativeStateRequest`, `RelativeStateResult`; optional suffix fields
+  `SequentialOptions.innovation_recovery`, `EstimationResult.recovery_history`
+  and envelope `relative_request`/`relative_result`/`relative_state_request`/
+  `relative_state_result`; methods `run_relative_navigation` and
+  `relative_state`.
 
 The OCM publishes the fit's formal covariance with its assumptions and
 `COV_CALIBRATION Uncalibrated` (SDS 1.232.0). The covariance is conditional on

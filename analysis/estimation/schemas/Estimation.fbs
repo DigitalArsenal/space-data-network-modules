@@ -804,6 +804,12 @@ table RelativeNavConfig {
   process_noise:ProcessNoiseKind;
   acceleration_psd:[double] (required);
   recovery:InnovationRecoveryOptions;
+  // true: every state and covariance on the wire (initial, observations,
+  // predicted, filtered, innovation) is curvilinear RTN: [radial offset
+  // |r_d| - |r_c|, along-track and cross-track arc lengths at the chief's
+  // radius, and their rates]; the filter converts to rectilinear RTN for its
+  // linear models and back. false: rectilinear RTN.
+  curvilinear:bool = false;
 }
 
 table RelativeObservation {

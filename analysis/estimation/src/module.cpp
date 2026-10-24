@@ -1524,6 +1524,7 @@ extern "C" int run_relative_navigation(void) {
   for (int i = 0; i < 6; ++i) config.state[i] = cfg->state()->Get(i);
   for (int i = 0; i < 36; ++i) config.covariance[i] = cfg->covariance()->Get(i);
   config.chief = chief_from_wire(cfg->chief());
+  config.curvilinear = cfg->curvilinear();
   if (cfg->process_noise() == wire::ProcessNoiseKind::STATE_NOISE_COMPENSATION) config.white_acceleration = true;
   else if (cfg->process_noise() != wire::ProcessNoiseKind::NONE)
     return fail("bad-relative-request", "process_noise is NONE or STATE_NOISE_COMPENSATION (white acceleration)");

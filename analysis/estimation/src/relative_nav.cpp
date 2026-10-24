@@ -331,12 +331,98 @@ void assimilate(const Vector6& predicted, const Matrix6& covariance, const Matri
                             multiply(multiply(k, noise), transpose(k))));
 }
 
+// ---- Curvilinear RTN --------------------------------------------------------
+//
+// With the chief at radius r and radial rate rdot, a deputy at rectilinear
+// (x, y, z) has radius rd = |(r + x, y, z)|, in-plane angle th = atan2(y, r + x)
+// and out-of-plane angle ph = atan2(z, hypot(r + x, y)). The curvilinear
+// state is [rd - r, r th, r ph] and the time derivatives of those three.
+struct ChiefRadial {
+  double r{0.0}, rdot{0.0};
+};
+
+bool chief_radial(const RelativeConstants& constants, const ChiefReference& c, ChiefRadial* out) {
+  const double e = c.eccentricity, a = c.semi_major_axis_m, mu = constants.gravitational_parameter_m3_s2;
+  if (!(a > 0.0) || !(e >= 0.0) || !(e < 1.0) || !(mu > 0.0) || !std::isfinite(c.true_anomaly_rad)) return false;
+  const double p = a * (1.0 - e * e);
+  out->r = p / (1.0 + e * std::cos(c.true_anomaly_rad));
+  out->rdot = std::sqrt(mu / p) * e * std::sin(c.true_anomaly_rad);
+  return std::isfinite(out->r) && out->r > 0.0;
+}
+
+bool rect_to_curv_state(const ChiefRadial& c, const Vector6& s, Vector6* out) {
+  const double x = c.r + s[0], y = s[1], z = s[2];
+  const double plane2 = x * x + y * y, rd = std::sqrt(plane2 + z * z);
+  if (!(plane2 > 0.0)) return false;
+  const double plane = std::sqrt(plane2);
+  const double rd_dot = (x * (c.rdot + s[3]) + y * s[4] + z * s[5]) / rd;
+  const double theta = std::atan2(y, x), theta_dot = (x * s[4] - y * (c.rdot + s[3])) / plane2;
+  const double phi = std::atan2(z, plane), phi_dot = (s[5] * rd - z * rd_dot) / (rd * plane);
+  *out = {rd - c.r, c.r * theta, c.r * phi, rd_dot - c.rdot, c.rdot * theta + c.r * theta_dot,
+          c.rdot * phi + c.r * phi_dot};
+  return all_finite(*out);
+}
+
+bool curv_to_rect_state(const ChiefRadial& c, const Vector6& q, Vector6* out) {
+  const double rd = c.r + q[0], rd_dot = c.rdot + q[3];
+  if (!(rd > 0.0)) return false;
+  const double theta = q[1] / c.r, phi = q[2] / c.r;
+  const double theta_dot = (q[4] - c.rdot * theta) / c.r, phi_dot = (q[5] - c.rdot * phi) / c.r;
+  const double ct = std::cos(theta), st = std::sin(theta), cp = std::cos(phi), sp = std::sin(phi);
+  const double plane = rd * cp, plane_dot = rd_dot * cp - rd * sp * phi_dot;
+  *out = {plane * ct - c.r, plane * st, rd * sp, plane_dot * ct - plane * st * theta_dot - c.rdot,
+          plane_dot * st + plane * ct * theta_dot, rd_dot * sp + rd * cp * phi_dot};
+  return all_finite(*out);
+}
+
+// Central-difference Jacobian of a state map (positions 1 m, rates 1 mm/s).
+template <typename Map>
+bool jacobian(const Map& map, const Vector6& at_state, Matrix6* out) {
+  for (int j = 0; j < 6; ++j) {
+    const double h = j < 3 ? 1.0 : 1.0e-3;
+    Vector6 plus = at_state, minus = at_state, fp{}, fm{};
+    plus[j] += h;
+    minus[j] -= h;
+    if (!map(plus, &fp) || !map(minus, &fm)) return false;
+    for (int i = 0; i < 6; ++i) (*out)[6 * i + j] = (fp[i] - fm[i]) / (2.0 * h);
+  }
+  return true;
+}
+
+template <typename Map>
+bool map_belief(const Map& map, const Vector6& state, const Matrix6& covariance, Vector6* out_state,
+                Matrix6* out_covariance) {
+  Matrix6 j{};
+  if (!map(state, out_state) || !jacobian(map, state, &j)) return false;
+  if (out_covariance != nullptr)
+    *out_covariance = symmetrize(multiply(multiply(j, covariance), transpose(j)));
+  return true;
+}
+
 bool valid_noise(const Matrix6& r) {
   if (!all_finite(r)) return false;
   return covariance_is_symmetric_positive_definite(r, 1.0e-12 * (1.0 + std::abs(r[0]) + std::abs(r[35])));
 }
 
 }  // namespace relnav
+
+bool rectilinear_to_curvilinear(const RelativeConstants& constants, const ChiefReference& chief,
+                                const Vector6& state, const Matrix6& covariance,
+                                Vector6* curvilinear_state, Matrix6* curvilinear_covariance) {
+  relnav::ChiefRadial c;
+  if (!relnav::chief_radial(constants, chief, &c)) return false;
+  return relnav::map_belief([&](const Vector6& in, Vector6* out) { return relnav::rect_to_curv_state(c, in, out); },
+                            state, covariance, curvilinear_state, curvilinear_covariance);
+}
+
+bool curvilinear_to_rectilinear(const RelativeConstants& constants, const ChiefReference& chief,
+                                const Vector6& state, const Matrix6& covariance,
+                                Vector6* rectilinear_state, Matrix6* rectilinear_covariance) {
+  relnav::ChiefRadial c;
+  if (!relnav::chief_radial(constants, chief, &c)) return false;
+  return relnav::map_belief([&](const Vector6& in, Vector6* out) { return relnav::curv_to_rect_state(c, in, out); },
+                            state, covariance, rectilinear_state, rectilinear_covariance);
+}
 
 bool relative_transition(RelativeModel model, const RelativeConstants& constants,
                          const ChiefReference& from, const ChiefReference& to,
@@ -420,8 +506,13 @@ RelativeResult relative_filter(const RelativeConfig& config,
     return refuse("innovation recovery needs a probability in (0, 1), a confirmation count of at least 2, an inflation of at least 1 and a positive maximum gap");
   InnovationRecovery controller(config.recovery);
 
+  // The linear models are rectilinear; a curvilinear wire state converts in
+  // and every reported state converts back at the observation's chief.
   Vector6 x = config.state;
   Matrix6 p = config.covariance;
+  if (config.curvilinear &&
+      !curvilinear_to_rectilinear(config.constants, config.chief, config.state, config.covariance, &x, &p))
+    return refuse("the curvilinear initial state is not valid for this chief");
   double previous_epoch = config.epoch_seconds;
   ChiefReference previous_chief = config.chief;
   result.epochs.reserve(observations.size());
@@ -430,6 +521,11 @@ RelativeResult relative_filter(const RelativeConfig& config,
       return refuse("observations must be finite and chronological");
     if (!relnav::all_finite(o.state)) return refuse("observation states must be finite");
     if (!relnav::valid_noise(o.covariance)) return refuse("observation covariances must be symmetric positive definite");
+    Vector6 z = o.state;
+    Matrix6 r = o.covariance;
+    if (config.curvilinear &&
+        !curvilinear_to_rectilinear(config.constants, o.chief, o.state, o.covariance, &z, &r))
+      return refuse("a curvilinear observation is not valid for its chief");
     const double dt = o.epoch_seconds - previous_epoch;
     Matrix6 phi{};
     std::string error;
@@ -439,14 +535,11 @@ RelativeResult relative_filter(const RelativeConfig& config,
     const Vector6 predicted = relnav::times(phi, x);
     const Matrix6 predicted_p = relnav::symmetrize(relnav::sum(relnav::multiply(relnav::multiply(phi, p), relnav::transpose(phi)), q));
     relnav::Gain gain;
-    if (!relnav::normalized_innovation(predicted, predicted_p, o.state, o.covariance, &gain))
+    if (!relnav::normalized_innovation(predicted, predicted_p, z, r, &gain))
       return refuse("the innovation covariance is not invertible");
 
     RelativeEpoch row;
     row.epoch_seconds = o.epoch_seconds;
-    row.predicted_state = predicted;
-    row.predicted_covariance = predicted_p;
-    row.innovation = gain.innovation;
     row.normalized_innovation_squared = gain.nis;
     RecoveryAction action = RecoveryAction::ACCEPTED;
     if (recover) {
@@ -458,7 +551,7 @@ RelativeResult relative_filter(const RelativeConfig& config,
         const RecoveryBelief& c = controller.candidate();
         const Matrix6 candidate_p = relnav::symmetrize(relnav::sum(relnav::multiply(relnav::multiply(phi, c.covariance), relnav::transpose(phi)), q));
         relnav::Gain candidate_gain;
-        has_candidate = relnav::normalized_innovation(relnav::times(phi, c.state), candidate_p, o.state, o.covariance, &candidate_gain);
+        has_candidate = relnav::normalized_innovation(relnav::times(phi, c.state), candidate_p, z, r, &candidate_gain);
         candidate_nis = candidate_gain.nis;
       }
       row.has_recovery = true;
@@ -466,17 +559,29 @@ RelativeResult relative_filter(const RelativeConfig& config,
       action = row.recovery.action;
     }
     if (action == RecoveryAction::ACCEPTED) {
-      relnav::assimilate(predicted, predicted_p, o.covariance, gain, &x, &p);
+      relnav::assimilate(predicted, predicted_p, r, gain, &x, &p);
     } else if (action == RecoveryAction::HELD) {
       x = predicted;
       p = predicted_p;
-      controller.set_candidate({o.state, o.covariance});
+      controller.set_candidate({z, r});
     } else {
-      x = o.state;
-      for (int i = 0; i < 36; ++i) p[i] = config.recovery.covariance_inflation * o.covariance[i];
+      x = z;
+      for (int i = 0; i < 36; ++i) p[i] = config.recovery.covariance_inflation * r[i];
     }
-    row.filtered_state = x;
-    row.filtered_covariance = p;
+    if (config.curvilinear) {
+      Vector6 predicted_wire{};
+      if (!rectilinear_to_curvilinear(config.constants, o.chief, predicted, predicted_p, &predicted_wire, &row.predicted_covariance) ||
+          !rectilinear_to_curvilinear(config.constants, o.chief, x, p, &row.filtered_state, &row.filtered_covariance))
+        return refuse("a curvilinear state is not valid for its chief");
+      row.predicted_state = predicted_wire;
+      for (int i = 0; i < 6; ++i) row.innovation[i] = o.state[i] - predicted_wire[i];
+    } else {
+      row.predicted_state = predicted;
+      row.predicted_covariance = predicted_p;
+      row.innovation = gain.innovation;
+      row.filtered_state = x;
+      row.filtered_covariance = p;
+    }
     result.epochs.push_back(row);
     previous_epoch = o.epoch_seconds;
     previous_chief = o.chief;

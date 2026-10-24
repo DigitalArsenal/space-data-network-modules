@@ -66,6 +66,9 @@ struct RelativeConfig {
   bool white_acceleration{false};
   std::array<double, 3> acceleration_psd{{0.0, 0.0, 0.0}};
   RecoveryConfig recovery{};
+  // States and covariances on the wire are curvilinear RTN (radial offset,
+  // along-track and cross-track arc lengths at the chief radius, and rates).
+  bool curvilinear{false};
 };
 
 struct RelativeEpoch {
@@ -94,6 +97,16 @@ bool relative_transition(RelativeModel model, const RelativeConstants& constants
 
 RelativeResult relative_filter(const RelativeConfig& config,
                                const std::vector<RelativeObservation>& observations);
+
+// Rectilinear <-> curvilinear RTN states and covariances at the chief's
+// osculating reference. The covariance maps through the Jacobian of the
+// transformation, first order.
+bool rectilinear_to_curvilinear(const RelativeConstants& constants, const ChiefReference& chief,
+                                const Vector6& state, const Matrix6& covariance,
+                                Vector6* curvilinear_state, Matrix6* curvilinear_covariance);
+bool curvilinear_to_rectilinear(const RelativeConstants& constants, const ChiefReference& chief,
+                                const Vector6& state, const Matrix6& covariance,
+                                Vector6* rectilinear_state, Matrix6* rectilinear_covariance);
 
 // RTN relative state of a deputy about a chief, both inertial [r, v] in SI,
 // with the chief's osculating reference about mu.
