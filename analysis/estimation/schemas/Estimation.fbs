@@ -248,6 +248,8 @@ table EstimationResult {
   // state (ESPF_2025, ESPF_2026, ELLIPSOIDAL_SET_MEMBERSHIP).
   support_history:[SupportEpoch];
   final_support:SupportState;
+  // Extension v5: one row per observation when innovation recovery is enabled.
+  recovery_history:[RecoveryEpoch];
 }
 
 table EstimationEnvelope {
@@ -261,6 +263,12 @@ table EstimationEnvelope {
   // Extension v3: the TEAG primitives (method evaluate_teag).
   teag_request:TeagRequest;
   teag_result:TeagResult;
+  // Extension v5: relative navigation (methods run_relative_navigation and
+  // relative_state).
+  relative_request:RelativeNavRequest;
+  relative_result:RelativeNavResult;
+  relative_state_request:RelativeStateRequest;
+  relative_state_result:RelativeStateResult;
 }
 
 root_type EstimationEnvelope;
@@ -291,6 +299,9 @@ table SequentialOptions {
   espf:EspfOptions;
   set_membership:SetMembershipOptions;
   initial_support:SupportState;
+  // Extension v5: opt-in innovation recovery (EKF with POSITION_VELOCITY
+  // observations only). Absent or enabled=false: the numerics are unchanged.
+  innovation_recovery:InnovationRecoveryOptions;
 }
 
 table ExtendedObservation {
@@ -689,4 +700,150 @@ table TeagResult {
   entropy:double;
   support_entropy:double;
   entropy_alpha:double;
+}
+
+
+// Module-local append-only extension v5: relative-navigation EKFs and opt-in
+// innovation recovery. Recovery diagnostics are evidence about the track, never
+// maneuver hypotheses.
+
+// Closed-form relative dynamics of the filter (its own model, never the
+// truth): Clohessy and Wiltshire 1960 (circular chief), Schweighart and
+// Sedwick 2002 (circular chief with J2), Tschauner and Hempel 1965 and
+// Yamanaka and Ankersen 2002 (eccentric Keplerian chief).
+enum RelativeModel : ubyte {
+  HILL_CLOHESSY_WILTSHIRE = 0,
+  SCHWEIGHART_SEDWICK_J2 = 1,
+  TSCHAUNER_HEMPEL = 2,
+  YAMANAKA_ANKERSEN = 3
+}
+
+enum RecoveryStrategy : ubyte {
+  // A candidate track starts at the suspicious observation; recover when later
+  // observations disagree with the held track and agree with the candidate.
+  PREDICTIVE_CONSISTENCY = 0,
+  // Recover after confirmation_count consecutive high-NIS observations.
+  PERSISTENCE = 1
+}
+
+enum RecoveryClassification : ubyte {
+  NOMINAL = 0,
+  PENDING_DISCREPANCY = 1,
+  UNRESOLVED_DISCREPANCY = 2,
+  TRANSIENT_DISCREPANCY = 3,
+  PERSISTENT_DISCREPANCY = 4
+}
+
+enum RecoveryAction : ubyte {
+  ACCEPTED = 0,
+  HELD = 1,
+  REINITIALIZED = 2
+}
+
+table InnovationRecoveryOptions {
+  enabled:bool = false;
+  strategy:RecoveryStrategy = PREDICTIVE_CONSISTENCY;
+  // Chi-square probability of the NIS gate (6 degrees of freedom).
+  nis_probability:double = 0.999;
+  // Consecutive confirmations needed to reinitialize (at least 2).
+  confirmation_count:uint = 2;
+  // The reinitialized covariance is this factor times the observation's R.
+  covariance_inflation:double = 4;
+  // A pending discrepancy expires when the next observation is this far away.
+  max_gap_seconds:double = 120;
+}
+
+table RecoveryEpoch {
+  classification:RecoveryClassification;
+  action:RecoveryAction;
+  // Raw NIS against the held prediction, even when the observation is held.
+  nis:double;
+  threshold:double;
+  // NIS against the candidate track (PREDICTIVE_CONSISTENCY, pending only).
+  has_candidate:bool = false;
+  candidate_nis:double;
+  consecutive_exceedances:uint;
+  // First observation of the discrepancy, and this decision.
+  acquisition_epoch:EstimationEpoch;
+  decision_epoch:EstimationEpoch;
+}
+
+// Osculating Keplerian chief at an epoch. HCW uses the semi-major axis;
+// SS-J2 the semi-major axis and inclination; TH and YA all four.
+table ChiefReference {
+  semi_major_axis_m:double;
+  eccentricity:double;
+  inclination_rad:double;
+  true_anomaly_rad:double;
+}
+
+// State layout everywhere: [R, T, N, Rdot, Tdot, Ndot], SI, deputy relative to
+// the chief on the chief's CCSDS RTN axes (R = r/|r|, N = r x v/|r x v|,
+// T = N x R); the rates are those of the rotating frame, the quantities the
+// four models propagate.
+table RelativeNavConfig {
+  model:RelativeModel;
+  epoch:EstimationEpoch (required);
+  state:[double] (required);
+  // Row-major 6x6.
+  covariance:[double] (required);
+  chief:ChiefReference (required);
+  gravitational_parameter_m3_s2:double;
+  // SCHWEIGHART_SEDWICK_J2 only.
+  j2:double;
+  equatorial_radius_m:double;
+  // White acceleration, one spectral density per RTN axis (m^2/s^3).
+  acceleration_psd:[double] (required);
+  recovery:InnovationRecoveryOptions;
+}
+
+table RelativeObservation {
+  epoch:EstimationEpoch (required);
+  // The full relative state and its row-major 6x6 covariance.
+  state:[double] (required);
+  covariance:[double] (required);
+  chief:ChiefReference (required);
+}
+
+table RelativeNavRequest {
+  config:RelativeNavConfig (required);
+  observations:[RelativeObservation];
+  trace_id:string;
+}
+
+table RelativeNavEpoch {
+  epoch:EstimationEpoch;
+  predicted_state:[double];
+  predicted_covariance:[double];
+  filtered_state:[double];
+  filtered_covariance:[double];
+  innovation:[double];
+  normalized_innovation_squared:double;
+  // Present when recovery is enabled.
+  recovery:RecoveryEpoch;
+}
+
+table RelativeNavResult {
+  status:EstimationStatus = OK;
+  history:[RelativeNavEpoch];
+  error_message:string;
+  trace_id:string;
+}
+
+// method relative_state: the RTN relative state of deputy inertial states
+// about chief inertial states ([r, v], SI, one inertial frame), with the
+// chief's osculating reference.
+table RelativeStateRequest {
+  gravitational_parameter_m3_s2:double;
+  // 6 per pair.
+  chief_states:[double] (required);
+  deputy_states:[double] (required);
+}
+
+table RelativeStateResult {
+  status:EstimationStatus = OK;
+  // 6 per pair.
+  states:[double];
+  chiefs:[ChiefReference];
+  error_message:string;
 }
