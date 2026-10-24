@@ -43,7 +43,7 @@ constexpr double MU_SATURN = 37940584.841800;   // km^3/s^2
 constexpr double MU_URANUS = 5794556.400000;    // km^3/s^2
 constexpr double MU_NEPTUNE = 6836527.100580;   // km^3/s^2
 
-// Moon constants (GRGM1200A reference)
+// Moon constants (IAU 2015 mean radius; the Moon's field is lib/planetary_fields.h)
 constexpr double RE_MOON = 1737.4;              // km (mean radius)
 constexpr double J2_MOON = 2.0323e-4;           // J2 coefficient
 
@@ -625,7 +625,6 @@ enum class GravityModelType {
     J2J4,           ///< J2-J4 zonal harmonics
     EGM96,          ///< EGM96 (degree 360)
     EGM2008,        ///< EGM2008 (degree 2190 max)
-    GRGM1200A,      ///< GRGM1200A lunar model (degree 1200 max)
     Custom          ///< Custom coefficients
 };
 

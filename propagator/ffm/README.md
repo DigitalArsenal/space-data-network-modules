@@ -910,7 +910,7 @@ or the IERS 2010 CIO chain.
 
 ## License
 
-UNLICENSED — Proprietary. All rights reserved by DigitalArsenal.io, Inc.
+Apache-2.0.
 
 ## JPL kernel input (TMPL lane 01)
 

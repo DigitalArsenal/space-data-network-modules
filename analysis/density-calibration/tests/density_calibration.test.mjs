@@ -58,9 +58,15 @@ const raw = (f, rows, inputs = f.inputs) => rows.map((r) => ({ mjd: f.mjd, sunRa
 test('artifact passes the SDK compliance check', async () => {
   const report = await validateArtifactWithStandards({ manifest, wasmBytes: wasm, standardsRoot: STANDARDS_ROOT });
   assert.equal(report.ok, true, JSON.stringify(report.issues ?? report, null, 1).slice(0, 2000));
-  // Every port of every method carries one concrete type, the $DCL record.
+  // Every port of every method carries one concrete type: the $DCL record, except the typed inputs fit_energy_arcs reads for
+  // FFM's physics (the DE440 kernel, the Earth orientation rows and the daily space weather, $PRW arms) and the operator
+  // states prepare_operator_states reads ($OEM).
+  const typed = { 'fit_energy_arcs.kernel': '$PRW', 'fit_energy_arcs.earth_orientation': '$PRW', 'fit_energy_arcs.space_weather': '$PRW', 'prepare_operator_states.operator_states': '$OEM' };
   for (const method of manifest.methods)
-    for (const port of [...method.inputPorts, ...method.outputPorts]) assert.deepEqual(port.acceptedTypeSets.map((s) => s.allowedTypes), [[DCL_TYPE]], `${method.methodId}.${port.portId}`);
+    for (const port of [...method.inputPorts, ...method.outputPorts]) {
+      const id = `${method.methodId}.${port.portId}`;
+      assert.deepEqual(port.acceptedTypeSets.map((s) => s.allowedTypes.map((t) => t.fileIdentifier)), [[typed[id] ?? DCL_TYPE.fileIdentifier]], id);
+    }
 });
 
 test('JB2008 reproduces SET\'s Fortran validation output (eight hours, 150-600 km)', { skip: !haveSet && `SET jb2008validate.zip not found at ${validateZip}` }, async () => {

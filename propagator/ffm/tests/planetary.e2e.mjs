@@ -27,7 +27,8 @@
 // Phobos/Deimos and the atmosphere is one mean profile).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { destroyLanes, dist, KERNELS, MARS, MOON, readTruth, request, run } from './lib/planetary.mjs';
+import { destroyLanes, KERNELS, MARS, MOON, readTruth, request, run } from './lib/planetary.mjs';
+import { byDay, fit, fitIndices, fmt } from './lib/planetaryFit.mjs';
 import { sds } from './lib/prwCodec.mjs';
 import { buildNative, run as runNative } from './lib/nativeBuild.mjs';
 import fs from 'node:fs';
@@ -38,73 +39,6 @@ const check = (ok, message) => { if (!ok) { failures.push(message); console.log(
 const kernel = (name) => fs.readFileSync(new URL(name, KERNELS));
 const KERNEL_2026 = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
 const KERNEL_2018 = kernel('de440-2018-04-11_2018-05-17.bsp'), KERNEL_2021 = kernel('de440-2021-01-21_2021-02-17.bsp');
-
-// ---- the fit: Gauss-Newton on the initial state and scale factors of the radiation-pressure and drag coefficients ----------
-// Positions every FIT_STEP seconds over the fit day; the Jacobian by forward differences of the module's own trajectories.
-const FIT_STEP = 600, DAY = 86400;
-const STEPS = [1e-3, 1e-3, 1e-3, 1e-6, 1e-6, 1e-6];       // km and km/s
-const solve = (A, b) => {                                  // Gaussian elimination with partial pivoting
-  const n = b.length, M = A.map((row, i) => [...row, b[i]]);
-  for (let c = 0; c < n; c++) {
-    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
-    [M[c], M[p]] = [M[p], M[c]];
-    for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
-  }
-  const x = Array(n).fill(0);
-  for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / M[r][r]; }
-  return x;
-};
-
-async function propagate(ctx, state, scales, target, sampleIndices) {
-  const { truth, center, forces, kernel: kernelBytes, lane: kind } = ctx;
-  const f = { ...forces };
-  if (f.srp) f.srp = { cr: f.srp.cr * scales.srp };
-  if (f.drag) f.drag = { cd: f.drag.cd * scales.drag };
-  const exec = request({ center, epoch: truth.epochs[0], initial: state, target, samples: sampleIndices.map((k) => truth.epochs[k]), forces: f });
-  const out = await run(kind, exec, kernelBytes);
-  if (out.error) throw new Error(out.error);
-  return out;
-}
-async function fit(ctx, fitIndices) {
-  const { truth, forces } = ctx;
-  const names = ['srp', 'drag'].filter((n) => forces[n]);
-  let state = [...truth.states[0]], scales = { srp: 1, drag: 1 };
-  const observe = async (s, sc) => (await propagate(ctx, s, sc, truth.epochs[fitIndices.at(-1)], fitIndices)).samples;
-  const residual = (samples) => fitIndices.flatMap((k, i) => [0, 1, 2].map((c) => (samples[i][c] - truth.states[k][c]) * 1000));
-  let rms = Infinity, best = null;
-  for (let iteration = 0; iteration < 5; ++iteration) {
-    const base = await observe(state, scales), e = residual(base);
-    const now = Math.sqrt(e.reduce((a, v) => a + v * v, 0) / e.length);
-    const improved = !best || now < best.fitRms;
-    if (improved) best = { state: [...state], scales: { ...scales }, fitRms: now };
-    if (iteration > 0 && now > rms * 0.98) break;
-    rms = now;
-    const columns = [];
-    for (let p = 0; p < 6; ++p) { const s = [...state]; s[p] += STEPS[p]; columns.push(residual(await observe(s, scales)).map((v, i) => (v - e[i]) / STEPS[p])); }
-    for (const n of names) { const sc = { ...scales, [n]: scales[n] + 0.05 }; columns.push(residual(await observe(state, sc)).map((v, i) => (v - e[i]) / 0.05)); }
-    const np = columns.length;
-    const N = Array.from({ length: np }, (_, i) => Array.from({ length: np }, (_, j) => columns[i].reduce((a, v, k) => a + v * columns[j][k], 0)));
-    const g = columns.map((c) => -c.reduce((a, v, k) => a + v * e[k], 0));
-    for (let i = 0; i < np; ++i) N[i][i] *= 1 + 1e-9;
-    const delta = solve(N, g);
-    state = state.map((v, i) => v + delta[i]);
-    names.forEach((n, i) => { scales[n] = Math.min(8, Math.max(0.05, scales[n] + delta[6 + i])); });
-  }
-  return best;
-}
-// Error by day: the fitted state propagated over the whole window, compared with every truth state.
-async function byDay(ctx, solution, days) {
-  const all = Array.from({ length: Math.round(days * DAY / ctx.truth.stepSeconds) }, (_, k) => k + 1);
-  const out = await propagate(ctx, solution.state, solution.scales, ctx.truth.epochs[all.at(-1)], all);
-  const perDay = [];
-  for (let d = 0; d < days; ++d) {
-    const rows = all.map((k, i) => ({ k, e: dist(out.samples[i], ctx.truth.states[k]) })).filter(({ k }) => k > d * DAY / ctx.truth.stepSeconds && k <= (d + 1) * DAY / ctx.truth.stepSeconds);
-    perDay.push({ rms: Math.sqrt(rows.reduce((a, r) => a + r.e * r.e, 0) / rows.length), max: Math.max(...rows.map((r) => r.e)) });
-  }
-  return perDay;
-}
-const fitIndices = (truth) => Array.from({ length: DAY / FIT_STEP }, (_, k) => (k + 1) * FIT_STEP / truth.stepSeconds);
-const fmt = (rows) => rows.map((r, d) => `day ${d + 1} rms ${r.rms.toFixed(1)} m (max ${r.max.toFixed(1)})`).join('; ');
 
 const MOON_GM = 4902.7998069317;     // GRGM660PRIM's own GM (its PDS header), km^3/s^2
 const MARS_GM = 42828.3748574;       // the GM of Mars alone in the MRO120F label, km^3/s^2
@@ -160,16 +94,16 @@ console.log('0. Embedded fields, axes and the third-body harmonic term against i
 }
 
 // ---- 1. LRO -------------------------------------------------------------------------------------------------------
-console.log('1. LRO about the Moon (GRGM660PRIM, DE440 libration, Sun and Earth, radiation pressure)');
+console.log('1. LRO about the Moon (GRGM660PRIM to its embedded degree 150, DE440 libration, Sun and Earth, radiation pressure)');
 const lroForces = (degree) => ({ gm: MOON_GM, degree, order: degree, thirdBodies: [10, 399], massKg: 1100, areaM2: 12, srp: { cr: 1.3 } });
 const results = { lro: {}, sweep: [], mro: {}, maven: {} };
 for (const name of ['lro-2026-03-20', 'lro-2026-03-27']) {
   const truth = readTruth(`${name}.json`);
-  const ctx = { truth, center: MOON, forces: lroForces(100), kernel: KERNEL_2026, lane: 'browser' };
+  const ctx = { truth, center: MOON, forces: lroForces(150), kernel: KERNEL_2026, lane: 'browser' };
   const solution = await fit(ctx, fitIndices(truth));
   const days = await byDay(ctx, solution, 4);
   results.lro[name] = { fitRms: solution.fitRms, scales: solution.scales, days };
-  console.log(`  ${name} degree 100: fit rms ${solution.fitRms.toFixed(1)} m, SRP scale ${solution.scales.srp.toFixed(2)}; ${fmt(days)}`);
+  console.log(`  ${name} degree 150: fit rms ${solution.fitRms.toFixed(1)} m, SRP scale ${solution.scales.srp.toFixed(2)}; ${fmt(days)}`);
   // Measured 19.6 and 3.5 m (fit) and 117, 293, 516 m (window 1) on days 2 to 4; the bars are about twice the worse window.
   check(solution.fitRms < 40, `${name}: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 40 m`);
   check(days[0].rms < 70 && days[1].rms < 250 && days[2].rms < 600 && days[3].rms < 1100, `${name}: prediction errors ${fmt(days)} exceed the 70, 250, 600 and 1100 m bars`);
@@ -177,7 +111,7 @@ for (const name of ['lro-2026-03-20', 'lro-2026-03-27']) {
 {
   const truth = readTruth('lro-2026-03-20.json');
   console.log('  the field in the error (same window, fitted at each degree):');
-  for (const degree of [2, 20, 100, 200]) {
+  for (const degree of [2, 20, 60, 150]) {
     const ctx = { truth, center: MOON, forces: lroForces(degree), kernel: KERNEL_2026, lane: 'browser' };
     const solution = await fit(ctx, fitIndices(truth));
     const days = await byDay(ctx, solution, 2);
@@ -231,7 +165,7 @@ console.log('3. Refusals by name');
   await refused('GRGM660PRIM about the Earth', base(399, { ...moon, gravity: sds.pcfGravitySelection.GRGM660PRIM }), /unsupported-gravity/);
   await refused('the Moon as its own third body', base(MOON, { ...moon, thirdBodies: [10, 301] }), /unsupported-third-body/);
   await refused('a body with no embedded field', base(599, moon), /unsupported-central-body/);
-  await refused('a degree beyond the field', base(MOON, lroForces(661)), /unsupported-gravity/);
+  await refused('a degree beyond the embedded field', base(MOON, lroForces(151)), /unsupported-gravity: GRGM660PRIM is embedded to degree 150 of its 660/);
   await refused('a state about the wrong body', request({ center: MARS, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[12], forces: { ...moon, extra: { CENTRAL_BODY_NAIF_ID: MOON } } }), /unsupported-frame/);
   const stm = base(MOON, moon); stm.INCLUDE_STM = true;
   await refused('the transition matrix about the Moon', stm, /unsupported-configuration/);

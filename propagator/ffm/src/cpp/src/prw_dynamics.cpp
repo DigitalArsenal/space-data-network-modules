@@ -214,8 +214,10 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
         if(choice==pcfGravitySelection::GRGM660PRIM&&center!=planetary::MOON)
             return prwError(error,"unsupported-gravity: GRGM660PRIM is the Moon's field; set CENTRAL_BODY_NAIF_ID 301.");
         const int degree=in->MAXIMUM_DEGREE(),order=in->MAXIMUM_ORDER(),highest=planetary::fieldInfo(center).degree;
-        if(degree<2||degree>highest)
-            return prwError(error,(std::string("unsupported-gravity: The embedded ")+planetary::bodyName(center)+" field supports degrees two through "+std::to_string(highest)+".").c_str());
+        if(degree<2||degree>highest) {
+            const auto info=planetary::fieldInfo(center);
+            return prwError(error,(std::string("unsupported-gravity: ")+info.name+" is embedded to degree "+std::to_string(highest)+(info.sourceDegree>highest?" of its "+std::to_string(info.sourceDegree):std::string())+"; the request names degree "+std::to_string(degree)+" (two through "+std::to_string(highest)+" are available).").c_str());
+        }
         if(order<0||order>degree)return prwError(error,"unsupported-gravity: Field order must be between zero and the degree.");
         int tesseral=UINT16_MAX;
         if(in->HAS_MAXIMUM_TESSERAL_DEGREE()) {
@@ -775,7 +777,11 @@ bool preflightKernel(const Execution& in,const timesys::Instant& target,std::str
         const int center=f.centralBodyNaifId;
         // The libration records end a day inside the span they hold, so no stage of a step reads past them.
         for(const auto& at:{in.initialTT.instant(),target})
-            if(!planetary::orientationCovers(center,at)){error=std::string("orientation-out-of-range: The ")+planetary::bodyName(center)+"'s orientation model does not cover the arc (the Moon's DE440 libration holds 2000-01-02 to 2049-12-31).";return false;}
+            if(!planetary::orientationCovers(center,at)){
+                double start=0,stop=0;planetary::orientationSpan(center,start,stop);
+                TTEpoch from,to;from.whole=start;to.whole=stop;
+                error=std::string("orientation-out-of-range: The ")+planetary::bodyName(center)+"'s embedded orientation model covers "+formatIsoSeconds(from).substr(0,10)+" to "+formatIsoSeconds(to).substr(0,10)+" (TDB); the arc reaches beyond it.";return false;
+            }
         const std::pair<int,bool> bodies[]={{10,f.useSRP||(f.useThirdBody&&b.includeSun)},{399,f.useThirdBody&&b.includeEarth},{301,f.useThirdBody&&b.includeMoon&&center!=301},{1,f.useThirdBody&&b.includeMercury},{2,f.useThirdBody&&b.includeVenus},{4,f.useThirdBody&&b.includeMars&&center!=499},{5,f.useThirdBody&&b.includeJupiter},{6,f.useThirdBody&&b.includeSaturn},{7,f.useThirdBody&&b.includeUranus},{8,f.useThirdBody&&b.includeNeptune}};
         for(const auto& body:bodies)if(body.second&&(!ForceModel::BodyAboutCentral(f,body.first,in.initialTT.instant()).valid||!ForceModel::BodyAboutCentral(f,body.first,target).valid)) {
             error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;

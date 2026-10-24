@@ -74,6 +74,9 @@ add_library(
     "${FFM_LIB_DIR}/nrlmsise00.cpp"
     "${FFM_LIB_DIR}/time_convert.cpp"
     "${FFM_LIB_DIR}/us76.cpp"
+    "${FFM_LIB_DIR}/ffm_gravity.cpp"
+    "${FFM_LIB_DIR}/planetary_fields.cpp"
+    "${FFM_LIB_DIR}/central_body.cpp"
     src/plugin_runtime.cpp
     "${NRLMSISE00_DIR}/nrlmsise-00.c"
     "${NRLMSISE00_DIR}/nrlmsise-00_data.c"

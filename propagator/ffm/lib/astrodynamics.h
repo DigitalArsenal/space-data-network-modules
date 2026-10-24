@@ -1050,12 +1050,6 @@ double mahalanobisDistance(
 /// @return Gravity field coefficient structure
 GravityFieldCoefficients initEGM2008(uint16_t maxDegree = 70, uint16_t maxOrder = 70);
 
-/// Initialize GRGM1200A lunar gravity field coefficients
-/// @param maxDegree Maximum degree (2-1200, recommended: 100)
-/// @param maxOrder Maximum order (0 = zonal only)
-/// @return Gravity field coefficient structure for Moon
-GravityFieldCoefficients initGRGM1200A(uint16_t maxDegree = 100, uint16_t maxOrder = 100);
-
 /// Compute high-fidelity gravity acceleration using spherical harmonics
 /// @param position Position in body-fixed frame (km)
 /// @param coeffs Gravity field coefficients

@@ -344,19 +344,6 @@ Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config) {
 }
 
 // =============================================================================
-// 4. GRGM1200A - Lunar Gravity Model
-// =============================================================================
-
-Vec3 GRGM1200A(const Vec3& position, const GRGM1200AForceConfig& config) {
-    GravityFieldCoefficients coeffs = initGRGM1200A(
-        std::min(config.truncationDegree, static_cast<uint16_t>(20)),
-        std::min(config.truncationOrder, static_cast<uint16_t>(20)));
-
-    GravityAcceleration result = computeSphericalHarmonicGravity(position, coeffs);
-    return result.total;
-}
-
-// =============================================================================
 // 5. Third Body - Sun/Moon/Planet Perturbations
 // =============================================================================
 
@@ -1786,11 +1773,6 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const 
     Vec3 gravity;
     const bool combinedGravity = FfmCombinedGravity(position, jd, forceSet, gravity);
     totalAcc += combinedGravity ? gravity : CentralBodyGravity(position, jd, forceSet);
-
-    // Lunar gravity (separate body, doesn't include Earth point mass)
-    if (forceSet.useGRGM1200A) {
-        totalAcc += GRGM1200A(position, forceSet.grgm1200a);
-    }
 
     // 5. Third Body
     if (forceSet.useThirdBody) {

@@ -14,7 +14,8 @@
       "title": "GRGM660PRIM, GSFC lunar gravity field, degree and order 660, fully normalized, reference radius 1738.0 km, principal-axes frame of planetary ephemeris DE421",
       "citation": "Lemoine et al. 2013, J. Geophys. Res. Planets 118, doi:10.1002/jgre.20118; PDS dataset GRAIL-L-LGRS-5-RDR-V1.0",
       "license": "NASA Planetary Data System open data; no use restriction stated; citation requested",
-      "redistribution": "redistributable; the repository commits only the float32 reduction"
+      "redistribution": "redistributable; the repository commits the float32 reduction to degree 150 of the field's 660 (the degree past which the day-2 prediction error of the planetary E2E's two LRO windows stops falling: 46, 28, 38, 31 m at degrees 120, 150, 200, 260, tests/planetary-degree-sweep.mjs; the size budget of the default artifact; the full field is a typed data input to come)",
+      "embeddedDegree": 150
     },
     "mro120f": {
       "directory": "src-pds-mro-mars-gravity",
@@ -38,13 +39,13 @@
       "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
       "bytes": 12863488,
       "window": {
-        "start": "2000-01-01T00:00:00Z",
-        "stop": "2050-01-01T00:00:00Z"
+        "start": "2022-01-01T00:00:00Z",
+        "stop": "2037-01-01T00:00:00Z"
       },
       "title": "DE440 lunar principal-axis libration angles (binary PCK)",
       "citation": "Park et al. 2021, Astron. J. 161:105, doi:10.3847/1538-3881/abd414; NAIF generic kernels",
       "license": "NAIF/JPL public data; no use restriction stated",
-      "redistribution": "redistributable; the repository commits the Chebyshev records of the 2000-2050 window unchanged"
+      "redistribution": "redistributable; the repository commits the Chebyshev records of the 2022-2037 window unchanged (the size budget of the default artifact; a binary PCK typed input to come covers any span)"
     },
     "de440s": {
       "directory": "src-naif-generic-kernels",
@@ -239,7 +240,7 @@
     },
     "oracles.json": {
       "kind": "oracle",
-      "sha256": "53ab90667c9a5b73d6106fcee9e74f3ee5406024027554a64aa1f454b077a604",
+      "sha256": "f70207779638749498142a877a229709bc367b062b7b6df60a0f1c74884e8cc3",
       "derivation": "tests/fixtures/planetary/make-oracles.py: CSPICE lunar libration frame, an independent Legendre recursion and potential differences over the PDS tables, an independent evaluation of the MRO120F label formula; shares no code with FFM"
     }
   }

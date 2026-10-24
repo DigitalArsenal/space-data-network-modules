@@ -13,7 +13,8 @@
       "title": "GRGM660PRIM, GSFC lunar gravity field, degree and order 660, fully normalized, reference radius 1738.0 km, principal-axes frame of planetary ephemeris DE421",
       "citation": "Lemoine et al. 2013, J. Geophys. Res. Planets 118, doi:10.1002/jgre.20118; PDS dataset GRAIL-L-LGRS-5-RDR-V1.0",
       "license": "NASA Planetary Data System open data; no use restriction stated; citation requested",
-      "redistribution": "redistributable; the repository commits only the float32 reduction"
+      "redistribution": "redistributable; the repository commits the float32 reduction to degree 150 of the field's 660 (the degree past which the day-2 prediction error of the planetary E2E's two LRO windows stops falling: 46, 28, 38, 31 m at degrees 120, 150, 200, 260, tests/planetary-degree-sweep.mjs; the size budget of the default artifact; the full field is a typed data input to come)",
+      "embeddedDegree": 150
     },
     "mro120f": {
       "directory": "src-pds-mro-mars-gravity",
@@ -37,13 +38,13 @@
       "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
       "bytes": 12863488,
       "window": {
-        "start": "2000-01-01T00:00:00Z",
-        "stop": "2050-01-01T00:00:00Z"
+        "start": "2022-01-01T00:00:00Z",
+        "stop": "2037-01-01T00:00:00Z"
       },
       "title": "DE440 lunar principal-axis libration angles (binary PCK)",
       "citation": "Park et al. 2021, Astron. J. 161:105, doi:10.3847/1538-3881/abd414; NAIF generic kernels",
       "license": "NAIF/JPL public data; no use restriction stated",
-      "redistribution": "redistributable; the repository commits the Chebyshev records of the 2000-2050 window unchanged"
+      "redistribution": "redistributable; the repository commits the Chebyshev records of the 2022-2037 window unchanged (the size budget of the default artifact; a binary PCK typed input to come covers any span)"
     },
     "de440s": {
       "directory": "src-naif-generic-kernels",
@@ -133,28 +134,30 @@
   },
   "embedded": {
     "grgm660prim.bin": {
-      "bytes": 1750368,
-      "sha256": "ece9d9f07b2912f201d65acef3d317be980cd3257f312fab787de1df6f096cc8",
+      "bytes": 91848,
+      "sha256": "c991d17baca48845c0074ab5d6ff69bd425f0ad7510ffd10792b66fc96a18f83",
       "source": "grgm660prim",
-      "degree": 660,
+      "degree": 150,
+      "sourceDegree": 660,
       "gmKm3S2": 4902.79980693169,
       "referenceRadiusKm": 1738
     },
     "mro120f.bin": {
       "bytes": 59088,
-      "sha256": "52fb78937e1efd2b35d85e4bd5d9e5f6819e0d3f3f1d9b21fe313e42dc38c5d1",
+      "sha256": "4fbf3a9d581c0abbba8d3d41fe2f539df1da4e590d2ec9c63a314efdbc5bfec5",
       "source": "mro120f",
       "degree": 120,
+      "sourceDegree": 120,
       "gmKm3S2": 42828.3756639565,
       "referenceRadiusKm": 3396
     },
     "moon_pa_de440.bin": {
-      "bytes": 547960,
-      "sha256": "3f08f9f86462d1bc0b1691c33a323829b4bec24bd59b684409a47432ecde5abe",
+      "bytes": 164680,
+      "sha256": "f9b731dd6d38b2ffbadf804a9072fb7f9896bf60831ae1243503f3296ffe75a5",
       "source": "moon-pa-de440",
       "degree": 9,
-      "records": 2283,
-      "startTdbSeconds": -43200,
+      "records": 686,
+      "startTdbSeconds": 693921600,
       "lengthSeconds": 691200,
       "segmentCount": 40000
     },

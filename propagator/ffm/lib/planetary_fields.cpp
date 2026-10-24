@@ -173,6 +173,8 @@ FieldInfo fieldInfo(int naifId) {
     info.degree = int(u32(t.bytes + 8));
     info.gmKm3S2 = f64(t.bytes + 16);
     info.referenceRadiusKm = f64(t.bytes + 24);
+    info.sourceDegree = int(f64(t.bytes + 32));
+    info.name = naifId == MOON ? "GRGM660PRIM" : "MRO120F";
     return info;
 }
 
@@ -232,13 +234,22 @@ double spinRateRadPerSec(int naifId) {
     return naifId == MARS ? kMarsDegPerDay * kDegToRad / 86400.0 : 0.0;
 }
 
+bool orientationSpan(int naifId, double& startSeconds, double& stopSeconds) {
+    if (naifId != MOON) return false;
+    const Libration l = libration();
+    // One day inside the records at each end, so that no stage of a step reads past them.
+    startSeconds = l.start + 86400.0;
+    stopSeconds = l.start + double(l.records) * l.length - 86400.0;
+    return true;
+}
+
 bool orientationCovers(int naifId, const timesys::Instant& tt) {
     if (naifId == MARS) return true;
     if (naifId != MOON) return false;
-    const Libration l = libration();
+    double start = 0, stop = 0;
+    if (!orientationSpan(naifId, start, stop)) return false;
     const double et = tt.tdb().secondsSinceJ2000();
-    // One day inside the records at each end, so that no stage of a step reads past them.
-    return et >= l.start + 86400.0 && et < l.start + double(l.records) * l.length - 86400.0;
+    return et >= start && et < stop;
 }
 
 bool bodyFixedRotation(int naifId, const timesys::Instant& tt, double m[3][3]) {

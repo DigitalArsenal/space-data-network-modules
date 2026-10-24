@@ -1,7 +1,7 @@
 // environment_models.cpp - Phase 8.6 Environment Models Implementation
 // =============================================================================
 // High-fidelity environment models for precision orbit determination and
-// propagation. Implements EGM2008, GRGM1200A, JPL ephemerides, SRP,
+// propagation. Implements EGM2008, JPL ephemerides, SRP,
 // advanced atmosphere models, and space weather integration.
 // =============================================================================
 
@@ -32,21 +32,6 @@ static constexpr double SOLAR_FLUX_1AU_W = 1361.0;       // W/m^2
 
 // EGM2008 coefficients are now loaded from egm2008_data.h (degree 2-70, 2553 records)
 // Generated from official ICGEM data by scripts/generate_egm2008.cjs
-
-// GRGM1200A lunar coefficients (selected terms)
-// Reference: Lemoine et al. (2014), GRGM1200A
-namespace GRGM1200ACoefficients {
-    static constexpr double C20 = -9.0878e-5;
-    static constexpr double C22 =  3.4717e-5;
-    static constexpr double S22 = -1.0095e-6;
-    static constexpr double C30 = -7.1426e-6;
-    static constexpr double C31 =  2.6167e-5;
-    static constexpr double S31 =  5.8528e-6;
-    static constexpr double C32 =  4.8892e-6;
-    static constexpr double S32 =  1.6838e-6;
-    static constexpr double C33 =  1.7062e-6;
-    static constexpr double S33 = -2.7088e-7;
-}
 
 ExtendedGravityField initEGM2008Extended(const EGM2008Config& config) {
     ExtendedGravityField field;
@@ -104,55 +89,6 @@ ExtendedGravityField initEGM96Extended(const EGM2008Config& config) {
         field.Cnm[rec.n][rec.m] = rec.Cnm;
         field.Snm[rec.n][rec.m] = rec.Snm;
     }
-    return field;
-}
-
-ExtendedGravityField initGRGM1200AExtended(const GRGM1200AConfig& config) {
-    ExtendedGravityField field;
-    field.model = GravityModelType::GRGM1200A;
-    field.mu = MU_MOON;
-    field.referenceRadius = RE_MOON;
-    field.normalized = true;
-
-    uint16_t maxDeg = std::min(config.maxDegree, static_cast<uint16_t>(MAX_GRAVITY_DEGREE));
-    uint16_t maxOrd = std::min(config.maxOrder, maxDeg);
-    field.allocate(maxDeg, maxOrd);
-
-    // Initialize
-    for (uint16_t n = 0; n <= maxDeg; n++) {
-        for (uint16_t m = 0; m <= std::min(n, maxOrd); m++) {
-            field.Cnm[n][m] = 0.0;
-            field.Snm[n][m] = 0.0;
-        }
-    }
-
-    field.Cnm[0][0] = 1.0;
-
-    // Load GRGM1200A coefficients
-    if (maxDeg >= 2) {
-        field.Cnm[2][0] = GRGM1200ACoefficients::C20;
-        if (maxOrd >= 2) {
-            field.Cnm[2][2] = GRGM1200ACoefficients::C22;
-            field.Snm[2][2] = GRGM1200ACoefficients::S22;
-        }
-    }
-
-    if (maxDeg >= 3) {
-        field.Cnm[3][0] = GRGM1200ACoefficients::C30;
-        if (maxOrd >= 1) {
-            field.Cnm[3][1] = GRGM1200ACoefficients::C31;
-            field.Snm[3][1] = GRGM1200ACoefficients::S31;
-        }
-        if (maxOrd >= 2) {
-            field.Cnm[3][2] = GRGM1200ACoefficients::C32;
-            field.Snm[3][2] = GRGM1200ACoefficients::S32;
-        }
-        if (maxOrd >= 3) {
-            field.Cnm[3][3] = GRGM1200ACoefficients::C33;
-            field.Snm[3][3] = GRGM1200ACoefficients::S33;
-        }
-    }
-
     return field;
 }
 

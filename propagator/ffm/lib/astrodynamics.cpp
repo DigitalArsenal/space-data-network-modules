@@ -3696,15 +3696,6 @@ namespace egm2008 {
     };
 }
 
-// GRGM1200A lunar coefficients (sample)
-namespace grgm1200a {
-    constexpr double C20 = -9.09317899159e-05;
-    constexpr double C22 = 3.47064353532e-05;
-    constexpr double S22 = 7.03402582942e-06;
-    constexpr double C30 = -8.55755935006e-06;
-    constexpr double C40 = -1.04439330305e-06;
-}
-
 GravityFieldCoefficients initEGM2008(uint16_t maxDegree, uint16_t maxOrder) {
     GravityFieldCoefficients coeffs;
     coeffs.model = GravityModelType::EGM2008;
@@ -3729,32 +3720,6 @@ GravityFieldCoefficients initEGM2008(uint16_t maxDegree, uint16_t maxOrder) {
             coeffs.Snm[n][m] = egm2008::S[n][m];
         }
     }
-
-    return coeffs;
-}
-
-GravityFieldCoefficients initGRGM1200A(uint16_t maxDegree, uint16_t maxOrder) {
-    GravityFieldCoefficients coeffs;
-    coeffs.model = GravityModelType::GRGM1200A;
-    coeffs.maxDegree = std::min(maxDegree, static_cast<uint16_t>(GravityFieldCoefficients::MAX_INLINE_DEGREE));
-    coeffs.maxOrder = std::min(maxOrder, coeffs.maxDegree);
-    coeffs.mu = MU_MOON;
-    coeffs.referenceRadius = RE_MOON;
-
-    // Zero initialize
-    for (int n = 0; n <= GravityFieldCoefficients::MAX_INLINE_DEGREE; n++) {
-        for (int m = 0; m <= GravityFieldCoefficients::MAX_INLINE_DEGREE; m++) {
-            coeffs.Cnm[n][m] = 0.0;
-            coeffs.Snm[n][m] = 0.0;
-        }
-    }
-
-    // Set lunar coefficients
-    coeffs.Cnm[2][0] = grgm1200a::C20;
-    coeffs.Cnm[2][2] = grgm1200a::C22;
-    coeffs.Snm[2][2] = grgm1200a::S22;
-    coeffs.Cnm[3][0] = grgm1200a::C30;
-    coeffs.Cnm[4][0] = grgm1200a::C40;
 
     return coeffs;
 }

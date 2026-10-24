@@ -2,10 +2,11 @@
 // The Moon and Mars as central bodies: their embedded harmonic gravity fields, their body-fixed axes, and the
 // constants a force set needs about them. One unit holds everything FFM knows about a planet other than the Earth.
 //
-//   Moon (NAIF 301)  GRGM660PRIM (Lemoine et al. 2013, doi:10.1002/jgre.20118), degree and order 660, fully
-//                    normalized, reference radius 1738.0 km, in the principal-axes frame; the axes are DE440's
-//                    lunar libration (Park et al. 2021), the Chebyshev records of moon_pa_de440_200625.bpc for
-//                    2000-01-01 to 2050-01-01.
+//   Moon (NAIF 301)  GRGM660PRIM (Lemoine et al. 2013, doi:10.1002/jgre.20118), degree and order 660 of which the
+//                    default artifact embeds the first lib/data/planetary/grgm660prim.bin's degree (the size
+//                    budget; a request above it is refused by name), fully normalized, reference radius 1738.0
+//                    km, in the principal-axes frame; the axes are DE440's lunar libration (Park et al. 2021),
+//                    the Chebyshev records of moon_pa_de440_200625.bpc for the window in the data file.
 //   Mars (NAIF 499)  MRO120F (Konopliv et al. 2020, doi:10.1029/2020GL090568), degree and order 120, fully
 //                    normalized, reference radius 3396.0 km, in the Mars-fixed frame its PDS label defines by
 //                    Euler angles (N, J fixed; PSI, I secular; PHI secular plus seasonal spin terms).
@@ -41,6 +42,8 @@ struct FieldInfo {
     double gmKm3S2 = 0;           ///< the field's own GM, which scales its harmonics
     double referenceRadiusKm = 0;
     int degree = 0;               ///< highest degree (and order) embedded
+    int sourceDegree = 0;         ///< the published field's degree (GRGM660PRIM: 660, of which `degree` is embedded)
+    const char* name = "";        ///< the published field's name
 };
 FieldInfo fieldInfo(int naifId);
 
@@ -61,6 +64,10 @@ double marsAltitudeKm(double x, double y, double z);
 
 /// The body's spin rate about its pole (rad/s): Mars's 350.891985314 degrees a day of the MRO120F frame.
 double spinRateRadPerSec(int naifId);
+
+/// The span the body's orientation model covers, TDB seconds past J2000 (the Moon's embedded libration records; Mars's
+/// label model has none). False for a body whose model is not bounded.
+bool orientationSpan(int naifId, double& startSeconds, double& stopSeconds);
 
 /// True when the body's orientation model holds the instant (the Moon's libration covers 2000 to 2050).
 bool orientationCovers(int naifId, const timesys::Instant& tt);

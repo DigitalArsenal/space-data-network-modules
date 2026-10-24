@@ -464,8 +464,7 @@ const char* ValidateAccelerationPartials(const Vec3& position,const ForceModelSe
         const bool inlineCentral=hasCentral && mode!=GravityMode::PointMass &&
             mode!=GravityMode::J2Only && mode!=GravityMode::J2J4 &&
             mode!=GravityMode::LoadedField && mode!=GravityMode::EGM2008;
-        if((inlineCentral&&f.sphericalHarmonics.maxDegree>0&&f.sphericalHarmonics.maxOrder>0)||
-           (f.useGRGM1200A&&f.grgm1200a.truncationOrder>0))
+        if(inlineCentral&&f.sphericalHarmonics.maxDegree>0&&f.sphericalHarmonics.maxOrder>0)
             return "ANALYTIC STM: inline tesseral gravity at polar coordinate singularity; use loaded field or FINITE_DIFFERENCE";
     }
     return nullptr;
@@ -481,7 +480,6 @@ AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3
     }
     const V r=positionSeed(position),v=velocitySeed(velocity);
     V a=centralGravity(r,jd,f);
-    if(f.useGRGM1200A)a=a+inlineGravity(r,initGRGM1200A(std::min<uint16_t>(f.grgm1200a.truncationDegree,20),std::min<uint16_t>(f.grgm1200a.truncationOrder,20)));
     if(f.useThirdBody)a=a+thirdBodies(r,jd,f.thirdBody);
     if(f.useSRP){
         const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;

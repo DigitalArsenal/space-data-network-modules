@@ -84,7 +84,7 @@ def main():
     for k in ['naif0012.tls', 'pck00011.tpc', 'moon_de440_250416.tf', 'moon_pa_de440_200625.bpc', 'de440s.bsp']:
         sp.furnsh(os.path.join(kernels, k))
     data = {'_comment': 'Independent oracles for tests/planetary.e2e.mjs; see make-oracles.py.'}
-    ets = [0.0, 7.0e8, 8.0e8, 8.2e8, 8.5e8, 9.0e8]
+    ets = [7.0e8, 7.6e8, 8.0e8, 8.2e8, 8.5e8, 9.0e8]   # inside the embedded libration window (2022-2037)
     data['rotation'] = {'epochsTdbSeconds': ets,
         'moon': [sp.pxform('J2000', 'MOON_PA_DE440', e).flatten().tolist() for e in ets],
         'mars': [mars_matrix(e).flatten().tolist() for e in ets]}
@@ -96,7 +96,7 @@ def main():
         iau.append({'poleArcsec': pole, 'rotationArcsec': total})
     data['rotation']['marsVsIau'] = iau
     fields = []
-    plan = [('301', 'grail', 'gggrx_0660pm_sha.tab', 'src-pds-grail-grgm660prim', [(70, 70, 70), (660, 660, 660), (100, 30, 20)],
+    plan = [('301', 'grail', 'gggrx_0660pm_sha.tab', 'src-pds-grail-grgm660prim', [(70, 70, 70), (150, 150, 150), (100, 30, 20)],
              [[1800.0, 300.0, 700.0], [-1745.0, 120.0, -420.0], [300.0, 1700.0, -900.0], [1740.0, 5.0, 12.0]]),
             ('499', 'mro', 'jgmro_120f_sha.tab', 'src-pds-mro-mars-gravity', [(120, 120, 120), (60, 40, 30)],
              [[3700.0, 400.0, 1200.0], [-3500.0, -900.0, 800.0], [500.0, 3600.0, -1500.0]])]

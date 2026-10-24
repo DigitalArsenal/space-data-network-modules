@@ -39,7 +39,7 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
   ...[1800, 3600].map(seconds => encodePluginInvokeRequest({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
     makeTable('PRWResidentRequest', { INSTANCE: instance, ENTITY_HANDLES: [seeds[0].handle], TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
-const predecessor = execFileSync('git', ['show', '96a55da80626ae2a5615fed42e3865ddd470ec13:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+const predecessor = execFileSync('git', ['show', '8c6ff00332a6115579db9278f3e1d9c56daa9176:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 // The browser pool's own coverage window: the defaults of OrbPro
 // packages/orbpro-integration/propagator.ffm at main 7ad42e4e1c
@@ -65,7 +65,7 @@ const report = { artifactSha256: sha(wasm), previousArtifactSha256: sha(fs.readF
   docker: 'WAIVED by owner 2026-10-22: do not start Docker' };
 const predecessorExports = WebAssembly.Module.exports(await WebAssembly.compile(predecessor));
 const currentExports = WebAssembly.Module.exports(await WebAssembly.compile(wasm));
-assert.deepEqual(currentExports.filter(e => e.name !== 'plugin_catalog_drag_acceleration'), predecessorExports, 'existing exports changed');
+assert.deepEqual(currentExports, predecessorExports, 'existing exports changed');
 assert(currentExports.some(e => e.name === 'plugin_catalog_drag_acceleration' && e.kind === 'function'), 'missing configured-drag diagnostic');
 const memorySection = analyzeWasmThreadFeatures(wasm).sharedMemory;
 assert(memorySection?.growable);
@@ -293,7 +293,7 @@ try {
           }) };
         };
         assert.deepEqual(focusOutputs.map(decoded), old.outputs.map(b => decoded(new Uint8Array(b))), 'previous focus fields changed');
-        row.previousArtifactParity = 'field-identical; SDS 1.259 RFM default fields change serialized layout only';
+        row.previousArtifactParity = 'field-identical';
       } else {
         assert.deepEqual(row.outputs, old.outputs, 'previous catalog bytes changed');
         row.previousArtifactParity = 'bit-identical';

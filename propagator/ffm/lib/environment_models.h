@@ -1,7 +1,7 @@
 // environment_models.h - Phase 8.6 Environment Models
 // =============================================================================
 // High-fidelity environment models for precision orbit determination and
-// propagation. Implements EGM2008, GRGM1200A, JPL ephemerides, SRP,
+// propagation. Implements EGM2008, JPL ephemerides, SRP,
 // advanced atmosphere models, and space weather integration.
 // =============================================================================
 
@@ -87,13 +87,6 @@ struct EGM2008Config {
     double S21DotRate{1.606e-11};
 };
 
-/// GRGM1200A lunar gravity model configuration
-struct GRGM1200AConfig {
-    uint16_t maxDegree{100};       ///< Maximum degree (up to 1200)
-    uint16_t maxOrder{100};        ///< Maximum order (up to 1200)
-    bool includeGRACE{true};       ///< Include GRAIL refinements
-};
-
 /// Initialize EGM2008 extended gravity field
 /// @param config Configuration for degree/order and drift
 /// @return Extended gravity field with coefficients
@@ -102,11 +95,6 @@ ExtendedGravityField initEGM2008Extended(const EGM2008Config& config);
 /// Initialize the embedded EGM96 field (degree 2-70, lib/egm96_data.h) to
 /// config.maxDegree / maxOrder; the drift settings do not apply.
 ExtendedGravityField initEGM96Extended(const EGM2008Config& config);
-
-/// Initialize GRGM1200A lunar gravity field
-/// @param config Configuration for degree/order
-/// @return Extended gravity field with lunar coefficients
-ExtendedGravityField initGRGM1200AExtended(const GRGM1200AConfig& config);
 
 /// Compute gravity acceleration using extended field
 /// Uses Pines recursion for numerical stability at high degrees
@@ -147,7 +135,7 @@ Mat3 computeGravityGradient(
 // =============================================================================
 //
 // Until gmat-07 the only fields that existed were two vendored coefficient
-// blobs: EGM2008 to degree 70 and GRGM1200A. There was no reader, so no other
+// blobs: EGM2008 to degree 70 and a lunar sample. There was no reader, so no other
 // Earth field, no Mars field and no user-supplied field could be flown at all.
 // A loader is what makes the gravity row a capability rather than two frozen
 // answers.
@@ -732,7 +720,6 @@ struct FullEnvironmentConfig {
     // Gravity
     bool useExtendedGravity{false};
     EGM2008Config egm2008Config;
-    GRGM1200AConfig grgm1200aConfig;
     ExtendedGravityField earthField;
     ExtendedGravityField moonField;
 

@@ -79,7 +79,7 @@ test("the CMake library target compiles lib/ sources, not local copies", () => {
   // Every .cpp the physics library target names must resolve to a file that
   // exists, and every lib/ translation unit must be named exactly once.
   const named = [...target.matchAll(/([\w./$\{\}"-]+\.cpp)/g)].map((m) =>
-    m[1].replaceAll('"', "").replace("${FFM_LIB_DIR}", lib),
+    m[1].replaceAll('"', "").replace("${FFM_LIB_DIR}", lib).replace("${HWM14_DIR}", join(ffm, "..", "..", "third_party", "hwm14")),
   );
   const fromLib = named
     .filter((p) => p.startsWith(lib))

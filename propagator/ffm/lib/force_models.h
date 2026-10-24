@@ -137,23 +137,6 @@ Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config = E
 const ExtendedGravityField& EmbeddedEarthGravityField(const EGM2008ForceConfig& config);
 
 // -----------------------------------------------------------------------------
-// 4. GRGM1200A - Lunar Gravity Model (degree 1200)
-// -----------------------------------------------------------------------------
-
-/// GRGM1200A configuration for ForceModel API
-struct GRGM1200AForceConfig {
-    uint16_t truncationDegree{100}; ///< Truncation degree (2-1200)
-    uint16_t truncationOrder{100};  ///< Truncation order
-    bool normalized{true};
-};
-
-/// GRGM1200A lunar gravity model (GRAIL-derived, degree 1200)
-/// @param position Satellite position in Moon-centered frame (km)
-/// @param config GRGM1200A configuration
-/// @return Acceleration vector (km/s^2)
-Vec3 GRGM1200A(const Vec3& position, const GRGM1200AForceConfig& config = GRGM1200AForceConfig());
-
-// -----------------------------------------------------------------------------
 // 5. Third Body - Sun/Moon/Planet Perturbations
 // -----------------------------------------------------------------------------
 
@@ -886,9 +869,6 @@ struct ForceModelSet {
     /// EGM2008 path uses.
     bool useLoadedField{false};
     std::shared_ptr<const ExtendedGravityField> loadedField;
-
-    bool useGRGM1200A{false};
-    GRGM1200AForceConfig grgm1200a;
 
     // Third body
     bool useThirdBody{false};

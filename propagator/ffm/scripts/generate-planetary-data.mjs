@@ -5,16 +5,17 @@
 //
 //   node scripts/generate-planetary-data.mjs <sources-dir>
 //
-//   grgm660prim.bin   GRGM660PRIM, the Moon's field to degree and order 660 (Lemoine et al. 2013, JGR Planets
-//                     118, doi:10.1002/jgre.20118), PDS GRAIL-L-LGRS-5-RDR-V1.0 gggrx_0660pm_sha.tab.
+//   grgm660prim.bin   GRGM660PRIM, the Moon's field of degree and order 660 (Lemoine et al. 2013, JGR Planets
+//                     118, doi:10.1002/jgre.20118), PDS GRAIL-L-LGRS-5-RDR-V1.0 gggrx_0660pm_sha.tab, embedded to its
+//                     manifest's embeddedDegree (the default artifact's size budget).
 //   mro120f.bin       MRO120F, Mars's field to degree and order 120 (Konopliv et al. 2020, GRL 47,
 //                     doi:10.1029/2020GL090568), PDS MRO-M-RSS-5-SDP-V1.0 jgmro_120f_sha.tab.
 //   ../mars_atmosphere_data.h  the banded-exponential Mars atmosphere NASA GMAT R2026a ships (Apache-2.0).
-//   moon_pa_de440.bin DE440's lunar principal-axis libration angles (Park et al. 2021), 2000-01-01 to
-//                     2050-01-01, the Chebyshev records of NAIF's moon_pa_de440_200625.bpc copied as published.
+//   moon_pa_de440.bin DE440's lunar principal-axis libration angles (Park et al. 2021), the manifest's window
+//                     (2020-01-01 to 2038-01-01), the Chebyshev records of NAIF's moon_pa_de440_200625.bpc copied as published.
 //
-// Field file layout (little endian): "FFMF", u32 version 1, u32 degree, u32 order, f64 GM (km^3/s^2),
-// f64 reference radius (km), then C(n,m) for n = 0..degree, m = 0..n and the same for S, as float32 (the
+// Field file layout (little endian): "FFMF", u32 version 1, u32 degree, u32 order (both the embedded degree), f64 GM (km^3/s^2),
+// f64 reference radius (km), f64 the source field's degree, then C(n,m) for n = 0..degree, m = 0..n and the same for S, as float32 (the
 // fully normalized coefficients of the table rounded to float32, relative 6e-8: at the Moon's surface the
 // rounding moves the acceleration by under 1e-11 of itself, tests/planetary.e2e.mjs measures it).
 // Libration file layout: "FFMP", u32 version 1, u32 degree, u32 records, f64 first record start (TDB seconds
@@ -46,25 +47,29 @@ function field(sourceKey, outName) {
   const [radius, gm, , degree, order, normalization] = head;
   if (normalization !== 1) throw new Error(`${spec.file}: coefficients are not fully normalized`);
   if (degree !== spec.degree || order !== spec.degree) throw new Error(`${spec.file}: degree ${degree}/${order}, expected ${spec.degree}`);
-  const rows = (degree + 1) * (degree + 2) / 2;
+  // The embedded field is the table's first rows: the coefficients of degree up to embeddedDegree (the triangular layout is row by row).
+  const embedded = spec.embeddedDegree ?? degree;
+  if (embedded > degree) throw new Error(`${spec.file}: embeddedDegree ${embedded} exceeds the table's ${degree}`);
+  const rows = (embedded + 1) * (embedded + 2) / 2;
   const C = new Float32Array(rows), S = new Float32Array(rows);
   const seen = new Uint8Array(rows);
   for (const line of lines.slice(1)) {
     const f = line.split(',');
     const n = Number(f[0]), m = Number(f[1]);
     if (!(n >= 0 && n <= degree && m >= 0 && m <= n)) throw new Error(`${spec.file}: bad row ${line}`);
+    if (n > embedded) continue;
     const at = n * (n + 1) / 2 + m;
     C[at] = Number(f[2]); S[at] = Number(f[3]); seen[at] = 1;
   }
-  for (let n = 0; n <= degree; ++n) for (let m = 0; m <= n; ++m)
-    if (!seen[n * (n + 1) / 2 + m] && n >= 1) throw new Error(`${spec.file}: missing (${n},${m})`);
+  for (let n = 1; n <= embedded; ++n) for (let m = 0; m <= n; ++m)
+    if (!seen[n * (n + 1) / 2 + m]) throw new Error(`${spec.file}: missing (${n},${m})`);
   const header = Buffer.alloc(40);
-  header.write('FFMF', 0, 'latin1'); header.writeUInt32LE(1, 4); header.writeUInt32LE(degree, 8); header.writeUInt32LE(order, 12);
+  header.write('FFMF', 0, 'latin1'); header.writeUInt32LE(1, 4); header.writeUInt32LE(embedded, 8); header.writeUInt32LE(embedded, 12);
   header.writeDoubleLE(gm, 16); header.writeDoubleLE(radius, 24);
-  header.writeDoubleLE(0, 32); // reserved
+  header.writeDoubleLE(degree, 32); // the source field's degree
   const out = Buffer.concat([header, Buffer.from(C.buffer), Buffer.from(S.buffer)]);
   fs.writeFileSync(path.join(outDir, outName), out);
-  written[outName] = { bytes: out.length, sha256: sha(out), source: sourceKey, degree, gmKm3S2: gm, referenceRadiusKm: radius };
+  written[outName] = { bytes: out.length, sha256: sha(out), source: sourceKey, degree: embedded, sourceDegree: degree, gmKm3S2: gm, referenceRadiusKm: radius };
 }
 
 // ---- lunar libration (NAIF binary PCK, DAF type 2) -----------------------------------------------------
