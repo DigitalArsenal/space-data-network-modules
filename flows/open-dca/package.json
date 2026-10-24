@@ -8,7 +8,7 @@
     "test": "node tests/open-dca.e2e.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.9"
+    "space-data-module-sdk": "0.9.12"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.1"
