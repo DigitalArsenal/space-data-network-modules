@@ -152,8 +152,9 @@ async function main() {
   });
   const report = await runParityHarness({ wasmPath: wasm, plan, lanes: ['browser', 'wasmedge'], timeoutMs: 300000, log: console.log });
   console.log(formatParityReport(report));
+  // A failed run leaves the committed receipt untouched: assert, then write.
+  assert.equal(report.ok, true, JSON.stringify(report.failures));
   const receipt = { ...report, wasmPath: 'analysis/estimation/dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' };
   fs.writeFileSync(fileURLToPath(new URL('../conformance/relative-nav-recovery-parity.json', import.meta.url)), `${JSON.stringify(receipt, null, 2)}\n`);
-  assert.equal(report.ok, true, JSON.stringify(report.failures));
 }
 await main();

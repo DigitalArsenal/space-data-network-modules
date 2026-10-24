@@ -1,25 +1,20 @@
 {
   "ok": true,
-  "fixture": "analysis/vcm-adapter 0.2.0 methods",
+  "fixture": "analysis/vcm-adapter methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "ee944e78f51b8e965202a9308a6b154fbd56b05a79875bdde7c574de8604a447",
-  "moduleSha256": "401bf0d280478722281f522ba080a6ed5a39fea44e3bcb5d85542d38bb97226d",
+  "artifactSha256": "626d229ec2c0c1228f54699cbf86cf56bf71ebeefbb00dfca912ca424973b51e",
+  "moduleSha256": "b57aef45391bcd81611ac73e5a7581af82f4bdcfe8355a9cd29ad84c40a3c577",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 6,
-      "durationMs": 1435
+      "durationMs": 679
     },
     {
       "lane": "wasmedge",
       "runs": 6,
-      "durationMs": 319
-    },
-    {
-      "lane": "docker-wasmedge",
-      "runs": 6,
-      "durationMs": 6043
+      "durationMs": 345
     }
   ],
   "cases": [
@@ -30,7 +25,7 @@
     "write-sample-ocm-with-eop",
     "write-sample-ocm-without-eop"
   ],
-  "comparisons": 30,
+  "comparisons": 18,
   "failures": [],
   "runs": [
     {
@@ -39,9 +34,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b41db5dacaf3a91aaa6a46908ab5c8125fcf6c39792a8c47a2a07a7d4a2f340c",
-      "stdoutLength": 9064
+      "stdoutSha256": "a6c76256041a50b57e6a531c5b15315ecfbb4d607261dc6d53ff6c7d6e7f49af",
+      "stdoutLength": 9904
     },
     {
       "lane": "browser",
@@ -49,9 +46,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "75a29c84afc61ee44790073b1fb3e24e4c50c034e50091fb266eb79a6ab8d203",
-      "stdoutLength": 8944
+      "stdoutSha256": "708ddc009055112b493ff41adf38a0a51905783b828872883d6a532ab394b9a0",
+      "stdoutLength": 9664
     },
     {
       "lane": "browser",
@@ -59,9 +58,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "8920556b37cfdccce21a8040b931afdfe050f92766ecb179c92082b0bdf4091e",
-      "stdoutLength": 148
+      "stdoutSha256": "58c0eefe4ce49e72d668fd9e6502f8f5b64ce4cdb9dd3d87c40a71e709019525",
+      "stdoutLength": 156
     },
     {
       "lane": "browser",
@@ -69,9 +70,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "f8390dd534b57fc4c743532630c6228054a947f95a450c0ae423b26dff5581db",
-      "stdoutLength": 2528
+      "stdoutSha256": "ca61a078df3e11234d0d5a296853b3fd9da256c4d78d61f1fdd31be55bf0f61c",
+      "stdoutLength": 2768
     },
     {
       "lane": "browser",
@@ -79,9 +82,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "ddf9261ea6d21875e56747bd22648c5b43f85b03e473ac331113632610517923",
-      "stdoutLength": 2264
+      "stdoutSha256": "12ad2c9bb944cb2d93d59cee9f6a1703d72c9907e4213afad4b47371c2020639",
+      "stdoutLength": 2384
     },
     {
       "lane": "browser",
@@ -89,9 +94,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "4ad929187951f08a858b08a3a45faa089230dce89d2ac747aa4c760350095817",
-      "stdoutLength": 2264
+      "stdoutSha256": "8769404e61f7c0f717303e2b7976ba5f404cf05d7ad21450f9ef1d6b5b800baa",
+      "stdoutLength": 2384
     },
     {
       "lane": "wasmedge",
@@ -99,9 +106,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b41db5dacaf3a91aaa6a46908ab5c8125fcf6c39792a8c47a2a07a7d4a2f340c",
-      "stdoutLength": 9064
+      "stdoutSha256": "a6c76256041a50b57e6a531c5b15315ecfbb4d607261dc6d53ff6c7d6e7f49af",
+      "stdoutLength": 9904
     },
     {
       "lane": "wasmedge",
@@ -109,9 +118,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "75a29c84afc61ee44790073b1fb3e24e4c50c034e50091fb266eb79a6ab8d203",
-      "stdoutLength": 8944
+      "stdoutSha256": "708ddc009055112b493ff41adf38a0a51905783b828872883d6a532ab394b9a0",
+      "stdoutLength": 9664
     },
     {
       "lane": "wasmedge",
@@ -119,9 +130,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "8920556b37cfdccce21a8040b931afdfe050f92766ecb179c92082b0bdf4091e",
-      "stdoutLength": 148
+      "stdoutSha256": "58c0eefe4ce49e72d668fd9e6502f8f5b64ce4cdb9dd3d87c40a71e709019525",
+      "stdoutLength": 156
     },
     {
       "lane": "wasmedge",
@@ -129,9 +142,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "f8390dd534b57fc4c743532630c6228054a947f95a450c0ae423b26dff5581db",
-      "stdoutLength": 2528
+      "stdoutSha256": "ca61a078df3e11234d0d5a296853b3fd9da256c4d78d61f1fdd31be55bf0f61c",
+      "stdoutLength": 2768
     },
     {
       "lane": "wasmedge",
@@ -139,9 +154,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "ddf9261ea6d21875e56747bd22648c5b43f85b03e473ac331113632610517923",
-      "stdoutLength": 2264
+      "stdoutSha256": "12ad2c9bb944cb2d93d59cee9f6a1703d72c9907e4213afad4b47371c2020639",
+      "stdoutLength": 2384
     },
     {
       "lane": "wasmedge",
@@ -149,69 +166,12 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "4ad929187951f08a858b08a3a45faa089230dce89d2ac747aa4c760350095817",
-      "stdoutLength": 2264
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "read-sample",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b41db5dacaf3a91aaa6a46908ab5c8125fcf6c39792a8c47a2a07a7d4a2f340c",
-      "stdoutLength": 9064
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "read-sample-parameter-rows-as-printed",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "75a29c84afc61ee44790073b1fb3e24e4c50c034e50091fb266eb79a6ab8d203",
-      "stdoutLength": 8944
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "read-refused-not-a-vcm",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "8920556b37cfdccce21a8040b931afdfe050f92766ecb179c92082b0bdf4091e",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "ocm-from-result",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "f8390dd534b57fc4c743532630c6228054a947f95a450c0ae423b26dff5581db",
-      "stdoutLength": 2528
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "write-sample-ocm-with-eop",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "ddf9261ea6d21875e56747bd22648c5b43f85b03e473ac331113632610517923",
-      "stdoutLength": 2264
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "write-sample-ocm-without-eop",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "4ad929187951f08a858b08a3a45faa089230dce89d2ac747aa4c760350095817",
-      "stdoutLength": 2264
+      "stdoutSha256": "8769404e61f7c0f717303e2b7976ba5f404cf05d7ad21450f9ef1d6b5b800baa",
+      "stdoutLength": 2384
     }
-  ]
+  ],
+  "dockerLane": "waived by the owner 2026-10-22 (no Docker)"
 }

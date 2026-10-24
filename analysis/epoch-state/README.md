@@ -108,6 +108,6 @@ to GCRS agrees within 0.7 m for the 2000 and 2006 epochs and 2.5 m for 1980.
 The rows at later ages, and the TEME trajectory the query port answers, are
 checked against `tests/ages-reference.json`, written by
 `tests/ages-reference.py` from python-sgp4 2.27 and pyerfa 2.0.1.5 (positions
-within 1 mm, velocities within 1e-9 km/s). Tri-runtime parity (browser,
-WasmEdge, Docker WasmEdge) of the three methods: `PATH=$HOME/.wasmedge/bin:$PATH
-node tests/parity.mjs`.
+within 1 mm, velocities within 1e-9 km/s). Parity (browser and
+native WasmEdge; the owner waived the Docker leg on 2026-10-22) of the methods:
+`PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs`.

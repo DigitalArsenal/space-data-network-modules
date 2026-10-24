@@ -567,8 +567,9 @@ artifact is rebuilt with `SPACE_DATA_MODULE_SDK_COMPILE_CACHE=0 node build.mjs`
 
 The test provider is an ignored fixture, also built by `npm test`'s pretest hook.
 Its physics is C++ WASM. Production artifacts never include that provider.
-Parity runs identical estimator bytes in Chrome/V8, native WasmEdge and container
-WasmEdge at host worker widths 1/2/4/8. This sequential artifact tests host width
+Parity runs identical estimator bytes in Chrome/V8 and native WasmEdge at host
+worker widths 1/2/4/8; the owner waived the container WasmEdge leg on 2026-10-22,
+and the receipt records the waiver. This sequential artifact tests host width
 invariance, not concurrent filter updates.
 
 The dynamical tests are answered by `propagator/ffm`'s WASM. The measurement
@@ -580,4 +581,4 @@ records through `analysis/association`'s installed bindings (`npm ci` there).
 
 See [original fixture authorities](tests/fixtures/README.md),
 [depth authority and reproduction details](tests/fixtures/DEPTH.md), and
-[the tri-runtime receipt](conformance/lane05-parity.json).
+[the parity receipt](conformance/lane05-parity.json).
