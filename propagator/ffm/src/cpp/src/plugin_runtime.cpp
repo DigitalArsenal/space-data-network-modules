@@ -47,86 +47,6 @@ PluginInvokeResult make_error_result(
     return result;
 }
 
-astro::IntegrationMethod parse_integration_method(const std::string& raw_name) {
-    std::string name = raw_name;
-    std::transform(
-        name.begin(),
-        name.end(),
-        name.begin(),
-        [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
-
-    if (name == "RK4") {
-        return astro::IntegrationMethod::RK4;
-    }
-    if (name == "RKF45") {
-        return astro::IntegrationMethod::RKF45;
-    }
-    if (name == "RKF78") {
-        return astro::IntegrationMethod::RKF78;
-    }
-    if (name == "RK78") {
-        return astro::IntegrationMethod::RK78;
-    }
-    if (name == "RKDP87") return astro::IntegrationMethod::RKDP87;
-    if (name == "ABM") {
-        return astro::IntegrationMethod::ABM;
-    }
-    if (name == "BS") {
-        return astro::IntegrationMethod::BS;
-    }
-    if (name == "COWELL") {
-        return astro::IntegrationMethod::Cowell;
-    }
-    if (name == "ENCKE") {
-        return astro::IntegrationMethod::Encke;
-    }
-    if (name == "EQUINOCTIALVOP") {
-        return astro::IntegrationMethod::EquinoctialVOP;
-    }
-    throw std::runtime_error("Unknown integrator method: " + raw_name);
-}
-
-void configure_integrator(
-    const json& params,
-    astro::IntegratorConfig& config) {
-    if (!params.contains("integrator")) {
-        return;
-    }
-
-    const auto& integrator = params.at("integrator");
-    if (integrator.contains("method")) {
-        config.method =
-            parse_integration_method(integrator.at("method").get<std::string>());
-    }
-    if (integrator.contains("initialStep")) {
-        config.initialStep = integrator.at("initialStep").get<double>();
-    }
-    if (integrator.contains("minStep")) {
-        config.minStep = integrator.at("minStep").get<double>();
-    }
-    if (integrator.contains("maxStep")) {
-        config.maxStep = integrator.at("maxStep").get<double>();
-    }
-    if (integrator.contains("absTolerance")) {
-        config.absTolerance = integrator.at("absTolerance").get<double>();
-    }
-    if (integrator.contains("relTolerance")) {
-        config.relTolerance = integrator.at("relTolerance").get<double>();
-    }
-    if (integrator.contains("tolerance")) {
-        const double tolerance = integrator.at("tolerance").get<double>();
-        config.absTolerance = tolerance;
-        config.relTolerance = tolerance;
-    }
-    if (integrator.contains("maxSteps")) {
-        const auto& value=integrator.at("maxSteps");
-        if(!value.is_number_integer()||value.get<double>()<1||
-           value.get<double>()>std::numeric_limits<uint32_t>::max()/10)
-            throw std::runtime_error("maxSteps must be an integer between 1 and 429496729.");
-        config.maxSteps = value.get<uint32_t>();
-    }
-}
-
 double read_optional_double(
     const json& value,
     const char* first_key,
@@ -439,7 +359,6 @@ std::string propagate_json(const json& params, std::string& operation_error) {
     sv.epoch = epoch_jd;
 
     IntegratorConfig config;
-    configure_integrator(params, config);
 
     ForceModel::ForceModelSet forces;
     configure_force_models(params, epoch_jd, forces);

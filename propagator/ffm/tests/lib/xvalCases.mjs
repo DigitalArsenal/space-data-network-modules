@@ -77,7 +77,7 @@ export const TOLERANCE_M = {
 // The request for one tool's case. GMAT's drag cases are Jacchia-Roberts
 // (gmat-reference.json says why); every other case is the Orekit request.
 export function ffmInputs(c) {
-  return requestInputs(c, { edit: (exec) => { if (c.atmosphere === 'JACCHIA_ROBERTS') exec.FORCES.ATMOSPHERE_MODEL = sds.prwAtmosphereFamily.JACCHIA_ROBERTS; } });
+  return requestInputs(c, { edit: (exec) => { if (c.atmosphere === 'JACCHIA_ROBERTS') exec.FORCES.ATMOSPHERE_MODEL = sds.pcfAtmosphereFamily.JACCHIA_ROBERTS; } });
 }
 
 // {worst, worstAt} between two sample lists ([t, x, y, z, ...], meters).

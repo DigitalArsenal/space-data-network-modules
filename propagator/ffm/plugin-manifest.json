@@ -137,6 +137,26 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "second_trajectory",
+          "description": "Optional second trajectory as $OEM (kilometers, kilometers per second, in the request's axes), read by an EVENTS entry of kind CLOSEST_APPROACH. Its epochs must cover the propagated arc; Hermite polynomials of degree 7 through the four nodes around the epoch join the samples.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
         }
       ],
       "outputPorts": [

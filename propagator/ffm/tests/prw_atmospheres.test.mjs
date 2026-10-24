@@ -33,7 +33,7 @@ test('JB2008 takes jb2008_indices only, and only JB2008 takes them', async (t) =
 test('Jacchia-Roberts drives drag from WEATHER or the space_weather rows', async (t) => {
   const h = await harness(); t.after(() => h.destroy());
   const W1 = find('LEO400', 'W1'), F6 = find('LEO400', 'F6');
-  const j70 = (exec) => { exec.FORCES.ATMOSPHERE_MODEL = sds.prwAtmosphereFamily.JACCHIA_ROBERTS; };
+  const j70 = (exec) => { exec.FORCES.ATMOSPHERE_MODEL = sds.pcfAtmosphereFamily.JACCHIA_ROBERTS; };
   for (const c of [W1, F6]) {
     const r = await h.invoke({ methodId: 'invoke', inputs: requestInputs(c, { edit: j70 }) });
     assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);

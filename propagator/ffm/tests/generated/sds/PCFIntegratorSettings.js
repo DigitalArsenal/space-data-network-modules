@@ -1,6 +1,6 @@
 import * as flatbuffers from 'flatbuffers';
-import { prwSolverAlgorithm } from './prwSolverAlgorithm.js';
-export class PRWIntegratorSettings {
+import { pcfIntegratorAlgorithm } from './pcfIntegratorAlgorithm.js';
+export class PCFIntegratorSettings {
     bb = null;
     bb_pos = 0;
     __init(i, bb) {
@@ -8,16 +8,16 @@ export class PRWIntegratorSettings {
         this.bb = bb;
         return this;
     }
-    static getRootAsPRWIntegratorSettings(bb, obj) {
-        return (obj || new PRWIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    static getRootAsPCFIntegratorSettings(bb, obj) {
+        return (obj || new PCFIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
-    static getSizePrefixedRootAsPRWIntegratorSettings(bb, obj) {
+    static getSizePrefixedRootAsPCFIntegratorSettings(bb, obj) {
         bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-        return (obj || new PRWIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+        return (obj || new PCFIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
     ALGORITHM() {
         const offset = this.bb.__offset(this.bb_pos, 4);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwSolverAlgorithm.UNSPECIFIED;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfIntegratorAlgorithm.UNSPECIFIED;
     }
     INITIAL_STEP_SECONDS() {
         const offset = this.bb.__offset(this.bb_pos, 6);
@@ -51,11 +51,11 @@ export class PRWIntegratorSettings {
         const offset = this.bb.__offset(this.bb_pos, 16);
         return offset ? this.bb.readUint32(this.bb_pos + offset) : 100000;
     }
-    static startPRWIntegratorSettings(builder) {
+    static startPCFIntegratorSettings(builder) {
         builder.startObject(7);
     }
     static addAlgorithm(builder, ALGORITHM) {
-        builder.addFieldInt8(0, ALGORITHM, prwSolverAlgorithm.UNSPECIFIED);
+        builder.addFieldInt8(0, ALGORITHM, pcfIntegratorAlgorithm.UNSPECIFIED);
     }
     static addInitialStepSeconds(builder, INITIAL_STEP_SECONDS) {
         builder.addFieldFloat64(1, INITIAL_STEP_SECONDS, 60.0);
@@ -85,24 +85,24 @@ export class PRWIntegratorSettings {
     static addMaximumSteps(builder, MAXIMUM_STEPS) {
         builder.addFieldInt32(6, MAXIMUM_STEPS, 100000);
     }
-    static endPRWIntegratorSettings(builder) {
+    static endPCFIntegratorSettings(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 12);
         return offset;
     }
-    static createPRWIntegratorSettings(builder, ALGORITHM, INITIAL_STEP_SECONDS, MINIMUM_STEP_SECONDS, MAXIMUM_STEP_SECONDS, ABSOLUTE_TOLERANCESOffset, RELATIVE_TOLERANCE, MAXIMUM_STEPS) {
-        PRWIntegratorSettings.startPRWIntegratorSettings(builder);
-        PRWIntegratorSettings.addAlgorithm(builder, ALGORITHM);
-        PRWIntegratorSettings.addInitialStepSeconds(builder, INITIAL_STEP_SECONDS);
-        PRWIntegratorSettings.addMinimumStepSeconds(builder, MINIMUM_STEP_SECONDS);
-        PRWIntegratorSettings.addMaximumStepSeconds(builder, MAXIMUM_STEP_SECONDS);
-        PRWIntegratorSettings.addAbsoluteTolerances(builder, ABSOLUTE_TOLERANCESOffset);
-        PRWIntegratorSettings.addRelativeTolerance(builder, RELATIVE_TOLERANCE);
-        PRWIntegratorSettings.addMaximumSteps(builder, MAXIMUM_STEPS);
-        return PRWIntegratorSettings.endPRWIntegratorSettings(builder);
+    static createPCFIntegratorSettings(builder, ALGORITHM, INITIAL_STEP_SECONDS, MINIMUM_STEP_SECONDS, MAXIMUM_STEP_SECONDS, ABSOLUTE_TOLERANCESOffset, RELATIVE_TOLERANCE, MAXIMUM_STEPS) {
+        PCFIntegratorSettings.startPCFIntegratorSettings(builder);
+        PCFIntegratorSettings.addAlgorithm(builder, ALGORITHM);
+        PCFIntegratorSettings.addInitialStepSeconds(builder, INITIAL_STEP_SECONDS);
+        PCFIntegratorSettings.addMinimumStepSeconds(builder, MINIMUM_STEP_SECONDS);
+        PCFIntegratorSettings.addMaximumStepSeconds(builder, MAXIMUM_STEP_SECONDS);
+        PCFIntegratorSettings.addAbsoluteTolerances(builder, ABSOLUTE_TOLERANCESOffset);
+        PCFIntegratorSettings.addRelativeTolerance(builder, RELATIVE_TOLERANCE);
+        PCFIntegratorSettings.addMaximumSteps(builder, MAXIMUM_STEPS);
+        return PCFIntegratorSettings.endPCFIntegratorSettings(builder);
     }
     unpack() {
-        return new PRWIntegratorSettingsT(this.ALGORITHM(), this.INITIAL_STEP_SECONDS(), this.MINIMUM_STEP_SECONDS(), this.MAXIMUM_STEP_SECONDS(), this.bb.createScalarList(this.ABSOLUTE_TOLERANCES.bind(this), this.absoluteTolerancesLength()), this.RELATIVE_TOLERANCE(), this.MAXIMUM_STEPS());
+        return new PCFIntegratorSettingsT(this.ALGORITHM(), this.INITIAL_STEP_SECONDS(), this.MINIMUM_STEP_SECONDS(), this.MAXIMUM_STEP_SECONDS(), this.bb.createScalarList(this.ABSOLUTE_TOLERANCES.bind(this), this.absoluteTolerancesLength()), this.RELATIVE_TOLERANCE(), this.MAXIMUM_STEPS());
     }
     unpackTo(_o) {
         _o.ALGORITHM = this.ALGORITHM();
@@ -114,7 +114,7 @@ export class PRWIntegratorSettings {
         _o.MAXIMUM_STEPS = this.MAXIMUM_STEPS();
     }
 }
-export class PRWIntegratorSettingsT {
+export class PCFIntegratorSettingsT {
     ALGORITHM;
     INITIAL_STEP_SECONDS;
     MINIMUM_STEP_SECONDS;
@@ -122,7 +122,7 @@ export class PRWIntegratorSettingsT {
     ABSOLUTE_TOLERANCES;
     RELATIVE_TOLERANCE;
     MAXIMUM_STEPS;
-    constructor(ALGORITHM = prwSolverAlgorithm.UNSPECIFIED, INITIAL_STEP_SECONDS = 60.0, MINIMUM_STEP_SECONDS = 1.0, MAXIMUM_STEP_SECONDS = 3600.0, ABSOLUTE_TOLERANCES = [], RELATIVE_TOLERANCE = 1e-12, MAXIMUM_STEPS = 100000){
+    constructor(ALGORITHM = pcfIntegratorAlgorithm.UNSPECIFIED, INITIAL_STEP_SECONDS = 60.0, MINIMUM_STEP_SECONDS = 1.0, MAXIMUM_STEP_SECONDS = 3600.0, ABSOLUTE_TOLERANCES = [], RELATIVE_TOLERANCE = 1e-12, MAXIMUM_STEPS = 100000){
         this.ALGORITHM = ALGORITHM;
         this.INITIAL_STEP_SECONDS = INITIAL_STEP_SECONDS;
         this.MINIMUM_STEP_SECONDS = MINIMUM_STEP_SECONDS;
@@ -132,7 +132,7 @@ export class PRWIntegratorSettingsT {
         this.MAXIMUM_STEPS = MAXIMUM_STEPS;
     }
     pack(builder) {
-        const ABSOLUTE_TOLERANCES = PRWIntegratorSettings.createAbsoluteTolerancesVector(builder, this.ABSOLUTE_TOLERANCES);
-        return PRWIntegratorSettings.createPRWIntegratorSettings(builder, this.ALGORITHM, this.INITIAL_STEP_SECONDS, this.MINIMUM_STEP_SECONDS, this.MAXIMUM_STEP_SECONDS, ABSOLUTE_TOLERANCES, this.RELATIVE_TOLERANCE, this.MAXIMUM_STEPS);
+        const ABSOLUTE_TOLERANCES = PCFIntegratorSettings.createAbsoluteTolerancesVector(builder, this.ABSOLUTE_TOLERANCES);
+        return PCFIntegratorSettings.createPCFIntegratorSettings(builder, this.ALGORITHM, this.INITIAL_STEP_SECONDS, this.MINIMUM_STEP_SECONDS, this.MAXIMUM_STEP_SECONDS, ABSOLUTE_TOLERANCES, this.RELATIVE_TOLERANCE, this.MAXIMUM_STEPS);
     }
 }

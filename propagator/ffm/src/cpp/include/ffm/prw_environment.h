@@ -7,6 +7,7 @@
 #include "ffm/density_correction.h"
 #include "astrodynamics.h"
 #include "EOP_generated.h"
+#include "OEM_generated.h"
 extern "C" {
 #include "erfa.h"
 #include "erfam.h"
@@ -200,7 +201,13 @@ public:
 // The environment frames of one propagation request or resident instance,
 // verified and read into their tables. `owned` holds copies of the frames the
 // tables point into when they must outlive the invocation that supplied them.
+// The second trajectory of a CLOSEST_APPROACH event: an OEM's samples, epochs on the TT clock.
+struct SecondTrajectory {
+    std::vector<TTEpoch> epoch;
+    std::vector<std::array<double,6>> state;  // km, km/s, in the request's axes
+};
 struct Environment {
+    std::shared_ptr<SecondTrajectory> secondTrajectory;
     std::shared_ptr<EarthRotation> earth;
     std::shared_ptr<SpaceWeatherTable> weather;
     std::shared_ptr<JB2008IndicesTable> jb2008;

@@ -231,7 +231,7 @@ measurable over a one-day fit arc (D/E 0.96-1.01, intervals across 1).
 On the PRW request (SDS 1.241.0), `FORCES.RADIATION_PRESSURE_MODEL` selects
 `CANNONBALL` (the default; `REFLECTIVITY_COEFFICIENT` and `AREA_M2`),
 `GNSS_BOX_WING` (with `GNSS_BLOCK` `GPS_IIR`, `GPS_IIR_M` or `GPS_IIF`, at the
-dynamical mass) or `NONE`; `FORCES.ECOM2` (`PRWEcom2`, m/s^2) adds ECOM2 to
+dynamical mass) or `NONE`; `FORCES.ECOM2` (`PCFEcom2`, m/s^2) adds ECOM2 to
 any of them, and `DYNAMIC_PARAMETERS` `ECOM2_D0` .. `ECOM2_B3_SIN` carry its
 coefficients in the STM and covariance. All of these need `ENABLE_SRP`;
 `GNSS_BLOCK` applies to the box-wing only and `SRP_AREA_OVER_MASS` to the
@@ -612,6 +612,78 @@ against 1e-14; it is 6-9 m in LEO at 1e-11 and 46-157 m at 1e-10. A
 conjunction screen needs meter-level positions; 1e-12 keeps the integration
 there and costs a fifth to a quarter more than 1e-11 in LEO.
 
+## Integrators and events
+
+The integrator and the events are chosen in the request: `PCFIntegratorSettings.ALGORITHM`
+and `PRWExecutionRequest.EVENTS`. No name string and no integer code selects either. A value
+the build does not run is refused by name.
+
+| ALGORITHM | method | order | stages per step | continuous extension | source |
+| --- | --- | --- | --- | --- | --- |
+| RK4 | classical Runge-Kutta, fixed step | 4 | 4 | quintic Hermite | |
+| RKF45, COWELL | Cash-Karp | 5(4) | 6 | quintic Hermite | Cash and Karp 1990, ACM TOMS 16:201 |
+| RKF78, RK78 | Fehlberg, one pair under two names | 7(8) | 13 | quintic Hermite | Fehlberg 1968, NASA TR R-287 |
+| RKDP87 | RK8(7)13M | 8(7) | 13 | degree 6, 14 stages | Prince and Dormand 1981, J. Comput. Appl. Math. 7:67; Bogacki and Shampine 1990, Comput. Math. Appl. 20:15 |
+| DOPRI5 | Dormand-Prince | 5(4) | 6, first same as last | order 4 | Dormand and Prince 1980, J. Comput. Appl. Math. 6:19; Shampine 1986, Math. Comp. 46:135 |
+| RK65 | RK6(5)8M | 6(5) | 8 | quintic Hermite | Prince and Dormand 1981 |
+| RKV98 | Verner efficient 9(8) | 9(8) | 16 | degree 9, 10 further stages | Verner 2010, Numer. Algorithms 53:383 |
+| RKN1210 | Runge-Kutta-Nystrom 12(10)17M | 12(10) | 17 | quintic Hermite | Dormand, El-Mikkawy and Prince 1987, IMA J. Numer. Anal. 7:423 |
+| BS | Bulirsch-Stoer | | | quintic Hermite | |
+| ABM, GAUSS_JACKSON_8 | fixed-step multistep on a uniform grid of whole steps | 4, 8 | 1 or 2 | none | |
+
+The tableaus are in `lib/rk_tableaus.h` and the one stage loop in `lib/rk_engine.cpp`. RKN1210
+integrates r'' = a(t, r); a force set with drag, relativity, empirical or thrust acceleration is
+refused. ENCKE, EQUINOCTIAL_VOP and GAUSS_VOP integrate a reduced force model and are refused:
+FFM runs the full force model. DROMO and STIEFEL are refused: their propagation does not reach
+the requested epoch to the integration tolerance. DOPRI853 (Dormand-Prince 8(5,3)) is refused: RKDP87
+is the eighth-order Prince-Dormand pair FFM runs.
+
+Over ten LEO orbits (a = 6900 km, e = 0.01) at tolerance 1e-12 the position errors against the
+exact two-body state are: RKF45 16 mm in 32 178 evaluations, RKF78 54 mm in 8 697, RKDP87 0.49 mm
+in 8 203, DOPRI5 2.5 mm in 36 450, RK65 0.47 mm in 15 440, RKV98 69 um in 7 616, RKN1210 2.0 um
+in 2 754, BS 2.8 um in 4 656; RK4 at 1 s is 19 um in 228 164. The Fehlberg pair's embedded
+estimate trails its true error, so RKDP87 is two orders more accurate at the same cost.
+`tests/integrator-events.e2e.mjs` prints these for LEO, GEO and e = 0.7.
+
+### Events
+
+`EVENTS` holds `PCFEventDefinition` entries, each a continuous function g of the integrated state;
+an event is a zero crossing of g.
+
+| KIND | g | INCREASING / DECREASING |
+| --- | --- | --- |
+| APSIS | r . v | periapsis / apoapsis |
+| PLANE_CROSSING | n . r, n = PLANE_NORMAL, default the pole of the request axes | ascending / descending |
+| TRUE_ANOMALY | true anomaly minus ANGLE_RAD, wrapped | passage of the angle |
+| ARGUMENT_OF_LATITUDE | argument of latitude minus ANGLE_RAD, wrapped | passage of the angle |
+| LATITUDE_EXTREMUM | r^2 dz/dt - z (r . v), z along the pole | minimum / maximum of the geocentric latitude |
+| UMBRA, PENUMBRA | separation of the Sun and Earth centers minus the difference or sum of the apparent radii | exit / entry |
+| CLOSEST_APPROACH | (r - r2) . (v - v2), r2 and v2 from the `second_trajectory` input | minimum / maximum of the range |
+| EXPRESSION | the value of a reverse Polish program over named parameters | the program's sign |
+
+`ACTION` is CONTINUE (counted), RECORD (reported) or STOP (reported; the propagation ends at the
+`OCCURRENCE`-th qualifying crossing and the final sample is the state there). `DIRECTION`
+filters the crossings. `TOLERANCE_SECONDS` is the epoch tolerance (default 1e-9 s). The result
+carries `EVENTS` (epoch, elapsed seconds, state, g at the epoch), `EVENT_OCCURRENCES` per spec and
+`STOPPED_BY_EVENT`.
+
+After each accepted step the loop compares g at the two ends. A sign change is bracketed
+there, refined on the integrator's continuous extension by Brent's method, and confirmed by
+re-stepping the integrator itself from the start of the step to the candidate epoch and correcting
+it with Newton's method on those states (`lib/integrator_events.cpp`). The epoch is a root of g
+along the integrator's own solution, so it does not depend on the step size and is as accurate as
+the integration. An EXPRESSION is data, at most 64 terms and 16 deep, over `pceParameter` values
+(POSITION_X/Y/Z, VELOCITY_X/Y/Z, POSITION_MAGNITUDE, VELOCITY_MAGNITUDE, RADIAL_VELOCITY,
+ANGULAR_MOMENTUM_*, SPECIFIC_ORBITAL_ENERGY, SEMI_MAJOR_AXIS, ECCENTRICITY, INCLINATION,
+RIGHT_ASCENSION_OF_ASCENDING_NODE, ARGUMENT_OF_PERIAPSIS, TRUE_ANOMALY, ARGUMENT_OF_LATITUDE,
+GEOCENTRIC_LATITUDE) in the catalog's SI units; no code runs and any other parameter is refused by
+name. The optional `second_trajectory` input is an `$OEM` (kilometers, kilometers per second, in the
+request's axes) that must cover the arc; it is interpolated by Hermite polynomials of degree 7
+through the four nodes around the epoch. Events apply to a plain state propagation by RK4, RKF45, COWELL, RKF78, RK78,
+RKDP87, DOPRI5, RK65, RKV98, RKN1210 and BS, forward or backward; a request with an STM,
+covariance, samples, impulses or burns, or with another integrator, is refused by name. The
+latitude extremum is about the pole of the request axes.
+
 ## Usage
 
 ### Via SDN Plugin Delivery (ecies-decrypted bytes)
@@ -876,11 +948,7 @@ All calculations execute in C++ WASM. Example request body:
     "includeSTM": true,
     "STM_METHOD": "ANALYTIC",
     "DENSITY_GRADIENT": "FINITE_DIFFERENCE",
-    "forces": {"gravityMode": "J2"},
-    "integrator": {
-      "method": "RKF78", "initialStep": 20, "minStep": 0.001,
-      "maxStep": 60, "absTolerance": 1e-12, "relTolerance": 1e-12
-    }
+    "forces": {"gravityMode": "J2"}
   }
 }
 ```
@@ -980,10 +1048,6 @@ surface; it introduces no SDS schema or resident-state burn contract.
     "massKg": 1000,
     "STM_METHOD": "ANALYTIC",
     "forces": {"gravityMode": "POINT_MASS", "j2": false},
-    "integrator": {
-      "method": "RKF78", "initialStep": 10, "minStep": 0.0001,
-      "maxStep": 30, "absTolerance": 1e-11, "relTolerance": 1e-11
-    },
     "finiteBurns": [{
       "startSeconds": 60,
       "stopSeconds": 360,

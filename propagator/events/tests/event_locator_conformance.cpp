@@ -950,6 +950,137 @@ void checkFormation() {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// 9. Orbital angles, latitude extrema and an arbitrary plane.
+// ---------------------------------------------------------------------------
+
+double wrapTwoPi(double x) {
+  const double twoPi = 2.0 * ev::kPi;
+  return x - twoPi * std::floor(x / twoPi);
+}
+
+/// Epoch (seconds after the source's epoch, first at or after 0) at which the true anomaly of
+/// the source's orbit is `nu`.
+double epochOfTrueAnomaly(const KeplerSource& source, double nu) {
+  const double e = source.elements.eccentricity;
+  const double M = orb::eccentricToMeanAnomaly(orb::trueToEccentricAnomaly(nu, e), e);
+  return wrapTwoPi(M - source.meanAnomalyAtEpoch) / source.meanMotion;
+}
+
+void checkAnglesAndPlanes() {
+  std::printf("\n-- orbital angles, latitude extrema, arbitrary plane --\n");
+  const double mu = 3.986004418e14;
+  orb::Keplerian elements;
+  elements.semiMajorAxis = 9000000.0;
+  elements.eccentricity = 0.3;
+  elements.inclination = 63.4 * (ev::kPi / 180.0);
+  elements.raan = 0.4;
+  elements.argumentOfPeriapsis = 1.2;
+  elements.trueAnomaly = 0.3;
+  KeplerSource source = makeKeplerSource(elements, mu);
+  const double period = 2.0 * ev::kPi / source.meanMotion;
+  const double omega = elements.argumentOfPeriapsis;
+
+  ev::ScanRequest request;
+  request.startSeconds = 0.0;
+  request.stopSeconds = 2.2 * period;
+  request.refinement.coarseStepSeconds = 60.0;
+  request.refinement.toleranceSeconds = 1e-9;
+
+  const auto worstEpochError = [&](const ev::Event* events, int32_t count,
+                                   const double* anomalies, int32_t expectedPerOrbit,
+                                   const char* label) {
+    // every orbit repeats each anomaly: the expected epochs are the first one plus k periods
+    double expected[16];
+    int32_t total = 0;
+    for (int32_t i = 0; i < expectedPerOrbit; ++i)
+      for (double t = epochOfTrueAnomaly(source, anomalies[i]); t < request.stopSeconds && total < 16;
+           t += period)
+        expected[total++] = t;
+    // sort the expected epochs
+    for (int32_t i = 0; i < total; ++i)
+      for (int32_t j = i + 1; j < total; ++j)
+        if (expected[j] < expected[i]) { const double t = expected[i]; expected[i] = expected[j]; expected[j] = t; }
+    char text[96];
+    std::snprintf(text, sizeof text, "%s: %d events, expected %d", label, count, total);
+    reportExact(text, count == total, count == total ? "count" : "count differs");
+    double worst = 0.0;
+    for (int32_t i = 0; i < count && i < total; ++i) worst = std::fmax(worst, std::fabs(events[i].epochSeconds - expected[i]));
+    return worst;
+  };
+
+  ev::Event events[16];
+  int32_t count = 0;
+
+  // TRUE ANOMALY. The wrap of the angle is a jump, not a root: without the jump limit the scan
+  // reports it too.
+  ev::OrbitAngleContext angle;
+  angle.mu = mu;
+  angle.target = 1.0;
+  ev::ScanRequest wrapped = request;
+  wrapped.jumpLimit = ev::kPi;
+  ev::Status status = ev::scan(keplerStateSource, &source, ev::orbitAngleFunction, &angle, wrapped,
+                               events, 16, &count);
+  reportExact("the true-anomaly scan succeeds", status == ev::Status::OK, "OK");
+  const double anomalies1[1] = {1.0};
+  report("true anomaly 1.0 rad: worst epoch error",
+         worstEpochError(events, count, anomalies1, 1, "true anomaly"), 1e-6, "s");
+  int32_t spurious = 0;
+  ev::scan(keplerStateSource, &source, ev::orbitAngleFunction, &angle, request, events, 16, &spurious);
+  reportExact("without the jump limit the wrap is reported as an event", spurious > count, "the wrap");
+
+  // ARGUMENT OF LATITUDE.
+  angle.argumentOfLatitude = true;
+  angle.target = 2.0;
+  status = ev::scan(keplerStateSource, &source, ev::orbitAngleFunction, &angle, wrapped, events, 16, &count);
+  reportExact("the argument-of-latitude scan succeeds", status == ev::Status::OK, "OK");
+  const double anomalies2[1] = {wrapTwoPi(2.0 - omega)};
+  report("argument of latitude 2.0 rad: worst epoch error",
+         worstEpochError(events, count, anomalies2, 1, "argument of latitude"), 1e-6, "s");
+
+  // LATITUDE EXTREMA: the latitude is sin i sin u, extremal at u = pi/2 and 3 pi/2 whatever the
+  // eccentricity.
+  ev::PoleContext pole;
+  status = ev::scan(keplerStateSource, &source, ev::latitudeRateFunction, &pole, request, events, 16, &count);
+  reportExact("the latitude-extremum scan succeeds", status == ev::Status::OK, "OK");
+  const double anomalies3[2] = {wrapTwoPi(0.5 * ev::kPi - omega), wrapTwoPi(1.5 * ev::kPi - omega)};
+  report("latitude maxima and minima: worst epoch error",
+         worstEpochError(events, count, anomalies3, 2, "latitude extrema"), 1e-6, "s");
+  bool alternate = count >= 2;
+  for (int32_t i = 1; i < count; ++i) alternate = alternate && events[i].direction != events[i - 1].direction;
+  reportExact("maxima (falling rate) and minima (rising rate) alternate", alternate, "alternate");
+  for (int32_t i = 0; i < count; ++i) {
+    const double z = events[i].state[2], r = std::sqrt(events[i].state[0] * events[i].state[0] +
+                      events[i].state[1] * events[i].state[1] + events[i].state[2] * events[i].state[2]);
+    const double latitude = std::asin(z / r);
+    const double expectedLatitude = events[i].direction == ev::Direction::DECREASING ? elements.inclination : -elements.inclination;
+    if (i < 2) report(events[i].direction == ev::Direction::DECREASING ? "latitude at the maximum equals the inclination" : "latitude at the minimum equals minus the inclination",
+                      std::fabs(latitude - expectedLatitude), 1e-9, "rad");
+  }
+
+  // AN ARBITRARY PLANE through the center: r . n = 0 where (P . n) cos nu + (Q . n) sin nu = 0.
+  orb::Keplerian periapsis = elements;
+  periapsis.trueAnomaly = 0.0;
+  orb::Cartesian atPeriapsis;
+  orb::cartesianFromKeplerian(periapsis, mu, &atPeriapsis);
+  const double rp = std::sqrt(atPeriapsis.position.x * atPeriapsis.position.x + atPeriapsis.position.y * atPeriapsis.position.y + atPeriapsis.position.z * atPeriapsis.position.z);
+  const double vp = std::sqrt(atPeriapsis.velocity.x * atPeriapsis.velocity.x + atPeriapsis.velocity.y * atPeriapsis.velocity.y + atPeriapsis.velocity.z * atPeriapsis.velocity.z);
+  const double P[3] = {atPeriapsis.position.x / rp, atPeriapsis.position.y / rp, atPeriapsis.position.z / rp};
+  const double Q[3] = {atPeriapsis.velocity.x / vp, atPeriapsis.velocity.y / vp, atPeriapsis.velocity.z / vp};
+  ev::NodeContext plane;
+  const double raw[3] = {0.3, -0.4, 0.8};
+  const double length = std::sqrt(raw[0] * raw[0] + raw[1] * raw[1] + raw[2] * raw[2]);
+  for (int i = 0; i < 3; ++i) plane.planeNormal[i] = raw[i] / length;
+  const double pn = P[0] * plane.planeNormal[0] + P[1] * plane.planeNormal[1] + P[2] * plane.planeNormal[2];
+  const double qn = Q[0] * plane.planeNormal[0] + Q[1] * plane.planeNormal[1] + Q[2] * plane.planeNormal[2];
+  const double nu0 = std::atan2(-pn, qn);
+  const double anomalies4[2] = {wrapTwoPi(nu0), wrapTwoPi(nu0 + ev::kPi)};
+  status = ev::scan(keplerStateSource, &source, ev::nodeFunction, &plane, request, events, 16, &count);
+  reportExact("the arbitrary-plane scan succeeds", status == ev::Status::OK, "OK");
+  report("crossings of a plane with an arbitrary normal: worst epoch error",
+         worstEpochError(events, count, anomalies4, 2, "plane crossings"), 1e-6, "s");
+}
+
 int main() {
   std::printf("event locator conformance harness\n");
   checkRefinement();
@@ -961,6 +1092,7 @@ int main() {
   checkIntrusion();
   checkStoppingConditions();
   checkFormation();
+  checkAnglesAndPlanes();
   std::printf("\n%d checks, %d failures\n", gChecks, gFailures);
   return gFailures == 0 ? 0 : 1;
 }

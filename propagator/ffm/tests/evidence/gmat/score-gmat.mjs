@@ -26,7 +26,7 @@ try {
  const run=async(g,setting,withStm=false)=>{
   const c=REFERENCE.cases.find(c=>`${c.orbit} ${c.forces}`===g.id);
   const inputs=requestInputs(c,{maxStep:setting.maxStep,...(setting.tolerance?{tolerance:setting.tolerance}:{}),edit:exec=>{
-   if(g.atmosphere==='JACCHIA_ROBERTS')exec.FORCES.ATMOSPHERE_MODEL=sds.prwAtmosphereFamily.JACCHIA_ROBERTS;
+   if(g.atmosphere==='JACCHIA_ROBERTS')exec.FORCES.ATMOSPHERE_MODEL=sds.pcfAtmosphereFamily.JACCHIA_ROBERTS;
    if(withStm)Object.assign(exec,{INCLUDE_STM:true,STM_TECHNIQUE:sds.prwDerivativeTechnique.ANALYTIC,DENSITY_TREATMENT:sds.prwDensityTreatment.FINITE_DIFFERENCE,DYNAMIC_PARAMETERS:[]});
   }});
   const h=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});

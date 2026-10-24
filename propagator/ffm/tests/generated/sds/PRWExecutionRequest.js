@@ -1,8 +1,9 @@
 import * as flatbuffers from 'flatbuffers';
+import { PCFEventDefinition, PCFEventDefinitionT } from './PCFEventDefinition.js';
+import { PCFForceModel, PCFForceModelT } from './PCFForceModel.js';
+import { PCFIntegratorSettings, PCFIntegratorSettingsT } from './PCFIntegratorSettings.js';
 import { PRWFiniteBurn, PRWFiniteBurnT } from './PRWFiniteBurn.js';
-import { PRWForceConfiguration, PRWForceConfigurationT } from './PRWForceConfiguration.js';
 import { PRWImpulse, PRWImpulseT } from './PRWImpulse.js';
-import { PRWIntegratorSettings, PRWIntegratorSettingsT } from './PRWIntegratorSettings.js';
 import { PRWProcessNoise, PRWProcessNoiseT } from './PRWProcessNoise.js';
 import { PRWResidentState, PRWResidentStateT } from './PRWResidentState.js';
 import { PRWStateMatrix, PRWStateMatrixT } from './PRWStateMatrix.js';
@@ -35,11 +36,11 @@ export class PRWExecutionRequest {
     }
     INTEGRATOR(obj) {
         const offset = this.bb.__offset(this.bb_pos, 8);
-        return offset ? (obj || new PRWIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+        return offset ? (obj || new PCFIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
     }
     FORCES(obj) {
         const offset = this.bb.__offset(this.bb_pos, 10);
-        return offset ? (obj || new PRWForceConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+        return offset ? (obj || new PCFForceModel()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
     }
     INCLUDE_STM() {
         const offset = this.bb.__offset(this.bb_pos, 12);
@@ -105,8 +106,16 @@ export class PRWExecutionRequest {
         const offset = this.bb.__offset(this.bb_pos, 32);
         return offset ? new Uint8Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
     }
+    EVENTS(index, obj) {
+        const offset = this.bb.__offset(this.bb_pos, 34);
+        return offset ? (obj || new PCFEventDefinition()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+    }
+    eventsLength() {
+        const offset = this.bb.__offset(this.bb_pos, 34);
+        return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+    }
     static startPRWExecutionRequest(builder) {
-        builder.startObject(15);
+        builder.startObject(16);
     }
     static addInitial(builder, INITIALOffset) {
         builder.addFieldOffset(0, INITIALOffset, 0);
@@ -193,6 +202,19 @@ export class PRWExecutionRequest {
     static startDynamicParametersVector(builder, numElems) {
         builder.startVector(1, numElems, 1);
     }
+    static addEvents(builder, EVENTSOffset) {
+        builder.addFieldOffset(15, EVENTSOffset, 0);
+    }
+    static createEventsVector(builder, data) {
+        builder.startVector(4, data.length, 4);
+        for(let i = data.length - 1; i >= 0; i--){
+            builder.addOffset(data[i]);
+        }
+        return builder.endVector();
+    }
+    static startEventsVector(builder, numElems) {
+        builder.startVector(4, numElems, 4);
+    }
     static endPRWExecutionRequest(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 4);
@@ -202,7 +224,7 @@ export class PRWExecutionRequest {
         return offset;
     }
     unpack() {
-        return new PRWExecutionRequestT(this.INITIAL() !== null ? this.INITIAL().unpack() : null, this.TARGET_EPOCH() !== null ? this.TARGET_EPOCH().unpack() : null, this.INTEGRATOR() !== null ? this.INTEGRATOR().unpack() : null, this.FORCES() !== null ? this.FORCES().unpack() : null, this.INCLUDE_STM(), this.STM_TECHNIQUE(), this.DENSITY_TREATMENT(), this.INITIAL_COVARIANCE() !== null ? this.INITIAL_COVARIANCE().unpack() : null, this.INITIAL_MASS_COVARIANCE() !== null ? this.INITIAL_MASS_COVARIANCE().unpack() : null, this.bb.createObjList(this.SAMPLE_EPOCHS.bind(this), this.sampleEpochsLength()), this.bb.createObjList(this.IMPULSES.bind(this), this.impulsesLength()), this.INCLUDE_MASS_DYNAMICS(), this.bb.createObjList(this.FINITE_BURNS.bind(this), this.finiteBurnsLength()), this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null, this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength()));
+        return new PRWExecutionRequestT(this.INITIAL() !== null ? this.INITIAL().unpack() : null, this.TARGET_EPOCH() !== null ? this.TARGET_EPOCH().unpack() : null, this.INTEGRATOR() !== null ? this.INTEGRATOR().unpack() : null, this.FORCES() !== null ? this.FORCES().unpack() : null, this.INCLUDE_STM(), this.STM_TECHNIQUE(), this.DENSITY_TREATMENT(), this.INITIAL_COVARIANCE() !== null ? this.INITIAL_COVARIANCE().unpack() : null, this.INITIAL_MASS_COVARIANCE() !== null ? this.INITIAL_MASS_COVARIANCE().unpack() : null, this.bb.createObjList(this.SAMPLE_EPOCHS.bind(this), this.sampleEpochsLength()), this.bb.createObjList(this.IMPULSES.bind(this), this.impulsesLength()), this.INCLUDE_MASS_DYNAMICS(), this.bb.createObjList(this.FINITE_BURNS.bind(this), this.finiteBurnsLength()), this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null, this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength()), this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength()));
     }
     unpackTo(_o) {
         _o.INITIAL = this.INITIAL() !== null ? this.INITIAL().unpack() : null;
@@ -220,6 +242,7 @@ export class PRWExecutionRequest {
         _o.FINITE_BURNS = this.bb.createObjList(this.FINITE_BURNS.bind(this), this.finiteBurnsLength());
         _o.PROCESS_NOISE = this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null;
         _o.DYNAMIC_PARAMETERS = this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength());
+        _o.EVENTS = this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength());
     }
 }
 export class PRWExecutionRequestT {
@@ -238,7 +261,8 @@ export class PRWExecutionRequestT {
     FINITE_BURNS;
     PROCESS_NOISE;
     DYNAMIC_PARAMETERS;
-    constructor(INITIAL = null, TARGET_EPOCH = null, INTEGRATOR = null, FORCES = null, INCLUDE_STM = false, STM_TECHNIQUE = prwDerivativeTechnique.ANALYTIC, DENSITY_TREATMENT = prwDensityTreatment.NEGLECTED, INITIAL_COVARIANCE = null, INITIAL_MASS_COVARIANCE = null, SAMPLE_EPOCHS = [], IMPULSES = [], INCLUDE_MASS_DYNAMICS = false, FINITE_BURNS = [], PROCESS_NOISE = null, DYNAMIC_PARAMETERS = []){
+    EVENTS;
+    constructor(INITIAL = null, TARGET_EPOCH = null, INTEGRATOR = null, FORCES = null, INCLUDE_STM = false, STM_TECHNIQUE = prwDerivativeTechnique.ANALYTIC, DENSITY_TREATMENT = prwDensityTreatment.NEGLECTED, INITIAL_COVARIANCE = null, INITIAL_MASS_COVARIANCE = null, SAMPLE_EPOCHS = [], IMPULSES = [], INCLUDE_MASS_DYNAMICS = false, FINITE_BURNS = [], PROCESS_NOISE = null, DYNAMIC_PARAMETERS = [], EVENTS = []){
         this.INITIAL = INITIAL;
         this.TARGET_EPOCH = TARGET_EPOCH;
         this.INTEGRATOR = INTEGRATOR;
@@ -254,6 +278,7 @@ export class PRWExecutionRequestT {
         this.FINITE_BURNS = FINITE_BURNS;
         this.PROCESS_NOISE = PROCESS_NOISE;
         this.DYNAMIC_PARAMETERS = DYNAMIC_PARAMETERS;
+        this.EVENTS = EVENTS;
     }
     pack(builder) {
         const INITIAL = this.INITIAL !== null ? this.INITIAL.pack(builder) : 0;
@@ -267,6 +292,7 @@ export class PRWExecutionRequestT {
         const FINITE_BURNS = PRWExecutionRequest.createFiniteBurnsVector(builder, builder.createObjectOffsetList(this.FINITE_BURNS));
         const PROCESS_NOISE = this.PROCESS_NOISE !== null ? this.PROCESS_NOISE.pack(builder) : 0;
         const DYNAMIC_PARAMETERS = PRWExecutionRequest.createDynamicParametersVector(builder, this.DYNAMIC_PARAMETERS);
+        const EVENTS = PRWExecutionRequest.createEventsVector(builder, builder.createObjectOffsetList(this.EVENTS));
         PRWExecutionRequest.startPRWExecutionRequest(builder);
         PRWExecutionRequest.addInitial(builder, INITIAL);
         PRWExecutionRequest.addTargetEpoch(builder, TARGET_EPOCH);
@@ -283,6 +309,7 @@ export class PRWExecutionRequestT {
         PRWExecutionRequest.addFiniteBurns(builder, FINITE_BURNS);
         PRWExecutionRequest.addProcessNoise(builder, PROCESS_NOISE);
         PRWExecutionRequest.addDynamicParameters(builder, DYNAMIC_PARAMETERS);
+        PRWExecutionRequest.addEvents(builder, EVENTS);
         return PRWExecutionRequest.endPRWExecutionRequest(builder);
     }
 }

@@ -16,8 +16,8 @@ const ecom = REFERENCE.cases.find((c) => c.model === 'ecom2');
 const cases = [
   ...REFERENCE.cases.map((c) => ({ id: c.name, request: { methodId: 'invoke', inputs: hex(inputs(c)) } })),
   { id: 'IIF-boxwing-plus-ecom2', request: { methodId: 'invoke', inputs: hex(inputs(ecom, (e) => {
-    e.FORCES.RADIATION_PRESSURE_MODEL = sds.prwRadiationPressureFamily.GNSS_BOX_WING;
-    e.FORCES.GNSS_BLOCK = sds.prwGnssSpacecraftBlock.GPS_IIF;
+    e.FORCES.RADIATION_PRESSURE_MODEL = sds.pcfRadiationPressureFamily.GNSS_BOX_WING;
+    e.FORCES.GNSS_BLOCK = sds.pcfGnssSpacecraftBlock.GPS_IIF;
   })) } },
 ];
 const plan = await normalizeParityFixture({ name: 'propagator/ffm PRW GNSS radiation pressure', threadCounts: [1, 2, 4, 8], cases });

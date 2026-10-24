@@ -1,10 +1,11 @@
 # Event Locator
 
-One event-location engine; six locators.
+One event-location engine; nine locators.
 
 Eclipse (umbra, penumbra, antumbra), station contact with light-time
 correction, body intrusion into a conic field of view, apsides, node crossings
-and a stopping condition on any named catalog parameter are not six algorithms.
+of any plane through the center, maxima and minima of the geocentric latitude and a
+stopping condition on any named catalog parameter are not separate algorithms.
 They are six **event functions** handed to one runner:
 
     g(t) is continuous;  an event is a sign change of g;
@@ -83,3 +84,19 @@ TT Julian dates. Range extrema use a 2 m bar (100 m/s × refinement tolerance,
 plus endpoint rounding). `tests/events.test.mjs` also checks conic interval
 entry and exit against a trigonometric closed form with a 1 ms bar, including
 the 10 s Hermite table's interpolation error.
+
+## Angles, latitude extrema and planes
+
+- A goal on a periodic catalog parameter (`TRUE_ANOMALY`, `MEAN_ANOMALY`, `ECCENTRIC_ANOMALY`,
+  `ARGUMENT_OF_PERIAPSIS`, `RIGHT_ASCENSION_OF_ASCENDING_NODE`, `ARGUMENT_OF_LATITUDE`) is met by a
+  zero of the angle minus the goal wrapped to (-pi, pi]. The wrap is a jump of 2 pi, not a root, and
+  the scan refuses it (`ScanRequest.jumpLimit`); a plain difference would report it as an event.
+- `LATITUDE_EXTREMUM` locates the zeros of the geocentric latitude rate about the pole of the
+  ephemeris axes: `MAXIMUM_LATITUDE` where it falls through zero, `MINIMUM_LATITUDE` where it rises.
+- `NODE_CROSSING` crosses the plane through the center with normal `PLANE_NORMAL`, the pole of the
+  ephemeris axes when it is absent, and reports the ascending or descending crossings or both.
+
+The three are functions in `src/event_locator.hpp`, which `propagator/ffm` includes to locate the
+same events inside its integrators. `tests/events-angles.test.mjs` measures them on the wire
+against a Kepler orbit in 60-digit arithmetic; `tests/event_locator_conformance.cpp` measures the
+functions (epoch errors below 2e-12 s on an analytic orbit).

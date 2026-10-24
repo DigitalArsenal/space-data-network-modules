@@ -1,0 +1,23 @@
+export var pcfIntegratorAlgorithm = /*#__PURE__*/ function(pcfIntegratorAlgorithm) {
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RK4"] = 1] = "RK4";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RKF45"] = 2] = "RKF45";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RKF78"] = 3] = "RKF78";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RK78"] = 4] = "RK78";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RKDP87"] = 5] = "RKDP87";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["ABM"] = 6] = "ABM";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["BS"] = 7] = "BS";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["COWELL"] = 8] = "COWELL";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["ENCKE"] = 9] = "ENCKE";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["EQUINOCTIAL_VOP"] = 10] = "EQUINOCTIAL_VOP";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["DOPRI5"] = 11] = "DOPRI5";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RK65"] = 12] = "RK65";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RKV98"] = 13] = "RKV98";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["RKN1210"] = 14] = "RKN1210";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["GAUSS_JACKSON_8"] = 15] = "GAUSS_JACKSON_8";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["GAUSS_VOP"] = 16] = "GAUSS_VOP";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["DROMO"] = 17] = "DROMO";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["STIEFEL"] = 18] = "STIEFEL";
+    pcfIntegratorAlgorithm[pcfIntegratorAlgorithm["DOPRI853"] = 19] = "DOPRI853";
+    return pcfIntegratorAlgorithm;
+}({});

@@ -1,6 +1,9 @@
 #include "ffm/prw_dynamics.h"
+#include "shadow_events.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
+#include <memory>
 
 namespace ffm {
 namespace dynamics {
@@ -26,23 +29,36 @@ void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest) {
     for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=big[i*n+k]*m[k*n+j];tmp[i*n+j]=v;}
     for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=tmp[i*n+k]*big[j*n+k];m[i*n+j]=v;}
 }
-bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error) {
+// The one place the SDS solver enumeration becomes an IntegrationMethod. A solver the build
+// does not run is refused by name.
+bool parseIntegrator(const PCFIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error) {
     if(!in)return prwError(error,"invalid-integrator: Missing integrator settings.");
-    switch(in->ALGORITHM()) {
-    case prwSolverAlgorithm::RK4:out.method=IntegrationMethod::RK4;break;
-    case prwSolverAlgorithm::RKF45:out.method=IntegrationMethod::RKF45;break;
-    case prwSolverAlgorithm::RKF78:out.method=IntegrationMethod::RKF78;break;
-    case prwSolverAlgorithm::RK78:out.method=IntegrationMethod::RK78;break;
-    case prwSolverAlgorithm::RKDP87:out.method=IntegrationMethod::RKDP87;break;
-    case prwSolverAlgorithm::ABM:out.method=IntegrationMethod::ABM;break;
-    case prwSolverAlgorithm::BS:out.method=IntegrationMethod::BS;break;
-    case prwSolverAlgorithm::COWELL:out.method=IntegrationMethod::Cowell;break;
-    case prwSolverAlgorithm::ENCKE:out.method=IntegrationMethod::Encke;break;
-    case prwSolverAlgorithm::EQUINOCTIAL_VOP:out.method=IntegrationMethod::EquinoctialVOP;break;
-    default:return prwError(error,"unsupported-integrator: ALGORITHM must name a supported solver.");
+    const auto algorithm=in->ALGORITHM();
+    switch(algorithm) {
+    case pcfIntegratorAlgorithm::RK4:out.method=IntegrationMethod::RK4;break;
+    case pcfIntegratorAlgorithm::RKF45:out.method=IntegrationMethod::RKF45;break;
+    case pcfIntegratorAlgorithm::RKF78:out.method=IntegrationMethod::RKF78;break;
+    case pcfIntegratorAlgorithm::RK78:out.method=IntegrationMethod::RK78;break;
+    case pcfIntegratorAlgorithm::RKDP87:out.method=IntegrationMethod::RKDP87;break;
+    case pcfIntegratorAlgorithm::DOPRI5:out.method=IntegrationMethod::DOPRI5;break;
+    case pcfIntegratorAlgorithm::RK65:out.method=IntegrationMethod::RK65;break;
+    case pcfIntegratorAlgorithm::RKV98:out.method=IntegrationMethod::RKV98;break;
+    case pcfIntegratorAlgorithm::RKN1210:out.method=IntegrationMethod::RKN1210;break;
+    case pcfIntegratorAlgorithm::ABM:out.method=IntegrationMethod::ABM;break;
+    case pcfIntegratorAlgorithm::BS:out.method=IntegrationMethod::BS;break;
+    case pcfIntegratorAlgorithm::GAUSS_JACKSON_8:out.method=IntegrationMethod::GaussJackson8;break;
+    case pcfIntegratorAlgorithm::COWELL:out.method=IntegrationMethod::Cowell;break;
+    case pcfIntegratorAlgorithm::DROMO:
+    case pcfIntegratorAlgorithm::STIEFEL:
+        return prwError(error,(std::string("unsupported-integrator: ")+EnumNamepcfIntegratorAlgorithm(algorithm)+" does not reach the requested epoch to the integration tolerance on the verified orbits; FFM does not offer it.").c_str());
+    case pcfIntegratorAlgorithm::DOPRI853:
+        return prwError(error,"unsupported-integrator: DOPRI853 (Dormand-Prince 8(5,3)) is not run by FFM; RKDP87 is the eighth-order Prince-Dormand pair FFM runs.");
+    case pcfIntegratorAlgorithm::ENCKE:
+    case pcfIntegratorAlgorithm::EQUINOCTIAL_VOP:
+    case pcfIntegratorAlgorithm::GAUSS_VOP:
+        return prwError(error,(std::string("unsupported-integrator: ")+EnumNamepcfIntegratorAlgorithm(algorithm)+" integrates a reduced force model; FFM runs the full force model.").c_str());
+    default:return prwError(error,("unsupported-integrator: ALGORITHM "+std::to_string(int(algorithm))+" names no solver of this build.").c_str());
     }
-    if(out.method==IntegrationMethod::ABM||out.method==IntegrationMethod::Encke||out.method==IntegrationMethod::EquinoctialVOP)
-        return prwError(error,"unsupported-integrator: This profile has no verified result dispatcher for ABM, ENCKE or EQUINOCTIAL_VOP.");
     out.initialStep=in->INITIAL_STEP_SECONDS();out.minStep=in->MINIMUM_STEP_SECONDS();out.maxStep=in->MAXIMUM_STEP_SECONDS();
     out.relTolerance=in->RELATIVE_TOLERANCE();out.maxSteps=in->MAXIMUM_STEPS();
     if(!positive(out.initialStep)||!positive(out.minStep)||!positive(out.maxStep)||out.maxStep<out.minStep||
@@ -66,23 +82,23 @@ bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfi
 // cannonball at Cr 0, which contributes exactly nothing, so ECOM2 alone needs
 // no other path. Cr and AREA_M2 belong to the cannonball; the other families
 // do not read them.
-bool parseRadiationPressure(const PRWForceConfiguration* in,ForceModel::SRPForceConfig& srp,std::string& error) {
+bool parseRadiationPressure(const PCFForceModel* in,ForceModel::SRPForceConfig& srp,std::string& error) {
     const bool srpOn=in->ENABLE_SRP();
     const auto family=in->RADIATION_PRESSURE_MODEL();
-    if(!srpOn&&(family!=prwRadiationPressureFamily::CANNONBALL||in->GNSS_BLOCK()!=prwGnssSpacecraftBlock::UNSPECIFIED||in->ECOM2()))
+    if(!srpOn&&(family!=pcfRadiationPressureFamily::CANNONBALL||in->GNSS_BLOCK()!=pcfGnssSpacecraftBlock::UNSPECIFIED||in->ECOM2()))
         return prwError(error,"invalid-forces: RADIATION_PRESSURE_MODEL, GNSS_BLOCK and ECOM2 are radiation pressure; set ENABLE_SRP.");
-    if(family!=prwRadiationPressureFamily::GNSS_BOX_WING&&in->GNSS_BLOCK()!=prwGnssSpacecraftBlock::UNSPECIFIED)
+    if(family!=pcfRadiationPressureFamily::GNSS_BOX_WING&&in->GNSS_BLOCK()!=pcfGnssSpacecraftBlock::UNSPECIFIED)
         return prwError(error,"invalid-forces: GNSS_BLOCK applies to RADIATION_PRESSURE_MODEL GNSS_BOX_WING.");
     switch(family) {
-        case prwRadiationPressureFamily::CANNONBALL:srp.model=ForceModel::SRPModelType::Cannonball;break;
-        case prwRadiationPressureFamily::NONE:srp.model=ForceModel::SRPModelType::Cannonball;srp.Cr=0;break;
-        case prwRadiationPressureFamily::GNSS_BOX_WING:
+        case pcfRadiationPressureFamily::CANNONBALL:srp.model=ForceModel::SRPModelType::Cannonball;break;
+        case pcfRadiationPressureFamily::NONE:srp.model=ForceModel::SRPModelType::Cannonball;srp.Cr=0;break;
+        case pcfRadiationPressureFamily::GNSS_BOX_WING:
             srp.model=ForceModel::SRPModelType::GnssBoxWing;
             switch(in->GNSS_BLOCK()) {
-                case prwGnssSpacecraftBlock::GPS_IIR:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIR);break;
-                case prwGnssSpacecraftBlock::GPS_IIR_M:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIR_M);break;
-                case prwGnssSpacecraftBlock::GPS_IIF:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIF);break;
-                case prwGnssSpacecraftBlock::UNSPECIFIED:return prwError(error,"invalid-forces: GNSS_BOX_WING needs GNSS_BLOCK.");
+                case pcfGnssSpacecraftBlock::GPS_IIR:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIR);break;
+                case pcfGnssSpacecraftBlock::GPS_IIR_M:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIR_M);break;
+                case pcfGnssSpacecraftBlock::GPS_IIF:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIF);break;
+                case pcfGnssSpacecraftBlock::UNSPECIFIED:return prwError(error,"invalid-forces: GNSS_BOX_WING needs GNSS_BLOCK.");
                 default:return prwError(error,"unsupported-radiation-pressure: Unknown GNSS spacecraft block.");
             }
             break;
@@ -93,7 +109,7 @@ bool parseRadiationPressure(const PRWForceConfiguration* in,ForceModel::SRPForce
         const double c[11]={e->D0_M_S2(),e->Y0_M_S2(),e->B0_M_S2(),e->D2_COS_M_S2(),e->D2_SIN_M_S2(),e->D4_COS_M_S2(),e->D4_SIN_M_S2(),
                             e->B1_COS_M_S2(),e->B1_SIN_M_S2(),e->B3_COS_M_S2(),e->B3_SIN_M_S2()};
         srp.ecom2.enabled=true;
-        // PRWEcom2's order is gnss_srp::Ecom2Term's; both are m/s^2.
+        // PCFEcom2's order is gnss_srp::Ecom2Term's; both are m/s^2.
         for(int k=0;k<=int(gnss_srp::Ecom2Term::B3s);++k) {
             if(!std::isfinite(c[k]))return prwError(error,"invalid-forces: ECOM2 coefficients must be finite.");
             gnss_srp::Ecom2Coefficient(srp.ecom2,gnss_srp::Ecom2Term(k))=c[k];
@@ -101,7 +117,7 @@ bool parseRadiationPressure(const PRWForceConfiguration* in,ForceModel::SRPForce
     }
     return true;
 }
-bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
+bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
     if(!in)return prwError(error,"invalid-forces: Missing force configuration.");
     out.usePointMass=in->ENABLE_POINT_MASS();out.mu=in->GRAVITATIONAL_PARAMETER()*1e-9;
     out.useSphericalHarmonics=in->ENABLE_J2()||in->ENABLE_J3()||in->ENABLE_J4()||in->ENABLE_HIGHER_ZONALS();
@@ -135,7 +151,7 @@ bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,b
     };
     out.sphericalHarmonics.maxOrder=0;out.egm2008.truncationOrder=0;
     switch(in->GRAVITY_CHOICE()) {
-    case prwGravitySelection::INFER_FLAGS:
+    case pcfGravitySelection::INFER_FLAGS:
         if(in->HAS_MAXIMUM_TESSERAL_DEGREE())return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE applies to SPHERICAL_HARMONICS, EGM2008 and EGM96.");
         out.gravityMode=ForceModel::GravityMode::Infer;
         if(in->HAS_MAXIMUM_DEGREE())out.sphericalHarmonics.maxDegree=in->MAXIMUM_DEGREE();
@@ -143,21 +159,21 @@ bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,b
         if(out.useSphericalHarmonics&&out.sphericalHarmonics.maxDegree>20)
             return prwError(error,"unsupported-gravity: The inline spherical-harmonic field supports degrees zero through twenty.");
         break;
-    case prwGravitySelection::POINT_MASS:
+    case pcfGravitySelection::POINT_MASS:
         if(in->HAS_MAXIMUM_TESSERAL_DEGREE())return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE applies to SPHERICAL_HARMONICS, EGM2008 and EGM96.");
         out.gravityMode=ForceModel::GravityMode::PointMass;break;
-    case prwGravitySelection::J2_ONLY:
-    case prwGravitySelection::J2_TO_J4:
+    case pcfGravitySelection::J2_ONLY:
+    case pcfGravitySelection::J2_TO_J4:
         if(in->HAS_MAXIMUM_DEGREE()||in->HAS_MAXIMUM_ORDER()||in->HAS_MAXIMUM_TESSERAL_DEGREE())
             return prwError(error,"invalid-forces: J2_ONLY and J2_TO_J4 fix their own degree; select SPHERICAL_HARMONICS for another truncation.");
-        if(!field(in->GRAVITY_CHOICE()==prwGravitySelection::J2_ONLY?2:4,0,ForceModel::EmbeddedEarthField::EGM2008))return false;
+        if(!field(in->GRAVITY_CHOICE()==pcfGravitySelection::J2_ONLY?2:4,0,ForceModel::EmbeddedEarthField::EGM2008))return false;
         break;
-    case prwGravitySelection::SPHERICAL_HARMONICS:
-    case prwGravitySelection::EGM2008:
-    case prwGravitySelection::EGM96:
+    case pcfGravitySelection::SPHERICAL_HARMONICS:
+    case pcfGravitySelection::EGM2008:
+    case pcfGravitySelection::EGM96:
         if(!in->HAS_MAXIMUM_DEGREE()||!in->HAS_MAXIMUM_ORDER())
             return prwError(error,"invalid-forces: A field selection states both MAXIMUM_DEGREE and MAXIMUM_ORDER.");
-        if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER(),in->GRAVITY_CHOICE()==prwGravitySelection::EGM96?ForceModel::EmbeddedEarthField::EGM96:ForceModel::EmbeddedEarthField::EGM2008))return false;
+        if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER(),in->GRAVITY_CHOICE()==pcfGravitySelection::EGM96?ForceModel::EmbeddedEarthField::EGM96:ForceModel::EmbeddedEarthField::EGM2008))return false;
         break;
     default:return prwError(error,"unsupported-gravity: Unknown gravity selection.");
     }
@@ -188,19 +204,19 @@ bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,b
         return prwError(error,"invalid-forces: Spacecraft mass, area, Cd and Cr are invalid.");
     if(!parseRadiationPressure(in,out.srp,error))return false;
     switch(in->ATMOSPHERE_MODEL()) {
-        case prwAtmosphereFamily::NRLMSISE00:out.dragModel=ForceModel::DragModelType::NRLMSISE00;break;
-        case prwAtmosphereFamily::EXPONENTIAL:out.dragModel=ForceModel::DragModelType::Exponential;break;
-        case prwAtmosphereFamily::USSA1976:out.dragModel=ForceModel::DragModelType::USSA1976;break;
-        case prwAtmosphereFamily::HARRIS_PRIESTER:out.dragModel=ForceModel::DragModelType::HarrisPriester;break;
+        case pcfAtmosphereFamily::NRLMSISE00:out.dragModel=ForceModel::DragModelType::NRLMSISE00;break;
+        case pcfAtmosphereFamily::EXPONENTIAL:out.dragModel=ForceModel::DragModelType::Exponential;break;
+        case pcfAtmosphereFamily::USSA1976:out.dragModel=ForceModel::DragModelType::USSA1976;break;
+        case pcfAtmosphereFamily::HARRIS_PRIESTER:out.dragModel=ForceModel::DragModelType::HarrisPriester;break;
         // JB2008 (lib/jb2008.h): geodetic and Sun-relative, so Earth-fixed;
         // its drivers come from the jb2008_indices input only.
-        case prwAtmosphereFamily::JB2008:
+        case pcfAtmosphereFamily::JB2008:
             if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: JB2008 is evaluated in Earth-fixed axes; supply earth_orientation.");
             if(in->WEATHER())return prwError(error,"invalid-weather: JB2008 reads the jb2008_indices input; omit WEATHER.");
             out.dragModel=ForceModel::DragModelType::JB2008;break;
         // Jacchia-Roberts (lib/jacchia_roberts.h), also Earth-fixed; drivers from
         // WEATHER or the space_weather input like NRLMSISE-00.
-        case prwAtmosphereFamily::JACCHIA_ROBERTS:
+        case pcfAtmosphereFamily::JACCHIA_ROBERTS:
             if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: Jacchia-Roberts is evaluated in Earth-fixed axes; supply earth_orientation.");
             out.dragModel=ForceModel::DragModelType::JacchiaRoberts;break;
         default:return prwError(error,"unsupported-atmosphere: Unknown atmosphere selection.");
@@ -215,18 +231,18 @@ bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,b
     }
     // Solid Earth tides (PRW SOLID_TIDES, SDS 1.240.0).
     switch(in->SOLID_TIDES()) {
-        case prwSolidTideModel::NONE:break;
-        case prwSolidTideModel::IERS_2010:
+        case pcfSolidTideModel::NONE:break;
+        case pcfSolidTideModel::IERS_2010:
             if(!hasEarthOrientation)return prwError(error,"eop-data-required: Solid Earth tides are Earth-fixed; supply earth_orientation.");
             out.useSolidTides=true;out.solidTides=ForceModel::SolidTideConfig();break;
         default:return prwError(error,"unsupported-solid-tides: Unknown solid tide model.");
     }
     // Post-Newtonian terms, IERS Conventions (2010) eq. 10.12 with beta = gamma = 1.
     switch(in->RELATIVITY()) {
-        case prwRelativityTerms::NONE:break;
-        case prwRelativityTerms::SCHWARZSCHILD:
+        case pcfRelativityTerms::NONE:break;
+        case pcfRelativityTerms::SCHWARZSCHILD:
             out.useRelativisticCorrection=true;out.relativistic.schwarzschild=true;out.relativistic.lenseThirring=out.relativistic.deSitter=false;break;
-        case prwRelativityTerms::IERS_2010:
+        case pcfRelativityTerms::IERS_2010:
             out.useRelativisticCorrection=true;out.relativistic.schwarzschild=out.relativistic.lenseThirring=out.relativistic.deSitter=true;break;
         default:return prwError(error,"unsupported-relativity: Unknown relativity terms.");
     }
@@ -234,11 +250,11 @@ bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,b
     // albedo and infrared (lib/earth_radiation.h) on an isotropic Cr*A/m, the
     // request's own or the cannonball's.
     switch(in->EARTH_RADIATION()) {
-        case prwEarthRadiationModel::NONE:
+        case pcfEarthRadiationModel::NONE:
             if(in->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG())
                 return prwError(error,"invalid-forces: EARTH_RADIATION_AREA_OVER_MASS_M2_KG applies to EARTH_RADIATION KNOCKE.");
             break;
-        case prwEarthRadiationModel::KNOCKE: {
+        case pcfEarthRadiationModel::KNOCKE: {
             const double resolution=in->EARTH_RADIATION_RESOLUTION_DEG();
             if(!(std::isfinite(resolution)&&resolution>=1&&resolution<=45))
                 return prwError(error,"invalid-forces: EARTH_RADIATION_RESOLUTION_DEG must lie in [1, 45] degrees.");
@@ -259,8 +275,8 @@ bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,b
     // Ocean tides (PRW OCEAN_TIDES, SDS 1.243.0): FES2004, IERS Conventions
     // (2010) section 6.3, to degree and order 50.
     switch(in->OCEAN_TIDES()) {
-        case prwOceanTideModel::NONE:break;
-        case prwOceanTideModel::FES2004: {
+        case pcfOceanTideModel::NONE:break;
+        case pcfOceanTideModel::FES2004: {
             if(!hasEarthOrientation)return prwError(error,"eop-data-required: Ocean tides are Earth-fixed; supply earth_orientation.");
             const int degree=in->OCEAN_TIDE_MAXIMUM_DEGREE(),order=in->OCEAN_TIDE_MAXIMUM_ORDER();
             if(degree<2||degree>50||order>degree)
@@ -372,6 +388,206 @@ bool parseBurn(const PRWFiniteBurn* in,const std::string& frame,double target,In
     }
     return true;
 }
+// ---- EVENTS: each kind is a continuous function of the integrated state ([r, v], km and km/s,
+// GCRF), the zero crossings of which are the events (propagator/events/src/event_locator.hpp
+// holds the shared ones).
+namespace {
+namespace ev = sdn::events;
+using Integrator::EventSpec;
+struct NormalContext {double normal[3];};
+bool unitVector(const Execution& e,const FRMVector3* v,double out[3],std::string& error) {
+    Vec3 n(0,0,1);
+    if(v)n=Vec3(v->X(),v->Y(),v->Z());
+    const double m=n.magnitude();
+    if(!std::isfinite(m)||!(m>0))return prwError(error,"invalid-event: A plane normal or pole needs three finite components, not all zero.");
+    n=toGcrf(e,n*(1/m));
+    out[0]=n.x;out[1]=n.y;out[2]=n.z;return true;
+}
+}
+// ---- EXPRESSION: a bounded reverse Polish program over named parameters, evaluated here as data.
+namespace {
+struct Term {pcfExpressionOperation operation;double value;pceParameter parameter;};
+constexpr size_t kExpressionTerms=64,kExpressionStack=16;
+// The $PCE parameters an expression may name, evaluated on the integrated state in the request's
+// axes and the catalog's SI units (meters, seconds, radians).
+bool parameterValue(const Execution& e,double mu,const double* y,pceParameter parameter,double* out) {
+    const Vec3 r=toRequestAxes(e,Vec3(y[0],y[1],y[2]))*1000,v=toRequestAxes(e,Vec3(y[3],y[4],y[5]))*1000;
+    const double rm=r.magnitude(),vm=v.magnitude(),muSi=mu*1e9;
+    const Vec3 h=r.cross(v);const double hm=h.magnitude();
+    const auto node=[&](Vec3& n){n=Vec3(0,0,1).cross(h);return n.magnitude()>1e-9*hm&&hm>0;};
+    switch(parameter) {
+        case pceParameter::POSITION_X:*out=r.x;return true;
+        case pceParameter::POSITION_Y:*out=r.y;return true;
+        case pceParameter::POSITION_Z:*out=r.z;return true;
+        case pceParameter::VELOCITY_X:*out=v.x;return true;
+        case pceParameter::VELOCITY_Y:*out=v.y;return true;
+        case pceParameter::VELOCITY_Z:*out=v.z;return true;
+        case pceParameter::POSITION_MAGNITUDE:*out=rm;return true;
+        case pceParameter::VELOCITY_MAGNITUDE:*out=vm;return true;
+        case pceParameter::RADIAL_VELOCITY:*out=r.dot(v)/rm;return rm>0;
+        case pceParameter::ANGULAR_MOMENTUM_MAGNITUDE:*out=hm;return true;
+        case pceParameter::ANGULAR_MOMENTUM_X:*out=h.x;return true;
+        case pceParameter::ANGULAR_MOMENTUM_Y:*out=h.y;return true;
+        case pceParameter::ANGULAR_MOMENTUM_Z:*out=h.z;return true;
+        case pceParameter::SPECIFIC_ORBITAL_ENERGY:*out=0.5*vm*vm-muSi/rm;return rm>0;
+        case pceParameter::SEMI_MAJOR_AXIS:{const double d=2/rm-vm*vm/muSi;*out=1/d;return rm>0&&d!=0;}
+        case pceParameter::ECCENTRICITY:*out=((r*(vm*vm-muSi/rm)-v*r.dot(v))*(1/muSi)).magnitude();return rm>0;
+        case pceParameter::INCLINATION:*out=std::acos(std::max(-1.0,std::min(1.0,h.z/hm)));return hm>0;
+        case pceParameter::RIGHT_ASCENSION_OF_ASCENDING_NODE:{Vec3 n;if(!node(n))return false;*out=std::fmod(std::atan2(n.y,n.x)+2*PI,2*PI);return true;}
+        case pceParameter::ARGUMENT_OF_PERIAPSIS:{
+            Vec3 n;if(!node(n))return false;
+            const Vec3 ev=(r*(vm*vm-muSi/rm)-v*r.dot(v))*(1/muSi);const double em=ev.magnitude();if(!(em>1e-12))return false;
+            const double c=std::max(-1.0,std::min(1.0,n.dot(ev)/(n.magnitude()*em)));*out=ev.z<0?2*PI-std::acos(c):std::acos(c);return true;}
+        case pceParameter::TRUE_ANOMALY:{const double s[6]={r.x,r.y,r.z,v.x,v.y,v.z};return sdn::events::osculatingTrueAnomaly(s,muSi,out);}
+        case pceParameter::ARGUMENT_OF_LATITUDE:{const double s[6]={r.x,r.y,r.z,v.x,v.y,v.z},pole[3]={0,0,1};return sdn::events::osculatingArgumentOfLatitude(s,pole,out);}
+        case pceParameter::GEOCENTRIC_LATITUDE:*out=std::asin(std::max(-1.0,std::min(1.0,r.z/rm)));return rm>0;
+        default:return false;
+    }
+}
+bool parseExpression(const PCFExpression* in,Execution& e,double mu,Integrator::EventSpec& event,std::string& error) {
+    if(!in||!in->TERMS()||in->TERMS()->size()==0||in->TERMS()->size()>kExpressionTerms)
+        return prwError(error,"invalid-event: An EXPRESSION has between 1 and 64 terms.");
+    auto program=std::make_shared<std::vector<Term>>();
+    int depth=0;
+    for(const auto* t:*in->TERMS()) {
+        const auto op=t->OPERATION();
+        int pops=0,pushes=1;
+        switch(op) {
+            case pcfExpressionOperation::CONSTANT:pops=0;if(!std::isfinite(t->VALUE()))return prwError(error,"invalid-event: An expression constant must be finite.");break;
+            case pcfExpressionOperation::PARAMETER:{
+                pops=0;
+                switch(t->PARAMETER()) {
+                    case pceParameter::POSITION_X:case pceParameter::POSITION_Y:case pceParameter::POSITION_Z:
+                    case pceParameter::VELOCITY_X:case pceParameter::VELOCITY_Y:case pceParameter::VELOCITY_Z:
+                    case pceParameter::POSITION_MAGNITUDE:case pceParameter::VELOCITY_MAGNITUDE:case pceParameter::RADIAL_VELOCITY:
+                    case pceParameter::ANGULAR_MOMENTUM_MAGNITUDE:case pceParameter::ANGULAR_MOMENTUM_X:case pceParameter::ANGULAR_MOMENTUM_Y:case pceParameter::ANGULAR_MOMENTUM_Z:
+                    case pceParameter::SPECIFIC_ORBITAL_ENERGY:case pceParameter::SEMI_MAJOR_AXIS:case pceParameter::ECCENTRICITY:case pceParameter::INCLINATION:
+                    case pceParameter::RIGHT_ASCENSION_OF_ASCENDING_NODE:case pceParameter::ARGUMENT_OF_PERIAPSIS:case pceParameter::TRUE_ANOMALY:
+                    case pceParameter::ARGUMENT_OF_LATITUDE:case pceParameter::GEOCENTRIC_LATITUDE:break;
+                    default:return prwError(error,(std::string("unsupported-event: The expression parameter ")+EnumNamepceParameter(t->PARAMETER())+" is not evaluated inside the integration.").c_str());
+                }
+                break;
+            }
+            case pcfExpressionOperation::ADD:case pcfExpressionOperation::SUBTRACT:case pcfExpressionOperation::MULTIPLY:case pcfExpressionOperation::DIVIDE:
+            case pcfExpressionOperation::MINIMUM:case pcfExpressionOperation::MAXIMUM:pops=2;break;
+            case pcfExpressionOperation::NEGATE:case pcfExpressionOperation::ABSOLUTE:case pcfExpressionOperation::SQUARE_ROOT:
+            case pcfExpressionOperation::SINE:case pcfExpressionOperation::COSINE:pops=1;break;
+            default:return prwError(error,"invalid-event: Unknown expression operation.");
+        }
+        if(depth<pops)return prwError(error,"invalid-event: An expression pops an empty stack.");
+        depth=depth-pops+pushes;
+        if(depth>int(kExpressionStack))return prwError(error,"invalid-event: An expression stack is at most 16 deep.");
+        program->push_back({op,t->VALUE(),t->PARAMETER()});
+    }
+    if(depth!=1)return prwError(error,"invalid-event: An expression leaves exactly one number.");
+    const Execution* execution=&e;
+    event.g=[program,execution,mu](double,const double* y,double* g){
+        double stack[kExpressionStack];size_t top=0;
+        for(const Term& term:*program) {
+            switch(term.operation) {
+                case pcfExpressionOperation::CONSTANT:stack[top++]=term.value;break;
+                case pcfExpressionOperation::PARAMETER:{double v=0;if(!parameterValue(*execution,mu,y,term.parameter,&v))return false;stack[top++]=v;break;}
+                case pcfExpressionOperation::ADD:stack[top-2]+=stack[top-1];--top;break;
+                case pcfExpressionOperation::SUBTRACT:stack[top-2]-=stack[top-1];--top;break;
+                case pcfExpressionOperation::MULTIPLY:stack[top-2]*=stack[top-1];--top;break;
+                case pcfExpressionOperation::DIVIDE:if(stack[top-1]==0)return false;stack[top-2]/=stack[top-1];--top;break;
+                case pcfExpressionOperation::MINIMUM:stack[top-2]=std::min(stack[top-2],stack[top-1]);--top;break;
+                case pcfExpressionOperation::MAXIMUM:stack[top-2]=std::max(stack[top-2],stack[top-1]);--top;break;
+                case pcfExpressionOperation::NEGATE:stack[top-1]=-stack[top-1];break;
+                case pcfExpressionOperation::ABSOLUTE:stack[top-1]=std::abs(stack[top-1]);break;
+                case pcfExpressionOperation::SQUARE_ROOT:if(stack[top-1]<0)return false;stack[top-1]=std::sqrt(stack[top-1]);break;
+                case pcfExpressionOperation::SINE:stack[top-1]=std::sin(stack[top-1]);break;
+                case pcfExpressionOperation::COSINE:stack[top-1]=std::cos(stack[top-1]);break;
+                default:return false;
+            }
+        }
+        *g=stack[0];return std::isfinite(*g);
+    };
+    return true;
+}
+}
+bool parseEvents(const PRWExecutionRequest* in,Execution& out,std::string& error) {
+    const auto* list=in->EVENTS();
+    if(!list||list->size()==0)return true;
+    if(out.variational||out.massDynamics)
+        return prwError(error,"unsupported-events: Events apply to a plain state propagation (no STM, covariance, samples, impulses or burns).");
+    if(!Integrator::engineSupports(out.integrator.method))
+        return prwError(error,(std::string("unsupported-events: ")+EnumNamepcfIntegratorAlgorithm(in->INTEGRATOR()->ALGORITHM())+" has no continuous extension in this build.").c_str());
+    out.eventOutcome.occurrences.assign(list->size(),0);
+    const double mu=out.forces.mu;
+    const auto* forces=&out.forces;
+    const auto epoch=out.eventOutcome.epoch;
+    for(const auto* spec:*list) {
+        EventSpec event;
+        switch(spec->DIRECTION()) {
+            case pcfEventDirection::ANY:event.direction=ev::Direction::ANY;break;
+            case pcfEventDirection::INCREASING:event.direction=ev::Direction::INCREASING;break;
+            case pcfEventDirection::DECREASING:event.direction=ev::Direction::DECREASING;break;
+            default:return prwError(error,"invalid-event: Unknown crossing direction.");
+        }
+        switch(spec->ACTION()) {
+            case pcfEventAction::CONTINUE:event.action=Integrator::EventAction::Continue;break;
+            case pcfEventAction::RECORD:event.action=Integrator::EventAction::Record;break;
+            case pcfEventAction::STOP:event.action=Integrator::EventAction::Stop;break;
+            default:return prwError(error,"invalid-event: Unknown event action.");
+        }
+        if(!(spec->TOLERANCE_SECONDS()>=0)||!std::isfinite(spec->TOLERANCE_SECONDS()))return prwError(error,"invalid-event: TOLERANCE_SECONDS must be finite and not negative.");
+        event.toleranceSeconds=spec->TOLERANCE_SECONDS()>0?spec->TOLERANCE_SECONDS():1e-9;
+        if(spec->OCCURRENCE()<1)return prwError(error,"invalid-event: OCCURRENCE counts from 1.");
+        event.occurrence=spec->OCCURRENCE();
+        const bool periodic=spec->KIND()==pcfEventKind::TRUE_ANOMALY||spec->KIND()==pcfEventKind::ARGUMENT_OF_LATITUDE;
+        if(periodic&&!std::isfinite(spec->ANGLE_RAD()))return prwError(error,"invalid-event: ANGLE_RAD must be finite.");
+        switch(spec->KIND()) {
+            case pcfEventKind::APSIS:
+                event.g=[](double t,const double* y,double* g){return ev::apsisFunction(nullptr,t,y,g)==0;};
+                break;
+            case pcfEventKind::PLANE_CROSSING: {
+                auto context=std::make_shared<ev::NodeContext>();
+                if(!unitVector(out,spec->PLANE_NORMAL(),context->planeNormal,error))return false;
+                event.g=[context](double t,const double* y,double* g){return ev::nodeFunction(context.get(),t,y,g)==0;};
+                break;
+            }
+            case pcfEventKind::TRUE_ANOMALY:
+            case pcfEventKind::ARGUMENT_OF_LATITUDE: {
+                auto context=std::make_shared<ev::OrbitAngleContext>();
+                context->mu=mu;context->target=spec->ANGLE_RAD();
+                context->argumentOfLatitude=spec->KIND()==pcfEventKind::ARGUMENT_OF_LATITUDE;
+                if(!unitVector(out,nullptr,context->pole,error))return false;
+                event.jumpLimit=ev::kPi;
+                event.g=[context](double t,const double* y,double* g){return ev::orbitAngleFunction(context.get(),t,y,g)==0;};
+                break;
+            }
+            case pcfEventKind::LATITUDE_EXTREMUM: {
+                auto context=std::make_shared<ev::PoleContext>();
+                if(!unitVector(out,nullptr,context->pole,error))return false;
+                event.g=[context](double t,const double* y,double* g){return ev::latitudeRateFunction(context.get(),t,y,g)==0;};
+                break;
+            }
+            case pcfEventKind::UMBRA:
+            case pcfEventKind::PENUMBRA: {
+                const int which=spec->KIND()==pcfEventKind::PENUMBRA?0:1;
+                event.g=[forces,epoch,which](double t,const double* y,double* g){
+                    double both[2];shadow::boundaryFunctions(*forces,*epoch,t,y,both);*g=both[which];return std::isfinite(*g);
+                };
+                break;
+            }
+            case pcfEventKind::EXPRESSION:
+                if(!parseExpression(spec->EXPRESSION(),out,mu,event,error))return false;
+                break;
+            case pcfEventKind::CLOSEST_APPROACH:
+                // The trajectory is an input, bound by attachEnvironment once the inputs are read.
+                if(!spec->SECOND_TRAJECTORY_PORT()||spec->SECOND_TRAJECTORY_PORT()->str()!="second_trajectory")
+                    return prwError(error,"invalid-event: CLOSEST_APPROACH names the second_trajectory port.");
+                out.pendingSecondTrajectory.push_back(out.events.size());
+                break;
+            default:
+                return prwError(error,(std::string("unsupported-event: ")+EnumNamepcfEventKind(spec->KIND())+" is not an event kind of this build.").c_str());
+        }
+        out.events.push_back(std::move(event));
+        out.eventKinds.push_back(spec->KIND());
+    }
+    return true;
+}
 bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error) {
     if(!in||!in->INITIAL()||!in->INITIAL()->VALID())return prwError(error,"invalid-state: Execution requires a valid initial state.");
     coords::Frame axes=coords::Frame::GCRF;
@@ -418,7 +634,7 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
             case prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE:q=ForceModel::DynamicParameter::DragAreaOverMassRate;break;
             case prwDynamicParameter::SRP_AREA_OVER_MASS:q=ForceModel::DynamicParameter::SrpAreaOverMass;break;
             case prwDynamicParameter::IN_TRACK_ACCELERATION:q=ForceModel::DynamicParameter::InTrackAcceleration;break;
-            // ECOM2_D0 .. ECOM2_B3_SIN: one ordinal each, in PRWEcom2's order.
+            // ECOM2_D0 .. ECOM2_B3_SIN: one ordinal each, in PCFEcom2's order.
             case prwDynamicParameter::ECOM2_D0:case prwDynamicParameter::ECOM2_Y0:case prwDynamicParameter::ECOM2_B0:
             case prwDynamicParameter::ECOM2_D2_COS:case prwDynamicParameter::ECOM2_D2_SIN:case prwDynamicParameter::ECOM2_D4_COS:
             case prwDynamicParameter::ECOM2_D4_SIN:case prwDynamicParameter::ECOM2_B1_COS:case prwDynamicParameter::ECOM2_B1_SIN:
@@ -426,7 +642,7 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
                 q=ForceModel::DynamicParameter(int(ForceModel::DynamicParameter::Ecom2D0)+int(p)-int(prwDynamicParameter::ECOM2_D0));break;
             default:return prwError(error,"unsupported-parameter: Unknown dynamic parameter.");
         }
-        if(q==ForceModel::DynamicParameter::SrpAreaOverMass&&in->FORCES()->RADIATION_PRESSURE_MODEL()!=prwRadiationPressureFamily::CANNONBALL)
+        if(q==ForceModel::DynamicParameter::SrpAreaOverMass&&in->FORCES()->RADIATION_PRESSURE_MODEL()!=pcfRadiationPressureFamily::CANNONBALL)
             return prwError(error,"invalid-parameters: SRP_AREA_OVER_MASS is the cannonball's Cr*A/m; RADIATION_PRESSURE_MODEL must be CANNONBALL.");
         if(std::find(out.parameters.begin(),out.parameters.end(),q)!=out.parameters.end())return prwError(error,"invalid-parameters: DYNAMIC_PARAMETERS must not repeat.");
         if(const char* reason=ForceModel::ValidateParameter(q,out.forces)){error=std::string("invalid-parameters: ")+reason;return false;}
@@ -483,7 +699,7 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
     }
     out.variational=in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.samples.empty()||!out.impulses.empty();
     out.stateOnly=!in->INCLUDE_STM()&&!out.covariance&&!out.massCovariance&&!out.massDynamics&&out.impulses.empty()&&out.burns.empty()&&out.parameters.empty();
-    return true;
+    return parseEvents(in,out,error);
 }
 bool preflightKernel(const Execution& in,const timesys::Instant& target,std::string& error) {
     if(Ephemeris::selectedEphemerisSource()==Ephemeris::EphemerisSource::Analytical)return true;
@@ -553,12 +769,21 @@ bool propagateState(Execution& execution,StateVector& state,TTEpoch& at,const TT
         const double span=elapsedSeconds(at,stop);
         setDriverSpan(execution,at,stop);
         if(execution.forces.explicitEpochContract)execution.forces.integrationEpochTT=at.instant();
-        const auto value=Integrator::PropagateWithResult(state,span,config,execution.forces);
+        const bool located=!execution.events.empty();
+        if(located)execution.eventOutcome.offset=elapsedSeconds(execution.initialTT,at);
+        const auto value=located?Integrator::PropagateWithEvents(state,span,config,execution.forces,&execution.events,&execution.eventOutcome)
+                                :Integrator::PropagateWithResult(state,span,config,execution.forces);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        // RK4, RKDP87 and BS step forward only; a backward request must not
-        // come back as the initial state.
+        // An event that ends the propagation is where it ends.
+        if(located&&execution.eventOutcome.stoppedBy>=0) {
+            at=normalizeTT(at.whole,at.fraction+value.totalTime);
+            state=value.finalState;state.epoch=timesys::ttToTdb(at.jdTt());steps+=value.steps;rejections+=value.rejections;
+            return true;
+        }
+        // RK4 and BS step forward only; a backward request must not come back as the
+        // initial state.
         if(!std::isfinite(value.totalTime)||std::abs(value.totalTime-span)>32*std::numeric_limits<double>::epsilon()*std::max(1.0,std::abs(span)))
-            return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).");
+            return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4 and BS integrate forward only).");
         state=value.finalState;state.epoch=timesys::ttToTdb(stop.jdTt());at=stop;steps+=value.steps;rejections+=value.rejections;
     }
     return true;
@@ -626,6 +851,25 @@ bool loadEnvironment(const PrwEnvironment& frames,bool own,Environment& out,std:
         out.densityCorrection=std::make_shared<DensityCorrection>();
         if(!out.densityCorrection->load(frames.densityCorrection,frames.densityCorrectionSize,error))return false;
     }
+    if(frames.secondTrajectorySize) {
+        flatbuffers::Verifier verifier(frames.secondTrajectory,frames.secondTrajectorySize);
+        if(!VerifyOEMBuffer(verifier))return prwError(error,"invalid-second-trajectory: second_trajectory is not a valid $OEM.");
+        const OEM* oem=GetOEM(frames.secondTrajectory);
+        out.secondTrajectory=std::make_shared<SecondTrajectory>();
+        if(oem&&oem->EPHEMERIS_DATA_BLOCK())for(const auto* block:*oem->EPHEMERIS_DATA_BLOCK()) {
+            if(!block||!block->EPHEMERIS_DATA_LINES())continue;
+            for(const auto* line:*block->EPHEMERIS_DATA_LINES()) {
+                if(!line||!line->EPOCH())continue;
+                double whole=0,fraction=0,jd=0;TTEpoch tt;
+                if(!parseIsoSeconds(line->EPOCH()->str(),whole,fraction,jd,error)||!toTT(whole,fraction,jd,block->TIME_SYSTEM(),tt,error))return false;
+                if(!out.secondTrajectory->epoch.empty()&&elapsedSeconds(out.secondTrajectory->epoch.back(),tt)<=0)
+                    return prwError(error,"invalid-second-trajectory: The $OEM epochs must increase strictly.");
+                out.secondTrajectory->epoch.push_back(tt);
+                out.secondTrajectory->state.push_back({line->X(),line->Y(),line->Z(),line->X_DOT(),line->Y_DOT(),line->Z_DOT()});
+            }
+        }
+        if(out.secondTrajectory->epoch.size()<2)return prwError(error,"invalid-second-trajectory: The $OEM needs at least two samples.");
+    }
     if(frames.jb2008IndicesSize) {
         const PRW* root=nullptr;if(!verifyPrw(jb2008,frames.jb2008IndicesSize,root,error))return false;
         if(!root->JB2008_INDICES())return prwError(error,"invalid-prw-arm: jb2008_indices requires JB2008_INDICES.");
@@ -635,7 +879,66 @@ bool loadEnvironment(const PrwEnvironment& frames,bool own,Environment& out,std:
     }
     return true;
 }
+// The second trajectory of CLOSEST_APPROACH events: g = (r - r2) . (v - v2), half the rate of the
+// squared range, along the $OEM interpolated in the integration axes. Hermite interpolation of
+// position and velocity through the four nodes around the epoch (a polynomial of degree 7, error
+// of the order of the eighth power of the node spacing), velocity as its derivative.
+namespace {
+struct SecondSamples {std::vector<double> t;std::vector<std::array<double,6>> y;};
+bool hermiteSecond(const SecondSamples& s,double at,double r[3],double v[3]) {
+    const auto& times=s.t;
+    size_t hi=std::upper_bound(times.begin(),times.end(),at)-times.begin();
+    if(hi==0||hi>=times.size()){if(hi==times.size()&&at==times.back())hi=times.size()-1;else return false;}
+    size_t first=hi>=2?hi-2:0;
+    if(first+4>times.size())first=times.size()>=4?times.size()-4:0;
+    const size_t count=std::min<size_t>(4,times.size()-first);
+    const size_t n=2*count;
+    for(int k=0;k<3;++k) {
+        double z[8],c[8];
+        for(size_t i=0;i<count;++i){z[2*i]=z[2*i+1]=times[first+i];c[2*i]=c[2*i+1]=s.y[first+i][k];}
+        // divided differences with repeated nodes: the first difference of a doubled node is the velocity
+        double column[8];for(size_t i=0;i<n;++i)column[i]=c[i];
+        double coefficient[8];coefficient[0]=column[0];
+        for(size_t order=1;order<n;++order) {
+            for(size_t i=0;i+order<n;++i) {
+                if(z[i+order]==z[i])column[i]=order==1?s.y[first+i/2][3+k]:0;  // only order 1 occurs on a doubled node pair
+                else column[i]=(column[i+1]-column[i])/(z[i+order]-z[i]);
+            }
+            coefficient[order]=column[0];
+        }
+        double p=coefficient[n-1],dp=0;
+        for(size_t j=n-1;j-- >0;){dp=dp*(at-z[j])+p;p=p*(at-z[j])+coefficient[j];}
+        r[k]=p;v[k]=dp;
+    }
+    return true;
+}
+bool bindSecondTrajectory(Execution& execution,const Environment& environment,std::string& error) {
+    if(execution.pendingSecondTrajectory.empty())return true;
+    const auto& table=environment.secondTrajectory;
+    if(!table)return prwError(error,"missing-second-trajectory: CLOSEST_APPROACH reads the second_trajectory input, which carries no $OEM.");
+    auto samples=std::make_shared<SecondSamples>();
+    for(size_t i=0;i<table->epoch.size();++i) {
+        samples->t.push_back(elapsedSeconds(execution.initialTT,table->epoch[i]));
+        const auto& s=table->state[i];
+        const Vec3 r=toGcrf(execution,Vec3(s[0],s[1],s[2])),v=toGcrf(execution,Vec3(s[3],s[4],s[5]));
+        samples->y.push_back({r.x,r.y,r.z,v.x,v.y,v.z});
+    }
+    const double end=elapsedSeconds(execution.initialTT,execution.targetTT);
+    if(samples->t.front()>std::min(0.0,end)||samples->t.back()<std::max(0.0,end))
+        return prwError(error,"second-trajectory-out-of-range: The $OEM must cover the whole propagated arc.");
+    const Execution* e=&execution;
+    for(const size_t index:execution.pendingSecondTrajectory)
+        execution.events[index].g=[samples,e](double t,const double* y,double* g){
+            double r2[3],v2[3];
+            if(!hermiteSecond(*samples,t+e->eventOutcome.offset,r2,v2))return false;
+            *g=(y[0]-r2[0])*(y[3]-v2[0])+(y[1]-r2[1])*(y[4]-v2[1])+(y[2]-r2[2])*(y[5]-v2[2]);
+            return true;
+        };
+    return true;
+}
+}
 bool attachEnvironment(Execution& execution,const Environment& environment,bool requestWeather,std::string& error) {
+    if(!bindSecondTrajectory(execution,environment,error))return false;
     const auto& jb2008=environment.jb2008;const auto& weather=environment.weather;const auto& earth=environment.earth;
     execution.densityCorrectionBreaks.reset();
     execution.forces.densityScaleAt={};

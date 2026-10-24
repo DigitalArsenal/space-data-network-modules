@@ -1,6 +1,6 @@
 import * as flatbuffers from 'flatbuffers';
 import { TIMInstant, TIMInstantT } from './TIMInstant.js';
-import { prwAtmosphereFamily } from './prwAtmosphereFamily.js';
+import { pcfAtmosphereFamily } from './pcfAtmosphereFamily.js';
 export class PRWAtmosphereRequest {
     bb = null;
     bb_pos = 0;
@@ -18,7 +18,7 @@ export class PRWAtmosphereRequest {
     }
     ATMOSPHERE_MODEL() {
         const offset = this.bb.__offset(this.bb_pos, 4);
-        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwAtmosphereFamily.NRLMSISE00;
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfAtmosphereFamily.NRLMSISE00;
     }
     EPOCH(obj) {
         const offset = this.bb.__offset(this.bb_pos, 6);
@@ -64,7 +64,7 @@ export class PRWAtmosphereRequest {
         builder.startObject(11);
     }
     static addAtmosphereModel(builder, ATMOSPHERE_MODEL) {
-        builder.addFieldInt8(0, ATMOSPHERE_MODEL, prwAtmosphereFamily.NRLMSISE00);
+        builder.addFieldInt8(0, ATMOSPHERE_MODEL, pcfAtmosphereFamily.NRLMSISE00);
     }
     static addEpoch(builder, EPOCHOffset) {
         builder.addFieldOffset(1, EPOCHOffset, 0);
@@ -130,7 +130,7 @@ export class PRWAtmosphereRequestT {
     F107_AVERAGE;
     AP_INDEX;
     INCLUDE_ANOMALOUS_OXYGEN;
-    constructor(ATMOSPHERE_MODEL = prwAtmosphereFamily.NRLMSISE00, EPOCH = null, ALTITUDE_M = 0.0, LATITUDE_RAD = 0.0, LONGITUDE_RAD = 0.0, LOCAL_SOLAR_TIME_HOURS = 0.0, HAS_LOCAL_SOLAR_TIME_HOURS = false, F107 = 150.0, F107_AVERAGE = 150.0, AP_INDEX = 4.0, INCLUDE_ANOMALOUS_OXYGEN = false){
+    constructor(ATMOSPHERE_MODEL = pcfAtmosphereFamily.NRLMSISE00, EPOCH = null, ALTITUDE_M = 0.0, LATITUDE_RAD = 0.0, LONGITUDE_RAD = 0.0, LOCAL_SOLAR_TIME_HOURS = 0.0, HAS_LOCAL_SOLAR_TIME_HOURS = false, F107 = 150.0, F107_AVERAGE = 150.0, AP_INDEX = 4.0, INCLUDE_ANOMALOUS_OXYGEN = false){
         this.ATMOSPHERE_MODEL = ATMOSPHERE_MODEL;
         this.EPOCH = EPOCH;
         this.ALTITUDE_M = ALTITUDE_M;

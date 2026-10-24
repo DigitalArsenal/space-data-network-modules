@@ -8,7 +8,8 @@ export const packageRoot = fileURLToPath(new URL('.', import.meta.url));
 export const standardsRoot = path.join(packageRoot, 'node_modules/spacedatastandards.org');
 export async function generateSdsBindings() {
   const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'))).version;
-  if (version.split('+')[0] !== '1.259.0') throw new Error(`Expected published SDS 1.259.0; installed ${version}. Run npm ci.`);
+  const expected = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'))).devDependencies['spacedatastandards.org'];
+  if (version.split('+')[0] !== expected) throw new Error(`Expected published SDS ${expected}; installed ${version}. Run npm ci.`);
   const flatc = await createFlatc();
   const mkdir = p => { try { flatc.FS.mkdir(p); } catch {} };
   for (const p of ['/schemas', '/out_cpp', '/out_ts']) mkdir(p);

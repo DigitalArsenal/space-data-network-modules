@@ -1,0 +1,73 @@
+import * as flatbuffers from 'flatbuffers';
+export class PCFGaussianPrior {
+    bb = null;
+    bb_pos = 0;
+    __init(i, bb) {
+        this.bb_pos = i;
+        this.bb = bb;
+        return this;
+    }
+    static getRootAsPCFGaussianPrior(bb, obj) {
+        return (obj || new PCFGaussianPrior()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    }
+    static getSizePrefixedRootAsPCFGaussianPrior(bb, obj) {
+        bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
+        return (obj || new PCFGaussianPrior()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    }
+    MEAN() {
+        const offset = this.bb.__offset(this.bb_pos, 4);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    SIGMA() {
+        const offset = this.bb.__offset(this.bb_pos, 6);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    HAS_SIGMA() {
+        const offset = this.bb.__offset(this.bb_pos, 8);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
+    static startPCFGaussianPrior(builder) {
+        builder.startObject(3);
+    }
+    static addMean(builder, MEAN) {
+        builder.addFieldFloat64(0, MEAN, 0.0);
+    }
+    static addSigma(builder, SIGMA) {
+        builder.addFieldFloat64(1, SIGMA, 0.0);
+    }
+    static addHasSigma(builder, HAS_SIGMA) {
+        builder.addFieldInt8(2, +HAS_SIGMA, +false);
+    }
+    static endPCFGaussianPrior(builder) {
+        const offset = builder.endObject();
+        return offset;
+    }
+    static createPCFGaussianPrior(builder, MEAN, SIGMA, HAS_SIGMA) {
+        PCFGaussianPrior.startPCFGaussianPrior(builder);
+        PCFGaussianPrior.addMean(builder, MEAN);
+        PCFGaussianPrior.addSigma(builder, SIGMA);
+        PCFGaussianPrior.addHasSigma(builder, HAS_SIGMA);
+        return PCFGaussianPrior.endPCFGaussianPrior(builder);
+    }
+    unpack() {
+        return new PCFGaussianPriorT(this.MEAN(), this.SIGMA(), this.HAS_SIGMA());
+    }
+    unpackTo(_o) {
+        _o.MEAN = this.MEAN();
+        _o.SIGMA = this.SIGMA();
+        _o.HAS_SIGMA = this.HAS_SIGMA();
+    }
+}
+export class PCFGaussianPriorT {
+    MEAN;
+    SIGMA;
+    HAS_SIGMA;
+    constructor(MEAN = 0.0, SIGMA = 0.0, HAS_SIGMA = false){
+        this.MEAN = MEAN;
+        this.SIGMA = SIGMA;
+        this.HAS_SIGMA = HAS_SIGMA;
+    }
+    pack(builder) {
+        return PCFGaussianPrior.createPCFGaussianPrior(builder, this.MEAN, this.SIGMA, this.HAS_SIGMA);
+    }
+}

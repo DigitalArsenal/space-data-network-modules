@@ -7,6 +7,7 @@
 // =============================================================================
 
 #include "astrodynamics.h"
+#include "rk_engine.h"
 #include "atmosphere_winds.h"
 #include "ephemeris.h"
 #include "atmosphere.h"
@@ -189,123 +190,16 @@ bool integratorPropagate(IntegratorState& state,
 // =============================================================================
 
 // -----------------------------------------------------------------------------
-// RKDP87 - Dormand-Prince 8(7) Adaptive Step
+// RKDP87 - Prince and Dormand RK8(7)13M (lib/rk_engine.h holds the tableau)
 // -----------------------------------------------------------------------------
 
 void rkdp87Step(double t, double h, const double* y,
                 double* yout, double* yerr,
                 DerivativeFunc deriv, void* params) {
-    constexpr int N = 6;
-    double k[13][N];
-    double ytmp[N];
-
-    // RKDP8(7) Butcher tableau coefficients (simplified)
-    // Full 13-stage Dormand-Prince 8(7) method
-
-    // Stage 1
-    deriv(t, y, k[0], params);
-
-    // Stage 2
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (k[0][i] / 18.0);
-    deriv(t + h/18.0, ytmp, k[1], params);
-
-    // Stage 3
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (k[0][i]/48.0 + k[1][i]/16.0);
-    deriv(t + h/12.0, ytmp, k[2], params);
-
-    // Stage 4
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (k[0][i]/32.0 - 3.0*k[1][i]/32.0 + 3.0*k[2][i]/16.0);
-    deriv(t + h/8.0, ytmp, k[3], params);
-
-    // Stage 5
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (5.0*k[0][i]/16.0 - 75.0*k[2][i]/64.0 + 75.0*k[3][i]/64.0);
-    deriv(t + 5.0*h/16.0, ytmp, k[4], params);
-
-    // Stage 6
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (3.0*k[0][i]/80.0 + 3.0*k[3][i]/16.0 + 3.0*k[4][i]/20.0);
-    deriv(t + 3.0*h/8.0, ytmp, k[5], params);
-
-    // Stage 7
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (29443841.0/614563906.0*k[0][i] + 77736538.0/692538347.0*k[4][i]
-                             - 28693883.0/1125000000.0*k[5][i]);
-    deriv(t + 59.0*h/400.0, ytmp, k[6], params);
-
-    // Stage 8
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (16016141.0/946692911.0*k[0][i] + 61564180.0/158732637.0*k[4][i]
-                             + 22789713.0/633445777.0*k[5][i] + 545815736.0/2771057229.0*k[6][i]);
-    deriv(t + 93.0*h/200.0, ytmp, k[7], params);
-
-    // Stage 9
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (-1052.0/21849.0*k[0][i] + 138.0/703.0*k[4][i]
-                             + 400.0/2223.0*k[5][i] + 2401.0/27702.0*k[6][i] - 2401.0/9786.0*k[7][i]);
-    deriv(t + 5490023248.0/9719169821.0*h, ytmp, k[8], params);
-
-    // Stage 10
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (451.0/720.0*k[0][i] - 32.0/45.0*k[4][i]
-                             + 64.0/45.0*k[5][i] - 3875.0/7776.0*k[6][i] + 2401.0/2592.0*k[7][i]
-                             - 17.0/648.0*k[8][i]);
-    deriv(t + 13.0*h/20.0, ytmp, k[9], params);
-
-    // Stage 11
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (47.0/540.0*k[0][i] - 64.0/405.0*k[5][i]
-                             + 16807.0/65610.0*k[6][i] - 16807.0/10935.0*k[7][i]
-                             + 91.0/540.0*k[8][i] + 1.0/3.0*k[9][i]);
-    deriv(t + 1201146811.0/1299019798.0*h, ytmp, k[10], params);
-
-    // Stage 12
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (-1.0/20.0*k[0][i] + 32.0/45.0*k[5][i]
-                             - 16807.0/13122.0*k[6][i] + 16807.0/4374.0*k[7][i]
-                             - 91.0/540.0*k[8][i] + 1.0/3.0*k[10][i]);
-    deriv(t + h, ytmp, k[11], params);
-
-    // Stage 13 (FSAL)
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (7.0/1408.0*k[0][i] + 1125.0/2816.0*k[5][i]
-                             + 9.0/32.0*k[6][i] + 125.0/768.0*k[7][i] + 5.0/66.0*k[10][i]
-                             + 5.0/66.0*k[11][i]);
-    deriv(t + h, ytmp, k[12], params);
-
-    // 8th order solution (output)
-    for (int i = 0; i < N; i++) {
-        yout[i] = y[i] + h * (13451932.0/455176623.0*k[0][i]
-                             - 808719846.0/976000145.0*k[5][i]
-                             + 1757004468.0/5645159321.0*k[6][i]
-                             + 656045339.0/265891186.0*k[7][i]
-                             - 3867574721.0/1518517206.0*k[8][i]
-                             + 465885868.0/322736535.0*k[9][i]
-                             + 53011238.0/667516719.0*k[10][i]
-                             + 2.0/45.0*k[11][i]);
-    }
-
-    // 7th order solution (for error estimation)
-    double y7[N];
-    for (int i = 0; i < N; i++) {
-        y7[i] = y[i] + h * (14005451.0/335480064.0*k[0][i]
-                           - 59238493.0/1068277825.0*k[5][i]
-                           + 181606767.0/758867731.0*k[6][i]
-                           + 561292985.0/797845732.0*k[7][i]
-                           - 1041891430.0/1371343529.0*k[8][i]
-                           + 760417239.0/1151165299.0*k[9][i]
-                           + 118820643.0/751138087.0*k[10][i]
-                           - 528747749.0/2220607170.0*k[11][i]
-                           + 1.0/4.0*k[12][i]);
-    }
-
-    // Error estimate (difference between 8th and 7th order)
-    for (int i = 0; i < N; i++) {
-        yerr[i] = yout[i] - y7[i];
-    }
+    const rk::Pair& pair = *rk::pairFor(IntegrationMethod::RKDP87);
+    rk::Stages stages;
+    deriv(t, y, stages.k[0], params);
+    rk::solve(pair, deriv, params, t, h, y, stages, yout, yerr);
 }
 
 // -----------------------------------------------------------------------------

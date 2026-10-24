@@ -2,6 +2,7 @@ import * as flatbuffers from 'flatbuffers';
 import { CAT, CATT } from './CAT.js';
 import { PPEOrbitalElementRecord, PPEOrbitalElementRecordT } from './PPEOrbitalElementRecord.js';
 import { PPEPositionRecord, PPEPositionRecordT } from './PPEPositionRecord.js';
+import { PVN, PVNT } from './PVN.js';
 import { RFM, RFMT } from './RFM.js';
 import { polynomialBasisType } from './polynomialBasisType.js';
 import { timingStandard } from './timingStandard.js';
@@ -84,8 +85,12 @@ export class PPE {
         const offset = this.bb.__offset(this.bb_pos, 28);
         return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
     }
+    PROVENANCE(obj) {
+        const offset = this.bb.__offset(this.bb_pos, 30);
+        return offset ? (obj || new PVN()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    }
     static startPPE(builder) {
-        builder.startObject(13);
+        builder.startObject(14);
     }
     static addComment(builder, COMMENTOffset) {
         builder.addFieldOffset(0, COMMENTOffset, 0);
@@ -156,12 +161,15 @@ export class PPE {
     static addNominalNumCoefficients(builder, NOMINAL_NUM_COEFFICIENTS) {
         builder.addFieldInt16(12, NOMINAL_NUM_COEFFICIENTS, 0);
     }
+    static addProvenance(builder, PROVENANCEOffset) {
+        builder.addFieldOffset(13, PROVENANCEOffset, 0);
+    }
     static endPPE(builder) {
         const offset = builder.endObject();
         return offset;
     }
     unpack() {
-        return new PPET(this.bb.createScalarList(this.COMMENT.bind(this), this.commentLength()), this.OBJECT() !== null ? this.OBJECT().unpack() : null, this.CENTER_NAME(), this.REFERENCE_FRAME() !== null ? this.REFERENCE_FRAME().unpack() : null, this.TIME_SYSTEM(), this.START_TIME(), this.STOP_TIME(), this.DEFAULT_BASIS_TYPE(), this.bb.createObjList(this.POSITION_RECORDS.bind(this), this.positionRecordsLength()), this.bb.createObjList(this.ORBITAL_ELEMENT_RECORDS.bind(this), this.orbitalElementRecordsLength()), this.EPHEMERIS_SOURCE(), this.NOMINAL_SEGMENT_SPAN(), this.NOMINAL_NUM_COEFFICIENTS());
+        return new PPET(this.bb.createScalarList(this.COMMENT.bind(this), this.commentLength()), this.OBJECT() !== null ? this.OBJECT().unpack() : null, this.CENTER_NAME(), this.REFERENCE_FRAME() !== null ? this.REFERENCE_FRAME().unpack() : null, this.TIME_SYSTEM(), this.START_TIME(), this.STOP_TIME(), this.DEFAULT_BASIS_TYPE(), this.bb.createObjList(this.POSITION_RECORDS.bind(this), this.positionRecordsLength()), this.bb.createObjList(this.ORBITAL_ELEMENT_RECORDS.bind(this), this.orbitalElementRecordsLength()), this.EPHEMERIS_SOURCE(), this.NOMINAL_SEGMENT_SPAN(), this.NOMINAL_NUM_COEFFICIENTS(), this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null);
     }
     unpackTo(_o) {
         _o.COMMENT = this.bb.createScalarList(this.COMMENT.bind(this), this.commentLength());
@@ -177,6 +185,7 @@ export class PPE {
         _o.EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE();
         _o.NOMINAL_SEGMENT_SPAN = this.NOMINAL_SEGMENT_SPAN();
         _o.NOMINAL_NUM_COEFFICIENTS = this.NOMINAL_NUM_COEFFICIENTS();
+        _o.PROVENANCE = this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null;
     }
 }
 export class PPET {
@@ -193,7 +202,8 @@ export class PPET {
     EPHEMERIS_SOURCE;
     NOMINAL_SEGMENT_SPAN;
     NOMINAL_NUM_COEFFICIENTS;
-    constructor(COMMENT = [], OBJECT = null, CENTER_NAME = null, REFERENCE_FRAME = null, TIME_SYSTEM = timingStandard.GMST, START_TIME = null, STOP_TIME = null, DEFAULT_BASIS_TYPE = polynomialBasisType.CHEBYSHEV, POSITION_RECORDS = [], ORBITAL_ELEMENT_RECORDS = [], EPHEMERIS_SOURCE = null, NOMINAL_SEGMENT_SPAN = 0.0, NOMINAL_NUM_COEFFICIENTS = 0){
+    PROVENANCE;
+    constructor(COMMENT = [], OBJECT = null, CENTER_NAME = null, REFERENCE_FRAME = null, TIME_SYSTEM = timingStandard.GMST, START_TIME = null, STOP_TIME = null, DEFAULT_BASIS_TYPE = polynomialBasisType.CHEBYSHEV, POSITION_RECORDS = [], ORBITAL_ELEMENT_RECORDS = [], EPHEMERIS_SOURCE = null, NOMINAL_SEGMENT_SPAN = 0.0, NOMINAL_NUM_COEFFICIENTS = 0, PROVENANCE = null){
         this.COMMENT = COMMENT;
         this.OBJECT = OBJECT;
         this.CENTER_NAME = CENTER_NAME;
@@ -207,6 +217,7 @@ export class PPET {
         this.EPHEMERIS_SOURCE = EPHEMERIS_SOURCE;
         this.NOMINAL_SEGMENT_SPAN = NOMINAL_SEGMENT_SPAN;
         this.NOMINAL_NUM_COEFFICIENTS = NOMINAL_NUM_COEFFICIENTS;
+        this.PROVENANCE = PROVENANCE;
     }
     pack(builder) {
         const COMMENT = PPE.createCommentVector(builder, builder.createObjectOffsetList(this.COMMENT));
@@ -218,6 +229,7 @@ export class PPET {
         const POSITION_RECORDS = PPE.createPositionRecordsVector(builder, builder.createObjectOffsetList(this.POSITION_RECORDS));
         const ORBITAL_ELEMENT_RECORDS = PPE.createOrbitalElementRecordsVector(builder, builder.createObjectOffsetList(this.ORBITAL_ELEMENT_RECORDS));
         const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
+        const PROVENANCE = this.PROVENANCE !== null ? this.PROVENANCE.pack(builder) : 0;
         PPE.startPPE(builder);
         PPE.addComment(builder, COMMENT);
         PPE.addObject(builder, OBJECT);
@@ -232,6 +244,7 @@ export class PPET {
         PPE.addEphemerisSource(builder, EPHEMERIS_SOURCE);
         PPE.addNominalSegmentSpan(builder, this.NOMINAL_SEGMENT_SPAN);
         PPE.addNominalNumCoefficients(builder, this.NOMINAL_NUM_COEFFICIENTS);
+        PPE.addProvenance(builder, PROVENANCE);
         return PPE.endPPE(builder);
     }
 }

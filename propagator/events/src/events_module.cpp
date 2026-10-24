@@ -398,6 +398,22 @@ double body_radius(int bodyId) {
   }
 }
 
+/// The catalog parameters that are angles on a circle: a goal on one is met by a crossing of
+/// the wrapped difference, and the wrap itself is not a crossing.
+bool is_periodic_angle(par::ParameterId id) {
+  switch (id) {
+    case par::ParameterId::TA:
+    case par::ParameterId::MA:
+    case par::ParameterId::EA:
+    case par::ParameterId::AOP:
+    case par::ParameterId::RAAN:
+    case par::ParameterId::ArgumentOfLatitude:
+      return true;
+    default:
+      return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // A parameter scalar over the catalog, so a stopping condition on a NAMED
 // parameter resolves through the same evaluator the catalog module publishes.
@@ -600,6 +616,7 @@ extern "C" int locate_events(void) {
   ev::ContactContext contact;
   ev::IntrusionContext intrusion;
   ev::NodeContext node;
+  ev::PoleContext pole;
   ev::StoppingContext stopping;
   SiteContext site;
   ScalarContext scalar;
@@ -754,6 +771,50 @@ extern "C" int locate_events(void) {
       exitType = evlEventType::DESCENDING_NODE;
       eventFunction = ev::nodeFunction;
       eventContext = &node;
+      if (const EVLNodeCrossingConfiguration* configuration = request->NODE_CROSSING_CONFIGURATION()) {
+        // The plane crossed: the pole of the ephemeris axes unless the request states a normal.
+        if (const FRMVector3* normal = configuration->PLANE_NORMAL()) {
+          const double length = std::sqrt(normal->X() * normal->X() + normal->Y() * normal->Y() +
+                                          normal->Z() * normal->Z());
+          if (length > 0.0) {
+            node.planeNormal[0] = normal->X() / length;
+            node.planeNormal[1] = normal->Y() / length;
+            node.planeNormal[2] = normal->Z() / length;
+          }
+        }
+        if (configuration->REPORT_ASCENDING() && !configuration->REPORT_DESCENDING()) {
+          scan.direction = ev::Direction::INCREASING;
+        } else if (!configuration->REPORT_ASCENDING() && configuration->REPORT_DESCENDING()) {
+          scan.direction = ev::Direction::DECREASING;
+        } else if (!configuration->REPORT_ASCENDING() && !configuration->REPORT_DESCENDING()) {
+          return refuse(evlResultStatus::INVALID_INPUT,
+                        "A NODE_CROSSING request reports the ascending crossings, the descending "
+                        "crossings or both.");
+        }
+      }
+      break;
+    }
+    case evlLocatorClass::LATITUDE_EXTREMUM: {
+      // The latitude rate crosses zero falling at a maximum and rising at a minimum. The pole is
+      // that of the ephemeris axes.
+      const EVLLatitudeExtremumConfiguration* configuration =
+          request->LATITUDE_EXTREMUM_CONFIGURATION();
+      if (configuration == nullptr) {
+        return refuse(evlResultStatus::MISSING_CONFIGURATION,
+                      "A LATITUDE_EXTREMUM request needs LATITUDE_EXTREMUM_CONFIGURATION.");
+      }
+      if (configuration->REPORT_MAXIMUM() && !configuration->REPORT_MINIMUM()) {
+        scan.direction = ev::Direction::DECREASING;
+      } else if (!configuration->REPORT_MAXIMUM() && configuration->REPORT_MINIMUM()) {
+        scan.direction = ev::Direction::INCREASING;
+      } else if (!configuration->REPORT_MAXIMUM() && !configuration->REPORT_MINIMUM()) {
+        return refuse(evlResultStatus::INVALID_INPUT,
+                      "A LATITUDE_EXTREMUM request reports the maxima, the minima or both.");
+      }
+      entryType = evlEventType::MINIMUM_LATITUDE;
+      exitType = evlEventType::MAXIMUM_LATITUDE;
+      eventFunction = ev::latitudeRateFunction;
+      eventContext = &pole;
       break;
     }
     case evlLocatorClass::PARAMETER_CONDITION: {
@@ -808,6 +869,8 @@ extern "C" int locate_events(void) {
       stopping.scalar = parameter_scalar;
       stopping.scalarContext = &scalar;
       stopping.goal = condition->GOAL_VALUE();
+      stopping.periodic = is_periodic_angle(scalar.id);
+      if (stopping.periodic) scan.jumpLimit = ev::kPi;
       if (condition->DIRECTION() == pceConditionDirection::INCREASING) {
         scan.direction = ev::Direction::INCREASING;
       } else if (condition->DIRECTION() == pceConditionDirection::DECREASING) {
@@ -822,7 +885,7 @@ extern "C" int locate_events(void) {
     default:
       return refuse(evlResultStatus::UNSUPPORTED_LOCATOR_CLASS,
                     "This provider locates eclipse, contact, intrusion, apsides, node "
-                    "crossings and parameter conditions.");
+                    "crossings, latitude extrema and parameter conditions.");
   }
 
   static ev::Event events[kMaxEvents];
@@ -1122,6 +1185,7 @@ extern "C" int propagate_to_condition(void) {
   stopping.scalar = parameter_scalar;
   stopping.scalarContext = &scalar;
   stopping.goal = condition->GOAL_VALUE();
+  stopping.periodic = is_periodic_angle(scalar.id);
 
   const double maximumElapsed = request->MAXIMUM_ELAPSED_SECONDS() > 0.0
                                     ? request->MAXIMUM_ELAPSED_SECONDS()
@@ -1150,6 +1214,7 @@ extern "C" int propagate_to_condition(void) {
                                   ? request->CONDITIONS()->Get(0)->OCCURRENCE()
                                   : 1;
   scan.maxEvents = static_cast<int32_t>(occurrence);
+  if (stopping.periodic) scan.jumpLimit = ev::kPi;
 
   static ev::Event events[64];
   int32_t count = 0;

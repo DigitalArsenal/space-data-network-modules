@@ -24,7 +24,7 @@ const decode = (bytes) => P.PRW.getSizePrefixedRootAsPRW(new flatbuffers.ByteBuf
 
 function forces(p) {
   return {
-    GRAVITY_CHOICE: enumValue('prwGravitySelection', p.gravity.field),
+    GRAVITY_CHOICE: enumValue('pcfGravitySelection', p.gravity.field),
     ENABLE_POINT_MASS: p.gravity.pointMass,
     GRAVITATIONAL_PARAMETER: p.gravity.gm_m3_s2,
     ENABLE_J2: p.gravity.legacyZonalFlags.j2,
@@ -43,25 +43,25 @@ function forces(p) {
     AREA_M2: p.srp.area_m2,
     REFLECTIVITY_COEFFICIENT: p.srp.crAreaOverMass_m2_kg,
     DRAG_COEFFICIENT: p.drag.cdAreaOverMass_m2_kg,
-    ATMOSPHERE_MODEL: enumValue('prwAtmosphereFamily', p.drag.model.replaceAll('-', '').toUpperCase()),
+    ATMOSPHERE_MODEL: enumValue('pcfAtmosphereFamily', p.drag.model.replaceAll('-', '').toUpperCase()),
     WEATHER: p.drag.weather,
     EPHEMERIS_SOURCE: p.thirdBodies.ephemerisSource,
-    SOLID_TIDES: enumValue('prwSolidTideModel', p.solidTides.selection),
-    RELATIVITY: enumValue('prwRelativityTerms', p.relativity.selection),
+    SOLID_TIDES: enumValue('pcfSolidTideModel', p.solidTides.selection),
+    RELATIVITY: enumValue('pcfRelativityTerms', p.relativity.selection),
     IN_TRACK_ACCELERATION_M_S2: p.inTrackAcceleration.value_m_s2,
     HAS_IN_TRACK_ACCELERATION_M_S2: p.inTrackAcceleration.specified,
     DRAG_AREA_OVER_MASS_RATE_M2_KG_S: p.drag.areaOverMassRate_m2_kg_s,
     HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: p.drag.areaOverMassRateSpecified,
     MAXIMUM_TESSERAL_DEGREE: p.gravity.maximumTesseralDegree,
     HAS_MAXIMUM_TESSERAL_DEGREE: p.gravity.maximumTesseralDegreeSpecified,
-    RADIATION_PRESSURE_MODEL: enumValue('prwRadiationPressureFamily', p.srp.model.toUpperCase()),
-    GNSS_BLOCK: enumValue('prwGnssSpacecraftBlock', p.srp.gnssBlock),
+    RADIATION_PRESSURE_MODEL: enumValue('pcfRadiationPressureFamily', p.srp.model.toUpperCase()),
+    GNSS_BLOCK: enumValue('pcfGnssSpacecraftBlock', p.srp.gnssBlock),
     ECOM2: p.srp.ecom2,
-    EARTH_RADIATION: enumValue('prwEarthRadiationModel', p.earthRadiation.model.toUpperCase()),
+    EARTH_RADIATION: enumValue('pcfEarthRadiationModel', p.earthRadiation.model.toUpperCase()),
     EARTH_RADIATION_RESOLUTION_DEG: p.earthRadiation.resolutionDeg,
     EARTH_RADIATION_AREA_OVER_MASS_M2_KG: p.earthRadiation.areaOverMass_m2_kg,
     HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG: p.earthRadiation.areaOverMassSpecified,
-    OCEAN_TIDES: enumValue('prwOceanTideModel', p.oceanTides.model),
+    OCEAN_TIDES: enumValue('pcfOceanTideModel', p.oceanTides.model),
     OCEAN_TIDE_MAXIMUM_DEGREE: p.oceanTides.degree,
     OCEAN_TIDE_MAXIMUM_ORDER: p.oceanTides.order,
   };
@@ -69,7 +69,7 @@ function forces(p) {
 
 function integrator(p) {
   return {
-    ALGORITHM: enumValue('prwSolverAlgorithm', p.algorithm),
+    ALGORITHM: enumValue('pcfIntegratorAlgorithm', p.algorithm),
     INITIAL_STEP_SECONDS: p.initialStep_s,
     MINIMUM_STEP_SECONDS: p.minStep_s,
     MAXIMUM_STEP_SECONDS: p.maxStep_s,
@@ -103,7 +103,7 @@ function checkCppDefaults(p) {
   assert.ok(!/out\.drag\.includeWinds\s*=/.test(dynamics), 'PRW wind selection changed; review profile');
   for (const [member, label] of [['includeSunTide', 'Sun'], ['includeMoonTide', 'Moon'], ['frequencyDependent', 'frequency-dependent Step 2']])
     assert.equal(p.solidTides.model.includes(label), boolDefault(member), `Solid tide ${member}`);
-  const branch = dynamics.match(new RegExp(`case prwRelativityTerms::${p.relativity.selection}:([\\s\\S]*?)break;`))?.[1];
+  const branch = dynamics.match(new RegExp(`case pcfRelativityTerms::${p.relativity.selection}:([\\s\\S]*?)break;`))?.[1];
   assert.ok(branch, 'Missing selected relativity branch');
   const assignments = [...branch.matchAll(/((?:out\.relativistic\.\w+\s*=\s*)+)(true|false)\s*;/g)];
   const enabled = new Set(assignments.filter((m) => m[2] === 'true').flatMap((m) => [...m[1].matchAll(/out\.relativistic\.(\w+)/g)].map((v) => v[1])));

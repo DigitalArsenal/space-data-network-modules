@@ -16,6 +16,8 @@ struct PrwEnvironment {
     const uint8_t* spaceWeather = nullptr; size_t spaceWeatherSize = 0;
     const uint8_t* jb2008Indices = nullptr; size_t jb2008IndicesSize = 0;
     const uint8_t* densityCorrection = nullptr; size_t densityCorrectionSize = 0;
+    // second_trajectory: an OEM that EVENTS of kind CLOSEST_APPROACH read.
+    const uint8_t* secondTrajectory = nullptr; size_t secondTrajectorySize = 0;
 };
 bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,
                       const PrwEnvironment& environment,

@@ -109,14 +109,14 @@ export function execution(params,withKernel=false) {
   const bodies=[['Sun','sun',10,true],['Moon','moon',301,true],['Mercury','mercury',1,false],
     ['Venus','venus',2,false],['Mars','mars',4,false],['Jupiter','jupiter',5,false],
     ['Saturn','saturn',6,false],['Uranus','uranus',7,false],['Neptune','neptune',8,false]];
-  const settings=makeTable('PRWIntegratorSettings',{
-    ALGORITHM:choice('prwSolverAlgorithm',it.method?.toUpperCase()==='EQUINOCTIALVOP'?'EQUINOCTIAL_VOP':it.method?.toUpperCase(),'RK78'),
+  const settings=makeTable('PCFIntegratorSettings',{
+    ALGORITHM:choice('pcfIntegratorAlgorithm',it.method?.toUpperCase()==='EQUINOCTIALVOP'?'EQUINOCTIAL_VOP':it.method?.toUpperCase(),'RK78'),
     INITIAL_STEP_SECONDS:it.initialStep??60,MINIMUM_STEP_SECONDS:it.minStep??1,MAXIMUM_STEP_SECONDS:it.maxStep??3600,
     ABSOLUTE_TOLERANCES:[...Array(6).fill(tol*1000),...(seven?[tol]:[])],
     RELATIVE_TOLERANCE:it.tolerance??it.relTolerance??1e-12,MAXIMUM_STEPS:it.maxSteps??100000,
   });
-  const forces=makeTable('PRWForceConfiguration',{
-    GRAVITY_CHOICE:choice('prwGravitySelection',({J2:'J2_ONLY',J2_J4:'J2_TO_J4'})[f.gravityMode]??f.gravityMode,'INFER_FLAGS'),
+  const forces=makeTable('PCFForceModel',{
+    GRAVITY_CHOICE:choice('pcfGravitySelection',({J2:'J2_ONLY',J2_J4:'J2_TO_J4'})[f.gravityMode]??f.gravityMode,'INFER_FLAGS'),
     ENABLE_POINT_MASS:f.centralBody??f.pointMass??true,GRAVITATIONAL_PARAMETER:(f.mu??398600.4418)*1e9,
     ENABLE_J2:f.j2??true,ENABLE_J3:f.j3??false,ENABLE_J4:f.j4??false,ENABLE_HIGHER_ZONALS:f.higherZonals??false,
     MAXIMUM_DEGREE:f.maxDegree??0,HAS_MAXIMUM_DEGREE:f.maxDegree!==undefined,
@@ -125,14 +125,14 @@ export function execution(params,withKernel=false) {
     ENABLE_SRP:f.srp??false,ENABLE_DRAG:f.drag??false,INITIAL_MASS_KG:mass,
     AREA_M2:f.areaM2??f.area??sc.areaM2??sc.area??10,
     REFLECTIVITY_COEFFICIENT:f.cr??f.Cr??1.5,DRAG_COEFFICIENT:f.cd??f.Cd??2.2,
-    ATMOSPHERE_MODEL:choice('prwAtmosphereFamily',f.dragModel,'NRLMSISE00'),
+    ATMOSPHERE_MODEL:choice('pcfAtmosphereFamily',f.dragModel,'NRLMSISE00'),
     EPHEMERIS_SOURCE:params.ephemerisSource??(withKernel?'JPL_SPK':'Analytical'),
   });
   // Weather is explicitly UTC. This fixture epoch is input metadata, not an
   // inferred UTC=TDB conversion; constant weather indices are sampled there.
   if(params.weather) {
     const w=params.weather;
-    forces.WEATHER=makeTable('PRWSpaceWeather',{EPOCH:instant(w.epochUTCJD??params.epochJD,'UTC'),
+    forces.WEATHER=makeTable('PCFSpaceWeather',{EPOCH:instant(w.epochUTCJD??params.epochJD,'UTC'),
       F107:w.F107??w.f107??150,F107_AVERAGE:w.F107a??w.f107a??150,AP_INDEX:w.Ap??w.ap??15,KP_INDEX:w.Kp??w.kp??3});
   }
   return makeTable('PRWExecutionRequest',{
@@ -164,7 +164,7 @@ export function operationPayload(operation,params={},withKernel=false) {
     const epoch=new Date(Date.UTC(params.year>0?params.year:2001,0,params.dayOfYear??172));
     const jd=epoch.getTime()/86400000+2440587.5+(params.secondOfDay??29000)/86400;
     return encodePrw('ATMOSPHERE_REQUEST',makeTable('PRWAtmosphereRequest',{
-      EPOCH:instant(jd,'UTC'),ATMOSPHERE_MODEL:choice('prwAtmosphereFamily',params.model,'NRLMSISE00'),
+      EPOCH:instant(jd,'UTC'),ATMOSPHERE_MODEL:choice('pcfAtmosphereFamily',params.model,'NRLMSISE00'),
       ALTITUDE_M:params.altitudeKm*1000,LATITUDE_RAD:(params.latitudeDeg??0)*Math.PI/180,LONGITUDE_RAD:(params.longitudeDeg??0)*Math.PI/180,
       LOCAL_SOLAR_TIME_HOURS:params.localSolarTimeHours??0,HAS_LOCAL_SOLAR_TIME_HOURS:params.localSolarTimeHours!==undefined,
       F107:params.f107??150,F107_AVERAGE:params.f107a??150,AP_INDEX:params.ap??4,INCLUDE_ANOMALOUS_OXYGEN:params.includeAnomalousOxygen??false,
@@ -214,7 +214,7 @@ export function decodeResult(response) {
   }
   if(root.ATMOSPHERE_RESULT) {
     const r=root.ATMOSPHERE_RESULT,names=['','He','O','N2','O2','Ar','H','N','anomalousO'];
-    return {model:sds.prwAtmosphereFamily[r.ATMOSPHERE_MODEL],variant:r.VARIANT,altitudeKm:r.ALTITUDE_M/1000,
+    return {model:sds.pcfAtmosphereFamily[r.ATMOSPHERE_MODEL],variant:r.VARIANT,altitudeKm:r.ALTITUDE_M/1000,
       densityKgM3:r.DENSITY_KG_M3,densityGCm3:r.DENSITY_KG_M3/1000,temperatureK:r.HAS_TEMPERATURE_K?r.TEMPERATURE_K:undefined,
       exosphericTemperatureK:r.HAS_EXOSPHERIC_TEMPERATURE_K?r.EXOSPHERIC_TEMPERATURE_K:undefined,
       scaleHeightKm:r.HAS_SCALE_HEIGHT_M?r.SCALE_HEIGHT_M/1000:undefined,

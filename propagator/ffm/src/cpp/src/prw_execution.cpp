@@ -48,6 +48,7 @@ bool finish(const Execution& execution,const PRWExecutionRequest* request,const 
 // runs along the arc) and the plain path without STM or samples.
 bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error) {
     const double epoch=timesys::ttToTdb(epochTT.jdTt());
+    TTEpoch reached=epochTT;
     if(!preflightKernel(execution,epochTT.instant(),error))return false;
     const auto stateOut=[&](StateVector state){return sampleState(execution,request,state);};
     const auto matrixOut=[&](const double* values,unsigned n,bool covariance){return sampleMatrix(execution,values,n,covariance);};
@@ -73,9 +74,11 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
     } else {
         StateVector state=execution.initial;TTEpoch at=execution.initialTT;uint32_t steps=0,rejections=0;
         if(!propagateState(execution,state,at,epochTT,steps,rejections,error))return false;
-        state.epoch=epoch;out.STATE=stateOut(state);out.ACCEPTED_STEPS=steps;out.REJECTED_STEPS=rejections;
+        // A STOP event ends the arc where it is: the sample is the state there.
+        if(execution.eventOutcome.stoppedBy>=0)reached=at;
+        state.epoch=timesys::ttToTdb(reached.jdTt());out.STATE=stateOut(state);out.ACCEPTED_STEPS=steps;out.REJECTED_STEPS=rejections;
     }
-    return finish(execution,request,epochTT,out,error);
+    return finish(execution,request,reached,out,error);
 }
 // The tail every sample shares: mass echo, epoch label and finiteness.
 bool finish(const Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error) {
@@ -156,6 +159,28 @@ bool evaluateStatesInOrder(Execution& execution,const PRWExecutionRequest* reque
     for(size_t k=1;k<samples.size();++k)result.SAMPLES.push_back(std::move(samples[k]));
     return true;
 }
+// The located events, in the request's axes, at their exact epochs.
+void encodeEvents(const Execution& execution,const PRWExecutionRequest* request,PRWExecutionResultT& result) {
+    const auto& outcome=execution.eventOutcome;
+    for(const auto& hit:outcome.hits) {
+        auto record=std::make_unique<PRWEventRecordT>();
+        record->EVENT_INDEX=hit.spec;record->KIND=execution.eventKinds[hit.spec];
+        record->DIRECTION=hit.direction==sdn::events::Direction::INCREASING?pcfEventDirection::INCREASING:pcfEventDirection::DECREASING;
+        record->ELAPSED_SECONDS=hit.t;
+        const TTEpoch at=normalizeTT(execution.initialTT.whole,execution.initialTT.fraction+hit.t);
+        record->EPOCH=std::make_unique<TIMInstantT>();
+        record->EPOCH->TIME_SYSTEM=timingStandard::TDB;record->EPOCH->EPOCH_FORMAT=timEpochRepresentation::ISO8601;record->EPOCH->ISO8601=formatTdb(at);
+        StateVector state;
+        state.position=Vec3(hit.state[0],hit.state[1],hit.state[2]);state.velocity=Vec3(hit.state[3],hit.state[4],hit.state[5]);
+        state.epoch=timesys::ttToTdb(at.jdTt());
+        record->STATE=sampleState(execution,request,state);
+        record->STATE->STATE->EPOCH=formatTdb(at);record->STATE->STATE->EPOCH_TIME_SYSTEM="TDB";
+        record->RESIDUAL=hit.residual;record->ITERATIONS=hit.iterations;
+        result.EVENTS.push_back(std::move(record));
+    }
+    result.EVENT_OCCURRENCES=outcome.occurrences;
+    result.STOPPED_BY_EVENT=outcome.stoppedBy;
+}
 bool execute(const PRWExecutionRequest* request,const Environment& environment,PRWT& response,std::string& error) {
     Execution execution;if(!parseExecution(request,environment.earth!=nullptr,execution,error))return false;
     if(!attachEnvironment(execution,environment,request->FORCES()->WEATHER()!=nullptr,error))return false;
@@ -177,6 +202,10 @@ bool execute(const PRWExecutionRequest* request,const Environment& environment,P
         for(const auto& epoch:execution.samplesTT){auto sample=std::make_unique<PRWPropagationSampleT>();if(!evaluate(execution,request,epoch,*sample,error))return false;result->SAMPLES.push_back(std::move(sample));}
     }
     result->ELAPSED_SECONDS=elapsedSeconds(execution.initialTT,execution.targetTT);result->EPHEMERIS_SOURCE=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource());
+    if(!execution.events.empty()) {
+        encodeEvents(execution,request,*result);
+        if(execution.eventOutcome.stoppedBy>=0)result->ELAPSED_SECONDS=execution.eventOutcome.hits.back().t;
+    }
     if(execution.variational){result->STM_TECHNIQUE=request->STM_TECHNIQUE();result->DENSITY_TREATMENT=request->DENSITY_TREATMENT();}
     if(request->DYNAMIC_PARAMETERS())for(const auto p:*request->DYNAMIC_PARAMETERS())result->DYNAMIC_PARAMETERS.push_back(p);
     response.EXECUTION_RESULT=std::move(result);return true;
@@ -209,14 +238,14 @@ bool atmosphere(const PRWAtmosphereRequest* request,PRWT& response,std::string& 
     if(!request->HAS_LOCAL_SOLAR_TIME_HOURS()&&request->LOCAL_SOLAR_TIME_HOURS()!=0)return prwError(error,"invalid-presence: Local solar time requires its presence bit.");
     if(request->HAS_LOCAL_SOLAR_TIME_HOURS()&&(!nonnegative(request->LOCAL_SOLAR_TIME_HOURS())||request->LOCAL_SOLAR_TIME_HOURS()>=24))return prwError(error,"invalid-atmosphere: Local solar time must be in [0,24).");
     auto result=std::make_unique<PRWAtmosphereResultT>();result->ATMOSPHERE_MODEL=request->ATMOSPHERE_MODEL();result->ALTITUDE_M=altitude;
-    if(request->ATMOSPHERE_MODEL()==prwAtmosphereFamily::USSA1976) {
+    if(request->ATMOSPHERE_MODEL()==pcfAtmosphereFamily::USSA1976) {
         if(altitude>86000)return prwError(error,"unsupported-atmosphere: USSA1976 profile covers 0 to 86 km geometric altitude.");
         if(request->INCLUDE_ANOMALOUS_OXYGEN())return prwError(error,"unsupported-atmosphere: Anomalous oxygen is an NRLMSISE00 option.");
         const auto value=computeUSSA1976(altitude*0.001);result->DENSITY_KG_M3=value.density;result->HAS_TEMPERATURE_K=true;result->TEMPERATURE_K=value.temperature;result->HAS_SCALE_HEIGHT_M=true;result->SCALE_HEIGHT_M=value.scaleHeight*1000;
-    } else if(request->ATMOSPHERE_MODEL()==prwAtmosphereFamily::EXPONENTIAL) {
+    } else if(request->ATMOSPHERE_MODEL()==pcfAtmosphereFamily::EXPONENTIAL) {
         if(request->INCLUDE_ANOMALOUS_OXYGEN())return prwError(error,"unsupported-atmosphere: Anomalous oxygen is an NRLMSISE00 option.");
         result->DENSITY_KG_M3=exponentialAtmosphereDensity(altitude*0.001);
-    } else if(request->ATMOSPHERE_MODEL()==prwAtmosphereFamily::NRLMSISE00) {
+    } else if(request->ATMOSPHERE_MODEL()==pcfAtmosphereFamily::NRLMSISE00) {
         nrlmsise_input input{};nrlmsise_flags flags{};nrlmsise_output value{};
         int month=0,day=0,hour=0,minute=0;double seconds=0;
         timesys::Epoch(utc,timesys::TimeScale::UTC).toComponents(input.year,month,day,hour,minute,seconds);

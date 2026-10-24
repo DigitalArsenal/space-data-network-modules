@@ -1,6 +1,6 @@
 import * as flatbuffers from 'flatbuffers';
 import { TIMInstant, TIMInstantT } from './TIMInstant.js';
-export class PRWSpaceWeather {
+export class PCFSpaceWeather {
     bb = null;
     bb_pos = 0;
     __init(i, bb) {
@@ -8,12 +8,12 @@ export class PRWSpaceWeather {
         this.bb = bb;
         return this;
     }
-    static getRootAsPRWSpaceWeather(bb, obj) {
-        return (obj || new PRWSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    static getRootAsPCFSpaceWeather(bb, obj) {
+        return (obj || new PCFSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
-    static getSizePrefixedRootAsPRWSpaceWeather(bb, obj) {
+    static getSizePrefixedRootAsPCFSpaceWeather(bb, obj) {
         bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-        return (obj || new PRWSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+        return (obj || new PCFSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
     EPOCH(obj) {
         const offset = this.bb.__offset(this.bb_pos, 4);
@@ -35,7 +35,7 @@ export class PRWSpaceWeather {
         const offset = this.bb.__offset(this.bb_pos, 12);
         return offset ? this.bb.readFloat64(this.bb_pos + offset) : 3.0;
     }
-    static startPRWSpaceWeather(builder) {
+    static startPCFSpaceWeather(builder) {
         builder.startObject(5);
     }
     static addEpoch(builder, EPOCHOffset) {
@@ -53,22 +53,22 @@ export class PRWSpaceWeather {
     static addKpIndex(builder, KP_INDEX) {
         builder.addFieldFloat64(4, KP_INDEX, 3.0);
     }
-    static endPRWSpaceWeather(builder) {
+    static endPCFSpaceWeather(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 4);
         return offset;
     }
-    static createPRWSpaceWeather(builder, EPOCHOffset, F107, F107_AVERAGE, AP_INDEX, KP_INDEX) {
-        PRWSpaceWeather.startPRWSpaceWeather(builder);
-        PRWSpaceWeather.addEpoch(builder, EPOCHOffset);
-        PRWSpaceWeather.addF107(builder, F107);
-        PRWSpaceWeather.addF107Average(builder, F107_AVERAGE);
-        PRWSpaceWeather.addApIndex(builder, AP_INDEX);
-        PRWSpaceWeather.addKpIndex(builder, KP_INDEX);
-        return PRWSpaceWeather.endPRWSpaceWeather(builder);
+    static createPCFSpaceWeather(builder, EPOCHOffset, F107, F107_AVERAGE, AP_INDEX, KP_INDEX) {
+        PCFSpaceWeather.startPCFSpaceWeather(builder);
+        PCFSpaceWeather.addEpoch(builder, EPOCHOffset);
+        PCFSpaceWeather.addF107(builder, F107);
+        PCFSpaceWeather.addF107Average(builder, F107_AVERAGE);
+        PCFSpaceWeather.addApIndex(builder, AP_INDEX);
+        PCFSpaceWeather.addKpIndex(builder, KP_INDEX);
+        return PCFSpaceWeather.endPCFSpaceWeather(builder);
     }
     unpack() {
-        return new PRWSpaceWeatherT(this.EPOCH() !== null ? this.EPOCH().unpack() : null, this.F107(), this.F107_AVERAGE(), this.AP_INDEX(), this.KP_INDEX());
+        return new PCFSpaceWeatherT(this.EPOCH() !== null ? this.EPOCH().unpack() : null, this.F107(), this.F107_AVERAGE(), this.AP_INDEX(), this.KP_INDEX());
     }
     unpackTo(_o) {
         _o.EPOCH = this.EPOCH() !== null ? this.EPOCH().unpack() : null;
@@ -78,7 +78,7 @@ export class PRWSpaceWeather {
         _o.KP_INDEX = this.KP_INDEX();
     }
 }
-export class PRWSpaceWeatherT {
+export class PCFSpaceWeatherT {
     EPOCH;
     F107;
     F107_AVERAGE;
@@ -93,6 +93,6 @@ export class PRWSpaceWeatherT {
     }
     pack(builder) {
         const EPOCH = this.EPOCH !== null ? this.EPOCH.pack(builder) : 0;
-        return PRWSpaceWeather.createPRWSpaceWeather(builder, EPOCH, this.F107, this.F107_AVERAGE, this.AP_INDEX, this.KP_INDEX);
+        return PCFSpaceWeather.createPCFSpaceWeather(builder, EPOCH, this.F107, this.F107_AVERAGE, this.AP_INDEX, this.KP_INDEX);
     }
 }

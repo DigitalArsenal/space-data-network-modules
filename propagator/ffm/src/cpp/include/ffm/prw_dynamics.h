@@ -7,6 +7,7 @@
 #include "ffm/prw_environment.h"
 #include "ffm/prw_covariance.h"
 #include "integrators.h"
+#include "integrator_events.h"
 #include "variational.h"
 #include "finite_burn.h"
 #include "force_partials.h"
@@ -62,6 +63,13 @@ struct Execution {
     // Shared across the catalog, never copied once per entity.
     std::shared_ptr<const std::vector<TTEpoch>> densityCorrectionBreaks;
     std::shared_ptr<std::array<double,2>> driverSpan;
+    // EVENTS: located inside the integration (lib/integrator_events.h). The event functions
+    // hold pointers into this Execution, which therefore stays where parseExecution built it.
+    std::vector<Integrator::EventSpec> events;
+    std::vector<pcfEventKind> eventKinds;
+    Integrator::EventOutcome eventOutcome;
+    // EVENTS of kind CLOSEST_APPROACH, whose g attachEnvironment binds to the second trajectory.
+    std::vector<size_t> pendingSecondTrajectory;
 };
 // The variational path without mass dynamics visits the request's epochs in
 // time order, forward and backward of the initial epoch separately, and
@@ -83,9 +91,11 @@ Vec3 toRequestAxes(const Execution& e,const Vec3& v);
 Vec3 toGcrf(const Execution& e,const Vec3& v);
 // M <- R M R^T for an n x n row-major covariance or STM on [r, v, rest].
 void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest);
-bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error);
-bool parseForces(const PRWForceConfiguration* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error);
+bool parseIntegrator(const PCFIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error);
+bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error);
 bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error);
+// EVENTS into out.events (parseExecution calls it last).
+bool parseEvents(const PRWExecutionRequest* in,Execution& out,std::string& error);
 // The kernel holds every body the force set reads at both ends of the arc.
 bool preflightKernel(const Execution& in,const timesys::Instant& target,std::string& error);
 double utcJd(const TTEpoch& tt);

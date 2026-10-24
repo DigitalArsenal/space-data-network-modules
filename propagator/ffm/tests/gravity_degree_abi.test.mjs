@@ -38,7 +38,6 @@ import test from 'node:test';
 import { createFFMPropagator } from '../index.js';
 
 const FFM_ERR_BAD_ARGUMENT = -4;
-const RK78 = 2;
 const orekit = JSON.parse(fs.readFileSync(new URL('./fixtures/orekit/orekit-reference.json', import.meta.url), 'utf8'));
 const gmat = JSON.parse(fs.readFileSync(new URL('./fixtures/gmat/gmat-reference.json', import.meta.url), 'utf8'));
 
@@ -68,7 +67,6 @@ function setForceModel(mu, degree = 0, order = 0, j2 = 0, j3 = 0, j4 = 0) {
  */
 function fly({ mu, array = [], gravity }, epochJD, state, offsetsSec) {
   assert.equal(ex.plugin_init(), 0);
-  ex.plugin_set_integrator(RK78);
   assert.equal(setForceModel(mu, ...array), 0);
   if (gravity) ex.plugin_set_gravity(gravity[0], gravity[1], 0);
   f64(statePtr, 7).set([epochJD, ...state]);

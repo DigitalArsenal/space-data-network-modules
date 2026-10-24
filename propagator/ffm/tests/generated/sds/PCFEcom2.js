@@ -1,5 +1,5 @@
 import * as flatbuffers from 'flatbuffers';
-export class PRWEcom2 {
+export class PCFEcom2 {
     bb = null;
     bb_pos = 0;
     __init(i, bb) {
@@ -7,12 +7,12 @@ export class PRWEcom2 {
         this.bb = bb;
         return this;
     }
-    static getRootAsPRWEcom2(bb, obj) {
-        return (obj || new PRWEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    static getRootAsPCFEcom2(bb, obj) {
+        return (obj || new PCFEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
-    static getSizePrefixedRootAsPRWEcom2(bb, obj) {
+    static getSizePrefixedRootAsPCFEcom2(bb, obj) {
         bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-        return (obj || new PRWEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+        return (obj || new PCFEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
     D0_M_S2() {
         const offset = this.bb.__offset(this.bb_pos, 4);
@@ -58,7 +58,7 @@ export class PRWEcom2 {
         const offset = this.bb.__offset(this.bb_pos, 24);
         return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
     }
-    static startPRWEcom2(builder) {
+    static startPCFEcom2(builder) {
         builder.startObject(11);
     }
     static addD0MS2(builder, D0_M_S2) {
@@ -94,27 +94,27 @@ export class PRWEcom2 {
     static addB3SinMS2(builder, B3_SIN_M_S2) {
         builder.addFieldFloat64(10, B3_SIN_M_S2, 0.0);
     }
-    static endPRWEcom2(builder) {
+    static endPCFEcom2(builder) {
         const offset = builder.endObject();
         return offset;
     }
-    static createPRWEcom2(builder, D0_M_S2, Y0_M_S2, B0_M_S2, D2_COS_M_S2, D2_SIN_M_S2, D4_COS_M_S2, D4_SIN_M_S2, B1_COS_M_S2, B1_SIN_M_S2, B3_COS_M_S2, B3_SIN_M_S2) {
-        PRWEcom2.startPRWEcom2(builder);
-        PRWEcom2.addD0MS2(builder, D0_M_S2);
-        PRWEcom2.addY0MS2(builder, Y0_M_S2);
-        PRWEcom2.addB0MS2(builder, B0_M_S2);
-        PRWEcom2.addD2CosMS2(builder, D2_COS_M_S2);
-        PRWEcom2.addD2SinMS2(builder, D2_SIN_M_S2);
-        PRWEcom2.addD4CosMS2(builder, D4_COS_M_S2);
-        PRWEcom2.addD4SinMS2(builder, D4_SIN_M_S2);
-        PRWEcom2.addB1CosMS2(builder, B1_COS_M_S2);
-        PRWEcom2.addB1SinMS2(builder, B1_SIN_M_S2);
-        PRWEcom2.addB3CosMS2(builder, B3_COS_M_S2);
-        PRWEcom2.addB3SinMS2(builder, B3_SIN_M_S2);
-        return PRWEcom2.endPRWEcom2(builder);
+    static createPCFEcom2(builder, D0_M_S2, Y0_M_S2, B0_M_S2, D2_COS_M_S2, D2_SIN_M_S2, D4_COS_M_S2, D4_SIN_M_S2, B1_COS_M_S2, B1_SIN_M_S2, B3_COS_M_S2, B3_SIN_M_S2) {
+        PCFEcom2.startPCFEcom2(builder);
+        PCFEcom2.addD0MS2(builder, D0_M_S2);
+        PCFEcom2.addY0MS2(builder, Y0_M_S2);
+        PCFEcom2.addB0MS2(builder, B0_M_S2);
+        PCFEcom2.addD2CosMS2(builder, D2_COS_M_S2);
+        PCFEcom2.addD2SinMS2(builder, D2_SIN_M_S2);
+        PCFEcom2.addD4CosMS2(builder, D4_COS_M_S2);
+        PCFEcom2.addD4SinMS2(builder, D4_SIN_M_S2);
+        PCFEcom2.addB1CosMS2(builder, B1_COS_M_S2);
+        PCFEcom2.addB1SinMS2(builder, B1_SIN_M_S2);
+        PCFEcom2.addB3CosMS2(builder, B3_COS_M_S2);
+        PCFEcom2.addB3SinMS2(builder, B3_SIN_M_S2);
+        return PCFEcom2.endPCFEcom2(builder);
     }
     unpack() {
-        return new PRWEcom2T(this.D0_M_S2(), this.Y0_M_S2(), this.B0_M_S2(), this.D2_COS_M_S2(), this.D2_SIN_M_S2(), this.D4_COS_M_S2(), this.D4_SIN_M_S2(), this.B1_COS_M_S2(), this.B1_SIN_M_S2(), this.B3_COS_M_S2(), this.B3_SIN_M_S2());
+        return new PCFEcom2T(this.D0_M_S2(), this.Y0_M_S2(), this.B0_M_S2(), this.D2_COS_M_S2(), this.D2_SIN_M_S2(), this.D4_COS_M_S2(), this.D4_SIN_M_S2(), this.B1_COS_M_S2(), this.B1_SIN_M_S2(), this.B3_COS_M_S2(), this.B3_SIN_M_S2());
     }
     unpackTo(_o) {
         _o.D0_M_S2 = this.D0_M_S2();
@@ -130,7 +130,7 @@ export class PRWEcom2 {
         _o.B3_SIN_M_S2 = this.B3_SIN_M_S2();
     }
 }
-export class PRWEcom2T {
+export class PCFEcom2T {
     D0_M_S2;
     Y0_M_S2;
     B0_M_S2;
@@ -156,6 +156,6 @@ export class PRWEcom2T {
         this.B3_SIN_M_S2 = B3_SIN_M_S2;
     }
     pack(builder) {
-        return PRWEcom2.createPRWEcom2(builder, this.D0_M_S2, this.Y0_M_S2, this.B0_M_S2, this.D2_COS_M_S2, this.D2_SIN_M_S2, this.D4_COS_M_S2, this.D4_SIN_M_S2, this.B1_COS_M_S2, this.B1_SIN_M_S2, this.B3_COS_M_S2, this.B3_SIN_M_S2);
+        return PCFEcom2.createPCFEcom2(builder, this.D0_M_S2, this.Y0_M_S2, this.B0_M_S2, this.D2_COS_M_S2, this.D2_SIN_M_S2, this.D4_COS_M_S2, this.D4_SIN_M_S2, this.B1_COS_M_S2, this.B1_SIN_M_S2, this.B3_COS_M_S2, this.B3_SIN_M_S2);
     }
 }
