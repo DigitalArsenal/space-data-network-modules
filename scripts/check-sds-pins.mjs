@@ -22,7 +22,8 @@ const DEPENDENCY_KINDS = ['dependencies', 'devDependencies', 'peerDependencies',
 const GENERATOR = 'generate-sds-headers.mjs';
 
 // headers: the directories the module's generator writes, regenerated from the installed release and compared with the
-// tracked files. dist: where the module's last build records the release it ran against.
+// tracked files. dist: where the module's last build records the release it ran against. xmt: the dist's JavaScript binding,
+// bundled again from the installed release.
 const TOUCHED = {
   'licensing/core': { headers: ['src/cpp/generated/sds'] },
   'propagator/sgp4': { headers: ['src/cpp/generated/sds'] },
@@ -30,7 +31,7 @@ const TOUCHED = {
   'analysis/conjunction-assessment': { headers: ['src/cpp/generated/sds', 'src/js/sds'], dist: (provenance) => provenance.standards?.version },
   'analysis/vcm-adapter': { dist: (provenance) => provenance.spacedatastandards },
   'analysis/density-calibration': { dist: (provenance) => provenance.spacedatastandards },
-  'analysis/catalog-composer': { dist: (provenance) => provenance.spacedatastandards, xmt: true },
+  'analysis/catalog-composer': { xmt: true },
 };
 const PYTHON_ASTRO = 'packages/python-astro';
 

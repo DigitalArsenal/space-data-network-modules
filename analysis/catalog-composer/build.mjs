@@ -42,7 +42,6 @@ const result = await compileModuleFromSource({
   threadModel: 'wasi-sequential',
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
-await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({ spacedatastandards: sds.version, sdsFamilies: sds.families }, null, 2)}\n`);
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
 // Dependencies are loaded by the generic APP bridge with exact artifact hashes.
 const matchingModules = [];
