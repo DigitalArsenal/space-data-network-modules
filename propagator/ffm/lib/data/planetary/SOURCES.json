@@ -1,0 +1,151 @@
+{
+  "sources": {
+    "grgm660prim": {
+      "directory": "src-pds-grail-grgm660prim",
+      "file": "gggrx_0660pm_sha.tab",
+      "url": "https://pds-geosciences.wustl.edu/grail/grail-l-lgrs-5-rdr-v1/grail_1001/shadr/gggrx_0660pm_sha.tab",
+      "sha256": "a77ee9996aff7341ef89f69aa401f39ba0c2949ed80411505fb4826b771dd63e",
+      "bytes": 26692624,
+      "degree": 660,
+      "labelFile": "gggrx_0660pm_sha.lbl",
+      "labelUrl": "https://pds-geosciences.wustl.edu/grail/grail-l-lgrs-5-rdr-v1/grail_1001/shadr/gggrx_0660pm_sha.lbl",
+      "labelSha256": "6f7c4bd8e13c9ed0d649e4b0763527da98218b08102cfc3fc8292474d40541d3",
+      "title": "GRGM660PRIM, GSFC lunar gravity field, degree and order 660, fully normalized, reference radius 1738.0 km, principal-axes frame of planetary ephemeris DE421",
+      "citation": "Lemoine et al. 2013, J. Geophys. Res. Planets 118, doi:10.1002/jgre.20118; PDS dataset GRAIL-L-LGRS-5-RDR-V1.0",
+      "license": "NASA Planetary Data System open data; no use restriction stated; citation requested",
+      "redistribution": "redistributable; the repository commits only the float32 reduction"
+    },
+    "mro120f": {
+      "directory": "src-pds-mro-mars-gravity",
+      "file": "jgmro_120f_sha.tab",
+      "url": "https://pds-geosciences.wustl.edu/mro/mro-m-rss-5-sdp-v1/mrors_1xxx/data/shadr/jgmro_120f_sha.tab",
+      "sha256": "ddd3de9c30d75879fe37aa17a1149e7c96c141c095962954cb7ea865a2c025b6",
+      "bytes": 900604,
+      "degree": 120,
+      "labelFile": "jgmro_120f_sha.lbl",
+      "labelUrl": "https://pds-geosciences.wustl.edu/mro/mro-m-rss-5-sdp-v1/mrors_1xxx/data/shadr/jgmro_120f_sha.lbl",
+      "labelSha256": "bf50ba3a03c1c2ec8d63c3132a9b3cd89a5e880d546f195d9eb10a902ea0c80a",
+      "title": "MRO120F, JPL Mars gravity field, degree and order 120, fully normalized, reference radius 3396.0 km, with its own Mars-fixed frame (the label's Euler-angle model)",
+      "citation": "Konopliv et al. 2020, Geophys. Res. Lett. 47, e2020GL090568, doi:10.1029/2020GL090568; PDS dataset MRO-M-RSS-5-SDP-V1.0",
+      "license": "NASA Planetary Data System open data; no use restriction stated; citation requested",
+      "redistribution": "redistributable; the repository commits only the float32 reduction"
+    },
+    "moon-pa-de440": {
+      "directory": "src-naif-generic-kernels",
+      "file": "moon_pa_de440_200625.bpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc",
+      "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
+      "bytes": 12863488,
+      "window": {
+        "start": "2000-01-01T00:00:00Z",
+        "stop": "2050-01-01T00:00:00Z"
+      },
+      "title": "DE440 lunar principal-axis libration angles (binary PCK)",
+      "citation": "Park et al. 2021, Astron. J. 161:105, doi:10.3847/1538-3881/abd414; NAIF generic kernels",
+      "license": "NAIF/JPL public data; no use restriction stated",
+      "redistribution": "redistributable; the repository commits the Chebyshev records of the 2000-2050 window unchanged"
+    },
+    "de440s": {
+      "directory": "src-naif-generic-kernels",
+      "file": "de440s.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+      "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+      "bytes": 32726016,
+      "title": "JPL DE440 planetary ephemeris, 1849-2150 (the short file), the kernel input of every planetary request",
+      "citation": "Park et al. 2021, Astron. J. 161:105",
+      "license": "NAIF/JPL public data; no use restriction stated",
+      "redistribution": "redistributable; not committed here (32.7 MB), fetched and verified"
+    },
+    "pck00011": {
+      "directory": "src-naif-generic-kernels",
+      "file": "pck00011.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+      "bytes": 131226,
+      "title": "NAIF planetary constants kernel (IAU WGCCRE 2015 rotation models and radii), the oracle for the Mars pole and spin check",
+      "license": "NAIF/JPL public data",
+      "redistribution": "redistributable; not committed"
+    },
+    "gm-de440": {
+      "directory": "src-naif-generic-kernels",
+      "file": "gm_de440.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
+      "sha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
+      "bytes": 12406,
+      "title": "DE440 gravitational parameters (BODY<n>_GM)",
+      "license": "NAIF/JPL public data",
+      "redistribution": "redistributable; not committed"
+    },
+    "leapseconds": {
+      "directory": "src-naif-generic-kernels",
+      "file": "naif0012.tls",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
+      "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+      "bytes": 5257,
+      "title": "NAIF leapseconds kernel",
+      "license": "NAIF/JPL public data",
+      "redistribution": "redistributable; not committed"
+    },
+    "lro-reconstructed": {
+      "directory": "src-naif-lro-spk",
+      "file": "lrorg_2026074_2026166_v01.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/pds/data/lro-l-spice-6-v1.0/lrosp_1000/data/spk/lrorg_2026074_2026166_v01.bsp",
+      "sha256": "5e17414e03c794e9dc29e4f4fde64d1d2d9fd106d87f26404188888495de28b1",
+      "bytes": 7557120,
+      "title": "LRO reconstructed trajectory (NAIF target -85 relative to the Moon, J2000), 2026-03-15 to 2026-06-15, big-endian DAF",
+      "citation": "NAIF PDS archive LRO-L-SPICE-6-V1.0",
+      "license": "NAIF/NASA PDS public data",
+      "redistribution": "redistributable; not committed, the E2E commits sampled states"
+    },
+    "mro-reconstructed": {
+      "directory": "src-naif-mro-spk",
+      "file": "mro_psp47.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/pds/data/mro-m-spice-6-v1.0/mrosp_1000/data/spk/mro_psp47.bsp",
+      "sha256": "fcf25d8ab510d730b6a093f515bc01beef321e05d00aaa2c0307ef40cadb4f79",
+      "bytes": 124520448,
+      "title": "MRO reconstructed trajectory, primary science phase 47 (NAIF target -74 relative to Mars), little-endian DAF",
+      "citation": "NAIF PDS archive MRO-M-SPICE-6-V1.0",
+      "license": "NAIF/NASA PDS public data",
+      "redistribution": "redistributable; not committed, the E2E commits sampled states"
+    },
+    "maven-reconstructed": {
+      "directory": "src-naif-maven-spk",
+      "file": "maven_orb_rec_210101_210401_v1.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/MAVEN/kernels/spk/maven_orb_rec_210101_210401_v1.bsp",
+      "sha256": "109105dd0124eb100235116e268a26a38b52b3be23f6ddf1b03d4039d3549335",
+      "bytes": 37157888,
+      "title": "MAVEN reconstructed orbit (NAIF target -202 relative to Mars), 2021-01-01 to 2021-04-01, little-endian DAF",
+      "citation": "NAIF MAVEN kernels",
+      "license": "NAIF/NASA public data",
+      "redistribution": "redistributable; not committed, the E2E commits sampled states"
+    }
+  },
+  "embedded": {
+    "grgm660prim.bin": {
+      "bytes": 1750368,
+      "sha256": "ece9d9f07b2912f201d65acef3d317be980cd3257f312fab787de1df6f096cc8",
+      "source": "grgm660prim",
+      "degree": 660,
+      "gmKm3S2": 4902.79980693169,
+      "referenceRadiusKm": 1738
+    },
+    "mro120f.bin": {
+      "bytes": 59088,
+      "sha256": "52fb78937e1efd2b35d85e4bd5d9e5f6819e0d3f3f1d9b21fe313e42dc38c5d1",
+      "source": "mro120f",
+      "degree": 120,
+      "gmKm3S2": 42828.3756639565,
+      "referenceRadiusKm": 3396
+    },
+    "moon_pa_de440.bin": {
+      "bytes": 547960,
+      "sha256": "3f08f9f86462d1bc0b1691c33a323829b4bec24bd59b684409a47432ecde5abe",
+      "source": "moon-pa-de440",
+      "degree": 9,
+      "records": 2283,
+      "startTdbSeconds": -43200,
+      "lengthSeconds": 691200,
+      "segmentCount": 40000
+    }
+  }
+}
