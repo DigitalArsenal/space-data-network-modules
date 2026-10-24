@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// E2E (modules-apache-2-license-20261024): the public modules repo is Apache-2.0 throughout
-// (owner 2026-10-24: "Apache 2.0 for all of it"), and the third-party code in it keeps its own
-// license, listed in NOTICE. Reads the tracked files of this checkout; no network, no build.
+// E2E (modules-apache-2-license-20261024, extended by modules-license-cleanup-20261024): the public
+// modules repo is Apache-2.0 throughout (owner 2026-10-24: "Apache 2.0 for all of it"), and the
+// third-party code in it keeps its own license, listed in NOTICE. Reads the tracked files of this
+// checkout; no network, no build.
 //   1. LICENSE is the canonical Apache License 2.0 text (SHA-256 of apache.org's LICENSE-2.0.txt).
 //   2. NOTICE opens with the copyright line of Edgesource Corporation, never Digital Arsenal.
 //   3. Every package.json of ours declares Apache-2.0 or a listed SPDX expression; a package that
@@ -10,6 +11,9 @@
 //   4. Every third_party/, vendor/ and deps/ directory has a NOTICE row, and each NOTICE row's
 //      path exists and its license text exists and carries that license's terms.
 //   5. No tracked file says UNLICENSED.
+//   6. Every LICENSE file of ours is the canonical Apache License 2.0 text, and no license or
+//      notice file names Digital Arsenal (a GitHub address such as github.com/DigitalArsenal is
+//      not a copyright holder).
 // usage: node scripts/license-check.e2e.mjs
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -37,10 +41,16 @@ const HELD = {
   'propagator/ffm/': 'modules-ffm-planetary-gravity-20261024',
 };
 
-/** Third-party paths whose terms are open. Each prints on every run. */
-const OPEN = {
+/** License texts copied verbatim from another repository and pinned by a lock; naming Digital Arsenal is reported, not failed. */
+const PINNED = {
+  'packages/python-astro/src/spacedatanetwork_astro/invoke/SDK-LICENSE.txt':
+    'bindings.lock.json and build_backend.py pin its SHA-256 and tests/test_vendoring.py asserts its text; changing it takes those two files',
+};
+
+/** Third-party paths whose license basis prints on every run. A NOTICE row with no license text must be listed. */
+const NOTES = {
   'analysis/od/src/cpp/deps/vallado-sgp4/': 'no license text in the tree, and none in the file headers',
-  'third_party/hwm14/': 'the repository treats it as a U.S. Government work; the publisher lists CC BY-NC-ND for the article and its supporting information (NOTICE.md)',
+  'third_party/hwm14/': 'public domain: U.S. Government work (17 U.S.C. § 105), released by NRL; see README.md',
 };
 
 /** What each license's text must say, on text with comment marks and line breaks removed. */
@@ -52,7 +62,7 @@ const TERMS = {
   'Unlicense': /This is free and unencumbered software released into the public domain/,
   'LicenseRef-USSF-SGP4': /OPEN SOURCE AGREEMENT for SGP4/,
   'LicenseRef-Public-Domain': /disclaims copyright|public domain/i,
-  'LicenseRef-US-Government-Work': /17 U\.S\.C\. 105/,
+  'LicenseRef-US-Government-Work': /17 U\.S\.C\. (?:§ )?105/,
   'LicenseRef-Unstated': null,
 };
 
@@ -90,29 +100,31 @@ if (notice.split('\n')[0] === NOTICE_LINE) ok('NOTICE opens with the Edgesource 
 else fail(`NOTICE must open with: ${NOTICE_LINE}`);
 if (/digital ?arsenal/i.test(notice)) fail('NOTICE names Digital Arsenal; the copyright holder is Edgesource Corporation');
 
+// A License cell is an SPDX expression, or a statement that ends in a parenthesized LicenseRef-* identifier.
 const rows = notice.split('\n').filter((l) => l.startsWith('|')).map((l) => l.slice(1, -1).split('|').map((c) => c.trim()))
   .filter((c) => c.length === 4 && c[0] !== 'Path' && !/^-+$/.test(c[0]))
-  .map(([paths, component, license, texts]) => ({
-    paths: paths.split(/,\s*/),
-    component,
-    license,
-    ids: license.split(/ (?:AND|OR) /),
-    any: / OR /.test(license),
-    texts: texts === 'none in tree' ? [] : texts.split(/,\s*/),
-  }));
+  .map(([paths, component, license, texts]) => {
+    const ref = license.match(/\((LicenseRef-[\w.-]+)\)$/);
+    return {
+      paths: paths.split(/,\s*/),
+      component,
+      license,
+      ids: ref ? [ref[1]] : license.split(/ (?:AND|OR) /),
+      any: !ref && / OR /.test(license),
+      texts: texts === 'none in tree' ? [] : texts.split(/,\s*/),
+    };
+  });
 
 // 3. packages
 {
   const manifests = files.filter((f) => /(^|\/)package\.json$/.test(f) && !unitOf(f));
   let audited = 0;
-  const heldSeen = new Set();
   for (const f of manifests) {
     const pkg = JSON.parse(read(f));
     if (!pkg.name) continue; // a type marker for generated files, not a package
     audited += 1;
     const dir = path.dirname(f);
     const held = heldBy(f);
-    if (held) heldSeen.add(held);
     if (pkg.license === undefined) {
       if (!pkg.private) fail(`${f}: a published package declares no license`);
     } else if (pkg.license === 'Apache-2.0') {
@@ -142,7 +154,7 @@ const rows = notice.split('\n').filter((l) => l.startsWith('|')).map((l) => l.sl
     for (const p of row.paths) if (!exists(p)) fail(`NOTICE row ${where}: ${p} does not exist`);
     for (const id of row.ids) if (!(id in TERMS)) fail(`NOTICE row ${where}: unknown license identifier ${id}`);
     if (row.texts.length === 0) {
-      if (!row.paths.every((p) => p in OPEN)) fail(`NOTICE row ${where}: no license text, and the path is not listed as open`);
+      if (!row.paths.every((p) => p in NOTES)) fail(`NOTICE row ${where}: no license text, and the path is not listed in NOTES`);
       continue;
     }
     const missing = row.texts.filter((t) => !fileSet.has(t));
@@ -153,9 +165,9 @@ const rows = notice.split('\n').filter((l) => l.startsWith('|')).map((l) => l.sl
       fail(`NOTICE row ${where}: ${row.texts.join(', ')} does not carry the ${row.license} terms`);
     }
   }
-  for (const [p, why] of Object.entries(OPEN)) {
-    if (rows.some((r) => r.paths.includes(p))) note(`open: ${p}: ${why}`);
-    else fail(`${p} is listed as open in the E2E but has no NOTICE row`);
+  for (const [p, why] of Object.entries(NOTES)) {
+    if (rows.some((r) => r.paths.includes(p))) note(`${p}: ${why}`);
+    else fail(`${p} is listed in NOTES but has no NOTICE row`);
   }
   ok(`${units.length} third-party directories and ${rows.length} NOTICE rows checked`);
 }
@@ -176,6 +188,25 @@ const rows = notice.split('\n').filter((l) => l.startsWith('|')).map((l) => l.sl
     else note(`${prefix} no longer says UNLICENSED; remove it from HELD in this script`);
   }
   if (own.length === 0) ok('no file of this task says UNLICENSED');
+}
+
+// 6. LICENSE files and Digital Arsenal
+{
+  const licenses = files.filter((f) => /^LICENSE(\.txt)?$/.test(path.basename(f)) && !unitOf(f));
+  for (const f of licenses) {
+    const sha = createHash('sha256').update(fs.readFileSync(path.join(root, f))).digest('hex');
+    if (sha !== APACHE_SHA256) fail(`${f} is not the canonical Apache License 2.0 text`);
+  }
+  ok(`${licenses.length} LICENSE files checked`);
+
+  const named = files.filter((f) => /^([\w.-]*-)?(LICEN[CS]E|NOTICE|COPYING)(-[\w-]+)?(\.(txt|md))?$/i.test(path.basename(f)) || f.startsWith('LICENSES/'));
+  const hits = named.filter((f) => /digital\s+arsenal/i.test(read(f)));
+  for (const f of hits.filter((h) => !(h in PINNED))) fail(`${f} names Digital Arsenal; the copyright holder is Edgesource Corporation`);
+  for (const [f, why] of Object.entries(PINNED)) {
+    if (hits.includes(f)) note(`${f} names Digital Arsenal; ${why}`);
+    else note(`${f} no longer names Digital Arsenal; remove it from PINNED in this script`);
+  }
+  ok(`${named.length} license and notice files checked for Digital Arsenal`);
 }
 
 if (failures.length) {
