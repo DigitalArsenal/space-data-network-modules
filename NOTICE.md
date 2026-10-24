@@ -18,6 +18,7 @@ written by scripts in the same directory.
 | hapsira (poliastro) | MIT | `analysis/maneuver/vectors/hapsira-extract.json` | [LICENSES/MIT-hapsira.txt](LICENSES/MIT-hapsira.txt) |
 | Nyx Space | AGPL-3.0 for the code; its outputs are not covered | `propagator/ffm/tests/fixtures/nyx/nyx-reference.json` (outputs) | none needed |
 | US Space Force SGP4 and SGP4-XP (Sgp4Prop WebAssembly 9.1.1.0, Astro Standards v9.1, XP build). Copyright 2015 United States Government as represented by the Administrator of US Space Force. All Rights Reserved. | US Space Force Open Source Agreement for SGP4: use for any purpose; redistribution in binary form with the copyright notice, the Agreement and its disclaimer; no endorsement by the US Space Force or its contributors; export of goods or technical data from the United States may require a license from the U.S. Government | `propagator/sgp4-xp/third_party/ussf-sgp4/` (the library, unmodified, and the JavaScript runtime the tests compare it with), joined into `propagator/sgp4-xp/dist/isomorphic/module.wasm` and into the OD node of `flows/supplemental-omm` (`nodes/od`) (the custom section `ussf-sgp4-notice` of each holds the notice and the Agreement) | [propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt](propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt), [NOTICE.md](propagator/sgp4-xp/third_party/ussf-sgp4/NOTICE.md) |
+| HWM14, the Horizontal Wind Model 2014 (release HWM14.123114), by Douglas Drob and John Emmert, Naval Research Laboratory (the authors the NRL code header names) | a work of the US Government (17 U.S.C. § 105), not subject to copyright in the US (owner ruling 2026-10-24); the journal's CC BY-NC-ND covers the article, not the NRL code | `third_party/hwm14/` (`nrl/` is NRL's own release, from the Internet Archive capture of map.nrl.navy.mil; the C++ port and its data beside it) | citation: Drob et al. (2015), Earth and Space Science 2, 301-319; Emmert et al. (2008), J. Geophys. Res. 113 |
 | ERFA | BSD-3-Clause | `higherpop/third_party/erfa/` (also compiled into `propagator/sdn-ap/dist/isomorphic/module.wasm`) | in that directory; `propagator/sdn-ap/LICENSES/ERFA.txt` |
 | pugixml 1.15 (Arseny Kapoulkine) | MIT | `files/ccsds-messages/third_party/pugixml/` (compiled into the module) | in that directory (`LICENSE.md`, `PROVENANCE.md`) |
 | SDN-AP spec vectors: element sets made for the specification and what the unmodified US Space Force Sgp4Prop library (9.9 native, 9.1.1.0 WebAssembly) returns for them, run as a black box | US Space Force Open Source Agreement for SGP4 (above); the library is not in `propagator/sdn-ap/` | `propagator/sdn-ap/spec-vectors/vectors.json`, the probe values of `propagator/sdn-ap/SPEC.md` | [propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt](propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt) |
@@ -49,10 +50,6 @@ written by scripts in the same directory.
 
 ## Open questions
 
-- HWM14 winds data in `third_party/hwm14`: the repository treats it as a U.S.
-  Government work; the publisher lists CC BY-NC-ND for the article and its
-  supporting information. Unresolved; see the follow-up on an optional runtime
-  data input.
 - The Orekit-derived CCSDS CDM example embedded in
   `analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs`
   (CDMExample1, from Orekit's test resources, Apache-2.0).
