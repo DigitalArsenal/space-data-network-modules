@@ -1,0 +1,26 @@
+SDN-AP propagator (space-data-network-modules, propagator/sdn-ap)
+Copyright 2026 Edgesource Corporation
+
+Licensed under the Apache License, Version 2.0 (LICENSE).
+
+The module compiles, from this repository, pinned by SHA-256 in build.mjs:
+- ERFA (Essential Routines for Fundamental Astronomy), BSD-3-Clause, derived with
+  permission from IAU SOFA (higherpop/third_party/erfa); its licence is carried
+  as LICENSES/ERFA.txt and dist/LICENSES/ERFA.txt.
+- NRLMSISE-00, the C port by Dominik Brodowski, public domain
+  (third_party/nrlmsise00).
+- The EGM96 geopotential to degree and order 70, NASA GSFC and NIMA, public
+  (propagator/ffm/lib).
+- The Jacchia 1970 density table, SAO Special Report 313, Table 6, transcribed
+  in src/j70_table6.inc.
+
+The build reads, from SDNAP_HAC_ROOT, pinned by SHA-256 and refitted into tables
+(README, "Build data"; tools/fetch-build-data.mjs fetches and verifies them):
+- GRGM660PRIM, NASA GSFC GRAIL gravity, PDS Geosciences Node, public.
+- NAIF moon_pa_de440_200625.bpc and de440s.bsp, NASA JPL NAIF, public.
+
+spec-vectors/vectors.json holds element sets made for the specification and
+the states and intermediate quantities that the unmodified US Space Force
+Sgp4Prop library returns for them, run as a black box. The library is not in
+this package; it is used and its outputs redistributed under the USSF open
+source agreement (propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt).

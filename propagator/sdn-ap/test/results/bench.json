@@ -1,0 +1,48 @@
+{
+ "task": "modules-sdn-gp-propagator-20261023",
+ "theory": "SGP4XP as implemented (public base + applied SPEC sections; see README)",
+ "baseline": {
+  "source": "USSF Sgp4Prop 9.1.1.0 XP, Node, single-threaded, measured 2026-10-23",
+  "objects": 32770,
+  "kibPerObject": 48.6,
+  "stepMs": [
+   175,
+   276
+  ],
+  "firstPropagationUsPerObject": 347.4,
+  "jump1dUsPerObject": 266.9,
+  "jump7dUsPerObject": 1707.8
+ },
+ "rows": [
+  {
+   "threads": 0,
+   "objects": 32770,
+   "storeKibPerObject": 3.263,
+   "recordBytes": 3336,
+   "memoryGrowthKibPerObjectAtInit": 3.373,
+   "memoryGrowthWhilePropagatingBytes": 0,
+   "initUsPerObject": 26.62,
+   "firstPropagationUsPerObject": 467.488,
+   "stepMs": 158.57,
+   "stepUsPerObject": 4.839,
+   "jump1dUsPerObject": 412.933,
+   "jump7dUsPerObject": 1928.099,
+   "failedAt7d": 16,
+   "cpuUsPerObject": {
+    "step": 1.643,
+    "jump1d": 138.738,
+    "jump7d": 730.207
+   },
+   "loadAverage": [
+    92.4,
+    99.6,
+    80.7
+   ],
+   "speedupPerStepVsBaseline": [
+    1.1,
+    1.7
+   ],
+   "speedupJump7dVsBaseline": 1
+  }
+ ]
+}

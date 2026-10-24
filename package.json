@@ -2,6 +2,7 @@
   "name": "space-data-network-modules",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "spacedatastandards.org": "1.261.0"
