@@ -108,6 +108,7 @@ function stripLocalIncludes(source) {
     .replace(/^#include "\.\.\/\.\.\/ccsds-messages\/src\/kvn\.hpp"\n/gm, "")
     .replace(/^#include "vcm\.hpp"\n/gm, "")
     .replace(/^#include "sentinel_eof\.hpp"\n/gm, "")
+    .replace(/^#include "ncd_frame\.hpp"\n/gm, "")
     .replace(/^#include "naif_sclk\.hpp"\n/gm, "")
     .replace(/^#include "naif_ck\.hpp"\n/gm, "")
     .replace(/^#include "text_kernel\.hpp"\n/gm, "")
@@ -170,6 +171,7 @@ const pieces = [
   stripLocalIncludes(await read(textKernelPath)),
   stripLocalIncludes(await read(path.join(srcRoot, "naif_sclk.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "naif_ck.hpp"))),
+  stripLocalIncludes(await read(path.join(srcRoot, "ncd_frame.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "orbit_products_module.cpp"))),
   await read(path.join(srcRoot, "vimpel_module.cpp")),
   await read(path.join(srcRoot, "ses_i11_module.cpp")),
