@@ -105,7 +105,7 @@ into the record or its body identity on the way out.
 container from its own leading bytes and say what it found. A member of the
 `$NCD` roster this reader does not project onto `$OEM` — the attitude and
 tracking-data containers, OEM in XML — is refused by name rather than folded
-into a neighbouring reader.
+into a neighboring reader.
 
 Propagation is a separate lane and is unchanged: `data-source/spk-source`
 reaches these same headers through `plugin_init_ephemeris`, an ABI export that
@@ -154,7 +154,7 @@ file as SES publishes it (provider format `ses-i11`), hash-checked against its
 NCD, and evaluates the model from the element epoch to the file's stated end
 of validity (170 hours when it states none) every 300 s. It emits one $OEM
 block, Earth-fixed (`FIXED_EARTH`, the format names no realization) on UTC,
-kilometres and kilometres per second, and the input NCD unchanged.
+kilometers and kilometers per second, and the input NCD unchanged.
 
 The evaluation is the one Orekit 13.1 implements
 (`IntelsatElevenElementsPropagator.propagateInEcef`): east longitude and

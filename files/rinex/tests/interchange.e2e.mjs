@@ -15,6 +15,7 @@
 //                  and indicators, to the bit. Navigation is refused by name (SDS has no broadcast-ephemeris record).
 //   Options        every request option (window, satellite systems, segments, the spacecraft clock) is a field of
 //                  an $NCD or of the record; the tests build them with the SDS FlatBuffers, never a JSON options file.
+//   Robustness     seeded mutations of every reader's input are refused by name or read, never a trap.
 //   Parity         the committed tri-runtime records (browser and native WasmEdge; the Docker leg is waived by the
 //                  owner) are for the artifacts in dist/ now. INTERCHANGE_PARITY=run reruns them (the browser leg is
 //                  headless Chrome: run it under /Users/tj/software/terrain-work/lanes/headless-run).
@@ -30,9 +31,9 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const filesRoot = path.resolve(here, "..", "..");
 const SUITES = [
-  { pkg: "orbit-products", tests: ["tests/sentinel_eof.test.mjs", "tests/naif_ck.test.mjs"],
+  { pkg: "orbit-products", tests: ["tests/sentinel_eof.test.mjs", "tests/naif_ck.test.mjs", "tests/interchange_fuzz.test.mjs"],
     measured: [/S1A POEORB adjacent days/, /RESORB .* against POEORB/, /NAIF-published CK records read/, /module round trip/, /CSPICE .* read \d+ records/] },
-  { pkg: "rinex", tests: ["tests/rinex_obs.test.mjs"], measured: [/observations in \d+ epochs.*identical to georinex/] },
+  { pkg: "rinex", tests: ["tests/rinex_obs.test.mjs", "tests/rinex_fuzz.test.mjs"], measured: [/observations in \d+ epochs.*identical to georinex/] },
 ];
 
 let failed = false;
