@@ -88,7 +88,7 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   CENTER_NAME is absent or the set's (else grid-center-mismatch); `ingest_omm` refuses it (unsupported-theory). A
   Sun-centred block ending inside a planet's sphere of influence is refused (inside-sphere-of-influence).
 - Third-party code, read from the open modules repository (this repository vendors nothing) and pinned by SHA-256
-  in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.json` records the path, commits and
+  in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.txt` records the path, commits and
   hashes): NRLMSISE-00 (Brodowski's public-domain port) and ERFA (BSD-3-Clause, derived with permission from IAU
   SOFA; licence carried in `LICENSES/ERFA.txt` and `dist/LICENSES/ERFA.txt`).
 
@@ -162,7 +162,7 @@ DE440 principal-axis frame frozen at the epoch; the $OMM carries them referred t
   de440s.bsp: Moon - Earth about the EMB; Sun - EMB - Earth) refitted over the same span to 16-day records of degree 18
   (max 1.6 m) and 32-day records of degree 12 (max 3.3 km); the heliocentric planets (system barycentres minus the
   Sun) over 2012-2029: Venus 64 d / degree 14 (2.6 m), the Earth-Moon barycentre 64 d / 12 (39 m), Mars 128 d / 14
-  (0.12 km), Jupiter and Saturn 128 d / 12 (0.25 km); errors recorded in `dist/build-provenance.json`.
+  (0.12 km), Jupiter and Saturn 128 d / 12 (0.25 km); errors recorded in `dist/build-provenance.txt`.
 - Rates: every GRGM660PRIM term to degree 70 whose angle has no mean anomaly (|q| <= 2), F and G held at the epoch,
   evaluated in the PA frame of the time (the DE440 pole and spin from the refit; the rates carried back to the
   epoch-PA inertial frame through the orbit's vectors); Earth and Sun by SPEC 5's averaged quadrupole and octupole;

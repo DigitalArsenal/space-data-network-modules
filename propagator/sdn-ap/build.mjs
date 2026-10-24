@@ -18,7 +18,7 @@ const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 // NRLMSISE-00, ERFA and the gravity coefficients are read from this repository (propagator/sdn-ap sits two levels
 // below its root); SPACE_DATA_NETWORK_MODULES_ROOT names another checkout
 const modulesRoot = path.resolve(packageRoot, "..", "..");
-// a source inside this checkout as a repository path in dist/build-provenance.json; others as given
+// a source inside this checkout as a repository path in dist/build-provenance.txt; others as given
 const shownPath = (p) => {
   const r = path.relative(modulesRoot, p);
   return r && !r.startsWith("..") && !path.isAbsolute(r) ? r : p;
@@ -104,7 +104,7 @@ async function ommSlots() {
 // NRLMSISE-00 (SDN-AP drag, DESIGN 2a): the public-domain Brodowski C port the FFM truth uses, read from the open
 // modules repository's vendored copy (the stack submodule path; this repository vendors nothing) and PINNED: every file
 // must match the SHA-256 recorded here (the copy at modules commit 75fd4d9d), or the build fails. The path and the
-// hashes are written to dist/build-provenance.json.
+// hashes are written to dist/build-provenance.txt.
 const NRLMSISE_PIN = Object.freeze({
   modulesCommit: "75fd4d9d29c8332e43c5daa443fd6cd77f9ecd17",
   files: Object.freeze({
@@ -148,7 +148,7 @@ async function nrlmsise() {
 // or the build fails. Compiled: the closure of eraPnm06a, eraGst06, eraUtctai and eraTaitt, numerics unmodified (the
 // per-file erfa*.h includes are dropped and the headers emitted once, as foundation/frames does). The licence is
 // carried: LICENSES/ERFA.txt in the package and dist/LICENSES/ERFA.txt beside the module must equal the pinned
-// LICENSE.txt, and dist/build-provenance.json records it.
+// LICENSE.txt, and dist/build-provenance.txt records it.
 const ERFA_PIN = Object.freeze({
   modulesCommit: "7d59ae2171b5b57fd3b3587ff012de75b8aabb0c",
   license: Object.freeze({ spdx: "BSD-3-Clause", file: "LICENSE.txt", sha256: "556abafd66857342b5f760bc42d323d1cfea310569267d3ae316d438b075424d" }),
@@ -245,7 +245,7 @@ async function checkTable6() {
   for (let h = 420; h <= 1000; h += 20) grid.push(h);
   for (let h = 1050; h <= 1500; h += 50) grid.push(h);
   for (let h = 1600; h <= 2500; h += 100) grid.push(h);
-  if (JSON.stringify(heights) !== JSON.stringify(grid) || rows.length !== 95 || rows.some((r) => r.length !== 29)) {
+  if (heights.length !== grid.length || heights.some((h, i) => h !== grid[i]) || rows.length !== 95 || rows.some((r) => r.length !== 29)) {
     throw new Error("src/j70_table6.inc: not the SPEC 3.3 grid of 95 heights x 29 temperatures");
   }
   const canonical = rows.map((r, i) => `${heights[i]},${r.map((v) => (v / 1000).toFixed(3)).join(",")}\n`).join("");
@@ -269,7 +269,7 @@ await checkTable6();
 // Gravity (SDN-AP 2d, tesseral m-daily and shallow-resonance terms): the fully normalized EGM-96 (default) or EGM2008
 // coefficients to degree and order 70 that this repository's FFM carries (propagator/ffm/lib), read from this
 // checkout and PINNED by SHA-256 (the copies at modules commit 0e84a2c8); SDNAP_GRAVITY=egm2008
-// selects EGM2008. Recorded in dist/build-provenance.json.
+// selects EGM2008. Recorded in dist/build-provenance.txt.
 const GRAVITY_PIN = Object.freeze({
   modulesCommit: "0e84a2c8fb6258d5e37b3c59839ea0e5794ffae1",
   files: Object.freeze({
@@ -311,7 +311,7 @@ async function gravity() {
 // truncated to degree LUNAR_PIN.degree, and the DE440 lunar principal-axis orientation (NAIF moon_pa_de440_200625.bpc:
 // 3-1-3 Euler angles of MOON_PA_DE440 from J2000, Chebyshev records of 8 days), refitted over LUNAR_PIN.span to
 // records of spanDays days and degree spanDegree; the refit's error against the kernel is measured here and recorded
-// in dist/build-provenance.json. SDNAP_HAC_ROOT moves the archive root.
+// in dist/build-provenance.txt. SDNAP_HAC_ROOT moves the archive root.
 const LUNAR_PIN = Object.freeze({
   field: { file: "pds-grail-gravity/gggrx_0660pm_sha.tab", sha256: "a77ee9996aff7341ef89f69aa401f39ba0c2949ed80411505fb4826b771dd63e" },
   orientation: { file: "naif-kernels/pck/moon_pa_de440_200625.bpc", sha256: "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f" },
@@ -533,15 +533,22 @@ const compilation = await compileModuleFromSource({
   threadModel: ModuleThreadModel.EMSCRIPTEN_PTHREADS,
 });
 if (!compilation.report?.ok) {
-  throw new Error(`sdn-ap-propagator validation failed: ${JSON.stringify(compilation.report?.issues ?? [], null, 2)}`);
+  const issues = (compilation.report?.issues ?? []).map((i) => [i.severity, i.code, i.message].filter(Boolean).join(" ") || String(i));
+  throw new Error(`sdn-ap-propagator validation failed: ${issues.join("; ")}`);
 }
 await fs.copyFile(path.join(packageRoot, "plugin-manifest.json"), path.join(distRoot, "plugin-manifest.json"));
 await fs.mkdir(path.join(distRoot, "LICENSES"), { recursive: true });
 await fs.writeFile(path.join(distRoot, "LICENSES", "ERFA.txt"), erfaLicense);
-await fs.writeFile(
-  path.join(distRoot, "build-provenance.json"),
-  `${JSON.stringify({ module: manifest.pluginId, version: manifest.version, sha256: createHash("sha256").update(compilation.wasmBytes).digest("hex"), ...provenance }, null, 1)}\n`,
-);
+// the provenance as "key value" lines (nested keys joined by dots, lists by spaces): no JSON in the module's tooling
+const provenanceLines = [];
+const flatten = (prefix, value) => {
+  if (value === null || value === undefined) provenanceLines.push(`${prefix} -`);
+  else if (Array.isArray(value)) provenanceLines.push(`${prefix} ${value.map(String).join(" ")}`);
+  else if (typeof value === "object") for (const [k, v] of Object.entries(value)) flatten(prefix ? `${prefix}.${k}` : k, v);
+  else provenanceLines.push(`${prefix} ${String(value)}`);
+};
+flatten("", { module: manifest.pluginId, version: manifest.version, sha256: createHash("sha256").update(compilation.wasmBytes).digest("hex"), ...provenance });
+await fs.writeFile(path.join(distRoot, "build-provenance.txt"), `${provenanceLines.join("\n")}\n`);
 console.log(`built ${path.relative(packageRoot, outputPath)} (${compilation.wasmBytes.length} bytes)`);
 
 if (process.argv.includes("--protect")) {
