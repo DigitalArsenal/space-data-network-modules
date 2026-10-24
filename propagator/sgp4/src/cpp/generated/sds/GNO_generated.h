@@ -81,43 +81,35 @@ enum class gnssObsType : int8_t {
   DOPPLER = 2,
   SNR = 3,
   RAW_IF = 4,
-  /// Ionosphere phase delay (RINEX observation type I), as the file states it.
-  IONOSPHERE_PHASE_DELAY = 5,
-  /// Receiver channel number (RINEX observation type X), as the receiver reports it.
-  CHANNEL_NUMBER = 6,
   MIN = PSEUDORANGE,
-  MAX = CHANNEL_NUMBER
+  MAX = RAW_IF
 };
 
-inline const gnssObsType (&EnumValuesgnssObsType())[7] {
+inline const gnssObsType (&EnumValuesgnssObsType())[5] {
   static const gnssObsType values[] = {
     gnssObsType::PSEUDORANGE,
     gnssObsType::CARRIER_PHASE,
     gnssObsType::DOPPLER,
     gnssObsType::SNR,
-    gnssObsType::RAW_IF,
-    gnssObsType::IONOSPHERE_PHASE_DELAY,
-    gnssObsType::CHANNEL_NUMBER
+    gnssObsType::RAW_IF
   };
   return values;
 }
 
 inline const char * const *EnumNamesgnssObsType() {
-  static const char * const names[8] = {
+  static const char * const names[6] = {
     "PSEUDORANGE",
     "CARRIER_PHASE",
     "DOPPLER",
     "SNR",
     "RAW_IF",
-    "IONOSPHERE_PHASE_DELAY",
-    "CHANNEL_NUMBER",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamegnssObsType(gnssObsType e) {
-  if (::flatbuffers::IsOutRange(e, gnssObsType::PSEUDORANGE, gnssObsType::CHANNEL_NUMBER)) return "";
+  if (::flatbuffers::IsOutRange(e, gnssObsType::PSEUDORANGE, gnssObsType::RAW_IF)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesgnssObsType()[index];
 }
@@ -258,8 +250,6 @@ struct gnssSatObsT : public ::flatbuffers::NativeTable {
   int32_t TRACKING_STATUS = 0;
   int32_t AGC_STATE = 0;
   std::vector<std::unique_ptr<gnssObsDataT>> OBSERVATIONS{};
-  int8_t GLONASS_FREQUENCY_NUMBER = 0;
-  bool HAS_GLONASS_FREQUENCY_NUMBER = false;
   gnssSatObsT() = default;
   gnssSatObsT(const gnssSatObsT &o);
   gnssSatObsT(gnssSatObsT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -278,9 +268,7 @@ struct gnssSatObs FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_AZIMUTH = 10,
     VT_TRACKING_STATUS = 12,
     VT_AGC_STATE = 14,
-    VT_OBSERVATIONS = 16,
-    VT_GLONASS_FREQUENCY_NUMBER = 18,
-    VT_HAS_GLONASS_FREQUENCY_NUMBER = 20
+    VT_OBSERVATIONS = 16
   };
   /// GNSS satellite identifier (e.g., G01, R24, E05, C03)
   const ::flatbuffers::String *GNSS_SAT_ID() const {
@@ -310,16 +298,6 @@ struct gnssSatObs FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<gnssObsData>> *OBSERVATIONS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<gnssObsData>> *>(VT_OBSERVATIONS);
   }
-  /// GLONASS frequency channel number k of this satellite (RINEX GLONASS SLOT /
-  /// FRQ #), -7 to +6. Meaningful only when HAS_GLONASS_FREQUENCY_NUMBER.
-  int8_t GLONASS_FREQUENCY_NUMBER() const {
-    return GetField<int8_t>(VT_GLONASS_FREQUENCY_NUMBER, 0);
-  }
-  /// True when GLONASS_FREQUENCY_NUMBER carries a value (channel 0 is a real
-  /// channel); false (the default) means absent.
-  bool HAS_GLONASS_FREQUENCY_NUMBER() const {
-    return GetField<uint8_t>(VT_HAS_GLONASS_FREQUENCY_NUMBER, 0) != 0;
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -333,8 +311,6 @@ struct gnssSatObs FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_OBSERVATIONS) &&
            verifier.VerifyVector(OBSERVATIONS()) &&
            verifier.VerifyVectorOfTables(OBSERVATIONS()) &&
-           VerifyField<int8_t>(verifier, VT_GLONASS_FREQUENCY_NUMBER, 1) &&
-           VerifyField<uint8_t>(verifier, VT_HAS_GLONASS_FREQUENCY_NUMBER, 1) &&
            verifier.EndTable();
   }
   gnssSatObsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -367,12 +343,6 @@ struct gnssSatObsBuilder {
   void add_OBSERVATIONS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<gnssObsData>>> OBSERVATIONS) {
     fbb_.AddOffset(gnssSatObs::VT_OBSERVATIONS, OBSERVATIONS);
   }
-  void add_GLONASS_FREQUENCY_NUMBER(int8_t GLONASS_FREQUENCY_NUMBER) {
-    fbb_.AddElement<int8_t>(gnssSatObs::VT_GLONASS_FREQUENCY_NUMBER, GLONASS_FREQUENCY_NUMBER, 0);
-  }
-  void add_HAS_GLONASS_FREQUENCY_NUMBER(bool HAS_GLONASS_FREQUENCY_NUMBER) {
-    fbb_.AddElement<uint8_t>(gnssSatObs::VT_HAS_GLONASS_FREQUENCY_NUMBER, static_cast<uint8_t>(HAS_GLONASS_FREQUENCY_NUMBER), 0);
-  }
   explicit gnssSatObsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -392,9 +362,7 @@ inline ::flatbuffers::Offset<gnssSatObs> CreategnssSatObs(
     double AZIMUTH = 0.0,
     int32_t TRACKING_STATUS = 0,
     int32_t AGC_STATE = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<gnssObsData>>> OBSERVATIONS = 0,
-    int8_t GLONASS_FREQUENCY_NUMBER = 0,
-    bool HAS_GLONASS_FREQUENCY_NUMBER = false) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<gnssObsData>>> OBSERVATIONS = 0) {
   gnssSatObsBuilder builder_(_fbb);
   builder_.add_AZIMUTH(AZIMUTH);
   builder_.add_ELEVATION(ELEVATION);
@@ -402,8 +370,6 @@ inline ::flatbuffers::Offset<gnssSatObs> CreategnssSatObs(
   builder_.add_AGC_STATE(AGC_STATE);
   builder_.add_TRACKING_STATUS(TRACKING_STATUS);
   builder_.add_GNSS_SAT_ID(GNSS_SAT_ID);
-  builder_.add_HAS_GLONASS_FREQUENCY_NUMBER(HAS_GLONASS_FREQUENCY_NUMBER);
-  builder_.add_GLONASS_FREQUENCY_NUMBER(GLONASS_FREQUENCY_NUMBER);
   builder_.add_CONSTELLATION(CONSTELLATION);
   return builder_.Finish();
 }
@@ -421,9 +387,7 @@ inline ::flatbuffers::Offset<gnssSatObs> CreategnssSatObsDirect(
     double AZIMUTH = 0.0,
     int32_t TRACKING_STATUS = 0,
     int32_t AGC_STATE = 0,
-    const std::vector<::flatbuffers::Offset<gnssObsData>> *OBSERVATIONS = nullptr,
-    int8_t GLONASS_FREQUENCY_NUMBER = 0,
-    bool HAS_GLONASS_FREQUENCY_NUMBER = false) {
+    const std::vector<::flatbuffers::Offset<gnssObsData>> *OBSERVATIONS = nullptr) {
   auto GNSS_SAT_ID__ = GNSS_SAT_ID ? _fbb.CreateString(GNSS_SAT_ID) : 0;
   auto OBSERVATIONS__ = OBSERVATIONS ? _fbb.CreateVector<::flatbuffers::Offset<gnssObsData>>(*OBSERVATIONS) : 0;
   return CreategnssSatObs(
@@ -434,9 +398,7 @@ inline ::flatbuffers::Offset<gnssSatObs> CreategnssSatObsDirect(
       AZIMUTH,
       TRACKING_STATUS,
       AGC_STATE,
-      OBSERVATIONS__,
-      GLONASS_FREQUENCY_NUMBER,
-      HAS_GLONASS_FREQUENCY_NUMBER);
+      OBSERVATIONS__);
 }
 
 ::flatbuffers::Offset<gnssSatObs> CreategnssSatObs(::flatbuffers::FlatBufferBuilder &_fbb, const gnssSatObsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -466,18 +428,6 @@ struct GNOT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<gnssSatObsT>> SAT_OBS{};
   std::vector<std::string> OBS_CODE_SET{};
   std::string NOTES{};
-  std::string TIME_SYSTEM{};
-  uint8_t EPOCH_FLAG = 0;
-  std::string MARKER_NAME{};
-  std::string MARKER_NUMBER{};
-  std::string MARKER_TYPE{};
-  std::string OBSERVER{};
-  std::string AGENCY{};
-  std::vector<double> ANTENNA_DELTA_HEN{};
-  std::vector<std::string> PHASE_SHIFTS{};
-  std::string SIGNAL_STRENGTH_UNIT{};
-  int32_t LEAP_SECONDS = 0;
-  bool HAS_LEAP_SECONDS = false;
   GNOT() = default;
   GNOT(const GNOT &o);
   GNOT(GNOT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -512,19 +462,7 @@ struct GNO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_VDOP = 42,
     VT_SAT_OBS = 44,
     VT_OBS_CODE_SET = 46,
-    VT_NOTES = 48,
-    VT_TIME_SYSTEM = 50,
-    VT_EPOCH_FLAG = 52,
-    VT_MARKER_NAME = 54,
-    VT_MARKER_NUMBER = 56,
-    VT_MARKER_TYPE = 58,
-    VT_OBSERVER = 60,
-    VT_AGENCY = 62,
-    VT_ANTENNA_DELTA_HEN = 64,
-    VT_PHASE_SHIFTS = 66,
-    VT_SIGNAL_STRENGTH_UNIT = 68,
-    VT_LEAP_SECONDS = 70,
-    VT_HAS_LEAP_SECONDS = 72
+    VT_NOTES = 48
   };
   /// Unique identifier
   const ::flatbuffers::String *ID() const {
@@ -618,61 +556,6 @@ struct GNO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *NOTES() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NOTES);
   }
-  /// Time scale of EPOCH as the file names it: GPS, GLO, GAL, QZS, BDT or IRN.
-  /// Default empty (not stated).
-  const ::flatbuffers::String *TIME_SYSTEM() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_TIME_SYSTEM);
-  }
-  /// RINEX epoch flag: 0 OK, 1 power failure since the previous epoch, 2 start of
-  /// a moving antenna, 3 new site occupation, 4 header information follows, 5
-  /// external event, 6 cycle slip records follow. Default 0.
-  uint8_t EPOCH_FLAG() const {
-    return GetField<uint8_t>(VT_EPOCH_FLAG, 0);
-  }
-  /// Marker name from the header. Default empty.
-  const ::flatbuffers::String *MARKER_NAME() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_MARKER_NAME);
-  }
-  /// Marker number from the header. Default empty.
-  const ::flatbuffers::String *MARKER_NUMBER() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_MARKER_NUMBER);
-  }
-  /// Marker type from the header. Default empty.
-  const ::flatbuffers::String *MARKER_TYPE() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_MARKER_TYPE);
-  }
-  /// Observer from the header. Default empty.
-  const ::flatbuffers::String *OBSERVER() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_OBSERVER);
-  }
-  /// Agency from the header. Default empty.
-  const ::flatbuffers::String *AGENCY() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_AGENCY);
-  }
-  /// Antenna delta from the marker to the antenna reference point: height, east,
-  /// north, meters, as [H, E, N]. Default empty.
-  const ::flatbuffers::Vector<double> *ANTENNA_DELTA_HEN() const {
-    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ANTENNA_DELTA_HEN);
-  }
-  /// Phase shift records as the header writes them, one per line, for example
-  /// "G L2S -0.25000". Default empty.
-  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *PHASE_SHIFTS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_PHASE_SHIFTS);
-  }
-  /// Unit of the signal strength observations as the header states it. Default
-  /// empty.
-  const ::flatbuffers::String *SIGNAL_STRENGTH_UNIT() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_SIGNAL_STRENGTH_UNIT);
-  }
-  /// Leap seconds of the header (RINEX LEAP SECONDS), seconds. Meaningful only
-  /// when HAS_LEAP_SECONDS.
-  int32_t LEAP_SECONDS() const {
-    return GetField<int32_t>(VT_LEAP_SECONDS, 0);
-  }
-  /// True when LEAP_SECONDS carries a value; false (the default) means absent.
-  bool HAS_LEAP_SECONDS() const {
-    return GetField<uint8_t>(VT_HAS_LEAP_SECONDS, 0) != 0;
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -711,28 +594,6 @@ struct GNO FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfStrings(OBS_CODE_SET()) &&
            VerifyOffset(verifier, VT_NOTES) &&
            verifier.VerifyString(NOTES()) &&
-           VerifyOffset(verifier, VT_TIME_SYSTEM) &&
-           verifier.VerifyString(TIME_SYSTEM()) &&
-           VerifyField<uint8_t>(verifier, VT_EPOCH_FLAG, 1) &&
-           VerifyOffset(verifier, VT_MARKER_NAME) &&
-           verifier.VerifyString(MARKER_NAME()) &&
-           VerifyOffset(verifier, VT_MARKER_NUMBER) &&
-           verifier.VerifyString(MARKER_NUMBER()) &&
-           VerifyOffset(verifier, VT_MARKER_TYPE) &&
-           verifier.VerifyString(MARKER_TYPE()) &&
-           VerifyOffset(verifier, VT_OBSERVER) &&
-           verifier.VerifyString(OBSERVER()) &&
-           VerifyOffset(verifier, VT_AGENCY) &&
-           verifier.VerifyString(AGENCY()) &&
-           VerifyOffset(verifier, VT_ANTENNA_DELTA_HEN) &&
-           verifier.VerifyVector(ANTENNA_DELTA_HEN()) &&
-           VerifyOffset(verifier, VT_PHASE_SHIFTS) &&
-           verifier.VerifyVector(PHASE_SHIFTS()) &&
-           verifier.VerifyVectorOfStrings(PHASE_SHIFTS()) &&
-           VerifyOffset(verifier, VT_SIGNAL_STRENGTH_UNIT) &&
-           verifier.VerifyString(SIGNAL_STRENGTH_UNIT()) &&
-           VerifyField<int32_t>(verifier, VT_LEAP_SECONDS, 4) &&
-           VerifyField<uint8_t>(verifier, VT_HAS_LEAP_SECONDS, 1) &&
            verifier.EndTable();
   }
   GNOT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -813,42 +674,6 @@ struct GNOBuilder {
   void add_NOTES(::flatbuffers::Offset<::flatbuffers::String> NOTES) {
     fbb_.AddOffset(GNO::VT_NOTES, NOTES);
   }
-  void add_TIME_SYSTEM(::flatbuffers::Offset<::flatbuffers::String> TIME_SYSTEM) {
-    fbb_.AddOffset(GNO::VT_TIME_SYSTEM, TIME_SYSTEM);
-  }
-  void add_EPOCH_FLAG(uint8_t EPOCH_FLAG) {
-    fbb_.AddElement<uint8_t>(GNO::VT_EPOCH_FLAG, EPOCH_FLAG, 0);
-  }
-  void add_MARKER_NAME(::flatbuffers::Offset<::flatbuffers::String> MARKER_NAME) {
-    fbb_.AddOffset(GNO::VT_MARKER_NAME, MARKER_NAME);
-  }
-  void add_MARKER_NUMBER(::flatbuffers::Offset<::flatbuffers::String> MARKER_NUMBER) {
-    fbb_.AddOffset(GNO::VT_MARKER_NUMBER, MARKER_NUMBER);
-  }
-  void add_MARKER_TYPE(::flatbuffers::Offset<::flatbuffers::String> MARKER_TYPE) {
-    fbb_.AddOffset(GNO::VT_MARKER_TYPE, MARKER_TYPE);
-  }
-  void add_OBSERVER(::flatbuffers::Offset<::flatbuffers::String> OBSERVER) {
-    fbb_.AddOffset(GNO::VT_OBSERVER, OBSERVER);
-  }
-  void add_AGENCY(::flatbuffers::Offset<::flatbuffers::String> AGENCY) {
-    fbb_.AddOffset(GNO::VT_AGENCY, AGENCY);
-  }
-  void add_ANTENNA_DELTA_HEN(::flatbuffers::Offset<::flatbuffers::Vector<double>> ANTENNA_DELTA_HEN) {
-    fbb_.AddOffset(GNO::VT_ANTENNA_DELTA_HEN, ANTENNA_DELTA_HEN);
-  }
-  void add_PHASE_SHIFTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> PHASE_SHIFTS) {
-    fbb_.AddOffset(GNO::VT_PHASE_SHIFTS, PHASE_SHIFTS);
-  }
-  void add_SIGNAL_STRENGTH_UNIT(::flatbuffers::Offset<::flatbuffers::String> SIGNAL_STRENGTH_UNIT) {
-    fbb_.AddOffset(GNO::VT_SIGNAL_STRENGTH_UNIT, SIGNAL_STRENGTH_UNIT);
-  }
-  void add_LEAP_SECONDS(int32_t LEAP_SECONDS) {
-    fbb_.AddElement<int32_t>(GNO::VT_LEAP_SECONDS, LEAP_SECONDS, 0);
-  }
-  void add_HAS_LEAP_SECONDS(bool HAS_LEAP_SECONDS) {
-    fbb_.AddElement<uint8_t>(GNO::VT_HAS_LEAP_SECONDS, static_cast<uint8_t>(HAS_LEAP_SECONDS), 0);
-  }
   explicit GNOBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -884,19 +709,7 @@ inline ::flatbuffers::Offset<GNO> CreateGNO(
     double VDOP = 0.0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<gnssSatObs>>> SAT_OBS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> OBS_CODE_SET = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> TIME_SYSTEM = 0,
-    uint8_t EPOCH_FLAG = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> MARKER_NAME = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> MARKER_NUMBER = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> MARKER_TYPE = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> OBSERVER = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> AGENCY = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<double>> ANTENNA_DELTA_HEN = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> PHASE_SHIFTS = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> SIGNAL_STRENGTH_UNIT = 0,
-    int32_t LEAP_SECONDS = 0,
-    bool HAS_LEAP_SECONDS = false) {
+    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0) {
   GNOBuilder builder_(_fbb);
   builder_.add_VDOP(VDOP);
   builder_.add_HDOP(HDOP);
@@ -910,16 +723,6 @@ inline ::flatbuffers::Offset<GNO> CreateGNO(
   builder_.add_LATITUDE(LATITUDE);
   builder_.add_CLOCK_DRIFT(CLOCK_DRIFT);
   builder_.add_CLOCK_OFFSET(CLOCK_OFFSET);
-  builder_.add_LEAP_SECONDS(LEAP_SECONDS);
-  builder_.add_SIGNAL_STRENGTH_UNIT(SIGNAL_STRENGTH_UNIT);
-  builder_.add_PHASE_SHIFTS(PHASE_SHIFTS);
-  builder_.add_ANTENNA_DELTA_HEN(ANTENNA_DELTA_HEN);
-  builder_.add_AGENCY(AGENCY);
-  builder_.add_OBSERVER(OBSERVER);
-  builder_.add_MARKER_TYPE(MARKER_TYPE);
-  builder_.add_MARKER_NUMBER(MARKER_NUMBER);
-  builder_.add_MARKER_NAME(MARKER_NAME);
-  builder_.add_TIME_SYSTEM(TIME_SYSTEM);
   builder_.add_NOTES(NOTES);
   builder_.add_OBS_CODE_SET(OBS_CODE_SET);
   builder_.add_SAT_OBS(SAT_OBS);
@@ -931,8 +734,6 @@ inline ::flatbuffers::Offset<GNO> CreateGNO(
   builder_.add_RECEIVER_TYPE(RECEIVER_TYPE);
   builder_.add_RECEIVER_ID(RECEIVER_ID);
   builder_.add_ID(ID);
-  builder_.add_HAS_LEAP_SECONDS(HAS_LEAP_SECONDS);
-  builder_.add_EPOCH_FLAG(EPOCH_FLAG);
   return builder_.Finish();
 }
 
@@ -965,19 +766,7 @@ inline ::flatbuffers::Offset<GNO> CreateGNODirect(
     double VDOP = 0.0,
     const std::vector<::flatbuffers::Offset<gnssSatObs>> *SAT_OBS = nullptr,
     const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *OBS_CODE_SET = nullptr,
-    const char *NOTES = nullptr,
-    const char *TIME_SYSTEM = nullptr,
-    uint8_t EPOCH_FLAG = 0,
-    const char *MARKER_NAME = nullptr,
-    const char *MARKER_NUMBER = nullptr,
-    const char *MARKER_TYPE = nullptr,
-    const char *OBSERVER = nullptr,
-    const char *AGENCY = nullptr,
-    const std::vector<double> *ANTENNA_DELTA_HEN = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *PHASE_SHIFTS = nullptr,
-    const char *SIGNAL_STRENGTH_UNIT = nullptr,
-    int32_t LEAP_SECONDS = 0,
-    bool HAS_LEAP_SECONDS = false) {
+    const char *NOTES = nullptr) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto RECEIVER_ID__ = RECEIVER_ID ? _fbb.CreateString(RECEIVER_ID) : 0;
   auto RECEIVER_TYPE__ = RECEIVER_TYPE ? _fbb.CreateString(RECEIVER_TYPE) : 0;
@@ -988,15 +777,6 @@ inline ::flatbuffers::Offset<GNO> CreateGNODirect(
   auto SAT_OBS__ = SAT_OBS ? _fbb.CreateVector<::flatbuffers::Offset<gnssSatObs>>(*SAT_OBS) : 0;
   auto OBS_CODE_SET__ = OBS_CODE_SET ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*OBS_CODE_SET) : 0;
   auto NOTES__ = NOTES ? _fbb.CreateString(NOTES) : 0;
-  auto TIME_SYSTEM__ = TIME_SYSTEM ? _fbb.CreateString(TIME_SYSTEM) : 0;
-  auto MARKER_NAME__ = MARKER_NAME ? _fbb.CreateString(MARKER_NAME) : 0;
-  auto MARKER_NUMBER__ = MARKER_NUMBER ? _fbb.CreateString(MARKER_NUMBER) : 0;
-  auto MARKER_TYPE__ = MARKER_TYPE ? _fbb.CreateString(MARKER_TYPE) : 0;
-  auto OBSERVER__ = OBSERVER ? _fbb.CreateString(OBSERVER) : 0;
-  auto AGENCY__ = AGENCY ? _fbb.CreateString(AGENCY) : 0;
-  auto ANTENNA_DELTA_HEN__ = ANTENNA_DELTA_HEN ? _fbb.CreateVector<double>(*ANTENNA_DELTA_HEN) : 0;
-  auto PHASE_SHIFTS__ = PHASE_SHIFTS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*PHASE_SHIFTS) : 0;
-  auto SIGNAL_STRENGTH_UNIT__ = SIGNAL_STRENGTH_UNIT ? _fbb.CreateString(SIGNAL_STRENGTH_UNIT) : 0;
   return CreateGNO(
       _fbb,
       ID__,
@@ -1021,19 +801,7 @@ inline ::flatbuffers::Offset<GNO> CreateGNODirect(
       VDOP,
       SAT_OBS__,
       OBS_CODE_SET__,
-      NOTES__,
-      TIME_SYSTEM__,
-      EPOCH_FLAG,
-      MARKER_NAME__,
-      MARKER_NUMBER__,
-      MARKER_TYPE__,
-      OBSERVER__,
-      AGENCY__,
-      ANTENNA_DELTA_HEN__,
-      PHASE_SHIFTS__,
-      SIGNAL_STRENGTH_UNIT__,
-      LEAP_SECONDS,
-      HAS_LEAP_SECONDS);
+      NOTES__);
 }
 
 ::flatbuffers::Offset<GNO> CreateGNO(::flatbuffers::FlatBufferBuilder &_fbb, const GNOT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1082,9 +850,7 @@ inline gnssSatObsT::gnssSatObsT(const gnssSatObsT &o)
         ELEVATION(o.ELEVATION),
         AZIMUTH(o.AZIMUTH),
         TRACKING_STATUS(o.TRACKING_STATUS),
-        AGC_STATE(o.AGC_STATE),
-        GLONASS_FREQUENCY_NUMBER(o.GLONASS_FREQUENCY_NUMBER),
-        HAS_GLONASS_FREQUENCY_NUMBER(o.HAS_GLONASS_FREQUENCY_NUMBER) {
+        AGC_STATE(o.AGC_STATE) {
   OBSERVATIONS.reserve(o.OBSERVATIONS.size());
   for (const auto &OBSERVATIONS_ : o.OBSERVATIONS) { OBSERVATIONS.emplace_back((OBSERVATIONS_) ? new gnssObsDataT(*OBSERVATIONS_) : nullptr); }
 }
@@ -1097,8 +863,6 @@ inline gnssSatObsT &gnssSatObsT::operator=(gnssSatObsT o) FLATBUFFERS_NOEXCEPT {
   std::swap(TRACKING_STATUS, o.TRACKING_STATUS);
   std::swap(AGC_STATE, o.AGC_STATE);
   std::swap(OBSERVATIONS, o.OBSERVATIONS);
-  std::swap(GLONASS_FREQUENCY_NUMBER, o.GLONASS_FREQUENCY_NUMBER);
-  std::swap(HAS_GLONASS_FREQUENCY_NUMBER, o.HAS_GLONASS_FREQUENCY_NUMBER);
   return *this;
 }
 
@@ -1118,8 +882,6 @@ inline void gnssSatObs::UnPackTo(gnssSatObsT *_o, const ::flatbuffers::resolver_
   { auto _e = TRACKING_STATUS(); _o->TRACKING_STATUS = _e; }
   { auto _e = AGC_STATE(); _o->AGC_STATE = _e; }
   { auto _e = OBSERVATIONS(); if (_e) { _o->OBSERVATIONS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->OBSERVATIONS[_i]) { _e->Get(_i)->UnPackTo(_o->OBSERVATIONS[_i].get(), _resolver); } else { _o->OBSERVATIONS[_i] = std::unique_ptr<gnssObsDataT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->OBSERVATIONS.resize(0); } }
-  { auto _e = GLONASS_FREQUENCY_NUMBER(); _o->GLONASS_FREQUENCY_NUMBER = _e; }
-  { auto _e = HAS_GLONASS_FREQUENCY_NUMBER(); _o->HAS_GLONASS_FREQUENCY_NUMBER = _e; }
 }
 
 inline ::flatbuffers::Offset<gnssSatObs> CreategnssSatObs(::flatbuffers::FlatBufferBuilder &_fbb, const gnssSatObsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1137,8 +899,6 @@ inline ::flatbuffers::Offset<gnssSatObs> gnssSatObs::Pack(::flatbuffers::FlatBuf
   auto _TRACKING_STATUS = _o->TRACKING_STATUS;
   auto _AGC_STATE = _o->AGC_STATE;
   auto _OBSERVATIONS = _o->OBSERVATIONS.size() ? _fbb.CreateVector<::flatbuffers::Offset<gnssObsData>> (_o->OBSERVATIONS.size(), [](size_t i, _VectorArgs *__va) { return CreategnssObsData(*__va->__fbb, __va->__o->OBSERVATIONS[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _GLONASS_FREQUENCY_NUMBER = _o->GLONASS_FREQUENCY_NUMBER;
-  auto _HAS_GLONASS_FREQUENCY_NUMBER = _o->HAS_GLONASS_FREQUENCY_NUMBER;
   return CreategnssSatObs(
       _fbb,
       _GNSS_SAT_ID,
@@ -1147,9 +907,7 @@ inline ::flatbuffers::Offset<gnssSatObs> gnssSatObs::Pack(::flatbuffers::FlatBuf
       _AZIMUTH,
       _TRACKING_STATUS,
       _AGC_STATE,
-      _OBSERVATIONS,
-      _GLONASS_FREQUENCY_NUMBER,
-      _HAS_GLONASS_FREQUENCY_NUMBER);
+      _OBSERVATIONS);
 }
 
 inline GNOT::GNOT(const GNOT &o)
@@ -1174,19 +932,7 @@ inline GNOT::GNOT(const GNOT &o)
         HDOP(o.HDOP),
         VDOP(o.VDOP),
         OBS_CODE_SET(o.OBS_CODE_SET),
-        NOTES(o.NOTES),
-        TIME_SYSTEM(o.TIME_SYSTEM),
-        EPOCH_FLAG(o.EPOCH_FLAG),
-        MARKER_NAME(o.MARKER_NAME),
-        MARKER_NUMBER(o.MARKER_NUMBER),
-        MARKER_TYPE(o.MARKER_TYPE),
-        OBSERVER(o.OBSERVER),
-        AGENCY(o.AGENCY),
-        ANTENNA_DELTA_HEN(o.ANTENNA_DELTA_HEN),
-        PHASE_SHIFTS(o.PHASE_SHIFTS),
-        SIGNAL_STRENGTH_UNIT(o.SIGNAL_STRENGTH_UNIT),
-        LEAP_SECONDS(o.LEAP_SECONDS),
-        HAS_LEAP_SECONDS(o.HAS_LEAP_SECONDS) {
+        NOTES(o.NOTES) {
   SAT_OBS.reserve(o.SAT_OBS.size());
   for (const auto &SAT_OBS_ : o.SAT_OBS) { SAT_OBS.emplace_back((SAT_OBS_) ? new gnssSatObsT(*SAT_OBS_) : nullptr); }
 }
@@ -1215,18 +961,6 @@ inline GNOT &GNOT::operator=(GNOT o) FLATBUFFERS_NOEXCEPT {
   std::swap(SAT_OBS, o.SAT_OBS);
   std::swap(OBS_CODE_SET, o.OBS_CODE_SET);
   std::swap(NOTES, o.NOTES);
-  std::swap(TIME_SYSTEM, o.TIME_SYSTEM);
-  std::swap(EPOCH_FLAG, o.EPOCH_FLAG);
-  std::swap(MARKER_NAME, o.MARKER_NAME);
-  std::swap(MARKER_NUMBER, o.MARKER_NUMBER);
-  std::swap(MARKER_TYPE, o.MARKER_TYPE);
-  std::swap(OBSERVER, o.OBSERVER);
-  std::swap(AGENCY, o.AGENCY);
-  std::swap(ANTENNA_DELTA_HEN, o.ANTENNA_DELTA_HEN);
-  std::swap(PHASE_SHIFTS, o.PHASE_SHIFTS);
-  std::swap(SIGNAL_STRENGTH_UNIT, o.SIGNAL_STRENGTH_UNIT);
-  std::swap(LEAP_SECONDS, o.LEAP_SECONDS);
-  std::swap(HAS_LEAP_SECONDS, o.HAS_LEAP_SECONDS);
   return *this;
 }
 
@@ -1262,18 +996,6 @@ inline void GNO::UnPackTo(GNOT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SAT_OBS(); if (_e) { _o->SAT_OBS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SAT_OBS[_i]) { _e->Get(_i)->UnPackTo(_o->SAT_OBS[_i].get(), _resolver); } else { _o->SAT_OBS[_i] = std::unique_ptr<gnssSatObsT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SAT_OBS.resize(0); } }
   { auto _e = OBS_CODE_SET(); if (_e) { _o->OBS_CODE_SET.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->OBS_CODE_SET[_i] = _e->Get(_i)->str(); } } else { _o->OBS_CODE_SET.resize(0); } }
   { auto _e = NOTES(); if (_e) _o->NOTES = _e->str(); }
-  { auto _e = TIME_SYSTEM(); if (_e) _o->TIME_SYSTEM = _e->str(); }
-  { auto _e = EPOCH_FLAG(); _o->EPOCH_FLAG = _e; }
-  { auto _e = MARKER_NAME(); if (_e) _o->MARKER_NAME = _e->str(); }
-  { auto _e = MARKER_NUMBER(); if (_e) _o->MARKER_NUMBER = _e->str(); }
-  { auto _e = MARKER_TYPE(); if (_e) _o->MARKER_TYPE = _e->str(); }
-  { auto _e = OBSERVER(); if (_e) _o->OBSERVER = _e->str(); }
-  { auto _e = AGENCY(); if (_e) _o->AGENCY = _e->str(); }
-  { auto _e = ANTENNA_DELTA_HEN(); if (_e) { _o->ANTENNA_DELTA_HEN.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ANTENNA_DELTA_HEN[_i] = _e->Get(_i); } } else { _o->ANTENNA_DELTA_HEN.resize(0); } }
-  { auto _e = PHASE_SHIFTS(); if (_e) { _o->PHASE_SHIFTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->PHASE_SHIFTS[_i] = _e->Get(_i)->str(); } } else { _o->PHASE_SHIFTS.resize(0); } }
-  { auto _e = SIGNAL_STRENGTH_UNIT(); if (_e) _o->SIGNAL_STRENGTH_UNIT = _e->str(); }
-  { auto _e = LEAP_SECONDS(); _o->LEAP_SECONDS = _e; }
-  { auto _e = HAS_LEAP_SECONDS(); _o->HAS_LEAP_SECONDS = _e; }
 }
 
 inline ::flatbuffers::Offset<GNO> CreateGNO(::flatbuffers::FlatBufferBuilder &_fbb, const GNOT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1307,18 +1029,6 @@ inline ::flatbuffers::Offset<GNO> GNO::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SAT_OBS = _o->SAT_OBS.size() ? _fbb.CreateVector<::flatbuffers::Offset<gnssSatObs>> (_o->SAT_OBS.size(), [](size_t i, _VectorArgs *__va) { return CreategnssSatObs(*__va->__fbb, __va->__o->SAT_OBS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _OBS_CODE_SET = _o->OBS_CODE_SET.size() ? _fbb.CreateVectorOfStrings(_o->OBS_CODE_SET) : 0;
   auto _NOTES = _o->NOTES.empty() ? 0 : _fbb.CreateString(_o->NOTES);
-  auto _TIME_SYSTEM = _o->TIME_SYSTEM.empty() ? 0 : _fbb.CreateString(_o->TIME_SYSTEM);
-  auto _EPOCH_FLAG = _o->EPOCH_FLAG;
-  auto _MARKER_NAME = _o->MARKER_NAME.empty() ? 0 : _fbb.CreateString(_o->MARKER_NAME);
-  auto _MARKER_NUMBER = _o->MARKER_NUMBER.empty() ? 0 : _fbb.CreateString(_o->MARKER_NUMBER);
-  auto _MARKER_TYPE = _o->MARKER_TYPE.empty() ? 0 : _fbb.CreateString(_o->MARKER_TYPE);
-  auto _OBSERVER = _o->OBSERVER.empty() ? 0 : _fbb.CreateString(_o->OBSERVER);
-  auto _AGENCY = _o->AGENCY.empty() ? 0 : _fbb.CreateString(_o->AGENCY);
-  auto _ANTENNA_DELTA_HEN = _o->ANTENNA_DELTA_HEN.size() ? _fbb.CreateVector(_o->ANTENNA_DELTA_HEN) : 0;
-  auto _PHASE_SHIFTS = _o->PHASE_SHIFTS.size() ? _fbb.CreateVectorOfStrings(_o->PHASE_SHIFTS) : 0;
-  auto _SIGNAL_STRENGTH_UNIT = _o->SIGNAL_STRENGTH_UNIT.empty() ? 0 : _fbb.CreateString(_o->SIGNAL_STRENGTH_UNIT);
-  auto _LEAP_SECONDS = _o->LEAP_SECONDS;
-  auto _HAS_LEAP_SECONDS = _o->HAS_LEAP_SECONDS;
   return CreateGNO(
       _fbb,
       _ID,
@@ -1343,19 +1053,7 @@ inline ::flatbuffers::Offset<GNO> GNO::Pack(::flatbuffers::FlatBufferBuilder &_f
       _VDOP,
       _SAT_OBS,
       _OBS_CODE_SET,
-      _NOTES,
-      _TIME_SYSTEM,
-      _EPOCH_FLAG,
-      _MARKER_NAME,
-      _MARKER_NUMBER,
-      _MARKER_TYPE,
-      _OBSERVER,
-      _AGENCY,
-      _ANTENNA_DELTA_HEN,
-      _PHASE_SHIFTS,
-      _SIGNAL_STRENGTH_UNIT,
-      _LEAP_SECONDS,
-      _HAS_LEAP_SECONDS);
+      _NOTES);
 }
 
 inline const GNO *GetGNO(const void *buf) {

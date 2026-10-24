@@ -20,7 +20,6 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "NCD_generated.h"
 #include "EOP_generated.h"
 #include "SPW_generated.h"
-#include "PCF_generated.h"
 
 struct PRWInit;
 struct PRWInitBuilder;
@@ -46,9 +45,25 @@ struct PRWBatchResponse;
 struct PRWBatchResponseBuilder;
 struct PRWBatchResponseT;
 
+struct PRWEcom2;
+struct PRWEcom2Builder;
+struct PRWEcom2T;
+
 struct PRWInstance;
 struct PRWInstanceBuilder;
 struct PRWInstanceT;
+
+struct PRWIntegratorSettings;
+struct PRWIntegratorSettingsBuilder;
+struct PRWIntegratorSettingsT;
+
+struct PRWSpaceWeather;
+struct PRWSpaceWeatherBuilder;
+struct PRWSpaceWeatherT;
+
+struct PRWForceConfiguration;
+struct PRWForceConfigurationBuilder;
+struct PRWForceConfigurationT;
 
 struct PRWStateMatrix;
 struct PRWStateMatrixBuilder;
@@ -77,10 +92,6 @@ struct PRWBurnBoundaryT;
 struct PRWFiniteBurn;
 struct PRWFiniteBurnBuilder;
 struct PRWFiniteBurnT;
-
-struct PRWEventRecord;
-struct PRWEventRecordBuilder;
-struct PRWEventRecordT;
 
 struct PRWExecutionRequest;
 struct PRWExecutionRequestBuilder;
@@ -199,11 +210,6 @@ struct PRWT;
 /// Earth orientation, space weather) lives in SDS `OCM` + `OMM` + `PPE` +
 /// `RFM` + `ATM` + `EOP` + `SPW`. PRW is the runtime wire that moves those
 /// across a JS ↔ WASM boundary, not a substitute for any of them.
-///
-/// The integrator settings and the force model a propagation runs under are
-/// `PCF`'s tables (PCFIntegratorSettings, PCFForceModel and their enums); PRW
-/// carries them and does not define them, so a configuration and a request
-/// share one definition of each.
 /// Runtime state-flag bitfield (sized to match a single uint).
 /// Data-interchange equivalents: MANEUVERING is subsumed by OCM.Maneuver;
 /// HAS_COVARIANCE is implicit from OCM.COVARIANCE_DATA. The remaining
@@ -354,6 +360,166 @@ inline const char *EnumNameprwSourceKind(prwSourceKind e) {
   if (::flatbuffers::IsOutRange(e, prwSourceKind::OMM, prwSourceKind::KEPLERIAN)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesprwSourceKind()[index];
+}
+
+/// Propagator Runtime Wire — envelope that carries either an init request,
+/// a batch request, or a batch response across a runtime boundary.
+/// New numeric choices are append-only and are not legacy C++ enum ordinals.
+enum class prwSolverAlgorithm : uint8_t {
+  UNSPECIFIED = 0,
+  RK4 = 1,
+  RKF45 = 2,
+  RKF78 = 3,
+  RK78 = 4,
+  RKDP87 = 5,
+  ABM = 6,
+  BS = 7,
+  COWELL = 8,
+  ENCKE = 9,
+  EQUINOCTIAL_VOP = 10,
+  MIN = UNSPECIFIED,
+  MAX = EQUINOCTIAL_VOP
+};
+
+inline const prwSolverAlgorithm (&EnumValuesprwSolverAlgorithm())[11] {
+  static const prwSolverAlgorithm values[] = {
+    prwSolverAlgorithm::UNSPECIFIED,
+    prwSolverAlgorithm::RK4,
+    prwSolverAlgorithm::RKF45,
+    prwSolverAlgorithm::RKF78,
+    prwSolverAlgorithm::RK78,
+    prwSolverAlgorithm::RKDP87,
+    prwSolverAlgorithm::ABM,
+    prwSolverAlgorithm::BS,
+    prwSolverAlgorithm::COWELL,
+    prwSolverAlgorithm::ENCKE,
+    prwSolverAlgorithm::EQUINOCTIAL_VOP
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwSolverAlgorithm() {
+  static const char * const names[12] = {
+    "UNSPECIFIED",
+    "RK4",
+    "RKF45",
+    "RKF78",
+    "RK78",
+    "RKDP87",
+    "ABM",
+    "BS",
+    "COWELL",
+    "ENCKE",
+    "EQUINOCTIAL_VOP",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwSolverAlgorithm(prwSolverAlgorithm e) {
+  if (::flatbuffers::IsOutRange(e, prwSolverAlgorithm::UNSPECIFIED, prwSolverAlgorithm::EQUINOCTIAL_VOP)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwSolverAlgorithm()[index];
+}
+
+enum class prwGravitySelection : uint8_t {
+  INFER_FLAGS = 0,
+  POINT_MASS = 1,
+  J2_ONLY = 2,
+  J2_TO_J4 = 3,
+  SPHERICAL_HARMONICS = 4,
+  EGM2008 = 5,
+  /// NGA EGM96 (Lemoine et al. 1998, NASA/TP-1998-206861), tide-free.
+  EGM96 = 6,
+  MIN = INFER_FLAGS,
+  MAX = EGM96
+};
+
+inline const prwGravitySelection (&EnumValuesprwGravitySelection())[7] {
+  static const prwGravitySelection values[] = {
+    prwGravitySelection::INFER_FLAGS,
+    prwGravitySelection::POINT_MASS,
+    prwGravitySelection::J2_ONLY,
+    prwGravitySelection::J2_TO_J4,
+    prwGravitySelection::SPHERICAL_HARMONICS,
+    prwGravitySelection::EGM2008,
+    prwGravitySelection::EGM96
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwGravitySelection() {
+  static const char * const names[8] = {
+    "INFER_FLAGS",
+    "POINT_MASS",
+    "J2_ONLY",
+    "J2_TO_J4",
+    "SPHERICAL_HARMONICS",
+    "EGM2008",
+    "EGM96",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwGravitySelection(prwGravitySelection e) {
+  if (::flatbuffers::IsOutRange(e, prwGravitySelection::INFER_FLAGS, prwGravitySelection::EGM96)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwGravitySelection()[index];
+}
+
+enum class prwAtmosphereFamily : uint8_t {
+  UNSPECIFIED = 0,
+  NRLMSISE00 = 1,
+  EXPONENTIAL = 2,
+  USSA1976 = 3,
+  HARRIS_PRIESTER = 4,
+  /// Jacchia-Roberts (Roberts, Celestial Mechanics 4, 1971): the closed-form
+  /// evaluation of Jacchia's static diffusion model with the constants NASA
+  /// GTDS and GMAT use (inflection temperature, mean molecular mass and
+  /// 100 km composition of Jacchia 1971, SAO SR 332; ATM's JR71). The drivers:
+  /// F10.7 of the previous day, that day's 81-day centred average, and the
+  /// three-hour Kp 6.7 h earlier (PRW.SPACE_WEATHER, or WEATHER's values held
+  /// constant). A VCM's JACCHIA_70 is carried here.
+  JACCHIA_ROBERTS = 5,
+  /// Jacchia-Bowman 2008 (Bowman et al., AIAA 2008-6438): solar indices and
+  /// Dst-derived temperature change from PRW.JB2008_INDICES.
+  JB2008 = 6,
+  MIN = UNSPECIFIED,
+  MAX = JB2008
+};
+
+inline const prwAtmosphereFamily (&EnumValuesprwAtmosphereFamily())[7] {
+  static const prwAtmosphereFamily values[] = {
+    prwAtmosphereFamily::UNSPECIFIED,
+    prwAtmosphereFamily::NRLMSISE00,
+    prwAtmosphereFamily::EXPONENTIAL,
+    prwAtmosphereFamily::USSA1976,
+    prwAtmosphereFamily::HARRIS_PRIESTER,
+    prwAtmosphereFamily::JACCHIA_ROBERTS,
+    prwAtmosphereFamily::JB2008
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwAtmosphereFamily() {
+  static const char * const names[8] = {
+    "UNSPECIFIED",
+    "NRLMSISE00",
+    "EXPONENTIAL",
+    "USSA1976",
+    "HARRIS_PRIESTER",
+    "JACCHIA_ROBERTS",
+    "JB2008",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwAtmosphereFamily(prwAtmosphereFamily e) {
+  if (::flatbuffers::IsOutRange(e, prwAtmosphereFamily::UNSPECIFIED, prwAtmosphereFamily::JB2008)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwAtmosphereFamily()[index];
 }
 
 enum class prwDerivativeTechnique : uint8_t {
@@ -653,6 +819,80 @@ inline const char *EnumNameprwDensitySpecies(prwDensitySpecies e) {
   return EnumNamesprwDensitySpecies()[index];
 }
 
+/// Solid Earth tide model for the central body's field. NONE leaves the
+/// tides out. IERS_2010 is IERS Conventions (2010) section 6.2: the degree 2
+/// and 3 tides raised by the Sun and Moon with Table 6.3's anelastic Love
+/// numbers and the degree 4 terms through k+ (step 1, eqs. 6.6-6.7), the
+/// frequency-dependent corrections of Tables 6.5a-c (step 2, eq. 6.8), and
+/// the permanent tide handled for the field's own tide system. Pole tide is
+/// not included.
+enum class prwSolidTideModel : uint8_t {
+  NONE = 0,
+  IERS_2010 = 1,
+  MIN = NONE,
+  MAX = IERS_2010
+};
+
+inline const prwSolidTideModel (&EnumValuesprwSolidTideModel())[2] {
+  static const prwSolidTideModel values[] = {
+    prwSolidTideModel::NONE,
+    prwSolidTideModel::IERS_2010
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwSolidTideModel() {
+  static const char * const names[3] = {
+    "NONE",
+    "IERS_2010",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwSolidTideModel(prwSolidTideModel e) {
+  if (::flatbuffers::IsOutRange(e, prwSolidTideModel::NONE, prwSolidTideModel::IERS_2010)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwSolidTideModel()[index];
+}
+
+/// Post-Newtonian corrections to the central body's acceleration (IERS
+/// Conventions (2010) eq. 10.12). NONE leaves them out. SCHWARZSCHILD is the
+/// point-mass term only. IERS_2010 adds Lense-Thirring and de Sitter
+/// (geodesic) precession.
+enum class prwRelativityTerms : uint8_t {
+  NONE = 0,
+  SCHWARZSCHILD = 1,
+  IERS_2010 = 2,
+  MIN = NONE,
+  MAX = IERS_2010
+};
+
+inline const prwRelativityTerms (&EnumValuesprwRelativityTerms())[3] {
+  static const prwRelativityTerms values[] = {
+    prwRelativityTerms::NONE,
+    prwRelativityTerms::SCHWARZSCHILD,
+    prwRelativityTerms::IERS_2010
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwRelativityTerms() {
+  static const char * const names[4] = {
+    "NONE",
+    "SCHWARZSCHILD",
+    "IERS_2010",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwRelativityTerms(prwRelativityTerms e) {
+  if (::flatbuffers::IsOutRange(e, prwRelativityTerms::NONE, prwRelativityTerms::IERS_2010)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwRelativityTerms()[index];
+}
+
 /// Dynamical model parameters a covariance and STM may carry after the state
 /// (a VCM's B, BDOT, AGOM and T). Values are the request's FORCES, in SI:
 /// DRAG_AREA_OVER_MASS Cd*A/m (m2/kg, DRAG_COEFFICIENT * AREA_M2 /
@@ -666,7 +906,7 @@ enum class prwDynamicParameter : uint8_t {
   DRAG_AREA_OVER_MASS_RATE = 2,
   SRP_AREA_OVER_MASS = 3,
   IN_TRACK_ACCELERATION = 4,
-  /// ECOM2 coefficients (PCFEcom2), in their order there.
+  /// ECOM2 coefficients (PRWEcom2), in their order there.
   ECOM2_D0 = 5,
   ECOM2_Y0 = 6,
   ECOM2_B0 = 7,
@@ -731,6 +971,153 @@ inline const char *EnumNameprwDynamicParameter(prwDynamicParameter e) {
   if (::flatbuffers::IsOutRange(e, prwDynamicParameter::UNSPECIFIED, prwDynamicParameter::ECOM2_B3_SIN)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesprwDynamicParameter()[index];
+}
+
+/// Solar radiation pressure model family. CANNONBALL uses the
+/// radiation-pressure coefficient and area-to-mass ratio of the force
+/// configuration; GNSS_BOX_WING is the a priori box-wing model of the
+/// spacecraft block in GNSS_BLOCK (Rodriguez-Solano, Hugentobler and
+/// Steigenberger 2012, Adv. Space Res. 49, doi:10.1016/j.asr.2012.01.016)
+/// under nominal yaw steering, with the mass INITIAL_MASS_KG.
+enum class prwRadiationPressureFamily : uint8_t {
+  CANNONBALL = 0,
+  GNSS_BOX_WING = 1,
+  NONE = 2,
+  MIN = CANNONBALL,
+  MAX = NONE
+};
+
+inline const prwRadiationPressureFamily (&EnumValuesprwRadiationPressureFamily())[3] {
+  static const prwRadiationPressureFamily values[] = {
+    prwRadiationPressureFamily::CANNONBALL,
+    prwRadiationPressureFamily::GNSS_BOX_WING,
+    prwRadiationPressureFamily::NONE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwRadiationPressureFamily() {
+  static const char * const names[4] = {
+    "CANNONBALL",
+    "GNSS_BOX_WING",
+    "NONE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwRadiationPressureFamily(prwRadiationPressureFamily e) {
+  if (::flatbuffers::IsOutRange(e, prwRadiationPressureFamily::CANNONBALL, prwRadiationPressureFamily::NONE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwRadiationPressureFamily()[index];
+}
+
+/// Earth radiation pressure: the sunlight the Earth reflects (albedo) and the
+/// infrared it emits, pushing on an isotropic (cannonball) spacecraft. KNOCKE
+/// is Knocke, Ries and Tapley (1988, AIAA paper 88-4292): albedo and
+/// emissivity zonal to the second Legendre degree with the annual term of
+/// the first, from the elements of the Earth's surface the spacecraft sees
+/// (as Orekit's KnockeRediffusedForceModel evaluates it).
+enum class prwEarthRadiationModel : uint8_t {
+  NONE = 0,
+  KNOCKE = 1,
+  MIN = NONE,
+  MAX = KNOCKE
+};
+
+inline const prwEarthRadiationModel (&EnumValuesprwEarthRadiationModel())[2] {
+  static const prwEarthRadiationModel values[] = {
+    prwEarthRadiationModel::NONE,
+    prwEarthRadiationModel::KNOCKE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwEarthRadiationModel() {
+  static const char * const names[3] = {
+    "NONE",
+    "KNOCKE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwEarthRadiationModel(prwEarthRadiationModel e) {
+  if (::flatbuffers::IsOutRange(e, prwEarthRadiationModel::NONE, prwEarthRadiationModel::KNOCKE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwEarthRadiationModel()[index];
+}
+
+/// Ocean tide model for the central body's field. FES2004 is IERS
+/// Conventions (2010) section 6.3: the variations of the normalized Stokes
+/// coefficients of the FES2004 waves (the IERS file fes2004_Cnm-Snm.dat,
+/// eq. 6.15) at their Doodson arguments, in the field's Earth-fixed axes.
+/// The ocean pole tide is not included.
+enum class prwOceanTideModel : uint8_t {
+  NONE = 0,
+  FES2004 = 1,
+  MIN = NONE,
+  MAX = FES2004
+};
+
+inline const prwOceanTideModel (&EnumValuesprwOceanTideModel())[2] {
+  static const prwOceanTideModel values[] = {
+    prwOceanTideModel::NONE,
+    prwOceanTideModel::FES2004
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwOceanTideModel() {
+  static const char * const names[3] = {
+    "NONE",
+    "FES2004",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwOceanTideModel(prwOceanTideModel e) {
+  if (::flatbuffers::IsOutRange(e, prwOceanTideModel::NONE, prwOceanTideModel::FES2004)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwOceanTideModel()[index];
+}
+
+/// GNSS spacecraft block, selecting the box-wing surfaces.
+enum class prwGnssSpacecraftBlock : uint8_t {
+  UNSPECIFIED = 0,
+  GPS_IIR = 1,
+  GPS_IIR_M = 2,
+  GPS_IIF = 3,
+  MIN = UNSPECIFIED,
+  MAX = GPS_IIF
+};
+
+inline const prwGnssSpacecraftBlock (&EnumValuesprwGnssSpacecraftBlock())[4] {
+  static const prwGnssSpacecraftBlock values[] = {
+    prwGnssSpacecraftBlock::UNSPECIFIED,
+    prwGnssSpacecraftBlock::GPS_IIR,
+    prwGnssSpacecraftBlock::GPS_IIR_M,
+    prwGnssSpacecraftBlock::GPS_IIF
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwGnssSpacecraftBlock() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "GPS_IIR",
+    "GPS_IIR_M",
+    "GPS_IIF",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwGnssSpacecraftBlock(prwGnssSpacecraftBlock e) {
+  if (::flatbuffers::IsOutRange(e, prwGnssSpacecraftBlock::UNSPECIFIED, prwGnssSpacecraftBlock::GPS_IIF)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwGnssSpacecraftBlock()[index];
 }
 
 struct PRWInitT : public ::flatbuffers::NativeTable {
@@ -1519,6 +1906,178 @@ inline ::flatbuffers::Offset<PRWBatchResponse> CreatePRWBatchResponseDirect(
 
 ::flatbuffers::Offset<PRWBatchResponse> CreatePRWBatchResponse(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBatchResponseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PRWEcom2T : public ::flatbuffers::NativeTable {
+  typedef PRWEcom2 TableType;
+  double D0_M_S2 = 0.0;
+  double Y0_M_S2 = 0.0;
+  double B0_M_S2 = 0.0;
+  double D2_COS_M_S2 = 0.0;
+  double D2_SIN_M_S2 = 0.0;
+  double D4_COS_M_S2 = 0.0;
+  double D4_SIN_M_S2 = 0.0;
+  double B1_COS_M_S2 = 0.0;
+  double B1_SIN_M_S2 = 0.0;
+  double B3_COS_M_S2 = 0.0;
+  double B3_SIN_M_S2 = 0.0;
+};
+
+/// ECOM2 empirical solar radiation pressure (Arnold et al. 2015, J. Geod. 89,
+/// doi:10.1007/s00190-015-0814-4, eq. 5), in m/s^2 in the D-Y-B frame,
+/// added to the a priori model and scaled by the visible Sun fraction.
+struct PRWEcom2 FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWEcom2T NativeTableType;
+  typedef PRWEcom2Builder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_D0_M_S2 = 4,
+    VT_Y0_M_S2 = 6,
+    VT_B0_M_S2 = 8,
+    VT_D2_COS_M_S2 = 10,
+    VT_D2_SIN_M_S2 = 12,
+    VT_D4_COS_M_S2 = 14,
+    VT_D4_SIN_M_S2 = 16,
+    VT_B1_COS_M_S2 = 18,
+    VT_B1_SIN_M_S2 = 20,
+    VT_B3_COS_M_S2 = 22,
+    VT_B3_SIN_M_S2 = 24
+  };
+  double D0_M_S2() const {
+    return GetField<double>(VT_D0_M_S2, 0.0);
+  }
+  double Y0_M_S2() const {
+    return GetField<double>(VT_Y0_M_S2, 0.0);
+  }
+  double B0_M_S2() const {
+    return GetField<double>(VT_B0_M_S2, 0.0);
+  }
+  double D2_COS_M_S2() const {
+    return GetField<double>(VT_D2_COS_M_S2, 0.0);
+  }
+  double D2_SIN_M_S2() const {
+    return GetField<double>(VT_D2_SIN_M_S2, 0.0);
+  }
+  double D4_COS_M_S2() const {
+    return GetField<double>(VT_D4_COS_M_S2, 0.0);
+  }
+  double D4_SIN_M_S2() const {
+    return GetField<double>(VT_D4_SIN_M_S2, 0.0);
+  }
+  double B1_COS_M_S2() const {
+    return GetField<double>(VT_B1_COS_M_S2, 0.0);
+  }
+  double B1_SIN_M_S2() const {
+    return GetField<double>(VT_B1_SIN_M_S2, 0.0);
+  }
+  double B3_COS_M_S2() const {
+    return GetField<double>(VT_B3_COS_M_S2, 0.0);
+  }
+  double B3_SIN_M_S2() const {
+    return GetField<double>(VT_B3_SIN_M_S2, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_D0_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_Y0_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B0_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D2_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D2_SIN_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D4_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D4_SIN_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B1_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B1_SIN_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B3_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B3_SIN_M_S2, 8) &&
+           verifier.EndTable();
+  }
+  PRWEcom2T *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWEcom2T *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWEcom2> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWEcom2Builder {
+  typedef PRWEcom2 Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_D0_M_S2(double D0_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D0_M_S2, D0_M_S2, 0.0);
+  }
+  void add_Y0_M_S2(double Y0_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_Y0_M_S2, Y0_M_S2, 0.0);
+  }
+  void add_B0_M_S2(double B0_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B0_M_S2, B0_M_S2, 0.0);
+  }
+  void add_D2_COS_M_S2(double D2_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D2_COS_M_S2, D2_COS_M_S2, 0.0);
+  }
+  void add_D2_SIN_M_S2(double D2_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D2_SIN_M_S2, D2_SIN_M_S2, 0.0);
+  }
+  void add_D4_COS_M_S2(double D4_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D4_COS_M_S2, D4_COS_M_S2, 0.0);
+  }
+  void add_D4_SIN_M_S2(double D4_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D4_SIN_M_S2, D4_SIN_M_S2, 0.0);
+  }
+  void add_B1_COS_M_S2(double B1_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B1_COS_M_S2, B1_COS_M_S2, 0.0);
+  }
+  void add_B1_SIN_M_S2(double B1_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B1_SIN_M_S2, B1_SIN_M_S2, 0.0);
+  }
+  void add_B3_COS_M_S2(double B3_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B3_COS_M_S2, B3_COS_M_S2, 0.0);
+  }
+  void add_B3_SIN_M_S2(double B3_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B3_SIN_M_S2, B3_SIN_M_S2, 0.0);
+  }
+  explicit PRWEcom2Builder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWEcom2> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWEcom2>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWEcom2> CreatePRWEcom2(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double D0_M_S2 = 0.0,
+    double Y0_M_S2 = 0.0,
+    double B0_M_S2 = 0.0,
+    double D2_COS_M_S2 = 0.0,
+    double D2_SIN_M_S2 = 0.0,
+    double D4_COS_M_S2 = 0.0,
+    double D4_SIN_M_S2 = 0.0,
+    double B1_COS_M_S2 = 0.0,
+    double B1_SIN_M_S2 = 0.0,
+    double B3_COS_M_S2 = 0.0,
+    double B3_SIN_M_S2 = 0.0) {
+  PRWEcom2Builder builder_(_fbb);
+  builder_.add_B3_SIN_M_S2(B3_SIN_M_S2);
+  builder_.add_B3_COS_M_S2(B3_COS_M_S2);
+  builder_.add_B1_SIN_M_S2(B1_SIN_M_S2);
+  builder_.add_B1_COS_M_S2(B1_COS_M_S2);
+  builder_.add_D4_SIN_M_S2(D4_SIN_M_S2);
+  builder_.add_D4_COS_M_S2(D4_COS_M_S2);
+  builder_.add_D2_SIN_M_S2(D2_SIN_M_S2);
+  builder_.add_D2_COS_M_S2(D2_COS_M_S2);
+  builder_.add_B0_M_S2(B0_M_S2);
+  builder_.add_Y0_M_S2(Y0_M_S2);
+  builder_.add_D0_M_S2(D0_M_S2);
+  return builder_.Finish();
+}
+
+struct PRWEcom2::Traits {
+  using type = PRWEcom2;
+  static auto constexpr Create = CreatePRWEcom2;
+};
+
+::flatbuffers::Offset<PRWEcom2> CreatePRWEcom2(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PRWInstanceT : public ::flatbuffers::NativeTable {
   typedef PRWInstance TableType;
   std::string MODULE_ID{};
@@ -1619,6 +2178,885 @@ inline ::flatbuffers::Offset<PRWInstance> CreatePRWInstanceDirect(
 }
 
 ::flatbuffers::Offset<PRWInstance> CreatePRWInstance(::flatbuffers::FlatBufferBuilder &_fbb, const PRWInstanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWIntegratorSettingsT : public ::flatbuffers::NativeTable {
+  typedef PRWIntegratorSettings TableType;
+  prwSolverAlgorithm ALGORITHM = prwSolverAlgorithm::UNSPECIFIED;
+  double INITIAL_STEP_SECONDS = 60.0;
+  double MINIMUM_STEP_SECONDS = 1.0;
+  double MAXIMUM_STEP_SECONDS = 3600.0;
+  std::vector<double> ABSOLUTE_TOLERANCES{};
+  double RELATIVE_TOLERANCE = 1e-12;
+  uint32_t MAXIMUM_STEPS = 100000;
+};
+
+/// Units are SI. A scalar legacy tolerance must be expanded by the adapter.
+struct PRWIntegratorSettings FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWIntegratorSettingsT NativeTableType;
+  typedef PRWIntegratorSettingsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ALGORITHM = 4,
+    VT_INITIAL_STEP_SECONDS = 6,
+    VT_MINIMUM_STEP_SECONDS = 8,
+    VT_MAXIMUM_STEP_SECONDS = 10,
+    VT_ABSOLUTE_TOLERANCES = 12,
+    VT_RELATIVE_TOLERANCE = 14,
+    VT_MAXIMUM_STEPS = 16
+  };
+  prwSolverAlgorithm ALGORITHM() const {
+    return static_cast<prwSolverAlgorithm>(GetField<uint8_t>(VT_ALGORITHM, 0));
+  }
+  double INITIAL_STEP_SECONDS() const {
+    return GetField<double>(VT_INITIAL_STEP_SECONDS, 60.0);
+  }
+  double MINIMUM_STEP_SECONDS() const {
+    return GetField<double>(VT_MINIMUM_STEP_SECONDS, 1.0);
+  }
+  double MAXIMUM_STEP_SECONDS() const {
+    return GetField<double>(VT_MAXIMUM_STEP_SECONDS, 3600.0);
+  }
+  /// Six or seven positive tolerances, respectively m, m/s and optional kg.
+  const ::flatbuffers::Vector<double> *ABSOLUTE_TOLERANCES() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ABSOLUTE_TOLERANCES);
+  }
+  double RELATIVE_TOLERANCE() const {
+    return GetField<double>(VT_RELATIVE_TOLERANCE, 1e-12);
+  }
+  uint32_t MAXIMUM_STEPS() const {
+    return GetField<uint32_t>(VT_MAXIMUM_STEPS, 100000);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_ALGORITHM, 1) &&
+           VerifyField<double>(verifier, VT_INITIAL_STEP_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_MINIMUM_STEP_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_MAXIMUM_STEP_SECONDS, 8) &&
+           VerifyOffsetRequired(verifier, VT_ABSOLUTE_TOLERANCES) &&
+           verifier.VerifyVector(ABSOLUTE_TOLERANCES()) &&
+           VerifyField<double>(verifier, VT_RELATIVE_TOLERANCE, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MAXIMUM_STEPS, 4) &&
+           verifier.EndTable();
+  }
+  PRWIntegratorSettingsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWIntegratorSettingsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWIntegratorSettings> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWIntegratorSettingsBuilder {
+  typedef PRWIntegratorSettings Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ALGORITHM(prwSolverAlgorithm ALGORITHM) {
+    fbb_.AddElement<uint8_t>(PRWIntegratorSettings::VT_ALGORITHM, static_cast<uint8_t>(ALGORITHM), 0);
+  }
+  void add_INITIAL_STEP_SECONDS(double INITIAL_STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_INITIAL_STEP_SECONDS, INITIAL_STEP_SECONDS, 60.0);
+  }
+  void add_MINIMUM_STEP_SECONDS(double MINIMUM_STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_MINIMUM_STEP_SECONDS, MINIMUM_STEP_SECONDS, 1.0);
+  }
+  void add_MAXIMUM_STEP_SECONDS(double MAXIMUM_STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_MAXIMUM_STEP_SECONDS, MAXIMUM_STEP_SECONDS, 3600.0);
+  }
+  void add_ABSOLUTE_TOLERANCES(::flatbuffers::Offset<::flatbuffers::Vector<double>> ABSOLUTE_TOLERANCES) {
+    fbb_.AddOffset(PRWIntegratorSettings::VT_ABSOLUTE_TOLERANCES, ABSOLUTE_TOLERANCES);
+  }
+  void add_RELATIVE_TOLERANCE(double RELATIVE_TOLERANCE) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_RELATIVE_TOLERANCE, RELATIVE_TOLERANCE, 1e-12);
+  }
+  void add_MAXIMUM_STEPS(uint32_t MAXIMUM_STEPS) {
+    fbb_.AddElement<uint32_t>(PRWIntegratorSettings::VT_MAXIMUM_STEPS, MAXIMUM_STEPS, 100000);
+  }
+  explicit PRWIntegratorSettingsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWIntegratorSettings> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWIntegratorSettings>(end);
+    fbb_.Required(o, PRWIntegratorSettings::VT_ABSOLUTE_TOLERANCES);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettings(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwSolverAlgorithm ALGORITHM = prwSolverAlgorithm::UNSPECIFIED,
+    double INITIAL_STEP_SECONDS = 60.0,
+    double MINIMUM_STEP_SECONDS = 1.0,
+    double MAXIMUM_STEP_SECONDS = 3600.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> ABSOLUTE_TOLERANCES = 0,
+    double RELATIVE_TOLERANCE = 1e-12,
+    uint32_t MAXIMUM_STEPS = 100000) {
+  PRWIntegratorSettingsBuilder builder_(_fbb);
+  builder_.add_RELATIVE_TOLERANCE(RELATIVE_TOLERANCE);
+  builder_.add_MAXIMUM_STEP_SECONDS(MAXIMUM_STEP_SECONDS);
+  builder_.add_MINIMUM_STEP_SECONDS(MINIMUM_STEP_SECONDS);
+  builder_.add_INITIAL_STEP_SECONDS(INITIAL_STEP_SECONDS);
+  builder_.add_MAXIMUM_STEPS(MAXIMUM_STEPS);
+  builder_.add_ABSOLUTE_TOLERANCES(ABSOLUTE_TOLERANCES);
+  builder_.add_ALGORITHM(ALGORITHM);
+  return builder_.Finish();
+}
+
+struct PRWIntegratorSettings::Traits {
+  using type = PRWIntegratorSettings;
+  static auto constexpr Create = CreatePRWIntegratorSettings;
+};
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettingsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwSolverAlgorithm ALGORITHM = prwSolverAlgorithm::UNSPECIFIED,
+    double INITIAL_STEP_SECONDS = 60.0,
+    double MINIMUM_STEP_SECONDS = 1.0,
+    double MAXIMUM_STEP_SECONDS = 3600.0,
+    const std::vector<double> *ABSOLUTE_TOLERANCES = nullptr,
+    double RELATIVE_TOLERANCE = 1e-12,
+    uint32_t MAXIMUM_STEPS = 100000) {
+  auto ABSOLUTE_TOLERANCES__ = ABSOLUTE_TOLERANCES ? _fbb.CreateVector<double>(*ABSOLUTE_TOLERANCES) : 0;
+  return CreatePRWIntegratorSettings(
+      _fbb,
+      ALGORITHM,
+      INITIAL_STEP_SECONDS,
+      MINIMUM_STEP_SECONDS,
+      MAXIMUM_STEP_SECONDS,
+      ABSOLUTE_TOLERANCES__,
+      RELATIVE_TOLERANCE,
+      MAXIMUM_STEPS);
+}
+
+::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettings(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWSpaceWeatherT : public ::flatbuffers::NativeTable {
+  typedef PRWSpaceWeather TableType;
+  std::unique_ptr<TIMInstantT> EPOCH{};
+  double F107 = 150.0;
+  double F107_AVERAGE = 150.0;
+  double AP_INDEX = 15.0;
+  double KP_INDEX = 3.0;
+  PRWSpaceWeatherT() = default;
+  PRWSpaceWeatherT(const PRWSpaceWeatherT &o);
+  PRWSpaceWeatherT(PRWSpaceWeatherT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWSpaceWeatherT &operator=(PRWSpaceWeatherT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Instantaneous space weather. TIM epoch is UTC; flux in SFU (1e-22 W/m2/Hz).
+struct PRWSpaceWeather FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWSpaceWeatherT NativeTableType;
+  typedef PRWSpaceWeatherBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_F107 = 6,
+    VT_F107_AVERAGE = 8,
+    VT_AP_INDEX = 10,
+    VT_KP_INDEX = 12
+  };
+  const TIMInstant *EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_EPOCH);
+  }
+  double F107() const {
+    return GetField<double>(VT_F107, 150.0);
+  }
+  double F107_AVERAGE() const {
+    return GetField<double>(VT_F107_AVERAGE, 150.0);
+  }
+  /// Conventional daily Ap and three-hour Kp index values; not accelerations.
+  double AP_INDEX() const {
+    return GetField<double>(VT_AP_INDEX, 15.0);
+  }
+  double KP_INDEX() const {
+    return GetField<double>(VT_KP_INDEX, 3.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_EPOCH) &&
+           verifier.VerifyTable(EPOCH()) &&
+           VerifyField<double>(verifier, VT_F107, 8) &&
+           VerifyField<double>(verifier, VT_F107_AVERAGE, 8) &&
+           VerifyField<double>(verifier, VT_AP_INDEX, 8) &&
+           VerifyField<double>(verifier, VT_KP_INDEX, 8) &&
+           verifier.EndTable();
+  }
+  PRWSpaceWeatherT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWSpaceWeatherT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWSpaceWeather> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWSpaceWeatherBuilder {
+  typedef PRWSpaceWeather Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
+    fbb_.AddOffset(PRWSpaceWeather::VT_EPOCH, EPOCH);
+  }
+  void add_F107(double F107) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_F107, F107, 150.0);
+  }
+  void add_F107_AVERAGE(double F107_AVERAGE) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_F107_AVERAGE, F107_AVERAGE, 150.0);
+  }
+  void add_AP_INDEX(double AP_INDEX) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_AP_INDEX, AP_INDEX, 15.0);
+  }
+  void add_KP_INDEX(double KP_INDEX) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_KP_INDEX, KP_INDEX, 3.0);
+  }
+  explicit PRWSpaceWeatherBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWSpaceWeather> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWSpaceWeather>(end);
+    fbb_.Required(o, PRWSpaceWeather::VT_EPOCH);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWSpaceWeather> CreatePRWSpaceWeather(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
+    double F107 = 150.0,
+    double F107_AVERAGE = 150.0,
+    double AP_INDEX = 15.0,
+    double KP_INDEX = 3.0) {
+  PRWSpaceWeatherBuilder builder_(_fbb);
+  builder_.add_KP_INDEX(KP_INDEX);
+  builder_.add_AP_INDEX(AP_INDEX);
+  builder_.add_F107_AVERAGE(F107_AVERAGE);
+  builder_.add_F107(F107);
+  builder_.add_EPOCH(EPOCH);
+  return builder_.Finish();
+}
+
+struct PRWSpaceWeather::Traits {
+  using type = PRWSpaceWeather;
+  static auto constexpr Create = CreatePRWSpaceWeather;
+};
+
+::flatbuffers::Offset<PRWSpaceWeather> CreatePRWSpaceWeather(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWForceConfigurationT : public ::flatbuffers::NativeTable {
+  typedef PRWForceConfiguration TableType;
+  prwGravitySelection GRAVITY_CHOICE = prwGravitySelection::INFER_FLAGS;
+  bool ENABLE_POINT_MASS = true;
+  double GRAVITATIONAL_PARAMETER = 0.0;
+  bool ENABLE_J2 = true;
+  bool ENABLE_J3 = false;
+  bool ENABLE_J4 = false;
+  bool ENABLE_HIGHER_ZONALS = false;
+  uint16_t MAXIMUM_DEGREE = 0;
+  bool HAS_MAXIMUM_DEGREE = false;
+  uint16_t MAXIMUM_ORDER = 0;
+  bool HAS_MAXIMUM_ORDER = false;
+  bool ENABLE_THIRD_BODY = false;
+  std::vector<int32_t> THIRD_BODY_IDS{};
+  bool ENABLE_SRP = false;
+  bool ENABLE_DRAG = false;
+  double INITIAL_MASS_KG = 1000.0;
+  double AREA_M2 = 10.0;
+  double REFLECTIVITY_COEFFICIENT = 1.5;
+  double DRAG_COEFFICIENT = 2.2;
+  prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00;
+  std::unique_ptr<PRWSpaceWeatherT> WEATHER{};
+  std::string EPHEMERIS_SOURCE{};
+  prwSolidTideModel SOLID_TIDES = prwSolidTideModel::NONE;
+  prwRelativityTerms RELATIVITY = prwRelativityTerms::NONE;
+  double IN_TRACK_ACCELERATION_M_S2 = 0.0;
+  bool HAS_IN_TRACK_ACCELERATION_M_S2 = false;
+  double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0;
+  bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false;
+  uint16_t MAXIMUM_TESSERAL_DEGREE = 0;
+  bool HAS_MAXIMUM_TESSERAL_DEGREE = false;
+  prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL;
+  prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED;
+  std::unique_ptr<PRWEcom2T> ECOM2{};
+  prwEarthRadiationModel EARTH_RADIATION = prwEarthRadiationModel::NONE;
+  double EARTH_RADIATION_RESOLUTION_DEG = 15.0;
+  double EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0;
+  bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false;
+  prwOceanTideModel OCEAN_TIDES = prwOceanTideModel::NONE;
+  uint16_t OCEAN_TIDE_MAXIMUM_DEGREE = 30;
+  uint16_t OCEAN_TIDE_MAXIMUM_ORDER = 30;
+  PRWForceConfigurationT() = default;
+  PRWForceConfigurationT(const PRWForceConfigurationT &o);
+  PRWForceConfigurationT(PRWForceConfigurationT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWForceConfigurationT &operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Executable subset currently reachable through HPOP invoke. No implied
+/// support for coefficients, drag models or bodies the provider cannot supply.
+struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWForceConfigurationT NativeTableType;
+  typedef PRWForceConfigurationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_GRAVITY_CHOICE = 4,
+    VT_ENABLE_POINT_MASS = 6,
+    VT_GRAVITATIONAL_PARAMETER = 8,
+    VT_ENABLE_J2 = 10,
+    VT_ENABLE_J3 = 12,
+    VT_ENABLE_J4 = 14,
+    VT_ENABLE_HIGHER_ZONALS = 16,
+    VT_MAXIMUM_DEGREE = 18,
+    VT_HAS_MAXIMUM_DEGREE = 20,
+    VT_MAXIMUM_ORDER = 22,
+    VT_HAS_MAXIMUM_ORDER = 24,
+    VT_ENABLE_THIRD_BODY = 26,
+    VT_THIRD_BODY_IDS = 28,
+    VT_ENABLE_SRP = 30,
+    VT_ENABLE_DRAG = 32,
+    VT_INITIAL_MASS_KG = 34,
+    VT_AREA_M2 = 36,
+    VT_REFLECTIVITY_COEFFICIENT = 38,
+    VT_DRAG_COEFFICIENT = 40,
+    VT_ATMOSPHERE_MODEL = 42,
+    VT_WEATHER = 44,
+    VT_EPHEMERIS_SOURCE = 46,
+    VT_SOLID_TIDES = 48,
+    VT_RELATIVITY = 50,
+    VT_IN_TRACK_ACCELERATION_M_S2 = 52,
+    VT_HAS_IN_TRACK_ACCELERATION_M_S2 = 54,
+    VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 56,
+    VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 58,
+    VT_MAXIMUM_TESSERAL_DEGREE = 60,
+    VT_HAS_MAXIMUM_TESSERAL_DEGREE = 62,
+    VT_RADIATION_PRESSURE_MODEL = 64,
+    VT_GNSS_BLOCK = 66,
+    VT_ECOM2 = 68,
+    VT_EARTH_RADIATION = 70,
+    VT_EARTH_RADIATION_RESOLUTION_DEG = 72,
+    VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 74,
+    VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 76,
+    VT_OCEAN_TIDES = 78,
+    VT_OCEAN_TIDE_MAXIMUM_DEGREE = 80,
+    VT_OCEAN_TIDE_MAXIMUM_ORDER = 82
+  };
+  prwGravitySelection GRAVITY_CHOICE() const {
+    return static_cast<prwGravitySelection>(GetField<uint8_t>(VT_GRAVITY_CHOICE, 0));
+  }
+  bool ENABLE_POINT_MASS() const {
+    return GetField<uint8_t>(VT_ENABLE_POINT_MASS, 1) != 0;
+  }
+  /// m3/s2; required positive when a central gravity term is enabled.
+  double GRAVITATIONAL_PARAMETER() const {
+    return GetField<double>(VT_GRAVITATIONAL_PARAMETER, 0.0);
+  }
+  bool ENABLE_J2() const {
+    return GetField<uint8_t>(VT_ENABLE_J2, 1) != 0;
+  }
+  bool ENABLE_J3() const {
+    return GetField<uint8_t>(VT_ENABLE_J3, 0) != 0;
+  }
+  bool ENABLE_J4() const {
+    return GetField<uint8_t>(VT_ENABLE_J4, 0) != 0;
+  }
+  bool ENABLE_HIGHER_ZONALS() const {
+    return GetField<uint8_t>(VT_ENABLE_HIGHER_ZONALS, 0) != 0;
+  }
+  /// Optional truncations; absent selects the explicitly reported model default.
+  uint16_t MAXIMUM_DEGREE() const {
+    return GetField<uint16_t>(VT_MAXIMUM_DEGREE, 0);
+  }
+  /// True when MAXIMUM_DEGREE carries a value; false means absent.
+  bool HAS_MAXIMUM_DEGREE() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_DEGREE, 0) != 0;
+  }
+  uint16_t MAXIMUM_ORDER() const {
+    return GetField<uint16_t>(VT_MAXIMUM_ORDER, 0);
+  }
+  /// True when MAXIMUM_ORDER carries a value; false means absent.
+  bool HAS_MAXIMUM_ORDER() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_ORDER, 0) != 0;
+  }
+  bool ENABLE_THIRD_BODY() const {
+    return GetField<uint8_t>(VT_ENABLE_THIRD_BODY, 0) != 0;
+  }
+  /// NAIF IDs; explicit vector, e.g. [10,301]. Empty means no third bodies.
+  const ::flatbuffers::Vector<int32_t> *THIRD_BODY_IDS() const {
+    return GetPointer<const ::flatbuffers::Vector<int32_t> *>(VT_THIRD_BODY_IDS);
+  }
+  bool ENABLE_SRP() const {
+    return GetField<uint8_t>(VT_ENABLE_SRP, 0) != 0;
+  }
+  bool ENABLE_DRAG() const {
+    return GetField<uint8_t>(VT_ENABLE_DRAG, 0) != 0;
+  }
+  double INITIAL_MASS_KG() const {
+    return GetField<double>(VT_INITIAL_MASS_KG, 1000.0);
+  }
+  double AREA_M2() const {
+    return GetField<double>(VT_AREA_M2, 10.0);
+  }
+  double REFLECTIVITY_COEFFICIENT() const {
+    return GetField<double>(VT_REFLECTIVITY_COEFFICIENT, 1.5);
+  }
+  double DRAG_COEFFICIENT() const {
+    return GetField<double>(VT_DRAG_COEFFICIENT, 2.2);
+  }
+  prwAtmosphereFamily ATMOSPHERE_MODEL() const {
+    return static_cast<prwAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 1));
+  }
+  const PRWSpaceWeather *WEATHER() const {
+    return GetPointer<const PRWSpaceWeather *>(VT_WEATHER);
+  }
+  /// Actual configured source name, e.g. an analytic series or a planetary SPK kernel.
+  const ::flatbuffers::String *EPHEMERIS_SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPHEMERIS_SOURCE);
+  }
+  /// Solid Earth tides. Their field is Earth-fixed, so a provider needs Earth
+  /// orientation (PRW.EARTH_ORIENTATION) to apply them.
+  prwSolidTideModel SOLID_TIDES() const {
+    return static_cast<prwSolidTideModel>(GetField<uint8_t>(VT_SOLID_TIDES, 0));
+  }
+  prwRelativityTerms RELATIVITY() const {
+    return static_cast<prwRelativityTerms>(GetField<uint8_t>(VT_RELATIVITY, 0));
+  }
+  /// Constant acceleration along the in-track axis, m/s2: T of RTN,
+  /// N cross rhat with N = unit(r cross v) (the "in-track thrust" of a VCM).
+  double IN_TRACK_ACCELERATION_M_S2() const {
+    return GetField<double>(VT_IN_TRACK_ACCELERATION_M_S2, 0.0);
+  }
+  /// True when IN_TRACK_ACCELERATION_M_S2 carries a value; false means absent.
+  bool HAS_IN_TRACK_ACCELERATION_M_S2() const {
+    return GetField<uint8_t>(VT_HAS_IN_TRACK_ACCELERATION_M_S2, 0) != 0;
+  }
+  /// Rate of change of the drag ballistic coefficient Cd*A/m, m2/kg/s (the
+  /// BDOT of a VCM). Drag uses Cd*A/m + rate * (t - initial epoch).
+  double DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
+    return GetField<double>(VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+  }
+  /// True when DRAG_AREA_OVER_MASS_RATE_M2_KG_S carries a value; false means absent.
+  bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
+    return GetField<uint8_t>(VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0) != 0;
+  }
+  /// Highest degree of the tesseral and sectorial terms (order >= 1); the
+  /// zonals run to MAXIMUM_DEGREE. A VCM's "mmZ,nnT" is MAXIMUM_DEGREE mm,
+  /// MAXIMUM_ORDER nn and MAXIMUM_TESSERAL_DEGREE nn.
+  uint16_t MAXIMUM_TESSERAL_DEGREE() const {
+    return GetField<uint16_t>(VT_MAXIMUM_TESSERAL_DEGREE, 0);
+  }
+  /// True when MAXIMUM_TESSERAL_DEGREE carries a value; false means absent.
+  bool HAS_MAXIMUM_TESSERAL_DEGREE() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_TESSERAL_DEGREE, 0) != 0;
+  }
+  /// Solar radiation pressure model family (default: the cannonball).
+  prwRadiationPressureFamily RADIATION_PRESSURE_MODEL() const {
+    return static_cast<prwRadiationPressureFamily>(GetField<uint8_t>(VT_RADIATION_PRESSURE_MODEL, 0));
+  }
+  /// Spacecraft block; required when RADIATION_PRESSURE_MODEL is GNSS_BOX_WING.
+  prwGnssSpacecraftBlock GNSS_BLOCK() const {
+    return static_cast<prwGnssSpacecraftBlock>(GetField<uint8_t>(VT_GNSS_BLOCK, 0));
+  }
+  /// ECOM2 coefficients; absent means no ECOM2 term.
+  const PRWEcom2 *ECOM2() const {
+    return GetPointer<const PRWEcom2 *>(VT_ECOM2);
+  }
+  /// Earth radiation pressure (albedo and infrared). It reads the Sun's
+  /// position from the request's ephemeris source.
+  prwEarthRadiationModel EARTH_RADIATION() const {
+    return static_cast<prwEarthRadiationModel>(GetField<uint8_t>(VT_EARTH_RADIATION, 0));
+  }
+  /// Angular size of the Earth surface elements it sums, degrees.
+  double EARTH_RADIATION_RESOLUTION_DEG() const {
+    return GetField<double>(VT_EARTH_RADIATION_RESOLUTION_DEG, 15.0);
+  }
+  /// Isotropic Cr*A/m, m2/kg, the Earth's radiation acts on. Absent, it is the
+  /// cannonball's REFLECTIVITY_COEFFICIENT * AREA_M2 / INITIAL_MASS_KG, and
+  /// fitting SRP_AREA_OVER_MASS scales both.
+  double EARTH_RADIATION_AREA_OVER_MASS_M2_KG() const {
+    return GetField<double>(VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  /// True when EARTH_RADIATION_AREA_OVER_MASS_M2_KG carries a value; false means absent.
+  bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG() const {
+    return GetField<uint8_t>(VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0) != 0;
+  }
+  /// Ocean tides. Their field is Earth-fixed, so a provider needs Earth
+  /// orientation (PRW.EARTH_ORIENTATION) to apply them.
+  prwOceanTideModel OCEAN_TIDES() const {
+    return static_cast<prwOceanTideModel>(GetField<uint8_t>(VT_OCEAN_TIDES, 0));
+  }
+  /// Truncation of the ocean tide field.
+  uint16_t OCEAN_TIDE_MAXIMUM_DEGREE() const {
+    return GetField<uint16_t>(VT_OCEAN_TIDE_MAXIMUM_DEGREE, 30);
+  }
+  uint16_t OCEAN_TIDE_MAXIMUM_ORDER() const {
+    return GetField<uint16_t>(VT_OCEAN_TIDE_MAXIMUM_ORDER, 30);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_GRAVITY_CHOICE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_POINT_MASS, 1) &&
+           VerifyField<double>(verifier, VT_GRAVITATIONAL_PARAMETER, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_J2, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_J3, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_J4, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_HIGHER_ZONALS, 1) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_DEGREE, 2) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_DEGREE, 1) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_ORDER, 2) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_ORDER, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_THIRD_BODY, 1) &&
+           VerifyOffset(verifier, VT_THIRD_BODY_IDS) &&
+           verifier.VerifyVector(THIRD_BODY_IDS()) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_SRP, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_DRAG, 1) &&
+           VerifyField<double>(verifier, VT_INITIAL_MASS_KG, 8) &&
+           VerifyField<double>(verifier, VT_AREA_M2, 8) &&
+           VerifyField<double>(verifier, VT_REFLECTIVITY_COEFFICIENT, 8) &&
+           VerifyField<double>(verifier, VT_DRAG_COEFFICIENT, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ATMOSPHERE_MODEL, 1) &&
+           VerifyOffset(verifier, VT_WEATHER) &&
+           verifier.VerifyTable(WEATHER()) &&
+           VerifyOffsetRequired(verifier, VT_EPHEMERIS_SOURCE) &&
+           verifier.VerifyString(EPHEMERIS_SOURCE()) &&
+           VerifyField<uint8_t>(verifier, VT_SOLID_TIDES, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RELATIVITY, 1) &&
+           VerifyField<double>(verifier, VT_IN_TRACK_ACCELERATION_M_S2, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_IN_TRACK_ACCELERATION_M_S2, 1) &&
+           VerifyField<double>(verifier, VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 1) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_TESSERAL_DEGREE, 2) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_TESSERAL_DEGREE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RADIATION_PRESSURE_MODEL, 1) &&
+           VerifyField<uint8_t>(verifier, VT_GNSS_BLOCK, 1) &&
+           VerifyOffset(verifier, VT_ECOM2) &&
+           verifier.VerifyTable(ECOM2()) &&
+           VerifyField<uint8_t>(verifier, VT_EARTH_RADIATION, 1) &&
+           VerifyField<double>(verifier, VT_EARTH_RADIATION_RESOLUTION_DEG, 8) &&
+           VerifyField<double>(verifier, VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 1) &&
+           VerifyField<uint8_t>(verifier, VT_OCEAN_TIDES, 1) &&
+           VerifyField<uint16_t>(verifier, VT_OCEAN_TIDE_MAXIMUM_DEGREE, 2) &&
+           VerifyField<uint16_t>(verifier, VT_OCEAN_TIDE_MAXIMUM_ORDER, 2) &&
+           verifier.EndTable();
+  }
+  PRWForceConfigurationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWForceConfigurationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWForceConfiguration> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWForceConfigurationBuilder {
+  typedef PRWForceConfiguration Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_GRAVITY_CHOICE(prwGravitySelection GRAVITY_CHOICE) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_GRAVITY_CHOICE, static_cast<uint8_t>(GRAVITY_CHOICE), 0);
+  }
+  void add_ENABLE_POINT_MASS(bool ENABLE_POINT_MASS) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_POINT_MASS, static_cast<uint8_t>(ENABLE_POINT_MASS), 1);
+  }
+  void add_GRAVITATIONAL_PARAMETER(double GRAVITATIONAL_PARAMETER) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_GRAVITATIONAL_PARAMETER, GRAVITATIONAL_PARAMETER, 0.0);
+  }
+  void add_ENABLE_J2(bool ENABLE_J2) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_J2, static_cast<uint8_t>(ENABLE_J2), 1);
+  }
+  void add_ENABLE_J3(bool ENABLE_J3) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_J3, static_cast<uint8_t>(ENABLE_J3), 0);
+  }
+  void add_ENABLE_J4(bool ENABLE_J4) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_J4, static_cast<uint8_t>(ENABLE_J4), 0);
+  }
+  void add_ENABLE_HIGHER_ZONALS(bool ENABLE_HIGHER_ZONALS) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_HIGHER_ZONALS, static_cast<uint8_t>(ENABLE_HIGHER_ZONALS), 0);
+  }
+  void add_MAXIMUM_DEGREE(uint16_t MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_MAXIMUM_DEGREE, MAXIMUM_DEGREE, 0);
+  }
+  void add_HAS_MAXIMUM_DEGREE(bool HAS_MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_MAXIMUM_DEGREE, static_cast<uint8_t>(HAS_MAXIMUM_DEGREE), 0);
+  }
+  void add_MAXIMUM_ORDER(uint16_t MAXIMUM_ORDER) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_MAXIMUM_ORDER, MAXIMUM_ORDER, 0);
+  }
+  void add_HAS_MAXIMUM_ORDER(bool HAS_MAXIMUM_ORDER) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_MAXIMUM_ORDER, static_cast<uint8_t>(HAS_MAXIMUM_ORDER), 0);
+  }
+  void add_ENABLE_THIRD_BODY(bool ENABLE_THIRD_BODY) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_THIRD_BODY, static_cast<uint8_t>(ENABLE_THIRD_BODY), 0);
+  }
+  void add_THIRD_BODY_IDS(::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> THIRD_BODY_IDS) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_THIRD_BODY_IDS, THIRD_BODY_IDS);
+  }
+  void add_ENABLE_SRP(bool ENABLE_SRP) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_SRP, static_cast<uint8_t>(ENABLE_SRP), 0);
+  }
+  void add_ENABLE_DRAG(bool ENABLE_DRAG) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_DRAG, static_cast<uint8_t>(ENABLE_DRAG), 0);
+  }
+  void add_INITIAL_MASS_KG(double INITIAL_MASS_KG) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_INITIAL_MASS_KG, INITIAL_MASS_KG, 1000.0);
+  }
+  void add_AREA_M2(double AREA_M2) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_AREA_M2, AREA_M2, 10.0);
+  }
+  void add_REFLECTIVITY_COEFFICIENT(double REFLECTIVITY_COEFFICIENT) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_REFLECTIVITY_COEFFICIENT, REFLECTIVITY_COEFFICIENT, 1.5);
+  }
+  void add_DRAG_COEFFICIENT(double DRAG_COEFFICIENT) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_DRAG_COEFFICIENT, DRAG_COEFFICIENT, 2.2);
+  }
+  void add_ATMOSPHERE_MODEL(prwAtmosphereFamily ATMOSPHERE_MODEL) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ATMOSPHERE_MODEL, static_cast<uint8_t>(ATMOSPHERE_MODEL), 1);
+  }
+  void add_WEATHER(::flatbuffers::Offset<PRWSpaceWeather> WEATHER) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_WEATHER, WEATHER);
+  }
+  void add_EPHEMERIS_SOURCE(::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_EPHEMERIS_SOURCE, EPHEMERIS_SOURCE);
+  }
+  void add_SOLID_TIDES(prwSolidTideModel SOLID_TIDES) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_SOLID_TIDES, static_cast<uint8_t>(SOLID_TIDES), 0);
+  }
+  void add_RELATIVITY(prwRelativityTerms RELATIVITY) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_RELATIVITY, static_cast<uint8_t>(RELATIVITY), 0);
+  }
+  void add_IN_TRACK_ACCELERATION_M_S2(double IN_TRACK_ACCELERATION_M_S2) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_IN_TRACK_ACCELERATION_M_S2, IN_TRACK_ACCELERATION_M_S2, 0.0);
+  }
+  void add_HAS_IN_TRACK_ACCELERATION_M_S2(bool HAS_IN_TRACK_ACCELERATION_M_S2) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_IN_TRACK_ACCELERATION_M_S2, static_cast<uint8_t>(HAS_IN_TRACK_ACCELERATION_M_S2), 0);
+  }
+  void add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(double DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+  }
+  void add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, static_cast<uint8_t>(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S), 0);
+  }
+  void add_MAXIMUM_TESSERAL_DEGREE(uint16_t MAXIMUM_TESSERAL_DEGREE) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE, 0);
+  }
+  void add_HAS_MAXIMUM_TESSERAL_DEGREE(bool HAS_MAXIMUM_TESSERAL_DEGREE) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_MAXIMUM_TESSERAL_DEGREE, static_cast<uint8_t>(HAS_MAXIMUM_TESSERAL_DEGREE), 0);
+  }
+  void add_RADIATION_PRESSURE_MODEL(prwRadiationPressureFamily RADIATION_PRESSURE_MODEL) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_RADIATION_PRESSURE_MODEL, static_cast<uint8_t>(RADIATION_PRESSURE_MODEL), 0);
+  }
+  void add_GNSS_BLOCK(prwGnssSpacecraftBlock GNSS_BLOCK) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_GNSS_BLOCK, static_cast<uint8_t>(GNSS_BLOCK), 0);
+  }
+  void add_ECOM2(::flatbuffers::Offset<PRWEcom2> ECOM2) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_ECOM2, ECOM2);
+  }
+  void add_EARTH_RADIATION(prwEarthRadiationModel EARTH_RADIATION) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_EARTH_RADIATION, static_cast<uint8_t>(EARTH_RADIATION), 0);
+  }
+  void add_EARTH_RADIATION_RESOLUTION_DEG(double EARTH_RADIATION_RESOLUTION_DEG) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_EARTH_RADIATION_RESOLUTION_DEG, EARTH_RADIATION_RESOLUTION_DEG, 15.0);
+  }
+  void add_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(double EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  void add_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, static_cast<uint8_t>(HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG), 0);
+  }
+  void add_OCEAN_TIDES(prwOceanTideModel OCEAN_TIDES) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_OCEAN_TIDES, static_cast<uint8_t>(OCEAN_TIDES), 0);
+  }
+  void add_OCEAN_TIDE_MAXIMUM_DEGREE(uint16_t OCEAN_TIDE_MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_OCEAN_TIDE_MAXIMUM_DEGREE, OCEAN_TIDE_MAXIMUM_DEGREE, 30);
+  }
+  void add_OCEAN_TIDE_MAXIMUM_ORDER(uint16_t OCEAN_TIDE_MAXIMUM_ORDER) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_OCEAN_TIDE_MAXIMUM_ORDER, OCEAN_TIDE_MAXIMUM_ORDER, 30);
+  }
+  explicit PRWForceConfigurationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWForceConfiguration> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWForceConfiguration>(end);
+    fbb_.Required(o, PRWForceConfiguration::VT_EPHEMERIS_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwGravitySelection GRAVITY_CHOICE = prwGravitySelection::INFER_FLAGS,
+    bool ENABLE_POINT_MASS = true,
+    double GRAVITATIONAL_PARAMETER = 0.0,
+    bool ENABLE_J2 = true,
+    bool ENABLE_J3 = false,
+    bool ENABLE_J4 = false,
+    bool ENABLE_HIGHER_ZONALS = false,
+    uint16_t MAXIMUM_DEGREE = 0,
+    bool HAS_MAXIMUM_DEGREE = false,
+    uint16_t MAXIMUM_ORDER = 0,
+    bool HAS_MAXIMUM_ORDER = false,
+    bool ENABLE_THIRD_BODY = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> THIRD_BODY_IDS = 0,
+    bool ENABLE_SRP = false,
+    bool ENABLE_DRAG = false,
+    double INITIAL_MASS_KG = 1000.0,
+    double AREA_M2 = 10.0,
+    double REFLECTIVITY_COEFFICIENT = 1.5,
+    double DRAG_COEFFICIENT = 2.2,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
+    ::flatbuffers::Offset<PRWSpaceWeather> WEATHER = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0,
+    prwSolidTideModel SOLID_TIDES = prwSolidTideModel::NONE,
+    prwRelativityTerms RELATIVITY = prwRelativityTerms::NONE,
+    double IN_TRACK_ACCELERATION_M_S2 = 0.0,
+    bool HAS_IN_TRACK_ACCELERATION_M_S2 = false,
+    double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false,
+    uint16_t MAXIMUM_TESSERAL_DEGREE = 0,
+    bool HAS_MAXIMUM_TESSERAL_DEGREE = false,
+    prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL,
+    prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED,
+    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0,
+    prwEarthRadiationModel EARTH_RADIATION = prwEarthRadiationModel::NONE,
+    double EARTH_RADIATION_RESOLUTION_DEG = 15.0,
+    double EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false,
+    prwOceanTideModel OCEAN_TIDES = prwOceanTideModel::NONE,
+    uint16_t OCEAN_TIDE_MAXIMUM_DEGREE = 30,
+    uint16_t OCEAN_TIDE_MAXIMUM_ORDER = 30) {
+  PRWForceConfigurationBuilder builder_(_fbb);
+  builder_.add_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  builder_.add_EARTH_RADIATION_RESOLUTION_DEG(EARTH_RADIATION_RESOLUTION_DEG);
+  builder_.add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  builder_.add_IN_TRACK_ACCELERATION_M_S2(IN_TRACK_ACCELERATION_M_S2);
+  builder_.add_DRAG_COEFFICIENT(DRAG_COEFFICIENT);
+  builder_.add_REFLECTIVITY_COEFFICIENT(REFLECTIVITY_COEFFICIENT);
+  builder_.add_AREA_M2(AREA_M2);
+  builder_.add_INITIAL_MASS_KG(INITIAL_MASS_KG);
+  builder_.add_GRAVITATIONAL_PARAMETER(GRAVITATIONAL_PARAMETER);
+  builder_.add_ECOM2(ECOM2);
+  builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
+  builder_.add_WEATHER(WEATHER);
+  builder_.add_THIRD_BODY_IDS(THIRD_BODY_IDS);
+  builder_.add_OCEAN_TIDE_MAXIMUM_ORDER(OCEAN_TIDE_MAXIMUM_ORDER);
+  builder_.add_OCEAN_TIDE_MAXIMUM_DEGREE(OCEAN_TIDE_MAXIMUM_DEGREE);
+  builder_.add_MAXIMUM_TESSERAL_DEGREE(MAXIMUM_TESSERAL_DEGREE);
+  builder_.add_MAXIMUM_ORDER(MAXIMUM_ORDER);
+  builder_.add_MAXIMUM_DEGREE(MAXIMUM_DEGREE);
+  builder_.add_OCEAN_TIDES(OCEAN_TIDES);
+  builder_.add_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  builder_.add_EARTH_RADIATION(EARTH_RADIATION);
+  builder_.add_GNSS_BLOCK(GNSS_BLOCK);
+  builder_.add_RADIATION_PRESSURE_MODEL(RADIATION_PRESSURE_MODEL);
+  builder_.add_HAS_MAXIMUM_TESSERAL_DEGREE(HAS_MAXIMUM_TESSERAL_DEGREE);
+  builder_.add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  builder_.add_HAS_IN_TRACK_ACCELERATION_M_S2(HAS_IN_TRACK_ACCELERATION_M_S2);
+  builder_.add_RELATIVITY(RELATIVITY);
+  builder_.add_SOLID_TIDES(SOLID_TIDES);
+  builder_.add_ATMOSPHERE_MODEL(ATMOSPHERE_MODEL);
+  builder_.add_ENABLE_DRAG(ENABLE_DRAG);
+  builder_.add_ENABLE_SRP(ENABLE_SRP);
+  builder_.add_ENABLE_THIRD_BODY(ENABLE_THIRD_BODY);
+  builder_.add_HAS_MAXIMUM_ORDER(HAS_MAXIMUM_ORDER);
+  builder_.add_HAS_MAXIMUM_DEGREE(HAS_MAXIMUM_DEGREE);
+  builder_.add_ENABLE_HIGHER_ZONALS(ENABLE_HIGHER_ZONALS);
+  builder_.add_ENABLE_J4(ENABLE_J4);
+  builder_.add_ENABLE_J3(ENABLE_J3);
+  builder_.add_ENABLE_J2(ENABLE_J2);
+  builder_.add_ENABLE_POINT_MASS(ENABLE_POINT_MASS);
+  builder_.add_GRAVITY_CHOICE(GRAVITY_CHOICE);
+  return builder_.Finish();
+}
+
+struct PRWForceConfiguration::Traits {
+  using type = PRWForceConfiguration;
+  static auto constexpr Create = CreatePRWForceConfiguration;
+};
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwGravitySelection GRAVITY_CHOICE = prwGravitySelection::INFER_FLAGS,
+    bool ENABLE_POINT_MASS = true,
+    double GRAVITATIONAL_PARAMETER = 0.0,
+    bool ENABLE_J2 = true,
+    bool ENABLE_J3 = false,
+    bool ENABLE_J4 = false,
+    bool ENABLE_HIGHER_ZONALS = false,
+    uint16_t MAXIMUM_DEGREE = 0,
+    bool HAS_MAXIMUM_DEGREE = false,
+    uint16_t MAXIMUM_ORDER = 0,
+    bool HAS_MAXIMUM_ORDER = false,
+    bool ENABLE_THIRD_BODY = false,
+    const std::vector<int32_t> *THIRD_BODY_IDS = nullptr,
+    bool ENABLE_SRP = false,
+    bool ENABLE_DRAG = false,
+    double INITIAL_MASS_KG = 1000.0,
+    double AREA_M2 = 10.0,
+    double REFLECTIVITY_COEFFICIENT = 1.5,
+    double DRAG_COEFFICIENT = 2.2,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
+    ::flatbuffers::Offset<PRWSpaceWeather> WEATHER = 0,
+    const char *EPHEMERIS_SOURCE = nullptr,
+    prwSolidTideModel SOLID_TIDES = prwSolidTideModel::NONE,
+    prwRelativityTerms RELATIVITY = prwRelativityTerms::NONE,
+    double IN_TRACK_ACCELERATION_M_S2 = 0.0,
+    bool HAS_IN_TRACK_ACCELERATION_M_S2 = false,
+    double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false,
+    uint16_t MAXIMUM_TESSERAL_DEGREE = 0,
+    bool HAS_MAXIMUM_TESSERAL_DEGREE = false,
+    prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL,
+    prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED,
+    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0,
+    prwEarthRadiationModel EARTH_RADIATION = prwEarthRadiationModel::NONE,
+    double EARTH_RADIATION_RESOLUTION_DEG = 15.0,
+    double EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false,
+    prwOceanTideModel OCEAN_TIDES = prwOceanTideModel::NONE,
+    uint16_t OCEAN_TIDE_MAXIMUM_DEGREE = 30,
+    uint16_t OCEAN_TIDE_MAXIMUM_ORDER = 30) {
+  auto THIRD_BODY_IDS__ = THIRD_BODY_IDS ? _fbb.CreateVector<int32_t>(*THIRD_BODY_IDS) : 0;
+  auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
+  return CreatePRWForceConfiguration(
+      _fbb,
+      GRAVITY_CHOICE,
+      ENABLE_POINT_MASS,
+      GRAVITATIONAL_PARAMETER,
+      ENABLE_J2,
+      ENABLE_J3,
+      ENABLE_J4,
+      ENABLE_HIGHER_ZONALS,
+      MAXIMUM_DEGREE,
+      HAS_MAXIMUM_DEGREE,
+      MAXIMUM_ORDER,
+      HAS_MAXIMUM_ORDER,
+      ENABLE_THIRD_BODY,
+      THIRD_BODY_IDS__,
+      ENABLE_SRP,
+      ENABLE_DRAG,
+      INITIAL_MASS_KG,
+      AREA_M2,
+      REFLECTIVITY_COEFFICIENT,
+      DRAG_COEFFICIENT,
+      ATMOSPHERE_MODEL,
+      WEATHER,
+      EPHEMERIS_SOURCE__,
+      SOLID_TIDES,
+      RELATIVITY,
+      IN_TRACK_ACCELERATION_M_S2,
+      HAS_IN_TRACK_ACCELERATION_M_S2,
+      DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      MAXIMUM_TESSERAL_DEGREE,
+      HAS_MAXIMUM_TESSERAL_DEGREE,
+      RADIATION_PRESSURE_MODEL,
+      GNSS_BLOCK,
+      ECOM2,
+      EARTH_RADIATION,
+      EARTH_RADIATION_RESOLUTION_DEG,
+      EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      OCEAN_TIDES,
+      OCEAN_TIDE_MAXIMUM_DEGREE,
+      OCEAN_TIDE_MAXIMUM_ORDER);
+}
+
+::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct PRWStateMatrixT : public ::flatbuffers::NativeTable {
   typedef PRWStateMatrix TableType;
@@ -1933,7 +3371,7 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
     return GetField<uint8_t>(VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0) != 0;
   }
-  /// Constant in-track acceleration, m/s2, as PCFForceModel's.
+  /// Constant in-track acceleration, m/s2, as PRWForceConfiguration's.
   double IN_TRACK_ACCELERATION_M_S2() const {
     return GetField<double>(VT_IN_TRACK_ACCELERATION_M_S2, 0.0);
   }
@@ -2625,165 +4063,12 @@ inline ::flatbuffers::Offset<PRWFiniteBurn> CreatePRWFiniteBurnDirect(
 
 ::flatbuffers::Offset<PRWFiniteBurn> CreatePRWFiniteBurn(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFiniteBurnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-struct PRWEventRecordT : public ::flatbuffers::NativeTable {
-  typedef PRWEventRecord TableType;
-  uint32_t EVENT_INDEX = 0;
-  pcfEventKind KIND = pcfEventKind::UNSPECIFIED;
-  pcfEventDirection DIRECTION = pcfEventDirection::ANY;
-  std::unique_ptr<TIMInstantT> EPOCH{};
-  double ELAPSED_SECONDS = 0.0;
-  std::unique_ptr<PRWResidentStateT> STATE{};
-  double RESIDUAL = 0.0;
-  uint32_t ITERATIONS = 0;
-  PRWEventRecordT() = default;
-  PRWEventRecordT(const PRWEventRecordT &o);
-  PRWEventRecordT(PRWEventRecordT&&) FLATBUFFERS_NOEXCEPT = default;
-  PRWEventRecordT &operator=(PRWEventRecordT o) FLATBUFFERS_NOEXCEPT;
-};
-
-/// A located event.
-struct PRWEventRecord FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  typedef PRWEventRecordT NativeTableType;
-  typedef PRWEventRecordBuilder Builder;
-  struct Traits;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_EVENT_INDEX = 4,
-    VT_KIND = 6,
-    VT_DIRECTION = 8,
-    VT_EPOCH = 10,
-    VT_ELAPSED_SECONDS = 12,
-    VT_STATE = 14,
-    VT_RESIDUAL = 16,
-    VT_ITERATIONS = 18
-  };
-  /// Index into the request's EVENTS.
-  uint32_t EVENT_INDEX() const {
-    return GetField<uint32_t>(VT_EVENT_INDEX, 0);
-  }
-  /// The event function that crossed zero.
-  pcfEventKind KIND() const {
-    return static_cast<pcfEventKind>(GetField<uint8_t>(VT_KIND, 0));
-  }
-  /// The way g crossed zero: INCREASING or DECREASING.
-  pcfEventDirection DIRECTION() const {
-    return static_cast<pcfEventDirection>(GetField<uint8_t>(VT_DIRECTION, 0));
-  }
-  /// Epoch of the crossing.
-  const TIMInstant *EPOCH() const {
-    return GetPointer<const TIMInstant *>(VT_EPOCH);
-  }
-  /// Seconds from the request's initial epoch, negative for a backward propagation.
-  double ELAPSED_SECONDS() const {
-    return GetField<double>(VT_ELAPSED_SECONDS, 0.0);
-  }
-  /// The state at EPOCH in the request's axes.
-  const PRWResidentState *STATE() const {
-    return GetPointer<const PRWResidentState *>(VT_STATE);
-  }
-  /// g at EPOCH.
-  double RESIDUAL() const {
-    return GetField<double>(VT_RESIDUAL, 0.0);
-  }
-  /// Refinement steps taken.
-  uint32_t ITERATIONS() const {
-    return GetField<uint32_t>(VT_ITERATIONS, 0);
-  }
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_EVENT_INDEX, 4) &&
-           VerifyField<uint8_t>(verifier, VT_KIND, 1) &&
-           VerifyField<uint8_t>(verifier, VT_DIRECTION, 1) &&
-           VerifyOffsetRequired(verifier, VT_EPOCH) &&
-           verifier.VerifyTable(EPOCH()) &&
-           VerifyField<double>(verifier, VT_ELAPSED_SECONDS, 8) &&
-           VerifyOffsetRequired(verifier, VT_STATE) &&
-           verifier.VerifyTable(STATE()) &&
-           VerifyField<double>(verifier, VT_RESIDUAL, 8) &&
-           VerifyField<uint32_t>(verifier, VT_ITERATIONS, 4) &&
-           verifier.EndTable();
-  }
-  PRWEventRecordT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  void UnPackTo(PRWEventRecordT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
-  static ::flatbuffers::Offset<PRWEventRecord> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEventRecordT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-};
-
-struct PRWEventRecordBuilder {
-  typedef PRWEventRecord Table;
-  ::flatbuffers::FlatBufferBuilder &fbb_;
-  ::flatbuffers::uoffset_t start_;
-  void add_EVENT_INDEX(uint32_t EVENT_INDEX) {
-    fbb_.AddElement<uint32_t>(PRWEventRecord::VT_EVENT_INDEX, EVENT_INDEX, 0);
-  }
-  void add_KIND(pcfEventKind KIND) {
-    fbb_.AddElement<uint8_t>(PRWEventRecord::VT_KIND, static_cast<uint8_t>(KIND), 0);
-  }
-  void add_DIRECTION(pcfEventDirection DIRECTION) {
-    fbb_.AddElement<uint8_t>(PRWEventRecord::VT_DIRECTION, static_cast<uint8_t>(DIRECTION), 0);
-  }
-  void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
-    fbb_.AddOffset(PRWEventRecord::VT_EPOCH, EPOCH);
-  }
-  void add_ELAPSED_SECONDS(double ELAPSED_SECONDS) {
-    fbb_.AddElement<double>(PRWEventRecord::VT_ELAPSED_SECONDS, ELAPSED_SECONDS, 0.0);
-  }
-  void add_STATE(::flatbuffers::Offset<PRWResidentState> STATE) {
-    fbb_.AddOffset(PRWEventRecord::VT_STATE, STATE);
-  }
-  void add_RESIDUAL(double RESIDUAL) {
-    fbb_.AddElement<double>(PRWEventRecord::VT_RESIDUAL, RESIDUAL, 0.0);
-  }
-  void add_ITERATIONS(uint32_t ITERATIONS) {
-    fbb_.AddElement<uint32_t>(PRWEventRecord::VT_ITERATIONS, ITERATIONS, 0);
-  }
-  explicit PRWEventRecordBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  ::flatbuffers::Offset<PRWEventRecord> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = ::flatbuffers::Offset<PRWEventRecord>(end);
-    fbb_.Required(o, PRWEventRecord::VT_EPOCH);
-    fbb_.Required(o, PRWEventRecord::VT_STATE);
-    return o;
-  }
-};
-
-inline ::flatbuffers::Offset<PRWEventRecord> CreatePRWEventRecord(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t EVENT_INDEX = 0,
-    pcfEventKind KIND = pcfEventKind::UNSPECIFIED,
-    pcfEventDirection DIRECTION = pcfEventDirection::ANY,
-    ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
-    double ELAPSED_SECONDS = 0.0,
-    ::flatbuffers::Offset<PRWResidentState> STATE = 0,
-    double RESIDUAL = 0.0,
-    uint32_t ITERATIONS = 0) {
-  PRWEventRecordBuilder builder_(_fbb);
-  builder_.add_RESIDUAL(RESIDUAL);
-  builder_.add_ELAPSED_SECONDS(ELAPSED_SECONDS);
-  builder_.add_ITERATIONS(ITERATIONS);
-  builder_.add_STATE(STATE);
-  builder_.add_EPOCH(EPOCH);
-  builder_.add_EVENT_INDEX(EVENT_INDEX);
-  builder_.add_DIRECTION(DIRECTION);
-  builder_.add_KIND(KIND);
-  return builder_.Finish();
-}
-
-struct PRWEventRecord::Traits {
-  using type = PRWEventRecord;
-  static auto constexpr Create = CreatePRWEventRecord;
-};
-
-::flatbuffers::Offset<PRWEventRecord> CreatePRWEventRecord(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEventRecordT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
-
 struct PRWExecutionRequestT : public ::flatbuffers::NativeTable {
   typedef PRWExecutionRequest TableType;
   std::unique_ptr<PRWResidentStateT> INITIAL{};
   std::unique_ptr<TIMInstantT> TARGET_EPOCH{};
-  std::unique_ptr<PCFIntegratorSettingsT> INTEGRATOR{};
-  std::unique_ptr<PCFForceModelT> FORCES{};
+  std::unique_ptr<PRWIntegratorSettingsT> INTEGRATOR{};
+  std::unique_ptr<PRWForceConfigurationT> FORCES{};
   bool INCLUDE_STM = false;
   prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::ANALYTIC;
   prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::NEGLECTED;
@@ -2795,7 +4080,6 @@ struct PRWExecutionRequestT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<PRWFiniteBurnT>> FINITE_BURNS{};
   std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
   std::vector<prwDynamicParameter> DYNAMIC_PARAMETERS{};
-  std::vector<std::unique_ptr<PCFEventDefinitionT>> EVENTS{};
   PRWExecutionRequestT() = default;
   PRWExecutionRequestT(const PRWExecutionRequestT &o);
   PRWExecutionRequestT(PRWExecutionRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2822,8 +4106,7 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
     VT_INCLUDE_MASS_DYNAMICS = 26,
     VT_FINITE_BURNS = 28,
     VT_PROCESS_NOISE = 30,
-    VT_DYNAMIC_PARAMETERS = 32,
-    VT_EVENTS = 34
+    VT_DYNAMIC_PARAMETERS = 32
   };
   const PRWResidentState *INITIAL() const {
     return GetPointer<const PRWResidentState *>(VT_INITIAL);
@@ -2831,11 +4114,11 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   const TIMInstant *TARGET_EPOCH() const {
     return GetPointer<const TIMInstant *>(VT_TARGET_EPOCH);
   }
-  const PCFIntegratorSettings *INTEGRATOR() const {
-    return GetPointer<const PCFIntegratorSettings *>(VT_INTEGRATOR);
+  const PRWIntegratorSettings *INTEGRATOR() const {
+    return GetPointer<const PRWIntegratorSettings *>(VT_INTEGRATOR);
   }
-  const PCFForceModel *FORCES() const {
-    return GetPointer<const PCFForceModel *>(VT_FORCES);
+  const PRWForceConfiguration *FORCES() const {
+    return GetPointer<const PRWForceConfiguration *>(VT_FORCES);
   }
   bool INCLUDE_STM() const {
     return GetField<uint8_t>(VT_INCLUDE_STM, 0) != 0;
@@ -2876,13 +4159,6 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   const ::flatbuffers::Vector<prwDynamicParameter> *DYNAMIC_PARAMETERS() const {
     return GetPointer<const ::flatbuffers::Vector<prwDynamicParameter> *>(VT_DYNAMIC_PARAMETERS);
   }
-  /// Events located inside the integration (PCFEventDefinition, shared with $PCF).
-  /// They apply to a plain state propagation (no STM, covariance, samples, impulses
-  /// or burns) by an integrator with a continuous extension; any other request that
-  /// names events is refused. Default empty.
-  const ::flatbuffers::Vector<::flatbuffers::Offset<PCFEventDefinition>> *EVENTS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PCFEventDefinition>> *>(VT_EVENTS);
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2915,9 +4191,6 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
            verifier.VerifyTable(PROCESS_NOISE()) &&
            VerifyOffset(verifier, VT_DYNAMIC_PARAMETERS) &&
            verifier.VerifyVector(DYNAMIC_PARAMETERS()) &&
-           VerifyOffset(verifier, VT_EVENTS) &&
-           verifier.VerifyVector(EVENTS()) &&
-           verifier.VerifyVectorOfTables(EVENTS()) &&
            verifier.EndTable();
   }
   PRWExecutionRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2935,10 +4208,10 @@ struct PRWExecutionRequestBuilder {
   void add_TARGET_EPOCH(::flatbuffers::Offset<TIMInstant> TARGET_EPOCH) {
     fbb_.AddOffset(PRWExecutionRequest::VT_TARGET_EPOCH, TARGET_EPOCH);
   }
-  void add_INTEGRATOR(::flatbuffers::Offset<PCFIntegratorSettings> INTEGRATOR) {
+  void add_INTEGRATOR(::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR) {
     fbb_.AddOffset(PRWExecutionRequest::VT_INTEGRATOR, INTEGRATOR);
   }
-  void add_FORCES(::flatbuffers::Offset<PCFForceModel> FORCES) {
+  void add_FORCES(::flatbuffers::Offset<PRWForceConfiguration> FORCES) {
     fbb_.AddOffset(PRWExecutionRequest::VT_FORCES, FORCES);
   }
   void add_INCLUDE_STM(bool INCLUDE_STM) {
@@ -2974,9 +4247,6 @@ struct PRWExecutionRequestBuilder {
   void add_DYNAMIC_PARAMETERS(::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> DYNAMIC_PARAMETERS) {
     fbb_.AddOffset(PRWExecutionRequest::VT_DYNAMIC_PARAMETERS, DYNAMIC_PARAMETERS);
   }
-  void add_EVENTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PCFEventDefinition>>> EVENTS) {
-    fbb_.AddOffset(PRWExecutionRequest::VT_EVENTS, EVENTS);
-  }
   explicit PRWExecutionRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2996,8 +4266,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<PRWResidentState> INITIAL = 0,
     ::flatbuffers::Offset<TIMInstant> TARGET_EPOCH = 0,
-    ::flatbuffers::Offset<PCFIntegratorSettings> INTEGRATOR = 0,
-    ::flatbuffers::Offset<PCFForceModel> FORCES = 0,
+    ::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR = 0,
+    ::flatbuffers::Offset<PRWForceConfiguration> FORCES = 0,
     bool INCLUDE_STM = false,
     prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::ANALYTIC,
     prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::NEGLECTED,
@@ -3008,10 +4278,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(
     bool INCLUDE_MASS_DYNAMICS = false,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>>> FINITE_BURNS = 0,
     ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> DYNAMIC_PARAMETERS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PCFEventDefinition>>> EVENTS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> DYNAMIC_PARAMETERS = 0) {
   PRWExecutionRequestBuilder builder_(_fbb);
-  builder_.add_EVENTS(EVENTS);
   builder_.add_DYNAMIC_PARAMETERS(DYNAMIC_PARAMETERS);
   builder_.add_PROCESS_NOISE(PROCESS_NOISE);
   builder_.add_FINITE_BURNS(FINITE_BURNS);
@@ -3039,8 +4307,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequestDirec
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<PRWResidentState> INITIAL = 0,
     ::flatbuffers::Offset<TIMInstant> TARGET_EPOCH = 0,
-    ::flatbuffers::Offset<PCFIntegratorSettings> INTEGRATOR = 0,
-    ::flatbuffers::Offset<PCFForceModel> FORCES = 0,
+    ::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR = 0,
+    ::flatbuffers::Offset<PRWForceConfiguration> FORCES = 0,
     bool INCLUDE_STM = false,
     prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::ANALYTIC,
     prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::NEGLECTED,
@@ -3051,13 +4319,11 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequestDirec
     bool INCLUDE_MASS_DYNAMICS = false,
     const std::vector<::flatbuffers::Offset<PRWFiniteBurn>> *FINITE_BURNS = nullptr,
     ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0,
-    const std::vector<prwDynamicParameter> *DYNAMIC_PARAMETERS = nullptr,
-    const std::vector<::flatbuffers::Offset<PCFEventDefinition>> *EVENTS = nullptr) {
+    const std::vector<prwDynamicParameter> *DYNAMIC_PARAMETERS = nullptr) {
   auto SAMPLE_EPOCHS__ = SAMPLE_EPOCHS ? _fbb.CreateVector<::flatbuffers::Offset<TIMInstant>>(*SAMPLE_EPOCHS) : 0;
   auto IMPULSES__ = IMPULSES ? _fbb.CreateVector<::flatbuffers::Offset<PRWImpulse>>(*IMPULSES) : 0;
   auto FINITE_BURNS__ = FINITE_BURNS ? _fbb.CreateVector<::flatbuffers::Offset<PRWFiniteBurn>>(*FINITE_BURNS) : 0;
   auto DYNAMIC_PARAMETERS__ = DYNAMIC_PARAMETERS ? _fbb.CreateVector<prwDynamicParameter>(*DYNAMIC_PARAMETERS) : 0;
-  auto EVENTS__ = EVENTS ? _fbb.CreateVector<::flatbuffers::Offset<PCFEventDefinition>>(*EVENTS) : 0;
   return CreatePRWExecutionRequest(
       _fbb,
       INITIAL,
@@ -3074,8 +4340,7 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequestDirec
       INCLUDE_MASS_DYNAMICS,
       FINITE_BURNS__,
       PROCESS_NOISE,
-      DYNAMIC_PARAMETERS__,
-      EVENTS__);
+      DYNAMIC_PARAMETERS__);
 }
 
 ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3477,9 +4742,6 @@ struct PRWExecutionResultT : public ::flatbuffers::NativeTable {
   prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::UNSPECIFIED;
   prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::UNSPECIFIED;
   std::vector<prwDynamicParameter> DYNAMIC_PARAMETERS{};
-  std::vector<std::unique_ptr<PRWEventRecordT>> EVENTS{};
-  std::vector<uint32_t> EVENT_OCCURRENCES{};
-  int32_t STOPPED_BY_EVENT = -1;
   PRWExecutionResultT() = default;
   PRWExecutionResultT(const PRWExecutionResultT &o);
   PRWExecutionResultT(PRWExecutionResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3497,10 +4759,7 @@ struct PRWExecutionResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_EPHEMERIS_SOURCE = 10,
     VT_STM_TECHNIQUE = 12,
     VT_DENSITY_TREATMENT = 14,
-    VT_DYNAMIC_PARAMETERS = 16,
-    VT_EVENTS = 18,
-    VT_EVENT_OCCURRENCES = 20,
-    VT_STOPPED_BY_EVENT = 22
+    VT_DYNAMIC_PARAMETERS = 16
   };
   const PRWPropagationSample *FINAL_SAMPLE() const {
     return GetPointer<const PRWPropagationSample *>(VT_FINAL_SAMPLE);
@@ -3524,18 +4783,6 @@ struct PRWExecutionResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const ::flatbuffers::Vector<prwDynamicParameter> *DYNAMIC_PARAMETERS() const {
     return GetPointer<const ::flatbuffers::Vector<prwDynamicParameter> *>(VT_DYNAMIC_PARAMETERS);
   }
-  /// The located events with ACTION RECORD or STOP, in time order of propagation.
-  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWEventRecord>> *EVENTS() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWEventRecord>> *>(VT_EVENTS);
-  }
-  /// Per request EVENTS entry, the qualifying crossings the propagation passed.
-  const ::flatbuffers::Vector<uint32_t> *EVENT_OCCURRENCES() const {
-    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_EVENT_OCCURRENCES);
-  }
-  /// Index of the request EVENTS entry that ended the propagation, or -1. Default -1.
-  int32_t STOPPED_BY_EVENT() const {
-    return GetField<int32_t>(VT_STOPPED_BY_EVENT, -1);
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3551,12 +4798,6 @@ struct PRWExecutionResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyField<uint8_t>(verifier, VT_DENSITY_TREATMENT, 1) &&
            VerifyOffset(verifier, VT_DYNAMIC_PARAMETERS) &&
            verifier.VerifyVector(DYNAMIC_PARAMETERS()) &&
-           VerifyOffset(verifier, VT_EVENTS) &&
-           verifier.VerifyVector(EVENTS()) &&
-           verifier.VerifyVectorOfTables(EVENTS()) &&
-           VerifyOffset(verifier, VT_EVENT_OCCURRENCES) &&
-           verifier.VerifyVector(EVENT_OCCURRENCES()) &&
-           VerifyField<int32_t>(verifier, VT_STOPPED_BY_EVENT, 4) &&
            verifier.EndTable();
   }
   PRWExecutionResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3589,15 +4830,6 @@ struct PRWExecutionResultBuilder {
   void add_DYNAMIC_PARAMETERS(::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> DYNAMIC_PARAMETERS) {
     fbb_.AddOffset(PRWExecutionResult::VT_DYNAMIC_PARAMETERS, DYNAMIC_PARAMETERS);
   }
-  void add_EVENTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWEventRecord>>> EVENTS) {
-    fbb_.AddOffset(PRWExecutionResult::VT_EVENTS, EVENTS);
-  }
-  void add_EVENT_OCCURRENCES(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> EVENT_OCCURRENCES) {
-    fbb_.AddOffset(PRWExecutionResult::VT_EVENT_OCCURRENCES, EVENT_OCCURRENCES);
-  }
-  void add_STOPPED_BY_EVENT(int32_t STOPPED_BY_EVENT) {
-    fbb_.AddElement<int32_t>(PRWExecutionResult::VT_STOPPED_BY_EVENT, STOPPED_BY_EVENT, -1);
-  }
   explicit PRWExecutionResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3619,15 +4851,9 @@ inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResult(
     ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0,
     prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::UNSPECIFIED,
     prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::UNSPECIFIED,
-    ::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> DYNAMIC_PARAMETERS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWEventRecord>>> EVENTS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> EVENT_OCCURRENCES = 0,
-    int32_t STOPPED_BY_EVENT = -1) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> DYNAMIC_PARAMETERS = 0) {
   PRWExecutionResultBuilder builder_(_fbb);
   builder_.add_ELAPSED_SECONDS(ELAPSED_SECONDS);
-  builder_.add_STOPPED_BY_EVENT(STOPPED_BY_EVENT);
-  builder_.add_EVENT_OCCURRENCES(EVENT_OCCURRENCES);
-  builder_.add_EVENTS(EVENTS);
   builder_.add_DYNAMIC_PARAMETERS(DYNAMIC_PARAMETERS);
   builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
   builder_.add_SAMPLES(SAMPLES);
@@ -3650,15 +4876,10 @@ inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResultDirect(
     const char *EPHEMERIS_SOURCE = nullptr,
     prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::UNSPECIFIED,
     prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::UNSPECIFIED,
-    const std::vector<prwDynamicParameter> *DYNAMIC_PARAMETERS = nullptr,
-    const std::vector<::flatbuffers::Offset<PRWEventRecord>> *EVENTS = nullptr,
-    const std::vector<uint32_t> *EVENT_OCCURRENCES = nullptr,
-    int32_t STOPPED_BY_EVENT = -1) {
+    const std::vector<prwDynamicParameter> *DYNAMIC_PARAMETERS = nullptr) {
   auto SAMPLES__ = SAMPLES ? _fbb.CreateVector<::flatbuffers::Offset<PRWPropagationSample>>(*SAMPLES) : 0;
   auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
   auto DYNAMIC_PARAMETERS__ = DYNAMIC_PARAMETERS ? _fbb.CreateVector<prwDynamicParameter>(*DYNAMIC_PARAMETERS) : 0;
-  auto EVENTS__ = EVENTS ? _fbb.CreateVector<::flatbuffers::Offset<PRWEventRecord>>(*EVENTS) : 0;
-  auto EVENT_OCCURRENCES__ = EVENT_OCCURRENCES ? _fbb.CreateVector<uint32_t>(*EVENT_OCCURRENCES) : 0;
   return CreatePRWExecutionResult(
       _fbb,
       FINAL_SAMPLE,
@@ -3667,10 +4888,7 @@ inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResultDirect(
       EPHEMERIS_SOURCE__,
       STM_TECHNIQUE,
       DENSITY_TREATMENT,
-      DYNAMIC_PARAMETERS__,
-      EVENTS__,
-      EVENT_OCCURRENCES__,
-      STOPPED_BY_EVENT);
+      DYNAMIC_PARAMETERS__);
 }
 
 ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5299,7 +6517,7 @@ inline ::flatbuffers::Offset<PRWEphemerisResult> CreatePRWEphemerisResultDirect(
 
 struct PRWAtmosphereRequestT : public ::flatbuffers::NativeTable {
   typedef PRWAtmosphereRequest TableType;
-  pcfAtmosphereFamily ATMOSPHERE_MODEL = pcfAtmosphereFamily::NRLMSISE00;
+  prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00;
   std::unique_ptr<TIMInstantT> EPOCH{};
   double ALTITUDE_M = 0.0;
   double LATITUDE_RAD = 0.0;
@@ -5334,8 +6552,8 @@ struct PRWAtmosphereRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
     VT_AP_INDEX = 22,
     VT_INCLUDE_ANOMALOUS_OXYGEN = 24
   };
-  pcfAtmosphereFamily ATMOSPHERE_MODEL() const {
-    return static_cast<pcfAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 1));
+  prwAtmosphereFamily ATMOSPHERE_MODEL() const {
+    return static_cast<prwAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 1));
   }
   const TIMInstant *EPOCH() const {
     return GetPointer<const TIMInstant *>(VT_EPOCH);
@@ -5395,7 +6613,7 @@ struct PRWAtmosphereRequestBuilder {
   typedef PRWAtmosphereRequest Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_ATMOSPHERE_MODEL(pcfAtmosphereFamily ATMOSPHERE_MODEL) {
+  void add_ATMOSPHERE_MODEL(prwAtmosphereFamily ATMOSPHERE_MODEL) {
     fbb_.AddElement<uint8_t>(PRWAtmosphereRequest::VT_ATMOSPHERE_MODEL, static_cast<uint8_t>(ATMOSPHERE_MODEL), 1);
   }
   void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
@@ -5442,7 +6660,7 @@ struct PRWAtmosphereRequestBuilder {
 
 inline ::flatbuffers::Offset<PRWAtmosphereRequest> CreatePRWAtmosphereRequest(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    pcfAtmosphereFamily ATMOSPHERE_MODEL = pcfAtmosphereFamily::NRLMSISE00,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
     ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
     double ALTITUDE_M = 0.0,
     double LATITUDE_RAD = 0.0,
@@ -5547,7 +6765,7 @@ struct PRWSpeciesDensity::Traits {
 
 struct PRWAtmosphereResultT : public ::flatbuffers::NativeTable {
   typedef PRWAtmosphereResult TableType;
-  pcfAtmosphereFamily ATMOSPHERE_MODEL = pcfAtmosphereFamily::UNSPECIFIED;
+  prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::UNSPECIFIED;
   std::string VARIANT{};
   double ALTITUDE_M = 0.0;
   double DENSITY_KG_M3 = 0.0;
@@ -5581,8 +6799,8 @@ struct PRWAtmosphereResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
     VT_HAS_SCALE_HEIGHT_M = 22,
     VT_NUMBER_DENSITIES = 24
   };
-  pcfAtmosphereFamily ATMOSPHERE_MODEL() const {
-    return static_cast<pcfAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 0));
+  prwAtmosphereFamily ATMOSPHERE_MODEL() const {
+    return static_cast<prwAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 0));
   }
   const ::flatbuffers::String *VARIANT() const {
     return GetPointer<const ::flatbuffers::String *>(VT_VARIANT);
@@ -5645,7 +6863,7 @@ struct PRWAtmosphereResultBuilder {
   typedef PRWAtmosphereResult Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_ATMOSPHERE_MODEL(pcfAtmosphereFamily ATMOSPHERE_MODEL) {
+  void add_ATMOSPHERE_MODEL(prwAtmosphereFamily ATMOSPHERE_MODEL) {
     fbb_.AddElement<uint8_t>(PRWAtmosphereResult::VT_ATMOSPHERE_MODEL, static_cast<uint8_t>(ATMOSPHERE_MODEL), 0);
   }
   void add_VARIANT(::flatbuffers::Offset<::flatbuffers::String> VARIANT) {
@@ -5691,7 +6909,7 @@ struct PRWAtmosphereResultBuilder {
 
 inline ::flatbuffers::Offset<PRWAtmosphereResult> CreatePRWAtmosphereResult(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    pcfAtmosphereFamily ATMOSPHERE_MODEL = pcfAtmosphereFamily::UNSPECIFIED,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::UNSPECIFIED,
     ::flatbuffers::Offset<::flatbuffers::String> VARIANT = 0,
     double ALTITUDE_M = 0.0,
     double DENSITY_KG_M3 = 0.0,
@@ -5724,7 +6942,7 @@ struct PRWAtmosphereResult::Traits {
 
 inline ::flatbuffers::Offset<PRWAtmosphereResult> CreatePRWAtmosphereResultDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    pcfAtmosphereFamily ATMOSPHERE_MODEL = pcfAtmosphereFamily::UNSPECIFIED,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::UNSPECIFIED,
     const char *VARIANT = nullptr,
     double ALTITUDE_M = 0.0,
     double DENSITY_KG_M3 = 0.0,
@@ -7035,6 +8253,62 @@ inline ::flatbuffers::Offset<PRWBatchResponse> PRWBatchResponse::Pack(::flatbuff
       _ERROR_MESSAGE);
 }
 
+inline PRWEcom2T *PRWEcom2::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWEcom2T>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWEcom2::UnPackTo(PRWEcom2T *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = D0_M_S2(); _o->D0_M_S2 = _e; }
+  { auto _e = Y0_M_S2(); _o->Y0_M_S2 = _e; }
+  { auto _e = B0_M_S2(); _o->B0_M_S2 = _e; }
+  { auto _e = D2_COS_M_S2(); _o->D2_COS_M_S2 = _e; }
+  { auto _e = D2_SIN_M_S2(); _o->D2_SIN_M_S2 = _e; }
+  { auto _e = D4_COS_M_S2(); _o->D4_COS_M_S2 = _e; }
+  { auto _e = D4_SIN_M_S2(); _o->D4_SIN_M_S2 = _e; }
+  { auto _e = B1_COS_M_S2(); _o->B1_COS_M_S2 = _e; }
+  { auto _e = B1_SIN_M_S2(); _o->B1_SIN_M_S2 = _e; }
+  { auto _e = B3_COS_M_S2(); _o->B3_COS_M_S2 = _e; }
+  { auto _e = B3_SIN_M_S2(); _o->B3_SIN_M_S2 = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWEcom2> CreatePRWEcom2(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWEcom2::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWEcom2> PRWEcom2::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWEcom2T* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _D0_M_S2 = _o->D0_M_S2;
+  auto _Y0_M_S2 = _o->Y0_M_S2;
+  auto _B0_M_S2 = _o->B0_M_S2;
+  auto _D2_COS_M_S2 = _o->D2_COS_M_S2;
+  auto _D2_SIN_M_S2 = _o->D2_SIN_M_S2;
+  auto _D4_COS_M_S2 = _o->D4_COS_M_S2;
+  auto _D4_SIN_M_S2 = _o->D4_SIN_M_S2;
+  auto _B1_COS_M_S2 = _o->B1_COS_M_S2;
+  auto _B1_SIN_M_S2 = _o->B1_SIN_M_S2;
+  auto _B3_COS_M_S2 = _o->B3_COS_M_S2;
+  auto _B3_SIN_M_S2 = _o->B3_SIN_M_S2;
+  return CreatePRWEcom2(
+      _fbb,
+      _D0_M_S2,
+      _Y0_M_S2,
+      _B0_M_S2,
+      _D2_COS_M_S2,
+      _D2_SIN_M_S2,
+      _D4_COS_M_S2,
+      _D4_SIN_M_S2,
+      _B1_COS_M_S2,
+      _B1_SIN_M_S2,
+      _B3_COS_M_S2,
+      _B3_SIN_M_S2);
+}
+
 inline PRWInstanceT *PRWInstance::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<PRWInstanceT>();
   UnPackTo(_o.get(), _resolver);
@@ -7065,6 +8339,335 @@ inline ::flatbuffers::Offset<PRWInstance> PRWInstance::Pack(::flatbuffers::FlatB
       _MODULE_ID,
       _INSTANCE_ID,
       _GENERATION);
+}
+
+inline PRWIntegratorSettingsT *PRWIntegratorSettings::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWIntegratorSettingsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWIntegratorSettings::UnPackTo(PRWIntegratorSettingsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ALGORITHM(); _o->ALGORITHM = _e; }
+  { auto _e = INITIAL_STEP_SECONDS(); _o->INITIAL_STEP_SECONDS = _e; }
+  { auto _e = MINIMUM_STEP_SECONDS(); _o->MINIMUM_STEP_SECONDS = _e; }
+  { auto _e = MAXIMUM_STEP_SECONDS(); _o->MAXIMUM_STEP_SECONDS = _e; }
+  { auto _e = ABSOLUTE_TOLERANCES(); if (_e) { _o->ABSOLUTE_TOLERANCES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ABSOLUTE_TOLERANCES[_i] = _e->Get(_i); } } else { _o->ABSOLUTE_TOLERANCES.resize(0); } }
+  { auto _e = RELATIVE_TOLERANCE(); _o->RELATIVE_TOLERANCE = _e; }
+  { auto _e = MAXIMUM_STEPS(); _o->MAXIMUM_STEPS = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettings(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWIntegratorSettings::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> PRWIntegratorSettings::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWIntegratorSettingsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ALGORITHM = _o->ALGORITHM;
+  auto _INITIAL_STEP_SECONDS = _o->INITIAL_STEP_SECONDS;
+  auto _MINIMUM_STEP_SECONDS = _o->MINIMUM_STEP_SECONDS;
+  auto _MAXIMUM_STEP_SECONDS = _o->MAXIMUM_STEP_SECONDS;
+  auto _ABSOLUTE_TOLERANCES = _fbb.CreateVector(_o->ABSOLUTE_TOLERANCES);
+  auto _RELATIVE_TOLERANCE = _o->RELATIVE_TOLERANCE;
+  auto _MAXIMUM_STEPS = _o->MAXIMUM_STEPS;
+  return CreatePRWIntegratorSettings(
+      _fbb,
+      _ALGORITHM,
+      _INITIAL_STEP_SECONDS,
+      _MINIMUM_STEP_SECONDS,
+      _MAXIMUM_STEP_SECONDS,
+      _ABSOLUTE_TOLERANCES,
+      _RELATIVE_TOLERANCE,
+      _MAXIMUM_STEPS);
+}
+
+inline PRWSpaceWeatherT::PRWSpaceWeatherT(const PRWSpaceWeatherT &o)
+      : EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
+        F107(o.F107),
+        F107_AVERAGE(o.F107_AVERAGE),
+        AP_INDEX(o.AP_INDEX),
+        KP_INDEX(o.KP_INDEX) {
+}
+
+inline PRWSpaceWeatherT &PRWSpaceWeatherT::operator=(PRWSpaceWeatherT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(F107, o.F107);
+  std::swap(F107_AVERAGE, o.F107_AVERAGE);
+  std::swap(AP_INDEX, o.AP_INDEX);
+  std::swap(KP_INDEX, o.KP_INDEX);
+  return *this;
+}
+
+inline PRWSpaceWeatherT *PRWSpaceWeather::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWSpaceWeatherT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWSpaceWeather::UnPackTo(PRWSpaceWeatherT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = EPOCH(); if (_e) { if(_o->EPOCH) { _e->UnPackTo(_o->EPOCH.get(), _resolver); } else { _o->EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->EPOCH) { _o->EPOCH.reset(); } }
+  { auto _e = F107(); _o->F107 = _e; }
+  { auto _e = F107_AVERAGE(); _o->F107_AVERAGE = _e; }
+  { auto _e = AP_INDEX(); _o->AP_INDEX = _e; }
+  { auto _e = KP_INDEX(); _o->KP_INDEX = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWSpaceWeather> CreatePRWSpaceWeather(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWSpaceWeather::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWSpaceWeather> PRWSpaceWeather::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWSpaceWeatherT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _EPOCH = _o->EPOCH ? CreateTIMInstant(_fbb, _o->EPOCH.get(), _rehasher) : 0;
+  auto _F107 = _o->F107;
+  auto _F107_AVERAGE = _o->F107_AVERAGE;
+  auto _AP_INDEX = _o->AP_INDEX;
+  auto _KP_INDEX = _o->KP_INDEX;
+  return CreatePRWSpaceWeather(
+      _fbb,
+      _EPOCH,
+      _F107,
+      _F107_AVERAGE,
+      _AP_INDEX,
+      _KP_INDEX);
+}
+
+inline PRWForceConfigurationT::PRWForceConfigurationT(const PRWForceConfigurationT &o)
+      : GRAVITY_CHOICE(o.GRAVITY_CHOICE),
+        ENABLE_POINT_MASS(o.ENABLE_POINT_MASS),
+        GRAVITATIONAL_PARAMETER(o.GRAVITATIONAL_PARAMETER),
+        ENABLE_J2(o.ENABLE_J2),
+        ENABLE_J3(o.ENABLE_J3),
+        ENABLE_J4(o.ENABLE_J4),
+        ENABLE_HIGHER_ZONALS(o.ENABLE_HIGHER_ZONALS),
+        MAXIMUM_DEGREE(o.MAXIMUM_DEGREE),
+        HAS_MAXIMUM_DEGREE(o.HAS_MAXIMUM_DEGREE),
+        MAXIMUM_ORDER(o.MAXIMUM_ORDER),
+        HAS_MAXIMUM_ORDER(o.HAS_MAXIMUM_ORDER),
+        ENABLE_THIRD_BODY(o.ENABLE_THIRD_BODY),
+        THIRD_BODY_IDS(o.THIRD_BODY_IDS),
+        ENABLE_SRP(o.ENABLE_SRP),
+        ENABLE_DRAG(o.ENABLE_DRAG),
+        INITIAL_MASS_KG(o.INITIAL_MASS_KG),
+        AREA_M2(o.AREA_M2),
+        REFLECTIVITY_COEFFICIENT(o.REFLECTIVITY_COEFFICIENT),
+        DRAG_COEFFICIENT(o.DRAG_COEFFICIENT),
+        ATMOSPHERE_MODEL(o.ATMOSPHERE_MODEL),
+        WEATHER((o.WEATHER) ? new PRWSpaceWeatherT(*o.WEATHER) : nullptr),
+        EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE),
+        SOLID_TIDES(o.SOLID_TIDES),
+        RELATIVITY(o.RELATIVITY),
+        IN_TRACK_ACCELERATION_M_S2(o.IN_TRACK_ACCELERATION_M_S2),
+        HAS_IN_TRACK_ACCELERATION_M_S2(o.HAS_IN_TRACK_ACCELERATION_M_S2),
+        DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
+        HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
+        MAXIMUM_TESSERAL_DEGREE(o.MAXIMUM_TESSERAL_DEGREE),
+        HAS_MAXIMUM_TESSERAL_DEGREE(o.HAS_MAXIMUM_TESSERAL_DEGREE),
+        RADIATION_PRESSURE_MODEL(o.RADIATION_PRESSURE_MODEL),
+        GNSS_BLOCK(o.GNSS_BLOCK),
+        ECOM2((o.ECOM2) ? new PRWEcom2T(*o.ECOM2) : nullptr),
+        EARTH_RADIATION(o.EARTH_RADIATION),
+        EARTH_RADIATION_RESOLUTION_DEG(o.EARTH_RADIATION_RESOLUTION_DEG),
+        EARTH_RADIATION_AREA_OVER_MASS_M2_KG(o.EARTH_RADIATION_AREA_OVER_MASS_M2_KG),
+        HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(o.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG),
+        OCEAN_TIDES(o.OCEAN_TIDES),
+        OCEAN_TIDE_MAXIMUM_DEGREE(o.OCEAN_TIDE_MAXIMUM_DEGREE),
+        OCEAN_TIDE_MAXIMUM_ORDER(o.OCEAN_TIDE_MAXIMUM_ORDER) {
+}
+
+inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(GRAVITY_CHOICE, o.GRAVITY_CHOICE);
+  std::swap(ENABLE_POINT_MASS, o.ENABLE_POINT_MASS);
+  std::swap(GRAVITATIONAL_PARAMETER, o.GRAVITATIONAL_PARAMETER);
+  std::swap(ENABLE_J2, o.ENABLE_J2);
+  std::swap(ENABLE_J3, o.ENABLE_J3);
+  std::swap(ENABLE_J4, o.ENABLE_J4);
+  std::swap(ENABLE_HIGHER_ZONALS, o.ENABLE_HIGHER_ZONALS);
+  std::swap(MAXIMUM_DEGREE, o.MAXIMUM_DEGREE);
+  std::swap(HAS_MAXIMUM_DEGREE, o.HAS_MAXIMUM_DEGREE);
+  std::swap(MAXIMUM_ORDER, o.MAXIMUM_ORDER);
+  std::swap(HAS_MAXIMUM_ORDER, o.HAS_MAXIMUM_ORDER);
+  std::swap(ENABLE_THIRD_BODY, o.ENABLE_THIRD_BODY);
+  std::swap(THIRD_BODY_IDS, o.THIRD_BODY_IDS);
+  std::swap(ENABLE_SRP, o.ENABLE_SRP);
+  std::swap(ENABLE_DRAG, o.ENABLE_DRAG);
+  std::swap(INITIAL_MASS_KG, o.INITIAL_MASS_KG);
+  std::swap(AREA_M2, o.AREA_M2);
+  std::swap(REFLECTIVITY_COEFFICIENT, o.REFLECTIVITY_COEFFICIENT);
+  std::swap(DRAG_COEFFICIENT, o.DRAG_COEFFICIENT);
+  std::swap(ATMOSPHERE_MODEL, o.ATMOSPHERE_MODEL);
+  std::swap(WEATHER, o.WEATHER);
+  std::swap(EPHEMERIS_SOURCE, o.EPHEMERIS_SOURCE);
+  std::swap(SOLID_TIDES, o.SOLID_TIDES);
+  std::swap(RELATIVITY, o.RELATIVITY);
+  std::swap(IN_TRACK_ACCELERATION_M_S2, o.IN_TRACK_ACCELERATION_M_S2);
+  std::swap(HAS_IN_TRACK_ACCELERATION_M_S2, o.HAS_IN_TRACK_ACCELERATION_M_S2);
+  std::swap(DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  std::swap(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  std::swap(MAXIMUM_TESSERAL_DEGREE, o.MAXIMUM_TESSERAL_DEGREE);
+  std::swap(HAS_MAXIMUM_TESSERAL_DEGREE, o.HAS_MAXIMUM_TESSERAL_DEGREE);
+  std::swap(RADIATION_PRESSURE_MODEL, o.RADIATION_PRESSURE_MODEL);
+  std::swap(GNSS_BLOCK, o.GNSS_BLOCK);
+  std::swap(ECOM2, o.ECOM2);
+  std::swap(EARTH_RADIATION, o.EARTH_RADIATION);
+  std::swap(EARTH_RADIATION_RESOLUTION_DEG, o.EARTH_RADIATION_RESOLUTION_DEG);
+  std::swap(EARTH_RADIATION_AREA_OVER_MASS_M2_KG, o.EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  std::swap(HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, o.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  std::swap(OCEAN_TIDES, o.OCEAN_TIDES);
+  std::swap(OCEAN_TIDE_MAXIMUM_DEGREE, o.OCEAN_TIDE_MAXIMUM_DEGREE);
+  std::swap(OCEAN_TIDE_MAXIMUM_ORDER, o.OCEAN_TIDE_MAXIMUM_ORDER);
+  return *this;
+}
+
+inline PRWForceConfigurationT *PRWForceConfiguration::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWForceConfigurationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWForceConfiguration::UnPackTo(PRWForceConfigurationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = GRAVITY_CHOICE(); _o->GRAVITY_CHOICE = _e; }
+  { auto _e = ENABLE_POINT_MASS(); _o->ENABLE_POINT_MASS = _e; }
+  { auto _e = GRAVITATIONAL_PARAMETER(); _o->GRAVITATIONAL_PARAMETER = _e; }
+  { auto _e = ENABLE_J2(); _o->ENABLE_J2 = _e; }
+  { auto _e = ENABLE_J3(); _o->ENABLE_J3 = _e; }
+  { auto _e = ENABLE_J4(); _o->ENABLE_J4 = _e; }
+  { auto _e = ENABLE_HIGHER_ZONALS(); _o->ENABLE_HIGHER_ZONALS = _e; }
+  { auto _e = MAXIMUM_DEGREE(); _o->MAXIMUM_DEGREE = _e; }
+  { auto _e = HAS_MAXIMUM_DEGREE(); _o->HAS_MAXIMUM_DEGREE = _e; }
+  { auto _e = MAXIMUM_ORDER(); _o->MAXIMUM_ORDER = _e; }
+  { auto _e = HAS_MAXIMUM_ORDER(); _o->HAS_MAXIMUM_ORDER = _e; }
+  { auto _e = ENABLE_THIRD_BODY(); _o->ENABLE_THIRD_BODY = _e; }
+  { auto _e = THIRD_BODY_IDS(); if (_e) { _o->THIRD_BODY_IDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->THIRD_BODY_IDS[_i] = _e->Get(_i); } } else { _o->THIRD_BODY_IDS.resize(0); } }
+  { auto _e = ENABLE_SRP(); _o->ENABLE_SRP = _e; }
+  { auto _e = ENABLE_DRAG(); _o->ENABLE_DRAG = _e; }
+  { auto _e = INITIAL_MASS_KG(); _o->INITIAL_MASS_KG = _e; }
+  { auto _e = AREA_M2(); _o->AREA_M2 = _e; }
+  { auto _e = REFLECTIVITY_COEFFICIENT(); _o->REFLECTIVITY_COEFFICIENT = _e; }
+  { auto _e = DRAG_COEFFICIENT(); _o->DRAG_COEFFICIENT = _e; }
+  { auto _e = ATMOSPHERE_MODEL(); _o->ATMOSPHERE_MODEL = _e; }
+  { auto _e = WEATHER(); if (_e) { if(_o->WEATHER) { _e->UnPackTo(_o->WEATHER.get(), _resolver); } else { _o->WEATHER = std::unique_ptr<PRWSpaceWeatherT>(_e->UnPack(_resolver)); } } else if (_o->WEATHER) { _o->WEATHER.reset(); } }
+  { auto _e = EPHEMERIS_SOURCE(); if (_e) _o->EPHEMERIS_SOURCE = _e->str(); }
+  { auto _e = SOLID_TIDES(); _o->SOLID_TIDES = _e; }
+  { auto _e = RELATIVITY(); _o->RELATIVITY = _e; }
+  { auto _e = IN_TRACK_ACCELERATION_M_S2(); _o->IN_TRACK_ACCELERATION_M_S2 = _e; }
+  { auto _e = HAS_IN_TRACK_ACCELERATION_M_S2(); _o->HAS_IN_TRACK_ACCELERATION_M_S2 = _e; }
+  { auto _e = DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
+  { auto _e = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
+  { auto _e = MAXIMUM_TESSERAL_DEGREE(); _o->MAXIMUM_TESSERAL_DEGREE = _e; }
+  { auto _e = HAS_MAXIMUM_TESSERAL_DEGREE(); _o->HAS_MAXIMUM_TESSERAL_DEGREE = _e; }
+  { auto _e = RADIATION_PRESSURE_MODEL(); _o->RADIATION_PRESSURE_MODEL = _e; }
+  { auto _e = GNSS_BLOCK(); _o->GNSS_BLOCK = _e; }
+  { auto _e = ECOM2(); if (_e) { if(_o->ECOM2) { _e->UnPackTo(_o->ECOM2.get(), _resolver); } else { _o->ECOM2 = std::unique_ptr<PRWEcom2T>(_e->UnPack(_resolver)); } } else if (_o->ECOM2) { _o->ECOM2.reset(); } }
+  { auto _e = EARTH_RADIATION(); _o->EARTH_RADIATION = _e; }
+  { auto _e = EARTH_RADIATION_RESOLUTION_DEG(); _o->EARTH_RADIATION_RESOLUTION_DEG = _e; }
+  { auto _e = EARTH_RADIATION_AREA_OVER_MASS_M2_KG(); _o->EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(); _o->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = OCEAN_TIDES(); _o->OCEAN_TIDES = _e; }
+  { auto _e = OCEAN_TIDE_MAXIMUM_DEGREE(); _o->OCEAN_TIDE_MAXIMUM_DEGREE = _e; }
+  { auto _e = OCEAN_TIDE_MAXIMUM_ORDER(); _o->OCEAN_TIDE_MAXIMUM_ORDER = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWForceConfiguration::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWForceConfigurationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _GRAVITY_CHOICE = _o->GRAVITY_CHOICE;
+  auto _ENABLE_POINT_MASS = _o->ENABLE_POINT_MASS;
+  auto _GRAVITATIONAL_PARAMETER = _o->GRAVITATIONAL_PARAMETER;
+  auto _ENABLE_J2 = _o->ENABLE_J2;
+  auto _ENABLE_J3 = _o->ENABLE_J3;
+  auto _ENABLE_J4 = _o->ENABLE_J4;
+  auto _ENABLE_HIGHER_ZONALS = _o->ENABLE_HIGHER_ZONALS;
+  auto _MAXIMUM_DEGREE = _o->MAXIMUM_DEGREE;
+  auto _HAS_MAXIMUM_DEGREE = _o->HAS_MAXIMUM_DEGREE;
+  auto _MAXIMUM_ORDER = _o->MAXIMUM_ORDER;
+  auto _HAS_MAXIMUM_ORDER = _o->HAS_MAXIMUM_ORDER;
+  auto _ENABLE_THIRD_BODY = _o->ENABLE_THIRD_BODY;
+  auto _THIRD_BODY_IDS = _o->THIRD_BODY_IDS.size() ? _fbb.CreateVector(_o->THIRD_BODY_IDS) : 0;
+  auto _ENABLE_SRP = _o->ENABLE_SRP;
+  auto _ENABLE_DRAG = _o->ENABLE_DRAG;
+  auto _INITIAL_MASS_KG = _o->INITIAL_MASS_KG;
+  auto _AREA_M2 = _o->AREA_M2;
+  auto _REFLECTIVITY_COEFFICIENT = _o->REFLECTIVITY_COEFFICIENT;
+  auto _DRAG_COEFFICIENT = _o->DRAG_COEFFICIENT;
+  auto _ATMOSPHERE_MODEL = _o->ATMOSPHERE_MODEL;
+  auto _WEATHER = _o->WEATHER ? CreatePRWSpaceWeather(_fbb, _o->WEATHER.get(), _rehasher) : 0;
+  auto _EPHEMERIS_SOURCE = _fbb.CreateString(_o->EPHEMERIS_SOURCE);
+  auto _SOLID_TIDES = _o->SOLID_TIDES;
+  auto _RELATIVITY = _o->RELATIVITY;
+  auto _IN_TRACK_ACCELERATION_M_S2 = _o->IN_TRACK_ACCELERATION_M_S2;
+  auto _HAS_IN_TRACK_ACCELERATION_M_S2 = _o->HAS_IN_TRACK_ACCELERATION_M_S2;
+  auto _DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+  auto _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+  auto _MAXIMUM_TESSERAL_DEGREE = _o->MAXIMUM_TESSERAL_DEGREE;
+  auto _HAS_MAXIMUM_TESSERAL_DEGREE = _o->HAS_MAXIMUM_TESSERAL_DEGREE;
+  auto _RADIATION_PRESSURE_MODEL = _o->RADIATION_PRESSURE_MODEL;
+  auto _GNSS_BLOCK = _o->GNSS_BLOCK;
+  auto _ECOM2 = _o->ECOM2 ? CreatePRWEcom2(_fbb, _o->ECOM2.get(), _rehasher) : 0;
+  auto _EARTH_RADIATION = _o->EARTH_RADIATION;
+  auto _EARTH_RADIATION_RESOLUTION_DEG = _o->EARTH_RADIATION_RESOLUTION_DEG;
+  auto _EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _o->EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
+  auto _HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _o->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
+  auto _OCEAN_TIDES = _o->OCEAN_TIDES;
+  auto _OCEAN_TIDE_MAXIMUM_DEGREE = _o->OCEAN_TIDE_MAXIMUM_DEGREE;
+  auto _OCEAN_TIDE_MAXIMUM_ORDER = _o->OCEAN_TIDE_MAXIMUM_ORDER;
+  return CreatePRWForceConfiguration(
+      _fbb,
+      _GRAVITY_CHOICE,
+      _ENABLE_POINT_MASS,
+      _GRAVITATIONAL_PARAMETER,
+      _ENABLE_J2,
+      _ENABLE_J3,
+      _ENABLE_J4,
+      _ENABLE_HIGHER_ZONALS,
+      _MAXIMUM_DEGREE,
+      _HAS_MAXIMUM_DEGREE,
+      _MAXIMUM_ORDER,
+      _HAS_MAXIMUM_ORDER,
+      _ENABLE_THIRD_BODY,
+      _THIRD_BODY_IDS,
+      _ENABLE_SRP,
+      _ENABLE_DRAG,
+      _INITIAL_MASS_KG,
+      _AREA_M2,
+      _REFLECTIVITY_COEFFICIENT,
+      _DRAG_COEFFICIENT,
+      _ATMOSPHERE_MODEL,
+      _WEATHER,
+      _EPHEMERIS_SOURCE,
+      _SOLID_TIDES,
+      _RELATIVITY,
+      _IN_TRACK_ACCELERATION_M_S2,
+      _HAS_IN_TRACK_ACCELERATION_M_S2,
+      _DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      _MAXIMUM_TESSERAL_DEGREE,
+      _HAS_MAXIMUM_TESSERAL_DEGREE,
+      _RADIATION_PRESSURE_MODEL,
+      _GNSS_BLOCK,
+      _ECOM2,
+      _EARTH_RADIATION,
+      _EARTH_RADIATION_RESOLUTION_DEG,
+      _EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      _HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      _OCEAN_TIDES,
+      _OCEAN_TIDE_MAXIMUM_DEGREE,
+      _OCEAN_TIDE_MAXIMUM_ORDER);
 }
 
 inline PRWStateMatrixT *PRWStateMatrix::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -7466,81 +9069,11 @@ inline ::flatbuffers::Offset<PRWFiniteBurn> PRWFiniteBurn::Pack(::flatbuffers::F
       _THROTTLE);
 }
 
-inline PRWEventRecordT::PRWEventRecordT(const PRWEventRecordT &o)
-      : EVENT_INDEX(o.EVENT_INDEX),
-        KIND(o.KIND),
-        DIRECTION(o.DIRECTION),
-        EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
-        ELAPSED_SECONDS(o.ELAPSED_SECONDS),
-        STATE((o.STATE) ? new PRWResidentStateT(*o.STATE) : nullptr),
-        RESIDUAL(o.RESIDUAL),
-        ITERATIONS(o.ITERATIONS) {
-}
-
-inline PRWEventRecordT &PRWEventRecordT::operator=(PRWEventRecordT o) FLATBUFFERS_NOEXCEPT {
-  std::swap(EVENT_INDEX, o.EVENT_INDEX);
-  std::swap(KIND, o.KIND);
-  std::swap(DIRECTION, o.DIRECTION);
-  std::swap(EPOCH, o.EPOCH);
-  std::swap(ELAPSED_SECONDS, o.ELAPSED_SECONDS);
-  std::swap(STATE, o.STATE);
-  std::swap(RESIDUAL, o.RESIDUAL);
-  std::swap(ITERATIONS, o.ITERATIONS);
-  return *this;
-}
-
-inline PRWEventRecordT *PRWEventRecord::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
-  auto _o = std::make_unique<PRWEventRecordT>();
-  UnPackTo(_o.get(), _resolver);
-  return _o.release();
-}
-
-inline void PRWEventRecord::UnPackTo(PRWEventRecordT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
-  (void)_o;
-  (void)_resolver;
-  { auto _e = EVENT_INDEX(); _o->EVENT_INDEX = _e; }
-  { auto _e = KIND(); _o->KIND = _e; }
-  { auto _e = DIRECTION(); _o->DIRECTION = _e; }
-  { auto _e = EPOCH(); if (_e) { if(_o->EPOCH) { _e->UnPackTo(_o->EPOCH.get(), _resolver); } else { _o->EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->EPOCH) { _o->EPOCH.reset(); } }
-  { auto _e = ELAPSED_SECONDS(); _o->ELAPSED_SECONDS = _e; }
-  { auto _e = STATE(); if (_e) { if(_o->STATE) { _e->UnPackTo(_o->STATE.get(), _resolver); } else { _o->STATE = std::unique_ptr<PRWResidentStateT>(_e->UnPack(_resolver)); } } else if (_o->STATE) { _o->STATE.reset(); } }
-  { auto _e = RESIDUAL(); _o->RESIDUAL = _e; }
-  { auto _e = ITERATIONS(); _o->ITERATIONS = _e; }
-}
-
-inline ::flatbuffers::Offset<PRWEventRecord> CreatePRWEventRecord(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEventRecordT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  return PRWEventRecord::Pack(_fbb, _o, _rehasher);
-}
-
-inline ::flatbuffers::Offset<PRWEventRecord> PRWEventRecord::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEventRecordT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
-  (void)_rehasher;
-  (void)_o;
-  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWEventRecordT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _EVENT_INDEX = _o->EVENT_INDEX;
-  auto _KIND = _o->KIND;
-  auto _DIRECTION = _o->DIRECTION;
-  auto _EPOCH = _o->EPOCH ? CreateTIMInstant(_fbb, _o->EPOCH.get(), _rehasher) : 0;
-  auto _ELAPSED_SECONDS = _o->ELAPSED_SECONDS;
-  auto _STATE = _o->STATE ? CreatePRWResidentState(_fbb, _o->STATE.get(), _rehasher) : 0;
-  auto _RESIDUAL = _o->RESIDUAL;
-  auto _ITERATIONS = _o->ITERATIONS;
-  return CreatePRWEventRecord(
-      _fbb,
-      _EVENT_INDEX,
-      _KIND,
-      _DIRECTION,
-      _EPOCH,
-      _ELAPSED_SECONDS,
-      _STATE,
-      _RESIDUAL,
-      _ITERATIONS);
-}
-
 inline PRWExecutionRequestT::PRWExecutionRequestT(const PRWExecutionRequestT &o)
       : INITIAL((o.INITIAL) ? new PRWResidentStateT(*o.INITIAL) : nullptr),
         TARGET_EPOCH((o.TARGET_EPOCH) ? new TIMInstantT(*o.TARGET_EPOCH) : nullptr),
-        INTEGRATOR((o.INTEGRATOR) ? new PCFIntegratorSettingsT(*o.INTEGRATOR) : nullptr),
-        FORCES((o.FORCES) ? new PCFForceModelT(*o.FORCES) : nullptr),
+        INTEGRATOR((o.INTEGRATOR) ? new PRWIntegratorSettingsT(*o.INTEGRATOR) : nullptr),
+        FORCES((o.FORCES) ? new PRWForceConfigurationT(*o.FORCES) : nullptr),
         INCLUDE_STM(o.INCLUDE_STM),
         STM_TECHNIQUE(o.STM_TECHNIQUE),
         DENSITY_TREATMENT(o.DENSITY_TREATMENT),
@@ -7555,8 +9088,6 @@ inline PRWExecutionRequestT::PRWExecutionRequestT(const PRWExecutionRequestT &o)
   for (const auto &IMPULSES_ : o.IMPULSES) { IMPULSES.emplace_back((IMPULSES_) ? new PRWImpulseT(*IMPULSES_) : nullptr); }
   FINITE_BURNS.reserve(o.FINITE_BURNS.size());
   for (const auto &FINITE_BURNS_ : o.FINITE_BURNS) { FINITE_BURNS.emplace_back((FINITE_BURNS_) ? new PRWFiniteBurnT(*FINITE_BURNS_) : nullptr); }
-  EVENTS.reserve(o.EVENTS.size());
-  for (const auto &EVENTS_ : o.EVENTS) { EVENTS.emplace_back((EVENTS_) ? new PCFEventDefinitionT(*EVENTS_) : nullptr); }
 }
 
 inline PRWExecutionRequestT &PRWExecutionRequestT::operator=(PRWExecutionRequestT o) FLATBUFFERS_NOEXCEPT {
@@ -7575,7 +9106,6 @@ inline PRWExecutionRequestT &PRWExecutionRequestT::operator=(PRWExecutionRequest
   std::swap(FINITE_BURNS, o.FINITE_BURNS);
   std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
   std::swap(DYNAMIC_PARAMETERS, o.DYNAMIC_PARAMETERS);
-  std::swap(EVENTS, o.EVENTS);
   return *this;
 }
 
@@ -7590,8 +9120,8 @@ inline void PRWExecutionRequest::UnPackTo(PRWExecutionRequestT *_o, const ::flat
   (void)_resolver;
   { auto _e = INITIAL(); if (_e) { if(_o->INITIAL) { _e->UnPackTo(_o->INITIAL.get(), _resolver); } else { _o->INITIAL = std::unique_ptr<PRWResidentStateT>(_e->UnPack(_resolver)); } } else if (_o->INITIAL) { _o->INITIAL.reset(); } }
   { auto _e = TARGET_EPOCH(); if (_e) { if(_o->TARGET_EPOCH) { _e->UnPackTo(_o->TARGET_EPOCH.get(), _resolver); } else { _o->TARGET_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_EPOCH) { _o->TARGET_EPOCH.reset(); } }
-  { auto _e = INTEGRATOR(); if (_e) { if(_o->INTEGRATOR) { _e->UnPackTo(_o->INTEGRATOR.get(), _resolver); } else { _o->INTEGRATOR = std::unique_ptr<PCFIntegratorSettingsT>(_e->UnPack(_resolver)); } } else if (_o->INTEGRATOR) { _o->INTEGRATOR.reset(); } }
-  { auto _e = FORCES(); if (_e) { if(_o->FORCES) { _e->UnPackTo(_o->FORCES.get(), _resolver); } else { _o->FORCES = std::unique_ptr<PCFForceModelT>(_e->UnPack(_resolver)); } } else if (_o->FORCES) { _o->FORCES.reset(); } }
+  { auto _e = INTEGRATOR(); if (_e) { if(_o->INTEGRATOR) { _e->UnPackTo(_o->INTEGRATOR.get(), _resolver); } else { _o->INTEGRATOR = std::unique_ptr<PRWIntegratorSettingsT>(_e->UnPack(_resolver)); } } else if (_o->INTEGRATOR) { _o->INTEGRATOR.reset(); } }
+  { auto _e = FORCES(); if (_e) { if(_o->FORCES) { _e->UnPackTo(_o->FORCES.get(), _resolver); } else { _o->FORCES = std::unique_ptr<PRWForceConfigurationT>(_e->UnPack(_resolver)); } } else if (_o->FORCES) { _o->FORCES.reset(); } }
   { auto _e = INCLUDE_STM(); _o->INCLUDE_STM = _e; }
   { auto _e = STM_TECHNIQUE(); _o->STM_TECHNIQUE = _e; }
   { auto _e = DENSITY_TREATMENT(); _o->DENSITY_TREATMENT = _e; }
@@ -7603,7 +9133,6 @@ inline void PRWExecutionRequest::UnPackTo(PRWExecutionRequestT *_o, const ::flat
   { auto _e = FINITE_BURNS(); if (_e) { _o->FINITE_BURNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FINITE_BURNS[_i]) { _e->Get(_i)->UnPackTo(_o->FINITE_BURNS[_i].get(), _resolver); } else { _o->FINITE_BURNS[_i] = std::unique_ptr<PRWFiniteBurnT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FINITE_BURNS.resize(0); } }
   { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
   { auto _e = DYNAMIC_PARAMETERS(); if (_e) { _o->DYNAMIC_PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DYNAMIC_PARAMETERS[_i] = static_cast<prwDynamicParameter>(_e->Get(_i)); } } else { _o->DYNAMIC_PARAMETERS.resize(0); } }
-  { auto _e = EVENTS(); if (_e) { _o->EVENTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EVENTS[_i]) { _e->Get(_i)->UnPackTo(_o->EVENTS[_i].get(), _resolver); } else { _o->EVENTS[_i] = std::unique_ptr<PCFEventDefinitionT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EVENTS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -7616,8 +9145,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> PRWExecutionRequest::Pack(::fl
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWExecutionRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _INITIAL = _o->INITIAL ? CreatePRWResidentState(_fbb, _o->INITIAL.get(), _rehasher) : 0;
   auto _TARGET_EPOCH = _o->TARGET_EPOCH ? CreateTIMInstant(_fbb, _o->TARGET_EPOCH.get(), _rehasher) : 0;
-  auto _INTEGRATOR = _o->INTEGRATOR ? CreatePCFIntegratorSettings(_fbb, _o->INTEGRATOR.get(), _rehasher) : 0;
-  auto _FORCES = _o->FORCES ? CreatePCFForceModel(_fbb, _o->FORCES.get(), _rehasher) : 0;
+  auto _INTEGRATOR = _o->INTEGRATOR ? CreatePRWIntegratorSettings(_fbb, _o->INTEGRATOR.get(), _rehasher) : 0;
+  auto _FORCES = _o->FORCES ? CreatePRWForceConfiguration(_fbb, _o->FORCES.get(), _rehasher) : 0;
   auto _INCLUDE_STM = _o->INCLUDE_STM;
   auto _STM_TECHNIQUE = _o->STM_TECHNIQUE;
   auto _DENSITY_TREATMENT = _o->DENSITY_TREATMENT;
@@ -7629,7 +9158,6 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> PRWExecutionRequest::Pack(::fl
   auto _FINITE_BURNS = _o->FINITE_BURNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWFiniteBurn>> (_o->FINITE_BURNS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWFiniteBurn(*__va->__fbb, __va->__o->FINITE_BURNS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
   auto _DYNAMIC_PARAMETERS = _o->DYNAMIC_PARAMETERS.size() ? _fbb.CreateVector(_o->DYNAMIC_PARAMETERS) : 0;
-  auto _EVENTS = _o->EVENTS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PCFEventDefinition>> (_o->EVENTS.size(), [](size_t i, _VectorArgs *__va) { return CreatePCFEventDefinition(*__va->__fbb, __va->__o->EVENTS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreatePRWExecutionRequest(
       _fbb,
       _INITIAL,
@@ -7646,8 +9174,7 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> PRWExecutionRequest::Pack(::fl
       _INCLUDE_MASS_DYNAMICS,
       _FINITE_BURNS,
       _PROCESS_NOISE,
-      _DYNAMIC_PARAMETERS,
-      _EVENTS);
+      _DYNAMIC_PARAMETERS);
 }
 
 inline PRWBurnReportT::PRWBurnReportT(const PRWBurnReportT &o)
@@ -7827,13 +9354,9 @@ inline PRWExecutionResultT::PRWExecutionResultT(const PRWExecutionResultT &o)
         EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE),
         STM_TECHNIQUE(o.STM_TECHNIQUE),
         DENSITY_TREATMENT(o.DENSITY_TREATMENT),
-        DYNAMIC_PARAMETERS(o.DYNAMIC_PARAMETERS),
-        EVENT_OCCURRENCES(o.EVENT_OCCURRENCES),
-        STOPPED_BY_EVENT(o.STOPPED_BY_EVENT) {
+        DYNAMIC_PARAMETERS(o.DYNAMIC_PARAMETERS) {
   SAMPLES.reserve(o.SAMPLES.size());
   for (const auto &SAMPLES_ : o.SAMPLES) { SAMPLES.emplace_back((SAMPLES_) ? new PRWPropagationSampleT(*SAMPLES_) : nullptr); }
-  EVENTS.reserve(o.EVENTS.size());
-  for (const auto &EVENTS_ : o.EVENTS) { EVENTS.emplace_back((EVENTS_) ? new PRWEventRecordT(*EVENTS_) : nullptr); }
 }
 
 inline PRWExecutionResultT &PRWExecutionResultT::operator=(PRWExecutionResultT o) FLATBUFFERS_NOEXCEPT {
@@ -7844,9 +9367,6 @@ inline PRWExecutionResultT &PRWExecutionResultT::operator=(PRWExecutionResultT o
   std::swap(STM_TECHNIQUE, o.STM_TECHNIQUE);
   std::swap(DENSITY_TREATMENT, o.DENSITY_TREATMENT);
   std::swap(DYNAMIC_PARAMETERS, o.DYNAMIC_PARAMETERS);
-  std::swap(EVENTS, o.EVENTS);
-  std::swap(EVENT_OCCURRENCES, o.EVENT_OCCURRENCES);
-  std::swap(STOPPED_BY_EVENT, o.STOPPED_BY_EVENT);
   return *this;
 }
 
@@ -7866,9 +9386,6 @@ inline void PRWExecutionResult::UnPackTo(PRWExecutionResultT *_o, const ::flatbu
   { auto _e = STM_TECHNIQUE(); _o->STM_TECHNIQUE = _e; }
   { auto _e = DENSITY_TREATMENT(); _o->DENSITY_TREATMENT = _e; }
   { auto _e = DYNAMIC_PARAMETERS(); if (_e) { _o->DYNAMIC_PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DYNAMIC_PARAMETERS[_i] = static_cast<prwDynamicParameter>(_e->Get(_i)); } } else { _o->DYNAMIC_PARAMETERS.resize(0); } }
-  { auto _e = EVENTS(); if (_e) { _o->EVENTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EVENTS[_i]) { _e->Get(_i)->UnPackTo(_o->EVENTS[_i].get(), _resolver); } else { _o->EVENTS[_i] = std::unique_ptr<PRWEventRecordT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EVENTS.resize(0); } }
-  { auto _e = EVENT_OCCURRENCES(); if (_e) { _o->EVENT_OCCURRENCES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->EVENT_OCCURRENCES[_i] = _e->Get(_i); } } else { _o->EVENT_OCCURRENCES.resize(0); } }
-  { auto _e = STOPPED_BY_EVENT(); _o->STOPPED_BY_EVENT = _e; }
 }
 
 inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -7886,9 +9403,6 @@ inline ::flatbuffers::Offset<PRWExecutionResult> PRWExecutionResult::Pack(::flat
   auto _STM_TECHNIQUE = _o->STM_TECHNIQUE;
   auto _DENSITY_TREATMENT = _o->DENSITY_TREATMENT;
   auto _DYNAMIC_PARAMETERS = _o->DYNAMIC_PARAMETERS.size() ? _fbb.CreateVector(_o->DYNAMIC_PARAMETERS) : 0;
-  auto _EVENTS = _o->EVENTS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWEventRecord>> (_o->EVENTS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWEventRecord(*__va->__fbb, __va->__o->EVENTS[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _EVENT_OCCURRENCES = _o->EVENT_OCCURRENCES.size() ? _fbb.CreateVector(_o->EVENT_OCCURRENCES) : 0;
-  auto _STOPPED_BY_EVENT = _o->STOPPED_BY_EVENT;
   return CreatePRWExecutionResult(
       _fbb,
       _FINAL_SAMPLE,
@@ -7897,10 +9411,7 @@ inline ::flatbuffers::Offset<PRWExecutionResult> PRWExecutionResult::Pack(::flat
       _EPHEMERIS_SOURCE,
       _STM_TECHNIQUE,
       _DENSITY_TREATMENT,
-      _DYNAMIC_PARAMETERS,
-      _EVENTS,
-      _EVENT_OCCURRENCES,
-      _STOPPED_BY_EVENT);
+      _DYNAMIC_PARAMETERS);
 }
 
 inline PRWResidentRequestT::PRWResidentRequestT(const PRWResidentRequestT &o)

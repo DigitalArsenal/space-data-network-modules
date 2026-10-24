@@ -952,7 +952,6 @@ struct QRPT : public ::flatbuffers::NativeTable {
   uint16_t HTTP_STATUS = 0;
   uint64_t BODY_REF_TOKEN = 0;
   uint64_t BODY_REF_SIZE = 0;
-  std::string RESUME_CURSOR{};
   QRPT() = default;
   QRPT(const QRPT &o);
   QRPT(QRPT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1013,8 +1012,7 @@ struct QRP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_MAX_BYTES = 94,
     VT_HTTP_STATUS = 96,
     VT_BODY_REF_TOKEN = 98,
-    VT_BODY_REF_SIZE = 100,
-    VT_RESUME_CURSOR = 102
+    VT_BODY_REF_SIZE = 100
   };
   qrpKind KIND() const {
     return static_cast<qrpKind>(GetField<int8_t>(VT_KIND, 0));
@@ -1209,12 +1207,6 @@ struct QRP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t BODY_REF_SIZE() const {
     return GetField<uint64_t>(VT_BODY_REF_SIZE, 0);
   }
-  /// Opaque cursor that resumes after the last row of this complete scan;
-  /// present on the last page; a request with it returns only rows stored
-  /// after that point, and its own last page carries a fresh RESUME_CURSOR.
-  const ::flatbuffers::String *RESUME_CURSOR() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_RESUME_CURSOR);
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1294,8 +1286,6 @@ struct QRP FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint16_t>(verifier, VT_HTTP_STATUS, 2) &&
            VerifyField<uint64_t>(verifier, VT_BODY_REF_TOKEN, 8) &&
            VerifyField<uint64_t>(verifier, VT_BODY_REF_SIZE, 8) &&
-           VerifyOffset(verifier, VT_RESUME_CURSOR) &&
-           verifier.VerifyString(RESUME_CURSOR()) &&
            verifier.EndTable();
   }
   QRPT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1454,9 +1444,6 @@ struct QRPBuilder {
   void add_BODY_REF_SIZE(uint64_t BODY_REF_SIZE) {
     fbb_.AddElement<uint64_t>(QRP::VT_BODY_REF_SIZE, BODY_REF_SIZE, 0);
   }
-  void add_RESUME_CURSOR(::flatbuffers::Offset<::flatbuffers::String> RESUME_CURSOR) {
-    fbb_.AddOffset(QRP::VT_RESUME_CURSOR, RESUME_CURSOR);
-  }
   explicit QRPBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1518,8 +1505,7 @@ inline ::flatbuffers::Offset<QRP> CreateQRP(
     uint64_t MAX_BYTES = 0,
     uint16_t HTTP_STATUS = 0,
     uint64_t BODY_REF_TOKEN = 0,
-    uint64_t BODY_REF_SIZE = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> RESUME_CURSOR = 0) {
+    uint64_t BODY_REF_SIZE = 0) {
   QRPBuilder builder_(_fbb);
   builder_.add_BODY_REF_SIZE(BODY_REF_SIZE);
   builder_.add_BODY_REF_TOKEN(BODY_REF_TOKEN);
@@ -1533,7 +1519,6 @@ inline ::flatbuffers::Offset<QRP> CreateQRP(
   builder_.add_TOTAL_COUNT(TOTAL_COUNT);
   builder_.add_TO_EPOCH_MS(TO_EPOCH_MS);
   builder_.add_FROM_EPOCH_MS(FROM_EPOCH_MS);
-  builder_.add_RESUME_CURSOR(RESUME_CURSOR);
   builder_.add_MAX_ELAPSED_MS(MAX_ELAPSED_MS);
   builder_.add_TABLES(TABLES);
   builder_.add_ROWS(ROWS);
@@ -1629,8 +1614,7 @@ inline ::flatbuffers::Offset<QRP> CreateQRPDirect(
     uint64_t MAX_BYTES = 0,
     uint16_t HTTP_STATUS = 0,
     uint64_t BODY_REF_TOKEN = 0,
-    uint64_t BODY_REF_SIZE = 0,
-    const char *RESUME_CURSOR = nullptr) {
+    uint64_t BODY_REF_SIZE = 0) {
   auto ERROR_CODE__ = ERROR_CODE ? _fbb.CreateString(ERROR_CODE) : 0;
   auto MESSAGE__ = MESSAGE ? _fbb.CreateString(MESSAGE) : 0;
   auto SCHEMA_NAME__ = SCHEMA_NAME ? _fbb.CreateString(SCHEMA_NAME) : 0;
@@ -1653,7 +1637,6 @@ inline ::flatbuffers::Offset<QRP> CreateQRPDirect(
   auto PARAMETERS__ = PARAMETERS ? _fbb.CreateVector<::flatbuffers::Offset<QRPValue>>(*PARAMETERS) : 0;
   auto ROWS__ = ROWS ? _fbb.CreateVector<::flatbuffers::Offset<QRPRow>>(*ROWS) : 0;
   auto TABLES__ = TABLES ? _fbb.CreateVector<::flatbuffers::Offset<QRPTable>>(*TABLES) : 0;
-  auto RESUME_CURSOR__ = RESUME_CURSOR ? _fbb.CreateString(RESUME_CURSOR) : 0;
   return CreateQRP(
       _fbb,
       KIND,
@@ -1704,8 +1687,7 @@ inline ::flatbuffers::Offset<QRP> CreateQRPDirect(
       MAX_BYTES,
       HTTP_STATUS,
       BODY_REF_TOKEN,
-      BODY_REF_SIZE,
-      RESUME_CURSOR__);
+      BODY_REF_SIZE);
 }
 
 ::flatbuffers::Offset<QRP> CreateQRP(::flatbuffers::FlatBufferBuilder &_fbb, const QRPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1957,8 +1939,7 @@ inline QRPT::QRPT(const QRPT &o)
         MAX_BYTES(o.MAX_BYTES),
         HTTP_STATUS(o.HTTP_STATUS),
         BODY_REF_TOKEN(o.BODY_REF_TOKEN),
-        BODY_REF_SIZE(o.BODY_REF_SIZE),
-        RESUME_CURSOR(o.RESUME_CURSOR) {
+        BODY_REF_SIZE(o.BODY_REF_SIZE) {
   FILTERS.reserve(o.FILTERS.size());
   for (const auto &FILTERS_ : o.FILTERS) { FILTERS.emplace_back((FILTERS_) ? new QRPFilterT(*FILTERS_) : nullptr); }
   COLUMNS.reserve(o.COLUMNS.size());
@@ -2021,7 +2002,6 @@ inline QRPT &QRPT::operator=(QRPT o) FLATBUFFERS_NOEXCEPT {
   std::swap(HTTP_STATUS, o.HTTP_STATUS);
   std::swap(BODY_REF_TOKEN, o.BODY_REF_TOKEN);
   std::swap(BODY_REF_SIZE, o.BODY_REF_SIZE);
-  std::swap(RESUME_CURSOR, o.RESUME_CURSOR);
   return *this;
 }
 
@@ -2083,7 +2063,6 @@ inline void QRP::UnPackTo(QRPT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = HTTP_STATUS(); _o->HTTP_STATUS = _e; }
   { auto _e = BODY_REF_TOKEN(); _o->BODY_REF_TOKEN = _e; }
   { auto _e = BODY_REF_SIZE(); _o->BODY_REF_SIZE = _e; }
-  { auto _e = RESUME_CURSOR(); if (_e) _o->RESUME_CURSOR = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<QRP> CreateQRP(::flatbuffers::FlatBufferBuilder &_fbb, const QRPT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2143,7 +2122,6 @@ inline ::flatbuffers::Offset<QRP> QRP::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _HTTP_STATUS = _o->HTTP_STATUS;
   auto _BODY_REF_TOKEN = _o->BODY_REF_TOKEN;
   auto _BODY_REF_SIZE = _o->BODY_REF_SIZE;
-  auto _RESUME_CURSOR = _o->RESUME_CURSOR.empty() ? 0 : _fbb.CreateString(_o->RESUME_CURSOR);
   return CreateQRP(
       _fbb,
       _KIND,
@@ -2194,8 +2172,7 @@ inline ::flatbuffers::Offset<QRP> QRP::Pack(::flatbuffers::FlatBufferBuilder &_f
       _MAX_BYTES,
       _HTTP_STATUS,
       _BODY_REF_TOKEN,
-      _BODY_REF_SIZE,
-      _RESUME_CURSOR);
+      _BODY_REF_SIZE);
 }
 
 inline const QRP *GetQRP(const void *buf) {

@@ -17,7 +17,6 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "PRW_generated.h"
 #include "OMM_generated.h"
 #include "OEM_generated.h"
-#include "PVN_generated.h"
 
 struct dclFitStatistics;
 struct dclFitStatisticsBuilder;
@@ -66,8 +65,7 @@ struct DCLT;
 /// Density Calibration (DCL)
 /// Description
 /// A calibration of a thermospheric density model and the results computed
-/// with it. A calibration may be a dimensionless common-mode log-density
-/// scale for NRLMSISE-00, or a correction to the model's exospheric
+/// with it. A calibration is a correction to the model's exospheric
 /// temperature (added where the model adds its geomagnetic term, so a
 /// constant correction is the same as raising every hourly Dst-derived
 /// temperature change by that amount), estimated either from observed
@@ -96,8 +94,7 @@ struct DCLT;
 /// (density, Mach, heating) along an entry trajectory; a DCL density
 /// evaluation along the same trajectory supplies its calibrated density.
 ///
-/// Times are Unix milliseconds (UTC); densities kg/m^3; temperatures K;
-/// log-density scales are dimensionless ln(corrected density / model density).
+/// Times are Unix milliseconds (UTC); densities kg/m^3; temperatures K.
 /// What a record computes. Append new values only; never reorder or reuse
 /// existing values.
 enum class dclProduct : uint8_t {
@@ -152,45 +149,40 @@ inline const char *EnumNamedclProduct(dclProduct e) {
   return EnumNamesdclProduct()[index];
 }
 
-/// Form of a density-model correction. Append new values only; never reorder or
+/// Form of a temperature correction. Append new values only; never reorder or
 /// reuse existing values.
 enum class dclCorrectionForm : uint8_t {
   /// No correction (dT = 0).
   None = 0,
   /// Spherical harmonics in latitude and local solar time per time segment.
   Harmonic = 1,
-  /// Temperature values, K, at time nodes, optionally at altitude nodes.
+  /// Values at time nodes, optionally at altitude nodes.
   Nodes = 2,
-  /// Fleet common-mode ln(density / NRLMSISE-00 density), dimensionless.
-  /// Uses NODE_TIMES_MS and NODE_LOG_DENSITY_SCALE_DIMENSIONLESS only.
-  LogDensityNodes = 3,
   MIN = None,
-  MAX = LogDensityNodes
+  MAX = Nodes
 };
 
-inline const dclCorrectionForm (&EnumValuesdclCorrectionForm())[4] {
+inline const dclCorrectionForm (&EnumValuesdclCorrectionForm())[3] {
   static const dclCorrectionForm values[] = {
     dclCorrectionForm::None,
     dclCorrectionForm::Harmonic,
-    dclCorrectionForm::Nodes,
-    dclCorrectionForm::LogDensityNodes
+    dclCorrectionForm::Nodes
   };
   return values;
 }
 
 inline const char * const *EnumNamesdclCorrectionForm() {
-  static const char * const names[5] = {
+  static const char * const names[4] = {
     "None",
     "Harmonic",
     "Nodes",
-    "LogDensityNodes",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamedclCorrectionForm(dclCorrectionForm e) {
-  if (::flatbuffers::IsOutRange(e, dclCorrectionForm::None, dclCorrectionForm::LogDensityNodes)) return "";
+  if (::flatbuffers::IsOutRange(e, dclCorrectionForm::None, dclCorrectionForm::Nodes)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesdclCorrectionForm()[index];
 }
@@ -616,14 +608,13 @@ struct dclCorrectionT : public ::flatbuffers::NativeTable {
   std::vector<double> NODE_ALTITUDES_KM{};
   std::vector<double> NODE_VALUES_K{};
   std::vector<double> NODE_SIGMAS_K{};
-  std::vector<double> NODE_LOG_DENSITY_SCALE_DIMENSIONLESS{};
   dclCorrectionT() = default;
   dclCorrectionT(const dclCorrectionT &o);
   dclCorrectionT(dclCorrectionT&&) FLATBUFFERS_NOEXCEPT = default;
   dclCorrectionT &operator=(dclCorrectionT o) FLATBUFFERS_NOEXCEPT;
 };
 
-/// An exospheric-temperature correction or a dimensionless log-density scale.
+/// An exospheric-temperature correction.
 struct dclCorrection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef dclCorrectionT NativeTableType;
   typedef dclCorrectionBuilder Builder;
@@ -635,8 +626,7 @@ struct dclCorrection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_NODE_TIMES_MS = 10,
     VT_NODE_ALTITUDES_KM = 12,
     VT_NODE_VALUES_K = 14,
-    VT_NODE_SIGMAS_K = 16,
-    VT_NODE_LOG_DENSITY_SCALE_DIMENSIONLESS = 18
+    VT_NODE_SIGMAS_K = 16
   };
   dclCorrectionForm FORM() const {
     return static_cast<dclCorrectionForm>(GetField<uint8_t>(VT_FORM, 0));
@@ -650,9 +640,8 @@ struct dclCorrection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<dclHarmonicSegment>> *SEGMENTS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<dclHarmonicSegment>> *>(VT_SEGMENTS);
   }
-  /// Nodes or LogDensityNodes: UTC Unix milliseconds, strictly increasing.
-  /// The selected correction is linear in time between nodes and held at the
-  /// first/last value outside the node span.
+  /// Nodes: node times, strictly increasing. dT is linear in time between
+  /// nodes and held outside them.
   const ::flatbuffers::Vector<int64_t> *NODE_TIMES_MS() const {
     return GetPointer<const ::flatbuffers::Vector<int64_t> *>(VT_NODE_TIMES_MS);
   }
@@ -673,17 +662,6 @@ struct dclCorrection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<double> *NODE_SIGMAS_K() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_NODE_SIGMAS_K);
   }
-  /// LogDensityNodes only: s = ln(rho_drag / rho_NRLMSISE00), dimensionless,
-  /// one finite value per NODE_TIMES_MS entry, shared by the whole fleet.
-  /// rho_drag = rho_NRLMSISE00 * exp(s(t)); this is not a temperature change.
-  /// NODE_ALTITUDES_KM, NODE_VALUES_K, NODE_SIGMAS_K and SEGMENTS must be empty.
-  /// SETTINGS.TO_MS marks the last solve epoch. Published nodes explicitly
-  /// include the producer's forecast decay through at least 48 hours after
-  /// that epoch. Interpolate those nodes; do not apply another decay in the
-  /// consumer. After the final published node, hold its value.
-  const ::flatbuffers::Vector<double> *NODE_LOG_DENSITY_SCALE_DIMENSIONLESS() const {
-    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_NODE_LOG_DENSITY_SCALE_DIMENSIONLESS);
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -700,8 +678,6 @@ struct dclCorrection FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVector(NODE_VALUES_K()) &&
            VerifyOffset(verifier, VT_NODE_SIGMAS_K) &&
            verifier.VerifyVector(NODE_SIGMAS_K()) &&
-           VerifyOffset(verifier, VT_NODE_LOG_DENSITY_SCALE_DIMENSIONLESS) &&
-           verifier.VerifyVector(NODE_LOG_DENSITY_SCALE_DIMENSIONLESS()) &&
            verifier.EndTable();
   }
   dclCorrectionT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -734,9 +710,6 @@ struct dclCorrectionBuilder {
   void add_NODE_SIGMAS_K(::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_SIGMAS_K) {
     fbb_.AddOffset(dclCorrection::VT_NODE_SIGMAS_K, NODE_SIGMAS_K);
   }
-  void add_NODE_LOG_DENSITY_SCALE_DIMENSIONLESS(::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_LOG_DENSITY_SCALE_DIMENSIONLESS) {
-    fbb_.AddOffset(dclCorrection::VT_NODE_LOG_DENSITY_SCALE_DIMENSIONLESS, NODE_LOG_DENSITY_SCALE_DIMENSIONLESS);
-  }
   explicit dclCorrectionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -756,10 +729,8 @@ inline ::flatbuffers::Offset<dclCorrection> CreatedclCorrection(
     ::flatbuffers::Offset<::flatbuffers::Vector<int64_t>> NODE_TIMES_MS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_ALTITUDES_KM = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_VALUES_K = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_SIGMAS_K = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_LOG_DENSITY_SCALE_DIMENSIONLESS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> NODE_SIGMAS_K = 0) {
   dclCorrectionBuilder builder_(_fbb);
-  builder_.add_NODE_LOG_DENSITY_SCALE_DIMENSIONLESS(NODE_LOG_DENSITY_SCALE_DIMENSIONLESS);
   builder_.add_NODE_SIGMAS_K(NODE_SIGMAS_K);
   builder_.add_NODE_VALUES_K(NODE_VALUES_K);
   builder_.add_NODE_ALTITUDES_KM(NODE_ALTITUDES_KM);
@@ -783,14 +754,12 @@ inline ::flatbuffers::Offset<dclCorrection> CreatedclCorrectionDirect(
     const std::vector<int64_t> *NODE_TIMES_MS = nullptr,
     const std::vector<double> *NODE_ALTITUDES_KM = nullptr,
     const std::vector<double> *NODE_VALUES_K = nullptr,
-    const std::vector<double> *NODE_SIGMAS_K = nullptr,
-    const std::vector<double> *NODE_LOG_DENSITY_SCALE_DIMENSIONLESS = nullptr) {
+    const std::vector<double> *NODE_SIGMAS_K = nullptr) {
   auto SEGMENTS__ = SEGMENTS ? _fbb.CreateVector<::flatbuffers::Offset<dclHarmonicSegment>>(*SEGMENTS) : 0;
   auto NODE_TIMES_MS__ = NODE_TIMES_MS ? _fbb.CreateVector<int64_t>(*NODE_TIMES_MS) : 0;
   auto NODE_ALTITUDES_KM__ = NODE_ALTITUDES_KM ? _fbb.CreateVector<double>(*NODE_ALTITUDES_KM) : 0;
   auto NODE_VALUES_K__ = NODE_VALUES_K ? _fbb.CreateVector<double>(*NODE_VALUES_K) : 0;
   auto NODE_SIGMAS_K__ = NODE_SIGMAS_K ? _fbb.CreateVector<double>(*NODE_SIGMAS_K) : 0;
-  auto NODE_LOG_DENSITY_SCALE_DIMENSIONLESS__ = NODE_LOG_DENSITY_SCALE_DIMENSIONLESS ? _fbb.CreateVector<double>(*NODE_LOG_DENSITY_SCALE_DIMENSIONLESS) : 0;
   return CreatedclCorrection(
       _fbb,
       FORM,
@@ -799,8 +768,7 @@ inline ::flatbuffers::Offset<dclCorrection> CreatedclCorrectionDirect(
       NODE_TIMES_MS__,
       NODE_ALTITUDES_KM__,
       NODE_VALUES_K__,
-      NODE_SIGMAS_K__,
-      NODE_LOG_DENSITY_SCALE_DIMENSIONLESS__);
+      NODE_SIGMAS_K__);
 }
 
 ::flatbuffers::Offset<dclCorrection> CreatedclCorrection(::flatbuffers::FlatBufferBuilder &_fbb, const dclCorrectionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2753,7 +2721,6 @@ struct DCLT : public ::flatbuffers::NativeTable {
   double LEVEL_LN_B_CORRELATION = std::numeric_limits<double>::quiet_NaN();
   double MEAN_LEVEL_SIGMA_K = std::numeric_limits<double>::quiet_NaN();
   std::unique_ptr<dclStatesT> STATES{};
-  std::unique_ptr<PVNT> PROVENANCE{};
   DCLT() = default;
   DCLT(const DCLT &o);
   DCLT(DCLT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2792,8 +2759,7 @@ struct DCL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_HISTORY = 48,
     VT_LEVEL_LN_B_CORRELATION = 50,
     VT_MEAN_LEVEL_SIGMA_K = 52,
-    VT_STATES = 54,
-    VT_PROVENANCE = 56
+    VT_STATES = 54
   };
   /// Identifier of the record; empty = not assigned.
   const ::flatbuffers::String *ID() const {
@@ -2894,10 +2860,6 @@ struct DCL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const dclStates *STATES() const {
     return GetPointer<const dclStates *>(VT_STATES);
   }
-  /// Per-record source, provider, software, license terms and lineage.
-  const PVN *PROVENANCE() const {
-    return GetPointer<const PVN *>(VT_PROVENANCE);
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2947,8 +2909,6 @@ struct DCL FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_MEAN_LEVEL_SIGMA_K, 8) &&
            VerifyOffset(verifier, VT_STATES) &&
            verifier.VerifyTable(STATES()) &&
-           VerifyOffset(verifier, VT_PROVENANCE) &&
-           verifier.VerifyTable(PROVENANCE()) &&
            verifier.EndTable();
   }
   DCLT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3038,9 +2998,6 @@ struct DCLBuilder {
   void add_STATES(::flatbuffers::Offset<dclStates> STATES) {
     fbb_.AddOffset(DCL::VT_STATES, STATES);
   }
-  void add_PROVENANCE(::flatbuffers::Offset<PVN> PROVENANCE) {
-    fbb_.AddOffset(DCL::VT_PROVENANCE, PROVENANCE);
-  }
   explicit DCLBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3079,8 +3036,7 @@ inline ::flatbuffers::Offset<DCL> CreateDCL(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<dclIteration>>> HISTORY = 0,
     double LEVEL_LN_B_CORRELATION = std::numeric_limits<double>::quiet_NaN(),
     double MEAN_LEVEL_SIGMA_K = std::numeric_limits<double>::quiet_NaN(),
-    ::flatbuffers::Offset<dclStates> STATES = 0,
-    ::flatbuffers::Offset<PVN> PROVENANCE = 0) {
+    ::flatbuffers::Offset<dclStates> STATES = 0) {
   DCLBuilder builder_(_fbb);
   builder_.add_MEAN_LEVEL_SIGMA_K(MEAN_LEVEL_SIGMA_K);
   builder_.add_LEVEL_LN_B_CORRELATION(LEVEL_LN_B_CORRELATION);
@@ -3088,7 +3044,6 @@ inline ::flatbuffers::Offset<DCL> CreateDCL(
   builder_.add_EARTH_ROTATION_RAD_S(EARTH_ROTATION_RAD_S);
   builder_.add_GM_M3_S2(GM_M3_S2);
   builder_.add_CREATED_AT_MS(CREATED_AT_MS);
-  builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_STATES(STATES);
   builder_.add_HISTORY(HISTORY);
   builder_.add_LEVELS(LEVELS);
@@ -3144,8 +3099,7 @@ inline ::flatbuffers::Offset<DCL> CreateDCLDirect(
     const std::vector<::flatbuffers::Offset<dclIteration>> *HISTORY = nullptr,
     double LEVEL_LN_B_CORRELATION = std::numeric_limits<double>::quiet_NaN(),
     double MEAN_LEVEL_SIGMA_K = std::numeric_limits<double>::quiet_NaN(),
-    ::flatbuffers::Offset<dclStates> STATES = 0,
-    ::flatbuffers::Offset<PVN> PROVENANCE = 0) {
+    ::flatbuffers::Offset<dclStates> STATES = 0) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto PRODUCER__ = PRODUCER ? _fbb.CreateString(PRODUCER) : 0;
   auto SPACE_WEATHER__ = SPACE_WEATHER ? _fbb.CreateVector<::flatbuffers::Offset<SPW>>(*SPACE_WEATHER) : 0;
@@ -3182,8 +3136,7 @@ inline ::flatbuffers::Offset<DCL> CreateDCLDirect(
       HISTORY__,
       LEVEL_LN_B_CORRELATION,
       MEAN_LEVEL_SIGMA_K,
-      STATES,
-      PROVENANCE);
+      STATES);
 }
 
 ::flatbuffers::Offset<DCL> CreateDCL(::flatbuffers::FlatBufferBuilder &_fbb, const DCLT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3328,8 +3281,7 @@ inline dclCorrectionT::dclCorrectionT(const dclCorrectionT &o)
         NODE_TIMES_MS(o.NODE_TIMES_MS),
         NODE_ALTITUDES_KM(o.NODE_ALTITUDES_KM),
         NODE_VALUES_K(o.NODE_VALUES_K),
-        NODE_SIGMAS_K(o.NODE_SIGMAS_K),
-        NODE_LOG_DENSITY_SCALE_DIMENSIONLESS(o.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS) {
+        NODE_SIGMAS_K(o.NODE_SIGMAS_K) {
   SEGMENTS.reserve(o.SEGMENTS.size());
   for (const auto &SEGMENTS_ : o.SEGMENTS) { SEGMENTS.emplace_back((SEGMENTS_) ? new dclHarmonicSegmentT(*SEGMENTS_) : nullptr); }
 }
@@ -3342,7 +3294,6 @@ inline dclCorrectionT &dclCorrectionT::operator=(dclCorrectionT o) FLATBUFFERS_N
   std::swap(NODE_ALTITUDES_KM, o.NODE_ALTITUDES_KM);
   std::swap(NODE_VALUES_K, o.NODE_VALUES_K);
   std::swap(NODE_SIGMAS_K, o.NODE_SIGMAS_K);
-  std::swap(NODE_LOG_DENSITY_SCALE_DIMENSIONLESS, o.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS);
   return *this;
 }
 
@@ -3362,7 +3313,6 @@ inline void dclCorrection::UnPackTo(dclCorrectionT *_o, const ::flatbuffers::res
   { auto _e = NODE_ALTITUDES_KM(); if (_e) { _o->NODE_ALTITUDES_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->NODE_ALTITUDES_KM[_i] = _e->Get(_i); } } else { _o->NODE_ALTITUDES_KM.resize(0); } }
   { auto _e = NODE_VALUES_K(); if (_e) { _o->NODE_VALUES_K.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->NODE_VALUES_K[_i] = _e->Get(_i); } } else { _o->NODE_VALUES_K.resize(0); } }
   { auto _e = NODE_SIGMAS_K(); if (_e) { _o->NODE_SIGMAS_K.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->NODE_SIGMAS_K[_i] = _e->Get(_i); } } else { _o->NODE_SIGMAS_K.resize(0); } }
-  { auto _e = NODE_LOG_DENSITY_SCALE_DIMENSIONLESS(); if (_e) { _o->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[_i] = _e->Get(_i); } } else { _o->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<dclCorrection> CreatedclCorrection(::flatbuffers::FlatBufferBuilder &_fbb, const dclCorrectionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3380,7 +3330,6 @@ inline ::flatbuffers::Offset<dclCorrection> dclCorrection::Pack(::flatbuffers::F
   auto _NODE_ALTITUDES_KM = _o->NODE_ALTITUDES_KM.size() ? _fbb.CreateVector(_o->NODE_ALTITUDES_KM) : 0;
   auto _NODE_VALUES_K = _o->NODE_VALUES_K.size() ? _fbb.CreateVector(_o->NODE_VALUES_K) : 0;
   auto _NODE_SIGMAS_K = _o->NODE_SIGMAS_K.size() ? _fbb.CreateVector(_o->NODE_SIGMAS_K) : 0;
-  auto _NODE_LOG_DENSITY_SCALE_DIMENSIONLESS = _o->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.size() ? _fbb.CreateVector(_o->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS) : 0;
   return CreatedclCorrection(
       _fbb,
       _FORM,
@@ -3389,8 +3338,7 @@ inline ::flatbuffers::Offset<dclCorrection> dclCorrection::Pack(::flatbuffers::F
       _NODE_TIMES_MS,
       _NODE_ALTITUDES_KM,
       _NODE_VALUES_K,
-      _NODE_SIGMAS_K,
-      _NODE_LOG_DENSITY_SCALE_DIMENSIONLESS);
+      _NODE_SIGMAS_K);
 }
 
 inline dclPointsT *dclPoints::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -4002,8 +3950,7 @@ inline DCLT::DCLT(const DCLT &o)
         FIT((o.FIT) ? new dclFitStatisticsT(*o.FIT) : nullptr),
         LEVEL_LN_B_CORRELATION(o.LEVEL_LN_B_CORRELATION),
         MEAN_LEVEL_SIGMA_K(o.MEAN_LEVEL_SIGMA_K),
-        STATES((o.STATES) ? new dclStatesT(*o.STATES) : nullptr),
-        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr) {
+        STATES((o.STATES) ? new dclStatesT(*o.STATES) : nullptr) {
   SPACE_WEATHER.reserve(o.SPACE_WEATHER.size());
   for (const auto &SPACE_WEATHER_ : o.SPACE_WEATHER) { SPACE_WEATHER.emplace_back((SPACE_WEATHER_) ? new SPWT(*SPACE_WEATHER_) : nullptr); }
   OBJECTS.reserve(o.OBJECTS.size());
@@ -4041,7 +3988,6 @@ inline DCLT &DCLT::operator=(DCLT o) FLATBUFFERS_NOEXCEPT {
   std::swap(LEVEL_LN_B_CORRELATION, o.LEVEL_LN_B_CORRELATION);
   std::swap(MEAN_LEVEL_SIGMA_K, o.MEAN_LEVEL_SIGMA_K);
   std::swap(STATES, o.STATES);
-  std::swap(PROVENANCE, o.PROVENANCE);
   return *this;
 }
 
@@ -4080,7 +4026,6 @@ inline void DCL::UnPackTo(DCLT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = LEVEL_LN_B_CORRELATION(); _o->LEVEL_LN_B_CORRELATION = _e; }
   { auto _e = MEAN_LEVEL_SIGMA_K(); _o->MEAN_LEVEL_SIGMA_K = _e; }
   { auto _e = STATES(); if (_e) { if(_o->STATES) { _e->UnPackTo(_o->STATES.get(), _resolver); } else { _o->STATES = std::unique_ptr<dclStatesT>(_e->UnPack(_resolver)); } } else if (_o->STATES) { _o->STATES.reset(); } }
-  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
 }
 
 inline ::flatbuffers::Offset<DCL> CreateDCL(::flatbuffers::FlatBufferBuilder &_fbb, const DCLT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4117,7 +4062,6 @@ inline ::flatbuffers::Offset<DCL> DCL::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _LEVEL_LN_B_CORRELATION = _o->LEVEL_LN_B_CORRELATION;
   auto _MEAN_LEVEL_SIGMA_K = _o->MEAN_LEVEL_SIGMA_K;
   auto _STATES = _o->STATES ? CreatedclStates(_fbb, _o->STATES.get(), _rehasher) : 0;
-  auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
   return CreateDCL(
       _fbb,
       _ID,
@@ -4145,8 +4089,7 @@ inline ::flatbuffers::Offset<DCL> DCL::Pack(::flatbuffers::FlatBufferBuilder &_f
       _HISTORY,
       _LEVEL_LN_B_CORRELATION,
       _MEAN_LEVEL_SIGMA_K,
-      _STATES,
-      _PROVENANCE);
+      _STATES);
 }
 
 inline const DCL *GetDCL(const void *buf) {

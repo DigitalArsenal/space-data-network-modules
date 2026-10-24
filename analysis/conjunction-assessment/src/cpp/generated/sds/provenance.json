@@ -1,6 +1,6 @@
 {
   "package": "spacedatastandards.org",
-  "version": "1.264.0",
+  "version": "1.265.0",
   "generator": "flatc-wasm@26.1.32",
   "schemas": {
     "RFM": "064ec7033db427b4d14392e5e4b4eb0ea75b1324d4b94274f7548201b86d7347",
@@ -26,7 +26,7 @@
     "ATM": "5794e411f2c6523dc70c642d2aacabe2e495a88efa08ac4fc7a160e8abffcbe1",
     "OCM": "f76837db8853640e6f58cee9b4e3fef84e22a513dfeb9c626beb2056157d64fb",
     "PNM": "fa07cb319cdd4bf50f0d6ffe0b2de0cb469edb8f735d72574ff19de634125195",
-    "EPM": "90251831a8cd98ceb8f1559682c3f50c7be3d8d3c98890cd553a50c46cd5274a",
+    "EPM": "e36708cd0e11800d593de68f2edc7432536664ce4317036d573bdbbc1dd02e8c",
     "CDM": "f70e322e00ef17e0d734739f9c2107057db23730058666a60c3748436576ed55",
     "CSM": "7b2066b3bb817159241b34a3a0892b15f069cbb11490d887de4f28cc108b662a",
     "CQR": "8ec37495fcb988854143443c3cbfec1fc6eb6b3cc3af60fa55c4d64b8d9d8ecf",

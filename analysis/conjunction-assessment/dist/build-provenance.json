@@ -1,7 +1,7 @@
 {
   "standards": {
     "package": "spacedatastandards.org",
-    "version": "1.264.0",
+    "version": "1.265.0",
     "schemas": {
       "RFM": "064ec7033db427b4d14392e5e4b4eb0ea75b1324d4b94274f7548201b86d7347",
       "FRM": "af51a26da7423a8d005c073a4f8a49a9a0d1672248352a02dec89d28d21cabd7",
@@ -26,7 +26,7 @@
       "ATM": "5794e411f2c6523dc70c642d2aacabe2e495a88efa08ac4fc7a160e8abffcbe1",
       "OCM": "f76837db8853640e6f58cee9b4e3fef84e22a513dfeb9c626beb2056157d64fb",
       "PNM": "fa07cb319cdd4bf50f0d6ffe0b2de0cb469edb8f735d72574ff19de634125195",
-      "EPM": "90251831a8cd98ceb8f1559682c3f50c7be3d8d3c98890cd553a50c46cd5274a",
+      "EPM": "e36708cd0e11800d593de68f2edc7432536664ce4317036d573bdbbc1dd02e8c",
       "CDM": "f70e322e00ef17e0d734739f9c2107057db23730058666a60c3748436576ed55",
       "CSM": "7b2066b3bb817159241b34a3a0892b15f069cbb11490d887de4f28cc108b662a",
       "CQR": "8ec37495fcb988854143443c3cbfec1fc6eb6b3cc3af60fa55c4d64b8d9d8ecf",
@@ -43,7 +43,7 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "db62a3283c120ce641c67b6c64722e3c3e23faaa4347c73c1066581ecb9c1d3c",
+  "sourceSha256": "d853d146cb53891edf3f3f65e72483f54506c4e88687958eca19184d0d0e366e",
   "wasmSha256": "d2bd762cf8a79f10b628f70a60bef0a125a6ac648517da0b466068169a6eb1b0",
   "threadFeatures": {
     "hasSharedMemory": true,

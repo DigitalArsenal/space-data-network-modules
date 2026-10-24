@@ -13,8 +13,6 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
-#include "PVN_generated.h"
-
 struct SPW;
 struct SPWBuilder;
 struct SPWT;
@@ -133,11 +131,6 @@ struct SPWT : public ::flatbuffers::NativeTable {
   float F107_OBS_LAST81 = 0.0f;
   float F107_ADJ_CENTER81 = 0.0f;
   float F107_ADJ_LAST81 = 0.0f;
-  std::unique_ptr<PVNT> PROVENANCE{};
-  SPWT() = default;
-  SPWT(const SPWT &o);
-  SPWT(SPWT&&) FLATBUFFERS_NOEXCEPT = default;
-  SPWT &operator=(SPWT o) FLATBUFFERS_NOEXCEPT;
 };
 
 /// Space Weather Data Record
@@ -176,8 +169,7 @@ struct SPW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_F107_OBS_CENTER81 = 58,
     VT_F107_OBS_LAST81 = 60,
     VT_F107_ADJ_CENTER81 = 62,
-    VT_F107_ADJ_LAST81 = 64,
-    VT_PROVENANCE = 66
+    VT_F107_ADJ_LAST81 = 64
   };
   /// Date in ISO 8601 format
   const ::flatbuffers::String *DATE() const {
@@ -303,10 +295,6 @@ struct SPW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   float F107_ADJ_LAST81() const {
     return GetField<float>(VT_F107_ADJ_LAST81, 0.0f);
   }
-  /// Per-record source, provider, software, license terms and lineage.
-  const PVN *PROVENANCE() const {
-    return GetPointer<const PVN *>(VT_PROVENANCE);
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -342,8 +330,6 @@ struct SPW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<float>(verifier, VT_F107_OBS_LAST81, 4) &&
            VerifyField<float>(verifier, VT_F107_ADJ_CENTER81, 4) &&
            VerifyField<float>(verifier, VT_F107_ADJ_LAST81, 4) &&
-           VerifyOffset(verifier, VT_PROVENANCE) &&
-           verifier.VerifyTable(PROVENANCE()) &&
            verifier.EndTable();
   }
   SPWT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -448,9 +434,6 @@ struct SPWBuilder {
   void add_F107_ADJ_LAST81(float F107_ADJ_LAST81) {
     fbb_.AddElement<float>(SPW::VT_F107_ADJ_LAST81, F107_ADJ_LAST81, 0.0f);
   }
-  void add_PROVENANCE(::flatbuffers::Offset<PVN> PROVENANCE) {
-    fbb_.AddOffset(SPW::VT_PROVENANCE, PROVENANCE);
-  }
   explicit SPWBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -494,10 +477,8 @@ inline ::flatbuffers::Offset<SPW> CreateSPW(
     float F107_OBS_CENTER81 = 0.0f,
     float F107_OBS_LAST81 = 0.0f,
     float F107_ADJ_CENTER81 = 0.0f,
-    float F107_ADJ_LAST81 = 0.0f,
-    ::flatbuffers::Offset<PVN> PROVENANCE = 0) {
+    float F107_ADJ_LAST81 = 0.0f) {
   SPWBuilder builder_(_fbb);
-  builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_F107_ADJ_LAST81(F107_ADJ_LAST81);
   builder_.add_F107_ADJ_CENTER81(F107_ADJ_CENTER81);
   builder_.add_F107_OBS_LAST81(F107_OBS_LAST81);
@@ -569,8 +550,7 @@ inline ::flatbuffers::Offset<SPW> CreateSPWDirect(
     float F107_OBS_CENTER81 = 0.0f,
     float F107_OBS_LAST81 = 0.0f,
     float F107_ADJ_CENTER81 = 0.0f,
-    float F107_ADJ_LAST81 = 0.0f,
-    ::flatbuffers::Offset<PVN> PROVENANCE = 0) {
+    float F107_ADJ_LAST81 = 0.0f) {
   auto DATE__ = DATE ? _fbb.CreateString(DATE) : 0;
   return CreateSPW(
       _fbb,
@@ -604,8 +584,7 @@ inline ::flatbuffers::Offset<SPW> CreateSPWDirect(
       F107_OBS_CENTER81,
       F107_OBS_LAST81,
       F107_ADJ_CENTER81,
-      F107_ADJ_LAST81,
-      PROVENANCE);
+      F107_ADJ_LAST81);
 }
 
 ::flatbuffers::Offset<SPW> CreateSPW(::flatbuffers::FlatBufferBuilder &_fbb, const SPWT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -684,77 +663,6 @@ inline ::flatbuffers::Offset<SPWCOLLECTION> CreateSPWCOLLECTIONDirect(
 
 ::flatbuffers::Offset<SPWCOLLECTION> CreateSPWCOLLECTION(::flatbuffers::FlatBufferBuilder &_fbb, const SPWCOLLECTIONT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
-inline SPWT::SPWT(const SPWT &o)
-      : DATE(o.DATE),
-        BSRN(o.BSRN),
-        ND(o.ND),
-        KP1(o.KP1),
-        KP2(o.KP2),
-        KP3(o.KP3),
-        KP4(o.KP4),
-        KP5(o.KP5),
-        KP6(o.KP6),
-        KP7(o.KP7),
-        KP8(o.KP8),
-        KP_SUM(o.KP_SUM),
-        AP1(o.AP1),
-        AP2(o.AP2),
-        AP3(o.AP3),
-        AP4(o.AP4),
-        AP5(o.AP5),
-        AP6(o.AP6),
-        AP7(o.AP7),
-        AP8(o.AP8),
-        AP_AVG(o.AP_AVG),
-        CP(o.CP),
-        C9(o.C9),
-        ISN(o.ISN),
-        F107_OBS(o.F107_OBS),
-        F107_ADJ(o.F107_ADJ),
-        F107_DATA_TYPE(o.F107_DATA_TYPE),
-        F107_OBS_CENTER81(o.F107_OBS_CENTER81),
-        F107_OBS_LAST81(o.F107_OBS_LAST81),
-        F107_ADJ_CENTER81(o.F107_ADJ_CENTER81),
-        F107_ADJ_LAST81(o.F107_ADJ_LAST81),
-        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr) {
-}
-
-inline SPWT &SPWT::operator=(SPWT o) FLATBUFFERS_NOEXCEPT {
-  std::swap(DATE, o.DATE);
-  std::swap(BSRN, o.BSRN);
-  std::swap(ND, o.ND);
-  std::swap(KP1, o.KP1);
-  std::swap(KP2, o.KP2);
-  std::swap(KP3, o.KP3);
-  std::swap(KP4, o.KP4);
-  std::swap(KP5, o.KP5);
-  std::swap(KP6, o.KP6);
-  std::swap(KP7, o.KP7);
-  std::swap(KP8, o.KP8);
-  std::swap(KP_SUM, o.KP_SUM);
-  std::swap(AP1, o.AP1);
-  std::swap(AP2, o.AP2);
-  std::swap(AP3, o.AP3);
-  std::swap(AP4, o.AP4);
-  std::swap(AP5, o.AP5);
-  std::swap(AP6, o.AP6);
-  std::swap(AP7, o.AP7);
-  std::swap(AP8, o.AP8);
-  std::swap(AP_AVG, o.AP_AVG);
-  std::swap(CP, o.CP);
-  std::swap(C9, o.C9);
-  std::swap(ISN, o.ISN);
-  std::swap(F107_OBS, o.F107_OBS);
-  std::swap(F107_ADJ, o.F107_ADJ);
-  std::swap(F107_DATA_TYPE, o.F107_DATA_TYPE);
-  std::swap(F107_OBS_CENTER81, o.F107_OBS_CENTER81);
-  std::swap(F107_OBS_LAST81, o.F107_OBS_LAST81);
-  std::swap(F107_ADJ_CENTER81, o.F107_ADJ_CENTER81);
-  std::swap(F107_ADJ_LAST81, o.F107_ADJ_LAST81);
-  std::swap(PROVENANCE, o.PROVENANCE);
-  return *this;
-}
-
 inline SPWT *SPW::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<SPWT>();
   UnPackTo(_o.get(), _resolver);
@@ -795,7 +703,6 @@ inline void SPW::UnPackTo(SPWT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = F107_OBS_LAST81(); _o->F107_OBS_LAST81 = _e; }
   { auto _e = F107_ADJ_CENTER81(); _o->F107_ADJ_CENTER81 = _e; }
   { auto _e = F107_ADJ_LAST81(); _o->F107_ADJ_LAST81 = _e; }
-  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SPW> CreateSPW(::flatbuffers::FlatBufferBuilder &_fbb, const SPWT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -837,7 +744,6 @@ inline ::flatbuffers::Offset<SPW> SPW::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _F107_OBS_LAST81 = _o->F107_OBS_LAST81;
   auto _F107_ADJ_CENTER81 = _o->F107_ADJ_CENTER81;
   auto _F107_ADJ_LAST81 = _o->F107_ADJ_LAST81;
-  auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
   return CreateSPW(
       _fbb,
       _DATE,
@@ -870,8 +776,7 @@ inline ::flatbuffers::Offset<SPW> SPW::Pack(::flatbuffers::FlatBufferBuilder &_f
       _F107_OBS_CENTER81,
       _F107_OBS_LAST81,
       _F107_ADJ_CENTER81,
-      _F107_ADJ_LAST81,
-      _PROVENANCE);
+      _F107_ADJ_LAST81);
 }
 
 inline SPWCOLLECTIONT::SPWCOLLECTIONT(const SPWCOLLECTIONT &o) {

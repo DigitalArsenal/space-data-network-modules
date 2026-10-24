@@ -19,62 +19,12 @@ struct STR;
 struct STRBuilder;
 struct STRT;
 
-/// How a star's distance was estimated.
-/// Append new values only; never reorder or reuse existing values.
-enum class strDistanceEstimator : uint8_t {
-  /// No distance; DISTANCE_PC, DISTANCE_LO_PC and DISTANCE_HI_PC are NaN.
-  UNSPECIFIED = 0,
-  /// Geometric distance: the median of the posterior from the parallax under a
-  /// direction-dependent prior (Bailer-Jones et al. 2021, AJ 161, 147).
-  BAILER_JONES_2021_GEO = 1,
-  /// Photogeometric distance: the geometric posterior further constrained by the
-  /// star's color and magnitude (Bailer-Jones et al. 2021, AJ 161, 147).
-  BAILER_JONES_2021_PHOTOGEO = 2,
-  /// Mode of the posterior from the parallax under the exponentially decreasing
-  /// space density prior with its length scale (Bailer-Jones 2015, PASP 127, 994).
-  EDSD_POSTERIOR = 3,
-  /// Inverse parallax, DISTANCE_PC = 1000 / PARALLAX; meaningful only when the
-  /// fractional parallax uncertainty is small.
-  PARALLAX_INVERSE = 4,
-  MIN = UNSPECIFIED,
-  MAX = PARALLAX_INVERSE
-};
-
-inline const strDistanceEstimator (&EnumValuesstrDistanceEstimator())[5] {
-  static const strDistanceEstimator values[] = {
-    strDistanceEstimator::UNSPECIFIED,
-    strDistanceEstimator::BAILER_JONES_2021_GEO,
-    strDistanceEstimator::BAILER_JONES_2021_PHOTOGEO,
-    strDistanceEstimator::EDSD_POSTERIOR,
-    strDistanceEstimator::PARALLAX_INVERSE
-  };
-  return values;
-}
-
-inline const char * const *EnumNamesstrDistanceEstimator() {
-  static const char * const names[6] = {
-    "UNSPECIFIED",
-    "BAILER_JONES_2021_GEO",
-    "BAILER_JONES_2021_PHOTOGEO",
-    "EDSD_POSTERIOR",
-    "PARALLAX_INVERSE",
-    nullptr
-  };
-  return names;
-}
-
-inline const char *EnumNamestrDistanceEstimator(strDistanceEstimator e) {
-  if (::flatbuffers::IsOutRange(e, strDistanceEstimator::UNSPECIFIED, strDistanceEstimator::PARALLAX_INVERSE)) return "";
-  const size_t index = static_cast<size_t>(e);
-  return EnumNamesstrDistanceEstimator()[index];
-}
-
 struct STRT : public ::flatbuffers::NativeTable {
   typedef STR TableType;
   std::string ID{};
   int64_t CS_ID = 0;
   uint32_t GNC_CAT_ID = 0;
-  uint64_t GAIA_DR3_SOURCE_ID = 0;
+  int64_t GAIADR3_CAT_ID = 0;
   uint32_t HIP_CAT_ID = 0;
   std::string CAT_VERSION{};
   std::string ASTROMETRY_ORIGIN{};
@@ -130,11 +80,6 @@ struct STRT : public ::flatbuffers::NativeTable {
   double VARIABILITY_AMPLITUDE = std::numeric_limits<double>::quiet_NaN();
   double VARIABILITY_EPOCH = std::numeric_limits<double>::quiet_NaN();
   std::vector<std::unique_ptr<PHBMeasurementT>> PHOTOMETRY{};
-  double DISTANCE_PC = std::numeric_limits<double>::quiet_NaN();
-  double DISTANCE_LO_PC = std::numeric_limits<double>::quiet_NaN();
-  double DISTANCE_HI_PC = std::numeric_limits<double>::quiet_NaN();
-  strDistanceEstimator DISTANCE_METHOD = strDistanceEstimator::UNSPECIFIED;
-  std::string DISTANCE_REF{};
   STRT() = default;
   STRT(const STRT &o);
   STRT(STRT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -150,7 +95,7 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ID = 4,
     VT_CS_ID = 6,
     VT_GNC_CAT_ID = 8,
-    VT_GAIA_DR3_SOURCE_ID = 10,
+    VT_GAIADR3_CAT_ID = 10,
     VT_HIP_CAT_ID = 12,
     VT_CAT_VERSION = 14,
     VT_ASTROMETRY_ORIGIN = 16,
@@ -205,12 +150,7 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_VARIABILITY_PERIOD = 114,
     VT_VARIABILITY_AMPLITUDE = 116,
     VT_VARIABILITY_EPOCH = 118,
-    VT_PHOTOMETRY = 120,
-    VT_DISTANCE_PC = 122,
-    VT_DISTANCE_LO_PC = 124,
-    VT_DISTANCE_HI_PC = 126,
-    VT_DISTANCE_METHOD = 128,
-    VT_DISTANCE_REF = 130
+    VT_PHOTOMETRY = 120
   };
   /// Unique internal identifier
   const ::flatbuffers::String *ID() const {
@@ -224,10 +164,9 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint32_t GNC_CAT_ID() const {
     return GetField<uint32_t>(VT_GNC_CAT_ID, 0);
   }
-  /// Source identifier (source_id) in the third data release of the all-sky space astrometry
-  /// survey; 0 when the star has no match in that release
-  uint64_t GAIA_DR3_SOURCE_ID() const {
-    return GetField<uint64_t>(VT_GAIA_DR3_SOURCE_ID, 0);
+  /// Source identifier in the third data release of the all-sky space astrometry survey
+  int64_t GAIADR3_CAT_ID() const {
+    return GetField<int64_t>(VT_GAIADR3_CAT_ID, 0);
   }
   /// Identifier in the first space astrometry mission's main catalog
   uint32_t HIP_CAT_ID() const {
@@ -405,7 +344,7 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *SPECTRAL_TYPE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_SPECTRAL_TYPE);
   }
-  /// Proper name as recognized by the astronomical naming authority
+  /// Proper name as recognised by the astronomical naming authority
   const ::flatbuffers::String *PROPER_NAME() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PROPER_NAME);
   }
@@ -445,35 +384,9 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double VARIABILITY_EPOCH() const {
     return GetField<double>(VT_VARIABILITY_EPOCH, std::numeric_limits<double>::quiet_NaN());
   }
-  /// Brightness in every band the star was measured or modeled in
+  /// Brightness in every band the star was measured or modelled in
   const ::flatbuffers::Vector<::flatbuffers::Offset<PHBMeasurement>> *PHOTOMETRY() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PHBMeasurement>> *>(VT_PHOTOMETRY);
-  }
-  /// Distance from the Sun (parsecs): the posterior median, or the mode for
-  /// EDSD_POSTERIOR, as DISTANCE_METHOD states
-  double DISTANCE_PC() const {
-    return GetField<double>(VT_DISTANCE_PC, std::numeric_limits<double>::quiet_NaN());
-  }
-  /// Lower bound of the distance (parsecs): the 16th percentile of the posterior
-  /// for BAILER_JONES_2021_GEO and BAILER_JONES_2021_PHOTOGEO, the lower edge of
-  /// the 68% highest-density interval for EDSD_POSTERIOR, and
-  /// 1000 / (PARALLAX + PARALLAX_UNC) for PARALLAX_INVERSE
-  double DISTANCE_LO_PC() const {
-    return GetField<double>(VT_DISTANCE_LO_PC, std::numeric_limits<double>::quiet_NaN());
-  }
-  /// Upper bound of the distance (parsecs): the 84th percentile, the upper edge of
-  /// the 68% highest-density interval, or 1000 / (PARALLAX - PARALLAX_UNC), as for
-  /// DISTANCE_LO_PC; NaN when unbounded
-  double DISTANCE_HI_PC() const {
-    return GetField<double>(VT_DISTANCE_HI_PC, std::numeric_limits<double>::quiet_NaN());
-  }
-  /// Estimator that produced DISTANCE_PC, DISTANCE_LO_PC and DISTANCE_HI_PC
-  strDistanceEstimator DISTANCE_METHOD() const {
-    return static_cast<strDistanceEstimator>(GetField<uint8_t>(VT_DISTANCE_METHOD, 0));
-  }
-  /// Bibliographic code of the distance catalog or method, e.g. "2021AJ....161..147B"
-  const ::flatbuffers::String *DISTANCE_REF() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_DISTANCE_REF);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -482,7 +395,7 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(ID()) &&
            VerifyField<int64_t>(verifier, VT_CS_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_GNC_CAT_ID, 4) &&
-           VerifyField<uint64_t>(verifier, VT_GAIA_DR3_SOURCE_ID, 8) &&
+           VerifyField<int64_t>(verifier, VT_GAIADR3_CAT_ID, 8) &&
            VerifyField<uint32_t>(verifier, VT_HIP_CAT_ID, 4) &&
            VerifyOffset(verifier, VT_CAT_VERSION) &&
            verifier.VerifyString(CAT_VERSION()) &&
@@ -549,12 +462,6 @@ struct STR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_PHOTOMETRY) &&
            verifier.VerifyVector(PHOTOMETRY()) &&
            verifier.VerifyVectorOfTables(PHOTOMETRY()) &&
-           VerifyField<double>(verifier, VT_DISTANCE_PC, 8) &&
-           VerifyField<double>(verifier, VT_DISTANCE_LO_PC, 8) &&
-           VerifyField<double>(verifier, VT_DISTANCE_HI_PC, 8) &&
-           VerifyField<uint8_t>(verifier, VT_DISTANCE_METHOD, 1) &&
-           VerifyOffset(verifier, VT_DISTANCE_REF) &&
-           verifier.VerifyString(DISTANCE_REF()) &&
            verifier.EndTable();
   }
   STRT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -575,8 +482,8 @@ struct STRBuilder {
   void add_GNC_CAT_ID(uint32_t GNC_CAT_ID) {
     fbb_.AddElement<uint32_t>(STR::VT_GNC_CAT_ID, GNC_CAT_ID, 0);
   }
-  void add_GAIA_DR3_SOURCE_ID(uint64_t GAIA_DR3_SOURCE_ID) {
-    fbb_.AddElement<uint64_t>(STR::VT_GAIA_DR3_SOURCE_ID, GAIA_DR3_SOURCE_ID, 0);
+  void add_GAIADR3_CAT_ID(int64_t GAIADR3_CAT_ID) {
+    fbb_.AddElement<int64_t>(STR::VT_GAIADR3_CAT_ID, GAIADR3_CAT_ID, 0);
   }
   void add_HIP_CAT_ID(uint32_t HIP_CAT_ID) {
     fbb_.AddElement<uint32_t>(STR::VT_HIP_CAT_ID, HIP_CAT_ID, 0);
@@ -743,21 +650,6 @@ struct STRBuilder {
   void add_PHOTOMETRY(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PHBMeasurement>>> PHOTOMETRY) {
     fbb_.AddOffset(STR::VT_PHOTOMETRY, PHOTOMETRY);
   }
-  void add_DISTANCE_PC(double DISTANCE_PC) {
-    fbb_.AddElement<double>(STR::VT_DISTANCE_PC, DISTANCE_PC, std::numeric_limits<double>::quiet_NaN());
-  }
-  void add_DISTANCE_LO_PC(double DISTANCE_LO_PC) {
-    fbb_.AddElement<double>(STR::VT_DISTANCE_LO_PC, DISTANCE_LO_PC, std::numeric_limits<double>::quiet_NaN());
-  }
-  void add_DISTANCE_HI_PC(double DISTANCE_HI_PC) {
-    fbb_.AddElement<double>(STR::VT_DISTANCE_HI_PC, DISTANCE_HI_PC, std::numeric_limits<double>::quiet_NaN());
-  }
-  void add_DISTANCE_METHOD(strDistanceEstimator DISTANCE_METHOD) {
-    fbb_.AddElement<uint8_t>(STR::VT_DISTANCE_METHOD, static_cast<uint8_t>(DISTANCE_METHOD), 0);
-  }
-  void add_DISTANCE_REF(::flatbuffers::Offset<::flatbuffers::String> DISTANCE_REF) {
-    fbb_.AddOffset(STR::VT_DISTANCE_REF, DISTANCE_REF);
-  }
   explicit STRBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -774,7 +666,7 @@ inline ::flatbuffers::Offset<STR> CreateSTR(
     ::flatbuffers::Offset<::flatbuffers::String> ID = 0,
     int64_t CS_ID = 0,
     uint32_t GNC_CAT_ID = 0,
-    uint64_t GAIA_DR3_SOURCE_ID = 0,
+    int64_t GAIADR3_CAT_ID = 0,
     uint32_t HIP_CAT_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CAT_VERSION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ASTROMETRY_ORIGIN = 0,
@@ -829,16 +721,8 @@ inline ::flatbuffers::Offset<STR> CreateSTR(
     double VARIABILITY_PERIOD = std::numeric_limits<double>::quiet_NaN(),
     double VARIABILITY_AMPLITUDE = std::numeric_limits<double>::quiet_NaN(),
     double VARIABILITY_EPOCH = std::numeric_limits<double>::quiet_NaN(),
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PHBMeasurement>>> PHOTOMETRY = 0,
-    double DISTANCE_PC = std::numeric_limits<double>::quiet_NaN(),
-    double DISTANCE_LO_PC = std::numeric_limits<double>::quiet_NaN(),
-    double DISTANCE_HI_PC = std::numeric_limits<double>::quiet_NaN(),
-    strDistanceEstimator DISTANCE_METHOD = strDistanceEstimator::UNSPECIFIED,
-    ::flatbuffers::Offset<::flatbuffers::String> DISTANCE_REF = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PHBMeasurement>>> PHOTOMETRY = 0) {
   STRBuilder builder_(_fbb);
-  builder_.add_DISTANCE_HI_PC(DISTANCE_HI_PC);
-  builder_.add_DISTANCE_LO_PC(DISTANCE_LO_PC);
-  builder_.add_DISTANCE_PC(DISTANCE_PC);
   builder_.add_VARIABILITY_EPOCH(VARIABILITY_EPOCH);
   builder_.add_VARIABILITY_AMPLITUDE(VARIABILITY_AMPLITUDE);
   builder_.add_VARIABILITY_PERIOD(VARIABILITY_PERIOD);
@@ -875,9 +759,8 @@ inline ::flatbuffers::Offset<STR> CreateSTR(
   builder_.add_RA_UNC(RA_UNC);
   builder_.add_RA(RA);
   builder_.add_STAR_EPOCH(STAR_EPOCH);
-  builder_.add_GAIA_DR3_SOURCE_ID(GAIA_DR3_SOURCE_ID);
+  builder_.add_GAIADR3_CAT_ID(GAIADR3_CAT_ID);
   builder_.add_CS_ID(CS_ID);
-  builder_.add_DISTANCE_REF(DISTANCE_REF);
   builder_.add_PHOTOMETRY(PHOTOMETRY);
   builder_.add_VARIABILITY_CLASS(VARIABILITY_CLASS);
   builder_.add_DESIGNATIONS(DESIGNATIONS);
@@ -893,7 +776,6 @@ inline ::flatbuffers::Offset<STR> CreateSTR(
   builder_.add_HIP_CAT_ID(HIP_CAT_ID);
   builder_.add_GNC_CAT_ID(GNC_CAT_ID);
   builder_.add_ID(ID);
-  builder_.add_DISTANCE_METHOD(DISTANCE_METHOD);
   builder_.add_SHIFT_FLAG(SHIFT_FLAG);
   builder_.add_NEIGHBOR_FLAG(NEIGHBOR_FLAG);
   builder_.add_MULT_FLAG(MULT_FLAG);
@@ -913,7 +795,7 @@ inline ::flatbuffers::Offset<STR> CreateSTRDirect(
     const char *ID = nullptr,
     int64_t CS_ID = 0,
     uint32_t GNC_CAT_ID = 0,
-    uint64_t GAIA_DR3_SOURCE_ID = 0,
+    int64_t GAIADR3_CAT_ID = 0,
     uint32_t HIP_CAT_ID = 0,
     const char *CAT_VERSION = nullptr,
     const char *ASTROMETRY_ORIGIN = nullptr,
@@ -968,12 +850,7 @@ inline ::flatbuffers::Offset<STR> CreateSTRDirect(
     double VARIABILITY_PERIOD = std::numeric_limits<double>::quiet_NaN(),
     double VARIABILITY_AMPLITUDE = std::numeric_limits<double>::quiet_NaN(),
     double VARIABILITY_EPOCH = std::numeric_limits<double>::quiet_NaN(),
-    const std::vector<::flatbuffers::Offset<PHBMeasurement>> *PHOTOMETRY = nullptr,
-    double DISTANCE_PC = std::numeric_limits<double>::quiet_NaN(),
-    double DISTANCE_LO_PC = std::numeric_limits<double>::quiet_NaN(),
-    double DISTANCE_HI_PC = std::numeric_limits<double>::quiet_NaN(),
-    strDistanceEstimator DISTANCE_METHOD = strDistanceEstimator::UNSPECIFIED,
-    const char *DISTANCE_REF = nullptr) {
+    const std::vector<::flatbuffers::Offset<PHBMeasurement>> *PHOTOMETRY = nullptr) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto CAT_VERSION__ = CAT_VERSION ? _fbb.CreateString(CAT_VERSION) : 0;
   auto ASTROMETRY_ORIGIN__ = ASTROMETRY_ORIGIN ? _fbb.CreateString(ASTROMETRY_ORIGIN) : 0;
@@ -984,13 +861,12 @@ inline ::flatbuffers::Offset<STR> CreateSTRDirect(
   auto DESIGNATIONS__ = DESIGNATIONS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*DESIGNATIONS) : 0;
   auto VARIABILITY_CLASS__ = VARIABILITY_CLASS ? _fbb.CreateString(VARIABILITY_CLASS) : 0;
   auto PHOTOMETRY__ = PHOTOMETRY ? _fbb.CreateVector<::flatbuffers::Offset<PHBMeasurement>>(*PHOTOMETRY) : 0;
-  auto DISTANCE_REF__ = DISTANCE_REF ? _fbb.CreateString(DISTANCE_REF) : 0;
   return CreateSTR(
       _fbb,
       ID__,
       CS_ID,
       GNC_CAT_ID,
-      GAIA_DR3_SOURCE_ID,
+      GAIADR3_CAT_ID,
       HIP_CAT_ID,
       CAT_VERSION__,
       ASTROMETRY_ORIGIN__,
@@ -1045,12 +921,7 @@ inline ::flatbuffers::Offset<STR> CreateSTRDirect(
       VARIABILITY_PERIOD,
       VARIABILITY_AMPLITUDE,
       VARIABILITY_EPOCH,
-      PHOTOMETRY__,
-      DISTANCE_PC,
-      DISTANCE_LO_PC,
-      DISTANCE_HI_PC,
-      DISTANCE_METHOD,
-      DISTANCE_REF__);
+      PHOTOMETRY__);
 }
 
 ::flatbuffers::Offset<STR> CreateSTR(::flatbuffers::FlatBufferBuilder &_fbb, const STRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1059,7 +930,7 @@ inline STRT::STRT(const STRT &o)
       : ID(o.ID),
         CS_ID(o.CS_ID),
         GNC_CAT_ID(o.GNC_CAT_ID),
-        GAIA_DR3_SOURCE_ID(o.GAIA_DR3_SOURCE_ID),
+        GAIADR3_CAT_ID(o.GAIADR3_CAT_ID),
         HIP_CAT_ID(o.HIP_CAT_ID),
         CAT_VERSION(o.CAT_VERSION),
         ASTROMETRY_ORIGIN(o.ASTROMETRY_ORIGIN),
@@ -1113,12 +984,7 @@ inline STRT::STRT(const STRT &o)
         VARIABILITY_CLASS(o.VARIABILITY_CLASS),
         VARIABILITY_PERIOD(o.VARIABILITY_PERIOD),
         VARIABILITY_AMPLITUDE(o.VARIABILITY_AMPLITUDE),
-        VARIABILITY_EPOCH(o.VARIABILITY_EPOCH),
-        DISTANCE_PC(o.DISTANCE_PC),
-        DISTANCE_LO_PC(o.DISTANCE_LO_PC),
-        DISTANCE_HI_PC(o.DISTANCE_HI_PC),
-        DISTANCE_METHOD(o.DISTANCE_METHOD),
-        DISTANCE_REF(o.DISTANCE_REF) {
+        VARIABILITY_EPOCH(o.VARIABILITY_EPOCH) {
   PHOTOMETRY.reserve(o.PHOTOMETRY.size());
   for (const auto &PHOTOMETRY_ : o.PHOTOMETRY) { PHOTOMETRY.emplace_back((PHOTOMETRY_) ? new PHBMeasurementT(*PHOTOMETRY_) : nullptr); }
 }
@@ -1127,7 +993,7 @@ inline STRT &STRT::operator=(STRT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ID, o.ID);
   std::swap(CS_ID, o.CS_ID);
   std::swap(GNC_CAT_ID, o.GNC_CAT_ID);
-  std::swap(GAIA_DR3_SOURCE_ID, o.GAIA_DR3_SOURCE_ID);
+  std::swap(GAIADR3_CAT_ID, o.GAIADR3_CAT_ID);
   std::swap(HIP_CAT_ID, o.HIP_CAT_ID);
   std::swap(CAT_VERSION, o.CAT_VERSION);
   std::swap(ASTROMETRY_ORIGIN, o.ASTROMETRY_ORIGIN);
@@ -1183,11 +1049,6 @@ inline STRT &STRT::operator=(STRT o) FLATBUFFERS_NOEXCEPT {
   std::swap(VARIABILITY_AMPLITUDE, o.VARIABILITY_AMPLITUDE);
   std::swap(VARIABILITY_EPOCH, o.VARIABILITY_EPOCH);
   std::swap(PHOTOMETRY, o.PHOTOMETRY);
-  std::swap(DISTANCE_PC, o.DISTANCE_PC);
-  std::swap(DISTANCE_LO_PC, o.DISTANCE_LO_PC);
-  std::swap(DISTANCE_HI_PC, o.DISTANCE_HI_PC);
-  std::swap(DISTANCE_METHOD, o.DISTANCE_METHOD);
-  std::swap(DISTANCE_REF, o.DISTANCE_REF);
   return *this;
 }
 
@@ -1203,7 +1064,7 @@ inline void STR::UnPackTo(STRT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = ID(); if (_e) _o->ID = _e->str(); }
   { auto _e = CS_ID(); _o->CS_ID = _e; }
   { auto _e = GNC_CAT_ID(); _o->GNC_CAT_ID = _e; }
-  { auto _e = GAIA_DR3_SOURCE_ID(); _o->GAIA_DR3_SOURCE_ID = _e; }
+  { auto _e = GAIADR3_CAT_ID(); _o->GAIADR3_CAT_ID = _e; }
   { auto _e = HIP_CAT_ID(); _o->HIP_CAT_ID = _e; }
   { auto _e = CAT_VERSION(); if (_e) _o->CAT_VERSION = _e->str(); }
   { auto _e = ASTROMETRY_ORIGIN(); if (_e) _o->ASTROMETRY_ORIGIN = _e->str(); }
@@ -1259,11 +1120,6 @@ inline void STR::UnPackTo(STRT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = VARIABILITY_AMPLITUDE(); _o->VARIABILITY_AMPLITUDE = _e; }
   { auto _e = VARIABILITY_EPOCH(); _o->VARIABILITY_EPOCH = _e; }
   { auto _e = PHOTOMETRY(); if (_e) { _o->PHOTOMETRY.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->PHOTOMETRY[_i]) { _e->Get(_i)->UnPackTo(_o->PHOTOMETRY[_i].get(), _resolver); } else { _o->PHOTOMETRY[_i] = std::unique_ptr<PHBMeasurementT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->PHOTOMETRY.resize(0); } }
-  { auto _e = DISTANCE_PC(); _o->DISTANCE_PC = _e; }
-  { auto _e = DISTANCE_LO_PC(); _o->DISTANCE_LO_PC = _e; }
-  { auto _e = DISTANCE_HI_PC(); _o->DISTANCE_HI_PC = _e; }
-  { auto _e = DISTANCE_METHOD(); _o->DISTANCE_METHOD = _e; }
-  { auto _e = DISTANCE_REF(); if (_e) _o->DISTANCE_REF = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<STR> CreateSTR(::flatbuffers::FlatBufferBuilder &_fbb, const STRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1277,7 +1133,7 @@ inline ::flatbuffers::Offset<STR> STR::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _ID = _o->ID.empty() ? 0 : _fbb.CreateString(_o->ID);
   auto _CS_ID = _o->CS_ID;
   auto _GNC_CAT_ID = _o->GNC_CAT_ID;
-  auto _GAIA_DR3_SOURCE_ID = _o->GAIA_DR3_SOURCE_ID;
+  auto _GAIADR3_CAT_ID = _o->GAIADR3_CAT_ID;
   auto _HIP_CAT_ID = _o->HIP_CAT_ID;
   auto _CAT_VERSION = _o->CAT_VERSION.empty() ? 0 : _fbb.CreateString(_o->CAT_VERSION);
   auto _ASTROMETRY_ORIGIN = _o->ASTROMETRY_ORIGIN.empty() ? 0 : _fbb.CreateString(_o->ASTROMETRY_ORIGIN);
@@ -1333,17 +1189,12 @@ inline ::flatbuffers::Offset<STR> STR::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _VARIABILITY_AMPLITUDE = _o->VARIABILITY_AMPLITUDE;
   auto _VARIABILITY_EPOCH = _o->VARIABILITY_EPOCH;
   auto _PHOTOMETRY = _o->PHOTOMETRY.size() ? _fbb.CreateVector<::flatbuffers::Offset<PHBMeasurement>> (_o->PHOTOMETRY.size(), [](size_t i, _VectorArgs *__va) { return CreatePHBMeasurement(*__va->__fbb, __va->__o->PHOTOMETRY[i].get(), __va->__rehasher); }, &_va ) : 0;
-  auto _DISTANCE_PC = _o->DISTANCE_PC;
-  auto _DISTANCE_LO_PC = _o->DISTANCE_LO_PC;
-  auto _DISTANCE_HI_PC = _o->DISTANCE_HI_PC;
-  auto _DISTANCE_METHOD = _o->DISTANCE_METHOD;
-  auto _DISTANCE_REF = _o->DISTANCE_REF.empty() ? 0 : _fbb.CreateString(_o->DISTANCE_REF);
   return CreateSTR(
       _fbb,
       _ID,
       _CS_ID,
       _GNC_CAT_ID,
-      _GAIA_DR3_SOURCE_ID,
+      _GAIADR3_CAT_ID,
       _HIP_CAT_ID,
       _CAT_VERSION,
       _ASTROMETRY_ORIGIN,
@@ -1398,12 +1249,7 @@ inline ::flatbuffers::Offset<STR> STR::Pack(::flatbuffers::FlatBufferBuilder &_f
       _VARIABILITY_PERIOD,
       _VARIABILITY_AMPLITUDE,
       _VARIABILITY_EPOCH,
-      _PHOTOMETRY,
-      _DISTANCE_PC,
-      _DISTANCE_LO_PC,
-      _DISTANCE_HI_PC,
-      _DISTANCE_METHOD,
-      _DISTANCE_REF);
+      _PHOTOMETRY);
 }
 
 inline const STR *GetSTR(const void *buf) {

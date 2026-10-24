@@ -2,9 +2,9 @@
 
 FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
 
-The wheel vendors generated output from ratified SDS **1.264.0**, Git commit
-`7c61b15299b0c06def4006fff8748dff01a43dc1` (package metadata
-`1.264.0+1792871374963`). It does not require the stale PyPI SDS distribution.
+The wheel vendors generated output from ratified SDS **1.265.0**, Git commit
+`1b135309866cfa0ecf08248143c8ffbff5564b33` (package metadata
+`1.265.0+1792874245672`). It does not require the stale PyPI SDS distribution.
 The source is read using `git archive <commit> lib/py`; uncommitted generator
 changes in the canonical checkout cannot alter the package.
 
@@ -32,7 +32,7 @@ PYTHONPATH=packages/python-astro/src python3 -m unittest discover \
 Run regeneration after `prepare_artifacts.py`, because the binding lock also
 records the distributed WASM hashes, module-declared SDS dependencies, and
 available artifact build provenance. The SDS version selected for Python
-bindings is the coordinator's 1.264.0 pin; older module-declared dependencies
+bindings is the coordinator's 1.265.0 pin; older module-declared dependencies
 are recorded transparently rather than rewritten.
 
 `--sds-only` refreshes `sds/` and the lock's SDS, artifact and license

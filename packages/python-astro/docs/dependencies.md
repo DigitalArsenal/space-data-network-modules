@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM specification](../../../propagator
 
 The coordinator resolved the first-pass dependency blockers: this package embeds
 **WasmEdge 0.16.4 through its C API using ctypes**, and vendors immutable generated
-**SDS 1.264.0** output. It depends on neither the empty PyPI `wasmedge` package nor
+**SDS 1.265.0** output. It depends on neither the empty PyPI `wasmedge` package nor
 the stale PyPI SDS wheels. `dependency-audit.json` records that historical audit.
 
 ## Native runtime
@@ -40,9 +40,9 @@ execution remain untested. macOS arm64 with Python 3.14 is verified.
 ## Generated bindings
 
 See [sds-generation.md](sds-generation.md). The package uses immutable Git
-`7c61b15299b0c06def4006fff8748dff01a43dc1:lib/py`, even if another lane is
+`1b135309866cfa0ecf08248143c8ffbff5564b33:lib/py`, even if another lane is
 regenerating files in the canonical checkout. Full source manifest:
-`b9382d664b0e5f28a08489691dbc26b594a2d09e5efa8b29e03c01d354a2765d`.
+`abe67014ee43a291ad785fb9a229b0ebf3747e96d0afa17fa54ca821dff1ed14`.
 All 7,413 source files are hashed; required families and their import closure
 are vendored under a private namespace. Generated imports are rewritten only by
 `scripts/vendor_sds.py`. Module `.fbs` schemas are compiled with pinned
@@ -64,7 +64,7 @@ was observed. Unknown imports fail vendoring instead of being skipped.
 - Current SDK and legacy SGP4 schemas both define incompatible `StateVector`
   types. Legacy SGP4 bindings use `.invoke.legacy.orbpro`, never an alias that
   overwrites `.invoke.orbpro`.
-- Module-declared SDS pins are mixed, not uniformly 1.264.0. Both those pins and
+- Module-declared SDS pins are mixed, not uniformly 1.265.0. Both those pins and
   the coordinator-selected immutable Python binding revision are recorded in
   the binding lock. No module manifest or SDS schema is changed by this lane.
 

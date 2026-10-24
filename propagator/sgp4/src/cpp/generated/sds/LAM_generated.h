@@ -778,10 +778,6 @@ struct lamInsertionOrbitT : public ::flatbuffers::NativeTable {
   double ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG = 0.0;
   double PERIAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0;
   double APOAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0;
-  double SEMI_MAJOR_AXIS_UNCERTAINTY_M = 0.0;
-  bool HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M = false;
-  double INCLINATION_UNCERTAINTY_DEG = 0.0;
-  bool HAS_INCLINATION_UNCERTAINTY_DEG = false;
 };
 
 /// Orbit at insertion, measured or projected.
@@ -804,11 +800,7 @@ struct lamInsertionOrbit FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_RAAN_UNCERTAINTY_DEG = 26,
     VT_ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG = 28,
     VT_PERIAPSIS_ALTITUDE_UNCERTAINTY_M = 30,
-    VT_APOAPSIS_ALTITUDE_UNCERTAINTY_M = 32,
-    VT_SEMI_MAJOR_AXIS_UNCERTAINTY_M = 34,
-    VT_HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M = 36,
-    VT_INCLINATION_UNCERTAINTY_DEG = 38,
-    VT_HAS_INCLINATION_UNCERTAINTY_DEG = 40
+    VT_APOAPSIS_ALTITUDE_UNCERTAINTY_M = 32
   };
   /// Insertion epoch in ISO 8601 UTC format.
   const ::flatbuffers::String *EPOCH() const {
@@ -870,26 +862,6 @@ struct lamInsertionOrbit FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   double APOAPSIS_ALTITUDE_UNCERTAINTY_M() const {
     return GetField<double>(VT_APOAPSIS_ALTITUDE_UNCERTAINTY_M, 0.0);
   }
-  /// One-sigma uncertainty of SEMI_MAJOR_AXIS_M in meters. Meaningful only when
-  /// HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M.
-  double SEMI_MAJOR_AXIS_UNCERTAINTY_M() const {
-    return GetField<double>(VT_SEMI_MAJOR_AXIS_UNCERTAINTY_M, 0.0);
-  }
-  /// True when SEMI_MAJOR_AXIS_UNCERTAINTY_M carries a value; false (the
-  /// default) means absent, and a consumer applies its vehicle-class default.
-  bool HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M() const {
-    return GetField<uint8_t>(VT_HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M, 0) != 0;
-  }
-  /// One-sigma uncertainty of INCLINATION_DEG in degrees. Meaningful only when
-  /// HAS_INCLINATION_UNCERTAINTY_DEG.
-  double INCLINATION_UNCERTAINTY_DEG() const {
-    return GetField<double>(VT_INCLINATION_UNCERTAINTY_DEG, 0.0);
-  }
-  /// True when INCLINATION_UNCERTAINTY_DEG carries a value; false (the default)
-  /// means absent, and a consumer applies its vehicle-class default.
-  bool HAS_INCLINATION_UNCERTAINTY_DEG() const {
-    return GetField<uint8_t>(VT_HAS_INCLINATION_UNCERTAINTY_DEG, 0) != 0;
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -910,10 +882,6 @@ struct lamInsertionOrbit FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            VerifyField<double>(verifier, VT_ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG, 8) &&
            VerifyField<double>(verifier, VT_PERIAPSIS_ALTITUDE_UNCERTAINTY_M, 8) &&
            VerifyField<double>(verifier, VT_APOAPSIS_ALTITUDE_UNCERTAINTY_M, 8) &&
-           VerifyField<double>(verifier, VT_SEMI_MAJOR_AXIS_UNCERTAINTY_M, 8) &&
-           VerifyField<uint8_t>(verifier, VT_HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M, 1) &&
-           VerifyField<double>(verifier, VT_INCLINATION_UNCERTAINTY_DEG, 8) &&
-           VerifyField<uint8_t>(verifier, VT_HAS_INCLINATION_UNCERTAINTY_DEG, 1) &&
            verifier.EndTable();
   }
   lamInsertionOrbitT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -970,18 +938,6 @@ struct lamInsertionOrbitBuilder {
   void add_APOAPSIS_ALTITUDE_UNCERTAINTY_M(double APOAPSIS_ALTITUDE_UNCERTAINTY_M) {
     fbb_.AddElement<double>(lamInsertionOrbit::VT_APOAPSIS_ALTITUDE_UNCERTAINTY_M, APOAPSIS_ALTITUDE_UNCERTAINTY_M, 0.0);
   }
-  void add_SEMI_MAJOR_AXIS_UNCERTAINTY_M(double SEMI_MAJOR_AXIS_UNCERTAINTY_M) {
-    fbb_.AddElement<double>(lamInsertionOrbit::VT_SEMI_MAJOR_AXIS_UNCERTAINTY_M, SEMI_MAJOR_AXIS_UNCERTAINTY_M, 0.0);
-  }
-  void add_HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M(bool HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M) {
-    fbb_.AddElement<uint8_t>(lamInsertionOrbit::VT_HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M, static_cast<uint8_t>(HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M), 0);
-  }
-  void add_INCLINATION_UNCERTAINTY_DEG(double INCLINATION_UNCERTAINTY_DEG) {
-    fbb_.AddElement<double>(lamInsertionOrbit::VT_INCLINATION_UNCERTAINTY_DEG, INCLINATION_UNCERTAINTY_DEG, 0.0);
-  }
-  void add_HAS_INCLINATION_UNCERTAINTY_DEG(bool HAS_INCLINATION_UNCERTAINTY_DEG) {
-    fbb_.AddElement<uint8_t>(lamInsertionOrbit::VT_HAS_INCLINATION_UNCERTAINTY_DEG, static_cast<uint8_t>(HAS_INCLINATION_UNCERTAINTY_DEG), 0);
-  }
   explicit lamInsertionOrbitBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1009,14 +965,8 @@ inline ::flatbuffers::Offset<lamInsertionOrbit> CreatelamInsertionOrbit(
     double RAAN_UNCERTAINTY_DEG = 0.0,
     double ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG = 0.0,
     double PERIAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0,
-    double APOAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0,
-    double SEMI_MAJOR_AXIS_UNCERTAINTY_M = 0.0,
-    bool HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M = false,
-    double INCLINATION_UNCERTAINTY_DEG = 0.0,
-    bool HAS_INCLINATION_UNCERTAINTY_DEG = false) {
+    double APOAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0) {
   lamInsertionOrbitBuilder builder_(_fbb);
-  builder_.add_INCLINATION_UNCERTAINTY_DEG(INCLINATION_UNCERTAINTY_DEG);
-  builder_.add_SEMI_MAJOR_AXIS_UNCERTAINTY_M(SEMI_MAJOR_AXIS_UNCERTAINTY_M);
   builder_.add_APOAPSIS_ALTITUDE_UNCERTAINTY_M(APOAPSIS_ALTITUDE_UNCERTAINTY_M);
   builder_.add_PERIAPSIS_ALTITUDE_UNCERTAINTY_M(PERIAPSIS_ALTITUDE_UNCERTAINTY_M);
   builder_.add_ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG(ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG);
@@ -1032,8 +982,6 @@ inline ::flatbuffers::Offset<lamInsertionOrbit> CreatelamInsertionOrbit(
   builder_.add_TIME_FROM_LAUNCH_S(TIME_FROM_LAUNCH_S);
   builder_.add_REF_FRAME(REF_FRAME);
   builder_.add_EPOCH(EPOCH);
-  builder_.add_HAS_INCLINATION_UNCERTAINTY_DEG(HAS_INCLINATION_UNCERTAINTY_DEG);
-  builder_.add_HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M(HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M);
   return builder_.Finish();
 }
 
@@ -1058,11 +1006,7 @@ inline ::flatbuffers::Offset<lamInsertionOrbit> CreatelamInsertionOrbitDirect(
     double RAAN_UNCERTAINTY_DEG = 0.0,
     double ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG = 0.0,
     double PERIAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0,
-    double APOAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0,
-    double SEMI_MAJOR_AXIS_UNCERTAINTY_M = 0.0,
-    bool HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M = false,
-    double INCLINATION_UNCERTAINTY_DEG = 0.0,
-    bool HAS_INCLINATION_UNCERTAINTY_DEG = false) {
+    double APOAPSIS_ALTITUDE_UNCERTAINTY_M = 0.0) {
   auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
   auto REF_FRAME__ = REF_FRAME ? _fbb.CreateString(REF_FRAME) : 0;
   return CreatelamInsertionOrbit(
@@ -1081,11 +1025,7 @@ inline ::flatbuffers::Offset<lamInsertionOrbit> CreatelamInsertionOrbitDirect(
       RAAN_UNCERTAINTY_DEG,
       ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG,
       PERIAPSIS_ALTITUDE_UNCERTAINTY_M,
-      APOAPSIS_ALTITUDE_UNCERTAINTY_M,
-      SEMI_MAJOR_AXIS_UNCERTAINTY_M,
-      HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M,
-      INCLINATION_UNCERTAINTY_DEG,
-      HAS_INCLINATION_UNCERTAINTY_DEG);
+      APOAPSIS_ALTITUDE_UNCERTAINTY_M);
 }
 
 ::flatbuffers::Offset<lamInsertionOrbit> CreatelamInsertionOrbit(::flatbuffers::FlatBufferBuilder &_fbb, const lamInsertionOrbitT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2335,10 +2275,6 @@ inline void lamInsertionOrbit::UnPackTo(lamInsertionOrbitT *_o, const ::flatbuff
   { auto _e = ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG(); _o->ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG = _e; }
   { auto _e = PERIAPSIS_ALTITUDE_UNCERTAINTY_M(); _o->PERIAPSIS_ALTITUDE_UNCERTAINTY_M = _e; }
   { auto _e = APOAPSIS_ALTITUDE_UNCERTAINTY_M(); _o->APOAPSIS_ALTITUDE_UNCERTAINTY_M = _e; }
-  { auto _e = SEMI_MAJOR_AXIS_UNCERTAINTY_M(); _o->SEMI_MAJOR_AXIS_UNCERTAINTY_M = _e; }
-  { auto _e = HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M(); _o->HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M = _e; }
-  { auto _e = INCLINATION_UNCERTAINTY_DEG(); _o->INCLINATION_UNCERTAINTY_DEG = _e; }
-  { auto _e = HAS_INCLINATION_UNCERTAINTY_DEG(); _o->HAS_INCLINATION_UNCERTAINTY_DEG = _e; }
 }
 
 inline ::flatbuffers::Offset<lamInsertionOrbit> CreatelamInsertionOrbit(::flatbuffers::FlatBufferBuilder &_fbb, const lamInsertionOrbitT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2364,10 +2300,6 @@ inline ::flatbuffers::Offset<lamInsertionOrbit> lamInsertionOrbit::Pack(::flatbu
   auto _ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG = _o->ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG;
   auto _PERIAPSIS_ALTITUDE_UNCERTAINTY_M = _o->PERIAPSIS_ALTITUDE_UNCERTAINTY_M;
   auto _APOAPSIS_ALTITUDE_UNCERTAINTY_M = _o->APOAPSIS_ALTITUDE_UNCERTAINTY_M;
-  auto _SEMI_MAJOR_AXIS_UNCERTAINTY_M = _o->SEMI_MAJOR_AXIS_UNCERTAINTY_M;
-  auto _HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M = _o->HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M;
-  auto _INCLINATION_UNCERTAINTY_DEG = _o->INCLINATION_UNCERTAINTY_DEG;
-  auto _HAS_INCLINATION_UNCERTAINTY_DEG = _o->HAS_INCLINATION_UNCERTAINTY_DEG;
   return CreatelamInsertionOrbit(
       _fbb,
       _EPOCH,
@@ -2384,11 +2316,7 @@ inline ::flatbuffers::Offset<lamInsertionOrbit> lamInsertionOrbit::Pack(::flatbu
       _RAAN_UNCERTAINTY_DEG,
       _ARGUMENT_OF_LATITUDE_UNCERTAINTY_DEG,
       _PERIAPSIS_ALTITUDE_UNCERTAINTY_M,
-      _APOAPSIS_ALTITUDE_UNCERTAINTY_M,
-      _SEMI_MAJOR_AXIS_UNCERTAINTY_M,
-      _HAS_SEMI_MAJOR_AXIS_UNCERTAINTY_M,
-      _INCLINATION_UNCERTAINTY_DEG,
-      _HAS_INCLINATION_UNCERTAINTY_DEG);
+      _APOAPSIS_ALTITUDE_UNCERTAINTY_M);
 }
 
 inline LAMT::LAMT(const LAMT &o)

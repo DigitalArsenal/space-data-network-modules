@@ -56,8 +56,8 @@ inline const char *EnumNamecovarianceCalibration(covarianceCalibration e) {
   return EnumNamescovarianceCalibration()[index];
 }
 
-/// The rule that produced a covariance. Wire values are append-only, not a
-/// preference order: a producer states the estimator it actually used.
+/// The rule that produced a covariance. A producer applies the first rule it
+/// can, in this order.
 enum class covarianceRule : int8_t {
   /// Not stated
   Unspecified = 0,
@@ -72,43 +72,35 @@ enum class covarianceRule : int8_t {
   /// The empirical model pooled over all sources, for a source without its own
   /// model in the regime
   PooledModel = 4,
-  /// Empirical errors from this object's own element-set history, shrunk
-  /// toward a population prior identified by MODEL_ID and REGIME. Later
-  /// element sets are comparison states, not independent truth; history alone
-  /// never establishes calibration. HISTORY_* and SHRINKAGE_WEIGHT carry
-  /// fitting evidence; SAMPLES/OBJECTS/SCALE_FACTOR retain their meanings.
-  EmpiricalHistoryShrunk = 5,
   MIN = Unspecified,
-  MAX = EmpiricalHistoryShrunk
+  MAX = PooledModel
 };
 
-inline const covarianceRule (&EnumValuescovarianceRule())[6] {
+inline const covarianceRule (&EnumValuescovarianceRule())[5] {
   static const covarianceRule values[] = {
     covarianceRule::Unspecified,
     covarianceRule::Operator,
     covarianceRule::ScaledFit,
     covarianceRule::SourceModel,
-    covarianceRule::PooledModel,
-    covarianceRule::EmpiricalHistoryShrunk
+    covarianceRule::PooledModel
   };
   return values;
 }
 
 inline const char * const *EnumNamescovarianceRule() {
-  static const char * const names[7] = {
+  static const char * const names[6] = {
     "Unspecified",
     "Operator",
     "ScaledFit",
     "SourceModel",
     "PooledModel",
-    "EmpiricalHistoryShrunk",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamecovarianceRule(covarianceRule e) {
-  if (::flatbuffers::IsOutRange(e, covarianceRule::Unspecified, covarianceRule::EmpiricalHistoryShrunk)) return "";
+  if (::flatbuffers::IsOutRange(e, covarianceRule::Unspecified, covarianceRule::PooledModel)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamescovarianceRule()[index];
 }
@@ -129,10 +121,6 @@ struct CVRT : public ::flatbuffers::NativeTable {
   double SCALE_FACTOR = std::numeric_limits<double>::quiet_NaN();
   covarianceCalibration CALIBRATION = covarianceCalibration::Unspecified;
   std::string EVIDENCE{};
-  uint32_t HISTORY_SAMPLES = 0;
-  uint32_t HISTORY_SETS = 0;
-  std::string HISTORY_WINDOW{};
-  double SHRINKAGE_WEIGHT = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Covariance Realism
@@ -154,23 +142,17 @@ struct CVR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_OBJECTS = 24,
     VT_SCALE_FACTOR = 26,
     VT_CALIBRATION = 28,
-    VT_EVIDENCE = 30,
-    VT_HISTORY_SAMPLES = 32,
-    VT_HISTORY_SETS = 34,
-    VT_HISTORY_WINDOW = 36,
-    VT_SHRINKAGE_WEIGHT = 38
+    VT_EVIDENCE = 30
   };
   /// The rule that produced the covariance. In a CCSDS covariance block,
   /// Operator keeps the operator's COV_BASIS, ScaledFit is DETERMINED, and
-  /// SourceModel, PooledModel and EmpiricalHistoryShrunk are EMPIRICAL with
-  /// MODEL_ID as COV_BASIS_ID.
+  /// SourceModel and PooledModel are EMPIRICAL with MODEL_ID as COV_BASIS_ID.
   covarianceRule RULE() const {
     return static_cast<covarianceRule>(GetField<int8_t>(VT_RULE, 0));
   }
   /// Identifier of the error model (SourceModel, PooledModel) or of the
   /// measured realism factor (ScaledFit) the covariance came from. Empty for
-  /// Operator. For EmpiricalHistoryShrunk, identifies the population prior;
-  /// EVIDENCE identifies the history estimator and its configuration.
+  /// Operator.
   const ::flatbuffers::String *MODEL_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_MODEL_ID);
   }
@@ -232,36 +214,6 @@ struct CVR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *EVIDENCE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_EVIDENCE);
   }
-  /// Number of retained older/newer element-set residual pairs from this
-  /// object in the age bin containing AGE_DAYS, after rejection/clipping.
-  /// Zero means no retained pairs; never the held-out test count SAMPLES.
-  uint32_t HISTORY_SAMPLES() const {
-    return GetField<uint32_t>(VT_HISTORY_SAMPLES, 0);
-  }
-  /// Number of distinct older element sets contributing HISTORY_SAMPLES.
-  /// Zero means none; never the distinct calibration-object count OBJECTS.
-  uint32_t HISTORY_SETS() const {
-    return GetField<uint32_t>(VT_HISTORY_SETS, 0);
-  }
-  /// ISO 8601 UTC start/end interval spanning the element-set epochs used
-  /// in the object's history fit. Empty when no history was used. This is
-  /// training support, not TEST_WINDOW or the element-set age AGE_DAYS.
-  const ::flatbuffers::String *HISTORY_WINDOW() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_HISTORY_WINDOW);
-  }
-  /// Dimensionless population-prior fraction alpha in the covariance blend
-  /// P = (1-alpha) H + alpha P_prior, where H is the history error second
-  /// moment and P_prior includes the population model's realism scaling.
-  /// Range [0,1]: 0 is all history, 1 is all prior; NaN when not applicable
-  /// or unknown. For interpolation across bins, report the correspondingly
-  /// interpolated alpha. EVIDENCE must identify the estimator/configuration,
-  /// retained-count bin, participating bins and their weights so the blend
-  /// can be reconstructed; the scalar alone does not describe that mixture.
-  /// This is not SCALE_FACTOR, which multiplies a covariance. History-only
-  /// evidence leaves CALIBRATION Uncalibrated and test statistics unmeasured.
-  double SHRINKAGE_WEIGHT() const {
-    return GetField<double>(VT_SHRINKAGE_WEIGHT, std::numeric_limits<double>::quiet_NaN());
-  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -284,11 +236,6 @@ struct CVR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<int8_t>(verifier, VT_CALIBRATION, 1) &&
            VerifyOffset(verifier, VT_EVIDENCE) &&
            verifier.VerifyString(EVIDENCE()) &&
-           VerifyField<uint32_t>(verifier, VT_HISTORY_SAMPLES, 4) &&
-           VerifyField<uint32_t>(verifier, VT_HISTORY_SETS, 4) &&
-           VerifyOffset(verifier, VT_HISTORY_WINDOW) &&
-           verifier.VerifyString(HISTORY_WINDOW()) &&
-           VerifyField<double>(verifier, VT_SHRINKAGE_WEIGHT, 8) &&
            verifier.EndTable();
   }
   CVRT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -342,18 +289,6 @@ struct CVRBuilder {
   void add_EVIDENCE(::flatbuffers::Offset<::flatbuffers::String> EVIDENCE) {
     fbb_.AddOffset(CVR::VT_EVIDENCE, EVIDENCE);
   }
-  void add_HISTORY_SAMPLES(uint32_t HISTORY_SAMPLES) {
-    fbb_.AddElement<uint32_t>(CVR::VT_HISTORY_SAMPLES, HISTORY_SAMPLES, 0);
-  }
-  void add_HISTORY_SETS(uint32_t HISTORY_SETS) {
-    fbb_.AddElement<uint32_t>(CVR::VT_HISTORY_SETS, HISTORY_SETS, 0);
-  }
-  void add_HISTORY_WINDOW(::flatbuffers::Offset<::flatbuffers::String> HISTORY_WINDOW) {
-    fbb_.AddOffset(CVR::VT_HISTORY_WINDOW, HISTORY_WINDOW);
-  }
-  void add_SHRINKAGE_WEIGHT(double SHRINKAGE_WEIGHT) {
-    fbb_.AddElement<double>(CVR::VT_SHRINKAGE_WEIGHT, SHRINKAGE_WEIGHT, std::numeric_limits<double>::quiet_NaN());
-  }
   explicit CVRBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -380,21 +315,13 @@ inline ::flatbuffers::Offset<CVR> CreateCVR(
     uint32_t OBJECTS = 0,
     double SCALE_FACTOR = std::numeric_limits<double>::quiet_NaN(),
     covarianceCalibration CALIBRATION = covarianceCalibration::Unspecified,
-    ::flatbuffers::Offset<::flatbuffers::String> EVIDENCE = 0,
-    uint32_t HISTORY_SAMPLES = 0,
-    uint32_t HISTORY_SETS = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> HISTORY_WINDOW = 0,
-    double SHRINKAGE_WEIGHT = std::numeric_limits<double>::quiet_NaN()) {
+    ::flatbuffers::Offset<::flatbuffers::String> EVIDENCE = 0) {
   CVRBuilder builder_(_fbb);
-  builder_.add_SHRINKAGE_WEIGHT(SHRINKAGE_WEIGHT);
   builder_.add_SCALE_FACTOR(SCALE_FACTOR);
   builder_.add_COVERAGE_95(COVERAGE_95);
   builder_.add_MEAN_D2_OVER_3(MEAN_D2_OVER_3);
   builder_.add_HORIZON_DAYS(HORIZON_DAYS);
   builder_.add_AGE_DAYS(AGE_DAYS);
-  builder_.add_HISTORY_WINDOW(HISTORY_WINDOW);
-  builder_.add_HISTORY_SETS(HISTORY_SETS);
-  builder_.add_HISTORY_SAMPLES(HISTORY_SAMPLES);
   builder_.add_EVIDENCE(EVIDENCE);
   builder_.add_OBJECTS(OBJECTS);
   builder_.add_SAMPLES(SAMPLES);
@@ -427,17 +354,12 @@ inline ::flatbuffers::Offset<CVR> CreateCVRDirect(
     uint32_t OBJECTS = 0,
     double SCALE_FACTOR = std::numeric_limits<double>::quiet_NaN(),
     covarianceCalibration CALIBRATION = covarianceCalibration::Unspecified,
-    const char *EVIDENCE = nullptr,
-    uint32_t HISTORY_SAMPLES = 0,
-    uint32_t HISTORY_SETS = 0,
-    const char *HISTORY_WINDOW = nullptr,
-    double SHRINKAGE_WEIGHT = std::numeric_limits<double>::quiet_NaN()) {
+    const char *EVIDENCE = nullptr) {
   auto MODEL_ID__ = MODEL_ID ? _fbb.CreateString(MODEL_ID) : 0;
   auto REGIME__ = REGIME ? _fbb.CreateString(REGIME) : 0;
   auto MEASURED_LINEAGE__ = MEASURED_LINEAGE ? _fbb.CreateString(MEASURED_LINEAGE) : 0;
   auto TEST_WINDOW__ = TEST_WINDOW ? _fbb.CreateString(TEST_WINDOW) : 0;
   auto EVIDENCE__ = EVIDENCE ? _fbb.CreateString(EVIDENCE) : 0;
-  auto HISTORY_WINDOW__ = HISTORY_WINDOW ? _fbb.CreateString(HISTORY_WINDOW) : 0;
   return CreateCVR(
       _fbb,
       RULE,
@@ -453,11 +375,7 @@ inline ::flatbuffers::Offset<CVR> CreateCVRDirect(
       OBJECTS,
       SCALE_FACTOR,
       CALIBRATION,
-      EVIDENCE__,
-      HISTORY_SAMPLES,
-      HISTORY_SETS,
-      HISTORY_WINDOW__,
-      SHRINKAGE_WEIGHT);
+      EVIDENCE__);
 }
 
 ::flatbuffers::Offset<CVR> CreateCVR(::flatbuffers::FlatBufferBuilder &_fbb, const CVRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -485,10 +403,6 @@ inline void CVR::UnPackTo(CVRT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SCALE_FACTOR(); _o->SCALE_FACTOR = _e; }
   { auto _e = CALIBRATION(); _o->CALIBRATION = _e; }
   { auto _e = EVIDENCE(); if (_e) _o->EVIDENCE = _e->str(); }
-  { auto _e = HISTORY_SAMPLES(); _o->HISTORY_SAMPLES = _e; }
-  { auto _e = HISTORY_SETS(); _o->HISTORY_SETS = _e; }
-  { auto _e = HISTORY_WINDOW(); if (_e) _o->HISTORY_WINDOW = _e->str(); }
-  { auto _e = SHRINKAGE_WEIGHT(); _o->SHRINKAGE_WEIGHT = _e; }
 }
 
 inline ::flatbuffers::Offset<CVR> CreateCVR(::flatbuffers::FlatBufferBuilder &_fbb, const CVRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -513,10 +427,6 @@ inline ::flatbuffers::Offset<CVR> CVR::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SCALE_FACTOR = _o->SCALE_FACTOR;
   auto _CALIBRATION = _o->CALIBRATION;
   auto _EVIDENCE = _o->EVIDENCE.empty() ? 0 : _fbb.CreateString(_o->EVIDENCE);
-  auto _HISTORY_SAMPLES = _o->HISTORY_SAMPLES;
-  auto _HISTORY_SETS = _o->HISTORY_SETS;
-  auto _HISTORY_WINDOW = _o->HISTORY_WINDOW.empty() ? 0 : _fbb.CreateString(_o->HISTORY_WINDOW);
-  auto _SHRINKAGE_WEIGHT = _o->SHRINKAGE_WEIGHT;
   return CreateCVR(
       _fbb,
       _RULE,
@@ -532,11 +442,7 @@ inline ::flatbuffers::Offset<CVR> CVR::Pack(::flatbuffers::FlatBufferBuilder &_f
       _OBJECTS,
       _SCALE_FACTOR,
       _CALIBRATION,
-      _EVIDENCE,
-      _HISTORY_SAMPLES,
-      _HISTORY_SETS,
-      _HISTORY_WINDOW,
-      _SHRINKAGE_WEIGHT);
+      _EVIDENCE);
 }
 
 inline const CVR *GetCVR(const void *buf) {

@@ -26,7 +26,6 @@ const GENERATOR = 'generate-sds-headers.mjs';
 // bundled again from the installed release.
 const TOUCHED = {
   'licensing/core': { headers: ['src/cpp/generated/sds'] },
-  'propagator/sgp4': { headers: ['src/cpp/generated/sds'] },
   'analysis/epoch-state': { headers: ['src/generated/sds'], dist: (provenance) => provenance.spacedatastandards },
   'analysis/conjunction-assessment': { headers: ['src/cpp/generated/sds', 'src/js/sds'], dist: (provenance) => provenance.standards?.version },
   'analysis/vcm-adapter': { dist: (provenance) => provenance.spacedatastandards },

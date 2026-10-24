@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.264.0",
+    "spacedatastandards.org": "1.265.0",
     "flatc-wasm": "26.1.38",
     "flatbuffers": "25.9.23",
     "esbuild": "0.27.7",
