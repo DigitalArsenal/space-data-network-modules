@@ -1,7 +1,7 @@
 {
   "ok": true,
   "fixture": "relative navigation and innovation recovery, extension v5",
-  "wasmPath": "tests/.generated/module-under-test/f72236c381272426/dist/isomorphic/module.wasm",
+  "wasmPath": "analysis/estimation/dist/isomorphic/module.wasm",
   "artifactSha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d",
   "moduleSha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d",
   "pin": "0.16.4",
@@ -9,12 +9,12 @@
     {
       "lane": "browser",
       "runs": 48,
-      "durationMs": 2386
+      "durationMs": 1452
     },
     {
       "lane": "wasmedge",
       "runs": 48,
-      "durationMs": 3440
+      "durationMs": 3788
     }
   ],
   "cases": [

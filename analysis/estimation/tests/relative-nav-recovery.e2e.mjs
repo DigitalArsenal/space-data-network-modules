@@ -37,23 +37,28 @@
 // error after recovery for planted burns (FFM impulses of 1 cm/s, 10 cm/s and 1 m/s along-track
 // and one 10-minute finite burn), the maximum observation gap, resets from single and double
 // injected outliers, recovery-off byte identity (options absent vs enabled = false; the absolute
-// EKF also against the committed module of the base commit), the RTN conversion against an
+// EKF also against the artifact committed before this change), the RTN conversion against an
 // independent reference, a curvilinear-RTN run against the rectilinear run mapped to curvilinear,
 // and the four models against point-mass FFM truth. Acceptance asserts are listed in summarize().
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fork } from 'node:child_process';
+import { execFileSync, fork } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing/browser';
-import { moduleUnderTest } from './build-under-test.mjs';
 import { api, pack, typeRef, unpack } from './wire.mjs';
 import { CADENCE_S, EPOCH_JD, FIELD_RADIUS_M, J2, MU, answerQueries, deputyInitialState, ffmArc, keplerState, openFfm } from './relnav-truth.mjs';
 import { chiefRadial, curvilinearBelief, nodalElements, relativeStateReference } from './relnav-reference.mjs';
 import { cholesky, draw, makeRng, mean, neesSegment, neesSeries, norm3, secondsSince } from './relnav-scoring.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
+// The module under test is the committed artifact itself, so a pass proves the shipped bytes.
+const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const WASM = path.join(PACKAGE_ROOT, 'dist/isomorphic/module.wasm'), MANIFEST = path.join(PACKAGE_ROOT, 'dist/plugin-manifest.json');
+// The artifact committed before this change, for the recovery-off comparison.
+const BASE_COMMIT = '73aed2e1face8206dc3c82dced4d0e837ed3b9d2';
 const A = api();
 const harness = async (wasm, manifest) => createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasm), manifest: JSON.parse(fs.readFileSync(manifest, 'utf8')), surface: 'direct' });
 const epochOf = (seconds) => new A.EstimationEpochT(EPOCH_JD, seconds);
@@ -218,10 +223,9 @@ const check = (condition, message) => { if (!condition) { report.failures.push(m
 const t0 = Date.now(), elapsed = () => `${((Date.now() - t0) / 1000).toFixed(0)}s`;
 
 async function main() {
-  const built = moduleUnderTest();
-  say(`module under test ${built.hash} (built from the working-tree sources and Estimation.fbs; ${elapsed()})`);
-  const estimator = await harness(built.wasm, built.manifest);
-  const pool = new Pool(Math.min(8, Math.max(2, os.cpus().length >> 1)), built.wasm, built.manifest);
+  say(`module under test: dist/isomorphic/module.wasm, sha256 ${crypto.createHash('sha256').update(fs.readFileSync(WASM)).digest('hex').slice(0, 16)}`);
+  const estimator = await harness(WASM, MANIFEST);
+  const pool = new Pool(Math.min(8, Math.max(2, os.cpus().length >> 1)), WASM, MANIFEST);
   const times = (n) => Array.from({ length: n }, (_, k) => (k + 1) * CADENCE_S);
   const arc = async (state, n, maneuver = null, forces = null) => {
     const message = await pool.submit({ kind: 'arc', state, times: times(n), maneuver, ...(forces ? { forces } : {}) });
@@ -255,7 +259,7 @@ async function main() {
 
   // The absolute pipeline starts as soon as its truth is in, in the workers, while the relative
   // pipeline runs in this process.
-  const absolutePromise = Promise.all(absArcs).then(() => absolutePipeline(pool, absTruth, built));
+  const absolutePromise = Promise.all(absArcs).then(() => absolutePipeline(pool, absTruth));
   await Promise.all(relArcs);
   say(`truth ready (${elapsed()})`);
 
@@ -580,7 +584,7 @@ function absoluteRequest({ start, initial, truth, count, q, recovery, rng, shift
 }
 const outlierAbsolute = (sign) => Array.from({ length: 6 }, () => sign * 30);   // 30 sigma in every component
 
-async function absolutePipeline(pool, truth, built) {
+async function absolutePipeline(pool, truth) {
   const results = [];
   for (const orbit of ORBITS) {
     const t = truth[orbit.id];
@@ -670,12 +674,14 @@ function summarizeAbsolute(abs) {
 
 // =========================================================================
 // Recovery off leaves the numerics unchanged: the absolute EKF (nonlinear propagation through FFM, 120
-// observations) on this module and on the committed module of the base commit, round by round, byte for byte.
+// observations) on this module and on the artifact committed before this change (git, BASE_COMMIT), round by
+// round, byte for byte.
 // =========================================================================
 async function baselineIdentity(estimator, truth) {
-  const root = fileURLToPath(new URL('..', import.meta.url)), wasm = path.join(root, 'dist/isomorphic/module.wasm'), manifest = path.join(root, 'dist/plugin-manifest.json');
-  if (!fs.existsSync(wasm) || !fs.existsSync(manifest)) return { skipped: true };
-  const old = await harness(wasm, manifest), ffm = await openFfm();
+  const show = (file) => execFileSync('git', ['show', `${BASE_COMMIT}:analysis/estimation/${file}`], { cwd: PACKAGE_ROOT, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] });
+  let wasm, manifest;
+  try { wasm = show('dist/isomorphic/module.wasm'); manifest = show('dist/plugin-manifest.json'); } catch { return { skipped: true }; }
+  const old = await createBrowserModuleHarness({ wasmSource: wasm, manifest: JSON.parse(manifest.toString('utf8')), surface: 'direct' }), ffm = await openFfm();
   const t = truth['ISS-like'], count = 120;
   const envelope = unpack(absoluteRequest({ start: 0, initial: t.s0, truth: t.free.slice(0, count), count, q: 1e-8, recovery: null, rng: makeRng(seedOf('baseline')) }));
   const call = (host) => host.invoke({ methodId: 'run_estimation', inputs: [{ portId: 'request', typeRef, payload: pack(envelope) }, { portId: 'propagator_samples', typeRef, payload: EMPTY_LEGACY_PORT() }] });
@@ -732,7 +738,7 @@ function summarize(rel, abs, baseline, models) {
   check(rel.cases.every((c) => c.identical), 'recovery off with the options present is not byte-identical to the options absent (relative)');
   for (const r of abs.rows) check(r.identical, `recovery off with the options present is not byte-identical to the options absent (absolute ${r.orbit})`);
   say(`recovery off byte-identical (options absent vs enabled=false): relative ${rel.cases.filter((c) => c.identical).length}/${rel.cases.length}, absolute ${abs.rows.filter((r) => r.identical).length}/${abs.rows.length}`);
-  say(baseline.skipped ? 'absolute recovery off vs the committed base module: skipped (no committed artifact)' : `absolute recovery off vs the committed base-commit module: every estimator field byte-identical in all ${baseline.rounds + 1} rounds of a ${baseline.count}-observation EKF arc (the SDS ODR and OCM records are excluded: the committed artifact predates this build's SDS pin)`);
+  say(baseline.skipped ? 'absolute recovery off vs the artifact committed before this change: skipped (that commit is not in this clone)' : `absolute recovery off vs the artifact committed before this change: every estimator field byte-identical in all ${baseline.rounds + 1} rounds of a ${baseline.count}-observation EKF arc (the SDS ODR and OCM records are excluded: the committed artifact predates this build's SDS pin)`);
   // 5. Conversion.
   check(rel.conversion.positionRatio <= 1 && rel.conversion.rateRatio <= 1 && rel.conversion.chiefWorst < 1e-9, `conversion differs from the reference by ${rel.conversion.positionWorst} m (${rel.conversion.positionRatio} of its bound) / ${rel.conversion.rateWorst} m/s (${rel.conversion.rateRatio}), elements ${rel.conversion.chiefWorst}`);
   // 5b. Curvilinear RTN and the two-body model check.

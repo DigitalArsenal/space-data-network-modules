@@ -5,7 +5,7 @@ import createFlatc from "flatc-wasm/module";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.join(packageRoot, "node_modules", "spacedatastandards.org");
-const defaultOutDir = path.join(packageRoot, "src", "generated", "sds");
+const outDir = path.join(packageRoot, "src", "generated", "sds");
 const ROOT_FAMILIES = ["ODR", "OCM", "TDM", "CRD", "MEM", "TRH"];
 
 function includesFor(family) {
@@ -43,7 +43,7 @@ function rewriteHeader(source, family, includes) {
     .replace(/[ \t]+$/gm, "");
 }
 
-export async function generateSdsHeaders(outDir = defaultOutDir) {
+export async function generateSdsHeaders() {
   if (!fs.existsSync(standardsRoot)) {
     throw new Error(`spacedatastandards.org is not installed at ${standardsRoot}; run npm ci`);
   }

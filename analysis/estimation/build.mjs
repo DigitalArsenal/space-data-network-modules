@@ -12,15 +12,7 @@ import { generateSdsHeaders } from "./generate-sds-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
-// `--out <dir>` builds the same module into <dir> (generated headers in
-// <dir>/generated, artifact in <dir>/dist) and leaves the tracked generated
-// headers and dist untouched: how the E2E builds the module under test from
-// a schema the standards release has not published yet.
-const outFlag = process.argv.indexOf("--out");
-const outRoot = outFlag > 0 ? path.resolve(process.argv[outFlag + 1]) : null;
-const distRoot = path.join(outRoot ?? packageRoot, "dist");
-const generatedRoot = outRoot ? path.join(outRoot, "generated") : path.join(packageRoot, "src", "generated");
-const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
+const outputPath = path.join(packageRoot, "dist", "isomorphic", "module.wasm");
 const sdkRoot = path.join(packageRoot, "node_modules", "space-data-module-sdk");
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
@@ -41,7 +33,7 @@ async function generateSdkHeaders() {
     flatc.FS.writeFile(`/sdk/${name}`, await fs.readFile(path.join(schemasRoot, name)));
   }
   flatc.FS.writeFile("/sdk/Estimation.fbs", await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs")));
-  await fs.mkdir(path.join(generatedRoot, "invoke"), { recursive: true });
+  await fs.mkdir(path.join(packageRoot, "src", "generated", "invoke"), { recursive: true });
   const headers = [];
   for (const name of ["BaseTypes", "Propagator", "Estimation"]) {
     const rc = flatc.callMain([
@@ -50,7 +42,7 @@ async function generateSdkHeaders() {
     ]);
     if (rc !== 0) throw new Error(`flatc failed for SDK ${name}.fbs`);
     const header = flatc.FS.readFile(`/out/${name}_generated.h`, { encoding: "utf8" });
-    await fs.writeFile(path.join(generatedRoot, "invoke", `${name}_generated.h`), header);
+    await fs.writeFile(path.join(packageRoot, "src", "generated", "invoke", `${name}_generated.h`), header);
     headers.push(header);
   }
   return headers;
@@ -64,7 +56,7 @@ const stripGeneratedIncludes = (source) => source
   .replace(/^#include "recovery\.hpp"\n/gm, "")
   .replace(/^#include "relative_nav\.hpp"\n/gm, "");
 
-const { families, headers: sdsHeaders, version: sdsVersion } = await generateSdsHeaders(path.join(generatedRoot, "sds"));
+const { families, headers: sdsHeaders, version: sdsVersion } = await generateSdsHeaders();
 const sdkHeaders = await generateSdkHeaders();
 const recoveryHeader = await fs.readFile(path.join(packageRoot, "src", "recovery.hpp"), "utf8");
 const relativeHeader = await fs.readFile(path.join(packageRoot, "src", "relative_nav.hpp"), "utf8");
@@ -94,7 +86,7 @@ const sourceCode = [
   stripGeneratedIncludes(moduleSource),
 ].join("\n\n");
 
-await fs.rm(distRoot, { recursive: true, force: true });
+await fs.rm(path.join(packageRoot, "dist"), { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
 const compilation = await compileModuleFromSource({
@@ -125,12 +117,12 @@ if (!compilation.report?.ok) {
   throw new Error(`compiled artifact failed SDK validation:\n${JSON.stringify(compilation.report?.issues ?? [], null, 2)}`);
 }
 
-await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
-fsSync.writeFileSync(path.join(distRoot, "build-provenance.json"), `${JSON.stringify({
+await fs.copyFile(manifestPath, path.join(packageRoot, "dist", "plugin-manifest.json"));
+fsSync.writeFileSync(path.join(packageRoot, "dist", "build-provenance.json"), `${JSON.stringify({
   spacedatastandards: sdsVersion,
   moduleSdk: JSON.parse(await fs.readFile(path.join(sdkRoot, "package.json"), "utf8")).version,
   family: "estimation",
-  invokeContract: {path: "schemas/Estimation.fbs", extension: 2, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
+  invokeContract: {path: "schemas/Estimation.fbs", extension: 5, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
   propagatorContract: ["plugin_propagate", "plugin_compute_stm"],
   threadModel: manifest.threadModel,
 }, null, 2)}\n`);

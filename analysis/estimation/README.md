@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ff
 
 C++ WASM estimation through the SDK's `dist/isomorphic/module.wasm`. The caller
 selects the propagator; the estimator contains no force model. JavaScript only
-routes FlatBuffer messages. The build pins SDK **0.8.25** and SDS **1.232.0**.
+routes FlatBuffer messages. The build pins SDK **0.8.25** and SDS **1.261.0**.
 
 ## Two-way light time
 
@@ -559,11 +559,11 @@ node tests/relative-nav-recovery.e2e.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/relnav-parity.mjs
 ```
 
-The relative-navigation and recovery tests build the module from the working
-tree and the local `Estimation.fbs` into the ignored `tests/.generated` tree
-(`node build.mjs --out <dir>` does the same), so they run before the standards
-release that publishes the extension v5 schema; `relnav-parity.mjs` runs in a
-browser and goes through `headless-run`.
+The relative-navigation and recovery tests run the committed
+`dist/isomorphic/module.wasm`, so a pass proves the shipped bytes;
+`relnav-parity.mjs` runs in a browser and goes through `headless-run`. The
+artifact is rebuilt with `SPACE_DATA_MODULE_SDK_COMPILE_CACHE=0 node build.mjs`
+(the SDK's compile cache keys on `module.cpp` and its headers only).
 
 The test provider is an ignored fixture, also built by `npm test`'s pretest hook.
 Its physics is C++ WASM. Production artifacts never include that provider.

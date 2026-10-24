@@ -112,6 +112,46 @@ struct TeagResult;
 struct TeagResultBuilder;
 struct TeagResultT;
 
+struct InnovationRecoveryOptions;
+struct InnovationRecoveryOptionsBuilder;
+struct InnovationRecoveryOptionsT;
+
+struct RecoveryEpoch;
+struct RecoveryEpochBuilder;
+struct RecoveryEpochT;
+
+struct ChiefReference;
+struct ChiefReferenceBuilder;
+struct ChiefReferenceT;
+
+struct RelativeNavConfig;
+struct RelativeNavConfigBuilder;
+struct RelativeNavConfigT;
+
+struct RelativeObservation;
+struct RelativeObservationBuilder;
+struct RelativeObservationT;
+
+struct RelativeNavRequest;
+struct RelativeNavRequestBuilder;
+struct RelativeNavRequestT;
+
+struct RelativeNavEpoch;
+struct RelativeNavEpochBuilder;
+struct RelativeNavEpochT;
+
+struct RelativeNavResult;
+struct RelativeNavResultBuilder;
+struct RelativeNavResultT;
+
+struct RelativeStateRequest;
+struct RelativeStateRequestBuilder;
+struct RelativeStateRequestT;
+
+struct RelativeStateResult;
+struct RelativeStateResultBuilder;
+struct RelativeStateResultT;
+
 enum class EstimatorKind : uint8_t {
   BATCH_WEIGHTED_LEAST_SQUARES = 0,
   EXTENDED_KALMAN_FILTER = 1,
@@ -516,6 +556,171 @@ inline const char *EnumNameMeasurementParameterKind(MeasurementParameterKind e) 
   if (::flatbuffers::IsOutRange(e, MeasurementParameterKind::BIAS, MeasurementParameterKind::TIME_BIAS)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesMeasurementParameterKind()[index];
+}
+
+enum class RelativeModel : uint8_t {
+  HILL_CLOHESSY_WILTSHIRE = 0,
+  SCHWEIGHART_SEDWICK_J2 = 1,
+  TSCHAUNER_HEMPEL = 2,
+  YAMANAKA_ANKERSEN = 3,
+  MIN = HILL_CLOHESSY_WILTSHIRE,
+  MAX = YAMANAKA_ANKERSEN
+};
+
+inline const RelativeModel (&EnumValuesRelativeModel())[4] {
+  static const RelativeModel values[] = {
+    RelativeModel::HILL_CLOHESSY_WILTSHIRE,
+    RelativeModel::SCHWEIGHART_SEDWICK_J2,
+    RelativeModel::TSCHAUNER_HEMPEL,
+    RelativeModel::YAMANAKA_ANKERSEN
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesRelativeModel() {
+  static const char * const names[5] = {
+    "HILL_CLOHESSY_WILTSHIRE",
+    "SCHWEIGHART_SEDWICK_J2",
+    "TSCHAUNER_HEMPEL",
+    "YAMANAKA_ANKERSEN",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameRelativeModel(RelativeModel e) {
+  if (::flatbuffers::IsOutRange(e, RelativeModel::HILL_CLOHESSY_WILTSHIRE, RelativeModel::YAMANAKA_ANKERSEN)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesRelativeModel()[index];
+}
+
+enum class RelativeMeasurementModel : uint8_t {
+  FULL_STATE = 0,
+  MIN = FULL_STATE,
+  MAX = FULL_STATE
+};
+
+inline const RelativeMeasurementModel (&EnumValuesRelativeMeasurementModel())[1] {
+  static const RelativeMeasurementModel values[] = {
+    RelativeMeasurementModel::FULL_STATE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesRelativeMeasurementModel() {
+  static const char * const names[2] = {
+    "FULL_STATE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameRelativeMeasurementModel(RelativeMeasurementModel e) {
+  if (::flatbuffers::IsOutRange(e, RelativeMeasurementModel::FULL_STATE, RelativeMeasurementModel::FULL_STATE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesRelativeMeasurementModel()[index];
+}
+
+enum class RecoveryStrategy : uint8_t {
+  PREDICTIVE_CONSISTENCY = 0,
+  PERSISTENCE = 1,
+  MIN = PREDICTIVE_CONSISTENCY,
+  MAX = PERSISTENCE
+};
+
+inline const RecoveryStrategy (&EnumValuesRecoveryStrategy())[2] {
+  static const RecoveryStrategy values[] = {
+    RecoveryStrategy::PREDICTIVE_CONSISTENCY,
+    RecoveryStrategy::PERSISTENCE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesRecoveryStrategy() {
+  static const char * const names[3] = {
+    "PREDICTIVE_CONSISTENCY",
+    "PERSISTENCE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameRecoveryStrategy(RecoveryStrategy e) {
+  if (::flatbuffers::IsOutRange(e, RecoveryStrategy::PREDICTIVE_CONSISTENCY, RecoveryStrategy::PERSISTENCE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesRecoveryStrategy()[index];
+}
+
+enum class RecoveryClassification : uint8_t {
+  NOMINAL = 0,
+  PENDING_DISCREPANCY = 1,
+  UNRESOLVED_DISCREPANCY = 2,
+  TRANSIENT_DISCREPANCY = 3,
+  PERSISTENT_DISCREPANCY = 4,
+  MIN = NOMINAL,
+  MAX = PERSISTENT_DISCREPANCY
+};
+
+inline const RecoveryClassification (&EnumValuesRecoveryClassification())[5] {
+  static const RecoveryClassification values[] = {
+    RecoveryClassification::NOMINAL,
+    RecoveryClassification::PENDING_DISCREPANCY,
+    RecoveryClassification::UNRESOLVED_DISCREPANCY,
+    RecoveryClassification::TRANSIENT_DISCREPANCY,
+    RecoveryClassification::PERSISTENT_DISCREPANCY
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesRecoveryClassification() {
+  static const char * const names[6] = {
+    "NOMINAL",
+    "PENDING_DISCREPANCY",
+    "UNRESOLVED_DISCREPANCY",
+    "TRANSIENT_DISCREPANCY",
+    "PERSISTENT_DISCREPANCY",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameRecoveryClassification(RecoveryClassification e) {
+  if (::flatbuffers::IsOutRange(e, RecoveryClassification::NOMINAL, RecoveryClassification::PERSISTENT_DISCREPANCY)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesRecoveryClassification()[index];
+}
+
+enum class RecoveryAction : uint8_t {
+  ACCEPTED = 0,
+  HELD = 1,
+  REINITIALIZED = 2,
+  MIN = ACCEPTED,
+  MAX = REINITIALIZED
+};
+
+inline const RecoveryAction (&EnumValuesRecoveryAction())[3] {
+  static const RecoveryAction values[] = {
+    RecoveryAction::ACCEPTED,
+    RecoveryAction::HELD,
+    RecoveryAction::REINITIALIZED
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesRecoveryAction() {
+  static const char * const names[4] = {
+    "ACCEPTED",
+    "HELD",
+    "REINITIALIZED",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameRecoveryAction(RecoveryAction e) {
+  if (::flatbuffers::IsOutRange(e, RecoveryAction::ACCEPTED, RecoveryAction::REINITIALIZED)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesRecoveryAction()[index];
 }
 
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) EstimationEpoch FLATBUFFERS_FINAL_CLASS {
@@ -1616,6 +1821,7 @@ struct EstimationResultT : public ::flatbuffers::NativeTable {
   std::unique_ptr<orbpro::estimation::BatchFitResultT> batch_fit{};
   std::vector<std::unique_ptr<orbpro::estimation::SupportEpochT>> support_history{};
   std::unique_ptr<orbpro::estimation::SupportStateT> final_support{};
+  std::vector<std::unique_ptr<orbpro::estimation::RecoveryEpochT>> recovery_history{};
   EstimationResultT() = default;
   EstimationResultT(const EstimationResultT &o);
   EstimationResultT(EstimationResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1641,7 +1847,8 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PROPAGATION_REQUESTS = 26,
     VT_BATCH_FIT = 28,
     VT_SUPPORT_HISTORY = 30,
-    VT_FINAL_SUPPORT = 32
+    VT_FINAL_SUPPORT = 32,
+    VT_RECOVERY_HISTORY = 34
   };
   orbpro::estimation::EstimationStatus status() const {
     return static_cast<orbpro::estimation::EstimationStatus>(GetField<int32_t>(VT_STATUS, 0));
@@ -1690,6 +1897,9 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const orbpro::estimation::SupportState *final_support() const {
     return GetPointer<const orbpro::estimation::SupportState *>(VT_FINAL_SUPPORT);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>> *recovery_history() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>> *>(VT_RECOVERY_HISTORY);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1724,6 +1934,9 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfTables(support_history()) &&
            VerifyOffset(verifier, VT_FINAL_SUPPORT) &&
            verifier.VerifyTable(final_support()) &&
+           VerifyOffset(verifier, VT_RECOVERY_HISTORY) &&
+           verifier.VerifyVector(recovery_history()) &&
+           verifier.VerifyVectorOfTables(recovery_history()) &&
            verifier.EndTable();
   }
   EstimationResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1780,6 +1993,9 @@ struct EstimationResultBuilder {
   void add_final_support(::flatbuffers::Offset<orbpro::estimation::SupportState> final_support) {
     fbb_.AddOffset(EstimationResult::VT_FINAL_SUPPORT, final_support);
   }
+  void add_recovery_history(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>>> recovery_history) {
+    fbb_.AddOffset(EstimationResult::VT_RECOVERY_HISTORY, recovery_history);
+  }
   explicit EstimationResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1807,8 +2023,10 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>> propagation_requests = 0,
     ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>>> support_history = 0,
-    ::flatbuffers::Offset<orbpro::estimation::SupportState> final_support = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> final_support = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>>> recovery_history = 0) {
   EstimationResultBuilder builder_(_fbb);
+  builder_.add_recovery_history(recovery_history);
   builder_.add_final_support(final_support);
   builder_.add_support_history(support_history);
   builder_.add_batch_fit(batch_fit);
@@ -1848,7 +2066,8 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
     const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> *propagation_requests = nullptr,
     ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>> *support_history = nullptr,
-    ::flatbuffers::Offset<orbpro::estimation::SupportState> final_support = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> final_support = 0,
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>> *recovery_history = nullptr) {
   auto filter_history__ = filter_history ? _fbb.CreateVectorOfStructs<orbpro::estimation::FilterEpoch>(*filter_history) : 0;
   auto residuals__ = residuals ? _fbb.CreateVector<double>(*residuals) : 0;
   auto iteration_covariances__ = iteration_covariances ? _fbb.CreateVector<double>(*iteration_covariances) : 0;
@@ -1860,6 +2079,7 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
   auto extended_history__ = extended_history ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>>(*extended_history) : 0;
   auto propagation_requests__ = propagation_requests ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>(*propagation_requests) : 0;
   auto support_history__ = support_history ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>>(*support_history) : 0;
+  auto recovery_history__ = recovery_history ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>>(*recovery_history) : 0;
   return orbpro::estimation::CreateEstimationResult(
       _fbb,
       status,
@@ -1876,7 +2096,8 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
       propagation_requests__,
       batch_fit,
       support_history__,
-      final_support);
+      final_support,
+      recovery_history__);
 }
 
 ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1892,6 +2113,10 @@ struct EstimationEnvelopeT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<orbpro::estimation::PropagationAnswerT>> propagation_answers{};
   std::unique_ptr<orbpro::estimation::TeagRequestT> teag_request{};
   std::unique_ptr<orbpro::estimation::TeagResultT> teag_result{};
+  std::unique_ptr<orbpro::estimation::RelativeNavRequestT> relative_request{};
+  std::unique_ptr<orbpro::estimation::RelativeNavResultT> relative_result{};
+  std::unique_ptr<orbpro::estimation::RelativeStateRequestT> relative_state_request{};
+  std::unique_ptr<orbpro::estimation::RelativeStateResultT> relative_state_result{};
   EstimationEnvelopeT() = default;
   EstimationEnvelopeT(const EstimationEnvelopeT &o);
   EstimationEnvelopeT(EstimationEnvelopeT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1911,7 +2136,11 @@ struct EstimationEnvelope FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_INITIAL_ORBIT_RESULT = 14,
     VT_PROPAGATION_ANSWERS = 16,
     VT_TEAG_REQUEST = 18,
-    VT_TEAG_RESULT = 20
+    VT_TEAG_RESULT = 20,
+    VT_RELATIVE_REQUEST = 22,
+    VT_RELATIVE_RESULT = 24,
+    VT_RELATIVE_STATE_REQUEST = 26,
+    VT_RELATIVE_STATE_RESULT = 28
   };
   const orbpro::estimation::EstimationRequest *request() const {
     return GetPointer<const orbpro::estimation::EstimationRequest *>(VT_REQUEST);
@@ -1940,6 +2169,18 @@ struct EstimationEnvelope FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const orbpro::estimation::TeagResult *teag_result() const {
     return GetPointer<const orbpro::estimation::TeagResult *>(VT_TEAG_RESULT);
   }
+  const orbpro::estimation::RelativeNavRequest *relative_request() const {
+    return GetPointer<const orbpro::estimation::RelativeNavRequest *>(VT_RELATIVE_REQUEST);
+  }
+  const orbpro::estimation::RelativeNavResult *relative_result() const {
+    return GetPointer<const orbpro::estimation::RelativeNavResult *>(VT_RELATIVE_RESULT);
+  }
+  const orbpro::estimation::RelativeStateRequest *relative_state_request() const {
+    return GetPointer<const orbpro::estimation::RelativeStateRequest *>(VT_RELATIVE_STATE_REQUEST);
+  }
+  const orbpro::estimation::RelativeStateResult *relative_state_result() const {
+    return GetPointer<const orbpro::estimation::RelativeStateResult *>(VT_RELATIVE_STATE_RESULT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1960,6 +2201,14 @@ struct EstimationEnvelope FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            verifier.VerifyTable(teag_request()) &&
            VerifyOffset(verifier, VT_TEAG_RESULT) &&
            verifier.VerifyTable(teag_result()) &&
+           VerifyOffset(verifier, VT_RELATIVE_REQUEST) &&
+           verifier.VerifyTable(relative_request()) &&
+           VerifyOffset(verifier, VT_RELATIVE_RESULT) &&
+           verifier.VerifyTable(relative_result()) &&
+           VerifyOffset(verifier, VT_RELATIVE_STATE_REQUEST) &&
+           verifier.VerifyTable(relative_state_request()) &&
+           VerifyOffset(verifier, VT_RELATIVE_STATE_RESULT) &&
+           verifier.VerifyTable(relative_state_result()) &&
            verifier.EndTable();
   }
   EstimationEnvelopeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1998,6 +2247,18 @@ struct EstimationEnvelopeBuilder {
   void add_teag_result(::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result) {
     fbb_.AddOffset(EstimationEnvelope::VT_TEAG_RESULT, teag_result);
   }
+  void add_relative_request(::flatbuffers::Offset<orbpro::estimation::RelativeNavRequest> relative_request) {
+    fbb_.AddOffset(EstimationEnvelope::VT_RELATIVE_REQUEST, relative_request);
+  }
+  void add_relative_result(::flatbuffers::Offset<orbpro::estimation::RelativeNavResult> relative_result) {
+    fbb_.AddOffset(EstimationEnvelope::VT_RELATIVE_RESULT, relative_result);
+  }
+  void add_relative_state_request(::flatbuffers::Offset<orbpro::estimation::RelativeStateRequest> relative_state_request) {
+    fbb_.AddOffset(EstimationEnvelope::VT_RELATIVE_STATE_REQUEST, relative_state_request);
+  }
+  void add_relative_state_result(::flatbuffers::Offset<orbpro::estimation::RelativeStateResult> relative_state_result) {
+    fbb_.AddOffset(EstimationEnvelope::VT_RELATIVE_STATE_RESULT, relative_state_result);
+  }
   explicit EstimationEnvelopeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2019,8 +2280,16 @@ inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelope(
     const orbpro::estimation::InitialOrbitResult *initial_orbit_result = nullptr,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>>> propagation_answers = 0,
     ::flatbuffers::Offset<orbpro::estimation::TeagRequest> teag_request = 0,
-    ::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeNavRequest> relative_request = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeNavResult> relative_result = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeStateRequest> relative_state_request = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeStateResult> relative_state_result = 0) {
   EstimationEnvelopeBuilder builder_(_fbb);
+  builder_.add_relative_state_result(relative_state_result);
+  builder_.add_relative_state_request(relative_state_request);
+  builder_.add_relative_result(relative_result);
+  builder_.add_relative_request(relative_request);
   builder_.add_teag_result(teag_result);
   builder_.add_teag_request(teag_request);
   builder_.add_propagation_answers(propagation_answers);
@@ -2048,7 +2317,11 @@ inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelopeDirect(
     const orbpro::estimation::InitialOrbitResult *initial_orbit_result = nullptr,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> *propagation_answers = nullptr,
     ::flatbuffers::Offset<orbpro::estimation::TeagRequest> teag_request = 0,
-    ::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeNavRequest> relative_request = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeNavResult> relative_result = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeStateRequest> relative_state_request = 0,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeStateResult> relative_state_result = 0) {
   auto propagator_samples__ = propagator_samples ? _fbb.CreateVectorOfStructs<orbpro::estimation::EstimationPropagatorSample>(*propagator_samples) : 0;
   auto simulated_observations__ = simulated_observations ? _fbb.CreateVectorOfStructs<orbpro::estimation::EstimationObservation>(*simulated_observations) : 0;
   auto propagation_answers__ = propagation_answers ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>>(*propagation_answers) : 0;
@@ -2062,7 +2335,11 @@ inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelopeDirect(
       initial_orbit_result,
       propagation_answers__,
       teag_request,
-      teag_result);
+      teag_result,
+      relative_request,
+      relative_result,
+      relative_state_request,
+      relative_state_result);
 }
 
 ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelope(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationEnvelopeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2089,6 +2366,7 @@ struct SequentialOptionsT : public ::flatbuffers::NativeTable {
   std::unique_ptr<orbpro::estimation::EspfOptionsT> espf{};
   std::unique_ptr<orbpro::estimation::SetMembershipOptionsT> set_membership{};
   std::unique_ptr<orbpro::estimation::SupportStateT> initial_support{};
+  std::unique_ptr<orbpro::estimation::InnovationRecoveryOptionsT> innovation_recovery{};
   SequentialOptionsT() = default;
   SequentialOptionsT(const SequentialOptionsT &o);
   SequentialOptionsT(SequentialOptionsT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2119,7 +2397,8 @@ struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_CLOCK_DRIFT_PSD = 36,
     VT_ESPF = 38,
     VT_SET_MEMBERSHIP = 40,
-    VT_INITIAL_SUPPORT = 42
+    VT_INITIAL_SUPPORT = 42,
+    VT_INNOVATION_RECOVERY = 44
   };
   double ukf_alpha() const {
     return GetField<double>(VT_UKF_ALPHA, 1.0);
@@ -2181,6 +2460,9 @@ struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   const orbpro::estimation::SupportState *initial_support() const {
     return GetPointer<const orbpro::estimation::SupportState *>(VT_INITIAL_SUPPORT);
   }
+  const orbpro::estimation::InnovationRecoveryOptions *innovation_recovery() const {
+    return GetPointer<const orbpro::estimation::InnovationRecoveryOptions *>(VT_INNOVATION_RECOVERY);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2208,6 +2490,8 @@ struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            verifier.VerifyTable(set_membership()) &&
            VerifyOffset(verifier, VT_INITIAL_SUPPORT) &&
            verifier.VerifyTable(initial_support()) &&
+           VerifyOffset(verifier, VT_INNOVATION_RECOVERY) &&
+           verifier.VerifyTable(innovation_recovery()) &&
            verifier.EndTable();
   }
   SequentialOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2279,6 +2563,9 @@ struct SequentialOptionsBuilder {
   void add_initial_support(::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support) {
     fbb_.AddOffset(SequentialOptions::VT_INITIAL_SUPPORT, initial_support);
   }
+  void add_innovation_recovery(::flatbuffers::Offset<orbpro::estimation::InnovationRecoveryOptions> innovation_recovery) {
+    fbb_.AddOffset(SequentialOptions::VT_INNOVATION_RECOVERY, innovation_recovery);
+  }
   explicit SequentialOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2311,7 +2598,8 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(
     double clock_drift_psd = 0.0,
     ::flatbuffers::Offset<orbpro::estimation::EspfOptions> espf = 0,
     ::flatbuffers::Offset<orbpro::estimation::SetMembershipOptions> set_membership = 0,
-    ::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support = 0,
+    ::flatbuffers::Offset<orbpro::estimation::InnovationRecoveryOptions> innovation_recovery = 0) {
   SequentialOptionsBuilder builder_(_fbb);
   builder_.add_clock_drift_psd(clock_drift_psd);
   builder_.add_clock_bias_psd(clock_bias_psd);
@@ -2324,6 +2612,7 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(
   builder_.add_ukf_kappa(ukf_kappa);
   builder_.add_ukf_beta(ukf_beta);
   builder_.add_ukf_alpha(ukf_alpha);
+  builder_.add_innovation_recovery(innovation_recovery);
   builder_.add_initial_support(initial_support);
   builder_.add_set_membership(set_membership);
   builder_.add_espf(espf);
@@ -2362,7 +2651,8 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptionsDirect(
     double clock_drift_psd = 0.0,
     ::flatbuffers::Offset<orbpro::estimation::EspfOptions> espf = 0,
     ::flatbuffers::Offset<orbpro::estimation::SetMembershipOptions> set_membership = 0,
-    ::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support = 0,
+    ::flatbuffers::Offset<orbpro::estimation::InnovationRecoveryOptions> innovation_recovery = 0) {
   auto initial_covariance8__ = initial_covariance8 ? _fbb.CreateVector<double>(*initial_covariance8) : 0;
   return orbpro::estimation::CreateSequentialOptions(
       _fbb,
@@ -2385,7 +2675,8 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptionsDirect(
       clock_drift_psd,
       espf,
       set_membership,
-      initial_support);
+      initial_support,
+      innovation_recovery);
 }
 
 ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(::flatbuffers::FlatBufferBuilder &_fbb, const SequentialOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5920,6 +6211,1300 @@ inline ::flatbuffers::Offset<TeagResult> CreateTeagResultDirect(
 
 ::flatbuffers::Offset<TeagResult> CreateTeagResult(::flatbuffers::FlatBufferBuilder &_fbb, const TeagResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct InnovationRecoveryOptionsT : public ::flatbuffers::NativeTable {
+  typedef InnovationRecoveryOptions TableType;
+  bool enabled = false;
+  orbpro::estimation::RecoveryStrategy strategy = orbpro::estimation::RecoveryStrategy::PREDICTIVE_CONSISTENCY;
+  double nis_probability = 0.999;
+  uint32_t confirmation_count = 2;
+  double covariance_inflation = 4.0;
+  double max_gap_seconds = 120.0;
+};
+
+struct InnovationRecoveryOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef InnovationRecoveryOptionsT NativeTableType;
+  typedef InnovationRecoveryOptionsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ENABLED = 4,
+    VT_STRATEGY = 6,
+    VT_NIS_PROBABILITY = 8,
+    VT_CONFIRMATION_COUNT = 10,
+    VT_COVARIANCE_INFLATION = 12,
+    VT_MAX_GAP_SECONDS = 14
+  };
+  bool enabled() const {
+    return GetField<uint8_t>(VT_ENABLED, 0) != 0;
+  }
+  orbpro::estimation::RecoveryStrategy strategy() const {
+    return static_cast<orbpro::estimation::RecoveryStrategy>(GetField<uint8_t>(VT_STRATEGY, 0));
+  }
+  double nis_probability() const {
+    return GetField<double>(VT_NIS_PROBABILITY, 0.999);
+  }
+  uint32_t confirmation_count() const {
+    return GetField<uint32_t>(VT_CONFIRMATION_COUNT, 2);
+  }
+  double covariance_inflation() const {
+    return GetField<double>(VT_COVARIANCE_INFLATION, 4.0);
+  }
+  double max_gap_seconds() const {
+    return GetField<double>(VT_MAX_GAP_SECONDS, 120.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLED, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STRATEGY, 1) &&
+           VerifyField<double>(verifier, VT_NIS_PROBABILITY, 8) &&
+           VerifyField<uint32_t>(verifier, VT_CONFIRMATION_COUNT, 4) &&
+           VerifyField<double>(verifier, VT_COVARIANCE_INFLATION, 8) &&
+           VerifyField<double>(verifier, VT_MAX_GAP_SECONDS, 8) &&
+           verifier.EndTable();
+  }
+  InnovationRecoveryOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(InnovationRecoveryOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<InnovationRecoveryOptions> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const InnovationRecoveryOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct InnovationRecoveryOptionsBuilder {
+  typedef InnovationRecoveryOptions Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_enabled(bool enabled) {
+    fbb_.AddElement<uint8_t>(InnovationRecoveryOptions::VT_ENABLED, static_cast<uint8_t>(enabled), 0);
+  }
+  void add_strategy(orbpro::estimation::RecoveryStrategy strategy) {
+    fbb_.AddElement<uint8_t>(InnovationRecoveryOptions::VT_STRATEGY, static_cast<uint8_t>(strategy), 0);
+  }
+  void add_nis_probability(double nis_probability) {
+    fbb_.AddElement<double>(InnovationRecoveryOptions::VT_NIS_PROBABILITY, nis_probability, 0.999);
+  }
+  void add_confirmation_count(uint32_t confirmation_count) {
+    fbb_.AddElement<uint32_t>(InnovationRecoveryOptions::VT_CONFIRMATION_COUNT, confirmation_count, 2);
+  }
+  void add_covariance_inflation(double covariance_inflation) {
+    fbb_.AddElement<double>(InnovationRecoveryOptions::VT_COVARIANCE_INFLATION, covariance_inflation, 4.0);
+  }
+  void add_max_gap_seconds(double max_gap_seconds) {
+    fbb_.AddElement<double>(InnovationRecoveryOptions::VT_MAX_GAP_SECONDS, max_gap_seconds, 120.0);
+  }
+  explicit InnovationRecoveryOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<InnovationRecoveryOptions> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<InnovationRecoveryOptions>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<InnovationRecoveryOptions> CreateInnovationRecoveryOptions(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    bool enabled = false,
+    orbpro::estimation::RecoveryStrategy strategy = orbpro::estimation::RecoveryStrategy::PREDICTIVE_CONSISTENCY,
+    double nis_probability = 0.999,
+    uint32_t confirmation_count = 2,
+    double covariance_inflation = 4.0,
+    double max_gap_seconds = 120.0) {
+  InnovationRecoveryOptionsBuilder builder_(_fbb);
+  builder_.add_max_gap_seconds(max_gap_seconds);
+  builder_.add_covariance_inflation(covariance_inflation);
+  builder_.add_nis_probability(nis_probability);
+  builder_.add_confirmation_count(confirmation_count);
+  builder_.add_strategy(strategy);
+  builder_.add_enabled(enabled);
+  return builder_.Finish();
+}
+
+struct InnovationRecoveryOptions::Traits {
+  using type = InnovationRecoveryOptions;
+  static auto constexpr Create = CreateInnovationRecoveryOptions;
+};
+
+::flatbuffers::Offset<InnovationRecoveryOptions> CreateInnovationRecoveryOptions(::flatbuffers::FlatBufferBuilder &_fbb, const InnovationRecoveryOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RecoveryEpochT : public ::flatbuffers::NativeTable {
+  typedef RecoveryEpoch TableType;
+  orbpro::estimation::RecoveryClassification classification = orbpro::estimation::RecoveryClassification::NOMINAL;
+  orbpro::estimation::RecoveryAction action = orbpro::estimation::RecoveryAction::ACCEPTED;
+  double nis = 0.0;
+  double threshold = 0.0;
+  bool has_candidate = false;
+  double candidate_nis = 0.0;
+  uint32_t consecutive_exceedances = 0;
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> acquisition_epoch{};
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> decision_epoch{};
+  RecoveryEpochT() = default;
+  RecoveryEpochT(const RecoveryEpochT &o);
+  RecoveryEpochT(RecoveryEpochT&&) FLATBUFFERS_NOEXCEPT = default;
+  RecoveryEpochT &operator=(RecoveryEpochT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RecoveryEpoch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RecoveryEpochT NativeTableType;
+  typedef RecoveryEpochBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_CLASSIFICATION = 4,
+    VT_ACTION = 6,
+    VT_NIS = 8,
+    VT_THRESHOLD = 10,
+    VT_HAS_CANDIDATE = 12,
+    VT_CANDIDATE_NIS = 14,
+    VT_CONSECUTIVE_EXCEEDANCES = 16,
+    VT_ACQUISITION_EPOCH = 18,
+    VT_DECISION_EPOCH = 20
+  };
+  orbpro::estimation::RecoveryClassification classification() const {
+    return static_cast<orbpro::estimation::RecoveryClassification>(GetField<uint8_t>(VT_CLASSIFICATION, 0));
+  }
+  orbpro::estimation::RecoveryAction action() const {
+    return static_cast<orbpro::estimation::RecoveryAction>(GetField<uint8_t>(VT_ACTION, 0));
+  }
+  double nis() const {
+    return GetField<double>(VT_NIS, 0.0);
+  }
+  double threshold() const {
+    return GetField<double>(VT_THRESHOLD, 0.0);
+  }
+  bool has_candidate() const {
+    return GetField<uint8_t>(VT_HAS_CANDIDATE, 0) != 0;
+  }
+  double candidate_nis() const {
+    return GetField<double>(VT_CANDIDATE_NIS, 0.0);
+  }
+  uint32_t consecutive_exceedances() const {
+    return GetField<uint32_t>(VT_CONSECUTIVE_EXCEEDANCES, 0);
+  }
+  const orbpro::estimation::EstimationEpoch *acquisition_epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_ACQUISITION_EPOCH);
+  }
+  const orbpro::estimation::EstimationEpoch *decision_epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_DECISION_EPOCH);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_CLASSIFICATION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ACTION, 1) &&
+           VerifyField<double>(verifier, VT_NIS, 8) &&
+           VerifyField<double>(verifier, VT_THRESHOLD, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_CANDIDATE, 1) &&
+           VerifyField<double>(verifier, VT_CANDIDATE_NIS, 8) &&
+           VerifyField<uint32_t>(verifier, VT_CONSECUTIVE_EXCEEDANCES, 4) &&
+           VerifyField<orbpro::estimation::EstimationEpoch>(verifier, VT_ACQUISITION_EPOCH, 8) &&
+           VerifyField<orbpro::estimation::EstimationEpoch>(verifier, VT_DECISION_EPOCH, 8) &&
+           verifier.EndTable();
+  }
+  RecoveryEpochT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RecoveryEpochT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RecoveryEpoch> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RecoveryEpochT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RecoveryEpochBuilder {
+  typedef RecoveryEpoch Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_classification(orbpro::estimation::RecoveryClassification classification) {
+    fbb_.AddElement<uint8_t>(RecoveryEpoch::VT_CLASSIFICATION, static_cast<uint8_t>(classification), 0);
+  }
+  void add_action(orbpro::estimation::RecoveryAction action) {
+    fbb_.AddElement<uint8_t>(RecoveryEpoch::VT_ACTION, static_cast<uint8_t>(action), 0);
+  }
+  void add_nis(double nis) {
+    fbb_.AddElement<double>(RecoveryEpoch::VT_NIS, nis, 0.0);
+  }
+  void add_threshold(double threshold) {
+    fbb_.AddElement<double>(RecoveryEpoch::VT_THRESHOLD, threshold, 0.0);
+  }
+  void add_has_candidate(bool has_candidate) {
+    fbb_.AddElement<uint8_t>(RecoveryEpoch::VT_HAS_CANDIDATE, static_cast<uint8_t>(has_candidate), 0);
+  }
+  void add_candidate_nis(double candidate_nis) {
+    fbb_.AddElement<double>(RecoveryEpoch::VT_CANDIDATE_NIS, candidate_nis, 0.0);
+  }
+  void add_consecutive_exceedances(uint32_t consecutive_exceedances) {
+    fbb_.AddElement<uint32_t>(RecoveryEpoch::VT_CONSECUTIVE_EXCEEDANCES, consecutive_exceedances, 0);
+  }
+  void add_acquisition_epoch(const orbpro::estimation::EstimationEpoch *acquisition_epoch) {
+    fbb_.AddStruct(RecoveryEpoch::VT_ACQUISITION_EPOCH, acquisition_epoch);
+  }
+  void add_decision_epoch(const orbpro::estimation::EstimationEpoch *decision_epoch) {
+    fbb_.AddStruct(RecoveryEpoch::VT_DECISION_EPOCH, decision_epoch);
+  }
+  explicit RecoveryEpochBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RecoveryEpoch> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RecoveryEpoch>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RecoveryEpoch> CreateRecoveryEpoch(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    orbpro::estimation::RecoveryClassification classification = orbpro::estimation::RecoveryClassification::NOMINAL,
+    orbpro::estimation::RecoveryAction action = orbpro::estimation::RecoveryAction::ACCEPTED,
+    double nis = 0.0,
+    double threshold = 0.0,
+    bool has_candidate = false,
+    double candidate_nis = 0.0,
+    uint32_t consecutive_exceedances = 0,
+    const orbpro::estimation::EstimationEpoch *acquisition_epoch = nullptr,
+    const orbpro::estimation::EstimationEpoch *decision_epoch = nullptr) {
+  RecoveryEpochBuilder builder_(_fbb);
+  builder_.add_candidate_nis(candidate_nis);
+  builder_.add_threshold(threshold);
+  builder_.add_nis(nis);
+  builder_.add_decision_epoch(decision_epoch);
+  builder_.add_acquisition_epoch(acquisition_epoch);
+  builder_.add_consecutive_exceedances(consecutive_exceedances);
+  builder_.add_has_candidate(has_candidate);
+  builder_.add_action(action);
+  builder_.add_classification(classification);
+  return builder_.Finish();
+}
+
+struct RecoveryEpoch::Traits {
+  using type = RecoveryEpoch;
+  static auto constexpr Create = CreateRecoveryEpoch;
+};
+
+::flatbuffers::Offset<RecoveryEpoch> CreateRecoveryEpoch(::flatbuffers::FlatBufferBuilder &_fbb, const RecoveryEpochT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct ChiefReferenceT : public ::flatbuffers::NativeTable {
+  typedef ChiefReference TableType;
+  double semi_major_axis_m = 0.0;
+  double eccentricity = 0.0;
+  double inclination_rad = 0.0;
+  double true_anomaly_rad = 0.0;
+  double argument_of_perigee_rad = 0.0;
+};
+
+struct ChiefReference FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef ChiefReferenceT NativeTableType;
+  typedef ChiefReferenceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SEMI_MAJOR_AXIS_M = 4,
+    VT_ECCENTRICITY = 6,
+    VT_INCLINATION_RAD = 8,
+    VT_TRUE_ANOMALY_RAD = 10,
+    VT_ARGUMENT_OF_PERIGEE_RAD = 12
+  };
+  double semi_major_axis_m() const {
+    return GetField<double>(VT_SEMI_MAJOR_AXIS_M, 0.0);
+  }
+  double eccentricity() const {
+    return GetField<double>(VT_ECCENTRICITY, 0.0);
+  }
+  double inclination_rad() const {
+    return GetField<double>(VT_INCLINATION_RAD, 0.0);
+  }
+  double true_anomaly_rad() const {
+    return GetField<double>(VT_TRUE_ANOMALY_RAD, 0.0);
+  }
+  double argument_of_perigee_rad() const {
+    return GetField<double>(VT_ARGUMENT_OF_PERIGEE_RAD, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_SEMI_MAJOR_AXIS_M, 8) &&
+           VerifyField<double>(verifier, VT_ECCENTRICITY, 8) &&
+           VerifyField<double>(verifier, VT_INCLINATION_RAD, 8) &&
+           VerifyField<double>(verifier, VT_TRUE_ANOMALY_RAD, 8) &&
+           VerifyField<double>(verifier, VT_ARGUMENT_OF_PERIGEE_RAD, 8) &&
+           verifier.EndTable();
+  }
+  ChiefReferenceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(ChiefReferenceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<ChiefReference> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ChiefReferenceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct ChiefReferenceBuilder {
+  typedef ChiefReference Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_semi_major_axis_m(double semi_major_axis_m) {
+    fbb_.AddElement<double>(ChiefReference::VT_SEMI_MAJOR_AXIS_M, semi_major_axis_m, 0.0);
+  }
+  void add_eccentricity(double eccentricity) {
+    fbb_.AddElement<double>(ChiefReference::VT_ECCENTRICITY, eccentricity, 0.0);
+  }
+  void add_inclination_rad(double inclination_rad) {
+    fbb_.AddElement<double>(ChiefReference::VT_INCLINATION_RAD, inclination_rad, 0.0);
+  }
+  void add_true_anomaly_rad(double true_anomaly_rad) {
+    fbb_.AddElement<double>(ChiefReference::VT_TRUE_ANOMALY_RAD, true_anomaly_rad, 0.0);
+  }
+  void add_argument_of_perigee_rad(double argument_of_perigee_rad) {
+    fbb_.AddElement<double>(ChiefReference::VT_ARGUMENT_OF_PERIGEE_RAD, argument_of_perigee_rad, 0.0);
+  }
+  explicit ChiefReferenceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<ChiefReference> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<ChiefReference>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<ChiefReference> CreateChiefReference(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double semi_major_axis_m = 0.0,
+    double eccentricity = 0.0,
+    double inclination_rad = 0.0,
+    double true_anomaly_rad = 0.0,
+    double argument_of_perigee_rad = 0.0) {
+  ChiefReferenceBuilder builder_(_fbb);
+  builder_.add_argument_of_perigee_rad(argument_of_perigee_rad);
+  builder_.add_true_anomaly_rad(true_anomaly_rad);
+  builder_.add_inclination_rad(inclination_rad);
+  builder_.add_eccentricity(eccentricity);
+  builder_.add_semi_major_axis_m(semi_major_axis_m);
+  return builder_.Finish();
+}
+
+struct ChiefReference::Traits {
+  using type = ChiefReference;
+  static auto constexpr Create = CreateChiefReference;
+};
+
+::flatbuffers::Offset<ChiefReference> CreateChiefReference(::flatbuffers::FlatBufferBuilder &_fbb, const ChiefReferenceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeNavConfigT : public ::flatbuffers::NativeTable {
+  typedef RelativeNavConfig TableType;
+  orbpro::estimation::RelativeModel model = orbpro::estimation::RelativeModel::HILL_CLOHESSY_WILTSHIRE;
+  orbpro::estimation::RelativeMeasurementModel measurement_model = orbpro::estimation::RelativeMeasurementModel::FULL_STATE;
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> epoch{};
+  std::vector<double> state{};
+  std::vector<double> covariance{};
+  std::unique_ptr<orbpro::estimation::ChiefReferenceT> chief{};
+  double gravitational_parameter_m3_s2 = 0.0;
+  double j2 = 0.0;
+  double equatorial_radius_m = 0.0;
+  orbpro::estimation::ProcessNoiseKind process_noise = orbpro::estimation::ProcessNoiseKind::NONE;
+  std::vector<double> acceleration_psd{};
+  std::unique_ptr<orbpro::estimation::InnovationRecoveryOptionsT> recovery{};
+  bool curvilinear = false;
+  RelativeNavConfigT() = default;
+  RelativeNavConfigT(const RelativeNavConfigT &o);
+  RelativeNavConfigT(RelativeNavConfigT&&) FLATBUFFERS_NOEXCEPT = default;
+  RelativeNavConfigT &operator=(RelativeNavConfigT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RelativeNavConfig FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeNavConfigT NativeTableType;
+  typedef RelativeNavConfigBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MODEL = 4,
+    VT_MEASUREMENT_MODEL = 6,
+    VT_EPOCH = 8,
+    VT_STATE = 10,
+    VT_COVARIANCE = 12,
+    VT_CHIEF = 14,
+    VT_GRAVITATIONAL_PARAMETER_M3_S2 = 16,
+    VT_J2 = 18,
+    VT_EQUATORIAL_RADIUS_M = 20,
+    VT_PROCESS_NOISE = 22,
+    VT_ACCELERATION_PSD = 24,
+    VT_RECOVERY = 26,
+    VT_CURVILINEAR = 28
+  };
+  orbpro::estimation::RelativeModel model() const {
+    return static_cast<orbpro::estimation::RelativeModel>(GetField<uint8_t>(VT_MODEL, 0));
+  }
+  orbpro::estimation::RelativeMeasurementModel measurement_model() const {
+    return static_cast<orbpro::estimation::RelativeMeasurementModel>(GetField<uint8_t>(VT_MEASUREMENT_MODEL, 0));
+  }
+  const orbpro::estimation::EstimationEpoch *epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_EPOCH);
+  }
+  const ::flatbuffers::Vector<double> *state() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_STATE);
+  }
+  const ::flatbuffers::Vector<double> *covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_COVARIANCE);
+  }
+  const orbpro::estimation::ChiefReference *chief() const {
+    return GetPointer<const orbpro::estimation::ChiefReference *>(VT_CHIEF);
+  }
+  double gravitational_parameter_m3_s2() const {
+    return GetField<double>(VT_GRAVITATIONAL_PARAMETER_M3_S2, 0.0);
+  }
+  double j2() const {
+    return GetField<double>(VT_J2, 0.0);
+  }
+  double equatorial_radius_m() const {
+    return GetField<double>(VT_EQUATORIAL_RADIUS_M, 0.0);
+  }
+  orbpro::estimation::ProcessNoiseKind process_noise() const {
+    return static_cast<orbpro::estimation::ProcessNoiseKind>(GetField<uint8_t>(VT_PROCESS_NOISE, 0));
+  }
+  const ::flatbuffers::Vector<double> *acceleration_psd() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ACCELERATION_PSD);
+  }
+  const orbpro::estimation::InnovationRecoveryOptions *recovery() const {
+    return GetPointer<const orbpro::estimation::InnovationRecoveryOptions *>(VT_RECOVERY);
+  }
+  bool curvilinear() const {
+    return GetField<uint8_t>(VT_CURVILINEAR, 0) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_MODEL, 1) &&
+           VerifyField<uint8_t>(verifier, VT_MEASUREMENT_MODEL, 1) &&
+           VerifyFieldRequired<orbpro::estimation::EstimationEpoch>(verifier, VT_EPOCH, 8) &&
+           VerifyOffsetRequired(verifier, VT_STATE) &&
+           verifier.VerifyVector(state()) &&
+           VerifyOffsetRequired(verifier, VT_COVARIANCE) &&
+           verifier.VerifyVector(covariance()) &&
+           VerifyOffsetRequired(verifier, VT_CHIEF) &&
+           verifier.VerifyTable(chief()) &&
+           VerifyField<double>(verifier, VT_GRAVITATIONAL_PARAMETER_M3_S2, 8) &&
+           VerifyField<double>(verifier, VT_J2, 8) &&
+           VerifyField<double>(verifier, VT_EQUATORIAL_RADIUS_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_PROCESS_NOISE, 1) &&
+           VerifyOffsetRequired(verifier, VT_ACCELERATION_PSD) &&
+           verifier.VerifyVector(acceleration_psd()) &&
+           VerifyOffset(verifier, VT_RECOVERY) &&
+           verifier.VerifyTable(recovery()) &&
+           VerifyField<uint8_t>(verifier, VT_CURVILINEAR, 1) &&
+           verifier.EndTable();
+  }
+  RelativeNavConfigT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeNavConfigT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeNavConfig> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavConfigT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeNavConfigBuilder {
+  typedef RelativeNavConfig Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_model(orbpro::estimation::RelativeModel model) {
+    fbb_.AddElement<uint8_t>(RelativeNavConfig::VT_MODEL, static_cast<uint8_t>(model), 0);
+  }
+  void add_measurement_model(orbpro::estimation::RelativeMeasurementModel measurement_model) {
+    fbb_.AddElement<uint8_t>(RelativeNavConfig::VT_MEASUREMENT_MODEL, static_cast<uint8_t>(measurement_model), 0);
+  }
+  void add_epoch(const orbpro::estimation::EstimationEpoch *epoch) {
+    fbb_.AddStruct(RelativeNavConfig::VT_EPOCH, epoch);
+  }
+  void add_state(::flatbuffers::Offset<::flatbuffers::Vector<double>> state) {
+    fbb_.AddOffset(RelativeNavConfig::VT_STATE, state);
+  }
+  void add_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance) {
+    fbb_.AddOffset(RelativeNavConfig::VT_COVARIANCE, covariance);
+  }
+  void add_chief(::flatbuffers::Offset<orbpro::estimation::ChiefReference> chief) {
+    fbb_.AddOffset(RelativeNavConfig::VT_CHIEF, chief);
+  }
+  void add_gravitational_parameter_m3_s2(double gravitational_parameter_m3_s2) {
+    fbb_.AddElement<double>(RelativeNavConfig::VT_GRAVITATIONAL_PARAMETER_M3_S2, gravitational_parameter_m3_s2, 0.0);
+  }
+  void add_j2(double j2) {
+    fbb_.AddElement<double>(RelativeNavConfig::VT_J2, j2, 0.0);
+  }
+  void add_equatorial_radius_m(double equatorial_radius_m) {
+    fbb_.AddElement<double>(RelativeNavConfig::VT_EQUATORIAL_RADIUS_M, equatorial_radius_m, 0.0);
+  }
+  void add_process_noise(orbpro::estimation::ProcessNoiseKind process_noise) {
+    fbb_.AddElement<uint8_t>(RelativeNavConfig::VT_PROCESS_NOISE, static_cast<uint8_t>(process_noise), 0);
+  }
+  void add_acceleration_psd(::flatbuffers::Offset<::flatbuffers::Vector<double>> acceleration_psd) {
+    fbb_.AddOffset(RelativeNavConfig::VT_ACCELERATION_PSD, acceleration_psd);
+  }
+  void add_recovery(::flatbuffers::Offset<orbpro::estimation::InnovationRecoveryOptions> recovery) {
+    fbb_.AddOffset(RelativeNavConfig::VT_RECOVERY, recovery);
+  }
+  void add_curvilinear(bool curvilinear) {
+    fbb_.AddElement<uint8_t>(RelativeNavConfig::VT_CURVILINEAR, static_cast<uint8_t>(curvilinear), 0);
+  }
+  explicit RelativeNavConfigBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeNavConfig> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeNavConfig>(end);
+    fbb_.Required(o, RelativeNavConfig::VT_EPOCH);
+    fbb_.Required(o, RelativeNavConfig::VT_STATE);
+    fbb_.Required(o, RelativeNavConfig::VT_COVARIANCE);
+    fbb_.Required(o, RelativeNavConfig::VT_CHIEF);
+    fbb_.Required(o, RelativeNavConfig::VT_ACCELERATION_PSD);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeNavConfig> CreateRelativeNavConfig(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    orbpro::estimation::RelativeModel model = orbpro::estimation::RelativeModel::HILL_CLOHESSY_WILTSHIRE,
+    orbpro::estimation::RelativeMeasurementModel measurement_model = orbpro::estimation::RelativeMeasurementModel::FULL_STATE,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> state = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance = 0,
+    ::flatbuffers::Offset<orbpro::estimation::ChiefReference> chief = 0,
+    double gravitational_parameter_m3_s2 = 0.0,
+    double j2 = 0.0,
+    double equatorial_radius_m = 0.0,
+    orbpro::estimation::ProcessNoiseKind process_noise = orbpro::estimation::ProcessNoiseKind::NONE,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> acceleration_psd = 0,
+    ::flatbuffers::Offset<orbpro::estimation::InnovationRecoveryOptions> recovery = 0,
+    bool curvilinear = false) {
+  RelativeNavConfigBuilder builder_(_fbb);
+  builder_.add_equatorial_radius_m(equatorial_radius_m);
+  builder_.add_j2(j2);
+  builder_.add_gravitational_parameter_m3_s2(gravitational_parameter_m3_s2);
+  builder_.add_recovery(recovery);
+  builder_.add_acceleration_psd(acceleration_psd);
+  builder_.add_chief(chief);
+  builder_.add_covariance(covariance);
+  builder_.add_state(state);
+  builder_.add_epoch(epoch);
+  builder_.add_curvilinear(curvilinear);
+  builder_.add_process_noise(process_noise);
+  builder_.add_measurement_model(measurement_model);
+  builder_.add_model(model);
+  return builder_.Finish();
+}
+
+struct RelativeNavConfig::Traits {
+  using type = RelativeNavConfig;
+  static auto constexpr Create = CreateRelativeNavConfig;
+};
+
+inline ::flatbuffers::Offset<RelativeNavConfig> CreateRelativeNavConfigDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    orbpro::estimation::RelativeModel model = orbpro::estimation::RelativeModel::HILL_CLOHESSY_WILTSHIRE,
+    orbpro::estimation::RelativeMeasurementModel measurement_model = orbpro::estimation::RelativeMeasurementModel::FULL_STATE,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    const std::vector<double> *state = nullptr,
+    const std::vector<double> *covariance = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::ChiefReference> chief = 0,
+    double gravitational_parameter_m3_s2 = 0.0,
+    double j2 = 0.0,
+    double equatorial_radius_m = 0.0,
+    orbpro::estimation::ProcessNoiseKind process_noise = orbpro::estimation::ProcessNoiseKind::NONE,
+    const std::vector<double> *acceleration_psd = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::InnovationRecoveryOptions> recovery = 0,
+    bool curvilinear = false) {
+  auto state__ = state ? _fbb.CreateVector<double>(*state) : 0;
+  auto covariance__ = covariance ? _fbb.CreateVector<double>(*covariance) : 0;
+  auto acceleration_psd__ = acceleration_psd ? _fbb.CreateVector<double>(*acceleration_psd) : 0;
+  return orbpro::estimation::CreateRelativeNavConfig(
+      _fbb,
+      model,
+      measurement_model,
+      epoch,
+      state__,
+      covariance__,
+      chief,
+      gravitational_parameter_m3_s2,
+      j2,
+      equatorial_radius_m,
+      process_noise,
+      acceleration_psd__,
+      recovery,
+      curvilinear);
+}
+
+::flatbuffers::Offset<RelativeNavConfig> CreateRelativeNavConfig(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavConfigT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeObservationT : public ::flatbuffers::NativeTable {
+  typedef RelativeObservation TableType;
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> epoch{};
+  std::vector<double> state{};
+  std::vector<double> covariance{};
+  std::unique_ptr<orbpro::estimation::ChiefReferenceT> chief{};
+  RelativeObservationT() = default;
+  RelativeObservationT(const RelativeObservationT &o);
+  RelativeObservationT(RelativeObservationT&&) FLATBUFFERS_NOEXCEPT = default;
+  RelativeObservationT &operator=(RelativeObservationT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RelativeObservation FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeObservationT NativeTableType;
+  typedef RelativeObservationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_STATE = 6,
+    VT_COVARIANCE = 8,
+    VT_CHIEF = 10
+  };
+  const orbpro::estimation::EstimationEpoch *epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_EPOCH);
+  }
+  const ::flatbuffers::Vector<double> *state() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_STATE);
+  }
+  const ::flatbuffers::Vector<double> *covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_COVARIANCE);
+  }
+  const orbpro::estimation::ChiefReference *chief() const {
+    return GetPointer<const orbpro::estimation::ChiefReference *>(VT_CHIEF);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyFieldRequired<orbpro::estimation::EstimationEpoch>(verifier, VT_EPOCH, 8) &&
+           VerifyOffsetRequired(verifier, VT_STATE) &&
+           verifier.VerifyVector(state()) &&
+           VerifyOffsetRequired(verifier, VT_COVARIANCE) &&
+           verifier.VerifyVector(covariance()) &&
+           VerifyOffsetRequired(verifier, VT_CHIEF) &&
+           verifier.VerifyTable(chief()) &&
+           verifier.EndTable();
+  }
+  RelativeObservationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeObservationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeObservation> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeObservationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeObservationBuilder {
+  typedef RelativeObservation Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_epoch(const orbpro::estimation::EstimationEpoch *epoch) {
+    fbb_.AddStruct(RelativeObservation::VT_EPOCH, epoch);
+  }
+  void add_state(::flatbuffers::Offset<::flatbuffers::Vector<double>> state) {
+    fbb_.AddOffset(RelativeObservation::VT_STATE, state);
+  }
+  void add_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance) {
+    fbb_.AddOffset(RelativeObservation::VT_COVARIANCE, covariance);
+  }
+  void add_chief(::flatbuffers::Offset<orbpro::estimation::ChiefReference> chief) {
+    fbb_.AddOffset(RelativeObservation::VT_CHIEF, chief);
+  }
+  explicit RelativeObservationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeObservation> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeObservation>(end);
+    fbb_.Required(o, RelativeObservation::VT_EPOCH);
+    fbb_.Required(o, RelativeObservation::VT_STATE);
+    fbb_.Required(o, RelativeObservation::VT_COVARIANCE);
+    fbb_.Required(o, RelativeObservation::VT_CHIEF);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeObservation> CreateRelativeObservation(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> state = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance = 0,
+    ::flatbuffers::Offset<orbpro::estimation::ChiefReference> chief = 0) {
+  RelativeObservationBuilder builder_(_fbb);
+  builder_.add_chief(chief);
+  builder_.add_covariance(covariance);
+  builder_.add_state(state);
+  builder_.add_epoch(epoch);
+  return builder_.Finish();
+}
+
+struct RelativeObservation::Traits {
+  using type = RelativeObservation;
+  static auto constexpr Create = CreateRelativeObservation;
+};
+
+inline ::flatbuffers::Offset<RelativeObservation> CreateRelativeObservationDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    const std::vector<double> *state = nullptr,
+    const std::vector<double> *covariance = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::ChiefReference> chief = 0) {
+  auto state__ = state ? _fbb.CreateVector<double>(*state) : 0;
+  auto covariance__ = covariance ? _fbb.CreateVector<double>(*covariance) : 0;
+  return orbpro::estimation::CreateRelativeObservation(
+      _fbb,
+      epoch,
+      state__,
+      covariance__,
+      chief);
+}
+
+::flatbuffers::Offset<RelativeObservation> CreateRelativeObservation(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeObservationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeNavRequestT : public ::flatbuffers::NativeTable {
+  typedef RelativeNavRequest TableType;
+  std::unique_ptr<orbpro::estimation::RelativeNavConfigT> config{};
+  std::vector<std::unique_ptr<orbpro::estimation::RelativeObservationT>> observations{};
+  std::string trace_id{};
+  RelativeNavRequestT() = default;
+  RelativeNavRequestT(const RelativeNavRequestT &o);
+  RelativeNavRequestT(RelativeNavRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  RelativeNavRequestT &operator=(RelativeNavRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RelativeNavRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeNavRequestT NativeTableType;
+  typedef RelativeNavRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_CONFIG = 4,
+    VT_OBSERVATIONS = 6,
+    VT_TRACE_ID = 8
+  };
+  const orbpro::estimation::RelativeNavConfig *config() const {
+    return GetPointer<const orbpro::estimation::RelativeNavConfig *>(VT_CONFIG);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>> *observations() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>> *>(VT_OBSERVATIONS);
+  }
+  const ::flatbuffers::String *trace_id() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRACE_ID);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_CONFIG) &&
+           verifier.VerifyTable(config()) &&
+           VerifyOffset(verifier, VT_OBSERVATIONS) &&
+           verifier.VerifyVector(observations()) &&
+           verifier.VerifyVectorOfTables(observations()) &&
+           VerifyOffset(verifier, VT_TRACE_ID) &&
+           verifier.VerifyString(trace_id()) &&
+           verifier.EndTable();
+  }
+  RelativeNavRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeNavRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeNavRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeNavRequestBuilder {
+  typedef RelativeNavRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_config(::flatbuffers::Offset<orbpro::estimation::RelativeNavConfig> config) {
+    fbb_.AddOffset(RelativeNavRequest::VT_CONFIG, config);
+  }
+  void add_observations(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>>> observations) {
+    fbb_.AddOffset(RelativeNavRequest::VT_OBSERVATIONS, observations);
+  }
+  void add_trace_id(::flatbuffers::Offset<::flatbuffers::String> trace_id) {
+    fbb_.AddOffset(RelativeNavRequest::VT_TRACE_ID, trace_id);
+  }
+  explicit RelativeNavRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeNavRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeNavRequest>(end);
+    fbb_.Required(o, RelativeNavRequest::VT_CONFIG);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeNavRequest> CreateRelativeNavRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeNavConfig> config = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>>> observations = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> trace_id = 0) {
+  RelativeNavRequestBuilder builder_(_fbb);
+  builder_.add_trace_id(trace_id);
+  builder_.add_observations(observations);
+  builder_.add_config(config);
+  return builder_.Finish();
+}
+
+struct RelativeNavRequest::Traits {
+  using type = RelativeNavRequest;
+  static auto constexpr Create = CreateRelativeNavRequest;
+};
+
+inline ::flatbuffers::Offset<RelativeNavRequest> CreateRelativeNavRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<orbpro::estimation::RelativeNavConfig> config = 0,
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>> *observations = nullptr,
+    const char *trace_id = nullptr) {
+  auto observations__ = observations ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>>(*observations) : 0;
+  auto trace_id__ = trace_id ? _fbb.CreateString(trace_id) : 0;
+  return orbpro::estimation::CreateRelativeNavRequest(
+      _fbb,
+      config,
+      observations__,
+      trace_id__);
+}
+
+::flatbuffers::Offset<RelativeNavRequest> CreateRelativeNavRequest(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeNavEpochT : public ::flatbuffers::NativeTable {
+  typedef RelativeNavEpoch TableType;
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> epoch{};
+  std::vector<double> predicted_state{};
+  std::vector<double> predicted_covariance{};
+  std::vector<double> filtered_state{};
+  std::vector<double> filtered_covariance{};
+  std::vector<double> innovation{};
+  double normalized_innovation_squared = 0.0;
+  std::unique_ptr<orbpro::estimation::RecoveryEpochT> recovery{};
+  RelativeNavEpochT() = default;
+  RelativeNavEpochT(const RelativeNavEpochT &o);
+  RelativeNavEpochT(RelativeNavEpochT&&) FLATBUFFERS_NOEXCEPT = default;
+  RelativeNavEpochT &operator=(RelativeNavEpochT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RelativeNavEpoch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeNavEpochT NativeTableType;
+  typedef RelativeNavEpochBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_PREDICTED_STATE = 6,
+    VT_PREDICTED_COVARIANCE = 8,
+    VT_FILTERED_STATE = 10,
+    VT_FILTERED_COVARIANCE = 12,
+    VT_INNOVATION = 14,
+    VT_NORMALIZED_INNOVATION_SQUARED = 16,
+    VT_RECOVERY = 18
+  };
+  const orbpro::estimation::EstimationEpoch *epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_EPOCH);
+  }
+  const ::flatbuffers::Vector<double> *predicted_state() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PREDICTED_STATE);
+  }
+  const ::flatbuffers::Vector<double> *predicted_covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PREDICTED_COVARIANCE);
+  }
+  const ::flatbuffers::Vector<double> *filtered_state() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_FILTERED_STATE);
+  }
+  const ::flatbuffers::Vector<double> *filtered_covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_FILTERED_COVARIANCE);
+  }
+  const ::flatbuffers::Vector<double> *innovation() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_INNOVATION);
+  }
+  double normalized_innovation_squared() const {
+    return GetField<double>(VT_NORMALIZED_INNOVATION_SQUARED, 0.0);
+  }
+  const orbpro::estimation::RecoveryEpoch *recovery() const {
+    return GetPointer<const orbpro::estimation::RecoveryEpoch *>(VT_RECOVERY);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<orbpro::estimation::EstimationEpoch>(verifier, VT_EPOCH, 8) &&
+           VerifyOffset(verifier, VT_PREDICTED_STATE) &&
+           verifier.VerifyVector(predicted_state()) &&
+           VerifyOffset(verifier, VT_PREDICTED_COVARIANCE) &&
+           verifier.VerifyVector(predicted_covariance()) &&
+           VerifyOffset(verifier, VT_FILTERED_STATE) &&
+           verifier.VerifyVector(filtered_state()) &&
+           VerifyOffset(verifier, VT_FILTERED_COVARIANCE) &&
+           verifier.VerifyVector(filtered_covariance()) &&
+           VerifyOffset(verifier, VT_INNOVATION) &&
+           verifier.VerifyVector(innovation()) &&
+           VerifyField<double>(verifier, VT_NORMALIZED_INNOVATION_SQUARED, 8) &&
+           VerifyOffset(verifier, VT_RECOVERY) &&
+           verifier.VerifyTable(recovery()) &&
+           verifier.EndTable();
+  }
+  RelativeNavEpochT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeNavEpochT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeNavEpoch> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavEpochT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeNavEpochBuilder {
+  typedef RelativeNavEpoch Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_epoch(const orbpro::estimation::EstimationEpoch *epoch) {
+    fbb_.AddStruct(RelativeNavEpoch::VT_EPOCH, epoch);
+  }
+  void add_predicted_state(::flatbuffers::Offset<::flatbuffers::Vector<double>> predicted_state) {
+    fbb_.AddOffset(RelativeNavEpoch::VT_PREDICTED_STATE, predicted_state);
+  }
+  void add_predicted_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> predicted_covariance) {
+    fbb_.AddOffset(RelativeNavEpoch::VT_PREDICTED_COVARIANCE, predicted_covariance);
+  }
+  void add_filtered_state(::flatbuffers::Offset<::flatbuffers::Vector<double>> filtered_state) {
+    fbb_.AddOffset(RelativeNavEpoch::VT_FILTERED_STATE, filtered_state);
+  }
+  void add_filtered_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> filtered_covariance) {
+    fbb_.AddOffset(RelativeNavEpoch::VT_FILTERED_COVARIANCE, filtered_covariance);
+  }
+  void add_innovation(::flatbuffers::Offset<::flatbuffers::Vector<double>> innovation) {
+    fbb_.AddOffset(RelativeNavEpoch::VT_INNOVATION, innovation);
+  }
+  void add_normalized_innovation_squared(double normalized_innovation_squared) {
+    fbb_.AddElement<double>(RelativeNavEpoch::VT_NORMALIZED_INNOVATION_SQUARED, normalized_innovation_squared, 0.0);
+  }
+  void add_recovery(::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch> recovery) {
+    fbb_.AddOffset(RelativeNavEpoch::VT_RECOVERY, recovery);
+  }
+  explicit RelativeNavEpochBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeNavEpoch> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeNavEpoch>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeNavEpoch> CreateRelativeNavEpoch(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> predicted_state = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> predicted_covariance = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> filtered_state = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> filtered_covariance = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> innovation = 0,
+    double normalized_innovation_squared = 0.0,
+    ::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch> recovery = 0) {
+  RelativeNavEpochBuilder builder_(_fbb);
+  builder_.add_normalized_innovation_squared(normalized_innovation_squared);
+  builder_.add_recovery(recovery);
+  builder_.add_innovation(innovation);
+  builder_.add_filtered_covariance(filtered_covariance);
+  builder_.add_filtered_state(filtered_state);
+  builder_.add_predicted_covariance(predicted_covariance);
+  builder_.add_predicted_state(predicted_state);
+  builder_.add_epoch(epoch);
+  return builder_.Finish();
+}
+
+struct RelativeNavEpoch::Traits {
+  using type = RelativeNavEpoch;
+  static auto constexpr Create = CreateRelativeNavEpoch;
+};
+
+inline ::flatbuffers::Offset<RelativeNavEpoch> CreateRelativeNavEpochDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    const std::vector<double> *predicted_state = nullptr,
+    const std::vector<double> *predicted_covariance = nullptr,
+    const std::vector<double> *filtered_state = nullptr,
+    const std::vector<double> *filtered_covariance = nullptr,
+    const std::vector<double> *innovation = nullptr,
+    double normalized_innovation_squared = 0.0,
+    ::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch> recovery = 0) {
+  auto predicted_state__ = predicted_state ? _fbb.CreateVector<double>(*predicted_state) : 0;
+  auto predicted_covariance__ = predicted_covariance ? _fbb.CreateVector<double>(*predicted_covariance) : 0;
+  auto filtered_state__ = filtered_state ? _fbb.CreateVector<double>(*filtered_state) : 0;
+  auto filtered_covariance__ = filtered_covariance ? _fbb.CreateVector<double>(*filtered_covariance) : 0;
+  auto innovation__ = innovation ? _fbb.CreateVector<double>(*innovation) : 0;
+  return orbpro::estimation::CreateRelativeNavEpoch(
+      _fbb,
+      epoch,
+      predicted_state__,
+      predicted_covariance__,
+      filtered_state__,
+      filtered_covariance__,
+      innovation__,
+      normalized_innovation_squared,
+      recovery);
+}
+
+::flatbuffers::Offset<RelativeNavEpoch> CreateRelativeNavEpoch(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavEpochT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeNavResultT : public ::flatbuffers::NativeTable {
+  typedef RelativeNavResult TableType;
+  std::vector<std::unique_ptr<orbpro::estimation::RelativeNavEpochT>> history{};
+  std::string trace_id{};
+  RelativeNavResultT() = default;
+  RelativeNavResultT(const RelativeNavResultT &o);
+  RelativeNavResultT(RelativeNavResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  RelativeNavResultT &operator=(RelativeNavResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RelativeNavResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeNavResultT NativeTableType;
+  typedef RelativeNavResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_HISTORY = 4,
+    VT_TRACE_ID = 6
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>> *history() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>> *>(VT_HISTORY);
+  }
+  const ::flatbuffers::String *trace_id() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRACE_ID);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_HISTORY) &&
+           verifier.VerifyVector(history()) &&
+           verifier.VerifyVectorOfTables(history()) &&
+           VerifyOffset(verifier, VT_TRACE_ID) &&
+           verifier.VerifyString(trace_id()) &&
+           verifier.EndTable();
+  }
+  RelativeNavResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeNavResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeNavResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeNavResultBuilder {
+  typedef RelativeNavResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_history(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>>> history) {
+    fbb_.AddOffset(RelativeNavResult::VT_HISTORY, history);
+  }
+  void add_trace_id(::flatbuffers::Offset<::flatbuffers::String> trace_id) {
+    fbb_.AddOffset(RelativeNavResult::VT_TRACE_ID, trace_id);
+  }
+  explicit RelativeNavResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeNavResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeNavResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeNavResult> CreateRelativeNavResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>>> history = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> trace_id = 0) {
+  RelativeNavResultBuilder builder_(_fbb);
+  builder_.add_trace_id(trace_id);
+  builder_.add_history(history);
+  return builder_.Finish();
+}
+
+struct RelativeNavResult::Traits {
+  using type = RelativeNavResult;
+  static auto constexpr Create = CreateRelativeNavResult;
+};
+
+inline ::flatbuffers::Offset<RelativeNavResult> CreateRelativeNavResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>> *history = nullptr,
+    const char *trace_id = nullptr) {
+  auto history__ = history ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>>(*history) : 0;
+  auto trace_id__ = trace_id ? _fbb.CreateString(trace_id) : 0;
+  return orbpro::estimation::CreateRelativeNavResult(
+      _fbb,
+      history__,
+      trace_id__);
+}
+
+::flatbuffers::Offset<RelativeNavResult> CreateRelativeNavResult(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeStateRequestT : public ::flatbuffers::NativeTable {
+  typedef RelativeStateRequest TableType;
+  double gravitational_parameter_m3_s2 = 0.0;
+  std::vector<double> chief_states{};
+  std::vector<double> deputy_states{};
+  bool curvilinear = false;
+};
+
+struct RelativeStateRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeStateRequestT NativeTableType;
+  typedef RelativeStateRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_GRAVITATIONAL_PARAMETER_M3_S2 = 4,
+    VT_CHIEF_STATES = 6,
+    VT_DEPUTY_STATES = 8,
+    VT_CURVILINEAR = 10
+  };
+  double gravitational_parameter_m3_s2() const {
+    return GetField<double>(VT_GRAVITATIONAL_PARAMETER_M3_S2, 0.0);
+  }
+  const ::flatbuffers::Vector<double> *chief_states() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_CHIEF_STATES);
+  }
+  const ::flatbuffers::Vector<double> *deputy_states() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DEPUTY_STATES);
+  }
+  bool curvilinear() const {
+    return GetField<uint8_t>(VT_CURVILINEAR, 0) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_GRAVITATIONAL_PARAMETER_M3_S2, 8) &&
+           VerifyOffsetRequired(verifier, VT_CHIEF_STATES) &&
+           verifier.VerifyVector(chief_states()) &&
+           VerifyOffsetRequired(verifier, VT_DEPUTY_STATES) &&
+           verifier.VerifyVector(deputy_states()) &&
+           VerifyField<uint8_t>(verifier, VT_CURVILINEAR, 1) &&
+           verifier.EndTable();
+  }
+  RelativeStateRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeStateRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeStateRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeStateRequestBuilder {
+  typedef RelativeStateRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_gravitational_parameter_m3_s2(double gravitational_parameter_m3_s2) {
+    fbb_.AddElement<double>(RelativeStateRequest::VT_GRAVITATIONAL_PARAMETER_M3_S2, gravitational_parameter_m3_s2, 0.0);
+  }
+  void add_chief_states(::flatbuffers::Offset<::flatbuffers::Vector<double>> chief_states) {
+    fbb_.AddOffset(RelativeStateRequest::VT_CHIEF_STATES, chief_states);
+  }
+  void add_deputy_states(::flatbuffers::Offset<::flatbuffers::Vector<double>> deputy_states) {
+    fbb_.AddOffset(RelativeStateRequest::VT_DEPUTY_STATES, deputy_states);
+  }
+  void add_curvilinear(bool curvilinear) {
+    fbb_.AddElement<uint8_t>(RelativeStateRequest::VT_CURVILINEAR, static_cast<uint8_t>(curvilinear), 0);
+  }
+  explicit RelativeStateRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeStateRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeStateRequest>(end);
+    fbb_.Required(o, RelativeStateRequest::VT_CHIEF_STATES);
+    fbb_.Required(o, RelativeStateRequest::VT_DEPUTY_STATES);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeStateRequest> CreateRelativeStateRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double gravitational_parameter_m3_s2 = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> chief_states = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> deputy_states = 0,
+    bool curvilinear = false) {
+  RelativeStateRequestBuilder builder_(_fbb);
+  builder_.add_gravitational_parameter_m3_s2(gravitational_parameter_m3_s2);
+  builder_.add_deputy_states(deputy_states);
+  builder_.add_chief_states(chief_states);
+  builder_.add_curvilinear(curvilinear);
+  return builder_.Finish();
+}
+
+struct RelativeStateRequest::Traits {
+  using type = RelativeStateRequest;
+  static auto constexpr Create = CreateRelativeStateRequest;
+};
+
+inline ::flatbuffers::Offset<RelativeStateRequest> CreateRelativeStateRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double gravitational_parameter_m3_s2 = 0.0,
+    const std::vector<double> *chief_states = nullptr,
+    const std::vector<double> *deputy_states = nullptr,
+    bool curvilinear = false) {
+  auto chief_states__ = chief_states ? _fbb.CreateVector<double>(*chief_states) : 0;
+  auto deputy_states__ = deputy_states ? _fbb.CreateVector<double>(*deputy_states) : 0;
+  return orbpro::estimation::CreateRelativeStateRequest(
+      _fbb,
+      gravitational_parameter_m3_s2,
+      chief_states__,
+      deputy_states__,
+      curvilinear);
+}
+
+::flatbuffers::Offset<RelativeStateRequest> CreateRelativeStateRequest(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RelativeStateResultT : public ::flatbuffers::NativeTable {
+  typedef RelativeStateResult TableType;
+  std::vector<double> states{};
+  std::vector<std::unique_ptr<orbpro::estimation::ChiefReferenceT>> chiefs{};
+  RelativeStateResultT() = default;
+  RelativeStateResultT(const RelativeStateResultT &o);
+  RelativeStateResultT(RelativeStateResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  RelativeStateResultT &operator=(RelativeStateResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct RelativeStateResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RelativeStateResultT NativeTableType;
+  typedef RelativeStateResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_STATES = 4,
+    VT_CHIEFS = 6
+  };
+  const ::flatbuffers::Vector<double> *states() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_STATES);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>> *chiefs() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>> *>(VT_CHIEFS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_STATES) &&
+           verifier.VerifyVector(states()) &&
+           VerifyOffset(verifier, VT_CHIEFS) &&
+           verifier.VerifyVector(chiefs()) &&
+           verifier.VerifyVectorOfTables(chiefs()) &&
+           verifier.EndTable();
+  }
+  RelativeStateResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RelativeStateResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RelativeStateResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RelativeStateResultBuilder {
+  typedef RelativeStateResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_states(::flatbuffers::Offset<::flatbuffers::Vector<double>> states) {
+    fbb_.AddOffset(RelativeStateResult::VT_STATES, states);
+  }
+  void add_chiefs(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>>> chiefs) {
+    fbb_.AddOffset(RelativeStateResult::VT_CHIEFS, chiefs);
+  }
+  explicit RelativeStateResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RelativeStateResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RelativeStateResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RelativeStateResult> CreateRelativeStateResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> states = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>>> chiefs = 0) {
+  RelativeStateResultBuilder builder_(_fbb);
+  builder_.add_chiefs(chiefs);
+  builder_.add_states(states);
+  return builder_.Finish();
+}
+
+struct RelativeStateResult::Traits {
+  using type = RelativeStateResult;
+  static auto constexpr Create = CreateRelativeStateResult;
+};
+
+inline ::flatbuffers::Offset<RelativeStateResult> CreateRelativeStateResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<double> *states = nullptr,
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>> *chiefs = nullptr) {
+  auto states__ = states ? _fbb.CreateVector<double>(*states) : 0;
+  auto chiefs__ = chiefs ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>>(*chiefs) : 0;
+  return orbpro::estimation::CreateRelativeStateResult(
+      _fbb,
+      states__,
+      chiefs__);
+}
+
+::flatbuffers::Offset<RelativeStateResult> CreateRelativeStateResult(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 inline EstimationRequestT::EstimationRequestT(const EstimationRequestT &o)
       : config((o.config) ? new orbpro::estimation::EstimationConfig(*o.config) : nullptr),
         observations(o.observations),
@@ -6020,6 +7605,8 @@ inline EstimationResultT::EstimationResultT(const EstimationResultT &o)
   for (const auto &propagation_requests_ : o.propagation_requests) { propagation_requests.emplace_back((propagation_requests_) ? new orbpro::estimation::PropagationQueryT(*propagation_requests_) : nullptr); }
   support_history.reserve(o.support_history.size());
   for (const auto &support_history_ : o.support_history) { support_history.emplace_back((support_history_) ? new orbpro::estimation::SupportEpochT(*support_history_) : nullptr); }
+  recovery_history.reserve(o.recovery_history.size());
+  for (const auto &recovery_history_ : o.recovery_history) { recovery_history.emplace_back((recovery_history_) ? new orbpro::estimation::RecoveryEpochT(*recovery_history_) : nullptr); }
 }
 
 inline EstimationResultT &EstimationResultT::operator=(EstimationResultT o) FLATBUFFERS_NOEXCEPT {
@@ -6038,6 +7625,7 @@ inline EstimationResultT &EstimationResultT::operator=(EstimationResultT o) FLAT
   std::swap(batch_fit, o.batch_fit);
   std::swap(support_history, o.support_history);
   std::swap(final_support, o.final_support);
+  std::swap(recovery_history, o.recovery_history);
   return *this;
 }
 
@@ -6065,6 +7653,7 @@ inline void EstimationResult::UnPackTo(EstimationResultT *_o, const ::flatbuffer
   { auto _e = batch_fit(); if (_e) { if(_o->batch_fit) { _e->UnPackTo(_o->batch_fit.get(), _resolver); } else { _o->batch_fit = std::unique_ptr<orbpro::estimation::BatchFitResultT>(_e->UnPack(_resolver)); } } else if (_o->batch_fit) { _o->batch_fit.reset(); } }
   { auto _e = support_history(); if (_e) { _o->support_history.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->support_history[_i]) { _e->Get(_i)->UnPackTo(_o->support_history[_i].get(), _resolver); } else { _o->support_history[_i] = std::unique_ptr<orbpro::estimation::SupportEpochT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->support_history.resize(0); } }
   { auto _e = final_support(); if (_e) { if(_o->final_support) { _e->UnPackTo(_o->final_support.get(), _resolver); } else { _o->final_support = std::unique_ptr<orbpro::estimation::SupportStateT>(_e->UnPack(_resolver)); } } else if (_o->final_support) { _o->final_support.reset(); } }
+  { auto _e = recovery_history(); if (_e) { _o->recovery_history.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->recovery_history[_i]) { _e->Get(_i)->UnPackTo(_o->recovery_history[_i].get(), _resolver); } else { _o->recovery_history[_i] = std::unique_ptr<orbpro::estimation::RecoveryEpochT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->recovery_history.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6090,6 +7679,7 @@ inline ::flatbuffers::Offset<EstimationResult> EstimationResult::Pack(::flatbuff
   auto _batch_fit = _o->batch_fit ? CreateBatchFitResult(_fbb, _o->batch_fit.get(), _rehasher) : 0;
   auto _support_history = _o->support_history.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>> (_o->support_history.size(), [](size_t i, _VectorArgs *__va) { return CreateSupportEpoch(*__va->__fbb, __va->__o->support_history[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _final_support = _o->final_support ? CreateSupportState(_fbb, _o->final_support.get(), _rehasher) : 0;
+  auto _recovery_history = _o->recovery_history.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::RecoveryEpoch>> (_o->recovery_history.size(), [](size_t i, _VectorArgs *__va) { return CreateRecoveryEpoch(*__va->__fbb, __va->__o->recovery_history[i].get(), __va->__rehasher); }, &_va ) : 0;
   return orbpro::estimation::CreateEstimationResult(
       _fbb,
       _status,
@@ -6106,7 +7696,8 @@ inline ::flatbuffers::Offset<EstimationResult> EstimationResult::Pack(::flatbuff
       _propagation_requests,
       _batch_fit,
       _support_history,
-      _final_support);
+      _final_support,
+      _recovery_history);
 }
 
 inline EstimationEnvelopeT::EstimationEnvelopeT(const EstimationEnvelopeT &o)
@@ -6117,7 +7708,11 @@ inline EstimationEnvelopeT::EstimationEnvelopeT(const EstimationEnvelopeT &o)
         initial_orbit_request((o.initial_orbit_request) ? new orbpro::estimation::InitialOrbitRequest(*o.initial_orbit_request) : nullptr),
         initial_orbit_result((o.initial_orbit_result) ? new orbpro::estimation::InitialOrbitResult(*o.initial_orbit_result) : nullptr),
         teag_request((o.teag_request) ? new orbpro::estimation::TeagRequestT(*o.teag_request) : nullptr),
-        teag_result((o.teag_result) ? new orbpro::estimation::TeagResultT(*o.teag_result) : nullptr) {
+        teag_result((o.teag_result) ? new orbpro::estimation::TeagResultT(*o.teag_result) : nullptr),
+        relative_request((o.relative_request) ? new orbpro::estimation::RelativeNavRequestT(*o.relative_request) : nullptr),
+        relative_result((o.relative_result) ? new orbpro::estimation::RelativeNavResultT(*o.relative_result) : nullptr),
+        relative_state_request((o.relative_state_request) ? new orbpro::estimation::RelativeStateRequestT(*o.relative_state_request) : nullptr),
+        relative_state_result((o.relative_state_result) ? new orbpro::estimation::RelativeStateResultT(*o.relative_state_result) : nullptr) {
   propagation_answers.reserve(o.propagation_answers.size());
   for (const auto &propagation_answers_ : o.propagation_answers) { propagation_answers.emplace_back((propagation_answers_) ? new orbpro::estimation::PropagationAnswerT(*propagation_answers_) : nullptr); }
 }
@@ -6132,6 +7727,10 @@ inline EstimationEnvelopeT &EstimationEnvelopeT::operator=(EstimationEnvelopeT o
   std::swap(propagation_answers, o.propagation_answers);
   std::swap(teag_request, o.teag_request);
   std::swap(teag_result, o.teag_result);
+  std::swap(relative_request, o.relative_request);
+  std::swap(relative_result, o.relative_result);
+  std::swap(relative_state_request, o.relative_state_request);
+  std::swap(relative_state_result, o.relative_state_result);
   return *this;
 }
 
@@ -6153,6 +7752,10 @@ inline void EstimationEnvelope::UnPackTo(EstimationEnvelopeT *_o, const ::flatbu
   { auto _e = propagation_answers(); if (_e) { _o->propagation_answers.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->propagation_answers[_i]) { _e->Get(_i)->UnPackTo(_o->propagation_answers[_i].get(), _resolver); } else { _o->propagation_answers[_i] = std::unique_ptr<orbpro::estimation::PropagationAnswerT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->propagation_answers.resize(0); } }
   { auto _e = teag_request(); if (_e) { if(_o->teag_request) { _e->UnPackTo(_o->teag_request.get(), _resolver); } else { _o->teag_request = std::unique_ptr<orbpro::estimation::TeagRequestT>(_e->UnPack(_resolver)); } } else if (_o->teag_request) { _o->teag_request.reset(); } }
   { auto _e = teag_result(); if (_e) { if(_o->teag_result) { _e->UnPackTo(_o->teag_result.get(), _resolver); } else { _o->teag_result = std::unique_ptr<orbpro::estimation::TeagResultT>(_e->UnPack(_resolver)); } } else if (_o->teag_result) { _o->teag_result.reset(); } }
+  { auto _e = relative_request(); if (_e) { if(_o->relative_request) { _e->UnPackTo(_o->relative_request.get(), _resolver); } else { _o->relative_request = std::unique_ptr<orbpro::estimation::RelativeNavRequestT>(_e->UnPack(_resolver)); } } else if (_o->relative_request) { _o->relative_request.reset(); } }
+  { auto _e = relative_result(); if (_e) { if(_o->relative_result) { _e->UnPackTo(_o->relative_result.get(), _resolver); } else { _o->relative_result = std::unique_ptr<orbpro::estimation::RelativeNavResultT>(_e->UnPack(_resolver)); } } else if (_o->relative_result) { _o->relative_result.reset(); } }
+  { auto _e = relative_state_request(); if (_e) { if(_o->relative_state_request) { _e->UnPackTo(_o->relative_state_request.get(), _resolver); } else { _o->relative_state_request = std::unique_ptr<orbpro::estimation::RelativeStateRequestT>(_e->UnPack(_resolver)); } } else if (_o->relative_state_request) { _o->relative_state_request.reset(); } }
+  { auto _e = relative_state_result(); if (_e) { if(_o->relative_state_result) { _e->UnPackTo(_o->relative_state_result.get(), _resolver); } else { _o->relative_state_result = std::unique_ptr<orbpro::estimation::RelativeStateResultT>(_e->UnPack(_resolver)); } } else if (_o->relative_state_result) { _o->relative_state_result.reset(); } }
 }
 
 inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelope(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationEnvelopeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6172,6 +7775,10 @@ inline ::flatbuffers::Offset<EstimationEnvelope> EstimationEnvelope::Pack(::flat
   auto _propagation_answers = _o->propagation_answers.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> (_o->propagation_answers.size(), [](size_t i, _VectorArgs *__va) { return CreatePropagationAnswer(*__va->__fbb, __va->__o->propagation_answers[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _teag_request = _o->teag_request ? CreateTeagRequest(_fbb, _o->teag_request.get(), _rehasher) : 0;
   auto _teag_result = _o->teag_result ? CreateTeagResult(_fbb, _o->teag_result.get(), _rehasher) : 0;
+  auto _relative_request = _o->relative_request ? CreateRelativeNavRequest(_fbb, _o->relative_request.get(), _rehasher) : 0;
+  auto _relative_result = _o->relative_result ? CreateRelativeNavResult(_fbb, _o->relative_result.get(), _rehasher) : 0;
+  auto _relative_state_request = _o->relative_state_request ? CreateRelativeStateRequest(_fbb, _o->relative_state_request.get(), _rehasher) : 0;
+  auto _relative_state_result = _o->relative_state_result ? CreateRelativeStateResult(_fbb, _o->relative_state_result.get(), _rehasher) : 0;
   return orbpro::estimation::CreateEstimationEnvelope(
       _fbb,
       _request,
@@ -6182,7 +7789,11 @@ inline ::flatbuffers::Offset<EstimationEnvelope> EstimationEnvelope::Pack(::flat
       _initial_orbit_result,
       _propagation_answers,
       _teag_request,
-      _teag_result);
+      _teag_result,
+      _relative_request,
+      _relative_result,
+      _relative_state_request,
+      _relative_state_result);
 }
 
 inline SequentialOptionsT::SequentialOptionsT(const SequentialOptionsT &o)
@@ -6205,7 +7816,8 @@ inline SequentialOptionsT::SequentialOptionsT(const SequentialOptionsT &o)
         clock_drift_psd(o.clock_drift_psd),
         espf((o.espf) ? new orbpro::estimation::EspfOptionsT(*o.espf) : nullptr),
         set_membership((o.set_membership) ? new orbpro::estimation::SetMembershipOptionsT(*o.set_membership) : nullptr),
-        initial_support((o.initial_support) ? new orbpro::estimation::SupportStateT(*o.initial_support) : nullptr) {
+        initial_support((o.initial_support) ? new orbpro::estimation::SupportStateT(*o.initial_support) : nullptr),
+        innovation_recovery((o.innovation_recovery) ? new orbpro::estimation::InnovationRecoveryOptionsT(*o.innovation_recovery) : nullptr) {
 }
 
 inline SequentialOptionsT &SequentialOptionsT::operator=(SequentialOptionsT o) FLATBUFFERS_NOEXCEPT {
@@ -6229,6 +7841,7 @@ inline SequentialOptionsT &SequentialOptionsT::operator=(SequentialOptionsT o) F
   std::swap(espf, o.espf);
   std::swap(set_membership, o.set_membership);
   std::swap(initial_support, o.initial_support);
+  std::swap(innovation_recovery, o.innovation_recovery);
   return *this;
 }
 
@@ -6261,6 +7874,7 @@ inline void SequentialOptions::UnPackTo(SequentialOptionsT *_o, const ::flatbuff
   { auto _e = espf(); if (_e) { if(_o->espf) { _e->UnPackTo(_o->espf.get(), _resolver); } else { _o->espf = std::unique_ptr<orbpro::estimation::EspfOptionsT>(_e->UnPack(_resolver)); } } else if (_o->espf) { _o->espf.reset(); } }
   { auto _e = set_membership(); if (_e) { if(_o->set_membership) { _e->UnPackTo(_o->set_membership.get(), _resolver); } else { _o->set_membership = std::unique_ptr<orbpro::estimation::SetMembershipOptionsT>(_e->UnPack(_resolver)); } } else if (_o->set_membership) { _o->set_membership.reset(); } }
   { auto _e = initial_support(); if (_e) { if(_o->initial_support) { _e->UnPackTo(_o->initial_support.get(), _resolver); } else { _o->initial_support = std::unique_ptr<orbpro::estimation::SupportStateT>(_e->UnPack(_resolver)); } } else if (_o->initial_support) { _o->initial_support.reset(); } }
+  { auto _e = innovation_recovery(); if (_e) { if(_o->innovation_recovery) { _e->UnPackTo(_o->innovation_recovery.get(), _resolver); } else { _o->innovation_recovery = std::unique_ptr<orbpro::estimation::InnovationRecoveryOptionsT>(_e->UnPack(_resolver)); } } else if (_o->innovation_recovery) { _o->innovation_recovery.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(::flatbuffers::FlatBufferBuilder &_fbb, const SequentialOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6291,6 +7905,7 @@ inline ::flatbuffers::Offset<SequentialOptions> SequentialOptions::Pack(::flatbu
   auto _espf = _o->espf ? CreateEspfOptions(_fbb, _o->espf.get(), _rehasher) : 0;
   auto _set_membership = _o->set_membership ? CreateSetMembershipOptions(_fbb, _o->set_membership.get(), _rehasher) : 0;
   auto _initial_support = _o->initial_support ? CreateSupportState(_fbb, _o->initial_support.get(), _rehasher) : 0;
+  auto _innovation_recovery = _o->innovation_recovery ? CreateInnovationRecoveryOptions(_fbb, _o->innovation_recovery.get(), _rehasher) : 0;
   return orbpro::estimation::CreateSequentialOptions(
       _fbb,
       _ukf_alpha,
@@ -6312,7 +7927,8 @@ inline ::flatbuffers::Offset<SequentialOptions> SequentialOptions::Pack(::flatbu
       _clock_drift_psd,
       _espf,
       _set_membership,
-      _initial_support);
+      _initial_support,
+      _innovation_recovery);
 }
 
 inline ExtendedObservationT::ExtendedObservationT(const ExtendedObservationT &o)
@@ -7550,6 +9166,538 @@ inline ::flatbuffers::Offset<TeagResult> TeagResult::Pack(::flatbuffers::FlatBuf
       _entropy,
       _support_entropy,
       _entropy_alpha);
+}
+
+inline InnovationRecoveryOptionsT *InnovationRecoveryOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<InnovationRecoveryOptionsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void InnovationRecoveryOptions::UnPackTo(InnovationRecoveryOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = enabled(); _o->enabled = _e; }
+  { auto _e = strategy(); _o->strategy = _e; }
+  { auto _e = nis_probability(); _o->nis_probability = _e; }
+  { auto _e = confirmation_count(); _o->confirmation_count = _e; }
+  { auto _e = covariance_inflation(); _o->covariance_inflation = _e; }
+  { auto _e = max_gap_seconds(); _o->max_gap_seconds = _e; }
+}
+
+inline ::flatbuffers::Offset<InnovationRecoveryOptions> CreateInnovationRecoveryOptions(::flatbuffers::FlatBufferBuilder &_fbb, const InnovationRecoveryOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return InnovationRecoveryOptions::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<InnovationRecoveryOptions> InnovationRecoveryOptions::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const InnovationRecoveryOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const InnovationRecoveryOptionsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _enabled = _o->enabled;
+  auto _strategy = _o->strategy;
+  auto _nis_probability = _o->nis_probability;
+  auto _confirmation_count = _o->confirmation_count;
+  auto _covariance_inflation = _o->covariance_inflation;
+  auto _max_gap_seconds = _o->max_gap_seconds;
+  return orbpro::estimation::CreateInnovationRecoveryOptions(
+      _fbb,
+      _enabled,
+      _strategy,
+      _nis_probability,
+      _confirmation_count,
+      _covariance_inflation,
+      _max_gap_seconds);
+}
+
+inline RecoveryEpochT::RecoveryEpochT(const RecoveryEpochT &o)
+      : classification(o.classification),
+        action(o.action),
+        nis(o.nis),
+        threshold(o.threshold),
+        has_candidate(o.has_candidate),
+        candidate_nis(o.candidate_nis),
+        consecutive_exceedances(o.consecutive_exceedances),
+        acquisition_epoch((o.acquisition_epoch) ? new orbpro::estimation::EstimationEpoch(*o.acquisition_epoch) : nullptr),
+        decision_epoch((o.decision_epoch) ? new orbpro::estimation::EstimationEpoch(*o.decision_epoch) : nullptr) {
+}
+
+inline RecoveryEpochT &RecoveryEpochT::operator=(RecoveryEpochT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(classification, o.classification);
+  std::swap(action, o.action);
+  std::swap(nis, o.nis);
+  std::swap(threshold, o.threshold);
+  std::swap(has_candidate, o.has_candidate);
+  std::swap(candidate_nis, o.candidate_nis);
+  std::swap(consecutive_exceedances, o.consecutive_exceedances);
+  std::swap(acquisition_epoch, o.acquisition_epoch);
+  std::swap(decision_epoch, o.decision_epoch);
+  return *this;
+}
+
+inline RecoveryEpochT *RecoveryEpoch::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RecoveryEpochT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RecoveryEpoch::UnPackTo(RecoveryEpochT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = classification(); _o->classification = _e; }
+  { auto _e = action(); _o->action = _e; }
+  { auto _e = nis(); _o->nis = _e; }
+  { auto _e = threshold(); _o->threshold = _e; }
+  { auto _e = has_candidate(); _o->has_candidate = _e; }
+  { auto _e = candidate_nis(); _o->candidate_nis = _e; }
+  { auto _e = consecutive_exceedances(); _o->consecutive_exceedances = _e; }
+  { auto _e = acquisition_epoch(); if (_e) _o->acquisition_epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = decision_epoch(); if (_e) _o->decision_epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+}
+
+inline ::flatbuffers::Offset<RecoveryEpoch> CreateRecoveryEpoch(::flatbuffers::FlatBufferBuilder &_fbb, const RecoveryEpochT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RecoveryEpoch::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RecoveryEpoch> RecoveryEpoch::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RecoveryEpochT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RecoveryEpochT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _classification = _o->classification;
+  auto _action = _o->action;
+  auto _nis = _o->nis;
+  auto _threshold = _o->threshold;
+  auto _has_candidate = _o->has_candidate;
+  auto _candidate_nis = _o->candidate_nis;
+  auto _consecutive_exceedances = _o->consecutive_exceedances;
+  auto _acquisition_epoch = _o->acquisition_epoch ? _o->acquisition_epoch.get() : nullptr;
+  auto _decision_epoch = _o->decision_epoch ? _o->decision_epoch.get() : nullptr;
+  return orbpro::estimation::CreateRecoveryEpoch(
+      _fbb,
+      _classification,
+      _action,
+      _nis,
+      _threshold,
+      _has_candidate,
+      _candidate_nis,
+      _consecutive_exceedances,
+      _acquisition_epoch,
+      _decision_epoch);
+}
+
+inline ChiefReferenceT *ChiefReference::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<ChiefReferenceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void ChiefReference::UnPackTo(ChiefReferenceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = semi_major_axis_m(); _o->semi_major_axis_m = _e; }
+  { auto _e = eccentricity(); _o->eccentricity = _e; }
+  { auto _e = inclination_rad(); _o->inclination_rad = _e; }
+  { auto _e = true_anomaly_rad(); _o->true_anomaly_rad = _e; }
+  { auto _e = argument_of_perigee_rad(); _o->argument_of_perigee_rad = _e; }
+}
+
+inline ::flatbuffers::Offset<ChiefReference> CreateChiefReference(::flatbuffers::FlatBufferBuilder &_fbb, const ChiefReferenceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return ChiefReference::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<ChiefReference> ChiefReference::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const ChiefReferenceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const ChiefReferenceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _semi_major_axis_m = _o->semi_major_axis_m;
+  auto _eccentricity = _o->eccentricity;
+  auto _inclination_rad = _o->inclination_rad;
+  auto _true_anomaly_rad = _o->true_anomaly_rad;
+  auto _argument_of_perigee_rad = _o->argument_of_perigee_rad;
+  return orbpro::estimation::CreateChiefReference(
+      _fbb,
+      _semi_major_axis_m,
+      _eccentricity,
+      _inclination_rad,
+      _true_anomaly_rad,
+      _argument_of_perigee_rad);
+}
+
+inline RelativeNavConfigT::RelativeNavConfigT(const RelativeNavConfigT &o)
+      : model(o.model),
+        measurement_model(o.measurement_model),
+        epoch((o.epoch) ? new orbpro::estimation::EstimationEpoch(*o.epoch) : nullptr),
+        state(o.state),
+        covariance(o.covariance),
+        chief((o.chief) ? new orbpro::estimation::ChiefReferenceT(*o.chief) : nullptr),
+        gravitational_parameter_m3_s2(o.gravitational_parameter_m3_s2),
+        j2(o.j2),
+        equatorial_radius_m(o.equatorial_radius_m),
+        process_noise(o.process_noise),
+        acceleration_psd(o.acceleration_psd),
+        recovery((o.recovery) ? new orbpro::estimation::InnovationRecoveryOptionsT(*o.recovery) : nullptr),
+        curvilinear(o.curvilinear) {
+}
+
+inline RelativeNavConfigT &RelativeNavConfigT::operator=(RelativeNavConfigT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(model, o.model);
+  std::swap(measurement_model, o.measurement_model);
+  std::swap(epoch, o.epoch);
+  std::swap(state, o.state);
+  std::swap(covariance, o.covariance);
+  std::swap(chief, o.chief);
+  std::swap(gravitational_parameter_m3_s2, o.gravitational_parameter_m3_s2);
+  std::swap(j2, o.j2);
+  std::swap(equatorial_radius_m, o.equatorial_radius_m);
+  std::swap(process_noise, o.process_noise);
+  std::swap(acceleration_psd, o.acceleration_psd);
+  std::swap(recovery, o.recovery);
+  std::swap(curvilinear, o.curvilinear);
+  return *this;
+}
+
+inline RelativeNavConfigT *RelativeNavConfig::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeNavConfigT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeNavConfig::UnPackTo(RelativeNavConfigT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = model(); _o->model = _e; }
+  { auto _e = measurement_model(); _o->measurement_model = _e; }
+  { auto _e = epoch(); if (_e) _o->epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = state(); if (_e) { _o->state.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->state[_i] = _e->Get(_i); } } else { _o->state.resize(0); } }
+  { auto _e = covariance(); if (_e) { _o->covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->covariance[_i] = _e->Get(_i); } } else { _o->covariance.resize(0); } }
+  { auto _e = chief(); if (_e) { if(_o->chief) { _e->UnPackTo(_o->chief.get(), _resolver); } else { _o->chief = std::unique_ptr<orbpro::estimation::ChiefReferenceT>(_e->UnPack(_resolver)); } } else if (_o->chief) { _o->chief.reset(); } }
+  { auto _e = gravitational_parameter_m3_s2(); _o->gravitational_parameter_m3_s2 = _e; }
+  { auto _e = j2(); _o->j2 = _e; }
+  { auto _e = equatorial_radius_m(); _o->equatorial_radius_m = _e; }
+  { auto _e = process_noise(); _o->process_noise = _e; }
+  { auto _e = acceleration_psd(); if (_e) { _o->acceleration_psd.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->acceleration_psd[_i] = _e->Get(_i); } } else { _o->acceleration_psd.resize(0); } }
+  { auto _e = recovery(); if (_e) { if(_o->recovery) { _e->UnPackTo(_o->recovery.get(), _resolver); } else { _o->recovery = std::unique_ptr<orbpro::estimation::InnovationRecoveryOptionsT>(_e->UnPack(_resolver)); } } else if (_o->recovery) { _o->recovery.reset(); } }
+  { auto _e = curvilinear(); _o->curvilinear = _e; }
+}
+
+inline ::flatbuffers::Offset<RelativeNavConfig> CreateRelativeNavConfig(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavConfigT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeNavConfig::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeNavConfig> RelativeNavConfig::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavConfigT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeNavConfigT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _model = _o->model;
+  auto _measurement_model = _o->measurement_model;
+  auto _epoch = _o->epoch ? _o->epoch.get() : nullptr;
+  auto _state = _fbb.CreateVector(_o->state);
+  auto _covariance = _fbb.CreateVector(_o->covariance);
+  auto _chief = _o->chief ? CreateChiefReference(_fbb, _o->chief.get(), _rehasher) : 0;
+  auto _gravitational_parameter_m3_s2 = _o->gravitational_parameter_m3_s2;
+  auto _j2 = _o->j2;
+  auto _equatorial_radius_m = _o->equatorial_radius_m;
+  auto _process_noise = _o->process_noise;
+  auto _acceleration_psd = _fbb.CreateVector(_o->acceleration_psd);
+  auto _recovery = _o->recovery ? CreateInnovationRecoveryOptions(_fbb, _o->recovery.get(), _rehasher) : 0;
+  auto _curvilinear = _o->curvilinear;
+  return orbpro::estimation::CreateRelativeNavConfig(
+      _fbb,
+      _model,
+      _measurement_model,
+      _epoch,
+      _state,
+      _covariance,
+      _chief,
+      _gravitational_parameter_m3_s2,
+      _j2,
+      _equatorial_radius_m,
+      _process_noise,
+      _acceleration_psd,
+      _recovery,
+      _curvilinear);
+}
+
+inline RelativeObservationT::RelativeObservationT(const RelativeObservationT &o)
+      : epoch((o.epoch) ? new orbpro::estimation::EstimationEpoch(*o.epoch) : nullptr),
+        state(o.state),
+        covariance(o.covariance),
+        chief((o.chief) ? new orbpro::estimation::ChiefReferenceT(*o.chief) : nullptr) {
+}
+
+inline RelativeObservationT &RelativeObservationT::operator=(RelativeObservationT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(epoch, o.epoch);
+  std::swap(state, o.state);
+  std::swap(covariance, o.covariance);
+  std::swap(chief, o.chief);
+  return *this;
+}
+
+inline RelativeObservationT *RelativeObservation::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeObservationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeObservation::UnPackTo(RelativeObservationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = epoch(); if (_e) _o->epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = state(); if (_e) { _o->state.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->state[_i] = _e->Get(_i); } } else { _o->state.resize(0); } }
+  { auto _e = covariance(); if (_e) { _o->covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->covariance[_i] = _e->Get(_i); } } else { _o->covariance.resize(0); } }
+  { auto _e = chief(); if (_e) { if(_o->chief) { _e->UnPackTo(_o->chief.get(), _resolver); } else { _o->chief = std::unique_ptr<orbpro::estimation::ChiefReferenceT>(_e->UnPack(_resolver)); } } else if (_o->chief) { _o->chief.reset(); } }
+}
+
+inline ::flatbuffers::Offset<RelativeObservation> CreateRelativeObservation(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeObservationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeObservation::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeObservation> RelativeObservation::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeObservationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeObservationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _epoch = _o->epoch ? _o->epoch.get() : nullptr;
+  auto _state = _fbb.CreateVector(_o->state);
+  auto _covariance = _fbb.CreateVector(_o->covariance);
+  auto _chief = _o->chief ? CreateChiefReference(_fbb, _o->chief.get(), _rehasher) : 0;
+  return orbpro::estimation::CreateRelativeObservation(
+      _fbb,
+      _epoch,
+      _state,
+      _covariance,
+      _chief);
+}
+
+inline RelativeNavRequestT::RelativeNavRequestT(const RelativeNavRequestT &o)
+      : config((o.config) ? new orbpro::estimation::RelativeNavConfigT(*o.config) : nullptr),
+        trace_id(o.trace_id) {
+  observations.reserve(o.observations.size());
+  for (const auto &observations_ : o.observations) { observations.emplace_back((observations_) ? new orbpro::estimation::RelativeObservationT(*observations_) : nullptr); }
+}
+
+inline RelativeNavRequestT &RelativeNavRequestT::operator=(RelativeNavRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(config, o.config);
+  std::swap(observations, o.observations);
+  std::swap(trace_id, o.trace_id);
+  return *this;
+}
+
+inline RelativeNavRequestT *RelativeNavRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeNavRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeNavRequest::UnPackTo(RelativeNavRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = config(); if (_e) { if(_o->config) { _e->UnPackTo(_o->config.get(), _resolver); } else { _o->config = std::unique_ptr<orbpro::estimation::RelativeNavConfigT>(_e->UnPack(_resolver)); } } else if (_o->config) { _o->config.reset(); } }
+  { auto _e = observations(); if (_e) { _o->observations.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->observations[_i]) { _e->Get(_i)->UnPackTo(_o->observations[_i].get(), _resolver); } else { _o->observations[_i] = std::unique_ptr<orbpro::estimation::RelativeObservationT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->observations.resize(0); } }
+  { auto _e = trace_id(); if (_e) _o->trace_id = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<RelativeNavRequest> CreateRelativeNavRequest(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeNavRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeNavRequest> RelativeNavRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeNavRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _config = _o->config ? CreateRelativeNavConfig(_fbb, _o->config.get(), _rehasher) : 0;
+  auto _observations = _o->observations.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::RelativeObservation>> (_o->observations.size(), [](size_t i, _VectorArgs *__va) { return CreateRelativeObservation(*__va->__fbb, __va->__o->observations[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _trace_id = _o->trace_id.empty() ? 0 : _fbb.CreateString(_o->trace_id);
+  return orbpro::estimation::CreateRelativeNavRequest(
+      _fbb,
+      _config,
+      _observations,
+      _trace_id);
+}
+
+inline RelativeNavEpochT::RelativeNavEpochT(const RelativeNavEpochT &o)
+      : epoch((o.epoch) ? new orbpro::estimation::EstimationEpoch(*o.epoch) : nullptr),
+        predicted_state(o.predicted_state),
+        predicted_covariance(o.predicted_covariance),
+        filtered_state(o.filtered_state),
+        filtered_covariance(o.filtered_covariance),
+        innovation(o.innovation),
+        normalized_innovation_squared(o.normalized_innovation_squared),
+        recovery((o.recovery) ? new orbpro::estimation::RecoveryEpochT(*o.recovery) : nullptr) {
+}
+
+inline RelativeNavEpochT &RelativeNavEpochT::operator=(RelativeNavEpochT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(epoch, o.epoch);
+  std::swap(predicted_state, o.predicted_state);
+  std::swap(predicted_covariance, o.predicted_covariance);
+  std::swap(filtered_state, o.filtered_state);
+  std::swap(filtered_covariance, o.filtered_covariance);
+  std::swap(innovation, o.innovation);
+  std::swap(normalized_innovation_squared, o.normalized_innovation_squared);
+  std::swap(recovery, o.recovery);
+  return *this;
+}
+
+inline RelativeNavEpochT *RelativeNavEpoch::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeNavEpochT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeNavEpoch::UnPackTo(RelativeNavEpochT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = epoch(); if (_e) _o->epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = predicted_state(); if (_e) { _o->predicted_state.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->predicted_state[_i] = _e->Get(_i); } } else { _o->predicted_state.resize(0); } }
+  { auto _e = predicted_covariance(); if (_e) { _o->predicted_covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->predicted_covariance[_i] = _e->Get(_i); } } else { _o->predicted_covariance.resize(0); } }
+  { auto _e = filtered_state(); if (_e) { _o->filtered_state.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->filtered_state[_i] = _e->Get(_i); } } else { _o->filtered_state.resize(0); } }
+  { auto _e = filtered_covariance(); if (_e) { _o->filtered_covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->filtered_covariance[_i] = _e->Get(_i); } } else { _o->filtered_covariance.resize(0); } }
+  { auto _e = innovation(); if (_e) { _o->innovation.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->innovation[_i] = _e->Get(_i); } } else { _o->innovation.resize(0); } }
+  { auto _e = normalized_innovation_squared(); _o->normalized_innovation_squared = _e; }
+  { auto _e = recovery(); if (_e) { if(_o->recovery) { _e->UnPackTo(_o->recovery.get(), _resolver); } else { _o->recovery = std::unique_ptr<orbpro::estimation::RecoveryEpochT>(_e->UnPack(_resolver)); } } else if (_o->recovery) { _o->recovery.reset(); } }
+}
+
+inline ::flatbuffers::Offset<RelativeNavEpoch> CreateRelativeNavEpoch(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavEpochT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeNavEpoch::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeNavEpoch> RelativeNavEpoch::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavEpochT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeNavEpochT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _epoch = _o->epoch ? _o->epoch.get() : nullptr;
+  auto _predicted_state = _o->predicted_state.size() ? _fbb.CreateVector(_o->predicted_state) : 0;
+  auto _predicted_covariance = _o->predicted_covariance.size() ? _fbb.CreateVector(_o->predicted_covariance) : 0;
+  auto _filtered_state = _o->filtered_state.size() ? _fbb.CreateVector(_o->filtered_state) : 0;
+  auto _filtered_covariance = _o->filtered_covariance.size() ? _fbb.CreateVector(_o->filtered_covariance) : 0;
+  auto _innovation = _o->innovation.size() ? _fbb.CreateVector(_o->innovation) : 0;
+  auto _normalized_innovation_squared = _o->normalized_innovation_squared;
+  auto _recovery = _o->recovery ? CreateRecoveryEpoch(_fbb, _o->recovery.get(), _rehasher) : 0;
+  return orbpro::estimation::CreateRelativeNavEpoch(
+      _fbb,
+      _epoch,
+      _predicted_state,
+      _predicted_covariance,
+      _filtered_state,
+      _filtered_covariance,
+      _innovation,
+      _normalized_innovation_squared,
+      _recovery);
+}
+
+inline RelativeNavResultT::RelativeNavResultT(const RelativeNavResultT &o)
+      : trace_id(o.trace_id) {
+  history.reserve(o.history.size());
+  for (const auto &history_ : o.history) { history.emplace_back((history_) ? new orbpro::estimation::RelativeNavEpochT(*history_) : nullptr); }
+}
+
+inline RelativeNavResultT &RelativeNavResultT::operator=(RelativeNavResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(history, o.history);
+  std::swap(trace_id, o.trace_id);
+  return *this;
+}
+
+inline RelativeNavResultT *RelativeNavResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeNavResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeNavResult::UnPackTo(RelativeNavResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = history(); if (_e) { _o->history.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->history[_i]) { _e->Get(_i)->UnPackTo(_o->history[_i].get(), _resolver); } else { _o->history[_i] = std::unique_ptr<orbpro::estimation::RelativeNavEpochT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->history.resize(0); } }
+  { auto _e = trace_id(); if (_e) _o->trace_id = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<RelativeNavResult> CreateRelativeNavResult(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeNavResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeNavResult> RelativeNavResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeNavResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeNavResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _history = _o->history.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::RelativeNavEpoch>> (_o->history.size(), [](size_t i, _VectorArgs *__va) { return CreateRelativeNavEpoch(*__va->__fbb, __va->__o->history[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _trace_id = _o->trace_id.empty() ? 0 : _fbb.CreateString(_o->trace_id);
+  return orbpro::estimation::CreateRelativeNavResult(
+      _fbb,
+      _history,
+      _trace_id);
+}
+
+inline RelativeStateRequestT *RelativeStateRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeStateRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeStateRequest::UnPackTo(RelativeStateRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = gravitational_parameter_m3_s2(); _o->gravitational_parameter_m3_s2 = _e; }
+  { auto _e = chief_states(); if (_e) { _o->chief_states.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->chief_states[_i] = _e->Get(_i); } } else { _o->chief_states.resize(0); } }
+  { auto _e = deputy_states(); if (_e) { _o->deputy_states.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->deputy_states[_i] = _e->Get(_i); } } else { _o->deputy_states.resize(0); } }
+  { auto _e = curvilinear(); _o->curvilinear = _e; }
+}
+
+inline ::flatbuffers::Offset<RelativeStateRequest> CreateRelativeStateRequest(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeStateRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeStateRequest> RelativeStateRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeStateRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _gravitational_parameter_m3_s2 = _o->gravitational_parameter_m3_s2;
+  auto _chief_states = _fbb.CreateVector(_o->chief_states);
+  auto _deputy_states = _fbb.CreateVector(_o->deputy_states);
+  auto _curvilinear = _o->curvilinear;
+  return orbpro::estimation::CreateRelativeStateRequest(
+      _fbb,
+      _gravitational_parameter_m3_s2,
+      _chief_states,
+      _deputy_states,
+      _curvilinear);
+}
+
+inline RelativeStateResultT::RelativeStateResultT(const RelativeStateResultT &o)
+      : states(o.states) {
+  chiefs.reserve(o.chiefs.size());
+  for (const auto &chiefs_ : o.chiefs) { chiefs.emplace_back((chiefs_) ? new orbpro::estimation::ChiefReferenceT(*chiefs_) : nullptr); }
+}
+
+inline RelativeStateResultT &RelativeStateResultT::operator=(RelativeStateResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(states, o.states);
+  std::swap(chiefs, o.chiefs);
+  return *this;
+}
+
+inline RelativeStateResultT *RelativeStateResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RelativeStateResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RelativeStateResult::UnPackTo(RelativeStateResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = states(); if (_e) { _o->states.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->states[_i] = _e->Get(_i); } } else { _o->states.resize(0); } }
+  { auto _e = chiefs(); if (_e) { _o->chiefs.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->chiefs[_i]) { _e->Get(_i)->UnPackTo(_o->chiefs[_i].get(), _resolver); } else { _o->chiefs[_i] = std::unique_ptr<orbpro::estimation::ChiefReferenceT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->chiefs.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<RelativeStateResult> CreateRelativeStateResult(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RelativeStateResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RelativeStateResult> RelativeStateResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RelativeStateResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RelativeStateResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _states = _o->states.size() ? _fbb.CreateVector(_o->states) : 0;
+  auto _chiefs = _o->chiefs.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ChiefReference>> (_o->chiefs.size(), [](size_t i, _VectorArgs *__va) { return CreateChiefReference(*__va->__fbb, __va->__o->chiefs[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return orbpro::estimation::CreateRelativeStateResult(
+      _fbb,
+      _states,
+      _chiefs);
 }
 
 inline const orbpro::estimation::EstimationEnvelope *GetEstimationEnvelope(const void *buf) {

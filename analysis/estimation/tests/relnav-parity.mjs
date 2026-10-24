@@ -1,5 +1,5 @@
 // Tri-runtime parity of run_relative_navigation, relative_state and the
-// innovation-recovery EKF (extension v5): the identical module bytes, in the
+// innovation-recovery EKF (extension v5): the committed dist artifact, in the
 // Chrome/V8 lane and the native WasmEdge lane, at host widths 1/2/4/8, answer
 // byte-identical requests identically. The owner waived the container
 // WasmEdge leg (no Docker). Every request is a typed $EST FlatBuffer built
@@ -12,7 +12,6 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing/browser';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
-import { moduleUnderTest } from './build-under-test.mjs';
 import { EPOCH_JD, J2, FIELD_RADIUS_M, MU, answerQueries, deputyInitialState, ffmArc, keplerState, openFfm } from './relnav-truth.mjs';
 import { api, pack, typeRef, unpack } from './wire.mjs';
 
@@ -32,7 +31,9 @@ const chiefOf = (c) => Object.assign(new A.ChiefReferenceT(), { semiMajorAxisM: 
 const diagonal = (values) => values.flatMap((v, i) => Array.from({ length: values.length }, (_, j) => (i === j ? v : 0)));
 
 async function main() {
-  const { wasm, manifest, hash } = moduleUnderTest();
+  // The committed artifact itself, so the receipt covers the shipped bytes.
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const wasm = `${root}dist/isomorphic/module.wasm`, manifest = `${root}dist/plugin-manifest.json`;
   const estimator = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasm), manifest: JSON.parse(fs.readFileSync(manifest, 'utf8')), surface: 'direct' });
   const ffm = await openFfm();
   const call = async (methodId, envelope) => {
@@ -151,7 +152,7 @@ async function main() {
   });
   const report = await runParityHarness({ wasmPath: wasm, plan, lanes: ['browser', 'wasmedge'], timeoutMs: 300000, log: console.log });
   console.log(formatParityReport(report));
-  const receipt = { ...report, wasmPath: `tests/.generated/module-under-test/${hash}/dist/isomorphic/module.wasm`, dockerLane: 'waived by the owner 2026-10-22 (no Docker)' };
+  const receipt = { ...report, wasmPath: 'analysis/estimation/dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' };
   fs.writeFileSync(fileURLToPath(new URL('../conformance/relative-nav-recovery-parity.json', import.meta.url)), `${JSON.stringify(receipt, null, 2)}\n`);
   assert.equal(report.ok, true, JSON.stringify(report.failures));
 }
