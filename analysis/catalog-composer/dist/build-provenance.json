@@ -1,0 +1,31 @@
+{
+  "spacedatastandards": "1.264.0",
+  "sdsFamilies": [
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "RFM",
+    "TIM",
+    "PVN",
+    "PPE",
+    "OEM",
+    "OPM",
+    "NCD",
+    "MET",
+    "CVR",
+    "OMM",
+    "ATM",
+    "OCM",
+    "MNV",
+    "OIL",
+    "FRM",
+    "PCE",
+    "EOP",
+    "SPW",
+    "EVL",
+    "PCF",
+    "PRW",
+    "XMT"
+  ]
+}
