@@ -1,6 +1,7 @@
-// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of derive, omm_from_mpe, derive_omm and
-// answer_propagation_requests: identical request bytes must give byte-identical outputs in every lane.
-//   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
+// Parity (browser and native WasmEdge; the owner waived the Docker leg on 2026-10-22, it is never started) of derive,
+// omm_from_mpe, derive_omm and answer_propagation_requests: identical request bytes must give byte-identical outputs
+// in every lane. A failed run leaves the committed receipt untouched: assert, then write.
+//   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs   (through headless-run: the browser lane)
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,7 @@ const plan = await normalizeParityFixture({
   cases: cases.map((c) => ({ ...c, request: { ...c.request,
     inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString("hex") })) } })),
 });
-const report = await runParityHarness({ wasmPath: fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)), plan, timeoutMs: 120000, log: console.log });
+const report = await runParityHarness({ wasmPath: fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url)), plan, lanes: ["browser", "wasmedge"], timeoutMs: 120000, log: console.log });
 console.log(formatParityReport(report));
-fs.writeFileSync(new URL("../conformance/parity.json", import.meta.url), `${JSON.stringify({ ...report, wasmPath: "dist/isomorphic/module.wasm" }, null, 2)}\n`);
 assert.equal(report.ok, true, JSON.stringify(report.failures));
+fs.writeFileSync(new URL("../conformance/parity.json", import.meta.url), `${JSON.stringify({ ...report, wasmPath: "dist/isomorphic/module.wasm", dockerLane: "waived by the owner 2026-10-22 (no Docker)" }, null, 2)}\n`);
