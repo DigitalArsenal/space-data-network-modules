@@ -13,7 +13,7 @@
     "spacedatastandards.org": "1.261.0"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.8",
+    "space-data-module-sdk": "0.9.12",
     "flatc-wasm": "26.1.38"
   }
 }

@@ -18,7 +18,7 @@
   "devDependencies": {
     "esbuild": "0.28.0",
     "flatbuffers": "25.9.23",
-    "space-data-module-sdk": "0.9.7",
+    "space-data-module-sdk": "0.9.12",
     "spacedatastandards.org": "1.261.0"
   },
   "overrides": {
