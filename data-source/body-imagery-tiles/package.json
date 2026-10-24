@@ -19,7 +19,7 @@
   "devDependencies": {
     "esbuild": "^0.25.9",
     "jpeg-js": "0.4.4",
-    "space-data-module-sdk": "0.9.7",
+    "space-data-module-sdk": "0.9.12",
     "spacedatastandards.org": "^1.251.0"
   },
   "overrides": {

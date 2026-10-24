@@ -1199,17 +1199,14 @@
       }
     },
     "data-source/body-imagery-tiles/dist/isomorphic/module.wasm": {
-      "sha256": "b3fa7b00649735f43ebc799d36b5608aceaa0b2e2b022d3e9633c5d38de876ab",
-      "bytes": 206276,
+      "sha256": "06e2770f2f050aa6827b02ba3013c8c12d62600a0dd1299d6616aec8e2c0dd41",
+      "bytes": 212689,
       "module": "data-source/body-imagery-tiles",
-      "lastCommit": "faebcc5858ce02f0b21501a2b0488a8c8e92852c",
-      "lastCommitDate": "2026-10-22T03:14:40-04:00",
+      "lastCommit": "e10c799cb8962295dd90d3b67d9b95efc303a6af",
+      "lastCommitDate": "2026-10-22T13:25:47-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2713,17 +2710,14 @@
       }
     },
     "data-source/terrain-ingest/dist/isomorphic/module.wasm": {
-      "sha256": "02d885154c66cd10aede27cbcefba1fb24e614df61e3689d5380d1cbd5e92536",
-      "bytes": 466034,
+      "sha256": "c4b536e3757505f4458cc7b7263401ba18f1d53887c96799b73bd06d39c6c7cf",
+      "bytes": 482014,
       "module": "data-source/terrain-ingest",
-      "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
-      "lastCommitDate": "2026-10-23T15:12:10-04:00",
+      "lastCommit": "bea4eb947ad0ff44170a9d42d8add812b8faf723",
+      "lastCommitDate": "2026-10-24T02:06:43-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2789,17 +2783,14 @@
       }
     },
     "data-source/terrain-source/dist/isomorphic/module.wasm": {
-      "sha256": "dc23530fb74b08e806d012157587e1cb2355aadb938d3c27fe2289057b94697b",
-      "bytes": 549623,
+      "sha256": "c666164ac54c512c3c46a22c34c8a824596ff5aad314b7bab3a8a2eecd5aa870",
+      "bytes": 558147,
       "module": "data-source/terrain-source",
-      "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
-      "lastCommitDate": "2026-10-23T15:12:10-04:00",
+      "lastCommit": "bea4eb947ad0ff44170a9d42d8add812b8faf723",
+      "lastCommitDate": "2026-10-24T02:06:43-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2815,17 +2806,14 @@
       }
     },
     "data-source/terrain-source/dist/parity/module.wasm": {
-      "sha256": "33bc4f3dbf87fe1084f24b1ab38e84f31d48b9912709e64f1251330d30a53cba",
-      "bytes": 541693,
+      "sha256": "9bd7d7f4f6f4e20ac005e18f6c44e8278abfa1a6221081fd63efe05322fee068",
+      "bytes": 550201,
       "module": "data-source/terrain-source",
-      "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
-      "lastCommitDate": "2026-10-23T15:12:10-04:00",
+      "lastCommit": "bea4eb947ad0ff44170a9d42d8add812b8faf723",
+      "lastCommitDate": "2026-10-24T02:06:43-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
