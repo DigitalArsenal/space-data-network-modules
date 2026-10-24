@@ -1,0 +1,114 @@
+Space Data Network modules. Copyright 2026 Edgesource Corporation. Licensed under the Apache License 2.0.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this software except in compliance with the License. The License is in LICENSE
+and at https://www.apache.org/licenses/LICENSE-2.0.
+
+Every file in this repository is covered by the License except the third-party
+components below, which keep their own licenses; the License does not relicense
+them. Test fixtures, reference outputs and other data keep the terms in
+NOTICE.md.
+
+THIRD-PARTY COMPONENTS
+
+Path is a directory (trailing slash) or a file in this repository. License is an
+SPDX identifier or expression; the LicenseRef-* identifiers are defined below.
+License text lists the files that carry the terms.
+
+| Path | Component | License | License text |
+| --- | --- | --- | --- |
+| analysis/conjunction-assessment/src/cpp/deps/sgp4/ | libsgp4, Copyright 2013 Daniel Warner | Apache-2.0 | analysis/conjunction-assessment/src/cpp/deps/sgp4/LICENSE |
+| analysis/od/src/cpp/deps/sgp4/ | libsgp4, Copyright 2013 Daniel Warner (a second copy; analysis/od builds the Vallado SGP4 below instead) | Apache-2.0 | analysis/od/src/cpp/deps/sgp4/LICENSE |
+| analysis/od/src/cpp/deps/vallado-sgp4/ | SGP4.cpp and SGP4.h, David Vallado, companion code to Fundamentals of Astrodynamics and Applications | LicenseRef-Unstated | none in tree |
+| analysis/od/deps/emsdk/ | Emscripten SDK, Copyright 2018 Emscripten authors | MIT | analysis/od/deps/emsdk/LICENSE |
+| propagator/sgp4/src/cpp/deps/sqlite3/ | SQLite 3.45.2 amalgamation | LicenseRef-Public-Domain | propagator/sgp4/src/cpp/deps/sqlite3/sqlite3.h |
+| data-source/body-imagery/vendor/stb_image-2.30/ | stb_image 2.30, Sean Barrett | MIT OR Unlicense | data-source/body-imagery/vendor/stb_image-2.30/stb_image.h |
+| files/geotiff/vendor/stb_image-2.30/ | stb_image 2.30, Sean Barrett | MIT OR Unlicense | files/geotiff/vendor/stb_image-2.30/stb_image.h |
+| data-source/cell-tower-source/vendor/miniz-3.1.2/ | miniz 3.1.2, Copyright 2013-2014 RAD Game Tools and Valve Software, Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC | MIT | data-source/cell-tower-source/vendor/miniz-3.1.2/LICENSE |
+| data-source/geonames-source/vendor/miniz-3.1.2/ | miniz 3.1.2 (same release) | MIT | data-source/geonames-source/vendor/miniz-3.1.2/LICENSE |
+| data-source/imager-observation-parser/vendor/miniz-3.1.2/ | miniz 3.1.2 (same release) | MIT | data-source/imager-observation-parser/vendor/miniz-3.1.2/LICENSE |
+| data-source/terrain-source/vendor/miniz-3.1.2/ | miniz 3.1.2 (same release) | MIT | data-source/terrain-source/vendor/miniz-3.1.2/LICENSE |
+| files/geotiff/vendor/miniz-3.1.2/ | miniz 3.1.2 (same release) | MIT | files/geotiff/vendor/miniz-3.1.2/LICENSE |
+| data-source/solar-activity/vendor/flatbuffers/ | FlatBuffers JavaScript runtime, Google | Apache-2.0 | data-source/solar-activity/vendor/flatbuffers/LICENSE |
+| files/ccsds-messages/third_party/pugixml/ | pugixml 1.15, Copyright 2006-2025 Arseny Kapoulkine | MIT | files/ccsds-messages/third_party/pugixml/LICENSE.md |
+| flows/supplemental-omm/nodes/od/vendor/ | od-fit-core.o, its source patch and header: the frozen build of analysis/od, which compiles the Vallado SGP4 listed above | Apache-2.0 | flows/supplemental-omm/nodes/od/vendor/SGP4-LICENSE.txt |
+| maneuver/star-search/vendor/star-search/ | Star broad search, Copyright 2026 Yuji Takubo (UzTak/star-search), ported to C++ in maneuver/star-search/src/ | MIT | maneuver/star-search/vendor/star-search/LICENSE |
+| propagator/sgp4-xp/third_party/ussf-sgp4/ | US Space Force SGP4 and SGP4-XP (Sgp4Prop WebAssembly 9.1.1.0, Astro Standards v9.1), Copyright 2015 United States Government as represented by the Administrator of US Space Force; joined into propagator/sgp4-xp/dist/isomorphic/module.wasm and the OD node of flows/supplemental-omm | LicenseRef-USSF-SGP4 | propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt, propagator/sgp4-xp/third_party/ussf-sgp4/NOTICE.md |
+| third_party/hwm14/ | HWM14.123114, Naval Research Laboratory (D. P. Drob, J. T. Emmert), ported to C++; the NRL package is in nrl/ | LicenseRef-US-Government-Work | third_party/hwm14/README.md |
+| third_party/nrlmsise00/ | NRLMSISE-00 C source package 20041227, Naval Research Laboratory (J. M. Picone, A. E. Hedin, D. P. Drob), C port by Dominik Brodowski | LicenseRef-Public-Domain | third_party/nrlmsise00/README.md |
+| higherpop/third_party/erfa/ | ERFA, derived with permission from the IAU SOFA library, Copyright 2013-2023 NumFOCUS Foundation; used by the builds of analysis/association, analysis/conjunction-assessment, analysis/density-calibration, analysis/epoch-state, analysis/gp-error-model, analysis/observation-simulator, analysis/od, analysis/optical-astrometry, analysis/parameters, analysis/reference-states, analysis/targeting, analysis/vcm-adapter, foundation/frames, propagator/events, propagator/ffm and propagator/sgp4-xp | BSD-3-Clause | higherpop/third_party/erfa/LICENSE.txt |
+| analysis/conjunction-assessment/src/cpp/include/nlohmann/, propagator/ffm/src/cpp/include/nlohmann/, propagator/sgp4/src/cpp/include/nlohmann/ | JSON for Modern C++ 3.11.3, Copyright 2013-2023 Niels Lohmann | MIT | NOTICE |
+| foundation/attitude-math/, foundation/frames/, foundation/math-bspline/, foundation/numerics/, foundation/orbits/, propagator/atmosphere/, propagator/ffm/lib/, basilisk/runtime/ | Ports of Basilisk code and formulas, Copyright Autonomous Vehicle Systems Lab, University of Colorado at Boulder; basilisk/runtime contains no Basilisk source and its tests compare against upstream Basilisk | ISC | foundation/attitude-math/src/attitude_math_module.cpp, foundation/frames/src/frames_module.cpp, foundation/math-bspline/src/bspline_module.cpp, foundation/numerics/src/numerics_module.cpp, NOTICE |
+| analysis/lambert-izzo/ | izzos-lambert v2.0.0 (lambert_izzo), Copyright 2026 Sarkis Melkonian; the module wraps it | MIT OR Apache-2.0 | LICENSE, analysis/lambert-izzo/NOTICE |
+| analysis/milky-way-model/ | adapts OrbPro GalaxyFS.glsl, Copyright 2011-2026 CesiumJS Contributors | Apache-2.0 | analysis/milky-way-model/LICENSE |
+| propagator/ffm/tests/fixtures/orekit/, files/orbit-products/fixtures/ | Orekit 13.1 reference outputs, CS GROUP (in files/orbit-products/fixtures/: stk_02674_*.e and the Orekit cross-check dumps) | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt, LICENSES/NOTICE-Orekit.txt |
+| analysis/estimation/tests/fixtures/ | Hipparchus fixtures, The Hipparchus project | Apache-2.0 | analysis/estimation/tests/fixtures/hipparchus-LICENSE.txt, analysis/estimation/tests/fixtures/hipparchus-NOTICE.txt |
+| propagator/ffm/tests/fixtures/gmat/, propagator/ffm/tests/evidence/gmat/ | NASA GMAT R2026a reference outputs, Copyright United States Government as represented by the Administrator of NASA | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt |
+| propagator/ffm/tests/fixtures/tudat/, analysis/maneuver/vectors/tudat-extract.json | Tudat and tudatpy reference outputs, Delft University of Technology | BSD-3-Clause | LICENSES/BSD-3-Clause-Tudat.txt |
+| analysis/maneuver/vectors/hapsira-extract.json | hapsira (poliastro) reference values | MIT | LICENSES/MIT-hapsira.txt |
+
+LicenseRef identifiers
+
+- LicenseRef-USSF-SGP4: the US Space Force Open Source Agreement for SGP4. It is
+  not the Apache License 2.0. Redistribution is under the Agreement, with its
+  copyright notice, the Agreement and its disclaimer; it bars endorsement by the
+  US Space Force and notes that export from the United States may need a
+  license. Only the US Space Force library is under the Agreement; the module
+  code around it is under the License.
+- LicenseRef-US-Government-Work: a work of Naval Research Laboratory employees
+  within their duties (17 U.S.C. 105); the package carries no license text.
+  NOTICE.md has the open questions on HWM14.
+- LicenseRef-Public-Domain: the author's dedication, in the file headers or the
+  README named in License text.
+- LicenseRef-Unstated: the upstream release grants no license in the tree.
+
+NOTICES REPRODUCED HERE
+
+Reproduced because the component's directory carries no license text of its own.
+
+JSON for Modern C++ (nlohmann/json 3.11.3), https://github.com/nlohmann/json
+
+  MIT License
+
+  Copyright (c) 2013-2022 Niels Lohmann
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+Basilisk, https://github.com/AVSLab/basilisk
+
+  ISC License
+
+  Copyright (c) 2016, Autonomous Vehicle Systems Lab, University of Colorado at Boulder
+
+  Permission to use, copy, modify, and/or distribute this software for any
+  purpose with or without fee is hereby granted, provided that the above
+  copyright notice and this permission notice appear in all copies.
+
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+DATA
+
+The data and reference outputs under tests/, fixtures/ and similar directories,
+with their sources and terms, are listed in NOTICE.md.
