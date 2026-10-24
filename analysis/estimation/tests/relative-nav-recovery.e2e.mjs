@@ -51,7 +51,7 @@ import { moduleUnderTest } from './build-under-test.mjs';
 import { api, pack, typeRef, unpack } from './wire.mjs';
 import { CADENCE_S, EPOCH_JD, FIELD_RADIUS_M, J2, MU, answerQueries, deputyInitialState, ffmArc, keplerState, openFfm } from './relnav-truth.mjs';
 import { chiefRadial, curvilinearBelief, nodalElements, relativeStateReference } from './relnav-reference.mjs';
-import { cholesky, draw, makeRng, mean, meanNeesInterval, neesSegment, neesSeries, norm3, secondsSince } from './relnav-scoring.mjs';
+import { cholesky, draw, makeRng, mean, neesSegment, neesSeries, norm3, secondsSince } from './relnav-scoring.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const A = api();
@@ -294,7 +294,7 @@ const truthRows = (rel, count) => Array.from({ length: count }, (_, k) => Array.
 const seedOf = (...parts) => (SEED + parts.join('|').split('').reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) | 0, 7)) >>> 0;
 
 async function relativePipeline(estimator, truth) {
-  const rows = [], cases = [], burns = [];
+  const cases = [], burns = [];
   let curvilinear = null;
   // Floating-point bound of the conversion: 64 machine epsilons of the largest chief radius and speed
   // of the arc (a difference of two inertial states of that size, and the rotating-frame term).
@@ -712,8 +712,8 @@ function summarize(rel, abs, baseline, models) {
   // 1. False reinitializations per object-day (burn-free).
   const worstRel = Math.max(...rel.cases.flatMap((c) => [c.falsePerDay.predictive, c.falsePerDay.persistence]));
   const worstAbs = Math.max(...absSummary.falseReinits.map((f) => f.perDay));
-  const pairDays = rel.cases.length * N / (24 * 3600 / CADENCE_S);
-  say(`false reinitializations per object-day, recovery on (NIS probability 0.999, confirmation count 2): relative ${rel.cases.length} cases x 3 days = ${pairDays} pair-days, worst case ${fmt(worstRel, 3)} per day (predictive and persistence); absolute ${fmt(worstAbs, 3)} per day over ${ORBITS.length} orbits x ${ABS_SEGMENTS * ABS_ARC_S / 86400} object-day`);
+  const pairDays = rel.cases.length * N / (24 * 3600 / CADENCE_S);   // filter-days
+  say(`false reinitializations per object-day, recovery on (NIS probability 0.999, confirmation count 2): relative ${rel.cases.length} filter runs x 3 days = ${pairDays} filter-days (the models of a chief share its truth), worst case ${fmt(worstRel, 3)} per day (predictive and persistence); absolute ${fmt(worstAbs, 3)} per day over ${ORBITS.length} orbits x ${ABS_SEGMENTS * ABS_ARC_S / 86400} object-day`);
   for (const c of rel.cases) for (const strategy of STRATEGIES) {
     const d = c.reinitDetails[strategy];
     check(d.length === 0, `false reinitializations per object-day, ${STRATEGY_NAME[strategy]}, ${c.chief} ${MODEL_SHORT[c.model]} ${c.sep} m (q ${c.q.toExponential(1)}): ${d.length} in 3 days = ${fmt(d.length / 3, 2)} per day, at ${d.map((x) => `${x.hours.toFixed(2)} h (chief true anomaly ${x.nuDeg.toFixed(0)} deg)`).join(', ')} (target 0)`);

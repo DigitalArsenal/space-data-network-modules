@@ -430,6 +430,49 @@ not a mixture over unknown maneuvers, and can understate the error. A
 continuing burn can violate the candidate's coast prediction and delay
 `PREDICTIVE_CONSISTENCY`; known commanded burns belong in the propagation.
 
+### Authority (relative navigation and innovation recovery)
+
+[tests/relative-nav-recovery.e2e.mjs](tests/relative-nav-recovery.e2e.mjs) (about
+one minute): chief and deputy are each one `propagator/ffm` full-force run
+(EGM2008 70 x 70, Sun and Moon, radiation pressure, NRLMSISE-00 drag with CSSI
+space weather, solid tides, relativity) over 72 h at 60 s from 2026-08-02; the
+filters' dynamics never generate the truth. Chiefs: circular (HCW, SS-J2, TH,
+YA), e = 0.1 and e = 0.6 (TH, YA); deputies 100 m, 1 km and 10 km away on a
+bounded relative orbit. Measurements are the full relative state, 1 m and
+1 mm/s, position-velocity correlation 0.3. Planted maneuvers are FFM's own:
+impulses of 1 cm/s, 10 cm/s and 1 m/s along +T and one 10-minute finite burn.
+The process noise is selected on the first 24 h only; NEES is scored on the
+unseen 24-72 h, the reinitialization counts cover the full 72 h, and the burns
+are at 24 h.
+
+| Case | Reference | Result |
+| --- | --- | --- |
+| Transition of the four models, +60 s, 100 m | point-mass FFM states through `relative_state` | TH and YA 4.3e-6 m and 1.4e-7 m/s; HCW 5.7e-5 m and 1.9e-6 m/s |
+| Same, +1 h | same | TH and YA 4.0e-3 m (circular), 3.1e-3 m (e = 0.1), 2.7e-3 m (e = 0.6); HCW 0.22 m |
+| Same, +10 h through perigee (e = 0.6) | same | TH and YA 3.0e-2 m and 4.6e-6 m/s |
+| TH against YA, same inputs | each other | 2.9e-11 relative |
+| RTN conversion and chief reference | an independent implementation, 2163 pairs | 2.7e-12 m, 1.3e-15 m/s, elements 4.1e-13 |
+| Curvilinear run | the rectilinear run mapped to curvilinear (YA, e = 0.6, 1 km, 4320 observations) | 1.1e-8 m, 2.7e-12 m/s, covariance 1.4e-9 relative |
+| Burn-free arcs, NIS probability 0.999, count 2 | 24 filter runs x 3 days (27 pair-days of truth), and two absolute arcs (ISS-like, Starlink-like) of one day | 0 reinitializations per object-day, both strategies |
+| NEES, recovery off (expected 6) | FFM truth | relative 3.89 to 5.62 (median 5.40); absolute 5.48 and 4.79 |
+| One injected outlier, 30 sigma | 24 cases x 3 epochs, and both absolute arcs | 0 resets, both strategies |
+| Two consecutive incompatible outliers | same | `PREDICTIVE_CONSISTENCY` 0 resets, `PERSISTENCE` 2 |
+| Impulses of 10 cm/s and 1 m/s | all 8 chief/model cases, both absolute arcs | reinitialized at 90 s (the second observation), both strategies; error at the reinitialization 1.4 to 2.1 m and 0.7 to 1.5 mm/s (relative), 2.2 to 2.7 m and 4.5 to 10.6 mm/s (absolute) |
+| Impulse of 1 m/s, e = 0.6 | recovery off against on, +10 min | 103.7 m and 226 mm/s against 0.44 m and 0.16 mm/s |
+| Impulse of 1 cm/s and the finite burn | same | below the gate in most cases (maximum NIS 3.2 to 6.8 relative, 15.9 and 17.2 absolute; the gate is 22.46); e = 0.6 finite burn: `PERSISTENCE` 90 s, `PREDICTIVE_CONSISTENCY` 690 s; absolute finite burn 330 s and 270 s |
+| Observation gap after a 1 m/s burn | 1 and 2 dropped observations | reinitialized at 150 s and 270 s: the 120 s maximum gap holds the pending discrepancy across one dropped observation and expires it across two |
+| Recovery off | options absent against `enabled = false`, same build | byte-identical (24/24 relative, 2/2 absolute) |
+| Recovery off, absolute EKF | the committed base-commit artifact, 121 rounds of a 120-observation arc | every estimator field identical (the ODR and OCM records are excluded: the artifact predates the SDS pin) |
+| Tri-runtime parity | [tests/relnav-parity.mjs](tests/relnav-parity.mjs): 12 cases in Chrome/V8 and native WasmEdge at host widths 1/2/4/8 | byte-identical, 180 comparisons ([receipt](conformance/relative-nav-recovery-parity.json)); the container leg is waived |
+
+The gate trusts the innovation covariance. A process noise that does not cover
+the model error (kilometers of separation, perigee passage, J2) holds and
+reinitializes on the dynamics, and the same noise sets the smallest burn the
+gate can see: tune for NEES near 6 and no calibration-arc reinitializations,
+not for the least noise. A burn below the innovation covariance (about 1 cm/s
+against 1 mm/s sensors) never trips the gate, and a continuing burn delays
+`PREDICTIVE_CONSISTENCY`.
+
 ## Append-only invoke contract v1
 
 [`schemas/Estimation.fbs`](schemas/Estimation.fbs) is the module-local invoke
