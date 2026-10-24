@@ -430,8 +430,11 @@ class DSS(object):
 
     # How this node keeps a lane's publications. ReplaceCurrent supersedes the
     # previous batch of the lane with each new publication so the lane holds
-    # one current set; ArchiveAll keeps and pins every publication so history
-    # stays retrievable by content identifier.
+    # one current set; KeepAll keeps every publication in the store and pins
+    # none; ArchiveAll keeps and pins every publication so history stays
+    # retrievable by content identifier. A lane without a rule of its own
+    # follows its standard's default. A Subscribe without RETENTION keeps the
+    # lane's rule; SetRetention changes it.
     # DSS
     def RETENTION(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(110))
@@ -647,7 +650,7 @@ def DSSCreateVERIFIED_CHUNKSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateVERIFIED_CHUNKSVector(builder, data):
-    DSSCreateVERIFIED_CHUNKSVector(builder, data)
+    return DSSCreateVERIFIED_CHUNKSVector(builder, data)
 
 def DSSAddLAST_SYNCED_AT(builder, LAST_SYNCED_AT):
     builder.PrependUOffsetTRelativeSlot(32, flatbuffers.number_types.UOffsetTFlags.py_type(LAST_SYNCED_AT), 0)

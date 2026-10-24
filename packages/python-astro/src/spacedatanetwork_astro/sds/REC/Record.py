@@ -4,6 +4,7 @@
 
 import flatbuffers
 from flatbuffers.compat import import_numpy
+from .FlatbuffersEncryption import FlatbuffersEncryption
 np = import_numpy()
 
 # Individual record wrapper for any standard type
@@ -28,6 +29,27 @@ class Record(object):
     # Record
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
+
+    # Field-encryption format 3 walk program of Record (see FlatbuffersEncryption).
+    _FLATBUFFERS_ENCRYPTION_PROGRAM = (
+        2, 3, 10, 1, 6, 6, 4, 1, 63, 1, 1, 2, 12, 1
+    )
+
+    @classmethod
+    def EncryptBuffer(cls, buf, key, record_index=0):
+        """Returns a copy of a Record buffer with its (encrypted) fields
+        encrypted with field-encryption format 3 (key: 32 bytes;
+        record_index: unique per buffer under the key)."""
+        return FlatbuffersEncryption.crypt_buffer(
+            buf, key, record_index, cls._FLATBUFFERS_ENCRYPTION_PROGRAM)
+
+    @classmethod
+    def DecryptBuffer(cls, buf, key, record_index=0):
+        """Returns a copy of a Record buffer with its (encrypted) fields
+        decrypted with field-encryption format 3 (key: 32 bytes;
+        record_index: unique per buffer under the key)."""
+        return FlatbuffersEncryption.crypt_buffer(
+            buf, key, record_index, cls._FLATBUFFERS_ENCRYPTION_PROGRAM)
 
     # Record
     def value_type(self):
@@ -55,8 +77,47 @@ class Record(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
+    # Wide record type, for a standard numbered in RecordTypeExtended
+    # (ordinals 256 and up) because union RecordType has no room for it.
+    # value is then NONE. Readers dispatch on standard or EXTENDED_TYPE.
+    # Record
+    def EXTENDED_TYPE(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint16Flags, o + self._tab.Pos)
+        return 0
+
+    # The record's root FlatBuffer, with its file identifier, when
+    # EXTENDED_TYPE is set.
+    # Record
+    def EXTENDED_VALUE(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Uint8Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 1))
+        return 0
+
+    # Record
+    def EXTENDED_VALUEAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Uint8Flags, o)
+        return 0
+
+    # Record
+    def EXTENDED_VALUELength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # Record
+    def EXTENDED_VALUEIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        return o == 0
+
 def RecordStart(builder):
-    builder.StartObject(3)
+    builder.StartObject(5)
 
 def Start(builder):
     RecordStart(builder)
@@ -78,6 +139,34 @@ def RecordAddstandard(builder, standard):
 
 def Addstandard(builder, standard):
     RecordAddstandard(builder, standard)
+
+def RecordAddEXTENDED_TYPE(builder, EXTENDED_TYPE):
+    builder.PrependUint16Slot(3, EXTENDED_TYPE, 0)
+
+def AddEXTENDED_TYPE(builder, EXTENDED_TYPE):
+    RecordAddEXTENDED_TYPE(builder, EXTENDED_TYPE)
+
+def RecordAddEXTENDED_VALUE(builder, EXTENDED_VALUE):
+    builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(EXTENDED_VALUE), 0)
+
+def AddEXTENDED_VALUE(builder, EXTENDED_VALUE):
+    RecordAddEXTENDED_VALUE(builder, EXTENDED_VALUE)
+
+def RecordStartEXTENDED_VALUEVector(builder, numElems):
+    return builder.StartVector(1, numElems, 1)
+
+def StartEXTENDED_VALUEVector(builder, numElems):
+    return RecordStartEXTENDED_VALUEVector(builder, numElems)
+
+def RecordCreateEXTENDED_VALUEVector(builder, data):
+    data = list(data)
+    builder.StartVector(1, len(data), 1)
+    for item in reversed(data):
+        builder.PrependUint8(item)
+    return builder.EndVector()
+
+def CreateEXTENDED_VALUEVector(builder, data):
+    return RecordCreateEXTENDED_VALUEVector(builder, data)
 
 def RecordEnd(builder):
     return builder.EndObject()
@@ -126,9 +215,11 @@ import spacedatanetwork_astro.sds.REC.CNP as CNP
 import spacedatanetwork_astro.sds.REC.COM as COM
 import spacedatanetwork_astro.sds.REC.COT as COT
 import spacedatanetwork_astro.sds.REC.CPS as CPS
+import spacedatanetwork_astro.sds.REC.CQR as CQR
 import spacedatanetwork_astro.sds.REC.CRD as CRD
 import spacedatanetwork_astro.sds.REC.CRM as CRM
 import spacedatanetwork_astro.sds.REC.CSM as CSM
+import spacedatanetwork_astro.sds.REC.CSO as CSO
 import spacedatanetwork_astro.sds.REC.CTR as CTR
 import spacedatanetwork_astro.sds.REC.CVG as CVG
 import spacedatanetwork_astro.sds.REC.CVP as CVP
@@ -151,6 +242,7 @@ import spacedatanetwork_astro.sds.REC.EPF as EPF
 import spacedatanetwork_astro.sds.REC.EPM as EPM
 import spacedatanetwork_astro.sds.REC.ESL as ESL
 import spacedatanetwork_astro.sds.REC.ETM as ETM
+import spacedatanetwork_astro.sds.REC.ETS as ETS
 import spacedatanetwork_astro.sds.REC.EVL as EVL
 import spacedatanetwork_astro.sds.REC.EWR as EWR
 import spacedatanetwork_astro.sds.REC.FCS as FCS
@@ -236,6 +328,7 @@ import spacedatanetwork_astro.sds.REC.PAP as PAP
 import spacedatanetwork_astro.sds.REC.PCE as PCE
 import spacedatanetwork_astro.sds.REC.PCF as PCF
 import spacedatanetwork_astro.sds.REC.PGM as PGM
+import spacedatanetwork_astro.sds.REC.PHB as PHB
 import spacedatanetwork_astro.sds.REC.PHY as PHY
 import spacedatanetwork_astro.sds.REC.PIV as PIV
 import spacedatanetwork_astro.sds.REC.PKB as PKB
@@ -267,6 +360,7 @@ import spacedatanetwork_astro.sds.REC.RFM as RFM
 import spacedatanetwork_astro.sds.REC.RFO as RFO
 import spacedatanetwork_astro.sds.REC.RFS as RFS
 import spacedatanetwork_astro.sds.REC.ROC as ROC
+import spacedatanetwork_astro.sds.REC.RPC as RPC
 import spacedatanetwork_astro.sds.REC.RPT as RPT
 import spacedatanetwork_astro.sds.REC.RSD as RSD
 import spacedatanetwork_astro.sds.REC.RecordType as RecordType
@@ -287,6 +381,9 @@ import spacedatanetwork_astro.sds.REC.SHC as SHC
 import spacedatanetwork_astro.sds.REC.SHW as SHW
 import spacedatanetwork_astro.sds.REC.SIT as SIT
 import spacedatanetwork_astro.sds.REC.SKI as SKI
+import spacedatanetwork_astro.sds.REC.SKQ as SKQ
+import spacedatanetwork_astro.sds.REC.SKR as SKR
+import spacedatanetwork_astro.sds.REC.SKT as SKT
 import spacedatanetwork_astro.sds.REC.SLP as SLP
 import spacedatanetwork_astro.sds.REC.SNR as SNR
 import spacedatanetwork_astro.sds.REC.SNW as SNW
@@ -334,7 +431,7 @@ import spacedatanetwork_astro.sds.REC.WTH as WTH
 import spacedatanetwork_astro.sds.REC.WXF as WXF
 import spacedatanetwork_astro.sds.REC.XTC as XTC
 try:
-    from typing import Union
+    from typing import List, Union
 except:
     pass
 
@@ -346,10 +443,14 @@ class RecordT(object):
         value_type = 0,
         value = None,
         standard = None,
+        EXTENDED_TYPE = 0,
+        EXTENDED_VALUE = None,
     ):
         self.value_type = value_type  # type: int
-        self.value = value  # type: Union[None, 'ACL.ACLT', 'ACM.ACMT', 'ACR.ACRT', 'ACW.ACWT', 'AEM.AEMT', 'ANI.ANIT', 'AOF.AOFT', 'APM.APMT', 'ARM.ARMT', 'AST.ASTT', 'ATD.ATDT', 'ATM.ATMT', 'BAL.BALT', 'BEM.BEMT', 'BMC.BMCT', 'BOV.BOVT', 'BSP.BSPT', 'BUS.BUST', 'CAQ.CAQT', 'CAT.CATT', 'CDM.CDMT', 'CFP.CFPT', 'CHN.CHNT', 'CLT.CLTT', 'CMS.CMST', 'COM.COMT', 'COT.COTT', 'CRD.CRDT', 'CRM.CRMT', 'CSM.CSMT', 'CTR.CTRT', 'CZM.CZMT', 'DFH.DFHT', 'DMG.DMGT', 'DOA.DOAT', 'DPM.DPMT', 'DSS.DSST', 'EME.EMET', 'ENC.ENCT', 'ENV.ENVT', 'EOO.EOOT', 'EOP.EOPT', 'EPM.EPMT', 'ESL.ESLT', 'ETM.ETMT', 'EWR.EWRT', 'FCS.FCST', 'FPC.FPCT', 'FRM.FRMT', 'GDI.GDIT', 'GEO.GEOT', 'GJN.GJNT', 'GNO.GNOT', 'GPX.GPXT', 'GRV.GRVT', 'GVH.GVHT', 'HEL.HELT', 'HFC.HFCT', 'HYP.HYPT', 'IDM.IDMT', 'ION.IONT', 'IRO.IROT', 'KMF.KMFT', 'KML.KMLT', 'KRF.KRFT', 'LAM.LAMT', 'LCC.LCCT', 'LCF.LCFT', 'LCH.LCHT', 'LDM.LDMT', 'LGR.LGRT', 'LKS.LKST', 'LMO.LMOT', 'LMR.LMRT', 'LMS.LMST', 'LND.LNDT', 'LNE.LNET', 'LPF.LPFT', 'LWK.LWKT', 'MBL.MBLT', 'MET.METT', 'MFE.MFET', 'MNF.MNFT', 'MNV.MNVT', 'MPE.MPET', 'MSL.MSLT', 'MST.MSTT', 'MTI.MTIT', 'NAV.NAVT', 'NUM.NUMT', 'OBD.OBDT', 'OBT.OBTT', 'OCM.OCMT', 'OEM.OEMT', 'OMM.OMMT', 'OOA.OOAT', 'OOB.OOBT', 'OOD.OODT', 'OOE.OOET', 'OOI.OOIT', 'OOL.OOLT', 'OON.OONT', 'OOS.OOST', 'OOT.OOTT', 'OPM.OPMT', 'OSM.OSMT', 'PCF.PCFT', 'PHY.PHYT', 'PGM.PGMT', 'PIV.PIVT', 'PLD.PLDT', 'PLG.PLGT', 'PLK.PLKT', 'PNM.PNMT', 'PPE.PPET', 'PRG.PRGT', 'PRR.PRRT', 'PRW.PRWT', 'PUR.PURT', 'RAF.RAFT', 'RBK.RBKT', 'RCF.RCFT', 'RDM.RDMT', 'RDO.RDOT', 'REM.REMT', 'REV.REVT', 'RFB.RFBT', 'RFE.RFET', 'RFM.RFMT', 'RFO.RFOT', 'ROC.ROCT', 'SAR.SART', 'SCM.SCMT', 'SDF.SDFT', 'SDL.SDLT', 'SDR.SDRT', 'SEN.SENT', 'SEO.SEOT', 'SEV.SEVT', 'SHW.SHWT', 'SIT.SITT', 'SKI.SKIT', 'SNR.SNRT', 'SNW.SNWT', 'SOI.SOIT', 'SON.SONT', 'SPP.SPPT', 'SPW.SPWT', 'SRI.SRIT', 'STF.STFT', 'STR.STRT', 'STV.STVT', 'SWR.SWRT', 'TAB.TABT', 'TCF.TCFT', 'TDM.TDMT', 'TIM.TIMT', 'TKG.TKGT', 'TME.TMET', 'TMF.TMFT', 'TNR.TNRT', 'TPN.TPNT', 'TRE.TRET', 'TRK.TRKT', 'TRN.TRNT', 'VCM.VCMT', 'WPN.WPNT', 'WTH.WTHT', 'XTC.XTCT', 'SCV.SCVT', 'FSM.FSMT', 'FSP.FSPT', 'SCC.SCCT', 'SCN.SCNT', 'VST.VSTT', 'ENT.ENTT', 'VAM.VAMT', 'APP.APPT', 'CMT.CMTT', 'SCX.SCXT', 'CVG.CVGT', 'PKB.PKBT', 'RPT.RPTT', 'STO.STOT', 'SUB.SUBT', 'WKS.WKST', 'CPS.CPST', 'FSB.FSBT', 'FSO.FSOT', 'GST.GSTT', 'MDP.MDPT', 'MDS.MDST', 'PNL.PNLT', 'SHC.SHCT', 'CES.CEST', 'QEM.QEMT', 'SBM.SBMT', 'PMM.PMMT', 'OPP.OPPT', 'IQC.IQCT', 'CNP.CNPT', 'CMR.CMRT', 'TBS.TBST', 'CCT.CCTT', 'ACI.ACIT', 'CVP.CVPT', 'RFL.RFLT', 'RFS.RFST', 'TRS.TRST', 'GNP.GNPT', 'DTT.DTTT', 'AVL.AVLT', 'TFN.TFNT', 'TMS.TMST', 'VEP.VEPT', 'EGP.EGPT', 'APL.APLT', 'EMC.EMCT', 'EPF.EPFT', 'GEL.GELT', 'PAP.PAPT', 'RSD.RSDT', 'IRM.IRMT', 'VCF.VCFT', 'STX.STXT', 'TXS.TXST', 'BPF.BPFT', 'EVL.EVLT', 'PCE.PCET', 'NCD.NCDT', 'MEM.MEMT', 'ODR.ODRT', 'TRH.TRHT', 'SLP.SLPT', 'PSS.PSST', 'ICN.ICNT', 'TRP.TRPT', 'TRV.TRVT', 'ACT.ACTT', 'AGR.AGRT', 'NDS.NDST', 'NST.NSTT', 'QRP.QRPT', 'TCT.TCTT', 'WXF.WXFT', 'CLM.CLMT', 'GCT.GCTT']
+        self.value = value  # type: Union[None, 'ACL.ACLT', 'ACM.ACMT', 'ACR.ACRT', 'ACW.ACWT', 'AEM.AEMT', 'ANI.ANIT', 'AOF.AOFT', 'APM.APMT', 'ARM.ARMT', 'AST.ASTT', 'ATD.ATDT', 'ATM.ATMT', 'BAL.BALT', 'BEM.BEMT', 'BMC.BMCT', 'BOV.BOVT', 'BSP.BSPT', 'BUS.BUST', 'CAQ.CAQT', 'CAT.CATT', 'CDM.CDMT', 'CFP.CFPT', 'CHN.CHNT', 'CLT.CLTT', 'CMS.CMST', 'COM.COMT', 'COT.COTT', 'CRD.CRDT', 'CRM.CRMT', 'CSM.CSMT', 'CTR.CTRT', 'CZM.CZMT', 'DFH.DFHT', 'DMG.DMGT', 'DOA.DOAT', 'DPM.DPMT', 'DSS.DSST', 'EME.EMET', 'ENC.ENCT', 'ENV.ENVT', 'EOO.EOOT', 'EOP.EOPT', 'EPM.EPMT', 'ESL.ESLT', 'ETM.ETMT', 'EWR.EWRT', 'FCS.FCST', 'FPC.FPCT', 'FRM.FRMT', 'GDI.GDIT', 'GEO.GEOT', 'GJN.GJNT', 'GNO.GNOT', 'GPX.GPXT', 'GRV.GRVT', 'GVH.GVHT', 'HEL.HELT', 'HFC.HFCT', 'HYP.HYPT', 'IDM.IDMT', 'ION.IONT', 'IRO.IROT', 'KMF.KMFT', 'KML.KMLT', 'KRF.KRFT', 'LAM.LAMT', 'LCC.LCCT', 'LCF.LCFT', 'LCH.LCHT', 'LDM.LDMT', 'LGR.LGRT', 'LKS.LKST', 'LMO.LMOT', 'LMR.LMRT', 'LMS.LMST', 'LND.LNDT', 'LNE.LNET', 'LPF.LPFT', 'LWK.LWKT', 'MBL.MBLT', 'MET.METT', 'MFE.MFET', 'MNF.MNFT', 'MNV.MNVT', 'MPE.MPET', 'MSL.MSLT', 'MST.MSTT', 'MTI.MTIT', 'NAV.NAVT', 'NUM.NUMT', 'OBD.OBDT', 'OBT.OBTT', 'OCM.OCMT', 'OEM.OEMT', 'OMM.OMMT', 'OOA.OOAT', 'OOB.OOBT', 'OOD.OODT', 'OOE.OOET', 'OOI.OOIT', 'OOL.OOLT', 'OON.OONT', 'OOS.OOST', 'OOT.OOTT', 'OPM.OPMT', 'OSM.OSMT', 'PCF.PCFT', 'PHY.PHYT', 'PGM.PGMT', 'PIV.PIVT', 'PLD.PLDT', 'PLG.PLGT', 'PLK.PLKT', 'PNM.PNMT', 'PPE.PPET', 'PRG.PRGT', 'PRR.PRRT', 'PRW.PRWT', 'PUR.PURT', 'RAF.RAFT', 'RBK.RBKT', 'RCF.RCFT', 'RDM.RDMT', 'RDO.RDOT', 'REM.REMT', 'REV.REVT', 'RFB.RFBT', 'RFE.RFET', 'RFM.RFMT', 'RFO.RFOT', 'ROC.ROCT', 'SAR.SART', 'SCM.SCMT', 'SDF.SDFT', 'SDL.SDLT', 'SDR.SDRT', 'SEN.SENT', 'SEO.SEOT', 'SEV.SEVT', 'SHW.SHWT', 'SIT.SITT', 'SKI.SKIT', 'SNR.SNRT', 'SNW.SNWT', 'SOI.SOIT', 'SON.SONT', 'SPP.SPPT', 'SPW.SPWT', 'SRI.SRIT', 'STF.STFT', 'STR.STRT', 'STV.STVT', 'SWR.SWRT', 'TAB.TABT', 'TCF.TCFT', 'TDM.TDMT', 'TIM.TIMT', 'TKG.TKGT', 'TME.TMET', 'TMF.TMFT', 'TNR.TNRT', 'TPN.TPNT', 'TRE.TRET', 'TRK.TRKT', 'TRN.TRNT', 'VCM.VCMT', 'WPN.WPNT', 'WTH.WTHT', 'XTC.XTCT', 'SCV.SCVT', 'FSM.FSMT', 'FSP.FSPT', 'SCC.SCCT', 'SCN.SCNT', 'VST.VSTT', 'ENT.ENTT', 'VAM.VAMT', 'APP.APPT', 'CMT.CMTT', 'SCX.SCXT', 'CVG.CVGT', 'PKB.PKBT', 'RPT.RPTT', 'STO.STOT', 'SUB.SUBT', 'WKS.WKST', 'CPS.CPST', 'FSB.FSBT', 'FSO.FSOT', 'GST.GSTT', 'MDP.MDPT', 'MDS.MDST', 'PNL.PNLT', 'SHC.SHCT', 'CES.CEST', 'QEM.QEMT', 'SBM.SBMT', 'PMM.PMMT', 'OPP.OPPT', 'IQC.IQCT', 'CNP.CNPT', 'CMR.CMRT', 'TBS.TBST', 'CCT.CCTT', 'ACI.ACIT', 'CVP.CVPT', 'RFL.RFLT', 'RFS.RFST', 'TRS.TRST', 'GNP.GNPT', 'DTT.DTTT', 'AVL.AVLT', 'TFN.TFNT', 'TMS.TMST', 'VEP.VEPT', 'EGP.EGPT', 'APL.APLT', 'EMC.EMCT', 'EPF.EPFT', 'GEL.GELT', 'PAP.PAPT', 'RSD.RSDT', 'IRM.IRMT', 'VCF.VCFT', 'STX.STXT', 'TXS.TXST', 'BPF.BPFT', 'EVL.EVLT', 'PCE.PCET', 'NCD.NCDT', 'MEM.MEMT', 'ODR.ODRT', 'TRH.TRHT', 'SLP.SLPT', 'PSS.PSST', 'ICN.ICNT', 'TRP.TRPT', 'TRV.TRVT', 'ACT.ACTT', 'AGR.AGRT', 'NDS.NDST', 'NST.NSTT', 'QRP.QRPT', 'TCT.TCTT', 'WXF.WXFT', 'CLM.CLMT', 'GCT.GCTT', 'CQR.CQRT', 'RPC.RPCT', 'CSO.CSOT', 'PHB.PHBT', 'SKT.SKTT', 'SKQ.SKQT', 'SKR.SKRT', 'ETS.ETST']
         self.standard = standard  # type: Optional[str]
+        self.EXTENDED_TYPE = EXTENDED_TYPE  # type: int
+        self.EXTENDED_VALUE = EXTENDED_VALUE  # type: Optional[List[int]]
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -375,6 +476,14 @@ class RecordT(object):
         self.value_type = Record.value_type()
         self.value = RecordType.RecordTypeCreator(self.value_type, Record.value())
         self.standard = Record.standard()
+        self.EXTENDED_TYPE = Record.EXTENDED_TYPE()
+        if not Record.EXTENDED_VALUEIsNone():
+            if np is None:
+                self.EXTENDED_VALUE = []
+                for i in range(Record.EXTENDED_VALUELength()):
+                    self.EXTENDED_VALUE.append(Record.EXTENDED_VALUE(i))
+            else:
+                self.EXTENDED_VALUE = Record.EXTENDED_VALUEAsNumpy()
 
     # RecordT
     def Pack(self, builder):
@@ -382,11 +491,22 @@ class RecordT(object):
             value = self.value.Pack(builder)
         if self.standard is not None:
             standard = builder.CreateString(self.standard)
+        if self.EXTENDED_VALUE is not None:
+            if np is not None and type(self.EXTENDED_VALUE) is np.ndarray:
+                EXTENDED_VALUE = builder.CreateNumpyVector(self.EXTENDED_VALUE)
+            else:
+                RecordStartEXTENDED_VALUEVector(builder, len(self.EXTENDED_VALUE))
+                for i in reversed(range(len(self.EXTENDED_VALUE))):
+                    builder.PrependUint8(self.EXTENDED_VALUE[i])
+                EXTENDED_VALUE = builder.EndVector()
         RecordStart(builder)
         RecordAddvalue_type(builder, self.value_type)
         if self.value is not None:
             RecordAddvalue(builder, value)
         if self.standard is not None:
             RecordAddstandard(builder, standard)
+        RecordAddEXTENDED_TYPE(builder, self.EXTENDED_TYPE)
+        if self.EXTENDED_VALUE is not None:
+            RecordAddEXTENDED_VALUE(builder, EXTENDED_VALUE)
         Record = RecordEnd(builder)
         return Record

@@ -48,7 +48,7 @@ The policy is an `$XMT` `EPOCH_FIT_POLICY`; the example values:
 | --- | --- |
 | `PROPAGATOR_ID` | `com.orbpro.ffm` |
 | `PROPAGATOR_ARTIFACT_SHA256` | 64 lowercase hex characters |
-| `FORCE_MODEL` | `$PRW` `PRWForceConfiguration`: point mass, J2-J4, third bodies; no drag, no SRP (required) |
+| `FORCE_MODEL` | `$PRW` `PCFForceModel`: point mass, J2-J4, third bodies; no drag, no SRP (required) |
 | `FRAME_TRANSFORMATION_REF` | immutable frame-module/configuration reference |
 | `HOLDOUT_STRIDE` | 4 |
 | `POSITION_TOLERANCE_KM` | 1 |

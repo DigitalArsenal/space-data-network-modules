@@ -265,6 +265,14 @@ class RecordType(object):
     WXF = 245
     CLM = 246
     GCT = 247
+    CQR = 248
+    RPC = 249
+    CSO = 250
+    PHB = 251
+    SKT = 252
+    SKQ = 253
+    SKR = 254
+    ETS = 255
 
 def RecordTypeCreator(unionType, table):
     from flatbuffers.table import Table
@@ -1011,4 +1019,28 @@ def RecordTypeCreator(unionType, table):
     if unionType == RecordType.GCT:
         import spacedatanetwork_astro.sds.REC.GCT as GCT
         return GCT.GCTT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.CQR:
+        import spacedatanetwork_astro.sds.REC.CQR as CQR
+        return CQR.CQRT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.RPC:
+        import spacedatanetwork_astro.sds.REC.RPC as RPC
+        return RPC.RPCT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.CSO:
+        import spacedatanetwork_astro.sds.REC.CSO as CSO
+        return CSO.CSOT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.PHB:
+        import spacedatanetwork_astro.sds.REC.PHB as PHB
+        return PHB.PHBT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.SKT:
+        import spacedatanetwork_astro.sds.REC.SKT as SKT
+        return SKT.SKTT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.SKQ:
+        import spacedatanetwork_astro.sds.REC.SKQ as SKQ
+        return SKQ.SKQT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.SKR:
+        import spacedatanetwork_astro.sds.REC.SKR as SKR
+        return SKR.SKRT.InitFromBuf(table.Bytes, table.Pos)
+    if unionType == RecordType.ETS:
+        import spacedatanetwork_astro.sds.REC.ETS as ETS
+        return ETS.ETST.InitFromBuf(table.Bytes, table.Pos)
     return None

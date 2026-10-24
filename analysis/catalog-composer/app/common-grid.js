@@ -80,8 +80,8 @@ export async function propagateCommonGrid(seedBytes, requestedGrid, {propagator,
   for(let i=0;i<grid.samples;i++) epochs.push(instant(await convertTime(time,(Date.parse(grid.start)+i*grid.stepSeconds*1000)/86400000+2440587.5,'UTC','TDB'),'TDB'));
   const request=table(p,'PRWExecutionRequest',{
     INITIAL:table(p,'PRWResidentState',{STATE:initial,COORDINATE_SYSTEM:system('GCRF',seed.epoch)}),TARGET_EPOCH:epochs.at(-1),SAMPLE_EPOCHS:epochs,
-    INTEGRATOR:table(p,'PRWIntegratorSettings',{ALGORITHM:p.prwSolverAlgorithm.RK78,INITIAL_STEP_SECONDS:model.initialStep,MINIMUM_STEP_SECONDS:1e-5,MAXIMUM_STEP_SECONDS:model.maxStep,ABSOLUTE_TOLERANCES:Array(6).fill(model.absoluteTolerance),RELATIVE_TOLERANCE:model.relativeTolerance,MAXIMUM_STEPS:100000}),
-    FORCES:table(p,'PRWForceConfiguration',{GRAVITY_CHOICE:p.prwGravitySelection.INFER_FLAGS,ENABLE_POINT_MASS:true,GRAVITATIONAL_PARAMETER:model.mu*1e9,ENABLE_J2:model.j2,ENABLE_J3:model.j3,ENABLE_J4:model.j4,ENABLE_THIRD_BODY:model.thirdBody,THIRD_BODY_IDS:[10,301],ENABLE_SRP:false,ENABLE_DRAG:false,EPHEMERIS_SOURCE:'Analytical'}),
+    INTEGRATOR:table(p,'PCFIntegratorSettings',{ALGORITHM:p.pcfIntegratorAlgorithm.RK78,INITIAL_STEP_SECONDS:model.initialStep,MINIMUM_STEP_SECONDS:1e-5,MAXIMUM_STEP_SECONDS:model.maxStep,ABSOLUTE_TOLERANCES:Array(6).fill(model.absoluteTolerance),RELATIVE_TOLERANCE:model.relativeTolerance,MAXIMUM_STEPS:100000}),
+    FORCES:table(p,'PCFForceModel',{GRAVITY_CHOICE:p.pcfGravitySelection.INFER_FLAGS,ENABLE_POINT_MASS:true,GRAVITATIONAL_PARAMETER:model.mu*1e9,ENABLE_J2:model.j2,ENABLE_J3:model.j3,ENABLE_J4:model.j4,ENABLE_THIRD_BODY:model.thirdBody,THIRD_BODY_IDS:[10,301],ENABLE_SRP:false,ENABLE_DRAG:false,EPHEMERIS_SOURCE:'Analytical'}),
   });
   const out=await invokeChecked(propagator,'invoke',[{portId:'request',typeRef:type('PRW'),payload:encode(p,'PRW',table(p,'PRW',{EXECUTION_REQUEST:request}))}],'response');
   const result=p.PRW.getSizePrefixedRootAsPRW(new ByteBuffer(bounded(out[0].payload,'PRW'))).EXECUTION_RESULT();

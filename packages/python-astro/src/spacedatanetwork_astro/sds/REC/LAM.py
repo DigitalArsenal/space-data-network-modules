@@ -950,8 +950,125 @@ class LAM(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
+    # Orbit the launch is steered to.
+    # LAM
+    def TARGET_ORBIT(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(118))
+        if o != 0:
+            x = self._tab.Indirect(o + self._tab.Pos)
+            from spacedatanetwork_astro.sds.REC.lamTargetOrbit import lamTargetOrbit
+            obj = lamTargetOrbit()
+            obj.Init(self._tab.Bytes, x)
+            return obj
+        return None
+
+    # Origin of the trajectory samples.
+    # LAM
+    def TRAJECTORY_SOURCE(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(120))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Int8Flags, o + self._tab.Pos)
+        return 0
+
+    # Frame of SPEED_M_PER_S samples.
+    # LAM
+    def SPEED_REFERENCE(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(122))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Int8Flags, o + self._tab.Pos)
+        return 0
+
+    # Orbit at insertion.
+    # LAM
+    def INSERTION(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(124))
+        if o != 0:
+            x = self._tab.Indirect(o + self._tab.Pos)
+            from spacedatanetwork_astro.sds.REC.lamInsertionOrbit import lamInsertionOrbit
+            obj = lamInsertionOrbit()
+            obj.Init(self._tab.Bytes, x)
+            return obj
+        return None
+
+    # Periapsis altitude of each sample's osculating orbit above the WGS-84 equatorial radius, in meters.
+    # LAM
+    def INSTANTANEOUS_PERIAPSIS_ALTITUDE_M(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(126))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 8))
+        return 0
+
+    # LAM
+    def INSTANTANEOUS_PERIAPSIS_ALTITUDE_MAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(126))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Float64Flags, o)
+        return 0
+
+    # LAM
+    def INSTANTANEOUS_PERIAPSIS_ALTITUDE_MLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(126))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # LAM
+    def INSTANTANEOUS_PERIAPSIS_ALTITUDE_MIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(126))
+        return o == 0
+
+    # Apoapsis altitude of each sample's osculating orbit above the WGS-84 equatorial radius, in meters.
+    # LAM
+    def INSTANTANEOUS_APOAPSIS_ALTITUDE_M(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(128))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 8))
+        return 0
+
+    # LAM
+    def INSTANTANEOUS_APOAPSIS_ALTITUDE_MAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(128))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Float64Flags, o)
+        return 0
+
+    # LAM
+    def INSTANTANEOUS_APOAPSIS_ALTITUDE_MLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(128))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # LAM
+    def INSTANTANEOUS_APOAPSIS_ALTITUDE_MIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(128))
+        return o == 0
+
+    # Liftoff epochs, ISO 8601 UTC, at which the ascent joins the TARGET_ORBIT reference plane.
+    # LAM
+    def IN_PLANE_LIFTOFF_EPOCHS(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(130))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.String(a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 4))
+        return ""
+
+    # LAM
+    def IN_PLANE_LIFTOFF_EPOCHSLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(130))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # LAM
+    def IN_PLANE_LIFTOFF_EPOCHSIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(130))
+        return o == 0
+
 def LAMStart(builder):
-    builder.StartObject(57)
+    builder.StartObject(64)
 
 def Start(builder):
     LAMStart(builder)
@@ -1050,7 +1167,7 @@ def LAMCreateEVENT_RECORDSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateEVENT_RECORDSVector(builder, data):
-    LAMCreateEVENT_RECORDSVector(builder, data)
+    return LAMCreateEVENT_RECORDSVector(builder, data)
 
 def LAMAddDETECTIONS(builder, DETECTIONS):
     builder.PrependUOffsetTRelativeSlot(14, flatbuffers.number_types.UOffsetTFlags.py_type(DETECTIONS), 0)
@@ -1068,7 +1185,7 @@ def LAMCreateDETECTIONSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateDETECTIONSVector(builder, data):
-    LAMCreateDETECTIONSVector(builder, data)
+    return LAMCreateDETECTIONSVector(builder, data)
 
 def LAMAddBOOST_TRACKS(builder, BOOST_TRACKS):
     builder.PrependUOffsetTRelativeSlot(15, flatbuffers.number_types.UOffsetTFlags.py_type(BOOST_TRACKS), 0)
@@ -1086,7 +1203,7 @@ def LAMCreateBOOST_TRACKSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateBOOST_TRACKSVector(builder, data):
-    LAMCreateBOOST_TRACKSVector(builder, data)
+    return LAMCreateBOOST_TRACKSVector(builder, data)
 
 def LAMAddBURN_OUT_VECTORS(builder, BURN_OUT_VECTORS):
     builder.PrependUOffsetTRelativeSlot(16, flatbuffers.number_types.UOffsetTFlags.py_type(BURN_OUT_VECTORS), 0)
@@ -1104,7 +1221,7 @@ def LAMCreateBURN_OUT_VECTORSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateBURN_OUT_VECTORSVector(builder, data):
-    LAMCreateBURN_OUT_VECTORSVector(builder, data)
+    return LAMCreateBURN_OUT_VECTORSVector(builder, data)
 
 def LAMAddTRAJECTORY_OEM(builder, TRAJECTORY_OEM):
     builder.PrependUOffsetTRelativeSlot(17, flatbuffers.number_types.UOffsetTFlags.py_type(TRAJECTORY_OEM), 0)
@@ -1192,7 +1309,7 @@ def LAMCreateTIME_FROM_LAUNCH_SVector(builder, data):
     return builder.EndVector()
 
 def CreateTIME_FROM_LAUNCH_SVector(builder, data):
-    LAMCreateTIME_FROM_LAUNCH_SVector(builder, data)
+    return LAMCreateTIME_FROM_LAUNCH_SVector(builder, data)
 
 def LAMAddLATITUDE_DEG(builder, LATITUDE_DEG):
     builder.PrependUOffsetTRelativeSlot(29, flatbuffers.number_types.UOffsetTFlags.py_type(LATITUDE_DEG), 0)
@@ -1214,7 +1331,7 @@ def LAMCreateLATITUDE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateLATITUDE_DEGVector(builder, data):
-    LAMCreateLATITUDE_DEGVector(builder, data)
+    return LAMCreateLATITUDE_DEGVector(builder, data)
 
 def LAMAddLONGITUDE_DEG(builder, LONGITUDE_DEG):
     builder.PrependUOffsetTRelativeSlot(30, flatbuffers.number_types.UOffsetTFlags.py_type(LONGITUDE_DEG), 0)
@@ -1236,7 +1353,7 @@ def LAMCreateLONGITUDE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateLONGITUDE_DEGVector(builder, data):
-    LAMCreateLONGITUDE_DEGVector(builder, data)
+    return LAMCreateLONGITUDE_DEGVector(builder, data)
 
 def LAMAddALTITUDE_M(builder, ALTITUDE_M):
     builder.PrependUOffsetTRelativeSlot(31, flatbuffers.number_types.UOffsetTFlags.py_type(ALTITUDE_M), 0)
@@ -1258,7 +1375,7 @@ def LAMCreateALTITUDE_MVector(builder, data):
     return builder.EndVector()
 
 def CreateALTITUDE_MVector(builder, data):
-    LAMCreateALTITUDE_MVector(builder, data)
+    return LAMCreateALTITUDE_MVector(builder, data)
 
 def LAMAddDOWNRANGE_M(builder, DOWNRANGE_M):
     builder.PrependUOffsetTRelativeSlot(32, flatbuffers.number_types.UOffsetTFlags.py_type(DOWNRANGE_M), 0)
@@ -1280,7 +1397,7 @@ def LAMCreateDOWNRANGE_MVector(builder, data):
     return builder.EndVector()
 
 def CreateDOWNRANGE_MVector(builder, data):
-    LAMCreateDOWNRANGE_MVector(builder, data)
+    return LAMCreateDOWNRANGE_MVector(builder, data)
 
 def LAMAddSPEED_M_PER_S(builder, SPEED_M_PER_S):
     builder.PrependUOffsetTRelativeSlot(33, flatbuffers.number_types.UOffsetTFlags.py_type(SPEED_M_PER_S), 0)
@@ -1302,7 +1419,7 @@ def LAMCreateSPEED_M_PER_SVector(builder, data):
     return builder.EndVector()
 
 def CreateSPEED_M_PER_SVector(builder, data):
-    LAMCreateSPEED_M_PER_SVector(builder, data)
+    return LAMCreateSPEED_M_PER_SVector(builder, data)
 
 def LAMAddMACH(builder, MACH):
     builder.PrependUOffsetTRelativeSlot(34, flatbuffers.number_types.UOffsetTFlags.py_type(MACH), 0)
@@ -1324,7 +1441,7 @@ def LAMCreateMACHVector(builder, data):
     return builder.EndVector()
 
 def CreateMACHVector(builder, data):
-    LAMCreateMACHVector(builder, data)
+    return LAMCreateMACHVector(builder, data)
 
 def LAMAddDYNAMIC_PRESSURE_PA(builder, DYNAMIC_PRESSURE_PA):
     builder.PrependUOffsetTRelativeSlot(35, flatbuffers.number_types.UOffsetTFlags.py_type(DYNAMIC_PRESSURE_PA), 0)
@@ -1346,7 +1463,7 @@ def LAMCreateDYNAMIC_PRESSURE_PAVector(builder, data):
     return builder.EndVector()
 
 def CreateDYNAMIC_PRESSURE_PAVector(builder, data):
-    LAMCreateDYNAMIC_PRESSURE_PAVector(builder, data)
+    return LAMCreateDYNAMIC_PRESSURE_PAVector(builder, data)
 
 def LAMAddHEAT_FLUX_W_PER_M2(builder, HEAT_FLUX_W_PER_M2):
     builder.PrependUOffsetTRelativeSlot(36, flatbuffers.number_types.UOffsetTFlags.py_type(HEAT_FLUX_W_PER_M2), 0)
@@ -1368,7 +1485,7 @@ def LAMCreateHEAT_FLUX_W_PER_M2Vector(builder, data):
     return builder.EndVector()
 
 def CreateHEAT_FLUX_W_PER_M2Vector(builder, data):
-    LAMCreateHEAT_FLUX_W_PER_M2Vector(builder, data)
+    return LAMCreateHEAT_FLUX_W_PER_M2Vector(builder, data)
 
 def LAMAddMASS_KG(builder, MASS_KG):
     builder.PrependUOffsetTRelativeSlot(37, flatbuffers.number_types.UOffsetTFlags.py_type(MASS_KG), 0)
@@ -1390,7 +1507,7 @@ def LAMCreateMASS_KGVector(builder, data):
     return builder.EndVector()
 
 def CreateMASS_KGVector(builder, data):
-    LAMCreateMASS_KGVector(builder, data)
+    return LAMCreateMASS_KGVector(builder, data)
 
 def LAMAddTHRUST_N(builder, THRUST_N):
     builder.PrependUOffsetTRelativeSlot(38, flatbuffers.number_types.UOffsetTFlags.py_type(THRUST_N), 0)
@@ -1412,7 +1529,7 @@ def LAMCreateTHRUST_NVector(builder, data):
     return builder.EndVector()
 
 def CreateTHRUST_NVector(builder, data):
-    LAMCreateTHRUST_NVector(builder, data)
+    return LAMCreateTHRUST_NVector(builder, data)
 
 def LAMAddACCELERATION_G(builder, ACCELERATION_G):
     builder.PrependUOffsetTRelativeSlot(39, flatbuffers.number_types.UOffsetTFlags.py_type(ACCELERATION_G), 0)
@@ -1434,7 +1551,7 @@ def LAMCreateACCELERATION_GVector(builder, data):
     return builder.EndVector()
 
 def CreateACCELERATION_GVector(builder, data):
-    LAMCreateACCELERATION_GVector(builder, data)
+    return LAMCreateACCELERATION_GVector(builder, data)
 
 def LAMAddPITCH_DEG(builder, PITCH_DEG):
     builder.PrependUOffsetTRelativeSlot(40, flatbuffers.number_types.UOffsetTFlags.py_type(PITCH_DEG), 0)
@@ -1456,7 +1573,7 @@ def LAMCreatePITCH_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreatePITCH_DEGVector(builder, data):
-    LAMCreatePITCH_DEGVector(builder, data)
+    return LAMCreatePITCH_DEGVector(builder, data)
 
 def LAMAddFLIGHT_PATH_ANGLE_DEG(builder, FLIGHT_PATH_ANGLE_DEG):
     builder.PrependUOffsetTRelativeSlot(41, flatbuffers.number_types.UOffsetTFlags.py_type(FLIGHT_PATH_ANGLE_DEG), 0)
@@ -1478,7 +1595,7 @@ def LAMCreateFLIGHT_PATH_ANGLE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateFLIGHT_PATH_ANGLE_DEGVector(builder, data):
-    LAMCreateFLIGHT_PATH_ANGLE_DEGVector(builder, data)
+    return LAMCreateFLIGHT_PATH_ANGLE_DEGVector(builder, data)
 
 def LAMAddIIP_LATITUDE_DEG(builder, IIP_LATITUDE_DEG):
     builder.PrependUOffsetTRelativeSlot(42, flatbuffers.number_types.UOffsetTFlags.py_type(IIP_LATITUDE_DEG), 0)
@@ -1500,7 +1617,7 @@ def LAMCreateIIP_LATITUDE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateIIP_LATITUDE_DEGVector(builder, data):
-    LAMCreateIIP_LATITUDE_DEGVector(builder, data)
+    return LAMCreateIIP_LATITUDE_DEGVector(builder, data)
 
 def LAMAddIIP_LONGITUDE_DEG(builder, IIP_LONGITUDE_DEG):
     builder.PrependUOffsetTRelativeSlot(43, flatbuffers.number_types.UOffsetTFlags.py_type(IIP_LONGITUDE_DEG), 0)
@@ -1522,7 +1639,7 @@ def LAMCreateIIP_LONGITUDE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateIIP_LONGITUDE_DEGVector(builder, data):
-    LAMCreateIIP_LONGITUDE_DEGVector(builder, data)
+    return LAMCreateIIP_LONGITUDE_DEGVector(builder, data)
 
 def LAMAddMAX_DYNAMIC_PRESSURE_PA(builder, MAX_DYNAMIC_PRESSURE_PA):
     builder.PrependFloat64Slot(44, MAX_DYNAMIC_PRESSURE_PA, 0.0)
@@ -1594,7 +1711,7 @@ def LAMCreateASCENT_EVENTSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateASCENT_EVENTSVector(builder, data):
-    LAMCreateASCENT_EVENTSVector(builder, data)
+    return LAMCreateASCENT_EVENTSVector(builder, data)
 
 def LAMAddCONSTRAINT_VIOLATIONS(builder, CONSTRAINT_VIOLATIONS):
     builder.PrependUOffsetTRelativeSlot(54, flatbuffers.number_types.UOffsetTFlags.py_type(CONSTRAINT_VIOLATIONS), 0)
@@ -1612,7 +1729,7 @@ def LAMCreateCONSTRAINT_VIOLATIONSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateCONSTRAINT_VIOLATIONSVector(builder, data):
-    LAMCreateCONSTRAINT_VIOLATIONSVector(builder, data)
+    return LAMCreateCONSTRAINT_VIOLATIONSVector(builder, data)
 
 def LAMAddASSUMPTIONS(builder, ASSUMPTIONS):
     builder.PrependUOffsetTRelativeSlot(55, flatbuffers.number_types.UOffsetTFlags.py_type(ASSUMPTIONS), 0)
@@ -1630,13 +1747,99 @@ def LAMCreateASSUMPTIONSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateASSUMPTIONSVector(builder, data):
-    LAMCreateASSUMPTIONSVector(builder, data)
+    return LAMCreateASSUMPTIONSVector(builder, data)
 
 def LAMAddCOMMENT(builder, COMMENT):
     builder.PrependUOffsetTRelativeSlot(56, flatbuffers.number_types.UOffsetTFlags.py_type(COMMENT), 0)
 
 def AddCOMMENT(builder, COMMENT):
     LAMAddCOMMENT(builder, COMMENT)
+
+def LAMAddTARGET_ORBIT(builder, TARGET_ORBIT):
+    builder.PrependUOffsetTRelativeSlot(57, flatbuffers.number_types.UOffsetTFlags.py_type(TARGET_ORBIT), 0)
+
+def AddTARGET_ORBIT(builder, TARGET_ORBIT):
+    LAMAddTARGET_ORBIT(builder, TARGET_ORBIT)
+
+def LAMAddTRAJECTORY_SOURCE(builder, TRAJECTORY_SOURCE):
+    builder.PrependInt8Slot(58, TRAJECTORY_SOURCE, 0)
+
+def AddTRAJECTORY_SOURCE(builder, TRAJECTORY_SOURCE):
+    LAMAddTRAJECTORY_SOURCE(builder, TRAJECTORY_SOURCE)
+
+def LAMAddSPEED_REFERENCE(builder, SPEED_REFERENCE):
+    builder.PrependInt8Slot(59, SPEED_REFERENCE, 0)
+
+def AddSPEED_REFERENCE(builder, SPEED_REFERENCE):
+    LAMAddSPEED_REFERENCE(builder, SPEED_REFERENCE)
+
+def LAMAddINSERTION(builder, INSERTION):
+    builder.PrependUOffsetTRelativeSlot(60, flatbuffers.number_types.UOffsetTFlags.py_type(INSERTION), 0)
+
+def AddINSERTION(builder, INSERTION):
+    LAMAddINSERTION(builder, INSERTION)
+
+def LAMAddINSTANTANEOUS_PERIAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_PERIAPSIS_ALTITUDE_M):
+    builder.PrependUOffsetTRelativeSlot(61, flatbuffers.number_types.UOffsetTFlags.py_type(INSTANTANEOUS_PERIAPSIS_ALTITUDE_M), 0)
+
+def AddINSTANTANEOUS_PERIAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_PERIAPSIS_ALTITUDE_M):
+    LAMAddINSTANTANEOUS_PERIAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_PERIAPSIS_ALTITUDE_M)
+
+def LAMStartINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, numElems):
+    return builder.StartVector(8, numElems, 8)
+
+def StartINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, numElems):
+    return LAMStartINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, numElems)
+
+def LAMCreateINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, data):
+    data = list(data)
+    builder.StartVector(8, len(data), 8)
+    for item in reversed(data):
+        builder.PrependFloat64(item)
+    return builder.EndVector()
+
+def CreateINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, data):
+    return LAMCreateINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, data)
+
+def LAMAddINSTANTANEOUS_APOAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_APOAPSIS_ALTITUDE_M):
+    builder.PrependUOffsetTRelativeSlot(62, flatbuffers.number_types.UOffsetTFlags.py_type(INSTANTANEOUS_APOAPSIS_ALTITUDE_M), 0)
+
+def AddINSTANTANEOUS_APOAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_APOAPSIS_ALTITUDE_M):
+    LAMAddINSTANTANEOUS_APOAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_APOAPSIS_ALTITUDE_M)
+
+def LAMStartINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, numElems):
+    return builder.StartVector(8, numElems, 8)
+
+def StartINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, numElems):
+    return LAMStartINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, numElems)
+
+def LAMCreateINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, data):
+    data = list(data)
+    builder.StartVector(8, len(data), 8)
+    for item in reversed(data):
+        builder.PrependFloat64(item)
+    return builder.EndVector()
+
+def CreateINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, data):
+    return LAMCreateINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, data)
+
+def LAMAddIN_PLANE_LIFTOFF_EPOCHS(builder, IN_PLANE_LIFTOFF_EPOCHS):
+    builder.PrependUOffsetTRelativeSlot(63, flatbuffers.number_types.UOffsetTFlags.py_type(IN_PLANE_LIFTOFF_EPOCHS), 0)
+
+def AddIN_PLANE_LIFTOFF_EPOCHS(builder, IN_PLANE_LIFTOFF_EPOCHS):
+    LAMAddIN_PLANE_LIFTOFF_EPOCHS(builder, IN_PLANE_LIFTOFF_EPOCHS)
+
+def LAMStartIN_PLANE_LIFTOFF_EPOCHSVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
+def StartIN_PLANE_LIFTOFF_EPOCHSVector(builder, numElems):
+    return LAMStartIN_PLANE_LIFTOFF_EPOCHSVector(builder, numElems)
+
+def LAMCreateIN_PLANE_LIFTOFF_EPOCHSVector(builder, data):
+    return builder.CreateVectorOfTables(data)
+
+def CreateIN_PLANE_LIFTOFF_EPOCHSVector(builder, data):
+    return LAMCreateIN_PLANE_LIFTOFF_EPOCHSVector(builder, data)
 
 def LAMEnd(builder):
     return builder.EndObject()
@@ -1656,6 +1859,8 @@ import spacedatanetwork_astro.sds.REC.OEM as OEM
 import spacedatanetwork_astro.sds.REC.ROC as ROC
 import spacedatanetwork_astro.sds.REC.lamAscentEvent as lamAscentEvent
 import spacedatanetwork_astro.sds.REC.lamConstraintViolation as lamConstraintViolation
+import spacedatanetwork_astro.sds.REC.lamInsertionOrbit as lamInsertionOrbit
+import spacedatanetwork_astro.sds.REC.lamTargetOrbit as lamTargetOrbit
 try:
     from typing import List, Optional
 except:
@@ -1723,6 +1928,13 @@ class LAMT(object):
         CONSTRAINT_VIOLATIONS = None,
         ASSUMPTIONS = None,
         COMMENT = None,
+        TARGET_ORBIT = None,
+        TRAJECTORY_SOURCE = 0,
+        SPEED_REFERENCE = 0,
+        INSERTION = None,
+        INSTANTANEOUS_PERIAPSIS_ALTITUDE_M = None,
+        INSTANTANEOUS_APOAPSIS_ALTITUDE_M = None,
+        IN_PLANE_LIFTOFF_EPOCHS = None,
     ):
         self.MESSAGE_ID = MESSAGE_ID  # type: Optional[str]
         self.CREATION_DATE = CREATION_DATE  # type: Optional[str]
@@ -1781,6 +1993,13 @@ class LAMT(object):
         self.CONSTRAINT_VIOLATIONS = CONSTRAINT_VIOLATIONS  # type: Optional[List[lamConstraintViolation.lamConstraintViolationT]]
         self.ASSUMPTIONS = ASSUMPTIONS  # type: Optional[List[Optional[str]]]
         self.COMMENT = COMMENT  # type: Optional[str]
+        self.TARGET_ORBIT = TARGET_ORBIT  # type: Optional[lamTargetOrbit.lamTargetOrbitT]
+        self.TRAJECTORY_SOURCE = TRAJECTORY_SOURCE  # type: int
+        self.SPEED_REFERENCE = SPEED_REFERENCE  # type: int
+        self.INSERTION = INSERTION  # type: Optional[lamInsertionOrbit.lamInsertionOrbitT]
+        self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M = INSTANTANEOUS_PERIAPSIS_ALTITUDE_M  # type: Optional[List[float]]
+        self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M = INSTANTANEOUS_APOAPSIS_ALTITUDE_M  # type: Optional[List[float]]
+        self.IN_PLANE_LIFTOFF_EPOCHS = IN_PLANE_LIFTOFF_EPOCHS  # type: Optional[List[Optional[str]]]
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -2007,6 +2226,30 @@ class LAMT(object):
             for i in range(LAM.ASSUMPTIONSLength()):
                 self.ASSUMPTIONS.append(LAM.ASSUMPTIONS(i))
         self.COMMENT = LAM.COMMENT()
+        if LAM.TARGET_ORBIT() is not None:
+            self.TARGET_ORBIT = lamTargetOrbit.lamTargetOrbitT.InitFromObj(LAM.TARGET_ORBIT())
+        self.TRAJECTORY_SOURCE = LAM.TRAJECTORY_SOURCE()
+        self.SPEED_REFERENCE = LAM.SPEED_REFERENCE()
+        if LAM.INSERTION() is not None:
+            self.INSERTION = lamInsertionOrbit.lamInsertionOrbitT.InitFromObj(LAM.INSERTION())
+        if not LAM.INSTANTANEOUS_PERIAPSIS_ALTITUDE_MIsNone():
+            if np is None:
+                self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M = []
+                for i in range(LAM.INSTANTANEOUS_PERIAPSIS_ALTITUDE_MLength()):
+                    self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M.append(LAM.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M(i))
+            else:
+                self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M = LAM.INSTANTANEOUS_PERIAPSIS_ALTITUDE_MAsNumpy()
+        if not LAM.INSTANTANEOUS_APOAPSIS_ALTITUDE_MIsNone():
+            if np is None:
+                self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M = []
+                for i in range(LAM.INSTANTANEOUS_APOAPSIS_ALTITUDE_MLength()):
+                    self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M.append(LAM.INSTANTANEOUS_APOAPSIS_ALTITUDE_M(i))
+            else:
+                self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M = LAM.INSTANTANEOUS_APOAPSIS_ALTITUDE_MAsNumpy()
+        if not LAM.IN_PLANE_LIFTOFF_EPOCHSIsNone():
+            self.IN_PLANE_LIFTOFF_EPOCHS = []
+            for i in range(LAM.IN_PLANE_LIFTOFF_EPOCHSLength()):
+                self.IN_PLANE_LIFTOFF_EPOCHS.append(LAM.IN_PLANE_LIFTOFF_EPOCHS(i))
 
     # LAMT
     def Pack(self, builder):
@@ -2244,6 +2487,34 @@ class LAMT(object):
             ASSUMPTIONS = builder.EndVector()
         if self.COMMENT is not None:
             COMMENT = builder.CreateString(self.COMMENT)
+        if self.TARGET_ORBIT is not None:
+            TARGET_ORBIT = self.TARGET_ORBIT.Pack(builder)
+        if self.INSERTION is not None:
+            INSERTION = self.INSERTION.Pack(builder)
+        if self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M is not None:
+            if np is not None and type(self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M) is np.ndarray:
+                INSTANTANEOUS_PERIAPSIS_ALTITUDE_M = builder.CreateNumpyVector(self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M)
+            else:
+                LAMStartINSTANTANEOUS_PERIAPSIS_ALTITUDE_MVector(builder, len(self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M))
+                for i in reversed(range(len(self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M))):
+                    builder.PrependFloat64(self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M[i])
+                INSTANTANEOUS_PERIAPSIS_ALTITUDE_M = builder.EndVector()
+        if self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M is not None:
+            if np is not None and type(self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M) is np.ndarray:
+                INSTANTANEOUS_APOAPSIS_ALTITUDE_M = builder.CreateNumpyVector(self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M)
+            else:
+                LAMStartINSTANTANEOUS_APOAPSIS_ALTITUDE_MVector(builder, len(self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M))
+                for i in reversed(range(len(self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M))):
+                    builder.PrependFloat64(self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M[i])
+                INSTANTANEOUS_APOAPSIS_ALTITUDE_M = builder.EndVector()
+        if self.IN_PLANE_LIFTOFF_EPOCHS is not None:
+            IN_PLANE_LIFTOFF_EPOCHSlist = []
+            for i in range(len(self.IN_PLANE_LIFTOFF_EPOCHS)):
+                IN_PLANE_LIFTOFF_EPOCHSlist.append(builder.CreateString(self.IN_PLANE_LIFTOFF_EPOCHS[i]))
+            LAMStartIN_PLANE_LIFTOFF_EPOCHSVector(builder, len(self.IN_PLANE_LIFTOFF_EPOCHS))
+            for i in reversed(range(len(self.IN_PLANE_LIFTOFF_EPOCHS))):
+                builder.PrependUOffsetTRelative(IN_PLANE_LIFTOFF_EPOCHSlist[i])
+            IN_PLANE_LIFTOFF_EPOCHS = builder.EndVector()
         LAMStart(builder)
         if self.MESSAGE_ID is not None:
             LAMAddMESSAGE_ID(builder, MESSAGE_ID)
@@ -2350,5 +2621,17 @@ class LAMT(object):
             LAMAddASSUMPTIONS(builder, ASSUMPTIONS)
         if self.COMMENT is not None:
             LAMAddCOMMENT(builder, COMMENT)
+        if self.TARGET_ORBIT is not None:
+            LAMAddTARGET_ORBIT(builder, TARGET_ORBIT)
+        LAMAddTRAJECTORY_SOURCE(builder, self.TRAJECTORY_SOURCE)
+        LAMAddSPEED_REFERENCE(builder, self.SPEED_REFERENCE)
+        if self.INSERTION is not None:
+            LAMAddINSERTION(builder, INSERTION)
+        if self.INSTANTANEOUS_PERIAPSIS_ALTITUDE_M is not None:
+            LAMAddINSTANTANEOUS_PERIAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_PERIAPSIS_ALTITUDE_M)
+        if self.INSTANTANEOUS_APOAPSIS_ALTITUDE_M is not None:
+            LAMAddINSTANTANEOUS_APOAPSIS_ALTITUDE_M(builder, INSTANTANEOUS_APOAPSIS_ALTITUDE_M)
+        if self.IN_PLANE_LIFTOFF_EPOCHS is not None:
+            LAMAddIN_PLANE_LIFTOFF_EPOCHS(builder, IN_PLANE_LIFTOFF_EPOCHS)
         LAM = LAMEnd(builder)
         return LAM

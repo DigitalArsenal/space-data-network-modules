@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
-import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, parseFlatcJson, publishedSchema, screeningControls } from './lib/cqr.mjs';
 import { CA_PARITY_TOLERANCES as T } from './lib/caParityTolerances.mjs';
 import { parseGridFrame } from '../gpu/gpuScreen.mjs';
 import { screenAllVsAllOnGpu } from '../gpu/allVsAll.mjs';
@@ -83,7 +83,7 @@ function assertSameEvents(actual, expected, label) {
   }
 }
 const excludedNorads = (frames) => frames.map((bytes) =>
-  JSON.parse(flatc.generateJSON(publishedSchema('OMM'), { path: '/omm.bin', data: bytes }, { defaultsJson: true })).NORAD_CAT_ID).sort();
+  parseFlatcJson(flatc.generateJSON(publishedSchema('OMM'), { path: '/omm.bin', data: bytes }, { defaultsJson: true })).NORAD_CAT_ID).sort();
 
 // Prepares a resident index and returns the window request the GPU path takes.
 let generation = 0;

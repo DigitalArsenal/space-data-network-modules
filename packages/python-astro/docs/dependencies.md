@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM specification](../../../propagator
 
 The coordinator resolved the first-pass dependency blockers: this package embeds
 **WasmEdge 0.16.4 through its C API using ctypes**, and vendors immutable generated
-**SDS 1.217.0** output. It depends on neither the empty PyPI `wasmedge` package nor
+**SDS 1.264.0** output. It depends on neither the empty PyPI `wasmedge` package nor
 the stale PyPI SDS wheels. `dependency-audit.json` records that historical audit.
 
 ## Native runtime
@@ -40,10 +40,10 @@ execution remain untested. macOS arm64 with Python 3.14 is verified.
 ## Generated bindings
 
 See [sds-generation.md](sds-generation.md). The package uses immutable Git
-`b76da41467e260c83b3432ba7f34a1eb05cc7ac7:lib/py`, even if another lane is
+`7c61b15299b0c06def4006fff8748dff01a43dc1:lib/py`, even if another lane is
 regenerating files in the canonical checkout. Full source manifest:
-`2040dce21fb7725099876b50b19c5fb37e4b6b403c48ac54a83b90e46077653a`.
-All 4,505 source files are hashed; required families and their import closure
+`b9382d664b0e5f28a08489691dbc26b594a2d09e5efa8b29e03c01d354a2765d`.
+All 7,413 source files are hashed; required families and their import closure
 are vendored under a private namespace. Generated imports are rewritten only by
 `scripts/vendor_sds.py`. Module `.fbs` schemas are compiled with pinned
 `flatc-wasm@26.1.32`; schema/compiler/artifact hashes are in `bindings.lock.json`.
@@ -64,7 +64,7 @@ was observed. Unknown imports fail vendoring instead of being skipped.
 - Current SDK and legacy SGP4 schemas both define incompatible `StateVector`
   types. Legacy SGP4 bindings use `.invoke.legacy.orbpro`, never an alias that
   overwrites `.invoke.orbpro`.
-- Module-declared SDS pins are mixed, not uniformly 1.217.0. Both those pins and
+- Module-declared SDS pins are mixed, not uniformly 1.264.0. Both those pins and
   the coordinator-selected immutable Python binding revision are recorded in
   the binding lock. No module manifest or SDS schema is changed by this lane.
 

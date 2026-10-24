@@ -7,10 +7,15 @@
 # into a shared memory arena.
 #
 # Data interchange for the underlying content (state vectors, covariance,
-# maneuvers, force models, Keplerian / TLE inputs, polynomial ephemeris)
-# lives in SDS `OCM` + `OMM` + `PPE` + `RFM` + `ATM`. PRW is the runtime
-# wire that moves those across a JS ↔ WASM boundary, not a substitute for
-# any of them.
+# maneuvers, force models, Keplerian / TLE inputs, polynomial ephemeris,
+# Earth orientation, space weather) lives in SDS `OCM` + `OMM` + `PPE` +
+# `RFM` + `ATM` + `EOP` + `SPW`. PRW is the runtime wire that moves those
+# across a JS ↔ WASM boundary, not a substitute for any of them.
+#
+# The integrator settings and the force model a propagation runs under are
+# `PCF`'s tables (PCFIntegratorSettings, PCFForceModel and their enums); PRW
+# carries them and does not define them, so a configuration and a request
+# share one definition of each.
 # Runtime state-flag bitfield (sized to match a single uint).
 # Data-interchange equivalents: MANEUVERING is subsumed by OCM.Maneuver;
 # HAS_COVARIANCE is implicit from OCM.COVARIANCE_DATA. The remaining

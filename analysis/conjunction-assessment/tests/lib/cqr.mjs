@@ -93,11 +93,20 @@ export function sdnLengthPrefixed(record) {
   return frame;
 }
 
+// flatc prints a NaN or infinite default (RFM's GALCEN_RA_DEG) as the bare tokens nan, inf and -inf, which JSON lacks. They read back as
+// the numbers they are, and stringifyFlatcJson writes them out as the same tokens, so a decoded record encodes again as it was.
+const NUL = '\u0000'; // marks a number JSON cannot carry while a record is between text and value
+export const parseFlatcJson = (text) => JSON.parse(
+  text.replace(/("(?:[^"\\]|\\.)*")|(-?)\b(nan|inf)\b/g, (token, string, sign, word) => string ?? `"\\u0000${sign}${word}"`),
+  (key, value) => typeof value === 'string' && value.startsWith(NUL) ? (value.endsWith('nan') ? NaN : value[1] === '-' ? -Infinity : Infinity) : value);
+export const stringifyFlatcJson = (value) => JSON.stringify(value,
+  (key, v) => typeof v === 'number' && !Number.isFinite(v) ? NUL + (Number.isNaN(v) ? 'nan' : v < 0 ? '-inf' : 'inf') : v)
+  .replace(/"\\u0000(-?(?:nan|inf))"/g, '$1');
 export function encodeCqr(flatc, record) {
-  return flatc.generateBinary(cqrSchema(), JSON.stringify(record), { sizePrefix: false });
+  return flatc.generateBinary(cqrSchema(), stringifyFlatcJson(record), { sizePrefix: false });
 }
 export function decodeCqr(flatc, bytes) {
-  return JSON.parse(flatc.generateJSON(cqrSchema(), { path: '/cqr.bin', data: bytes }, { defaultsJson: true }));
+  return parseFlatcJson(flatc.generateJSON(cqrSchema(), { path: '/cqr.bin', data: bytes }, { defaultsJson: true }));
 }
 export const utcJd = JULIAN_DATE => ({ TIME_SYSTEM: 'UTC', EPOCH_FORMAT: 'JULIAN_DATE', JULIAN_DATE });
 export function earthFrame(name = 'TEME') {

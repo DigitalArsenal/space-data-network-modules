@@ -1875,6 +1875,7 @@ var covarianceRule = /* @__PURE__ */ ((covarianceRule2) => {
   covarianceRule2[covarianceRule2["ScaledFit"] = 2] = "ScaledFit";
   covarianceRule2[covarianceRule2["SourceModel"] = 3] = "SourceModel";
   covarianceRule2[covarianceRule2["PooledModel"] = 4] = "PooledModel";
+  covarianceRule2[covarianceRule2["EmpiricalHistoryShrunk"] = 5] = "EmpiricalHistoryShrunk";
   return covarianceRule2;
 })(covarianceRule || {});
 
@@ -1981,7 +1982,8 @@ var CVR = class _CVR {
   /**
    * The rule that produced the covariance. In a CCSDS covariance block,
    * Operator keeps the operator's COV_BASIS, ScaledFit is DETERMINED, and
-   * SourceModel and PooledModel are EMPIRICAL with MODEL_ID as COV_BASIS_ID.
+   * SourceModel, PooledModel and EmpiricalHistoryShrunk are EMPIRICAL with
+   * MODEL_ID as COV_BASIS_ID.
    */
   RULE() {
     const offset = this.bb.__offset(this.bb_pos, 4);
@@ -2070,8 +2072,45 @@ var CVR = class _CVR {
     const offset = this.bb.__offset(this.bb_pos, 30);
     return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
   }
+  /**
+   * Number of retained older/newer element-set residual pairs from this
+   * object in the age bin containing AGE_DAYS, after rejection/clipping.
+   * Zero means no retained pairs; never the held-out test count SAMPLES.
+   */
+  HISTORY_SAMPLES() {
+    const offset = this.bb.__offset(this.bb_pos, 32);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Number of distinct older element sets contributing HISTORY_SAMPLES.
+   * Zero means none; never the distinct calibration-object count OBJECTS.
+   */
+  HISTORY_SETS() {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  HISTORY_WINDOW(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Dimensionless population-prior fraction alpha in the covariance blend
+   * P = (1-alpha) H + alpha P_prior, where H is the history error second
+   * moment and P_prior includes the population model's realism scaling.
+   * Range [0,1]: 0 is all history, 1 is all prior; NaN when not applicable
+   * or unknown. For interpolation across bins, report the correspondingly
+   * interpolated alpha. EVIDENCE must identify the estimator/configuration,
+   * retained-count bin, participating bins and their weights so the blend
+   * can be reconstructed; the scalar alone does not describe that mixture.
+   * This is not SCALE_FACTOR, which multiplies a covariance. History-only
+   * evidence leaves CALIBRATION Uncalibrated and test statistics unmeasured.
+   */
+  SHRINKAGE_WEIGHT() {
+    const offset = this.bb.__offset(this.bb_pos, 38);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
   static startCVR(builder) {
-    builder.startObject(14);
+    builder.startObject(18);
   }
   static addRule(builder, RULE) {
     builder.addFieldInt8(0, RULE, 0 /* Unspecified */);
@@ -2115,6 +2154,18 @@ var CVR = class _CVR {
   static addEvidence(builder, EVIDENCEOffset) {
     builder.addFieldOffset(13, EVIDENCEOffset, 0);
   }
+  static addHistorySamples(builder, HISTORY_SAMPLES) {
+    builder.addFieldInt32(14, HISTORY_SAMPLES, 0);
+  }
+  static addHistorySets(builder, HISTORY_SETS) {
+    builder.addFieldInt32(15, HISTORY_SETS, 0);
+  }
+  static addHistoryWindow(builder, HISTORY_WINDOWOffset) {
+    builder.addFieldOffset(16, HISTORY_WINDOWOffset, 0);
+  }
+  static addShrinkageWeight(builder, SHRINKAGE_WEIGHT) {
+    builder.addFieldFloat64(17, SHRINKAGE_WEIGHT, NaN);
+  }
   static endCVR(builder) {
     const offset = builder.endObject();
     return offset;
@@ -2125,7 +2176,7 @@ var CVR = class _CVR {
   static finishSizePrefixedCVRBuffer(builder, offset) {
     builder.finish(offset, "$CVR", true);
   }
-  static createCVR(builder, RULE, MODEL_IDOffset, REGIMEOffset, AGE_DAYS, HORIZON_DAYS, MEASURED_LINEAGEOffset, TEST_WINDOWOffset, MEAN_D2_OVER_3, COVERAGE_95, SAMPLES, OBJECTS, SCALE_FACTOR, CALIBRATION, EVIDENCEOffset) {
+  static createCVR(builder, RULE, MODEL_IDOffset, REGIMEOffset, AGE_DAYS, HORIZON_DAYS, MEASURED_LINEAGEOffset, TEST_WINDOWOffset, MEAN_D2_OVER_3, COVERAGE_95, SAMPLES, OBJECTS, SCALE_FACTOR, CALIBRATION, EVIDENCEOffset, HISTORY_SAMPLES, HISTORY_SETS, HISTORY_WINDOWOffset, SHRINKAGE_WEIGHT) {
     _CVR.startCVR(builder);
     _CVR.addRule(builder, RULE);
     _CVR.addModelId(builder, MODEL_IDOffset);
@@ -2141,6 +2192,10 @@ var CVR = class _CVR {
     _CVR.addScaleFactor(builder, SCALE_FACTOR);
     _CVR.addCalibration(builder, CALIBRATION);
     _CVR.addEvidence(builder, EVIDENCEOffset);
+    _CVR.addHistorySamples(builder, HISTORY_SAMPLES);
+    _CVR.addHistorySets(builder, HISTORY_SETS);
+    _CVR.addHistoryWindow(builder, HISTORY_WINDOWOffset);
+    _CVR.addShrinkageWeight(builder, SHRINKAGE_WEIGHT);
     return _CVR.endCVR(builder);
   }
   unpack() {
@@ -2158,7 +2213,11 @@ var CVR = class _CVR {
       this.OBJECTS(),
       this.SCALE_FACTOR(),
       this.CALIBRATION(),
-      this.EVIDENCE()
+      this.EVIDENCE(),
+      this.HISTORY_SAMPLES(),
+      this.HISTORY_SETS(),
+      this.HISTORY_WINDOW(),
+      this.SHRINKAGE_WEIGHT()
     );
   }
   unpackTo(_o) {
@@ -2176,10 +2235,14 @@ var CVR = class _CVR {
     _o.SCALE_FACTOR = this.SCALE_FACTOR();
     _o.CALIBRATION = this.CALIBRATION();
     _o.EVIDENCE = this.EVIDENCE();
+    _o.HISTORY_SAMPLES = this.HISTORY_SAMPLES();
+    _o.HISTORY_SETS = this.HISTORY_SETS();
+    _o.HISTORY_WINDOW = this.HISTORY_WINDOW();
+    _o.SHRINKAGE_WEIGHT = this.SHRINKAGE_WEIGHT();
   }
 };
 var CVRT = class {
-  constructor(RULE = 0 /* Unspecified */, MODEL_ID = null, REGIME = null, AGE_DAYS = NaN, HORIZON_DAYS = NaN, MEASURED_LINEAGE = null, TEST_WINDOW = null, MEAN_D2_OVER_3 = NaN, COVERAGE_95 = NaN, SAMPLES = 0, OBJECTS = 0, SCALE_FACTOR = NaN, CALIBRATION = 0 /* Unspecified */, EVIDENCE = null) {
+  constructor(RULE = 0 /* Unspecified */, MODEL_ID = null, REGIME = null, AGE_DAYS = NaN, HORIZON_DAYS = NaN, MEASURED_LINEAGE = null, TEST_WINDOW = null, MEAN_D2_OVER_3 = NaN, COVERAGE_95 = NaN, SAMPLES = 0, OBJECTS = 0, SCALE_FACTOR = NaN, CALIBRATION = 0 /* Unspecified */, EVIDENCE = null, HISTORY_SAMPLES = 0, HISTORY_SETS = 0, HISTORY_WINDOW = null, SHRINKAGE_WEIGHT = NaN) {
     this.RULE = RULE;
     this.MODEL_ID = MODEL_ID;
     this.REGIME = REGIME;
@@ -2194,6 +2257,10 @@ var CVRT = class {
     this.SCALE_FACTOR = SCALE_FACTOR;
     this.CALIBRATION = CALIBRATION;
     this.EVIDENCE = EVIDENCE;
+    this.HISTORY_SAMPLES = HISTORY_SAMPLES;
+    this.HISTORY_SETS = HISTORY_SETS;
+    this.HISTORY_WINDOW = HISTORY_WINDOW;
+    this.SHRINKAGE_WEIGHT = SHRINKAGE_WEIGHT;
   }
   pack(builder) {
     const MODEL_ID = this.MODEL_ID !== null ? builder.createString(this.MODEL_ID) : 0;
@@ -2201,6 +2268,7 @@ var CVRT = class {
     const MEASURED_LINEAGE = this.MEASURED_LINEAGE !== null ? builder.createString(this.MEASURED_LINEAGE) : 0;
     const TEST_WINDOW = this.TEST_WINDOW !== null ? builder.createString(this.TEST_WINDOW) : 0;
     const EVIDENCE = this.EVIDENCE !== null ? builder.createString(this.EVIDENCE) : 0;
+    const HISTORY_WINDOW = this.HISTORY_WINDOW !== null ? builder.createString(this.HISTORY_WINDOW) : 0;
     return CVR.createCVR(
       builder,
       this.RULE,
@@ -2216,7 +2284,11 @@ var CVRT = class {
       this.OBJECTS,
       this.SCALE_FACTOR,
       this.CALIBRATION,
-      EVIDENCE
+      EVIDENCE,
+      this.HISTORY_SAMPLES,
+      this.HISTORY_SETS,
+      HISTORY_WINDOW,
+      this.SHRINKAGE_WEIGHT
     );
   }
 };
@@ -2229,7 +2301,191 @@ var DataType = /* @__PURE__ */ ((DataType2) => {
 })(DataType || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/EOP.ts
+import * as flatbuffers12 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
 import * as flatbuffers11 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pvnLicenseClass.ts
+var pvnLicenseClass = /* @__PURE__ */ ((pvnLicenseClass2) => {
+  pvnLicenseClass2[pvnLicenseClass2["Unspecified"] = 0] = "Unspecified";
+  pvnLicenseClass2[pvnLicenseClass2["Reproducible"] = 1] = "Reproducible";
+  pvnLicenseClass2[pvnLicenseClass2["CiteOnly"] = 2] = "CiteOnly";
+  pvnLicenseClass2[pvnLicenseClass2["ShareAlike"] = 3] = "ShareAlike";
+  pvnLicenseClass2[pvnLicenseClass2["NonCommercial"] = 4] = "NonCommercial";
+  return pvnLicenseClass2;
+})(pvnLicenseClass || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pvnSourceKind.ts
+var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
+  pvnSourceKind2[pvnSourceKind2["Unspecified"] = 0] = "Unspecified";
+  pvnSourceKind2[pvnSourceKind2["ElementSet"] = 1] = "ElementSet";
+  pvnSourceKind2[pvnSourceKind2["Ephemeris"] = 2] = "Ephemeris";
+  pvnSourceKind2[pvnSourceKind2["Observation"] = 3] = "Observation";
+  pvnSourceKind2[pvnSourceKind2["Reference"] = 4] = "Reference";
+  return pvnSourceKind2;
+})(pvnSourceKind || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
+var PVN = class _PVN {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPVN(bb, obj) {
+    return (obj || new _PVN()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPVN(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers11.SIZE_PREFIX_LENGTH);
+    return (obj || new _PVN()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static bufferHasIdentifier(bb) {
+    return bb.__has_identifier("$PVN");
+  }
+  SOURCE_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * What kind of data the source supplies.
+   */
+  SOURCE_KIND() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* Unspecified */;
+  }
+  ORIGINATOR(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  PROVIDER_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  PRODUCER(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * What the source's terms permit for the product.
+   */
+  LICENSE_CLASS() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* Unspecified */;
+  }
+  LICENSE_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  LINEAGE(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  static startPVN(builder) {
+    builder.startObject(8);
+  }
+  static addSourceId(builder, SOURCE_IDOffset) {
+    builder.addFieldOffset(0, SOURCE_IDOffset, 0);
+  }
+  static addSourceKind(builder, SOURCE_KIND) {
+    builder.addFieldInt8(1, SOURCE_KIND, 0 /* Unspecified */);
+  }
+  static addOriginator(builder, ORIGINATOROffset) {
+    builder.addFieldOffset(2, ORIGINATOROffset, 0);
+  }
+  static addProviderId(builder, PROVIDER_IDOffset) {
+    builder.addFieldOffset(3, PROVIDER_IDOffset, 0);
+  }
+  static addProducer(builder, PRODUCEROffset) {
+    builder.addFieldOffset(4, PRODUCEROffset, 0);
+  }
+  static addLicenseClass(builder, LICENSE_CLASS) {
+    builder.addFieldInt8(5, LICENSE_CLASS, 0 /* Unspecified */);
+  }
+  static addLicenseId(builder, LICENSE_IDOffset) {
+    builder.addFieldOffset(6, LICENSE_IDOffset, 0);
+  }
+  static addLineage(builder, LINEAGEOffset) {
+    builder.addFieldOffset(7, LINEAGEOffset, 0);
+  }
+  static endPVN(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static finishPVNBuffer(builder, offset) {
+    builder.finish(offset, "$PVN");
+  }
+  static finishSizePrefixedPVNBuffer(builder, offset) {
+    builder.finish(offset, "$PVN", true);
+  }
+  static createPVN(builder, SOURCE_IDOffset, SOURCE_KIND, ORIGINATOROffset, PROVIDER_IDOffset, PRODUCEROffset, LICENSE_CLASS, LICENSE_IDOffset, LINEAGEOffset) {
+    _PVN.startPVN(builder);
+    _PVN.addSourceId(builder, SOURCE_IDOffset);
+    _PVN.addSourceKind(builder, SOURCE_KIND);
+    _PVN.addOriginator(builder, ORIGINATOROffset);
+    _PVN.addProviderId(builder, PROVIDER_IDOffset);
+    _PVN.addProducer(builder, PRODUCEROffset);
+    _PVN.addLicenseClass(builder, LICENSE_CLASS);
+    _PVN.addLicenseId(builder, LICENSE_IDOffset);
+    _PVN.addLineage(builder, LINEAGEOffset);
+    return _PVN.endPVN(builder);
+  }
+  unpack() {
+    return new PVNT(
+      this.SOURCE_ID(),
+      this.SOURCE_KIND(),
+      this.ORIGINATOR(),
+      this.PROVIDER_ID(),
+      this.PRODUCER(),
+      this.LICENSE_CLASS(),
+      this.LICENSE_ID(),
+      this.LINEAGE()
+    );
+  }
+  unpackTo(_o) {
+    _o.SOURCE_ID = this.SOURCE_ID();
+    _o.SOURCE_KIND = this.SOURCE_KIND();
+    _o.ORIGINATOR = this.ORIGINATOR();
+    _o.PROVIDER_ID = this.PROVIDER_ID();
+    _o.PRODUCER = this.PRODUCER();
+    _o.LICENSE_CLASS = this.LICENSE_CLASS();
+    _o.LICENSE_ID = this.LICENSE_ID();
+    _o.LINEAGE = this.LINEAGE();
+  }
+};
+var PVNT = class {
+  constructor(SOURCE_ID = null, SOURCE_KIND = 0 /* Unspecified */, ORIGINATOR = null, PROVIDER_ID = null, PRODUCER = null, LICENSE_CLASS = 0 /* Unspecified */, LICENSE_ID = null, LINEAGE = null) {
+    this.SOURCE_ID = SOURCE_ID;
+    this.SOURCE_KIND = SOURCE_KIND;
+    this.ORIGINATOR = ORIGINATOR;
+    this.PROVIDER_ID = PROVIDER_ID;
+    this.PRODUCER = PRODUCER;
+    this.LICENSE_CLASS = LICENSE_CLASS;
+    this.LICENSE_ID = LICENSE_ID;
+    this.LINEAGE = LINEAGE;
+  }
+  pack(builder) {
+    const SOURCE_ID = this.SOURCE_ID !== null ? builder.createString(this.SOURCE_ID) : 0;
+    const ORIGINATOR = this.ORIGINATOR !== null ? builder.createString(this.ORIGINATOR) : 0;
+    const PROVIDER_ID = this.PROVIDER_ID !== null ? builder.createString(this.PROVIDER_ID) : 0;
+    const PRODUCER = this.PRODUCER !== null ? builder.createString(this.PRODUCER) : 0;
+    const LICENSE_ID = this.LICENSE_ID !== null ? builder.createString(this.LICENSE_ID) : 0;
+    const LINEAGE = this.LINEAGE !== null ? builder.createString(this.LINEAGE) : 0;
+    return PVN.createPVN(
+      builder,
+      SOURCE_ID,
+      this.SOURCE_KIND,
+      ORIGINATOR,
+      PROVIDER_ID,
+      PRODUCER,
+      this.LICENSE_CLASS,
+      LICENSE_ID,
+      LINEAGE
+    );
+  }
+};
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/eopSeries.ts
 var eopSeries = /* @__PURE__ */ ((eopSeries2) => {
@@ -2265,7 +2521,7 @@ var EOP = class _EOP {
     return (obj || new _EOP()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsEOP(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers11.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers12.SIZE_PREFIX_LENGTH);
     return (obj || new _EOP()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -2486,8 +2742,15 @@ var EOP = class _EOP {
     const offset = this.bb.__offset(this.bb_pos, 62);
     return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
   }
+  /**
+   * Where this Earth-orientation row comes from and the terms it travels under.
+   */
+  PROVENANCE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 64);
+    return offset ? (obj || new PVN()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
   static startEOP(builder) {
-    builder.startObject(30);
+    builder.startObject(31);
   }
   static addDate(builder, DATEOffset) {
     builder.addFieldOffset(0, DATEOffset, 0);
@@ -2579,6 +2842,9 @@ var EOP = class _EOP {
   static addNutationDepsUncertaintyRadians(builder, NUTATION_DEPS_UNCERTAINTY_RADIANS) {
     builder.addFieldFloat64(29, NUTATION_DEPS_UNCERTAINTY_RADIANS, 0);
   }
+  static addProvenance(builder, PROVENANCEOffset) {
+    builder.addFieldOffset(30, PROVENANCEOffset, 0);
+  }
   static endEOP(builder) {
     const offset = builder.endObject();
     return offset;
@@ -2588,40 +2854,6 @@ var EOP = class _EOP {
   }
   static finishSizePrefixedEOPBuffer(builder, offset) {
     builder.finish(offset, "$EOP", true);
-  }
-  static createEOP(builder, DATEOffset, MJD, X_POLE_WANDER_RADIANS, Y_POLE_WANDER_RADIANS, X_CELESTIAL_POLE_OFFSET_RADIANS, Y_CELESTIAL_POLE_OFFSET_RADIANS, UT1_MINUS_UTC_SECONDS, TAI_MINUS_UTC_SECONDS, LENGTH_OF_DAY_CORRECTION_SECONDS, DATA_TYPE, SERIES, IAU_CONVENTION, X_POLE_WANDER_UNCERTAINTY_RADIANS, Y_POLE_WANDER_UNCERTAINTY_RADIANS, X_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS, Y_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS, UT1_MINUS_UTC_UNCERTAINTY_SECONDS, LENGTH_OF_DAY_UNCERTAINTY_SECONDS, X_POLE_WANDER_RADIANS_HP, Y_POLE_WANDER_RADIANS_HP, X_CELESTIAL_POLE_OFFSET_RADIANS_HP, Y_CELESTIAL_POLE_OFFSET_RADIANS_HP, UT1_MINUS_UTC_SECONDS_HP, LENGTH_OF_DAY_CORRECTION_SECONDS_HP, DATA_SET_EPOCHOffset, DATA_SET_CIDOffset, NUTATION_DPSI_RADIANS, NUTATION_DEPS_RADIANS, NUTATION_DPSI_UNCERTAINTY_RADIANS, NUTATION_DEPS_UNCERTAINTY_RADIANS) {
-    _EOP.startEOP(builder);
-    _EOP.addDate(builder, DATEOffset);
-    _EOP.addMjd(builder, MJD);
-    _EOP.addXPoleWanderRadians(builder, X_POLE_WANDER_RADIANS);
-    _EOP.addYPoleWanderRadians(builder, Y_POLE_WANDER_RADIANS);
-    _EOP.addXCelestialPoleOffsetRadians(builder, X_CELESTIAL_POLE_OFFSET_RADIANS);
-    _EOP.addYCelestialPoleOffsetRadians(builder, Y_CELESTIAL_POLE_OFFSET_RADIANS);
-    _EOP.addUt1MinusUtcSeconds(builder, UT1_MINUS_UTC_SECONDS);
-    _EOP.addTaiMinusUtcSeconds(builder, TAI_MINUS_UTC_SECONDS);
-    _EOP.addLengthOfDayCorrectionSeconds(builder, LENGTH_OF_DAY_CORRECTION_SECONDS);
-    _EOP.addDataType(builder, DATA_TYPE);
-    _EOP.addSeries(builder, SERIES);
-    _EOP.addIauConvention(builder, IAU_CONVENTION);
-    _EOP.addXPoleWanderUncertaintyRadians(builder, X_POLE_WANDER_UNCERTAINTY_RADIANS);
-    _EOP.addYPoleWanderUncertaintyRadians(builder, Y_POLE_WANDER_UNCERTAINTY_RADIANS);
-    _EOP.addXCelestialPoleOffsetUncertaintyRadians(builder, X_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS);
-    _EOP.addYCelestialPoleOffsetUncertaintyRadians(builder, Y_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS);
-    _EOP.addUt1MinusUtcUncertaintySeconds(builder, UT1_MINUS_UTC_UNCERTAINTY_SECONDS);
-    _EOP.addLengthOfDayUncertaintySeconds(builder, LENGTH_OF_DAY_UNCERTAINTY_SECONDS);
-    _EOP.addXPoleWanderRadiansHp(builder, X_POLE_WANDER_RADIANS_HP);
-    _EOP.addYPoleWanderRadiansHp(builder, Y_POLE_WANDER_RADIANS_HP);
-    _EOP.addXCelestialPoleOffsetRadiansHp(builder, X_CELESTIAL_POLE_OFFSET_RADIANS_HP);
-    _EOP.addYCelestialPoleOffsetRadiansHp(builder, Y_CELESTIAL_POLE_OFFSET_RADIANS_HP);
-    _EOP.addUt1MinusUtcSecondsHp(builder, UT1_MINUS_UTC_SECONDS_HP);
-    _EOP.addLengthOfDayCorrectionSecondsHp(builder, LENGTH_OF_DAY_CORRECTION_SECONDS_HP);
-    _EOP.addDataSetEpoch(builder, DATA_SET_EPOCHOffset);
-    _EOP.addDataSetCid(builder, DATA_SET_CIDOffset);
-    _EOP.addNutationDpsiRadians(builder, NUTATION_DPSI_RADIANS);
-    _EOP.addNutationDepsRadians(builder, NUTATION_DEPS_RADIANS);
-    _EOP.addNutationDpsiUncertaintyRadians(builder, NUTATION_DPSI_UNCERTAINTY_RADIANS);
-    _EOP.addNutationDepsUncertaintyRadians(builder, NUTATION_DEPS_UNCERTAINTY_RADIANS);
-    return _EOP.endEOP(builder);
   }
   unpack() {
     return new EOPT(
@@ -2654,7 +2886,8 @@ var EOP = class _EOP {
       this.NUTATION_DPSI_RADIANS(),
       this.NUTATION_DEPS_RADIANS(),
       this.NUTATION_DPSI_UNCERTAINTY_RADIANS(),
-      this.NUTATION_DEPS_UNCERTAINTY_RADIANS()
+      this.NUTATION_DEPS_UNCERTAINTY_RADIANS(),
+      this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null
     );
   }
   unpackTo(_o) {
@@ -2688,10 +2921,11 @@ var EOP = class _EOP {
     _o.NUTATION_DEPS_RADIANS = this.NUTATION_DEPS_RADIANS();
     _o.NUTATION_DPSI_UNCERTAINTY_RADIANS = this.NUTATION_DPSI_UNCERTAINTY_RADIANS();
     _o.NUTATION_DEPS_UNCERTAINTY_RADIANS = this.NUTATION_DEPS_UNCERTAINTY_RADIANS();
+    _o.PROVENANCE = this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null;
   }
 };
 var EOPT = class {
-  constructor(DATE = null, MJD = 0, X_POLE_WANDER_RADIANS = 0, Y_POLE_WANDER_RADIANS = 0, X_CELESTIAL_POLE_OFFSET_RADIANS = 0, Y_CELESTIAL_POLE_OFFSET_RADIANS = 0, UT1_MINUS_UTC_SECONDS = 0, TAI_MINUS_UTC_SECONDS = 0, LENGTH_OF_DAY_CORRECTION_SECONDS = 0, DATA_TYPE = 0 /* OBSERVED */, SERIES = 0 /* UNSPECIFIED */, IAU_CONVENTION = 0 /* UNSPECIFIED */, X_POLE_WANDER_UNCERTAINTY_RADIANS = 0, Y_POLE_WANDER_UNCERTAINTY_RADIANS = 0, X_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS = 0, Y_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS = 0, UT1_MINUS_UTC_UNCERTAINTY_SECONDS = 0, LENGTH_OF_DAY_UNCERTAINTY_SECONDS = 0, X_POLE_WANDER_RADIANS_HP = 0, Y_POLE_WANDER_RADIANS_HP = 0, X_CELESTIAL_POLE_OFFSET_RADIANS_HP = 0, Y_CELESTIAL_POLE_OFFSET_RADIANS_HP = 0, UT1_MINUS_UTC_SECONDS_HP = 0, LENGTH_OF_DAY_CORRECTION_SECONDS_HP = 0, DATA_SET_EPOCH = null, DATA_SET_CID = null, NUTATION_DPSI_RADIANS = 0, NUTATION_DEPS_RADIANS = 0, NUTATION_DPSI_UNCERTAINTY_RADIANS = 0, NUTATION_DEPS_UNCERTAINTY_RADIANS = 0) {
+  constructor(DATE = null, MJD = 0, X_POLE_WANDER_RADIANS = 0, Y_POLE_WANDER_RADIANS = 0, X_CELESTIAL_POLE_OFFSET_RADIANS = 0, Y_CELESTIAL_POLE_OFFSET_RADIANS = 0, UT1_MINUS_UTC_SECONDS = 0, TAI_MINUS_UTC_SECONDS = 0, LENGTH_OF_DAY_CORRECTION_SECONDS = 0, DATA_TYPE = 0 /* OBSERVED */, SERIES = 0 /* UNSPECIFIED */, IAU_CONVENTION = 0 /* UNSPECIFIED */, X_POLE_WANDER_UNCERTAINTY_RADIANS = 0, Y_POLE_WANDER_UNCERTAINTY_RADIANS = 0, X_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS = 0, Y_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS = 0, UT1_MINUS_UTC_UNCERTAINTY_SECONDS = 0, LENGTH_OF_DAY_UNCERTAINTY_SECONDS = 0, X_POLE_WANDER_RADIANS_HP = 0, Y_POLE_WANDER_RADIANS_HP = 0, X_CELESTIAL_POLE_OFFSET_RADIANS_HP = 0, Y_CELESTIAL_POLE_OFFSET_RADIANS_HP = 0, UT1_MINUS_UTC_SECONDS_HP = 0, LENGTH_OF_DAY_CORRECTION_SECONDS_HP = 0, DATA_SET_EPOCH = null, DATA_SET_CID = null, NUTATION_DPSI_RADIANS = 0, NUTATION_DEPS_RADIANS = 0, NUTATION_DPSI_UNCERTAINTY_RADIANS = 0, NUTATION_DEPS_UNCERTAINTY_RADIANS = 0, PROVENANCE = null) {
     this.DATE = DATE;
     this.MJD = MJD;
     this.X_POLE_WANDER_RADIANS = X_POLE_WANDER_RADIANS;
@@ -2722,231 +2956,58 @@ var EOPT = class {
     this.NUTATION_DEPS_RADIANS = NUTATION_DEPS_RADIANS;
     this.NUTATION_DPSI_UNCERTAINTY_RADIANS = NUTATION_DPSI_UNCERTAINTY_RADIANS;
     this.NUTATION_DEPS_UNCERTAINTY_RADIANS = NUTATION_DEPS_UNCERTAINTY_RADIANS;
+    this.PROVENANCE = PROVENANCE;
   }
   pack(builder) {
     const DATE = this.DATE !== null ? builder.createString(this.DATE) : 0;
     const DATA_SET_EPOCH = this.DATA_SET_EPOCH !== null ? builder.createString(this.DATA_SET_EPOCH) : 0;
     const DATA_SET_CID = this.DATA_SET_CID !== null ? builder.createString(this.DATA_SET_CID) : 0;
-    return EOP.createEOP(
-      builder,
-      DATE,
-      this.MJD,
-      this.X_POLE_WANDER_RADIANS,
-      this.Y_POLE_WANDER_RADIANS,
-      this.X_CELESTIAL_POLE_OFFSET_RADIANS,
-      this.Y_CELESTIAL_POLE_OFFSET_RADIANS,
-      this.UT1_MINUS_UTC_SECONDS,
-      this.TAI_MINUS_UTC_SECONDS,
-      this.LENGTH_OF_DAY_CORRECTION_SECONDS,
-      this.DATA_TYPE,
-      this.SERIES,
-      this.IAU_CONVENTION,
-      this.X_POLE_WANDER_UNCERTAINTY_RADIANS,
-      this.Y_POLE_WANDER_UNCERTAINTY_RADIANS,
-      this.X_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS,
-      this.Y_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS,
-      this.UT1_MINUS_UTC_UNCERTAINTY_SECONDS,
-      this.LENGTH_OF_DAY_UNCERTAINTY_SECONDS,
-      this.X_POLE_WANDER_RADIANS_HP,
-      this.Y_POLE_WANDER_RADIANS_HP,
-      this.X_CELESTIAL_POLE_OFFSET_RADIANS_HP,
-      this.Y_CELESTIAL_POLE_OFFSET_RADIANS_HP,
-      this.UT1_MINUS_UTC_SECONDS_HP,
-      this.LENGTH_OF_DAY_CORRECTION_SECONDS_HP,
-      DATA_SET_EPOCH,
-      DATA_SET_CID,
-      this.NUTATION_DPSI_RADIANS,
-      this.NUTATION_DEPS_RADIANS,
-      this.NUTATION_DPSI_UNCERTAINTY_RADIANS,
-      this.NUTATION_DEPS_UNCERTAINTY_RADIANS
-    );
+    const PROVENANCE = this.PROVENANCE !== null ? this.PROVENANCE.pack(builder) : 0;
+    EOP.startEOP(builder);
+    EOP.addDate(builder, DATE);
+    EOP.addMjd(builder, this.MJD);
+    EOP.addXPoleWanderRadians(builder, this.X_POLE_WANDER_RADIANS);
+    EOP.addYPoleWanderRadians(builder, this.Y_POLE_WANDER_RADIANS);
+    EOP.addXCelestialPoleOffsetRadians(builder, this.X_CELESTIAL_POLE_OFFSET_RADIANS);
+    EOP.addYCelestialPoleOffsetRadians(builder, this.Y_CELESTIAL_POLE_OFFSET_RADIANS);
+    EOP.addUt1MinusUtcSeconds(builder, this.UT1_MINUS_UTC_SECONDS);
+    EOP.addTaiMinusUtcSeconds(builder, this.TAI_MINUS_UTC_SECONDS);
+    EOP.addLengthOfDayCorrectionSeconds(builder, this.LENGTH_OF_DAY_CORRECTION_SECONDS);
+    EOP.addDataType(builder, this.DATA_TYPE);
+    EOP.addSeries(builder, this.SERIES);
+    EOP.addIauConvention(builder, this.IAU_CONVENTION);
+    EOP.addXPoleWanderUncertaintyRadians(builder, this.X_POLE_WANDER_UNCERTAINTY_RADIANS);
+    EOP.addYPoleWanderUncertaintyRadians(builder, this.Y_POLE_WANDER_UNCERTAINTY_RADIANS);
+    EOP.addXCelestialPoleOffsetUncertaintyRadians(builder, this.X_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS);
+    EOP.addYCelestialPoleOffsetUncertaintyRadians(builder, this.Y_CELESTIAL_POLE_OFFSET_UNCERTAINTY_RADIANS);
+    EOP.addUt1MinusUtcUncertaintySeconds(builder, this.UT1_MINUS_UTC_UNCERTAINTY_SECONDS);
+    EOP.addLengthOfDayUncertaintySeconds(builder, this.LENGTH_OF_DAY_UNCERTAINTY_SECONDS);
+    EOP.addXPoleWanderRadiansHp(builder, this.X_POLE_WANDER_RADIANS_HP);
+    EOP.addYPoleWanderRadiansHp(builder, this.Y_POLE_WANDER_RADIANS_HP);
+    EOP.addXCelestialPoleOffsetRadiansHp(builder, this.X_CELESTIAL_POLE_OFFSET_RADIANS_HP);
+    EOP.addYCelestialPoleOffsetRadiansHp(builder, this.Y_CELESTIAL_POLE_OFFSET_RADIANS_HP);
+    EOP.addUt1MinusUtcSecondsHp(builder, this.UT1_MINUS_UTC_SECONDS_HP);
+    EOP.addLengthOfDayCorrectionSecondsHp(builder, this.LENGTH_OF_DAY_CORRECTION_SECONDS_HP);
+    EOP.addDataSetEpoch(builder, DATA_SET_EPOCH);
+    EOP.addDataSetCid(builder, DATA_SET_CID);
+    EOP.addNutationDpsiRadians(builder, this.NUTATION_DPSI_RADIANS);
+    EOP.addNutationDepsRadians(builder, this.NUTATION_DEPS_RADIANS);
+    EOP.addNutationDpsiUncertaintyRadians(builder, this.NUTATION_DPSI_UNCERTAINTY_RADIANS);
+    EOP.addNutationDepsUncertaintyRadians(builder, this.NUTATION_DEPS_UNCERTAINTY_RADIANS);
+    EOP.addProvenance(builder, PROVENANCE);
+    return EOP.endEOP(builder);
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/F107DataType.ts
-var F107DataType = /* @__PURE__ */ ((F107DataType2) => {
-  F107DataType2[F107DataType2["OBS"] = 0] = "OBS";
-  F107DataType2[F107DataType2["INT"] = 1] = "INT";
-  F107DataType2[F107DataType2["PRD"] = 2] = "PRD";
-  F107DataType2[F107DataType2["PRM"] = 3] = "PRM";
-  return F107DataType2;
-})(F107DataType || {});
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVL.ts
+import * as flatbuffers34 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FluxQualifier.ts
-var FluxQualifier = /* @__PURE__ */ ((FluxQualifier2) => {
-  FluxQualifier2[FluxQualifier2["OBSERVED"] = 0] = "OBSERVED";
-  FluxQualifier2[FluxQualifier2["BURST_ADJUSTED"] = 1] = "BURST_ADJUSTED";
-  FluxQualifier2[FluxQualifier2["INTERPOLATED_EXTRAPOLATED"] = 2] = "INTERPOLATED_EXTRAPOLATED";
-  FluxQualifier2[FluxQualifier2["NO_OBSERVATION"] = 3] = "NO_OBSERVATION";
-  FluxQualifier2[FluxQualifier2["PROVIDER_INTERPOLATED"] = 4] = "PROVIDER_INTERPOLATED";
-  return FluxQualifier2;
-})(FluxQualifier || {});
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventLocationRequest.ts
+import * as flatbuffers28 from "flatbuffers";
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
-import * as flatbuffers21 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
-import * as flatbuffers19 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMMatrix3.ts
-import * as flatbuffers12 from "flatbuffers";
-var FRMMatrix3 = class _FRMMatrix3 {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsFRMMatrix3(bb, obj) {
-    return (obj || new _FRMMatrix3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsFRMMatrix3(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers12.SIZE_PREFIX_LENGTH);
-    return (obj || new _FRMMatrix3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  M11() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M12() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M13() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M21() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M22() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M23() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M31() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M32() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  M33() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  static startFRMMatrix3(builder) {
-    builder.startObject(9);
-  }
-  static addM11(builder, M11) {
-    builder.addFieldFloat64(0, M11, 0);
-  }
-  static addM12(builder, M12) {
-    builder.addFieldFloat64(1, M12, 0);
-  }
-  static addM13(builder, M13) {
-    builder.addFieldFloat64(2, M13, 0);
-  }
-  static addM21(builder, M21) {
-    builder.addFieldFloat64(3, M21, 0);
-  }
-  static addM22(builder, M22) {
-    builder.addFieldFloat64(4, M22, 0);
-  }
-  static addM23(builder, M23) {
-    builder.addFieldFloat64(5, M23, 0);
-  }
-  static addM31(builder, M31) {
-    builder.addFieldFloat64(6, M31, 0);
-  }
-  static addM32(builder, M32) {
-    builder.addFieldFloat64(7, M32, 0);
-  }
-  static addM33(builder, M33) {
-    builder.addFieldFloat64(8, M33, 0);
-  }
-  static endFRMMatrix3(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createFRMMatrix3(builder, M11, M12, M13, M21, M22, M23, M31, M32, M33) {
-    _FRMMatrix3.startFRMMatrix3(builder);
-    _FRMMatrix3.addM11(builder, M11);
-    _FRMMatrix3.addM12(builder, M12);
-    _FRMMatrix3.addM13(builder, M13);
-    _FRMMatrix3.addM21(builder, M21);
-    _FRMMatrix3.addM22(builder, M22);
-    _FRMMatrix3.addM23(builder, M23);
-    _FRMMatrix3.addM31(builder, M31);
-    _FRMMatrix3.addM32(builder, M32);
-    _FRMMatrix3.addM33(builder, M33);
-    return _FRMMatrix3.endFRMMatrix3(builder);
-  }
-  unpack() {
-    return new FRMMatrix3T(
-      this.M11(),
-      this.M12(),
-      this.M13(),
-      this.M21(),
-      this.M22(),
-      this.M23(),
-      this.M31(),
-      this.M32(),
-      this.M33()
-    );
-  }
-  unpackTo(_o) {
-    _o.M11 = this.M11();
-    _o.M12 = this.M12();
-    _o.M13 = this.M13();
-    _o.M21 = this.M21();
-    _o.M22 = this.M22();
-    _o.M23 = this.M23();
-    _o.M31 = this.M31();
-    _o.M32 = this.M32();
-    _o.M33 = this.M33();
-  }
-};
-var FRMMatrix3T = class {
-  constructor(M11 = 0, M12 = 0, M13 = 0, M21 = 0, M22 = 0, M23 = 0, M31 = 0, M32 = 0, M33 = 0) {
-    this.M11 = M11;
-    this.M12 = M12;
-    this.M13 = M13;
-    this.M21 = M21;
-    this.M22 = M22;
-    this.M23 = M23;
-    this.M31 = M31;
-    this.M32 = M32;
-    this.M33 = M33;
-  }
-  pack(builder) {
-    return FRMMatrix3.createFRMMatrix3(
-      builder,
-      this.M11,
-      this.M12,
-      this.M13,
-      this.M21,
-      this.M22,
-      this.M23,
-      this.M31,
-      this.M32,
-      this.M33
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
-import * as flatbuffers14 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMVector3.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLApsidesConfiguration.ts
 import * as flatbuffers13 from "flatbuffers";
-var FRMVector3 = class _FRMVector3 {
+var EVLApsidesConfiguration = class _EVLApsidesConfiguration {
   bb = null;
   bb_pos = 0;
   __init(i, bb) {
@@ -2954,582 +3015,88 @@ var FRMVector3 = class _FRMVector3 {
     this.bb = bb;
     return this;
   }
-  static getRootAsFRMVector3(bb, obj) {
-    return (obj || new _FRMVector3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  static getRootAsEVLApsidesConfiguration(bb, obj) {
+    return (obj || new _EVLApsidesConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
-  static getSizePrefixedRootAsFRMVector3(bb, obj) {
+  static getSizePrefixedRootAsEVLApsidesConfiguration(bb, obj) {
     bb.setPosition(bb.position() + flatbuffers13.SIZE_PREFIX_LENGTH);
-    return (obj || new _FRMVector3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+    return (obj || new _EVLApsidesConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
-  X() {
+  /**
+   * Ephemeris body code the radius is measured from. The apsis is the root
+   * of the RADIAL_VELOCITY parameter about this body, NOT an extremum of
+   * geodetic height; the two differ by tens of degrees of true anomaly on an
+   * oblate body.
+   */
+  CENTRAL_BODY_ID() {
     const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
   }
-  Y() {
+  REPORT_APOAPSIS() {
     const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
   }
-  Z() {
+  REPORT_PERIAPSIS() {
     const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
   }
-  static startFRMVector3(builder) {
+  static startEVLApsidesConfiguration(builder) {
     builder.startObject(3);
   }
-  static addX(builder, X) {
-    builder.addFieldFloat64(0, X, 0);
+  static addCentralBodyId(builder, CENTRAL_BODY_ID) {
+    builder.addFieldInt32(0, CENTRAL_BODY_ID, 0);
   }
-  static addY(builder, Y) {
-    builder.addFieldFloat64(1, Y, 0);
+  static addReportApoapsis(builder, REPORT_APOAPSIS) {
+    builder.addFieldInt8(1, +REPORT_APOAPSIS, 1);
   }
-  static addZ(builder, Z) {
-    builder.addFieldFloat64(2, Z, 0);
+  static addReportPeriapsis(builder, REPORT_PERIAPSIS) {
+    builder.addFieldInt8(2, +REPORT_PERIAPSIS, 1);
   }
-  static endFRMVector3(builder) {
+  static endEVLApsidesConfiguration(builder) {
     const offset = builder.endObject();
     return offset;
   }
-  static createFRMVector3(builder, X, Y, Z) {
-    _FRMVector3.startFRMVector3(builder);
-    _FRMVector3.addX(builder, X);
-    _FRMVector3.addY(builder, Y);
-    _FRMVector3.addZ(builder, Z);
-    return _FRMVector3.endFRMVector3(builder);
+  static createEVLApsidesConfiguration(builder, CENTRAL_BODY_ID, REPORT_APOAPSIS, REPORT_PERIAPSIS) {
+    _EVLApsidesConfiguration.startEVLApsidesConfiguration(builder);
+    _EVLApsidesConfiguration.addCentralBodyId(builder, CENTRAL_BODY_ID);
+    _EVLApsidesConfiguration.addReportApoapsis(builder, REPORT_APOAPSIS);
+    _EVLApsidesConfiguration.addReportPeriapsis(builder, REPORT_PERIAPSIS);
+    return _EVLApsidesConfiguration.endEVLApsidesConfiguration(builder);
   }
   unpack() {
-    return new FRMVector3T(
-      this.X(),
-      this.Y(),
-      this.Z()
+    return new EVLApsidesConfigurationT(
+      this.CENTRAL_BODY_ID(),
+      this.REPORT_APOAPSIS(),
+      this.REPORT_PERIAPSIS()
     );
   }
   unpackTo(_o) {
-    _o.X = this.X();
-    _o.Y = this.Y();
-    _o.Z = this.Z();
+    _o.CENTRAL_BODY_ID = this.CENTRAL_BODY_ID();
+    _o.REPORT_APOAPSIS = this.REPORT_APOAPSIS();
+    _o.REPORT_PERIAPSIS = this.REPORT_PERIAPSIS();
   }
 };
-var FRMVector3T = class {
-  constructor(X = 0, Y = 0, Z = 0) {
-    this.X = X;
-    this.Y = Y;
-    this.Z = Z;
+var EVLApsidesConfigurationT = class {
+  constructor(CENTRAL_BODY_ID = 0, REPORT_APOAPSIS = true, REPORT_PERIAPSIS = true) {
+    this.CENTRAL_BODY_ID = CENTRAL_BODY_ID;
+    this.REPORT_APOAPSIS = REPORT_APOAPSIS;
+    this.REPORT_PERIAPSIS = REPORT_PERIAPSIS;
   }
   pack(builder) {
-    return FRMVector3.createFRMVector3(
+    return EVLApsidesConfiguration.createEVLApsidesConfiguration(
       builder,
-      this.X,
-      this.Y,
-      this.Z
+      this.CENTRAL_BODY_ID,
+      this.REPORT_APOAPSIS,
+      this.REPORT_PERIAPSIS
     );
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/frmStateRepresentation.ts
-var frmStateRepresentation = /* @__PURE__ */ ((frmStateRepresentation2) => {
-  frmStateRepresentation2[frmStateRepresentation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  frmStateRepresentation2[frmStateRepresentation2["CARTESIAN"] = 1] = "CARTESIAN";
-  frmStateRepresentation2[frmStateRepresentation2["KEPLERIAN"] = 2] = "KEPLERIAN";
-  frmStateRepresentation2[frmStateRepresentation2["MODIFIED_KEPLERIAN"] = 3] = "MODIFIED_KEPLERIAN";
-  frmStateRepresentation2[frmStateRepresentation2["SPHERICAL_AZFPA"] = 4] = "SPHERICAL_AZFPA";
-  frmStateRepresentation2[frmStateRepresentation2["SPHERICAL_RADEC"] = 5] = "SPHERICAL_RADEC";
-  frmStateRepresentation2[frmStateRepresentation2["EQUINOCTIAL"] = 6] = "EQUINOCTIAL";
-  frmStateRepresentation2[frmStateRepresentation2["MODIFIED_EQUINOCTIAL"] = 7] = "MODIFIED_EQUINOCTIAL";
-  frmStateRepresentation2[frmStateRepresentation2["ALTERNATE_EQUINOCTIAL"] = 8] = "ALTERNATE_EQUINOCTIAL";
-  frmStateRepresentation2[frmStateRepresentation2["DELAUNAY"] = 9] = "DELAUNAY";
-  frmStateRepresentation2[frmStateRepresentation2["PLANETODETIC"] = 10] = "PLANETODETIC";
-  frmStateRepresentation2[frmStateRepresentation2["INCOMING_ASYMPTOTE"] = 11] = "INCOMING_ASYMPTOTE";
-  frmStateRepresentation2[frmStateRepresentation2["OUTGOING_ASYMPTOTE"] = 12] = "OUTGOING_ASYMPTOTE";
-  frmStateRepresentation2[frmStateRepresentation2["BROUWER_MEAN_SHORT"] = 13] = "BROUWER_MEAN_SHORT";
-  frmStateRepresentation2[frmStateRepresentation2["BROUWER_MEAN_LONG"] = 14] = "BROUWER_MEAN_LONG";
-  return frmStateRepresentation2;
-})(frmStateRepresentation || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
-var FRMStateVector = class _FRMStateVector {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsFRMStateVector(bb, obj) {
-    return (obj || new _FRMStateVector()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsFRMStateVector(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers14.SIZE_PREFIX_LENGTH);
-    return (obj || new _FRMStateVector()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  REPRESENTATION() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  /**
-   * The 6 element values of REPRESENTATION, SI units and radians.
-   */
-  ELEMENTS(index) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  elementsLength() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  elementsArray() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  /**
-   * Cartesian position, metres.
-   */
-  POSITION(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
-   * Cartesian velocity, metres per second.
-   */
-  VELOCITY(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  COORDINATE_SYSTEM_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  EPOCH(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  EPOCH_TIME_SYSTEM(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Gravitational parameter, m^3/s^2, of the origin body when the element
-   * set requires one. Absent means the provider's default for the origin.
-   */
-  GRAVITATIONAL_PARAMETER() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  static startFRMStateVector(builder) {
-    builder.startObject(8);
-  }
-  static addRepresentation(builder, REPRESENTATION) {
-    builder.addFieldInt8(0, REPRESENTATION, 0 /* UNSPECIFIED */);
-  }
-  static addElements(builder, ELEMENTSOffset) {
-    builder.addFieldOffset(1, ELEMENTSOffset, 0);
-  }
-  static createElementsVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startElementsVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static addPosition(builder, POSITIONOffset) {
-    builder.addFieldOffset(2, POSITIONOffset, 0);
-  }
-  static addVelocity(builder, VELOCITYOffset) {
-    builder.addFieldOffset(3, VELOCITYOffset, 0);
-  }
-  static addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAMEOffset) {
-    builder.addFieldOffset(4, COORDINATE_SYSTEM_NAMEOffset, 0);
-  }
-  static addEpoch(builder, EPOCHOffset) {
-    builder.addFieldOffset(5, EPOCHOffset, 0);
-  }
-  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
-    builder.addFieldOffset(6, EPOCH_TIME_SYSTEMOffset, 0);
-  }
-  static addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER) {
-    builder.addFieldFloat64(7, GRAVITATIONAL_PARAMETER, 0);
-  }
-  static endFRMStateVector(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  unpack() {
-    return new FRMStateVectorT(
-      this.REPRESENTATION(),
-      this.bb.createScalarList(this.ELEMENTS.bind(this), this.elementsLength()),
-      this.POSITION() !== null ? this.POSITION().unpack() : null,
-      this.VELOCITY() !== null ? this.VELOCITY().unpack() : null,
-      this.COORDINATE_SYSTEM_NAME(),
-      this.EPOCH(),
-      this.EPOCH_TIME_SYSTEM(),
-      this.GRAVITATIONAL_PARAMETER()
-    );
-  }
-  unpackTo(_o) {
-    _o.REPRESENTATION = this.REPRESENTATION();
-    _o.ELEMENTS = this.bb.createScalarList(this.ELEMENTS.bind(this), this.elementsLength());
-    _o.POSITION = this.POSITION() !== null ? this.POSITION().unpack() : null;
-    _o.VELOCITY = this.VELOCITY() !== null ? this.VELOCITY().unpack() : null;
-    _o.COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME();
-    _o.EPOCH = this.EPOCH();
-    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
-    _o.GRAVITATIONAL_PARAMETER = this.GRAVITATIONAL_PARAMETER();
-  }
-};
-var FRMStateVectorT = class {
-  constructor(REPRESENTATION = 0 /* UNSPECIFIED */, ELEMENTS = [], POSITION = null, VELOCITY = null, COORDINATE_SYSTEM_NAME = null, EPOCH = null, EPOCH_TIME_SYSTEM = null, GRAVITATIONAL_PARAMETER = 0) {
-    this.REPRESENTATION = REPRESENTATION;
-    this.ELEMENTS = ELEMENTS;
-    this.POSITION = POSITION;
-    this.VELOCITY = VELOCITY;
-    this.COORDINATE_SYSTEM_NAME = COORDINATE_SYSTEM_NAME;
-    this.EPOCH = EPOCH;
-    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
-    this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
-  }
-  pack(builder) {
-    const ELEMENTS = FRMStateVector.createElementsVector(builder, this.ELEMENTS);
-    const POSITION = this.POSITION !== null ? this.POSITION.pack(builder) : 0;
-    const VELOCITY = this.VELOCITY !== null ? this.VELOCITY.pack(builder) : 0;
-    const COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.COORDINATE_SYSTEM_NAME) : 0;
-    const EPOCH = this.EPOCH !== null ? builder.createString(this.EPOCH) : 0;
-    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
-    FRMStateVector.startFRMStateVector(builder);
-    FRMStateVector.addRepresentation(builder, this.REPRESENTATION);
-    FRMStateVector.addElements(builder, ELEMENTS);
-    FRMStateVector.addPosition(builder, POSITION);
-    FRMStateVector.addVelocity(builder, VELOCITY);
-    FRMStateVector.addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAME);
-    FRMStateVector.addEpoch(builder, EPOCH);
-    FRMStateVector.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEM);
-    FRMStateVector.addGravitationalParameter(builder, this.GRAVITATIONAL_PARAMETER);
-    return FRMStateVector.endFRMStateVector(builder);
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
-import * as flatbuffers18 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMLocalAlignedConstrainedAxes.ts
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLContactConfiguration.ts
 import * as flatbuffers15 from "flatbuffers";
-var RFMLocalAlignedConstrainedAxes = class _RFMLocalAlignedConstrainedAxes {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsRFMLocalAlignedConstrainedAxes(bb, obj) {
-    return (obj || new _RFMLocalAlignedConstrainedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsRFMLocalAlignedConstrainedAxes(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers15.SIZE_PREFIX_LENGTH);
-    return (obj || new _RFMLocalAlignedConstrainedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  REFERENCE_OBJECT_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  REFERENCE_COORDINATE_SYSTEM_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  ALIGNMENT_VECTOR(index) {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  alignmentVectorLength() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  alignmentVectorArray() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  ALIGNMENT_REFERENCE_VECTOR(index) {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  alignmentReferenceVectorLength() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  alignmentReferenceVectorArray() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  CONSTRAINT_VECTOR(index) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  constraintVectorLength() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  constraintVectorArray() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  CONSTRAINT_REFERENCE_VECTOR(index) {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  constraintReferenceVectorLength() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  constraintReferenceVectorArray() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  static startRFMLocalAlignedConstrainedAxes(builder) {
-    builder.startObject(6);
-  }
-  static addReferenceObjectId(builder, REFERENCE_OBJECT_IDOffset) {
-    builder.addFieldOffset(0, REFERENCE_OBJECT_IDOffset, 0);
-  }
-  static addReferenceCoordinateSystemName(builder, REFERENCE_COORDINATE_SYSTEM_NAMEOffset) {
-    builder.addFieldOffset(1, REFERENCE_COORDINATE_SYSTEM_NAMEOffset, 0);
-  }
-  static addAlignmentVector(builder, ALIGNMENT_VECTOROffset) {
-    builder.addFieldOffset(2, ALIGNMENT_VECTOROffset, 0);
-  }
-  static createAlignmentVectorVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startAlignmentVectorVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static addAlignmentReferenceVector(builder, ALIGNMENT_REFERENCE_VECTOROffset) {
-    builder.addFieldOffset(3, ALIGNMENT_REFERENCE_VECTOROffset, 0);
-  }
-  static createAlignmentReferenceVectorVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startAlignmentReferenceVectorVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static addConstraintVector(builder, CONSTRAINT_VECTOROffset) {
-    builder.addFieldOffset(4, CONSTRAINT_VECTOROffset, 0);
-  }
-  static createConstraintVectorVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startConstraintVectorVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static addConstraintReferenceVector(builder, CONSTRAINT_REFERENCE_VECTOROffset) {
-    builder.addFieldOffset(5, CONSTRAINT_REFERENCE_VECTOROffset, 0);
-  }
-  static createConstraintReferenceVectorVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startConstraintReferenceVectorVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static endRFMLocalAlignedConstrainedAxes(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createRFMLocalAlignedConstrainedAxes(builder, REFERENCE_OBJECT_IDOffset, REFERENCE_COORDINATE_SYSTEM_NAMEOffset, ALIGNMENT_VECTOROffset, ALIGNMENT_REFERENCE_VECTOROffset, CONSTRAINT_VECTOROffset, CONSTRAINT_REFERENCE_VECTOROffset) {
-    _RFMLocalAlignedConstrainedAxes.startRFMLocalAlignedConstrainedAxes(builder);
-    _RFMLocalAlignedConstrainedAxes.addReferenceObjectId(builder, REFERENCE_OBJECT_IDOffset);
-    _RFMLocalAlignedConstrainedAxes.addReferenceCoordinateSystemName(builder, REFERENCE_COORDINATE_SYSTEM_NAMEOffset);
-    _RFMLocalAlignedConstrainedAxes.addAlignmentVector(builder, ALIGNMENT_VECTOROffset);
-    _RFMLocalAlignedConstrainedAxes.addAlignmentReferenceVector(builder, ALIGNMENT_REFERENCE_VECTOROffset);
-    _RFMLocalAlignedConstrainedAxes.addConstraintVector(builder, CONSTRAINT_VECTOROffset);
-    _RFMLocalAlignedConstrainedAxes.addConstraintReferenceVector(builder, CONSTRAINT_REFERENCE_VECTOROffset);
-    return _RFMLocalAlignedConstrainedAxes.endRFMLocalAlignedConstrainedAxes(builder);
-  }
-  unpack() {
-    return new RFMLocalAlignedConstrainedAxesT(
-      this.REFERENCE_OBJECT_ID(),
-      this.REFERENCE_COORDINATE_SYSTEM_NAME(),
-      this.bb.createScalarList(this.ALIGNMENT_VECTOR.bind(this), this.alignmentVectorLength()),
-      this.bb.createScalarList(this.ALIGNMENT_REFERENCE_VECTOR.bind(this), this.alignmentReferenceVectorLength()),
-      this.bb.createScalarList(this.CONSTRAINT_VECTOR.bind(this), this.constraintVectorLength()),
-      this.bb.createScalarList(this.CONSTRAINT_REFERENCE_VECTOR.bind(this), this.constraintReferenceVectorLength())
-    );
-  }
-  unpackTo(_o) {
-    _o.REFERENCE_OBJECT_ID = this.REFERENCE_OBJECT_ID();
-    _o.REFERENCE_COORDINATE_SYSTEM_NAME = this.REFERENCE_COORDINATE_SYSTEM_NAME();
-    _o.ALIGNMENT_VECTOR = this.bb.createScalarList(this.ALIGNMENT_VECTOR.bind(this), this.alignmentVectorLength());
-    _o.ALIGNMENT_REFERENCE_VECTOR = this.bb.createScalarList(this.ALIGNMENT_REFERENCE_VECTOR.bind(this), this.alignmentReferenceVectorLength());
-    _o.CONSTRAINT_VECTOR = this.bb.createScalarList(this.CONSTRAINT_VECTOR.bind(this), this.constraintVectorLength());
-    _o.CONSTRAINT_REFERENCE_VECTOR = this.bb.createScalarList(this.CONSTRAINT_REFERENCE_VECTOR.bind(this), this.constraintReferenceVectorLength());
-  }
-};
-var RFMLocalAlignedConstrainedAxesT = class {
-  constructor(REFERENCE_OBJECT_ID = null, REFERENCE_COORDINATE_SYSTEM_NAME = null, ALIGNMENT_VECTOR = [], ALIGNMENT_REFERENCE_VECTOR = [], CONSTRAINT_VECTOR = [], CONSTRAINT_REFERENCE_VECTOR = []) {
-    this.REFERENCE_OBJECT_ID = REFERENCE_OBJECT_ID;
-    this.REFERENCE_COORDINATE_SYSTEM_NAME = REFERENCE_COORDINATE_SYSTEM_NAME;
-    this.ALIGNMENT_VECTOR = ALIGNMENT_VECTOR;
-    this.ALIGNMENT_REFERENCE_VECTOR = ALIGNMENT_REFERENCE_VECTOR;
-    this.CONSTRAINT_VECTOR = CONSTRAINT_VECTOR;
-    this.CONSTRAINT_REFERENCE_VECTOR = CONSTRAINT_REFERENCE_VECTOR;
-  }
-  pack(builder) {
-    const REFERENCE_OBJECT_ID = this.REFERENCE_OBJECT_ID !== null ? builder.createString(this.REFERENCE_OBJECT_ID) : 0;
-    const REFERENCE_COORDINATE_SYSTEM_NAME = this.REFERENCE_COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.REFERENCE_COORDINATE_SYSTEM_NAME) : 0;
-    const ALIGNMENT_VECTOR = RFMLocalAlignedConstrainedAxes.createAlignmentVectorVector(builder, this.ALIGNMENT_VECTOR);
-    const ALIGNMENT_REFERENCE_VECTOR = RFMLocalAlignedConstrainedAxes.createAlignmentReferenceVectorVector(builder, this.ALIGNMENT_REFERENCE_VECTOR);
-    const CONSTRAINT_VECTOR = RFMLocalAlignedConstrainedAxes.createConstraintVectorVector(builder, this.CONSTRAINT_VECTOR);
-    const CONSTRAINT_REFERENCE_VECTOR = RFMLocalAlignedConstrainedAxes.createConstraintReferenceVectorVector(builder, this.CONSTRAINT_REFERENCE_VECTOR);
-    return RFMLocalAlignedConstrainedAxes.createRFMLocalAlignedConstrainedAxes(
-      builder,
-      REFERENCE_OBJECT_ID,
-      REFERENCE_COORDINATE_SYSTEM_NAME,
-      ALIGNMENT_VECTOR,
-      ALIGNMENT_REFERENCE_VECTOR,
-      CONSTRAINT_VECTOR,
-      CONSTRAINT_REFERENCE_VECTOR
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
-import * as flatbuffers16 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/rfmVectorSpecification.ts
-var rfmVectorSpecification = /* @__PURE__ */ ((rfmVectorSpecification2) => {
-  rfmVectorSpecification2[rfmVectorSpecification2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  rfmVectorSpecification2[rfmVectorSpecification2["RADIAL"] = 1] = "RADIAL";
-  rfmVectorSpecification2[rfmVectorSpecification2["ANTI_RADIAL"] = 2] = "ANTI_RADIAL";
-  rfmVectorSpecification2[rfmVectorSpecification2["VELOCITY"] = 3] = "VELOCITY";
-  rfmVectorSpecification2[rfmVectorSpecification2["ANTI_VELOCITY"] = 4] = "ANTI_VELOCITY";
-  rfmVectorSpecification2[rfmVectorSpecification2["ORBIT_NORMAL"] = 5] = "ORBIT_NORMAL";
-  rfmVectorSpecification2[rfmVectorSpecification2["ANTI_ORBIT_NORMAL"] = 6] = "ANTI_ORBIT_NORMAL";
-  return rfmVectorSpecification2;
-})(rfmVectorSpecification || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
-var RFMObjectReferencedAxes = class _RFMObjectReferencedAxes {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsRFMObjectReferencedAxes(bb, obj) {
-    return (obj || new _RFMObjectReferencedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsRFMObjectReferencedAxes(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers16.SIZE_PREFIX_LENGTH);
-    return (obj || new _RFMObjectReferencedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  PRIMARY_OBJECT_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  SECONDARY_OBJECT_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  X_AXIS() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  Y_AXIS() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  Z_AXIS() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  static startRFMObjectReferencedAxes(builder) {
-    builder.startObject(5);
-  }
-  static addPrimaryObjectId(builder, PRIMARY_OBJECT_IDOffset) {
-    builder.addFieldOffset(0, PRIMARY_OBJECT_IDOffset, 0);
-  }
-  static addSecondaryObjectId(builder, SECONDARY_OBJECT_IDOffset) {
-    builder.addFieldOffset(1, SECONDARY_OBJECT_IDOffset, 0);
-  }
-  static addXAxis(builder, X_AXIS) {
-    builder.addFieldInt8(2, X_AXIS, 0 /* UNSPECIFIED */);
-  }
-  static addYAxis(builder, Y_AXIS) {
-    builder.addFieldInt8(3, Y_AXIS, 0 /* UNSPECIFIED */);
-  }
-  static addZAxis(builder, Z_AXIS) {
-    builder.addFieldInt8(4, Z_AXIS, 0 /* UNSPECIFIED */);
-  }
-  static endRFMObjectReferencedAxes(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createRFMObjectReferencedAxes(builder, PRIMARY_OBJECT_IDOffset, SECONDARY_OBJECT_IDOffset, X_AXIS, Y_AXIS, Z_AXIS) {
-    _RFMObjectReferencedAxes.startRFMObjectReferencedAxes(builder);
-    _RFMObjectReferencedAxes.addPrimaryObjectId(builder, PRIMARY_OBJECT_IDOffset);
-    _RFMObjectReferencedAxes.addSecondaryObjectId(builder, SECONDARY_OBJECT_IDOffset);
-    _RFMObjectReferencedAxes.addXAxis(builder, X_AXIS);
-    _RFMObjectReferencedAxes.addYAxis(builder, Y_AXIS);
-    _RFMObjectReferencedAxes.addZAxis(builder, Z_AXIS);
-    return _RFMObjectReferencedAxes.endRFMObjectReferencedAxes(builder);
-  }
-  unpack() {
-    return new RFMObjectReferencedAxesT(
-      this.PRIMARY_OBJECT_ID(),
-      this.SECONDARY_OBJECT_ID(),
-      this.X_AXIS(),
-      this.Y_AXIS(),
-      this.Z_AXIS()
-    );
-  }
-  unpackTo(_o) {
-    _o.PRIMARY_OBJECT_ID = this.PRIMARY_OBJECT_ID();
-    _o.SECONDARY_OBJECT_ID = this.SECONDARY_OBJECT_ID();
-    _o.X_AXIS = this.X_AXIS();
-    _o.Y_AXIS = this.Y_AXIS();
-    _o.Z_AXIS = this.Z_AXIS();
-  }
-};
-var RFMObjectReferencedAxesT = class {
-  constructor(PRIMARY_OBJECT_ID = null, SECONDARY_OBJECT_ID = null, X_AXIS = 0 /* UNSPECIFIED */, Y_AXIS = 0 /* UNSPECIFIED */, Z_AXIS = 0 /* UNSPECIFIED */) {
-    this.PRIMARY_OBJECT_ID = PRIMARY_OBJECT_ID;
-    this.SECONDARY_OBJECT_ID = SECONDARY_OBJECT_ID;
-    this.X_AXIS = X_AXIS;
-    this.Y_AXIS = Y_AXIS;
-    this.Z_AXIS = Z_AXIS;
-  }
-  pack(builder) {
-    const PRIMARY_OBJECT_ID = this.PRIMARY_OBJECT_ID !== null ? builder.createString(this.PRIMARY_OBJECT_ID) : 0;
-    const SECONDARY_OBJECT_ID = this.SECONDARY_OBJECT_ID !== null ? builder.createString(this.SECONDARY_OBJECT_ID) : 0;
-    return RFMObjectReferencedAxes.createRFMObjectReferencedAxes(
-      builder,
-      PRIMARY_OBJECT_ID,
-      SECONDARY_OBJECT_ID,
-      this.X_AXIS,
-      this.Y_AXIS,
-      this.Z_AXIS
-    );
-  }
-};
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/RFMOrigin.ts
-import * as flatbuffers17 from "flatbuffers";
+import * as flatbuffers14 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/rfmLibrationPoint.ts
 var rfmLibrationPoint = /* @__PURE__ */ ((rfmLibrationPoint2) => {
@@ -3550,6 +3117,7 @@ var rfmOriginKind = /* @__PURE__ */ ((rfmOriginKind2) => {
   rfmOriginKind2[rfmOriginKind2["LIBRATION_POINT"] = 3] = "LIBRATION_POINT";
   rfmOriginKind2[rfmOriginKind2["SPACE_OBJECT"] = 4] = "SPACE_OBJECT";
   rfmOriginKind2[rfmOriginKind2["GROUND_SITE"] = 5] = "GROUND_SITE";
+  rfmOriginKind2[rfmOriginKind2["GALACTIC_CENTER"] = 6] = "GALACTIC_CENTER";
   return rfmOriginKind2;
 })(rfmOriginKind || {});
 
@@ -3566,7 +3134,7 @@ var RFMOrigin = class _RFMOrigin {
     return (obj || new _RFMOrigin()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsRFMOrigin(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers17.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers14.SIZE_PREFIX_LENGTH);
     return (obj || new _RFMOrigin()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KIND() {
@@ -3783,6 +3351,1878 @@ var RFMOriginT = class {
   }
 };
 
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlAberrationCorrection.ts
+var evlAberrationCorrection = /* @__PURE__ */ ((evlAberrationCorrection2) => {
+  evlAberrationCorrection2[evlAberrationCorrection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlAberrationCorrection2[evlAberrationCorrection2["NO_CORRECTION"] = 1] = "NO_CORRECTION";
+  evlAberrationCorrection2[evlAberrationCorrection2["LIGHT_TIME"] = 2] = "LIGHT_TIME";
+  evlAberrationCorrection2[evlAberrationCorrection2["LIGHT_TIME_AND_STELLAR_ABERRATION"] = 3] = "LIGHT_TIME_AND_STELLAR_ABERRATION";
+  return evlAberrationCorrection2;
+})(evlAberrationCorrection || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLContactConfiguration.ts
+var EVLContactConfiguration = class _EVLContactConfiguration {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLContactConfiguration(bb, obj) {
+    return (obj || new _EVLContactConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLContactConfiguration(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers15.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLContactConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * The observing point, normally a GROUND_SITE origin.
+   */
+  OBSERVER(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? (obj || new RFMOrigin()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  SENSOR_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Elevation the target must exceed, radians, when no mask is supplied.
+   */
+  MINIMUM_ELEVATION_RAD() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Horizon mask as azimuth and minimum-elevation pairs, radians, in
+   * ascending azimuth: [az0, el0, az1, el1, ...]. Present, it supersedes
+   * MINIMUM_ELEVATION_RAD. An odd length is INVALID_INPUT.
+   */
+  AZIMUTH_ELEVATION_MASK_RAD(index) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  azimuthElevationMaskRadLength() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  azimuthElevationMaskRadArray() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Bodies allowed to block the line of sight.
+   */
+  OCCULTING_BODY_IDS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readInt32(this.bb.__vector(this.bb_pos + offset) + index * 4) : 0;
+  }
+  occultingBodyIdsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  occultingBodyIdsArray() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? new Int32Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  ABERRATION_CORRECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Events shorter than this are not reported.
+   */
+  MINIMUM_DURATION_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startEVLContactConfiguration(builder) {
+    builder.startObject(7);
+  }
+  static addObserver(builder, OBSERVEROffset) {
+    builder.addFieldOffset(0, OBSERVEROffset, 0);
+  }
+  static addSensorId(builder, SENSOR_IDOffset) {
+    builder.addFieldOffset(1, SENSOR_IDOffset, 0);
+  }
+  static addMinimumElevationRad(builder, MINIMUM_ELEVATION_RAD) {
+    builder.addFieldFloat64(2, MINIMUM_ELEVATION_RAD, 0);
+  }
+  static addAzimuthElevationMaskRad(builder, AZIMUTH_ELEVATION_MASK_RADOffset) {
+    builder.addFieldOffset(3, AZIMUTH_ELEVATION_MASK_RADOffset, 0);
+  }
+  static createAzimuthElevationMaskRadVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startAzimuthElevationMaskRadVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addOccultingBodyIds(builder, OCCULTING_BODY_IDSOffset) {
+    builder.addFieldOffset(4, OCCULTING_BODY_IDSOffset, 0);
+  }
+  static createOccultingBodyIdsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt32(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startOccultingBodyIdsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addAberrationCorrection(builder, ABERRATION_CORRECTION) {
+    builder.addFieldInt8(5, ABERRATION_CORRECTION, 0 /* UNSPECIFIED */);
+  }
+  static addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS) {
+    builder.addFieldFloat64(6, MINIMUM_DURATION_SECONDS, 0);
+  }
+  static endEVLContactConfiguration(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createEVLContactConfiguration(builder, OBSERVEROffset, SENSOR_IDOffset, MINIMUM_ELEVATION_RAD, AZIMUTH_ELEVATION_MASK_RADOffset, OCCULTING_BODY_IDSOffset, ABERRATION_CORRECTION, MINIMUM_DURATION_SECONDS) {
+    _EVLContactConfiguration.startEVLContactConfiguration(builder);
+    _EVLContactConfiguration.addObserver(builder, OBSERVEROffset);
+    _EVLContactConfiguration.addSensorId(builder, SENSOR_IDOffset);
+    _EVLContactConfiguration.addMinimumElevationRad(builder, MINIMUM_ELEVATION_RAD);
+    _EVLContactConfiguration.addAzimuthElevationMaskRad(builder, AZIMUTH_ELEVATION_MASK_RADOffset);
+    _EVLContactConfiguration.addOccultingBodyIds(builder, OCCULTING_BODY_IDSOffset);
+    _EVLContactConfiguration.addAberrationCorrection(builder, ABERRATION_CORRECTION);
+    _EVLContactConfiguration.addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS);
+    return _EVLContactConfiguration.endEVLContactConfiguration(builder);
+  }
+  unpack() {
+    return new EVLContactConfigurationT(
+      this.OBSERVER() !== null ? this.OBSERVER().unpack() : null,
+      this.SENSOR_ID(),
+      this.MINIMUM_ELEVATION_RAD(),
+      this.bb.createScalarList(this.AZIMUTH_ELEVATION_MASK_RAD.bind(this), this.azimuthElevationMaskRadLength()),
+      this.bb.createScalarList(this.OCCULTING_BODY_IDS.bind(this), this.occultingBodyIdsLength()),
+      this.ABERRATION_CORRECTION(),
+      this.MINIMUM_DURATION_SECONDS()
+    );
+  }
+  unpackTo(_o) {
+    _o.OBSERVER = this.OBSERVER() !== null ? this.OBSERVER().unpack() : null;
+    _o.SENSOR_ID = this.SENSOR_ID();
+    _o.MINIMUM_ELEVATION_RAD = this.MINIMUM_ELEVATION_RAD();
+    _o.AZIMUTH_ELEVATION_MASK_RAD = this.bb.createScalarList(this.AZIMUTH_ELEVATION_MASK_RAD.bind(this), this.azimuthElevationMaskRadLength());
+    _o.OCCULTING_BODY_IDS = this.bb.createScalarList(this.OCCULTING_BODY_IDS.bind(this), this.occultingBodyIdsLength());
+    _o.ABERRATION_CORRECTION = this.ABERRATION_CORRECTION();
+    _o.MINIMUM_DURATION_SECONDS = this.MINIMUM_DURATION_SECONDS();
+  }
+};
+var EVLContactConfigurationT = class {
+  constructor(OBSERVER = null, SENSOR_ID = null, MINIMUM_ELEVATION_RAD = 0, AZIMUTH_ELEVATION_MASK_RAD = [], OCCULTING_BODY_IDS = [], ABERRATION_CORRECTION = 0 /* UNSPECIFIED */, MINIMUM_DURATION_SECONDS = 0) {
+    this.OBSERVER = OBSERVER;
+    this.SENSOR_ID = SENSOR_ID;
+    this.MINIMUM_ELEVATION_RAD = MINIMUM_ELEVATION_RAD;
+    this.AZIMUTH_ELEVATION_MASK_RAD = AZIMUTH_ELEVATION_MASK_RAD;
+    this.OCCULTING_BODY_IDS = OCCULTING_BODY_IDS;
+    this.ABERRATION_CORRECTION = ABERRATION_CORRECTION;
+    this.MINIMUM_DURATION_SECONDS = MINIMUM_DURATION_SECONDS;
+  }
+  pack(builder) {
+    const OBSERVER = this.OBSERVER !== null ? this.OBSERVER.pack(builder) : 0;
+    const SENSOR_ID = this.SENSOR_ID !== null ? builder.createString(this.SENSOR_ID) : 0;
+    const AZIMUTH_ELEVATION_MASK_RAD = EVLContactConfiguration.createAzimuthElevationMaskRadVector(builder, this.AZIMUTH_ELEVATION_MASK_RAD);
+    const OCCULTING_BODY_IDS = EVLContactConfiguration.createOccultingBodyIdsVector(builder, this.OCCULTING_BODY_IDS);
+    return EVLContactConfiguration.createEVLContactConfiguration(
+      builder,
+      OBSERVER,
+      SENSOR_ID,
+      this.MINIMUM_ELEVATION_RAD,
+      AZIMUTH_ELEVATION_MASK_RAD,
+      OCCULTING_BODY_IDS,
+      this.ABERRATION_CORRECTION,
+      this.MINIMUM_DURATION_SECONDS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEclipseConfiguration.ts
+import * as flatbuffers16 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlShadowModel.ts
+var evlShadowModel = /* @__PURE__ */ ((evlShadowModel2) => {
+  evlShadowModel2[evlShadowModel2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlShadowModel2[evlShadowModel2["CYLINDRICAL"] = 1] = "CYLINDRICAL";
+  evlShadowModel2[evlShadowModel2["CONICAL"] = 2] = "CONICAL";
+  evlShadowModel2[evlShadowModel2["DUAL_CONE"] = 3] = "DUAL_CONE";
+  return evlShadowModel2;
+})(evlShadowModel || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEclipseConfiguration.ts
+var EVLEclipseConfiguration = class _EVLEclipseConfiguration {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLEclipseConfiguration(bb, obj) {
+    return (obj || new _EVLEclipseConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLEclipseConfiguration(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers16.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLEclipseConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Ephemeris body codes of the bodies allowed to occult, in the order they
+   * are tested. More than one is normal.
+   */
+  OCCULTING_BODY_IDS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readInt32(this.bb.__vector(this.bb_pos + offset) + index * 4) : 0;
+  }
+  occultingBodyIdsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  occultingBodyIdsArray() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? new Int32Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Ephemeris body code of the illuminating body.
+   */
+  ILLUMINATING_BODY_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  SHADOW_MODEL() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Which shadow regions to report. A model that cannot distinguish a region
+   * MUST refuse the request rather than fold it into a neighbour.
+   */
+  REPORT_UMBRA() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  REPORT_PENUMBRA() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  REPORT_ANTUMBRA() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * Events shorter than this are not reported. 0 reports every event.
+   */
+  MINIMUM_DURATION_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Correct the illuminating-body direction for signal travel time.
+   */
+  ABERRATION_CORRECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  static startEVLEclipseConfiguration(builder) {
+    builder.startObject(8);
+  }
+  static addOccultingBodyIds(builder, OCCULTING_BODY_IDSOffset) {
+    builder.addFieldOffset(0, OCCULTING_BODY_IDSOffset, 0);
+  }
+  static createOccultingBodyIdsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt32(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startOccultingBodyIdsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addIlluminatingBodyId(builder, ILLUMINATING_BODY_ID) {
+    builder.addFieldInt32(1, ILLUMINATING_BODY_ID, 0);
+  }
+  static addShadowModel(builder, SHADOW_MODEL) {
+    builder.addFieldInt8(2, SHADOW_MODEL, 0 /* UNSPECIFIED */);
+  }
+  static addReportUmbra(builder, REPORT_UMBRA) {
+    builder.addFieldInt8(3, +REPORT_UMBRA, 1);
+  }
+  static addReportPenumbra(builder, REPORT_PENUMBRA) {
+    builder.addFieldInt8(4, +REPORT_PENUMBRA, 1);
+  }
+  static addReportAntumbra(builder, REPORT_ANTUMBRA) {
+    builder.addFieldInt8(5, +REPORT_ANTUMBRA, 1);
+  }
+  static addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS) {
+    builder.addFieldFloat64(6, MINIMUM_DURATION_SECONDS, 0);
+  }
+  static addAberrationCorrection(builder, ABERRATION_CORRECTION) {
+    builder.addFieldInt8(7, ABERRATION_CORRECTION, 0 /* UNSPECIFIED */);
+  }
+  static endEVLEclipseConfiguration(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createEVLEclipseConfiguration(builder, OCCULTING_BODY_IDSOffset, ILLUMINATING_BODY_ID, SHADOW_MODEL, REPORT_UMBRA, REPORT_PENUMBRA, REPORT_ANTUMBRA, MINIMUM_DURATION_SECONDS, ABERRATION_CORRECTION) {
+    _EVLEclipseConfiguration.startEVLEclipseConfiguration(builder);
+    _EVLEclipseConfiguration.addOccultingBodyIds(builder, OCCULTING_BODY_IDSOffset);
+    _EVLEclipseConfiguration.addIlluminatingBodyId(builder, ILLUMINATING_BODY_ID);
+    _EVLEclipseConfiguration.addShadowModel(builder, SHADOW_MODEL);
+    _EVLEclipseConfiguration.addReportUmbra(builder, REPORT_UMBRA);
+    _EVLEclipseConfiguration.addReportPenumbra(builder, REPORT_PENUMBRA);
+    _EVLEclipseConfiguration.addReportAntumbra(builder, REPORT_ANTUMBRA);
+    _EVLEclipseConfiguration.addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS);
+    _EVLEclipseConfiguration.addAberrationCorrection(builder, ABERRATION_CORRECTION);
+    return _EVLEclipseConfiguration.endEVLEclipseConfiguration(builder);
+  }
+  unpack() {
+    return new EVLEclipseConfigurationT(
+      this.bb.createScalarList(this.OCCULTING_BODY_IDS.bind(this), this.occultingBodyIdsLength()),
+      this.ILLUMINATING_BODY_ID(),
+      this.SHADOW_MODEL(),
+      this.REPORT_UMBRA(),
+      this.REPORT_PENUMBRA(),
+      this.REPORT_ANTUMBRA(),
+      this.MINIMUM_DURATION_SECONDS(),
+      this.ABERRATION_CORRECTION()
+    );
+  }
+  unpackTo(_o) {
+    _o.OCCULTING_BODY_IDS = this.bb.createScalarList(this.OCCULTING_BODY_IDS.bind(this), this.occultingBodyIdsLength());
+    _o.ILLUMINATING_BODY_ID = this.ILLUMINATING_BODY_ID();
+    _o.SHADOW_MODEL = this.SHADOW_MODEL();
+    _o.REPORT_UMBRA = this.REPORT_UMBRA();
+    _o.REPORT_PENUMBRA = this.REPORT_PENUMBRA();
+    _o.REPORT_ANTUMBRA = this.REPORT_ANTUMBRA();
+    _o.MINIMUM_DURATION_SECONDS = this.MINIMUM_DURATION_SECONDS();
+    _o.ABERRATION_CORRECTION = this.ABERRATION_CORRECTION();
+  }
+};
+var EVLEclipseConfigurationT = class {
+  constructor(OCCULTING_BODY_IDS = [], ILLUMINATING_BODY_ID = 0, SHADOW_MODEL = 0 /* UNSPECIFIED */, REPORT_UMBRA = true, REPORT_PENUMBRA = true, REPORT_ANTUMBRA = true, MINIMUM_DURATION_SECONDS = 0, ABERRATION_CORRECTION = 0 /* UNSPECIFIED */) {
+    this.OCCULTING_BODY_IDS = OCCULTING_BODY_IDS;
+    this.ILLUMINATING_BODY_ID = ILLUMINATING_BODY_ID;
+    this.SHADOW_MODEL = SHADOW_MODEL;
+    this.REPORT_UMBRA = REPORT_UMBRA;
+    this.REPORT_PENUMBRA = REPORT_PENUMBRA;
+    this.REPORT_ANTUMBRA = REPORT_ANTUMBRA;
+    this.MINIMUM_DURATION_SECONDS = MINIMUM_DURATION_SECONDS;
+    this.ABERRATION_CORRECTION = ABERRATION_CORRECTION;
+  }
+  pack(builder) {
+    const OCCULTING_BODY_IDS = EVLEclipseConfiguration.createOccultingBodyIdsVector(builder, this.OCCULTING_BODY_IDS);
+    return EVLEclipseConfiguration.createEVLEclipseConfiguration(
+      builder,
+      OCCULTING_BODY_IDS,
+      this.ILLUMINATING_BODY_ID,
+      this.SHADOW_MODEL,
+      this.REPORT_UMBRA,
+      this.REPORT_PENUMBRA,
+      this.REPORT_ANTUMBRA,
+      this.MINIMUM_DURATION_SECONDS,
+      this.ABERRATION_CORRECTION
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLIntrusionConfiguration.ts
+import * as flatbuffers18 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMVector3.ts
+import * as flatbuffers17 from "flatbuffers";
+var FRMVector3 = class _FRMVector3 {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsFRMVector3(bb, obj) {
+    return (obj || new _FRMVector3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsFRMVector3(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers17.SIZE_PREFIX_LENGTH);
+    return (obj || new _FRMVector3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  X() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  Y() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  Z() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startFRMVector3(builder) {
+    builder.startObject(3);
+  }
+  static addX(builder, X) {
+    builder.addFieldFloat64(0, X, 0);
+  }
+  static addY(builder, Y) {
+    builder.addFieldFloat64(1, Y, 0);
+  }
+  static addZ(builder, Z) {
+    builder.addFieldFloat64(2, Z, 0);
+  }
+  static endFRMVector3(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createFRMVector3(builder, X, Y, Z) {
+    _FRMVector3.startFRMVector3(builder);
+    _FRMVector3.addX(builder, X);
+    _FRMVector3.addY(builder, Y);
+    _FRMVector3.addZ(builder, Z);
+    return _FRMVector3.endFRMVector3(builder);
+  }
+  unpack() {
+    return new FRMVector3T(
+      this.X(),
+      this.Y(),
+      this.Z()
+    );
+  }
+  unpackTo(_o) {
+    _o.X = this.X();
+    _o.Y = this.Y();
+    _o.Z = this.Z();
+  }
+};
+var FRMVector3T = class {
+  constructor(X = 0, Y = 0, Z = 0) {
+    this.X = X;
+    this.Y = Y;
+    this.Z = Z;
+  }
+  pack(builder) {
+    return FRMVector3.createFRMVector3(
+      builder,
+      this.X,
+      this.Y,
+      this.Z
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlFieldOfViewShape.ts
+var evlFieldOfViewShape = /* @__PURE__ */ ((evlFieldOfViewShape2) => {
+  evlFieldOfViewShape2[evlFieldOfViewShape2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlFieldOfViewShape2[evlFieldOfViewShape2["CONIC"] = 1] = "CONIC";
+  evlFieldOfViewShape2[evlFieldOfViewShape2["RECTANGULAR"] = 2] = "RECTANGULAR";
+  evlFieldOfViewShape2[evlFieldOfViewShape2["CUSTOM_MASK"] = 3] = "CUSTOM_MASK";
+  return evlFieldOfViewShape2;
+})(evlFieldOfViewShape || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLIntrusionConfiguration.ts
+var EVLIntrusionConfiguration = class _EVLIntrusionConfiguration {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLIntrusionConfiguration(bb, obj) {
+    return (obj || new _EVLIntrusionConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLIntrusionConfiguration(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers18.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLIntrusionConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  SENSOR_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  FIELD_OF_VIEW_SHAPE() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Boresight direction, expressed in BORESIGHT_COORDINATE_SYSTEM_NAME.
+   */
+  BORESIGHT(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  BORESIGHT_COORDINATE_SYSTEM_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Half-angle of a CONIC field of view, radians.
+   */
+  CONE_HALF_ANGLE_RAD() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Half-angles of a RECTANGULAR field of view about the boresight, radians.
+   */
+  RECTANGULAR_HALF_ANGLE_X_RAD() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  RECTANGULAR_HALF_ANGLE_Y_RAD() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Boundary of a CUSTOM_MASK field of view as clock and cone angle pairs
+   * about the boresight, radians: [clock0, cone0, clock1, cone1, ...]. An
+   * odd length is INVALID_INPUT.
+   */
+  CUSTOM_MASK_RAD(index) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  customMaskRadLength() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  customMaskRadArray() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Ephemeris body codes of the bodies tested for intrusion.
+   */
+  INTRUDING_BODY_IDS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readInt32(this.bb.__vector(this.bb_pos + offset) + index * 4) : 0;
+  }
+  intrudingBodyIdsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  intrudingBodyIdsArray() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? new Int32Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  INTRUDING_OBJECT_IDS(index, optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+  }
+  intrudingObjectIdsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Test the intruder's apparent disc rather than its centre, so an event
+   * begins when the limb enters the field of view.
+   */
+  USE_APPARENT_BODY_RADIUS() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  MINIMUM_DURATION_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startEVLIntrusionConfiguration(builder) {
+    builder.startObject(12);
+  }
+  static addSensorId(builder, SENSOR_IDOffset) {
+    builder.addFieldOffset(0, SENSOR_IDOffset, 0);
+  }
+  static addFieldOfViewShape(builder, FIELD_OF_VIEW_SHAPE) {
+    builder.addFieldInt8(1, FIELD_OF_VIEW_SHAPE, 0 /* UNSPECIFIED */);
+  }
+  static addBoresight(builder, BORESIGHTOffset) {
+    builder.addFieldOffset(2, BORESIGHTOffset, 0);
+  }
+  static addBoresightCoordinateSystemName(builder, BORESIGHT_COORDINATE_SYSTEM_NAMEOffset) {
+    builder.addFieldOffset(3, BORESIGHT_COORDINATE_SYSTEM_NAMEOffset, 0);
+  }
+  static addConeHalfAngleRad(builder, CONE_HALF_ANGLE_RAD) {
+    builder.addFieldFloat64(4, CONE_HALF_ANGLE_RAD, 0);
+  }
+  static addRectangularHalfAngleXRad(builder, RECTANGULAR_HALF_ANGLE_X_RAD) {
+    builder.addFieldFloat64(5, RECTANGULAR_HALF_ANGLE_X_RAD, 0);
+  }
+  static addRectangularHalfAngleYRad(builder, RECTANGULAR_HALF_ANGLE_Y_RAD) {
+    builder.addFieldFloat64(6, RECTANGULAR_HALF_ANGLE_Y_RAD, 0);
+  }
+  static addCustomMaskRad(builder, CUSTOM_MASK_RADOffset) {
+    builder.addFieldOffset(7, CUSTOM_MASK_RADOffset, 0);
+  }
+  static createCustomMaskRadVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startCustomMaskRadVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addIntrudingBodyIds(builder, INTRUDING_BODY_IDSOffset) {
+    builder.addFieldOffset(8, INTRUDING_BODY_IDSOffset, 0);
+  }
+  static createIntrudingBodyIdsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt32(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startIntrudingBodyIdsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addIntrudingObjectIds(builder, INTRUDING_OBJECT_IDSOffset) {
+    builder.addFieldOffset(9, INTRUDING_OBJECT_IDSOffset, 0);
+  }
+  static createIntrudingObjectIdsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startIntrudingObjectIdsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addUseApparentBodyRadius(builder, USE_APPARENT_BODY_RADIUS) {
+    builder.addFieldInt8(10, +USE_APPARENT_BODY_RADIUS, 0);
+  }
+  static addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS) {
+    builder.addFieldFloat64(11, MINIMUM_DURATION_SECONDS, 0);
+  }
+  static endEVLIntrusionConfiguration(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new EVLIntrusionConfigurationT(
+      this.SENSOR_ID(),
+      this.FIELD_OF_VIEW_SHAPE(),
+      this.BORESIGHT() !== null ? this.BORESIGHT().unpack() : null,
+      this.BORESIGHT_COORDINATE_SYSTEM_NAME(),
+      this.CONE_HALF_ANGLE_RAD(),
+      this.RECTANGULAR_HALF_ANGLE_X_RAD(),
+      this.RECTANGULAR_HALF_ANGLE_Y_RAD(),
+      this.bb.createScalarList(this.CUSTOM_MASK_RAD.bind(this), this.customMaskRadLength()),
+      this.bb.createScalarList(this.INTRUDING_BODY_IDS.bind(this), this.intrudingBodyIdsLength()),
+      this.bb.createScalarList(this.INTRUDING_OBJECT_IDS.bind(this), this.intrudingObjectIdsLength()),
+      this.USE_APPARENT_BODY_RADIUS(),
+      this.MINIMUM_DURATION_SECONDS()
+    );
+  }
+  unpackTo(_o) {
+    _o.SENSOR_ID = this.SENSOR_ID();
+    _o.FIELD_OF_VIEW_SHAPE = this.FIELD_OF_VIEW_SHAPE();
+    _o.BORESIGHT = this.BORESIGHT() !== null ? this.BORESIGHT().unpack() : null;
+    _o.BORESIGHT_COORDINATE_SYSTEM_NAME = this.BORESIGHT_COORDINATE_SYSTEM_NAME();
+    _o.CONE_HALF_ANGLE_RAD = this.CONE_HALF_ANGLE_RAD();
+    _o.RECTANGULAR_HALF_ANGLE_X_RAD = this.RECTANGULAR_HALF_ANGLE_X_RAD();
+    _o.RECTANGULAR_HALF_ANGLE_Y_RAD = this.RECTANGULAR_HALF_ANGLE_Y_RAD();
+    _o.CUSTOM_MASK_RAD = this.bb.createScalarList(this.CUSTOM_MASK_RAD.bind(this), this.customMaskRadLength());
+    _o.INTRUDING_BODY_IDS = this.bb.createScalarList(this.INTRUDING_BODY_IDS.bind(this), this.intrudingBodyIdsLength());
+    _o.INTRUDING_OBJECT_IDS = this.bb.createScalarList(this.INTRUDING_OBJECT_IDS.bind(this), this.intrudingObjectIdsLength());
+    _o.USE_APPARENT_BODY_RADIUS = this.USE_APPARENT_BODY_RADIUS();
+    _o.MINIMUM_DURATION_SECONDS = this.MINIMUM_DURATION_SECONDS();
+  }
+};
+var EVLIntrusionConfigurationT = class {
+  constructor(SENSOR_ID = null, FIELD_OF_VIEW_SHAPE = 0 /* UNSPECIFIED */, BORESIGHT = null, BORESIGHT_COORDINATE_SYSTEM_NAME = null, CONE_HALF_ANGLE_RAD = 0, RECTANGULAR_HALF_ANGLE_X_RAD = 0, RECTANGULAR_HALF_ANGLE_Y_RAD = 0, CUSTOM_MASK_RAD = [], INTRUDING_BODY_IDS = [], INTRUDING_OBJECT_IDS = [], USE_APPARENT_BODY_RADIUS = false, MINIMUM_DURATION_SECONDS = 0) {
+    this.SENSOR_ID = SENSOR_ID;
+    this.FIELD_OF_VIEW_SHAPE = FIELD_OF_VIEW_SHAPE;
+    this.BORESIGHT = BORESIGHT;
+    this.BORESIGHT_COORDINATE_SYSTEM_NAME = BORESIGHT_COORDINATE_SYSTEM_NAME;
+    this.CONE_HALF_ANGLE_RAD = CONE_HALF_ANGLE_RAD;
+    this.RECTANGULAR_HALF_ANGLE_X_RAD = RECTANGULAR_HALF_ANGLE_X_RAD;
+    this.RECTANGULAR_HALF_ANGLE_Y_RAD = RECTANGULAR_HALF_ANGLE_Y_RAD;
+    this.CUSTOM_MASK_RAD = CUSTOM_MASK_RAD;
+    this.INTRUDING_BODY_IDS = INTRUDING_BODY_IDS;
+    this.INTRUDING_OBJECT_IDS = INTRUDING_OBJECT_IDS;
+    this.USE_APPARENT_BODY_RADIUS = USE_APPARENT_BODY_RADIUS;
+    this.MINIMUM_DURATION_SECONDS = MINIMUM_DURATION_SECONDS;
+  }
+  pack(builder) {
+    const SENSOR_ID = this.SENSOR_ID !== null ? builder.createString(this.SENSOR_ID) : 0;
+    const BORESIGHT = this.BORESIGHT !== null ? this.BORESIGHT.pack(builder) : 0;
+    const BORESIGHT_COORDINATE_SYSTEM_NAME = this.BORESIGHT_COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.BORESIGHT_COORDINATE_SYSTEM_NAME) : 0;
+    const CUSTOM_MASK_RAD = EVLIntrusionConfiguration.createCustomMaskRadVector(builder, this.CUSTOM_MASK_RAD);
+    const INTRUDING_BODY_IDS = EVLIntrusionConfiguration.createIntrudingBodyIdsVector(builder, this.INTRUDING_BODY_IDS);
+    const INTRUDING_OBJECT_IDS = EVLIntrusionConfiguration.createIntrudingObjectIdsVector(builder, builder.createObjectOffsetList(this.INTRUDING_OBJECT_IDS));
+    EVLIntrusionConfiguration.startEVLIntrusionConfiguration(builder);
+    EVLIntrusionConfiguration.addSensorId(builder, SENSOR_ID);
+    EVLIntrusionConfiguration.addFieldOfViewShape(builder, this.FIELD_OF_VIEW_SHAPE);
+    EVLIntrusionConfiguration.addBoresight(builder, BORESIGHT);
+    EVLIntrusionConfiguration.addBoresightCoordinateSystemName(builder, BORESIGHT_COORDINATE_SYSTEM_NAME);
+    EVLIntrusionConfiguration.addConeHalfAngleRad(builder, this.CONE_HALF_ANGLE_RAD);
+    EVLIntrusionConfiguration.addRectangularHalfAngleXRad(builder, this.RECTANGULAR_HALF_ANGLE_X_RAD);
+    EVLIntrusionConfiguration.addRectangularHalfAngleYRad(builder, this.RECTANGULAR_HALF_ANGLE_Y_RAD);
+    EVLIntrusionConfiguration.addCustomMaskRad(builder, CUSTOM_MASK_RAD);
+    EVLIntrusionConfiguration.addIntrudingBodyIds(builder, INTRUDING_BODY_IDS);
+    EVLIntrusionConfiguration.addIntrudingObjectIds(builder, INTRUDING_OBJECT_IDS);
+    EVLIntrusionConfiguration.addUseApparentBodyRadius(builder, this.USE_APPARENT_BODY_RADIUS);
+    EVLIntrusionConfiguration.addMinimumDurationSeconds(builder, this.MINIMUM_DURATION_SECONDS);
+    return EVLIntrusionConfiguration.endEVLIntrusionConfiguration(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLLatitudeExtremumConfiguration.ts
+import * as flatbuffers19 from "flatbuffers";
+var EVLLatitudeExtremumConfiguration = class _EVLLatitudeExtremumConfiguration {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLLatitudeExtremumConfiguration(bb, obj) {
+    return (obj || new _EVLLatitudeExtremumConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLLatitudeExtremumConfiguration(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers19.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLLatitudeExtremumConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Ephemeris body code the latitude is measured about; the pole is that of
+   * the request context's axes.
+   */
+  CENTRAL_BODY_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  REPORT_MAXIMUM() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  REPORT_MINIMUM() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  static startEVLLatitudeExtremumConfiguration(builder) {
+    builder.startObject(3);
+  }
+  static addCentralBodyId(builder, CENTRAL_BODY_ID) {
+    builder.addFieldInt32(0, CENTRAL_BODY_ID, 0);
+  }
+  static addReportMaximum(builder, REPORT_MAXIMUM) {
+    builder.addFieldInt8(1, +REPORT_MAXIMUM, 1);
+  }
+  static addReportMinimum(builder, REPORT_MINIMUM) {
+    builder.addFieldInt8(2, +REPORT_MINIMUM, 1);
+  }
+  static endEVLLatitudeExtremumConfiguration(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createEVLLatitudeExtremumConfiguration(builder, CENTRAL_BODY_ID, REPORT_MAXIMUM, REPORT_MINIMUM) {
+    _EVLLatitudeExtremumConfiguration.startEVLLatitudeExtremumConfiguration(builder);
+    _EVLLatitudeExtremumConfiguration.addCentralBodyId(builder, CENTRAL_BODY_ID);
+    _EVLLatitudeExtremumConfiguration.addReportMaximum(builder, REPORT_MAXIMUM);
+    _EVLLatitudeExtremumConfiguration.addReportMinimum(builder, REPORT_MINIMUM);
+    return _EVLLatitudeExtremumConfiguration.endEVLLatitudeExtremumConfiguration(builder);
+  }
+  unpack() {
+    return new EVLLatitudeExtremumConfigurationT(
+      this.CENTRAL_BODY_ID(),
+      this.REPORT_MAXIMUM(),
+      this.REPORT_MINIMUM()
+    );
+  }
+  unpackTo(_o) {
+    _o.CENTRAL_BODY_ID = this.CENTRAL_BODY_ID();
+    _o.REPORT_MAXIMUM = this.REPORT_MAXIMUM();
+    _o.REPORT_MINIMUM = this.REPORT_MINIMUM();
+  }
+};
+var EVLLatitudeExtremumConfigurationT = class {
+  constructor(CENTRAL_BODY_ID = 0, REPORT_MAXIMUM = true, REPORT_MINIMUM = true) {
+    this.CENTRAL_BODY_ID = CENTRAL_BODY_ID;
+    this.REPORT_MAXIMUM = REPORT_MAXIMUM;
+    this.REPORT_MINIMUM = REPORT_MINIMUM;
+  }
+  pack(builder) {
+    return EVLLatitudeExtremumConfiguration.createEVLLatitudeExtremumConfiguration(
+      builder,
+      this.CENTRAL_BODY_ID,
+      this.REPORT_MAXIMUM,
+      this.REPORT_MINIMUM
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLNodeCrossingConfiguration.ts
+import * as flatbuffers20 from "flatbuffers";
+var EVLNodeCrossingConfiguration = class _EVLNodeCrossingConfiguration {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLNodeCrossingConfiguration(bb, obj) {
+    return (obj || new _EVLNodeCrossingConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLNodeCrossingConfiguration(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers20.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLNodeCrossingConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  REFERENCE_COORDINATE_SYSTEM_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  REPORT_ASCENDING() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  REPORT_DESCENDING() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * Normal of the plane crossed, in the axes of REFERENCE_COORDINATE_SYSTEM_NAME;
+   * it need not be a unit vector. Absent or zero: the pole of those axes, which
+   * makes the crossings the nodes of its equator. Any other normal is an
+   * arbitrary plane through the center of the system.
+   */
+  PLANE_NORMAL(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startEVLNodeCrossingConfiguration(builder) {
+    builder.startObject(4);
+  }
+  static addReferenceCoordinateSystemName(builder, REFERENCE_COORDINATE_SYSTEM_NAMEOffset) {
+    builder.addFieldOffset(0, REFERENCE_COORDINATE_SYSTEM_NAMEOffset, 0);
+  }
+  static addReportAscending(builder, REPORT_ASCENDING) {
+    builder.addFieldInt8(1, +REPORT_ASCENDING, 1);
+  }
+  static addReportDescending(builder, REPORT_DESCENDING) {
+    builder.addFieldInt8(2, +REPORT_DESCENDING, 1);
+  }
+  static addPlaneNormal(builder, PLANE_NORMALOffset) {
+    builder.addFieldOffset(3, PLANE_NORMALOffset, 0);
+  }
+  static endEVLNodeCrossingConfiguration(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new EVLNodeCrossingConfigurationT(
+      this.REFERENCE_COORDINATE_SYSTEM_NAME(),
+      this.REPORT_ASCENDING(),
+      this.REPORT_DESCENDING(),
+      this.PLANE_NORMAL() !== null ? this.PLANE_NORMAL().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.REFERENCE_COORDINATE_SYSTEM_NAME = this.REFERENCE_COORDINATE_SYSTEM_NAME();
+    _o.REPORT_ASCENDING = this.REPORT_ASCENDING();
+    _o.REPORT_DESCENDING = this.REPORT_DESCENDING();
+    _o.PLANE_NORMAL = this.PLANE_NORMAL() !== null ? this.PLANE_NORMAL().unpack() : null;
+  }
+};
+var EVLNodeCrossingConfigurationT = class {
+  constructor(REFERENCE_COORDINATE_SYSTEM_NAME = null, REPORT_ASCENDING = true, REPORT_DESCENDING = true, PLANE_NORMAL = null) {
+    this.REFERENCE_COORDINATE_SYSTEM_NAME = REFERENCE_COORDINATE_SYSTEM_NAME;
+    this.REPORT_ASCENDING = REPORT_ASCENDING;
+    this.REPORT_DESCENDING = REPORT_DESCENDING;
+    this.PLANE_NORMAL = PLANE_NORMAL;
+  }
+  pack(builder) {
+    const REFERENCE_COORDINATE_SYSTEM_NAME = this.REFERENCE_COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.REFERENCE_COORDINATE_SYSTEM_NAME) : 0;
+    const PLANE_NORMAL = this.PLANE_NORMAL !== null ? this.PLANE_NORMAL.pack(builder) : 0;
+    EVLNodeCrossingConfiguration.startEVLNodeCrossingConfiguration(builder);
+    EVLNodeCrossingConfiguration.addReferenceCoordinateSystemName(builder, REFERENCE_COORDINATE_SYSTEM_NAME);
+    EVLNodeCrossingConfiguration.addReportAscending(builder, this.REPORT_ASCENDING);
+    EVLNodeCrossingConfiguration.addReportDescending(builder, this.REPORT_DESCENDING);
+    EVLNodeCrossingConfiguration.addPlaneNormal(builder, PLANE_NORMAL);
+    return EVLNodeCrossingConfiguration.endEVLNodeCrossingConfiguration(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLParameterConditionConfiguration.ts
+import * as flatbuffers23 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
+import * as flatbuffers22 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
+import * as flatbuffers21 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceParameter.ts
+var pceParameter = /* @__PURE__ */ ((pceParameter2) => {
+  pceParameter2[pceParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pceParameter2[pceParameter2["POSITION_X"] = 1] = "POSITION_X";
+  pceParameter2[pceParameter2["POSITION_Y"] = 2] = "POSITION_Y";
+  pceParameter2[pceParameter2["POSITION_Z"] = 3] = "POSITION_Z";
+  pceParameter2[pceParameter2["VELOCITY_X"] = 4] = "VELOCITY_X";
+  pceParameter2[pceParameter2["VELOCITY_Y"] = 5] = "VELOCITY_Y";
+  pceParameter2[pceParameter2["VELOCITY_Z"] = 6] = "VELOCITY_Z";
+  pceParameter2[pceParameter2["POSITION_MAGNITUDE"] = 7] = "POSITION_MAGNITUDE";
+  pceParameter2[pceParameter2["VELOCITY_MAGNITUDE"] = 8] = "VELOCITY_MAGNITUDE";
+  pceParameter2[pceParameter2["RIGHT_ASCENSION"] = 9] = "RIGHT_ASCENSION";
+  pceParameter2[pceParameter2["DECLINATION"] = 10] = "DECLINATION";
+  pceParameter2[pceParameter2["VELOCITY_RIGHT_ASCENSION"] = 11] = "VELOCITY_RIGHT_ASCENSION";
+  pceParameter2[pceParameter2["VELOCITY_DECLINATION"] = 12] = "VELOCITY_DECLINATION";
+  pceParameter2[pceParameter2["FLIGHT_PATH_ANGLE"] = 13] = "FLIGHT_PATH_ANGLE";
+  pceParameter2[pceParameter2["AZIMUTH_ANGLE"] = 14] = "AZIMUTH_ANGLE";
+  pceParameter2[pceParameter2["HORIZONTAL_FLIGHT_PATH_ANGLE"] = 15] = "HORIZONTAL_FLIGHT_PATH_ANGLE";
+  pceParameter2[pceParameter2["RADIAL_VELOCITY"] = 16] = "RADIAL_VELOCITY";
+  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_MAGNITUDE"] = 17] = "ANGULAR_MOMENTUM_MAGNITUDE";
+  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_X"] = 18] = "ANGULAR_MOMENTUM_X";
+  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_Y"] = 19] = "ANGULAR_MOMENTUM_Y";
+  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_Z"] = 20] = "ANGULAR_MOMENTUM_Z";
+  pceParameter2[pceParameter2["SEMI_MAJOR_AXIS"] = 30] = "SEMI_MAJOR_AXIS";
+  pceParameter2[pceParameter2["ECCENTRICITY"] = 31] = "ECCENTRICITY";
+  pceParameter2[pceParameter2["INCLINATION"] = 32] = "INCLINATION";
+  pceParameter2[pceParameter2["RIGHT_ASCENSION_OF_ASCENDING_NODE"] = 33] = "RIGHT_ASCENSION_OF_ASCENDING_NODE";
+  pceParameter2[pceParameter2["ARGUMENT_OF_PERIAPSIS"] = 34] = "ARGUMENT_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["TRUE_ANOMALY"] = 35] = "TRUE_ANOMALY";
+  pceParameter2[pceParameter2["MEAN_ANOMALY"] = 36] = "MEAN_ANOMALY";
+  pceParameter2[pceParameter2["ECCENTRIC_ANOMALY"] = 37] = "ECCENTRIC_ANOMALY";
+  pceParameter2[pceParameter2["HYPERBOLIC_ANOMALY"] = 38] = "HYPERBOLIC_ANOMALY";
+  pceParameter2[pceParameter2["RADIUS_OF_PERIAPSIS"] = 39] = "RADIUS_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["RADIUS_OF_APOAPSIS"] = 40] = "RADIUS_OF_APOAPSIS";
+  pceParameter2[pceParameter2["ALTITUDE_OF_PERIAPSIS"] = 41] = "ALTITUDE_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["ALTITUDE_OF_APOAPSIS"] = 42] = "ALTITUDE_OF_APOAPSIS";
+  pceParameter2[pceParameter2["SEMILATUS_RECTUM"] = 43] = "SEMILATUS_RECTUM";
+  pceParameter2[pceParameter2["ORBIT_PERIOD"] = 44] = "ORBIT_PERIOD";
+  pceParameter2[pceParameter2["MEAN_MOTION"] = 45] = "MEAN_MOTION";
+  pceParameter2[pceParameter2["SPECIFIC_ORBITAL_ENERGY"] = 46] = "SPECIFIC_ORBITAL_ENERGY";
+  pceParameter2[pceParameter2["CHARACTERISTIC_ENERGY"] = 47] = "CHARACTERISTIC_ENERGY";
+  pceParameter2[pceParameter2["VELOCITY_AT_PERIAPSIS"] = 48] = "VELOCITY_AT_PERIAPSIS";
+  pceParameter2[pceParameter2["VELOCITY_AT_APOAPSIS"] = 49] = "VELOCITY_AT_APOAPSIS";
+  pceParameter2[pceParameter2["ARGUMENT_OF_LATITUDE"] = 50] = "ARGUMENT_OF_LATITUDE";
+  pceParameter2[pceParameter2["TRUE_LONGITUDE"] = 51] = "TRUE_LONGITUDE";
+  pceParameter2[pceParameter2["MEAN_LONGITUDE"] = 52] = "MEAN_LONGITUDE";
+  pceParameter2[pceParameter2["BETA_ANGLE"] = 53] = "BETA_ANGLE";
+  pceParameter2[pceParameter2["ECCENTRICITY_VECTOR_X"] = 54] = "ECCENTRICITY_VECTOR_X";
+  pceParameter2[pceParameter2["ECCENTRICITY_VECTOR_Y"] = 55] = "ECCENTRICITY_VECTOR_Y";
+  pceParameter2[pceParameter2["ECCENTRICITY_VECTOR_Z"] = 56] = "ECCENTRICITY_VECTOR_Z";
+  pceParameter2[pceParameter2["SEMI_MINOR_AXIS"] = 57] = "SEMI_MINOR_AXIS";
+  pceParameter2[pceParameter2["EQUINOCTIAL_H"] = 70] = "EQUINOCTIAL_H";
+  pceParameter2[pceParameter2["EQUINOCTIAL_K"] = 71] = "EQUINOCTIAL_K";
+  pceParameter2[pceParameter2["EQUINOCTIAL_P"] = 72] = "EQUINOCTIAL_P";
+  pceParameter2[pceParameter2["EQUINOCTIAL_Q"] = 73] = "EQUINOCTIAL_Q";
+  pceParameter2[pceParameter2["EQUINOCTIAL_MEAN_LONGITUDE"] = 74] = "EQUINOCTIAL_MEAN_LONGITUDE";
+  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_F"] = 75] = "MODIFIED_EQUINOCTIAL_F";
+  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_G"] = 76] = "MODIFIED_EQUINOCTIAL_G";
+  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_H"] = 77] = "MODIFIED_EQUINOCTIAL_H";
+  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_K"] = 78] = "MODIFIED_EQUINOCTIAL_K";
+  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_TRUE_LONGITUDE"] = 79] = "MODIFIED_EQUINOCTIAL_TRUE_LONGITUDE";
+  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_SEMILATUS_RECTUM"] = 80] = "MODIFIED_EQUINOCTIAL_SEMILATUS_RECTUM";
+  pceParameter2[pceParameter2["ALTERNATE_EQUINOCTIAL_P"] = 81] = "ALTERNATE_EQUINOCTIAL_P";
+  pceParameter2[pceParameter2["ALTERNATE_EQUINOCTIAL_Q"] = 82] = "ALTERNATE_EQUINOCTIAL_Q";
+  pceParameter2[pceParameter2["ALTERNATE_EQUINOCTIAL_MEAN_MOTION"] = 83] = "ALTERNATE_EQUINOCTIAL_MEAN_MOTION";
+  pceParameter2[pceParameter2["DELAUNAY_MEAN_ANOMALY"] = 90] = "DELAUNAY_MEAN_ANOMALY";
+  pceParameter2[pceParameter2["DELAUNAY_ARGUMENT_OF_PERIAPSIS"] = 91] = "DELAUNAY_ARGUMENT_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["DELAUNAY_ASCENDING_NODE"] = 92] = "DELAUNAY_ASCENDING_NODE";
+  pceParameter2[pceParameter2["DELAUNAY_ACTION_TOTAL"] = 93] = "DELAUNAY_ACTION_TOTAL";
+  pceParameter2[pceParameter2["DELAUNAY_ACTION_ANGULAR_MOMENTUM"] = 94] = "DELAUNAY_ACTION_ANGULAR_MOMENTUM";
+  pceParameter2[pceParameter2["DELAUNAY_ACTION_POLAR_ANGULAR_MOMENTUM"] = 95] = "DELAUNAY_ACTION_POLAR_ANGULAR_MOMENTUM";
+  pceParameter2[pceParameter2["GEODETIC_LATITUDE"] = 100] = "GEODETIC_LATITUDE";
+  pceParameter2[pceParameter2["GEODETIC_LONGITUDE"] = 101] = "GEODETIC_LONGITUDE";
+  pceParameter2[pceParameter2["GEODETIC_ALTITUDE"] = 102] = "GEODETIC_ALTITUDE";
+  pceParameter2[pceParameter2["GEOCENTRIC_LATITUDE"] = 103] = "GEOCENTRIC_LATITUDE";
+  pceParameter2[pceParameter2["PLANETODETIC_RADIUS_MAGNITUDE"] = 104] = "PLANETODETIC_RADIUS_MAGNITUDE";
+  pceParameter2[pceParameter2["PLANETODETIC_VELOCITY_MAGNITUDE"] = 105] = "PLANETODETIC_VELOCITY_MAGNITUDE";
+  pceParameter2[pceParameter2["PLANETODETIC_AZIMUTH"] = 106] = "PLANETODETIC_AZIMUTH";
+  pceParameter2[pceParameter2["PLANETODETIC_HORIZONTAL_FLIGHT_PATH_ANGLE"] = 107] = "PLANETODETIC_HORIZONTAL_FLIGHT_PATH_ANGLE";
+  pceParameter2[pceParameter2["LOCAL_SIDEREAL_TIME"] = 108] = "LOCAL_SIDEREAL_TIME";
+  pceParameter2[pceParameter2["PRIME_MERIDIAN_HOUR_ANGLE"] = 109] = "PRIME_MERIDIAN_HOUR_ANGLE";
+  pceParameter2[pceParameter2["B_DOT_T"] = 120] = "B_DOT_T";
+  pceParameter2[pceParameter2["B_DOT_R"] = 121] = "B_DOT_R";
+  pceParameter2[pceParameter2["B_VECTOR_MAGNITUDE"] = 122] = "B_VECTOR_MAGNITUDE";
+  pceParameter2[pceParameter2["B_VECTOR_ANGLE"] = 123] = "B_VECTOR_ANGLE";
+  pceParameter2[pceParameter2["DECLINATION_OF_DEPARTURE_ASYMPTOTE"] = 124] = "DECLINATION_OF_DEPARTURE_ASYMPTOTE";
+  pceParameter2[pceParameter2["RIGHT_ASCENSION_OF_DEPARTURE_ASYMPTOTE"] = 125] = "RIGHT_ASCENSION_OF_DEPARTURE_ASYMPTOTE";
+  pceParameter2[pceParameter2["INCOMING_RADIUS_OF_PERIAPSIS"] = 126] = "INCOMING_RADIUS_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["INCOMING_CHARACTERISTIC_ENERGY"] = 127] = "INCOMING_CHARACTERISTIC_ENERGY";
+  pceParameter2[pceParameter2["INCOMING_ASYMPTOTE_RIGHT_ASCENSION"] = 128] = "INCOMING_ASYMPTOTE_RIGHT_ASCENSION";
+  pceParameter2[pceParameter2["INCOMING_ASYMPTOTE_DECLINATION"] = 129] = "INCOMING_ASYMPTOTE_DECLINATION";
+  pceParameter2[pceParameter2["INCOMING_B_VECTOR_AZIMUTH"] = 130] = "INCOMING_B_VECTOR_AZIMUTH";
+  pceParameter2[pceParameter2["OUTGOING_RADIUS_OF_PERIAPSIS"] = 131] = "OUTGOING_RADIUS_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["OUTGOING_CHARACTERISTIC_ENERGY"] = 132] = "OUTGOING_CHARACTERISTIC_ENERGY";
+  pceParameter2[pceParameter2["OUTGOING_ASYMPTOTE_RIGHT_ASCENSION"] = 133] = "OUTGOING_ASYMPTOTE_RIGHT_ASCENSION";
+  pceParameter2[pceParameter2["OUTGOING_ASYMPTOTE_DECLINATION"] = 134] = "OUTGOING_ASYMPTOTE_DECLINATION";
+  pceParameter2[pceParameter2["OUTGOING_B_VECTOR_AZIMUTH"] = 135] = "OUTGOING_B_VECTOR_AZIMUTH";
+  pceParameter2[pceParameter2["HYPERBOLIC_EXCESS_VELOCITY"] = 136] = "HYPERBOLIC_EXCESS_VELOCITY";
+  pceParameter2[pceParameter2["BROUWER_SHORT_SEMI_MAJOR_AXIS"] = 140] = "BROUWER_SHORT_SEMI_MAJOR_AXIS";
+  pceParameter2[pceParameter2["BROUWER_SHORT_ECCENTRICITY"] = 141] = "BROUWER_SHORT_ECCENTRICITY";
+  pceParameter2[pceParameter2["BROUWER_SHORT_INCLINATION"] = 142] = "BROUWER_SHORT_INCLINATION";
+  pceParameter2[pceParameter2["BROUWER_SHORT_RIGHT_ASCENSION_OF_ASCENDING_NODE"] = 143] = "BROUWER_SHORT_RIGHT_ASCENSION_OF_ASCENDING_NODE";
+  pceParameter2[pceParameter2["BROUWER_SHORT_ARGUMENT_OF_PERIAPSIS"] = 144] = "BROUWER_SHORT_ARGUMENT_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["BROUWER_SHORT_MEAN_ANOMALY"] = 145] = "BROUWER_SHORT_MEAN_ANOMALY";
+  pceParameter2[pceParameter2["BROUWER_LONG_SEMI_MAJOR_AXIS"] = 146] = "BROUWER_LONG_SEMI_MAJOR_AXIS";
+  pceParameter2[pceParameter2["BROUWER_LONG_ECCENTRICITY"] = 147] = "BROUWER_LONG_ECCENTRICITY";
+  pceParameter2[pceParameter2["BROUWER_LONG_INCLINATION"] = 148] = "BROUWER_LONG_INCLINATION";
+  pceParameter2[pceParameter2["BROUWER_LONG_RIGHT_ASCENSION_OF_ASCENDING_NODE"] = 149] = "BROUWER_LONG_RIGHT_ASCENSION_OF_ASCENDING_NODE";
+  pceParameter2[pceParameter2["BROUWER_LONG_ARGUMENT_OF_PERIAPSIS"] = 150] = "BROUWER_LONG_ARGUMENT_OF_PERIAPSIS";
+  pceParameter2[pceParameter2["BROUWER_LONG_MEAN_ANOMALY"] = 151] = "BROUWER_LONG_MEAN_ANOMALY";
+  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX"] = 160] = "ORBIT_STATE_TRANSITION_MATRIX";
+  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_A"] = 161] = "ORBIT_STATE_TRANSITION_MATRIX_A";
+  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_B"] = 162] = "ORBIT_STATE_TRANSITION_MATRIX_B";
+  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_C"] = 163] = "ORBIT_STATE_TRANSITION_MATRIX_C";
+  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_D"] = 164] = "ORBIT_STATE_TRANSITION_MATRIX_D";
+  pceParameter2[pceParameter2["ORBIT_ERROR_COVARIANCE_MATRIX"] = 165] = "ORBIT_ERROR_COVARIANCE_MATRIX";
+  pceParameter2[pceParameter2["EPOCH_A1_GREGORIAN"] = 180] = "EPOCH_A1_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_A1_MODIFIED_JULIAN"] = 181] = "EPOCH_A1_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["EPOCH_TAI_GREGORIAN"] = 182] = "EPOCH_TAI_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_TAI_MODIFIED_JULIAN"] = 183] = "EPOCH_TAI_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["EPOCH_TT_GREGORIAN"] = 184] = "EPOCH_TT_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_TT_MODIFIED_JULIAN"] = 185] = "EPOCH_TT_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["EPOCH_TDB_GREGORIAN"] = 186] = "EPOCH_TDB_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_TDB_MODIFIED_JULIAN"] = 187] = "EPOCH_TDB_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["EPOCH_UTC_GREGORIAN"] = 188] = "EPOCH_UTC_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_UTC_MODIFIED_JULIAN"] = 189] = "EPOCH_UTC_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["EPOCH_UT1_GREGORIAN"] = 190] = "EPOCH_UT1_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_UT1_MODIFIED_JULIAN"] = 191] = "EPOCH_UT1_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["EPOCH_GPS_GREGORIAN"] = 192] = "EPOCH_GPS_GREGORIAN";
+  pceParameter2[pceParameter2["EPOCH_GPS_MODIFIED_JULIAN"] = 193] = "EPOCH_GPS_MODIFIED_JULIAN";
+  pceParameter2[pceParameter2["ELAPSED_DAYS"] = 194] = "ELAPSED_DAYS";
+  pceParameter2[pceParameter2["ELAPSED_SECONDS"] = 195] = "ELAPSED_SECONDS";
+  pceParameter2[pceParameter2["DRY_MASS"] = 220] = "DRY_MASS";
+  pceParameter2[pceParameter2["TOTAL_MASS"] = 221] = "TOTAL_MASS";
+  pceParameter2[pceParameter2["DRAG_COEFFICIENT"] = 222] = "DRAG_COEFFICIENT";
+  pceParameter2[pceParameter2["DRAG_AREA"] = 223] = "DRAG_AREA";
+  pceParameter2[pceParameter2["REFLECTIVITY_COEFFICIENT"] = 224] = "REFLECTIVITY_COEFFICIENT";
+  pceParameter2[pceParameter2["SOLAR_RADIATION_PRESSURE_AREA"] = 225] = "SOLAR_RADIATION_PRESSURE_AREA";
+  pceParameter2[pceParameter2["ATMOSPHERIC_DENSITY_SCALE_FACTOR"] = 226] = "ATMOSPHERIC_DENSITY_SCALE_FACTOR";
+  pceParameter2[pceParameter2["DRAG_SCALE_FACTOR"] = 227] = "DRAG_SCALE_FACTOR";
+  pceParameter2[pceParameter2["SOLAR_RADIATION_PRESSURE_SCALE_FACTOR"] = 228] = "SOLAR_RADIATION_PRESSURE_SCALE_FACTOR";
+  pceParameter2[pceParameter2["BALLISTIC_COEFFICIENT"] = 229] = "BALLISTIC_COEFFICIENT";
+  pceParameter2[pceParameter2["AREA_TO_MASS_RATIO"] = 230] = "AREA_TO_MASS_RATIO";
+  pceParameter2[pceParameter2["CENTER_OF_MASS_X"] = 231] = "CENTER_OF_MASS_X";
+  pceParameter2[pceParameter2["CENTER_OF_MASS_Y"] = 232] = "CENTER_OF_MASS_Y";
+  pceParameter2[pceParameter2["CENTER_OF_MASS_Z"] = 233] = "CENTER_OF_MASS_Z";
+  pceParameter2[pceParameter2["MOMENT_OF_INERTIA_MATRIX"] = 234] = "MOMENT_OF_INERTIA_MATRIX";
+  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_1"] = 250] = "ATTITUDE_QUATERNION_1";
+  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_2"] = 251] = "ATTITUDE_QUATERNION_2";
+  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_3"] = 252] = "ATTITUDE_QUATERNION_3";
+  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_4"] = 253] = "ATTITUDE_QUATERNION_4";
+  pceParameter2[pceParameter2["ATTITUDE_DIRECTION_COSINE_MATRIX"] = 254] = "ATTITUDE_DIRECTION_COSINE_MATRIX";
+  pceParameter2[pceParameter2["EULER_ANGLE_1"] = 255] = "EULER_ANGLE_1";
+  pceParameter2[pceParameter2["EULER_ANGLE_2"] = 256] = "EULER_ANGLE_2";
+  pceParameter2[pceParameter2["EULER_ANGLE_3"] = 257] = "EULER_ANGLE_3";
+  pceParameter2[pceParameter2["EULER_ANGLE_RATE_1"] = 258] = "EULER_ANGLE_RATE_1";
+  pceParameter2[pceParameter2["EULER_ANGLE_RATE_2"] = 259] = "EULER_ANGLE_RATE_2";
+  pceParameter2[pceParameter2["EULER_ANGLE_RATE_3"] = 260] = "EULER_ANGLE_RATE_3";
+  pceParameter2[pceParameter2["MODIFIED_RODRIGUES_PARAMETER_1"] = 261] = "MODIFIED_RODRIGUES_PARAMETER_1";
+  pceParameter2[pceParameter2["MODIFIED_RODRIGUES_PARAMETER_2"] = 262] = "MODIFIED_RODRIGUES_PARAMETER_2";
+  pceParameter2[pceParameter2["MODIFIED_RODRIGUES_PARAMETER_3"] = 263] = "MODIFIED_RODRIGUES_PARAMETER_3";
+  pceParameter2[pceParameter2["ANGULAR_VELOCITY_X"] = 264] = "ANGULAR_VELOCITY_X";
+  pceParameter2[pceParameter2["ANGULAR_VELOCITY_Y"] = 265] = "ANGULAR_VELOCITY_Y";
+  pceParameter2[pceParameter2["ANGULAR_VELOCITY_Z"] = 266] = "ANGULAR_VELOCITY_Z";
+  pceParameter2[pceParameter2["EULER_AXIS_X"] = 267] = "EULER_AXIS_X";
+  pceParameter2[pceParameter2["EULER_AXIS_Y"] = 268] = "EULER_AXIS_Y";
+  pceParameter2[pceParameter2["EULER_AXIS_Z"] = 269] = "EULER_AXIS_Z";
+  pceParameter2[pceParameter2["PRINCIPAL_ROTATION_ANGLE"] = 270] = "PRINCIPAL_ROTATION_ANGLE";
+  pceParameter2[pceParameter2["TANK_FUEL_MASS"] = 300] = "TANK_FUEL_MASS";
+  pceParameter2[pceParameter2["TANK_PRESSURE"] = 301] = "TANK_PRESSURE";
+  pceParameter2[pceParameter2["TANK_TEMPERATURE"] = 302] = "TANK_TEMPERATURE";
+  pceParameter2[pceParameter2["TANK_REFERENCE_TEMPERATURE"] = 303] = "TANK_REFERENCE_TEMPERATURE";
+  pceParameter2[pceParameter2["TANK_VOLUME"] = 304] = "TANK_VOLUME";
+  pceParameter2[pceParameter2["TANK_FUEL_DENSITY"] = 305] = "TANK_FUEL_DENSITY";
+  pceParameter2[pceParameter2["THRUSTER_DUTY_CYCLE"] = 320] = "THRUSTER_DUTY_CYCLE";
+  pceParameter2[pceParameter2["THRUSTER_THRUST_SCALE_FACTOR"] = 321] = "THRUSTER_THRUST_SCALE_FACTOR";
+  pceParameter2[pceParameter2["THRUSTER_GRAVITATIONAL_ACCELERATION"] = 322] = "THRUSTER_GRAVITATIONAL_ACCELERATION";
+  pceParameter2[pceParameter2["THRUSTER_MIXTURE_RATIO"] = 323] = "THRUSTER_MIXTURE_RATIO";
+  pceParameter2[pceParameter2["THRUSTER_SPECIFIC_IMPULSE"] = 324] = "THRUSTER_SPECIFIC_IMPULSE";
+  pceParameter2[pceParameter2["THRUSTER_THRUST_MAGNITUDE"] = 325] = "THRUSTER_THRUST_MAGNITUDE";
+  pceParameter2[pceParameter2["THRUSTER_MASS_FLOW_RATE"] = 326] = "THRUSTER_MASS_FLOW_RATE";
+  pceParameter2[pceParameter2["THRUSTER_DIRECTION_X"] = 327] = "THRUSTER_DIRECTION_X";
+  pceParameter2[pceParameter2["THRUSTER_DIRECTION_Y"] = 328] = "THRUSTER_DIRECTION_Y";
+  pceParameter2[pceParameter2["THRUSTER_DIRECTION_Z"] = 329] = "THRUSTER_DIRECTION_Z";
+  pceParameter2[pceParameter2["THRUSTER_THRUST_COEFFICIENTS"] = 330] = "THRUSTER_THRUST_COEFFICIENTS";
+  pceParameter2[pceParameter2["THRUSTER_IMPULSE_COEFFICIENTS"] = 331] = "THRUSTER_IMPULSE_COEFFICIENTS";
+  pceParameter2[pceParameter2["IMPULSIVE_BURN_ELEMENT_1"] = 370] = "IMPULSIVE_BURN_ELEMENT_1";
+  pceParameter2[pceParameter2["IMPULSIVE_BURN_ELEMENT_2"] = 371] = "IMPULSIVE_BURN_ELEMENT_2";
+  pceParameter2[pceParameter2["IMPULSIVE_BURN_ELEMENT_3"] = 372] = "IMPULSIVE_BURN_ELEMENT_3";
+  pceParameter2[pceParameter2["IMPULSIVE_BURN_DELTA_V_MAGNITUDE"] = 373] = "IMPULSIVE_BURN_DELTA_V_MAGNITUDE";
+  pceParameter2[pceParameter2["IMPULSIVE_BURN_MASS_CONSUMED"] = 374] = "IMPULSIVE_BURN_MASS_CONSUMED";
+  pceParameter2[pceParameter2["FINITE_BURN_THRUST_MAGNITUDE"] = 390] = "FINITE_BURN_THRUST_MAGNITUDE";
+  pceParameter2[pceParameter2["FINITE_BURN_MASS_FLOW_RATE"] = 391] = "FINITE_BURN_MASS_FLOW_RATE";
+  pceParameter2[pceParameter2["FINITE_BURN_THRUST_X"] = 392] = "FINITE_BURN_THRUST_X";
+  pceParameter2[pceParameter2["FINITE_BURN_THRUST_Y"] = 393] = "FINITE_BURN_THRUST_Y";
+  pceParameter2[pceParameter2["FINITE_BURN_THRUST_Z"] = 394] = "FINITE_BURN_THRUST_Z";
+  pceParameter2[pceParameter2["FINITE_BURN_ACCELERATION_MAGNITUDE"] = 395] = "FINITE_BURN_ACCELERATION_MAGNITUDE";
+  pceParameter2[pceParameter2["FINITE_BURN_MASS_CONSUMED"] = 396] = "FINITE_BURN_MASS_CONSUMED";
+  pceParameter2[pceParameter2["TOTAL_POWER_AVAILABLE"] = 410] = "TOTAL_POWER_AVAILABLE";
+  pceParameter2[pceParameter2["REQUIRED_BUS_POWER"] = 411] = "REQUIRED_BUS_POWER";
+  pceParameter2[pceParameter2["THRUST_POWER_AVAILABLE"] = 412] = "THRUST_POWER_AVAILABLE";
+  pceParameter2[pceParameter2["GENERATED_POWER"] = 413] = "GENERATED_POWER";
+  pceParameter2[pceParameter2["TOTAL_TORQUE_X"] = 430] = "TOTAL_TORQUE_X";
+  pceParameter2[pceParameter2["TOTAL_TORQUE_Y"] = 431] = "TOTAL_TORQUE_Y";
+  pceParameter2[pceParameter2["TOTAL_TORQUE_Z"] = 432] = "TOTAL_TORQUE_Z";
+  pceParameter2[pceParameter2["TOTAL_TORQUE_MAGNITUDE"] = 433] = "TOTAL_TORQUE_MAGNITUDE";
+  pceParameter2[pceParameter2["SOLVER_STATUS"] = 450] = "SOLVER_STATUS";
+  pceParameter2[pceParameter2["SOLVER_ITERATION_COUNT"] = 451] = "SOLVER_ITERATION_COUNT";
+  pceParameter2[pceParameter2["SOLVER_OBJECTIVE_VALUE"] = 452] = "SOLVER_OBJECTIVE_VALUE";
+  pceParameter2[pceParameter2["SOLVER_MAXIMUM_CONSTRAINT_VIOLATION"] = 453] = "SOLVER_MAXIMUM_CONSTRAINT_VIOLATION";
+  pceParameter2[pceParameter2["RELATIVE_RANGE"] = 470] = "RELATIVE_RANGE";
+  pceParameter2[pceParameter2["RELATIVE_RANGE_RATE"] = 471] = "RELATIVE_RANGE_RATE";
+  pceParameter2[pceParameter2["RELATIVE_POSITION_X"] = 472] = "RELATIVE_POSITION_X";
+  pceParameter2[pceParameter2["RELATIVE_POSITION_Y"] = 473] = "RELATIVE_POSITION_Y";
+  pceParameter2[pceParameter2["RELATIVE_POSITION_Z"] = 474] = "RELATIVE_POSITION_Z";
+  pceParameter2[pceParameter2["RELATIVE_VELOCITY_X"] = 475] = "RELATIVE_VELOCITY_X";
+  pceParameter2[pceParameter2["RELATIVE_VELOCITY_Y"] = 476] = "RELATIVE_VELOCITY_Y";
+  pceParameter2[pceParameter2["RELATIVE_VELOCITY_Z"] = 477] = "RELATIVE_VELOCITY_Z";
+  pceParameter2[pceParameter2["TOPOCENTRIC_AZIMUTH"] = 478] = "TOPOCENTRIC_AZIMUTH";
+  pceParameter2[pceParameter2["TOPOCENTRIC_ELEVATION"] = 479] = "TOPOCENTRIC_ELEVATION";
+  pceParameter2[pceParameter2["ANGULAR_SEPARATION"] = 480] = "ANGULAR_SEPARATION";
+  pceParameter2[pceParameter2["SOLAR_PHASE_ANGLE"] = 481] = "SOLAR_PHASE_ANGLE";
+  pceParameter2[pceParameter2["LOCAL_SOLAR_ELEVATION_ANGLE"] = 482] = "LOCAL_SOLAR_ELEVATION_ANGLE";
+  pceParameter2[pceParameter2["ILLUMINATION_FRACTION"] = 483] = "ILLUMINATION_FRACTION";
+  pceParameter2[pceParameter2["LIGHT_TIME_DELAY"] = 484] = "LIGHT_TIME_DELAY";
+  pceParameter2[pceParameter2["PROVIDER_DEFINED"] = 65535] = "PROVIDER_DEFINED";
+  return pceParameter2;
+})(pceParameter || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
+var PCEParameterRef = class _PCEParameterRef {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCEParameterRef(bb, obj) {
+    return (obj || new _PCEParameterRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCEParameterRef(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers21.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCEParameterRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Roster member, or PROVIDER_DEFINED.
+   */
+  PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  PROVIDER_DEFINED_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Component of a vector or matrix parameter, zero-based and row-major.
+   * Negative selects the whole value.
+   */
+  ELEMENT_INDEX() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : -1;
+  }
+  COORDINATE_SYSTEM_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Ephemeris body code of the central body, when the parameter is
+   * CENTRAL_BODY_DEPENDENT and the context default is not wanted.
+   */
+  CENTRAL_BODY_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  SITE_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SECOND_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  OWNER_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  OWNER_HARDWARE_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  static startPCEParameterRef(builder) {
+    builder.startObject(10);
+  }
+  static addParameter(builder, PARAMETER) {
+    builder.addFieldInt16(0, PARAMETER, 0 /* UNSPECIFIED */);
+  }
+  static addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset) {
+    builder.addFieldOffset(1, PROVIDER_DEFINED_NAMEOffset, 0);
+  }
+  static addElementIndex(builder, ELEMENT_INDEX) {
+    builder.addFieldInt32(2, ELEMENT_INDEX, -1);
+  }
+  static addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAMEOffset) {
+    builder.addFieldOffset(3, COORDINATE_SYSTEM_NAMEOffset, 0);
+  }
+  static addCentralBodyId(builder, CENTRAL_BODY_ID) {
+    builder.addFieldInt32(4, CENTRAL_BODY_ID, 0);
+  }
+  static addSiteId(builder, SITE_IDOffset) {
+    builder.addFieldOffset(5, SITE_IDOffset, 0);
+  }
+  static addSecondObjectId(builder, SECOND_OBJECT_IDOffset) {
+    builder.addFieldOffset(6, SECOND_OBJECT_IDOffset, 0);
+  }
+  static addOwnerObjectId(builder, OWNER_OBJECT_IDOffset) {
+    builder.addFieldOffset(7, OWNER_OBJECT_IDOffset, 0);
+  }
+  static addOwnerHardwareName(builder, OWNER_HARDWARE_NAMEOffset) {
+    builder.addFieldOffset(8, OWNER_HARDWARE_NAMEOffset, 0);
+  }
+  static addTimeSystem(builder, TIME_SYSTEMOffset) {
+    builder.addFieldOffset(9, TIME_SYSTEMOffset, 0);
+  }
+  static endPCEParameterRef(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCEParameterRef(builder, PARAMETER, PROVIDER_DEFINED_NAMEOffset, ELEMENT_INDEX, COORDINATE_SYSTEM_NAMEOffset, CENTRAL_BODY_ID, SITE_IDOffset, SECOND_OBJECT_IDOffset, OWNER_OBJECT_IDOffset, OWNER_HARDWARE_NAMEOffset, TIME_SYSTEMOffset) {
+    _PCEParameterRef.startPCEParameterRef(builder);
+    _PCEParameterRef.addParameter(builder, PARAMETER);
+    _PCEParameterRef.addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset);
+    _PCEParameterRef.addElementIndex(builder, ELEMENT_INDEX);
+    _PCEParameterRef.addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAMEOffset);
+    _PCEParameterRef.addCentralBodyId(builder, CENTRAL_BODY_ID);
+    _PCEParameterRef.addSiteId(builder, SITE_IDOffset);
+    _PCEParameterRef.addSecondObjectId(builder, SECOND_OBJECT_IDOffset);
+    _PCEParameterRef.addOwnerObjectId(builder, OWNER_OBJECT_IDOffset);
+    _PCEParameterRef.addOwnerHardwareName(builder, OWNER_HARDWARE_NAMEOffset);
+    _PCEParameterRef.addTimeSystem(builder, TIME_SYSTEMOffset);
+    return _PCEParameterRef.endPCEParameterRef(builder);
+  }
+  unpack() {
+    return new PCEParameterRefT(
+      this.PARAMETER(),
+      this.PROVIDER_DEFINED_NAME(),
+      this.ELEMENT_INDEX(),
+      this.COORDINATE_SYSTEM_NAME(),
+      this.CENTRAL_BODY_ID(),
+      this.SITE_ID(),
+      this.SECOND_OBJECT_ID(),
+      this.OWNER_OBJECT_ID(),
+      this.OWNER_HARDWARE_NAME(),
+      this.TIME_SYSTEM()
+    );
+  }
+  unpackTo(_o) {
+    _o.PARAMETER = this.PARAMETER();
+    _o.PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME();
+    _o.ELEMENT_INDEX = this.ELEMENT_INDEX();
+    _o.COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME();
+    _o.CENTRAL_BODY_ID = this.CENTRAL_BODY_ID();
+    _o.SITE_ID = this.SITE_ID();
+    _o.SECOND_OBJECT_ID = this.SECOND_OBJECT_ID();
+    _o.OWNER_OBJECT_ID = this.OWNER_OBJECT_ID();
+    _o.OWNER_HARDWARE_NAME = this.OWNER_HARDWARE_NAME();
+    _o.TIME_SYSTEM = this.TIME_SYSTEM();
+  }
+};
+var PCEParameterRefT = class {
+  constructor(PARAMETER = 0 /* UNSPECIFIED */, PROVIDER_DEFINED_NAME = null, ELEMENT_INDEX = -1, COORDINATE_SYSTEM_NAME = null, CENTRAL_BODY_ID = 0, SITE_ID = null, SECOND_OBJECT_ID = null, OWNER_OBJECT_ID = null, OWNER_HARDWARE_NAME = null, TIME_SYSTEM = null) {
+    this.PARAMETER = PARAMETER;
+    this.PROVIDER_DEFINED_NAME = PROVIDER_DEFINED_NAME;
+    this.ELEMENT_INDEX = ELEMENT_INDEX;
+    this.COORDINATE_SYSTEM_NAME = COORDINATE_SYSTEM_NAME;
+    this.CENTRAL_BODY_ID = CENTRAL_BODY_ID;
+    this.SITE_ID = SITE_ID;
+    this.SECOND_OBJECT_ID = SECOND_OBJECT_ID;
+    this.OWNER_OBJECT_ID = OWNER_OBJECT_ID;
+    this.OWNER_HARDWARE_NAME = OWNER_HARDWARE_NAME;
+    this.TIME_SYSTEM = TIME_SYSTEM;
+  }
+  pack(builder) {
+    const PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME !== null ? builder.createString(this.PROVIDER_DEFINED_NAME) : 0;
+    const COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.COORDINATE_SYSTEM_NAME) : 0;
+    const SITE_ID = this.SITE_ID !== null ? builder.createString(this.SITE_ID) : 0;
+    const SECOND_OBJECT_ID = this.SECOND_OBJECT_ID !== null ? builder.createString(this.SECOND_OBJECT_ID) : 0;
+    const OWNER_OBJECT_ID = this.OWNER_OBJECT_ID !== null ? builder.createString(this.OWNER_OBJECT_ID) : 0;
+    const OWNER_HARDWARE_NAME = this.OWNER_HARDWARE_NAME !== null ? builder.createString(this.OWNER_HARDWARE_NAME) : 0;
+    const TIME_SYSTEM = this.TIME_SYSTEM !== null ? builder.createString(this.TIME_SYSTEM) : 0;
+    return PCEParameterRef.createPCEParameterRef(
+      builder,
+      this.PARAMETER,
+      PROVIDER_DEFINED_NAME,
+      this.ELEMENT_INDEX,
+      COORDINATE_SYSTEM_NAME,
+      this.CENTRAL_BODY_ID,
+      SITE_ID,
+      SECOND_OBJECT_ID,
+      OWNER_OBJECT_ID,
+      OWNER_HARDWARE_NAME,
+      TIME_SYSTEM
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceConditionDirection.ts
+var pceConditionDirection = /* @__PURE__ */ ((pceConditionDirection2) => {
+  pceConditionDirection2[pceConditionDirection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pceConditionDirection2[pceConditionDirection2["ANY_CROSSING"] = 1] = "ANY_CROSSING";
+  pceConditionDirection2[pceConditionDirection2["INCREASING"] = 2] = "INCREASING";
+  pceConditionDirection2[pceConditionDirection2["DECREASING"] = 3] = "DECREASING";
+  return pceConditionDirection2;
+})(pceConditionDirection || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
+var PCEParameterCondition = class _PCEParameterCondition {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCEParameterCondition(bb, obj) {
+    return (obj || new _PCEParameterCondition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCEParameterCondition(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers22.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCEParameterCondition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  PARAMETER(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? (obj || new PCEParameterRef()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Value the parameter must attain, in the parameter's own SI unit.
+   */
+  GOAL_VALUE() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  DIRECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Convergence bar on the parameter value at the reported epoch, in the
+   * parameter's own unit. A provider that cannot meet it returns
+   * ROOT_REFINEMENT_FAILED rather than reporting an unconverged root.
+   */
+  GOAL_TOLERANCE() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Which attainment satisfies the condition, one-based. 0 and 1 both mean
+   * the first.
+   */
+  OCCURRENCE() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 1;
+  }
+  static startPCEParameterCondition(builder) {
+    builder.startObject(5);
+  }
+  static addParameter(builder, PARAMETEROffset) {
+    builder.addFieldOffset(0, PARAMETEROffset, 0);
+  }
+  static addGoalValue(builder, GOAL_VALUE) {
+    builder.addFieldFloat64(1, GOAL_VALUE, 0);
+  }
+  static addDirection(builder, DIRECTION) {
+    builder.addFieldInt8(2, DIRECTION, 0 /* UNSPECIFIED */);
+  }
+  static addGoalTolerance(builder, GOAL_TOLERANCE) {
+    builder.addFieldFloat64(3, GOAL_TOLERANCE, 0);
+  }
+  static addOccurrence(builder, OCCURRENCE) {
+    builder.addFieldInt32(4, OCCURRENCE, 1);
+  }
+  static endPCEParameterCondition(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCEParameterCondition(builder, PARAMETEROffset, GOAL_VALUE, DIRECTION, GOAL_TOLERANCE, OCCURRENCE) {
+    _PCEParameterCondition.startPCEParameterCondition(builder);
+    _PCEParameterCondition.addParameter(builder, PARAMETEROffset);
+    _PCEParameterCondition.addGoalValue(builder, GOAL_VALUE);
+    _PCEParameterCondition.addDirection(builder, DIRECTION);
+    _PCEParameterCondition.addGoalTolerance(builder, GOAL_TOLERANCE);
+    _PCEParameterCondition.addOccurrence(builder, OCCURRENCE);
+    return _PCEParameterCondition.endPCEParameterCondition(builder);
+  }
+  unpack() {
+    return new PCEParameterConditionT(
+      this.PARAMETER() !== null ? this.PARAMETER().unpack() : null,
+      this.GOAL_VALUE(),
+      this.DIRECTION(),
+      this.GOAL_TOLERANCE(),
+      this.OCCURRENCE()
+    );
+  }
+  unpackTo(_o) {
+    _o.PARAMETER = this.PARAMETER() !== null ? this.PARAMETER().unpack() : null;
+    _o.GOAL_VALUE = this.GOAL_VALUE();
+    _o.DIRECTION = this.DIRECTION();
+    _o.GOAL_TOLERANCE = this.GOAL_TOLERANCE();
+    _o.OCCURRENCE = this.OCCURRENCE();
+  }
+};
+var PCEParameterConditionT = class {
+  constructor(PARAMETER = null, GOAL_VALUE = 0, DIRECTION = 0 /* UNSPECIFIED */, GOAL_TOLERANCE = 0, OCCURRENCE = 1) {
+    this.PARAMETER = PARAMETER;
+    this.GOAL_VALUE = GOAL_VALUE;
+    this.DIRECTION = DIRECTION;
+    this.GOAL_TOLERANCE = GOAL_TOLERANCE;
+    this.OCCURRENCE = OCCURRENCE;
+  }
+  pack(builder) {
+    const PARAMETER = this.PARAMETER !== null ? this.PARAMETER.pack(builder) : 0;
+    return PCEParameterCondition.createPCEParameterCondition(
+      builder,
+      PARAMETER,
+      this.GOAL_VALUE,
+      this.DIRECTION,
+      this.GOAL_TOLERANCE,
+      this.OCCURRENCE
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLParameterConditionConfiguration.ts
+var EVLParameterConditionConfiguration = class _EVLParameterConditionConfiguration {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLParameterConditionConfiguration(bb, obj) {
+    return (obj || new _EVLParameterConditionConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLParameterConditionConfiguration(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers23.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLParameterConditionConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Conditions on $PCE catalog parameters. The predicate vocabulary is
+   * PCEParameterCondition and is NOT restated here.
+   */
+  CONDITIONS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? (obj || new PCEParameterCondition()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  conditionsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True reports the interval BETWEEN a satisfying crossing and the next
+   * unsatisfying one; false reports each crossing as an instantaneous event
+   * with equal start and stop epochs.
+   */
+  REPORT_AS_INTERVAL() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  MINIMUM_DURATION_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startEVLParameterConditionConfiguration(builder) {
+    builder.startObject(3);
+  }
+  static addConditions(builder, CONDITIONSOffset) {
+    builder.addFieldOffset(0, CONDITIONSOffset, 0);
+  }
+  static createConditionsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startConditionsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addReportAsInterval(builder, REPORT_AS_INTERVAL) {
+    builder.addFieldInt8(1, +REPORT_AS_INTERVAL, 1);
+  }
+  static addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS) {
+    builder.addFieldFloat64(2, MINIMUM_DURATION_SECONDS, 0);
+  }
+  static endEVLParameterConditionConfiguration(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createEVLParameterConditionConfiguration(builder, CONDITIONSOffset, REPORT_AS_INTERVAL, MINIMUM_DURATION_SECONDS) {
+    _EVLParameterConditionConfiguration.startEVLParameterConditionConfiguration(builder);
+    _EVLParameterConditionConfiguration.addConditions(builder, CONDITIONSOffset);
+    _EVLParameterConditionConfiguration.addReportAsInterval(builder, REPORT_AS_INTERVAL);
+    _EVLParameterConditionConfiguration.addMinimumDurationSeconds(builder, MINIMUM_DURATION_SECONDS);
+    return _EVLParameterConditionConfiguration.endEVLParameterConditionConfiguration(builder);
+  }
+  unpack() {
+    return new EVLParameterConditionConfigurationT(
+      this.bb.createObjList(this.CONDITIONS.bind(this), this.conditionsLength()),
+      this.REPORT_AS_INTERVAL(),
+      this.MINIMUM_DURATION_SECONDS()
+    );
+  }
+  unpackTo(_o) {
+    _o.CONDITIONS = this.bb.createObjList(this.CONDITIONS.bind(this), this.conditionsLength());
+    _o.REPORT_AS_INTERVAL = this.REPORT_AS_INTERVAL();
+    _o.MINIMUM_DURATION_SECONDS = this.MINIMUM_DURATION_SECONDS();
+  }
+};
+var EVLParameterConditionConfigurationT = class {
+  constructor(CONDITIONS = [], REPORT_AS_INTERVAL = true, MINIMUM_DURATION_SECONDS = 0) {
+    this.CONDITIONS = CONDITIONS;
+    this.REPORT_AS_INTERVAL = REPORT_AS_INTERVAL;
+    this.MINIMUM_DURATION_SECONDS = MINIMUM_DURATION_SECONDS;
+  }
+  pack(builder) {
+    const CONDITIONS = EVLParameterConditionConfiguration.createConditionsVector(builder, builder.createObjectOffsetList(this.CONDITIONS));
+    return EVLParameterConditionConfiguration.createEVLParameterConditionConfiguration(
+      builder,
+      CONDITIONS,
+      this.REPORT_AS_INTERVAL,
+      this.MINIMUM_DURATION_SECONDS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
+import * as flatbuffers27 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystem.ts
+import * as flatbuffers26 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMLocalAlignedConstrainedAxes.ts
+import * as flatbuffers24 from "flatbuffers";
+var RFMLocalAlignedConstrainedAxes = class _RFMLocalAlignedConstrainedAxes {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsRFMLocalAlignedConstrainedAxes(bb, obj) {
+    return (obj || new _RFMLocalAlignedConstrainedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsRFMLocalAlignedConstrainedAxes(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers24.SIZE_PREFIX_LENGTH);
+    return (obj || new _RFMLocalAlignedConstrainedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  REFERENCE_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  REFERENCE_COORDINATE_SYSTEM_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  ALIGNMENT_VECTOR(index) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  alignmentVectorLength() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  alignmentVectorArray() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  ALIGNMENT_REFERENCE_VECTOR(index) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  alignmentReferenceVectorLength() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  alignmentReferenceVectorArray() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  CONSTRAINT_VECTOR(index) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  constraintVectorLength() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  constraintVectorArray() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  CONSTRAINT_REFERENCE_VECTOR(index) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  constraintReferenceVectorLength() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  constraintReferenceVectorArray() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  static startRFMLocalAlignedConstrainedAxes(builder) {
+    builder.startObject(6);
+  }
+  static addReferenceObjectId(builder, REFERENCE_OBJECT_IDOffset) {
+    builder.addFieldOffset(0, REFERENCE_OBJECT_IDOffset, 0);
+  }
+  static addReferenceCoordinateSystemName(builder, REFERENCE_COORDINATE_SYSTEM_NAMEOffset) {
+    builder.addFieldOffset(1, REFERENCE_COORDINATE_SYSTEM_NAMEOffset, 0);
+  }
+  static addAlignmentVector(builder, ALIGNMENT_VECTOROffset) {
+    builder.addFieldOffset(2, ALIGNMENT_VECTOROffset, 0);
+  }
+  static createAlignmentVectorVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startAlignmentVectorVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addAlignmentReferenceVector(builder, ALIGNMENT_REFERENCE_VECTOROffset) {
+    builder.addFieldOffset(3, ALIGNMENT_REFERENCE_VECTOROffset, 0);
+  }
+  static createAlignmentReferenceVectorVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startAlignmentReferenceVectorVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addConstraintVector(builder, CONSTRAINT_VECTOROffset) {
+    builder.addFieldOffset(4, CONSTRAINT_VECTOROffset, 0);
+  }
+  static createConstraintVectorVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startConstraintVectorVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addConstraintReferenceVector(builder, CONSTRAINT_REFERENCE_VECTOROffset) {
+    builder.addFieldOffset(5, CONSTRAINT_REFERENCE_VECTOROffset, 0);
+  }
+  static createConstraintReferenceVectorVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startConstraintReferenceVectorVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static endRFMLocalAlignedConstrainedAxes(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createRFMLocalAlignedConstrainedAxes(builder, REFERENCE_OBJECT_IDOffset, REFERENCE_COORDINATE_SYSTEM_NAMEOffset, ALIGNMENT_VECTOROffset, ALIGNMENT_REFERENCE_VECTOROffset, CONSTRAINT_VECTOROffset, CONSTRAINT_REFERENCE_VECTOROffset) {
+    _RFMLocalAlignedConstrainedAxes.startRFMLocalAlignedConstrainedAxes(builder);
+    _RFMLocalAlignedConstrainedAxes.addReferenceObjectId(builder, REFERENCE_OBJECT_IDOffset);
+    _RFMLocalAlignedConstrainedAxes.addReferenceCoordinateSystemName(builder, REFERENCE_COORDINATE_SYSTEM_NAMEOffset);
+    _RFMLocalAlignedConstrainedAxes.addAlignmentVector(builder, ALIGNMENT_VECTOROffset);
+    _RFMLocalAlignedConstrainedAxes.addAlignmentReferenceVector(builder, ALIGNMENT_REFERENCE_VECTOROffset);
+    _RFMLocalAlignedConstrainedAxes.addConstraintVector(builder, CONSTRAINT_VECTOROffset);
+    _RFMLocalAlignedConstrainedAxes.addConstraintReferenceVector(builder, CONSTRAINT_REFERENCE_VECTOROffset);
+    return _RFMLocalAlignedConstrainedAxes.endRFMLocalAlignedConstrainedAxes(builder);
+  }
+  unpack() {
+    return new RFMLocalAlignedConstrainedAxesT(
+      this.REFERENCE_OBJECT_ID(),
+      this.REFERENCE_COORDINATE_SYSTEM_NAME(),
+      this.bb.createScalarList(this.ALIGNMENT_VECTOR.bind(this), this.alignmentVectorLength()),
+      this.bb.createScalarList(this.ALIGNMENT_REFERENCE_VECTOR.bind(this), this.alignmentReferenceVectorLength()),
+      this.bb.createScalarList(this.CONSTRAINT_VECTOR.bind(this), this.constraintVectorLength()),
+      this.bb.createScalarList(this.CONSTRAINT_REFERENCE_VECTOR.bind(this), this.constraintReferenceVectorLength())
+    );
+  }
+  unpackTo(_o) {
+    _o.REFERENCE_OBJECT_ID = this.REFERENCE_OBJECT_ID();
+    _o.REFERENCE_COORDINATE_SYSTEM_NAME = this.REFERENCE_COORDINATE_SYSTEM_NAME();
+    _o.ALIGNMENT_VECTOR = this.bb.createScalarList(this.ALIGNMENT_VECTOR.bind(this), this.alignmentVectorLength());
+    _o.ALIGNMENT_REFERENCE_VECTOR = this.bb.createScalarList(this.ALIGNMENT_REFERENCE_VECTOR.bind(this), this.alignmentReferenceVectorLength());
+    _o.CONSTRAINT_VECTOR = this.bb.createScalarList(this.CONSTRAINT_VECTOR.bind(this), this.constraintVectorLength());
+    _o.CONSTRAINT_REFERENCE_VECTOR = this.bb.createScalarList(this.CONSTRAINT_REFERENCE_VECTOR.bind(this), this.constraintReferenceVectorLength());
+  }
+};
+var RFMLocalAlignedConstrainedAxesT = class {
+  constructor(REFERENCE_OBJECT_ID = null, REFERENCE_COORDINATE_SYSTEM_NAME = null, ALIGNMENT_VECTOR = [], ALIGNMENT_REFERENCE_VECTOR = [], CONSTRAINT_VECTOR = [], CONSTRAINT_REFERENCE_VECTOR = []) {
+    this.REFERENCE_OBJECT_ID = REFERENCE_OBJECT_ID;
+    this.REFERENCE_COORDINATE_SYSTEM_NAME = REFERENCE_COORDINATE_SYSTEM_NAME;
+    this.ALIGNMENT_VECTOR = ALIGNMENT_VECTOR;
+    this.ALIGNMENT_REFERENCE_VECTOR = ALIGNMENT_REFERENCE_VECTOR;
+    this.CONSTRAINT_VECTOR = CONSTRAINT_VECTOR;
+    this.CONSTRAINT_REFERENCE_VECTOR = CONSTRAINT_REFERENCE_VECTOR;
+  }
+  pack(builder) {
+    const REFERENCE_OBJECT_ID = this.REFERENCE_OBJECT_ID !== null ? builder.createString(this.REFERENCE_OBJECT_ID) : 0;
+    const REFERENCE_COORDINATE_SYSTEM_NAME = this.REFERENCE_COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.REFERENCE_COORDINATE_SYSTEM_NAME) : 0;
+    const ALIGNMENT_VECTOR = RFMLocalAlignedConstrainedAxes.createAlignmentVectorVector(builder, this.ALIGNMENT_VECTOR);
+    const ALIGNMENT_REFERENCE_VECTOR = RFMLocalAlignedConstrainedAxes.createAlignmentReferenceVectorVector(builder, this.ALIGNMENT_REFERENCE_VECTOR);
+    const CONSTRAINT_VECTOR = RFMLocalAlignedConstrainedAxes.createConstraintVectorVector(builder, this.CONSTRAINT_VECTOR);
+    const CONSTRAINT_REFERENCE_VECTOR = RFMLocalAlignedConstrainedAxes.createConstraintReferenceVectorVector(builder, this.CONSTRAINT_REFERENCE_VECTOR);
+    return RFMLocalAlignedConstrainedAxes.createRFMLocalAlignedConstrainedAxes(
+      builder,
+      REFERENCE_OBJECT_ID,
+      REFERENCE_COORDINATE_SYSTEM_NAME,
+      ALIGNMENT_VECTOR,
+      ALIGNMENT_REFERENCE_VECTOR,
+      CONSTRAINT_VECTOR,
+      CONSTRAINT_REFERENCE_VECTOR
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
+import * as flatbuffers25 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/rfmVectorSpecification.ts
+var rfmVectorSpecification = /* @__PURE__ */ ((rfmVectorSpecification2) => {
+  rfmVectorSpecification2[rfmVectorSpecification2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  rfmVectorSpecification2[rfmVectorSpecification2["RADIAL"] = 1] = "RADIAL";
+  rfmVectorSpecification2[rfmVectorSpecification2["ANTI_RADIAL"] = 2] = "ANTI_RADIAL";
+  rfmVectorSpecification2[rfmVectorSpecification2["VELOCITY"] = 3] = "VELOCITY";
+  rfmVectorSpecification2[rfmVectorSpecification2["ANTI_VELOCITY"] = 4] = "ANTI_VELOCITY";
+  rfmVectorSpecification2[rfmVectorSpecification2["ORBIT_NORMAL"] = 5] = "ORBIT_NORMAL";
+  rfmVectorSpecification2[rfmVectorSpecification2["ANTI_ORBIT_NORMAL"] = 6] = "ANTI_ORBIT_NORMAL";
+  return rfmVectorSpecification2;
+})(rfmVectorSpecification || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/RFMObjectReferencedAxes.ts
+var RFMObjectReferencedAxes = class _RFMObjectReferencedAxes {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsRFMObjectReferencedAxes(bb, obj) {
+    return (obj || new _RFMObjectReferencedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsRFMObjectReferencedAxes(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers25.SIZE_PREFIX_LENGTH);
+    return (obj || new _RFMObjectReferencedAxes()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  PRIMARY_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SECONDARY_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  X_AXIS() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  Y_AXIS() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  Z_AXIS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  static startRFMObjectReferencedAxes(builder) {
+    builder.startObject(5);
+  }
+  static addPrimaryObjectId(builder, PRIMARY_OBJECT_IDOffset) {
+    builder.addFieldOffset(0, PRIMARY_OBJECT_IDOffset, 0);
+  }
+  static addSecondaryObjectId(builder, SECONDARY_OBJECT_IDOffset) {
+    builder.addFieldOffset(1, SECONDARY_OBJECT_IDOffset, 0);
+  }
+  static addXAxis(builder, X_AXIS) {
+    builder.addFieldInt8(2, X_AXIS, 0 /* UNSPECIFIED */);
+  }
+  static addYAxis(builder, Y_AXIS) {
+    builder.addFieldInt8(3, Y_AXIS, 0 /* UNSPECIFIED */);
+  }
+  static addZAxis(builder, Z_AXIS) {
+    builder.addFieldInt8(4, Z_AXIS, 0 /* UNSPECIFIED */);
+  }
+  static endRFMObjectReferencedAxes(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createRFMObjectReferencedAxes(builder, PRIMARY_OBJECT_IDOffset, SECONDARY_OBJECT_IDOffset, X_AXIS, Y_AXIS, Z_AXIS) {
+    _RFMObjectReferencedAxes.startRFMObjectReferencedAxes(builder);
+    _RFMObjectReferencedAxes.addPrimaryObjectId(builder, PRIMARY_OBJECT_IDOffset);
+    _RFMObjectReferencedAxes.addSecondaryObjectId(builder, SECONDARY_OBJECT_IDOffset);
+    _RFMObjectReferencedAxes.addXAxis(builder, X_AXIS);
+    _RFMObjectReferencedAxes.addYAxis(builder, Y_AXIS);
+    _RFMObjectReferencedAxes.addZAxis(builder, Z_AXIS);
+    return _RFMObjectReferencedAxes.endRFMObjectReferencedAxes(builder);
+  }
+  unpack() {
+    return new RFMObjectReferencedAxesT(
+      this.PRIMARY_OBJECT_ID(),
+      this.SECONDARY_OBJECT_ID(),
+      this.X_AXIS(),
+      this.Y_AXIS(),
+      this.Z_AXIS()
+    );
+  }
+  unpackTo(_o) {
+    _o.PRIMARY_OBJECT_ID = this.PRIMARY_OBJECT_ID();
+    _o.SECONDARY_OBJECT_ID = this.SECONDARY_OBJECT_ID();
+    _o.X_AXIS = this.X_AXIS();
+    _o.Y_AXIS = this.Y_AXIS();
+    _o.Z_AXIS = this.Z_AXIS();
+  }
+};
+var RFMObjectReferencedAxesT = class {
+  constructor(PRIMARY_OBJECT_ID = null, SECONDARY_OBJECT_ID = null, X_AXIS = 0 /* UNSPECIFIED */, Y_AXIS = 0 /* UNSPECIFIED */, Z_AXIS = 0 /* UNSPECIFIED */) {
+    this.PRIMARY_OBJECT_ID = PRIMARY_OBJECT_ID;
+    this.SECONDARY_OBJECT_ID = SECONDARY_OBJECT_ID;
+    this.X_AXIS = X_AXIS;
+    this.Y_AXIS = Y_AXIS;
+    this.Z_AXIS = Z_AXIS;
+  }
+  pack(builder) {
+    const PRIMARY_OBJECT_ID = this.PRIMARY_OBJECT_ID !== null ? builder.createString(this.PRIMARY_OBJECT_ID) : 0;
+    const SECONDARY_OBJECT_ID = this.SECONDARY_OBJECT_ID !== null ? builder.createString(this.SECONDARY_OBJECT_ID) : 0;
+    return RFMObjectReferencedAxes.createRFMObjectReferencedAxes(
+      builder,
+      PRIMARY_OBJECT_ID,
+      SECONDARY_OBJECT_ID,
+      this.X_AXIS,
+      this.Y_AXIS,
+      this.Z_AXIS
+    );
+  }
+};
+
 // node_modules/spacedatastandards.org/lib/ts/XMT/rfmAxisType.ts
 var rfmAxisType = /* @__PURE__ */ ((rfmAxisType2) => {
   rfmAxisType2[rfmAxisType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
@@ -3818,6 +5258,7 @@ var rfmAxisType = /* @__PURE__ */ ((rfmAxisType2) => {
   rfmAxisType2[rfmAxisType2["ORBITAL_VELOCITY_NORMAL_CONORMAL"] = 30] = "ORBITAL_VELOCITY_NORMAL_CONORMAL";
   rfmAxisType2[rfmAxisType2["ORBITAL_RADIAL_TRANSVERSE_NORMAL"] = 31] = "ORBITAL_RADIAL_TRANSVERSE_NORMAL";
   rfmAxisType2[rfmAxisType2["ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL"] = 32] = "ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL";
+  rfmAxisType2[rfmAxisType2["GALACTIC"] = 33] = "GALACTIC";
   return rfmAxisType2;
 })(rfmAxisType || {});
 
@@ -3834,7 +5275,7 @@ var RFMCoordinateSystem = class _RFMCoordinateSystem {
     return (obj || new _RFMCoordinateSystem()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsRFMCoordinateSystem(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers18.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers26.SIZE_PREFIX_LENGTH);
     return (obj || new _RFMCoordinateSystem()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   NAME(optionalEncoding) {
@@ -3900,8 +5341,76 @@ var RFMCoordinateSystem = class _RFMCoordinateSystem {
     const offset = this.bb.__offset(this.bb_pos, 24);
     return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
   }
+  /**
+   * ICRS right ascension of the Galactic center, degrees. NaN means absent.
+   * Sgr A*: 17h45m40.0409s (Reid & Brunthaler 2004, ApJ 616, 872).
+   */
+  GALCEN_RA_DEG() {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  /**
+   * ICRS declination of the Galactic center, degrees. NaN means absent.
+   * Sgr A*: -29d00m28.118s (Reid & Brunthaler 2004, ApJ 616, 872).
+   */
+  GALCEN_DEC_DEG() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  /**
+   * Sun-to-Galactic-center distance R0, parsecs. NaN means absent.
+   * Example: 8178 pc (GRAVITY Collaboration 2019, A&A 625, L10).
+   */
+  GALCEN_DISTANCE_PC() {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  /**
+   * Solar height above the Galactic midplane, parsecs, positive north.
+   * NaN means absent; example: 20.8 pc (Bennett & Bovy 2019, MNRAS 482, 1417).
+   */
+  Z_SUN_PC() {
+    const offset = this.bb.__offset(this.bb_pos, 32);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  /**
+   * Roll angle in degrees in the Astropy Galactocentric convention.
+   * NaN means absent, not zero. With GALACTIC axes, the five explicit scalar
+   * parameters define a derived Galactocentric orientation: X points from
+   * the Sun toward the center's projection in the midplane, Y follows
+   * Galactic rotation, and Z completes a right-handed triad toward Galactic
+   * north. This parameterized orientation is independent of ORIGIN; with
+   * GALACTIC_CENTER the Sun lies at X=-sqrt(R0^2-Z_SUN_PC^2), Y=0, Z=Z_SUN_PC.
+   * All five scalars must be finite for a spatial Galactocentric transform,
+   * with R0 > 0 and abs(Z_SUN_PC) <= R0; none has an assumed default.
+   */
+  ROLL_DEG() {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  /**
+   * Total solar velocity [v_X,v_Y,v_Z] in km/s in the resulting Galactocentric
+   * axes, including circular motion (not just peculiar U,V,W). Exactly three
+   * components when present; omit the vector when unknown, or use NaN for
+   * an unknown component. A velocity transform requires all three finite.
+   * Schonrich, Binney & Dehnen (2010), MNRAS 403, 1829, constrain peculiar
+   * motion; Reid & Brunthaler (2020), ApJ 892, 39, constrain Sgr A* motion.
+   * Publishers must state their adopted total velocity; no default is implied.
+   */
+  V_SUN_KMS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  vSunKmsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  vSunKmsArray() {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
   static startRFMCoordinateSystem(builder) {
-    builder.startObject(11);
+    builder.startObject(17);
   }
   static addName(builder, NAMEOffset) {
     builder.addFieldOffset(0, NAMEOffset, 0);
@@ -3936,6 +5445,34 @@ var RFMCoordinateSystem = class _RFMCoordinateSystem {
   static addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset) {
     builder.addFieldOffset(10, EOP_DATA_SET_CIDOffset, 0);
   }
+  static addGalcenRaDeg(builder, GALCEN_RA_DEG) {
+    builder.addFieldFloat64(11, GALCEN_RA_DEG, NaN);
+  }
+  static addGalcenDecDeg(builder, GALCEN_DEC_DEG) {
+    builder.addFieldFloat64(12, GALCEN_DEC_DEG, NaN);
+  }
+  static addGalcenDistancePc(builder, GALCEN_DISTANCE_PC) {
+    builder.addFieldFloat64(13, GALCEN_DISTANCE_PC, NaN);
+  }
+  static addZSunPc(builder, Z_SUN_PC) {
+    builder.addFieldFloat64(14, Z_SUN_PC, NaN);
+  }
+  static addRollDeg(builder, ROLL_DEG) {
+    builder.addFieldFloat64(15, ROLL_DEG, NaN);
+  }
+  static addVSunKms(builder, V_SUN_KMSOffset) {
+    builder.addFieldOffset(16, V_SUN_KMSOffset, 0);
+  }
+  static createVSunKmsVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startVSunKmsVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
   static endRFMCoordinateSystem(builder) {
     const offset = builder.endObject();
     return offset;
@@ -3952,7 +5489,13 @@ var RFMCoordinateSystem = class _RFMCoordinateSystem {
       this.LOCAL_ALIGNED_CONSTRAINED_AXES() !== null ? this.LOCAL_ALIGNED_CONSTRAINED_AXES().unpack() : null,
       this.KERNEL_FRAME_NAME(),
       this.KERNEL_FRAME_ID(),
-      this.EOP_DATA_SET_CID()
+      this.EOP_DATA_SET_CID(),
+      this.GALCEN_RA_DEG(),
+      this.GALCEN_DEC_DEG(),
+      this.GALCEN_DISTANCE_PC(),
+      this.Z_SUN_PC(),
+      this.ROLL_DEG(),
+      this.bb.createScalarList(this.V_SUN_KMS.bind(this), this.vSunKmsLength())
     );
   }
   unpackTo(_o) {
@@ -3967,10 +5510,16 @@ var RFMCoordinateSystem = class _RFMCoordinateSystem {
     _o.KERNEL_FRAME_NAME = this.KERNEL_FRAME_NAME();
     _o.KERNEL_FRAME_ID = this.KERNEL_FRAME_ID();
     _o.EOP_DATA_SET_CID = this.EOP_DATA_SET_CID();
+    _o.GALCEN_RA_DEG = this.GALCEN_RA_DEG();
+    _o.GALCEN_DEC_DEG = this.GALCEN_DEC_DEG();
+    _o.GALCEN_DISTANCE_PC = this.GALCEN_DISTANCE_PC();
+    _o.Z_SUN_PC = this.Z_SUN_PC();
+    _o.ROLL_DEG = this.ROLL_DEG();
+    _o.V_SUN_KMS = this.bb.createScalarList(this.V_SUN_KMS.bind(this), this.vSunKmsLength());
   }
 };
 var RFMCoordinateSystemT = class {
-  constructor(NAME = null, AXIS_TYPE = 0 /* UNSPECIFIED */, ORIGIN = null, AXIS_REFERENCE_BODY_ID = 0, EPOCH = null, EPOCH_TIME_SYSTEM = null, OBJECT_REFERENCED_AXES = null, LOCAL_ALIGNED_CONSTRAINED_AXES = null, KERNEL_FRAME_NAME = null, KERNEL_FRAME_ID = 0, EOP_DATA_SET_CID = null) {
+  constructor(NAME = null, AXIS_TYPE = 0 /* UNSPECIFIED */, ORIGIN = null, AXIS_REFERENCE_BODY_ID = 0, EPOCH = null, EPOCH_TIME_SYSTEM = null, OBJECT_REFERENCED_AXES = null, LOCAL_ALIGNED_CONSTRAINED_AXES = null, KERNEL_FRAME_NAME = null, KERNEL_FRAME_ID = 0, EOP_DATA_SET_CID = null, GALCEN_RA_DEG = NaN, GALCEN_DEC_DEG = NaN, GALCEN_DISTANCE_PC = NaN, Z_SUN_PC = NaN, ROLL_DEG = NaN, V_SUN_KMS = []) {
     this.NAME = NAME;
     this.AXIS_TYPE = AXIS_TYPE;
     this.ORIGIN = ORIGIN;
@@ -3982,6 +5531,12 @@ var RFMCoordinateSystemT = class {
     this.KERNEL_FRAME_NAME = KERNEL_FRAME_NAME;
     this.KERNEL_FRAME_ID = KERNEL_FRAME_ID;
     this.EOP_DATA_SET_CID = EOP_DATA_SET_CID;
+    this.GALCEN_RA_DEG = GALCEN_RA_DEG;
+    this.GALCEN_DEC_DEG = GALCEN_DEC_DEG;
+    this.GALCEN_DISTANCE_PC = GALCEN_DISTANCE_PC;
+    this.Z_SUN_PC = Z_SUN_PC;
+    this.ROLL_DEG = ROLL_DEG;
+    this.V_SUN_KMS = V_SUN_KMS;
   }
   pack(builder) {
     const NAME = this.NAME !== null ? builder.createString(this.NAME) : 0;
@@ -3992,6 +5547,7 @@ var RFMCoordinateSystemT = class {
     const LOCAL_ALIGNED_CONSTRAINED_AXES = this.LOCAL_ALIGNED_CONSTRAINED_AXES !== null ? this.LOCAL_ALIGNED_CONSTRAINED_AXES.pack(builder) : 0;
     const KERNEL_FRAME_NAME = this.KERNEL_FRAME_NAME !== null ? builder.createString(this.KERNEL_FRAME_NAME) : 0;
     const EOP_DATA_SET_CID = this.EOP_DATA_SET_CID !== null ? builder.createString(this.EOP_DATA_SET_CID) : 0;
+    const V_SUN_KMS = RFMCoordinateSystem.createVSunKmsVector(builder, this.V_SUN_KMS);
     RFMCoordinateSystem.startRFMCoordinateSystem(builder);
     RFMCoordinateSystem.addName(builder, NAME);
     RFMCoordinateSystem.addAxisType(builder, this.AXIS_TYPE);
@@ -4004,7 +5560,1932 @@ var RFMCoordinateSystemT = class {
     RFMCoordinateSystem.addKernelFrameName(builder, KERNEL_FRAME_NAME);
     RFMCoordinateSystem.addKernelFrameId(builder, this.KERNEL_FRAME_ID);
     RFMCoordinateSystem.addEopDataSetCid(builder, EOP_DATA_SET_CID);
+    RFMCoordinateSystem.addGalcenRaDeg(builder, this.GALCEN_RA_DEG);
+    RFMCoordinateSystem.addGalcenDecDeg(builder, this.GALCEN_DEC_DEG);
+    RFMCoordinateSystem.addGalcenDistancePc(builder, this.GALCEN_DISTANCE_PC);
+    RFMCoordinateSystem.addZSunPc(builder, this.Z_SUN_PC);
+    RFMCoordinateSystem.addRollDeg(builder, this.ROLL_DEG);
+    RFMCoordinateSystem.addVSunKms(builder, V_SUN_KMS);
     return RFMCoordinateSystem.endRFMCoordinateSystem(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceOwnerClass.ts
+var pceOwnerClass = /* @__PURE__ */ ((pceOwnerClass2) => {
+  pceOwnerClass2[pceOwnerClass2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pceOwnerClass2[pceOwnerClass2["SPACE_OBJECT"] = 1] = "SPACE_OBJECT";
+  pceOwnerClass2[pceOwnerClass2["SPACE_POINT"] = 2] = "SPACE_POINT";
+  pceOwnerClass2[pceOwnerClass2["GROUND_SITE"] = 3] = "GROUND_SITE";
+  pceOwnerClass2[pceOwnerClass2["THRUSTER"] = 4] = "THRUSTER";
+  pceOwnerClass2[pceOwnerClass2["FUEL_TANK"] = 5] = "FUEL_TANK";
+  pceOwnerClass2[pceOwnerClass2["IMPULSIVE_BURN"] = 6] = "IMPULSIVE_BURN";
+  pceOwnerClass2[pceOwnerClass2["FINITE_BURN"] = 7] = "FINITE_BURN";
+  pceOwnerClass2[pceOwnerClass2["POWER_SYSTEM"] = 8] = "POWER_SYSTEM";
+  pceOwnerClass2[pceOwnerClass2["ATTITUDE_SYSTEM"] = 9] = "ATTITUDE_SYSTEM";
+  pceOwnerClass2[pceOwnerClass2["SOLVER"] = 10] = "SOLVER";
+  pceOwnerClass2[pceOwnerClass2["OBJECT_GROUP"] = 11] = "OBJECT_GROUP";
+  return pceOwnerClass2;
+})(pceOwnerClass || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
+var PCEEvaluationContext = class _PCEEvaluationContext {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCEEvaluationContext(bb, obj) {
+    return (obj || new _PCEEvaluationContext()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCEEvaluationContext(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers27.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCEEvaluationContext()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  OWNER_CLASS() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  HARDWARE_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Ephemeris body code of the default central body.
+   */
+  CENTRAL_BODY_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Gravitational parameter of the central body, m^3/s^2. Absent means the
+   * provider's own value for CENTRAL_BODY_ID.
+   */
+  GRAVITATIONAL_PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Shape of the central body, REQUIRED for planetodetic parameters.
+   */
+  EQUATORIAL_RADIUS_M() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  FLATTENING() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Fully specified coordinate systems, each named through
+   * RFMCoordinateSystem.NAME.
+   */
+  COORDINATE_SYSTEMS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? (obj || new RFMCoordinateSystem()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  coordinateSystemsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  DEFAULT_COORDINATE_SYSTEM_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  DEFAULT_TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  REFERENCE_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EOP_DATA_SET_CID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Ephemeris body code of the illuminating body for lighting parameters.
+   */
+  ILLUMINATING_BODY_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  static startPCEEvaluationContext(builder) {
+    builder.startObject(13);
+  }
+  static addOwnerClass(builder, OWNER_CLASS) {
+    builder.addFieldInt8(0, OWNER_CLASS, 0 /* UNSPECIFIED */);
+  }
+  static addObjectId(builder, OBJECT_IDOffset) {
+    builder.addFieldOffset(1, OBJECT_IDOffset, 0);
+  }
+  static addHardwareName(builder, HARDWARE_NAMEOffset) {
+    builder.addFieldOffset(2, HARDWARE_NAMEOffset, 0);
+  }
+  static addCentralBodyId(builder, CENTRAL_BODY_ID) {
+    builder.addFieldInt32(3, CENTRAL_BODY_ID, 0);
+  }
+  static addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER) {
+    builder.addFieldFloat64(4, GRAVITATIONAL_PARAMETER, 0);
+  }
+  static addEquatorialRadiusM(builder, EQUATORIAL_RADIUS_M) {
+    builder.addFieldFloat64(5, EQUATORIAL_RADIUS_M, 0);
+  }
+  static addFlattening(builder, FLATTENING) {
+    builder.addFieldFloat64(6, FLATTENING, 0);
+  }
+  static addCoordinateSystems(builder, COORDINATE_SYSTEMSOffset) {
+    builder.addFieldOffset(7, COORDINATE_SYSTEMSOffset, 0);
+  }
+  static createCoordinateSystemsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startCoordinateSystemsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addDefaultCoordinateSystemName(builder, DEFAULT_COORDINATE_SYSTEM_NAMEOffset) {
+    builder.addFieldOffset(8, DEFAULT_COORDINATE_SYSTEM_NAMEOffset, 0);
+  }
+  static addDefaultTimeSystem(builder, DEFAULT_TIME_SYSTEMOffset) {
+    builder.addFieldOffset(9, DEFAULT_TIME_SYSTEMOffset, 0);
+  }
+  static addReferenceEpoch(builder, REFERENCE_EPOCHOffset) {
+    builder.addFieldOffset(10, REFERENCE_EPOCHOffset, 0);
+  }
+  static addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset) {
+    builder.addFieldOffset(11, EOP_DATA_SET_CIDOffset, 0);
+  }
+  static addIlluminatingBodyId(builder, ILLUMINATING_BODY_ID) {
+    builder.addFieldInt32(12, ILLUMINATING_BODY_ID, 0);
+  }
+  static endPCEEvaluationContext(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCEEvaluationContext(builder, OWNER_CLASS, OBJECT_IDOffset, HARDWARE_NAMEOffset, CENTRAL_BODY_ID, GRAVITATIONAL_PARAMETER, EQUATORIAL_RADIUS_M, FLATTENING, COORDINATE_SYSTEMSOffset, DEFAULT_COORDINATE_SYSTEM_NAMEOffset, DEFAULT_TIME_SYSTEMOffset, REFERENCE_EPOCHOffset, EOP_DATA_SET_CIDOffset, ILLUMINATING_BODY_ID) {
+    _PCEEvaluationContext.startPCEEvaluationContext(builder);
+    _PCEEvaluationContext.addOwnerClass(builder, OWNER_CLASS);
+    _PCEEvaluationContext.addObjectId(builder, OBJECT_IDOffset);
+    _PCEEvaluationContext.addHardwareName(builder, HARDWARE_NAMEOffset);
+    _PCEEvaluationContext.addCentralBodyId(builder, CENTRAL_BODY_ID);
+    _PCEEvaluationContext.addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER);
+    _PCEEvaluationContext.addEquatorialRadiusM(builder, EQUATORIAL_RADIUS_M);
+    _PCEEvaluationContext.addFlattening(builder, FLATTENING);
+    _PCEEvaluationContext.addCoordinateSystems(builder, COORDINATE_SYSTEMSOffset);
+    _PCEEvaluationContext.addDefaultCoordinateSystemName(builder, DEFAULT_COORDINATE_SYSTEM_NAMEOffset);
+    _PCEEvaluationContext.addDefaultTimeSystem(builder, DEFAULT_TIME_SYSTEMOffset);
+    _PCEEvaluationContext.addReferenceEpoch(builder, REFERENCE_EPOCHOffset);
+    _PCEEvaluationContext.addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset);
+    _PCEEvaluationContext.addIlluminatingBodyId(builder, ILLUMINATING_BODY_ID);
+    return _PCEEvaluationContext.endPCEEvaluationContext(builder);
+  }
+  unpack() {
+    return new PCEEvaluationContextT(
+      this.OWNER_CLASS(),
+      this.OBJECT_ID(),
+      this.HARDWARE_NAME(),
+      this.CENTRAL_BODY_ID(),
+      this.GRAVITATIONAL_PARAMETER(),
+      this.EQUATORIAL_RADIUS_M(),
+      this.FLATTENING(),
+      this.bb.createObjList(this.COORDINATE_SYSTEMS.bind(this), this.coordinateSystemsLength()),
+      this.DEFAULT_COORDINATE_SYSTEM_NAME(),
+      this.DEFAULT_TIME_SYSTEM(),
+      this.REFERENCE_EPOCH(),
+      this.EOP_DATA_SET_CID(),
+      this.ILLUMINATING_BODY_ID()
+    );
+  }
+  unpackTo(_o) {
+    _o.OWNER_CLASS = this.OWNER_CLASS();
+    _o.OBJECT_ID = this.OBJECT_ID();
+    _o.HARDWARE_NAME = this.HARDWARE_NAME();
+    _o.CENTRAL_BODY_ID = this.CENTRAL_BODY_ID();
+    _o.GRAVITATIONAL_PARAMETER = this.GRAVITATIONAL_PARAMETER();
+    _o.EQUATORIAL_RADIUS_M = this.EQUATORIAL_RADIUS_M();
+    _o.FLATTENING = this.FLATTENING();
+    _o.COORDINATE_SYSTEMS = this.bb.createObjList(this.COORDINATE_SYSTEMS.bind(this), this.coordinateSystemsLength());
+    _o.DEFAULT_COORDINATE_SYSTEM_NAME = this.DEFAULT_COORDINATE_SYSTEM_NAME();
+    _o.DEFAULT_TIME_SYSTEM = this.DEFAULT_TIME_SYSTEM();
+    _o.REFERENCE_EPOCH = this.REFERENCE_EPOCH();
+    _o.EOP_DATA_SET_CID = this.EOP_DATA_SET_CID();
+    _o.ILLUMINATING_BODY_ID = this.ILLUMINATING_BODY_ID();
+  }
+};
+var PCEEvaluationContextT = class {
+  constructor(OWNER_CLASS = 0 /* UNSPECIFIED */, OBJECT_ID = null, HARDWARE_NAME = null, CENTRAL_BODY_ID = 0, GRAVITATIONAL_PARAMETER = 0, EQUATORIAL_RADIUS_M = 0, FLATTENING = 0, COORDINATE_SYSTEMS = [], DEFAULT_COORDINATE_SYSTEM_NAME = null, DEFAULT_TIME_SYSTEM = null, REFERENCE_EPOCH = null, EOP_DATA_SET_CID = null, ILLUMINATING_BODY_ID = 0) {
+    this.OWNER_CLASS = OWNER_CLASS;
+    this.OBJECT_ID = OBJECT_ID;
+    this.HARDWARE_NAME = HARDWARE_NAME;
+    this.CENTRAL_BODY_ID = CENTRAL_BODY_ID;
+    this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
+    this.EQUATORIAL_RADIUS_M = EQUATORIAL_RADIUS_M;
+    this.FLATTENING = FLATTENING;
+    this.COORDINATE_SYSTEMS = COORDINATE_SYSTEMS;
+    this.DEFAULT_COORDINATE_SYSTEM_NAME = DEFAULT_COORDINATE_SYSTEM_NAME;
+    this.DEFAULT_TIME_SYSTEM = DEFAULT_TIME_SYSTEM;
+    this.REFERENCE_EPOCH = REFERENCE_EPOCH;
+    this.EOP_DATA_SET_CID = EOP_DATA_SET_CID;
+    this.ILLUMINATING_BODY_ID = ILLUMINATING_BODY_ID;
+  }
+  pack(builder) {
+    const OBJECT_ID = this.OBJECT_ID !== null ? builder.createString(this.OBJECT_ID) : 0;
+    const HARDWARE_NAME = this.HARDWARE_NAME !== null ? builder.createString(this.HARDWARE_NAME) : 0;
+    const COORDINATE_SYSTEMS = PCEEvaluationContext.createCoordinateSystemsVector(builder, builder.createObjectOffsetList(this.COORDINATE_SYSTEMS));
+    const DEFAULT_COORDINATE_SYSTEM_NAME = this.DEFAULT_COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.DEFAULT_COORDINATE_SYSTEM_NAME) : 0;
+    const DEFAULT_TIME_SYSTEM = this.DEFAULT_TIME_SYSTEM !== null ? builder.createString(this.DEFAULT_TIME_SYSTEM) : 0;
+    const REFERENCE_EPOCH = this.REFERENCE_EPOCH !== null ? builder.createString(this.REFERENCE_EPOCH) : 0;
+    const EOP_DATA_SET_CID = this.EOP_DATA_SET_CID !== null ? builder.createString(this.EOP_DATA_SET_CID) : 0;
+    return PCEEvaluationContext.createPCEEvaluationContext(
+      builder,
+      this.OWNER_CLASS,
+      OBJECT_ID,
+      HARDWARE_NAME,
+      this.CENTRAL_BODY_ID,
+      this.GRAVITATIONAL_PARAMETER,
+      this.EQUATORIAL_RADIUS_M,
+      this.FLATTENING,
+      COORDINATE_SYSTEMS,
+      DEFAULT_COORDINATE_SYSTEM_NAME,
+      DEFAULT_TIME_SYSTEM,
+      REFERENCE_EPOCH,
+      EOP_DATA_SET_CID,
+      this.ILLUMINATING_BODY_ID
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlLocatorClass.ts
+var evlLocatorClass = /* @__PURE__ */ ((evlLocatorClass2) => {
+  evlLocatorClass2[evlLocatorClass2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlLocatorClass2[evlLocatorClass2["ECLIPSE"] = 1] = "ECLIPSE";
+  evlLocatorClass2[evlLocatorClass2["CONTACT"] = 2] = "CONTACT";
+  evlLocatorClass2[evlLocatorClass2["INTRUSION"] = 3] = "INTRUSION";
+  evlLocatorClass2[evlLocatorClass2["APSIDES"] = 4] = "APSIDES";
+  evlLocatorClass2[evlLocatorClass2["NODE_CROSSING"] = 5] = "NODE_CROSSING";
+  evlLocatorClass2[evlLocatorClass2["PARAMETER_CONDITION"] = 6] = "PARAMETER_CONDITION";
+  evlLocatorClass2[evlLocatorClass2["LATITUDE_EXTREMUM"] = 7] = "LATITUDE_EXTREMUM";
+  return evlLocatorClass2;
+})(evlLocatorClass || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventLocationRequest.ts
+var EVLEventLocationRequest = class _EVLEventLocationRequest {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLEventLocationRequest(bb, obj) {
+    return (obj || new _EVLEventLocationRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLEventLocationRequest(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers28.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLEventLocationRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  LOCATOR_CLASS() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  TARGET_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Bodies, coordinate systems, epoch reference and Earth-orientation data
+   * set the geometry is evaluated in. The state source itself is a port the
+   * caller supplies and is NOT named here.
+   */
+  CONTEXT(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? (obj || new PCEEvaluationContext()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  SCAN_START_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SCAN_STOP_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EPOCH_TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Coarse step the event function is sampled at before refinement. A
+   * provider MAY choose its own step when this is absent, and the located
+   * epochs MUST NOT depend on it beyond REFINEMENT_TOLERANCE_SECONDS.
+   */
+  SCAN_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Convergence bar on a located epoch. A provider that cannot meet it
+   * returns ROOT_REFINEMENT_FAILED.
+   */
+  REFINEMENT_TOLERANCE_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Upper bound on reported events. 0 means no bound.
+   */
+  MAXIMUM_EVENTS() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Parameters to evaluate at each event's instants.
+   */
+  REPORT_PARAMETERS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? (obj || new PCEParameterRef()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  reportParametersLength() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Exactly the configuration matching LOCATOR_CLASS is present; any other
+   * combination is MISSING_CONFIGURATION.
+   */
+  ECLIPSE_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? (obj || new EVLEclipseConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  CONTACT_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? (obj || new EVLContactConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  INTRUSION_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? (obj || new EVLIntrusionConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  APSIDES_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? (obj || new EVLApsidesConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  NODE_CROSSING_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 32);
+    return offset ? (obj || new EVLNodeCrossingConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  PARAMETER_CONDITION_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? (obj || new EVLParameterConditionConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  TRACE_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  LATITUDE_EXTREMUM_CONFIGURATION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 38);
+    return offset ? (obj || new EVLLatitudeExtremumConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startEVLEventLocationRequest(builder) {
+    builder.startObject(18);
+  }
+  static addLocatorClass(builder, LOCATOR_CLASS) {
+    builder.addFieldInt8(0, LOCATOR_CLASS, 0 /* UNSPECIFIED */);
+  }
+  static addTargetObjectId(builder, TARGET_OBJECT_IDOffset) {
+    builder.addFieldOffset(1, TARGET_OBJECT_IDOffset, 0);
+  }
+  static addContext(builder, CONTEXTOffset) {
+    builder.addFieldOffset(2, CONTEXTOffset, 0);
+  }
+  static addScanStartEpoch(builder, SCAN_START_EPOCHOffset) {
+    builder.addFieldOffset(3, SCAN_START_EPOCHOffset, 0);
+  }
+  static addScanStopEpoch(builder, SCAN_STOP_EPOCHOffset) {
+    builder.addFieldOffset(4, SCAN_STOP_EPOCHOffset, 0);
+  }
+  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
+    builder.addFieldOffset(5, EPOCH_TIME_SYSTEMOffset, 0);
+  }
+  static addScanStepSeconds(builder, SCAN_STEP_SECONDS) {
+    builder.addFieldFloat64(6, SCAN_STEP_SECONDS, 0);
+  }
+  static addRefinementToleranceSeconds(builder, REFINEMENT_TOLERANCE_SECONDS) {
+    builder.addFieldFloat64(7, REFINEMENT_TOLERANCE_SECONDS, 0);
+  }
+  static addMaximumEvents(builder, MAXIMUM_EVENTS) {
+    builder.addFieldInt32(8, MAXIMUM_EVENTS, 0);
+  }
+  static addReportParameters(builder, REPORT_PARAMETERSOffset) {
+    builder.addFieldOffset(9, REPORT_PARAMETERSOffset, 0);
+  }
+  static createReportParametersVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startReportParametersVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addEclipseConfiguration(builder, ECLIPSE_CONFIGURATIONOffset) {
+    builder.addFieldOffset(10, ECLIPSE_CONFIGURATIONOffset, 0);
+  }
+  static addContactConfiguration(builder, CONTACT_CONFIGURATIONOffset) {
+    builder.addFieldOffset(11, CONTACT_CONFIGURATIONOffset, 0);
+  }
+  static addIntrusionConfiguration(builder, INTRUSION_CONFIGURATIONOffset) {
+    builder.addFieldOffset(12, INTRUSION_CONFIGURATIONOffset, 0);
+  }
+  static addApsidesConfiguration(builder, APSIDES_CONFIGURATIONOffset) {
+    builder.addFieldOffset(13, APSIDES_CONFIGURATIONOffset, 0);
+  }
+  static addNodeCrossingConfiguration(builder, NODE_CROSSING_CONFIGURATIONOffset) {
+    builder.addFieldOffset(14, NODE_CROSSING_CONFIGURATIONOffset, 0);
+  }
+  static addParameterConditionConfiguration(builder, PARAMETER_CONDITION_CONFIGURATIONOffset) {
+    builder.addFieldOffset(15, PARAMETER_CONDITION_CONFIGURATIONOffset, 0);
+  }
+  static addTraceId(builder, TRACE_IDOffset) {
+    builder.addFieldOffset(16, TRACE_IDOffset, 0);
+  }
+  static addLatitudeExtremumConfiguration(builder, LATITUDE_EXTREMUM_CONFIGURATIONOffset) {
+    builder.addFieldOffset(17, LATITUDE_EXTREMUM_CONFIGURATIONOffset, 0);
+  }
+  static endEVLEventLocationRequest(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new EVLEventLocationRequestT(
+      this.LOCATOR_CLASS(),
+      this.TARGET_OBJECT_ID(),
+      this.CONTEXT() !== null ? this.CONTEXT().unpack() : null,
+      this.SCAN_START_EPOCH(),
+      this.SCAN_STOP_EPOCH(),
+      this.EPOCH_TIME_SYSTEM(),
+      this.SCAN_STEP_SECONDS(),
+      this.REFINEMENT_TOLERANCE_SECONDS(),
+      this.MAXIMUM_EVENTS(),
+      this.bb.createObjList(this.REPORT_PARAMETERS.bind(this), this.reportParametersLength()),
+      this.ECLIPSE_CONFIGURATION() !== null ? this.ECLIPSE_CONFIGURATION().unpack() : null,
+      this.CONTACT_CONFIGURATION() !== null ? this.CONTACT_CONFIGURATION().unpack() : null,
+      this.INTRUSION_CONFIGURATION() !== null ? this.INTRUSION_CONFIGURATION().unpack() : null,
+      this.APSIDES_CONFIGURATION() !== null ? this.APSIDES_CONFIGURATION().unpack() : null,
+      this.NODE_CROSSING_CONFIGURATION() !== null ? this.NODE_CROSSING_CONFIGURATION().unpack() : null,
+      this.PARAMETER_CONDITION_CONFIGURATION() !== null ? this.PARAMETER_CONDITION_CONFIGURATION().unpack() : null,
+      this.TRACE_ID(),
+      this.LATITUDE_EXTREMUM_CONFIGURATION() !== null ? this.LATITUDE_EXTREMUM_CONFIGURATION().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.LOCATOR_CLASS = this.LOCATOR_CLASS();
+    _o.TARGET_OBJECT_ID = this.TARGET_OBJECT_ID();
+    _o.CONTEXT = this.CONTEXT() !== null ? this.CONTEXT().unpack() : null;
+    _o.SCAN_START_EPOCH = this.SCAN_START_EPOCH();
+    _o.SCAN_STOP_EPOCH = this.SCAN_STOP_EPOCH();
+    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
+    _o.SCAN_STEP_SECONDS = this.SCAN_STEP_SECONDS();
+    _o.REFINEMENT_TOLERANCE_SECONDS = this.REFINEMENT_TOLERANCE_SECONDS();
+    _o.MAXIMUM_EVENTS = this.MAXIMUM_EVENTS();
+    _o.REPORT_PARAMETERS = this.bb.createObjList(this.REPORT_PARAMETERS.bind(this), this.reportParametersLength());
+    _o.ECLIPSE_CONFIGURATION = this.ECLIPSE_CONFIGURATION() !== null ? this.ECLIPSE_CONFIGURATION().unpack() : null;
+    _o.CONTACT_CONFIGURATION = this.CONTACT_CONFIGURATION() !== null ? this.CONTACT_CONFIGURATION().unpack() : null;
+    _o.INTRUSION_CONFIGURATION = this.INTRUSION_CONFIGURATION() !== null ? this.INTRUSION_CONFIGURATION().unpack() : null;
+    _o.APSIDES_CONFIGURATION = this.APSIDES_CONFIGURATION() !== null ? this.APSIDES_CONFIGURATION().unpack() : null;
+    _o.NODE_CROSSING_CONFIGURATION = this.NODE_CROSSING_CONFIGURATION() !== null ? this.NODE_CROSSING_CONFIGURATION().unpack() : null;
+    _o.PARAMETER_CONDITION_CONFIGURATION = this.PARAMETER_CONDITION_CONFIGURATION() !== null ? this.PARAMETER_CONDITION_CONFIGURATION().unpack() : null;
+    _o.TRACE_ID = this.TRACE_ID();
+    _o.LATITUDE_EXTREMUM_CONFIGURATION = this.LATITUDE_EXTREMUM_CONFIGURATION() !== null ? this.LATITUDE_EXTREMUM_CONFIGURATION().unpack() : null;
+  }
+};
+var EVLEventLocationRequestT = class {
+  constructor(LOCATOR_CLASS = 0 /* UNSPECIFIED */, TARGET_OBJECT_ID = null, CONTEXT = null, SCAN_START_EPOCH = null, SCAN_STOP_EPOCH = null, EPOCH_TIME_SYSTEM = null, SCAN_STEP_SECONDS = 0, REFINEMENT_TOLERANCE_SECONDS = 0, MAXIMUM_EVENTS = 0, REPORT_PARAMETERS = [], ECLIPSE_CONFIGURATION = null, CONTACT_CONFIGURATION = null, INTRUSION_CONFIGURATION = null, APSIDES_CONFIGURATION = null, NODE_CROSSING_CONFIGURATION = null, PARAMETER_CONDITION_CONFIGURATION = null, TRACE_ID = null, LATITUDE_EXTREMUM_CONFIGURATION = null) {
+    this.LOCATOR_CLASS = LOCATOR_CLASS;
+    this.TARGET_OBJECT_ID = TARGET_OBJECT_ID;
+    this.CONTEXT = CONTEXT;
+    this.SCAN_START_EPOCH = SCAN_START_EPOCH;
+    this.SCAN_STOP_EPOCH = SCAN_STOP_EPOCH;
+    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
+    this.SCAN_STEP_SECONDS = SCAN_STEP_SECONDS;
+    this.REFINEMENT_TOLERANCE_SECONDS = REFINEMENT_TOLERANCE_SECONDS;
+    this.MAXIMUM_EVENTS = MAXIMUM_EVENTS;
+    this.REPORT_PARAMETERS = REPORT_PARAMETERS;
+    this.ECLIPSE_CONFIGURATION = ECLIPSE_CONFIGURATION;
+    this.CONTACT_CONFIGURATION = CONTACT_CONFIGURATION;
+    this.INTRUSION_CONFIGURATION = INTRUSION_CONFIGURATION;
+    this.APSIDES_CONFIGURATION = APSIDES_CONFIGURATION;
+    this.NODE_CROSSING_CONFIGURATION = NODE_CROSSING_CONFIGURATION;
+    this.PARAMETER_CONDITION_CONFIGURATION = PARAMETER_CONDITION_CONFIGURATION;
+    this.TRACE_ID = TRACE_ID;
+    this.LATITUDE_EXTREMUM_CONFIGURATION = LATITUDE_EXTREMUM_CONFIGURATION;
+  }
+  pack(builder) {
+    const TARGET_OBJECT_ID = this.TARGET_OBJECT_ID !== null ? builder.createString(this.TARGET_OBJECT_ID) : 0;
+    const CONTEXT = this.CONTEXT !== null ? this.CONTEXT.pack(builder) : 0;
+    const SCAN_START_EPOCH = this.SCAN_START_EPOCH !== null ? builder.createString(this.SCAN_START_EPOCH) : 0;
+    const SCAN_STOP_EPOCH = this.SCAN_STOP_EPOCH !== null ? builder.createString(this.SCAN_STOP_EPOCH) : 0;
+    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
+    const REPORT_PARAMETERS = EVLEventLocationRequest.createReportParametersVector(builder, builder.createObjectOffsetList(this.REPORT_PARAMETERS));
+    const ECLIPSE_CONFIGURATION = this.ECLIPSE_CONFIGURATION !== null ? this.ECLIPSE_CONFIGURATION.pack(builder) : 0;
+    const CONTACT_CONFIGURATION = this.CONTACT_CONFIGURATION !== null ? this.CONTACT_CONFIGURATION.pack(builder) : 0;
+    const INTRUSION_CONFIGURATION = this.INTRUSION_CONFIGURATION !== null ? this.INTRUSION_CONFIGURATION.pack(builder) : 0;
+    const APSIDES_CONFIGURATION = this.APSIDES_CONFIGURATION !== null ? this.APSIDES_CONFIGURATION.pack(builder) : 0;
+    const NODE_CROSSING_CONFIGURATION = this.NODE_CROSSING_CONFIGURATION !== null ? this.NODE_CROSSING_CONFIGURATION.pack(builder) : 0;
+    const PARAMETER_CONDITION_CONFIGURATION = this.PARAMETER_CONDITION_CONFIGURATION !== null ? this.PARAMETER_CONDITION_CONFIGURATION.pack(builder) : 0;
+    const TRACE_ID = this.TRACE_ID !== null ? builder.createString(this.TRACE_ID) : 0;
+    const LATITUDE_EXTREMUM_CONFIGURATION = this.LATITUDE_EXTREMUM_CONFIGURATION !== null ? this.LATITUDE_EXTREMUM_CONFIGURATION.pack(builder) : 0;
+    EVLEventLocationRequest.startEVLEventLocationRequest(builder);
+    EVLEventLocationRequest.addLocatorClass(builder, this.LOCATOR_CLASS);
+    EVLEventLocationRequest.addTargetObjectId(builder, TARGET_OBJECT_ID);
+    EVLEventLocationRequest.addContext(builder, CONTEXT);
+    EVLEventLocationRequest.addScanStartEpoch(builder, SCAN_START_EPOCH);
+    EVLEventLocationRequest.addScanStopEpoch(builder, SCAN_STOP_EPOCH);
+    EVLEventLocationRequest.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEM);
+    EVLEventLocationRequest.addScanStepSeconds(builder, this.SCAN_STEP_SECONDS);
+    EVLEventLocationRequest.addRefinementToleranceSeconds(builder, this.REFINEMENT_TOLERANCE_SECONDS);
+    EVLEventLocationRequest.addMaximumEvents(builder, this.MAXIMUM_EVENTS);
+    EVLEventLocationRequest.addReportParameters(builder, REPORT_PARAMETERS);
+    EVLEventLocationRequest.addEclipseConfiguration(builder, ECLIPSE_CONFIGURATION);
+    EVLEventLocationRequest.addContactConfiguration(builder, CONTACT_CONFIGURATION);
+    EVLEventLocationRequest.addIntrusionConfiguration(builder, INTRUSION_CONFIGURATION);
+    EVLEventLocationRequest.addApsidesConfiguration(builder, APSIDES_CONFIGURATION);
+    EVLEventLocationRequest.addNodeCrossingConfiguration(builder, NODE_CROSSING_CONFIGURATION);
+    EVLEventLocationRequest.addParameterConditionConfiguration(builder, PARAMETER_CONDITION_CONFIGURATION);
+    EVLEventLocationRequest.addTraceId(builder, TRACE_ID);
+    EVLEventLocationRequest.addLatitudeExtremumConfiguration(builder, LATITUDE_EXTREMUM_CONFIGURATION);
+    return EVLEventLocationRequest.endEVLEventLocationRequest(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventReport.ts
+import * as flatbuffers33 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEvent.ts
+import * as flatbuffers32 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventSample.ts
+import * as flatbuffers31 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
+import * as flatbuffers30 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
+import * as flatbuffers29 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceResultStatus.ts
+var pceResultStatus = /* @__PURE__ */ ((pceResultStatus2) => {
+  pceResultStatus2[pceResultStatus2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pceResultStatus2[pceResultStatus2["OK"] = 1] = "OK";
+  pceResultStatus2[pceResultStatus2["INVALID_INPUT"] = 2] = "INVALID_INPUT";
+  pceResultStatus2[pceResultStatus2["UNKNOWN_PARAMETER"] = 3] = "UNKNOWN_PARAMETER";
+  pceResultStatus2[pceResultStatus2["NOT_IMPLEMENTED"] = 4] = "NOT_IMPLEMENTED";
+  pceResultStatus2[pceResultStatus2["MISSING_DEPENDENCY"] = 5] = "MISSING_DEPENDENCY";
+  pceResultStatus2[pceResultStatus2["MISSING_OWNER_OBJECT"] = 6] = "MISSING_OWNER_OBJECT";
+  pceResultStatus2[pceResultStatus2["MISSING_EOP_DATA"] = 7] = "MISSING_EOP_DATA";
+  pceResultStatus2[pceResultStatus2["SINGULAR_AT_STATE"] = 8] = "SINGULAR_AT_STATE";
+  pceResultStatus2[pceResultStatus2["OUT_OF_DOMAIN"] = 9] = "OUT_OF_DOMAIN";
+  pceResultStatus2[pceResultStatus2["GOAL_NOT_ATTAINED"] = 10] = "GOAL_NOT_ATTAINED";
+  pceResultStatus2[pceResultStatus2["ROOT_REFINEMENT_FAILED"] = 11] = "ROOT_REFINEMENT_FAILED";
+  pceResultStatus2[pceResultStatus2["BUDGET_EXCEEDED"] = 12] = "BUDGET_EXCEEDED";
+  return pceResultStatus2;
+})(pceResultStatus || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pceUnit.ts
+var pceUnit = /* @__PURE__ */ ((pceUnit2) => {
+  pceUnit2[pceUnit2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pceUnit2[pceUnit2["DIMENSIONLESS"] = 1] = "DIMENSIONLESS";
+  pceUnit2[pceUnit2["METRE"] = 2] = "METRE";
+  pceUnit2[pceUnit2["METRE_PER_SECOND"] = 3] = "METRE_PER_SECOND";
+  pceUnit2[pceUnit2["METRE_PER_SECOND_SQUARED"] = 4] = "METRE_PER_SECOND_SQUARED";
+  pceUnit2[pceUnit2["METRE_SQUARED"] = 5] = "METRE_SQUARED";
+  pceUnit2[pceUnit2["METRE_SQUARED_PER_SECOND"] = 6] = "METRE_SQUARED_PER_SECOND";
+  pceUnit2[pceUnit2["METRE_SQUARED_PER_SECOND_SQUARED"] = 7] = "METRE_SQUARED_PER_SECOND_SQUARED";
+  pceUnit2[pceUnit2["METRE_CUBED"] = 8] = "METRE_CUBED";
+  pceUnit2[pceUnit2["RADIAN"] = 9] = "RADIAN";
+  pceUnit2[pceUnit2["RADIAN_PER_SECOND"] = 10] = "RADIAN_PER_SECOND";
+  pceUnit2[pceUnit2["SECOND"] = 11] = "SECOND";
+  pceUnit2[pceUnit2["DAY"] = 12] = "DAY";
+  pceUnit2[pceUnit2["KILOGRAM"] = 13] = "KILOGRAM";
+  pceUnit2[pceUnit2["KILOGRAM_PER_SECOND"] = 14] = "KILOGRAM_PER_SECOND";
+  pceUnit2[pceUnit2["KILOGRAM_PER_METRE_CUBED"] = 15] = "KILOGRAM_PER_METRE_CUBED";
+  pceUnit2[pceUnit2["KILOGRAM_METRE_SQUARED"] = 16] = "KILOGRAM_METRE_SQUARED";
+  pceUnit2[pceUnit2["NEWTON"] = 17] = "NEWTON";
+  pceUnit2[pceUnit2["NEWTON_METRE"] = 18] = "NEWTON_METRE";
+  pceUnit2[pceUnit2["WATT"] = 19] = "WATT";
+  pceUnit2[pceUnit2["PASCAL"] = 20] = "PASCAL";
+  pceUnit2[pceUnit2["KELVIN"] = 21] = "KELVIN";
+  pceUnit2[pceUnit2["METRE_SQUARED_PER_KILOGRAM"] = 22] = "METRE_SQUARED_PER_KILOGRAM";
+  pceUnit2[pceUnit2["PROVIDER_DEFINED"] = 100] = "PROVIDER_DEFINED";
+  return pceUnit2;
+})(pceUnit || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
+var PCEParameterValue = class _PCEParameterValue {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCEParameterValue(bb, obj) {
+    return (obj || new _PCEParameterValue()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCEParameterValue(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers29.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCEParameterValue()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  PROVIDER_DEFINED_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  STATUS() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Scalar, integer or boolean value. Absent for vector and matrix types.
+   */
+  VALUE() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Vector or matrix values, row-major. Absent for scalar types; a scalar is
+   * NEVER also written here.
+   */
+  VALUES(index) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  valuesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  valuesArray() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Matrix shape, REQUIRED when the descriptor's DATA_TYPE is REAL_MATRIX.
+   */
+  ROW_COUNT() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  COLUMN_COUNT() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  STRING_VALUE(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Unit the value is expressed in, restating the descriptor so a value is
+   * self-describing when it travels without its catalog.
+   */
+  UNIT() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  MESSAGE(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  static startPCEParameterValue(builder) {
+    builder.startObject(10);
+  }
+  static addParameter(builder, PARAMETER) {
+    builder.addFieldInt16(0, PARAMETER, 0 /* UNSPECIFIED */);
+  }
+  static addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset) {
+    builder.addFieldOffset(1, PROVIDER_DEFINED_NAMEOffset, 0);
+  }
+  static addStatus(builder, STATUS) {
+    builder.addFieldInt8(2, STATUS, 0 /* UNSPECIFIED */);
+  }
+  static addValue(builder, VALUE) {
+    builder.addFieldFloat64(3, VALUE, 0);
+  }
+  static addValues(builder, VALUESOffset) {
+    builder.addFieldOffset(4, VALUESOffset, 0);
+  }
+  static createValuesVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startValuesVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addRowCount(builder, ROW_COUNT) {
+    builder.addFieldInt32(5, ROW_COUNT, 0);
+  }
+  static addColumnCount(builder, COLUMN_COUNT) {
+    builder.addFieldInt32(6, COLUMN_COUNT, 0);
+  }
+  static addStringValue(builder, STRING_VALUEOffset) {
+    builder.addFieldOffset(7, STRING_VALUEOffset, 0);
+  }
+  static addUnit(builder, UNIT) {
+    builder.addFieldInt8(8, UNIT, 0 /* UNSPECIFIED */);
+  }
+  static addMessage(builder, MESSAGEOffset) {
+    builder.addFieldOffset(9, MESSAGEOffset, 0);
+  }
+  static endPCEParameterValue(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCEParameterValue(builder, PARAMETER, PROVIDER_DEFINED_NAMEOffset, STATUS, VALUE, VALUESOffset, ROW_COUNT, COLUMN_COUNT, STRING_VALUEOffset, UNIT, MESSAGEOffset) {
+    _PCEParameterValue.startPCEParameterValue(builder);
+    _PCEParameterValue.addParameter(builder, PARAMETER);
+    _PCEParameterValue.addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset);
+    _PCEParameterValue.addStatus(builder, STATUS);
+    _PCEParameterValue.addValue(builder, VALUE);
+    _PCEParameterValue.addValues(builder, VALUESOffset);
+    _PCEParameterValue.addRowCount(builder, ROW_COUNT);
+    _PCEParameterValue.addColumnCount(builder, COLUMN_COUNT);
+    _PCEParameterValue.addStringValue(builder, STRING_VALUEOffset);
+    _PCEParameterValue.addUnit(builder, UNIT);
+    _PCEParameterValue.addMessage(builder, MESSAGEOffset);
+    return _PCEParameterValue.endPCEParameterValue(builder);
+  }
+  unpack() {
+    return new PCEParameterValueT(
+      this.PARAMETER(),
+      this.PROVIDER_DEFINED_NAME(),
+      this.STATUS(),
+      this.VALUE(),
+      this.bb.createScalarList(this.VALUES.bind(this), this.valuesLength()),
+      this.ROW_COUNT(),
+      this.COLUMN_COUNT(),
+      this.STRING_VALUE(),
+      this.UNIT(),
+      this.MESSAGE()
+    );
+  }
+  unpackTo(_o) {
+    _o.PARAMETER = this.PARAMETER();
+    _o.PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME();
+    _o.STATUS = this.STATUS();
+    _o.VALUE = this.VALUE();
+    _o.VALUES = this.bb.createScalarList(this.VALUES.bind(this), this.valuesLength());
+    _o.ROW_COUNT = this.ROW_COUNT();
+    _o.COLUMN_COUNT = this.COLUMN_COUNT();
+    _o.STRING_VALUE = this.STRING_VALUE();
+    _o.UNIT = this.UNIT();
+    _o.MESSAGE = this.MESSAGE();
+  }
+};
+var PCEParameterValueT = class {
+  constructor(PARAMETER = 0 /* UNSPECIFIED */, PROVIDER_DEFINED_NAME = null, STATUS = 0 /* UNSPECIFIED */, VALUE = 0, VALUES = [], ROW_COUNT = 0, COLUMN_COUNT = 0, STRING_VALUE = null, UNIT = 0 /* UNSPECIFIED */, MESSAGE = null) {
+    this.PARAMETER = PARAMETER;
+    this.PROVIDER_DEFINED_NAME = PROVIDER_DEFINED_NAME;
+    this.STATUS = STATUS;
+    this.VALUE = VALUE;
+    this.VALUES = VALUES;
+    this.ROW_COUNT = ROW_COUNT;
+    this.COLUMN_COUNT = COLUMN_COUNT;
+    this.STRING_VALUE = STRING_VALUE;
+    this.UNIT = UNIT;
+    this.MESSAGE = MESSAGE;
+  }
+  pack(builder) {
+    const PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME !== null ? builder.createString(this.PROVIDER_DEFINED_NAME) : 0;
+    const VALUES = PCEParameterValue.createValuesVector(builder, this.VALUES);
+    const STRING_VALUE = this.STRING_VALUE !== null ? builder.createString(this.STRING_VALUE) : 0;
+    const MESSAGE = this.MESSAGE !== null ? builder.createString(this.MESSAGE) : 0;
+    return PCEParameterValue.createPCEParameterValue(
+      builder,
+      this.PARAMETER,
+      PROVIDER_DEFINED_NAME,
+      this.STATUS,
+      this.VALUE,
+      VALUES,
+      this.ROW_COUNT,
+      this.COLUMN_COUNT,
+      STRING_VALUE,
+      this.UNIT,
+      MESSAGE
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
+var PCEParameterSample = class _PCEParameterSample {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCEParameterSample(bb, obj) {
+    return (obj || new _PCEParameterSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCEParameterSample(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers30.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCEParameterSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EPOCH_TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  PARAMETER_VALUES(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? (obj || new PCEParameterValue()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  parameterValuesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  static startPCEParameterSample(builder) {
+    builder.startObject(3);
+  }
+  static addEpoch(builder, EPOCHOffset) {
+    builder.addFieldOffset(0, EPOCHOffset, 0);
+  }
+  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
+    builder.addFieldOffset(1, EPOCH_TIME_SYSTEMOffset, 0);
+  }
+  static addParameterValues(builder, PARAMETER_VALUESOffset) {
+    builder.addFieldOffset(2, PARAMETER_VALUESOffset, 0);
+  }
+  static createParameterValuesVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startParameterValuesVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static endPCEParameterSample(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCEParameterSample(builder, EPOCHOffset, EPOCH_TIME_SYSTEMOffset, PARAMETER_VALUESOffset) {
+    _PCEParameterSample.startPCEParameterSample(builder);
+    _PCEParameterSample.addEpoch(builder, EPOCHOffset);
+    _PCEParameterSample.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset);
+    _PCEParameterSample.addParameterValues(builder, PARAMETER_VALUESOffset);
+    return _PCEParameterSample.endPCEParameterSample(builder);
+  }
+  unpack() {
+    return new PCEParameterSampleT(
+      this.EPOCH(),
+      this.EPOCH_TIME_SYSTEM(),
+      this.bb.createObjList(this.PARAMETER_VALUES.bind(this), this.parameterValuesLength())
+    );
+  }
+  unpackTo(_o) {
+    _o.EPOCH = this.EPOCH();
+    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
+    _o.PARAMETER_VALUES = this.bb.createObjList(this.PARAMETER_VALUES.bind(this), this.parameterValuesLength());
+  }
+};
+var PCEParameterSampleT = class {
+  constructor(EPOCH = null, EPOCH_TIME_SYSTEM = null, PARAMETER_VALUES = []) {
+    this.EPOCH = EPOCH;
+    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
+    this.PARAMETER_VALUES = PARAMETER_VALUES;
+  }
+  pack(builder) {
+    const EPOCH = this.EPOCH !== null ? builder.createString(this.EPOCH) : 0;
+    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
+    const PARAMETER_VALUES = PCEParameterSample.createParameterValuesVector(builder, builder.createObjectOffsetList(this.PARAMETER_VALUES));
+    return PCEParameterSample.createPCEParameterSample(
+      builder,
+      EPOCH,
+      EPOCH_TIME_SYSTEM,
+      PARAMETER_VALUES
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlSamplePoint.ts
+var evlSamplePoint = /* @__PURE__ */ ((evlSamplePoint2) => {
+  evlSamplePoint2[evlSamplePoint2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlSamplePoint2[evlSamplePoint2["EVENT_START"] = 1] = "EVENT_START";
+  evlSamplePoint2[evlSamplePoint2["EVENT_STOP"] = 2] = "EVENT_STOP";
+  evlSamplePoint2[evlSamplePoint2["EVENT_EXTREMUM"] = 3] = "EVENT_EXTREMUM";
+  evlSamplePoint2[evlSamplePoint2["INTERIOR"] = 4] = "INTERIOR";
+  return evlSamplePoint2;
+})(evlSamplePoint || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventSample.ts
+var EVLEventSample = class _EVLEventSample {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLEventSample(bb, obj) {
+    return (obj || new _EVLEventSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLEventSample(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers31.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLEventSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  POINT() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  SAMPLE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? (obj || new PCEParameterSample()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startEVLEventSample(builder) {
+    builder.startObject(2);
+  }
+  static addPoint(builder, POINT) {
+    builder.addFieldInt8(0, POINT, 0 /* UNSPECIFIED */);
+  }
+  static addSample(builder, SAMPLEOffset) {
+    builder.addFieldOffset(1, SAMPLEOffset, 0);
+  }
+  static endEVLEventSample(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new EVLEventSampleT(
+      this.POINT(),
+      this.SAMPLE() !== null ? this.SAMPLE().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.POINT = this.POINT();
+    _o.SAMPLE = this.SAMPLE() !== null ? this.SAMPLE().unpack() : null;
+  }
+};
+var EVLEventSampleT = class {
+  constructor(POINT = 0 /* UNSPECIFIED */, SAMPLE = null) {
+    this.POINT = POINT;
+    this.SAMPLE = SAMPLE;
+  }
+  pack(builder) {
+    const SAMPLE = this.SAMPLE !== null ? this.SAMPLE.pack(builder) : 0;
+    EVLEventSample.startEVLEventSample(builder);
+    EVLEventSample.addPoint(builder, this.POINT);
+    EVLEventSample.addSample(builder, SAMPLE);
+    return EVLEventSample.endEVLEventSample(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlEventType.ts
+var evlEventType = /* @__PURE__ */ ((evlEventType2) => {
+  evlEventType2[evlEventType2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlEventType2[evlEventType2["UMBRA"] = 1] = "UMBRA";
+  evlEventType2[evlEventType2["PENUMBRA"] = 2] = "PENUMBRA";
+  evlEventType2[evlEventType2["ANTUMBRA"] = 3] = "ANTUMBRA";
+  evlEventType2[evlEventType2["RISE"] = 4] = "RISE";
+  evlEventType2[evlEventType2["SET"] = 5] = "SET";
+  evlEventType2[evlEventType2["ENTRY"] = 6] = "ENTRY";
+  evlEventType2[evlEventType2["EXIT"] = 7] = "EXIT";
+  evlEventType2[evlEventType2["APOAPSIS"] = 8] = "APOAPSIS";
+  evlEventType2[evlEventType2["PERIAPSIS"] = 9] = "PERIAPSIS";
+  evlEventType2[evlEventType2["ASCENDING_NODE"] = 10] = "ASCENDING_NODE";
+  evlEventType2[evlEventType2["DESCENDING_NODE"] = 11] = "DESCENDING_NODE";
+  evlEventType2[evlEventType2["CONDITION_SATISFIED"] = 12] = "CONDITION_SATISFIED";
+  evlEventType2[evlEventType2["MAXIMUM_LATITUDE"] = 13] = "MAXIMUM_LATITUDE";
+  evlEventType2[evlEventType2["MINIMUM_LATITUDE"] = 14] = "MINIMUM_LATITUDE";
+  return evlEventType2;
+})(evlEventType || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEvent.ts
+var EVLEvent = class _EVLEvent {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLEvent(bb, obj) {
+    return (obj || new _EVLEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLEvent(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers32.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  EVENT_TYPE() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  START_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  STOP_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EPOCH_TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * STOP_EPOCH minus START_EPOCH in seconds. Carried because it is the
+   * reported quantity of an event report and MUST agree with the epochs.
+   */
+  DURATION_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  TARGET_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Ephemeris body code of the body that occulted or intruded, when one did.
+   */
+  OCCULTING_BODY_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  OBSERVER_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  OBSERVED_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EXTREMUM_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Value at EXTREMUM_EPOCH, in the unit of EXTREMUM_PARAMETER.
+   */
+  EXTREMUM_VALUE() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Which catalog parameter EXTREMUM_VALUE is a value of.
+   */
+  EXTREMUM_PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Index into EVLEventLocationRequest.PARAMETER_CONDITION_CONFIGURATION's
+   * CONDITIONS for a generic event; negative for every other class.
+   */
+  CONDITION_INDEX() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : -1;
+  }
+  /**
+   * Requested parameters, evaluated at the instants of this event.
+   */
+  SAMPLES(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? (obj || new EVLEventSample()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  samplesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  static startEVLEvent(builder) {
+    builder.startObject(14);
+  }
+  static addEventType(builder, EVENT_TYPE) {
+    builder.addFieldInt8(0, EVENT_TYPE, 0 /* UNSPECIFIED */);
+  }
+  static addStartEpoch(builder, START_EPOCHOffset) {
+    builder.addFieldOffset(1, START_EPOCHOffset, 0);
+  }
+  static addStopEpoch(builder, STOP_EPOCHOffset) {
+    builder.addFieldOffset(2, STOP_EPOCHOffset, 0);
+  }
+  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
+    builder.addFieldOffset(3, EPOCH_TIME_SYSTEMOffset, 0);
+  }
+  static addDurationSeconds(builder, DURATION_SECONDS) {
+    builder.addFieldFloat64(4, DURATION_SECONDS, 0);
+  }
+  static addTargetObjectId(builder, TARGET_OBJECT_IDOffset) {
+    builder.addFieldOffset(5, TARGET_OBJECT_IDOffset, 0);
+  }
+  static addOccultingBodyId(builder, OCCULTING_BODY_ID) {
+    builder.addFieldInt32(6, OCCULTING_BODY_ID, 0);
+  }
+  static addObserverId(builder, OBSERVER_IDOffset) {
+    builder.addFieldOffset(7, OBSERVER_IDOffset, 0);
+  }
+  static addObservedObjectId(builder, OBSERVED_OBJECT_IDOffset) {
+    builder.addFieldOffset(8, OBSERVED_OBJECT_IDOffset, 0);
+  }
+  static addExtremumEpoch(builder, EXTREMUM_EPOCHOffset) {
+    builder.addFieldOffset(9, EXTREMUM_EPOCHOffset, 0);
+  }
+  static addExtremumValue(builder, EXTREMUM_VALUE) {
+    builder.addFieldFloat64(10, EXTREMUM_VALUE, 0);
+  }
+  static addExtremumParameter(builder, EXTREMUM_PARAMETER) {
+    builder.addFieldInt16(11, EXTREMUM_PARAMETER, 0 /* UNSPECIFIED */);
+  }
+  static addConditionIndex(builder, CONDITION_INDEX) {
+    builder.addFieldInt32(12, CONDITION_INDEX, -1);
+  }
+  static addSamples(builder, SAMPLESOffset) {
+    builder.addFieldOffset(13, SAMPLESOffset, 0);
+  }
+  static createSamplesVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startSamplesVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static endEVLEvent(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createEVLEvent(builder, EVENT_TYPE, START_EPOCHOffset, STOP_EPOCHOffset, EPOCH_TIME_SYSTEMOffset, DURATION_SECONDS, TARGET_OBJECT_IDOffset, OCCULTING_BODY_ID, OBSERVER_IDOffset, OBSERVED_OBJECT_IDOffset, EXTREMUM_EPOCHOffset, EXTREMUM_VALUE, EXTREMUM_PARAMETER, CONDITION_INDEX, SAMPLESOffset) {
+    _EVLEvent.startEVLEvent(builder);
+    _EVLEvent.addEventType(builder, EVENT_TYPE);
+    _EVLEvent.addStartEpoch(builder, START_EPOCHOffset);
+    _EVLEvent.addStopEpoch(builder, STOP_EPOCHOffset);
+    _EVLEvent.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset);
+    _EVLEvent.addDurationSeconds(builder, DURATION_SECONDS);
+    _EVLEvent.addTargetObjectId(builder, TARGET_OBJECT_IDOffset);
+    _EVLEvent.addOccultingBodyId(builder, OCCULTING_BODY_ID);
+    _EVLEvent.addObserverId(builder, OBSERVER_IDOffset);
+    _EVLEvent.addObservedObjectId(builder, OBSERVED_OBJECT_IDOffset);
+    _EVLEvent.addExtremumEpoch(builder, EXTREMUM_EPOCHOffset);
+    _EVLEvent.addExtremumValue(builder, EXTREMUM_VALUE);
+    _EVLEvent.addExtremumParameter(builder, EXTREMUM_PARAMETER);
+    _EVLEvent.addConditionIndex(builder, CONDITION_INDEX);
+    _EVLEvent.addSamples(builder, SAMPLESOffset);
+    return _EVLEvent.endEVLEvent(builder);
+  }
+  unpack() {
+    return new EVLEventT(
+      this.EVENT_TYPE(),
+      this.START_EPOCH(),
+      this.STOP_EPOCH(),
+      this.EPOCH_TIME_SYSTEM(),
+      this.DURATION_SECONDS(),
+      this.TARGET_OBJECT_ID(),
+      this.OCCULTING_BODY_ID(),
+      this.OBSERVER_ID(),
+      this.OBSERVED_OBJECT_ID(),
+      this.EXTREMUM_EPOCH(),
+      this.EXTREMUM_VALUE(),
+      this.EXTREMUM_PARAMETER(),
+      this.CONDITION_INDEX(),
+      this.bb.createObjList(this.SAMPLES.bind(this), this.samplesLength())
+    );
+  }
+  unpackTo(_o) {
+    _o.EVENT_TYPE = this.EVENT_TYPE();
+    _o.START_EPOCH = this.START_EPOCH();
+    _o.STOP_EPOCH = this.STOP_EPOCH();
+    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
+    _o.DURATION_SECONDS = this.DURATION_SECONDS();
+    _o.TARGET_OBJECT_ID = this.TARGET_OBJECT_ID();
+    _o.OCCULTING_BODY_ID = this.OCCULTING_BODY_ID();
+    _o.OBSERVER_ID = this.OBSERVER_ID();
+    _o.OBSERVED_OBJECT_ID = this.OBSERVED_OBJECT_ID();
+    _o.EXTREMUM_EPOCH = this.EXTREMUM_EPOCH();
+    _o.EXTREMUM_VALUE = this.EXTREMUM_VALUE();
+    _o.EXTREMUM_PARAMETER = this.EXTREMUM_PARAMETER();
+    _o.CONDITION_INDEX = this.CONDITION_INDEX();
+    _o.SAMPLES = this.bb.createObjList(this.SAMPLES.bind(this), this.samplesLength());
+  }
+};
+var EVLEventT = class {
+  constructor(EVENT_TYPE = 0 /* UNSPECIFIED */, START_EPOCH = null, STOP_EPOCH = null, EPOCH_TIME_SYSTEM = null, DURATION_SECONDS = 0, TARGET_OBJECT_ID = null, OCCULTING_BODY_ID = 0, OBSERVER_ID = null, OBSERVED_OBJECT_ID = null, EXTREMUM_EPOCH = null, EXTREMUM_VALUE = 0, EXTREMUM_PARAMETER = 0 /* UNSPECIFIED */, CONDITION_INDEX = -1, SAMPLES = []) {
+    this.EVENT_TYPE = EVENT_TYPE;
+    this.START_EPOCH = START_EPOCH;
+    this.STOP_EPOCH = STOP_EPOCH;
+    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
+    this.DURATION_SECONDS = DURATION_SECONDS;
+    this.TARGET_OBJECT_ID = TARGET_OBJECT_ID;
+    this.OCCULTING_BODY_ID = OCCULTING_BODY_ID;
+    this.OBSERVER_ID = OBSERVER_ID;
+    this.OBSERVED_OBJECT_ID = OBSERVED_OBJECT_ID;
+    this.EXTREMUM_EPOCH = EXTREMUM_EPOCH;
+    this.EXTREMUM_VALUE = EXTREMUM_VALUE;
+    this.EXTREMUM_PARAMETER = EXTREMUM_PARAMETER;
+    this.CONDITION_INDEX = CONDITION_INDEX;
+    this.SAMPLES = SAMPLES;
+  }
+  pack(builder) {
+    const START_EPOCH = this.START_EPOCH !== null ? builder.createString(this.START_EPOCH) : 0;
+    const STOP_EPOCH = this.STOP_EPOCH !== null ? builder.createString(this.STOP_EPOCH) : 0;
+    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
+    const TARGET_OBJECT_ID = this.TARGET_OBJECT_ID !== null ? builder.createString(this.TARGET_OBJECT_ID) : 0;
+    const OBSERVER_ID = this.OBSERVER_ID !== null ? builder.createString(this.OBSERVER_ID) : 0;
+    const OBSERVED_OBJECT_ID = this.OBSERVED_OBJECT_ID !== null ? builder.createString(this.OBSERVED_OBJECT_ID) : 0;
+    const EXTREMUM_EPOCH = this.EXTREMUM_EPOCH !== null ? builder.createString(this.EXTREMUM_EPOCH) : 0;
+    const SAMPLES = EVLEvent.createSamplesVector(builder, builder.createObjectOffsetList(this.SAMPLES));
+    return EVLEvent.createEVLEvent(
+      builder,
+      this.EVENT_TYPE,
+      START_EPOCH,
+      STOP_EPOCH,
+      EPOCH_TIME_SYSTEM,
+      this.DURATION_SECONDS,
+      TARGET_OBJECT_ID,
+      this.OCCULTING_BODY_ID,
+      OBSERVER_ID,
+      OBSERVED_OBJECT_ID,
+      EXTREMUM_EPOCH,
+      this.EXTREMUM_VALUE,
+      this.EXTREMUM_PARAMETER,
+      this.CONDITION_INDEX,
+      SAMPLES
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/evlResultStatus.ts
+var evlResultStatus = /* @__PURE__ */ ((evlResultStatus2) => {
+  evlResultStatus2[evlResultStatus2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  evlResultStatus2[evlResultStatus2["OK"] = 1] = "OK";
+  evlResultStatus2[evlResultStatus2["INVALID_INPUT"] = 2] = "INVALID_INPUT";
+  evlResultStatus2[evlResultStatus2["UNSUPPORTED_LOCATOR_CLASS"] = 3] = "UNSUPPORTED_LOCATOR_CLASS";
+  evlResultStatus2[evlResultStatus2["MISSING_CONFIGURATION"] = 4] = "MISSING_CONFIGURATION";
+  evlResultStatus2[evlResultStatus2["MISSING_EPHEMERIS"] = 5] = "MISSING_EPHEMERIS";
+  evlResultStatus2[evlResultStatus2["MISSING_EOP_DATA"] = 6] = "MISSING_EOP_DATA";
+  evlResultStatus2[evlResultStatus2["PARAMETER_UNAVAILABLE"] = 7] = "PARAMETER_UNAVAILABLE";
+  evlResultStatus2[evlResultStatus2["ROOT_REFINEMENT_FAILED"] = 8] = "ROOT_REFINEMENT_FAILED";
+  evlResultStatus2[evlResultStatus2["BUDGET_EXCEEDED"] = 9] = "BUDGET_EXCEEDED";
+  return evlResultStatus2;
+})(evlResultStatus || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVLEventReport.ts
+var EVLEventReport = class _EVLEventReport {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVLEventReport(bb, obj) {
+    return (obj || new _EVLEventReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVLEventReport(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers33.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVLEventReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  STATUS() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  ERROR_MESSAGE(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  LOCATOR_CLASS() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  TARGET_OBJECT_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SCAN_START_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SCAN_STOP_EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EPOCH_TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Events in chronological order of START_EPOCH.
+   */
+  EVENTS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? (obj || new EVLEvent()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  eventsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Event-function evaluations actually performed, for step-independence
+   * evidence.
+   */
+  FUNCTION_EVALUATION_COUNT() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  EOP_DATA_SET_CID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  TRACE_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  static startEVLEventReport(builder) {
+    builder.startObject(11);
+  }
+  static addStatus(builder, STATUS) {
+    builder.addFieldInt8(0, STATUS, 0 /* UNSPECIFIED */);
+  }
+  static addErrorMessage(builder, ERROR_MESSAGEOffset) {
+    builder.addFieldOffset(1, ERROR_MESSAGEOffset, 0);
+  }
+  static addLocatorClass(builder, LOCATOR_CLASS) {
+    builder.addFieldInt8(2, LOCATOR_CLASS, 0 /* UNSPECIFIED */);
+  }
+  static addTargetObjectId(builder, TARGET_OBJECT_IDOffset) {
+    builder.addFieldOffset(3, TARGET_OBJECT_IDOffset, 0);
+  }
+  static addScanStartEpoch(builder, SCAN_START_EPOCHOffset) {
+    builder.addFieldOffset(4, SCAN_START_EPOCHOffset, 0);
+  }
+  static addScanStopEpoch(builder, SCAN_STOP_EPOCHOffset) {
+    builder.addFieldOffset(5, SCAN_STOP_EPOCHOffset, 0);
+  }
+  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
+    builder.addFieldOffset(6, EPOCH_TIME_SYSTEMOffset, 0);
+  }
+  static addEvents(builder, EVENTSOffset) {
+    builder.addFieldOffset(7, EVENTSOffset, 0);
+  }
+  static createEventsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startEventsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addFunctionEvaluationCount(builder, FUNCTION_EVALUATION_COUNT) {
+    builder.addFieldInt32(8, FUNCTION_EVALUATION_COUNT, 0);
+  }
+  static addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset) {
+    builder.addFieldOffset(9, EOP_DATA_SET_CIDOffset, 0);
+  }
+  static addTraceId(builder, TRACE_IDOffset) {
+    builder.addFieldOffset(10, TRACE_IDOffset, 0);
+  }
+  static endEVLEventReport(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createEVLEventReport(builder, STATUS, ERROR_MESSAGEOffset, LOCATOR_CLASS, TARGET_OBJECT_IDOffset, SCAN_START_EPOCHOffset, SCAN_STOP_EPOCHOffset, EPOCH_TIME_SYSTEMOffset, EVENTSOffset, FUNCTION_EVALUATION_COUNT, EOP_DATA_SET_CIDOffset, TRACE_IDOffset) {
+    _EVLEventReport.startEVLEventReport(builder);
+    _EVLEventReport.addStatus(builder, STATUS);
+    _EVLEventReport.addErrorMessage(builder, ERROR_MESSAGEOffset);
+    _EVLEventReport.addLocatorClass(builder, LOCATOR_CLASS);
+    _EVLEventReport.addTargetObjectId(builder, TARGET_OBJECT_IDOffset);
+    _EVLEventReport.addScanStartEpoch(builder, SCAN_START_EPOCHOffset);
+    _EVLEventReport.addScanStopEpoch(builder, SCAN_STOP_EPOCHOffset);
+    _EVLEventReport.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset);
+    _EVLEventReport.addEvents(builder, EVENTSOffset);
+    _EVLEventReport.addFunctionEvaluationCount(builder, FUNCTION_EVALUATION_COUNT);
+    _EVLEventReport.addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset);
+    _EVLEventReport.addTraceId(builder, TRACE_IDOffset);
+    return _EVLEventReport.endEVLEventReport(builder);
+  }
+  unpack() {
+    return new EVLEventReportT(
+      this.STATUS(),
+      this.ERROR_MESSAGE(),
+      this.LOCATOR_CLASS(),
+      this.TARGET_OBJECT_ID(),
+      this.SCAN_START_EPOCH(),
+      this.SCAN_STOP_EPOCH(),
+      this.EPOCH_TIME_SYSTEM(),
+      this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength()),
+      this.FUNCTION_EVALUATION_COUNT(),
+      this.EOP_DATA_SET_CID(),
+      this.TRACE_ID()
+    );
+  }
+  unpackTo(_o) {
+    _o.STATUS = this.STATUS();
+    _o.ERROR_MESSAGE = this.ERROR_MESSAGE();
+    _o.LOCATOR_CLASS = this.LOCATOR_CLASS();
+    _o.TARGET_OBJECT_ID = this.TARGET_OBJECT_ID();
+    _o.SCAN_START_EPOCH = this.SCAN_START_EPOCH();
+    _o.SCAN_STOP_EPOCH = this.SCAN_STOP_EPOCH();
+    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
+    _o.EVENTS = this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength());
+    _o.FUNCTION_EVALUATION_COUNT = this.FUNCTION_EVALUATION_COUNT();
+    _o.EOP_DATA_SET_CID = this.EOP_DATA_SET_CID();
+    _o.TRACE_ID = this.TRACE_ID();
+  }
+};
+var EVLEventReportT = class {
+  constructor(STATUS = 0 /* UNSPECIFIED */, ERROR_MESSAGE = null, LOCATOR_CLASS = 0 /* UNSPECIFIED */, TARGET_OBJECT_ID = null, SCAN_START_EPOCH = null, SCAN_STOP_EPOCH = null, EPOCH_TIME_SYSTEM = null, EVENTS = [], FUNCTION_EVALUATION_COUNT = 0, EOP_DATA_SET_CID = null, TRACE_ID = null) {
+    this.STATUS = STATUS;
+    this.ERROR_MESSAGE = ERROR_MESSAGE;
+    this.LOCATOR_CLASS = LOCATOR_CLASS;
+    this.TARGET_OBJECT_ID = TARGET_OBJECT_ID;
+    this.SCAN_START_EPOCH = SCAN_START_EPOCH;
+    this.SCAN_STOP_EPOCH = SCAN_STOP_EPOCH;
+    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
+    this.EVENTS = EVENTS;
+    this.FUNCTION_EVALUATION_COUNT = FUNCTION_EVALUATION_COUNT;
+    this.EOP_DATA_SET_CID = EOP_DATA_SET_CID;
+    this.TRACE_ID = TRACE_ID;
+  }
+  pack(builder) {
+    const ERROR_MESSAGE = this.ERROR_MESSAGE !== null ? builder.createString(this.ERROR_MESSAGE) : 0;
+    const TARGET_OBJECT_ID = this.TARGET_OBJECT_ID !== null ? builder.createString(this.TARGET_OBJECT_ID) : 0;
+    const SCAN_START_EPOCH = this.SCAN_START_EPOCH !== null ? builder.createString(this.SCAN_START_EPOCH) : 0;
+    const SCAN_STOP_EPOCH = this.SCAN_STOP_EPOCH !== null ? builder.createString(this.SCAN_STOP_EPOCH) : 0;
+    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
+    const EVENTS = EVLEventReport.createEventsVector(builder, builder.createObjectOffsetList(this.EVENTS));
+    const EOP_DATA_SET_CID = this.EOP_DATA_SET_CID !== null ? builder.createString(this.EOP_DATA_SET_CID) : 0;
+    const TRACE_ID = this.TRACE_ID !== null ? builder.createString(this.TRACE_ID) : 0;
+    return EVLEventReport.createEVLEventReport(
+      builder,
+      this.STATUS,
+      ERROR_MESSAGE,
+      this.LOCATOR_CLASS,
+      TARGET_OBJECT_ID,
+      SCAN_START_EPOCH,
+      SCAN_STOP_EPOCH,
+      EPOCH_TIME_SYSTEM,
+      EVENTS,
+      this.FUNCTION_EVALUATION_COUNT,
+      EOP_DATA_SET_CID,
+      TRACE_ID
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/EVL.ts
+var EVL = class _EVL {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsEVL(bb, obj) {
+    return (obj || new _EVL()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsEVL(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers34.SIZE_PREFIX_LENGTH);
+    return (obj || new _EVL()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static bufferHasIdentifier(bb) {
+    return bb.__has_identifier("$EVL");
+  }
+  LOCATION_REQUEST(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? (obj || new EVLEventLocationRequest()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  EVENT_REPORT(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? (obj || new EVLEventReport()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startEVL(builder) {
+    builder.startObject(2);
+  }
+  static addLocationRequest(builder, LOCATION_REQUESTOffset) {
+    builder.addFieldOffset(0, LOCATION_REQUESTOffset, 0);
+  }
+  static addEventReport(builder, EVENT_REPORTOffset) {
+    builder.addFieldOffset(1, EVENT_REPORTOffset, 0);
+  }
+  static endEVL(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static finishEVLBuffer(builder, offset) {
+    builder.finish(offset, "$EVL");
+  }
+  static finishSizePrefixedEVLBuffer(builder, offset) {
+    builder.finish(offset, "$EVL", true);
+  }
+  unpack() {
+    return new EVLT(
+      this.LOCATION_REQUEST() !== null ? this.LOCATION_REQUEST().unpack() : null,
+      this.EVENT_REPORT() !== null ? this.EVENT_REPORT().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.LOCATION_REQUEST = this.LOCATION_REQUEST() !== null ? this.LOCATION_REQUEST().unpack() : null;
+    _o.EVENT_REPORT = this.EVENT_REPORT() !== null ? this.EVENT_REPORT().unpack() : null;
+  }
+};
+var EVLT = class {
+  constructor(LOCATION_REQUEST = null, EVENT_REPORT = null) {
+    this.LOCATION_REQUEST = LOCATION_REQUEST;
+    this.EVENT_REPORT = EVENT_REPORT;
+  }
+  pack(builder) {
+    const LOCATION_REQUEST = this.LOCATION_REQUEST !== null ? this.LOCATION_REQUEST.pack(builder) : 0;
+    const EVENT_REPORT = this.EVENT_REPORT !== null ? this.EVENT_REPORT.pack(builder) : 0;
+    EVL.startEVL(builder);
+    EVL.addLocationRequest(builder, LOCATION_REQUEST);
+    EVL.addEventReport(builder, EVENT_REPORT);
+    return EVL.endEVL(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/F107DataType.ts
+var F107DataType = /* @__PURE__ */ ((F107DataType2) => {
+  F107DataType2[F107DataType2["OBS"] = 0] = "OBS";
+  F107DataType2[F107DataType2["INT"] = 1] = "INT";
+  F107DataType2[F107DataType2["PRD"] = 2] = "PRD";
+  F107DataType2[F107DataType2["PRM"] = 3] = "PRM";
+  return F107DataType2;
+})(F107DataType || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FluxQualifier.ts
+var FluxQualifier = /* @__PURE__ */ ((FluxQualifier2) => {
+  FluxQualifier2[FluxQualifier2["OBSERVED"] = 0] = "OBSERVED";
+  FluxQualifier2[FluxQualifier2["BURST_ADJUSTED"] = 1] = "BURST_ADJUSTED";
+  FluxQualifier2[FluxQualifier2["INTERPOLATED_EXTRAPOLATED"] = 2] = "INTERPOLATED_EXTRAPOLATED";
+  FluxQualifier2[FluxQualifier2["NO_OBSERVATION"] = 3] = "NO_OBSERVATION";
+  FluxQualifier2[FluxQualifier2["PROVIDER_INTERPOLATED"] = 4] = "PROVIDER_INTERPOLATED";
+  return FluxQualifier2;
+})(FluxQualifier || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRM.ts
+import * as flatbuffers39 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformRequest.ts
+import * as flatbuffers37 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMMatrix3.ts
+import * as flatbuffers35 from "flatbuffers";
+var FRMMatrix3 = class _FRMMatrix3 {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsFRMMatrix3(bb, obj) {
+    return (obj || new _FRMMatrix3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsFRMMatrix3(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers35.SIZE_PREFIX_LENGTH);
+    return (obj || new _FRMMatrix3()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  M11() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M12() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M13() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M21() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M22() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M23() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M31() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M32() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  M33() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startFRMMatrix3(builder) {
+    builder.startObject(9);
+  }
+  static addM11(builder, M11) {
+    builder.addFieldFloat64(0, M11, 0);
+  }
+  static addM12(builder, M12) {
+    builder.addFieldFloat64(1, M12, 0);
+  }
+  static addM13(builder, M13) {
+    builder.addFieldFloat64(2, M13, 0);
+  }
+  static addM21(builder, M21) {
+    builder.addFieldFloat64(3, M21, 0);
+  }
+  static addM22(builder, M22) {
+    builder.addFieldFloat64(4, M22, 0);
+  }
+  static addM23(builder, M23) {
+    builder.addFieldFloat64(5, M23, 0);
+  }
+  static addM31(builder, M31) {
+    builder.addFieldFloat64(6, M31, 0);
+  }
+  static addM32(builder, M32) {
+    builder.addFieldFloat64(7, M32, 0);
+  }
+  static addM33(builder, M33) {
+    builder.addFieldFloat64(8, M33, 0);
+  }
+  static endFRMMatrix3(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createFRMMatrix3(builder, M11, M12, M13, M21, M22, M23, M31, M32, M33) {
+    _FRMMatrix3.startFRMMatrix3(builder);
+    _FRMMatrix3.addM11(builder, M11);
+    _FRMMatrix3.addM12(builder, M12);
+    _FRMMatrix3.addM13(builder, M13);
+    _FRMMatrix3.addM21(builder, M21);
+    _FRMMatrix3.addM22(builder, M22);
+    _FRMMatrix3.addM23(builder, M23);
+    _FRMMatrix3.addM31(builder, M31);
+    _FRMMatrix3.addM32(builder, M32);
+    _FRMMatrix3.addM33(builder, M33);
+    return _FRMMatrix3.endFRMMatrix3(builder);
+  }
+  unpack() {
+    return new FRMMatrix3T(
+      this.M11(),
+      this.M12(),
+      this.M13(),
+      this.M21(),
+      this.M22(),
+      this.M23(),
+      this.M31(),
+      this.M32(),
+      this.M33()
+    );
+  }
+  unpackTo(_o) {
+    _o.M11 = this.M11();
+    _o.M12 = this.M12();
+    _o.M13 = this.M13();
+    _o.M21 = this.M21();
+    _o.M22 = this.M22();
+    _o.M23 = this.M23();
+    _o.M31 = this.M31();
+    _o.M32 = this.M32();
+    _o.M33 = this.M33();
+  }
+};
+var FRMMatrix3T = class {
+  constructor(M11 = 0, M12 = 0, M13 = 0, M21 = 0, M22 = 0, M23 = 0, M31 = 0, M32 = 0, M33 = 0) {
+    this.M11 = M11;
+    this.M12 = M12;
+    this.M13 = M13;
+    this.M21 = M21;
+    this.M22 = M22;
+    this.M23 = M23;
+    this.M31 = M31;
+    this.M32 = M32;
+    this.M33 = M33;
+  }
+  pack(builder) {
+    return FRMMatrix3.createFRMMatrix3(
+      builder,
+      this.M11,
+      this.M12,
+      this.M13,
+      this.M21,
+      this.M22,
+      this.M23,
+      this.M31,
+      this.M32,
+      this.M33
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
+import * as flatbuffers36 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/frmStateRepresentation.ts
+var frmStateRepresentation = /* @__PURE__ */ ((frmStateRepresentation2) => {
+  frmStateRepresentation2[frmStateRepresentation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  frmStateRepresentation2[frmStateRepresentation2["CARTESIAN"] = 1] = "CARTESIAN";
+  frmStateRepresentation2[frmStateRepresentation2["KEPLERIAN"] = 2] = "KEPLERIAN";
+  frmStateRepresentation2[frmStateRepresentation2["MODIFIED_KEPLERIAN"] = 3] = "MODIFIED_KEPLERIAN";
+  frmStateRepresentation2[frmStateRepresentation2["SPHERICAL_AZFPA"] = 4] = "SPHERICAL_AZFPA";
+  frmStateRepresentation2[frmStateRepresentation2["SPHERICAL_RADEC"] = 5] = "SPHERICAL_RADEC";
+  frmStateRepresentation2[frmStateRepresentation2["EQUINOCTIAL"] = 6] = "EQUINOCTIAL";
+  frmStateRepresentation2[frmStateRepresentation2["MODIFIED_EQUINOCTIAL"] = 7] = "MODIFIED_EQUINOCTIAL";
+  frmStateRepresentation2[frmStateRepresentation2["ALTERNATE_EQUINOCTIAL"] = 8] = "ALTERNATE_EQUINOCTIAL";
+  frmStateRepresentation2[frmStateRepresentation2["DELAUNAY"] = 9] = "DELAUNAY";
+  frmStateRepresentation2[frmStateRepresentation2["PLANETODETIC"] = 10] = "PLANETODETIC";
+  frmStateRepresentation2[frmStateRepresentation2["INCOMING_ASYMPTOTE"] = 11] = "INCOMING_ASYMPTOTE";
+  frmStateRepresentation2[frmStateRepresentation2["OUTGOING_ASYMPTOTE"] = 12] = "OUTGOING_ASYMPTOTE";
+  frmStateRepresentation2[frmStateRepresentation2["BROUWER_MEAN_SHORT"] = 13] = "BROUWER_MEAN_SHORT";
+  frmStateRepresentation2[frmStateRepresentation2["BROUWER_MEAN_LONG"] = 14] = "BROUWER_MEAN_LONG";
+  return frmStateRepresentation2;
+})(frmStateRepresentation || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/FRMStateVector.ts
+var FRMStateVector = class _FRMStateVector {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsFRMStateVector(bb, obj) {
+    return (obj || new _FRMStateVector()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsFRMStateVector(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers36.SIZE_PREFIX_LENGTH);
+    return (obj || new _FRMStateVector()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  REPRESENTATION() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * The 6 element values of REPRESENTATION, SI units and radians.
+   */
+  ELEMENTS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  elementsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  elementsArray() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Cartesian position, metres.
+   */
+  POSITION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Cartesian velocity, metres per second.
+   */
+  VELOCITY(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  COORDINATE_SYSTEM_NAME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EPOCH(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  EPOCH_TIME_SYSTEM(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Gravitational parameter, m^3/s^2, of the origin body when the element
+   * set requires one. Absent means the provider's default for the origin.
+   */
+  GRAVITATIONAL_PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startFRMStateVector(builder) {
+    builder.startObject(8);
+  }
+  static addRepresentation(builder, REPRESENTATION) {
+    builder.addFieldInt8(0, REPRESENTATION, 0 /* UNSPECIFIED */);
+  }
+  static addElements(builder, ELEMENTSOffset) {
+    builder.addFieldOffset(1, ELEMENTSOffset, 0);
+  }
+  static createElementsVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startElementsVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addPosition(builder, POSITIONOffset) {
+    builder.addFieldOffset(2, POSITIONOffset, 0);
+  }
+  static addVelocity(builder, VELOCITYOffset) {
+    builder.addFieldOffset(3, VELOCITYOffset, 0);
+  }
+  static addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAMEOffset) {
+    builder.addFieldOffset(4, COORDINATE_SYSTEM_NAMEOffset, 0);
+  }
+  static addEpoch(builder, EPOCHOffset) {
+    builder.addFieldOffset(5, EPOCHOffset, 0);
+  }
+  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
+    builder.addFieldOffset(6, EPOCH_TIME_SYSTEMOffset, 0);
+  }
+  static addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER) {
+    builder.addFieldFloat64(7, GRAVITATIONAL_PARAMETER, 0);
+  }
+  static endFRMStateVector(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new FRMStateVectorT(
+      this.REPRESENTATION(),
+      this.bb.createScalarList(this.ELEMENTS.bind(this), this.elementsLength()),
+      this.POSITION() !== null ? this.POSITION().unpack() : null,
+      this.VELOCITY() !== null ? this.VELOCITY().unpack() : null,
+      this.COORDINATE_SYSTEM_NAME(),
+      this.EPOCH(),
+      this.EPOCH_TIME_SYSTEM(),
+      this.GRAVITATIONAL_PARAMETER()
+    );
+  }
+  unpackTo(_o) {
+    _o.REPRESENTATION = this.REPRESENTATION();
+    _o.ELEMENTS = this.bb.createScalarList(this.ELEMENTS.bind(this), this.elementsLength());
+    _o.POSITION = this.POSITION() !== null ? this.POSITION().unpack() : null;
+    _o.VELOCITY = this.VELOCITY() !== null ? this.VELOCITY().unpack() : null;
+    _o.COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME();
+    _o.EPOCH = this.EPOCH();
+    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
+    _o.GRAVITATIONAL_PARAMETER = this.GRAVITATIONAL_PARAMETER();
+  }
+};
+var FRMStateVectorT = class {
+  constructor(REPRESENTATION = 0 /* UNSPECIFIED */, ELEMENTS = [], POSITION = null, VELOCITY = null, COORDINATE_SYSTEM_NAME = null, EPOCH = null, EPOCH_TIME_SYSTEM = null, GRAVITATIONAL_PARAMETER = 0) {
+    this.REPRESENTATION = REPRESENTATION;
+    this.ELEMENTS = ELEMENTS;
+    this.POSITION = POSITION;
+    this.VELOCITY = VELOCITY;
+    this.COORDINATE_SYSTEM_NAME = COORDINATE_SYSTEM_NAME;
+    this.EPOCH = EPOCH;
+    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
+    this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
+  }
+  pack(builder) {
+    const ELEMENTS = FRMStateVector.createElementsVector(builder, this.ELEMENTS);
+    const POSITION = this.POSITION !== null ? this.POSITION.pack(builder) : 0;
+    const VELOCITY = this.VELOCITY !== null ? this.VELOCITY.pack(builder) : 0;
+    const COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.COORDINATE_SYSTEM_NAME) : 0;
+    const EPOCH = this.EPOCH !== null ? builder.createString(this.EPOCH) : 0;
+    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
+    FRMStateVector.startFRMStateVector(builder);
+    FRMStateVector.addRepresentation(builder, this.REPRESENTATION);
+    FRMStateVector.addElements(builder, ELEMENTS);
+    FRMStateVector.addPosition(builder, POSITION);
+    FRMStateVector.addVelocity(builder, VELOCITY);
+    FRMStateVector.addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAME);
+    FRMStateVector.addEpoch(builder, EPOCH);
+    FRMStateVector.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEM);
+    FRMStateVector.addGravitationalParameter(builder, this.GRAVITATIONAL_PARAMETER);
+    return FRMStateVector.endFRMStateVector(builder);
   }
 };
 
@@ -4034,7 +7515,7 @@ var FRMFrameTransformRequest = class _FRMFrameTransformRequest {
     return (obj || new _FRMFrameTransformRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsFRMFrameTransformRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers19.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers37.SIZE_PREFIX_LENGTH);
     return (obj || new _FRMFrameTransformRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   OPERATION() {
@@ -4226,7 +7707,7 @@ var FRMFrameTransformRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/FRMFrameTransformResult.ts
-import * as flatbuffers20 from "flatbuffers";
+import * as flatbuffers38 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/frmResultStatus.ts
 var frmResultStatus = /* @__PURE__ */ ((frmResultStatus2) => {
@@ -4253,7 +7734,7 @@ var FRMFrameTransformResult = class _FRMFrameTransformResult {
     return (obj || new _FRMFrameTransformResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsFRMFrameTransformResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers20.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers38.SIZE_PREFIX_LENGTH);
     return (obj || new _FRMFrameTransformResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATUS() {
@@ -4426,7 +7907,7 @@ var FRM = class _FRM {
     return (obj || new _FRM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsFRM(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers21.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers39.SIZE_PREFIX_LENGTH);
     return (obj || new _FRM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -4486,7 +7967,7 @@ var FRMT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/LCC.ts
-import * as flatbuffers22 from "flatbuffers";
+import * as flatbuffers40 from "flatbuffers";
 var LCC = class _LCC {
   bb = null;
   bb_pos = 0;
@@ -4499,7 +7980,7 @@ var LCC = class _LCC {
     return (obj || new _LCC()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsLCC(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers22.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers40.SIZE_PREFIX_LENGTH);
     return (obj || new _LCC()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -4646,193 +8127,10 @@ var maneuverStatus = /* @__PURE__ */ ((maneuverStatus2) => {
 })(maneuverStatus || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/MNV.ts
-import * as flatbuffers25 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
-import * as flatbuffers23 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pvnLicenseClass.ts
-var pvnLicenseClass = /* @__PURE__ */ ((pvnLicenseClass2) => {
-  pvnLicenseClass2[pvnLicenseClass2["Unspecified"] = 0] = "Unspecified";
-  pvnLicenseClass2[pvnLicenseClass2["Reproducible"] = 1] = "Reproducible";
-  pvnLicenseClass2[pvnLicenseClass2["CiteOnly"] = 2] = "CiteOnly";
-  pvnLicenseClass2[pvnLicenseClass2["ShareAlike"] = 3] = "ShareAlike";
-  pvnLicenseClass2[pvnLicenseClass2["NonCommercial"] = 4] = "NonCommercial";
-  return pvnLicenseClass2;
-})(pvnLicenseClass || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pvnSourceKind.ts
-var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
-  pvnSourceKind2[pvnSourceKind2["Unspecified"] = 0] = "Unspecified";
-  pvnSourceKind2[pvnSourceKind2["ElementSet"] = 1] = "ElementSet";
-  pvnSourceKind2[pvnSourceKind2["Ephemeris"] = 2] = "Ephemeris";
-  pvnSourceKind2[pvnSourceKind2["Observation"] = 3] = "Observation";
-  return pvnSourceKind2;
-})(pvnSourceKind || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PVN.ts
-var PVN = class _PVN {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPVN(bb, obj) {
-    return (obj || new _PVN()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPVN(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers23.SIZE_PREFIX_LENGTH);
-    return (obj || new _PVN()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static bufferHasIdentifier(bb) {
-    return bb.__has_identifier("$PVN");
-  }
-  SOURCE_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * What kind of data the source supplies.
-   */
-  SOURCE_KIND() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* Unspecified */;
-  }
-  ORIGINATOR(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  PROVIDER_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  PRODUCER(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * What the source's terms permit for the product.
-   */
-  LICENSE_CLASS() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* Unspecified */;
-  }
-  LICENSE_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  LINEAGE(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  static startPVN(builder) {
-    builder.startObject(8);
-  }
-  static addSourceId(builder, SOURCE_IDOffset) {
-    builder.addFieldOffset(0, SOURCE_IDOffset, 0);
-  }
-  static addSourceKind(builder, SOURCE_KIND) {
-    builder.addFieldInt8(1, SOURCE_KIND, 0 /* Unspecified */);
-  }
-  static addOriginator(builder, ORIGINATOROffset) {
-    builder.addFieldOffset(2, ORIGINATOROffset, 0);
-  }
-  static addProviderId(builder, PROVIDER_IDOffset) {
-    builder.addFieldOffset(3, PROVIDER_IDOffset, 0);
-  }
-  static addProducer(builder, PRODUCEROffset) {
-    builder.addFieldOffset(4, PRODUCEROffset, 0);
-  }
-  static addLicenseClass(builder, LICENSE_CLASS) {
-    builder.addFieldInt8(5, LICENSE_CLASS, 0 /* Unspecified */);
-  }
-  static addLicenseId(builder, LICENSE_IDOffset) {
-    builder.addFieldOffset(6, LICENSE_IDOffset, 0);
-  }
-  static addLineage(builder, LINEAGEOffset) {
-    builder.addFieldOffset(7, LINEAGEOffset, 0);
-  }
-  static endPVN(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static finishPVNBuffer(builder, offset) {
-    builder.finish(offset, "$PVN");
-  }
-  static finishSizePrefixedPVNBuffer(builder, offset) {
-    builder.finish(offset, "$PVN", true);
-  }
-  static createPVN(builder, SOURCE_IDOffset, SOURCE_KIND, ORIGINATOROffset, PROVIDER_IDOffset, PRODUCEROffset, LICENSE_CLASS, LICENSE_IDOffset, LINEAGEOffset) {
-    _PVN.startPVN(builder);
-    _PVN.addSourceId(builder, SOURCE_IDOffset);
-    _PVN.addSourceKind(builder, SOURCE_KIND);
-    _PVN.addOriginator(builder, ORIGINATOROffset);
-    _PVN.addProviderId(builder, PROVIDER_IDOffset);
-    _PVN.addProducer(builder, PRODUCEROffset);
-    _PVN.addLicenseClass(builder, LICENSE_CLASS);
-    _PVN.addLicenseId(builder, LICENSE_IDOffset);
-    _PVN.addLineage(builder, LINEAGEOffset);
-    return _PVN.endPVN(builder);
-  }
-  unpack() {
-    return new PVNT(
-      this.SOURCE_ID(),
-      this.SOURCE_KIND(),
-      this.ORIGINATOR(),
-      this.PROVIDER_ID(),
-      this.PRODUCER(),
-      this.LICENSE_CLASS(),
-      this.LICENSE_ID(),
-      this.LINEAGE()
-    );
-  }
-  unpackTo(_o) {
-    _o.SOURCE_ID = this.SOURCE_ID();
-    _o.SOURCE_KIND = this.SOURCE_KIND();
-    _o.ORIGINATOR = this.ORIGINATOR();
-    _o.PROVIDER_ID = this.PROVIDER_ID();
-    _o.PRODUCER = this.PRODUCER();
-    _o.LICENSE_CLASS = this.LICENSE_CLASS();
-    _o.LICENSE_ID = this.LICENSE_ID();
-    _o.LINEAGE = this.LINEAGE();
-  }
-};
-var PVNT = class {
-  constructor(SOURCE_ID = null, SOURCE_KIND = 0 /* Unspecified */, ORIGINATOR = null, PROVIDER_ID = null, PRODUCER = null, LICENSE_CLASS = 0 /* Unspecified */, LICENSE_ID = null, LINEAGE = null) {
-    this.SOURCE_ID = SOURCE_ID;
-    this.SOURCE_KIND = SOURCE_KIND;
-    this.ORIGINATOR = ORIGINATOR;
-    this.PROVIDER_ID = PROVIDER_ID;
-    this.PRODUCER = PRODUCER;
-    this.LICENSE_CLASS = LICENSE_CLASS;
-    this.LICENSE_ID = LICENSE_ID;
-    this.LINEAGE = LINEAGE;
-  }
-  pack(builder) {
-    const SOURCE_ID = this.SOURCE_ID !== null ? builder.createString(this.SOURCE_ID) : 0;
-    const ORIGINATOR = this.ORIGINATOR !== null ? builder.createString(this.ORIGINATOR) : 0;
-    const PROVIDER_ID = this.PROVIDER_ID !== null ? builder.createString(this.PROVIDER_ID) : 0;
-    const PRODUCER = this.PRODUCER !== null ? builder.createString(this.PRODUCER) : 0;
-    const LICENSE_ID = this.LICENSE_ID !== null ? builder.createString(this.LICENSE_ID) : 0;
-    const LINEAGE = this.LINEAGE !== null ? builder.createString(this.LINEAGE) : 0;
-    return PVN.createPVN(
-      builder,
-      SOURCE_ID,
-      this.SOURCE_KIND,
-      ORIGINATOR,
-      PROVIDER_ID,
-      PRODUCER,
-      this.LICENSE_CLASS,
-      LICENSE_ID,
-      LINEAGE
-    );
-  }
-};
+import * as flatbuffers42 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/mnvOrbitalState.ts
-import * as flatbuffers24 from "flatbuffers";
+import * as flatbuffers41 from "flatbuffers";
 var mnvOrbitalState = class _mnvOrbitalState {
   bb = null;
   bb_pos = 0;
@@ -4845,7 +8143,7 @@ var mnvOrbitalState = class _mnvOrbitalState {
     return (obj || new _mnvOrbitalState()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsmnvOrbitalState(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers24.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers41.SIZE_PREFIX_LENGTH);
     return (obj || new _mnvOrbitalState()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ID_ELSET(optionalEncoding) {
@@ -5241,7 +8539,7 @@ var MNV = class _MNV {
     return (obj || new _MNV()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsMNV(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers25.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers42.SIZE_PREFIX_LENGTH);
     return (obj || new _MNV()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -5986,10 +9284,10 @@ var MNVT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/NCD.ts
-import * as flatbuffers30 from "flatbuffers";
+import * as flatbuffers47 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/NCDCode500Header.ts
-import * as flatbuffers26 from "flatbuffers";
+import * as flatbuffers43 from "flatbuffers";
 var NCDCode500Header = class _NCDCode500Header {
   bb = null;
   bb_pos = 0;
@@ -6002,7 +9300,7 @@ var NCDCode500Header = class _NCDCode500Header {
     return (obj || new _NCDCode500Header()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsNCDCode500Header(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers26.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers43.SIZE_PREFIX_LENGTH);
     return (obj || new _NCDCode500Header()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SATELLITE_NAME(optionalEncoding) {
@@ -6165,7 +9463,7 @@ var NCDCode500HeaderT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/NCDSP3Header.ts
-import * as flatbuffers27 from "flatbuffers";
+import * as flatbuffers44 from "flatbuffers";
 var NCDSP3Header = class _NCDSP3Header {
   bb = null;
   bb_pos = 0;
@@ -6178,7 +9476,7 @@ var NCDSP3Header = class _NCDSP3Header {
     return (obj || new _NCDSP3Header()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsNCDSP3Header(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers27.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers44.SIZE_PREFIX_LENGTH);
     return (obj || new _NCDSP3Header()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   FILE_TYPE(optionalEncoding) {
@@ -6511,7 +9809,7 @@ var NCDSP3HeaderT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/NCDScenarioEpochContainer.ts
-import * as flatbuffers28 from "flatbuffers";
+import * as flatbuffers45 from "flatbuffers";
 var NCDScenarioEpochContainer = class _NCDScenarioEpochContainer {
   bb = null;
   bb_pos = 0;
@@ -6524,7 +9822,7 @@ var NCDScenarioEpochContainer = class _NCDScenarioEpochContainer {
     return (obj || new _NCDScenarioEpochContainer()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsNCDScenarioEpochContainer(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers28.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers45.SIZE_PREFIX_LENGTH);
     return (obj || new _NCDScenarioEpochContainer()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SCENARIO_EPOCH(optionalEncoding) {
@@ -6713,7 +10011,7 @@ var NCDScenarioEpochContainerT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/NCDSegmentDescriptor.ts
-import * as flatbuffers29 from "flatbuffers";
+import * as flatbuffers46 from "flatbuffers";
 var NCDSegmentDescriptor = class _NCDSegmentDescriptor {
   bb = null;
   bb_pos = 0;
@@ -6726,7 +10024,7 @@ var NCDSegmentDescriptor = class _NCDSegmentDescriptor {
     return (obj || new _NCDSegmentDescriptor()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsNCDSegmentDescriptor(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers29.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers46.SIZE_PREFIX_LENGTH);
     return (obj || new _NCDSegmentDescriptor()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   NAME(optionalEncoding) {
@@ -6978,6 +10276,11 @@ var ncdContainerFormat = /* @__PURE__ */ ((ncdContainerFormat2) => {
   ncdContainerFormat2[ncdContainerFormat2["CCSDS_ACM_XML"] = 24] = "CCSDS_ACM_XML";
   ncdContainerFormat2[ncdContainerFormat2["CCSDS_RDM_KVN"] = 25] = "CCSDS_RDM_KVN";
   ncdContainerFormat2[ncdContainerFormat2["CCSDS_RDM_XML"] = 26] = "CCSDS_RDM_XML";
+  ncdContainerFormat2[ncdContainerFormat2["SENTINEL_EOF_XML"] = 27] = "SENTINEL_EOF_XML";
+  ncdContainerFormat2[ncdContainerFormat2["NAIF_CK_DAF"] = 28] = "NAIF_CK_DAF";
+  ncdContainerFormat2[ncdContainerFormat2["NAIF_SCLK_KERNEL"] = 29] = "NAIF_SCLK_KERNEL";
+  ncdContainerFormat2[ncdContainerFormat2["RINEX_OBS"] = 30] = "RINEX_OBS";
+  ncdContainerFormat2[ncdContainerFormat2["RINEX_NAV"] = 31] = "RINEX_NAV";
   ncdContainerFormat2[ncdContainerFormat2["PROVIDER_DEFINED"] = 255] = "PROVIDER_DEFINED";
   return ncdContainerFormat2;
 })(ncdContainerFormat || {});
@@ -6995,7 +10298,7 @@ var NCD = class _NCD {
     return (obj || new _NCD()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsNCD(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers30.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers47.SIZE_PREFIX_LENGTH);
     return (obj || new _NCD()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -7112,8 +10415,47 @@ var NCD = class _NCD {
     const offset = this.bb.__offset(this.bb_pos, 42);
     return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
   }
+  SELECT_START_TIME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 44);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SELECT_STOP_TIME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 46);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Thin the output to this spacing, seconds; 0 keeps every sample. Default 0.
+   */
+  SELECT_SAMPLE_INTERVAL_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 48);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  SELECT_SATELLITE_SYSTEMS(index, optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 50);
+    return offset ? this.bb.__string(this.bb.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+  }
+  selectSatelliteSystemsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 50);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  SELECT_OBSERVATION_CODES(index, optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 52);
+    return offset ? this.bb.__string(this.bb.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+  }
+  selectObservationCodesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 52);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Spacecraft clock id (for example -76) of a clock kernel to read; 0 selects
+   * by the instrument id. Default 0.
+   */
+  SELECT_CLOCK_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 54);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
   static startNCD(builder) {
-    builder.startObject(20);
+    builder.startObject(26);
   }
   static addFormat(builder, FORMAT) {
     builder.addFieldInt8(0, FORMAT, 0 /* UNSPECIFIED */);
@@ -7195,6 +10537,44 @@ var NCD = class _NCD {
   static addSourceCid(builder, SOURCE_CIDOffset) {
     builder.addFieldOffset(19, SOURCE_CIDOffset, 0);
   }
+  static addSelectStartTime(builder, SELECT_START_TIMEOffset) {
+    builder.addFieldOffset(20, SELECT_START_TIMEOffset, 0);
+  }
+  static addSelectStopTime(builder, SELECT_STOP_TIMEOffset) {
+    builder.addFieldOffset(21, SELECT_STOP_TIMEOffset, 0);
+  }
+  static addSelectSampleIntervalSeconds(builder, SELECT_SAMPLE_INTERVAL_SECONDS) {
+    builder.addFieldFloat64(22, SELECT_SAMPLE_INTERVAL_SECONDS, 0);
+  }
+  static addSelectSatelliteSystems(builder, SELECT_SATELLITE_SYSTEMSOffset) {
+    builder.addFieldOffset(23, SELECT_SATELLITE_SYSTEMSOffset, 0);
+  }
+  static createSelectSatelliteSystemsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startSelectSatelliteSystemsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addSelectObservationCodes(builder, SELECT_OBSERVATION_CODESOffset) {
+    builder.addFieldOffset(24, SELECT_OBSERVATION_CODESOffset, 0);
+  }
+  static createSelectObservationCodesVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startSelectObservationCodesVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addSelectClockId(builder, SELECT_CLOCK_ID) {
+    builder.addFieldInt32(25, SELECT_CLOCK_ID, 0);
+  }
   static endNCD(builder) {
     const offset = builder.endObject();
     return offset;
@@ -7226,7 +10606,13 @@ var NCD = class _NCD {
       this.STOP_TIME(),
       this.SOURCE_BYTE_LENGTH(),
       this.SOURCE_SHA256(),
-      this.SOURCE_CID()
+      this.SOURCE_CID(),
+      this.SELECT_START_TIME(),
+      this.SELECT_STOP_TIME(),
+      this.SELECT_SAMPLE_INTERVAL_SECONDS(),
+      this.bb.createScalarList(this.SELECT_SATELLITE_SYSTEMS.bind(this), this.selectSatelliteSystemsLength()),
+      this.bb.createScalarList(this.SELECT_OBSERVATION_CODES.bind(this), this.selectObservationCodesLength()),
+      this.SELECT_CLOCK_ID()
     );
   }
   unpackTo(_o) {
@@ -7250,10 +10636,16 @@ var NCD = class _NCD {
     _o.SOURCE_BYTE_LENGTH = this.SOURCE_BYTE_LENGTH();
     _o.SOURCE_SHA256 = this.SOURCE_SHA256();
     _o.SOURCE_CID = this.SOURCE_CID();
+    _o.SELECT_START_TIME = this.SELECT_START_TIME();
+    _o.SELECT_STOP_TIME = this.SELECT_STOP_TIME();
+    _o.SELECT_SAMPLE_INTERVAL_SECONDS = this.SELECT_SAMPLE_INTERVAL_SECONDS();
+    _o.SELECT_SATELLITE_SYSTEMS = this.bb.createScalarList(this.SELECT_SATELLITE_SYSTEMS.bind(this), this.selectSatelliteSystemsLength());
+    _o.SELECT_OBSERVATION_CODES = this.bb.createScalarList(this.SELECT_OBSERVATION_CODES.bind(this), this.selectObservationCodesLength());
+    _o.SELECT_CLOCK_ID = this.SELECT_CLOCK_ID();
   }
 };
 var NCDT = class {
-  constructor(FORMAT = 0 /* UNSPECIFIED */, PROVIDER_DEFINED_FORMAT_NAME = null, FORMAT_VERSION = null, PRODUCER = null, CREATION_DATE = null, ORIGINATOR = null, INTERNAL_FILE_NAME = null, COMMENT_AREA = [], NATIVE_FRAME_NAME = null, NATIVE_FRAME_ID = 0, NATIVE_TIME_SYSTEM = null, SEGMENTS = [], SP3_HEADER = null, SCENARIO_CONTAINER = null, CODE_500_HEADER = null, START_TIME = null, STOP_TIME = null, SOURCE_BYTE_LENGTH = BigInt("0"), SOURCE_SHA256 = null, SOURCE_CID = null) {
+  constructor(FORMAT = 0 /* UNSPECIFIED */, PROVIDER_DEFINED_FORMAT_NAME = null, FORMAT_VERSION = null, PRODUCER = null, CREATION_DATE = null, ORIGINATOR = null, INTERNAL_FILE_NAME = null, COMMENT_AREA = [], NATIVE_FRAME_NAME = null, NATIVE_FRAME_ID = 0, NATIVE_TIME_SYSTEM = null, SEGMENTS = [], SP3_HEADER = null, SCENARIO_CONTAINER = null, CODE_500_HEADER = null, START_TIME = null, STOP_TIME = null, SOURCE_BYTE_LENGTH = BigInt("0"), SOURCE_SHA256 = null, SOURCE_CID = null, SELECT_START_TIME = null, SELECT_STOP_TIME = null, SELECT_SAMPLE_INTERVAL_SECONDS = 0, SELECT_SATELLITE_SYSTEMS = [], SELECT_OBSERVATION_CODES = [], SELECT_CLOCK_ID = 0) {
     this.FORMAT = FORMAT;
     this.PROVIDER_DEFINED_FORMAT_NAME = PROVIDER_DEFINED_FORMAT_NAME;
     this.FORMAT_VERSION = FORMAT_VERSION;
@@ -7274,6 +10666,12 @@ var NCDT = class {
     this.SOURCE_BYTE_LENGTH = SOURCE_BYTE_LENGTH;
     this.SOURCE_SHA256 = SOURCE_SHA256;
     this.SOURCE_CID = SOURCE_CID;
+    this.SELECT_START_TIME = SELECT_START_TIME;
+    this.SELECT_STOP_TIME = SELECT_STOP_TIME;
+    this.SELECT_SAMPLE_INTERVAL_SECONDS = SELECT_SAMPLE_INTERVAL_SECONDS;
+    this.SELECT_SATELLITE_SYSTEMS = SELECT_SATELLITE_SYSTEMS;
+    this.SELECT_OBSERVATION_CODES = SELECT_OBSERVATION_CODES;
+    this.SELECT_CLOCK_ID = SELECT_CLOCK_ID;
   }
   pack(builder) {
     const PROVIDER_DEFINED_FORMAT_NAME = this.PROVIDER_DEFINED_FORMAT_NAME !== null ? builder.createString(this.PROVIDER_DEFINED_FORMAT_NAME) : 0;
@@ -7293,6 +10691,10 @@ var NCDT = class {
     const STOP_TIME = this.STOP_TIME !== null ? builder.createString(this.STOP_TIME) : 0;
     const SOURCE_SHA256 = this.SOURCE_SHA256 !== null ? builder.createString(this.SOURCE_SHA256) : 0;
     const SOURCE_CID = this.SOURCE_CID !== null ? builder.createString(this.SOURCE_CID) : 0;
+    const SELECT_START_TIME = this.SELECT_START_TIME !== null ? builder.createString(this.SELECT_START_TIME) : 0;
+    const SELECT_STOP_TIME = this.SELECT_STOP_TIME !== null ? builder.createString(this.SELECT_STOP_TIME) : 0;
+    const SELECT_SATELLITE_SYSTEMS = NCD.createSelectSatelliteSystemsVector(builder, builder.createObjectOffsetList(this.SELECT_SATELLITE_SYSTEMS));
+    const SELECT_OBSERVATION_CODES = NCD.createSelectObservationCodesVector(builder, builder.createObjectOffsetList(this.SELECT_OBSERVATION_CODES));
     NCD.startNCD(builder);
     NCD.addFormat(builder, this.FORMAT);
     NCD.addProviderDefinedFormatName(builder, PROVIDER_DEFINED_FORMAT_NAME);
@@ -7314,15 +10716,21 @@ var NCDT = class {
     NCD.addSourceByteLength(builder, this.SOURCE_BYTE_LENGTH);
     NCD.addSourceSha256(builder, SOURCE_SHA256);
     NCD.addSourceCid(builder, SOURCE_CID);
+    NCD.addSelectStartTime(builder, SELECT_START_TIME);
+    NCD.addSelectStopTime(builder, SELECT_STOP_TIME);
+    NCD.addSelectSampleIntervalSeconds(builder, this.SELECT_SAMPLE_INTERVAL_SECONDS);
+    NCD.addSelectSatelliteSystems(builder, SELECT_SATELLITE_SYSTEMS);
+    NCD.addSelectObservationCodes(builder, SELECT_OBSERVATION_CODES);
+    NCD.addSelectClockId(builder, this.SELECT_CLOCK_ID);
     return NCD.endNCD(builder);
   }
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/OIL.ts
-import * as flatbuffers35 from "flatbuffers";
+import * as flatbuffers52 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/OILConflict.ts
-import * as flatbuffers31 from "flatbuffers";
+import * as flatbuffers48 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/oilConflictShape.ts
 var oilConflictShape = /* @__PURE__ */ ((oilConflictShape2) => {
@@ -7346,7 +10754,7 @@ var OILConflict = class _OILConflict {
     return (obj || new _OILConflict()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsOILConflict(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers31.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers48.SIZE_PREFIX_LENGTH);
     return (obj || new _OILConflict()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   LEFT_IDS(index, optionalEncoding) {
@@ -7457,10 +10865,10 @@ var OILConflictT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/OILLink.ts
-import * as flatbuffers34 from "flatbuffers";
+import * as flatbuffers51 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/OILEvidence.ts
-import * as flatbuffers32 from "flatbuffers";
+import * as flatbuffers49 from "flatbuffers";
 var OILEvidence = class _OILEvidence {
   bb = null;
   bb_pos = 0;
@@ -7473,7 +10881,7 @@ var OILEvidence = class _OILEvidence {
     return (obj || new _OILEvidence()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsOILEvidence(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers32.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers49.SIZE_PREFIX_LENGTH);
     return (obj || new _OILEvidence()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE(optionalEncoding) {
@@ -7589,7 +10997,7 @@ var OILEvidenceT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/OILIdentifier.ts
-import * as flatbuffers33 from "flatbuffers";
+import * as flatbuffers50 from "flatbuffers";
 var OILIdentifier = class _OILIdentifier {
   bb = null;
   bb_pos = 0;
@@ -7602,7 +11010,7 @@ var OILIdentifier = class _OILIdentifier {
     return (obj || new _OILIdentifier()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsOILIdentifier(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers33.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers50.SIZE_PREFIX_LENGTH);
     return (obj || new _OILIdentifier()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   NAMESPACE(optionalEncoding) {
@@ -7766,7 +11174,7 @@ var OILLink = class _OILLink {
     return (obj || new _OILLink()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsOILLink(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers34.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers51.SIZE_PREFIX_LENGTH);
     return (obj || new _OILLink()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -7899,7 +11307,7 @@ var OIL = class _OIL {
     return (obj || new _OIL()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsOIL(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers35.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers52.SIZE_PREFIX_LENGTH);
     return (obj || new _OIL()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -8258,7 +11666,7 @@ var OrbitFrame = /* @__PURE__ */ ((OrbitFrame2) => {
 })(OrbitFrame || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/OrbitFrameWrapper.ts
-import * as flatbuffers36 from "flatbuffers";
+import * as flatbuffers53 from "flatbuffers";
 var OrbitFrameWrapper = class _OrbitFrameWrapper {
   bb = null;
   bb_pos = 0;
@@ -8271,7 +11679,7 @@ var OrbitFrameWrapper = class _OrbitFrameWrapper {
     return (obj || new _OrbitFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsOrbitFrameWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers36.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers53.SIZE_PREFIX_LENGTH);
     return (obj || new _OrbitFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   frame() {
@@ -8315,684 +11723,10 @@ var OrbitFrameWrapperT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCE.ts
-import * as flatbuffers48 from "flatbuffers";
+import * as flatbuffers60 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationRequest.ts
-import * as flatbuffers39 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
-import * as flatbuffers37 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceOwnerClass.ts
-var pceOwnerClass = /* @__PURE__ */ ((pceOwnerClass2) => {
-  pceOwnerClass2[pceOwnerClass2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pceOwnerClass2[pceOwnerClass2["SPACE_OBJECT"] = 1] = "SPACE_OBJECT";
-  pceOwnerClass2[pceOwnerClass2["SPACE_POINT"] = 2] = "SPACE_POINT";
-  pceOwnerClass2[pceOwnerClass2["GROUND_SITE"] = 3] = "GROUND_SITE";
-  pceOwnerClass2[pceOwnerClass2["THRUSTER"] = 4] = "THRUSTER";
-  pceOwnerClass2[pceOwnerClass2["FUEL_TANK"] = 5] = "FUEL_TANK";
-  pceOwnerClass2[pceOwnerClass2["IMPULSIVE_BURN"] = 6] = "IMPULSIVE_BURN";
-  pceOwnerClass2[pceOwnerClass2["FINITE_BURN"] = 7] = "FINITE_BURN";
-  pceOwnerClass2[pceOwnerClass2["POWER_SYSTEM"] = 8] = "POWER_SYSTEM";
-  pceOwnerClass2[pceOwnerClass2["ATTITUDE_SYSTEM"] = 9] = "ATTITUDE_SYSTEM";
-  pceOwnerClass2[pceOwnerClass2["SOLVER"] = 10] = "SOLVER";
-  pceOwnerClass2[pceOwnerClass2["OBJECT_GROUP"] = 11] = "OBJECT_GROUP";
-  return pceOwnerClass2;
-})(pceOwnerClass || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationContext.ts
-var PCEEvaluationContext = class _PCEEvaluationContext {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCEEvaluationContext(bb, obj) {
-    return (obj || new _PCEEvaluationContext()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCEEvaluationContext(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers37.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCEEvaluationContext()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  OWNER_CLASS() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  OBJECT_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  HARDWARE_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Ephemeris body code of the default central body.
-   */
-  CENTRAL_BODY_ID() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Gravitational parameter of the central body, m^3/s^2. Absent means the
-   * provider's own value for CENTRAL_BODY_ID.
-   */
-  GRAVITATIONAL_PARAMETER() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Shape of the central body, REQUIRED for planetodetic parameters.
-   */
-  EQUATORIAL_RADIUS_M() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  FLATTENING() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Fully specified coordinate systems, each named through
-   * RFMCoordinateSystem.NAME.
-   */
-  COORDINATE_SYSTEMS(index, obj) {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? (obj || new RFMCoordinateSystem()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
-  }
-  coordinateSystemsLength() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  DEFAULT_COORDINATE_SYSTEM_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  DEFAULT_TIME_SYSTEM(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  REFERENCE_EPOCH(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  EOP_DATA_SET_CID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 26);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Ephemeris body code of the illuminating body for lighting parameters.
-   */
-  ILLUMINATING_BODY_ID() {
-    const offset = this.bb.__offset(this.bb_pos, 28);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  static startPCEEvaluationContext(builder) {
-    builder.startObject(13);
-  }
-  static addOwnerClass(builder, OWNER_CLASS) {
-    builder.addFieldInt8(0, OWNER_CLASS, 0 /* UNSPECIFIED */);
-  }
-  static addObjectId(builder, OBJECT_IDOffset) {
-    builder.addFieldOffset(1, OBJECT_IDOffset, 0);
-  }
-  static addHardwareName(builder, HARDWARE_NAMEOffset) {
-    builder.addFieldOffset(2, HARDWARE_NAMEOffset, 0);
-  }
-  static addCentralBodyId(builder, CENTRAL_BODY_ID) {
-    builder.addFieldInt32(3, CENTRAL_BODY_ID, 0);
-  }
-  static addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER) {
-    builder.addFieldFloat64(4, GRAVITATIONAL_PARAMETER, 0);
-  }
-  static addEquatorialRadiusM(builder, EQUATORIAL_RADIUS_M) {
-    builder.addFieldFloat64(5, EQUATORIAL_RADIUS_M, 0);
-  }
-  static addFlattening(builder, FLATTENING) {
-    builder.addFieldFloat64(6, FLATTENING, 0);
-  }
-  static addCoordinateSystems(builder, COORDINATE_SYSTEMSOffset) {
-    builder.addFieldOffset(7, COORDINATE_SYSTEMSOffset, 0);
-  }
-  static createCoordinateSystemsVector(builder, data) {
-    builder.startVector(4, data.length, 4);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addOffset(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startCoordinateSystemsVector(builder, numElems) {
-    builder.startVector(4, numElems, 4);
-  }
-  static addDefaultCoordinateSystemName(builder, DEFAULT_COORDINATE_SYSTEM_NAMEOffset) {
-    builder.addFieldOffset(8, DEFAULT_COORDINATE_SYSTEM_NAMEOffset, 0);
-  }
-  static addDefaultTimeSystem(builder, DEFAULT_TIME_SYSTEMOffset) {
-    builder.addFieldOffset(9, DEFAULT_TIME_SYSTEMOffset, 0);
-  }
-  static addReferenceEpoch(builder, REFERENCE_EPOCHOffset) {
-    builder.addFieldOffset(10, REFERENCE_EPOCHOffset, 0);
-  }
-  static addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset) {
-    builder.addFieldOffset(11, EOP_DATA_SET_CIDOffset, 0);
-  }
-  static addIlluminatingBodyId(builder, ILLUMINATING_BODY_ID) {
-    builder.addFieldInt32(12, ILLUMINATING_BODY_ID, 0);
-  }
-  static endPCEEvaluationContext(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCEEvaluationContext(builder, OWNER_CLASS, OBJECT_IDOffset, HARDWARE_NAMEOffset, CENTRAL_BODY_ID, GRAVITATIONAL_PARAMETER, EQUATORIAL_RADIUS_M, FLATTENING, COORDINATE_SYSTEMSOffset, DEFAULT_COORDINATE_SYSTEM_NAMEOffset, DEFAULT_TIME_SYSTEMOffset, REFERENCE_EPOCHOffset, EOP_DATA_SET_CIDOffset, ILLUMINATING_BODY_ID) {
-    _PCEEvaluationContext.startPCEEvaluationContext(builder);
-    _PCEEvaluationContext.addOwnerClass(builder, OWNER_CLASS);
-    _PCEEvaluationContext.addObjectId(builder, OBJECT_IDOffset);
-    _PCEEvaluationContext.addHardwareName(builder, HARDWARE_NAMEOffset);
-    _PCEEvaluationContext.addCentralBodyId(builder, CENTRAL_BODY_ID);
-    _PCEEvaluationContext.addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER);
-    _PCEEvaluationContext.addEquatorialRadiusM(builder, EQUATORIAL_RADIUS_M);
-    _PCEEvaluationContext.addFlattening(builder, FLATTENING);
-    _PCEEvaluationContext.addCoordinateSystems(builder, COORDINATE_SYSTEMSOffset);
-    _PCEEvaluationContext.addDefaultCoordinateSystemName(builder, DEFAULT_COORDINATE_SYSTEM_NAMEOffset);
-    _PCEEvaluationContext.addDefaultTimeSystem(builder, DEFAULT_TIME_SYSTEMOffset);
-    _PCEEvaluationContext.addReferenceEpoch(builder, REFERENCE_EPOCHOffset);
-    _PCEEvaluationContext.addEopDataSetCid(builder, EOP_DATA_SET_CIDOffset);
-    _PCEEvaluationContext.addIlluminatingBodyId(builder, ILLUMINATING_BODY_ID);
-    return _PCEEvaluationContext.endPCEEvaluationContext(builder);
-  }
-  unpack() {
-    return new PCEEvaluationContextT(
-      this.OWNER_CLASS(),
-      this.OBJECT_ID(),
-      this.HARDWARE_NAME(),
-      this.CENTRAL_BODY_ID(),
-      this.GRAVITATIONAL_PARAMETER(),
-      this.EQUATORIAL_RADIUS_M(),
-      this.FLATTENING(),
-      this.bb.createObjList(this.COORDINATE_SYSTEMS.bind(this), this.coordinateSystemsLength()),
-      this.DEFAULT_COORDINATE_SYSTEM_NAME(),
-      this.DEFAULT_TIME_SYSTEM(),
-      this.REFERENCE_EPOCH(),
-      this.EOP_DATA_SET_CID(),
-      this.ILLUMINATING_BODY_ID()
-    );
-  }
-  unpackTo(_o) {
-    _o.OWNER_CLASS = this.OWNER_CLASS();
-    _o.OBJECT_ID = this.OBJECT_ID();
-    _o.HARDWARE_NAME = this.HARDWARE_NAME();
-    _o.CENTRAL_BODY_ID = this.CENTRAL_BODY_ID();
-    _o.GRAVITATIONAL_PARAMETER = this.GRAVITATIONAL_PARAMETER();
-    _o.EQUATORIAL_RADIUS_M = this.EQUATORIAL_RADIUS_M();
-    _o.FLATTENING = this.FLATTENING();
-    _o.COORDINATE_SYSTEMS = this.bb.createObjList(this.COORDINATE_SYSTEMS.bind(this), this.coordinateSystemsLength());
-    _o.DEFAULT_COORDINATE_SYSTEM_NAME = this.DEFAULT_COORDINATE_SYSTEM_NAME();
-    _o.DEFAULT_TIME_SYSTEM = this.DEFAULT_TIME_SYSTEM();
-    _o.REFERENCE_EPOCH = this.REFERENCE_EPOCH();
-    _o.EOP_DATA_SET_CID = this.EOP_DATA_SET_CID();
-    _o.ILLUMINATING_BODY_ID = this.ILLUMINATING_BODY_ID();
-  }
-};
-var PCEEvaluationContextT = class {
-  constructor(OWNER_CLASS = 0 /* UNSPECIFIED */, OBJECT_ID = null, HARDWARE_NAME = null, CENTRAL_BODY_ID = 0, GRAVITATIONAL_PARAMETER = 0, EQUATORIAL_RADIUS_M = 0, FLATTENING = 0, COORDINATE_SYSTEMS = [], DEFAULT_COORDINATE_SYSTEM_NAME = null, DEFAULT_TIME_SYSTEM = null, REFERENCE_EPOCH = null, EOP_DATA_SET_CID = null, ILLUMINATING_BODY_ID = 0) {
-    this.OWNER_CLASS = OWNER_CLASS;
-    this.OBJECT_ID = OBJECT_ID;
-    this.HARDWARE_NAME = HARDWARE_NAME;
-    this.CENTRAL_BODY_ID = CENTRAL_BODY_ID;
-    this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
-    this.EQUATORIAL_RADIUS_M = EQUATORIAL_RADIUS_M;
-    this.FLATTENING = FLATTENING;
-    this.COORDINATE_SYSTEMS = COORDINATE_SYSTEMS;
-    this.DEFAULT_COORDINATE_SYSTEM_NAME = DEFAULT_COORDINATE_SYSTEM_NAME;
-    this.DEFAULT_TIME_SYSTEM = DEFAULT_TIME_SYSTEM;
-    this.REFERENCE_EPOCH = REFERENCE_EPOCH;
-    this.EOP_DATA_SET_CID = EOP_DATA_SET_CID;
-    this.ILLUMINATING_BODY_ID = ILLUMINATING_BODY_ID;
-  }
-  pack(builder) {
-    const OBJECT_ID = this.OBJECT_ID !== null ? builder.createString(this.OBJECT_ID) : 0;
-    const HARDWARE_NAME = this.HARDWARE_NAME !== null ? builder.createString(this.HARDWARE_NAME) : 0;
-    const COORDINATE_SYSTEMS = PCEEvaluationContext.createCoordinateSystemsVector(builder, builder.createObjectOffsetList(this.COORDINATE_SYSTEMS));
-    const DEFAULT_COORDINATE_SYSTEM_NAME = this.DEFAULT_COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.DEFAULT_COORDINATE_SYSTEM_NAME) : 0;
-    const DEFAULT_TIME_SYSTEM = this.DEFAULT_TIME_SYSTEM !== null ? builder.createString(this.DEFAULT_TIME_SYSTEM) : 0;
-    const REFERENCE_EPOCH = this.REFERENCE_EPOCH !== null ? builder.createString(this.REFERENCE_EPOCH) : 0;
-    const EOP_DATA_SET_CID = this.EOP_DATA_SET_CID !== null ? builder.createString(this.EOP_DATA_SET_CID) : 0;
-    return PCEEvaluationContext.createPCEEvaluationContext(
-      builder,
-      this.OWNER_CLASS,
-      OBJECT_ID,
-      HARDWARE_NAME,
-      this.CENTRAL_BODY_ID,
-      this.GRAVITATIONAL_PARAMETER,
-      this.EQUATORIAL_RADIUS_M,
-      this.FLATTENING,
-      COORDINATE_SYSTEMS,
-      DEFAULT_COORDINATE_SYSTEM_NAME,
-      DEFAULT_TIME_SYSTEM,
-      REFERENCE_EPOCH,
-      EOP_DATA_SET_CID,
-      this.ILLUMINATING_BODY_ID
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
-import * as flatbuffers38 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceParameter.ts
-var pceParameter = /* @__PURE__ */ ((pceParameter2) => {
-  pceParameter2[pceParameter2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pceParameter2[pceParameter2["POSITION_X"] = 1] = "POSITION_X";
-  pceParameter2[pceParameter2["POSITION_Y"] = 2] = "POSITION_Y";
-  pceParameter2[pceParameter2["POSITION_Z"] = 3] = "POSITION_Z";
-  pceParameter2[pceParameter2["VELOCITY_X"] = 4] = "VELOCITY_X";
-  pceParameter2[pceParameter2["VELOCITY_Y"] = 5] = "VELOCITY_Y";
-  pceParameter2[pceParameter2["VELOCITY_Z"] = 6] = "VELOCITY_Z";
-  pceParameter2[pceParameter2["POSITION_MAGNITUDE"] = 7] = "POSITION_MAGNITUDE";
-  pceParameter2[pceParameter2["VELOCITY_MAGNITUDE"] = 8] = "VELOCITY_MAGNITUDE";
-  pceParameter2[pceParameter2["RIGHT_ASCENSION"] = 9] = "RIGHT_ASCENSION";
-  pceParameter2[pceParameter2["DECLINATION"] = 10] = "DECLINATION";
-  pceParameter2[pceParameter2["VELOCITY_RIGHT_ASCENSION"] = 11] = "VELOCITY_RIGHT_ASCENSION";
-  pceParameter2[pceParameter2["VELOCITY_DECLINATION"] = 12] = "VELOCITY_DECLINATION";
-  pceParameter2[pceParameter2["FLIGHT_PATH_ANGLE"] = 13] = "FLIGHT_PATH_ANGLE";
-  pceParameter2[pceParameter2["AZIMUTH_ANGLE"] = 14] = "AZIMUTH_ANGLE";
-  pceParameter2[pceParameter2["HORIZONTAL_FLIGHT_PATH_ANGLE"] = 15] = "HORIZONTAL_FLIGHT_PATH_ANGLE";
-  pceParameter2[pceParameter2["RADIAL_VELOCITY"] = 16] = "RADIAL_VELOCITY";
-  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_MAGNITUDE"] = 17] = "ANGULAR_MOMENTUM_MAGNITUDE";
-  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_X"] = 18] = "ANGULAR_MOMENTUM_X";
-  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_Y"] = 19] = "ANGULAR_MOMENTUM_Y";
-  pceParameter2[pceParameter2["ANGULAR_MOMENTUM_Z"] = 20] = "ANGULAR_MOMENTUM_Z";
-  pceParameter2[pceParameter2["SEMI_MAJOR_AXIS"] = 30] = "SEMI_MAJOR_AXIS";
-  pceParameter2[pceParameter2["ECCENTRICITY"] = 31] = "ECCENTRICITY";
-  pceParameter2[pceParameter2["INCLINATION"] = 32] = "INCLINATION";
-  pceParameter2[pceParameter2["RIGHT_ASCENSION_OF_ASCENDING_NODE"] = 33] = "RIGHT_ASCENSION_OF_ASCENDING_NODE";
-  pceParameter2[pceParameter2["ARGUMENT_OF_PERIAPSIS"] = 34] = "ARGUMENT_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["TRUE_ANOMALY"] = 35] = "TRUE_ANOMALY";
-  pceParameter2[pceParameter2["MEAN_ANOMALY"] = 36] = "MEAN_ANOMALY";
-  pceParameter2[pceParameter2["ECCENTRIC_ANOMALY"] = 37] = "ECCENTRIC_ANOMALY";
-  pceParameter2[pceParameter2["HYPERBOLIC_ANOMALY"] = 38] = "HYPERBOLIC_ANOMALY";
-  pceParameter2[pceParameter2["RADIUS_OF_PERIAPSIS"] = 39] = "RADIUS_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["RADIUS_OF_APOAPSIS"] = 40] = "RADIUS_OF_APOAPSIS";
-  pceParameter2[pceParameter2["ALTITUDE_OF_PERIAPSIS"] = 41] = "ALTITUDE_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["ALTITUDE_OF_APOAPSIS"] = 42] = "ALTITUDE_OF_APOAPSIS";
-  pceParameter2[pceParameter2["SEMILATUS_RECTUM"] = 43] = "SEMILATUS_RECTUM";
-  pceParameter2[pceParameter2["ORBIT_PERIOD"] = 44] = "ORBIT_PERIOD";
-  pceParameter2[pceParameter2["MEAN_MOTION"] = 45] = "MEAN_MOTION";
-  pceParameter2[pceParameter2["SPECIFIC_ORBITAL_ENERGY"] = 46] = "SPECIFIC_ORBITAL_ENERGY";
-  pceParameter2[pceParameter2["CHARACTERISTIC_ENERGY"] = 47] = "CHARACTERISTIC_ENERGY";
-  pceParameter2[pceParameter2["VELOCITY_AT_PERIAPSIS"] = 48] = "VELOCITY_AT_PERIAPSIS";
-  pceParameter2[pceParameter2["VELOCITY_AT_APOAPSIS"] = 49] = "VELOCITY_AT_APOAPSIS";
-  pceParameter2[pceParameter2["ARGUMENT_OF_LATITUDE"] = 50] = "ARGUMENT_OF_LATITUDE";
-  pceParameter2[pceParameter2["TRUE_LONGITUDE"] = 51] = "TRUE_LONGITUDE";
-  pceParameter2[pceParameter2["MEAN_LONGITUDE"] = 52] = "MEAN_LONGITUDE";
-  pceParameter2[pceParameter2["BETA_ANGLE"] = 53] = "BETA_ANGLE";
-  pceParameter2[pceParameter2["ECCENTRICITY_VECTOR_X"] = 54] = "ECCENTRICITY_VECTOR_X";
-  pceParameter2[pceParameter2["ECCENTRICITY_VECTOR_Y"] = 55] = "ECCENTRICITY_VECTOR_Y";
-  pceParameter2[pceParameter2["ECCENTRICITY_VECTOR_Z"] = 56] = "ECCENTRICITY_VECTOR_Z";
-  pceParameter2[pceParameter2["SEMI_MINOR_AXIS"] = 57] = "SEMI_MINOR_AXIS";
-  pceParameter2[pceParameter2["EQUINOCTIAL_H"] = 70] = "EQUINOCTIAL_H";
-  pceParameter2[pceParameter2["EQUINOCTIAL_K"] = 71] = "EQUINOCTIAL_K";
-  pceParameter2[pceParameter2["EQUINOCTIAL_P"] = 72] = "EQUINOCTIAL_P";
-  pceParameter2[pceParameter2["EQUINOCTIAL_Q"] = 73] = "EQUINOCTIAL_Q";
-  pceParameter2[pceParameter2["EQUINOCTIAL_MEAN_LONGITUDE"] = 74] = "EQUINOCTIAL_MEAN_LONGITUDE";
-  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_F"] = 75] = "MODIFIED_EQUINOCTIAL_F";
-  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_G"] = 76] = "MODIFIED_EQUINOCTIAL_G";
-  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_H"] = 77] = "MODIFIED_EQUINOCTIAL_H";
-  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_K"] = 78] = "MODIFIED_EQUINOCTIAL_K";
-  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_TRUE_LONGITUDE"] = 79] = "MODIFIED_EQUINOCTIAL_TRUE_LONGITUDE";
-  pceParameter2[pceParameter2["MODIFIED_EQUINOCTIAL_SEMILATUS_RECTUM"] = 80] = "MODIFIED_EQUINOCTIAL_SEMILATUS_RECTUM";
-  pceParameter2[pceParameter2["ALTERNATE_EQUINOCTIAL_P"] = 81] = "ALTERNATE_EQUINOCTIAL_P";
-  pceParameter2[pceParameter2["ALTERNATE_EQUINOCTIAL_Q"] = 82] = "ALTERNATE_EQUINOCTIAL_Q";
-  pceParameter2[pceParameter2["ALTERNATE_EQUINOCTIAL_MEAN_MOTION"] = 83] = "ALTERNATE_EQUINOCTIAL_MEAN_MOTION";
-  pceParameter2[pceParameter2["DELAUNAY_MEAN_ANOMALY"] = 90] = "DELAUNAY_MEAN_ANOMALY";
-  pceParameter2[pceParameter2["DELAUNAY_ARGUMENT_OF_PERIAPSIS"] = 91] = "DELAUNAY_ARGUMENT_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["DELAUNAY_ASCENDING_NODE"] = 92] = "DELAUNAY_ASCENDING_NODE";
-  pceParameter2[pceParameter2["DELAUNAY_ACTION_TOTAL"] = 93] = "DELAUNAY_ACTION_TOTAL";
-  pceParameter2[pceParameter2["DELAUNAY_ACTION_ANGULAR_MOMENTUM"] = 94] = "DELAUNAY_ACTION_ANGULAR_MOMENTUM";
-  pceParameter2[pceParameter2["DELAUNAY_ACTION_POLAR_ANGULAR_MOMENTUM"] = 95] = "DELAUNAY_ACTION_POLAR_ANGULAR_MOMENTUM";
-  pceParameter2[pceParameter2["GEODETIC_LATITUDE"] = 100] = "GEODETIC_LATITUDE";
-  pceParameter2[pceParameter2["GEODETIC_LONGITUDE"] = 101] = "GEODETIC_LONGITUDE";
-  pceParameter2[pceParameter2["GEODETIC_ALTITUDE"] = 102] = "GEODETIC_ALTITUDE";
-  pceParameter2[pceParameter2["GEOCENTRIC_LATITUDE"] = 103] = "GEOCENTRIC_LATITUDE";
-  pceParameter2[pceParameter2["PLANETODETIC_RADIUS_MAGNITUDE"] = 104] = "PLANETODETIC_RADIUS_MAGNITUDE";
-  pceParameter2[pceParameter2["PLANETODETIC_VELOCITY_MAGNITUDE"] = 105] = "PLANETODETIC_VELOCITY_MAGNITUDE";
-  pceParameter2[pceParameter2["PLANETODETIC_AZIMUTH"] = 106] = "PLANETODETIC_AZIMUTH";
-  pceParameter2[pceParameter2["PLANETODETIC_HORIZONTAL_FLIGHT_PATH_ANGLE"] = 107] = "PLANETODETIC_HORIZONTAL_FLIGHT_PATH_ANGLE";
-  pceParameter2[pceParameter2["LOCAL_SIDEREAL_TIME"] = 108] = "LOCAL_SIDEREAL_TIME";
-  pceParameter2[pceParameter2["PRIME_MERIDIAN_HOUR_ANGLE"] = 109] = "PRIME_MERIDIAN_HOUR_ANGLE";
-  pceParameter2[pceParameter2["B_DOT_T"] = 120] = "B_DOT_T";
-  pceParameter2[pceParameter2["B_DOT_R"] = 121] = "B_DOT_R";
-  pceParameter2[pceParameter2["B_VECTOR_MAGNITUDE"] = 122] = "B_VECTOR_MAGNITUDE";
-  pceParameter2[pceParameter2["B_VECTOR_ANGLE"] = 123] = "B_VECTOR_ANGLE";
-  pceParameter2[pceParameter2["DECLINATION_OF_DEPARTURE_ASYMPTOTE"] = 124] = "DECLINATION_OF_DEPARTURE_ASYMPTOTE";
-  pceParameter2[pceParameter2["RIGHT_ASCENSION_OF_DEPARTURE_ASYMPTOTE"] = 125] = "RIGHT_ASCENSION_OF_DEPARTURE_ASYMPTOTE";
-  pceParameter2[pceParameter2["INCOMING_RADIUS_OF_PERIAPSIS"] = 126] = "INCOMING_RADIUS_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["INCOMING_CHARACTERISTIC_ENERGY"] = 127] = "INCOMING_CHARACTERISTIC_ENERGY";
-  pceParameter2[pceParameter2["INCOMING_ASYMPTOTE_RIGHT_ASCENSION"] = 128] = "INCOMING_ASYMPTOTE_RIGHT_ASCENSION";
-  pceParameter2[pceParameter2["INCOMING_ASYMPTOTE_DECLINATION"] = 129] = "INCOMING_ASYMPTOTE_DECLINATION";
-  pceParameter2[pceParameter2["INCOMING_B_VECTOR_AZIMUTH"] = 130] = "INCOMING_B_VECTOR_AZIMUTH";
-  pceParameter2[pceParameter2["OUTGOING_RADIUS_OF_PERIAPSIS"] = 131] = "OUTGOING_RADIUS_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["OUTGOING_CHARACTERISTIC_ENERGY"] = 132] = "OUTGOING_CHARACTERISTIC_ENERGY";
-  pceParameter2[pceParameter2["OUTGOING_ASYMPTOTE_RIGHT_ASCENSION"] = 133] = "OUTGOING_ASYMPTOTE_RIGHT_ASCENSION";
-  pceParameter2[pceParameter2["OUTGOING_ASYMPTOTE_DECLINATION"] = 134] = "OUTGOING_ASYMPTOTE_DECLINATION";
-  pceParameter2[pceParameter2["OUTGOING_B_VECTOR_AZIMUTH"] = 135] = "OUTGOING_B_VECTOR_AZIMUTH";
-  pceParameter2[pceParameter2["HYPERBOLIC_EXCESS_VELOCITY"] = 136] = "HYPERBOLIC_EXCESS_VELOCITY";
-  pceParameter2[pceParameter2["BROUWER_SHORT_SEMI_MAJOR_AXIS"] = 140] = "BROUWER_SHORT_SEMI_MAJOR_AXIS";
-  pceParameter2[pceParameter2["BROUWER_SHORT_ECCENTRICITY"] = 141] = "BROUWER_SHORT_ECCENTRICITY";
-  pceParameter2[pceParameter2["BROUWER_SHORT_INCLINATION"] = 142] = "BROUWER_SHORT_INCLINATION";
-  pceParameter2[pceParameter2["BROUWER_SHORT_RIGHT_ASCENSION_OF_ASCENDING_NODE"] = 143] = "BROUWER_SHORT_RIGHT_ASCENSION_OF_ASCENDING_NODE";
-  pceParameter2[pceParameter2["BROUWER_SHORT_ARGUMENT_OF_PERIAPSIS"] = 144] = "BROUWER_SHORT_ARGUMENT_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["BROUWER_SHORT_MEAN_ANOMALY"] = 145] = "BROUWER_SHORT_MEAN_ANOMALY";
-  pceParameter2[pceParameter2["BROUWER_LONG_SEMI_MAJOR_AXIS"] = 146] = "BROUWER_LONG_SEMI_MAJOR_AXIS";
-  pceParameter2[pceParameter2["BROUWER_LONG_ECCENTRICITY"] = 147] = "BROUWER_LONG_ECCENTRICITY";
-  pceParameter2[pceParameter2["BROUWER_LONG_INCLINATION"] = 148] = "BROUWER_LONG_INCLINATION";
-  pceParameter2[pceParameter2["BROUWER_LONG_RIGHT_ASCENSION_OF_ASCENDING_NODE"] = 149] = "BROUWER_LONG_RIGHT_ASCENSION_OF_ASCENDING_NODE";
-  pceParameter2[pceParameter2["BROUWER_LONG_ARGUMENT_OF_PERIAPSIS"] = 150] = "BROUWER_LONG_ARGUMENT_OF_PERIAPSIS";
-  pceParameter2[pceParameter2["BROUWER_LONG_MEAN_ANOMALY"] = 151] = "BROUWER_LONG_MEAN_ANOMALY";
-  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX"] = 160] = "ORBIT_STATE_TRANSITION_MATRIX";
-  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_A"] = 161] = "ORBIT_STATE_TRANSITION_MATRIX_A";
-  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_B"] = 162] = "ORBIT_STATE_TRANSITION_MATRIX_B";
-  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_C"] = 163] = "ORBIT_STATE_TRANSITION_MATRIX_C";
-  pceParameter2[pceParameter2["ORBIT_STATE_TRANSITION_MATRIX_D"] = 164] = "ORBIT_STATE_TRANSITION_MATRIX_D";
-  pceParameter2[pceParameter2["ORBIT_ERROR_COVARIANCE_MATRIX"] = 165] = "ORBIT_ERROR_COVARIANCE_MATRIX";
-  pceParameter2[pceParameter2["EPOCH_A1_GREGORIAN"] = 180] = "EPOCH_A1_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_A1_MODIFIED_JULIAN"] = 181] = "EPOCH_A1_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["EPOCH_TAI_GREGORIAN"] = 182] = "EPOCH_TAI_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_TAI_MODIFIED_JULIAN"] = 183] = "EPOCH_TAI_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["EPOCH_TT_GREGORIAN"] = 184] = "EPOCH_TT_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_TT_MODIFIED_JULIAN"] = 185] = "EPOCH_TT_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["EPOCH_TDB_GREGORIAN"] = 186] = "EPOCH_TDB_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_TDB_MODIFIED_JULIAN"] = 187] = "EPOCH_TDB_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["EPOCH_UTC_GREGORIAN"] = 188] = "EPOCH_UTC_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_UTC_MODIFIED_JULIAN"] = 189] = "EPOCH_UTC_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["EPOCH_UT1_GREGORIAN"] = 190] = "EPOCH_UT1_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_UT1_MODIFIED_JULIAN"] = 191] = "EPOCH_UT1_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["EPOCH_GPS_GREGORIAN"] = 192] = "EPOCH_GPS_GREGORIAN";
-  pceParameter2[pceParameter2["EPOCH_GPS_MODIFIED_JULIAN"] = 193] = "EPOCH_GPS_MODIFIED_JULIAN";
-  pceParameter2[pceParameter2["ELAPSED_DAYS"] = 194] = "ELAPSED_DAYS";
-  pceParameter2[pceParameter2["ELAPSED_SECONDS"] = 195] = "ELAPSED_SECONDS";
-  pceParameter2[pceParameter2["DRY_MASS"] = 220] = "DRY_MASS";
-  pceParameter2[pceParameter2["TOTAL_MASS"] = 221] = "TOTAL_MASS";
-  pceParameter2[pceParameter2["DRAG_COEFFICIENT"] = 222] = "DRAG_COEFFICIENT";
-  pceParameter2[pceParameter2["DRAG_AREA"] = 223] = "DRAG_AREA";
-  pceParameter2[pceParameter2["REFLECTIVITY_COEFFICIENT"] = 224] = "REFLECTIVITY_COEFFICIENT";
-  pceParameter2[pceParameter2["SOLAR_RADIATION_PRESSURE_AREA"] = 225] = "SOLAR_RADIATION_PRESSURE_AREA";
-  pceParameter2[pceParameter2["ATMOSPHERIC_DENSITY_SCALE_FACTOR"] = 226] = "ATMOSPHERIC_DENSITY_SCALE_FACTOR";
-  pceParameter2[pceParameter2["DRAG_SCALE_FACTOR"] = 227] = "DRAG_SCALE_FACTOR";
-  pceParameter2[pceParameter2["SOLAR_RADIATION_PRESSURE_SCALE_FACTOR"] = 228] = "SOLAR_RADIATION_PRESSURE_SCALE_FACTOR";
-  pceParameter2[pceParameter2["BALLISTIC_COEFFICIENT"] = 229] = "BALLISTIC_COEFFICIENT";
-  pceParameter2[pceParameter2["AREA_TO_MASS_RATIO"] = 230] = "AREA_TO_MASS_RATIO";
-  pceParameter2[pceParameter2["CENTER_OF_MASS_X"] = 231] = "CENTER_OF_MASS_X";
-  pceParameter2[pceParameter2["CENTER_OF_MASS_Y"] = 232] = "CENTER_OF_MASS_Y";
-  pceParameter2[pceParameter2["CENTER_OF_MASS_Z"] = 233] = "CENTER_OF_MASS_Z";
-  pceParameter2[pceParameter2["MOMENT_OF_INERTIA_MATRIX"] = 234] = "MOMENT_OF_INERTIA_MATRIX";
-  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_1"] = 250] = "ATTITUDE_QUATERNION_1";
-  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_2"] = 251] = "ATTITUDE_QUATERNION_2";
-  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_3"] = 252] = "ATTITUDE_QUATERNION_3";
-  pceParameter2[pceParameter2["ATTITUDE_QUATERNION_4"] = 253] = "ATTITUDE_QUATERNION_4";
-  pceParameter2[pceParameter2["ATTITUDE_DIRECTION_COSINE_MATRIX"] = 254] = "ATTITUDE_DIRECTION_COSINE_MATRIX";
-  pceParameter2[pceParameter2["EULER_ANGLE_1"] = 255] = "EULER_ANGLE_1";
-  pceParameter2[pceParameter2["EULER_ANGLE_2"] = 256] = "EULER_ANGLE_2";
-  pceParameter2[pceParameter2["EULER_ANGLE_3"] = 257] = "EULER_ANGLE_3";
-  pceParameter2[pceParameter2["EULER_ANGLE_RATE_1"] = 258] = "EULER_ANGLE_RATE_1";
-  pceParameter2[pceParameter2["EULER_ANGLE_RATE_2"] = 259] = "EULER_ANGLE_RATE_2";
-  pceParameter2[pceParameter2["EULER_ANGLE_RATE_3"] = 260] = "EULER_ANGLE_RATE_3";
-  pceParameter2[pceParameter2["MODIFIED_RODRIGUES_PARAMETER_1"] = 261] = "MODIFIED_RODRIGUES_PARAMETER_1";
-  pceParameter2[pceParameter2["MODIFIED_RODRIGUES_PARAMETER_2"] = 262] = "MODIFIED_RODRIGUES_PARAMETER_2";
-  pceParameter2[pceParameter2["MODIFIED_RODRIGUES_PARAMETER_3"] = 263] = "MODIFIED_RODRIGUES_PARAMETER_3";
-  pceParameter2[pceParameter2["ANGULAR_VELOCITY_X"] = 264] = "ANGULAR_VELOCITY_X";
-  pceParameter2[pceParameter2["ANGULAR_VELOCITY_Y"] = 265] = "ANGULAR_VELOCITY_Y";
-  pceParameter2[pceParameter2["ANGULAR_VELOCITY_Z"] = 266] = "ANGULAR_VELOCITY_Z";
-  pceParameter2[pceParameter2["EULER_AXIS_X"] = 267] = "EULER_AXIS_X";
-  pceParameter2[pceParameter2["EULER_AXIS_Y"] = 268] = "EULER_AXIS_Y";
-  pceParameter2[pceParameter2["EULER_AXIS_Z"] = 269] = "EULER_AXIS_Z";
-  pceParameter2[pceParameter2["PRINCIPAL_ROTATION_ANGLE"] = 270] = "PRINCIPAL_ROTATION_ANGLE";
-  pceParameter2[pceParameter2["TANK_FUEL_MASS"] = 300] = "TANK_FUEL_MASS";
-  pceParameter2[pceParameter2["TANK_PRESSURE"] = 301] = "TANK_PRESSURE";
-  pceParameter2[pceParameter2["TANK_TEMPERATURE"] = 302] = "TANK_TEMPERATURE";
-  pceParameter2[pceParameter2["TANK_REFERENCE_TEMPERATURE"] = 303] = "TANK_REFERENCE_TEMPERATURE";
-  pceParameter2[pceParameter2["TANK_VOLUME"] = 304] = "TANK_VOLUME";
-  pceParameter2[pceParameter2["TANK_FUEL_DENSITY"] = 305] = "TANK_FUEL_DENSITY";
-  pceParameter2[pceParameter2["THRUSTER_DUTY_CYCLE"] = 320] = "THRUSTER_DUTY_CYCLE";
-  pceParameter2[pceParameter2["THRUSTER_THRUST_SCALE_FACTOR"] = 321] = "THRUSTER_THRUST_SCALE_FACTOR";
-  pceParameter2[pceParameter2["THRUSTER_GRAVITATIONAL_ACCELERATION"] = 322] = "THRUSTER_GRAVITATIONAL_ACCELERATION";
-  pceParameter2[pceParameter2["THRUSTER_MIXTURE_RATIO"] = 323] = "THRUSTER_MIXTURE_RATIO";
-  pceParameter2[pceParameter2["THRUSTER_SPECIFIC_IMPULSE"] = 324] = "THRUSTER_SPECIFIC_IMPULSE";
-  pceParameter2[pceParameter2["THRUSTER_THRUST_MAGNITUDE"] = 325] = "THRUSTER_THRUST_MAGNITUDE";
-  pceParameter2[pceParameter2["THRUSTER_MASS_FLOW_RATE"] = 326] = "THRUSTER_MASS_FLOW_RATE";
-  pceParameter2[pceParameter2["THRUSTER_DIRECTION_X"] = 327] = "THRUSTER_DIRECTION_X";
-  pceParameter2[pceParameter2["THRUSTER_DIRECTION_Y"] = 328] = "THRUSTER_DIRECTION_Y";
-  pceParameter2[pceParameter2["THRUSTER_DIRECTION_Z"] = 329] = "THRUSTER_DIRECTION_Z";
-  pceParameter2[pceParameter2["THRUSTER_THRUST_COEFFICIENTS"] = 330] = "THRUSTER_THRUST_COEFFICIENTS";
-  pceParameter2[pceParameter2["THRUSTER_IMPULSE_COEFFICIENTS"] = 331] = "THRUSTER_IMPULSE_COEFFICIENTS";
-  pceParameter2[pceParameter2["IMPULSIVE_BURN_ELEMENT_1"] = 370] = "IMPULSIVE_BURN_ELEMENT_1";
-  pceParameter2[pceParameter2["IMPULSIVE_BURN_ELEMENT_2"] = 371] = "IMPULSIVE_BURN_ELEMENT_2";
-  pceParameter2[pceParameter2["IMPULSIVE_BURN_ELEMENT_3"] = 372] = "IMPULSIVE_BURN_ELEMENT_3";
-  pceParameter2[pceParameter2["IMPULSIVE_BURN_DELTA_V_MAGNITUDE"] = 373] = "IMPULSIVE_BURN_DELTA_V_MAGNITUDE";
-  pceParameter2[pceParameter2["IMPULSIVE_BURN_MASS_CONSUMED"] = 374] = "IMPULSIVE_BURN_MASS_CONSUMED";
-  pceParameter2[pceParameter2["FINITE_BURN_THRUST_MAGNITUDE"] = 390] = "FINITE_BURN_THRUST_MAGNITUDE";
-  pceParameter2[pceParameter2["FINITE_BURN_MASS_FLOW_RATE"] = 391] = "FINITE_BURN_MASS_FLOW_RATE";
-  pceParameter2[pceParameter2["FINITE_BURN_THRUST_X"] = 392] = "FINITE_BURN_THRUST_X";
-  pceParameter2[pceParameter2["FINITE_BURN_THRUST_Y"] = 393] = "FINITE_BURN_THRUST_Y";
-  pceParameter2[pceParameter2["FINITE_BURN_THRUST_Z"] = 394] = "FINITE_BURN_THRUST_Z";
-  pceParameter2[pceParameter2["FINITE_BURN_ACCELERATION_MAGNITUDE"] = 395] = "FINITE_BURN_ACCELERATION_MAGNITUDE";
-  pceParameter2[pceParameter2["FINITE_BURN_MASS_CONSUMED"] = 396] = "FINITE_BURN_MASS_CONSUMED";
-  pceParameter2[pceParameter2["TOTAL_POWER_AVAILABLE"] = 410] = "TOTAL_POWER_AVAILABLE";
-  pceParameter2[pceParameter2["REQUIRED_BUS_POWER"] = 411] = "REQUIRED_BUS_POWER";
-  pceParameter2[pceParameter2["THRUST_POWER_AVAILABLE"] = 412] = "THRUST_POWER_AVAILABLE";
-  pceParameter2[pceParameter2["GENERATED_POWER"] = 413] = "GENERATED_POWER";
-  pceParameter2[pceParameter2["TOTAL_TORQUE_X"] = 430] = "TOTAL_TORQUE_X";
-  pceParameter2[pceParameter2["TOTAL_TORQUE_Y"] = 431] = "TOTAL_TORQUE_Y";
-  pceParameter2[pceParameter2["TOTAL_TORQUE_Z"] = 432] = "TOTAL_TORQUE_Z";
-  pceParameter2[pceParameter2["TOTAL_TORQUE_MAGNITUDE"] = 433] = "TOTAL_TORQUE_MAGNITUDE";
-  pceParameter2[pceParameter2["SOLVER_STATUS"] = 450] = "SOLVER_STATUS";
-  pceParameter2[pceParameter2["SOLVER_ITERATION_COUNT"] = 451] = "SOLVER_ITERATION_COUNT";
-  pceParameter2[pceParameter2["SOLVER_OBJECTIVE_VALUE"] = 452] = "SOLVER_OBJECTIVE_VALUE";
-  pceParameter2[pceParameter2["SOLVER_MAXIMUM_CONSTRAINT_VIOLATION"] = 453] = "SOLVER_MAXIMUM_CONSTRAINT_VIOLATION";
-  pceParameter2[pceParameter2["RELATIVE_RANGE"] = 470] = "RELATIVE_RANGE";
-  pceParameter2[pceParameter2["RELATIVE_RANGE_RATE"] = 471] = "RELATIVE_RANGE_RATE";
-  pceParameter2[pceParameter2["RELATIVE_POSITION_X"] = 472] = "RELATIVE_POSITION_X";
-  pceParameter2[pceParameter2["RELATIVE_POSITION_Y"] = 473] = "RELATIVE_POSITION_Y";
-  pceParameter2[pceParameter2["RELATIVE_POSITION_Z"] = 474] = "RELATIVE_POSITION_Z";
-  pceParameter2[pceParameter2["RELATIVE_VELOCITY_X"] = 475] = "RELATIVE_VELOCITY_X";
-  pceParameter2[pceParameter2["RELATIVE_VELOCITY_Y"] = 476] = "RELATIVE_VELOCITY_Y";
-  pceParameter2[pceParameter2["RELATIVE_VELOCITY_Z"] = 477] = "RELATIVE_VELOCITY_Z";
-  pceParameter2[pceParameter2["TOPOCENTRIC_AZIMUTH"] = 478] = "TOPOCENTRIC_AZIMUTH";
-  pceParameter2[pceParameter2["TOPOCENTRIC_ELEVATION"] = 479] = "TOPOCENTRIC_ELEVATION";
-  pceParameter2[pceParameter2["ANGULAR_SEPARATION"] = 480] = "ANGULAR_SEPARATION";
-  pceParameter2[pceParameter2["SOLAR_PHASE_ANGLE"] = 481] = "SOLAR_PHASE_ANGLE";
-  pceParameter2[pceParameter2["LOCAL_SOLAR_ELEVATION_ANGLE"] = 482] = "LOCAL_SOLAR_ELEVATION_ANGLE";
-  pceParameter2[pceParameter2["ILLUMINATION_FRACTION"] = 483] = "ILLUMINATION_FRACTION";
-  pceParameter2[pceParameter2["LIGHT_TIME_DELAY"] = 484] = "LIGHT_TIME_DELAY";
-  pceParameter2[pceParameter2["PROVIDER_DEFINED"] = 65535] = "PROVIDER_DEFINED";
-  return pceParameter2;
-})(pceParameter || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterRef.ts
-var PCEParameterRef = class _PCEParameterRef {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCEParameterRef(bb, obj) {
-    return (obj || new _PCEParameterRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCEParameterRef(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers38.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCEParameterRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * Roster member, or PROVIDER_DEFINED.
-   */
-  PARAMETER() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  PROVIDER_DEFINED_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Component of a vector or matrix parameter, zero-based and row-major.
-   * Negative selects the whole value.
-   */
-  ELEMENT_INDEX() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : -1;
-  }
-  COORDINATE_SYSTEM_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Ephemeris body code of the central body, when the parameter is
-   * CENTRAL_BODY_DEPENDENT and the context default is not wanted.
-   */
-  CENTRAL_BODY_ID() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  SITE_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  SECOND_OBJECT_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  OWNER_OBJECT_ID(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  OWNER_HARDWARE_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  TIME_SYSTEM(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  static startPCEParameterRef(builder) {
-    builder.startObject(10);
-  }
-  static addParameter(builder, PARAMETER) {
-    builder.addFieldInt16(0, PARAMETER, 0 /* UNSPECIFIED */);
-  }
-  static addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset) {
-    builder.addFieldOffset(1, PROVIDER_DEFINED_NAMEOffset, 0);
-  }
-  static addElementIndex(builder, ELEMENT_INDEX) {
-    builder.addFieldInt32(2, ELEMENT_INDEX, -1);
-  }
-  static addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAMEOffset) {
-    builder.addFieldOffset(3, COORDINATE_SYSTEM_NAMEOffset, 0);
-  }
-  static addCentralBodyId(builder, CENTRAL_BODY_ID) {
-    builder.addFieldInt32(4, CENTRAL_BODY_ID, 0);
-  }
-  static addSiteId(builder, SITE_IDOffset) {
-    builder.addFieldOffset(5, SITE_IDOffset, 0);
-  }
-  static addSecondObjectId(builder, SECOND_OBJECT_IDOffset) {
-    builder.addFieldOffset(6, SECOND_OBJECT_IDOffset, 0);
-  }
-  static addOwnerObjectId(builder, OWNER_OBJECT_IDOffset) {
-    builder.addFieldOffset(7, OWNER_OBJECT_IDOffset, 0);
-  }
-  static addOwnerHardwareName(builder, OWNER_HARDWARE_NAMEOffset) {
-    builder.addFieldOffset(8, OWNER_HARDWARE_NAMEOffset, 0);
-  }
-  static addTimeSystem(builder, TIME_SYSTEMOffset) {
-    builder.addFieldOffset(9, TIME_SYSTEMOffset, 0);
-  }
-  static endPCEParameterRef(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCEParameterRef(builder, PARAMETER, PROVIDER_DEFINED_NAMEOffset, ELEMENT_INDEX, COORDINATE_SYSTEM_NAMEOffset, CENTRAL_BODY_ID, SITE_IDOffset, SECOND_OBJECT_IDOffset, OWNER_OBJECT_IDOffset, OWNER_HARDWARE_NAMEOffset, TIME_SYSTEMOffset) {
-    _PCEParameterRef.startPCEParameterRef(builder);
-    _PCEParameterRef.addParameter(builder, PARAMETER);
-    _PCEParameterRef.addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset);
-    _PCEParameterRef.addElementIndex(builder, ELEMENT_INDEX);
-    _PCEParameterRef.addCoordinateSystemName(builder, COORDINATE_SYSTEM_NAMEOffset);
-    _PCEParameterRef.addCentralBodyId(builder, CENTRAL_BODY_ID);
-    _PCEParameterRef.addSiteId(builder, SITE_IDOffset);
-    _PCEParameterRef.addSecondObjectId(builder, SECOND_OBJECT_IDOffset);
-    _PCEParameterRef.addOwnerObjectId(builder, OWNER_OBJECT_IDOffset);
-    _PCEParameterRef.addOwnerHardwareName(builder, OWNER_HARDWARE_NAMEOffset);
-    _PCEParameterRef.addTimeSystem(builder, TIME_SYSTEMOffset);
-    return _PCEParameterRef.endPCEParameterRef(builder);
-  }
-  unpack() {
-    return new PCEParameterRefT(
-      this.PARAMETER(),
-      this.PROVIDER_DEFINED_NAME(),
-      this.ELEMENT_INDEX(),
-      this.COORDINATE_SYSTEM_NAME(),
-      this.CENTRAL_BODY_ID(),
-      this.SITE_ID(),
-      this.SECOND_OBJECT_ID(),
-      this.OWNER_OBJECT_ID(),
-      this.OWNER_HARDWARE_NAME(),
-      this.TIME_SYSTEM()
-    );
-  }
-  unpackTo(_o) {
-    _o.PARAMETER = this.PARAMETER();
-    _o.PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME();
-    _o.ELEMENT_INDEX = this.ELEMENT_INDEX();
-    _o.COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME();
-    _o.CENTRAL_BODY_ID = this.CENTRAL_BODY_ID();
-    _o.SITE_ID = this.SITE_ID();
-    _o.SECOND_OBJECT_ID = this.SECOND_OBJECT_ID();
-    _o.OWNER_OBJECT_ID = this.OWNER_OBJECT_ID();
-    _o.OWNER_HARDWARE_NAME = this.OWNER_HARDWARE_NAME();
-    _o.TIME_SYSTEM = this.TIME_SYSTEM();
-  }
-};
-var PCEParameterRefT = class {
-  constructor(PARAMETER = 0 /* UNSPECIFIED */, PROVIDER_DEFINED_NAME = null, ELEMENT_INDEX = -1, COORDINATE_SYSTEM_NAME = null, CENTRAL_BODY_ID = 0, SITE_ID = null, SECOND_OBJECT_ID = null, OWNER_OBJECT_ID = null, OWNER_HARDWARE_NAME = null, TIME_SYSTEM = null) {
-    this.PARAMETER = PARAMETER;
-    this.PROVIDER_DEFINED_NAME = PROVIDER_DEFINED_NAME;
-    this.ELEMENT_INDEX = ELEMENT_INDEX;
-    this.COORDINATE_SYSTEM_NAME = COORDINATE_SYSTEM_NAME;
-    this.CENTRAL_BODY_ID = CENTRAL_BODY_ID;
-    this.SITE_ID = SITE_ID;
-    this.SECOND_OBJECT_ID = SECOND_OBJECT_ID;
-    this.OWNER_OBJECT_ID = OWNER_OBJECT_ID;
-    this.OWNER_HARDWARE_NAME = OWNER_HARDWARE_NAME;
-    this.TIME_SYSTEM = TIME_SYSTEM;
-  }
-  pack(builder) {
-    const PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME !== null ? builder.createString(this.PROVIDER_DEFINED_NAME) : 0;
-    const COORDINATE_SYSTEM_NAME = this.COORDINATE_SYSTEM_NAME !== null ? builder.createString(this.COORDINATE_SYSTEM_NAME) : 0;
-    const SITE_ID = this.SITE_ID !== null ? builder.createString(this.SITE_ID) : 0;
-    const SECOND_OBJECT_ID = this.SECOND_OBJECT_ID !== null ? builder.createString(this.SECOND_OBJECT_ID) : 0;
-    const OWNER_OBJECT_ID = this.OWNER_OBJECT_ID !== null ? builder.createString(this.OWNER_OBJECT_ID) : 0;
-    const OWNER_HARDWARE_NAME = this.OWNER_HARDWARE_NAME !== null ? builder.createString(this.OWNER_HARDWARE_NAME) : 0;
-    const TIME_SYSTEM = this.TIME_SYSTEM !== null ? builder.createString(this.TIME_SYSTEM) : 0;
-    return PCEParameterRef.createPCEParameterRef(
-      builder,
-      this.PARAMETER,
-      PROVIDER_DEFINED_NAME,
-      this.ELEMENT_INDEX,
-      COORDINATE_SYSTEM_NAME,
-      this.CENTRAL_BODY_ID,
-      SITE_ID,
-      SECOND_OBJECT_ID,
-      OWNER_OBJECT_ID,
-      OWNER_HARDWARE_NAME,
-      TIME_SYSTEM
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationRequest.ts
+import * as flatbuffers54 from "flatbuffers";
 var PCEEvaluationRequest = class _PCEEvaluationRequest {
   bb = null;
   bb_pos = 0;
@@ -9005,7 +11739,7 @@ var PCEEvaluationRequest = class _PCEEvaluationRequest {
     return (obj || new _PCEEvaluationRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCEEvaluationRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers39.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers54.SIZE_PREFIX_LENGTH);
     return (obj || new _PCEEvaluationRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   CONTEXT(obj) {
@@ -9121,359 +11855,7 @@ var PCEEvaluationRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationResult.ts
-import * as flatbuffers42 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
-import * as flatbuffers41 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
-import * as flatbuffers40 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceResultStatus.ts
-var pceResultStatus = /* @__PURE__ */ ((pceResultStatus2) => {
-  pceResultStatus2[pceResultStatus2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pceResultStatus2[pceResultStatus2["OK"] = 1] = "OK";
-  pceResultStatus2[pceResultStatus2["INVALID_INPUT"] = 2] = "INVALID_INPUT";
-  pceResultStatus2[pceResultStatus2["UNKNOWN_PARAMETER"] = 3] = "UNKNOWN_PARAMETER";
-  pceResultStatus2[pceResultStatus2["NOT_IMPLEMENTED"] = 4] = "NOT_IMPLEMENTED";
-  pceResultStatus2[pceResultStatus2["MISSING_DEPENDENCY"] = 5] = "MISSING_DEPENDENCY";
-  pceResultStatus2[pceResultStatus2["MISSING_OWNER_OBJECT"] = 6] = "MISSING_OWNER_OBJECT";
-  pceResultStatus2[pceResultStatus2["MISSING_EOP_DATA"] = 7] = "MISSING_EOP_DATA";
-  pceResultStatus2[pceResultStatus2["SINGULAR_AT_STATE"] = 8] = "SINGULAR_AT_STATE";
-  pceResultStatus2[pceResultStatus2["OUT_OF_DOMAIN"] = 9] = "OUT_OF_DOMAIN";
-  pceResultStatus2[pceResultStatus2["GOAL_NOT_ATTAINED"] = 10] = "GOAL_NOT_ATTAINED";
-  pceResultStatus2[pceResultStatus2["ROOT_REFINEMENT_FAILED"] = 11] = "ROOT_REFINEMENT_FAILED";
-  pceResultStatus2[pceResultStatus2["BUDGET_EXCEEDED"] = 12] = "BUDGET_EXCEEDED";
-  return pceResultStatus2;
-})(pceResultStatus || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceUnit.ts
-var pceUnit = /* @__PURE__ */ ((pceUnit2) => {
-  pceUnit2[pceUnit2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pceUnit2[pceUnit2["DIMENSIONLESS"] = 1] = "DIMENSIONLESS";
-  pceUnit2[pceUnit2["METRE"] = 2] = "METRE";
-  pceUnit2[pceUnit2["METRE_PER_SECOND"] = 3] = "METRE_PER_SECOND";
-  pceUnit2[pceUnit2["METRE_PER_SECOND_SQUARED"] = 4] = "METRE_PER_SECOND_SQUARED";
-  pceUnit2[pceUnit2["METRE_SQUARED"] = 5] = "METRE_SQUARED";
-  pceUnit2[pceUnit2["METRE_SQUARED_PER_SECOND"] = 6] = "METRE_SQUARED_PER_SECOND";
-  pceUnit2[pceUnit2["METRE_SQUARED_PER_SECOND_SQUARED"] = 7] = "METRE_SQUARED_PER_SECOND_SQUARED";
-  pceUnit2[pceUnit2["METRE_CUBED"] = 8] = "METRE_CUBED";
-  pceUnit2[pceUnit2["RADIAN"] = 9] = "RADIAN";
-  pceUnit2[pceUnit2["RADIAN_PER_SECOND"] = 10] = "RADIAN_PER_SECOND";
-  pceUnit2[pceUnit2["SECOND"] = 11] = "SECOND";
-  pceUnit2[pceUnit2["DAY"] = 12] = "DAY";
-  pceUnit2[pceUnit2["KILOGRAM"] = 13] = "KILOGRAM";
-  pceUnit2[pceUnit2["KILOGRAM_PER_SECOND"] = 14] = "KILOGRAM_PER_SECOND";
-  pceUnit2[pceUnit2["KILOGRAM_PER_METRE_CUBED"] = 15] = "KILOGRAM_PER_METRE_CUBED";
-  pceUnit2[pceUnit2["KILOGRAM_METRE_SQUARED"] = 16] = "KILOGRAM_METRE_SQUARED";
-  pceUnit2[pceUnit2["NEWTON"] = 17] = "NEWTON";
-  pceUnit2[pceUnit2["NEWTON_METRE"] = 18] = "NEWTON_METRE";
-  pceUnit2[pceUnit2["WATT"] = 19] = "WATT";
-  pceUnit2[pceUnit2["PASCAL"] = 20] = "PASCAL";
-  pceUnit2[pceUnit2["KELVIN"] = 21] = "KELVIN";
-  pceUnit2[pceUnit2["METRE_SQUARED_PER_KILOGRAM"] = 22] = "METRE_SQUARED_PER_KILOGRAM";
-  pceUnit2[pceUnit2["PROVIDER_DEFINED"] = 100] = "PROVIDER_DEFINED";
-  return pceUnit2;
-})(pceUnit || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterValue.ts
-var PCEParameterValue = class _PCEParameterValue {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCEParameterValue(bb, obj) {
-    return (obj || new _PCEParameterValue()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCEParameterValue(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers40.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCEParameterValue()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  PARAMETER() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  PROVIDER_DEFINED_NAME(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  STATUS() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  /**
-   * Scalar, integer or boolean value. Absent for vector and matrix types.
-   */
-  VALUE() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Vector or matrix values, row-major. Absent for scalar types; a scalar is
-   * NEVER also written here.
-   */
-  VALUES(index) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  valuesLength() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  valuesArray() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  /**
-   * Matrix shape, REQUIRED when the descriptor's DATA_TYPE is REAL_MATRIX.
-   */
-  ROW_COUNT() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  COLUMN_COUNT() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  STRING_VALUE(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Unit the value is expressed in, restating the descriptor so a value is
-   * self-describing when it travels without its catalog.
-   */
-  UNIT() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  MESSAGE(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  static startPCEParameterValue(builder) {
-    builder.startObject(10);
-  }
-  static addParameter(builder, PARAMETER) {
-    builder.addFieldInt16(0, PARAMETER, 0 /* UNSPECIFIED */);
-  }
-  static addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset) {
-    builder.addFieldOffset(1, PROVIDER_DEFINED_NAMEOffset, 0);
-  }
-  static addStatus(builder, STATUS) {
-    builder.addFieldInt8(2, STATUS, 0 /* UNSPECIFIED */);
-  }
-  static addValue(builder, VALUE) {
-    builder.addFieldFloat64(3, VALUE, 0);
-  }
-  static addValues(builder, VALUESOffset) {
-    builder.addFieldOffset(4, VALUESOffset, 0);
-  }
-  static createValuesVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startValuesVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static addRowCount(builder, ROW_COUNT) {
-    builder.addFieldInt32(5, ROW_COUNT, 0);
-  }
-  static addColumnCount(builder, COLUMN_COUNT) {
-    builder.addFieldInt32(6, COLUMN_COUNT, 0);
-  }
-  static addStringValue(builder, STRING_VALUEOffset) {
-    builder.addFieldOffset(7, STRING_VALUEOffset, 0);
-  }
-  static addUnit(builder, UNIT) {
-    builder.addFieldInt8(8, UNIT, 0 /* UNSPECIFIED */);
-  }
-  static addMessage(builder, MESSAGEOffset) {
-    builder.addFieldOffset(9, MESSAGEOffset, 0);
-  }
-  static endPCEParameterValue(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCEParameterValue(builder, PARAMETER, PROVIDER_DEFINED_NAMEOffset, STATUS, VALUE, VALUESOffset, ROW_COUNT, COLUMN_COUNT, STRING_VALUEOffset, UNIT, MESSAGEOffset) {
-    _PCEParameterValue.startPCEParameterValue(builder);
-    _PCEParameterValue.addParameter(builder, PARAMETER);
-    _PCEParameterValue.addProviderDefinedName(builder, PROVIDER_DEFINED_NAMEOffset);
-    _PCEParameterValue.addStatus(builder, STATUS);
-    _PCEParameterValue.addValue(builder, VALUE);
-    _PCEParameterValue.addValues(builder, VALUESOffset);
-    _PCEParameterValue.addRowCount(builder, ROW_COUNT);
-    _PCEParameterValue.addColumnCount(builder, COLUMN_COUNT);
-    _PCEParameterValue.addStringValue(builder, STRING_VALUEOffset);
-    _PCEParameterValue.addUnit(builder, UNIT);
-    _PCEParameterValue.addMessage(builder, MESSAGEOffset);
-    return _PCEParameterValue.endPCEParameterValue(builder);
-  }
-  unpack() {
-    return new PCEParameterValueT(
-      this.PARAMETER(),
-      this.PROVIDER_DEFINED_NAME(),
-      this.STATUS(),
-      this.VALUE(),
-      this.bb.createScalarList(this.VALUES.bind(this), this.valuesLength()),
-      this.ROW_COUNT(),
-      this.COLUMN_COUNT(),
-      this.STRING_VALUE(),
-      this.UNIT(),
-      this.MESSAGE()
-    );
-  }
-  unpackTo(_o) {
-    _o.PARAMETER = this.PARAMETER();
-    _o.PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME();
-    _o.STATUS = this.STATUS();
-    _o.VALUE = this.VALUE();
-    _o.VALUES = this.bb.createScalarList(this.VALUES.bind(this), this.valuesLength());
-    _o.ROW_COUNT = this.ROW_COUNT();
-    _o.COLUMN_COUNT = this.COLUMN_COUNT();
-    _o.STRING_VALUE = this.STRING_VALUE();
-    _o.UNIT = this.UNIT();
-    _o.MESSAGE = this.MESSAGE();
-  }
-};
-var PCEParameterValueT = class {
-  constructor(PARAMETER = 0 /* UNSPECIFIED */, PROVIDER_DEFINED_NAME = null, STATUS = 0 /* UNSPECIFIED */, VALUE = 0, VALUES = [], ROW_COUNT = 0, COLUMN_COUNT = 0, STRING_VALUE = null, UNIT = 0 /* UNSPECIFIED */, MESSAGE = null) {
-    this.PARAMETER = PARAMETER;
-    this.PROVIDER_DEFINED_NAME = PROVIDER_DEFINED_NAME;
-    this.STATUS = STATUS;
-    this.VALUE = VALUE;
-    this.VALUES = VALUES;
-    this.ROW_COUNT = ROW_COUNT;
-    this.COLUMN_COUNT = COLUMN_COUNT;
-    this.STRING_VALUE = STRING_VALUE;
-    this.UNIT = UNIT;
-    this.MESSAGE = MESSAGE;
-  }
-  pack(builder) {
-    const PROVIDER_DEFINED_NAME = this.PROVIDER_DEFINED_NAME !== null ? builder.createString(this.PROVIDER_DEFINED_NAME) : 0;
-    const VALUES = PCEParameterValue.createValuesVector(builder, this.VALUES);
-    const STRING_VALUE = this.STRING_VALUE !== null ? builder.createString(this.STRING_VALUE) : 0;
-    const MESSAGE = this.MESSAGE !== null ? builder.createString(this.MESSAGE) : 0;
-    return PCEParameterValue.createPCEParameterValue(
-      builder,
-      this.PARAMETER,
-      PROVIDER_DEFINED_NAME,
-      this.STATUS,
-      this.VALUE,
-      VALUES,
-      this.ROW_COUNT,
-      this.COLUMN_COUNT,
-      STRING_VALUE,
-      this.UNIT,
-      MESSAGE
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterSample.ts
-var PCEParameterSample = class _PCEParameterSample {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCEParameterSample(bb, obj) {
-    return (obj || new _PCEParameterSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCEParameterSample(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers41.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCEParameterSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  EPOCH(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  EPOCH_TIME_SYSTEM(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  PARAMETER_VALUES(index, obj) {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? (obj || new PCEParameterValue()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
-  }
-  parameterValuesLength() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  static startPCEParameterSample(builder) {
-    builder.startObject(3);
-  }
-  static addEpoch(builder, EPOCHOffset) {
-    builder.addFieldOffset(0, EPOCHOffset, 0);
-  }
-  static addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset) {
-    builder.addFieldOffset(1, EPOCH_TIME_SYSTEMOffset, 0);
-  }
-  static addParameterValues(builder, PARAMETER_VALUESOffset) {
-    builder.addFieldOffset(2, PARAMETER_VALUESOffset, 0);
-  }
-  static createParameterValuesVector(builder, data) {
-    builder.startVector(4, data.length, 4);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addOffset(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startParameterValuesVector(builder, numElems) {
-    builder.startVector(4, numElems, 4);
-  }
-  static endPCEParameterSample(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCEParameterSample(builder, EPOCHOffset, EPOCH_TIME_SYSTEMOffset, PARAMETER_VALUESOffset) {
-    _PCEParameterSample.startPCEParameterSample(builder);
-    _PCEParameterSample.addEpoch(builder, EPOCHOffset);
-    _PCEParameterSample.addEpochTimeSystem(builder, EPOCH_TIME_SYSTEMOffset);
-    _PCEParameterSample.addParameterValues(builder, PARAMETER_VALUESOffset);
-    return _PCEParameterSample.endPCEParameterSample(builder);
-  }
-  unpack() {
-    return new PCEParameterSampleT(
-      this.EPOCH(),
-      this.EPOCH_TIME_SYSTEM(),
-      this.bb.createObjList(this.PARAMETER_VALUES.bind(this), this.parameterValuesLength())
-    );
-  }
-  unpackTo(_o) {
-    _o.EPOCH = this.EPOCH();
-    _o.EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM();
-    _o.PARAMETER_VALUES = this.bb.createObjList(this.PARAMETER_VALUES.bind(this), this.parameterValuesLength());
-  }
-};
-var PCEParameterSampleT = class {
-  constructor(EPOCH = null, EPOCH_TIME_SYSTEM = null, PARAMETER_VALUES = []) {
-    this.EPOCH = EPOCH;
-    this.EPOCH_TIME_SYSTEM = EPOCH_TIME_SYSTEM;
-    this.PARAMETER_VALUES = PARAMETER_VALUES;
-  }
-  pack(builder) {
-    const EPOCH = this.EPOCH !== null ? builder.createString(this.EPOCH) : 0;
-    const EPOCH_TIME_SYSTEM = this.EPOCH_TIME_SYSTEM !== null ? builder.createString(this.EPOCH_TIME_SYSTEM) : 0;
-    const PARAMETER_VALUES = PCEParameterSample.createParameterValuesVector(builder, builder.createObjectOffsetList(this.PARAMETER_VALUES));
-    return PCEParameterSample.createPCEParameterSample(
-      builder,
-      EPOCH,
-      EPOCH_TIME_SYSTEM,
-      PARAMETER_VALUES
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEEvaluationResult.ts
+import * as flatbuffers55 from "flatbuffers";
 var PCEEvaluationResult = class _PCEEvaluationResult {
   bb = null;
   bb_pos = 0;
@@ -9486,7 +11868,7 @@ var PCEEvaluationResult = class _PCEEvaluationResult {
     return (obj || new _PCEEvaluationResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCEEvaluationResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers42.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers55.SIZE_PREFIX_LENGTH);
     return (obj || new _PCEEvaluationResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATUS() {
@@ -9599,10 +11981,10 @@ var PCEEvaluationResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCatalog.ts
-import * as flatbuffers44 from "flatbuffers";
+import * as flatbuffers57 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterDescriptor.ts
-import * as flatbuffers43 from "flatbuffers";
+import * as flatbuffers56 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/pceAvailability.ts
 var pceAvailability = /* @__PURE__ */ ((pceAvailability2) => {
@@ -9650,7 +12032,7 @@ var PCEParameterDescriptor = class _PCEParameterDescriptor {
     return (obj || new _PCEParameterDescriptor()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCEParameterDescriptor(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers43.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers56.SIZE_PREFIX_LENGTH);
     return (obj || new _PCEParameterDescriptor()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   PARAMETER() {
@@ -10017,7 +12399,7 @@ var PCEParameterCatalog = class _PCEParameterCatalog {
     return (obj || new _PCEParameterCatalog()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCEParameterCatalog(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers44.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers57.SIZE_PREFIX_LENGTH);
     return (obj || new _PCEParameterCatalog()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   CATALOG_ID(optionalEncoding) {
@@ -10115,7 +12497,7 @@ var PCEParameterCatalogT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopReport.ts
-import * as flatbuffers45 from "flatbuffers";
+import * as flatbuffers58 from "flatbuffers";
 var PCEStopReport = class _PCEStopReport {
   bb = null;
   bb_pos = 0;
@@ -10128,7 +12510,7 @@ var PCEStopReport = class _PCEStopReport {
     return (obj || new _PCEStopReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCEStopReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers45.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers58.SIZE_PREFIX_LENGTH);
     return (obj || new _PCEStopReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATUS() {
@@ -10360,136 +12742,7 @@ var PCEStopReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCEStopRequest.ts
-import * as flatbuffers47 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
-import * as flatbuffers46 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pceConditionDirection.ts
-var pceConditionDirection = /* @__PURE__ */ ((pceConditionDirection2) => {
-  pceConditionDirection2[pceConditionDirection2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pceConditionDirection2[pceConditionDirection2["ANY_CROSSING"] = 1] = "ANY_CROSSING";
-  pceConditionDirection2[pceConditionDirection2["INCREASING"] = 2] = "INCREASING";
-  pceConditionDirection2[pceConditionDirection2["DECREASING"] = 3] = "DECREASING";
-  return pceConditionDirection2;
-})(pceConditionDirection || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCEParameterCondition.ts
-var PCEParameterCondition = class _PCEParameterCondition {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCEParameterCondition(bb, obj) {
-    return (obj || new _PCEParameterCondition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCEParameterCondition(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers46.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCEParameterCondition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  PARAMETER(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? (obj || new PCEParameterRef()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
-   * Value the parameter must attain, in the parameter's own SI unit.
-   */
-  GOAL_VALUE() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  DIRECTION() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  /**
-   * Convergence bar on the parameter value at the reported epoch, in the
-   * parameter's own unit. A provider that cannot meet it returns
-   * ROOT_REFINEMENT_FAILED rather than reporting an unconverged root.
-   */
-  GOAL_TOLERANCE() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Which attainment satisfies the condition, one-based. 0 and 1 both mean
-   * the first.
-   */
-  OCCURRENCE() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readUint32(this.bb_pos + offset) : 1;
-  }
-  static startPCEParameterCondition(builder) {
-    builder.startObject(5);
-  }
-  static addParameter(builder, PARAMETEROffset) {
-    builder.addFieldOffset(0, PARAMETEROffset, 0);
-  }
-  static addGoalValue(builder, GOAL_VALUE) {
-    builder.addFieldFloat64(1, GOAL_VALUE, 0);
-  }
-  static addDirection(builder, DIRECTION) {
-    builder.addFieldInt8(2, DIRECTION, 0 /* UNSPECIFIED */);
-  }
-  static addGoalTolerance(builder, GOAL_TOLERANCE) {
-    builder.addFieldFloat64(3, GOAL_TOLERANCE, 0);
-  }
-  static addOccurrence(builder, OCCURRENCE) {
-    builder.addFieldInt32(4, OCCURRENCE, 1);
-  }
-  static endPCEParameterCondition(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCEParameterCondition(builder, PARAMETEROffset, GOAL_VALUE, DIRECTION, GOAL_TOLERANCE, OCCURRENCE) {
-    _PCEParameterCondition.startPCEParameterCondition(builder);
-    _PCEParameterCondition.addParameter(builder, PARAMETEROffset);
-    _PCEParameterCondition.addGoalValue(builder, GOAL_VALUE);
-    _PCEParameterCondition.addDirection(builder, DIRECTION);
-    _PCEParameterCondition.addGoalTolerance(builder, GOAL_TOLERANCE);
-    _PCEParameterCondition.addOccurrence(builder, OCCURRENCE);
-    return _PCEParameterCondition.endPCEParameterCondition(builder);
-  }
-  unpack() {
-    return new PCEParameterConditionT(
-      this.PARAMETER() !== null ? this.PARAMETER().unpack() : null,
-      this.GOAL_VALUE(),
-      this.DIRECTION(),
-      this.GOAL_TOLERANCE(),
-      this.OCCURRENCE()
-    );
-  }
-  unpackTo(_o) {
-    _o.PARAMETER = this.PARAMETER() !== null ? this.PARAMETER().unpack() : null;
-    _o.GOAL_VALUE = this.GOAL_VALUE();
-    _o.DIRECTION = this.DIRECTION();
-    _o.GOAL_TOLERANCE = this.GOAL_TOLERANCE();
-    _o.OCCURRENCE = this.OCCURRENCE();
-  }
-};
-var PCEParameterConditionT = class {
-  constructor(PARAMETER = null, GOAL_VALUE = 0, DIRECTION = 0 /* UNSPECIFIED */, GOAL_TOLERANCE = 0, OCCURRENCE = 1) {
-    this.PARAMETER = PARAMETER;
-    this.GOAL_VALUE = GOAL_VALUE;
-    this.DIRECTION = DIRECTION;
-    this.GOAL_TOLERANCE = GOAL_TOLERANCE;
-    this.OCCURRENCE = OCCURRENCE;
-  }
-  pack(builder) {
-    const PARAMETER = this.PARAMETER !== null ? this.PARAMETER.pack(builder) : 0;
-    return PCEParameterCondition.createPCEParameterCondition(
-      builder,
-      PARAMETER,
-      this.GOAL_VALUE,
-      this.DIRECTION,
-      this.GOAL_TOLERANCE,
-      this.OCCURRENCE
-    );
-  }
-};
+import * as flatbuffers59 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/pcePropagationDirection.ts
 var pcePropagationDirection = /* @__PURE__ */ ((pcePropagationDirection2) => {
@@ -10512,7 +12765,7 @@ var PCEStopRequest = class _PCEStopRequest {
     return (obj || new _PCEStopRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCEStopRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers47.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers59.SIZE_PREFIX_LENGTH);
     return (obj || new _PCEStopRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   CONTEXT(obj) {
@@ -10716,7 +12969,7 @@ var PCE = class _PCE {
     return (obj || new _PCE()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCE(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers48.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers60.SIZE_PREFIX_LENGTH);
     return (obj || new _PCE()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -10811,6 +13064,3980 @@ var PCET = class {
   }
 };
 
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
+import * as flatbuffers79 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
+import * as flatbuffers63 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
+import * as flatbuffers62 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
+import * as flatbuffers61 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfExpressionOperation.ts
+var pcfExpressionOperation = /* @__PURE__ */ ((pcfExpressionOperation2) => {
+  pcfExpressionOperation2[pcfExpressionOperation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfExpressionOperation2[pcfExpressionOperation2["CONSTANT"] = 1] = "CONSTANT";
+  pcfExpressionOperation2[pcfExpressionOperation2["PARAMETER"] = 2] = "PARAMETER";
+  pcfExpressionOperation2[pcfExpressionOperation2["ADD"] = 3] = "ADD";
+  pcfExpressionOperation2[pcfExpressionOperation2["SUBTRACT"] = 4] = "SUBTRACT";
+  pcfExpressionOperation2[pcfExpressionOperation2["MULTIPLY"] = 5] = "MULTIPLY";
+  pcfExpressionOperation2[pcfExpressionOperation2["DIVIDE"] = 6] = "DIVIDE";
+  pcfExpressionOperation2[pcfExpressionOperation2["NEGATE"] = 7] = "NEGATE";
+  pcfExpressionOperation2[pcfExpressionOperation2["ABSOLUTE"] = 8] = "ABSOLUTE";
+  pcfExpressionOperation2[pcfExpressionOperation2["SQUARE_ROOT"] = 9] = "SQUARE_ROOT";
+  pcfExpressionOperation2[pcfExpressionOperation2["SINE"] = 10] = "SINE";
+  pcfExpressionOperation2[pcfExpressionOperation2["COSINE"] = 11] = "COSINE";
+  pcfExpressionOperation2[pcfExpressionOperation2["MINIMUM"] = 12] = "MINIMUM";
+  pcfExpressionOperation2[pcfExpressionOperation2["MAXIMUM"] = 13] = "MAXIMUM";
+  return pcfExpressionOperation2;
+})(pcfExpressionOperation || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
+var PCFExpressionTerm = class _PCFExpressionTerm {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFExpressionTerm(bb, obj) {
+    return (obj || new _PCFExpressionTerm()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFExpressionTerm(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers61.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFExpressionTerm()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * What the term does. Default UNSPECIFIED (refused).
+   */
+  OPERATION() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * The constant pushed by CONSTANT. Default 0.
+   */
+  VALUE() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * The catalog parameter pushed by PARAMETER. Default UNSPECIFIED.
+   */
+  PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  static startPCFExpressionTerm(builder) {
+    builder.startObject(3);
+  }
+  static addOperation(builder, OPERATION) {
+    builder.addFieldInt8(0, OPERATION, 0 /* UNSPECIFIED */);
+  }
+  static addValue(builder, VALUE) {
+    builder.addFieldFloat64(1, VALUE, 0);
+  }
+  static addParameter(builder, PARAMETER) {
+    builder.addFieldInt16(2, PARAMETER, 0 /* UNSPECIFIED */);
+  }
+  static endPCFExpressionTerm(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFExpressionTerm(builder, OPERATION, VALUE, PARAMETER) {
+    _PCFExpressionTerm.startPCFExpressionTerm(builder);
+    _PCFExpressionTerm.addOperation(builder, OPERATION);
+    _PCFExpressionTerm.addValue(builder, VALUE);
+    _PCFExpressionTerm.addParameter(builder, PARAMETER);
+    return _PCFExpressionTerm.endPCFExpressionTerm(builder);
+  }
+  unpack() {
+    return new PCFExpressionTermT(
+      this.OPERATION(),
+      this.VALUE(),
+      this.PARAMETER()
+    );
+  }
+  unpackTo(_o) {
+    _o.OPERATION = this.OPERATION();
+    _o.VALUE = this.VALUE();
+    _o.PARAMETER = this.PARAMETER();
+  }
+};
+var PCFExpressionTermT = class {
+  constructor(OPERATION = 0 /* UNSPECIFIED */, VALUE = 0, PARAMETER = 0 /* UNSPECIFIED */) {
+    this.OPERATION = OPERATION;
+    this.VALUE = VALUE;
+    this.PARAMETER = PARAMETER;
+  }
+  pack(builder) {
+    return PCFExpressionTerm.createPCFExpressionTerm(
+      builder,
+      this.OPERATION,
+      this.VALUE,
+      this.PARAMETER
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
+var PCFExpression = class _PCFExpression {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFExpression(bb, obj) {
+    return (obj || new _PCFExpression()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFExpression(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers62.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFExpression()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * The terms, in evaluation order. Default empty.
+   */
+  TERMS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? (obj || new PCFExpressionTerm()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  termsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  static startPCFExpression(builder) {
+    builder.startObject(1);
+  }
+  static addTerms(builder, TERMSOffset) {
+    builder.addFieldOffset(0, TERMSOffset, 0);
+  }
+  static createTermsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startTermsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static endPCFExpression(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFExpression(builder, TERMSOffset) {
+    _PCFExpression.startPCFExpression(builder);
+    _PCFExpression.addTerms(builder, TERMSOffset);
+    return _PCFExpression.endPCFExpression(builder);
+  }
+  unpack() {
+    return new PCFExpressionT(
+      this.bb.createObjList(this.TERMS.bind(this), this.termsLength())
+    );
+  }
+  unpackTo(_o) {
+    _o.TERMS = this.bb.createObjList(this.TERMS.bind(this), this.termsLength());
+  }
+};
+var PCFExpressionT = class {
+  constructor(TERMS = []) {
+    this.TERMS = TERMS;
+  }
+  pack(builder) {
+    const TERMS = PCFExpression.createTermsVector(builder, builder.createObjectOffsetList(this.TERMS));
+    return PCFExpression.createPCFExpression(
+      builder,
+      TERMS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventAction.ts
+var pcfEventAction = /* @__PURE__ */ ((pcfEventAction2) => {
+  pcfEventAction2[pcfEventAction2["CONTINUE"] = 0] = "CONTINUE";
+  pcfEventAction2[pcfEventAction2["RECORD"] = 1] = "RECORD";
+  pcfEventAction2[pcfEventAction2["STOP"] = 2] = "STOP";
+  return pcfEventAction2;
+})(pcfEventAction || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventDirection.ts
+var pcfEventDirection = /* @__PURE__ */ ((pcfEventDirection2) => {
+  pcfEventDirection2[pcfEventDirection2["ANY"] = 0] = "ANY";
+  pcfEventDirection2[pcfEventDirection2["INCREASING"] = 1] = "INCREASING";
+  pcfEventDirection2[pcfEventDirection2["DECREASING"] = 2] = "DECREASING";
+  return pcfEventDirection2;
+})(pcfEventDirection || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEventKind.ts
+var pcfEventKind = /* @__PURE__ */ ((pcfEventKind2) => {
+  pcfEventKind2[pcfEventKind2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfEventKind2[pcfEventKind2["APSIS"] = 1] = "APSIS";
+  pcfEventKind2[pcfEventKind2["PLANE_CROSSING"] = 2] = "PLANE_CROSSING";
+  pcfEventKind2[pcfEventKind2["TRUE_ANOMALY"] = 3] = "TRUE_ANOMALY";
+  pcfEventKind2[pcfEventKind2["ARGUMENT_OF_LATITUDE"] = 4] = "ARGUMENT_OF_LATITUDE";
+  pcfEventKind2[pcfEventKind2["LATITUDE_EXTREMUM"] = 5] = "LATITUDE_EXTREMUM";
+  pcfEventKind2[pcfEventKind2["UMBRA"] = 6] = "UMBRA";
+  pcfEventKind2[pcfEventKind2["PENUMBRA"] = 7] = "PENUMBRA";
+  pcfEventKind2[pcfEventKind2["CLOSEST_APPROACH"] = 8] = "CLOSEST_APPROACH";
+  pcfEventKind2[pcfEventKind2["EXPRESSION"] = 9] = "EXPRESSION";
+  return pcfEventKind2;
+})(pcfEventKind || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
+var PCFEventDefinition = class _PCFEventDefinition {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFEventDefinition(bb, obj) {
+    return (obj || new _PCFEventDefinition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFEventDefinition(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers63.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFEventDefinition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * The event function. Default UNSPECIFIED (refused).
+   */
+  KIND() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Which zero crossings of the event function count. Default ANY.
+   */
+  DIRECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* ANY */;
+  }
+  /**
+   * What the integrator does at the event. Default RECORD.
+   */
+  ACTION() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1 /* RECORD */;
+  }
+  /**
+   * Tolerance on the located epoch, seconds; 0 also selects 1e-9. Default 1e-9.
+   */
+  TOLERANCE_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1e-9;
+  }
+  /**
+   * STOP acts at this qualifying crossing (1 is the first). Default 1.
+   */
+  OCCURRENCE() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 1;
+  }
+  /**
+   * TRUE_ANOMALY and ARGUMENT_OF_LATITUDE: the angle, radians. Default 0.
+   */
+  ANGLE_RAD() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * PLANE_CROSSING: the normal, in the request's axes; it need not be a unit
+   * vector. Default absent (the pole of the axes).
+   */
+  PLANE_NORMAL(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? (obj || new FRMVector3()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  SECOND_TRAJECTORY_PORT(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * EXPRESSION: the program. Default absent.
+   */
+  EXPRESSION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? (obj || new PCFExpression()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startPCFEventDefinition(builder) {
+    builder.startObject(9);
+  }
+  static addKind(builder, KIND) {
+    builder.addFieldInt8(0, KIND, 0 /* UNSPECIFIED */);
+  }
+  static addDirection(builder, DIRECTION) {
+    builder.addFieldInt8(1, DIRECTION, 0 /* ANY */);
+  }
+  static addAction(builder, ACTION) {
+    builder.addFieldInt8(2, ACTION, 1 /* RECORD */);
+  }
+  static addToleranceSeconds(builder, TOLERANCE_SECONDS) {
+    builder.addFieldFloat64(3, TOLERANCE_SECONDS, 1e-9);
+  }
+  static addOccurrence(builder, OCCURRENCE) {
+    builder.addFieldInt32(4, OCCURRENCE, 1);
+  }
+  static addAngleRad(builder, ANGLE_RAD) {
+    builder.addFieldFloat64(5, ANGLE_RAD, 0);
+  }
+  static addPlaneNormal(builder, PLANE_NORMALOffset) {
+    builder.addFieldOffset(6, PLANE_NORMALOffset, 0);
+  }
+  static addSecondTrajectoryPort(builder, SECOND_TRAJECTORY_PORTOffset) {
+    builder.addFieldOffset(7, SECOND_TRAJECTORY_PORTOffset, 0);
+  }
+  static addExpression(builder, EXPRESSIONOffset) {
+    builder.addFieldOffset(8, EXPRESSIONOffset, 0);
+  }
+  static endPCFEventDefinition(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new PCFEventDefinitionT(
+      this.KIND(),
+      this.DIRECTION(),
+      this.ACTION(),
+      this.TOLERANCE_SECONDS(),
+      this.OCCURRENCE(),
+      this.ANGLE_RAD(),
+      this.PLANE_NORMAL() !== null ? this.PLANE_NORMAL().unpack() : null,
+      this.SECOND_TRAJECTORY_PORT(),
+      this.EXPRESSION() !== null ? this.EXPRESSION().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.KIND = this.KIND();
+    _o.DIRECTION = this.DIRECTION();
+    _o.ACTION = this.ACTION();
+    _o.TOLERANCE_SECONDS = this.TOLERANCE_SECONDS();
+    _o.OCCURRENCE = this.OCCURRENCE();
+    _o.ANGLE_RAD = this.ANGLE_RAD();
+    _o.PLANE_NORMAL = this.PLANE_NORMAL() !== null ? this.PLANE_NORMAL().unpack() : null;
+    _o.SECOND_TRAJECTORY_PORT = this.SECOND_TRAJECTORY_PORT();
+    _o.EXPRESSION = this.EXPRESSION() !== null ? this.EXPRESSION().unpack() : null;
+  }
+};
+var PCFEventDefinitionT = class {
+  constructor(KIND = 0 /* UNSPECIFIED */, DIRECTION = 0 /* ANY */, ACTION = 1 /* RECORD */, TOLERANCE_SECONDS = 1e-9, OCCURRENCE = 1, ANGLE_RAD = 0, PLANE_NORMAL = null, SECOND_TRAJECTORY_PORT = null, EXPRESSION = null) {
+    this.KIND = KIND;
+    this.DIRECTION = DIRECTION;
+    this.ACTION = ACTION;
+    this.TOLERANCE_SECONDS = TOLERANCE_SECONDS;
+    this.OCCURRENCE = OCCURRENCE;
+    this.ANGLE_RAD = ANGLE_RAD;
+    this.PLANE_NORMAL = PLANE_NORMAL;
+    this.SECOND_TRAJECTORY_PORT = SECOND_TRAJECTORY_PORT;
+    this.EXPRESSION = EXPRESSION;
+  }
+  pack(builder) {
+    const PLANE_NORMAL = this.PLANE_NORMAL !== null ? this.PLANE_NORMAL.pack(builder) : 0;
+    const SECOND_TRAJECTORY_PORT = this.SECOND_TRAJECTORY_PORT !== null ? builder.createString(this.SECOND_TRAJECTORY_PORT) : 0;
+    const EXPRESSION = this.EXPRESSION !== null ? this.EXPRESSION.pack(builder) : 0;
+    PCFEventDefinition.startPCFEventDefinition(builder);
+    PCFEventDefinition.addKind(builder, this.KIND);
+    PCFEventDefinition.addDirection(builder, this.DIRECTION);
+    PCFEventDefinition.addAction(builder, this.ACTION);
+    PCFEventDefinition.addToleranceSeconds(builder, this.TOLERANCE_SECONDS);
+    PCFEventDefinition.addOccurrence(builder, this.OCCURRENCE);
+    PCFEventDefinition.addAngleRad(builder, this.ANGLE_RAD);
+    PCFEventDefinition.addPlaneNormal(builder, PLANE_NORMAL);
+    PCFEventDefinition.addSecondTrajectoryPort(builder, SECOND_TRAJECTORY_PORT);
+    PCFEventDefinition.addExpression(builder, EXPRESSION);
+    return PCFEventDefinition.endPCFEventDefinition(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
+import * as flatbuffers65 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFGaussianPrior.ts
+import * as flatbuffers64 from "flatbuffers";
+var PCFGaussianPrior = class _PCFGaussianPrior {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFGaussianPrior(bb, obj) {
+    return (obj || new _PCFGaussianPrior()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFGaussianPrior(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers64.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFGaussianPrior()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Prior mean, in the unit of the parameter it is attached to. Default 0.
+   */
+  MEAN() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Prior standard deviation, in the same unit; > 0 when HAS_SIGMA.
+   */
+  SIGMA() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when SIGMA carries a value; false keeps the theory's own sigma.
+   */
+  HAS_SIGMA() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  static startPCFGaussianPrior(builder) {
+    builder.startObject(3);
+  }
+  static addMean(builder, MEAN) {
+    builder.addFieldFloat64(0, MEAN, 0);
+  }
+  static addSigma(builder, SIGMA) {
+    builder.addFieldFloat64(1, SIGMA, 0);
+  }
+  static addHasSigma(builder, HAS_SIGMA) {
+    builder.addFieldInt8(2, +HAS_SIGMA, 0);
+  }
+  static endPCFGaussianPrior(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFGaussianPrior(builder, MEAN, SIGMA, HAS_SIGMA) {
+    _PCFGaussianPrior.startPCFGaussianPrior(builder);
+    _PCFGaussianPrior.addMean(builder, MEAN);
+    _PCFGaussianPrior.addSigma(builder, SIGMA);
+    _PCFGaussianPrior.addHasSigma(builder, HAS_SIGMA);
+    return _PCFGaussianPrior.endPCFGaussianPrior(builder);
+  }
+  unpack() {
+    return new PCFGaussianPriorT(
+      this.MEAN(),
+      this.SIGMA(),
+      this.HAS_SIGMA()
+    );
+  }
+  unpackTo(_o) {
+    _o.MEAN = this.MEAN();
+    _o.SIGMA = this.SIGMA();
+    _o.HAS_SIGMA = this.HAS_SIGMA();
+  }
+};
+var PCFGaussianPriorT = class {
+  constructor(MEAN = 0, SIGMA = 0, HAS_SIGMA = false) {
+    this.MEAN = MEAN;
+    this.SIGMA = SIGMA;
+    this.HAS_SIGMA = HAS_SIGMA;
+  }
+  pack(builder) {
+    return PCFGaussianPrior.createPCFGaussianPrior(
+      builder,
+      this.MEAN,
+      this.SIGMA,
+      this.HAS_SIGMA
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
+var PCFFitPolicy = class _PCFFitPolicy {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFFitPolicy(bb, obj) {
+    return (obj || new _PCFFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFFitPolicy(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers65.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Fit span used when the span rule is not run, hours. Default 48.
+   */
+  DEFAULT_SPAN_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 48;
+  }
+  /**
+   * Shortest span a fit may take, hours. Default 24.
+   */
+  MINIMUM_SPAN_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 24;
+  }
+  /**
+   * Longest span a fit may take, hours. Default 120.
+   */
+  MAXIMUM_SPAN_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 120;
+  }
+  /**
+   * Spans the extension rule scores, ascending, hours, each within
+   * [MINIMUM_SPAN_HOURS, MAXIMUM_SPAN_HOURS]. Empty: 48, 72 and 120; with
+   * 24 in front when the eccentricity exceeds ECCENTRICITY_THRESHOLD.
+   */
+  CANDIDATE_SPANS_HOURS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  candidateSpansHoursLength() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  candidateSpansHoursArray() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Validation tail: each candidate is fitted to the data before the latest
+   * TAIL_HOURS and scored on that tail, hours. Default 24.
+   */
+  TAIL_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 24;
+  }
+  /**
+   * Extension rule: a longer candidate is taken only when its tail error is
+   * at most this fraction of the best shorter candidate's. Default 0.9.
+   */
+  EXTENSION_MARGIN() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.9;
+  }
+  /**
+   * Hours held out at the end of the data and reported as error growth; the
+   * fit then ends HOLDOUT_HOURS before the data does. Absent, the data
+   * block's own useable stop time decides.
+   */
+  HOLDOUT_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when HOLDOUT_HOURS carries a value; false means absent.
+   */
+  HAS_HOLDOUT_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Eccentricity above which the eccentric-orbit rule applies. Default 0.5.
+   */
+  ECCENTRICITY_THRESHOLD() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.5;
+  }
+  /**
+   * Eccentric orbits: the default span, hours. Default 24.
+   */
+  ECCENTRIC_DEFAULT_SPAN_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 24;
+  }
+  /**
+   * Eccentric orbits: EXTENSION_MARGIN. Default 0.7.
+   */
+  ECCENTRIC_EXTENSION_MARGIN() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.7;
+  }
+  /**
+   * Eccentric orbits: no candidate longer than this is tried once the orbital
+   * period passes it, hours. Default 36.
+   */
+  ECCENTRIC_MAXIMUM_PERIOD_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 36;
+  }
+  /**
+   * A fit whose RMS passes this is refused as fit-implausible, km. Default
+   * 100.
+   */
+  IMPLAUSIBLE_RMS_KM() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 100;
+  }
+  /**
+   * Prior on B_eff, the signed drag area-to-mass ratio Cd*A/m, m2/kg. Absent
+   * or without sigma: mean 0; sigma 1.0 for SDNAP, 0.05 for SGP4XP.
+   */
+  DRAG_PRIOR(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? (obj || new PCFGaussianPrior()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Prior on AGOM, the radiation-pressure area-to-mass ratio Cr*A/m, m2/kg.
+   * Absent or without sigma: mean 0, sigma 0.05.
+   */
+  SRP_PRIOR(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 32);
+    return offset ? (obj || new PCFGaussianPrior()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startPCFFitPolicy(builder) {
+    builder.startObject(15);
+  }
+  static addDefaultSpanHours(builder, DEFAULT_SPAN_HOURS) {
+    builder.addFieldFloat64(0, DEFAULT_SPAN_HOURS, 48);
+  }
+  static addMinimumSpanHours(builder, MINIMUM_SPAN_HOURS) {
+    builder.addFieldFloat64(1, MINIMUM_SPAN_HOURS, 24);
+  }
+  static addMaximumSpanHours(builder, MAXIMUM_SPAN_HOURS) {
+    builder.addFieldFloat64(2, MAXIMUM_SPAN_HOURS, 120);
+  }
+  static addCandidateSpansHours(builder, CANDIDATE_SPANS_HOURSOffset) {
+    builder.addFieldOffset(3, CANDIDATE_SPANS_HOURSOffset, 0);
+  }
+  static createCandidateSpansHoursVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startCandidateSpansHoursVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addTailHours(builder, TAIL_HOURS) {
+    builder.addFieldFloat64(4, TAIL_HOURS, 24);
+  }
+  static addExtensionMargin(builder, EXTENSION_MARGIN) {
+    builder.addFieldFloat64(5, EXTENSION_MARGIN, 0.9);
+  }
+  static addHoldoutHours(builder, HOLDOUT_HOURS) {
+    builder.addFieldFloat64(6, HOLDOUT_HOURS, 0);
+  }
+  static addHasHoldoutHours(builder, HAS_HOLDOUT_HOURS) {
+    builder.addFieldInt8(7, +HAS_HOLDOUT_HOURS, 0);
+  }
+  static addEccentricityThreshold(builder, ECCENTRICITY_THRESHOLD) {
+    builder.addFieldFloat64(8, ECCENTRICITY_THRESHOLD, 0.5);
+  }
+  static addEccentricDefaultSpanHours(builder, ECCENTRIC_DEFAULT_SPAN_HOURS) {
+    builder.addFieldFloat64(9, ECCENTRIC_DEFAULT_SPAN_HOURS, 24);
+  }
+  static addEccentricExtensionMargin(builder, ECCENTRIC_EXTENSION_MARGIN) {
+    builder.addFieldFloat64(10, ECCENTRIC_EXTENSION_MARGIN, 0.7);
+  }
+  static addEccentricMaximumPeriodHours(builder, ECCENTRIC_MAXIMUM_PERIOD_HOURS) {
+    builder.addFieldFloat64(11, ECCENTRIC_MAXIMUM_PERIOD_HOURS, 36);
+  }
+  static addImplausibleRmsKm(builder, IMPLAUSIBLE_RMS_KM) {
+    builder.addFieldFloat64(12, IMPLAUSIBLE_RMS_KM, 100);
+  }
+  static addDragPrior(builder, DRAG_PRIOROffset) {
+    builder.addFieldOffset(13, DRAG_PRIOROffset, 0);
+  }
+  static addSrpPrior(builder, SRP_PRIOROffset) {
+    builder.addFieldOffset(14, SRP_PRIOROffset, 0);
+  }
+  static endPCFFitPolicy(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new PCFFitPolicyT(
+      this.DEFAULT_SPAN_HOURS(),
+      this.MINIMUM_SPAN_HOURS(),
+      this.MAXIMUM_SPAN_HOURS(),
+      this.bb.createScalarList(this.CANDIDATE_SPANS_HOURS.bind(this), this.candidateSpansHoursLength()),
+      this.TAIL_HOURS(),
+      this.EXTENSION_MARGIN(),
+      this.HOLDOUT_HOURS(),
+      this.HAS_HOLDOUT_HOURS(),
+      this.ECCENTRICITY_THRESHOLD(),
+      this.ECCENTRIC_DEFAULT_SPAN_HOURS(),
+      this.ECCENTRIC_EXTENSION_MARGIN(),
+      this.ECCENTRIC_MAXIMUM_PERIOD_HOURS(),
+      this.IMPLAUSIBLE_RMS_KM(),
+      this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null,
+      this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.DEFAULT_SPAN_HOURS = this.DEFAULT_SPAN_HOURS();
+    _o.MINIMUM_SPAN_HOURS = this.MINIMUM_SPAN_HOURS();
+    _o.MAXIMUM_SPAN_HOURS = this.MAXIMUM_SPAN_HOURS();
+    _o.CANDIDATE_SPANS_HOURS = this.bb.createScalarList(this.CANDIDATE_SPANS_HOURS.bind(this), this.candidateSpansHoursLength());
+    _o.TAIL_HOURS = this.TAIL_HOURS();
+    _o.EXTENSION_MARGIN = this.EXTENSION_MARGIN();
+    _o.HOLDOUT_HOURS = this.HOLDOUT_HOURS();
+    _o.HAS_HOLDOUT_HOURS = this.HAS_HOLDOUT_HOURS();
+    _o.ECCENTRICITY_THRESHOLD = this.ECCENTRICITY_THRESHOLD();
+    _o.ECCENTRIC_DEFAULT_SPAN_HOURS = this.ECCENTRIC_DEFAULT_SPAN_HOURS();
+    _o.ECCENTRIC_EXTENSION_MARGIN = this.ECCENTRIC_EXTENSION_MARGIN();
+    _o.ECCENTRIC_MAXIMUM_PERIOD_HOURS = this.ECCENTRIC_MAXIMUM_PERIOD_HOURS();
+    _o.IMPLAUSIBLE_RMS_KM = this.IMPLAUSIBLE_RMS_KM();
+    _o.DRAG_PRIOR = this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null;
+    _o.SRP_PRIOR = this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null;
+  }
+};
+var PCFFitPolicyT = class {
+  constructor(DEFAULT_SPAN_HOURS = 48, MINIMUM_SPAN_HOURS = 24, MAXIMUM_SPAN_HOURS = 120, CANDIDATE_SPANS_HOURS = [], TAIL_HOURS = 24, EXTENSION_MARGIN = 0.9, HOLDOUT_HOURS = 0, HAS_HOLDOUT_HOURS = false, ECCENTRICITY_THRESHOLD = 0.5, ECCENTRIC_DEFAULT_SPAN_HOURS = 24, ECCENTRIC_EXTENSION_MARGIN = 0.7, ECCENTRIC_MAXIMUM_PERIOD_HOURS = 36, IMPLAUSIBLE_RMS_KM = 100, DRAG_PRIOR = null, SRP_PRIOR = null) {
+    this.DEFAULT_SPAN_HOURS = DEFAULT_SPAN_HOURS;
+    this.MINIMUM_SPAN_HOURS = MINIMUM_SPAN_HOURS;
+    this.MAXIMUM_SPAN_HOURS = MAXIMUM_SPAN_HOURS;
+    this.CANDIDATE_SPANS_HOURS = CANDIDATE_SPANS_HOURS;
+    this.TAIL_HOURS = TAIL_HOURS;
+    this.EXTENSION_MARGIN = EXTENSION_MARGIN;
+    this.HOLDOUT_HOURS = HOLDOUT_HOURS;
+    this.HAS_HOLDOUT_HOURS = HAS_HOLDOUT_HOURS;
+    this.ECCENTRICITY_THRESHOLD = ECCENTRICITY_THRESHOLD;
+    this.ECCENTRIC_DEFAULT_SPAN_HOURS = ECCENTRIC_DEFAULT_SPAN_HOURS;
+    this.ECCENTRIC_EXTENSION_MARGIN = ECCENTRIC_EXTENSION_MARGIN;
+    this.ECCENTRIC_MAXIMUM_PERIOD_HOURS = ECCENTRIC_MAXIMUM_PERIOD_HOURS;
+    this.IMPLAUSIBLE_RMS_KM = IMPLAUSIBLE_RMS_KM;
+    this.DRAG_PRIOR = DRAG_PRIOR;
+    this.SRP_PRIOR = SRP_PRIOR;
+  }
+  pack(builder) {
+    const CANDIDATE_SPANS_HOURS = PCFFitPolicy.createCandidateSpansHoursVector(builder, this.CANDIDATE_SPANS_HOURS);
+    const DRAG_PRIOR = this.DRAG_PRIOR !== null ? this.DRAG_PRIOR.pack(builder) : 0;
+    const SRP_PRIOR = this.SRP_PRIOR !== null ? this.SRP_PRIOR.pack(builder) : 0;
+    PCFFitPolicy.startPCFFitPolicy(builder);
+    PCFFitPolicy.addDefaultSpanHours(builder, this.DEFAULT_SPAN_HOURS);
+    PCFFitPolicy.addMinimumSpanHours(builder, this.MINIMUM_SPAN_HOURS);
+    PCFFitPolicy.addMaximumSpanHours(builder, this.MAXIMUM_SPAN_HOURS);
+    PCFFitPolicy.addCandidateSpansHours(builder, CANDIDATE_SPANS_HOURS);
+    PCFFitPolicy.addTailHours(builder, this.TAIL_HOURS);
+    PCFFitPolicy.addExtensionMargin(builder, this.EXTENSION_MARGIN);
+    PCFFitPolicy.addHoldoutHours(builder, this.HOLDOUT_HOURS);
+    PCFFitPolicy.addHasHoldoutHours(builder, this.HAS_HOLDOUT_HOURS);
+    PCFFitPolicy.addEccentricityThreshold(builder, this.ECCENTRICITY_THRESHOLD);
+    PCFFitPolicy.addEccentricDefaultSpanHours(builder, this.ECCENTRIC_DEFAULT_SPAN_HOURS);
+    PCFFitPolicy.addEccentricExtensionMargin(builder, this.ECCENTRIC_EXTENSION_MARGIN);
+    PCFFitPolicy.addEccentricMaximumPeriodHours(builder, this.ECCENTRIC_MAXIMUM_PERIOD_HOURS);
+    PCFFitPolicy.addImplausibleRmsKm(builder, this.IMPLAUSIBLE_RMS_KM);
+    PCFFitPolicy.addDragPrior(builder, DRAG_PRIOR);
+    PCFFitPolicy.addSrpPrior(builder, SRP_PRIOR);
+    return PCFFitPolicy.endPCFFitPolicy(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFForceModel.ts
+import * as flatbuffers71 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEcom2.ts
+import * as flatbuffers66 from "flatbuffers";
+var PCFEcom2 = class _PCFEcom2 {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFEcom2(bb, obj) {
+    return (obj || new _PCFEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFEcom2(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers66.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  D0_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  Y0_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  B0_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  D2_COS_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  D2_SIN_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  D4_COS_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  D4_SIN_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  B1_COS_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  B1_SIN_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  B3_COS_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  B3_SIN_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  static startPCFEcom2(builder) {
+    builder.startObject(11);
+  }
+  static addD0MS2(builder, D0_M_S2) {
+    builder.addFieldFloat64(0, D0_M_S2, 0);
+  }
+  static addY0MS2(builder, Y0_M_S2) {
+    builder.addFieldFloat64(1, Y0_M_S2, 0);
+  }
+  static addB0MS2(builder, B0_M_S2) {
+    builder.addFieldFloat64(2, B0_M_S2, 0);
+  }
+  static addD2CosMS2(builder, D2_COS_M_S2) {
+    builder.addFieldFloat64(3, D2_COS_M_S2, 0);
+  }
+  static addD2SinMS2(builder, D2_SIN_M_S2) {
+    builder.addFieldFloat64(4, D2_SIN_M_S2, 0);
+  }
+  static addD4CosMS2(builder, D4_COS_M_S2) {
+    builder.addFieldFloat64(5, D4_COS_M_S2, 0);
+  }
+  static addD4SinMS2(builder, D4_SIN_M_S2) {
+    builder.addFieldFloat64(6, D4_SIN_M_S2, 0);
+  }
+  static addB1CosMS2(builder, B1_COS_M_S2) {
+    builder.addFieldFloat64(7, B1_COS_M_S2, 0);
+  }
+  static addB1SinMS2(builder, B1_SIN_M_S2) {
+    builder.addFieldFloat64(8, B1_SIN_M_S2, 0);
+  }
+  static addB3CosMS2(builder, B3_COS_M_S2) {
+    builder.addFieldFloat64(9, B3_COS_M_S2, 0);
+  }
+  static addB3SinMS2(builder, B3_SIN_M_S2) {
+    builder.addFieldFloat64(10, B3_SIN_M_S2, 0);
+  }
+  static endPCFEcom2(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFEcom2(builder, D0_M_S2, Y0_M_S2, B0_M_S2, D2_COS_M_S2, D2_SIN_M_S2, D4_COS_M_S2, D4_SIN_M_S2, B1_COS_M_S2, B1_SIN_M_S2, B3_COS_M_S2, B3_SIN_M_S2) {
+    _PCFEcom2.startPCFEcom2(builder);
+    _PCFEcom2.addD0MS2(builder, D0_M_S2);
+    _PCFEcom2.addY0MS2(builder, Y0_M_S2);
+    _PCFEcom2.addB0MS2(builder, B0_M_S2);
+    _PCFEcom2.addD2CosMS2(builder, D2_COS_M_S2);
+    _PCFEcom2.addD2SinMS2(builder, D2_SIN_M_S2);
+    _PCFEcom2.addD4CosMS2(builder, D4_COS_M_S2);
+    _PCFEcom2.addD4SinMS2(builder, D4_SIN_M_S2);
+    _PCFEcom2.addB1CosMS2(builder, B1_COS_M_S2);
+    _PCFEcom2.addB1SinMS2(builder, B1_SIN_M_S2);
+    _PCFEcom2.addB3CosMS2(builder, B3_COS_M_S2);
+    _PCFEcom2.addB3SinMS2(builder, B3_SIN_M_S2);
+    return _PCFEcom2.endPCFEcom2(builder);
+  }
+  unpack() {
+    return new PCFEcom2T(
+      this.D0_M_S2(),
+      this.Y0_M_S2(),
+      this.B0_M_S2(),
+      this.D2_COS_M_S2(),
+      this.D2_SIN_M_S2(),
+      this.D4_COS_M_S2(),
+      this.D4_SIN_M_S2(),
+      this.B1_COS_M_S2(),
+      this.B1_SIN_M_S2(),
+      this.B3_COS_M_S2(),
+      this.B3_SIN_M_S2()
+    );
+  }
+  unpackTo(_o) {
+    _o.D0_M_S2 = this.D0_M_S2();
+    _o.Y0_M_S2 = this.Y0_M_S2();
+    _o.B0_M_S2 = this.B0_M_S2();
+    _o.D2_COS_M_S2 = this.D2_COS_M_S2();
+    _o.D2_SIN_M_S2 = this.D2_SIN_M_S2();
+    _o.D4_COS_M_S2 = this.D4_COS_M_S2();
+    _o.D4_SIN_M_S2 = this.D4_SIN_M_S2();
+    _o.B1_COS_M_S2 = this.B1_COS_M_S2();
+    _o.B1_SIN_M_S2 = this.B1_SIN_M_S2();
+    _o.B3_COS_M_S2 = this.B3_COS_M_S2();
+    _o.B3_SIN_M_S2 = this.B3_SIN_M_S2();
+  }
+};
+var PCFEcom2T = class {
+  constructor(D0_M_S2 = 0, Y0_M_S2 = 0, B0_M_S2 = 0, D2_COS_M_S2 = 0, D2_SIN_M_S2 = 0, D4_COS_M_S2 = 0, D4_SIN_M_S2 = 0, B1_COS_M_S2 = 0, B1_SIN_M_S2 = 0, B3_COS_M_S2 = 0, B3_SIN_M_S2 = 0) {
+    this.D0_M_S2 = D0_M_S2;
+    this.Y0_M_S2 = Y0_M_S2;
+    this.B0_M_S2 = B0_M_S2;
+    this.D2_COS_M_S2 = D2_COS_M_S2;
+    this.D2_SIN_M_S2 = D2_SIN_M_S2;
+    this.D4_COS_M_S2 = D4_COS_M_S2;
+    this.D4_SIN_M_S2 = D4_SIN_M_S2;
+    this.B1_COS_M_S2 = B1_COS_M_S2;
+    this.B1_SIN_M_S2 = B1_SIN_M_S2;
+    this.B3_COS_M_S2 = B3_COS_M_S2;
+    this.B3_SIN_M_S2 = B3_SIN_M_S2;
+  }
+  pack(builder) {
+    return PCFEcom2.createPCFEcom2(
+      builder,
+      this.D0_M_S2,
+      this.Y0_M_S2,
+      this.B0_M_S2,
+      this.D2_COS_M_S2,
+      this.D2_SIN_M_S2,
+      this.D4_COS_M_S2,
+      this.D4_SIN_M_S2,
+      this.B1_COS_M_S2,
+      this.B1_SIN_M_S2,
+      this.B3_COS_M_S2,
+      this.B3_SIN_M_S2
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEmpiricalTerms.ts
+import * as flatbuffers67 from "flatbuffers";
+var PCFEmpiricalTerms = class _PCFEmpiricalTerms {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFEmpiricalTerms(bb, obj) {
+    return (obj || new _PCFEmpiricalTerms()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFEmpiricalTerms(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers67.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFEmpiricalTerms()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Fit the once-per-revolution pair (TAUC, TAUS). Default true.
+   */
+  ONCE_PER_REVOLUTION() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * The constant term TAU0 is free only when this rule selects it: a fitted
+   * B_eff above this limit, m2/kg, is replaced by TAU0 with B_eff at its
+   * prior. Default 0.5; the rule applies only when HAS_TAU0_RULE_LIMIT_M2_KG.
+   */
+  TAU0_RULE_LIMIT_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.5;
+  }
+  /**
+   * True turns the TAU0 rule on with TAU0_RULE_LIMIT_M2_KG; false (the
+   * default) leaves TAU0 off.
+   */
+  HAS_TAU0_RULE_LIMIT_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * True holds TAUC and TAUS after the arc end above the drag regime
+   * instead of decaying them. Default false.
+   */
+  HELD_ABOVE_DRAG_REGIME() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Persistence time of the empirical force after the arc end, hours.
+   * Default 24.
+   */
+  PERSISTENCE_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 24;
+  }
+  static startPCFEmpiricalTerms(builder) {
+    builder.startObject(5);
+  }
+  static addOncePerRevolution(builder, ONCE_PER_REVOLUTION) {
+    builder.addFieldInt8(0, +ONCE_PER_REVOLUTION, 1);
+  }
+  static addTau0RuleLimitM2Kg(builder, TAU0_RULE_LIMIT_M2_KG) {
+    builder.addFieldFloat64(1, TAU0_RULE_LIMIT_M2_KG, 0.5);
+  }
+  static addHasTau0RuleLimitM2Kg(builder, HAS_TAU0_RULE_LIMIT_M2_KG) {
+    builder.addFieldInt8(2, +HAS_TAU0_RULE_LIMIT_M2_KG, 0);
+  }
+  static addHeldAboveDragRegime(builder, HELD_ABOVE_DRAG_REGIME) {
+    builder.addFieldInt8(3, +HELD_ABOVE_DRAG_REGIME, 0);
+  }
+  static addPersistenceHours(builder, PERSISTENCE_HOURS) {
+    builder.addFieldFloat64(4, PERSISTENCE_HOURS, 24);
+  }
+  static endPCFEmpiricalTerms(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFEmpiricalTerms(builder, ONCE_PER_REVOLUTION, TAU0_RULE_LIMIT_M2_KG, HAS_TAU0_RULE_LIMIT_M2_KG, HELD_ABOVE_DRAG_REGIME, PERSISTENCE_HOURS) {
+    _PCFEmpiricalTerms.startPCFEmpiricalTerms(builder);
+    _PCFEmpiricalTerms.addOncePerRevolution(builder, ONCE_PER_REVOLUTION);
+    _PCFEmpiricalTerms.addTau0RuleLimitM2Kg(builder, TAU0_RULE_LIMIT_M2_KG);
+    _PCFEmpiricalTerms.addHasTau0RuleLimitM2Kg(builder, HAS_TAU0_RULE_LIMIT_M2_KG);
+    _PCFEmpiricalTerms.addHeldAboveDragRegime(builder, HELD_ABOVE_DRAG_REGIME);
+    _PCFEmpiricalTerms.addPersistenceHours(builder, PERSISTENCE_HOURS);
+    return _PCFEmpiricalTerms.endPCFEmpiricalTerms(builder);
+  }
+  unpack() {
+    return new PCFEmpiricalTermsT(
+      this.ONCE_PER_REVOLUTION(),
+      this.TAU0_RULE_LIMIT_M2_KG(),
+      this.HAS_TAU0_RULE_LIMIT_M2_KG(),
+      this.HELD_ABOVE_DRAG_REGIME(),
+      this.PERSISTENCE_HOURS()
+    );
+  }
+  unpackTo(_o) {
+    _o.ONCE_PER_REVOLUTION = this.ONCE_PER_REVOLUTION();
+    _o.TAU0_RULE_LIMIT_M2_KG = this.TAU0_RULE_LIMIT_M2_KG();
+    _o.HAS_TAU0_RULE_LIMIT_M2_KG = this.HAS_TAU0_RULE_LIMIT_M2_KG();
+    _o.HELD_ABOVE_DRAG_REGIME = this.HELD_ABOVE_DRAG_REGIME();
+    _o.PERSISTENCE_HOURS = this.PERSISTENCE_HOURS();
+  }
+};
+var PCFEmpiricalTermsT = class {
+  constructor(ONCE_PER_REVOLUTION = true, TAU0_RULE_LIMIT_M2_KG = 0.5, HAS_TAU0_RULE_LIMIT_M2_KG = false, HELD_ABOVE_DRAG_REGIME = false, PERSISTENCE_HOURS = 24) {
+    this.ONCE_PER_REVOLUTION = ONCE_PER_REVOLUTION;
+    this.TAU0_RULE_LIMIT_M2_KG = TAU0_RULE_LIMIT_M2_KG;
+    this.HAS_TAU0_RULE_LIMIT_M2_KG = HAS_TAU0_RULE_LIMIT_M2_KG;
+    this.HELD_ABOVE_DRAG_REGIME = HELD_ABOVE_DRAG_REGIME;
+    this.PERSISTENCE_HOURS = PERSISTENCE_HOURS;
+  }
+  pack(builder) {
+    return PCFEmpiricalTerms.createPCFEmpiricalTerms(
+      builder,
+      this.ONCE_PER_REVOLUTION,
+      this.TAU0_RULE_LIMIT_M2_KG,
+      this.HAS_TAU0_RULE_LIMIT_M2_KG,
+      this.HELD_ABOVE_DRAG_REGIME,
+      this.PERSISTENCE_HOURS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFSpaceWeather.ts
+import * as flatbuffers70 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
+import * as flatbuffers69 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
+import * as flatbuffers68 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/timCcsdsTimeCodeKind.ts
+var timCcsdsTimeCodeKind = /* @__PURE__ */ ((timCcsdsTimeCodeKind2) => {
+  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["NONE"] = 0] = "NONE";
+  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["UNSEGMENTED"] = 1] = "UNSEGMENTED";
+  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["DAY_SEGMENTED"] = 2] = "DAY_SEGMENTED";
+  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["CALENDAR_SEGMENTED"] = 3] = "CALENDAR_SEGMENTED";
+  return timCcsdsTimeCodeKind2;
+})(timCcsdsTimeCodeKind || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
+var TIMCcsdsTimeCode = class _TIMCcsdsTimeCode {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsTIMCcsdsTimeCode(bb, obj) {
+    return (obj || new _TIMCcsdsTimeCode()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsTIMCcsdsTimeCode(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers68.SIZE_PREFIX_LENGTH);
+    return (obj || new _TIMCcsdsTimeCode()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * CCSDS time-code family.
+   */
+  CODE_KIND() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * First CCSDS preamble field octet.
+   */
+  PREAMBLE_FIELD1() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Second CCSDS preamble field octet; ignored when not signaled by preamble 1.
+   */
+  PREAMBLE_FIELD2() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Raw CCSDS time field octets.
+   */
+  TIME_FIELD(index) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readUint8(this.bb.__vector(this.bb_pos + offset) + index) : 0;
+  }
+  timeFieldLength() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  timeFieldArray() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? new Uint8Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  AGENCY_DEFINED_EPOCH_ISO8601(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  CCSDS_EPOCH_ISO8601(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  static startTIMCcsdsTimeCode(builder) {
+    builder.startObject(6);
+  }
+  static addCodeKind(builder, CODE_KIND) {
+    builder.addFieldInt8(0, CODE_KIND, 0 /* NONE */);
+  }
+  static addPreambleField1(builder, PREAMBLE_FIELD1) {
+    builder.addFieldInt8(1, PREAMBLE_FIELD1, 0);
+  }
+  static addPreambleField2(builder, PREAMBLE_FIELD2) {
+    builder.addFieldInt8(2, PREAMBLE_FIELD2, 0);
+  }
+  static addTimeField(builder, TIME_FIELDOffset) {
+    builder.addFieldOffset(3, TIME_FIELDOffset, 0);
+  }
+  static createTimeFieldVector(builder, data) {
+    builder.startVector(1, data.length, 1);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt8(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startTimeFieldVector(builder, numElems) {
+    builder.startVector(1, numElems, 1);
+  }
+  static addAgencyDefinedEpochIso8601(builder, AGENCY_DEFINED_EPOCH_ISO8601Offset) {
+    builder.addFieldOffset(4, AGENCY_DEFINED_EPOCH_ISO8601Offset, 0);
+  }
+  static addCcsdsEpochIso8601(builder, CCSDS_EPOCH_ISO8601Offset) {
+    builder.addFieldOffset(5, CCSDS_EPOCH_ISO8601Offset, 0);
+  }
+  static endTIMCcsdsTimeCode(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createTIMCcsdsTimeCode(builder, CODE_KIND, PREAMBLE_FIELD1, PREAMBLE_FIELD2, TIME_FIELDOffset, AGENCY_DEFINED_EPOCH_ISO8601Offset, CCSDS_EPOCH_ISO8601Offset) {
+    _TIMCcsdsTimeCode.startTIMCcsdsTimeCode(builder);
+    _TIMCcsdsTimeCode.addCodeKind(builder, CODE_KIND);
+    _TIMCcsdsTimeCode.addPreambleField1(builder, PREAMBLE_FIELD1);
+    _TIMCcsdsTimeCode.addPreambleField2(builder, PREAMBLE_FIELD2);
+    _TIMCcsdsTimeCode.addTimeField(builder, TIME_FIELDOffset);
+    _TIMCcsdsTimeCode.addAgencyDefinedEpochIso8601(builder, AGENCY_DEFINED_EPOCH_ISO8601Offset);
+    _TIMCcsdsTimeCode.addCcsdsEpochIso8601(builder, CCSDS_EPOCH_ISO8601Offset);
+    return _TIMCcsdsTimeCode.endTIMCcsdsTimeCode(builder);
+  }
+  unpack() {
+    return new TIMCcsdsTimeCodeT(
+      this.CODE_KIND(),
+      this.PREAMBLE_FIELD1(),
+      this.PREAMBLE_FIELD2(),
+      this.bb.createScalarList(this.TIME_FIELD.bind(this), this.timeFieldLength()),
+      this.AGENCY_DEFINED_EPOCH_ISO8601(),
+      this.CCSDS_EPOCH_ISO8601()
+    );
+  }
+  unpackTo(_o) {
+    _o.CODE_KIND = this.CODE_KIND();
+    _o.PREAMBLE_FIELD1 = this.PREAMBLE_FIELD1();
+    _o.PREAMBLE_FIELD2 = this.PREAMBLE_FIELD2();
+    _o.TIME_FIELD = this.bb.createScalarList(this.TIME_FIELD.bind(this), this.timeFieldLength());
+    _o.AGENCY_DEFINED_EPOCH_ISO8601 = this.AGENCY_DEFINED_EPOCH_ISO8601();
+    _o.CCSDS_EPOCH_ISO8601 = this.CCSDS_EPOCH_ISO8601();
+  }
+};
+var TIMCcsdsTimeCodeT = class {
+  constructor(CODE_KIND = 0 /* NONE */, PREAMBLE_FIELD1 = 0, PREAMBLE_FIELD2 = 0, TIME_FIELD = [], AGENCY_DEFINED_EPOCH_ISO8601 = null, CCSDS_EPOCH_ISO8601 = null) {
+    this.CODE_KIND = CODE_KIND;
+    this.PREAMBLE_FIELD1 = PREAMBLE_FIELD1;
+    this.PREAMBLE_FIELD2 = PREAMBLE_FIELD2;
+    this.TIME_FIELD = TIME_FIELD;
+    this.AGENCY_DEFINED_EPOCH_ISO8601 = AGENCY_DEFINED_EPOCH_ISO8601;
+    this.CCSDS_EPOCH_ISO8601 = CCSDS_EPOCH_ISO8601;
+  }
+  pack(builder) {
+    const TIME_FIELD = TIMCcsdsTimeCode.createTimeFieldVector(builder, this.TIME_FIELD);
+    const AGENCY_DEFINED_EPOCH_ISO8601 = this.AGENCY_DEFINED_EPOCH_ISO8601 !== null ? builder.createString(this.AGENCY_DEFINED_EPOCH_ISO8601) : 0;
+    const CCSDS_EPOCH_ISO8601 = this.CCSDS_EPOCH_ISO8601 !== null ? builder.createString(this.CCSDS_EPOCH_ISO8601) : 0;
+    return TIMCcsdsTimeCode.createTIMCcsdsTimeCode(
+      builder,
+      this.CODE_KIND,
+      this.PREAMBLE_FIELD1,
+      this.PREAMBLE_FIELD2,
+      TIME_FIELD,
+      AGENCY_DEFINED_EPOCH_ISO8601,
+      CCSDS_EPOCH_ISO8601
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/timEpochRepresentation.ts
+var timEpochRepresentation = /* @__PURE__ */ ((timEpochRepresentation2) => {
+  timEpochRepresentation2[timEpochRepresentation2["JULIAN_DATE"] = 0] = "JULIAN_DATE";
+  timEpochRepresentation2[timEpochRepresentation2["MODIFIED_JULIAN_DATE"] = 1] = "MODIFIED_JULIAN_DATE";
+  timEpochRepresentation2[timEpochRepresentation2["UNIX_SECONDS"] = 2] = "UNIX_SECONDS";
+  timEpochRepresentation2[timEpochRepresentation2["ISO8601"] = 3] = "ISO8601";
+  timEpochRepresentation2[timEpochRepresentation2["GPS_SECONDS"] = 4] = "GPS_SECONDS";
+  timEpochRepresentation2[timEpochRepresentation2["GNSS_WEEK_SECONDS"] = 5] = "GNSS_WEEK_SECONDS";
+  timEpochRepresentation2[timEpochRepresentation2["CCSDS_TIME_CODE"] = 6] = "CCSDS_TIME_CODE";
+  timEpochRepresentation2[timEpochRepresentation2["MISSION_ELAPSED_SECONDS"] = 7] = "MISSION_ELAPSED_SECONDS";
+  return timEpochRepresentation2;
+})(timEpochRepresentation || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/timingStandard.ts
+var timingStandard = /* @__PURE__ */ ((timingStandard2) => {
+  timingStandard2[timingStandard2["GMST"] = 0] = "GMST";
+  timingStandard2[timingStandard2["GPS"] = 1] = "GPS";
+  timingStandard2[timingStandard2["MET"] = 2] = "MET";
+  timingStandard2[timingStandard2["MRT"] = 3] = "MRT";
+  timingStandard2[timingStandard2["SCLK"] = 4] = "SCLK";
+  timingStandard2[timingStandard2["TAI"] = 5] = "TAI";
+  timingStandard2[timingStandard2["TCB"] = 6] = "TCB";
+  timingStandard2[timingStandard2["TDB"] = 7] = "TDB";
+  timingStandard2[timingStandard2["TCG"] = 8] = "TCG";
+  timingStandard2[timingStandard2["TT"] = 9] = "TT";
+  timingStandard2[timingStandard2["UT1"] = 10] = "UT1";
+  timingStandard2[timingStandard2["UTC"] = 11] = "UTC";
+  timingStandard2[timingStandard2["GLONASS"] = 12] = "GLONASS";
+  timingStandard2[timingStandard2["GST"] = 13] = "GST";
+  timingStandard2[timingStandard2["QZSS"] = 14] = "QZSS";
+  timingStandard2[timingStandard2["BDT"] = 15] = "BDT";
+  timingStandard2[timingStandard2["NAVIC"] = 16] = "NAVIC";
+  timingStandard2[timingStandard2["SBAS"] = 17] = "SBAS";
+  timingStandard2[timingStandard2["A1"] = 18] = "A1";
+  return timingStandard2;
+})(timingStandard || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
+var TIMInstant = class _TIMInstant {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsTIMInstant(bb, obj) {
+    return (obj || new _TIMInstant()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsTIMInstant(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers69.SIZE_PREFIX_LENGTH);
+    return (obj || new _TIMInstant()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Time system for this instant.
+   */
+  TIME_SYSTEM() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* GMST */;
+  }
+  /**
+   * Interpretation of JULIAN_DATE, SECONDS, and ISO8601.
+   */
+  EPOCH_FORMAT() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* JULIAN_DATE */;
+  }
+  /**
+   * Julian Date or Modified Julian Date day value, selected by EPOCH_FORMAT.
+   */
+  JULIAN_DATE() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Seconds for UNIX_SECONDS, GPS_SECONDS, GNSS_WEEK_SECONDS, or MISSION_ELAPSED_SECONDS.
+   */
+  SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  ISO8601(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Additional nanoseconds beyond the fractional scalar/text value.
+   */
+  SUBSECOND_NANOS() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  EPOCH_LABEL(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * GNSS week number when EPOCH_FORMAT is GNSS_WEEK_SECONDS.
+   */
+  GNSS_WEEK() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Whether GNSS_ROLLOVER_REFERENCE_ISO8601 should be applied.
+   */
+  HAS_GNSS_ROLLOVER_REFERENCE() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  GNSS_ROLLOVER_REFERENCE_ISO8601(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * CCSDS time-code payload when EPOCH_FORMAT is CCSDS_TIME_CODE.
+   */
+  CCSDS_TIME_CODE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? (obj || new TIMCcsdsTimeCode()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startTIMInstant(builder) {
+    builder.startObject(11);
+  }
+  static addTimeSystem(builder, TIME_SYSTEM) {
+    builder.addFieldInt8(0, TIME_SYSTEM, 0 /* GMST */);
+  }
+  static addEpochFormat(builder, EPOCH_FORMAT) {
+    builder.addFieldInt8(1, EPOCH_FORMAT, 0 /* JULIAN_DATE */);
+  }
+  static addJulianDate(builder, JULIAN_DATE) {
+    builder.addFieldFloat64(2, JULIAN_DATE, 0);
+  }
+  static addSeconds(builder, SECONDS) {
+    builder.addFieldFloat64(3, SECONDS, 0);
+  }
+  static addIso8601(builder, ISO8601Offset) {
+    builder.addFieldOffset(4, ISO8601Offset, 0);
+  }
+  static addSubsecondNanos(builder, SUBSECOND_NANOS) {
+    builder.addFieldInt32(5, SUBSECOND_NANOS, 0);
+  }
+  static addEpochLabel(builder, EPOCH_LABELOffset) {
+    builder.addFieldOffset(6, EPOCH_LABELOffset, 0);
+  }
+  static addGnssWeek(builder, GNSS_WEEK) {
+    builder.addFieldInt32(7, GNSS_WEEK, 0);
+  }
+  static addHasGnssRolloverReference(builder, HAS_GNSS_ROLLOVER_REFERENCE) {
+    builder.addFieldInt8(8, +HAS_GNSS_ROLLOVER_REFERENCE, 0);
+  }
+  static addGnssRolloverReferenceIso8601(builder, GNSS_ROLLOVER_REFERENCE_ISO8601Offset) {
+    builder.addFieldOffset(9, GNSS_ROLLOVER_REFERENCE_ISO8601Offset, 0);
+  }
+  static addCcsdsTimeCode(builder, CCSDS_TIME_CODEOffset) {
+    builder.addFieldOffset(10, CCSDS_TIME_CODEOffset, 0);
+  }
+  static endTIMInstant(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  unpack() {
+    return new TIMInstantT(
+      this.TIME_SYSTEM(),
+      this.EPOCH_FORMAT(),
+      this.JULIAN_DATE(),
+      this.SECONDS(),
+      this.ISO8601(),
+      this.SUBSECOND_NANOS(),
+      this.EPOCH_LABEL(),
+      this.GNSS_WEEK(),
+      this.HAS_GNSS_ROLLOVER_REFERENCE(),
+      this.GNSS_ROLLOVER_REFERENCE_ISO8601(),
+      this.CCSDS_TIME_CODE() !== null ? this.CCSDS_TIME_CODE().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.TIME_SYSTEM = this.TIME_SYSTEM();
+    _o.EPOCH_FORMAT = this.EPOCH_FORMAT();
+    _o.JULIAN_DATE = this.JULIAN_DATE();
+    _o.SECONDS = this.SECONDS();
+    _o.ISO8601 = this.ISO8601();
+    _o.SUBSECOND_NANOS = this.SUBSECOND_NANOS();
+    _o.EPOCH_LABEL = this.EPOCH_LABEL();
+    _o.GNSS_WEEK = this.GNSS_WEEK();
+    _o.HAS_GNSS_ROLLOVER_REFERENCE = this.HAS_GNSS_ROLLOVER_REFERENCE();
+    _o.GNSS_ROLLOVER_REFERENCE_ISO8601 = this.GNSS_ROLLOVER_REFERENCE_ISO8601();
+    _o.CCSDS_TIME_CODE = this.CCSDS_TIME_CODE() !== null ? this.CCSDS_TIME_CODE().unpack() : null;
+  }
+};
+var TIMInstantT = class {
+  constructor(TIME_SYSTEM = 0 /* GMST */, EPOCH_FORMAT = 0 /* JULIAN_DATE */, JULIAN_DATE = 0, SECONDS = 0, ISO8601 = null, SUBSECOND_NANOS = 0, EPOCH_LABEL = null, GNSS_WEEK = 0, HAS_GNSS_ROLLOVER_REFERENCE = false, GNSS_ROLLOVER_REFERENCE_ISO8601 = null, CCSDS_TIME_CODE = null) {
+    this.TIME_SYSTEM = TIME_SYSTEM;
+    this.EPOCH_FORMAT = EPOCH_FORMAT;
+    this.JULIAN_DATE = JULIAN_DATE;
+    this.SECONDS = SECONDS;
+    this.ISO8601 = ISO8601;
+    this.SUBSECOND_NANOS = SUBSECOND_NANOS;
+    this.EPOCH_LABEL = EPOCH_LABEL;
+    this.GNSS_WEEK = GNSS_WEEK;
+    this.HAS_GNSS_ROLLOVER_REFERENCE = HAS_GNSS_ROLLOVER_REFERENCE;
+    this.GNSS_ROLLOVER_REFERENCE_ISO8601 = GNSS_ROLLOVER_REFERENCE_ISO8601;
+    this.CCSDS_TIME_CODE = CCSDS_TIME_CODE;
+  }
+  pack(builder) {
+    const ISO8601 = this.ISO8601 !== null ? builder.createString(this.ISO8601) : 0;
+    const EPOCH_LABEL = this.EPOCH_LABEL !== null ? builder.createString(this.EPOCH_LABEL) : 0;
+    const GNSS_ROLLOVER_REFERENCE_ISO8601 = this.GNSS_ROLLOVER_REFERENCE_ISO8601 !== null ? builder.createString(this.GNSS_ROLLOVER_REFERENCE_ISO8601) : 0;
+    const CCSDS_TIME_CODE = this.CCSDS_TIME_CODE !== null ? this.CCSDS_TIME_CODE.pack(builder) : 0;
+    TIMInstant.startTIMInstant(builder);
+    TIMInstant.addTimeSystem(builder, this.TIME_SYSTEM);
+    TIMInstant.addEpochFormat(builder, this.EPOCH_FORMAT);
+    TIMInstant.addJulianDate(builder, this.JULIAN_DATE);
+    TIMInstant.addSeconds(builder, this.SECONDS);
+    TIMInstant.addIso8601(builder, ISO8601);
+    TIMInstant.addSubsecondNanos(builder, this.SUBSECOND_NANOS);
+    TIMInstant.addEpochLabel(builder, EPOCH_LABEL);
+    TIMInstant.addGnssWeek(builder, this.GNSS_WEEK);
+    TIMInstant.addHasGnssRolloverReference(builder, this.HAS_GNSS_ROLLOVER_REFERENCE);
+    TIMInstant.addGnssRolloverReferenceIso8601(builder, GNSS_ROLLOVER_REFERENCE_ISO8601);
+    TIMInstant.addCcsdsTimeCode(builder, CCSDS_TIME_CODE);
+    return TIMInstant.endTIMInstant(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFSpaceWeather.ts
+var PCFSpaceWeather = class _PCFSpaceWeather {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFSpaceWeather(bb, obj) {
+    return (obj || new _PCFSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFSpaceWeather(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers70.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Epoch the values apply to. Required; no default.
+   */
+  EPOCH(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? (obj || new TIMInstant()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Daily F10.7 solar radio flux, SFU. Default 150.
+   */
+  F107() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 150;
+  }
+  /**
+   * Centered 81-day average of F10.7, SFU. Default 150.
+   */
+  F107_AVERAGE() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 150;
+  }
+  /**
+   * Conventional daily Ap index value, dimensionless (not an acceleration).
+   * Default 15.
+   */
+  AP_INDEX() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 15;
+  }
+  /**
+   * Conventional three-hour Kp index value, dimensionless (not an
+   * acceleration). Default 3.
+   */
+  KP_INDEX() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 3;
+  }
+  static startPCFSpaceWeather(builder) {
+    builder.startObject(5);
+  }
+  static addEpoch(builder, EPOCHOffset) {
+    builder.addFieldOffset(0, EPOCHOffset, 0);
+  }
+  static addF107(builder, F107) {
+    builder.addFieldFloat64(1, F107, 150);
+  }
+  static addF107Average(builder, F107_AVERAGE) {
+    builder.addFieldFloat64(2, F107_AVERAGE, 150);
+  }
+  static addApIndex(builder, AP_INDEX) {
+    builder.addFieldFloat64(3, AP_INDEX, 15);
+  }
+  static addKpIndex(builder, KP_INDEX) {
+    builder.addFieldFloat64(4, KP_INDEX, 3);
+  }
+  static endPCFSpaceWeather(builder) {
+    const offset = builder.endObject();
+    builder.requiredField(offset, 4);
+    return offset;
+  }
+  static createPCFSpaceWeather(builder, EPOCHOffset, F107, F107_AVERAGE, AP_INDEX, KP_INDEX) {
+    _PCFSpaceWeather.startPCFSpaceWeather(builder);
+    _PCFSpaceWeather.addEpoch(builder, EPOCHOffset);
+    _PCFSpaceWeather.addF107(builder, F107);
+    _PCFSpaceWeather.addF107Average(builder, F107_AVERAGE);
+    _PCFSpaceWeather.addApIndex(builder, AP_INDEX);
+    _PCFSpaceWeather.addKpIndex(builder, KP_INDEX);
+    return _PCFSpaceWeather.endPCFSpaceWeather(builder);
+  }
+  unpack() {
+    return new PCFSpaceWeatherT(
+      this.EPOCH() !== null ? this.EPOCH().unpack() : null,
+      this.F107(),
+      this.F107_AVERAGE(),
+      this.AP_INDEX(),
+      this.KP_INDEX()
+    );
+  }
+  unpackTo(_o) {
+    _o.EPOCH = this.EPOCH() !== null ? this.EPOCH().unpack() : null;
+    _o.F107 = this.F107();
+    _o.F107_AVERAGE = this.F107_AVERAGE();
+    _o.AP_INDEX = this.AP_INDEX();
+    _o.KP_INDEX = this.KP_INDEX();
+  }
+};
+var PCFSpaceWeatherT = class {
+  constructor(EPOCH = null, F107 = 150, F107_AVERAGE = 150, AP_INDEX = 15, KP_INDEX = 3) {
+    this.EPOCH = EPOCH;
+    this.F107 = F107;
+    this.F107_AVERAGE = F107_AVERAGE;
+    this.AP_INDEX = AP_INDEX;
+    this.KP_INDEX = KP_INDEX;
+  }
+  pack(builder) {
+    const EPOCH = this.EPOCH !== null ? this.EPOCH.pack(builder) : 0;
+    return PCFSpaceWeather.createPCFSpaceWeather(
+      builder,
+      EPOCH,
+      this.F107,
+      this.F107_AVERAGE,
+      this.AP_INDEX,
+      this.KP_INDEX
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfAtmosphereFamily.ts
+var pcfAtmosphereFamily = /* @__PURE__ */ ((pcfAtmosphereFamily2) => {
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["NRLMSISE00"] = 1] = "NRLMSISE00";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["EXPONENTIAL"] = 2] = "EXPONENTIAL";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["USSA1976"] = 3] = "USSA1976";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["HARRIS_PRIESTER"] = 4] = "HARRIS_PRIESTER";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["JACCHIA_ROBERTS"] = 5] = "JACCHIA_ROBERTS";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["JB2008"] = 6] = "JB2008";
+  return pcfAtmosphereFamily2;
+})(pcfAtmosphereFamily || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfDensityCorrection.ts
+var pcfDensityCorrection = /* @__PURE__ */ ((pcfDensityCorrection2) => {
+  pcfDensityCorrection2[pcfDensityCorrection2["NONE"] = 0] = "NONE";
+  pcfDensityCorrection2[pcfDensityCorrection2["DCA_COMMON_MODE"] = 1] = "DCA_COMMON_MODE";
+  return pcfDensityCorrection2;
+})(pcfDensityCorrection || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEarthRadiationModel.ts
+var pcfEarthRadiationModel = /* @__PURE__ */ ((pcfEarthRadiationModel2) => {
+  pcfEarthRadiationModel2[pcfEarthRadiationModel2["NONE"] = 0] = "NONE";
+  pcfEarthRadiationModel2[pcfEarthRadiationModel2["KNOCKE"] = 1] = "KNOCKE";
+  return pcfEarthRadiationModel2;
+})(pcfEarthRadiationModel || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEphemerisKind.ts
+var pcfEphemerisKind = /* @__PURE__ */ ((pcfEphemerisKind2) => {
+  pcfEphemerisKind2[pcfEphemerisKind2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfEphemerisKind2[pcfEphemerisKind2["ANALYTIC_SERIES"] = 1] = "ANALYTIC_SERIES";
+  pcfEphemerisKind2[pcfEphemerisKind2["PLANETARY_KERNEL"] = 2] = "PLANETARY_KERNEL";
+  return pcfEphemerisKind2;
+})(pcfEphemerisKind || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfGnssSpacecraftBlock.ts
+var pcfGnssSpacecraftBlock = /* @__PURE__ */ ((pcfGnssSpacecraftBlock2) => {
+  pcfGnssSpacecraftBlock2[pcfGnssSpacecraftBlock2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfGnssSpacecraftBlock2[pcfGnssSpacecraftBlock2["GPS_IIR"] = 1] = "GPS_IIR";
+  pcfGnssSpacecraftBlock2[pcfGnssSpacecraftBlock2["GPS_IIR_M"] = 2] = "GPS_IIR_M";
+  pcfGnssSpacecraftBlock2[pcfGnssSpacecraftBlock2["GPS_IIF"] = 3] = "GPS_IIF";
+  return pcfGnssSpacecraftBlock2;
+})(pcfGnssSpacecraftBlock || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfGravitySelection.ts
+var pcfGravitySelection = /* @__PURE__ */ ((pcfGravitySelection2) => {
+  pcfGravitySelection2[pcfGravitySelection2["INFER_FLAGS"] = 0] = "INFER_FLAGS";
+  pcfGravitySelection2[pcfGravitySelection2["POINT_MASS"] = 1] = "POINT_MASS";
+  pcfGravitySelection2[pcfGravitySelection2["J2_ONLY"] = 2] = "J2_ONLY";
+  pcfGravitySelection2[pcfGravitySelection2["J2_TO_J4"] = 3] = "J2_TO_J4";
+  pcfGravitySelection2[pcfGravitySelection2["SPHERICAL_HARMONICS"] = 4] = "SPHERICAL_HARMONICS";
+  pcfGravitySelection2[pcfGravitySelection2["EGM2008"] = 5] = "EGM2008";
+  pcfGravitySelection2[pcfGravitySelection2["EGM96"] = 6] = "EGM96";
+  pcfGravitySelection2[pcfGravitySelection2["GRGM660PRIM"] = 7] = "GRGM660PRIM";
+  return pcfGravitySelection2;
+})(pcfGravitySelection || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfNeutralWind.ts
+var pcfNeutralWind = /* @__PURE__ */ ((pcfNeutralWind2) => {
+  pcfNeutralWind2[pcfNeutralWind2["NONE"] = 0] = "NONE";
+  pcfNeutralWind2[pcfNeutralWind2["HWM14"] = 1] = "HWM14";
+  return pcfNeutralWind2;
+})(pcfNeutralWind || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfOceanTideModel.ts
+var pcfOceanTideModel = /* @__PURE__ */ ((pcfOceanTideModel2) => {
+  pcfOceanTideModel2[pcfOceanTideModel2["NONE"] = 0] = "NONE";
+  pcfOceanTideModel2[pcfOceanTideModel2["FES2004"] = 1] = "FES2004";
+  return pcfOceanTideModel2;
+})(pcfOceanTideModel || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfRadiationPressureFamily.ts
+var pcfRadiationPressureFamily = /* @__PURE__ */ ((pcfRadiationPressureFamily2) => {
+  pcfRadiationPressureFamily2[pcfRadiationPressureFamily2["CANNONBALL"] = 0] = "CANNONBALL";
+  pcfRadiationPressureFamily2[pcfRadiationPressureFamily2["GNSS_BOX_WING"] = 1] = "GNSS_BOX_WING";
+  pcfRadiationPressureFamily2[pcfRadiationPressureFamily2["NONE"] = 2] = "NONE";
+  return pcfRadiationPressureFamily2;
+})(pcfRadiationPressureFamily || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfRelativityTerms.ts
+var pcfRelativityTerms = /* @__PURE__ */ ((pcfRelativityTerms2) => {
+  pcfRelativityTerms2[pcfRelativityTerms2["NONE"] = 0] = "NONE";
+  pcfRelativityTerms2[pcfRelativityTerms2["SCHWARZSCHILD"] = 1] = "SCHWARZSCHILD";
+  pcfRelativityTerms2[pcfRelativityTerms2["IERS_2010"] = 2] = "IERS_2010";
+  return pcfRelativityTerms2;
+})(pcfRelativityTerms || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfSolidTideModel.ts
+var pcfSolidTideModel = /* @__PURE__ */ ((pcfSolidTideModel2) => {
+  pcfSolidTideModel2[pcfSolidTideModel2["NONE"] = 0] = "NONE";
+  pcfSolidTideModel2[pcfSolidTideModel2["IERS_2010"] = 1] = "IERS_2010";
+  return pcfSolidTideModel2;
+})(pcfSolidTideModel || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfWeatherExtension.ts
+var pcfWeatherExtension = /* @__PURE__ */ ((pcfWeatherExtension2) => {
+  pcfWeatherExtension2[pcfWeatherExtension2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfWeatherExtension2[pcfWeatherExtension2["REFUSE"] = 1] = "REFUSE";
+  pcfWeatherExtension2[pcfWeatherExtension2["HOLD_LAST"] = 2] = "HOLD_LAST";
+  pcfWeatherExtension2[pcfWeatherExtension2["FORECAST_CHAIN"] = 3] = "FORECAST_CHAIN";
+  return pcfWeatherExtension2;
+})(pcfWeatherExtension || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfWeatherSource.ts
+var pcfWeatherSource = /* @__PURE__ */ ((pcfWeatherSource2) => {
+  pcfWeatherSource2[pcfWeatherSource2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfWeatherSource2[pcfWeatherSource2["CONSTANT"] = 1] = "CONSTANT";
+  pcfWeatherSource2[pcfWeatherSource2["RECORDS"] = 2] = "RECORDS";
+  return pcfWeatherSource2;
+})(pcfWeatherSource || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFForceModel.ts
+var PCFForceModel = class _PCFForceModel {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFForceModel(bb, obj) {
+    return (obj || new _PCFForceModel()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFForceModel(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers71.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFForceModel()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Gravity field. Default INFER_FLAGS (the ENABLE_ flags decide).
+   */
+  GRAVITY_CHOICE() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* INFER_FLAGS */;
+  }
+  /**
+   * Central-body point-mass term. Default true.
+   */
+  ENABLE_POINT_MASS() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * Gravitational parameter of the central body, m3/s2; required positive
+   * when a central gravity term is enabled. Default 0.
+   */
+  GRAVITATIONAL_PARAMETER() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * J2 zonal term. Default true.
+   */
+  ENABLE_J2() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * J3 zonal term. Default false.
+   */
+  ENABLE_J3() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * J4 zonal term. Default false.
+   */
+  ENABLE_J4() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Zonal terms above J4. Default false.
+   */
+  ENABLE_HIGHER_ZONALS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Highest field degree; dimensionless. Absent selects the explicitly
+   * reported model default.
+   */
+  MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when MAXIMUM_DEGREE carries a value; false (the default) means absent.
+   */
+  HAS_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Highest field order; dimensionless. Absent selects the explicitly
+   * reported model default.
+   */
+  MAXIMUM_ORDER() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when MAXIMUM_ORDER carries a value; false (the default) means absent.
+   */
+  HAS_MAXIMUM_ORDER() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Third-body gravity of THIRD_BODY_IDS. Default false.
+   */
+  ENABLE_THIRD_BODY() {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * NAIF IDs; explicit vector, e.g. [10,301]. Empty (the default) means no
+   * third bodies.
+   */
+  THIRD_BODY_IDS(index) {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.readInt32(this.bb.__vector(this.bb_pos + offset) + index * 4) : 0;
+  }
+  thirdBodyIdsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  thirdBodyIdsArray() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? new Int32Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Solar radiation pressure. Default false.
+   */
+  ENABLE_SRP() {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Atmospheric drag. Default false.
+   */
+  ENABLE_DRAG() {
+    const offset = this.bb.__offset(this.bb_pos, 32);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Spacecraft mass, kg. Default 1000.
+   */
+  INITIAL_MASS_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1e3;
+  }
+  /**
+   * Cross-section area, m2. Default 10.
+   */
+  AREA_M2() {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 10;
+  }
+  /**
+   * Radiation-pressure coefficient Cr, dimensionless. Default 1.5.
+   */
+  REFLECTIVITY_COEFFICIENT() {
+    const offset = this.bb.__offset(this.bb_pos, 38);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1.5;
+  }
+  /**
+   * Drag coefficient Cd, dimensionless. Default 2.2.
+   */
+  DRAG_COEFFICIENT() {
+    const offset = this.bb.__offset(this.bb_pos, 40);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2.2;
+  }
+  /**
+   * Atmosphere model. Default NRLMSISE00.
+   */
+  ATMOSPHERE_MODEL() {
+    const offset = this.bb.__offset(this.bb_pos, 42);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1 /* NRLMSISE00 */;
+  }
+  /**
+   * Space weather held for the arc when WEATHER_SOURCE selects it. Default
+   * absent.
+   */
+  WEATHER(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 44);
+    return offset ? (obj || new PCFSpaceWeather()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  EPHEMERIS_SOURCE(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 46);
+    return this.bb.__string(this.bb_pos + offset, optionalEncoding);
+  }
+  /**
+   * Solid Earth tides. Their field is Earth-fixed, so a provider needs Earth
+   * orientation (the request's Earth orientation rows) to apply them. Default
+   * NONE.
+   */
+  SOLID_TIDES() {
+    const offset = this.bb.__offset(this.bb_pos, 48);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * Post-Newtonian terms. Default NONE.
+   */
+  RELATIVITY() {
+    const offset = this.bb.__offset(this.bb_pos, 50);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * Constant acceleration along the in-track axis, m/s2: T of RTN,
+   * N cross rhat with N = unit(r cross v) (the "in-track thrust" of a VCM).
+   * Default absent.
+   */
+  IN_TRACK_ACCELERATION_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 52);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when IN_TRACK_ACCELERATION_M_S2 carries a value; false (the default)
+   * means absent.
+   */
+  HAS_IN_TRACK_ACCELERATION_M_S2() {
+    const offset = this.bb.__offset(this.bb_pos, 54);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Rate of change of the drag ballistic coefficient Cd*A/m, m2/kg/s (the
+   * BDOT of a VCM). Drag uses Cd*A/m + rate * (t - initial epoch). Default
+   * absent.
+   */
+  DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
+    const offset = this.bb.__offset(this.bb_pos, 56);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when DRAG_AREA_OVER_MASS_RATE_M2_KG_S carries a value; false (the
+   * default) means absent.
+   */
+  HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
+    const offset = this.bb.__offset(this.bb_pos, 58);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Highest degree of the tesseral and sectorial terms (order >= 1); the
+   * zonals run to MAXIMUM_DEGREE. A VCM's "mmZ,nnT" is MAXIMUM_DEGREE mm,
+   * MAXIMUM_ORDER nn and MAXIMUM_TESSERAL_DEGREE nn. Default absent.
+   */
+  MAXIMUM_TESSERAL_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 60);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when MAXIMUM_TESSERAL_DEGREE carries a value; false (the default)
+   * means absent.
+   */
+  HAS_MAXIMUM_TESSERAL_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 62);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Solar radiation pressure model family. Default CANNONBALL.
+   */
+  RADIATION_PRESSURE_MODEL() {
+    const offset = this.bb.__offset(this.bb_pos, 64);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* CANNONBALL */;
+  }
+  /**
+   * Spacecraft block; required when RADIATION_PRESSURE_MODEL is GNSS_BOX_WING.
+   * Default UNSPECIFIED.
+   */
+  GNSS_BLOCK() {
+    const offset = this.bb.__offset(this.bb_pos, 66);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * ECOM2 coefficients; absent (the default) means no ECOM2 term.
+   */
+  ECOM2(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 68);
+    return offset ? (obj || new PCFEcom2()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Earth radiation pressure (albedo and infrared). It reads the Sun's
+   * position from the ephemeris source. Default NONE.
+   */
+  EARTH_RADIATION() {
+    const offset = this.bb.__offset(this.bb_pos, 70);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * Angular size of the Earth surface elements it sums, degrees. Default 15.
+   */
+  EARTH_RADIATION_RESOLUTION_DEG() {
+    const offset = this.bb.__offset(this.bb_pos, 72);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 15;
+  }
+  /**
+   * Isotropic Cr*A/m, m2/kg, the Earth's radiation acts on. Absent, it is the
+   * cannonball's REFLECTIVITY_COEFFICIENT * AREA_M2 / INITIAL_MASS_KG, and
+   * fitting SRP_AREA_OVER_MASS scales both.
+   */
+  EARTH_RADIATION_AREA_OVER_MASS_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 74);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when EARTH_RADIATION_AREA_OVER_MASS_M2_KG carries a value; false (the
+   * default) means absent.
+   */
+  HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 76);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Ocean tides. Their field is Earth-fixed, so a provider needs Earth
+   * orientation (the request's Earth orientation rows) to apply them. Default
+   * NONE.
+   */
+  OCEAN_TIDES() {
+    const offset = this.bb.__offset(this.bb_pos, 78);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * Truncation of the ocean tide field, degree. Default 30.
+   */
+  OCEAN_TIDE_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 80);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
+  }
+  /**
+   * Truncation of the ocean tide field, order. Default 30.
+   */
+  OCEAN_TIDE_MAXIMUM_ORDER() {
+    const offset = this.bb.__offset(this.bb_pos, 82);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
+  }
+  /**
+   * Central body, a NAIF ID. The gravity field, atmosphere, tides and third
+   * bodies are those of this body. Default 399 (Earth).
+   */
+  CENTRAL_BODY_NAIF_ID() {
+    const offset = this.bb.__offset(this.bb_pos, 84);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : 399;
+  }
+  /**
+   * Where the Sun, Moon and planets are read from. Default UNSPECIFIED (the
+   * source named in EPHEMERIS_SOURCE).
+   */
+  EPHEMERIS_KIND() {
+    const offset = this.bb.__offset(this.bb_pos, 86);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Shadow model of the radiation-pressure and Earth-radiation terms. Default
+   * UNSPECIFIED (the provider's: conical).
+   */
+  SHADOW_MODEL() {
+    const offset = this.bb.__offset(this.bb_pos, 88);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Where the space weather comes from. Default UNSPECIFIED (inferred).
+   */
+  WEATHER_SOURCE() {
+    const offset = this.bb.__offset(this.bb_pos, 90);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * What happens past the last space weather row. Default UNSPECIFIED (the
+   * provider's rule).
+   */
+  WEATHER_EXTENSION() {
+    const offset = this.bb.__offset(this.bb_pos, 92);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Correction applied to the atmosphere model's density. Default NONE.
+   */
+  DENSITY_CORRECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 94);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * Past the last density-correction node the log-density scale relaxes to
+   * its trailing mean with this time constant, hours; 0 holds the last node.
+   * Absent, the provider's rule (the numerical propagator holds; the advanced
+   * mean-element propagator relaxes with 48 h).
+   */
+  DENSITY_CORRECTION_RELAXATION_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 96);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when DENSITY_CORRECTION_RELAXATION_HOURS carries a value; false (the
+   * default) means absent.
+   */
+  HAS_DENSITY_CORRECTION_RELAXATION_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 98);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Neutral wind in the drag relative velocity. Default NONE.
+   */
+  NEUTRAL_WIND() {
+    const offset = this.bb.__offset(this.bb_pos, 100);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
+  }
+  /**
+   * Empirical along-track terms of the averaged theories. Absent (the
+   * default): the theory's own.
+   */
+  EMPIRICAL_TERMS(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 102);
+    return offset ? (obj || new PCFEmpiricalTerms()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startPCFForceModel(builder) {
+    builder.startObject(50);
+  }
+  static addGravityChoice(builder, GRAVITY_CHOICE) {
+    builder.addFieldInt8(0, GRAVITY_CHOICE, 0 /* INFER_FLAGS */);
+  }
+  static addEnablePointMass(builder, ENABLE_POINT_MASS) {
+    builder.addFieldInt8(1, +ENABLE_POINT_MASS, 1);
+  }
+  static addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER) {
+    builder.addFieldFloat64(2, GRAVITATIONAL_PARAMETER, 0);
+  }
+  static addEnableJ2(builder, ENABLE_J2) {
+    builder.addFieldInt8(3, +ENABLE_J2, 1);
+  }
+  static addEnableJ3(builder, ENABLE_J3) {
+    builder.addFieldInt8(4, +ENABLE_J3, 0);
+  }
+  static addEnableJ4(builder, ENABLE_J4) {
+    builder.addFieldInt8(5, +ENABLE_J4, 0);
+  }
+  static addEnableHigherZonals(builder, ENABLE_HIGHER_ZONALS) {
+    builder.addFieldInt8(6, +ENABLE_HIGHER_ZONALS, 0);
+  }
+  static addMaximumDegree(builder, MAXIMUM_DEGREE) {
+    builder.addFieldInt16(7, MAXIMUM_DEGREE, 0);
+  }
+  static addHasMaximumDegree(builder, HAS_MAXIMUM_DEGREE) {
+    builder.addFieldInt8(8, +HAS_MAXIMUM_DEGREE, 0);
+  }
+  static addMaximumOrder(builder, MAXIMUM_ORDER) {
+    builder.addFieldInt16(9, MAXIMUM_ORDER, 0);
+  }
+  static addHasMaximumOrder(builder, HAS_MAXIMUM_ORDER) {
+    builder.addFieldInt8(10, +HAS_MAXIMUM_ORDER, 0);
+  }
+  static addEnableThirdBody(builder, ENABLE_THIRD_BODY) {
+    builder.addFieldInt8(11, +ENABLE_THIRD_BODY, 0);
+  }
+  static addThirdBodyIds(builder, THIRD_BODY_IDSOffset) {
+    builder.addFieldOffset(12, THIRD_BODY_IDSOffset, 0);
+  }
+  static createThirdBodyIdsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt32(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startThirdBodyIdsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addEnableSrp(builder, ENABLE_SRP) {
+    builder.addFieldInt8(13, +ENABLE_SRP, 0);
+  }
+  static addEnableDrag(builder, ENABLE_DRAG) {
+    builder.addFieldInt8(14, +ENABLE_DRAG, 0);
+  }
+  static addInitialMassKg(builder, INITIAL_MASS_KG) {
+    builder.addFieldFloat64(15, INITIAL_MASS_KG, 1e3);
+  }
+  static addAreaM2(builder, AREA_M2) {
+    builder.addFieldFloat64(16, AREA_M2, 10);
+  }
+  static addReflectivityCoefficient(builder, REFLECTIVITY_COEFFICIENT) {
+    builder.addFieldFloat64(17, REFLECTIVITY_COEFFICIENT, 1.5);
+  }
+  static addDragCoefficient(builder, DRAG_COEFFICIENT) {
+    builder.addFieldFloat64(18, DRAG_COEFFICIENT, 2.2);
+  }
+  static addAtmosphereModel(builder, ATMOSPHERE_MODEL) {
+    builder.addFieldInt8(19, ATMOSPHERE_MODEL, 1 /* NRLMSISE00 */);
+  }
+  static addWeather(builder, WEATHEROffset) {
+    builder.addFieldOffset(20, WEATHEROffset, 0);
+  }
+  static addEphemerisSource(builder, EPHEMERIS_SOURCEOffset) {
+    builder.addFieldOffset(21, EPHEMERIS_SOURCEOffset, 0);
+  }
+  static addSolidTides(builder, SOLID_TIDES) {
+    builder.addFieldInt8(22, SOLID_TIDES, 0 /* NONE */);
+  }
+  static addRelativity(builder, RELATIVITY) {
+    builder.addFieldInt8(23, RELATIVITY, 0 /* NONE */);
+  }
+  static addInTrackAccelerationMS2(builder, IN_TRACK_ACCELERATION_M_S2) {
+    builder.addFieldFloat64(24, IN_TRACK_ACCELERATION_M_S2, 0);
+  }
+  static addHasInTrackAccelerationMS2(builder, HAS_IN_TRACK_ACCELERATION_M_S2) {
+    builder.addFieldInt8(25, +HAS_IN_TRACK_ACCELERATION_M_S2, 0);
+  }
+  static addDragAreaOverMassRateM2KgS(builder, DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    builder.addFieldFloat64(26, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0);
+  }
+  static addHasDragAreaOverMassRateM2KgS(builder, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    builder.addFieldInt8(27, +HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0);
+  }
+  static addMaximumTesseralDegree(builder, MAXIMUM_TESSERAL_DEGREE) {
+    builder.addFieldInt16(28, MAXIMUM_TESSERAL_DEGREE, 0);
+  }
+  static addHasMaximumTesseralDegree(builder, HAS_MAXIMUM_TESSERAL_DEGREE) {
+    builder.addFieldInt8(29, +HAS_MAXIMUM_TESSERAL_DEGREE, 0);
+  }
+  static addRadiationPressureModel(builder, RADIATION_PRESSURE_MODEL) {
+    builder.addFieldInt8(30, RADIATION_PRESSURE_MODEL, 0 /* CANNONBALL */);
+  }
+  static addGnssBlock(builder, GNSS_BLOCK) {
+    builder.addFieldInt8(31, GNSS_BLOCK, 0 /* UNSPECIFIED */);
+  }
+  static addEcom2(builder, ECOM2Offset) {
+    builder.addFieldOffset(32, ECOM2Offset, 0);
+  }
+  static addEarthRadiation(builder, EARTH_RADIATION) {
+    builder.addFieldInt8(33, EARTH_RADIATION, 0 /* NONE */);
+  }
+  static addEarthRadiationResolutionDeg(builder, EARTH_RADIATION_RESOLUTION_DEG) {
+    builder.addFieldFloat64(34, EARTH_RADIATION_RESOLUTION_DEG, 15);
+  }
+  static addEarthRadiationAreaOverMassM2Kg(builder, EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
+    builder.addFieldFloat64(35, EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0);
+  }
+  static addHasEarthRadiationAreaOverMassM2Kg(builder, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
+    builder.addFieldInt8(36, +HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0);
+  }
+  static addOceanTides(builder, OCEAN_TIDES) {
+    builder.addFieldInt8(37, OCEAN_TIDES, 0 /* NONE */);
+  }
+  static addOceanTideMaximumDegree(builder, OCEAN_TIDE_MAXIMUM_DEGREE) {
+    builder.addFieldInt16(38, OCEAN_TIDE_MAXIMUM_DEGREE, 30);
+  }
+  static addOceanTideMaximumOrder(builder, OCEAN_TIDE_MAXIMUM_ORDER) {
+    builder.addFieldInt16(39, OCEAN_TIDE_MAXIMUM_ORDER, 30);
+  }
+  static addCentralBodyNaifId(builder, CENTRAL_BODY_NAIF_ID) {
+    builder.addFieldInt32(40, CENTRAL_BODY_NAIF_ID, 399);
+  }
+  static addEphemerisKind(builder, EPHEMERIS_KIND) {
+    builder.addFieldInt8(41, EPHEMERIS_KIND, 0 /* UNSPECIFIED */);
+  }
+  static addShadowModel(builder, SHADOW_MODEL) {
+    builder.addFieldInt8(42, SHADOW_MODEL, 0 /* UNSPECIFIED */);
+  }
+  static addWeatherSource(builder, WEATHER_SOURCE) {
+    builder.addFieldInt8(43, WEATHER_SOURCE, 0 /* UNSPECIFIED */);
+  }
+  static addWeatherExtension(builder, WEATHER_EXTENSION) {
+    builder.addFieldInt8(44, WEATHER_EXTENSION, 0 /* UNSPECIFIED */);
+  }
+  static addDensityCorrection(builder, DENSITY_CORRECTION) {
+    builder.addFieldInt8(45, DENSITY_CORRECTION, 0 /* NONE */);
+  }
+  static addDensityCorrectionRelaxationHours(builder, DENSITY_CORRECTION_RELAXATION_HOURS) {
+    builder.addFieldFloat64(46, DENSITY_CORRECTION_RELAXATION_HOURS, 0);
+  }
+  static addHasDensityCorrectionRelaxationHours(builder, HAS_DENSITY_CORRECTION_RELAXATION_HOURS) {
+    builder.addFieldInt8(47, +HAS_DENSITY_CORRECTION_RELAXATION_HOURS, 0);
+  }
+  static addNeutralWind(builder, NEUTRAL_WIND) {
+    builder.addFieldInt8(48, NEUTRAL_WIND, 0 /* NONE */);
+  }
+  static addEmpiricalTerms(builder, EMPIRICAL_TERMSOffset) {
+    builder.addFieldOffset(49, EMPIRICAL_TERMSOffset, 0);
+  }
+  static endPCFForceModel(builder) {
+    const offset = builder.endObject();
+    builder.requiredField(offset, 46);
+    return offset;
+  }
+  unpack() {
+    return new PCFForceModelT(
+      this.GRAVITY_CHOICE(),
+      this.ENABLE_POINT_MASS(),
+      this.GRAVITATIONAL_PARAMETER(),
+      this.ENABLE_J2(),
+      this.ENABLE_J3(),
+      this.ENABLE_J4(),
+      this.ENABLE_HIGHER_ZONALS(),
+      this.MAXIMUM_DEGREE(),
+      this.HAS_MAXIMUM_DEGREE(),
+      this.MAXIMUM_ORDER(),
+      this.HAS_MAXIMUM_ORDER(),
+      this.ENABLE_THIRD_BODY(),
+      this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength()),
+      this.ENABLE_SRP(),
+      this.ENABLE_DRAG(),
+      this.INITIAL_MASS_KG(),
+      this.AREA_M2(),
+      this.REFLECTIVITY_COEFFICIENT(),
+      this.DRAG_COEFFICIENT(),
+      this.ATMOSPHERE_MODEL(),
+      this.WEATHER() !== null ? this.WEATHER().unpack() : null,
+      this.EPHEMERIS_SOURCE(),
+      this.SOLID_TIDES(),
+      this.RELATIVITY(),
+      this.IN_TRACK_ACCELERATION_M_S2(),
+      this.HAS_IN_TRACK_ACCELERATION_M_S2(),
+      this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S(),
+      this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(),
+      this.MAXIMUM_TESSERAL_DEGREE(),
+      this.HAS_MAXIMUM_TESSERAL_DEGREE(),
+      this.RADIATION_PRESSURE_MODEL(),
+      this.GNSS_BLOCK(),
+      this.ECOM2() !== null ? this.ECOM2().unpack() : null,
+      this.EARTH_RADIATION(),
+      this.EARTH_RADIATION_RESOLUTION_DEG(),
+      this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG(),
+      this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(),
+      this.OCEAN_TIDES(),
+      this.OCEAN_TIDE_MAXIMUM_DEGREE(),
+      this.OCEAN_TIDE_MAXIMUM_ORDER(),
+      this.CENTRAL_BODY_NAIF_ID(),
+      this.EPHEMERIS_KIND(),
+      this.SHADOW_MODEL(),
+      this.WEATHER_SOURCE(),
+      this.WEATHER_EXTENSION(),
+      this.DENSITY_CORRECTION(),
+      this.DENSITY_CORRECTION_RELAXATION_HOURS(),
+      this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS(),
+      this.NEUTRAL_WIND(),
+      this.EMPIRICAL_TERMS() !== null ? this.EMPIRICAL_TERMS().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.GRAVITY_CHOICE = this.GRAVITY_CHOICE();
+    _o.ENABLE_POINT_MASS = this.ENABLE_POINT_MASS();
+    _o.GRAVITATIONAL_PARAMETER = this.GRAVITATIONAL_PARAMETER();
+    _o.ENABLE_J2 = this.ENABLE_J2();
+    _o.ENABLE_J3 = this.ENABLE_J3();
+    _o.ENABLE_J4 = this.ENABLE_J4();
+    _o.ENABLE_HIGHER_ZONALS = this.ENABLE_HIGHER_ZONALS();
+    _o.MAXIMUM_DEGREE = this.MAXIMUM_DEGREE();
+    _o.HAS_MAXIMUM_DEGREE = this.HAS_MAXIMUM_DEGREE();
+    _o.MAXIMUM_ORDER = this.MAXIMUM_ORDER();
+    _o.HAS_MAXIMUM_ORDER = this.HAS_MAXIMUM_ORDER();
+    _o.ENABLE_THIRD_BODY = this.ENABLE_THIRD_BODY();
+    _o.THIRD_BODY_IDS = this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength());
+    _o.ENABLE_SRP = this.ENABLE_SRP();
+    _o.ENABLE_DRAG = this.ENABLE_DRAG();
+    _o.INITIAL_MASS_KG = this.INITIAL_MASS_KG();
+    _o.AREA_M2 = this.AREA_M2();
+    _o.REFLECTIVITY_COEFFICIENT = this.REFLECTIVITY_COEFFICIENT();
+    _o.DRAG_COEFFICIENT = this.DRAG_COEFFICIENT();
+    _o.ATMOSPHERE_MODEL = this.ATMOSPHERE_MODEL();
+    _o.WEATHER = this.WEATHER() !== null ? this.WEATHER().unpack() : null;
+    _o.EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE();
+    _o.SOLID_TIDES = this.SOLID_TIDES();
+    _o.RELATIVITY = this.RELATIVITY();
+    _o.IN_TRACK_ACCELERATION_M_S2 = this.IN_TRACK_ACCELERATION_M_S2();
+    _o.HAS_IN_TRACK_ACCELERATION_M_S2 = this.HAS_IN_TRACK_ACCELERATION_M_S2();
+    _o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
+    _o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
+    _o.MAXIMUM_TESSERAL_DEGREE = this.MAXIMUM_TESSERAL_DEGREE();
+    _o.HAS_MAXIMUM_TESSERAL_DEGREE = this.HAS_MAXIMUM_TESSERAL_DEGREE();
+    _o.RADIATION_PRESSURE_MODEL = this.RADIATION_PRESSURE_MODEL();
+    _o.GNSS_BLOCK = this.GNSS_BLOCK();
+    _o.ECOM2 = this.ECOM2() !== null ? this.ECOM2().unpack() : null;
+    _o.EARTH_RADIATION = this.EARTH_RADIATION();
+    _o.EARTH_RADIATION_RESOLUTION_DEG = this.EARTH_RADIATION_RESOLUTION_DEG();
+    _o.EARTH_RADIATION_AREA_OVER_MASS_M2_KG = this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG();
+    _o.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG();
+    _o.OCEAN_TIDES = this.OCEAN_TIDES();
+    _o.OCEAN_TIDE_MAXIMUM_DEGREE = this.OCEAN_TIDE_MAXIMUM_DEGREE();
+    _o.OCEAN_TIDE_MAXIMUM_ORDER = this.OCEAN_TIDE_MAXIMUM_ORDER();
+    _o.CENTRAL_BODY_NAIF_ID = this.CENTRAL_BODY_NAIF_ID();
+    _o.EPHEMERIS_KIND = this.EPHEMERIS_KIND();
+    _o.SHADOW_MODEL = this.SHADOW_MODEL();
+    _o.WEATHER_SOURCE = this.WEATHER_SOURCE();
+    _o.WEATHER_EXTENSION = this.WEATHER_EXTENSION();
+    _o.DENSITY_CORRECTION = this.DENSITY_CORRECTION();
+    _o.DENSITY_CORRECTION_RELAXATION_HOURS = this.DENSITY_CORRECTION_RELAXATION_HOURS();
+    _o.HAS_DENSITY_CORRECTION_RELAXATION_HOURS = this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS();
+    _o.NEUTRAL_WIND = this.NEUTRAL_WIND();
+    _o.EMPIRICAL_TERMS = this.EMPIRICAL_TERMS() !== null ? this.EMPIRICAL_TERMS().unpack() : null;
+  }
+};
+var PCFForceModelT = class {
+  constructor(GRAVITY_CHOICE = 0 /* INFER_FLAGS */, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1e3, AREA_M2 = 10, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = 1 /* NRLMSISE00 */, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = 0 /* NONE */, RELATIVITY = 0 /* NONE */, IN_TRACK_ACCELERATION_M_S2 = 0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false, RADIATION_PRESSURE_MODEL = 0 /* CANNONBALL */, GNSS_BLOCK = 0 /* UNSPECIFIED */, ECOM2 = null, EARTH_RADIATION = 0 /* NONE */, EARTH_RADIATION_RESOLUTION_DEG = 15, EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false, OCEAN_TIDES = 0 /* NONE */, OCEAN_TIDE_MAXIMUM_DEGREE = 30, OCEAN_TIDE_MAXIMUM_ORDER = 30, CENTRAL_BODY_NAIF_ID = 399, EPHEMERIS_KIND = 0 /* UNSPECIFIED */, SHADOW_MODEL = 0 /* UNSPECIFIED */, WEATHER_SOURCE = 0 /* UNSPECIFIED */, WEATHER_EXTENSION = 0 /* UNSPECIFIED */, DENSITY_CORRECTION = 0 /* NONE */, DENSITY_CORRECTION_RELAXATION_HOURS = 0, HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false, NEUTRAL_WIND = 0 /* NONE */, EMPIRICAL_TERMS = null) {
+    this.GRAVITY_CHOICE = GRAVITY_CHOICE;
+    this.ENABLE_POINT_MASS = ENABLE_POINT_MASS;
+    this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
+    this.ENABLE_J2 = ENABLE_J2;
+    this.ENABLE_J3 = ENABLE_J3;
+    this.ENABLE_J4 = ENABLE_J4;
+    this.ENABLE_HIGHER_ZONALS = ENABLE_HIGHER_ZONALS;
+    this.MAXIMUM_DEGREE = MAXIMUM_DEGREE;
+    this.HAS_MAXIMUM_DEGREE = HAS_MAXIMUM_DEGREE;
+    this.MAXIMUM_ORDER = MAXIMUM_ORDER;
+    this.HAS_MAXIMUM_ORDER = HAS_MAXIMUM_ORDER;
+    this.ENABLE_THIRD_BODY = ENABLE_THIRD_BODY;
+    this.THIRD_BODY_IDS = THIRD_BODY_IDS;
+    this.ENABLE_SRP = ENABLE_SRP;
+    this.ENABLE_DRAG = ENABLE_DRAG;
+    this.INITIAL_MASS_KG = INITIAL_MASS_KG;
+    this.AREA_M2 = AREA_M2;
+    this.REFLECTIVITY_COEFFICIENT = REFLECTIVITY_COEFFICIENT;
+    this.DRAG_COEFFICIENT = DRAG_COEFFICIENT;
+    this.ATMOSPHERE_MODEL = ATMOSPHERE_MODEL;
+    this.WEATHER = WEATHER;
+    this.EPHEMERIS_SOURCE = EPHEMERIS_SOURCE;
+    this.SOLID_TIDES = SOLID_TIDES;
+    this.RELATIVITY = RELATIVITY;
+    this.IN_TRACK_ACCELERATION_M_S2 = IN_TRACK_ACCELERATION_M_S2;
+    this.HAS_IN_TRACK_ACCELERATION_M_S2 = HAS_IN_TRACK_ACCELERATION_M_S2;
+    this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+    this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+    this.MAXIMUM_TESSERAL_DEGREE = MAXIMUM_TESSERAL_DEGREE;
+    this.HAS_MAXIMUM_TESSERAL_DEGREE = HAS_MAXIMUM_TESSERAL_DEGREE;
+    this.RADIATION_PRESSURE_MODEL = RADIATION_PRESSURE_MODEL;
+    this.GNSS_BLOCK = GNSS_BLOCK;
+    this.ECOM2 = ECOM2;
+    this.EARTH_RADIATION = EARTH_RADIATION;
+    this.EARTH_RADIATION_RESOLUTION_DEG = EARTH_RADIATION_RESOLUTION_DEG;
+    this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG = EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
+    this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
+    this.OCEAN_TIDES = OCEAN_TIDES;
+    this.OCEAN_TIDE_MAXIMUM_DEGREE = OCEAN_TIDE_MAXIMUM_DEGREE;
+    this.OCEAN_TIDE_MAXIMUM_ORDER = OCEAN_TIDE_MAXIMUM_ORDER;
+    this.CENTRAL_BODY_NAIF_ID = CENTRAL_BODY_NAIF_ID;
+    this.EPHEMERIS_KIND = EPHEMERIS_KIND;
+    this.SHADOW_MODEL = SHADOW_MODEL;
+    this.WEATHER_SOURCE = WEATHER_SOURCE;
+    this.WEATHER_EXTENSION = WEATHER_EXTENSION;
+    this.DENSITY_CORRECTION = DENSITY_CORRECTION;
+    this.DENSITY_CORRECTION_RELAXATION_HOURS = DENSITY_CORRECTION_RELAXATION_HOURS;
+    this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS = HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
+    this.NEUTRAL_WIND = NEUTRAL_WIND;
+    this.EMPIRICAL_TERMS = EMPIRICAL_TERMS;
+  }
+  pack(builder) {
+    const THIRD_BODY_IDS = PCFForceModel.createThirdBodyIdsVector(builder, this.THIRD_BODY_IDS);
+    const WEATHER = this.WEATHER !== null ? this.WEATHER.pack(builder) : 0;
+    const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
+    const ECOM2 = this.ECOM2 !== null ? this.ECOM2.pack(builder) : 0;
+    const EMPIRICAL_TERMS = this.EMPIRICAL_TERMS !== null ? this.EMPIRICAL_TERMS.pack(builder) : 0;
+    PCFForceModel.startPCFForceModel(builder);
+    PCFForceModel.addGravityChoice(builder, this.GRAVITY_CHOICE);
+    PCFForceModel.addEnablePointMass(builder, this.ENABLE_POINT_MASS);
+    PCFForceModel.addGravitationalParameter(builder, this.GRAVITATIONAL_PARAMETER);
+    PCFForceModel.addEnableJ2(builder, this.ENABLE_J2);
+    PCFForceModel.addEnableJ3(builder, this.ENABLE_J3);
+    PCFForceModel.addEnableJ4(builder, this.ENABLE_J4);
+    PCFForceModel.addEnableHigherZonals(builder, this.ENABLE_HIGHER_ZONALS);
+    PCFForceModel.addMaximumDegree(builder, this.MAXIMUM_DEGREE);
+    PCFForceModel.addHasMaximumDegree(builder, this.HAS_MAXIMUM_DEGREE);
+    PCFForceModel.addMaximumOrder(builder, this.MAXIMUM_ORDER);
+    PCFForceModel.addHasMaximumOrder(builder, this.HAS_MAXIMUM_ORDER);
+    PCFForceModel.addEnableThirdBody(builder, this.ENABLE_THIRD_BODY);
+    PCFForceModel.addThirdBodyIds(builder, THIRD_BODY_IDS);
+    PCFForceModel.addEnableSrp(builder, this.ENABLE_SRP);
+    PCFForceModel.addEnableDrag(builder, this.ENABLE_DRAG);
+    PCFForceModel.addInitialMassKg(builder, this.INITIAL_MASS_KG);
+    PCFForceModel.addAreaM2(builder, this.AREA_M2);
+    PCFForceModel.addReflectivityCoefficient(builder, this.REFLECTIVITY_COEFFICIENT);
+    PCFForceModel.addDragCoefficient(builder, this.DRAG_COEFFICIENT);
+    PCFForceModel.addAtmosphereModel(builder, this.ATMOSPHERE_MODEL);
+    PCFForceModel.addWeather(builder, WEATHER);
+    PCFForceModel.addEphemerisSource(builder, EPHEMERIS_SOURCE);
+    PCFForceModel.addSolidTides(builder, this.SOLID_TIDES);
+    PCFForceModel.addRelativity(builder, this.RELATIVITY);
+    PCFForceModel.addInTrackAccelerationMS2(builder, this.IN_TRACK_ACCELERATION_M_S2);
+    PCFForceModel.addHasInTrackAccelerationMS2(builder, this.HAS_IN_TRACK_ACCELERATION_M_S2);
+    PCFForceModel.addDragAreaOverMassRateM2KgS(builder, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+    PCFForceModel.addHasDragAreaOverMassRateM2KgS(builder, this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+    PCFForceModel.addMaximumTesseralDegree(builder, this.MAXIMUM_TESSERAL_DEGREE);
+    PCFForceModel.addHasMaximumTesseralDegree(builder, this.HAS_MAXIMUM_TESSERAL_DEGREE);
+    PCFForceModel.addRadiationPressureModel(builder, this.RADIATION_PRESSURE_MODEL);
+    PCFForceModel.addGnssBlock(builder, this.GNSS_BLOCK);
+    PCFForceModel.addEcom2(builder, ECOM2);
+    PCFForceModel.addEarthRadiation(builder, this.EARTH_RADIATION);
+    PCFForceModel.addEarthRadiationResolutionDeg(builder, this.EARTH_RADIATION_RESOLUTION_DEG);
+    PCFForceModel.addEarthRadiationAreaOverMassM2Kg(builder, this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+    PCFForceModel.addHasEarthRadiationAreaOverMassM2Kg(builder, this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+    PCFForceModel.addOceanTides(builder, this.OCEAN_TIDES);
+    PCFForceModel.addOceanTideMaximumDegree(builder, this.OCEAN_TIDE_MAXIMUM_DEGREE);
+    PCFForceModel.addOceanTideMaximumOrder(builder, this.OCEAN_TIDE_MAXIMUM_ORDER);
+    PCFForceModel.addCentralBodyNaifId(builder, this.CENTRAL_BODY_NAIF_ID);
+    PCFForceModel.addEphemerisKind(builder, this.EPHEMERIS_KIND);
+    PCFForceModel.addShadowModel(builder, this.SHADOW_MODEL);
+    PCFForceModel.addWeatherSource(builder, this.WEATHER_SOURCE);
+    PCFForceModel.addWeatherExtension(builder, this.WEATHER_EXTENSION);
+    PCFForceModel.addDensityCorrection(builder, this.DENSITY_CORRECTION);
+    PCFForceModel.addDensityCorrectionRelaxationHours(builder, this.DENSITY_CORRECTION_RELAXATION_HOURS);
+    PCFForceModel.addHasDensityCorrectionRelaxationHours(builder, this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS);
+    PCFForceModel.addNeutralWind(builder, this.NEUTRAL_WIND);
+    PCFForceModel.addEmpiricalTerms(builder, EMPIRICAL_TERMS);
+    return PCFForceModel.endPCFForceModel(builder);
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFIntegratorSettings.ts
+import * as flatbuffers72 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfIntegratorAlgorithm.ts
+var pcfIntegratorAlgorithm = /* @__PURE__ */ ((pcfIntegratorAlgorithm2) => {
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RK4"] = 1] = "RK4";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RKF45"] = 2] = "RKF45";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RKF78"] = 3] = "RKF78";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RK78"] = 4] = "RK78";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RKDP87"] = 5] = "RKDP87";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["ABM"] = 6] = "ABM";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["BS"] = 7] = "BS";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["COWELL"] = 8] = "COWELL";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["ENCKE"] = 9] = "ENCKE";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["EQUINOCTIAL_VOP"] = 10] = "EQUINOCTIAL_VOP";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["DOPRI5"] = 11] = "DOPRI5";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RK65"] = 12] = "RK65";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RKV98"] = 13] = "RKV98";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["RKN1210"] = 14] = "RKN1210";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["GAUSS_JACKSON_8"] = 15] = "GAUSS_JACKSON_8";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["GAUSS_VOP"] = 16] = "GAUSS_VOP";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["DROMO"] = 17] = "DROMO";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["STIEFEL"] = 18] = "STIEFEL";
+  pcfIntegratorAlgorithm2[pcfIntegratorAlgorithm2["DOPRI853"] = 19] = "DOPRI853";
+  return pcfIntegratorAlgorithm2;
+})(pcfIntegratorAlgorithm || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFIntegratorSettings.ts
+var PCFIntegratorSettings = class _PCFIntegratorSettings {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFIntegratorSettings(bb, obj) {
+    return (obj || new _PCFIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFIntegratorSettings(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers72.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Algorithm. Default UNSPECIFIED (the provider's own).
+   */
+  ALGORITHM() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * First step, seconds; the fixed step of RK4. Default 60.
+   */
+  INITIAL_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 60;
+  }
+  /**
+   * Smallest step an adaptive algorithm may take, seconds. Default 1.
+   */
+  MINIMUM_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
+  }
+  /**
+   * Largest step, seconds. Default 3600.
+   */
+  MAXIMUM_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 3600;
+  }
+  /**
+   * Six or seven positive tolerances, respectively m, m/s and optional kg.
+   * Required; no default.
+   */
+  ABSOLUTE_TOLERANCES(index) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
+  }
+  absoluteTolerancesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  absoluteTolerancesArray() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset));
+  }
+  /**
+   * Relative tolerance, dimensionless. Default 1e-12.
+   */
+  RELATIVE_TOLERANCE() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1e-12;
+  }
+  /**
+   * Most steps one propagation may take. Default 100000.
+   */
+  MAXIMUM_STEPS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 1e5;
+  }
+  static startPCFIntegratorSettings(builder) {
+    builder.startObject(7);
+  }
+  static addAlgorithm(builder, ALGORITHM) {
+    builder.addFieldInt8(0, ALGORITHM, 0 /* UNSPECIFIED */);
+  }
+  static addInitialStepSeconds(builder, INITIAL_STEP_SECONDS) {
+    builder.addFieldFloat64(1, INITIAL_STEP_SECONDS, 60);
+  }
+  static addMinimumStepSeconds(builder, MINIMUM_STEP_SECONDS) {
+    builder.addFieldFloat64(2, MINIMUM_STEP_SECONDS, 1);
+  }
+  static addMaximumStepSeconds(builder, MAXIMUM_STEP_SECONDS) {
+    builder.addFieldFloat64(3, MAXIMUM_STEP_SECONDS, 3600);
+  }
+  static addAbsoluteTolerances(builder, ABSOLUTE_TOLERANCESOffset) {
+    builder.addFieldOffset(4, ABSOLUTE_TOLERANCESOffset, 0);
+  }
+  static createAbsoluteTolerancesVector(builder, data) {
+    builder.startVector(8, data.length, 8);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addFloat64(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startAbsoluteTolerancesVector(builder, numElems) {
+    builder.startVector(8, numElems, 8);
+  }
+  static addRelativeTolerance(builder, RELATIVE_TOLERANCE) {
+    builder.addFieldFloat64(5, RELATIVE_TOLERANCE, 1e-12);
+  }
+  static addMaximumSteps(builder, MAXIMUM_STEPS) {
+    builder.addFieldInt32(6, MAXIMUM_STEPS, 1e5);
+  }
+  static endPCFIntegratorSettings(builder) {
+    const offset = builder.endObject();
+    builder.requiredField(offset, 12);
+    return offset;
+  }
+  static createPCFIntegratorSettings(builder, ALGORITHM, INITIAL_STEP_SECONDS, MINIMUM_STEP_SECONDS, MAXIMUM_STEP_SECONDS, ABSOLUTE_TOLERANCESOffset, RELATIVE_TOLERANCE, MAXIMUM_STEPS) {
+    _PCFIntegratorSettings.startPCFIntegratorSettings(builder);
+    _PCFIntegratorSettings.addAlgorithm(builder, ALGORITHM);
+    _PCFIntegratorSettings.addInitialStepSeconds(builder, INITIAL_STEP_SECONDS);
+    _PCFIntegratorSettings.addMinimumStepSeconds(builder, MINIMUM_STEP_SECONDS);
+    _PCFIntegratorSettings.addMaximumStepSeconds(builder, MAXIMUM_STEP_SECONDS);
+    _PCFIntegratorSettings.addAbsoluteTolerances(builder, ABSOLUTE_TOLERANCESOffset);
+    _PCFIntegratorSettings.addRelativeTolerance(builder, RELATIVE_TOLERANCE);
+    _PCFIntegratorSettings.addMaximumSteps(builder, MAXIMUM_STEPS);
+    return _PCFIntegratorSettings.endPCFIntegratorSettings(builder);
+  }
+  unpack() {
+    return new PCFIntegratorSettingsT(
+      this.ALGORITHM(),
+      this.INITIAL_STEP_SECONDS(),
+      this.MINIMUM_STEP_SECONDS(),
+      this.MAXIMUM_STEP_SECONDS(),
+      this.bb.createScalarList(this.ABSOLUTE_TOLERANCES.bind(this), this.absoluteTolerancesLength()),
+      this.RELATIVE_TOLERANCE(),
+      this.MAXIMUM_STEPS()
+    );
+  }
+  unpackTo(_o) {
+    _o.ALGORITHM = this.ALGORITHM();
+    _o.INITIAL_STEP_SECONDS = this.INITIAL_STEP_SECONDS();
+    _o.MINIMUM_STEP_SECONDS = this.MINIMUM_STEP_SECONDS();
+    _o.MAXIMUM_STEP_SECONDS = this.MAXIMUM_STEP_SECONDS();
+    _o.ABSOLUTE_TOLERANCES = this.bb.createScalarList(this.ABSOLUTE_TOLERANCES.bind(this), this.absoluteTolerancesLength());
+    _o.RELATIVE_TOLERANCE = this.RELATIVE_TOLERANCE();
+    _o.MAXIMUM_STEPS = this.MAXIMUM_STEPS();
+  }
+};
+var PCFIntegratorSettingsT = class {
+  constructor(ALGORITHM = 0 /* UNSPECIFIED */, INITIAL_STEP_SECONDS = 60, MINIMUM_STEP_SECONDS = 1, MAXIMUM_STEP_SECONDS = 3600, ABSOLUTE_TOLERANCES = [], RELATIVE_TOLERANCE = 1e-12, MAXIMUM_STEPS = 1e5) {
+    this.ALGORITHM = ALGORITHM;
+    this.INITIAL_STEP_SECONDS = INITIAL_STEP_SECONDS;
+    this.MINIMUM_STEP_SECONDS = MINIMUM_STEP_SECONDS;
+    this.MAXIMUM_STEP_SECONDS = MAXIMUM_STEP_SECONDS;
+    this.ABSOLUTE_TOLERANCES = ABSOLUTE_TOLERANCES;
+    this.RELATIVE_TOLERANCE = RELATIVE_TOLERANCE;
+    this.MAXIMUM_STEPS = MAXIMUM_STEPS;
+  }
+  pack(builder) {
+    const ABSOLUTE_TOLERANCES = PCFIntegratorSettings.createAbsoluteTolerancesVector(builder, this.ABSOLUTE_TOLERANCES);
+    return PCFIntegratorSettings.createPCFIntegratorSettings(
+      builder,
+      this.ALGORITHM,
+      this.INITIAL_STEP_SECONDS,
+      this.MINIMUM_STEP_SECONDS,
+      this.MAXIMUM_STEP_SECONDS,
+      ABSOLUTE_TOLERANCES,
+      this.RELATIVE_TOLERANCE,
+      this.MAXIMUM_STEPS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFLaunch.ts
+import * as flatbuffers73 from "flatbuffers";
+var PCFLaunch = class _PCFLaunch {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFLaunch(bb, obj) {
+    return (obj || new _PCFLaunch()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFLaunch(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers73.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFLaunch()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * A priori B_eff (Cd*A/m) of a new object, m2/kg. Default 0.01.
+   */
+  DRAG_AREA_OVER_MASS_PRIOR_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
+  }
+  /**
+   * A priori AGOM (Cr*A/m) of a new object, m2/kg. Default 0.01.
+   */
+  SRP_AREA_OVER_MASS_PRIOR_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
+  }
+  /**
+   * Prior 1-sigma of each object's separation velocity per axis, m/s.
+   * Default 1.
+   */
+  SEPARATION_SIGMA_M_S() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
+  }
+  /**
+   * Shrinkage 1-sigma of each object's B_eff about the batch mean, m2/kg.
+   * Absent, it is DRAG_AREA_OVER_MASS_PRIOR_M2_KG.
+   */
+  SHRINK_SIGMA_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * True when SHRINK_SIGMA_M2_KG carries a value; false means absent.
+   */
+  HAS_SHRINK_SIGMA_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+  }
+  /**
+   * Prior 1-sigma of the batch-mean B_eff, m2/kg. Default 1.
+   */
+  BATCH_MEAN_SIGMA_M2_KG() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
+  }
+  static startPCFLaunch(builder) {
+    builder.startObject(6);
+  }
+  static addDragAreaOverMassPriorM2Kg(builder, DRAG_AREA_OVER_MASS_PRIOR_M2_KG) {
+    builder.addFieldFloat64(0, DRAG_AREA_OVER_MASS_PRIOR_M2_KG, 0.01);
+  }
+  static addSrpAreaOverMassPriorM2Kg(builder, SRP_AREA_OVER_MASS_PRIOR_M2_KG) {
+    builder.addFieldFloat64(1, SRP_AREA_OVER_MASS_PRIOR_M2_KG, 0.01);
+  }
+  static addSeparationSigmaMS(builder, SEPARATION_SIGMA_M_S) {
+    builder.addFieldFloat64(2, SEPARATION_SIGMA_M_S, 1);
+  }
+  static addShrinkSigmaM2Kg(builder, SHRINK_SIGMA_M2_KG) {
+    builder.addFieldFloat64(3, SHRINK_SIGMA_M2_KG, 0);
+  }
+  static addHasShrinkSigmaM2Kg(builder, HAS_SHRINK_SIGMA_M2_KG) {
+    builder.addFieldInt8(4, +HAS_SHRINK_SIGMA_M2_KG, 0);
+  }
+  static addBatchMeanSigmaM2Kg(builder, BATCH_MEAN_SIGMA_M2_KG) {
+    builder.addFieldFloat64(5, BATCH_MEAN_SIGMA_M2_KG, 1);
+  }
+  static endPCFLaunch(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFLaunch(builder, DRAG_AREA_OVER_MASS_PRIOR_M2_KG, SRP_AREA_OVER_MASS_PRIOR_M2_KG, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, HAS_SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) {
+    _PCFLaunch.startPCFLaunch(builder);
+    _PCFLaunch.addDragAreaOverMassPriorM2Kg(builder, DRAG_AREA_OVER_MASS_PRIOR_M2_KG);
+    _PCFLaunch.addSrpAreaOverMassPriorM2Kg(builder, SRP_AREA_OVER_MASS_PRIOR_M2_KG);
+    _PCFLaunch.addSeparationSigmaMS(builder, SEPARATION_SIGMA_M_S);
+    _PCFLaunch.addShrinkSigmaM2Kg(builder, SHRINK_SIGMA_M2_KG);
+    _PCFLaunch.addHasShrinkSigmaM2Kg(builder, HAS_SHRINK_SIGMA_M2_KG);
+    _PCFLaunch.addBatchMeanSigmaM2Kg(builder, BATCH_MEAN_SIGMA_M2_KG);
+    return _PCFLaunch.endPCFLaunch(builder);
+  }
+  unpack() {
+    return new PCFLaunchT(
+      this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG(),
+      this.SRP_AREA_OVER_MASS_PRIOR_M2_KG(),
+      this.SEPARATION_SIGMA_M_S(),
+      this.SHRINK_SIGMA_M2_KG(),
+      this.HAS_SHRINK_SIGMA_M2_KG(),
+      this.BATCH_MEAN_SIGMA_M2_KG()
+    );
+  }
+  unpackTo(_o) {
+    _o.DRAG_AREA_OVER_MASS_PRIOR_M2_KG = this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG();
+    _o.SRP_AREA_OVER_MASS_PRIOR_M2_KG = this.SRP_AREA_OVER_MASS_PRIOR_M2_KG();
+    _o.SEPARATION_SIGMA_M_S = this.SEPARATION_SIGMA_M_S();
+    _o.SHRINK_SIGMA_M2_KG = this.SHRINK_SIGMA_M2_KG();
+    _o.HAS_SHRINK_SIGMA_M2_KG = this.HAS_SHRINK_SIGMA_M2_KG();
+    _o.BATCH_MEAN_SIGMA_M2_KG = this.BATCH_MEAN_SIGMA_M2_KG();
+  }
+};
+var PCFLaunchT = class {
+  constructor(DRAG_AREA_OVER_MASS_PRIOR_M2_KG = 0.01, SRP_AREA_OVER_MASS_PRIOR_M2_KG = 0.01, SEPARATION_SIGMA_M_S = 1, SHRINK_SIGMA_M2_KG = 0, HAS_SHRINK_SIGMA_M2_KG = false, BATCH_MEAN_SIGMA_M2_KG = 1) {
+    this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG = DRAG_AREA_OVER_MASS_PRIOR_M2_KG;
+    this.SRP_AREA_OVER_MASS_PRIOR_M2_KG = SRP_AREA_OVER_MASS_PRIOR_M2_KG;
+    this.SEPARATION_SIGMA_M_S = SEPARATION_SIGMA_M_S;
+    this.SHRINK_SIGMA_M2_KG = SHRINK_SIGMA_M2_KG;
+    this.HAS_SHRINK_SIGMA_M2_KG = HAS_SHRINK_SIGMA_M2_KG;
+    this.BATCH_MEAN_SIGMA_M2_KG = BATCH_MEAN_SIGMA_M2_KG;
+  }
+  pack(builder) {
+    return PCFLaunch.createPCFLaunch(
+      builder,
+      this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG,
+      this.SRP_AREA_OVER_MASS_PRIOR_M2_KG,
+      this.SEPARATION_SIGMA_M_S,
+      this.SHRINK_SIGMA_M2_KG,
+      this.HAS_SHRINK_SIGMA_M2_KG,
+      this.BATCH_MEAN_SIGMA_M2_KG
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFManeuverDetection.ts
+import * as flatbuffers74 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfInnovationCorrelation.ts
+var pcfInnovationCorrelation = /* @__PURE__ */ ((pcfInnovationCorrelation2) => {
+  pcfInnovationCorrelation2[pcfInnovationCorrelation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfInnovationCorrelation2[pcfInnovationCorrelation2["WHITE"] = 1] = "WHITE";
+  pcfInnovationCorrelation2[pcfInnovationCorrelation2["ONE_SAMPLE_PER_REVOLUTION"] = 2] = "ONE_SAMPLE_PER_REVOLUTION";
+  pcfInnovationCorrelation2[pcfInnovationCorrelation2["CORRELATION_TIME"] = 3] = "CORRELATION_TIME";
+  return pcfInnovationCorrelation2;
+})(pcfInnovationCorrelation || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFManeuverDetection.ts
+var PCFManeuverDetection = class _PCFManeuverDetection {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFManeuverDetection(bb, obj) {
+    return (obj || new _PCFManeuverDetection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFManeuverDetection(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers74.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFManeuverDetection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * False-alarm rate the THRESHOLD is calibrated for, per object-year. A
+   * provider that cannot recalibrate refuses another rate. Default 1.
+   */
+  FALSE_ALARMS_PER_OBJECT_YEAR() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
+  }
+  /**
+   * How innovation correlation is weighted. Default ONE_SAMPLE_PER_REVOLUTION.
+   */
+  CORRELATION_MODEL() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 2 /* ONE_SAMPLE_PER_REVOLUTION */;
+  }
+  /**
+   * The statistic Lambda (chi-square, 3 degrees of freedom) above which a
+   * maneuver is declared. Default 20.
+   */
+  THRESHOLD() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 20;
+  }
+  /**
+   * States kept clear at each end of the arc when scanning. Default 12.
+   */
+  MARGIN_STATES() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 12;
+  }
+  /**
+   * Half-width of the window the burn epoch is refined in, hours. Default 2.
+   */
+  REFINE_WINDOW_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2;
+  }
+  /**
+   * Fewest states an arc must hold to be scanned. Default 48.
+   */
+  MINIMUM_STATES() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 48;
+  }
+  static startPCFManeuverDetection(builder) {
+    builder.startObject(6);
+  }
+  static addFalseAlarmsPerObjectYear(builder, FALSE_ALARMS_PER_OBJECT_YEAR) {
+    builder.addFieldFloat64(0, FALSE_ALARMS_PER_OBJECT_YEAR, 1);
+  }
+  static addCorrelationModel(builder, CORRELATION_MODEL) {
+    builder.addFieldInt8(1, CORRELATION_MODEL, 2 /* ONE_SAMPLE_PER_REVOLUTION */);
+  }
+  static addThreshold(builder, THRESHOLD) {
+    builder.addFieldFloat64(2, THRESHOLD, 20);
+  }
+  static addMarginStates(builder, MARGIN_STATES) {
+    builder.addFieldInt32(3, MARGIN_STATES, 12);
+  }
+  static addRefineWindowHours(builder, REFINE_WINDOW_HOURS) {
+    builder.addFieldFloat64(4, REFINE_WINDOW_HOURS, 2);
+  }
+  static addMinimumStates(builder, MINIMUM_STATES) {
+    builder.addFieldInt32(5, MINIMUM_STATES, 48);
+  }
+  static endPCFManeuverDetection(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFManeuverDetection(builder, FALSE_ALARMS_PER_OBJECT_YEAR, CORRELATION_MODEL, THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES) {
+    _PCFManeuverDetection.startPCFManeuverDetection(builder);
+    _PCFManeuverDetection.addFalseAlarmsPerObjectYear(builder, FALSE_ALARMS_PER_OBJECT_YEAR);
+    _PCFManeuverDetection.addCorrelationModel(builder, CORRELATION_MODEL);
+    _PCFManeuverDetection.addThreshold(builder, THRESHOLD);
+    _PCFManeuverDetection.addMarginStates(builder, MARGIN_STATES);
+    _PCFManeuverDetection.addRefineWindowHours(builder, REFINE_WINDOW_HOURS);
+    _PCFManeuverDetection.addMinimumStates(builder, MINIMUM_STATES);
+    return _PCFManeuverDetection.endPCFManeuverDetection(builder);
+  }
+  unpack() {
+    return new PCFManeuverDetectionT(
+      this.FALSE_ALARMS_PER_OBJECT_YEAR(),
+      this.CORRELATION_MODEL(),
+      this.THRESHOLD(),
+      this.MARGIN_STATES(),
+      this.REFINE_WINDOW_HOURS(),
+      this.MINIMUM_STATES()
+    );
+  }
+  unpackTo(_o) {
+    _o.FALSE_ALARMS_PER_OBJECT_YEAR = this.FALSE_ALARMS_PER_OBJECT_YEAR();
+    _o.CORRELATION_MODEL = this.CORRELATION_MODEL();
+    _o.THRESHOLD = this.THRESHOLD();
+    _o.MARGIN_STATES = this.MARGIN_STATES();
+    _o.REFINE_WINDOW_HOURS = this.REFINE_WINDOW_HOURS();
+    _o.MINIMUM_STATES = this.MINIMUM_STATES();
+  }
+};
+var PCFManeuverDetectionT = class {
+  constructor(FALSE_ALARMS_PER_OBJECT_YEAR = 1, CORRELATION_MODEL = 2 /* ONE_SAMPLE_PER_REVOLUTION */, THRESHOLD = 20, MARGIN_STATES = 12, REFINE_WINDOW_HOURS = 2, MINIMUM_STATES = 48) {
+    this.FALSE_ALARMS_PER_OBJECT_YEAR = FALSE_ALARMS_PER_OBJECT_YEAR;
+    this.CORRELATION_MODEL = CORRELATION_MODEL;
+    this.THRESHOLD = THRESHOLD;
+    this.MARGIN_STATES = MARGIN_STATES;
+    this.REFINE_WINDOW_HOURS = REFINE_WINDOW_HOURS;
+    this.MINIMUM_STATES = MINIMUM_STATES;
+  }
+  pack(builder) {
+    return PCFManeuverDetection.createPCFManeuverDetection(
+      builder,
+      this.FALSE_ALARMS_PER_OBJECT_YEAR,
+      this.CORRELATION_MODEL,
+      this.THRESHOLD,
+      this.MARGIN_STATES,
+      this.REFINE_WINDOW_HOURS,
+      this.MINIMUM_STATES
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFMeanElementOptions.ts
+import * as flatbuffers75 from "flatbuffers";
+var PCFMeanElementOptions = class _PCFMeanElementOptions {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFMeanElementOptions(bb, obj) {
+    return (obj || new _PCFMeanElementOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFMeanElementOptions(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers75.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFMeanElementOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Highest even degree of the m-daily short-periodic gravity terms; 0
+   * omits them. Range 0 to 16. Default 12.
+   */
+  M_DAILY_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 12;
+  }
+  /**
+   * Highest degree of the zonal tail (secular and long-period terms past
+   * J5). Range 6 to 70. Default 20.
+   */
+  ZONAL_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 20;
+  }
+  /**
+   * Highest degree of the eccentricity-vector short-periodic terms. Range
+   * 2 to 16. Default 7.
+   */
+  SHORT_PERIODIC_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 7;
+  }
+  /**
+   * Resonance terms on or off. Default true.
+   */
+  ENABLE_RESONANCE() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * Highest odd degree of the shallow-resonance terms. Default 31.
+   */
+  RESONANCE_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 31;
+  }
+  /**
+   * Resonance band: terms whose angle drifts slower than this fraction of
+   * the mean motion are integrated with the rates. Default 0.045.
+   */
+  RESONANCE_BAND() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.045;
+  }
+  /**
+   * Highest multiple of the mean anomaly in a resonance angle. Default 1.
+   */
+  RESONANCE_MAXIMUM_K() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1;
+  }
+  /**
+   * Near-resonance band at output time, as a fraction of the mean motion
+   * beyond RESONANCE_BAND; 0 is off. Default 0.
+   */
+  NEAR_RESONANCE_BAND() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Divisor of the integration grid step; >= 1. Default 1.
+   */
+  GRID_STEP_DIVISOR() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1;
+  }
+  /**
+   * The catalog-shared density kernel (a gridded log-density table shared by
+   * every object) on or off; off evaluates the atmosphere model directly.
+   * Default true.
+   */
+  DENSITY_KERNEL() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
+  }
+  /**
+   * Perigee height below which B_eff and TAU0 act (the drag regime), km.
+   * Default 2500.
+   */
+  DRAG_REGIME_PERIGEE_KM() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2500;
+  }
+  static startPCFMeanElementOptions(builder) {
+    builder.startObject(11);
+  }
+  static addMDailyMaximumDegree(builder, M_DAILY_MAXIMUM_DEGREE) {
+    builder.addFieldInt8(0, M_DAILY_MAXIMUM_DEGREE, 12);
+  }
+  static addZonalMaximumDegree(builder, ZONAL_MAXIMUM_DEGREE) {
+    builder.addFieldInt8(1, ZONAL_MAXIMUM_DEGREE, 20);
+  }
+  static addShortPeriodicMaximumDegree(builder, SHORT_PERIODIC_MAXIMUM_DEGREE) {
+    builder.addFieldInt8(2, SHORT_PERIODIC_MAXIMUM_DEGREE, 7);
+  }
+  static addEnableResonance(builder, ENABLE_RESONANCE) {
+    builder.addFieldInt8(3, +ENABLE_RESONANCE, 1);
+  }
+  static addResonanceMaximumDegree(builder, RESONANCE_MAXIMUM_DEGREE) {
+    builder.addFieldInt8(4, RESONANCE_MAXIMUM_DEGREE, 31);
+  }
+  static addResonanceBand(builder, RESONANCE_BAND) {
+    builder.addFieldFloat64(5, RESONANCE_BAND, 0.045);
+  }
+  static addResonanceMaximumK(builder, RESONANCE_MAXIMUM_K) {
+    builder.addFieldInt8(6, RESONANCE_MAXIMUM_K, 1);
+  }
+  static addNearResonanceBand(builder, NEAR_RESONANCE_BAND) {
+    builder.addFieldFloat64(7, NEAR_RESONANCE_BAND, 0);
+  }
+  static addGridStepDivisor(builder, GRID_STEP_DIVISOR) {
+    builder.addFieldInt8(8, GRID_STEP_DIVISOR, 1);
+  }
+  static addDensityKernel(builder, DENSITY_KERNEL) {
+    builder.addFieldInt8(9, +DENSITY_KERNEL, 1);
+  }
+  static addDragRegimePerigeeKm(builder, DRAG_REGIME_PERIGEE_KM) {
+    builder.addFieldFloat64(10, DRAG_REGIME_PERIGEE_KM, 2500);
+  }
+  static endPCFMeanElementOptions(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFMeanElementOptions(builder, M_DAILY_MAXIMUM_DEGREE, ZONAL_MAXIMUM_DEGREE, SHORT_PERIODIC_MAXIMUM_DEGREE, ENABLE_RESONANCE, RESONANCE_MAXIMUM_DEGREE, RESONANCE_BAND, RESONANCE_MAXIMUM_K, NEAR_RESONANCE_BAND, GRID_STEP_DIVISOR, DENSITY_KERNEL, DRAG_REGIME_PERIGEE_KM) {
+    _PCFMeanElementOptions.startPCFMeanElementOptions(builder);
+    _PCFMeanElementOptions.addMDailyMaximumDegree(builder, M_DAILY_MAXIMUM_DEGREE);
+    _PCFMeanElementOptions.addZonalMaximumDegree(builder, ZONAL_MAXIMUM_DEGREE);
+    _PCFMeanElementOptions.addShortPeriodicMaximumDegree(builder, SHORT_PERIODIC_MAXIMUM_DEGREE);
+    _PCFMeanElementOptions.addEnableResonance(builder, ENABLE_RESONANCE);
+    _PCFMeanElementOptions.addResonanceMaximumDegree(builder, RESONANCE_MAXIMUM_DEGREE);
+    _PCFMeanElementOptions.addResonanceBand(builder, RESONANCE_BAND);
+    _PCFMeanElementOptions.addResonanceMaximumK(builder, RESONANCE_MAXIMUM_K);
+    _PCFMeanElementOptions.addNearResonanceBand(builder, NEAR_RESONANCE_BAND);
+    _PCFMeanElementOptions.addGridStepDivisor(builder, GRID_STEP_DIVISOR);
+    _PCFMeanElementOptions.addDensityKernel(builder, DENSITY_KERNEL);
+    _PCFMeanElementOptions.addDragRegimePerigeeKm(builder, DRAG_REGIME_PERIGEE_KM);
+    return _PCFMeanElementOptions.endPCFMeanElementOptions(builder);
+  }
+  unpack() {
+    return new PCFMeanElementOptionsT(
+      this.M_DAILY_MAXIMUM_DEGREE(),
+      this.ZONAL_MAXIMUM_DEGREE(),
+      this.SHORT_PERIODIC_MAXIMUM_DEGREE(),
+      this.ENABLE_RESONANCE(),
+      this.RESONANCE_MAXIMUM_DEGREE(),
+      this.RESONANCE_BAND(),
+      this.RESONANCE_MAXIMUM_K(),
+      this.NEAR_RESONANCE_BAND(),
+      this.GRID_STEP_DIVISOR(),
+      this.DENSITY_KERNEL(),
+      this.DRAG_REGIME_PERIGEE_KM()
+    );
+  }
+  unpackTo(_o) {
+    _o.M_DAILY_MAXIMUM_DEGREE = this.M_DAILY_MAXIMUM_DEGREE();
+    _o.ZONAL_MAXIMUM_DEGREE = this.ZONAL_MAXIMUM_DEGREE();
+    _o.SHORT_PERIODIC_MAXIMUM_DEGREE = this.SHORT_PERIODIC_MAXIMUM_DEGREE();
+    _o.ENABLE_RESONANCE = this.ENABLE_RESONANCE();
+    _o.RESONANCE_MAXIMUM_DEGREE = this.RESONANCE_MAXIMUM_DEGREE();
+    _o.RESONANCE_BAND = this.RESONANCE_BAND();
+    _o.RESONANCE_MAXIMUM_K = this.RESONANCE_MAXIMUM_K();
+    _o.NEAR_RESONANCE_BAND = this.NEAR_RESONANCE_BAND();
+    _o.GRID_STEP_DIVISOR = this.GRID_STEP_DIVISOR();
+    _o.DENSITY_KERNEL = this.DENSITY_KERNEL();
+    _o.DRAG_REGIME_PERIGEE_KM = this.DRAG_REGIME_PERIGEE_KM();
+  }
+};
+var PCFMeanElementOptionsT = class {
+  constructor(M_DAILY_MAXIMUM_DEGREE = 12, ZONAL_MAXIMUM_DEGREE = 20, SHORT_PERIODIC_MAXIMUM_DEGREE = 7, ENABLE_RESONANCE = true, RESONANCE_MAXIMUM_DEGREE = 31, RESONANCE_BAND = 0.045, RESONANCE_MAXIMUM_K = 1, NEAR_RESONANCE_BAND = 0, GRID_STEP_DIVISOR = 1, DENSITY_KERNEL = true, DRAG_REGIME_PERIGEE_KM = 2500) {
+    this.M_DAILY_MAXIMUM_DEGREE = M_DAILY_MAXIMUM_DEGREE;
+    this.ZONAL_MAXIMUM_DEGREE = ZONAL_MAXIMUM_DEGREE;
+    this.SHORT_PERIODIC_MAXIMUM_DEGREE = SHORT_PERIODIC_MAXIMUM_DEGREE;
+    this.ENABLE_RESONANCE = ENABLE_RESONANCE;
+    this.RESONANCE_MAXIMUM_DEGREE = RESONANCE_MAXIMUM_DEGREE;
+    this.RESONANCE_BAND = RESONANCE_BAND;
+    this.RESONANCE_MAXIMUM_K = RESONANCE_MAXIMUM_K;
+    this.NEAR_RESONANCE_BAND = NEAR_RESONANCE_BAND;
+    this.GRID_STEP_DIVISOR = GRID_STEP_DIVISOR;
+    this.DENSITY_KERNEL = DENSITY_KERNEL;
+    this.DRAG_REGIME_PERIGEE_KM = DRAG_REGIME_PERIGEE_KM;
+  }
+  pack(builder) {
+    return PCFMeanElementOptions.createPCFMeanElementOptions(
+      builder,
+      this.M_DAILY_MAXIMUM_DEGREE,
+      this.ZONAL_MAXIMUM_DEGREE,
+      this.SHORT_PERIODIC_MAXIMUM_DEGREE,
+      this.ENABLE_RESONANCE,
+      this.RESONANCE_MAXIMUM_DEGREE,
+      this.RESONANCE_BAND,
+      this.RESONANCE_MAXIMUM_K,
+      this.NEAR_RESONANCE_BAND,
+      this.GRID_STEP_DIVISOR,
+      this.DENSITY_KERNEL,
+      this.DRAG_REGIME_PERIGEE_KM
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
+import * as flatbuffers76 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfOutputFrame.ts
+var pcfOutputFrame = /* @__PURE__ */ ((pcfOutputFrame2) => {
+  pcfOutputFrame2[pcfOutputFrame2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfOutputFrame2[pcfOutputFrame2["TEME"] = 1] = "TEME";
+  pcfOutputFrame2[pcfOutputFrame2["GCRF"] = 2] = "GCRF";
+  pcfOutputFrame2[pcfOutputFrame2["EME2000"] = 3] = "EME2000";
+  pcfOutputFrame2[pcfOutputFrame2["ITRF"] = 4] = "ITRF";
+  return pcfOutputFrame2;
+})(pcfOutputFrame || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
+var PCFOutput = class _PCFOutput {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFOutput(bb, obj) {
+    return (obj || new _PCFOutput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFOutput(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers76.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFOutput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Frame of the output states. Default UNSPECIFIED (the grid template's
+   * frame, TEME without one).
+   */
+  FRAME() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Spacing of the output states, seconds, when no grid template names the
+   * epochs; a grid template's epochs win. Default 60.
+   */
+  STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 60;
+  }
+  /**
+   * Most states one request may produce. Default 500000.
+   */
+  MAXIMUM_STATES() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 5e5;
+  }
+  static startPCFOutput(builder) {
+    builder.startObject(3);
+  }
+  static addFrame(builder, FRAME) {
+    builder.addFieldInt8(0, FRAME, 0 /* UNSPECIFIED */);
+  }
+  static addStepSeconds(builder, STEP_SECONDS) {
+    builder.addFieldFloat64(1, STEP_SECONDS, 60);
+  }
+  static addMaximumStates(builder, MAXIMUM_STATES) {
+    builder.addFieldInt32(2, MAXIMUM_STATES, 5e5);
+  }
+  static endPCFOutput(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFOutput(builder, FRAME, STEP_SECONDS, MAXIMUM_STATES) {
+    _PCFOutput.startPCFOutput(builder);
+    _PCFOutput.addFrame(builder, FRAME);
+    _PCFOutput.addStepSeconds(builder, STEP_SECONDS);
+    _PCFOutput.addMaximumStates(builder, MAXIMUM_STATES);
+    return _PCFOutput.endPCFOutput(builder);
+  }
+  unpack() {
+    return new PCFOutputT(
+      this.FRAME(),
+      this.STEP_SECONDS(),
+      this.MAXIMUM_STATES()
+    );
+  }
+  unpackTo(_o) {
+    _o.FRAME = this.FRAME();
+    _o.STEP_SECONDS = this.STEP_SECONDS();
+    _o.MAXIMUM_STATES = this.MAXIMUM_STATES();
+  }
+};
+var PCFOutputT = class {
+  constructor(FRAME = 0 /* UNSPECIFIED */, STEP_SECONDS = 60, MAXIMUM_STATES = 5e5) {
+    this.FRAME = FRAME;
+    this.STEP_SECONDS = STEP_SECONDS;
+    this.MAXIMUM_STATES = MAXIMUM_STATES;
+  }
+  pack(builder) {
+    return PCFOutput.createPCFOutput(
+      builder,
+      this.FRAME,
+      this.STEP_SECONDS,
+      this.MAXIMUM_STATES
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFReentry.ts
+import * as flatbuffers77 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfReentryWindowMethod.ts
+var pcfReentryWindowMethod = /* @__PURE__ */ ((pcfReentryWindowMethod2) => {
+  pcfReentryWindowMethod2[pcfReentryWindowMethod2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfReentryWindowMethod2[pcfReentryWindowMethod2["LINEAR"] = 1] = "LINEAR";
+  pcfReentryWindowMethod2[pcfReentryWindowMethod2["UNSCENTED"] = 2] = "UNSCENTED";
+  return pcfReentryWindowMethod2;
+})(pcfReentryWindowMethod || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFReentry.ts
+var PCFReentry = class _PCFReentry {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFReentry(bb, obj) {
+    return (obj || new _PCFReentry()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFReentry(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers77.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFReentry()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Altitude at which the trajectory ends as reentered, km. Default 80.
+   */
+  ALTITUDE_KM() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 80;
+  }
+  /**
+   * Hand-off when the perigee altitude falls below this, km. Default 180.
+   */
+  HANDOFF_PERIGEE_ALTITUDE_KM() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 180;
+  }
+  /**
+   * Hand-off when the decay over one step, 4 pi |da/dt| / (n H), passes this
+   * fraction of the density scale height H. Default 0.05.
+   */
+  HANDOFF_DECAY_RATIO() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.05;
+  }
+  /**
+   * Hand-off when the eccentricity collapses by more than this fraction of
+   * a e per revolution, with the eccentricity above
+   * HANDOFF_MINIMUM_ECCENTRICITY. Default 0.01.
+   */
+  HANDOFF_ECCENTRICITY_COLLAPSE() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
+  }
+  /**
+   * Eccentricity above which the collapse test applies. Default 0.01.
+   */
+  HANDOFF_MINIMUM_ECCENTRICITY() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
+  }
+  /**
+   * Spacing of the nodes the hand-off tests are evaluated at, minutes.
+   * Default 30.
+   */
+  NODE_STEP_MINUTES() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 30;
+  }
+  /**
+   * Longest look-ahead for a hand-off or reentry, days. Default 120.
+   */
+  HORIZON_DAYS() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 120;
+  }
+  /**
+   * How the reentry window is computed. Default LINEAR.
+   */
+  WINDOW_METHOD() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1 /* LINEAR */;
+  }
+  /**
+   * Fractional 1-sigma density error of the window. Default 0.15.
+   */
+  WINDOW_DENSITY_SIGMA() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.15;
+  }
+  /**
+   * Correlation time of the density error, days. Default 2.
+   */
+  WINDOW_CORRELATION_DAYS() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2;
+  }
+  /**
+   * Fractional 1-sigma error of the ballistic coefficient. Default 0.05.
+   */
+  WINDOW_BALLISTIC_SIGMA() {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.05;
+  }
+  /**
+   * Step of the osculating integration after the hand-off, seconds. Default
+   * 10.
+   */
+  OSCULATING_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 10;
+  }
+  static startPCFReentry(builder) {
+    builder.startObject(12);
+  }
+  static addAltitudeKm(builder, ALTITUDE_KM) {
+    builder.addFieldFloat64(0, ALTITUDE_KM, 80);
+  }
+  static addHandoffPerigeeAltitudeKm(builder, HANDOFF_PERIGEE_ALTITUDE_KM) {
+    builder.addFieldFloat64(1, HANDOFF_PERIGEE_ALTITUDE_KM, 180);
+  }
+  static addHandoffDecayRatio(builder, HANDOFF_DECAY_RATIO) {
+    builder.addFieldFloat64(2, HANDOFF_DECAY_RATIO, 0.05);
+  }
+  static addHandoffEccentricityCollapse(builder, HANDOFF_ECCENTRICITY_COLLAPSE) {
+    builder.addFieldFloat64(3, HANDOFF_ECCENTRICITY_COLLAPSE, 0.01);
+  }
+  static addHandoffMinimumEccentricity(builder, HANDOFF_MINIMUM_ECCENTRICITY) {
+    builder.addFieldFloat64(4, HANDOFF_MINIMUM_ECCENTRICITY, 0.01);
+  }
+  static addNodeStepMinutes(builder, NODE_STEP_MINUTES) {
+    builder.addFieldFloat64(5, NODE_STEP_MINUTES, 30);
+  }
+  static addHorizonDays(builder, HORIZON_DAYS) {
+    builder.addFieldFloat64(6, HORIZON_DAYS, 120);
+  }
+  static addWindowMethod(builder, WINDOW_METHOD) {
+    builder.addFieldInt8(7, WINDOW_METHOD, 1 /* LINEAR */);
+  }
+  static addWindowDensitySigma(builder, WINDOW_DENSITY_SIGMA) {
+    builder.addFieldFloat64(8, WINDOW_DENSITY_SIGMA, 0.15);
+  }
+  static addWindowCorrelationDays(builder, WINDOW_CORRELATION_DAYS) {
+    builder.addFieldFloat64(9, WINDOW_CORRELATION_DAYS, 2);
+  }
+  static addWindowBallisticSigma(builder, WINDOW_BALLISTIC_SIGMA) {
+    builder.addFieldFloat64(10, WINDOW_BALLISTIC_SIGMA, 0.05);
+  }
+  static addOsculatingStepSeconds(builder, OSCULATING_STEP_SECONDS) {
+    builder.addFieldFloat64(11, OSCULATING_STEP_SECONDS, 10);
+  }
+  static endPCFReentry(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFReentry(builder, ALTITUDE_KM, HANDOFF_PERIGEE_ALTITUDE_KM, HANDOFF_DECAY_RATIO, HANDOFF_ECCENTRICITY_COLLAPSE, HANDOFF_MINIMUM_ECCENTRICITY, NODE_STEP_MINUTES, HORIZON_DAYS, WINDOW_METHOD, WINDOW_DENSITY_SIGMA, WINDOW_CORRELATION_DAYS, WINDOW_BALLISTIC_SIGMA, OSCULATING_STEP_SECONDS) {
+    _PCFReentry.startPCFReentry(builder);
+    _PCFReentry.addAltitudeKm(builder, ALTITUDE_KM);
+    _PCFReentry.addHandoffPerigeeAltitudeKm(builder, HANDOFF_PERIGEE_ALTITUDE_KM);
+    _PCFReentry.addHandoffDecayRatio(builder, HANDOFF_DECAY_RATIO);
+    _PCFReentry.addHandoffEccentricityCollapse(builder, HANDOFF_ECCENTRICITY_COLLAPSE);
+    _PCFReentry.addHandoffMinimumEccentricity(builder, HANDOFF_MINIMUM_ECCENTRICITY);
+    _PCFReentry.addNodeStepMinutes(builder, NODE_STEP_MINUTES);
+    _PCFReentry.addHorizonDays(builder, HORIZON_DAYS);
+    _PCFReentry.addWindowMethod(builder, WINDOW_METHOD);
+    _PCFReentry.addWindowDensitySigma(builder, WINDOW_DENSITY_SIGMA);
+    _PCFReentry.addWindowCorrelationDays(builder, WINDOW_CORRELATION_DAYS);
+    _PCFReentry.addWindowBallisticSigma(builder, WINDOW_BALLISTIC_SIGMA);
+    _PCFReentry.addOsculatingStepSeconds(builder, OSCULATING_STEP_SECONDS);
+    return _PCFReentry.endPCFReentry(builder);
+  }
+  unpack() {
+    return new PCFReentryT(
+      this.ALTITUDE_KM(),
+      this.HANDOFF_PERIGEE_ALTITUDE_KM(),
+      this.HANDOFF_DECAY_RATIO(),
+      this.HANDOFF_ECCENTRICITY_COLLAPSE(),
+      this.HANDOFF_MINIMUM_ECCENTRICITY(),
+      this.NODE_STEP_MINUTES(),
+      this.HORIZON_DAYS(),
+      this.WINDOW_METHOD(),
+      this.WINDOW_DENSITY_SIGMA(),
+      this.WINDOW_CORRELATION_DAYS(),
+      this.WINDOW_BALLISTIC_SIGMA(),
+      this.OSCULATING_STEP_SECONDS()
+    );
+  }
+  unpackTo(_o) {
+    _o.ALTITUDE_KM = this.ALTITUDE_KM();
+    _o.HANDOFF_PERIGEE_ALTITUDE_KM = this.HANDOFF_PERIGEE_ALTITUDE_KM();
+    _o.HANDOFF_DECAY_RATIO = this.HANDOFF_DECAY_RATIO();
+    _o.HANDOFF_ECCENTRICITY_COLLAPSE = this.HANDOFF_ECCENTRICITY_COLLAPSE();
+    _o.HANDOFF_MINIMUM_ECCENTRICITY = this.HANDOFF_MINIMUM_ECCENTRICITY();
+    _o.NODE_STEP_MINUTES = this.NODE_STEP_MINUTES();
+    _o.HORIZON_DAYS = this.HORIZON_DAYS();
+    _o.WINDOW_METHOD = this.WINDOW_METHOD();
+    _o.WINDOW_DENSITY_SIGMA = this.WINDOW_DENSITY_SIGMA();
+    _o.WINDOW_CORRELATION_DAYS = this.WINDOW_CORRELATION_DAYS();
+    _o.WINDOW_BALLISTIC_SIGMA = this.WINDOW_BALLISTIC_SIGMA();
+    _o.OSCULATING_STEP_SECONDS = this.OSCULATING_STEP_SECONDS();
+  }
+};
+var PCFReentryT = class {
+  constructor(ALTITUDE_KM = 80, HANDOFF_PERIGEE_ALTITUDE_KM = 180, HANDOFF_DECAY_RATIO = 0.05, HANDOFF_ECCENTRICITY_COLLAPSE = 0.01, HANDOFF_MINIMUM_ECCENTRICITY = 0.01, NODE_STEP_MINUTES = 30, HORIZON_DAYS = 120, WINDOW_METHOD = 1 /* LINEAR */, WINDOW_DENSITY_SIGMA = 0.15, WINDOW_CORRELATION_DAYS = 2, WINDOW_BALLISTIC_SIGMA = 0.05, OSCULATING_STEP_SECONDS = 10) {
+    this.ALTITUDE_KM = ALTITUDE_KM;
+    this.HANDOFF_PERIGEE_ALTITUDE_KM = HANDOFF_PERIGEE_ALTITUDE_KM;
+    this.HANDOFF_DECAY_RATIO = HANDOFF_DECAY_RATIO;
+    this.HANDOFF_ECCENTRICITY_COLLAPSE = HANDOFF_ECCENTRICITY_COLLAPSE;
+    this.HANDOFF_MINIMUM_ECCENTRICITY = HANDOFF_MINIMUM_ECCENTRICITY;
+    this.NODE_STEP_MINUTES = NODE_STEP_MINUTES;
+    this.HORIZON_DAYS = HORIZON_DAYS;
+    this.WINDOW_METHOD = WINDOW_METHOD;
+    this.WINDOW_DENSITY_SIGMA = WINDOW_DENSITY_SIGMA;
+    this.WINDOW_CORRELATION_DAYS = WINDOW_CORRELATION_DAYS;
+    this.WINDOW_BALLISTIC_SIGMA = WINDOW_BALLISTIC_SIGMA;
+    this.OSCULATING_STEP_SECONDS = OSCULATING_STEP_SECONDS;
+  }
+  pack(builder) {
+    return PCFReentry.createPCFReentry(
+      builder,
+      this.ALTITUDE_KM,
+      this.HANDOFF_PERIGEE_ALTITUDE_KM,
+      this.HANDOFF_DECAY_RATIO,
+      this.HANDOFF_ECCENTRICITY_COLLAPSE,
+      this.HANDOFF_MINIMUM_ECCENTRICITY,
+      this.NODE_STEP_MINUTES,
+      this.HORIZON_DAYS,
+      this.WINDOW_METHOD,
+      this.WINDOW_DENSITY_SIGMA,
+      this.WINDOW_CORRELATION_DAYS,
+      this.WINDOW_BALLISTIC_SIGMA,
+      this.OSCULATING_STEP_SECONDS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFSegmentOptions.ts
+import * as flatbuffers78 from "flatbuffers";
+var PCFSegmentOptions = class _PCFSegmentOptions {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFSegmentOptions(bb, obj) {
+    return (obj || new _PCFSegmentOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFSegmentOptions(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers78.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFSegmentOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Moon-centered gravity field degree. Default 70.
+   */
+  MOON_GRAVITY_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 70;
+  }
+  /**
+   * Moon-centered short-periodic degree. Default 8.
+   */
+  MOON_SHORT_PERIODIC_MAXIMUM_DEGREE() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 8;
+  }
+  /**
+   * Moon-centered eccentricity order (highest |q| of the mean-anomaly
+   * multiple kept). Default 2.
+   */
+  MOON_ECCENTRICITY_ORDER() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 2;
+  }
+  /**
+   * Moon-centered integration step, seconds. Default 240.
+   */
+  MOON_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 240;
+  }
+  /**
+   * Cislunar integration step, seconds. Default 60.
+   */
+  CISLUNAR_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 60;
+  }
+  /**
+   * Heliocentric integration step, seconds. Default 1800.
+   */
+  HELIOCENTRIC_STEP_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1800;
+  }
+  /**
+   * A segment is accepted when its RMS is within max(RMS_FACTOR x the
+   * cleanest segment's RMS, that RMS + RMS_MARGIN_KM). Factor, default 2.
+   */
+  SEGMENT_RMS_FACTOR() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2;
+  }
+  /**
+   * The additive term of the same rule, km. Default 0.05.
+   */
+  SEGMENT_RMS_MARGIN_KM() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.05;
+  }
+  /**
+   * Shortest cislunar segment, hours. Default 6.
+   */
+  CISLUNAR_MINIMUM_SEGMENT_HOURS() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 6;
+  }
+  static startPCFSegmentOptions(builder) {
+    builder.startObject(9);
+  }
+  static addMoonGravityMaximumDegree(builder, MOON_GRAVITY_MAXIMUM_DEGREE) {
+    builder.addFieldInt16(0, MOON_GRAVITY_MAXIMUM_DEGREE, 70);
+  }
+  static addMoonShortPeriodicMaximumDegree(builder, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE) {
+    builder.addFieldInt8(1, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE, 8);
+  }
+  static addMoonEccentricityOrder(builder, MOON_ECCENTRICITY_ORDER) {
+    builder.addFieldInt8(2, MOON_ECCENTRICITY_ORDER, 2);
+  }
+  static addMoonStepSeconds(builder, MOON_STEP_SECONDS) {
+    builder.addFieldFloat64(3, MOON_STEP_SECONDS, 240);
+  }
+  static addCislunarStepSeconds(builder, CISLUNAR_STEP_SECONDS) {
+    builder.addFieldFloat64(4, CISLUNAR_STEP_SECONDS, 60);
+  }
+  static addHeliocentricStepSeconds(builder, HELIOCENTRIC_STEP_SECONDS) {
+    builder.addFieldFloat64(5, HELIOCENTRIC_STEP_SECONDS, 1800);
+  }
+  static addSegmentRmsFactor(builder, SEGMENT_RMS_FACTOR) {
+    builder.addFieldFloat64(6, SEGMENT_RMS_FACTOR, 2);
+  }
+  static addSegmentRmsMarginKm(builder, SEGMENT_RMS_MARGIN_KM) {
+    builder.addFieldFloat64(7, SEGMENT_RMS_MARGIN_KM, 0.05);
+  }
+  static addCislunarMinimumSegmentHours(builder, CISLUNAR_MINIMUM_SEGMENT_HOURS) {
+    builder.addFieldFloat64(8, CISLUNAR_MINIMUM_SEGMENT_HOURS, 6);
+  }
+  static endPCFSegmentOptions(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFSegmentOptions(builder, MOON_GRAVITY_MAXIMUM_DEGREE, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE, MOON_ECCENTRICITY_ORDER, MOON_STEP_SECONDS, CISLUNAR_STEP_SECONDS, HELIOCENTRIC_STEP_SECONDS, SEGMENT_RMS_FACTOR, SEGMENT_RMS_MARGIN_KM, CISLUNAR_MINIMUM_SEGMENT_HOURS) {
+    _PCFSegmentOptions.startPCFSegmentOptions(builder);
+    _PCFSegmentOptions.addMoonGravityMaximumDegree(builder, MOON_GRAVITY_MAXIMUM_DEGREE);
+    _PCFSegmentOptions.addMoonShortPeriodicMaximumDegree(builder, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE);
+    _PCFSegmentOptions.addMoonEccentricityOrder(builder, MOON_ECCENTRICITY_ORDER);
+    _PCFSegmentOptions.addMoonStepSeconds(builder, MOON_STEP_SECONDS);
+    _PCFSegmentOptions.addCislunarStepSeconds(builder, CISLUNAR_STEP_SECONDS);
+    _PCFSegmentOptions.addHeliocentricStepSeconds(builder, HELIOCENTRIC_STEP_SECONDS);
+    _PCFSegmentOptions.addSegmentRmsFactor(builder, SEGMENT_RMS_FACTOR);
+    _PCFSegmentOptions.addSegmentRmsMarginKm(builder, SEGMENT_RMS_MARGIN_KM);
+    _PCFSegmentOptions.addCislunarMinimumSegmentHours(builder, CISLUNAR_MINIMUM_SEGMENT_HOURS);
+    return _PCFSegmentOptions.endPCFSegmentOptions(builder);
+  }
+  unpack() {
+    return new PCFSegmentOptionsT(
+      this.MOON_GRAVITY_MAXIMUM_DEGREE(),
+      this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE(),
+      this.MOON_ECCENTRICITY_ORDER(),
+      this.MOON_STEP_SECONDS(),
+      this.CISLUNAR_STEP_SECONDS(),
+      this.HELIOCENTRIC_STEP_SECONDS(),
+      this.SEGMENT_RMS_FACTOR(),
+      this.SEGMENT_RMS_MARGIN_KM(),
+      this.CISLUNAR_MINIMUM_SEGMENT_HOURS()
+    );
+  }
+  unpackTo(_o) {
+    _o.MOON_GRAVITY_MAXIMUM_DEGREE = this.MOON_GRAVITY_MAXIMUM_DEGREE();
+    _o.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE = this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE();
+    _o.MOON_ECCENTRICITY_ORDER = this.MOON_ECCENTRICITY_ORDER();
+    _o.MOON_STEP_SECONDS = this.MOON_STEP_SECONDS();
+    _o.CISLUNAR_STEP_SECONDS = this.CISLUNAR_STEP_SECONDS();
+    _o.HELIOCENTRIC_STEP_SECONDS = this.HELIOCENTRIC_STEP_SECONDS();
+    _o.SEGMENT_RMS_FACTOR = this.SEGMENT_RMS_FACTOR();
+    _o.SEGMENT_RMS_MARGIN_KM = this.SEGMENT_RMS_MARGIN_KM();
+    _o.CISLUNAR_MINIMUM_SEGMENT_HOURS = this.CISLUNAR_MINIMUM_SEGMENT_HOURS();
+  }
+};
+var PCFSegmentOptionsT = class {
+  constructor(MOON_GRAVITY_MAXIMUM_DEGREE = 70, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE = 8, MOON_ECCENTRICITY_ORDER = 2, MOON_STEP_SECONDS = 240, CISLUNAR_STEP_SECONDS = 60, HELIOCENTRIC_STEP_SECONDS = 1800, SEGMENT_RMS_FACTOR = 2, SEGMENT_RMS_MARGIN_KM = 0.05, CISLUNAR_MINIMUM_SEGMENT_HOURS = 6) {
+    this.MOON_GRAVITY_MAXIMUM_DEGREE = MOON_GRAVITY_MAXIMUM_DEGREE;
+    this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE = MOON_SHORT_PERIODIC_MAXIMUM_DEGREE;
+    this.MOON_ECCENTRICITY_ORDER = MOON_ECCENTRICITY_ORDER;
+    this.MOON_STEP_SECONDS = MOON_STEP_SECONDS;
+    this.CISLUNAR_STEP_SECONDS = CISLUNAR_STEP_SECONDS;
+    this.HELIOCENTRIC_STEP_SECONDS = HELIOCENTRIC_STEP_SECONDS;
+    this.SEGMENT_RMS_FACTOR = SEGMENT_RMS_FACTOR;
+    this.SEGMENT_RMS_MARGIN_KM = SEGMENT_RMS_MARGIN_KM;
+    this.CISLUNAR_MINIMUM_SEGMENT_HOURS = CISLUNAR_MINIMUM_SEGMENT_HOURS;
+  }
+  pack(builder) {
+    return PCFSegmentOptions.createPCFSegmentOptions(
+      builder,
+      this.MOON_GRAVITY_MAXIMUM_DEGREE,
+      this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE,
+      this.MOON_ECCENTRICITY_ORDER,
+      this.MOON_STEP_SECONDS,
+      this.CISLUNAR_STEP_SECONDS,
+      this.HELIOCENTRIC_STEP_SECONDS,
+      this.SEGMENT_RMS_FACTOR,
+      this.SEGMENT_RMS_MARGIN_KM,
+      this.CISLUNAR_MINIMUM_SEGMENT_HOURS
+    );
+  }
+};
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfTheory.ts
+var pcfTheory = /* @__PURE__ */ ((pcfTheory2) => {
+  pcfTheory2[pcfTheory2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+  pcfTheory2[pcfTheory2["SGP4"] = 1] = "SGP4";
+  pcfTheory2[pcfTheory2["SGP4XP"] = 2] = "SGP4XP";
+  pcfTheory2[pcfTheory2["SDNAP"] = 3] = "SDNAP";
+  pcfTheory2[pcfTheory2["FFM"] = 4] = "FFM";
+  pcfTheory2[pcfTheory2["KEPLER"] = 5] = "KEPLER";
+  return pcfTheory2;
+})(pcfTheory || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
+var PCF = class _PCF {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCF(bb, obj) {
+    return (obj || new _PCF()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCF(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers79.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCF()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static bufferHasIdentifier(bb) {
+    return bb.__has_identifier("$PCF");
+  }
+  CONFIGURATION_ID(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  PROFILE(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * The orbit theory. Default UNSPECIFIED (the receiving module's own).
+   */
+  THEORY() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * Integrator and settings. Absent: the theory's own.
+   */
+  INTEGRATOR(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? (obj || new PCFIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Forces. Absent: the theory's built-in set.
+   */
+  FORCES(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? (obj || new PCFForceModel()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Truncations and switches of the averaged theories (SGP4XP, SDNAP).
+   */
+  MEAN_ELEMENT(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? (obj || new PCFMeanElementOptions()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Beyond-Earth segment sets.
+   */
+  SEGMENTS(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? (obj || new PCFSegmentOptions()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Fit policy.
+   */
+  FIT(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? (obj || new PCFFitPolicy()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Events located while integrating. Default empty.
+   */
+  EVENTS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? (obj || new PCFEventDefinition()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  eventsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Maneuver detection.
+   */
+  MANEUVER_DETECTION(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? (obj || new PCFManeuverDetection()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Reentry hand-off and window.
+   */
+  REENTRY(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? (obj || new PCFReentry()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Launch initialization priors.
+   */
+  LAUNCH(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? (obj || new PCFLaunch()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Output states.
+   */
+  OUTPUT(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? (obj || new PCFOutput()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  static startPCF(builder) {
+    builder.startObject(13);
+  }
+  static addConfigurationId(builder, CONFIGURATION_IDOffset) {
+    builder.addFieldOffset(0, CONFIGURATION_IDOffset, 0);
+  }
+  static addProfile(builder, PROFILEOffset) {
+    builder.addFieldOffset(1, PROFILEOffset, 0);
+  }
+  static addTheory(builder, THEORY) {
+    builder.addFieldInt8(2, THEORY, 0 /* UNSPECIFIED */);
+  }
+  static addIntegrator(builder, INTEGRATOROffset) {
+    builder.addFieldOffset(3, INTEGRATOROffset, 0);
+  }
+  static addForces(builder, FORCESOffset) {
+    builder.addFieldOffset(4, FORCESOffset, 0);
+  }
+  static addMeanElement(builder, MEAN_ELEMENTOffset) {
+    builder.addFieldOffset(5, MEAN_ELEMENTOffset, 0);
+  }
+  static addSegments(builder, SEGMENTSOffset) {
+    builder.addFieldOffset(6, SEGMENTSOffset, 0);
+  }
+  static addFit(builder, FITOffset) {
+    builder.addFieldOffset(7, FITOffset, 0);
+  }
+  static addEvents(builder, EVENTSOffset) {
+    builder.addFieldOffset(8, EVENTSOffset, 0);
+  }
+  static createEventsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startEventsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addManeuverDetection(builder, MANEUVER_DETECTIONOffset) {
+    builder.addFieldOffset(9, MANEUVER_DETECTIONOffset, 0);
+  }
+  static addReentry(builder, REENTRYOffset) {
+    builder.addFieldOffset(10, REENTRYOffset, 0);
+  }
+  static addLaunch(builder, LAUNCHOffset) {
+    builder.addFieldOffset(11, LAUNCHOffset, 0);
+  }
+  static addOutput(builder, OUTPUTOffset) {
+    builder.addFieldOffset(12, OUTPUTOffset, 0);
+  }
+  static endPCF(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static finishPCFBuffer(builder, offset) {
+    builder.finish(offset, "$PCF");
+  }
+  static finishSizePrefixedPCFBuffer(builder, offset) {
+    builder.finish(offset, "$PCF", true);
+  }
+  unpack() {
+    return new PCFT(
+      this.CONFIGURATION_ID(),
+      this.PROFILE(),
+      this.THEORY(),
+      this.INTEGRATOR() !== null ? this.INTEGRATOR().unpack() : null,
+      this.FORCES() !== null ? this.FORCES().unpack() : null,
+      this.MEAN_ELEMENT() !== null ? this.MEAN_ELEMENT().unpack() : null,
+      this.SEGMENTS() !== null ? this.SEGMENTS().unpack() : null,
+      this.FIT() !== null ? this.FIT().unpack() : null,
+      this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength()),
+      this.MANEUVER_DETECTION() !== null ? this.MANEUVER_DETECTION().unpack() : null,
+      this.REENTRY() !== null ? this.REENTRY().unpack() : null,
+      this.LAUNCH() !== null ? this.LAUNCH().unpack() : null,
+      this.OUTPUT() !== null ? this.OUTPUT().unpack() : null
+    );
+  }
+  unpackTo(_o) {
+    _o.CONFIGURATION_ID = this.CONFIGURATION_ID();
+    _o.PROFILE = this.PROFILE();
+    _o.THEORY = this.THEORY();
+    _o.INTEGRATOR = this.INTEGRATOR() !== null ? this.INTEGRATOR().unpack() : null;
+    _o.FORCES = this.FORCES() !== null ? this.FORCES().unpack() : null;
+    _o.MEAN_ELEMENT = this.MEAN_ELEMENT() !== null ? this.MEAN_ELEMENT().unpack() : null;
+    _o.SEGMENTS = this.SEGMENTS() !== null ? this.SEGMENTS().unpack() : null;
+    _o.FIT = this.FIT() !== null ? this.FIT().unpack() : null;
+    _o.EVENTS = this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength());
+    _o.MANEUVER_DETECTION = this.MANEUVER_DETECTION() !== null ? this.MANEUVER_DETECTION().unpack() : null;
+    _o.REENTRY = this.REENTRY() !== null ? this.REENTRY().unpack() : null;
+    _o.LAUNCH = this.LAUNCH() !== null ? this.LAUNCH().unpack() : null;
+    _o.OUTPUT = this.OUTPUT() !== null ? this.OUTPUT().unpack() : null;
+  }
+};
+var PCFT = class {
+  constructor(CONFIGURATION_ID = null, PROFILE = null, THEORY = 0 /* UNSPECIFIED */, INTEGRATOR = null, FORCES = null, MEAN_ELEMENT = null, SEGMENTS = null, FIT = null, EVENTS = [], MANEUVER_DETECTION = null, REENTRY = null, LAUNCH = null, OUTPUT = null) {
+    this.CONFIGURATION_ID = CONFIGURATION_ID;
+    this.PROFILE = PROFILE;
+    this.THEORY = THEORY;
+    this.INTEGRATOR = INTEGRATOR;
+    this.FORCES = FORCES;
+    this.MEAN_ELEMENT = MEAN_ELEMENT;
+    this.SEGMENTS = SEGMENTS;
+    this.FIT = FIT;
+    this.EVENTS = EVENTS;
+    this.MANEUVER_DETECTION = MANEUVER_DETECTION;
+    this.REENTRY = REENTRY;
+    this.LAUNCH = LAUNCH;
+    this.OUTPUT = OUTPUT;
+  }
+  pack(builder) {
+    const CONFIGURATION_ID = this.CONFIGURATION_ID !== null ? builder.createString(this.CONFIGURATION_ID) : 0;
+    const PROFILE = this.PROFILE !== null ? builder.createString(this.PROFILE) : 0;
+    const INTEGRATOR = this.INTEGRATOR !== null ? this.INTEGRATOR.pack(builder) : 0;
+    const FORCES = this.FORCES !== null ? this.FORCES.pack(builder) : 0;
+    const MEAN_ELEMENT = this.MEAN_ELEMENT !== null ? this.MEAN_ELEMENT.pack(builder) : 0;
+    const SEGMENTS = this.SEGMENTS !== null ? this.SEGMENTS.pack(builder) : 0;
+    const FIT = this.FIT !== null ? this.FIT.pack(builder) : 0;
+    const EVENTS = PCF.createEventsVector(builder, builder.createObjectOffsetList(this.EVENTS));
+    const MANEUVER_DETECTION = this.MANEUVER_DETECTION !== null ? this.MANEUVER_DETECTION.pack(builder) : 0;
+    const REENTRY = this.REENTRY !== null ? this.REENTRY.pack(builder) : 0;
+    const LAUNCH = this.LAUNCH !== null ? this.LAUNCH.pack(builder) : 0;
+    const OUTPUT = this.OUTPUT !== null ? this.OUTPUT.pack(builder) : 0;
+    PCF.startPCF(builder);
+    PCF.addConfigurationId(builder, CONFIGURATION_ID);
+    PCF.addProfile(builder, PROFILE);
+    PCF.addTheory(builder, this.THEORY);
+    PCF.addIntegrator(builder, INTEGRATOR);
+    PCF.addForces(builder, FORCES);
+    PCF.addMeanElement(builder, MEAN_ELEMENT);
+    PCF.addSegments(builder, SEGMENTS);
+    PCF.addFit(builder, FIT);
+    PCF.addEvents(builder, EVENTS);
+    PCF.addManeuverDetection(builder, MANEUVER_DETECTION);
+    PCF.addReentry(builder, REENTRY);
+    PCF.addLaunch(builder, LAUNCH);
+    PCF.addOutput(builder, OUTPUT);
+    return PCF.endPCF(builder);
+  }
+};
+
 // node_modules/spacedatastandards.org/lib/ts/XMT/polynomialBasisType.ts
 var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
   polynomialBasisType2[polynomialBasisType2["CHEBYSHEV"] = 0] = "CHEBYSHEV";
@@ -10822,10 +17049,10 @@ var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
 })(polynomialBasisType || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
-import * as flatbuffers54 from "flatbuffers";
+import * as flatbuffers85 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
-import * as flatbuffers49 from "flatbuffers";
+import * as flatbuffers80 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/ppeAnomalyType.ts
 var ppeAnomalyType = /* @__PURE__ */ ((ppeAnomalyType2) => {
@@ -10855,7 +17082,7 @@ var PPEOrbitalElementRecord = class _PPEOrbitalElementRecord {
     return (obj || new _PPEOrbitalElementRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPPEOrbitalElementRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers49.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers80.SIZE_PREFIX_LENGTH);
     return (obj || new _PPEOrbitalElementRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH_MID(optionalEncoding) {
@@ -11223,7 +17450,7 @@ var PPEOrbitalElementRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPEPositionRecord.ts
-import * as flatbuffers50 from "flatbuffers";
+import * as flatbuffers81 from "flatbuffers";
 var PPEPositionRecord = class _PPEPositionRecord {
   bb = null;
   bb_pos = 0;
@@ -11236,7 +17463,7 @@ var PPEPositionRecord = class _PPEPositionRecord {
     return (obj || new _PPEPositionRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPPEPositionRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers50.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers81.SIZE_PREFIX_LENGTH);
     return (obj || new _PPEPositionRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH_MID(optionalEncoding) {
@@ -11587,10 +17814,10 @@ var PPEPositionRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
-import * as flatbuffers53 from "flatbuffers";
+import * as flatbuffers84 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystemWrapper.ts
-import * as flatbuffers51 from "flatbuffers";
+import * as flatbuffers82 from "flatbuffers";
 var RFMCoordinateSystemWrapper = class _RFMCoordinateSystemWrapper {
   bb = null;
   bb_pos = 0;
@@ -11603,7 +17830,7 @@ var RFMCoordinateSystemWrapper = class _RFMCoordinateSystemWrapper {
     return (obj || new _RFMCoordinateSystemWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsRFMCoordinateSystemWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers51.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers82.SIZE_PREFIX_LENGTH);
     return (obj || new _RFMCoordinateSystemWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   COORDINATE_SYSTEM(obj) {
@@ -11648,7 +17875,7 @@ var RFMCoordinateSystemWrapperT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
-import * as flatbuffers52 from "flatbuffers";
+import * as flatbuffers83 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrame.ts
 var SpacecraftFrame = /* @__PURE__ */ ((SpacecraftFrame2) => {
@@ -11684,7 +17911,7 @@ var SpacecraftFrameWrapper = class _SpacecraftFrameWrapper {
     return (obj || new _SpacecraftFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsSpacecraftFrameWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers52.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers83.SIZE_PREFIX_LENGTH);
     return (obj || new _SpacecraftFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   frame() {
@@ -11787,7 +18014,7 @@ var RFM = class _RFM {
     return (obj || new _RFM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsRFM(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers53.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers84.SIZE_PREFIX_LENGTH);
     return (obj || new _RFM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -11889,30 +18116,6 @@ var RFMT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/timingStandard.ts
-var timingStandard = /* @__PURE__ */ ((timingStandard2) => {
-  timingStandard2[timingStandard2["GMST"] = 0] = "GMST";
-  timingStandard2[timingStandard2["GPS"] = 1] = "GPS";
-  timingStandard2[timingStandard2["MET"] = 2] = "MET";
-  timingStandard2[timingStandard2["MRT"] = 3] = "MRT";
-  timingStandard2[timingStandard2["SCLK"] = 4] = "SCLK";
-  timingStandard2[timingStandard2["TAI"] = 5] = "TAI";
-  timingStandard2[timingStandard2["TCB"] = 6] = "TCB";
-  timingStandard2[timingStandard2["TDB"] = 7] = "TDB";
-  timingStandard2[timingStandard2["TCG"] = 8] = "TCG";
-  timingStandard2[timingStandard2["TT"] = 9] = "TT";
-  timingStandard2[timingStandard2["UT1"] = 10] = "UT1";
-  timingStandard2[timingStandard2["UTC"] = 11] = "UTC";
-  timingStandard2[timingStandard2["GLONASS"] = 12] = "GLONASS";
-  timingStandard2[timingStandard2["GST"] = 13] = "GST";
-  timingStandard2[timingStandard2["QZSS"] = 14] = "QZSS";
-  timingStandard2[timingStandard2["BDT"] = 15] = "BDT";
-  timingStandard2[timingStandard2["NAVIC"] = 16] = "NAVIC";
-  timingStandard2[timingStandard2["SBAS"] = 17] = "SBAS";
-  timingStandard2[timingStandard2["A1"] = 18] = "A1";
-  return timingStandard2;
-})(timingStandard || {});
-
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
 var PPE = class _PPE {
   bb = null;
@@ -11926,7 +18129,7 @@ var PPE = class _PPE {
     return (obj || new _PPE()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPPE(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers54.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers85.SIZE_PREFIX_LENGTH);
     return (obj || new _PPE()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -12025,8 +18228,15 @@ var PPE = class _PPE {
     const offset = this.bb.__offset(this.bb_pos, 28);
     return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
   }
+  /**
+   * Where this polynomial ephemeris comes from and the terms it travels under.
+   */
+  PROVENANCE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? (obj || new PVN()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
   static startPPE(builder) {
-    builder.startObject(13);
+    builder.startObject(14);
   }
   static addComment(builder, COMMENTOffset) {
     builder.addFieldOffset(0, COMMENTOffset, 0);
@@ -12097,6 +18307,9 @@ var PPE = class _PPE {
   static addNominalNumCoefficients(builder, NOMINAL_NUM_COEFFICIENTS) {
     builder.addFieldInt16(12, NOMINAL_NUM_COEFFICIENTS, 0);
   }
+  static addProvenance(builder, PROVENANCEOffset) {
+    builder.addFieldOffset(13, PROVENANCEOffset, 0);
+  }
   static endPPE(builder) {
     const offset = builder.endObject();
     return offset;
@@ -12121,7 +18334,8 @@ var PPE = class _PPE {
       this.bb.createObjList(this.ORBITAL_ELEMENT_RECORDS.bind(this), this.orbitalElementRecordsLength()),
       this.EPHEMERIS_SOURCE(),
       this.NOMINAL_SEGMENT_SPAN(),
-      this.NOMINAL_NUM_COEFFICIENTS()
+      this.NOMINAL_NUM_COEFFICIENTS(),
+      this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null
     );
   }
   unpackTo(_o) {
@@ -12138,10 +18352,11 @@ var PPE = class _PPE {
     _o.EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE();
     _o.NOMINAL_SEGMENT_SPAN = this.NOMINAL_SEGMENT_SPAN();
     _o.NOMINAL_NUM_COEFFICIENTS = this.NOMINAL_NUM_COEFFICIENTS();
+    _o.PROVENANCE = this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null;
   }
 };
 var PPET = class {
-  constructor(COMMENT = [], OBJECT = null, CENTER_NAME = null, REFERENCE_FRAME = null, TIME_SYSTEM = 0 /* GMST */, START_TIME = null, STOP_TIME = null, DEFAULT_BASIS_TYPE = 0 /* CHEBYSHEV */, POSITION_RECORDS = [], ORBITAL_ELEMENT_RECORDS = [], EPHEMERIS_SOURCE = null, NOMINAL_SEGMENT_SPAN = 0, NOMINAL_NUM_COEFFICIENTS = 0) {
+  constructor(COMMENT = [], OBJECT = null, CENTER_NAME = null, REFERENCE_FRAME = null, TIME_SYSTEM = 0 /* GMST */, START_TIME = null, STOP_TIME = null, DEFAULT_BASIS_TYPE = 0 /* CHEBYSHEV */, POSITION_RECORDS = [], ORBITAL_ELEMENT_RECORDS = [], EPHEMERIS_SOURCE = null, NOMINAL_SEGMENT_SPAN = 0, NOMINAL_NUM_COEFFICIENTS = 0, PROVENANCE = null) {
     this.COMMENT = COMMENT;
     this.OBJECT = OBJECT;
     this.CENTER_NAME = CENTER_NAME;
@@ -12155,6 +18370,7 @@ var PPET = class {
     this.EPHEMERIS_SOURCE = EPHEMERIS_SOURCE;
     this.NOMINAL_SEGMENT_SPAN = NOMINAL_SEGMENT_SPAN;
     this.NOMINAL_NUM_COEFFICIENTS = NOMINAL_NUM_COEFFICIENTS;
+    this.PROVENANCE = PROVENANCE;
   }
   pack(builder) {
     const COMMENT = PPE.createCommentVector(builder, builder.createObjectOffsetList(this.COMMENT));
@@ -12166,6 +18382,7 @@ var PPET = class {
     const POSITION_RECORDS = PPE.createPositionRecordsVector(builder, builder.createObjectOffsetList(this.POSITION_RECORDS));
     const ORBITAL_ELEMENT_RECORDS = PPE.createOrbitalElementRecordsVector(builder, builder.createObjectOffsetList(this.ORBITAL_ELEMENT_RECORDS));
     const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
+    const PROVENANCE = this.PROVENANCE !== null ? this.PROVENANCE.pack(builder) : 0;
     PPE.startPPE(builder);
     PPE.addComment(builder, COMMENT);
     PPE.addObject(builder, OBJECT);
@@ -12180,6 +18397,7 @@ var PPET = class {
     PPE.addEphemerisSource(builder, EPHEMERIS_SOURCE);
     PPE.addNominalSegmentSpan(builder, this.NOMINAL_SEGMENT_SPAN);
     PPE.addNominalNumCoefficients(builder, this.NOMINAL_NUM_COEFFICIENTS);
+    PPE.addProvenance(builder, PROVENANCE);
     return PPE.endPPE(builder);
   }
 };
@@ -12209,389 +18427,10 @@ var propagatorStateFlags = /* @__PURE__ */ ((propagatorStateFlags2) => {
 })(propagatorStateFlags || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
-import * as flatbuffers102 from "flatbuffers";
+import * as flatbuffers128 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
-import * as flatbuffers57 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
-import * as flatbuffers56 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
-import * as flatbuffers55 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/timCcsdsTimeCodeKind.ts
-var timCcsdsTimeCodeKind = /* @__PURE__ */ ((timCcsdsTimeCodeKind2) => {
-  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["NONE"] = 0] = "NONE";
-  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["UNSEGMENTED"] = 1] = "UNSEGMENTED";
-  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["DAY_SEGMENTED"] = 2] = "DAY_SEGMENTED";
-  timCcsdsTimeCodeKind2[timCcsdsTimeCodeKind2["CALENDAR_SEGMENTED"] = 3] = "CALENDAR_SEGMENTED";
-  return timCcsdsTimeCodeKind2;
-})(timCcsdsTimeCodeKind || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMCcsdsTimeCode.ts
-var TIMCcsdsTimeCode = class _TIMCcsdsTimeCode {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsTIMCcsdsTimeCode(bb, obj) {
-    return (obj || new _TIMCcsdsTimeCode()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsTIMCcsdsTimeCode(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers55.SIZE_PREFIX_LENGTH);
-    return (obj || new _TIMCcsdsTimeCode()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * CCSDS time-code family.
-   */
-  CODE_KIND() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* NONE */;
-  }
-  /**
-   * First CCSDS preamble field octet.
-   */
-  PREAMBLE_FIELD1() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Second CCSDS preamble field octet; ignored when not signaled by preamble 1.
-   */
-  PREAMBLE_FIELD2() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Raw CCSDS time field octets.
-   */
-  TIME_FIELD(index) {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readUint8(this.bb.__vector(this.bb_pos + offset) + index) : 0;
-  }
-  timeFieldLength() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  timeFieldArray() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? new Uint8Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  AGENCY_DEFINED_EPOCH_ISO8601(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  CCSDS_EPOCH_ISO8601(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  static startTIMCcsdsTimeCode(builder) {
-    builder.startObject(6);
-  }
-  static addCodeKind(builder, CODE_KIND) {
-    builder.addFieldInt8(0, CODE_KIND, 0 /* NONE */);
-  }
-  static addPreambleField1(builder, PREAMBLE_FIELD1) {
-    builder.addFieldInt8(1, PREAMBLE_FIELD1, 0);
-  }
-  static addPreambleField2(builder, PREAMBLE_FIELD2) {
-    builder.addFieldInt8(2, PREAMBLE_FIELD2, 0);
-  }
-  static addTimeField(builder, TIME_FIELDOffset) {
-    builder.addFieldOffset(3, TIME_FIELDOffset, 0);
-  }
-  static createTimeFieldVector(builder, data) {
-    builder.startVector(1, data.length, 1);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addInt8(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startTimeFieldVector(builder, numElems) {
-    builder.startVector(1, numElems, 1);
-  }
-  static addAgencyDefinedEpochIso8601(builder, AGENCY_DEFINED_EPOCH_ISO8601Offset) {
-    builder.addFieldOffset(4, AGENCY_DEFINED_EPOCH_ISO8601Offset, 0);
-  }
-  static addCcsdsEpochIso8601(builder, CCSDS_EPOCH_ISO8601Offset) {
-    builder.addFieldOffset(5, CCSDS_EPOCH_ISO8601Offset, 0);
-  }
-  static endTIMCcsdsTimeCode(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createTIMCcsdsTimeCode(builder, CODE_KIND, PREAMBLE_FIELD1, PREAMBLE_FIELD2, TIME_FIELDOffset, AGENCY_DEFINED_EPOCH_ISO8601Offset, CCSDS_EPOCH_ISO8601Offset) {
-    _TIMCcsdsTimeCode.startTIMCcsdsTimeCode(builder);
-    _TIMCcsdsTimeCode.addCodeKind(builder, CODE_KIND);
-    _TIMCcsdsTimeCode.addPreambleField1(builder, PREAMBLE_FIELD1);
-    _TIMCcsdsTimeCode.addPreambleField2(builder, PREAMBLE_FIELD2);
-    _TIMCcsdsTimeCode.addTimeField(builder, TIME_FIELDOffset);
-    _TIMCcsdsTimeCode.addAgencyDefinedEpochIso8601(builder, AGENCY_DEFINED_EPOCH_ISO8601Offset);
-    _TIMCcsdsTimeCode.addCcsdsEpochIso8601(builder, CCSDS_EPOCH_ISO8601Offset);
-    return _TIMCcsdsTimeCode.endTIMCcsdsTimeCode(builder);
-  }
-  unpack() {
-    return new TIMCcsdsTimeCodeT(
-      this.CODE_KIND(),
-      this.PREAMBLE_FIELD1(),
-      this.PREAMBLE_FIELD2(),
-      this.bb.createScalarList(this.TIME_FIELD.bind(this), this.timeFieldLength()),
-      this.AGENCY_DEFINED_EPOCH_ISO8601(),
-      this.CCSDS_EPOCH_ISO8601()
-    );
-  }
-  unpackTo(_o) {
-    _o.CODE_KIND = this.CODE_KIND();
-    _o.PREAMBLE_FIELD1 = this.PREAMBLE_FIELD1();
-    _o.PREAMBLE_FIELD2 = this.PREAMBLE_FIELD2();
-    _o.TIME_FIELD = this.bb.createScalarList(this.TIME_FIELD.bind(this), this.timeFieldLength());
-    _o.AGENCY_DEFINED_EPOCH_ISO8601 = this.AGENCY_DEFINED_EPOCH_ISO8601();
-    _o.CCSDS_EPOCH_ISO8601 = this.CCSDS_EPOCH_ISO8601();
-  }
-};
-var TIMCcsdsTimeCodeT = class {
-  constructor(CODE_KIND = 0 /* NONE */, PREAMBLE_FIELD1 = 0, PREAMBLE_FIELD2 = 0, TIME_FIELD = [], AGENCY_DEFINED_EPOCH_ISO8601 = null, CCSDS_EPOCH_ISO8601 = null) {
-    this.CODE_KIND = CODE_KIND;
-    this.PREAMBLE_FIELD1 = PREAMBLE_FIELD1;
-    this.PREAMBLE_FIELD2 = PREAMBLE_FIELD2;
-    this.TIME_FIELD = TIME_FIELD;
-    this.AGENCY_DEFINED_EPOCH_ISO8601 = AGENCY_DEFINED_EPOCH_ISO8601;
-    this.CCSDS_EPOCH_ISO8601 = CCSDS_EPOCH_ISO8601;
-  }
-  pack(builder) {
-    const TIME_FIELD = TIMCcsdsTimeCode.createTimeFieldVector(builder, this.TIME_FIELD);
-    const AGENCY_DEFINED_EPOCH_ISO8601 = this.AGENCY_DEFINED_EPOCH_ISO8601 !== null ? builder.createString(this.AGENCY_DEFINED_EPOCH_ISO8601) : 0;
-    const CCSDS_EPOCH_ISO8601 = this.CCSDS_EPOCH_ISO8601 !== null ? builder.createString(this.CCSDS_EPOCH_ISO8601) : 0;
-    return TIMCcsdsTimeCode.createTIMCcsdsTimeCode(
-      builder,
-      this.CODE_KIND,
-      this.PREAMBLE_FIELD1,
-      this.PREAMBLE_FIELD2,
-      TIME_FIELD,
-      AGENCY_DEFINED_EPOCH_ISO8601,
-      CCSDS_EPOCH_ISO8601
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/timEpochRepresentation.ts
-var timEpochRepresentation = /* @__PURE__ */ ((timEpochRepresentation2) => {
-  timEpochRepresentation2[timEpochRepresentation2["JULIAN_DATE"] = 0] = "JULIAN_DATE";
-  timEpochRepresentation2[timEpochRepresentation2["MODIFIED_JULIAN_DATE"] = 1] = "MODIFIED_JULIAN_DATE";
-  timEpochRepresentation2[timEpochRepresentation2["UNIX_SECONDS"] = 2] = "UNIX_SECONDS";
-  timEpochRepresentation2[timEpochRepresentation2["ISO8601"] = 3] = "ISO8601";
-  timEpochRepresentation2[timEpochRepresentation2["GPS_SECONDS"] = 4] = "GPS_SECONDS";
-  timEpochRepresentation2[timEpochRepresentation2["GNSS_WEEK_SECONDS"] = 5] = "GNSS_WEEK_SECONDS";
-  timEpochRepresentation2[timEpochRepresentation2["CCSDS_TIME_CODE"] = 6] = "CCSDS_TIME_CODE";
-  timEpochRepresentation2[timEpochRepresentation2["MISSION_ELAPSED_SECONDS"] = 7] = "MISSION_ELAPSED_SECONDS";
-  return timEpochRepresentation2;
-})(timEpochRepresentation || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/TIMInstant.ts
-var TIMInstant = class _TIMInstant {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsTIMInstant(bb, obj) {
-    return (obj || new _TIMInstant()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsTIMInstant(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers56.SIZE_PREFIX_LENGTH);
-    return (obj || new _TIMInstant()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * Time system for this instant.
-   */
-  TIME_SYSTEM() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* GMST */;
-  }
-  /**
-   * Interpretation of JULIAN_DATE, SECONDS, and ISO8601.
-   */
-  EPOCH_FORMAT() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readInt8(this.bb_pos + offset) : 0 /* JULIAN_DATE */;
-  }
-  /**
-   * Julian Date or Modified Julian Date day value, selected by EPOCH_FORMAT.
-   */
-  JULIAN_DATE() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Seconds for UNIX_SECONDS, GPS_SECONDS, GNSS_WEEK_SECONDS, or MISSION_ELAPSED_SECONDS.
-   */
-  SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  ISO8601(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * Additional nanoseconds beyond the fractional scalar/text value.
-   */
-  SUBSECOND_NANOS() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  EPOCH_LABEL(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * GNSS week number when EPOCH_FORMAT is GNSS_WEEK_SECONDS.
-   */
-  GNSS_WEEK() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Whether GNSS_ROLLOVER_REFERENCE_ISO8601 should be applied.
-   */
-  HAS_GNSS_ROLLOVER_REFERENCE() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  GNSS_ROLLOVER_REFERENCE_ISO8601(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
-  }
-  /**
-   * CCSDS time-code payload when EPOCH_FORMAT is CCSDS_TIME_CODE.
-   */
-  CCSDS_TIME_CODE(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? (obj || new TIMCcsdsTimeCode()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  static startTIMInstant(builder) {
-    builder.startObject(11);
-  }
-  static addTimeSystem(builder, TIME_SYSTEM) {
-    builder.addFieldInt8(0, TIME_SYSTEM, 0 /* GMST */);
-  }
-  static addEpochFormat(builder, EPOCH_FORMAT) {
-    builder.addFieldInt8(1, EPOCH_FORMAT, 0 /* JULIAN_DATE */);
-  }
-  static addJulianDate(builder, JULIAN_DATE) {
-    builder.addFieldFloat64(2, JULIAN_DATE, 0);
-  }
-  static addSeconds(builder, SECONDS) {
-    builder.addFieldFloat64(3, SECONDS, 0);
-  }
-  static addIso8601(builder, ISO8601Offset) {
-    builder.addFieldOffset(4, ISO8601Offset, 0);
-  }
-  static addSubsecondNanos(builder, SUBSECOND_NANOS) {
-    builder.addFieldInt32(5, SUBSECOND_NANOS, 0);
-  }
-  static addEpochLabel(builder, EPOCH_LABELOffset) {
-    builder.addFieldOffset(6, EPOCH_LABELOffset, 0);
-  }
-  static addGnssWeek(builder, GNSS_WEEK) {
-    builder.addFieldInt32(7, GNSS_WEEK, 0);
-  }
-  static addHasGnssRolloverReference(builder, HAS_GNSS_ROLLOVER_REFERENCE) {
-    builder.addFieldInt8(8, +HAS_GNSS_ROLLOVER_REFERENCE, 0);
-  }
-  static addGnssRolloverReferenceIso8601(builder, GNSS_ROLLOVER_REFERENCE_ISO8601Offset) {
-    builder.addFieldOffset(9, GNSS_ROLLOVER_REFERENCE_ISO8601Offset, 0);
-  }
-  static addCcsdsTimeCode(builder, CCSDS_TIME_CODEOffset) {
-    builder.addFieldOffset(10, CCSDS_TIME_CODEOffset, 0);
-  }
-  static endTIMInstant(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  unpack() {
-    return new TIMInstantT(
-      this.TIME_SYSTEM(),
-      this.EPOCH_FORMAT(),
-      this.JULIAN_DATE(),
-      this.SECONDS(),
-      this.ISO8601(),
-      this.SUBSECOND_NANOS(),
-      this.EPOCH_LABEL(),
-      this.GNSS_WEEK(),
-      this.HAS_GNSS_ROLLOVER_REFERENCE(),
-      this.GNSS_ROLLOVER_REFERENCE_ISO8601(),
-      this.CCSDS_TIME_CODE() !== null ? this.CCSDS_TIME_CODE().unpack() : null
-    );
-  }
-  unpackTo(_o) {
-    _o.TIME_SYSTEM = this.TIME_SYSTEM();
-    _o.EPOCH_FORMAT = this.EPOCH_FORMAT();
-    _o.JULIAN_DATE = this.JULIAN_DATE();
-    _o.SECONDS = this.SECONDS();
-    _o.ISO8601 = this.ISO8601();
-    _o.SUBSECOND_NANOS = this.SUBSECOND_NANOS();
-    _o.EPOCH_LABEL = this.EPOCH_LABEL();
-    _o.GNSS_WEEK = this.GNSS_WEEK();
-    _o.HAS_GNSS_ROLLOVER_REFERENCE = this.HAS_GNSS_ROLLOVER_REFERENCE();
-    _o.GNSS_ROLLOVER_REFERENCE_ISO8601 = this.GNSS_ROLLOVER_REFERENCE_ISO8601();
-    _o.CCSDS_TIME_CODE = this.CCSDS_TIME_CODE() !== null ? this.CCSDS_TIME_CODE().unpack() : null;
-  }
-};
-var TIMInstantT = class {
-  constructor(TIME_SYSTEM = 0 /* GMST */, EPOCH_FORMAT = 0 /* JULIAN_DATE */, JULIAN_DATE = 0, SECONDS = 0, ISO8601 = null, SUBSECOND_NANOS = 0, EPOCH_LABEL = null, GNSS_WEEK = 0, HAS_GNSS_ROLLOVER_REFERENCE = false, GNSS_ROLLOVER_REFERENCE_ISO8601 = null, CCSDS_TIME_CODE = null) {
-    this.TIME_SYSTEM = TIME_SYSTEM;
-    this.EPOCH_FORMAT = EPOCH_FORMAT;
-    this.JULIAN_DATE = JULIAN_DATE;
-    this.SECONDS = SECONDS;
-    this.ISO8601 = ISO8601;
-    this.SUBSECOND_NANOS = SUBSECOND_NANOS;
-    this.EPOCH_LABEL = EPOCH_LABEL;
-    this.GNSS_WEEK = GNSS_WEEK;
-    this.HAS_GNSS_ROLLOVER_REFERENCE = HAS_GNSS_ROLLOVER_REFERENCE;
-    this.GNSS_ROLLOVER_REFERENCE_ISO8601 = GNSS_ROLLOVER_REFERENCE_ISO8601;
-    this.CCSDS_TIME_CODE = CCSDS_TIME_CODE;
-  }
-  pack(builder) {
-    const ISO8601 = this.ISO8601 !== null ? builder.createString(this.ISO8601) : 0;
-    const EPOCH_LABEL = this.EPOCH_LABEL !== null ? builder.createString(this.EPOCH_LABEL) : 0;
-    const GNSS_ROLLOVER_REFERENCE_ISO8601 = this.GNSS_ROLLOVER_REFERENCE_ISO8601 !== null ? builder.createString(this.GNSS_ROLLOVER_REFERENCE_ISO8601) : 0;
-    const CCSDS_TIME_CODE = this.CCSDS_TIME_CODE !== null ? this.CCSDS_TIME_CODE.pack(builder) : 0;
-    TIMInstant.startTIMInstant(builder);
-    TIMInstant.addTimeSystem(builder, this.TIME_SYSTEM);
-    TIMInstant.addEpochFormat(builder, this.EPOCH_FORMAT);
-    TIMInstant.addJulianDate(builder, this.JULIAN_DATE);
-    TIMInstant.addSeconds(builder, this.SECONDS);
-    TIMInstant.addIso8601(builder, ISO8601);
-    TIMInstant.addSubsecondNanos(builder, this.SUBSECOND_NANOS);
-    TIMInstant.addEpochLabel(builder, EPOCH_LABEL);
-    TIMInstant.addGnssWeek(builder, this.GNSS_WEEK);
-    TIMInstant.addHasGnssRolloverReference(builder, this.HAS_GNSS_ROLLOVER_REFERENCE);
-    TIMInstant.addGnssRolloverReferenceIso8601(builder, GNSS_ROLLOVER_REFERENCE_ISO8601);
-    TIMInstant.addCcsdsTimeCode(builder, CCSDS_TIME_CODE);
-    return TIMInstant.endTIMInstant(builder);
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwAtmosphereFamily.ts
-var prwAtmosphereFamily = /* @__PURE__ */ ((prwAtmosphereFamily2) => {
-  prwAtmosphereFamily2[prwAtmosphereFamily2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  prwAtmosphereFamily2[prwAtmosphereFamily2["NRLMSISE00"] = 1] = "NRLMSISE00";
-  prwAtmosphereFamily2[prwAtmosphereFamily2["EXPONENTIAL"] = 2] = "EXPONENTIAL";
-  prwAtmosphereFamily2[prwAtmosphereFamily2["USSA1976"] = 3] = "USSA1976";
-  prwAtmosphereFamily2[prwAtmosphereFamily2["HARRIS_PRIESTER"] = 4] = "HARRIS_PRIESTER";
-  prwAtmosphereFamily2[prwAtmosphereFamily2["JACCHIA_ROBERTS"] = 5] = "JACCHIA_ROBERTS";
-  prwAtmosphereFamily2[prwAtmosphereFamily2["JB2008"] = 6] = "JB2008";
-  return prwAtmosphereFamily2;
-})(prwAtmosphereFamily || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
+import * as flatbuffers86 from "flatbuffers";
 var PRWAtmosphereRequest = class _PRWAtmosphereRequest {
   bb = null;
   bb_pos = 0;
@@ -12604,7 +18443,7 @@ var PRWAtmosphereRequest = class _PRWAtmosphereRequest {
     return (obj || new _PRWAtmosphereRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWAtmosphereRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers57.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers86.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWAtmosphereRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ATMOSPHERE_MODEL() {
@@ -12760,10 +18599,10 @@ var PRWAtmosphereRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
-import * as flatbuffers59 from "flatbuffers";
+import * as flatbuffers88 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
-import * as flatbuffers58 from "flatbuffers";
+import * as flatbuffers87 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwDensitySpecies.ts
 var prwDensitySpecies = /* @__PURE__ */ ((prwDensitySpecies2) => {
@@ -12792,7 +18631,7 @@ var PRWSpeciesDensity = class _PRWSpeciesDensity {
     return (obj || new _PRWSpeciesDensity()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWSpeciesDensity(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers58.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers87.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWSpeciesDensity()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   CONSTITUENT() {
@@ -12860,7 +18699,7 @@ var PRWAtmosphereResult = class _PRWAtmosphereResult {
     return (obj || new _PRWAtmosphereResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWAtmosphereResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers59.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers88.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWAtmosphereResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ATMOSPHERE_MODEL() {
@@ -13049,7 +18888,7 @@ var PRWAtmosphereResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchRequest.ts
-import * as flatbuffers60 from "flatbuffers";
+import * as flatbuffers89 from "flatbuffers";
 var PRWBatchRequest = class _PRWBatchRequest {
   bb = null;
   bb_pos = 0;
@@ -13062,7 +18901,7 @@ var PRWBatchRequest = class _PRWBatchRequest {
     return (obj || new _PRWBatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBatchRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers60.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers89.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13186,7 +19025,7 @@ var PRWBatchRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchResponse.ts
-import * as flatbuffers61 from "flatbuffers";
+import * as flatbuffers90 from "flatbuffers";
 var PRWBatchResponse = class _PRWBatchResponse {
   bb = null;
   bb_pos = 0;
@@ -13199,7 +19038,7 @@ var PRWBatchResponse = class _PRWBatchResponse {
     return (obj || new _PRWBatchResponse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBatchResponse(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers61.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers90.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBatchResponse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13351,10 +19190,10 @@ var PRWBatchResponseT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
-import * as flatbuffers63 from "flatbuffers";
+import * as flatbuffers92 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWInstance.ts
-import * as flatbuffers62 from "flatbuffers";
+import * as flatbuffers91 from "flatbuffers";
 var PRWInstance = class _PRWInstance {
   bb = null;
   bb_pos = 0;
@@ -13367,7 +19206,7 @@ var PRWInstance = class _PRWInstance {
     return (obj || new _PRWInstance()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWInstance(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers62.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers91.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWInstance()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   MODULE_ID(optionalEncoding) {
@@ -13454,7 +19293,7 @@ var PRWDescribeRequest = class _PRWDescribeRequest {
     return (obj || new _PRWDescribeRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWDescribeRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers63.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers92.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWDescribeRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -13543,13 +19382,13 @@ var PRWDescribeRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
-import * as flatbuffers66 from "flatbuffers";
+import * as flatbuffers95 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
-import * as flatbuffers65 from "flatbuffers";
+import * as flatbuffers94 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
-import * as flatbuffers64 from "flatbuffers";
+import * as flatbuffers93 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwQualityEvidence.ts
 var prwQualityEvidence = /* @__PURE__ */ ((prwQualityEvidence2) => {
@@ -13572,7 +19411,7 @@ var PRWFitQuality = class _PRWFitQuality {
     return (obj || new _PRWFitQuality()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWFitQuality(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers64.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers93.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWFitQuality()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EVIDENCE_KIND() {
@@ -13711,7 +19550,7 @@ var PRWTrajectorySource = class _PRWTrajectorySource {
     return (obj || new _PRWTrajectorySource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWTrajectorySource(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers65.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers94.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWTrajectorySource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_HANDLE() {
@@ -13815,7 +19654,7 @@ var PRWDescribeResult = class _PRWDescribeResult {
     return (obj || new _PRWDescribeResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWDescribeResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers66.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers95.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWDescribeResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -13927,7 +19766,7 @@ var PRWDescribeResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEarthOrientation.ts
-import * as flatbuffers67 from "flatbuffers";
+import * as flatbuffers96 from "flatbuffers";
 var PRWEarthOrientation = class _PRWEarthOrientation {
   bb = null;
   bb_pos = 0;
@@ -13940,7 +19779,7 @@ var PRWEarthOrientation = class _PRWEarthOrientation {
     return (obj || new _PRWEarthOrientation()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEarthOrientation(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers67.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers96.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEarthOrientation()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ROWS(index, obj) {
@@ -14000,7 +19839,7 @@ var PRWEarthOrientationT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisRequest.ts
-import * as flatbuffers68 from "flatbuffers";
+import * as flatbuffers97 from "flatbuffers";
 var PRWEphemerisRequest = class _PRWEphemerisRequest {
   bb = null;
   bb_pos = 0;
@@ -14013,7 +19852,7 @@ var PRWEphemerisRequest = class _PRWEphemerisRequest {
     return (obj || new _PRWEphemerisRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEphemerisRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers68.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers97.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEphemerisRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH(obj) {
@@ -14083,13 +19922,13 @@ var PRWEphemerisRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
-import * as flatbuffers72 from "flatbuffers";
+import * as flatbuffers101 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
-import * as flatbuffers71 from "flatbuffers";
+import * as flatbuffers100 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
-import * as flatbuffers69 from "flatbuffers";
+import * as flatbuffers98 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseAxes.ts
 var prwProcessNoiseAxes = /* @__PURE__ */ ((prwProcessNoiseAxes2) => {
@@ -14120,7 +19959,7 @@ var PRWProcessNoise = class _PRWProcessNoise {
     return (obj || new _PRWProcessNoise()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWProcessNoise(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers69.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers98.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWProcessNoise()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   MODEL() {
@@ -14225,7 +20064,7 @@ var PRWProcessNoiseT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWStateMatrix.ts
-import * as flatbuffers70 from "flatbuffers";
+import * as flatbuffers99 from "flatbuffers";
 var PRWStateMatrix = class _PRWStateMatrix {
   bb = null;
   bb_pos = 0;
@@ -14238,7 +20077,7 @@ var PRWStateMatrix = class _PRWStateMatrix {
     return (obj || new _PRWStateMatrix()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWStateMatrix(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers70.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers99.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWStateMatrix()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   DIMENSION() {
@@ -14326,7 +20165,7 @@ var PRWResidentState = class _PRWResidentState {
     return (obj || new _PRWResidentState()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWResidentState(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers71.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers100.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWResidentState()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -14425,7 +20264,7 @@ var PRWResidentState = class _PRWResidentState {
     return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
   }
   /**
-   * Constant in-track acceleration, m/s2, as PRWForceConfiguration's.
+   * Constant in-track acceleration, m/s2, as PCFForceModel's.
    */
   IN_TRACK_ACCELERATION_M_S2() {
     const offset = this.bb.__offset(this.bb_pos, 38);
@@ -14615,7 +20454,7 @@ var PRWEphemerisResult = class _PRWEphemerisResult {
     return (obj || new _PRWEphemerisResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEphemerisResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers72.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers101.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEphemerisResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   TARGET_NAIF_ID() {
@@ -14693,13 +20532,13 @@ var PRWEphemerisResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
-import * as flatbuffers81 from "flatbuffers";
+import * as flatbuffers106 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
-import * as flatbuffers75 from "flatbuffers";
+import * as flatbuffers104 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnBoundary.ts
-import * as flatbuffers73 from "flatbuffers";
+import * as flatbuffers102 from "flatbuffers";
 var PRWBurnBoundary = class _PRWBurnBoundary {
   bb = null;
   bb_pos = 0;
@@ -14712,7 +20551,7 @@ var PRWBurnBoundary = class _PRWBurnBoundary {
     return (obj || new _PRWBurnBoundary()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBurnBoundary(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers73.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers102.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBurnBoundary()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ELAPSED_SECONDS() {
@@ -14779,7 +20618,7 @@ var PRWBurnBoundaryT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWThrottlePoint.ts
-import * as flatbuffers74 from "flatbuffers";
+import * as flatbuffers103 from "flatbuffers";
 var PRWThrottlePoint = class _PRWThrottlePoint {
   bb = null;
   bb_pos = 0;
@@ -14792,7 +20631,7 @@ var PRWThrottlePoint = class _PRWThrottlePoint {
     return (obj || new _PRWThrottlePoint()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWThrottlePoint(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers74.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers103.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWThrottlePoint()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ELAPSED_SECONDS() {
@@ -14879,7 +20718,7 @@ var PRWFiniteBurn = class _PRWFiniteBurn {
     return (obj || new _PRWFiniteBurn()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWFiniteBurn(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers75.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers104.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWFiniteBurn()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   START(obj) {
@@ -15070,930 +20909,8 @@ var PRWFiniteBurnT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWForceConfiguration.ts
-import * as flatbuffers78 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEcom2.ts
-import * as flatbuffers76 from "flatbuffers";
-var PRWEcom2 = class _PRWEcom2 {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPRWEcom2(bb, obj) {
-    return (obj || new _PRWEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPRWEcom2(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers76.SIZE_PREFIX_LENGTH);
-    return (obj || new _PRWEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  D0_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  Y0_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  B0_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  D2_COS_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  D2_SIN_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  D4_COS_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  D4_SIN_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  B1_COS_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  B1_SIN_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  B3_COS_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  B3_SIN_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  static startPRWEcom2(builder) {
-    builder.startObject(11);
-  }
-  static addD0MS2(builder, D0_M_S2) {
-    builder.addFieldFloat64(0, D0_M_S2, 0);
-  }
-  static addY0MS2(builder, Y0_M_S2) {
-    builder.addFieldFloat64(1, Y0_M_S2, 0);
-  }
-  static addB0MS2(builder, B0_M_S2) {
-    builder.addFieldFloat64(2, B0_M_S2, 0);
-  }
-  static addD2CosMS2(builder, D2_COS_M_S2) {
-    builder.addFieldFloat64(3, D2_COS_M_S2, 0);
-  }
-  static addD2SinMS2(builder, D2_SIN_M_S2) {
-    builder.addFieldFloat64(4, D2_SIN_M_S2, 0);
-  }
-  static addD4CosMS2(builder, D4_COS_M_S2) {
-    builder.addFieldFloat64(5, D4_COS_M_S2, 0);
-  }
-  static addD4SinMS2(builder, D4_SIN_M_S2) {
-    builder.addFieldFloat64(6, D4_SIN_M_S2, 0);
-  }
-  static addB1CosMS2(builder, B1_COS_M_S2) {
-    builder.addFieldFloat64(7, B1_COS_M_S2, 0);
-  }
-  static addB1SinMS2(builder, B1_SIN_M_S2) {
-    builder.addFieldFloat64(8, B1_SIN_M_S2, 0);
-  }
-  static addB3CosMS2(builder, B3_COS_M_S2) {
-    builder.addFieldFloat64(9, B3_COS_M_S2, 0);
-  }
-  static addB3SinMS2(builder, B3_SIN_M_S2) {
-    builder.addFieldFloat64(10, B3_SIN_M_S2, 0);
-  }
-  static endPRWEcom2(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPRWEcom2(builder, D0_M_S2, Y0_M_S2, B0_M_S2, D2_COS_M_S2, D2_SIN_M_S2, D4_COS_M_S2, D4_SIN_M_S2, B1_COS_M_S2, B1_SIN_M_S2, B3_COS_M_S2, B3_SIN_M_S2) {
-    _PRWEcom2.startPRWEcom2(builder);
-    _PRWEcom2.addD0MS2(builder, D0_M_S2);
-    _PRWEcom2.addY0MS2(builder, Y0_M_S2);
-    _PRWEcom2.addB0MS2(builder, B0_M_S2);
-    _PRWEcom2.addD2CosMS2(builder, D2_COS_M_S2);
-    _PRWEcom2.addD2SinMS2(builder, D2_SIN_M_S2);
-    _PRWEcom2.addD4CosMS2(builder, D4_COS_M_S2);
-    _PRWEcom2.addD4SinMS2(builder, D4_SIN_M_S2);
-    _PRWEcom2.addB1CosMS2(builder, B1_COS_M_S2);
-    _PRWEcom2.addB1SinMS2(builder, B1_SIN_M_S2);
-    _PRWEcom2.addB3CosMS2(builder, B3_COS_M_S2);
-    _PRWEcom2.addB3SinMS2(builder, B3_SIN_M_S2);
-    return _PRWEcom2.endPRWEcom2(builder);
-  }
-  unpack() {
-    return new PRWEcom2T(
-      this.D0_M_S2(),
-      this.Y0_M_S2(),
-      this.B0_M_S2(),
-      this.D2_COS_M_S2(),
-      this.D2_SIN_M_S2(),
-      this.D4_COS_M_S2(),
-      this.D4_SIN_M_S2(),
-      this.B1_COS_M_S2(),
-      this.B1_SIN_M_S2(),
-      this.B3_COS_M_S2(),
-      this.B3_SIN_M_S2()
-    );
-  }
-  unpackTo(_o) {
-    _o.D0_M_S2 = this.D0_M_S2();
-    _o.Y0_M_S2 = this.Y0_M_S2();
-    _o.B0_M_S2 = this.B0_M_S2();
-    _o.D2_COS_M_S2 = this.D2_COS_M_S2();
-    _o.D2_SIN_M_S2 = this.D2_SIN_M_S2();
-    _o.D4_COS_M_S2 = this.D4_COS_M_S2();
-    _o.D4_SIN_M_S2 = this.D4_SIN_M_S2();
-    _o.B1_COS_M_S2 = this.B1_COS_M_S2();
-    _o.B1_SIN_M_S2 = this.B1_SIN_M_S2();
-    _o.B3_COS_M_S2 = this.B3_COS_M_S2();
-    _o.B3_SIN_M_S2 = this.B3_SIN_M_S2();
-  }
-};
-var PRWEcom2T = class {
-  constructor(D0_M_S2 = 0, Y0_M_S2 = 0, B0_M_S2 = 0, D2_COS_M_S2 = 0, D2_SIN_M_S2 = 0, D4_COS_M_S2 = 0, D4_SIN_M_S2 = 0, B1_COS_M_S2 = 0, B1_SIN_M_S2 = 0, B3_COS_M_S2 = 0, B3_SIN_M_S2 = 0) {
-    this.D0_M_S2 = D0_M_S2;
-    this.Y0_M_S2 = Y0_M_S2;
-    this.B0_M_S2 = B0_M_S2;
-    this.D2_COS_M_S2 = D2_COS_M_S2;
-    this.D2_SIN_M_S2 = D2_SIN_M_S2;
-    this.D4_COS_M_S2 = D4_COS_M_S2;
-    this.D4_SIN_M_S2 = D4_SIN_M_S2;
-    this.B1_COS_M_S2 = B1_COS_M_S2;
-    this.B1_SIN_M_S2 = B1_SIN_M_S2;
-    this.B3_COS_M_S2 = B3_COS_M_S2;
-    this.B3_SIN_M_S2 = B3_SIN_M_S2;
-  }
-  pack(builder) {
-    return PRWEcom2.createPRWEcom2(
-      builder,
-      this.D0_M_S2,
-      this.Y0_M_S2,
-      this.B0_M_S2,
-      this.D2_COS_M_S2,
-      this.D2_SIN_M_S2,
-      this.D4_COS_M_S2,
-      this.D4_SIN_M_S2,
-      this.B1_COS_M_S2,
-      this.B1_SIN_M_S2,
-      this.B3_COS_M_S2,
-      this.B3_SIN_M_S2
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeather.ts
-import * as flatbuffers77 from "flatbuffers";
-var PRWSpaceWeather = class _PRWSpaceWeather {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPRWSpaceWeather(bb, obj) {
-    return (obj || new _PRWSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPRWSpaceWeather(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers77.SIZE_PREFIX_LENGTH);
-    return (obj || new _PRWSpaceWeather()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  EPOCH(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? (obj || new TIMInstant()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  F107() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 150;
-  }
-  F107_AVERAGE() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 150;
-  }
-  /**
-   * Conventional daily Ap and three-hour Kp index values; not accelerations.
-   */
-  AP_INDEX() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 15;
-  }
-  KP_INDEX() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 3;
-  }
-  static startPRWSpaceWeather(builder) {
-    builder.startObject(5);
-  }
-  static addEpoch(builder, EPOCHOffset) {
-    builder.addFieldOffset(0, EPOCHOffset, 0);
-  }
-  static addF107(builder, F107) {
-    builder.addFieldFloat64(1, F107, 150);
-  }
-  static addF107Average(builder, F107_AVERAGE) {
-    builder.addFieldFloat64(2, F107_AVERAGE, 150);
-  }
-  static addApIndex(builder, AP_INDEX) {
-    builder.addFieldFloat64(3, AP_INDEX, 15);
-  }
-  static addKpIndex(builder, KP_INDEX) {
-    builder.addFieldFloat64(4, KP_INDEX, 3);
-  }
-  static endPRWSpaceWeather(builder) {
-    const offset = builder.endObject();
-    builder.requiredField(offset, 4);
-    return offset;
-  }
-  static createPRWSpaceWeather(builder, EPOCHOffset, F107, F107_AVERAGE, AP_INDEX, KP_INDEX) {
-    _PRWSpaceWeather.startPRWSpaceWeather(builder);
-    _PRWSpaceWeather.addEpoch(builder, EPOCHOffset);
-    _PRWSpaceWeather.addF107(builder, F107);
-    _PRWSpaceWeather.addF107Average(builder, F107_AVERAGE);
-    _PRWSpaceWeather.addApIndex(builder, AP_INDEX);
-    _PRWSpaceWeather.addKpIndex(builder, KP_INDEX);
-    return _PRWSpaceWeather.endPRWSpaceWeather(builder);
-  }
-  unpack() {
-    return new PRWSpaceWeatherT(
-      this.EPOCH() !== null ? this.EPOCH().unpack() : null,
-      this.F107(),
-      this.F107_AVERAGE(),
-      this.AP_INDEX(),
-      this.KP_INDEX()
-    );
-  }
-  unpackTo(_o) {
-    _o.EPOCH = this.EPOCH() !== null ? this.EPOCH().unpack() : null;
-    _o.F107 = this.F107();
-    _o.F107_AVERAGE = this.F107_AVERAGE();
-    _o.AP_INDEX = this.AP_INDEX();
-    _o.KP_INDEX = this.KP_INDEX();
-  }
-};
-var PRWSpaceWeatherT = class {
-  constructor(EPOCH = null, F107 = 150, F107_AVERAGE = 150, AP_INDEX = 15, KP_INDEX = 3) {
-    this.EPOCH = EPOCH;
-    this.F107 = F107;
-    this.F107_AVERAGE = F107_AVERAGE;
-    this.AP_INDEX = AP_INDEX;
-    this.KP_INDEX = KP_INDEX;
-  }
-  pack(builder) {
-    const EPOCH = this.EPOCH !== null ? this.EPOCH.pack(builder) : 0;
-    return PRWSpaceWeather.createPRWSpaceWeather(
-      builder,
-      EPOCH,
-      this.F107,
-      this.F107_AVERAGE,
-      this.AP_INDEX,
-      this.KP_INDEX
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwEarthRadiationModel.ts
-var prwEarthRadiationModel = /* @__PURE__ */ ((prwEarthRadiationModel2) => {
-  prwEarthRadiationModel2[prwEarthRadiationModel2["NONE"] = 0] = "NONE";
-  prwEarthRadiationModel2[prwEarthRadiationModel2["KNOCKE"] = 1] = "KNOCKE";
-  return prwEarthRadiationModel2;
-})(prwEarthRadiationModel || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwGnssSpacecraftBlock.ts
-var prwGnssSpacecraftBlock = /* @__PURE__ */ ((prwGnssSpacecraftBlock2) => {
-  prwGnssSpacecraftBlock2[prwGnssSpacecraftBlock2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  prwGnssSpacecraftBlock2[prwGnssSpacecraftBlock2["GPS_IIR"] = 1] = "GPS_IIR";
-  prwGnssSpacecraftBlock2[prwGnssSpacecraftBlock2["GPS_IIR_M"] = 2] = "GPS_IIR_M";
-  prwGnssSpacecraftBlock2[prwGnssSpacecraftBlock2["GPS_IIF"] = 3] = "GPS_IIF";
-  return prwGnssSpacecraftBlock2;
-})(prwGnssSpacecraftBlock || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwGravitySelection.ts
-var prwGravitySelection = /* @__PURE__ */ ((prwGravitySelection2) => {
-  prwGravitySelection2[prwGravitySelection2["INFER_FLAGS"] = 0] = "INFER_FLAGS";
-  prwGravitySelection2[prwGravitySelection2["POINT_MASS"] = 1] = "POINT_MASS";
-  prwGravitySelection2[prwGravitySelection2["J2_ONLY"] = 2] = "J2_ONLY";
-  prwGravitySelection2[prwGravitySelection2["J2_TO_J4"] = 3] = "J2_TO_J4";
-  prwGravitySelection2[prwGravitySelection2["SPHERICAL_HARMONICS"] = 4] = "SPHERICAL_HARMONICS";
-  prwGravitySelection2[prwGravitySelection2["EGM2008"] = 5] = "EGM2008";
-  prwGravitySelection2[prwGravitySelection2["EGM96"] = 6] = "EGM96";
-  return prwGravitySelection2;
-})(prwGravitySelection || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwOceanTideModel.ts
-var prwOceanTideModel = /* @__PURE__ */ ((prwOceanTideModel2) => {
-  prwOceanTideModel2[prwOceanTideModel2["NONE"] = 0] = "NONE";
-  prwOceanTideModel2[prwOceanTideModel2["FES2004"] = 1] = "FES2004";
-  return prwOceanTideModel2;
-})(prwOceanTideModel || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwRadiationPressureFamily.ts
-var prwRadiationPressureFamily = /* @__PURE__ */ ((prwRadiationPressureFamily2) => {
-  prwRadiationPressureFamily2[prwRadiationPressureFamily2["CANNONBALL"] = 0] = "CANNONBALL";
-  prwRadiationPressureFamily2[prwRadiationPressureFamily2["GNSS_BOX_WING"] = 1] = "GNSS_BOX_WING";
-  prwRadiationPressureFamily2[prwRadiationPressureFamily2["NONE"] = 2] = "NONE";
-  return prwRadiationPressureFamily2;
-})(prwRadiationPressureFamily || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwRelativityTerms.ts
-var prwRelativityTerms = /* @__PURE__ */ ((prwRelativityTerms2) => {
-  prwRelativityTerms2[prwRelativityTerms2["NONE"] = 0] = "NONE";
-  prwRelativityTerms2[prwRelativityTerms2["SCHWARZSCHILD"] = 1] = "SCHWARZSCHILD";
-  prwRelativityTerms2[prwRelativityTerms2["IERS_2010"] = 2] = "IERS_2010";
-  return prwRelativityTerms2;
-})(prwRelativityTerms || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwSolidTideModel.ts
-var prwSolidTideModel = /* @__PURE__ */ ((prwSolidTideModel2) => {
-  prwSolidTideModel2[prwSolidTideModel2["NONE"] = 0] = "NONE";
-  prwSolidTideModel2[prwSolidTideModel2["IERS_2010"] = 1] = "IERS_2010";
-  return prwSolidTideModel2;
-})(prwSolidTideModel || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWForceConfiguration.ts
-var PRWForceConfiguration = class _PRWForceConfiguration {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPRWForceConfiguration(bb, obj) {
-    return (obj || new _PRWForceConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPRWForceConfiguration(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers78.SIZE_PREFIX_LENGTH);
-    return (obj || new _PRWForceConfiguration()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  GRAVITY_CHOICE() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* INFER_FLAGS */;
-  }
-  ENABLE_POINT_MASS() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
-  }
-  /**
-   * m3/s2; required positive when a central gravity term is enabled.
-   */
-  GRAVITATIONAL_PARAMETER() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  ENABLE_J2() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
-  }
-  ENABLE_J3() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  ENABLE_J4() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  ENABLE_HIGHER_ZONALS() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Optional truncations; absent selects the explicitly reported model default.
-   */
-  MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when MAXIMUM_DEGREE carries a value; false means absent.
-   */
-  HAS_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  MAXIMUM_ORDER() {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when MAXIMUM_ORDER carries a value; false means absent.
-   */
-  HAS_MAXIMUM_ORDER() {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  ENABLE_THIRD_BODY() {
-    const offset = this.bb.__offset(this.bb_pos, 26);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * NAIF IDs; explicit vector, e.g. [10,301]. Empty means no third bodies.
-   */
-  THIRD_BODY_IDS(index) {
-    const offset = this.bb.__offset(this.bb_pos, 28);
-    return offset ? this.bb.readInt32(this.bb.__vector(this.bb_pos + offset) + index * 4) : 0;
-  }
-  thirdBodyIdsLength() {
-    const offset = this.bb.__offset(this.bb_pos, 28);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  thirdBodyIdsArray() {
-    const offset = this.bb.__offset(this.bb_pos, 28);
-    return offset ? new Int32Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
-  }
-  ENABLE_SRP() {
-    const offset = this.bb.__offset(this.bb_pos, 30);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  ENABLE_DRAG() {
-    const offset = this.bb.__offset(this.bb_pos, 32);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  INITIAL_MASS_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 34);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1e3;
-  }
-  AREA_M2() {
-    const offset = this.bb.__offset(this.bb_pos, 36);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 10;
-  }
-  REFLECTIVITY_COEFFICIENT() {
-    const offset = this.bb.__offset(this.bb_pos, 38);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1.5;
-  }
-  DRAG_COEFFICIENT() {
-    const offset = this.bb.__offset(this.bb_pos, 40);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2.2;
-  }
-  ATMOSPHERE_MODEL() {
-    const offset = this.bb.__offset(this.bb_pos, 42);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1 /* NRLMSISE00 */;
-  }
-  WEATHER(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 44);
-    return offset ? (obj || new PRWSpaceWeather()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  EPHEMERIS_SOURCE(optionalEncoding) {
-    const offset = this.bb.__offset(this.bb_pos, 46);
-    return this.bb.__string(this.bb_pos + offset, optionalEncoding);
-  }
-  /**
-   * Solid Earth tides. Their field is Earth-fixed, so a provider needs Earth
-   * orientation (PRW.EARTH_ORIENTATION) to apply them.
-   */
-  SOLID_TIDES() {
-    const offset = this.bb.__offset(this.bb_pos, 48);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
-  }
-  RELATIVITY() {
-    const offset = this.bb.__offset(this.bb_pos, 50);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
-  }
-  /**
-   * Constant acceleration along the in-track axis, m/s2: T of RTN,
-   * N cross rhat with N = unit(r cross v) (the "in-track thrust" of a VCM).
-   */
-  IN_TRACK_ACCELERATION_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 52);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when IN_TRACK_ACCELERATION_M_S2 carries a value; false means absent.
-   */
-  HAS_IN_TRACK_ACCELERATION_M_S2() {
-    const offset = this.bb.__offset(this.bb_pos, 54);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Rate of change of the drag ballistic coefficient Cd*A/m, m2/kg/s (the
-   * BDOT of a VCM). Drag uses Cd*A/m + rate * (t - initial epoch).
-   */
-  DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
-    const offset = this.bb.__offset(this.bb_pos, 56);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when DRAG_AREA_OVER_MASS_RATE_M2_KG_S carries a value; false means absent.
-   */
-  HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
-    const offset = this.bb.__offset(this.bb_pos, 58);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Highest degree of the tesseral and sectorial terms (order >= 1); the
-   * zonals run to MAXIMUM_DEGREE. A VCM's "mmZ,nnT" is MAXIMUM_DEGREE mm,
-   * MAXIMUM_ORDER nn and MAXIMUM_TESSERAL_DEGREE nn.
-   */
-  MAXIMUM_TESSERAL_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 60);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when MAXIMUM_TESSERAL_DEGREE carries a value; false means absent.
-   */
-  HAS_MAXIMUM_TESSERAL_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 62);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Solar radiation pressure model family (default: the cannonball).
-   */
-  RADIATION_PRESSURE_MODEL() {
-    const offset = this.bb.__offset(this.bb_pos, 64);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* CANNONBALL */;
-  }
-  /**
-   * Spacecraft block; required when RADIATION_PRESSURE_MODEL is GNSS_BOX_WING.
-   */
-  GNSS_BLOCK() {
-    const offset = this.bb.__offset(this.bb_pos, 66);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  /**
-   * ECOM2 coefficients; absent means no ECOM2 term.
-   */
-  ECOM2(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 68);
-    return offset ? (obj || new PRWEcom2()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
-   * Earth radiation pressure (albedo and infrared). It reads the Sun's
-   * position from the request's ephemeris source.
-   */
-  EARTH_RADIATION() {
-    const offset = this.bb.__offset(this.bb_pos, 70);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
-  }
-  /**
-   * Angular size of the Earth surface elements it sums, degrees.
-   */
-  EARTH_RADIATION_RESOLUTION_DEG() {
-    const offset = this.bb.__offset(this.bb_pos, 72);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 15;
-  }
-  /**
-   * Isotropic Cr*A/m, m2/kg, the Earth's radiation acts on. Absent, it is the
-   * cannonball's REFLECTIVITY_COEFFICIENT * AREA_M2 / INITIAL_MASS_KG, and
-   * fitting SRP_AREA_OVER_MASS scales both.
-   */
-  EARTH_RADIATION_AREA_OVER_MASS_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 74);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when EARTH_RADIATION_AREA_OVER_MASS_M2_KG carries a value; false means absent.
-   */
-  HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 76);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Ocean tides. Their field is Earth-fixed, so a provider needs Earth
-   * orientation (PRW.EARTH_ORIENTATION) to apply them.
-   */
-  OCEAN_TIDES() {
-    const offset = this.bb.__offset(this.bb_pos, 78);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
-  }
-  /**
-   * Truncation of the ocean tide field.
-   */
-  OCEAN_TIDE_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 80);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
-  }
-  OCEAN_TIDE_MAXIMUM_ORDER() {
-    const offset = this.bb.__offset(this.bb_pos, 82);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
-  }
-  static startPRWForceConfiguration(builder) {
-    builder.startObject(40);
-  }
-  static addGravityChoice(builder, GRAVITY_CHOICE) {
-    builder.addFieldInt8(0, GRAVITY_CHOICE, 0 /* INFER_FLAGS */);
-  }
-  static addEnablePointMass(builder, ENABLE_POINT_MASS) {
-    builder.addFieldInt8(1, +ENABLE_POINT_MASS, 1);
-  }
-  static addGravitationalParameter(builder, GRAVITATIONAL_PARAMETER) {
-    builder.addFieldFloat64(2, GRAVITATIONAL_PARAMETER, 0);
-  }
-  static addEnableJ2(builder, ENABLE_J2) {
-    builder.addFieldInt8(3, +ENABLE_J2, 1);
-  }
-  static addEnableJ3(builder, ENABLE_J3) {
-    builder.addFieldInt8(4, +ENABLE_J3, 0);
-  }
-  static addEnableJ4(builder, ENABLE_J4) {
-    builder.addFieldInt8(5, +ENABLE_J4, 0);
-  }
-  static addEnableHigherZonals(builder, ENABLE_HIGHER_ZONALS) {
-    builder.addFieldInt8(6, +ENABLE_HIGHER_ZONALS, 0);
-  }
-  static addMaximumDegree(builder, MAXIMUM_DEGREE) {
-    builder.addFieldInt16(7, MAXIMUM_DEGREE, 0);
-  }
-  static addHasMaximumDegree(builder, HAS_MAXIMUM_DEGREE) {
-    builder.addFieldInt8(8, +HAS_MAXIMUM_DEGREE, 0);
-  }
-  static addMaximumOrder(builder, MAXIMUM_ORDER) {
-    builder.addFieldInt16(9, MAXIMUM_ORDER, 0);
-  }
-  static addHasMaximumOrder(builder, HAS_MAXIMUM_ORDER) {
-    builder.addFieldInt8(10, +HAS_MAXIMUM_ORDER, 0);
-  }
-  static addEnableThirdBody(builder, ENABLE_THIRD_BODY) {
-    builder.addFieldInt8(11, +ENABLE_THIRD_BODY, 0);
-  }
-  static addThirdBodyIds(builder, THIRD_BODY_IDSOffset) {
-    builder.addFieldOffset(12, THIRD_BODY_IDSOffset, 0);
-  }
-  static createThirdBodyIdsVector(builder, data) {
-    builder.startVector(4, data.length, 4);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addInt32(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startThirdBodyIdsVector(builder, numElems) {
-    builder.startVector(4, numElems, 4);
-  }
-  static addEnableSrp(builder, ENABLE_SRP) {
-    builder.addFieldInt8(13, +ENABLE_SRP, 0);
-  }
-  static addEnableDrag(builder, ENABLE_DRAG) {
-    builder.addFieldInt8(14, +ENABLE_DRAG, 0);
-  }
-  static addInitialMassKg(builder, INITIAL_MASS_KG) {
-    builder.addFieldFloat64(15, INITIAL_MASS_KG, 1e3);
-  }
-  static addAreaM2(builder, AREA_M2) {
-    builder.addFieldFloat64(16, AREA_M2, 10);
-  }
-  static addReflectivityCoefficient(builder, REFLECTIVITY_COEFFICIENT) {
-    builder.addFieldFloat64(17, REFLECTIVITY_COEFFICIENT, 1.5);
-  }
-  static addDragCoefficient(builder, DRAG_COEFFICIENT) {
-    builder.addFieldFloat64(18, DRAG_COEFFICIENT, 2.2);
-  }
-  static addAtmosphereModel(builder, ATMOSPHERE_MODEL) {
-    builder.addFieldInt8(19, ATMOSPHERE_MODEL, 1 /* NRLMSISE00 */);
-  }
-  static addWeather(builder, WEATHEROffset) {
-    builder.addFieldOffset(20, WEATHEROffset, 0);
-  }
-  static addEphemerisSource(builder, EPHEMERIS_SOURCEOffset) {
-    builder.addFieldOffset(21, EPHEMERIS_SOURCEOffset, 0);
-  }
-  static addSolidTides(builder, SOLID_TIDES) {
-    builder.addFieldInt8(22, SOLID_TIDES, 0 /* NONE */);
-  }
-  static addRelativity(builder, RELATIVITY) {
-    builder.addFieldInt8(23, RELATIVITY, 0 /* NONE */);
-  }
-  static addInTrackAccelerationMS2(builder, IN_TRACK_ACCELERATION_M_S2) {
-    builder.addFieldFloat64(24, IN_TRACK_ACCELERATION_M_S2, 0);
-  }
-  static addHasInTrackAccelerationMS2(builder, HAS_IN_TRACK_ACCELERATION_M_S2) {
-    builder.addFieldInt8(25, +HAS_IN_TRACK_ACCELERATION_M_S2, 0);
-  }
-  static addDragAreaOverMassRateM2KgS(builder, DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
-    builder.addFieldFloat64(26, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0);
-  }
-  static addHasDragAreaOverMassRateM2KgS(builder, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
-    builder.addFieldInt8(27, +HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0);
-  }
-  static addMaximumTesseralDegree(builder, MAXIMUM_TESSERAL_DEGREE) {
-    builder.addFieldInt16(28, MAXIMUM_TESSERAL_DEGREE, 0);
-  }
-  static addHasMaximumTesseralDegree(builder, HAS_MAXIMUM_TESSERAL_DEGREE) {
-    builder.addFieldInt8(29, +HAS_MAXIMUM_TESSERAL_DEGREE, 0);
-  }
-  static addRadiationPressureModel(builder, RADIATION_PRESSURE_MODEL) {
-    builder.addFieldInt8(30, RADIATION_PRESSURE_MODEL, 0 /* CANNONBALL */);
-  }
-  static addGnssBlock(builder, GNSS_BLOCK) {
-    builder.addFieldInt8(31, GNSS_BLOCK, 0 /* UNSPECIFIED */);
-  }
-  static addEcom2(builder, ECOM2Offset) {
-    builder.addFieldOffset(32, ECOM2Offset, 0);
-  }
-  static addEarthRadiation(builder, EARTH_RADIATION) {
-    builder.addFieldInt8(33, EARTH_RADIATION, 0 /* NONE */);
-  }
-  static addEarthRadiationResolutionDeg(builder, EARTH_RADIATION_RESOLUTION_DEG) {
-    builder.addFieldFloat64(34, EARTH_RADIATION_RESOLUTION_DEG, 15);
-  }
-  static addEarthRadiationAreaOverMassM2Kg(builder, EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
-    builder.addFieldFloat64(35, EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0);
-  }
-  static addHasEarthRadiationAreaOverMassM2Kg(builder, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
-    builder.addFieldInt8(36, +HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0);
-  }
-  static addOceanTides(builder, OCEAN_TIDES) {
-    builder.addFieldInt8(37, OCEAN_TIDES, 0 /* NONE */);
-  }
-  static addOceanTideMaximumDegree(builder, OCEAN_TIDE_MAXIMUM_DEGREE) {
-    builder.addFieldInt16(38, OCEAN_TIDE_MAXIMUM_DEGREE, 30);
-  }
-  static addOceanTideMaximumOrder(builder, OCEAN_TIDE_MAXIMUM_ORDER) {
-    builder.addFieldInt16(39, OCEAN_TIDE_MAXIMUM_ORDER, 30);
-  }
-  static endPRWForceConfiguration(builder) {
-    const offset = builder.endObject();
-    builder.requiredField(offset, 46);
-    return offset;
-  }
-  unpack() {
-    return new PRWForceConfigurationT(
-      this.GRAVITY_CHOICE(),
-      this.ENABLE_POINT_MASS(),
-      this.GRAVITATIONAL_PARAMETER(),
-      this.ENABLE_J2(),
-      this.ENABLE_J3(),
-      this.ENABLE_J4(),
-      this.ENABLE_HIGHER_ZONALS(),
-      this.MAXIMUM_DEGREE(),
-      this.HAS_MAXIMUM_DEGREE(),
-      this.MAXIMUM_ORDER(),
-      this.HAS_MAXIMUM_ORDER(),
-      this.ENABLE_THIRD_BODY(),
-      this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength()),
-      this.ENABLE_SRP(),
-      this.ENABLE_DRAG(),
-      this.INITIAL_MASS_KG(),
-      this.AREA_M2(),
-      this.REFLECTIVITY_COEFFICIENT(),
-      this.DRAG_COEFFICIENT(),
-      this.ATMOSPHERE_MODEL(),
-      this.WEATHER() !== null ? this.WEATHER().unpack() : null,
-      this.EPHEMERIS_SOURCE(),
-      this.SOLID_TIDES(),
-      this.RELATIVITY(),
-      this.IN_TRACK_ACCELERATION_M_S2(),
-      this.HAS_IN_TRACK_ACCELERATION_M_S2(),
-      this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S(),
-      this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(),
-      this.MAXIMUM_TESSERAL_DEGREE(),
-      this.HAS_MAXIMUM_TESSERAL_DEGREE(),
-      this.RADIATION_PRESSURE_MODEL(),
-      this.GNSS_BLOCK(),
-      this.ECOM2() !== null ? this.ECOM2().unpack() : null,
-      this.EARTH_RADIATION(),
-      this.EARTH_RADIATION_RESOLUTION_DEG(),
-      this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG(),
-      this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(),
-      this.OCEAN_TIDES(),
-      this.OCEAN_TIDE_MAXIMUM_DEGREE(),
-      this.OCEAN_TIDE_MAXIMUM_ORDER()
-    );
-  }
-  unpackTo(_o) {
-    _o.GRAVITY_CHOICE = this.GRAVITY_CHOICE();
-    _o.ENABLE_POINT_MASS = this.ENABLE_POINT_MASS();
-    _o.GRAVITATIONAL_PARAMETER = this.GRAVITATIONAL_PARAMETER();
-    _o.ENABLE_J2 = this.ENABLE_J2();
-    _o.ENABLE_J3 = this.ENABLE_J3();
-    _o.ENABLE_J4 = this.ENABLE_J4();
-    _o.ENABLE_HIGHER_ZONALS = this.ENABLE_HIGHER_ZONALS();
-    _o.MAXIMUM_DEGREE = this.MAXIMUM_DEGREE();
-    _o.HAS_MAXIMUM_DEGREE = this.HAS_MAXIMUM_DEGREE();
-    _o.MAXIMUM_ORDER = this.MAXIMUM_ORDER();
-    _o.HAS_MAXIMUM_ORDER = this.HAS_MAXIMUM_ORDER();
-    _o.ENABLE_THIRD_BODY = this.ENABLE_THIRD_BODY();
-    _o.THIRD_BODY_IDS = this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength());
-    _o.ENABLE_SRP = this.ENABLE_SRP();
-    _o.ENABLE_DRAG = this.ENABLE_DRAG();
-    _o.INITIAL_MASS_KG = this.INITIAL_MASS_KG();
-    _o.AREA_M2 = this.AREA_M2();
-    _o.REFLECTIVITY_COEFFICIENT = this.REFLECTIVITY_COEFFICIENT();
-    _o.DRAG_COEFFICIENT = this.DRAG_COEFFICIENT();
-    _o.ATMOSPHERE_MODEL = this.ATMOSPHERE_MODEL();
-    _o.WEATHER = this.WEATHER() !== null ? this.WEATHER().unpack() : null;
-    _o.EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE();
-    _o.SOLID_TIDES = this.SOLID_TIDES();
-    _o.RELATIVITY = this.RELATIVITY();
-    _o.IN_TRACK_ACCELERATION_M_S2 = this.IN_TRACK_ACCELERATION_M_S2();
-    _o.HAS_IN_TRACK_ACCELERATION_M_S2 = this.HAS_IN_TRACK_ACCELERATION_M_S2();
-    _o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
-    _o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
-    _o.MAXIMUM_TESSERAL_DEGREE = this.MAXIMUM_TESSERAL_DEGREE();
-    _o.HAS_MAXIMUM_TESSERAL_DEGREE = this.HAS_MAXIMUM_TESSERAL_DEGREE();
-    _o.RADIATION_PRESSURE_MODEL = this.RADIATION_PRESSURE_MODEL();
-    _o.GNSS_BLOCK = this.GNSS_BLOCK();
-    _o.ECOM2 = this.ECOM2() !== null ? this.ECOM2().unpack() : null;
-    _o.EARTH_RADIATION = this.EARTH_RADIATION();
-    _o.EARTH_RADIATION_RESOLUTION_DEG = this.EARTH_RADIATION_RESOLUTION_DEG();
-    _o.EARTH_RADIATION_AREA_OVER_MASS_M2_KG = this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG();
-    _o.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG();
-    _o.OCEAN_TIDES = this.OCEAN_TIDES();
-    _o.OCEAN_TIDE_MAXIMUM_DEGREE = this.OCEAN_TIDE_MAXIMUM_DEGREE();
-    _o.OCEAN_TIDE_MAXIMUM_ORDER = this.OCEAN_TIDE_MAXIMUM_ORDER();
-  }
-};
-var PRWForceConfigurationT = class {
-  constructor(GRAVITY_CHOICE = 0 /* INFER_FLAGS */, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1e3, AREA_M2 = 10, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = 1 /* NRLMSISE00 */, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = 0 /* NONE */, RELATIVITY = 0 /* NONE */, IN_TRACK_ACCELERATION_M_S2 = 0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false, RADIATION_PRESSURE_MODEL = 0 /* CANNONBALL */, GNSS_BLOCK = 0 /* UNSPECIFIED */, ECOM2 = null, EARTH_RADIATION = 0 /* NONE */, EARTH_RADIATION_RESOLUTION_DEG = 15, EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false, OCEAN_TIDES = 0 /* NONE */, OCEAN_TIDE_MAXIMUM_DEGREE = 30, OCEAN_TIDE_MAXIMUM_ORDER = 30) {
-    this.GRAVITY_CHOICE = GRAVITY_CHOICE;
-    this.ENABLE_POINT_MASS = ENABLE_POINT_MASS;
-    this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
-    this.ENABLE_J2 = ENABLE_J2;
-    this.ENABLE_J3 = ENABLE_J3;
-    this.ENABLE_J4 = ENABLE_J4;
-    this.ENABLE_HIGHER_ZONALS = ENABLE_HIGHER_ZONALS;
-    this.MAXIMUM_DEGREE = MAXIMUM_DEGREE;
-    this.HAS_MAXIMUM_DEGREE = HAS_MAXIMUM_DEGREE;
-    this.MAXIMUM_ORDER = MAXIMUM_ORDER;
-    this.HAS_MAXIMUM_ORDER = HAS_MAXIMUM_ORDER;
-    this.ENABLE_THIRD_BODY = ENABLE_THIRD_BODY;
-    this.THIRD_BODY_IDS = THIRD_BODY_IDS;
-    this.ENABLE_SRP = ENABLE_SRP;
-    this.ENABLE_DRAG = ENABLE_DRAG;
-    this.INITIAL_MASS_KG = INITIAL_MASS_KG;
-    this.AREA_M2 = AREA_M2;
-    this.REFLECTIVITY_COEFFICIENT = REFLECTIVITY_COEFFICIENT;
-    this.DRAG_COEFFICIENT = DRAG_COEFFICIENT;
-    this.ATMOSPHERE_MODEL = ATMOSPHERE_MODEL;
-    this.WEATHER = WEATHER;
-    this.EPHEMERIS_SOURCE = EPHEMERIS_SOURCE;
-    this.SOLID_TIDES = SOLID_TIDES;
-    this.RELATIVITY = RELATIVITY;
-    this.IN_TRACK_ACCELERATION_M_S2 = IN_TRACK_ACCELERATION_M_S2;
-    this.HAS_IN_TRACK_ACCELERATION_M_S2 = HAS_IN_TRACK_ACCELERATION_M_S2;
-    this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
-    this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
-    this.MAXIMUM_TESSERAL_DEGREE = MAXIMUM_TESSERAL_DEGREE;
-    this.HAS_MAXIMUM_TESSERAL_DEGREE = HAS_MAXIMUM_TESSERAL_DEGREE;
-    this.RADIATION_PRESSURE_MODEL = RADIATION_PRESSURE_MODEL;
-    this.GNSS_BLOCK = GNSS_BLOCK;
-    this.ECOM2 = ECOM2;
-    this.EARTH_RADIATION = EARTH_RADIATION;
-    this.EARTH_RADIATION_RESOLUTION_DEG = EARTH_RADIATION_RESOLUTION_DEG;
-    this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG = EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
-    this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
-    this.OCEAN_TIDES = OCEAN_TIDES;
-    this.OCEAN_TIDE_MAXIMUM_DEGREE = OCEAN_TIDE_MAXIMUM_DEGREE;
-    this.OCEAN_TIDE_MAXIMUM_ORDER = OCEAN_TIDE_MAXIMUM_ORDER;
-  }
-  pack(builder) {
-    const THIRD_BODY_IDS = PRWForceConfiguration.createThirdBodyIdsVector(builder, this.THIRD_BODY_IDS);
-    const WEATHER = this.WEATHER !== null ? this.WEATHER.pack(builder) : 0;
-    const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
-    const ECOM2 = this.ECOM2 !== null ? this.ECOM2.pack(builder) : 0;
-    PRWForceConfiguration.startPRWForceConfiguration(builder);
-    PRWForceConfiguration.addGravityChoice(builder, this.GRAVITY_CHOICE);
-    PRWForceConfiguration.addEnablePointMass(builder, this.ENABLE_POINT_MASS);
-    PRWForceConfiguration.addGravitationalParameter(builder, this.GRAVITATIONAL_PARAMETER);
-    PRWForceConfiguration.addEnableJ2(builder, this.ENABLE_J2);
-    PRWForceConfiguration.addEnableJ3(builder, this.ENABLE_J3);
-    PRWForceConfiguration.addEnableJ4(builder, this.ENABLE_J4);
-    PRWForceConfiguration.addEnableHigherZonals(builder, this.ENABLE_HIGHER_ZONALS);
-    PRWForceConfiguration.addMaximumDegree(builder, this.MAXIMUM_DEGREE);
-    PRWForceConfiguration.addHasMaximumDegree(builder, this.HAS_MAXIMUM_DEGREE);
-    PRWForceConfiguration.addMaximumOrder(builder, this.MAXIMUM_ORDER);
-    PRWForceConfiguration.addHasMaximumOrder(builder, this.HAS_MAXIMUM_ORDER);
-    PRWForceConfiguration.addEnableThirdBody(builder, this.ENABLE_THIRD_BODY);
-    PRWForceConfiguration.addThirdBodyIds(builder, THIRD_BODY_IDS);
-    PRWForceConfiguration.addEnableSrp(builder, this.ENABLE_SRP);
-    PRWForceConfiguration.addEnableDrag(builder, this.ENABLE_DRAG);
-    PRWForceConfiguration.addInitialMassKg(builder, this.INITIAL_MASS_KG);
-    PRWForceConfiguration.addAreaM2(builder, this.AREA_M2);
-    PRWForceConfiguration.addReflectivityCoefficient(builder, this.REFLECTIVITY_COEFFICIENT);
-    PRWForceConfiguration.addDragCoefficient(builder, this.DRAG_COEFFICIENT);
-    PRWForceConfiguration.addAtmosphereModel(builder, this.ATMOSPHERE_MODEL);
-    PRWForceConfiguration.addWeather(builder, WEATHER);
-    PRWForceConfiguration.addEphemerisSource(builder, EPHEMERIS_SOURCE);
-    PRWForceConfiguration.addSolidTides(builder, this.SOLID_TIDES);
-    PRWForceConfiguration.addRelativity(builder, this.RELATIVITY);
-    PRWForceConfiguration.addInTrackAccelerationMS2(builder, this.IN_TRACK_ACCELERATION_M_S2);
-    PRWForceConfiguration.addHasInTrackAccelerationMS2(builder, this.HAS_IN_TRACK_ACCELERATION_M_S2);
-    PRWForceConfiguration.addDragAreaOverMassRateM2KgS(builder, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
-    PRWForceConfiguration.addHasDragAreaOverMassRateM2KgS(builder, this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
-    PRWForceConfiguration.addMaximumTesseralDegree(builder, this.MAXIMUM_TESSERAL_DEGREE);
-    PRWForceConfiguration.addHasMaximumTesseralDegree(builder, this.HAS_MAXIMUM_TESSERAL_DEGREE);
-    PRWForceConfiguration.addRadiationPressureModel(builder, this.RADIATION_PRESSURE_MODEL);
-    PRWForceConfiguration.addGnssBlock(builder, this.GNSS_BLOCK);
-    PRWForceConfiguration.addEcom2(builder, ECOM2);
-    PRWForceConfiguration.addEarthRadiation(builder, this.EARTH_RADIATION);
-    PRWForceConfiguration.addEarthRadiationResolutionDeg(builder, this.EARTH_RADIATION_RESOLUTION_DEG);
-    PRWForceConfiguration.addEarthRadiationAreaOverMassM2Kg(builder, this.EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
-    PRWForceConfiguration.addHasEarthRadiationAreaOverMassM2Kg(builder, this.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
-    PRWForceConfiguration.addOceanTides(builder, this.OCEAN_TIDES);
-    PRWForceConfiguration.addOceanTideMaximumDegree(builder, this.OCEAN_TIDE_MAXIMUM_DEGREE);
-    PRWForceConfiguration.addOceanTideMaximumOrder(builder, this.OCEAN_TIDE_MAXIMUM_ORDER);
-    return PRWForceConfiguration.endPRWForceConfiguration(builder);
-  }
-};
-
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWImpulse.ts
-import * as flatbuffers79 from "flatbuffers";
+import * as flatbuffers105 from "flatbuffers";
 var PRWImpulse = class _PRWImpulse {
   bb = null;
   bb_pos = 0;
@@ -16006,7 +20923,7 @@ var PRWImpulse = class _PRWImpulse {
     return (obj || new _PRWImpulse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWImpulse(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers79.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers105.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWImpulse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH(obj) {
@@ -16069,176 +20986,6 @@ var PRWImpulseT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWIntegratorSettings.ts
-import * as flatbuffers80 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/prwSolverAlgorithm.ts
-var prwSolverAlgorithm = /* @__PURE__ */ ((prwSolverAlgorithm2) => {
-  prwSolverAlgorithm2[prwSolverAlgorithm2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["RK4"] = 1] = "RK4";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["RKF45"] = 2] = "RKF45";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["RKF78"] = 3] = "RKF78";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["RK78"] = 4] = "RK78";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["RKDP87"] = 5] = "RKDP87";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["ABM"] = 6] = "ABM";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["BS"] = 7] = "BS";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["COWELL"] = 8] = "COWELL";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["ENCKE"] = 9] = "ENCKE";
-  prwSolverAlgorithm2[prwSolverAlgorithm2["EQUINOCTIAL_VOP"] = 10] = "EQUINOCTIAL_VOP";
-  return prwSolverAlgorithm2;
-})(prwSolverAlgorithm || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PRWIntegratorSettings.ts
-var PRWIntegratorSettings = class _PRWIntegratorSettings {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPRWIntegratorSettings(bb, obj) {
-    return (obj || new _PRWIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPRWIntegratorSettings(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers80.SIZE_PREFIX_LENGTH);
-    return (obj || new _PRWIntegratorSettings()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  ALGORITHM() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
-  }
-  INITIAL_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 60;
-  }
-  MINIMUM_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
-  }
-  MAXIMUM_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 3600;
-  }
-  /**
-   * Six or seven positive tolerances, respectively m, m/s and optional kg.
-   */
-  ABSOLUTE_TOLERANCES(index) {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb.__vector(this.bb_pos + offset) + index * 8) : 0;
-  }
-  absoluteTolerancesLength() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  absoluteTolerancesArray() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return new Float64Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset));
-  }
-  RELATIVE_TOLERANCE() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1e-12;
-  }
-  MAXIMUM_STEPS() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readUint32(this.bb_pos + offset) : 1e5;
-  }
-  static startPRWIntegratorSettings(builder) {
-    builder.startObject(7);
-  }
-  static addAlgorithm(builder, ALGORITHM) {
-    builder.addFieldInt8(0, ALGORITHM, 0 /* UNSPECIFIED */);
-  }
-  static addInitialStepSeconds(builder, INITIAL_STEP_SECONDS) {
-    builder.addFieldFloat64(1, INITIAL_STEP_SECONDS, 60);
-  }
-  static addMinimumStepSeconds(builder, MINIMUM_STEP_SECONDS) {
-    builder.addFieldFloat64(2, MINIMUM_STEP_SECONDS, 1);
-  }
-  static addMaximumStepSeconds(builder, MAXIMUM_STEP_SECONDS) {
-    builder.addFieldFloat64(3, MAXIMUM_STEP_SECONDS, 3600);
-  }
-  static addAbsoluteTolerances(builder, ABSOLUTE_TOLERANCESOffset) {
-    builder.addFieldOffset(4, ABSOLUTE_TOLERANCESOffset, 0);
-  }
-  static createAbsoluteTolerancesVector(builder, data) {
-    builder.startVector(8, data.length, 8);
-    for (let i = data.length - 1; i >= 0; i--) {
-      builder.addFloat64(data[i]);
-    }
-    return builder.endVector();
-  }
-  static startAbsoluteTolerancesVector(builder, numElems) {
-    builder.startVector(8, numElems, 8);
-  }
-  static addRelativeTolerance(builder, RELATIVE_TOLERANCE) {
-    builder.addFieldFloat64(5, RELATIVE_TOLERANCE, 1e-12);
-  }
-  static addMaximumSteps(builder, MAXIMUM_STEPS) {
-    builder.addFieldInt32(6, MAXIMUM_STEPS, 1e5);
-  }
-  static endPRWIntegratorSettings(builder) {
-    const offset = builder.endObject();
-    builder.requiredField(offset, 12);
-    return offset;
-  }
-  static createPRWIntegratorSettings(builder, ALGORITHM, INITIAL_STEP_SECONDS, MINIMUM_STEP_SECONDS, MAXIMUM_STEP_SECONDS, ABSOLUTE_TOLERANCESOffset, RELATIVE_TOLERANCE, MAXIMUM_STEPS) {
-    _PRWIntegratorSettings.startPRWIntegratorSettings(builder);
-    _PRWIntegratorSettings.addAlgorithm(builder, ALGORITHM);
-    _PRWIntegratorSettings.addInitialStepSeconds(builder, INITIAL_STEP_SECONDS);
-    _PRWIntegratorSettings.addMinimumStepSeconds(builder, MINIMUM_STEP_SECONDS);
-    _PRWIntegratorSettings.addMaximumStepSeconds(builder, MAXIMUM_STEP_SECONDS);
-    _PRWIntegratorSettings.addAbsoluteTolerances(builder, ABSOLUTE_TOLERANCESOffset);
-    _PRWIntegratorSettings.addRelativeTolerance(builder, RELATIVE_TOLERANCE);
-    _PRWIntegratorSettings.addMaximumSteps(builder, MAXIMUM_STEPS);
-    return _PRWIntegratorSettings.endPRWIntegratorSettings(builder);
-  }
-  unpack() {
-    return new PRWIntegratorSettingsT(
-      this.ALGORITHM(),
-      this.INITIAL_STEP_SECONDS(),
-      this.MINIMUM_STEP_SECONDS(),
-      this.MAXIMUM_STEP_SECONDS(),
-      this.bb.createScalarList(this.ABSOLUTE_TOLERANCES.bind(this), this.absoluteTolerancesLength()),
-      this.RELATIVE_TOLERANCE(),
-      this.MAXIMUM_STEPS()
-    );
-  }
-  unpackTo(_o) {
-    _o.ALGORITHM = this.ALGORITHM();
-    _o.INITIAL_STEP_SECONDS = this.INITIAL_STEP_SECONDS();
-    _o.MINIMUM_STEP_SECONDS = this.MINIMUM_STEP_SECONDS();
-    _o.MAXIMUM_STEP_SECONDS = this.MAXIMUM_STEP_SECONDS();
-    _o.ABSOLUTE_TOLERANCES = this.bb.createScalarList(this.ABSOLUTE_TOLERANCES.bind(this), this.absoluteTolerancesLength());
-    _o.RELATIVE_TOLERANCE = this.RELATIVE_TOLERANCE();
-    _o.MAXIMUM_STEPS = this.MAXIMUM_STEPS();
-  }
-};
-var PRWIntegratorSettingsT = class {
-  constructor(ALGORITHM = 0 /* UNSPECIFIED */, INITIAL_STEP_SECONDS = 60, MINIMUM_STEP_SECONDS = 1, MAXIMUM_STEP_SECONDS = 3600, ABSOLUTE_TOLERANCES = [], RELATIVE_TOLERANCE = 1e-12, MAXIMUM_STEPS = 1e5) {
-    this.ALGORITHM = ALGORITHM;
-    this.INITIAL_STEP_SECONDS = INITIAL_STEP_SECONDS;
-    this.MINIMUM_STEP_SECONDS = MINIMUM_STEP_SECONDS;
-    this.MAXIMUM_STEP_SECONDS = MAXIMUM_STEP_SECONDS;
-    this.ABSOLUTE_TOLERANCES = ABSOLUTE_TOLERANCES;
-    this.RELATIVE_TOLERANCE = RELATIVE_TOLERANCE;
-    this.MAXIMUM_STEPS = MAXIMUM_STEPS;
-  }
-  pack(builder) {
-    const ABSOLUTE_TOLERANCES = PRWIntegratorSettings.createAbsoluteTolerancesVector(builder, this.ABSOLUTE_TOLERANCES);
-    return PRWIntegratorSettings.createPRWIntegratorSettings(
-      builder,
-      this.ALGORITHM,
-      this.INITIAL_STEP_SECONDS,
-      this.MINIMUM_STEP_SECONDS,
-      this.MAXIMUM_STEP_SECONDS,
-      ABSOLUTE_TOLERANCES,
-      this.RELATIVE_TOLERANCE,
-      this.MAXIMUM_STEPS
-    );
-  }
-};
-
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwDensityTreatment.ts
 var prwDensityTreatment = /* @__PURE__ */ ((prwDensityTreatment2) => {
   prwDensityTreatment2[prwDensityTreatment2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
@@ -16268,7 +21015,7 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
     return (obj || new _PRWExecutionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWExecutionRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers81.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers106.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWExecutionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INITIAL(obj) {
@@ -16281,11 +21028,11 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
   }
   INTEGRATOR(obj) {
     const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? (obj || new PRWIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    return offset ? (obj || new PCFIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   FORCES(obj) {
     const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? (obj || new PRWForceConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    return offset ? (obj || new PCFForceModel()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   INCLUDE_STM() {
     const offset = this.bb.__offset(this.bb_pos, 12);
@@ -16363,8 +21110,22 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
     const offset = this.bb.__offset(this.bb_pos, 32);
     return offset ? new Uint8Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
   }
+  /**
+   * Events located inside the integration (PCFEventDefinition, shared with $PCF).
+   * They apply to a plain state propagation (no STM, covariance, samples, impulses
+   * or burns) by an integrator with a continuous extension; any other request that
+   * names events is refused. Default empty.
+   */
+  EVENTS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? (obj || new PCFEventDefinition()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  eventsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
   static startPRWExecutionRequest(builder) {
-    builder.startObject(15);
+    builder.startObject(16);
   }
   static addInitial(builder, INITIALOffset) {
     builder.addFieldOffset(0, INITIALOffset, 0);
@@ -16451,6 +21212,19 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
   static startDynamicParametersVector(builder, numElems) {
     builder.startVector(1, numElems, 1);
   }
+  static addEvents(builder, EVENTSOffset) {
+    builder.addFieldOffset(15, EVENTSOffset, 0);
+  }
+  static createEventsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startEventsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
   static endPRWExecutionRequest(builder) {
     const offset = builder.endObject();
     builder.requiredField(offset, 4);
@@ -16475,7 +21249,8 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
       this.INCLUDE_MASS_DYNAMICS(),
       this.bb.createObjList(this.FINITE_BURNS.bind(this), this.finiteBurnsLength()),
       this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null,
-      this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength())
+      this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength()),
+      this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength())
     );
   }
   unpackTo(_o) {
@@ -16494,10 +21269,11 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
     _o.FINITE_BURNS = this.bb.createObjList(this.FINITE_BURNS.bind(this), this.finiteBurnsLength());
     _o.PROCESS_NOISE = this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null;
     _o.DYNAMIC_PARAMETERS = this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength());
+    _o.EVENTS = this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength());
   }
 };
 var PRWExecutionRequestT = class {
-  constructor(INITIAL = null, TARGET_EPOCH = null, INTEGRATOR = null, FORCES = null, INCLUDE_STM = false, STM_TECHNIQUE = 1 /* ANALYTIC */, DENSITY_TREATMENT = 1 /* NEGLECTED */, INITIAL_COVARIANCE = null, INITIAL_MASS_COVARIANCE = null, SAMPLE_EPOCHS = [], IMPULSES = [], INCLUDE_MASS_DYNAMICS = false, FINITE_BURNS = [], PROCESS_NOISE = null, DYNAMIC_PARAMETERS = []) {
+  constructor(INITIAL = null, TARGET_EPOCH = null, INTEGRATOR = null, FORCES = null, INCLUDE_STM = false, STM_TECHNIQUE = 1 /* ANALYTIC */, DENSITY_TREATMENT = 1 /* NEGLECTED */, INITIAL_COVARIANCE = null, INITIAL_MASS_COVARIANCE = null, SAMPLE_EPOCHS = [], IMPULSES = [], INCLUDE_MASS_DYNAMICS = false, FINITE_BURNS = [], PROCESS_NOISE = null, DYNAMIC_PARAMETERS = [], EVENTS = []) {
     this.INITIAL = INITIAL;
     this.TARGET_EPOCH = TARGET_EPOCH;
     this.INTEGRATOR = INTEGRATOR;
@@ -16513,6 +21289,7 @@ var PRWExecutionRequestT = class {
     this.FINITE_BURNS = FINITE_BURNS;
     this.PROCESS_NOISE = PROCESS_NOISE;
     this.DYNAMIC_PARAMETERS = DYNAMIC_PARAMETERS;
+    this.EVENTS = EVENTS;
   }
   pack(builder) {
     const INITIAL = this.INITIAL !== null ? this.INITIAL.pack(builder) : 0;
@@ -16526,6 +21303,7 @@ var PRWExecutionRequestT = class {
     const FINITE_BURNS = PRWExecutionRequest.createFiniteBurnsVector(builder, builder.createObjectOffsetList(this.FINITE_BURNS));
     const PROCESS_NOISE = this.PROCESS_NOISE !== null ? this.PROCESS_NOISE.pack(builder) : 0;
     const DYNAMIC_PARAMETERS = PRWExecutionRequest.createDynamicParametersVector(builder, this.DYNAMIC_PARAMETERS);
+    const EVENTS = PRWExecutionRequest.createEventsVector(builder, builder.createObjectOffsetList(this.EVENTS));
     PRWExecutionRequest.startPRWExecutionRequest(builder);
     PRWExecutionRequest.addInitial(builder, INITIAL);
     PRWExecutionRequest.addTargetEpoch(builder, TARGET_EPOCH);
@@ -16542,18 +21320,175 @@ var PRWExecutionRequestT = class {
     PRWExecutionRequest.addFiniteBurns(builder, FINITE_BURNS);
     PRWExecutionRequest.addProcessNoise(builder, PROCESS_NOISE);
     PRWExecutionRequest.addDynamicParameters(builder, DYNAMIC_PARAMETERS);
+    PRWExecutionRequest.addEvents(builder, EVENTS);
     return PRWExecutionRequest.endPRWExecutionRequest(builder);
   }
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
-import * as flatbuffers84 from "flatbuffers";
+import * as flatbuffers110 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PRWEventRecord.ts
+import * as flatbuffers107 from "flatbuffers";
+var PRWEventRecord = class _PRWEventRecord {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPRWEventRecord(bb, obj) {
+    return (obj || new _PRWEventRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPRWEventRecord(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers107.SIZE_PREFIX_LENGTH);
+    return (obj || new _PRWEventRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Index into the request's EVENTS.
+   */
+  EVENT_INDEX() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * The event function that crossed zero.
+   */
+  KIND() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* UNSPECIFIED */;
+  }
+  /**
+   * The way g crossed zero: INCREASING or DECREASING.
+   */
+  DIRECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* ANY */;
+  }
+  /**
+   * Epoch of the crossing.
+   */
+  EPOCH(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? (obj || new TIMInstant()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * Seconds from the request's initial epoch, negative for a backward propagation.
+   */
+  ELAPSED_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * The state at EPOCH in the request's axes.
+   */
+  STATE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? (obj || new PRWResidentState()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
+  /**
+   * g at EPOCH.
+   */
+  RESIDUAL() {
+    const offset = this.bb.__offset(this.bb_pos, 16);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Refinement steps taken.
+   */
+  ITERATIONS() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  static startPRWEventRecord(builder) {
+    builder.startObject(8);
+  }
+  static addEventIndex(builder, EVENT_INDEX) {
+    builder.addFieldInt32(0, EVENT_INDEX, 0);
+  }
+  static addKind(builder, KIND) {
+    builder.addFieldInt8(1, KIND, 0 /* UNSPECIFIED */);
+  }
+  static addDirection(builder, DIRECTION) {
+    builder.addFieldInt8(2, DIRECTION, 0 /* ANY */);
+  }
+  static addEpoch(builder, EPOCHOffset) {
+    builder.addFieldOffset(3, EPOCHOffset, 0);
+  }
+  static addElapsedSeconds(builder, ELAPSED_SECONDS) {
+    builder.addFieldFloat64(4, ELAPSED_SECONDS, 0);
+  }
+  static addState(builder, STATEOffset) {
+    builder.addFieldOffset(5, STATEOffset, 0);
+  }
+  static addResidual(builder, RESIDUAL) {
+    builder.addFieldFloat64(6, RESIDUAL, 0);
+  }
+  static addIterations(builder, ITERATIONS) {
+    builder.addFieldInt32(7, ITERATIONS, 0);
+  }
+  static endPRWEventRecord(builder) {
+    const offset = builder.endObject();
+    builder.requiredField(offset, 10);
+    builder.requiredField(offset, 14);
+    return offset;
+  }
+  unpack() {
+    return new PRWEventRecordT(
+      this.EVENT_INDEX(),
+      this.KIND(),
+      this.DIRECTION(),
+      this.EPOCH() !== null ? this.EPOCH().unpack() : null,
+      this.ELAPSED_SECONDS(),
+      this.STATE() !== null ? this.STATE().unpack() : null,
+      this.RESIDUAL(),
+      this.ITERATIONS()
+    );
+  }
+  unpackTo(_o) {
+    _o.EVENT_INDEX = this.EVENT_INDEX();
+    _o.KIND = this.KIND();
+    _o.DIRECTION = this.DIRECTION();
+    _o.EPOCH = this.EPOCH() !== null ? this.EPOCH().unpack() : null;
+    _o.ELAPSED_SECONDS = this.ELAPSED_SECONDS();
+    _o.STATE = this.STATE() !== null ? this.STATE().unpack() : null;
+    _o.RESIDUAL = this.RESIDUAL();
+    _o.ITERATIONS = this.ITERATIONS();
+  }
+};
+var PRWEventRecordT = class {
+  constructor(EVENT_INDEX = 0, KIND = 0 /* UNSPECIFIED */, DIRECTION = 0 /* ANY */, EPOCH = null, ELAPSED_SECONDS = 0, STATE = null, RESIDUAL = 0, ITERATIONS = 0) {
+    this.EVENT_INDEX = EVENT_INDEX;
+    this.KIND = KIND;
+    this.DIRECTION = DIRECTION;
+    this.EPOCH = EPOCH;
+    this.ELAPSED_SECONDS = ELAPSED_SECONDS;
+    this.STATE = STATE;
+    this.RESIDUAL = RESIDUAL;
+    this.ITERATIONS = ITERATIONS;
+  }
+  pack(builder) {
+    const EPOCH = this.EPOCH !== null ? this.EPOCH.pack(builder) : 0;
+    const STATE = this.STATE !== null ? this.STATE.pack(builder) : 0;
+    PRWEventRecord.startPRWEventRecord(builder);
+    PRWEventRecord.addEventIndex(builder, this.EVENT_INDEX);
+    PRWEventRecord.addKind(builder, this.KIND);
+    PRWEventRecord.addDirection(builder, this.DIRECTION);
+    PRWEventRecord.addEpoch(builder, EPOCH);
+    PRWEventRecord.addElapsedSeconds(builder, this.ELAPSED_SECONDS);
+    PRWEventRecord.addState(builder, STATE);
+    PRWEventRecord.addResidual(builder, this.RESIDUAL);
+    PRWEventRecord.addIterations(builder, this.ITERATIONS);
+    return PRWEventRecord.endPRWEventRecord(builder);
+  }
+};
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
-import * as flatbuffers83 from "flatbuffers";
+import * as flatbuffers109 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnReport.ts
-import * as flatbuffers82 from "flatbuffers";
+import * as flatbuffers108 from "flatbuffers";
 var PRWBurnReport = class _PRWBurnReport {
   bb = null;
   bb_pos = 0;
@@ -16566,7 +21501,7 @@ var PRWBurnReport = class _PRWBurnReport {
     return (obj || new _PRWBurnReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBurnReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers82.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers108.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBurnReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   BURN_INDEX() {
@@ -16759,7 +21694,7 @@ var PRWPropagationSample = class _PRWPropagationSample {
     return (obj || new _PRWPropagationSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWPropagationSample(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers83.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers109.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWPropagationSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATE(obj) {
@@ -16925,7 +21860,7 @@ var PRWExecutionResult = class _PRWExecutionResult {
     return (obj || new _PRWExecutionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWExecutionResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers84.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers110.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWExecutionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   FINAL_SAMPLE(obj) {
@@ -16971,8 +21906,41 @@ var PRWExecutionResult = class _PRWExecutionResult {
     const offset = this.bb.__offset(this.bb_pos, 16);
     return offset ? new Uint8Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
   }
+  /**
+   * The located events with ACTION RECORD or STOP, in time order of propagation.
+   */
+  EVENTS(index, obj) {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? (obj || new PRWEventRecord()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+  }
+  eventsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 18);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Per request EVENTS entry, the qualifying crossings the propagation passed.
+   */
+  EVENT_OCCURRENCES(index) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.readUint32(this.bb.__vector(this.bb_pos + offset) + index * 4) : 0;
+  }
+  eventOccurrencesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  eventOccurrencesArray() {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? new Uint32Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  /**
+   * Index of the request EVENTS entry that ended the propagation, or -1. Default -1.
+   */
+  STOPPED_BY_EVENT() {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.readInt32(this.bb_pos + offset) : -1;
+  }
   static startPRWExecutionResult(builder) {
-    builder.startObject(7);
+    builder.startObject(10);
   }
   static addFinalSample(builder, FINAL_SAMPLEOffset) {
     builder.addFieldOffset(0, FINAL_SAMPLEOffset, 0);
@@ -17015,13 +21983,42 @@ var PRWExecutionResult = class _PRWExecutionResult {
   static startDynamicParametersVector(builder, numElems) {
     builder.startVector(1, numElems, 1);
   }
+  static addEvents(builder, EVENTSOffset) {
+    builder.addFieldOffset(7, EVENTSOffset, 0);
+  }
+  static createEventsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startEventsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addEventOccurrences(builder, EVENT_OCCURRENCESOffset) {
+    builder.addFieldOffset(8, EVENT_OCCURRENCESOffset, 0);
+  }
+  static createEventOccurrencesVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt32(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startEventOccurrencesVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addStoppedByEvent(builder, STOPPED_BY_EVENT) {
+    builder.addFieldInt32(9, STOPPED_BY_EVENT, -1);
+  }
   static endPRWExecutionResult(builder) {
     const offset = builder.endObject();
     builder.requiredField(offset, 4);
     builder.requiredField(offset, 10);
     return offset;
   }
-  static createPRWExecutionResult(builder, FINAL_SAMPLEOffset, SAMPLESOffset, ELAPSED_SECONDS, EPHEMERIS_SOURCEOffset, STM_TECHNIQUE, DENSITY_TREATMENT, DYNAMIC_PARAMETERSOffset) {
+  static createPRWExecutionResult(builder, FINAL_SAMPLEOffset, SAMPLESOffset, ELAPSED_SECONDS, EPHEMERIS_SOURCEOffset, STM_TECHNIQUE, DENSITY_TREATMENT, DYNAMIC_PARAMETERSOffset, EVENTSOffset, EVENT_OCCURRENCESOffset, STOPPED_BY_EVENT) {
     _PRWExecutionResult.startPRWExecutionResult(builder);
     _PRWExecutionResult.addFinalSample(builder, FINAL_SAMPLEOffset);
     _PRWExecutionResult.addSamples(builder, SAMPLESOffset);
@@ -17030,6 +22027,9 @@ var PRWExecutionResult = class _PRWExecutionResult {
     _PRWExecutionResult.addStmTechnique(builder, STM_TECHNIQUE);
     _PRWExecutionResult.addDensityTreatment(builder, DENSITY_TREATMENT);
     _PRWExecutionResult.addDynamicParameters(builder, DYNAMIC_PARAMETERSOffset);
+    _PRWExecutionResult.addEvents(builder, EVENTSOffset);
+    _PRWExecutionResult.addEventOccurrences(builder, EVENT_OCCURRENCESOffset);
+    _PRWExecutionResult.addStoppedByEvent(builder, STOPPED_BY_EVENT);
     return _PRWExecutionResult.endPRWExecutionResult(builder);
   }
   unpack() {
@@ -17040,7 +22040,10 @@ var PRWExecutionResult = class _PRWExecutionResult {
       this.EPHEMERIS_SOURCE(),
       this.STM_TECHNIQUE(),
       this.DENSITY_TREATMENT(),
-      this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength())
+      this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength()),
+      this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength()),
+      this.bb.createScalarList(this.EVENT_OCCURRENCES.bind(this), this.eventOccurrencesLength()),
+      this.STOPPED_BY_EVENT()
     );
   }
   unpackTo(_o) {
@@ -17051,10 +22054,13 @@ var PRWExecutionResult = class _PRWExecutionResult {
     _o.STM_TECHNIQUE = this.STM_TECHNIQUE();
     _o.DENSITY_TREATMENT = this.DENSITY_TREATMENT();
     _o.DYNAMIC_PARAMETERS = this.bb.createScalarList(this.DYNAMIC_PARAMETERS.bind(this), this.dynamicParametersLength());
+    _o.EVENTS = this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength());
+    _o.EVENT_OCCURRENCES = this.bb.createScalarList(this.EVENT_OCCURRENCES.bind(this), this.eventOccurrencesLength());
+    _o.STOPPED_BY_EVENT = this.STOPPED_BY_EVENT();
   }
 };
 var PRWExecutionResultT = class {
-  constructor(FINAL_SAMPLE = null, SAMPLES = [], ELAPSED_SECONDS = 0, EPHEMERIS_SOURCE = null, STM_TECHNIQUE = 0 /* UNSPECIFIED */, DENSITY_TREATMENT = 0 /* UNSPECIFIED */, DYNAMIC_PARAMETERS = []) {
+  constructor(FINAL_SAMPLE = null, SAMPLES = [], ELAPSED_SECONDS = 0, EPHEMERIS_SOURCE = null, STM_TECHNIQUE = 0 /* UNSPECIFIED */, DENSITY_TREATMENT = 0 /* UNSPECIFIED */, DYNAMIC_PARAMETERS = [], EVENTS = [], EVENT_OCCURRENCES = [], STOPPED_BY_EVENT = -1) {
     this.FINAL_SAMPLE = FINAL_SAMPLE;
     this.SAMPLES = SAMPLES;
     this.ELAPSED_SECONDS = ELAPSED_SECONDS;
@@ -17062,12 +22068,17 @@ var PRWExecutionResultT = class {
     this.STM_TECHNIQUE = STM_TECHNIQUE;
     this.DENSITY_TREATMENT = DENSITY_TREATMENT;
     this.DYNAMIC_PARAMETERS = DYNAMIC_PARAMETERS;
+    this.EVENTS = EVENTS;
+    this.EVENT_OCCURRENCES = EVENT_OCCURRENCES;
+    this.STOPPED_BY_EVENT = STOPPED_BY_EVENT;
   }
   pack(builder) {
     const FINAL_SAMPLE = this.FINAL_SAMPLE !== null ? this.FINAL_SAMPLE.pack(builder) : 0;
     const SAMPLES = PRWExecutionResult.createSamplesVector(builder, builder.createObjectOffsetList(this.SAMPLES));
     const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
     const DYNAMIC_PARAMETERS = PRWExecutionResult.createDynamicParametersVector(builder, this.DYNAMIC_PARAMETERS);
+    const EVENTS = PRWExecutionResult.createEventsVector(builder, builder.createObjectOffsetList(this.EVENTS));
+    const EVENT_OCCURRENCES = PRWExecutionResult.createEventOccurrencesVector(builder, this.EVENT_OCCURRENCES);
     return PRWExecutionResult.createPRWExecutionResult(
       builder,
       FINAL_SAMPLE,
@@ -17076,19 +22087,22 @@ var PRWExecutionResultT = class {
       EPHEMERIS_SOURCE,
       this.STM_TECHNIQUE,
       this.DENSITY_TREATMENT,
-      DYNAMIC_PARAMETERS
+      DYNAMIC_PARAMETERS,
+      EVENTS,
+      EVENT_OCCURRENCES,
+      this.STOPPED_BY_EVENT
     );
   }
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
-import * as flatbuffers88 from "flatbuffers";
+import * as flatbuffers114 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
-import * as flatbuffers87 from "flatbuffers";
+import * as flatbuffers113 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWKeplerianElements.ts
-import * as flatbuffers85 from "flatbuffers";
+import * as flatbuffers111 from "flatbuffers";
 var PRWKeplerianElements = class _PRWKeplerianElements {
   bb = null;
   bb_pos = 0;
@@ -17101,7 +22115,7 @@ var PRWKeplerianElements = class _PRWKeplerianElements {
     return (obj || new _PRWKeplerianElements()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWKeplerianElements(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers85.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers111.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWKeplerianElements()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -17253,7 +22267,7 @@ var PRWKeplerianElementsT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWTleLines.ts
-import * as flatbuffers86 from "flatbuffers";
+import * as flatbuffers112 from "flatbuffers";
 var PRWTleLines = class _PRWTleLines {
   bb = null;
   bb_pos = 0;
@@ -17266,7 +22280,7 @@ var PRWTleLines = class _PRWTleLines {
     return (obj || new _PRWTleLines()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWTleLines(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers86.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers112.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWTleLines()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   LINE1(optionalEncoding) {
@@ -17375,7 +22389,7 @@ var PRWInitSource = class _PRWInitSource {
     return (obj || new _PRWInitSource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWInitSource(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers87.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers113.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWInitSource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -17503,7 +22517,7 @@ var PRWInit = class _PRWInit {
     return (obj || new _PRWInit()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWInit(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers88.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers114.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWInit()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -17599,10 +22613,10 @@ var PRWInitT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
-import * as flatbuffers90 from "flatbuffers";
+import * as flatbuffers116 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008Indices.ts
-import * as flatbuffers89 from "flatbuffers";
+import * as flatbuffers115 from "flatbuffers";
 var PRWJB2008Indices = class _PRWJB2008Indices {
   bb = null;
   bb_pos = 0;
@@ -17615,7 +22629,7 @@ var PRWJB2008Indices = class _PRWJB2008Indices {
     return (obj || new _PRWJB2008Indices()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWJB2008Indices(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers89.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers115.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWJB2008Indices()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   DATE(optionalEncoding) {
@@ -17816,7 +22830,7 @@ var PRWJB2008IndicesTable = class _PRWJB2008IndicesTable {
     return (obj || new _PRWJB2008IndicesTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWJB2008IndicesTable(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers90.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers116.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWJB2008IndicesTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ROWS(index, obj) {
@@ -17876,7 +22890,7 @@ var PRWJB2008IndicesTableT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWNativeInput.ts
-import * as flatbuffers91 from "flatbuffers";
+import * as flatbuffers117 from "flatbuffers";
 var PRWNativeInput = class _PRWNativeInput {
   bb = null;
   bb_pos = 0;
@@ -17889,7 +22903,7 @@ var PRWNativeInput = class _PRWNativeInput {
     return (obj || new _PRWNativeInput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWNativeInput(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers91.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers117.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWNativeInput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   DESCRIPTOR(obj) {
@@ -17970,7 +22984,7 @@ var PRWNativeInputT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareRequest.ts
-import * as flatbuffers92 from "flatbuffers";
+import * as flatbuffers118 from "flatbuffers";
 var PRWPrepareRequest = class _PRWPrepareRequest {
   bb = null;
   bb_pos = 0;
@@ -17983,7 +22997,7 @@ var PRWPrepareRequest = class _PRWPrepareRequest {
     return (obj || new _PRWPrepareRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWPrepareRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers92.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers118.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWPrepareRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -18100,7 +23114,7 @@ var PRWPrepareRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareResult.ts
-import * as flatbuffers93 from "flatbuffers";
+import * as flatbuffers119 from "flatbuffers";
 var PRWPrepareResult = class _PRWPrepareResult {
   bb = null;
   bb_pos = 0;
@@ -18113,7 +23127,7 @@ var PRWPrepareResult = class _PRWPrepareResult {
     return (obj || new _PRWPrepareResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWPrepareResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers93.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers119.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWPrepareResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -18188,7 +23202,7 @@ var PRWPrepareResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentRequest.ts
-import * as flatbuffers94 from "flatbuffers";
+import * as flatbuffers120 from "flatbuffers";
 var PRWResidentRequest = class _PRWResidentRequest {
   bb = null;
   bb_pos = 0;
@@ -18201,7 +23215,7 @@ var PRWResidentRequest = class _PRWResidentRequest {
     return (obj || new _PRWResidentRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWResidentRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers94.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers120.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWResidentRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -18308,10 +23322,10 @@ var PRWResidentRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
-import * as flatbuffers96 from "flatbuffers";
+import * as flatbuffers122 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SPW.ts
-import * as flatbuffers95 from "flatbuffers";
+import * as flatbuffers121 from "flatbuffers";
 var SPW = class _SPW {
   bb = null;
   bb_pos = 0;
@@ -18324,7 +23338,7 @@ var SPW = class _SPW {
     return (obj || new _SPW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsSPW(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers95.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers121.SIZE_PREFIX_LENGTH);
     return (obj || new _SPW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -18544,8 +23558,15 @@ var SPW = class _SPW {
     const offset = this.bb.__offset(this.bb_pos, 64);
     return offset ? this.bb.readFloat32(this.bb_pos + offset) : 0;
   }
+  /**
+   * Per-record source, provider, software, license terms and lineage.
+   */
+  PROVENANCE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 66);
+    return offset ? (obj || new PVN()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
   static startSPW(builder) {
-    builder.startObject(31);
+    builder.startObject(32);
   }
   static addDate(builder, DATEOffset) {
     builder.addFieldOffset(0, DATEOffset, 0);
@@ -18640,6 +23661,9 @@ var SPW = class _SPW {
   static addF107AdjLast81(builder, F107_ADJ_LAST81) {
     builder.addFieldFloat32(30, F107_ADJ_LAST81, 0);
   }
+  static addProvenance(builder, PROVENANCEOffset) {
+    builder.addFieldOffset(31, PROVENANCEOffset, 0);
+  }
   static endSPW(builder) {
     const offset = builder.endObject();
     return offset;
@@ -18649,41 +23673,6 @@ var SPW = class _SPW {
   }
   static finishSizePrefixedSPWBuffer(builder, offset) {
     builder.finish(offset, "$SPW", true);
-  }
-  static createSPW(builder, DATEOffset, BSRN, ND, KP1, KP2, KP3, KP4, KP5, KP6, KP7, KP8, KP_SUM, AP1, AP2, AP3, AP4, AP5, AP6, AP7, AP8, AP_AVG, CP, C9, ISN, F107_OBS, F107_ADJ, F107_DATA_TYPE, F107_OBS_CENTER81, F107_OBS_LAST81, F107_ADJ_CENTER81, F107_ADJ_LAST81) {
-    _SPW.startSPW(builder);
-    _SPW.addDate(builder, DATEOffset);
-    _SPW.addBsrn(builder, BSRN);
-    _SPW.addNd(builder, ND);
-    _SPW.addKp1(builder, KP1);
-    _SPW.addKp2(builder, KP2);
-    _SPW.addKp3(builder, KP3);
-    _SPW.addKp4(builder, KP4);
-    _SPW.addKp5(builder, KP5);
-    _SPW.addKp6(builder, KP6);
-    _SPW.addKp7(builder, KP7);
-    _SPW.addKp8(builder, KP8);
-    _SPW.addKpSum(builder, KP_SUM);
-    _SPW.addAp1(builder, AP1);
-    _SPW.addAp2(builder, AP2);
-    _SPW.addAp3(builder, AP3);
-    _SPW.addAp4(builder, AP4);
-    _SPW.addAp5(builder, AP5);
-    _SPW.addAp6(builder, AP6);
-    _SPW.addAp7(builder, AP7);
-    _SPW.addAp8(builder, AP8);
-    _SPW.addApAvg(builder, AP_AVG);
-    _SPW.addCp(builder, CP);
-    _SPW.addC9(builder, C9);
-    _SPW.addIsn(builder, ISN);
-    _SPW.addF107Obs(builder, F107_OBS);
-    _SPW.addF107Adj(builder, F107_ADJ);
-    _SPW.addF107DataType(builder, F107_DATA_TYPE);
-    _SPW.addF107ObsCenter81(builder, F107_OBS_CENTER81);
-    _SPW.addF107ObsLast81(builder, F107_OBS_LAST81);
-    _SPW.addF107AdjCenter81(builder, F107_ADJ_CENTER81);
-    _SPW.addF107AdjLast81(builder, F107_ADJ_LAST81);
-    return _SPW.endSPW(builder);
   }
   unpack() {
     return new SPWT(
@@ -18717,7 +23706,8 @@ var SPW = class _SPW {
       this.F107_OBS_CENTER81(),
       this.F107_OBS_LAST81(),
       this.F107_ADJ_CENTER81(),
-      this.F107_ADJ_LAST81()
+      this.F107_ADJ_LAST81(),
+      this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null
     );
   }
   unpackTo(_o) {
@@ -18752,10 +23742,11 @@ var SPW = class _SPW {
     _o.F107_OBS_LAST81 = this.F107_OBS_LAST81();
     _o.F107_ADJ_CENTER81 = this.F107_ADJ_CENTER81();
     _o.F107_ADJ_LAST81 = this.F107_ADJ_LAST81();
+    _o.PROVENANCE = this.PROVENANCE() !== null ? this.PROVENANCE().unpack() : null;
   }
 };
 var SPWT = class {
-  constructor(DATE = null, BSRN = 0, ND = 0, KP1 = 0, KP2 = 0, KP3 = 0, KP4 = 0, KP5 = 0, KP6 = 0, KP7 = 0, KP8 = 0, KP_SUM = 0, AP1 = 0, AP2 = 0, AP3 = 0, AP4 = 0, AP5 = 0, AP6 = 0, AP7 = 0, AP8 = 0, AP_AVG = 0, CP = 0, C9 = 0, ISN = 0, F107_OBS = 0, F107_ADJ = 0, F107_DATA_TYPE = 0 /* OBS */, F107_OBS_CENTER81 = 0, F107_OBS_LAST81 = 0, F107_ADJ_CENTER81 = 0, F107_ADJ_LAST81 = 0) {
+  constructor(DATE = null, BSRN = 0, ND = 0, KP1 = 0, KP2 = 0, KP3 = 0, KP4 = 0, KP5 = 0, KP6 = 0, KP7 = 0, KP8 = 0, KP_SUM = 0, AP1 = 0, AP2 = 0, AP3 = 0, AP4 = 0, AP5 = 0, AP6 = 0, AP7 = 0, AP8 = 0, AP_AVG = 0, CP = 0, C9 = 0, ISN = 0, F107_OBS = 0, F107_ADJ = 0, F107_DATA_TYPE = 0 /* OBS */, F107_OBS_CENTER81 = 0, F107_OBS_LAST81 = 0, F107_ADJ_CENTER81 = 0, F107_ADJ_LAST81 = 0, PROVENANCE = null) {
     this.DATE = DATE;
     this.BSRN = BSRN;
     this.ND = ND;
@@ -18787,43 +23778,45 @@ var SPWT = class {
     this.F107_OBS_LAST81 = F107_OBS_LAST81;
     this.F107_ADJ_CENTER81 = F107_ADJ_CENTER81;
     this.F107_ADJ_LAST81 = F107_ADJ_LAST81;
+    this.PROVENANCE = PROVENANCE;
   }
   pack(builder) {
     const DATE = this.DATE !== null ? builder.createString(this.DATE) : 0;
-    return SPW.createSPW(
-      builder,
-      DATE,
-      this.BSRN,
-      this.ND,
-      this.KP1,
-      this.KP2,
-      this.KP3,
-      this.KP4,
-      this.KP5,
-      this.KP6,
-      this.KP7,
-      this.KP8,
-      this.KP_SUM,
-      this.AP1,
-      this.AP2,
-      this.AP3,
-      this.AP4,
-      this.AP5,
-      this.AP6,
-      this.AP7,
-      this.AP8,
-      this.AP_AVG,
-      this.CP,
-      this.C9,
-      this.ISN,
-      this.F107_OBS,
-      this.F107_ADJ,
-      this.F107_DATA_TYPE,
-      this.F107_OBS_CENTER81,
-      this.F107_OBS_LAST81,
-      this.F107_ADJ_CENTER81,
-      this.F107_ADJ_LAST81
-    );
+    const PROVENANCE = this.PROVENANCE !== null ? this.PROVENANCE.pack(builder) : 0;
+    SPW.startSPW(builder);
+    SPW.addDate(builder, DATE);
+    SPW.addBsrn(builder, this.BSRN);
+    SPW.addNd(builder, this.ND);
+    SPW.addKp1(builder, this.KP1);
+    SPW.addKp2(builder, this.KP2);
+    SPW.addKp3(builder, this.KP3);
+    SPW.addKp4(builder, this.KP4);
+    SPW.addKp5(builder, this.KP5);
+    SPW.addKp6(builder, this.KP6);
+    SPW.addKp7(builder, this.KP7);
+    SPW.addKp8(builder, this.KP8);
+    SPW.addKpSum(builder, this.KP_SUM);
+    SPW.addAp1(builder, this.AP1);
+    SPW.addAp2(builder, this.AP2);
+    SPW.addAp3(builder, this.AP3);
+    SPW.addAp4(builder, this.AP4);
+    SPW.addAp5(builder, this.AP5);
+    SPW.addAp6(builder, this.AP6);
+    SPW.addAp7(builder, this.AP7);
+    SPW.addAp8(builder, this.AP8);
+    SPW.addApAvg(builder, this.AP_AVG);
+    SPW.addCp(builder, this.CP);
+    SPW.addC9(builder, this.C9);
+    SPW.addIsn(builder, this.ISN);
+    SPW.addF107Obs(builder, this.F107_OBS);
+    SPW.addF107Adj(builder, this.F107_ADJ);
+    SPW.addF107DataType(builder, this.F107_DATA_TYPE);
+    SPW.addF107ObsCenter81(builder, this.F107_OBS_CENTER81);
+    SPW.addF107ObsLast81(builder, this.F107_OBS_LAST81);
+    SPW.addF107AdjCenter81(builder, this.F107_ADJ_CENTER81);
+    SPW.addF107AdjLast81(builder, this.F107_ADJ_LAST81);
+    SPW.addProvenance(builder, PROVENANCE);
+    return SPW.endSPW(builder);
   }
 };
 
@@ -18840,7 +23833,7 @@ var PRWSpaceWeatherTable = class _PRWSpaceWeatherTable {
     return (obj || new _PRWSpaceWeatherTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWSpaceWeatherTable(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers96.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers122.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWSpaceWeatherTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ROWS(index, obj) {
@@ -18900,7 +23893,7 @@ var PRWSpaceWeatherTableT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWVersionResult.ts
-import * as flatbuffers97 from "flatbuffers";
+import * as flatbuffers123 from "flatbuffers";
 var PRWVersionResult = class _PRWVersionResult {
   bb = null;
   bb_pos = 0;
@@ -18913,7 +23906,7 @@ var PRWVersionResult = class _PRWVersionResult {
     return (obj || new _PRWVersionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWVersionResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers97.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers123.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWVersionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   VERSION(optionalEncoding) {
@@ -18973,10 +23966,10 @@ var PRWVersionResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
-import * as flatbuffers99 from "flatbuffers";
+import * as flatbuffers125 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRefusal.ts
-import * as flatbuffers98 from "flatbuffers";
+import * as flatbuffers124 from "flatbuffers";
 var PRWWindowRefusal = class _PRWWindowRefusal {
   bb = null;
   bb_pos = 0;
@@ -18989,7 +23982,7 @@ var PRWWindowRefusal = class _PRWWindowRefusal {
     return (obj || new _PRWWindowRefusal()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowRefusal(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers98.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers124.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowRefusal()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -19076,7 +24069,7 @@ var PRWWindowReport = class _PRWWindowReport {
     return (obj || new _PRWWindowReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers99.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers125.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -19202,10 +24195,10 @@ var PRWWindowReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
-import * as flatbuffers101 from "flatbuffers";
+import * as flatbuffers127 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowQuery.ts
-import * as flatbuffers100 from "flatbuffers";
+import * as flatbuffers126 from "flatbuffers";
 var PRWWindowQuery = class _PRWWindowQuery {
   bb = null;
   bb_pos = 0;
@@ -19218,7 +24211,7 @@ var PRWWindowQuery = class _PRWWindowQuery {
     return (obj || new _PRWWindowQuery()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowQuery(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers100.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers126.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowQuery()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -19399,7 +24392,7 @@ var PRWWindowRequest = class _PRWWindowRequest {
     return (obj || new _PRWWindowRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers101.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers127.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   QUERIES(index, obj) {
@@ -19525,7 +24518,7 @@ var PRW = class _PRW {
     return (obj || new _PRW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRW(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers102.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers128.SIZE_PREFIX_LENGTH);
     return (obj || new _PRW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -19863,7 +24856,7 @@ var prwDynamicParameter = /* @__PURE__ */ ((prwDynamicParameter2) => {
 })(prwDynamicParameter || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SPWCOLLECTION.ts
-import * as flatbuffers103 from "flatbuffers";
+import * as flatbuffers129 from "flatbuffers";
 var SPWCOLLECTION = class _SPWCOLLECTION {
   bb = null;
   bb_pos = 0;
@@ -19876,7 +24869,7 @@ var SPWCOLLECTION = class _SPWCOLLECTION {
     return (obj || new _SPWCOLLECTION()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsSPWCOLLECTION(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers103.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers129.SIZE_PREFIX_LENGTH);
     return (obj || new _SPWCOLLECTION()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   RECORDS(index, obj) {
@@ -19935,10 +24928,10 @@ var SPWCOLLECTIONT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
-import * as flatbuffers106 from "flatbuffers";
+import * as flatbuffers132 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionRequest.ts
-import * as flatbuffers104 from "flatbuffers";
+import * as flatbuffers130 from "flatbuffers";
 var TIMConversionRequest = class _TIMConversionRequest {
   bb = null;
   bb_pos = 0;
@@ -19951,7 +24944,7 @@ var TIMConversionRequest = class _TIMConversionRequest {
     return (obj || new _TIMConversionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsTIMConversionRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers104.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers130.SIZE_PREFIX_LENGTH);
     return (obj || new _TIMConversionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -20102,7 +25095,7 @@ var TIMConversionRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
-import * as flatbuffers105 from "flatbuffers";
+import * as flatbuffers131 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/timConversionStatus.ts
 var timConversionStatus = /* @__PURE__ */ ((timConversionStatus2) => {
@@ -20128,7 +25121,7 @@ var TIMConversionResult = class _TIMConversionResult {
     return (obj || new _TIMConversionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsTIMConversionResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers105.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers131.SIZE_PREFIX_LENGTH);
     return (obj || new _TIMConversionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -20249,7 +25242,7 @@ var TIM = class _TIM {
     return (obj || new _TIM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsTIM(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers106.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers132.SIZE_PREFIX_LENGTH);
     return (obj || new _TIM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -20344,13 +25337,13 @@ var TIMT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
-import * as flatbuffers137 from "flatbuffers";
+import * as flatbuffers163 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
-import * as flatbuffers111 from "flatbuffers";
+import * as flatbuffers137 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayer.ts
-import * as flatbuffers107 from "flatbuffers";
+import * as flatbuffers133 from "flatbuffers";
 var XMTLayer = class _XMTLayer {
   bb = null;
   bb_pos = 0;
@@ -20363,7 +25356,7 @@ var XMTLayer = class _XMTLayer {
     return (obj || new _XMTLayer()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTLayer(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers107.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers133.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTLayer()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ID(optionalEncoding) {
@@ -20487,7 +25480,7 @@ var XMTLayerT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTObjectOverride.ts
-import * as flatbuffers108 from "flatbuffers";
+import * as flatbuffers134 from "flatbuffers";
 var XMTObjectOverride = class _XMTObjectOverride {
   bb = null;
   bb_pos = 0;
@@ -20500,7 +25493,7 @@ var XMTObjectOverride = class _XMTObjectOverride {
     return (obj || new _XMTObjectOverride()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTObjectOverride(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers108.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers134.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTObjectOverride()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   OBJECT_KEY(optionalEncoding) {
@@ -20600,7 +25593,7 @@ var XMTObjectOverrideT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTSourceCoverage.ts
-import * as flatbuffers109 from "flatbuffers";
+import * as flatbuffers135 from "flatbuffers";
 var XMTSourceCoverage = class _XMTSourceCoverage {
   bb = null;
   bb_pos = 0;
@@ -20613,7 +25606,7 @@ var XMTSourceCoverage = class _XMTSourceCoverage {
     return (obj || new _XMTSourceCoverage()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTSourceCoverage(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers109.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers135.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTSourceCoverage()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -20698,7 +25691,7 @@ var XMTSourceCoverageT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateCandidate.ts
-import * as flatbuffers110 from "flatbuffers";
+import * as flatbuffers136 from "flatbuffers";
 var XMTStateCandidate = class _XMTStateCandidate {
   bb = null;
   bb_pos = 0;
@@ -20711,7 +25704,7 @@ var XMTStateCandidate = class _XMTStateCandidate {
     return (obj || new _XMTStateCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTStateCandidate(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers110.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers136.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTStateCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   OBJECT_KEY(optionalEncoding) {
@@ -20816,7 +25809,7 @@ var XMTComposeRecipe = class _XMTComposeRecipe {
     return (obj || new _XMTComposeRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTComposeRecipe(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers111.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers137.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTComposeRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   IDENTITY_RULE() {
@@ -21028,13 +26021,13 @@ var XMTComposeRecipeT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
-import * as flatbuffers115 from "flatbuffers";
+import * as flatbuffers141 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
-import * as flatbuffers114 from "flatbuffers";
+import * as flatbuffers140 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayerRecord.ts
-import * as flatbuffers112 from "flatbuffers";
+import * as flatbuffers138 from "flatbuffers";
 var XMTLayerRecord = class _XMTLayerRecord {
   bb = null;
   bb_pos = 0;
@@ -21047,7 +26040,7 @@ var XMTLayerRecord = class _XMTLayerRecord {
     return (obj || new _XMTLayerRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTLayerRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers112.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers138.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTLayerRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   LAYER(optionalEncoding) {
@@ -21146,7 +26139,7 @@ var XMTLayerRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
-import * as flatbuffers113 from "flatbuffers";
+import * as flatbuffers139 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtStateChoice.ts
 var xmtStateChoice = /* @__PURE__ */ ((xmtStateChoice2) => {
@@ -21174,7 +26167,7 @@ var XMTStateSelection = class _XMTStateSelection {
     return (obj || new _XMTStateSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTStateSelection(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers113.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers139.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTStateSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATUS() {
@@ -21307,7 +26300,7 @@ var XMTComposedObject = class _XMTComposedObject {
     return (obj || new _XMTComposedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTComposedObject(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers114.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers140.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTComposedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KEY(optionalEncoding) {
@@ -21446,7 +26439,7 @@ var XMTComposeReport = class _XMTComposeReport {
     return (obj || new _XMTComposeReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTComposeReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers115.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers141.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTComposeReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -21550,7 +26543,7 @@ var XMTComposeReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitPolicy.ts
-import * as flatbuffers116 from "flatbuffers";
+import * as flatbuffers142 from "flatbuffers";
 var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
   bb = null;
   bb_pos = 0;
@@ -21563,7 +26556,7 @@ var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
     return (obj || new _XMTEpochFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTEpochFitPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers116.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers142.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTEpochFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   PROPAGATOR_ID(optionalEncoding) {
@@ -21579,14 +26572,14 @@ var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
    */
   FORCE_MODEL(obj) {
     const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? (obj || new PRWForceConfiguration()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    return offset ? (obj || new PCFForceModel()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   /**
    * Integrator settings, when stated.
    */
   INTEGRATOR(obj) {
     const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? (obj || new PRWIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    return offset ? (obj || new PCFIntegratorSettings()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   FORCE_MODEL_LIMITATION(optionalEncoding) {
     const offset = this.bb.__offset(this.bb_pos, 12);
@@ -21780,7 +26773,7 @@ var XMTEpochFitPolicyT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
-import * as flatbuffers117 from "flatbuffers";
+import * as flatbuffers143 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtFitVerdict.ts
 var xmtFitVerdict = /* @__PURE__ */ ((xmtFitVerdict2) => {
@@ -21805,7 +26798,7 @@ var XMTEpochFitReport = class _XMTEpochFitReport {
     return (obj || new _XMTEpochFitReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTEpochFitReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers117.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers143.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTEpochFitReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   VERDICT() {
@@ -22098,10 +27091,10 @@ var XMTEpochFitReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
-import * as flatbuffers124 from "flatbuffers";
+import * as flatbuffers150 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverPolicy.ts
-import * as flatbuffers118 from "flatbuffers";
+import * as flatbuffers144 from "flatbuffers";
 var XMTManeuverPolicy = class _XMTManeuverPolicy {
   bb = null;
   bb_pos = 0;
@@ -22114,7 +27107,7 @@ var XMTManeuverPolicy = class _XMTManeuverPolicy {
     return (obj || new _XMTManeuverPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTManeuverPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers118.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers144.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTManeuverPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22259,10 +27252,10 @@ var XMTManeuverPolicyT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
-import * as flatbuffers121 from "flatbuffers";
+import * as flatbuffers147 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchPolicy.ts
-import * as flatbuffers119 from "flatbuffers";
+import * as flatbuffers145 from "flatbuffers";
 var XMTMatchPolicy = class _XMTMatchPolicy {
   bb = null;
   bb_pos = 0;
@@ -22275,7 +27268,7 @@ var XMTMatchPolicy = class _XMTMatchPolicy {
     return (obj || new _XMTMatchPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMatchPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers119.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers145.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMatchPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22368,7 +27361,7 @@ var XMTMatchPolicyT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTTrajectory.ts
-import * as flatbuffers120 from "flatbuffers";
+import * as flatbuffers146 from "flatbuffers";
 var XMTTrajectory = class _XMTTrajectory {
   bb = null;
   bb_pos = 0;
@@ -22381,7 +27374,7 @@ var XMTTrajectory = class _XMTTrajectory {
     return (obj || new _XMTTrajectory()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTTrajectory(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers120.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers146.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTTrajectory()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ID(optionalEncoding) {
@@ -22477,7 +27470,7 @@ var XMTMatchRequest = class _XMTMatchRequest {
     return (obj || new _XMTMatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMatchRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers121.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers147.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   POLICY(obj) {
@@ -22585,10 +27578,10 @@ var XMTMatchRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
-import * as flatbuffers123 from "flatbuffers";
+import * as flatbuffers149 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMeasuredError.ts
-import * as flatbuffers122 from "flatbuffers";
+import * as flatbuffers148 from "flatbuffers";
 var XMTMeasuredError = class _XMTMeasuredError {
   bb = null;
   bb_pos = 0;
@@ -22601,7 +27594,7 @@ var XMTMeasuredError = class _XMTMeasuredError {
     return (obj || new _XMTMeasuredError()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMeasuredError(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers122.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers148.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMeasuredError()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -22729,7 +27722,7 @@ var XMTSelectionPolicy = class _XMTSelectionPolicy {
     return (obj || new _XMTSelectionPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTSelectionPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers123.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers149.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTSelectionPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22890,7 +27883,7 @@ var XMTIntegrateRecipe = class _XMTIntegrateRecipe {
     return (obj || new _XMTIntegrateRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTIntegrateRecipe(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers124.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers150.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTIntegrateRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22970,16 +27963,16 @@ var XMTIntegrateRecipeT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
-import * as flatbuffers136 from "flatbuffers";
+import * as flatbuffers162 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
-import * as flatbuffers131 from "flatbuffers";
+import * as flatbuffers157 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
-import * as flatbuffers127 from "flatbuffers";
+import * as flatbuffers153 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverMember.ts
-import * as flatbuffers125 from "flatbuffers";
+import * as flatbuffers151 from "flatbuffers";
 var XMTManeuverMember = class _XMTManeuverMember {
   bb = null;
   bb_pos = 0;
@@ -22992,7 +27985,7 @@ var XMTManeuverMember = class _XMTManeuverMember {
     return (obj || new _XMTManeuverMember()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTManeuverMember(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers125.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers151.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTManeuverMember()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -23077,7 +28070,7 @@ var XMTManeuverMemberT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
-import * as flatbuffers126 from "flatbuffers";
+import * as flatbuffers152 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordKind.ts
 var xmtRecordKind = /* @__PURE__ */ ((xmtRecordKind2) => {
@@ -23103,7 +28096,7 @@ var XMTRecordRef = class _XMTRecordRef {
     return (obj || new _XMTRecordRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTRecordRef(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers126.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers152.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTRecordRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KIND() {
@@ -23185,7 +28178,7 @@ var XMTManeuverEvent = class _XMTManeuverEvent {
     return (obj || new _XMTManeuverEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTManeuverEvent(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers127.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers153.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTManeuverEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -23295,10 +28288,10 @@ var XMTManeuverEventT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
-import * as flatbuffers130 from "flatbuffers";
+import * as flatbuffers156 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
-import * as flatbuffers128 from "flatbuffers";
+import * as flatbuffers154 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtCandidateStanding.ts
 var xmtCandidateStanding = /* @__PURE__ */ ((xmtCandidateStanding2) => {
@@ -23324,7 +28317,7 @@ var XMTProductCandidate = class _XMTProductCandidate {
     return (obj || new _XMTProductCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTProductCandidate(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers128.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers154.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTProductCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -23471,7 +28464,7 @@ var XMTProductCandidateT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
-import * as flatbuffers129 from "flatbuffers";
+import * as flatbuffers155 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtCovarianceOrigin.ts
 var xmtCovarianceOrigin = /* @__PURE__ */ ((xmtCovarianceOrigin2) => {
@@ -23503,7 +28496,7 @@ var XMTProductSelection = class _XMTProductSelection {
     return (obj || new _XMTProductSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTProductSelection(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers129.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers155.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTProductSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -23661,7 +28654,7 @@ var XMTProductChoice = class _XMTProductChoice {
     return (obj || new _XMTProductChoice()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTProductChoice(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers130.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers156.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTProductChoice()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   PRODUCT(optionalEncoding) {
@@ -23762,7 +28755,7 @@ var XMTIntegratedObject = class _XMTIntegratedObject {
     return (obj || new _XMTIntegratedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTIntegratedObject(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers131.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers157.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTIntegratedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KEY(optionalEncoding) {
@@ -23957,10 +28950,10 @@ var XMTIntegratedObjectT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
-import * as flatbuffers133 from "flatbuffers";
+import * as flatbuffers159 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
-import * as flatbuffers132 from "flatbuffers";
+import * as flatbuffers158 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtPairVerdict.ts
 var xmtPairVerdict = /* @__PURE__ */ ((xmtPairVerdict2) => {
@@ -23985,7 +28978,7 @@ var XMTPairResult = class _XMTPairResult {
     return (obj || new _XMTPairResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTPairResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers132.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers158.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTPairResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -24189,7 +29182,7 @@ var XMTMatchReport = class _XMTMatchReport {
     return (obj || new _XMTMatchReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMatchReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers133.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers159.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMatchReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   POLICY(obj) {
@@ -24288,7 +29281,7 @@ var XMTMatchReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTReasonCount.ts
-import * as flatbuffers134 from "flatbuffers";
+import * as flatbuffers160 from "flatbuffers";
 var XMTReasonCount = class _XMTReasonCount {
   bb = null;
   bb_pos = 0;
@@ -24301,7 +29294,7 @@ var XMTReasonCount = class _XMTReasonCount {
     return (obj || new _XMTReasonCount()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTReasonCount(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers134.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers160.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTReasonCount()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   REASON(optionalEncoding) {
@@ -24358,7 +29351,7 @@ var XMTReasonCountT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTUnplacedRecord.ts
-import * as flatbuffers135 from "flatbuffers";
+import * as flatbuffers161 from "flatbuffers";
 var XMTUnplacedRecord = class _XMTUnplacedRecord {
   bb = null;
   bb_pos = 0;
@@ -24371,7 +29364,7 @@ var XMTUnplacedRecord = class _XMTUnplacedRecord {
     return (obj || new _XMTUnplacedRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTUnplacedRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers135.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers161.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTUnplacedRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KIND() {
@@ -24509,7 +29502,7 @@ var XMTIntegrateReport = class _XMTIntegrateReport {
     return (obj || new _XMTIntegrateReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTIntegrateReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers136.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers162.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTIntegrateReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   AS_OF_MS() {
@@ -24879,7 +29872,7 @@ var XMT = class _XMT {
     return (obj || new _XMT()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMT(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers137.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers163.SIZE_PREFIX_LENGTH);
     return (obj || new _XMT()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -25029,6 +30022,30 @@ export {
   DeviceType,
   EOP,
   EOPT,
+  EVL,
+  EVLApsidesConfiguration,
+  EVLApsidesConfigurationT,
+  EVLContactConfiguration,
+  EVLContactConfigurationT,
+  EVLEclipseConfiguration,
+  EVLEclipseConfigurationT,
+  EVLEvent,
+  EVLEventLocationRequest,
+  EVLEventLocationRequestT,
+  EVLEventReport,
+  EVLEventReportT,
+  EVLEventSample,
+  EVLEventSampleT,
+  EVLEventT,
+  EVLIntrusionConfiguration,
+  EVLIntrusionConfigurationT,
+  EVLLatitudeExtremumConfiguration,
+  EVLLatitudeExtremumConfigurationT,
+  EVLNodeCrossingConfiguration,
+  EVLNodeCrossingConfigurationT,
+  EVLParameterConditionConfiguration,
+  EVLParameterConditionConfigurationT,
+  EVLT,
   F107DataType,
   FRM,
   FRMFrameTransformRequest,
@@ -25098,6 +30115,40 @@ export {
   PCEStopRequest,
   PCEStopRequestT,
   PCET,
+  PCF,
+  PCFEcom2,
+  PCFEcom2T,
+  PCFEmpiricalTerms,
+  PCFEmpiricalTermsT,
+  PCFEventDefinition,
+  PCFEventDefinitionT,
+  PCFExpression,
+  PCFExpressionT,
+  PCFExpressionTerm,
+  PCFExpressionTermT,
+  PCFFitPolicy,
+  PCFFitPolicyT,
+  PCFForceModel,
+  PCFForceModelT,
+  PCFGaussianPrior,
+  PCFGaussianPriorT,
+  PCFIntegratorSettings,
+  PCFIntegratorSettingsT,
+  PCFLaunch,
+  PCFLaunchT,
+  PCFManeuverDetection,
+  PCFManeuverDetectionT,
+  PCFMeanElementOptions,
+  PCFMeanElementOptionsT,
+  PCFOutput,
+  PCFOutputT,
+  PCFReentry,
+  PCFReentryT,
+  PCFSegmentOptions,
+  PCFSegmentOptionsT,
+  PCFSpaceWeather,
+  PCFSpaceWeatherT,
+  PCFT,
   PLD,
   PLDT,
   PPE,
@@ -25125,12 +30176,12 @@ export {
   PRWDescribeResultT,
   PRWEarthOrientation,
   PRWEarthOrientationT,
-  PRWEcom2,
-  PRWEcom2T,
   PRWEphemerisRequest,
   PRWEphemerisRequestT,
   PRWEphemerisResult,
   PRWEphemerisResultT,
+  PRWEventRecord,
+  PRWEventRecordT,
   PRWExecutionRequest,
   PRWExecutionRequestT,
   PRWExecutionResult,
@@ -25139,8 +30190,6 @@ export {
   PRWFiniteBurnT,
   PRWFitQuality,
   PRWFitQualityT,
-  PRWForceConfiguration,
-  PRWForceConfigurationT,
   PRWImpulse,
   PRWImpulseT,
   PRWInit,
@@ -25149,8 +30198,6 @@ export {
   PRWInitT,
   PRWInstance,
   PRWInstanceT,
-  PRWIntegratorSettings,
-  PRWIntegratorSettingsT,
   PRWJB2008Indices,
   PRWJB2008IndicesT,
   PRWJB2008IndicesTable,
@@ -25171,8 +30218,6 @@ export {
   PRWResidentRequestT,
   PRWResidentState,
   PRWResidentStateT,
-  PRWSpaceWeather,
-  PRWSpaceWeatherT,
   PRWSpaceWeatherTable,
   PRWSpaceWeatherTableT,
   PRWSpeciesDensity,
@@ -25299,6 +30344,13 @@ export {
   covarianceRule,
   dataAvailability,
   eopSeries,
+  evlAberrationCorrection,
+  evlEventType,
+  evlFieldOfViewShape,
+  evlLocatorClass,
+  evlResultStatus,
+  evlSamplePoint,
+  evlShadowModel,
   frmOperationCode,
   frmResultStatus,
   frmStateRepresentation,
@@ -25323,26 +30375,39 @@ export {
   pcePropagationDirection,
   pceResultStatus,
   pceUnit,
+  pcfAtmosphereFamily,
+  pcfDensityCorrection,
+  pcfEarthRadiationModel,
+  pcfEphemerisKind,
+  pcfEventAction,
+  pcfEventDirection,
+  pcfEventKind,
+  pcfExpressionOperation,
+  pcfGnssSpacecraftBlock,
+  pcfGravitySelection,
+  pcfInnovationCorrelation,
+  pcfIntegratorAlgorithm,
+  pcfNeutralWind,
+  pcfOceanTideModel,
+  pcfOutputFrame,
+  pcfRadiationPressureFamily,
+  pcfReentryWindowMethod,
+  pcfRelativityTerms,
+  pcfSolidTideModel,
+  pcfTheory,
+  pcfWeatherExtension,
+  pcfWeatherSource,
   polynomialBasisType,
   ppeAnomalyType,
   propagatorErrorCode,
   propagatorStateFlags,
-  prwAtmosphereFamily,
   prwDensitySpecies,
   prwDensityTreatment,
   prwDerivativeTechnique,
   prwDynamicParameter,
-  prwEarthRadiationModel,
-  prwGnssSpacecraftBlock,
-  prwGravitySelection,
-  prwOceanTideModel,
   prwProcessNoiseAxes,
   prwProcessNoiseModel,
   prwQualityEvidence,
-  prwRadiationPressureFamily,
-  prwRelativityTerms,
-  prwSolidTideModel,
-  prwSolverAlgorithm,
   prwSourceKind,
   prwSteeringBasis,
   prwThrustPrescription,

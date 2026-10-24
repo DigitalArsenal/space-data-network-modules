@@ -6,7 +6,7 @@ import flatbuffers
 from flatbuffers.compat import import_numpy
 np = import_numpy()
 
-# Vector Covariance Message
+# DEPRECATED: use $OCM, which carries everything a VCM does. Vector Covariance Message.
 class VCM(object):
     __slots__ = ['_tab']
 
@@ -21,6 +21,10 @@ class VCM(object):
     def GetRootAsVCM(cls, buf, offset=0):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
+    @classmethod
+    def VCMBufferHasIdentifier(cls, buf, offset, size_prefixed=False):
+        return flatbuffers.util.BufferHasIdentifier(buf, offset, b"\x24\x56\x43\x4D", size_prefixed=size_prefixed)
+
     # VCM
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -520,7 +524,7 @@ def VCMCreateCOVARIANCEVector(builder, data):
     return builder.EndVector()
 
 def CreateCOVARIANCEVector(builder, data):
-    VCMCreateCOVARIANCEVector(builder, data)
+    return VCMCreateCOVARIANCEVector(builder, data)
 
 def VCMAddUSER_DEFINED_BIP_0044_TYPE(builder, USER_DEFINED_BIP_0044_TYPE):
     builder.PrependUint32Slot(30, USER_DEFINED_BIP_0044_TYPE, 0)

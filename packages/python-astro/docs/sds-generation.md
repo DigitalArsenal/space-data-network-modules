@@ -2,9 +2,9 @@
 
 FFM (Full Force Model) is defined in [the FFM specification](../../../propagator/ffm/FFM.md).
 
-The wheel vendors generated output from ratified SDS **1.217.0**, Git commit
-`b76da41467e260c83b3432ba7f34a1eb05cc7ac7` (package metadata
-`1.217.0+1789398499674`). It does not require the stale PyPI SDS distribution.
+The wheel vendors generated output from ratified SDS **1.264.0**, Git commit
+`7c61b15299b0c06def4006fff8748dff01a43dc1` (package metadata
+`1.264.0+1792871374963`). It does not require the stale PyPI SDS distribution.
 The source is read using `git archive <commit> lib/py`; uncommitted generator
 changes in the canonical checkout cannot alter the package.
 
@@ -22,9 +22,9 @@ From the modules repository root, with its pinned npm dependencies installed:
 
 ```sh
 python3 packages/python-astro/scripts/vendor_sds.py \
-  --sds-repo /path/to/spacedatastandards.org
+  --sds-repo /path/to/spacedatastandards.org --sds-only
 python3 packages/python-astro/scripts/vendor_sds.py \
-  --sds-repo /path/to/spacedatastandards.org --check
+  --sds-repo /path/to/spacedatastandards.org --sds-only --check
 PYTHONPATH=packages/python-astro/src python3 -m unittest discover \
   -s packages/python-astro/tests -p test_vendoring.py -v
 ```
@@ -32,8 +32,13 @@ PYTHONPATH=packages/python-astro/src python3 -m unittest discover \
 Run regeneration after `prepare_artifacts.py`, because the binding lock also
 records the distributed WASM hashes, module-declared SDS dependencies, and
 available artifact build provenance. The SDS version selected for Python
-bindings is the coordinator's 1.217.0 pin; older module-declared dependencies
+bindings is the coordinator's 1.264.0 pin; older module-declared dependencies
 are recorded transparently rather than rewritten.
+
+`--sds-only` refreshes `sds/` and the lock's SDS, artifact and license
+sections; `invoke/` and its lock section stay as committed. Without it the
+module-local invoke bindings regenerate too, from the SDK and `flatc-wasm`
+recorded in the lock (`FLATC_VERSION` in the script).
 
 Bare generator imports such as `import CelestialFrameWrapper` become private
 qualified imports retaining the original local alias. `from Type import Type`

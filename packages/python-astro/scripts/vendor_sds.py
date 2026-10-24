@@ -19,13 +19,13 @@ import tarfile
 
 PACKAGE = Path(__file__).resolve().parents[1]
 MODULES = PACKAGE.parents[1]
-SDS_REVISION = "b76da41467e260c83b3432ba7f34a1eb05cc7ac7"
-SDS_VERSION = "1.217.0"
+SDS_REVISION = "7c61b15299b0c06def4006fff8748dff01a43dc1"
+SDS_VERSION = "1.264.0"
 FLATC_VERSION = "26.1.32"
 FAMILIES = "PIV TAB OMM CAT REC RFM CRD MEM OCM ODR TDM TRH CDM CSM ACW EVL PCE EOP FRM OEM LMO LMS TIM NCD".split()
 SDS_NAMESPACE = "spacedatanetwork_astro.sds"
 INVOKE_NAMESPACE = "spacedatanetwork_astro.invoke"
-EXTERNAL_IMPORTS = {"flatbuffers", "typing", "numpy", "sys", "struct", "cryptography"}
+EXTERNAL_IMPORTS = {"flatbuffers", "typing", "numpy", "sys", "struct", "cryptography", "hashlib", "hmac"}
 
 
 def sha256(data: bytes) -> str:
@@ -216,6 +216,8 @@ def main():
     parser.add_argument("--modules-root", type=Path, default=MODULES)
     parser.add_argument("--output", type=Path, default=PACKAGE / "src/spacedatanetwork_astro")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--sds-only", action="store_true",
+                        help="refresh sds/ and the lock's sds, artifact and license sections; invoke/ and its lock section stay as committed")
     options = parser.parse_args()
     revision = subprocess.check_output(["git", "-C", str(options.sds_repo), "rev-parse", options.sds_revision], text=True).strip()
     version = json.loads(git_bytes(options.sds_repo, revision, "package.json"))["version"]
@@ -223,9 +225,15 @@ def main():
         raise SystemExit(f"Expected ratified SDS {SDS_VERSION}, found {version}")
     sources = source_tree(options.sds_repo, revision)
     sds, missing = vendor_sources(sources)
-    invoke, generation = generate_invoke(options.modules_root)
+    lock_path = options.output / "bindings.lock.json"
+    previous = json.loads(lock_path.read_text()) if options.sds_only else None
+    if options.sds_only:
+        invoke, generation = {}, previous["invoke"]
+    else:
+        invoke, generation = generate_invoke(options.modules_root)
     add_initializers(sds)
-    add_initializers(invoke)
+    if not options.sds_only:
+        add_initializers(invoke)
     sds_metadata = json.loads(git_bytes(options.sds_repo, revision, "package.json"))
     if sds_metadata.get("license") != "Apache-2.0":
         raise SystemExit("SDS license declaration changed; review its license before vendoring")
@@ -234,7 +242,6 @@ def main():
     apache_sha = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     if sha256(apache_license) != apache_sha:
         raise SystemExit("The standard Apache-2.0 license source changed; review before updating its pin")
-    sdk_license = (options.modules_root / "node_modules/space-data-module-sdk/LICENSE").read_bytes()
     sds["LICENSE.txt"] = apache_license
     sds["NOTICE.txt"] = ("spacedatastandards.org generated Python bindings\n"
         "Source: https://github.com/DigitalArsenal/spacedatastandards.org\n"
@@ -244,21 +251,25 @@ def main():
         "tree contains no SDS LICENSE or NOTICE file. Generated-file comments\n"
         "are preserved. Imports have been rewritten by scripts/vendor_sds.py\n"
         "to resolve within spacedatanetwork_astro.sds. No wire schema changed.\n").encode()
-    invoke["SDK-LICENSE.txt"] = sdk_license
-    invoke["NOTICE.txt"] = ("Module-local Python FlatBuffer bindings\n"
-        "SDK schema source: https://github.com/DigitalArsenal/space-data-module-sdk\n"
-        f"SDK version: {generation['sdk_version']}\n"
-        "SDK-derived files retain the Apache-2.0 terms in SDK-LICENSE.txt.\n"
-        "Other schemas come from this modules repository; this notice does not\n"
-        "relicense those modules. bindings.lock.json identifies each source.\n"
-        f"Python generated with flatc-wasm {FLATC_VERSION}; qualified Python\n"
-        "imports are rewritten by scripts/vendor_sds.py. No wire schema changed.\n").encode()
-    generation["license_sources"] = [
-        {"path": "node_modules/flatbuffers/LICENSE", "sha256": apache_sha},
-        {"path": "node_modules/space-data-module-sdk/LICENSE", "sha256": sha256(sdk_license)},
-    ]
+    if not options.sds_only:
+        sdk_license = (options.modules_root / "node_modules/space-data-module-sdk/LICENSE").read_bytes()
+        invoke["SDK-LICENSE.txt"] = sdk_license
+        invoke["NOTICE.txt"] = ("Module-local Python FlatBuffer bindings\n"
+            "SDK schema source: https://github.com/DigitalArsenal/space-data-module-sdk\n"
+            f"SDK version: {generation['sdk_version']}\n"
+            "SDK-derived files retain the Apache-2.0 terms in SDK-LICENSE.txt.\n"
+            "Other schemas come from this modules repository; this notice does not\n"
+            "relicense those modules. bindings.lock.json identifies each source.\n"
+            f"Python generated with flatc-wasm {FLATC_VERSION}; qualified Python\n"
+            "imports are rewritten by scripts/vendor_sds.py. No wire schema changed.\n").encode()
+        generation["license_sources"] = [
+            {"path": "node_modules/flatbuffers/LICENSE", "sha256": apache_sha},
+            {"path": "node_modules/space-data-module-sdk/LICENSE", "sha256": sha256(sdk_license)},
+        ]
     outputs = {"sds/" + name: data for name, data in sds.items()}
     outputs.update({"invoke/" + name: data for name, data in invoke.items()})
+    # --sds-only leaves invoke/ as committed: its files and their hashes carry over from the previous lock.
+    carried = {name: digest for name, digest in previous["generated_sha256"].items() if name.startswith("invoke/")} if options.sds_only else {}
     source_manifest = {name: sha256(data) for name, data in sorted(sources.items())}
     artifact_lock = json.loads((PACKAGE / "src/spacedatanetwork_astro/artifacts.lock.json").read_text())
     artifacts = []
@@ -273,7 +284,7 @@ def main():
             "revision": revision, "version": version, "families": sorted(FAMILIES),
             "lib_py_sha256": source_manifest, "lib_py_manifest_sha256": sha256(canonical_json(source_manifest))},
             "invoke": generation, "unresolved_imports": missing,
-            "generated_sha256": {name: sha256(data) for name, data in sorted(outputs.items())}}
+            "generated_sha256": {**carried, **{name: sha256(data) for name, data in sorted(outputs.items())}}}
     outputs["bindings.lock.json"] = canonical_json(lock)
     mismatches = []
     for name, data in outputs.items():
@@ -284,7 +295,7 @@ def main():
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
-    for folder in ("sds", "invoke"):
+    for folder in ("sds",) if options.sds_only else ("sds", "invoke"):
         for target in (options.output / folder).rglob("*.py"):
             name = target.relative_to(options.output).as_posix()
             if name not in outputs:
@@ -294,7 +305,7 @@ def main():
                     target.unlink()
     if mismatches:
         raise SystemExit("Generated bindings differ: " + ", ".join(mismatches[:20]))
-    print(f"{'Verified' if options.check else 'Vendored'} {len(sds)} SDS and {len(invoke)} invoke files; "
+    print(f"{'Verified' if options.check else 'Vendored'} {len(sds)} SDS and {len(invoke) or len(carried)} invoke files; "
           f"SDS {version} at {revision}; {len(missing)} unresolved imports")
 
 

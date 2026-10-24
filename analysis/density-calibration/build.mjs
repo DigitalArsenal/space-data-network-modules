@@ -18,9 +18,8 @@ import { generateSdsHeaders } from '../../scripts/lib/sds-cpp-headers.mjs';
 // decay methods; as analysis/epoch-state compiles it) and this module's source.
 const root = fileURLToPath(new URL('.', import.meta.url));
 // FFM owns the typed force/propagation implementation; this consumer links
-// only that surface using the SDK EH-free compiler contract.
-const {generateSdsBindings}=await import('../../propagator/ffm/generate-sds-bindings.mjs');
-await generateSdsBindings();
+// only that surface using the SDK EH-free compiler contract, with FFM's own
+// committed generated SDS headers. It never regenerates another module's tree.
 process.env.SDN_WASI_CLANGXX=path.join(root,'build-driver.mjs');
 process.env.SDN_WASI_CLANG=process.env.SDN_WASI_CLANGXX;
 await fs.chmod(process.env.SDN_WASI_CLANGXX,0o755);
@@ -69,7 +68,7 @@ export const compilation = await compileModuleFromSource({
 if (!compilation.report?.ok) throw new Error('Density calibration validation failed',{cause:compilation.report?.issues});
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  erfaSourceFiles: erfa.fileCount, jb2008: 'propagator/ffm/lib/jb2008.h', nrlmsise00: 'third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
+  spacedatastandards: sdsVersion, erfaSourceFiles: erfa.fileCount, jb2008: 'propagator/ffm/lib/jb2008.h', nrlmsise00: 'third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
   sdsHeaders: ordered.map((code) => `schema/${code}/main.fbs (scripts/lib/sds-cpp-headers.mjs)`), threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath}`);

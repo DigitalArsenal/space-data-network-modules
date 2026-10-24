@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import { decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
-import { initCqrFlatc, encodeCqr, decodeCqr, catalogRequest, gpRecord, publishedSchema, catalogInReferenceUnits, screeningControls, earthFrame } from '../tests/lib/cqr.mjs';
+import { initCqrFlatc, encodeCqr, decodeCqr, catalogRequest, gpRecord, parseFlatcJson, publishedSchema, catalogInReferenceUnits, screeningControls, earthFrame } from '../tests/lib/cqr.mjs';
 import { compareToReference, isoToJd } from '../tests/lib/screenCatalogParityHarness.mjs';
 import { CA_PARITY_TOLERANCES as T } from '../tests/lib/caParityTolerances.mjs';
 import { runThreadedBrowserLane } from './cqr-browser-parity-lane.mjs';
@@ -90,7 +90,7 @@ for(const run of observed){
   const result=decodeCqr(flatc,response.outputs[0].payload);
   if(run.caseId.startsWith('decaying-')){
     const excludedFrames=response.outputs.filter(f=>f.portId==='excluded');
-    const norads=excludedFrames.map(f=>JSON.parse(flatc.generateJSON(publishedSchema('OMM'),{path:'/omm.bin',data:f.payload},{defaultsJson:true})).NORAD_CAT_ID);
+    const norads=excludedFrames.map(f=>parseFlatcJson(flatc.generateJSON(publishedSchema('OMM'),{path:'/omm.bin',data:f.payload},{defaultsJson:true})).NORAD_CAT_ID);
     assert.deepEqual(norads,decayingExcluded);
     const r=result.CATALOG_RESULT;
     assert.equal(r.STATISTICS.FAILED_PAIRS,0);assert.equal(r.OBJECTS_PARSED-r.STATISTICS.TOTAL_OBJECTS,decayingExcluded.length);assert.ok((r.EVENTS??[]).length>0);

@@ -46,10 +46,10 @@ export function epochPolicy(p) {
   const f = p.forceModel, i = f?.integrator;
   return encodeXmt({ EPOCH_FIT_POLICY: table(x.XMTEpochFitPolicyT, {
     PROPAGATOR_ID: p.propagatorId, PROPAGATOR_ARTIFACT_SHA256: p.propagatorArtifactSha256,
-    FORCE_MODEL: f == null ? null : table(x.PRWForceConfigurationT, {
+    FORCE_MODEL: f == null ? null : table(x.PCFForceModelT, {
       ENABLE_POINT_MASS: !!f.centralBody, ENABLE_J2: !!f.j2, ENABLE_J3: !!f.j3, ENABLE_J4: !!f.j4, ENABLE_THIRD_BODY: !!f.thirdBody, ENABLE_SRP: !!f.srp, ENABLE_DRAG: !!f.drag,
       EPHEMERIS_SOURCE: f.ephemerisSource ?? 'none' }),
-    INTEGRATOR: i ? table(x.PRWIntegratorSettingsT, { INITIAL_STEP_SECONDS: i.initialStep, MINIMUM_STEP_SECONDS: i.minStep, MAXIMUM_STEP_SECONDS: i.maxStep,
+    INTEGRATOR: i ? table(x.PCFIntegratorSettingsT, { INITIAL_STEP_SECONDS: i.initialStep, MINIMUM_STEP_SECONDS: i.minStep, MAXIMUM_STEP_SECONDS: i.maxStep,
       ABSOLUTE_TOLERANCES: Array(6).fill(i.absTolerance), RELATIVE_TOLERANCE: i.relTolerance }) : null,
     FORCE_MODEL_LIMITATION: f?.limitation ?? null,
     FRAME_TRANSFORMATION_REF: p.frameTransformationRef, HOLDOUT_STRIDE: p.holdoutStride, POSITION_TOLERANCE_KM: p.positionToleranceKm,

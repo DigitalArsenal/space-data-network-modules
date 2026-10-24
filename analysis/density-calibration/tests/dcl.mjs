@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 
 export const STANDARDS_ROOT = process.env.SPACE_DATA_STANDARDS_ROOT
-  ?? fileURLToPath(new URL('../../../../spacedatastandards.org/', import.meta.url));
+  ?? fileURLToPath(new URL('../node_modules/spacedatastandards.org/', import.meta.url));
 
 // Every table and enum of lib/ts/<code> (the standard and the standards it includes) as one ES module, with flatbuffers.
 export async function loadStandard(code) {

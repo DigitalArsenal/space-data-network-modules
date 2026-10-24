@@ -405,7 +405,8 @@ class STF(object):
 
     # Retention rule the publisher recommends to subscribers of a dataset
     # listing: ReplaceCurrent when each publication is a complete current set,
-    # ArchiveAll when publications accumulate history.
+    # KeepAll when publications accumulate history the store should keep,
+    # ArchiveAll when that history should also stay pinned.
     # STF
     def RECOMMENDED_RETENTION(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(62))
@@ -465,7 +466,7 @@ def STFCreateDATA_TYPESVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateDATA_TYPESVector(builder, data):
-    STFCreateDATA_TYPESVector(builder, data)
+    return STFCreateDATA_TYPESVector(builder, data)
 
 def STFAddCOVERAGE(builder, COVERAGE):
     builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(COVERAGE), 0)
@@ -507,7 +508,7 @@ def STFCreatePRICINGVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreatePRICINGVector(builder, data):
-    STFCreatePRICINGVector(builder, data)
+    return STFCreatePRICINGVector(builder, data)
 
 def STFAddACCEPTED_PAYMENTS(builder, ACCEPTED_PAYMENTS):
     builder.PrependUOffsetTRelativeSlot(11, flatbuffers.number_types.UOffsetTFlags.py_type(ACCEPTED_PAYMENTS), 0)
@@ -529,7 +530,7 @@ def STFCreateACCEPTED_PAYMENTSVector(builder, data):
     return builder.EndVector()
 
 def CreateACCEPTED_PAYMENTSVector(builder, data):
-    STFCreateACCEPTED_PAYMENTSVector(builder, data)
+    return STFCreateACCEPTED_PAYMENTSVector(builder, data)
 
 def STFAddCREATED_AT(builder, CREATED_AT):
     builder.PrependUint64Slot(12, CREATED_AT, 0)
@@ -569,7 +570,7 @@ def STFCreateSIGNATUREVector(builder, data):
     return builder.EndVector()
 
 def CreateSIGNATUREVector(builder, data):
-    STFCreateSIGNATUREVector(builder, data)
+    return STFCreateSIGNATUREVector(builder, data)
 
 def STFAddLISTING_KIND(builder, LISTING_KIND):
     builder.PrependInt8Slot(16, LISTING_KIND, 0)
@@ -593,7 +594,7 @@ def STFCreateTAGSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateTAGSVector(builder, data):
-    STFCreateTAGSVector(builder, data)
+    return STFCreateTAGSVector(builder, data)
 
 def STFAddSAMPLE_RECORD_COUNT(builder, SAMPLE_RECORD_COUNT):
     builder.PrependUint32Slot(18, SAMPLE_RECORD_COUNT, 0)
@@ -617,7 +618,7 @@ def STFCreateDELIVERY_METHODSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateDELIVERY_METHODSVector(builder, data):
-    STFCreateDELIVERY_METHODSVector(builder, data)
+    return STFCreateDELIVERY_METHODSVector(builder, data)
 
 def STFAddPROTECTED_DELIVERY(builder, PROTECTED_DELIVERY):
     builder.PrependUOffsetTRelativeSlot(20, flatbuffers.number_types.UOffsetTFlags.py_type(PROTECTED_DELIVERY), 0)
@@ -687,7 +688,7 @@ def STFCreateCATEGORIESVector(builder, data):
     return builder.EndVector()
 
 def CreateCATEGORIESVector(builder, data):
-    STFCreateCATEGORIESVector(builder, data)
+    return STFCreateCATEGORIESVector(builder, data)
 
 def STFAddRECOMMENDED_RETENTION(builder, RECOMMENDED_RETENTION):
     builder.PrependInt8Slot(29, RECOMMENDED_RETENTION, 0)

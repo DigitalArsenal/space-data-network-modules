@@ -843,8 +843,77 @@ class HFC(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
+    # Northward horizontal neutral-wind samples in meters per second, in the
+    # local geodetic frame at each sample position. Parallel to LATITUDE_DEG.
+    # HFC
+    def WIND_NORTH_M_PER_S(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(98))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 8))
+        return 0
+
+    # HFC
+    def WIND_NORTH_M_PER_SAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(98))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Float64Flags, o)
+        return 0
+
+    # HFC
+    def WIND_NORTH_M_PER_SLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(98))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # HFC
+    def WIND_NORTH_M_PER_SIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(98))
+        return o == 0
+
+    # Eastward horizontal neutral-wind samples in meters per second, in the
+    # local geodetic frame at each sample position. Parallel to LATITUDE_DEG.
+    # HFC
+    def WIND_EAST_M_PER_S(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(100))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 8))
+        return 0
+
+    # HFC
+    def WIND_EAST_M_PER_SAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(100))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Float64Flags, o)
+        return 0
+
+    # HFC
+    def WIND_EAST_M_PER_SLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(100))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # HFC
+    def WIND_EAST_M_PER_SIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(100))
+        return o == 0
+
+    # Wind model and release that produced the wind samples, including whether
+    # storm-time (disturbance) winds were added. Absent when no winds were
+    # evaluated; the wind arrays are then absent as well. Speed-derived samples
+    # (MACH, DYNAMIC_PRESSURE_PA) are unchanged by the wind samples.
+    # HFC
+    def WIND_MODEL(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(102))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
 def HFCStart(builder):
-    builder.StartObject(47)
+    builder.StartObject(50)
 
 def Start(builder):
     HFCStart(builder)
@@ -983,7 +1052,7 @@ def HFCCreateSTATE_DATAVector(builder, data):
     return builder.EndVector()
 
 def CreateSTATE_DATAVector(builder, data):
-    HFCCreateSTATE_DATAVector(builder, data)
+    return HFCCreateSTATE_DATAVector(builder, data)
 
 def HFCAddSAMPLE_EPOCHS(builder, SAMPLE_EPOCHS):
     builder.PrependUOffsetTRelativeSlot(20, flatbuffers.number_types.UOffsetTFlags.py_type(SAMPLE_EPOCHS), 0)
@@ -1001,7 +1070,7 @@ def HFCCreateSAMPLE_EPOCHSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateSAMPLE_EPOCHSVector(builder, data):
-    HFCCreateSAMPLE_EPOCHSVector(builder, data)
+    return HFCCreateSAMPLE_EPOCHSVector(builder, data)
 
 def HFCAddLATITUDE_DEG(builder, LATITUDE_DEG):
     builder.PrependUOffsetTRelativeSlot(21, flatbuffers.number_types.UOffsetTFlags.py_type(LATITUDE_DEG), 0)
@@ -1023,7 +1092,7 @@ def HFCCreateLATITUDE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateLATITUDE_DEGVector(builder, data):
-    HFCCreateLATITUDE_DEGVector(builder, data)
+    return HFCCreateLATITUDE_DEGVector(builder, data)
 
 def HFCAddLONGITUDE_DEG(builder, LONGITUDE_DEG):
     builder.PrependUOffsetTRelativeSlot(22, flatbuffers.number_types.UOffsetTFlags.py_type(LONGITUDE_DEG), 0)
@@ -1045,7 +1114,7 @@ def HFCCreateLONGITUDE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateLONGITUDE_DEGVector(builder, data):
-    HFCCreateLONGITUDE_DEGVector(builder, data)
+    return HFCCreateLONGITUDE_DEGVector(builder, data)
 
 def HFCAddALTITUDE_M(builder, ALTITUDE_M):
     builder.PrependUOffsetTRelativeSlot(23, flatbuffers.number_types.UOffsetTFlags.py_type(ALTITUDE_M), 0)
@@ -1067,7 +1136,7 @@ def HFCCreateALTITUDE_MVector(builder, data):
     return builder.EndVector()
 
 def CreateALTITUDE_MVector(builder, data):
-    HFCCreateALTITUDE_MVector(builder, data)
+    return HFCCreateALTITUDE_MVector(builder, data)
 
 def HFCAddSPEED_M_PER_S(builder, SPEED_M_PER_S):
     builder.PrependUOffsetTRelativeSlot(24, flatbuffers.number_types.UOffsetTFlags.py_type(SPEED_M_PER_S), 0)
@@ -1089,7 +1158,7 @@ def HFCCreateSPEED_M_PER_SVector(builder, data):
     return builder.EndVector()
 
 def CreateSPEED_M_PER_SVector(builder, data):
-    HFCCreateSPEED_M_PER_SVector(builder, data)
+    return HFCCreateSPEED_M_PER_SVector(builder, data)
 
 def HFCAddMACH(builder, MACH):
     builder.PrependUOffsetTRelativeSlot(25, flatbuffers.number_types.UOffsetTFlags.py_type(MACH), 0)
@@ -1111,7 +1180,7 @@ def HFCCreateMACHVector(builder, data):
     return builder.EndVector()
 
 def CreateMACHVector(builder, data):
-    HFCCreateMACHVector(builder, data)
+    return HFCCreateMACHVector(builder, data)
 
 def HFCAddDYNAMIC_PRESSURE_PA(builder, DYNAMIC_PRESSURE_PA):
     builder.PrependUOffsetTRelativeSlot(26, flatbuffers.number_types.UOffsetTFlags.py_type(DYNAMIC_PRESSURE_PA), 0)
@@ -1133,7 +1202,7 @@ def HFCCreateDYNAMIC_PRESSURE_PAVector(builder, data):
     return builder.EndVector()
 
 def CreateDYNAMIC_PRESSURE_PAVector(builder, data):
-    HFCCreateDYNAMIC_PRESSURE_PAVector(builder, data)
+    return HFCCreateDYNAMIC_PRESSURE_PAVector(builder, data)
 
 def HFCAddDENSITY_KG_PER_M3(builder, DENSITY_KG_PER_M3):
     builder.PrependUOffsetTRelativeSlot(27, flatbuffers.number_types.UOffsetTFlags.py_type(DENSITY_KG_PER_M3), 0)
@@ -1155,7 +1224,7 @@ def HFCCreateDENSITY_KG_PER_M3Vector(builder, data):
     return builder.EndVector()
 
 def CreateDENSITY_KG_PER_M3Vector(builder, data):
-    HFCCreateDENSITY_KG_PER_M3Vector(builder, data)
+    return HFCCreateDENSITY_KG_PER_M3Vector(builder, data)
 
 def HFCAddTEMPERATURE_K(builder, TEMPERATURE_K):
     builder.PrependUOffsetTRelativeSlot(28, flatbuffers.number_types.UOffsetTFlags.py_type(TEMPERATURE_K), 0)
@@ -1177,7 +1246,7 @@ def HFCCreateTEMPERATURE_KVector(builder, data):
     return builder.EndVector()
 
 def CreateTEMPERATURE_KVector(builder, data):
-    HFCCreateTEMPERATURE_KVector(builder, data)
+    return HFCCreateTEMPERATURE_KVector(builder, data)
 
 def HFCAddPRESSURE_PA(builder, PRESSURE_PA):
     builder.PrependUOffsetTRelativeSlot(29, flatbuffers.number_types.UOffsetTFlags.py_type(PRESSURE_PA), 0)
@@ -1199,7 +1268,7 @@ def HFCCreatePRESSURE_PAVector(builder, data):
     return builder.EndVector()
 
 def CreatePRESSURE_PAVector(builder, data):
-    HFCCreatePRESSURE_PAVector(builder, data)
+    return HFCCreatePRESSURE_PAVector(builder, data)
 
 def HFCAddSPEED_OF_SOUND_M_PER_S(builder, SPEED_OF_SOUND_M_PER_S):
     builder.PrependUOffsetTRelativeSlot(30, flatbuffers.number_types.UOffsetTFlags.py_type(SPEED_OF_SOUND_M_PER_S), 0)
@@ -1221,7 +1290,7 @@ def HFCCreateSPEED_OF_SOUND_M_PER_SVector(builder, data):
     return builder.EndVector()
 
 def CreateSPEED_OF_SOUND_M_PER_SVector(builder, data):
-    HFCCreateSPEED_OF_SOUND_M_PER_SVector(builder, data)
+    return HFCCreateSPEED_OF_SOUND_M_PER_SVector(builder, data)
 
 def HFCAddKNUDSEN_NUMBER(builder, KNUDSEN_NUMBER):
     builder.PrependUOffsetTRelativeSlot(31, flatbuffers.number_types.UOffsetTFlags.py_type(KNUDSEN_NUMBER), 0)
@@ -1243,7 +1312,7 @@ def HFCCreateKNUDSEN_NUMBERVector(builder, data):
     return builder.EndVector()
 
 def CreateKNUDSEN_NUMBERVector(builder, data):
-    HFCCreateKNUDSEN_NUMBERVector(builder, data)
+    return HFCCreateKNUDSEN_NUMBERVector(builder, data)
 
 def HFCAddREYNOLDS_NUMBER(builder, REYNOLDS_NUMBER):
     builder.PrependUOffsetTRelativeSlot(32, flatbuffers.number_types.UOffsetTFlags.py_type(REYNOLDS_NUMBER), 0)
@@ -1265,7 +1334,7 @@ def HFCCreateREYNOLDS_NUMBERVector(builder, data):
     return builder.EndVector()
 
 def CreateREYNOLDS_NUMBERVector(builder, data):
-    HFCCreateREYNOLDS_NUMBERVector(builder, data)
+    return HFCCreateREYNOLDS_NUMBERVector(builder, data)
 
 def HFCAddCONVECTIVE_HEAT_FLUX_W_PER_M2(builder, CONVECTIVE_HEAT_FLUX_W_PER_M2):
     builder.PrependUOffsetTRelativeSlot(33, flatbuffers.number_types.UOffsetTFlags.py_type(CONVECTIVE_HEAT_FLUX_W_PER_M2), 0)
@@ -1287,7 +1356,7 @@ def HFCCreateCONVECTIVE_HEAT_FLUX_W_PER_M2Vector(builder, data):
     return builder.EndVector()
 
 def CreateCONVECTIVE_HEAT_FLUX_W_PER_M2Vector(builder, data):
-    HFCCreateCONVECTIVE_HEAT_FLUX_W_PER_M2Vector(builder, data)
+    return HFCCreateCONVECTIVE_HEAT_FLUX_W_PER_M2Vector(builder, data)
 
 def HFCAddRADIATIVE_HEAT_FLUX_W_PER_M2(builder, RADIATIVE_HEAT_FLUX_W_PER_M2):
     builder.PrependUOffsetTRelativeSlot(34, flatbuffers.number_types.UOffsetTFlags.py_type(RADIATIVE_HEAT_FLUX_W_PER_M2), 0)
@@ -1309,7 +1378,7 @@ def HFCCreateRADIATIVE_HEAT_FLUX_W_PER_M2Vector(builder, data):
     return builder.EndVector()
 
 def CreateRADIATIVE_HEAT_FLUX_W_PER_M2Vector(builder, data):
-    HFCCreateRADIATIVE_HEAT_FLUX_W_PER_M2Vector(builder, data)
+    return HFCCreateRADIATIVE_HEAT_FLUX_W_PER_M2Vector(builder, data)
 
 def HFCAddSTAGNATION_HEAT_FLUX_W_PER_M2(builder, STAGNATION_HEAT_FLUX_W_PER_M2):
     builder.PrependUOffsetTRelativeSlot(35, flatbuffers.number_types.UOffsetTFlags.py_type(STAGNATION_HEAT_FLUX_W_PER_M2), 0)
@@ -1331,7 +1400,7 @@ def HFCCreateSTAGNATION_HEAT_FLUX_W_PER_M2Vector(builder, data):
     return builder.EndVector()
 
 def CreateSTAGNATION_HEAT_FLUX_W_PER_M2Vector(builder, data):
-    HFCCreateSTAGNATION_HEAT_FLUX_W_PER_M2Vector(builder, data)
+    return HFCCreateSTAGNATION_HEAT_FLUX_W_PER_M2Vector(builder, data)
 
 def HFCAddLOAD_FACTOR_G(builder, LOAD_FACTOR_G):
     builder.PrependUOffsetTRelativeSlot(36, flatbuffers.number_types.UOffsetTFlags.py_type(LOAD_FACTOR_G), 0)
@@ -1353,7 +1422,7 @@ def HFCCreateLOAD_FACTOR_GVector(builder, data):
     return builder.EndVector()
 
 def CreateLOAD_FACTOR_GVector(builder, data):
-    HFCCreateLOAD_FACTOR_GVector(builder, data)
+    return HFCCreateLOAD_FACTOR_GVector(builder, data)
 
 def HFCAddANGLE_OF_ATTACK_DEG(builder, ANGLE_OF_ATTACK_DEG):
     builder.PrependUOffsetTRelativeSlot(37, flatbuffers.number_types.UOffsetTFlags.py_type(ANGLE_OF_ATTACK_DEG), 0)
@@ -1375,7 +1444,7 @@ def HFCCreateANGLE_OF_ATTACK_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateANGLE_OF_ATTACK_DEGVector(builder, data):
-    HFCCreateANGLE_OF_ATTACK_DEGVector(builder, data)
+    return HFCCreateANGLE_OF_ATTACK_DEGVector(builder, data)
 
 def HFCAddSIDESLIP_DEG(builder, SIDESLIP_DEG):
     builder.PrependUOffsetTRelativeSlot(38, flatbuffers.number_types.UOffsetTFlags.py_type(SIDESLIP_DEG), 0)
@@ -1397,7 +1466,7 @@ def HFCCreateSIDESLIP_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateSIDESLIP_DEGVector(builder, data):
-    HFCCreateSIDESLIP_DEGVector(builder, data)
+    return HFCCreateSIDESLIP_DEGVector(builder, data)
 
 def HFCAddBANK_ANGLE_DEG(builder, BANK_ANGLE_DEG):
     builder.PrependUOffsetTRelativeSlot(39, flatbuffers.number_types.UOffsetTFlags.py_type(BANK_ANGLE_DEG), 0)
@@ -1419,7 +1488,7 @@ def HFCCreateBANK_ANGLE_DEGVector(builder, data):
     return builder.EndVector()
 
 def CreateBANK_ANGLE_DEGVector(builder, data):
-    HFCCreateBANK_ANGLE_DEGVector(builder, data)
+    return HFCCreateBANK_ANGLE_DEGVector(builder, data)
 
 def HFCAddREFERENCE_AREA_M2(builder, REFERENCE_AREA_M2):
     builder.PrependFloat64Slot(40, REFERENCE_AREA_M2, 0.0)
@@ -1467,13 +1536,63 @@ def HFCCreateASSUMPTIONSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateASSUMPTIONSVector(builder, data):
-    HFCCreateASSUMPTIONSVector(builder, data)
+    return HFCCreateASSUMPTIONSVector(builder, data)
 
 def HFCAddCOMMENT(builder, COMMENT):
     builder.PrependUOffsetTRelativeSlot(46, flatbuffers.number_types.UOffsetTFlags.py_type(COMMENT), 0)
 
 def AddCOMMENT(builder, COMMENT):
     HFCAddCOMMENT(builder, COMMENT)
+
+def HFCAddWIND_NORTH_M_PER_S(builder, WIND_NORTH_M_PER_S):
+    builder.PrependUOffsetTRelativeSlot(47, flatbuffers.number_types.UOffsetTFlags.py_type(WIND_NORTH_M_PER_S), 0)
+
+def AddWIND_NORTH_M_PER_S(builder, WIND_NORTH_M_PER_S):
+    HFCAddWIND_NORTH_M_PER_S(builder, WIND_NORTH_M_PER_S)
+
+def HFCStartWIND_NORTH_M_PER_SVector(builder, numElems):
+    return builder.StartVector(8, numElems, 8)
+
+def StartWIND_NORTH_M_PER_SVector(builder, numElems):
+    return HFCStartWIND_NORTH_M_PER_SVector(builder, numElems)
+
+def HFCCreateWIND_NORTH_M_PER_SVector(builder, data):
+    data = list(data)
+    builder.StartVector(8, len(data), 8)
+    for item in reversed(data):
+        builder.PrependFloat64(item)
+    return builder.EndVector()
+
+def CreateWIND_NORTH_M_PER_SVector(builder, data):
+    return HFCCreateWIND_NORTH_M_PER_SVector(builder, data)
+
+def HFCAddWIND_EAST_M_PER_S(builder, WIND_EAST_M_PER_S):
+    builder.PrependUOffsetTRelativeSlot(48, flatbuffers.number_types.UOffsetTFlags.py_type(WIND_EAST_M_PER_S), 0)
+
+def AddWIND_EAST_M_PER_S(builder, WIND_EAST_M_PER_S):
+    HFCAddWIND_EAST_M_PER_S(builder, WIND_EAST_M_PER_S)
+
+def HFCStartWIND_EAST_M_PER_SVector(builder, numElems):
+    return builder.StartVector(8, numElems, 8)
+
+def StartWIND_EAST_M_PER_SVector(builder, numElems):
+    return HFCStartWIND_EAST_M_PER_SVector(builder, numElems)
+
+def HFCCreateWIND_EAST_M_PER_SVector(builder, data):
+    data = list(data)
+    builder.StartVector(8, len(data), 8)
+    for item in reversed(data):
+        builder.PrependFloat64(item)
+    return builder.EndVector()
+
+def CreateWIND_EAST_M_PER_SVector(builder, data):
+    return HFCCreateWIND_EAST_M_PER_SVector(builder, data)
+
+def HFCAddWIND_MODEL(builder, WIND_MODEL):
+    builder.PrependUOffsetTRelativeSlot(49, flatbuffers.number_types.UOffsetTFlags.py_type(WIND_MODEL), 0)
+
+def AddWIND_MODEL(builder, WIND_MODEL):
+    HFCAddWIND_MODEL(builder, WIND_MODEL)
 
 def HFCEnd(builder):
     return builder.EndObject()
@@ -1541,6 +1660,9 @@ class HFCT(object):
         SURFACE_TEMPERATURE_K = 0.0,
         ASSUMPTIONS = None,
         COMMENT = None,
+        WIND_NORTH_M_PER_S = None,
+        WIND_EAST_M_PER_S = None,
+        WIND_MODEL = None,
     ):
         self.MESSAGE_ID = MESSAGE_ID  # type: Optional[str]
         self.CREATION_DATE = CREATION_DATE  # type: Optional[str]
@@ -1589,6 +1711,9 @@ class HFCT(object):
         self.SURFACE_TEMPERATURE_K = SURFACE_TEMPERATURE_K  # type: float
         self.ASSUMPTIONS = ASSUMPTIONS  # type: Optional[List[Optional[str]]]
         self.COMMENT = COMMENT  # type: Optional[str]
+        self.WIND_NORTH_M_PER_S = WIND_NORTH_M_PER_S  # type: Optional[List[float]]
+        self.WIND_EAST_M_PER_S = WIND_EAST_M_PER_S  # type: Optional[List[float]]
+        self.WIND_MODEL = WIND_MODEL  # type: Optional[str]
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -1787,6 +1912,21 @@ class HFCT(object):
             for i in range(HFC.ASSUMPTIONSLength()):
                 self.ASSUMPTIONS.append(HFC.ASSUMPTIONS(i))
         self.COMMENT = HFC.COMMENT()
+        if not HFC.WIND_NORTH_M_PER_SIsNone():
+            if np is None:
+                self.WIND_NORTH_M_PER_S = []
+                for i in range(HFC.WIND_NORTH_M_PER_SLength()):
+                    self.WIND_NORTH_M_PER_S.append(HFC.WIND_NORTH_M_PER_S(i))
+            else:
+                self.WIND_NORTH_M_PER_S = HFC.WIND_NORTH_M_PER_SAsNumpy()
+        if not HFC.WIND_EAST_M_PER_SIsNone():
+            if np is None:
+                self.WIND_EAST_M_PER_S = []
+                for i in range(HFC.WIND_EAST_M_PER_SLength()):
+                    self.WIND_EAST_M_PER_S.append(HFC.WIND_EAST_M_PER_S(i))
+            else:
+                self.WIND_EAST_M_PER_S = HFC.WIND_EAST_M_PER_SAsNumpy()
+        self.WIND_MODEL = HFC.WIND_MODEL()
 
     # HFCT
     def Pack(self, builder):
@@ -1998,6 +2138,24 @@ class HFCT(object):
             ASSUMPTIONS = builder.EndVector()
         if self.COMMENT is not None:
             COMMENT = builder.CreateString(self.COMMENT)
+        if self.WIND_NORTH_M_PER_S is not None:
+            if np is not None and type(self.WIND_NORTH_M_PER_S) is np.ndarray:
+                WIND_NORTH_M_PER_S = builder.CreateNumpyVector(self.WIND_NORTH_M_PER_S)
+            else:
+                HFCStartWIND_NORTH_M_PER_SVector(builder, len(self.WIND_NORTH_M_PER_S))
+                for i in reversed(range(len(self.WIND_NORTH_M_PER_S))):
+                    builder.PrependFloat64(self.WIND_NORTH_M_PER_S[i])
+                WIND_NORTH_M_PER_S = builder.EndVector()
+        if self.WIND_EAST_M_PER_S is not None:
+            if np is not None and type(self.WIND_EAST_M_PER_S) is np.ndarray:
+                WIND_EAST_M_PER_S = builder.CreateNumpyVector(self.WIND_EAST_M_PER_S)
+            else:
+                HFCStartWIND_EAST_M_PER_SVector(builder, len(self.WIND_EAST_M_PER_S))
+                for i in reversed(range(len(self.WIND_EAST_M_PER_S))):
+                    builder.PrependFloat64(self.WIND_EAST_M_PER_S[i])
+                WIND_EAST_M_PER_S = builder.EndVector()
+        if self.WIND_MODEL is not None:
+            WIND_MODEL = builder.CreateString(self.WIND_MODEL)
         HFCStart(builder)
         if self.MESSAGE_ID is not None:
             HFCAddMESSAGE_ID(builder, MESSAGE_ID)
@@ -2084,5 +2242,11 @@ class HFCT(object):
             HFCAddASSUMPTIONS(builder, ASSUMPTIONS)
         if self.COMMENT is not None:
             HFCAddCOMMENT(builder, COMMENT)
+        if self.WIND_NORTH_M_PER_S is not None:
+            HFCAddWIND_NORTH_M_PER_S(builder, WIND_NORTH_M_PER_S)
+        if self.WIND_EAST_M_PER_S is not None:
+            HFCAddWIND_EAST_M_PER_S(builder, WIND_EAST_M_PER_S)
+        if self.WIND_MODEL is not None:
+            HFCAddWIND_MODEL(builder, WIND_MODEL)
         HFC = HFCEnd(builder)
         return HFC

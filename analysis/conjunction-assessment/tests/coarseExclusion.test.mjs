@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
-import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, parseFlatcJson, publishedSchema, screeningControls } from './lib/cqr.mjs';
 import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
 const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
@@ -38,7 +38,7 @@ const PRIMARY = 22;
 
 const flatc = await initCqrFlatc();
 const ommBytes = (g) => flatc.generateBinary(publishedSchema('OMM'), JSON.stringify(gpRecord(g)), { sizePrefix: false });
-const ommJson = (bytes) => JSON.parse(flatc.generateJSON(publishedSchema('OMM'), { path: '/omm.bin', data: bytes }, { defaultsJson: true }));
+const ommJson = (bytes) => parseFlatcJson(flatc.generateJSON(publishedSchema('OMM'), { path: '/omm.bin', data: bytes }, { defaultsJson: true }));
 
 // Primary first, every other fixture object a secondary: OrbPro's Live
 // catalog request shape (ordered ranges over catalog port frames).

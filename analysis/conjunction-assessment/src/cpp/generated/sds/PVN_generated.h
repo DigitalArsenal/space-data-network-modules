@@ -28,33 +28,37 @@ enum class pvnSourceKind : int8_t {
   /// Observations (ranges, angles, other measurements) that states are
   /// estimated from
   Observation = 3,
+  /// Reference registers of sites and facilities (status, dates, identity)
+  Reference = 4,
   MIN = Unspecified,
-  MAX = Observation
+  MAX = Reference
 };
 
-inline const pvnSourceKind (&EnumValuespvnSourceKind())[4] {
+inline const pvnSourceKind (&EnumValuespvnSourceKind())[5] {
   static const pvnSourceKind values[] = {
     pvnSourceKind::Unspecified,
     pvnSourceKind::ElementSet,
     pvnSourceKind::Ephemeris,
-    pvnSourceKind::Observation
+    pvnSourceKind::Observation,
+    pvnSourceKind::Reference
   };
   return values;
 }
 
 inline const char * const *EnumNamespvnSourceKind() {
-  static const char * const names[5] = {
+  static const char * const names[6] = {
     "Unspecified",
     "ElementSet",
     "Ephemeris",
     "Observation",
+    "Reference",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamepvnSourceKind(pvnSourceKind e) {
-  if (::flatbuffers::IsOutRange(e, pvnSourceKind::Unspecified, pvnSourceKind::Observation)) return "";
+  if (::flatbuffers::IsOutRange(e, pvnSourceKind::Unspecified, pvnSourceKind::Reference)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamespvnSourceKind()[index];
 }

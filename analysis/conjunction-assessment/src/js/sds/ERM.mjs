@@ -15,6 +15,7 @@ var covarianceRule = /* @__PURE__ */ ((covarianceRule2) => {
   covarianceRule2[covarianceRule2["ScaledFit"] = 2] = "ScaledFit";
   covarianceRule2[covarianceRule2["SourceModel"] = 3] = "SourceModel";
   covarianceRule2[covarianceRule2["PooledModel"] = 4] = "PooledModel";
+  covarianceRule2[covarianceRule2["EmpiricalHistoryShrunk"] = 5] = "EmpiricalHistoryShrunk";
   return covarianceRule2;
 })(covarianceRule || {});
 
@@ -41,7 +42,8 @@ var CVR = class _CVR {
   /**
    * The rule that produced the covariance. In a CCSDS covariance block,
    * Operator keeps the operator's COV_BASIS, ScaledFit is DETERMINED, and
-   * SourceModel and PooledModel are EMPIRICAL with MODEL_ID as COV_BASIS_ID.
+   * SourceModel, PooledModel and EmpiricalHistoryShrunk are EMPIRICAL with
+   * MODEL_ID as COV_BASIS_ID.
    */
   RULE() {
     const offset = this.bb.__offset(this.bb_pos, 4);
@@ -130,8 +132,45 @@ var CVR = class _CVR {
     const offset = this.bb.__offset(this.bb_pos, 30);
     return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
   }
+  /**
+   * Number of retained older/newer element-set residual pairs from this
+   * object in the age bin containing AGE_DAYS, after rejection/clipping.
+   * Zero means no retained pairs; never the held-out test count SAMPLES.
+   */
+  HISTORY_SAMPLES() {
+    const offset = this.bb.__offset(this.bb_pos, 32);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Number of distinct older element sets contributing HISTORY_SAMPLES.
+   * Zero means none; never the distinct calibration-object count OBJECTS.
+   */
+  HISTORY_SETS() {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  HISTORY_WINDOW(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Dimensionless population-prior fraction alpha in the covariance blend
+   * P = (1-alpha) H + alpha P_prior, where H is the history error second
+   * moment and P_prior includes the population model's realism scaling.
+   * Range [0,1]: 0 is all history, 1 is all prior; NaN when not applicable
+   * or unknown. For interpolation across bins, report the correspondingly
+   * interpolated alpha. EVIDENCE must identify the estimator/configuration,
+   * retained-count bin, participating bins and their weights so the blend
+   * can be reconstructed; the scalar alone does not describe that mixture.
+   * This is not SCALE_FACTOR, which multiplies a covariance. History-only
+   * evidence leaves CALIBRATION Uncalibrated and test statistics unmeasured.
+   */
+  SHRINKAGE_WEIGHT() {
+    const offset = this.bb.__offset(this.bb_pos, 38);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
   static startCVR(builder) {
-    builder.startObject(14);
+    builder.startObject(18);
   }
   static addRule(builder, RULE) {
     builder.addFieldInt8(0, RULE, 0 /* Unspecified */);
@@ -175,6 +214,18 @@ var CVR = class _CVR {
   static addEvidence(builder, EVIDENCEOffset) {
     builder.addFieldOffset(13, EVIDENCEOffset, 0);
   }
+  static addHistorySamples(builder, HISTORY_SAMPLES) {
+    builder.addFieldInt32(14, HISTORY_SAMPLES, 0);
+  }
+  static addHistorySets(builder, HISTORY_SETS) {
+    builder.addFieldInt32(15, HISTORY_SETS, 0);
+  }
+  static addHistoryWindow(builder, HISTORY_WINDOWOffset) {
+    builder.addFieldOffset(16, HISTORY_WINDOWOffset, 0);
+  }
+  static addShrinkageWeight(builder, SHRINKAGE_WEIGHT) {
+    builder.addFieldFloat64(17, SHRINKAGE_WEIGHT, NaN);
+  }
   static endCVR(builder) {
     const offset = builder.endObject();
     return offset;
@@ -185,7 +236,7 @@ var CVR = class _CVR {
   static finishSizePrefixedCVRBuffer(builder, offset) {
     builder.finish(offset, "$CVR", true);
   }
-  static createCVR(builder, RULE, MODEL_IDOffset, REGIMEOffset, AGE_DAYS, HORIZON_DAYS, MEASURED_LINEAGEOffset, TEST_WINDOWOffset, MEAN_D2_OVER_3, COVERAGE_95, SAMPLES, OBJECTS, SCALE_FACTOR, CALIBRATION, EVIDENCEOffset) {
+  static createCVR(builder, RULE, MODEL_IDOffset, REGIMEOffset, AGE_DAYS, HORIZON_DAYS, MEASURED_LINEAGEOffset, TEST_WINDOWOffset, MEAN_D2_OVER_3, COVERAGE_95, SAMPLES, OBJECTS, SCALE_FACTOR, CALIBRATION, EVIDENCEOffset, HISTORY_SAMPLES, HISTORY_SETS, HISTORY_WINDOWOffset, SHRINKAGE_WEIGHT) {
     _CVR.startCVR(builder);
     _CVR.addRule(builder, RULE);
     _CVR.addModelId(builder, MODEL_IDOffset);
@@ -201,6 +252,10 @@ var CVR = class _CVR {
     _CVR.addScaleFactor(builder, SCALE_FACTOR);
     _CVR.addCalibration(builder, CALIBRATION);
     _CVR.addEvidence(builder, EVIDENCEOffset);
+    _CVR.addHistorySamples(builder, HISTORY_SAMPLES);
+    _CVR.addHistorySets(builder, HISTORY_SETS);
+    _CVR.addHistoryWindow(builder, HISTORY_WINDOWOffset);
+    _CVR.addShrinkageWeight(builder, SHRINKAGE_WEIGHT);
     return _CVR.endCVR(builder);
   }
   unpack() {
@@ -218,7 +273,11 @@ var CVR = class _CVR {
       this.OBJECTS(),
       this.SCALE_FACTOR(),
       this.CALIBRATION(),
-      this.EVIDENCE()
+      this.EVIDENCE(),
+      this.HISTORY_SAMPLES(),
+      this.HISTORY_SETS(),
+      this.HISTORY_WINDOW(),
+      this.SHRINKAGE_WEIGHT()
     );
   }
   unpackTo(_o) {
@@ -236,10 +295,14 @@ var CVR = class _CVR {
     _o.SCALE_FACTOR = this.SCALE_FACTOR();
     _o.CALIBRATION = this.CALIBRATION();
     _o.EVIDENCE = this.EVIDENCE();
+    _o.HISTORY_SAMPLES = this.HISTORY_SAMPLES();
+    _o.HISTORY_SETS = this.HISTORY_SETS();
+    _o.HISTORY_WINDOW = this.HISTORY_WINDOW();
+    _o.SHRINKAGE_WEIGHT = this.SHRINKAGE_WEIGHT();
   }
 };
 var CVRT = class {
-  constructor(RULE = 0 /* Unspecified */, MODEL_ID = null, REGIME = null, AGE_DAYS = NaN, HORIZON_DAYS = NaN, MEASURED_LINEAGE = null, TEST_WINDOW = null, MEAN_D2_OVER_3 = NaN, COVERAGE_95 = NaN, SAMPLES = 0, OBJECTS = 0, SCALE_FACTOR = NaN, CALIBRATION = 0 /* Unspecified */, EVIDENCE = null) {
+  constructor(RULE = 0 /* Unspecified */, MODEL_ID = null, REGIME = null, AGE_DAYS = NaN, HORIZON_DAYS = NaN, MEASURED_LINEAGE = null, TEST_WINDOW = null, MEAN_D2_OVER_3 = NaN, COVERAGE_95 = NaN, SAMPLES = 0, OBJECTS = 0, SCALE_FACTOR = NaN, CALIBRATION = 0 /* Unspecified */, EVIDENCE = null, HISTORY_SAMPLES = 0, HISTORY_SETS = 0, HISTORY_WINDOW = null, SHRINKAGE_WEIGHT = NaN) {
     this.RULE = RULE;
     this.MODEL_ID = MODEL_ID;
     this.REGIME = REGIME;
@@ -254,6 +317,10 @@ var CVRT = class {
     this.SCALE_FACTOR = SCALE_FACTOR;
     this.CALIBRATION = CALIBRATION;
     this.EVIDENCE = EVIDENCE;
+    this.HISTORY_SAMPLES = HISTORY_SAMPLES;
+    this.HISTORY_SETS = HISTORY_SETS;
+    this.HISTORY_WINDOW = HISTORY_WINDOW;
+    this.SHRINKAGE_WEIGHT = SHRINKAGE_WEIGHT;
   }
   RULE;
   MODEL_ID;
@@ -269,12 +336,17 @@ var CVRT = class {
   SCALE_FACTOR;
   CALIBRATION;
   EVIDENCE;
+  HISTORY_SAMPLES;
+  HISTORY_SETS;
+  HISTORY_WINDOW;
+  SHRINKAGE_WEIGHT;
   pack(builder) {
     const MODEL_ID = this.MODEL_ID !== null ? builder.createString(this.MODEL_ID) : 0;
     const REGIME = this.REGIME !== null ? builder.createString(this.REGIME) : 0;
     const MEASURED_LINEAGE = this.MEASURED_LINEAGE !== null ? builder.createString(this.MEASURED_LINEAGE) : 0;
     const TEST_WINDOW = this.TEST_WINDOW !== null ? builder.createString(this.TEST_WINDOW) : 0;
     const EVIDENCE = this.EVIDENCE !== null ? builder.createString(this.EVIDENCE) : 0;
+    const HISTORY_WINDOW = this.HISTORY_WINDOW !== null ? builder.createString(this.HISTORY_WINDOW) : 0;
     return CVR.createCVR(
       builder,
       this.RULE,
@@ -290,7 +362,11 @@ var CVRT = class {
       this.OBJECTS,
       this.SCALE_FACTOR,
       this.CALIBRATION,
-      EVIDENCE
+      EVIDENCE,
+      this.HISTORY_SAMPLES,
+      this.HISTORY_SETS,
+      HISTORY_WINDOW,
+      this.SHRINKAGE_WEIGHT
     );
   }
 };
@@ -5950,6 +6026,7 @@ var pvnSourceKind = /* @__PURE__ */ ((pvnSourceKind2) => {
   pvnSourceKind2[pvnSourceKind2["ElementSet"] = 1] = "ElementSet";
   pvnSourceKind2[pvnSourceKind2["Ephemeris"] = 2] = "Ephemeris";
   pvnSourceKind2[pvnSourceKind2["Observation"] = 3] = "Observation";
+  pvnSourceKind2[pvnSourceKind2["Reference"] = 4] = "Reference";
   return pvnSourceKind2;
 })(pvnSourceKind || {});
 

@@ -28,7 +28,9 @@ const headers = [sds.header];
 headers.push(await fs.readFile(path.join(repo,'files/orbit-products/src/sha256.hpp'),'utf8'));
 headers.push(await fs.readFile(path.join(repo,'common/sds_cid.hpp'),'utf8'));
 headers.push(await fs.readFile(path.join(repo,'files/orbit-products/src/vimpel.hpp'),'utf8'));
-headers.push(await fs.readFile(path.join(repo,'analysis/estimation/src/estimation.hpp'),'utf8'));
+// estimation.hpp includes the recovery policy header: both go in, the policy first and its include dropped.
+headers.push(await fs.readFile(path.join(repo,'analysis/estimation/src/recovery.hpp'),'utf8'));
+headers.push((await fs.readFile(path.join(repo,'analysis/estimation/src/estimation.hpp'),'utf8')).replace('#include "recovery.hpp"\n',''));
 headers.push((await fs.readFile(path.join(repo,'analysis/estimation/src/estimation.cpp'),'utf8')).replace('#include "estimation.hpp"',''));
 const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
 // The module's sources in dependency order, one translation unit: composition, matching, epoch fitting, then the integrator

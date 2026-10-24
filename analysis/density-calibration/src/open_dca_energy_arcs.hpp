@@ -18,13 +18,13 @@ bool arc_propagate(const OrbitalState& a,double to,double B,const plugin_input_f
   r.INITIAL->COORDINATE_SYSTEM=std::make_unique<RFMCoordinateSystemT>();auto& frame=*r.INITIAL->COORDINATE_SYSTEM;
   frame.NAME="GCRF";frame.AXIS_TYPE=rfmAxisType::ICRF;frame.AXIS_REFERENCE_BODY_ID=399;frame.ORIGIN=std::make_unique<RFMOriginT>();frame.ORIGIN->KIND=rfmOriginKind::CELESTIAL_BODY;frame.ORIGIN->CELESTIAL_BODY_ID=399;
   r.TARGET_EPOCH=instant(to);r.SAMPLE_EPOCHS.push_back(instant(to));
-  r.FORCES=std::make_unique<PRWForceConfigurationT>();auto& f=*r.FORCES;
-  f.GRAVITY_CHOICE=prwGravitySelection::EGM2008;f.ENABLE_POINT_MASS=true;f.GRAVITATIONAL_PARAMETER=3.986004418e14;
+  r.FORCES=std::make_unique<PCFForceModelT>();auto& f=*r.FORCES;
+  f.GRAVITY_CHOICE=pcfGravitySelection::EGM2008;f.ENABLE_POINT_MASS=true;f.GRAVITATIONAL_PARAMETER=3.986004418e14;
   f.HAS_MAXIMUM_DEGREE=true;f.MAXIMUM_DEGREE=24;f.HAS_MAXIMUM_ORDER=true;f.MAXIMUM_ORDER=24;
   f.ENABLE_THIRD_BODY=true;f.THIRD_BODY_IDS={10,301};f.ENABLE_SRP=true;f.ENABLE_DRAG=true;f.INITIAL_MASS_KG=1;f.AREA_M2=1;f.REFLECTIVITY_COEFFICIENT=0.0135;f.DRAG_COEFFICIENT=B;
-  f.RADIATION_PRESSURE_MODEL=prwRadiationPressureFamily::CANNONBALL;f.ATMOSPHERE_MODEL=prwAtmosphereFamily::NRLMSISE00;f.EPHEMERIS_SOURCE="JPL_SPK";f.SOLID_TIDES=prwSolidTideModel::IERS_2010;
-  r.INTEGRATOR=std::make_unique<PRWIntegratorSettingsT>();auto& it=*r.INTEGRATOR;
-  it.ALGORITHM=prwSolverAlgorithm::RK78;it.INITIAL_STEP_SECONDS=30;it.MINIMUM_STEP_SECONDS=0.01;it.MAXIMUM_STEP_SECONDS=75;it.ABSOLUTE_TOLERANCES.assign(6,1e-8);it.RELATIVE_TOLERANCE=1e-11;it.MAXIMUM_STEPS=2000000;
+  f.RADIATION_PRESSURE_MODEL=pcfRadiationPressureFamily::CANNONBALL;f.ATMOSPHERE_MODEL=pcfAtmosphereFamily::NRLMSISE00;f.EPHEMERIS_SOURCE="JPL_SPK";f.SOLID_TIDES=pcfSolidTideModel::IERS_2010;
+  r.INTEGRATOR=std::make_unique<PCFIntegratorSettingsT>();auto& it=*r.INTEGRATOR;
+  it.ALGORITHM=pcfIntegratorAlgorithm::RK78;it.INITIAL_STEP_SECONDS=30;it.MINIMUM_STEP_SECONDS=0.01;it.MAXIMUM_STEP_SECONDS=75;it.ABSOLUTE_TOLERANCES.assign(6,1e-8);it.RELATIVE_TOLERANCE=1e-11;it.MAXIMUM_STEPS=2000000;
   r.INCLUDE_STM=true;r.STM_TECHNIQUE=prwDerivativeTechnique::ANALYTIC;r.DENSITY_TREATMENT=prwDensityTreatment::FINITE_DIFFERENCE;r.DYNAMIC_PARAMETERS={prwDynamicParameter::DRAG_AREA_OVER_MASS};
   fb::FlatBufferBuilder b;FinishSizePrefixedPRWBuffer(b,PRW::Pack(b,&request));std::vector<uint8_t> output;
   if(!ffm::processPrwInvoke(b.GetBufferPointer(),b.GetSize(),kernel->payload,kernel->payload_length,env,output,error))return false;

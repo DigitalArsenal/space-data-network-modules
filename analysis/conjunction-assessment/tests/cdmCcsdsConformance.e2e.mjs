@@ -18,7 +18,7 @@ import { ByteBuffer } from 'flatbuffers';
 import { CDM } from 'spacedatastandards.org/lib/js/CDM/CDM.js';
 import { CQR } from 'spacedatastandards.org/lib/js/CQR/CQR.js';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
-import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, parseFlatcJson, publishedSchema, screeningControls } from './lib/cqr.mjs';
 import { syntheticGp } from './lib/syntheticCatalog.mjs';
 import { uncertaintyModelFrame } from '../scripts/uncertainty-model.mjs';
 import {
@@ -33,7 +33,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cdm-e2e-'));
 
 // --- The module's surface ----------------------------------------------------------------
 const flatc = await initCqrFlatc();
-const cdmJson = (bytes) => JSON.parse(flatc.generateJSON(publishedSchema('CDM'), { path: '/cdm.bin', data: bytes }, { defaultsJson: true }));
+const cdmJson = (bytes) => parseFlatcJson(flatc.generateJSON(publishedSchema('CDM'), { path: '/cdm.bin', data: bytes }, { defaultsJson: true }));
 const cdmBytes = (record) => flatc.generateBinary(publishedSchema('CDM'), JSON.stringify(record), { sizePrefix: false });
 // flatc JSON prints doubles to 12 decimal places. Read small covariance/Pc values directly from
 // the published generated bindings, preserving their complete IEEE-754 value for comparisons.

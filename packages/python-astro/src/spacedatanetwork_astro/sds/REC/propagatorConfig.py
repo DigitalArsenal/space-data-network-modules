@@ -21,6 +21,10 @@ class propagatorConfig(object):
     def GetRootAspropagatorConfig(cls, buf, offset=0):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
+    @classmethod
+    def propagatorConfigBufferHasIdentifier(cls, buf, offset, size_prefixed=False):
+        return flatbuffers.util.BufferHasIdentifier(buf, offset, b"\x24\x56\x43\x4D", size_prefixed=size_prefixed)
+
     # propagatorConfig
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -134,7 +138,7 @@ def propagatorConfigCreateFORCE_MODELSVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateFORCE_MODELSVector(builder, data):
-    propagatorConfigCreateFORCE_MODELSVector(builder, data)
+    return propagatorConfigCreateFORCE_MODELSVector(builder, data)
 
 def propagatorConfigAddEPOCH(builder, EPOCH):
     builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(EPOCH), 0)
@@ -168,7 +172,7 @@ def propagatorConfigCreateZONAL_HARMONIC_TERMSVector(builder, data):
     return builder.EndVector()
 
 def CreateZONAL_HARMONIC_TERMSVector(builder, data):
-    propagatorConfigCreateZONAL_HARMONIC_TERMSVector(builder, data)
+    return propagatorConfigCreateZONAL_HARMONIC_TERMSVector(builder, data)
 
 def propagatorConfigEnd(builder):
     return builder.EndObject()
