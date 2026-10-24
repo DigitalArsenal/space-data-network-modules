@@ -83,7 +83,7 @@ const sourceCode = [
     : stripGeneratedIncludes(sdsHeaders[family])),
   ...sdkHeaders.map((header, index) => index === 0 ? header : stripGeneratedIncludes(header)),
   stripGeneratedIncludes(recoveryHeader),
-  estimationHeader,
+  stripGeneratedIncludes(estimationHeader),
   stripGeneratedIncludes(relativeHeader),
   teagHeader,
   stripGeneratedIncludes(tdmDecodeHeader),

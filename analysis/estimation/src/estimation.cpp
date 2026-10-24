@@ -1182,6 +1182,30 @@ FilterResult sequential_filter(const FilterConfig &config,
       (!std::isfinite(config.dmc_correlation_time_seconds) ||
        config.dmc_correlation_time_seconds <= 0))
     return result;
+  const bool recover = config.recovery.enabled;
+  if (recover) {
+    // Innovation recovery (extension v5) gates the joint NIS of six-component
+    // full-state observations. It replaces the component gate, and it excludes
+    // the smoother, clock states and the other adaptive controls.
+    if (config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER || smooth ||
+        n != 6 || config.adaptive_process_noise ||
+        config.inflate_measurement_noise ||
+        !valid_recovery_config(config.recovery)) {
+      result.error =
+          "innovation recovery needs the plain EKF (no smoothing, clock "
+          "states, adaptive Q or R inflation) and valid recovery options";
+      return result;
+    }
+    for (const auto &candidate : observations)
+      if (candidate.kind != MeasurementKind::POSITION_VELOCITY ||
+          candidate.value_count != 6) {
+        result.error =
+            "innovation recovery needs six-component POSITION_VELOCITY "
+            "observations";
+        return result;
+      }
+  }
+  InnovationRecovery controller(config.recovery);
   V x{};
   std::copy(config.initial.value.begin(), config.initial.value.end(),
             x.begin());
@@ -1326,6 +1350,42 @@ FilterResult sequential_filter(const FilterConfig &config,
     pp = sym8(pp, n);
     if (!chol8(pp, &scratch, n))
       return result;
+    bool has_candidate = false;
+    double candidate_nis = 0.0;
+    if (recover && controller.pending_at(o.epoch_seconds) &&
+        config.recovery.strategy == RecoveryStrategy::PREDICTIVE_CONSISTENCY) {
+      // The candidate started at the previous observation; the same
+      // propagation, STM and process noise carry it to this one.
+      const RecoveryBelief &c = controller.candidate();
+      V candidate_seed{}, candidate_x{};
+      for (int i = 0; i < 6; ++i)
+        candidate_seed[i] = c.state[i];
+      M candidate_phi = phi;
+      if (!propagate(candidate_seed, &candidate_x, &candidate_phi))
+        return result;
+      M candidate_p =
+          mul8(mul8(candidate_phi, expand6(c.covariance), n),
+               tr8(candidate_phi, n), n);
+      for (int i = 0; i < 64; ++i)
+        candidate_p[i] += qscale * q[i];
+      Matrix6 candidate_s{}, candidate_inverse{};
+      Vector6 candidate_innovation{};
+      for (int i = 0; i < 6; ++i) {
+        candidate_innovation[i] = o.value[i] - candidate_x[i];
+        for (int j = 0; j < 6; ++j)
+          candidate_s[6 * i + j] =
+              0.5 * (candidate_p[8 * i + j] + candidate_p[8 * j + i]) +
+              (i == j ? o.sigma[i] * o.sigma[i] : 0.0);
+      }
+      if (invert6(candidate_s, &candidate_inverse)) {
+        for (int i = 0; i < 6; ++i)
+          for (int j = 0; j < 6; ++j)
+            candidate_nis += candidate_innovation[i] *
+                             candidate_inverse[6 * i + j] *
+                             candidate_innovation[j];
+        has_candidate = std::isfinite(candidate_nis);
+      }
+    }
     V mean{};
     M h{}, s{}, cxy{};
     if (!measurement(o, xp, n, &mean, &h))
@@ -1399,7 +1459,14 @@ FilterResult sequential_filter(const FilterConfig &config,
     double max_sigma = 0;
     if (!innovation_stats(1, &max_sigma))
       return result;
-    if (max_sigma > config.sigma_edit_threshold &&
+    RecoveryAction action = RecoveryAction::ACCEPTED;
+    if (recover) {
+      const RecoveryDecision decision = controller.decide(
+          o.epoch_seconds, nis, has_candidate, candidate_nis);
+      action = decision.action;
+      result.recovery.push_back(decision);
+    }
+    if (!recover && max_sigma > config.sigma_edit_threshold &&
         config.inflate_measurement_noise) {
       // Increase only R, never P or the observation. Bisection finds the least
       // inflation passing the existing gate, subject to the caller's cap.
@@ -1421,10 +1488,20 @@ FilterResult sequential_filter(const FilterConfig &config,
       if (!innovation_stats(rscale, &max_sigma))
         return result;
     }
-    accepted = max_sigma <= config.sigma_edit_threshold;
+    accepted = recover ? action != RecoveryAction::HELD
+                       : max_sigma <= config.sigma_edit_threshold;
     V updated = xp;
     M updated_p = pp;
-    if (accepted) {
+    if (recover && action == RecoveryAction::REINITIALIZED) {
+      // Full-state reinitialization trusts the observation with the
+      // configured covariance inflation.
+      updated_p = M{};
+      for (int i = 0; i < 6; ++i) {
+        updated[i] = o.value[i];
+        updated_p[8 * i + i] =
+            config.recovery.covariance_inflation * o.sigma[i] * o.sigma[i];
+      }
+    } else if (accepted) {
       M gain{};
       for (int i = 0; i < n; ++i)
         for (int j = 0; j < m; ++j)
@@ -1453,8 +1530,18 @@ FilterResult sequential_filter(const FilterConfig &config,
               updated_p[8 * i + j] += gain[8 * i + k] * rscale * o.sigma[k] *
                                       o.sigma[k] * gain[8 * j + k];
       }
-    } else
+    } else {
       result.rejected_indices.push_back(index);
+      if (recover) {
+        // A held observation seeds the candidate track.
+        RecoveryBelief held{};
+        for (int i = 0; i < 6; ++i) {
+          held.state[i] = o.value[i];
+          held.covariance[6 * i + i] = o.sigma[i] * o.sigma[i];
+        }
+        controller.set_candidate(held);
+      }
+    }
     updated_p = sym8(updated_p, n);
     if (!chol8(updated_p, &scratch, n))
       return result;

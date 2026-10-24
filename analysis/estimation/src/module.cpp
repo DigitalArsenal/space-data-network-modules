@@ -1,5 +1,6 @@
 #include "space_data_module_invoke.h"
 #include "estimation.hpp"
+#include "relative_nav.hpp"
 #include "teag.hpp"
 #include "tdm_decode.hpp"
 #include "Estimation_generated.h"
@@ -628,6 +629,19 @@ int push(const char* port, const char* schema, const char* identifier,
                             static_cast<std::uint32_t>(bytes.size()));
 }
 
+// Extension v5: opt-in innovation recovery options. An absent table is off.
+bool recovery_from_wire(const wire::InnovationRecoveryOptions* source, core::RecoveryConfig* out) {
+  *out = core::RecoveryConfig{};
+  if (source == nullptr || !source->enabled()) return true;
+  out->enabled = true;
+  out->strategy = static_cast<core::RecoveryStrategy>(source->strategy());
+  out->nis_probability = source->nis_probability();
+  out->confirmation_count = source->confirmation_count() > 1000000u ? 0 : static_cast<int>(source->confirmation_count());
+  out->covariance_inflation = source->covariance_inflation();
+  out->max_gap_seconds = source->max_gap_seconds();
+  return core::valid_recovery_config(*out);
+}
+
 bool smooth_requested(const wire::EstimationRequest* request) {
   return request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS ||
          (request->options() && request->options()->smooth());
@@ -788,6 +802,10 @@ extern "C" int run_estimation(void) {
         if (!(o.initial_bound_scale > 0) || !(o.process_bound_scale > 0) || !(o.measurement_bound_scale > 0) || o.criterion > 1)
           return fail("bad-estimation-request", "set-membership bound scales must be positive; criterion 0 or 1");
       }
+      if (!recovery_from_wire(options->innovation_recovery(), &config.recovery))
+        return fail("bad-estimation-request", "innovation recovery needs a probability in (0, 1), a confirmation count of at least 2, an inflation of at least 1 and a positive maximum gap");
+      if (config.recovery.enabled && set_based(request->config()->estimator()))
+        return fail("bad-estimation-request", "innovation recovery applies to the extended Kalman filter only");
       if (const auto* s0 = options->initial_support()) {
         auto& t = config.initial_support;
         t.epoch_seconds = s0->epoch() ? relative_seconds(*s0->epoch(), request->config()->initial_epoch()) : 0.0;
@@ -903,6 +921,20 @@ extern "C" int run_estimation(void) {
       extended_history.push_back(wire::ExtendedFilterEpoch::Pack(builder,&row));
     }
   }
+  std::vector<::flatbuffers::Offset<wire::RecoveryEpoch>> recovery_history;
+  if (!batch_mode) {
+    for (const core::RecoveryDecision& d : filter.recovery) {
+      wire::RecoveryEpochT row;
+      row.classification = static_cast<wire::RecoveryClassification>(d.classification);
+      row.action = static_cast<wire::RecoveryAction>(d.action);
+      row.nis = d.nis; row.threshold = d.threshold;
+      row.has_candidate = d.has_candidate; row.candidate_nis = d.candidate_nis;
+      row.consecutive_exceedances = static_cast<std::uint32_t>(d.consecutive_exceedances);
+      row.acquisition_epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(d.acquisition_seconds, request->config()->initial_epoch()));
+      row.decision_epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(d.decision_seconds, request->config()->initial_epoch()));
+      recovery_history.push_back(wire::RecoveryEpoch::Pack(builder, &row));
+    }
+  }
   std::vector<::flatbuffers::Offset<wire::SupportEpoch>> support_history;
   ::flatbuffers::Offset<wire::SupportState> final_support = 0;
   if (!batch_mode && set_based(request->config()->estimator())) {
@@ -941,7 +973,8 @@ extern "C" int run_estimation(void) {
       converged ? wire::EstimationStatus::OK : wire::EstimationStatus::NOT_CONVERGED,
       &state, &wire_history, &residuals, &iteration_covariances, &rejected,
       &odr, &ocm, nullptr, trace, &extended_history, nullptr, 0,
-      support_history.empty() ? nullptr : &support_history, final_support);
+      support_history.empty() ? nullptr : &support_history, final_support,
+      recovery_history.empty() ? nullptr : &recovery_history);
   const auto root = wire::CreateEstimationEnvelope(builder, 0, result);
   wire::FinishEstimationEnvelopeBuffer(builder, root);
   const std::vector<std::uint8_t> response(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
@@ -1424,4 +1457,154 @@ extern "C" int evaluate_teag(void) {
   wire::FinishEstimationEnvelopeBuffer(b, wire::EstimationEnvelope::Pack(b, &reply));
   const std::vector<std::uint8_t> bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
   return push("result", "Estimation.fbs", "$EST", bytes) < 0 ? fail("emit-failed", "cannot emit the TEAG result") : 0;
+}
+
+
+// Extension v5: relative navigation. The state is the deputy about the chief on
+// the chief's CCSDS RTN axes; the four models are the filter's own linear
+// dynamics and the observation is the full relative state with its covariance
+// (relative_nav.hpp). Every option, including innovation recovery, is a field
+// of the typed request; diagnostics return in typed records.
+namespace {
+
+const wire::EstimationEnvelope* decode_envelope(const plugin_input_frame_t* frame) {
+  if (frame == nullptr || frame->payload == nullptr || frame->payload_length == 0 ||
+      !wire::EstimationEnvelopeBufferHasIdentifier(frame->payload))
+    return nullptr;
+  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+  if (!wire::VerifyEstimationEnvelopeBuffer(verifier)) return nullptr;
+  return wire::GetEstimationEnvelope(frame->payload);
+}
+
+core::ChiefReference chief_from_wire(const wire::ChiefReference* source) {
+  core::ChiefReference out;
+  out.semi_major_axis_m = source->semi_major_axis_m();
+  out.eccentricity = source->eccentricity();
+  out.inclination_rad = source->inclination_rad();
+  out.true_anomaly_rad = source->true_anomaly_rad();
+  return out;
+}
+
+std::unique_ptr<wire::ChiefReferenceT> chief_to_wire(const core::ChiefReference& source) {
+  auto out = std::make_unique<wire::ChiefReferenceT>();
+  out->semi_major_axis_m = source.semi_major_axis_m;
+  out->eccentricity = source.eccentricity;
+  out->inclination_rad = source.inclination_rad;
+  out->true_anomaly_rad = source.true_anomaly_rad;
+  return out;
+}
+
+int emit_envelope(wire::EstimationEnvelopeT* reply, const char* what) {
+  ::flatbuffers::FlatBufferBuilder b;
+  wire::FinishEstimationEnvelopeBuffer(b, wire::EstimationEnvelope::Pack(b, reply));
+  const std::vector<std::uint8_t> bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+  return push("result", "Estimation.fbs", "$EST", bytes) < 0 ? fail("emit-failed", what) : 0;
+}
+
+}  // namespace
+
+extern "C" int run_relative_navigation(void) {
+  plugin_reset_output_state();
+  const wire::EstimationEnvelope* envelope = decode_envelope(input("request"));
+  const wire::RelativeNavRequest* request = envelope ? envelope->relative_request() : nullptr;
+  const wire::RelativeNavConfig* cfg = request ? request->config() : nullptr;
+  if (cfg == nullptr || cfg->epoch() == nullptr)
+    return fail("bad-relative-request", "request must be a $EST envelope with relative_request");
+  if (cfg->measurement_model() != wire::RelativeMeasurementModel::FULL_STATE)
+    return fail("bad-relative-request", "the relative filters take the full relative state as the measurement model");
+  if (cfg->state()->size() != 6 || cfg->covariance()->size() != 36 || cfg->acceleration_psd()->size() != 3)
+    return fail("bad-relative-request", "state has 6 entries, covariance 36 and acceleration_psd 3");
+  if (static_cast<unsigned>(cfg->model()) > static_cast<unsigned>(wire::RelativeModel::YAMANAKA_ANKERSEN))
+    return fail("bad-relative-request", "unknown relative model");
+  core::RelativeConfig config;
+  config.model = static_cast<core::RelativeModel>(cfg->model());
+  config.constants.gravitational_parameter_m3_s2 = cfg->gravitational_parameter_m3_s2();
+  config.constants.j2 = cfg->j2();
+  config.constants.equatorial_radius_m = cfg->equatorial_radius_m();
+  for (int i = 0; i < 6; ++i) config.state[i] = cfg->state()->Get(i);
+  for (int i = 0; i < 36; ++i) config.covariance[i] = cfg->covariance()->Get(i);
+  config.chief = chief_from_wire(cfg->chief());
+  if (cfg->process_noise() == wire::ProcessNoiseKind::STATE_NOISE_COMPENSATION) config.white_acceleration = true;
+  else if (cfg->process_noise() != wire::ProcessNoiseKind::NONE)
+    return fail("bad-relative-request", "process_noise is NONE or STATE_NOISE_COMPENSATION (white acceleration)");
+  for (int i = 0; i < 3; ++i) config.acceleration_psd[i] = cfg->acceleration_psd()->Get(i);
+  if (!recovery_from_wire(cfg->recovery(), &config.recovery))
+    return fail("bad-relative-request", "innovation recovery needs a probability in (0, 1), a confirmation count of at least 2, an inflation of at least 1 and a positive maximum gap");
+  std::vector<core::RelativeObservation> observations;
+  if (request->observations() != nullptr) {
+    observations.reserve(request->observations()->size());
+    for (const wire::RelativeObservation* source : *request->observations()) {
+      if (source == nullptr || source->epoch() == nullptr || source->state()->size() != 6 ||
+          source->covariance()->size() != 36)
+        return fail("bad-relative-request", "each observation has an epoch, 6 state entries, 36 covariance entries and a chief reference");
+      core::RelativeObservation o;
+      o.epoch_seconds = relative_seconds(*source->epoch(), *cfg->epoch());
+      for (int i = 0; i < 6; ++i) o.state[i] = source->state()->Get(i);
+      for (int i = 0; i < 36; ++i) o.covariance[i] = source->covariance()->Get(i);
+      o.chief = chief_from_wire(source->chief());
+      observations.push_back(o);
+    }
+  }
+  const core::RelativeResult result = core::relative_filter(config, observations);
+  if (!result.valid) return fail("relative-filter-failed", result.error.c_str());
+
+  wire::EstimationEnvelopeT reply;
+  reply.relative_result = std::make_unique<wire::RelativeNavResultT>();
+  wire::RelativeNavResultT& out = *reply.relative_result;
+  out.status = wire::EstimationStatus::OK;
+  if (request->trace_id() != nullptr) out.trace_id = request->trace_id()->str();
+  out.history.reserve(result.epochs.size());
+  for (const core::RelativeEpoch& e : result.epochs) {
+    auto row = std::make_unique<wire::RelativeNavEpochT>();
+    row->epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(e.epoch_seconds, *cfg->epoch()));
+    row->predicted_state.assign(e.predicted_state.begin(), e.predicted_state.end());
+    row->predicted_covariance.assign(e.predicted_covariance.begin(), e.predicted_covariance.end());
+    row->filtered_state.assign(e.filtered_state.begin(), e.filtered_state.end());
+    row->filtered_covariance.assign(e.filtered_covariance.begin(), e.filtered_covariance.end());
+    row->innovation.assign(e.innovation.begin(), e.innovation.end());
+    row->normalized_innovation_squared = e.normalized_innovation_squared;
+    if (e.has_recovery) {
+      const core::RecoveryDecision& d = e.recovery;
+      auto r = std::make_unique<wire::RecoveryEpochT>();
+      r->classification = static_cast<wire::RecoveryClassification>(d.classification);
+      r->action = static_cast<wire::RecoveryAction>(d.action);
+      r->nis = d.nis; r->threshold = d.threshold;
+      r->has_candidate = d.has_candidate; r->candidate_nis = d.candidate_nis;
+      r->consecutive_exceedances = static_cast<std::uint32_t>(d.consecutive_exceedances);
+      r->acquisition_epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(d.acquisition_seconds, *cfg->epoch()));
+      r->decision_epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(d.decision_seconds, *cfg->epoch()));
+      row->recovery = std::move(r);
+    }
+    out.history.push_back(std::move(row));
+  }
+  return emit_envelope(&reply, "cannot emit the relative navigation result");
+}
+
+// The RTN relative state of deputy inertial states about chief inertial states
+// with the chief's osculating reference (extension v5).
+extern "C" int relative_state(void) {
+  plugin_reset_output_state();
+  const wire::EstimationEnvelope* envelope = decode_envelope(input("request"));
+  const wire::RelativeStateRequest* request = envelope ? envelope->relative_state_request() : nullptr;
+  if (request == nullptr) return fail("bad-relative-state", "request must be a $EST envelope with relative_state_request");
+  const std::size_t count = request->chief_states()->size();
+  if (count == 0 || count % 6 != 0 || request->deputy_states()->size() != count)
+    return fail("bad-relative-state", "chief_states and deputy_states hold 6 entries per pair, equally many");
+  wire::EstimationEnvelopeT reply;
+  reply.relative_state_result = std::make_unique<wire::RelativeStateResultT>();
+  wire::RelativeStateResultT& out = *reply.relative_state_result;
+  out.status = wire::EstimationStatus::OK;
+  for (std::size_t k = 0; k < count / 6; ++k) {
+    core::Vector6 chief{}, deputy{}, relative{};
+    for (int i = 0; i < 6; ++i) {
+      chief[i] = request->chief_states()->Get(static_cast<::flatbuffers::uoffset_t>(6 * k + i));
+      deputy[i] = request->deputy_states()->Get(static_cast<::flatbuffers::uoffset_t>(6 * k + i));
+    }
+    core::ChiefReference reference;
+    if (!core::inertial_to_rtn(request->gravitational_parameter_m3_s2(), chief, deputy, &relative, &reference))
+      return fail("bad-relative-state", "the chief state must be a bound orbit about a positive gravitational parameter");
+    out.states.insert(out.states.end(), relative.begin(), relative.end());
+    out.chiefs.push_back(chief_to_wire(reference));
+  }
+  return emit_envelope(&reply, "cannot emit the relative state result");
 }

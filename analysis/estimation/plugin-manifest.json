@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.estimation",
   "name": "Measurement-based Orbit Estimation",
-  "version": "0.4.1",
-  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Extension v2 adds fit_batch: batch least squares of the state plus dynamic parameters (B, BDOT, AGOM) with full 3x3 position weights through the inverted port. Validated against Orekit 13.1 BatchLSEstimator, Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo. Extension v3 adds the Epistemic Support-Point Filter (ESPF_2025 and ESPF_2026), an ellipsoidal set-membership filter (ELLIPSOIDAL_SET_MEMBERSHIP) and evaluate_teag (the TEAG primitives); docs/espf-spec.md. Extension v4 is fit_batch version 2: bounded and logarithmic parameters, Levenberg-Marquardt damping, measurement and consider parameters, covariance blocks with regularization, RTN output and error models; version-1 requests give version-1 bytes.",
+  "version": "0.5.0",
+  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Extension v2 adds fit_batch: batch least squares of the state plus dynamic parameters (B, BDOT, AGOM) with full 3x3 position weights through the inverted port. Validated against Orekit 13.1 BatchLSEstimator, Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo. Extension v3 adds the Epistemic Support-Point Filter (ESPF_2025 and ESPF_2026), an ellipsoidal set-membership filter (ELLIPSOIDAL_SET_MEMBERSHIP) and evaluate_teag (the TEAG primitives); docs/espf-spec.md. Extension v4 is fit_batch version 2: bounded and logarithmic parameters, Levenberg-Marquardt damping, measurement and consider parameters, covariance blocks with regularization, RTN output and error models; version-1 requests give version-1 bytes. Extension v5 adds run_relative_navigation (Clohessy-Wiltshire, Schweighart-Sedwick J2, Tschauner-Hempel and Yamanaka-Ankersen EKFs on the full relative state), relative_state (inertial to RTN) and opt-in innovation recovery (NIS hold with predictive-consistency or persistence reinitialization) for those filters and for the EKF with POSITION_VELOCITY observations (SequentialOptions.innovation_recovery, EstimationResult.recovery_history).",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -194,6 +194,108 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "The Theory of Epistemic Abductive Geometry primitives on a finite support (Jah 2026): impossibility field Phi = -log pi and the conjunctive update Phi+ = max(Phi-, psi), max-rescaling, the active-front zones, alpha-cuts, possibility Pi(A) and necessity N(A) = 1 - Pi(A^c) of events, Choquet surprisal and information content, the PCRB-admissible basin, the minimum-volume enclosing ellipsoid (Khachiyan with Todd-Yildirim away steps), the minimax medoid, Smolyak Clenshaw-Curtis grids, the minimum-trace outer bound of a Minkowski sum and the truncated possibilistic entropy. docs/espf-spec.md maps each to its paper."
+    },
+    {
+      "methodId": "run_relative_navigation",
+      "displayName": "Run Relative Navigation",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "relative-navigation-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope"
+                }
+              ],
+              "description": "relative_request: model (HCW, SS-J2, TH, YA), measurement model, initial relative state and covariance on the chief's CCSDS RTN axes, the chief's osculating reference, constants, white-acceleration process noise, innovation recovery options, and full-state observations with covariances and chief references."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "relative_request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "relative-navigation-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope"
+                }
+              ],
+              "description": "relative_result: per observation the predicted and filtered state and covariance, the innovation, the NIS and, when recovery is on, the typed recovery record (classification, action, NIS, candidate NIS, acquisition and decision epochs)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "relative_result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Relative-navigation extended Kalman filters on the full relative state: Clohessy-Wiltshire (1960), Schweighart-Sedwick J2 (2002), Tschauner-Hempel (1965; integrated in true anomaly) and Yamanaka-Ankersen (2002; closed form), each the filter's own linear model. Opt-in innovation recovery (NIS chi-square hold, predictive-consistency or persistence reinitialization with covariance inflation within a maximum observation gap), off by default and numerically absent when off. Angles-only and vision navigation are not supported."
+    },
+    {
+      "methodId": "relative_state",
+      "displayName": "Relative State From Inertial States",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "relative-state-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope"
+                }
+              ],
+              "description": "relative_state_request: chief and deputy inertial states ([r, v], SI) and the gravitational parameter."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "relative_state_request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "relative-state-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope"
+                }
+              ],
+              "description": "relative_state_result: the deputy's RTN relative state about the chief (rotating-frame rates) and the chief's osculating semi-major axis, eccentricity, inclination and true anomaly."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "relative_state_result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Converts inertial chief and deputy states to the relative state on the chief's CCSDS RTN axes (R = r/|r|, N = r x v/|r x v|, T = N x R) with rotating-frame rates, and reports the chief's osculating reference that the relative filters take."
     }
   ],
   "schemasUsed": [

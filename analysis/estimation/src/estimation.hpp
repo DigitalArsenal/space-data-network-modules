@@ -1,5 +1,7 @@
 #pragma once
 
+#include "recovery.hpp"
+
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -308,6 +310,9 @@ struct FilterConfig {
   EspfOptions espf{};
   SetMembershipOptions set_membership{};
   SupportState initial_support{};      // used when valid
+  // Opt-in innovation recovery (extension v5): EKF with six-component
+  // POSITION_VELOCITY observations only; off leaves the numerics unchanged.
+  RecoveryConfig recovery{};
 };
 
 struct FilterEpoch {
@@ -331,6 +336,7 @@ struct FilterResult {
   bool valid{false};
   std::vector<SupportEpoch> support;   // ESPF and set-membership runs
   SupportState final_support{};
+  std::vector<RecoveryDecision> recovery;  // one per observation when enabled
   std::string error;
 };
 
