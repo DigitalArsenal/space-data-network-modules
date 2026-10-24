@@ -178,3 +178,78 @@ Evidence (`tests/ses_i11.test.mjs`):
 | Longitude and latitude at 170 h for Intelsat 4521 | Intelsat's calculator, as Orekit 13.1's test asserts it (301.9191 E, 0.0257 N) | 1e-4 deg |
 | Longitude, latitude, radius and radial rate at the epoch for Intelsat 4521 | STK, as Orekit 13.1's test asserts it (302.0355 E, 0.0378 N, 42172456.005 m, 0.797 m/s) | 1e-4 deg, 1 mm, 1 mm/s |
 | A printed prediction the elements do not reproduce, a wrong format name, a wrong hash and a missing parameter line | refused, no output | — |
+
+## Sentinel orbit files and NAIF CK (0.2.0)
+
+Three more methods, all pure compute, no capabilities. **Every option of a request travels in the `$NCD` that
+frames the file or in the target record** (owner, 2026-10-24: *"We need to be able to pass configurations using a
+flatbuffer message"*); none travels in a JSON options file.
+
+| Method | In | Out |
+| --- | --- | --- |
+| `normalize_sentinel_eof` | `container`: `$NCD` (`PROVIDER_DEFINED`, `"sentinel-eof"`) + an ESA Earth Explorer orbit file | `ephemeris` (`$OEM`), `descriptor` (`$NCD`) |
+| `normalize_naif_ck` | `container`: `$NCD` (`"naif-ck"`) + a CK; `sclk`: `$NCD` (`"naif-sclk"`) + the clock kernel | `attitude` (`$AEM`), `descriptor` (`$NCD`) |
+| `write_naif_ck` | `attitude` (`$AEM`), `sclk` (as above), optional `descriptor` (`$NCD`) | `container`: the frame `normalize_naif_ck` reads |
+
+| Option | Where |
+| --- | --- |
+| selection window | container `$NCD` `START_TIME`, `STOP_TIME`: inclusive, on the file's own time scale (EOF: its `Time_Reference`; CK: the clock's TDB or TT) |
+| object / segment | container `$NCD` `SEGMENTS`: an entry selects the CK segments whose `NAME` and/or `TARGET_NAIF_ID` (the instrument) match; none selects all |
+| spacecraft clock | `sclk` `$NCD` `SEGMENTS[0].TARGET_NAIF_ID` (`-76`); without it NAIF's rule, the instrument id divided by 1000 |
+| frames, instrument, segment id (write) | `$AEM`: `REF_FRAME_A` (a NAIF built-in inertial name or a decimal frame code), `REF_FRAME_B` (a decimal instrument code), `OBJECT_NAME` |
+| file facts (write) | optional `$NCD` `INTERNAL_FILE_NAME`, `COMMENT_AREA` |
+
+The ESA and NAIF formats have no `ncdContainerFormat` member yet, so they are `PROVIDER_DEFINED` with the names
+above. What SDS needs for these (the enum members, and the request fields now carried by convention) is the exact
+diff in `../rinex/README.md`, "What SDS needs".
+
+### Sentinel EOF to `$OEM`
+
+The Copernicus POD service publishes the precise (`AUX_POEORB`), restituted (`AUX_RESORB`) and predicted
+(`AUX_PREORB`) orbits of Sentinel-1/2/3 as XML. The reader is strict: an unknown element, a unit other than `m` and
+`m/s`, a `Time_Reference` the OSVs carry no stamp for, a `count` that disagrees with the list, epochs that do not
+increase, non-XML and a non-EOF root are each refused by name. The states are read to **one `$OEM` block in the
+file's own Earth-fixed frame**: `REFERENCE_FRAME.NAME = "EARTH_FIXED"` as the file spells it (and `FIXED_EARTH`
+from the roster, since the file names no realization), `CENTER_NAME = EARTH`, kilometers and kilometers per
+second (one division from the file's meters), the epoch text the file wrote on its `Time_Reference` (explicit
+epochs, never a grid: a UTC grid is not uniform across a leap second). `OBJECT_NAME` is the mission the file
+names; no catalog number is supplied. The `$NCD` records the source: internal file name, producing system and
+creator, creation date, frame, time reference, the file type and validity as the one segment, the coverage read and
+the SHA-256. `$OEM` has no column for the per-OSV TAI and UT1 stamps, the absolute orbit number or the Quality
+flag; the block `COMMENT` declares that, with the orbit range and the flag counts.
+
+### NAIF CK type 3 and `$AEM`
+
+Only type 3 (discrete pointing with interpolation intervals) is read and written; any other type in a selected
+segment is `unsupported-ck-type`. The quaternion is NAIF's (`q0` scalar, `q2m(q)` the C-matrix from the reference
+frame to the instrument frame); CCSDS 504.0-B-2 annex F defines its quaternion from the same frame transformation
+with the opposite handedness of the vector part, so **CCSDS (Q1 Q2 Q3 QC) from A to B = NAIF (-q1 -q2 -q3 q0)**,
+an exact sign (A = the segment's reference frame, B = the instrument). The angular velocity is converted from rad/s
+to deg/s and is expressed in `REF_FRAME_A`. An interpolation interval is a continuity claim, so a CK segment with
+several intervals becomes several `$AEM` segments. `REF_FRAME_B` is the instrument code and `REF_FRAME_A` a NAIF
+built-in name or the decimal frame code, because a CK stores integers and the names of mission frames live in a
+frame kernel this module is not given.
+
+Time comes from the SCLK kernel (read with `propagator/solar-system-bodies`' text-kernel reader): NAIF's type 1
+conversion on the clock's declared time system, TDB or TT, **with no time-scale conversion**; `TIME_SYSTEM` says
+which. A writer refuses a `TIME_SYSTEM` that is not the clock's (`time-system-mismatch`), a B2A direction, an
+attitude type other than `QUATERNION` and `QUATERNION/ANGVEL`, an angular velocity expressed in `REF_FRAME_B`, the
+compact form (it would have to invent epochs), a non-unit quaternion and a name over 40 characters.
+
+### Measured
+
+| Claim | Authority | Result |
+| --- | --- | --- |
+| EOF states (Sentinel-1A `AUX_POEORB` x2, `AUX_RESORB`; 721, 721 and 541 OSVs) | Python `xml.etree` reading the same bytes | identical to the bit, epochs included |
+| Same arc, two precise files | adjacent-day `AUX_POEORB`, 721 common epochs | worst 3D difference **1.8 mm** |
+| Same arc, restituted against precise | 6-node Hermite of the precise states (`tests/reference/eof_resorb_vs_poe.py`) | 539 states, max **3.9 cm**, rms 3.1 cm |
+| CK read | NAIF-published MSL and InSight kernels, CSPICE N0067 (spiceypy 8.3.0) raw read | 30 records, quaternion and rates identical to the bit |
+| CK time | NAIF's type 1 formula from the kernel text; CSPICE `sct2e` + `unitim` | 0 s; 4.8e-7 s (CSPICE's TT/TDB round trip) |
+| quaternion convention | CSPICE `q2m` against annex F's matrix of (-q1 -q2 -q3 q0) | 3.3e-16 over all 30 records |
+| CK write | a kernel this module writes (2 segments, 265 records), read by CSPICE `ckgp`/`ckgpav` | rotation **2.2e-16 rad**, rate 4.3e-19 rad/s |
+| tri-runtime | browser and native WasmEdge, 18 cases | byte-identical (`conformance/parity.json`); Docker leg waived by the owner |
+
+The sample set is Sentinel-1A. Sentinel-2 and Sentinel-3 orbit files are published on the same service and in the
+same format, but their download needs a Copernicus Data Space account, so none was read here; a file whose
+structure differs is refused by name, not guessed. Fixtures and their sources and licenses:
+`fixtures/interchange/PROVENANCE.md`. The references are generated by `tests/reference/*.py` and committed.

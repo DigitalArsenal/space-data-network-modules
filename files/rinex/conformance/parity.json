@@ -9,12 +9,12 @@
     {
       "lane": "browser",
       "runs": 12,
-      "durationMs": 606
+      "durationMs": 662
     },
     {
       "lane": "wasmedge",
       "runs": 12,
-      "durationMs": 5248
+      "durationMs": 5596
     }
   ],
   "cases": [

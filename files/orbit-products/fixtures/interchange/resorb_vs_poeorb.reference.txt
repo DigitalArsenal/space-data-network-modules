@@ -1,0 +1,1 @@
+RESORB (NRT restituted) against POEORB (precise), Sentinel-1A, 2024-01-09/10: 539 restituted states inside the precise arc, 3D position difference max 0.0387 m, rms 0.0312 m, median 0.0326 m (6-node Hermite of the precise states)

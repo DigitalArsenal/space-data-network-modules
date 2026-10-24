@@ -6,7 +6,7 @@
  * Before this script the build read `lib/cpp/FRM/main_generated.h` out of a
  * sibling spacedatastandards.org GIT CHECKOUT. That is exactly the local-copy
  * lane the law forbids: the bytes a module compiled against were whatever the
- * neighbouring working tree happened to hold, reproducible nowhere else, and
+ * neighboring working tree happened to hold, reproducible nowhere else, and
  * unresolvable from a private task worktree at all. The published package ships
  * `schema/<FAMILY>/main.fbs` and no generated C++, so the headers are generated
  * here with the pinned `flatc-wasm`, from the pinned package version.

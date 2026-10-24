@@ -83,7 +83,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OEM envelope carrying every state history the container described, one data block per object: an SPK segment per body, an SP3 satellite per block, an OEM block per block. Positions are kilometres and velocities kilometres per second, as the IDL fixes. SP3's per-state clock bias and rate ride on EPHEMERIS_DATA_LINES and the NAIF integer target and centre codes on the block, so nothing the container stated about identity or clocks is dropped on the way into the record.",
+          "description": "SDS $OEM envelope carrying every state history the container described, one data block per object: an SPK segment per body, an SP3 satellite per block, an OEM block per block. Positions are kilometers and velocities kilometers per second, as the IDL fixes. SP3's per-state clock bias and rate ride on EPHEMERIS_DATA_LINES and the NAIF integer target and center codes on the block, so nothing the container stated about identity or clocks is dropped on the way into the record.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-ephemeris",
@@ -177,7 +177,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $NCD envelope with everything this module resolved from the container filled in, including the format it identified when the caller did not name one. This is the surface that answers \"what is this file\" without materialising its states, and the honest place to see a disagreement: a descriptor that came in claiming one format and goes out resolved as another says so here.",
+          "description": "SDS $NCD envelope with everything this module resolved from the container filled in, including the format it identified when the caller did not name one. This is the surface that answers \"what is this file\" without materializing its states, and the honest place to see a disagreement: a descriptor that came in claiming one format and goes out resolved as another says so here.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-descriptor",
@@ -327,7 +327,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OEM envelope with one Earth-fixed (FIXED_EARTH) block on UTC: the eleven-parameter model evaluated from the element epoch to the file's stated end of validity (170 hours when it states none) every 300 s, positions in kilometres and velocities in kilometres per second (analytic derivatives). OBJECT_NAME is the satellite name the file states; no catalog number is supplied. The block COMMENT records the elements and how closely the file's own printed prediction is reproduced; a file whose printed prediction is not reproduced to its printed precision is refused.",
+          "description": "SDS $OEM envelope with one Earth-fixed (FIXED_EARTH) block on UTC: the eleven-parameter model evaluated from the element epoch to the file's stated end of validity (170 hours when it states none) every 300 s, positions in kilometers and velocities in kilometers per second (analytic derivatives). OBJECT_NAME is the satellite name the file states; no catalog number is supplied. The block COMMENT records the elements and how closely the file's own printed prediction is reproduced; a file whose printed prediction is not reproduced to its printed precision is refused.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-ephemeris",
@@ -564,7 +564,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "SDS $OEM with one block in the file's own Earth-fixed frame (FIXED_EARTH, the file names no realization), kilometres and kilometres per second, one state per OSV with the epoch text the file wrote on its Time_Reference (no time-scale conversion). OBJECT_NAME is the mission the file names; no catalog number is supplied. The block COMMENT declares what $OEM has no column for: the per-OSV TAI and UT1 stamps, the orbit number and the Quality flag counts.",
+          "description": "SDS $OEM with one block in the file's own Earth-fixed frame (FIXED_EARTH, the file names no realization), kilometers and kilometers per second, one state per OSV with the epoch text the file wrote on its Time_Reference (no time-scale conversion). OBJECT_NAME is the mission the file names; no catalog number is supplied. The block COMMENT declares what $OEM has no column for: the per-OSV TAI and UT1 stamps, the orbit number and the Quality flag counts.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-ephemeris",

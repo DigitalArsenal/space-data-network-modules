@@ -154,6 +154,8 @@ test("a file this reader cannot stand behind is refused by name", { skip: !ready
     assert.equal(r.errorCode, code, `${code}: ${r.errorMessage}`);
     assert.equal(r.outputs.length, 0, `${code} left an output`);
   }
+  // A mixed file that names no time system is not read as GPS.
+  assert.equal((await read(h, mutate(/GPS         TIME OF FIRST OBS/, "            TIME OF FIRST OBS"))).errorCode, "missing-time-system");
   // A truncated file, an empty file and one that is not ASCII.
   assert.equal((await read(h, bytes.slice(0, bytes.length - 700))).errorCode, "truncated");
   assert.equal((await read(h, enc("not rinex\n"))).errorCode, "bad-rinex");

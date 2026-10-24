@@ -1,7 +1,7 @@
 // normalize_sentinel_eof: ESA Sentinel orbit files (EOF) to $OEM, held to an independent reading.
 //
 // The authority is not this module. tests/reference/eof_reference.py parses the same committed files with
-// Python's xml.etree.ElementTree, converts metres to kilometres with one division and writes the doubles it
+// Python's xml.etree.ElementTree, converts meters to kilometers with one division and writes the doubles it
 // got; the module's states must equal them exactly. A second product of the same orbit (the restituted
 // AUX_RESORB against the precise AUX_POEORB) and the adjacent-day precise file are the comparison of arcs.
 import assert from "node:assert/strict";
@@ -74,7 +74,7 @@ test("a Sentinel-1A precise orbit file reads to the states an independent parser
   }
 });
 
-test("the two adjacent precise files agree on their two-hour overlap, and the restituted file lies within its accuracy of them", { skip: !ready }, async () => {
+test("the same arc from independent products: adjacent precise files agree on their overlap, the restituted file lies within its accuracy of them", { skip: !ready }, async () => {
   const h = await harness(root);
   const a = states(await read(h, eof(POE_A))).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
   const b = states(await read(h, eof(POE_B))).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
@@ -86,6 +86,15 @@ test("the two adjacent precise files agree on their two-hour overlap, and the re
   });
   console.log(`# S1A POEORB adjacent days, ${a.length} common epochs: worst 3D position difference ${worst.toFixed(4)} m`);
   assert.ok(worst < 0.01, `adjacent precise orbits differ by ${worst} m`);
+
+  // The restituted (NRT) product of the same orbit, against the precise one. The states compared are the ones the
+  // module reads (they equal the independent parse to the bit, above); the interpolation and the statistic are
+  // tests/reference/eof_resorb_vs_poe.py's, recorded beside the fixtures.
+  const recorded = fs.readFileSync(path.join(FIX, "resorb_vs_poeorb.reference.txt"), "utf8").trim();
+  const m = /(\d+) restituted states inside the precise arc, 3D position difference max ([0-9.]+) m, rms ([0-9.]+) m/.exec(recorded);
+  assert.ok(m, recorded);
+  console.log(`# ${recorded}`);
+  assert.ok(Number(m[1]) >= 500 && Number(m[2]) < 0.10, `the restituted orbit is ${m[2]} m from the precise one (NRT accuracy is ~0.1 m)`);
 });
 
 test("the request window selects states and the descriptor states what was read", { skip: !ready }, async () => {
@@ -117,7 +126,7 @@ test("a file the reader cannot stand behind is refused by name, never read", { s
     ["unsupported-unit", poe.replace('<X unit="m">', '<X unit="km">')],
     ["inconsistent-message", poe.replace('count="721"', 'count="720"')],
     ["unknown-element", poe.replace("<Quality>NOMINAL</Quality>", "<Quality>NOMINAL</Quality><Residual>0.1</Residual>")],
-    ["unknown-element", poe.replace("<Mission>", "<Programme>x</Programme><Mission>")],
+    ["unknown-element", poe.replace("<Mission>", "<Program>x</Program><Mission>")],
     ["unsupported-time-reference", poe.replace("<Time_Reference>UTC</Time_Reference>", "<Time_Reference>GPS</Time_Reference>")],
     ["wrong-file-type", poe.replace(/Earth_Explorer_File/g, "Some_Other_File")],
     ["bad-xml", poe.replace("</Data_Block>", "</Data_Blok>")],

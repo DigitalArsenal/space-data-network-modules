@@ -9,7 +9,7 @@
  * parameters, the Code-500 header. A reader that emits only the first half
  * makes the second half unrecoverable, and a writer downstream then invents a
  * header rather than reproducing one. Both methods here emit the descriptor;
- * `read_container` additionally materialises the states.
+ * `read_container` additionally materializes the states.
  *
  * HOW THE BYTES ARRIVE, AND WHY THIS SHAPE
  *
@@ -95,7 +95,7 @@ std::string upper_ascii(const std::string& s) {
 /*
  * `$NCD`'s roster is wider than this reader: it names OEM/AEM/TDM in XML and
  * attitude containers this module does not project onto `$OEM`. A member we do
- * not read is refused BY NAME rather than folded into a neighbour, because a
+ * not read is refused BY NAME rather than folded into a neighbor, because a
  * silently substituted reader produces numbers from the wrong parser.
  */
 bool ephem_format_for(ncdContainerFormat declared, ephem::Format* out, const char** why) {
@@ -368,7 +368,7 @@ bool time_system_for(const std::string& name, timingStandard* out) {
  * only. `$RFM.NAME` always carries the container's own spelling; the union is
  * set only where the spelling IS a roster member, because a near-match here
  * ("ITRF2014" is not "ITRF2000") is wrong by the difference between two
- * realisations and reads as authoritative.
+ * realizations and reads as authoritative.
  */
 bool celestial_frame_for(const std::string& name, CelestialFrame* out) {
     struct Row { const char* token; CelestialFrame value; };
@@ -799,7 +799,7 @@ void build_descriptor(const Loaded& loaded, const uint8_t* body, size_t body_len
                 static_cast<uint32_t>(s.interp_degree > 0 ? s.interp_degree : 0);
             c->NUMBER_OF_EPHEMERIS_POINTS = static_cast<uint32_t>(s.rows.size());
             /* DISTANCE_UNIT and SEGMENT_BOUNDARY_TIMES stay unset: the reader
-             * normalises the file's declared unit to kilometres on the way in
+             * normalizes the file's declared unit to kilometers on the way in
              * and carries no segmentation, so this module cannot state either
              * without re-parsing the text with a second parser. Writing
              * "Kilometers" here because that is what the SERIES holds would be

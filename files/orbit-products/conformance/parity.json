@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "files/orbit-products 0.2.0 interchange methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "6322f4d53763f78ec1166f7a68c5de62dd357a098556ab4e7fe8e03097efa090",
-  "moduleSha256": "56f62f0bbb5aab846c0166e1d60ff6a3b2a33505b9c0b6a29e2d40236b9d3050",
+  "artifactSha256": "688f22ee2dba278d19e4029e8aedf1aa46fffd9910428f7d7ed40c9eeb583ad3",
+  "moduleSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 18,
-      "durationMs": 1218
+      "durationMs": 1188
     },
     {
       "lane": "wasmedge",
       "runs": 18,
-      "durationMs": 5415
+      "durationMs": 5224
     }
   ],
   "cases": [
@@ -47,7 +47,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "96b2f0d26784eee9e9b40e2e857ac3cd4f8c7a1ff98b0c9e6fae1df451da7caf",
+      "stdoutSha256": "3dd9872c6c4712a0d03e801695bd2dd9eed2fdfc2592eebdf9fedd028d411d06",
       "stdoutLength": 68096
     },
     {
@@ -57,7 +57,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "87a1e88f127e7d6307f114191519ada6ff8bb6e436d5537edaca1663fb1710b4",
+      "stdoutSha256": "06b22ea97562fecaaf52ac91604e0661dfd191276cbee5245d0633a0c4f0b4e8",
       "stdoutLength": 68096
     },
     {
@@ -67,7 +67,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8b6a8f0e8402819a6235d692874029a9a6aefdb52cb7b9ba6c2f2578587f2261",
+      "stdoutSha256": "848392ada117aae6c6547d79390f1fab7bc6a3921136060a08092940f87d9132",
       "stdoutLength": 51520
     },
     {
@@ -77,7 +77,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "63caeb1e48428947bc2b32a46e4543d0d4700ee0d1a2155629cb2b8e64f44dba",
+      "stdoutSha256": "2d0fa78b5db8ef102f5a4794b54f2cc1f8f86f75a0a96dcc44b2e8197f6fa046",
       "stdoutLength": 2304
     },
     {
@@ -107,8 +107,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8ab92cf2efa5ed4f5eab5aad2b2b0cf38f3d1492bb0c9f001237a31ee0c731cb",
-      "stdoutLength": 172
+      "stdoutSha256": "1f3348b9621be8482698cfcaa4904a573c1e956d754cdd66e6005336d6ee93da",
+      "stdoutLength": 168
     },
     {
       "lane": "browser",
@@ -227,7 +227,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "96b2f0d26784eee9e9b40e2e857ac3cd4f8c7a1ff98b0c9e6fae1df451da7caf",
+      "stdoutSha256": "3dd9872c6c4712a0d03e801695bd2dd9eed2fdfc2592eebdf9fedd028d411d06",
       "stdoutLength": 68096
     },
     {
@@ -237,7 +237,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "87a1e88f127e7d6307f114191519ada6ff8bb6e436d5537edaca1663fb1710b4",
+      "stdoutSha256": "06b22ea97562fecaaf52ac91604e0661dfd191276cbee5245d0633a0c4f0b4e8",
       "stdoutLength": 68096
     },
     {
@@ -247,7 +247,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8b6a8f0e8402819a6235d692874029a9a6aefdb52cb7b9ba6c2f2578587f2261",
+      "stdoutSha256": "848392ada117aae6c6547d79390f1fab7bc6a3921136060a08092940f87d9132",
       "stdoutLength": 51520
     },
     {
@@ -257,7 +257,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "63caeb1e48428947bc2b32a46e4543d0d4700ee0d1a2155629cb2b8e64f44dba",
+      "stdoutSha256": "2d0fa78b5db8ef102f5a4794b54f2cc1f8f86f75a0a96dcc44b2e8197f6fa046",
       "stdoutLength": 2304
     },
     {
@@ -287,8 +287,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8ab92cf2efa5ed4f5eab5aad2b2b0cf38f3d1492bb0c9f001237a31ee0c731cb",
-      "stdoutLength": 172
+      "stdoutSha256": "1f3348b9621be8482698cfcaa4904a573c1e956d754cdd66e6005336d6ee93da",
+      "stdoutLength": 168
     },
     {
       "lane": "wasmedge",

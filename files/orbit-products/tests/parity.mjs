@@ -39,7 +39,7 @@ for (const n of ["S1A_AUX_POEORB_V20240108_overlap", "S1A_AUX_POEORB_V20240109_o
 add("eof-read-window", eof(bytes("S1A_AUX_POEORB_V20240108_overlap.EOF"), { startTime: "2024-01-09T23:30:00", stopTime: "2024-01-09T23:31:00" }));
 add("eof-refused-unit", eof(enc(text("S1A_AUX_POEORB_V20240108_overlap.EOF").replace('<X unit="m">', '<X unit="km">'))));
 add("eof-refused-count", eof(enc(text("S1A_AUX_POEORB_V20240108_overlap.EOF").replace('count="721"', 'count="720"'))));
-add("eof-refused-unknown-element", eof(enc(text("S1A_AUX_POEORB_V20240108_overlap.EOF").replace("<Mission>", "<Programme>x</Programme><Mission>"))));
+add("eof-refused-unknown-element", eof(enc(text("S1A_AUX_POEORB_V20240108_overlap.EOF").replace("<Mission>", "<Program>x</Program><Mission>"))));
 add("eof-refused-empty-selection", eof(bytes("S1A_AUX_POEORB_V20240108_overlap.EOF"), { startTime: "2030-01-01T00:00:00" }));
 
 // NAIF CK

@@ -6,7 +6,7 @@
  * "Earth Explorer File": a Fixed_Header naming the file, the mission and its
  * validity, a Variable_Header naming the reference frame and the time
  * reference, and a Data_Block holding a List_of_OSVs, one orbit state vector
- * (OSV) per epoch. Positions are metres and velocities metres per second in
+ * (OSV) per epoch. Positions are meters and velocities meters per second in
  * the file's own Earth-fixed frame.
  *
  * THIS IS A READER FOR THE FORMAT AS ESA PUBLISHES IT, AND IT IS STRICT.
@@ -392,7 +392,7 @@ inline bool parse(const char* bytes, size_t length, File* out, Refusal* refusal)
                 return fail(refusal, "duplicate-element", std::string(where) + ": <" + name + "> is stated twice.");
             }
             have[cell] = true;
-            /* Metres to the series' kilometres: one division, the same operation
+            /* Meters to the series' kilometers: one division, the same operation
              * the independent reference performs, so the doubles agree bit for bit. */
             if (is_velocity) state.vel_kms[slot] = v / 1000.0;
             else state.pos_km[slot] = v / 1000.0;

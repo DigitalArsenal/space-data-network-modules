@@ -3,7 +3,7 @@
 //
 // normalize_sentinel_eof: an ESA Earth Explorer orbit file (Sentinel-1/2/3
 // AUX_POEORB, AUX_RESORB, AUX_PREORB; provider format "sentinel-eof") as one
-// Earth-fixed $OEM block, kilometres and kilometres per second, with an $NCD
+// Earth-fixed $OEM block, kilometers and kilometers per second, with an $NCD
 // descriptor that records the source: the internal file name, the producing
 // system, the creation date, the frame and time reference the file named, the
 // coverage read and the SHA-256 of the bytes.
@@ -149,7 +149,7 @@ extern "C" int normalize_sentinel_eof(void) {
         if (!file.creator_version.empty()) comment += " " + file.creator_version;
         comment += "; validity " + file.validity_start + " to " + file.validity_stop + "; frame " +
                    file.ref_frame + " (no realization named); epochs on " + file.time_reference +
-                   "; metres and metres per second read as kilometres and kilometres per second. "
+                   "; meters and meters per second read as kilometers and kilometers per second. "
                    "Carried by the file and not by $OEM: the per-OSV TAI and UT1 stamps, the absolute "
                    "orbit number";
         if (have_orbit) {

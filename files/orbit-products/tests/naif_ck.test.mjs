@@ -299,12 +299,12 @@ test("a kernel this module writes is read back by CSPICE to 1e-12 rad and by the
     fs.writeFileSync(expectedPath, `${rows.join("\n")}\n`);
     const readbackScript = path.join(root, "tests", "reference", "ck_readback.py");
     if (python === null) {
-      console.log("# spiceypy not found: the CSPICE leg is not run here; the committed readback below is the measurement");
+      console.log(`# ${recorded.trim()} [the committed record: spiceypy was not found here to rerun it]`);
     } else {
       const lsk = process.env.NAIF_LSK ?? "/Users/tj/software/tools/xval/naif-kernels/naif0012.tls";
       const run = spawnSync(python, ["-I", readbackScript, ckPath, path.join(FIX, MSL_CLOCK), lsk, expectedPath], { encoding: "utf8" });
       assert.equal(run.status, 0, run.stderr);
-      console.log(run.stdout.trim());
+      console.log(`# ${run.stdout.trim()}`);
       const m = /worst rotation difference ([0-9.e+-]+) rad; worst angular velocity difference ([0-9.e+-]+) rad\/s; worst tick difference ([0-9.e+-]+)/.exec(run.stdout);
       assert.ok(m, run.stdout);
       assert.ok(Number(m[1]) < 1e-12, `CSPICE reads a rotation ${m[1]} rad from the intended one`);
