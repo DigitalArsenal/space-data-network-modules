@@ -121,6 +121,18 @@ DS2001's density (Holwerda et al. 2005's face-on arm A_I). HII regions follow
 the KEH89 luminosity function with Stromgren sizes (`hii_population`).
 `face_on_columns` also returns `tau_g`, the vertical G optical depth.
 
+HII regions (0.5.1): each region's ionizing cluster is a compact blue-white
+core at its center (young light, sigma 31 pc, half the slab's texel), the
+clusters together a share 0.4 of the clumped young light (a model choice),
+split as the regions' nebular light; the star complexes keep the rest, so the
+young total is unchanged. The nebular lines (Case B with [OIII] and [NII])
+are reddened by the regions' own dust, A(H-alpha) = 1.1 mag (Kennicutt
+1983), which gives H-alpha : H-beta 4.4: pink-magenta to the eye rather
+than Case B's lavender. `hii_population` reports `cluster_light`,
+`nebular_light` and `complexes_light`. The bake value
+`diagnostic_nebulae_only` 1 bakes the nebulae's light alone, with the dust,
+at the whole model's exposure, for checking their color as drawn.
+
 Global volume: 384 × 384 × 48 over [-24,24] × [-24,24] × [-6,6] kpc (125 pc
 in x and y), its large-scale dust only; the light tapers to zero inside it,
 by 23.5 kpc in R and 5.6 kpc in z. Slab (since 0.4.1): 512 × 512 × 12 over the thin

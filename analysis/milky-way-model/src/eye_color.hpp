@@ -29,7 +29,7 @@
 //    [OIII] 5007 / H-beta = 1 and [NII] 6584 / H-alpha = 0.35 (a MODEL CHOICE
 //    on the star-forming side of Kauffmann et al. 2003, MNRAS 346, 1055,
 //    eq. 1), the doublets' weaker lines at a third (Storey & Zeippen 2000,
-//    MNRAS 312, 813).
+//    MNRAS 312, 813); reddened by the regions' own dust (0.5.1, below).
 // The color-matching functions: Wyman, Sloan & Shirley (2013), JCGT 2(2), 1,
 // the multi-lobe piecewise-Gaussian fit to CIE 1931 2-degree.
 namespace milky_way::eye {
@@ -73,17 +73,37 @@ inline XYZ integrate(const sdss::Bands& b) {
   }
   return out;
 }
-// XYZ per unit G light of the nebular lines: their total flux the young
+// Cardelli, Clayton & Mathis (1989), ApJ 345, 245, eq. 3 (optical, 1.1 <=
+// x <= 3.3 per micron), R_V = 3.1: A_lambda / A_V.
+inline double ccm89(double l_nm) {
+  const double x=1000.0/l_nm,y=x-1.82;
+  const double a=1+0.17699*y-0.50447*y*y-0.02427*y*y*y+0.72085*std::pow(y,4)+0.01979*std::pow(y,5)
+    -0.77530*std::pow(y,6)+0.32999*std::pow(y,7);
+  const double b=1.41338*y+2.28305*y*y+1.07233*y*y*y-5.38434*std::pow(y,4)-0.62251*std::pow(y,5)
+    +5.30260*std::pow(y,6)-2.09002*std::pow(y,7);
+  return a+b/3.1;
+}
+// THE REGIONS' OWN DUST (0.5.1): the lines leave a region through the dust
+// mixed into it, A(H-alpha) = 1.1 mag, the mean Kennicutt (1983, ApJ 272,
+// 54) adopts for disc HII regions (H-alpha : H-beta 4.4 for Case B's 2.86),
+// each line dimmed by CCM89 at R_V 3.1. Without it the Case B lines read
+// lavender-violet to the eye (the Balmer lines' blue in z-bar outweighs
+// H-alpha's red in x-bar), bluer than disc HII regions are seen.
+inline constexpr double hii_a_halpha=1.1;
+// XYZ per unit G light of the nebular lines: their total flux (after the
+// regions' own dust, the dimming folded into the regions' light) the young
 // continuum's over 330-1050 nm.
 inline XYZ nebular() {
   const auto& b=colors::young_bands;
   const double t=color_temperature(-2.5*std::log10(b.g/b.r));
   double energy=0,lines=0;
   for(double l=330.5;l<1050;l+=1.0) energy+=continuum(b,t,l);
-  for(const auto& line:nebular_lines) lines+=line.relative;
+  const double a_v=hii_a_halpha/ccm89(656.28);
+  auto seen=[&](const Line& line){return line.relative*std::pow(10.0,-0.4*a_v*ccm89(line.nm));};
+  for(const auto& line:nebular_lines) lines+=seen(line);
   XYZ out{0,0,0};
   for(const auto& line:nebular_lines) {
-    const XYZ c=cmf(line.nm);const double f=energy*line.relative/lines;
+    const XYZ c=cmf(line.nm);const double f=energy*seen(line)/lines;
     out.x+=f*c.x;out.y+=f*c.y;out.z+=f*c.z;
   }
   return out;
@@ -102,16 +122,6 @@ inline const Set& bands() {
                scaled(integrate(colors::intermediate_bands))};
   }();
   return set;
-}
-// Cardelli, Clayton & Mathis (1989), ApJ 345, 245, eq. 3 (optical, 1.1 <=
-// x <= 3.3 per micron), R_V = 3.1: A_lambda / A_V.
-inline double ccm89(double l_nm) {
-  const double x=1000.0/l_nm,y=x-1.82;
-  const double a=1+0.17699*y-0.50447*y*y-0.02427*y*y*y+0.72085*std::pow(y,4)+0.01979*std::pow(y,5)
-    -0.77530*std::pow(y,6)+0.32999*std::pow(y,7);
-  const double b=1.41338*y+2.28305*y*y+1.07233*y*y*y-5.38434*std::pow(y,4)-0.62251*std::pow(y,5)
-    +5.30260*std::pow(y,6)-2.09002*std::pow(y,7);
-  return a+b/3.1;
 }
 // Each channel's extinction to G (slots Y, Z, X): CCM89 averaged over the
 // old disc's spectrum times the channel's matching function, over A_G/A_V

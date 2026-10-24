@@ -38,13 +38,13 @@ extern "C" int bake() {
     {"appearance_structure_young_sigma",&structure::young_sigma,0.0,3.0},{"appearance_structure_dust_sigma",&structure::dust_sigma,0.0,3.0},
     {"appearance_structure_lane_sigma",&structure::lane_sigma,0.0,3.0},
     {"appearance_structure_fade_inner",&structure::fade_inner_kpc,0.0,4.0},{"appearance_structure_fade_outer",&structure::fade_outer_kpc,0.1,6.0},
-    {"display_basis",&eye::basis,0.0,1.0},{"look_good",&look::on,0.0,1.0}};
-  eye::basis=0;look::on=0;
+    {"display_basis",&eye::basis,0.0,1.0},{"look_good",&look::on,0.0,1.0},{"diagnostic_nebulae_only",&diagnostic::nebulae_only,0.0,1.0}};
+  eye::basis=0;look::on=0;diagnostic::nebulae_only=0;
   for (const auto& [name,value]:request.values) {
     const auto* o=std::find_if(std::begin(overrides),std::end(overrides),[&](const Override& x){return name==x.name;});
     const double v=request.number(name.c_str(),NAN);
     if (o==std::end(overrides) || !std::isfinite(v) || v<o->lo || v>o->hi)
-      return wire::fail("bake takes only appearance_* overrides within their fit bounds, display_basis (0 SDSS r,g,i; 1 CIE X,Y,Z) and look_good (0 TRUE PHYSICS; 1 LOOK GOOD); deliver a 3D dust map with load_dust_map first");
+      return wire::fail("bake takes only appearance_* overrides within their fit bounds, display_basis (0 SDSS r,g,i; 1 CIE X,Y,Z), look_good (0 TRUE PHYSICS; 1 LOOK GOOD) and diagnostic_nebulae_only (1: the HII nebulae's light alone); deliver a 3D dust map with load_dust_map first");
     *o->value=v;
   }
   const auto& loaded=dust_map::grid();
@@ -109,6 +109,9 @@ extern "C" int bake() {
   // and gamma; the SDSS transfer keeps its fitted alpha (the checks').
   double alpha=display::alpha_per_count;
   if(eye::on()) {
+    // The whole model's disc, a diagnostic bake's too (its light at the
+    // console's exposure).
+    const double nebulae_only=diagnostic::nebulae_only;diagnostic::nebulae_only=0;
     std::vector<double> ys;
     for(int k=0;k<24;++k) {
       const double phi=2*galactic_constants::pi*k/24,x=galactic_constants::solar_radius_kpc*std::cos(phi),y=galactic_constants::solar_radius_kpc*std::sin(phi);
@@ -125,6 +128,7 @@ extern "C" int bake() {
     const double q=look::softening(display::q);
     const double intensity=ys[12]*eye_counts,stretched=std::pow(look::disc_display(),1/display::gamma);
     alpha=std::sinh(q*stretched)/(q*intensity);
+    diagnostic::nebulae_only=nebulae_only;
   }
   r.vector("display_asinh",{eye::on()?look::softening(display::q):display::q,alpha,display::gamma,eye::on()?1.0:display::saturation},"Q,alpha per count,gamma,saturation");
   if(eye::on()) r.vector("display_counts_per_unit",{eye_counts,eye_counts,eye_counts},"SDSS-transfer counts per 0.396 arcsec pixel per Y,Z,X unit (the old disc's luminance at its SDSS intensity)");
@@ -412,6 +416,9 @@ extern "C" int hii_population() {
   for(const auto& k:pop.knots) {l.push_back(k.luminosity);s.push_back(k.sigma);}
   wire::Result r;r.vector("luminosity",l,"L / L_min");r.vector("sigma_kpc",s,"kpc");
   r.number("count",double(pop.knots.size()),"regions");
+  r.number("cluster_light",knots::total(hii::clusters()),"G light of the ionizing clusters (model units)");
+  r.number("nebular_light",knots::total(pop),"G light of the nebulae (model units)");
+  r.number("complexes_light",knots::total(complexes::population()),"G light of the star complexes, the clumped young light less the clusters (model units)");
   r.text("basis","dN/dL ~ L^-2 over 1-100 (Kennicutt, Edgar & Hodge 1989); sigma = 30 pc (L/L_min)^(1/3), at most 140 pc (Stromgren 1939)");
   return r.emit();
 }
