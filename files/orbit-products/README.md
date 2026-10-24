@@ -246,6 +246,7 @@ compact form (it would have to invent epochs), a non-unit quaternion and a name 
 | CK read | NAIF-published MSL and InSight kernels, CSPICE N0067 (spiceypy 8.3.0) raw read | 30 records, quaternion and rates identical to the bit |
 | CK time | NAIF's type 1 formula from the kernel text; CSPICE `sct2e` + `unitim` | 0 s; 4.8e-7 s (CSPICE's TT/TDB round trip) |
 | quaternion convention | CSPICE `q2m` against annex F's matrix of (-q1 -q2 -q3 q0) | 3.3e-16 over all 30 records |
+| angular velocity frame | SPICE's own pairing for a CK's rates, `rav2xf`/`xf2rav`, against the analytic derivative of a C-matrix with a fixed misalignment (`tests/reference/av_frame_check.py`) | expressed in the reference frame: dC/dt error 1.7e-18, against 5.3e-3 if it were the instrument frame |
 | CK write | a kernel this module writes (2 segments, 265 records), read by CSPICE `ckgp`/`ckgpav` | rotation **2.2e-16 rad**, rate 4.3e-19 rad/s |
 | tri-runtime | browser and native WasmEdge, 18 cases | byte-identical (`conformance/parity.json`); Docker leg waived by the owner |
 
