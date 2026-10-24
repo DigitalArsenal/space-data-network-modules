@@ -55,5 +55,5 @@
     "type": "git",
     "url": "https://github.com/DigitalArsenal/space-data-network-plugin-ffm"
   },
-  "license": "UNLICENSED"
+  "license": "Apache-2.0"
 }
