@@ -337,7 +337,7 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
                   const sdnap::fit::Options* options, double* stats) {
   if (row == nullptr || minutes == nullptr || positions == nullptr || options == nullptr || count < 3)
     return ORBPRO_PROP_BAD_INPUT;
-  if (row->theory != sdnap::kTheorySgp4Xp && row->theory != sdnap::kTheorySdnAp) return ORBPRO_PROP_BAD_INPUT;
+  if (row->theory != sdnap::kTheorySgp4Xp) return ORBPRO_PROP_BAD_INPUT;
   sdnap::drag::table();
   const sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
   if (stats != nullptr) {
@@ -348,55 +348,6 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
   }
   return r.status < 0 ? ORBPRO_PROP_UNPHYSICAL : ORBPRO_PROP_OK;
 }
-
-/// NRLMSISE-00 cost probe (DESIGN open question 3): `count` density calls over
-/// a fixed sweep of heights and latitudes; returns their sum (kg/m^3).
-SDNAP_EXPORT("sdnap_msis_probe")
-double sdnap_msis_probe(uint32_t count) {
-  double sum = 0.0;
-  for (uint32_t k = 0; k < count; ++k) {
-    const double h = 200.0 + (k % 64) * 10.0;
-    const double lat = ((k % 37) - 18) * 5.0 * sdnap::kDeg;
-    sum += sdnap::sdn::msis_density(lat, 0.3 * k, h, 172, 29000.0, 27200.0);
-  }
-  return sum;
-}
-
-/// SDN-AP environment in force (DESIGN 2a.3): F10.7 of the previous day, its
-/// 81-day mean, daily ap and the DCA common mode s (0 without $DCL rows).
-SDNAP_EXPORT("sdnap_set_environment")
-void sdnap_set_environment(double f107, double f107a, double ap, double s) {
-  sdnap::sdn::Environment& env = sdnap::sdn::environment();
-  env.f107 = f107;
-  env.f107a = f107a;
-  env.ap = ap;
-  env.s = s;
-}
-
-/// Diagnostic: SDN-AP density (kg/m^3) at UTC d50 (days from 1950 January 0.0), geocentric radius r (ER),
-/// geocentric latitude and Earth-fixed longitude (rad): mode 0 the direct NRLMSISE-00 x exp(s), 1 the kernel.
-SDNAP_EXPORT("sdnap_density_probe")
-double sdnap_density_probe(double d50, double r, double latc, double lon, int32_t mode) {
-  using namespace sdnap;
-  if (mode == 1) {
-    kernel::Pair kp{};
-    if (!(kernel::prepare() && kernel::acquire_pair(d50, kp))) return __builtin_nan("");
-    const double rho = kernel::density(kp, r, latc, lon);
-    kernel::release_pair(kp);
-    return rho;
-  }
-  double D, N;
-  drag::day_of_year(d50, D, N);
-  const int doy = static_cast<int>(std::floor(D)) + 1;
-  const double sec = (D - std::floor(D)) * 86400.0;
-  double phi, h;
-  drag::geodetic(r * std::cos(latc) * std::cos(lon), r * std::cos(latc) * std::sin(lon), r * std::sin(latc), phi, h);
-  return h > 2500.0 ? 0.0 : sdn::msis_density(phi, lon, h, doy, sec, d50);
-}
-
-/// SDN-AP drag path: 1 the 2a.4 shared kernel (default), 0 the direct reference path.
-SDNAP_EXPORT("sdnap_set_density_kernel")
-void sdnap_set_density_kernel(int32_t on) { sdnap::sdn::environment().kernel = on ? 1 : 0; }
 
 /// Cost probe: `count` rate evaluations of row `index` at its epoch state and
 /// time `minutes` (the experiment of DESIGN 2.0's per-evaluation figures).
@@ -413,21 +364,6 @@ double sdnap_rate_probe(uint32_t index, uint32_t count, double minutes) {
   return sum;
 }
 
-/// Days of $SPW space weather held (load_environment).
-SDNAP_EXPORT("sdnap_space_weather_days")
-uint32_t sdnap_space_weather_days(void) { return sdnap::sdn::space_weather().count; }
-
-/// The SDN-AP environment in force at d50 (days from 1950 January 0.0 UTC):
-/// out = F10.7 (day before), F10.7 81-day mean, Ap, s.
-SDNAP_EXPORT("sdnap_environment_at")
-void sdnap_environment_at(double d50, double* out) {
-  const sdnap::sdn::Environment e = sdnap::sdn::environment_at(d50);
-  out[0] = e.f107;
-  out[1] = e.f107a;
-  out[2] = e.ap;
-  out[3] = e.s;
-}
-
 /// SPEC 6 diagnostics: Kaula's G_lpq(e). mode 0 the Hansen coefficient itself
 /// (numerical integral), 1 the Maclaurin polynomial of SPEC 6.4, 2 its
 /// derivative dG/de; NaN when no class uses the polynomial.
@@ -440,23 +376,6 @@ double sdnap_hansen_g(int32_t l, int32_t p, int32_t q, double e, int32_t mode) {
   double G, dG;
   series_G(*h, e, G, dG);
   return mode == 1 ? G : dG;
-}
-
-/// Diagnostic: the normalized inclination function Fbar_l,m,(l-1)/2(i) of a k = 1
-/// term (odd l). mode 0 SDN-AP's Fourier form (tesseral.inc), 1 N_lm x Kaula's
-/// closed form (resonance.inc).
-SDNAP_EXPORT("sdnap_inclination_f")
-double sdnap_inclination_f(int32_t l, int32_t m, double inc, int32_t mode) {
-  using namespace sdnap::xpt;
-  if (l < 1 || l > 70 || m < 0 || m > l || !(l & 1)) return __builtin_nan("");
-  if (mode == 0) {
-    double F[72];
-    tess::normalized_Fk(m, 1, l, inc, F);
-    return F[l];
-  }
-  double F, dF;
-  res::kaula_F(l, m, (l - 1) / 2, std::sin(inc), std::cos(inc), F, dF);
-  return tess::norm_factor(l, m) * F;
 }
 
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC
@@ -542,57 +461,4 @@ void sdnap_table_cells(int32_t mode, uint8_t* out) {
   if (mode == 1) std::memset(d.cells, 0, sizeof d.cells);
   d.record_cells = mode == 1 ? 1 : 0;
   if (out != nullptr) std::memcpy(out, d.cells, sizeof d.cells);
-}
-
-/// SDN-AP 2d: the m-daily set's highest even degree (0 off, default 8); returns the previous value.
-SDNAP_EXPORT("sdnap_mdaily_degree")
-int32_t sdnap_mdaily_degree(int32_t degree) {
-  const int previous = sdnap::xpt::tess::mdaily_degree();
-  if (degree >= 0) sdnap::xpt::tess::mdaily_degree() = degree > 16 ? 16 : degree;
-  return previous;
-}
-
-// Diagnostic: the SDN-AP shallow resonance (DESIGN 2d.5) degree (0 off; < 0
-// leaves it), band (|psi-dot| / n, x 1e-4) and highest k (<= 0 leave them);
-// returns the previous degree. Applies to objects initialized afterwards.
-SDNAP_EXPORT("sdnap_shallow_resonance")
-int32_t sdnap_shallow_resonance(int32_t degree, int32_t band_e4, int32_t kmax) {
-  const int previous = sdnap::xpt::tess::shallow_degree();
-  if (degree >= 0) sdnap::xpt::tess::shallow_degree() = degree > 70 ? 70 : degree;
-  if (band_e4 > 0) sdnap::xpt::tess::shallow_band() = band_e4 * 1e-4;
-  if (kmax > 0) sdnap::xpt::tess::shallow_kmax() = kmax > 3 ? 3 : kmax;
-  return previous;
-}
-
-// Diagnostic: restrict the shallow terms to one order (m > 0), to the orders
-// from -m up (m < 0) or none (0), and divide the SDN-AP grid step (>= 1).
-// Diagnostic: the SDN-AP 2d.3b short-periodic degree (0 off, < 0 leaves it); returns the previous.
-SDNAP_EXPORT("sdnap_short_periodic_degree")
-int32_t sdnap_short_periodic_degree(int32_t degree) {
-  const int previous = sdnap::xpt::tess::sp_degree();
-  if (degree >= 0) sdnap::xpt::tess::sp_degree() = (degree & 0xff) > 16 ? 16 : (degree & 0xff);
-  if (degree >= 256) sdnap::xpt::tess::sp_mask() = (degree >> 8) & 7;  // diagnostic: families (1, 2, 4) x 256
-  return previous;
-}
-
-// Diagnostic: the SDN-AP 2d.6 zonal-tail degree (0 off, < 0 leaves it); returns the previous.
-SDNAP_EXPORT("sdnap_zonal_degree")
-int32_t sdnap_zonal_degree(int32_t degree) {
-  const int previous = sdnap::xpt::tess::zonal_degree();
-  if (degree >= 0) sdnap::xpt::tess::zonal_degree() = degree > 70 ? 70 : degree;
-  return previous;
-}
-
-// Diagnostic: the SDN-AP 2d.5b near band (|psi-dot| / n x 1e-4; 0 none, < 0 leaves it); returns the previous.
-SDNAP_EXPORT("sdnap_near_band")
-int32_t sdnap_near_band(int32_t band_e4) {
-  const int32_t previous = static_cast<int32_t>(sdnap::xpt::tess::near_band() * 1e4 + 0.5);
-  if (band_e4 >= 0) sdnap::xpt::tess::near_band() = band_e4 * 1e-4;
-  return previous;
-}
-
-SDNAP_EXPORT("sdnap_tesseral_diagnostic")
-void sdnap_tesseral_diagnostic(int32_t only_m, int32_t step_divisor) {
-  sdnap::xpt::tess::shallow_only_m() = only_m;
-  sdnap::xpt::tess::step_divisor() = step_divisor >= 1 && step_divisor <= 16 ? step_divisor : 1;
 }

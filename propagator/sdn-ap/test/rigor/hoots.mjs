@@ -75,44 +75,24 @@ export const checks = [
     },
   }),
   defineCheck({
-    id: "hoots-singular-geometry-sdnap", reviewer: REVIEWERS.HOOTS, tier: "fast",
-    question: "Does the SDNAP theory stay finite at the same singular geometries: a state for every sample it accepts, never a NaN reported as good?",
-    source: "paper 1.3 and 2.1 (equinoctial mean elements, nonsingular at e = 0 and i = 0); SPEC 1.5",
-    async run(ctx) {
-      const module = await ctx.module();
-      const rows = [];
-      for (const ecc of [0, 0.0001, 0.01, 0.7]) for (const inc of [0, 63.4349, 116.5651, 180]) for (const mm of [15.2, 2.006, 1.0027]) {
-        if (ecc === 0.7 && mm > 3) continue;
-        rows.push({ ...elementsOf(tleLines({ year: 26, day: 290.25, type: 4, bterm: 0.002, agom: 0.01, inc, raan: 0, ecc, argp: 45, ma: 10, mm })), theory: THEORY.SDNAP, label: `n=${mm} e=${ecc} i=${inc}` });
-      }
-      const out = moduleStates(module, rows, rows.map(() => WEEK));
-      let good = 0, refused = 0, bad = 0;
-      const refusedSets = new Set();
-      out.forEach((states, k) => states.forEach((s) => { if (!s.ok) { refused += 1; refusedSets.add(rows[k].label); } else if ([...s.r, ...s.v].every(Number.isFinite)) good += 1; else bad += 1; }));
-      return { pass: bad === 0 && good > 0, evidence: [`${rows.length} SDNAP sets x ${WEEK.length} times: ${good} finite states, ${refused} refused, ${bad} non-finite states reported good`,
-        `refused (report only): ${[...refusedSets].join("; ") || "none"}`] };
-    },
-  }),
-  defineCheck({
     id: "hoots-every-call-returns", reviewer: REVIEWERS.HOOTS, tier: "fast", timeoutSec: 60,
     question: "Does every call return, for every theory, at the edges of the element domain (e = 0, 1e-4, 0.5, 0.95; i = 0, 90, 179.9999, 180 deg; LEO, 12 h and GEO; up to 7 days either way): a state or a refusal, never a hang and never a non-finite state reported good?",
     source: "AIAA 2006-6753 App. D (a set is refused, not extrapolated); SPEC 1.5 (the equinoctial state for i < 180 deg); paper 1.1",
     async run(ctx) {
       const module = await ctx.module();
       const rows = [];
-      for (const theory of [THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]) for (const ecc of [0, 0.0001, 0.5, 0.95]) for (const inc of [0, 90, 179.9999, 180]) for (const mm of [15.2, 2.006, 1.0027]) {
+      for (const theory of [THEORY.SGP4, THEORY.SGP4XP]) for (const ecc of [0, 0.0001, 0.5, 0.95]) for (const inc of [0, 90, 179.9999, 180]) for (const mm of [15.2, 2.006, 1.0027]) {
         if (ecc >= 0.5 && mm > 3) continue;
         const fields = { year: 26, day: 290.25, rev: 0, inc, raan: 30, ecc, argp: 45, ma: 10, mm };
         rows.push({ ...elementsOf(tleLines(theory === THEORY.SGP4 ? { ...fields, type: 0, bstar: 1e-4 } : { ...fields, type: 4, bterm: 0.005, agom: 0.01 })), theory });
       }
-      // SDNAP a day either way (its integration costs about 60 ms per object-day), the others a week
-      const timesOf = (row) => (row.theory === THEORY.SDNAP ? [-1440, 0, 720, 1440] : [-10080, -1440, 0, 720, 1440, 10080]);
+      const timesOf = () => [-10080, -1440, 0, 720, 1440, 10080];
       const t0 = performance.now();
       const out = moduleStates(module, rows, rows.map(timesOf));
       const seconds = (performance.now() - t0) / 1e3;
       let good = 0, refused = 0, bad = 0;
       out.flat().forEach((s) => { if (!s.ok) refused += 1; else if ([...s.r, ...s.v].every(Number.isFinite)) good += 1; else bad += 1; });
-      return { pass: bad === 0, evidence: [`${rows.length} sets (SGP4, SGP4XP: 7 days either way; SDNAP: 1 day) x 4 to 6 times returned in ${seconds.toFixed(1)} s: ${good} finite states, ${refused} refused, ${bad} non-finite states reported good (a hang is a FAIL at the 60 s cap)`] };
+      return { pass: bad === 0, evidence: [`${rows.length} sets (SGP4, SGP4XP: 7 days either way) x 6 times returned in ${seconds.toFixed(1)} s: ${good} finite states, ${refused} refused, ${bad} non-finite states reported good (a hang is a FAIL at the 60 s cap)`] };
     },
   }),
   defineCheck({
@@ -164,7 +144,7 @@ export const checks = [
     async run(ctx) {
       const module = await ctx.module();
       const rows = [];
-      for (const theory of [THEORY.SGP4XP, THEORY.SDNAP]) for (const [mm, ecc, inc] of [[15.5, 0.001, 51.6], [14.3, 0.002, 98.2], [2.0056, 0.01, 55], [2.0059, 0.72, 63.4], [1.0027, 0.0003, 0.1]]) {
+      for (const theory of [THEORY.SGP4XP]) for (const [mm, ecc, inc] of [[15.5, 0.001, 51.6], [14.3, 0.002, 98.2], [2.0056, 0.01, 55], [2.0059, 0.72, 63.4], [1.0027, 0.0003, 0.1]]) {
         rows.push({ ...elementsOf(tleLines({ year: 26, day: 290.25, type: 4, bterm: 0.005, agom: 0.01, inc, raan: 33.3, ecc, argp: 123.4, ma: 222.2, mm })), theory });
       }
       module.init(rows);
@@ -183,7 +163,7 @@ export const checks = [
         worstAng = Math.max(worstAng, dAng(inc, row.inc), dAng(node + argp + m, row.raan + row.argp + row.ma));
       });
       x.sdnap_free(out);
-      evidence.unshift(`${rows.length} sets (SGP4XP and SDNAP): mean motion back within ${worstN.toExponential(2)} relative, e within ${worstE.toExponential(2)}, i and mean longitude within ${worstAng.toExponential(2)} deg; ${refused} refused`);
+      evidence.unshift(`${rows.length} sets (SGP4XP): mean motion back within ${worstN.toExponential(2)} relative, e within ${worstE.toExponential(2)}, i and mean longitude within ${worstAng.toExponential(2)} deg; ${refused} refused`);
       return { pass: refused === 0 && worstN <= 1e-12 && worstE <= 1e-12 && worstAng <= 1e-9, evidence };
     },
   }),

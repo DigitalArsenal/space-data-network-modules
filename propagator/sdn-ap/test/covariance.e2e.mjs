@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// E2E (task modules-sdn-ap-covariance-20261025): SDN-AP's propagated covariance (SPEC 12).
-// - fit (THEORY SDNAP) of 24 h of an SGP4XP trajectory writes COVARIANCE (21 values, TEME, positive definite),
-//   COV_REFERENCE_FRAME TEME and USER_DEFINED_SDNAP_COV_DRAG / _AGOM / _TAUC / _TAUS, _FLOOR_UVW, _NOISE, _NG_RATE,
-//   _REGIME; fit (THEORY SGP4XP) the same for its set (consider rows DRAG, the BTERM, and AGOM), which
-//   sdnap_covariance_at round-trips as well.
+// E2E (task modules-sdn-ap-covariance-20261025): the propagated covariance of an SGP4XP fit (SPEC 12).
+// - fit (THEORY SGP4XP) of 24 h of an SGP4XP trajectory writes COVARIANCE (21 values, TEME, positive definite),
+//   COV_REFERENCE_FRAME TEME and USER_DEFINED_SDNAP_COV_DRAG (the BTERM) / _AGOM, _FLOOR_UVW, _NOISE, _NG_RATE,
+//   _REGIME.
 // - sdnap_covariance_at round-trips it: at the epoch the state is propagate's within 1 mm and the covariance the
 //   set's COVARIANCE within 1e-6 relative (Frobenius).
 // - propagate of that set writes one covariance line per state: in TEME equal to sdnap_covariance_at at the same
@@ -29,11 +28,11 @@ const m = await openModule();
 const x = m.x;
 const mem = () => m.harness.memory.buffer;
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
-const SDNAP = configuration({ theory: "SDNAP" });
+const FIT = configuration({ theory: "SGP4XP" });
 const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
 const invoke = async (methodId, inputs) => {
-  const r = await command.invoke({ methodId, inputs: [SDNAP, ...inputs] });
+  const r = await command.invoke({ methodId, inputs: [FIT, ...inputs] });
   return r;
 };
 const ommOf = (fields, user = []) => {
@@ -115,13 +114,14 @@ const P0 = []; { let k = 0; for (let i = 0; i < 6; ++i) for (let j = 0; j <= i; 
   }
   check(pd, "COVARIANCE positive definite");
 }
-for (const name of ["SDNAP_COV_DRAG", "SDNAP_COV_AGOM", "SDNAP_COV_TAUC", "SDNAP_COV_TAUS", "SDNAP_COV_FLOOR_UVW", "SDNAP_COV_NOISE", "SDNAP_COV_NG_RATE", "SDNAP_COV_REGIME"])
+for (const name of ["SDNAP_COV_DRAG", "SDNAP_COV_AGOM", "SDNAP_COV_FLOOR_UVW", "SDNAP_COV_NOISE", "SDNAP_COV_NG_RATE", "SDNAP_COV_REGIME"])
   check(ud[name] !== undefined, `USER_DEFINED ${name}`);
-check(ud.SDNAP_COV_DRAG?.split(" ").length === 7 && ud.SDNAP_COV_TAUS?.split(" ").length === 10, "consider row lengths");
+check(ud.SDNAP_COV_DRAG?.split(" ").length === 7 && ud.SDNAP_COV_AGOM?.split(" ").length === 8, "consider row lengths");
+check(set.MEAN_ELEMENT_THEORY === 1 && ud.SDNAP_COV_TAUC === undefined && ud.SDNAP_B_EFF === undefined, "an SGP4XP set with no SDN-AP terms");
 
 // --- round trip at the epoch
 const arcEnd = Number(ud.SDNAP_COV_NOISE.split(" ")[4]);
-check(arcEnd === Number(ud.SDNAP_ARC_END_MIN), `noise start ${arcEnd} vs the arc end ${ud.SDNAP_ARC_END_MIN}`);
+check(arcEnd === 1440, `noise start ${arcEnd} vs the arc end 1440 min`);
 const times = [0, 1440, 2880, 4320];
 const at = covarianceAt(omm, times);
 check(at.status === 0, `sdnap_covariance_at: ${at.status}`);
@@ -166,20 +166,6 @@ check(trace(at.rows[3].P) > trace(at.rows[0].P), "the covariance grows over 3 da
   const expected = (a * sl * nDay * d) ** 2;
   console.log(`process noise s_l = 1e-6, 2 days after the arc: in-track variance added ${(added * 1e6).toFixed(2)} m^2, (a s_l n d)^2 = ${(expected * 1e6).toFixed(2)} m^2`);
   check(Math.abs(added / expected - 1) <= 0.1, `process noise in-track: ${added} vs ${expected}`);
-}
-
-// --- SGP4XP: the same record and round trip
-{
-  const r = await command.invoke({ methodId: "fit", inputs: [configuration({ theory: "SGP4XP" }), { portId: "ephemeris", typeRef: oemType, payload: fitInput }] });
-  check(r.statusCode === 0, `fit SGP4XP: ${r.errorCode}`);
-  const xp = r.outputs.find((o) => o.portId === "elements").payload;
-  const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(xp)).unpack();
-  const u = Object.fromEntries(e.USER_DEFINED_PARAMETERS.map((q) => [q.PARAM_NAME, q.PARAM_VALUE]));
-  const back = covarianceAt(xp, [0, 4320]);
-  const rt = back.status === 0 ? relDiff(lower(back.rows[0].P), e.COVARIANCE) : Infinity;
-  console.log(`SGP4XP fit: COVARIANCE ${e.COVARIANCE.length} values, rows ${Object.keys(u).join(", ")}; round trip ${rt.toExponential(2)}; position sigma at 3 days ${(Math.sqrt(trace(back.rows[1]?.P ?? [0])) * 1e3).toFixed(1)} m`);
-  check(e.MEAN_ELEMENT_THEORY === 1 && e.COVARIANCE.length === 21 && u.SDNAP_COV_DRAG?.split(" ").length === 7 && u.SDNAP_COV_AGOM?.split(" ").length === 8 &&
-    u.SDNAP_COV_TAUC === undefined && u.SDNAP_B_EFF === undefined && rt <= 1e-6, "SGP4XP covariance record and round trip");
 }
 
 // --- refusals

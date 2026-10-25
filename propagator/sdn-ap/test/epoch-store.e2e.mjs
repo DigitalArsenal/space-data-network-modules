@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // E2E (task modules-sdn-ap-epoch-store-blend-20261025): the epoch store (SPEC 14).
-// Synthetic history: an SDN-AP series (opm_set of an SGP4XP trajectory's states every 6 h over 3 days, each with a
-// COVARIANCE), an SGP4 series (sets every 12 h), an aged set and a same-epoch duplicate, loaded by load_epochs.
+// Synthetic history: an SGP4XP series (a truth set's own mean elements, from sdnap_mean_elements_at, every 6 h over 3
+// days, the mean anomaly of every other set moved by 0.0115 deg so that each handover is a jump the blend must
+// remove, each set with a COVARIANCE), an SGP4 series (sets every 12 h), an aged set and a same-epoch duplicate,
+// loaded by load_epochs.
 // - The load's counts: records, kept, aged, duplicates; MAX_SETS_PER_OBJECT and THEORIES applied.
 // - Selection against brute force over 400 times (NEAREST and LATEST_BEFORE): the dominant set (the blend weight
 //   below 1/2: a, else b) is the nearest set, or the latest at or before the time.
@@ -24,10 +26,9 @@ import { ephemerisDataBlockT } from "spacedatastandards.org/lib/js/OEM/ephemeris
 import { ephemerisDataLineT } from "spacedatastandards.org/lib/js/OEM/ephemerisDataLine.js";
 import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
-import { OPM, OPMT } from "spacedatastandards.org/lib/js/OPM/OPM.js";
 import { pcfTheory } from "spacedatastandards.org/lib/js/PCF/pcfTheory.js";
 import { jdOf, rfm } from "./lib/frames.mjs";
-import { openModule, wasmPath } from "./lib/module.mjs";
+import { openModule, THEORY, wasmPath } from "./lib/module.mjs";
 import { configuration } from "./lib/pcf.mjs";
 
 const failures = [];
@@ -37,7 +38,6 @@ const x = m.x, mem = () => m.harness.memory.buffer;
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
 const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
-const opmType = { schemaName: "OPM.fbs", fileIdentifier: "$OPM", rootTypeName: "OPM" };
 const DAY = 86400000;
 const iso = (t) => new Date(t).toISOString().replace("Z", "");
 const T0 = Date.parse("2026-10-20T00:00:00Z");
@@ -55,35 +55,41 @@ function gridOem(frame, times) {
   const b = new flatbuffers.Builder(1 << 16); OEM.finishOEMBuffer(b, o.pack(b));
   return b.asUint8Array();
 }
-const truthSet = (() => {
+const xpSet = (fields) => {
   const b = new flatbuffers.Builder(256);
-  const e = b.createString(iso(T0 - DAY));
-  OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addMeanMotion(b, 15.5); OMM.addEccentricity(b, 0.0011); OMM.addInclination(b, 51.6);
-  OMM.addRaOfAscNode(b, 120); OMM.addArgOfPericenter(b, 90); OMM.addMeanAnomaly(b, 30); OMM.addBstar(b, 0.02); OMM.addMeanMotionDdot(b, 0.01);
+  const e = b.createString(iso(fields.epoch)), orig = b.createString("SDN-AP E2E");
+  OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addOriginator(b, orig); OMM.addMeanMotion(b, fields.mm); OMM.addEccentricity(b, fields.ecc); OMM.addInclination(b, fields.inc);
+  OMM.addRaOfAscNode(b, fields.raan); OMM.addArgOfPericenter(b, fields.argp); OMM.addMeanAnomaly(b, fields.ma); OMM.addBstar(b, 0.02); OMM.addMeanMotionDdot(b, 0.01);
   OMM.addNoradCatId(b, 90011); OMM.addMeanElementTheory(b, 1);
   OMM.finishOMMBuffer(b, OMM.endOMM(b));
   return b.asUint8Array();
-})();
-const epochs6h = Array.from({ length: 13 }, (_, k) => T0 + k * 6 * 3600000);
-const truth = await command.invoke({ methodId: "propagate", inputs: [configuration({}), { portId: "omm", typeRef: ommType, payload: truthSet }, { portId: "grid", typeRef: oemType, payload: gridOem("TEME", [T0 - 8 * DAY, ...epochs6h]) }] });
-if (truth.statusCode !== 0) throw new Error(`truth: ${truth.errorCode} ${truth.errorMessage}`);
-const truthLines = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(truth.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+};
 const COV = [1e-2, 1e-3, 2e-2, 1e-4, 2e-4, 3e-2, 1e-6, 2e-6, 3e-6, 1e-8, 2e-6, 1e-6, 4e-6, 1e-9, 2e-8, 3e-6, 2e-6, 1e-6, 1e-9, 1e-9, 3e-8];
-async function sdnapSet(L, extra = {}) {
-  const t = Object.assign(new OPMT(), { CCSDS_OPM_VERS: "2.0", ORIGINATOR: "SDN-AP E2E", OBJECT_NAME: "EPOCH STORE E2E", OBJECT_ID: "2026-911A", CENTER_NAME: "EARTH", REF_FRAME: "TEME",
-    TIME_SYSTEM: "UTC", EPOCH: L.EPOCH, X: L.X, Y: L.Y, Z: L.Z, X_DOT: L.X_DOT, Y_DOT: L.Y_DOT, Z_DOT: L.Z_DOT, GM: 398600.4418, COV_REF_FRAME: "TEME", COVARIANCE: COV, ...extra });
-  const b = new flatbuffers.Builder(1024); OPM.finishSizePrefixedOPMBuffer(b, t.pack(b));
-  const r = await command.invoke({ methodId: "opm_set", inputs: [configuration({ theory: "SDNAP" }), { portId: "opm", typeRef: opmType, payload: b.asUint8Array() }] });
-  if (r.statusCode !== 0) throw new Error(`opm_set: ${r.errorCode} ${r.errorMessage}`);
-  // the set as the sync module carries it: NORAD number added (the $OPM has none)
-  const o = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs[0].payload)).unpack();
-  o.NORAD_CAT_ID = 90011;
-  const bb = new flatbuffers.Builder(4096); OMM.finishOMMBuffer(bb, o.pack(bb));
-  return bb.asUint8Array();
+// the truth set (epoch a day before the first set) and, at each set's epoch, its own mean elements
+const truthEpoch = T0 - DAY;
+{
+  const j = jdOf(iso(truthEpoch));
+  m.init([{ epochWhole: j.whole, epochFrac: j.frac, meanMotion: 15.5, ecc: 0.0011, inc: 51.6, raan: 120, argp: 90, ma: 30, bterm: 0.02, agom: 0.01, norad: 90011, theory: THEORY.SGP4XP }]);
 }
-const sdnapRecords = [];
-for (const L of truthLines) sdnapRecords.push(prefixed(await sdnapSet(L)));
-sdnapRecords.push(prefixed(await sdnapSet(truthLines[5])));  // a same-epoch duplicate of set 4
+const meanSet = (epoch, k) => {
+  const q = x.sdnap_alloc(48);
+  if (x.sdnap_mean_elements_at(0, (epoch - truthEpoch) / 60000, q) !== 0) throw new Error("mean elements of the truth set");
+  const [a, ecc, inc, raan, argp, ma] = Array.from(new Float64Array(mem(), q, 6));
+  const mm = x.sdnap_mean_motion_of(a, ecc, inc);
+  x.sdnap_free(q);
+  return xpSet({ epoch, mm, ecc, inc, raan, argp, ma: (ma + (k % 2 ? 0.0115 : 0) + 360) % 360 });
+};
+/** The k-th set of the series at `epoch`, carrying COVARIANCE. */
+const seriesSet = (epoch, k) => {
+  const t = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(meanSet(epoch, k))).unpack();
+  t.COVARIANCE = COV;
+  t.COV_REFERENCE_FRAME = rfm("TEME");
+  const bb = new flatbuffers.Builder(1024); OMM.finishOMMBuffer(bb, t.pack(bb));
+  return bb.asUint8Array();
+};
+const xpRecords = [prefixed(seriesSet(T0 - 7 * DAY, 0))];  // an aged set, 7 days before the first epoch
+for (let k = 0; k < 13; ++k) xpRecords.push(prefixed(seriesSet(T0 + k * 6 * 3600000, k)));
+xpRecords.push(prefixed(seriesSet(T0 + 5 * 6 * 3600000, 5)));  // a same-epoch duplicate of set 5
 const sgp4Records = Array.from({ length: 7 }, (_, k) => {
   const b = new flatbuffers.Builder(256);
   const e = b.createString(iso(T0 + k * 12 * 3600000)), id = b.createString("1998-067A"), orig = b.createString("18 SPCS");
@@ -93,7 +99,7 @@ const sgp4Records = Array.from({ length: 7 }, (_, k) => {
   OMM.finishSizePrefixedOMMBuffer(b, OMM.endOMM(b));
   return Buffer.from(b.asUint8Array());
 });
-const snapshot = { portId: "omm", typeRef: ommType, payload: stream([...sgp4Records, ...sdnapRecords]) };
+const snapshot = { portId: "omm", typeRef: ommType, payload: stream([...sgp4Records, ...xpRecords]) };
 const load = async (cfg) => {
   const r = await m.harness.invoke({ methodId: "load_epochs", inputs: [store(cfg), snapshot] });
   if (r.statusCode !== 0) throw new Error(`load_epochs: ${r.errorCode} ${r.errorMessage}`);

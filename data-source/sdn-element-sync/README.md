@@ -33,7 +33,7 @@ clock): the SDN host connectors move the bytes, the harness schedules, this modu
 
 Rules: expiry is by `EPOCH` (a set before the window start is dropped on the way in and again at the cache by the
 `expire` cutoff); a set is identified by (object, theory, originator, epoch) and a pulled set wins over a cached one;
-SGP4, SGP4XP and SDN-AP sets all pass (the epoch store selects by theory); an unsigned, unverified or notice-less pull
+SGP4 and SGP4XP sets of any originator pass (the epoch store selects by theory); an unsigned, unverified or notice-less pull
 is refused whole and nothing of it is cached or seeded. The module never signs and never alters a notice: re-seeding
 sends the original sets with the original publisher's notice, so a third node verifies the original signature.
 

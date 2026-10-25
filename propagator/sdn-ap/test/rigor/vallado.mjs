@@ -147,7 +147,7 @@ export const checks = [
     async run(ctx) {
       const module = await ctx.module();
       const rows = [];
-      for (const theory of [THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]) for (const [mm, ecc, inc] of CORPUS.slice(0, 5)) {
+      for (const theory of [THEORY.SGP4, THEORY.SGP4XP]) for (const [mm, ecc, inc] of CORPUS.slice(0, 5)) {
         const base = elementsOf(tleLines({ year: 16, day: 366.5, rev: 0, inc, raan: 10, ecc, argp: 20, ma: 30, mm, ...(theory === THEORY.SGP4 ? { type: 0, bstar: 1e-5 } : { type: 4, bterm: 0.005, agom: 0.01 }) }));
         rows.push({ ...base, theory });
       }
@@ -184,7 +184,7 @@ export const checks = [
     source: "AIAA 2006-6753 sec. VI.D (resonance integrated from the epoch at every request); paper 1.1 and 2.2 (checkpoints keyed by time alone)",
     async run(ctx) {
       const module = await ctx.module();
-      const rows = corpusRows([THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]);
+      const rows = corpusRows([THEORY.SGP4, THEORY.SGP4XP]);
       const at = (k) => [-2880, 0, 1000, 5000, 9000][k % 5];
       const bytes = (p) => createHash("sha256").update(Buffer.from(new Float64Array([...p.x, ...p.y, ...p.z, ...p.vx, ...p.vy, ...p.vz]).buffer)).update(Buffer.from(p.status.buffer)).digest("hex");
       module.init(rows);
@@ -193,7 +193,7 @@ export const checks = [
       module.atMinutes(rows.map(() => 14400));
       module.atMinutes(rows.map(() => -14400));
       const visited = bytes(module.atMinutes(rows.map((_, k) => at(k))));
-      return { pass: fresh === visited, evidence: [`${rows.length} sets (SGP4, SGP4XP, SDNAP) at 5 times: fresh ${fresh.slice(0, 16)}, after +10 d and -10 d ${visited.slice(0, 16)}`] };
+      return { pass: fresh === visited, evidence: [`${rows.length} sets (SGP4, SGP4XP) at 5 times: fresh ${fresh.slice(0, 16)}, after +10 d and -10 d ${visited.slice(0, 16)}`] };
     },
   }),
   defineCheck({
@@ -203,48 +203,22 @@ export const checks = [
     async run(ctx) {
       const module = await ctx.module();
       const rows = [];
-      for (const theory of [THEORY.SGP4XP, THEORY.SDNAP]) for (const [mm, ecc, inc] of [[15.5, 0.001, 51.6], [14.3, 0.002, 98.2], [12.5, 0.01, 70], [4.5, 0.01, 55]]) {
-        rows.push(rowOf({ mm, ecc, inc, raan: 40, argp: 15, ma: 7, bterm: 0, agom: 0 }, theory));
+      for (const [mm, ecc, inc] of [[15.5, 0.001, 51.6], [14.3, 0.002, 98.2], [12.5, 0.01, 70], [4.5, 0.01, 55]]) {
+        rows.push(rowOf({ mm, ecc, inc, raan: 40, argp: 15, ma: 7, bterm: 0, agom: 0 }, THEORY.SGP4XP));
       }
       module.init(rows);
       const x = module.x, out = x.sdnap_alloc(48);
       const aAt = (i, t) => (x.sdnap_mean_elements_at(i, t, out) === 0 ? new Float64Array(module.harness.memory.buffer, out, 1)[0] : NaN);
-      // the day's average (144 samples): SDNAP's mean a carries the m-daily tesseral terms (paper 3.2), which a day averages
-      const dayMean = (i, d) => { let sum = 0; for (let k = 0; k < 144; k += 1) sum += aAt(i, d * 1440 + 10 * k); return sum / 144; };
-      const worst = { [THEORY.SGP4XP]: 0, [THEORY.SDNAP]: 0 };
-      let refused = 0;
+      let worst = 0, refused = 0;
       rows.forEach((row, i) => {
-        const a = row.theory === THEORY.SGP4XP ? [aAt(i, 0), aAt(i, 43200)] : [dayMean(i, 0), dayMean(i, 29)];
+        const a = [aAt(i, 0), aAt(i, 43200)];
         if (!a.every(Number.isFinite)) { refused += 1; return; }
-        worst[row.theory] = Math.max(worst[row.theory], Math.abs(a[1] / a[0] - 1));
+        worst = Math.max(worst, Math.abs(a[1] / a[0] - 1));
       });
       x.sdnap_free(out);
-      return { pass: refused === 0 && worst[THEORY.SGP4XP] <= 1e-12, evidence: [
+      return { pass: refused === 0 && worst <= 1e-12, evidence: [
         `${rows.length} drag-free, radiation-free sets, LEO to MEO, off resonance; ${refused} refused`,
-        `SGP4XP mean a, epoch vs 30 days: ${worst[THEORY.SGP4XP].toExponential(3)} relative (bound 1e-12)`,
-        `report only: SDNAP mean a, day-1 average vs day-30 average, ${worst[THEORY.SDNAP].toExponential(3)} relative: SDNAP carries the m-daily and shallow-resonance tesseral terms (paper 3.2, 3.4), which exchange energy with the rotating field, so its mean a is not an integral`] };
-    },
-  }),
-  defineCheck({
-    id: "vallado-step-convergence", reviewer: REVIEWERS.VALLADO, tier: "full",
-    question: "Do the integrated shallow-resonance terms converge as the integration step shrinks: at 7 days the state at step/1 and step/2 approaches step/8, the error falling with the step?",
-    source: "paper 2.2 and 3.4 (third-order Runge-Kutta on an epoch-anchored grid); sdnap_tesseral_diagnostic step divisor",
-    async run() {
-      const rows = [[14.8, 0.001, 53], [13.0, 0.002, 63], [12.0, 0.01, 80]].map(([mm, ecc, inc]) => rowOf({ mm, ecc, inc, raan: 40, argp: 15, ma: 7, bterm: 0, agom: 0 }, THEORY.SDNAP));
-      const at = async (divisor) => {
-        const m = await openModule();
-        m.x.sdnap_tesseral_diagnostic(0, divisor);
-        m.init(rows);
-        const p = m.atMinutes(rows.map(() => 10080));
-        const r = rows.map((_, k) => [p.x[k], p.y[k], p.z[k]]);
-        m.destroy();
-        return r;
-      };
-      const ref = await at(8);
-      const err = [];
-      for (const d of [1, 2, 4]) { const s = await at(d); err.push(Math.max(...s.map((r, k) => hypot3(r, ref[k]) * 1e3))); }
-      const falls = err[1] < err[0] && err[2] < err[1];
-      return { pass: falls || err[0] === 0, evidence: [`3 SDNAP sets with shallow resonance at 7 days: max |state(step/d) - state(step/8)| = ${err.map((e, k) => `d=${[1, 2, 4][k]}: ${e.toExponential(3)} m`).join(", ")}`] };
+        `SGP4XP mean a, epoch vs 30 days: ${worst.toExponential(3)} relative (bound 1e-12)`] };
     },
   }),
   defineCheck({
@@ -252,7 +226,7 @@ export const checks = [
     question: "Are the output bytes the same at any thread count (0 and 4 workers) for every theory?",
     source: "paper 12.2 (batch propagation returns the same bytes at any thread count)",
     async run() {
-      const rows = corpusRows([THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]);
+      const rows = corpusRows([THEORY.SGP4, THEORY.SGP4XP]);
       const digest = async (threads) => {
         const m = await openModule({ threads });
         m.init(rows);
@@ -293,12 +267,12 @@ export const checks = [
       evidence.push(`SPEC band: mean d^2/3 [${mean.join(", ")}], 95 % coverage [${cov.join(", ")}]; recorded ${recorded.recorded}: [${recorded.meanD2Over3.join(", ")}], [${recorded.coverage95.join(", ")}] (${recorded.reason})`);
       if (!same) evidence.push("the band in SPEC.md differs from the recorded band: record the change and its reason in data/covariance-band.json");
       const cells = [], missing = [];
-      for (const th of ["sdnap", "sgp4xp"]) {
+      for (const th of ["sgp4xp"]) {
         const r = JSON.parse(fs.readFileSync(here(`../results/covariance-realism-${th}.json`), "utf8"));
         for (const [set, v] of Object.entries(r.realism)) for (const day of ["1", "2", "3"]) {
           const c = v.all?.[day];
           if (!c || !Number.isFinite(c.meanD2Over3) || !Number.isFinite(c.coverage95)) { missing.push(`${th} ${set} day ${day}`); continue; }
-          cells.push({ name: `${th === "sdnap" ? "SDN-AP" : "SGP4XP"} ${set} day ${day}`, m: c.meanD2Over3, cov: c.coverage95, n: c.samples });
+          cells.push({ name: `SGP4XP ${set} day ${day}`, m: c.meanD2Over3, cov: c.coverage95, n: c.samples });
         }
       }
       const outside = cells.filter((c) => c.m < mean[0] || c.m > mean[1] || c.cov < cov[0] || c.cov > cov[1]);

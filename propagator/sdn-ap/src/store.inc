@@ -20,19 +20,12 @@ struct ElementRow {
   double bstar;                ///< SGP4: B*, 1/earth radii
   double mean_motion_dot;      ///< rev/day^2 (carried)
   double mean_motion_ddot;     ///< rev/day^3 (carried)
-  double bterm;                ///< SGP4-XP: m^2/kg; SDN-AP: B_eff = (1 - kappa) B, signed
-  double agom;                 ///< SGP4-XP, SDN-AP: m^2/kg
+  double bterm;                ///< SGP4-XP: m^2/kg
+  double agom;                 ///< SGP4-XP: m^2/kg
   uint32_t norad_cat_id;
   int32_t theory;              ///< sdnap::Theory
-  // SDN-AP (DESIGN 2b, 2c): zero for the other theories
-  double kappa;                ///< drag-makeup fraction (carried; the dynamics use B_eff)
-  double tau0, tauc, taus;     ///< empirical transverse accelerations, m/s^2
-  double arc_end_min;          ///< end of the fit arc, minutes from epoch (2c g(t))
-  double rho_arc;              ///< arc-mean density at fit time (2a.5), kg/m^3
-  uint32_t flags;              ///< SDN-AP: kFlagLowering (2c.2 tau0 selected: the thrust persists after the arc)
-  uint32_t reserved;
 };
-static_assert(sizeof(ElementRow) == 168, "ElementRow is 168 bytes");
+static_assert(sizeof(ElementRow) == 112, "ElementRow is 112 bytes");
 
 /// Rows hold SGP4 records (Sat) or SGP4XP records (xpt::XpSat); `slot` maps
 /// a row to its record.
@@ -81,21 +74,16 @@ inline Elements elements_of(const ElementRow& row) {
   e.agom = row.agom;
   e.norad = row.norad_cat_id;
   e.theory = row.theory;
-  e.kappa = row.kappa;
-  e.tau0 = row.tau0;
-  e.tauc = row.tauc;
-  e.taus = row.taus;
-  e.arc_end_min = row.arc_end_min;
-  e.flags = row.flags;
   return e;
 }
 
-/// A row the ingest takes for any theory: every field a number and the inclination within [0, 180] deg (CCSDS
-/// 502.0-B-3). Any other row is held refused (init_error), never initialized or propagated.
+/// A row the ingest takes for any theory: SGP4 or SGP4XP, every field a number and the inclination within [0, 180] deg
+/// (CCSDS 502.0-B-3). Any other row is held refused (init_error), never initialized or propagated.
 inline bool row_well_formed(const ElementRow& r) {
+  if (r.theory != kTheorySgp4 && r.theory != kTheorySgp4Xp) return false;
   const double fields[] = {r.epoch_jd_whole, r.epoch_jd_frac, r.mean_motion_rev_day, r.eccentricity, r.inclination_deg,
                            r.raan_deg, r.arg_pericenter_deg, r.mean_anomaly_deg, r.bstar, r.mean_motion_dot,
-                           r.mean_motion_ddot, r.bterm, r.agom, r.kappa, r.tau0, r.tauc, r.taus, r.arc_end_min, r.rho_arc};
+                           r.mean_motion_ddot, r.bterm, r.agom};
   for (const double v : fields)
     if (!std::isfinite(v)) return false;
   return r.inclination_deg >= 0.0 && r.inclination_deg <= 180.0;
@@ -109,7 +97,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
   Store& st = store();
   if (count == 0) return 0;
   uint32_t nxp = 0;
-  for (uint32_t i = 0; i < count; ++i) nxp += (rows[i].theory == kTheorySgp4Xp || rows[i].theory == kTheorySdnAp) ? 1 : 0;
+  for (uint32_t i = 0; i < count; ++i) nxp += rows[i].theory == kTheorySgp4Xp ? 1 : 0;
   const uint32_t nsat = count - nxp;
   st.kind = static_cast<uint8_t*>(std::malloc(count));
   st.slot = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * count));
@@ -125,7 +113,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
   for (uint32_t i = 0; i < count; ++i) {
     const Elements e = elements_of(rows[i]);
     const bool well_formed = row_well_formed(rows[i]);
-    if (e.theory == kTheorySgp4Xp || e.theory == kTheorySdnAp) {
+    if (e.theory == kTheorySgp4Xp) {
       st.kind[i] = 1;
       st.slot[i] = st.xp_count;
       xpt::XpSat& x = st.xps[st.xp_count++];
@@ -203,14 +191,7 @@ inline uint64_t resonant_terms_bytes() {
   const Store& st = store();
   uint64_t n = 0;
   for (uint32_t i = 0; i < st.xp_count; ++i) {
-    if (st.xps[i].ctx.res_taylor != nullptr) n += xpt::res::class_terms(st.xps[i].ctx.resonance).count * sizeof(xpt::res::GTaylor);
     n += static_cast<uint64_t>(st.xps[i].ctx.res_count) * sizeof(xpt::res::ResCoef);
-    n += static_cast<uint64_t>(st.xps[i].ctx.shallow_count + st.xps[i].ctx.near_count) * sizeof(xpt::tess::ShallowCoef);
-    const int md = st.xps[i].ctx.mdaily_degree;
-    n += static_cast<uint64_t>(md * (md + 2) / 4) * 2 * sizeof(float);
-    if (st.xps[i].ctx.zt != nullptr) n += static_cast<uint64_t>(xpt::tess::zonal_count(st.xps[i].ctx.zt_degree)) * 4 * sizeof(float);
-    if (st.xps[i].ctx.sp != nullptr)
-      n += static_cast<uint64_t>(xpt::tess::sp_count(st.xps[i].ctx.sp_degree, st.xps[i].ctx.sp_mask)) * 4 * sizeof(float);
   }
   return n;
 }

@@ -30,8 +30,6 @@ const CHILDREN = [
   "com.digitalarsenal.hostcap.storage-ingest",
   "org.sdn.flows.supplemental-omm.od",
   "org.sdn.flows.supplemental-omm.status",
-  "org.sdn.flows.supplemental-omm.sdnap",
-  "com.spacedatanetwork.sdn-ap-propagator",
 ].sort();
 // The legacy flow's own provider copies, timer, FlatSQL and publication nodes: retired.
 const RETIRED = /^org\.sdn\.flows\.supplemental-omm\.(provider-|timer|publication)|^com\.digitalarsenal\.flatsql\.store$/;

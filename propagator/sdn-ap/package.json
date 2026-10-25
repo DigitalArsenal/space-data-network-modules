@@ -4,7 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "description": "SDN-AP propagator: SGP4XP (the US Space Force SGP4-XP theory, clean-room) and SDN-AP (SDN's improved general-perturbations theory) as one isomorphic WASM module behind the OrbPro propagator ABI.",
+  "description": "SDN-AP propagator bundle: SGP4 and SGP4XP (the US Space Force SGP4-XP theory, clean-room) as one isomorphic WASM module behind the OrbPro propagator ABI.",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "files": [
     "dist/",
@@ -21,8 +21,7 @@
   "scripts": {
     "build": "node build.mjs",
     "e2e": "node test/conformance.e2e.mjs",
-    "bench": "node test/bench.mjs",
-    "fetch-build-data": "node tools/fetch-build-data.mjs"
+    "bench": "node test/bench.mjs"
   },
   "devDependencies": {
     "flatc-wasm": "26.1.38",

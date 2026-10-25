@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Covariance realism of SDN-AP (SPEC 12) on laser-ranged precise orbits, and the fit of its process noise.
+// Covariance realism of the SGP4XP fit (SPEC 12) on laser-ranged precise orbits, and the fit of its process noise.
 //
-// Each window: the module's `fit` (THEORY SDNAP, or SGP4XP with --theory SGP4XP) on 24 h of a GCRF reference ephemeris (USEABLE_START_TIME to
+// Each window: the module's `fit` (THEORY SGP4XP) on 24 h of a GCRF reference ephemeris (USEABLE_START_TIME to
 // USEABLE_STOP_TIME), then its `propagate` of the fitted $OMM onto the reference epochs of the next 3 days every
 // 30 min in GCRF, states and covariance lines both from the module. The script compares the module's numbers with the
 // reference: e = model - reference, d^2 = e^T P^-1 e on the 3 x 3 position block, against chi-square(3): mean d^2 / 3
@@ -17,13 +17,11 @@
 //                      propagations of each set (noise off, then each size alone at 1e-6: P is linear in the squared
 //                      sizes); prints the constants for src/covariance.inc
 //
-//   node test/covariance-realism.mjs --theory SDNAP --set calibration --out test/results/covariance-calibration-sdnap.json
-//   node test/covariance-realism.mjs --theory SGP4XP --set calibration --out test/results/covariance-calibration-sgp4xp.json
-//   node test/covariance-realism.mjs --theory SDNAP --set held-out --out test/results/covariance-realism-sdnap.json
-//   node test/covariance-realism.mjs --theory SGP4XP --set held-out --out test/results/covariance-realism-sgp4xp.json
+//   node test/covariance-realism.mjs --set calibration --out test/results/covariance-calibration-sgp4xp.json
+//   node test/covariance-realism.mjs --set held-out --out test/results/covariance-realism-sgp4xp.json
 //
 // Reference: /opt/data/sdn-archive/reference-states/reference (ILRS combination and NSGF analysis-centre orbits as GCRF
-// $OEM, made by analysis/reference-states). Space weather: the experiment's GFZ table (space-weather-history.prw).
+// $OEM, made by analysis/reference-states).
 // JS moves bytes and does statistics on the module's numbers; it computes no orbit and no frame.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -41,19 +39,17 @@ import { configuration } from "./lib/pcf.mjs";
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : fallback; };
 const SET = arg("set", "held-out");
-const THEORY = arg("theory", "SDNAP");
+const THEORY = "SGP4XP";
 const OUT = arg("out", null);
 const LIMIT = Number(arg("limit", "0"));
 const ARCHIVE = process.env.SDN_ARCHIVE ?? "/opt/data/sdn-archive";
 const REFERENCE = path.join(ARCHIVE, "reference-states/reference");
 const ROWS = path.join(ARCHIVE, "sdn-gp-starlink-ffm-match/rows");
-const WEATHER = path.join(ARCHIVE, "sdn-gp-starlink-ffm-match/environment/space-weather-history.prw");
 const DAY = 86400000, SAMPLE = 1800000, FIT = DAY, LEAD_DAYS = 3, UNIT = 1e-6;
 const CHI2_3_95 = 7.814727903251178, CHI2_3_MEDIAN = 2.365973884375338;
 
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
 const CONFIG = configuration({ theory: THEORY });
-const weather = { portId: "space_weather_table", typeRef: { schemaName: "PRW.fbs", fileIdentifier: "$PRW", rootTypeName: "PRW" }, payload: new Uint8Array(fs.readFileSync(WEATHER)) };
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
 const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const ms = (text) => Date.parse(text.endsWith("Z") ? text : `${text}Z`);
@@ -135,7 +131,7 @@ function oemBytes(head, lines, useStart, useStop, frame = "GCRF") {
   return b.asUint8Array();
 }
 async function call(methodId, inputs) {
-  const r = await command.invoke({ methodId, inputs: [CONFIG, weather, ...inputs] });
+  const r = await command.invoke({ methodId, inputs: [CONFIG, ...inputs] });
   if (r.statusCode !== 0) throw new Error(`${methodId}: ${r.errorCode} ${r.errorMessage}`);
   return r.outputs;
 }

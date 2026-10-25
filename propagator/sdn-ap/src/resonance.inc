@@ -3,7 +3,7 @@
 // SGP4XP integrates the class of the epoch mean motion with the functions at the
 // epoch e_0, i_0 (6.3); the rates the library reports with its native elements
 // take the class of the current n and the functions at the current e and i
-// (amendment 5, from those readouts: 6.8, 6.9), and so does SDN-AP throughout.
+// (amendment 5, from those readouts: 6.8, 6.9).
 // A class sums exactly its SPEC 6.1 terms (l, m, p, q), k = l - 2p + q, of
 // Kaula's disturbing function
 //   R = sum (mu / a^(l+1)) F_lmp G_lpq S_lmpq,
@@ -20,11 +20,6 @@
 // the 16 h G_410 with 2 e^2 (derivative exact), the 16 h dG_40,-2/de without its
 // e^13 and e^15 terms, the 1-day G_30,-1 ending at e^25, and the abs(q) = 1
 // series' e^27 coefficient c_27 - 2 c_1 b_27 (main 789db82).
-// SDN-AP uses the correct functions instead: the exact dF_632/di, and G_lpq,
-// dG_lpq/de from the Maclaurin polynomial below e = 0.3 (exact to rounding there)
-// and above it from the Hansen coefficient itself (numerical integral, valid
-// beyond the Laplace limit e = 0.6627 where the polynomial diverges) expanded to
-// third order about the epoch e (the epoch class's terms, taken at initialization).
 // -----------------------------------------------------------------------------
 
 // Included inside namespace sdnap::xpt (xp_theory.inc).
@@ -274,23 +269,6 @@ inline double hansen_G(int l, int p, int q, double e) {
   return sum / kN;
 }
 
-/// G_lpq(e) and dG_lpq/de from the Hansen coefficient (SDN-AP): the derivative
-/// by a fourth-order central difference.
-inline void exact_G(int l, int p, int q, double e, double& G, double& dG) {
-  G = hansen_G(l, p, q, e);
-  const double h = 1e-4;
-  if (e >= 2.0 * h && e + 2.0 * h < 1.0) {
-    dG = (hansen_G(l, p, q, e - 2.0 * h) - 8.0 * hansen_G(l, p, q, e - h) + 8.0 * hansen_G(l, p, q, e + h) -
-          hansen_G(l, p, q, e + 2.0 * h)) / (12.0 * h);
-  } else {
-    // near e = 0: the Maclaurin polynomial is exact to rounding there
-    double Gs;
-    const HansenSeries* hs = hansen_series(l, p, q);
-    if (hs != nullptr) series_G(*hs, e, Gs, dG);
-    else dG = 0.0;
-  }
-}
-
 /// One term's parts (SPEC 6.3): the integers, the tesserals and F G, F dG/de, dF/di G at the elements evaluated.
 struct ResCoef {
   int8_t l, m, p, k;
@@ -299,30 +277,10 @@ struct ResCoef {
   double fg, fdg, dfg;
 };
 
-/// SDN-AP's G_lpq about the epoch e_0 (above kSeriesE): G, dG/de, d2G/de2, d3G/de3 there, from the Hansen
-/// coefficient at e_0 and e_0 +- h, +- 2h.
-struct GTaylor {
-  double g0, g1, g2, g3;
-};
-constexpr double kSeriesE = 0.3;  ///< below it SDN-AP takes G from the Maclaurin polynomial (exact to rounding)
-inline GTaylor g_taylor(int l, int p, int q, double e0) {
-  const double h = 5e-4;
-  const double gm2 = hansen_G(l, p, q, e0 - 2.0 * h), gm1 = hansen_G(l, p, q, e0 - h), g0 = hansen_G(l, p, q, e0);
-  const double gp1 = hansen_G(l, p, q, e0 + h), gp2 = hansen_G(l, p, q, e0 + 2.0 * h);
-  GTaylor out;
-  out.g0 = g0;
-  out.g1 = (gm2 - 8.0 * gm1 + 8.0 * gp1 - gp2) / (12.0 * h);
-  out.g2 = (-gp2 + 16.0 * gp1 - 30.0 * g0 + 16.0 * gm1 - gm2) / (12.0 * h * h);
-  out.g3 = (gp2 - 2.0 * gp1 + 2.0 * gm1 - gm2) / (2.0 * h * h * h);
-  return out;
-}
-
 /// The terms of class `cls` at the current e and i (SPEC 6.3, amendment 5): the integers, the tesserals and F G,
-/// F dG/de, dF/di G. `library` selects the SGP4XP functions (SPEC 6.4 as the library computes them), otherwise
-/// SDN-AP's: G from the Maclaurin polynomial below kSeriesE, above it from `taylor` (the terms of class
-/// `taylor_cls` about e_0) when the class is that one. si, ci: sin i and cos i. Returns the count written (at most 29).
-inline int current_terms(int cls, double e, double si, double ci, bool library, const GTaylor* taylor, int taylor_cls,
-                         double e0, ResCoef* out) {
+/// F dG/de, dF/di G, as the SGP4XP library computes them (SPEC 6.4). si, ci: sin i and cos i. Returns the count written
+/// (at most 29).
+inline int current_terms(int cls, double e, double si, double ci, ResCoef* out) {
   const TermSet ts = class_terms(cls);
   const KaulaPoly* polys = class_polys_of(cls);
   if (polys == nullptr) return 0;
@@ -335,30 +293,20 @@ inline int current_terms(int cls, double e, double si, double ci, bool library, 
     sp[j] = sp[j - 1] * si;
     cp[j] = cp[j - 1] * ci;
   }
-  const bool expand = !library && taylor != nullptr && cls == taylor_cls && e >= kSeriesE;
   for (int j = 0; j < ts.count; ++j) {
     const ResonantTerm& t = ts.t[j];
     const Harmonic& hm = harmonic(t.l, t.m);
     double F, dF, G, dG;
     kaula_eval(polys[j], sp, cp, F, dF);
     const HansenSeries& hs = kHansen[t.hansen];
-    if (library) {
-      if (t.l == 6 && t.m == 3 && t.p == 2) dF = library_D632(si, ci);
-      if (cls == 1 && t.l == 3 && t.p == 0 && t.q == -1) {
-        series_G(hs, e, G, dG, /*drop_last=*/true, -1, -1, true);  // G_30,-1 ends at e^25; dG keeps 27 (c27 + 2 b27) e^26
-      } else if (cls == 4 && t.l == 4 && t.p == 0 && t.q == -2) {
-        series_G(hs, e, G, dG, false, 13, 15, true);  // dG_40,-2/de without e^13, e^15
-      } else {
-        series_G(hs, e, G, dG, false, -1, -1, true);
-        if (cls == 4 && t.l == 4 && t.p == 1 && t.q == 0) G += e * e;  // G_410 with 2 e^2
-      }
-    } else if (expand) {
-      const GTaylor& g = taylor[j];
-      const double d = e - e0;
-      G = g.g0 + d * (g.g1 + d * (0.5 * g.g2 + d * (g.g3 / 6.0)));
-      dG = g.g1 + d * (g.g2 + d * (0.5 * g.g3));
+    if (t.l == 6 && t.m == 3 && t.p == 2) dF = library_D632(si, ci);
+    if (cls == 1 && t.l == 3 && t.p == 0 && t.q == -1) {
+      series_G(hs, e, G, dG, /*drop_last=*/true, -1, -1, true);  // G_30,-1 ends at e^25; dG keeps 27 (c27 + 2 b27) e^26
+    } else if (cls == 4 && t.l == 4 && t.p == 0 && t.q == -2) {
+      series_G(hs, e, G, dG, false, 13, 15, true);  // dG_40,-2/de without e^13, e^15
     } else {
-      series_G(hs, e, G, dG);
+      series_G(hs, e, G, dG, false, -1, -1, true);
+      if (cls == 4 && t.l == 4 && t.p == 1 && t.q == 0) G += e * e;  // G_410 with 2 e^2
     }
     ResCoef& c = out[j];
     c.l = t.l;
@@ -378,7 +326,7 @@ inline int current_terms(int cls, double e, double si, double ci, bool library, 
 /// The resonance contribution to the six rates (n-dot, e-dot, i-dot,
 /// e varpi-dot, sin i Omega-dot, lambda-dot - n) at the current mean elements
 /// kp, time t (minutes from epoch); theta_g0 the Greenwich angle at epoch (1.2).
-/// The terms (coefs, count) in Lagrange's equations (SPEC 6.3); degree up to 70 for SDN-AP's shallow resonant terms.
+/// The terms (coefs, count) in Lagrange's equations (SPEC 6.3).
 inline void resonance_six(const ResCoef* coefs, int count, double t, const Kepler& kp, double n, double eta, double si,
                           double ci, double theta_g0, double* six) {
   if (count == 0) return;

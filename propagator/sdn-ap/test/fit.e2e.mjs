@@ -16,18 +16,20 @@
 //   states fitted back (declared EME2000) reproduce the TEME fit within 1 m; a 4-day ephemeris is fitted over its
 //   latest 48 h or 72 h (the span rule, validated on the latest 24 h); a size-prefixed $OMM propagates as the plain
 //   one.
+// - The SDN-AP theory was removed: an $OMM naming it (MEAN_ELEMENT_THEORY SDNAP) is refused by propagate and
+//   ingest_omm (invalid-omm), a fit with THEORY SDNAP by configuration-refused, and an ElementRow of theory 16 is
+//   held refused.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
-import { OMMUserDefinedParameter } from "spacedatastandards.org/lib/js/OMM/OMMUserDefinedParameter.js";
 import { OBD } from "spacedatastandards.org/lib/js/OBD/OBD.js";
 import { odMethod } from "spacedatastandards.org/lib/js/OBD/odMethod.js";
 import { FRAME_PROBE, jdOf, oemInFrame, packOem, rfm, rotate } from "./lib/frames.mjs";
 import { openModule, wasmPath } from "./lib/module.mjs";
-import { PCFEmpiricalTermsT, configuration, explicit, withConfiguration } from "./lib/pcf.mjs";
+import { configuration, withConfiguration } from "./lib/pcf.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
@@ -45,9 +47,8 @@ const m = await openModule();
 }
 
 // --- one SGP4XP set, propagated, then fitted in three frames
-// every configured method takes a $PCF; THEORY SDNAP selects the SDN-AP fit
+// every configured method takes a $PCF
 const command = withConfiguration(await createStandaloneHarness("browser", wasmPath, { surface: "command" }));
-const SDNAP = configuration({ theory: "SDNAP" });
 const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
 const ommBytes = (() => {
@@ -112,17 +113,15 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   console.log(`GCRF by enumeration only vs TEME fit: max |dr| ${max.toExponential(3)} m`);
   check(max <= 1.0, `GCRF by enumeration vs TEME fit: ${max} m`);
   const code = async (method, payload) => {
-    const r = await command.invoke(method === "fit SDNAP"
-      ? { methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload }] }
-      : { methodId: method, inputs: [{ portId: "ephemeris", typeRef: oemType, payload }] });
+    const r = await command.invoke({ methodId: method, inputs: [{ portId: "ephemeris", typeRef: oemType, payload }] });
     return r.statusCode === 0 ? "accepted" : r.errorCode;
   };
   const conflict = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(oemInFrame(m, source, "GCRF", null, undefined, "enum"))).unpack();
   conflict.EPHEMERIS_DATA_BLOCK[0].REFERENCE_FRAME.NAME = "TEME";
   const elsewhere = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(oemInFrame(m, source, "GCRF", null, undefined, "both"))).unpack();
-  for (const method of ["fit", "fit SDNAP"]) {
-    // fit (SGP4XP) is geocentric; fit SDNAP fits Earth- and Moon-centered blocks, nothing else
-    elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME = method === "fit" ? "MOON" : "MARS";
+  for (const method of ["fit"]) {
+    // fit (SGP4XP) is geocentric
+    elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME = "MOON";
     const center = await code(method, packOem(elsewhere));
     console.log(`${method}: CENTER_NAME ${elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME} -> ${center}`);
     check(center === "unsupported-center", `${method} with a ${elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME}-centered block: ${center}`);
@@ -210,278 +209,37 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   }
 }
 
-// --- SDN-AP (theory 16) through fit SDNAP: a truth propagated from an SDN-AP set (B_eff 0.02 m^2/kg, tauc 2e-8 and
-// taus -1e-8 m/s^2, AGOM 0.01) is fitted with a B prior of 0.1 +- 0.01 m^2/kg; B_eff, tauc, taus and kappa = 1 - B_eff/B
-// must come back, and the fitted set (read back by propagate as theory 16) must reproduce the truth.
-const sdnapOmm = (fields, user) => {
-  const b = new flatbuffers.Builder(1024);
-  const epoch = b.createString("2026-10-20T12:00:00.000000");
-  const params = Object.entries(user).filter(([k]) => k !== "THEORY").map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(String(v))));
-  const vec = OMM.createUserDefinedParametersVector(b, params);
-  OMM.startOMM(b);
-  OMM.addEpoch(b, epoch);
-  for (const [k, v] of Object.entries(fields)) OMM[`add${k}`](b, v);
-  OMM.addNoradCatId(b, 90002);
-  OMM.addMeanElementTheory(b, user.THEORY === "SDN-AP" ? 4 : 1);
-  OMM.addUserDefinedParameters(b, vec);
-  OMM.finishOMMBuffer(b, OMM.endOMM(b));
-  return b.asUint8Array();
-};
-const truthOmm = sdnapOmm({ MeanMotion: 15.3, Eccentricity: 0.0008, Inclination: 53, RaOfAscNode: 120, ArgOfPericenter: 90, MeanAnomaly: 30, Bstar: 0.02, MeanMotionDdot: 0.01 },
-  { THEORY: "SDN-AP", SDNAP_TAUC: 2e-8, SDNAP_TAUS: -1e-8, SDNAP_ARC_END_MIN: 1440 });
-const truthOem = await propagate(truthOmm);
-const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1, SDNAP_B_SIGMA: 0.01 });
+// --- the SDN-AP theory is gone: a set that names it, and a fit that asks for it, are refused by name
 {
-  const cpu = process.cpuUsage();
-  const r = await command.invoke({ methodId: "fit", inputs: [SDNAP, 
-    { portId: "ephemeris", typeRef: oemType, payload: oemInFrame(m, truthOem, "TEME", null) },
-    { portId: "prior", typeRef: ommType, payload: priorOmm }] });
-  const seconds = process.cpuUsage(cpu).user / 1e6;
-  if (r.statusCode !== 0) failures.push(`fit SDNAP: ${r.errorCode} ${r.errorMessage}`);
-  else {
-    const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload));
-    const ud = {};
-    for (let k = 0; k < e.userDefinedParametersLength(); ++k) { const q = e.USER_DEFINED_PARAMETERS(k); ud[q.PARAM_NAME()] = Number(q.PARAM_VALUE()); }
-    const rms = Number(/fit RMS ([\d.]+) km/.exec(e.COMMENT())[1]);
-    console.log(`fit SDNAP: B_eff ${ud.SDNAP_B_EFF.toPrecision(6)} (truth 0.02), tauc ${ud.SDNAP_TAUC.toExponential(4)} (2e-8), taus ${ud.SDNAP_TAUS.toExponential(4)} (-1e-8), kappa ${ud.SDNAP_KAPPA.toFixed(5)} +- ${ud.SDNAP_KAPPA_SIGMA.toFixed(5)} (0.8), RMS ${(rms * 1e3).toFixed(3)} m; CPU ${seconds.toFixed(2)} s`);
-    check(Math.abs(ud.SDNAP_B_EFF - 0.02) < 2e-3, `fit SDNAP B_eff ${ud.SDNAP_B_EFF}`);
-    check(Math.abs(ud.SDNAP_KAPPA - 0.8) < 0.03 && ud.SDNAP_KAPPA_SIGMA > 0, `fit SDNAP kappa ${ud.SDNAP_KAPPA} +- ${ud.SDNAP_KAPPA_SIGMA}`);
-    const back = await states(r.outputs.find((o) => o.portId === "elements").payload);
-    const truthStates = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(truthOem)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-    let max = 0;
-    for (let k = 0; k < truthStates.length; ++k) max = Math.max(max, Math.hypot(back[k].X - truthStates[k].X, back[k].Y - truthStates[k].Y, back[k].Z - truthStates[k].Z) * 1e3);
-    console.log(`fit SDNAP set read back as theory 16 against the truth over the day: max |dr| ${max.toExponential(3)} m`);
-    check(max < 5.0 && rms * 1e3 < 5.0, `fit SDNAP reproduction: max ${max} m, RMS ${rms * 1e3} m`);
-  }
-}
-
-// --- B_eff free by default; the 2c.2 rule opt-in: a heavy-drag truth (B_eff 1.0 m^2/kg) fitted with no prior keeps
-// B_eff near 1.0 and no LOWERING flag; with a prior carrying USER_DEFINED_SDNAP_TAU0_RULE = 1 the set is flagged
-// and carries tau0 instead
-{
-  const heavyOmm = sdnapOmm({ MeanMotion: 15.3, Eccentricity: 0.0008, Inclination: 53, RaOfAscNode: 120, ArgOfPericenter: 90, MeanAnomaly: 30, Bstar: 1.0, MeanMotionDdot: 0.0 },
-    { THEORY: "SDN-AP", SDNAP_ARC_END_MIN: 1440 });
-  const heavyOem = oemInFrame(m, await propagate(heavyOmm), "TEME", null);
-  const paramsOf = (r) => {
-    const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload));
-    const u = {};
-    for (let k = 0; k < e.userDefinedParametersLength(); ++k) { const q = e.USER_DEFINED_PARAMETERS(k); u[q.PARAM_NAME()] = Number(q.PARAM_VALUE()); }
-    return u;
-  };
-  const free = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: heavyOem }] });
-  const rule = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: heavyOem },
-    { portId: "prior", typeRef: ommType, payload: sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_TAU0_RULE: 1 }) }] });
-  if (free.statusCode !== 0 || rule.statusCode !== 0) failures.push(`heavy-drag fits: ${free.errorCode} / ${rule.errorCode}`);
-  else {
-    const f = paramsOf(free), g = paramsOf(rule);
-    console.log(`B_eff 1.0 truth: default B_eff ${f.SDNAP_B_EFF.toPrecision(5)}, LOWERING ${f.SDNAP_LOWERING ?? 0}; 2c.2 opt-in: B_eff ${g.SDNAP_B_EFF}, tau0 ${g.SDNAP_TAU0.toExponential(3)} m/s^2, LOWERING ${g.SDNAP_LOWERING ?? 0}`);
-    check(Math.abs(f.SDNAP_B_EFF - 1.0) < 0.02 && !f.SDNAP_LOWERING, `default fit: B_eff ${f.SDNAP_B_EFF}, LOWERING ${f.SDNAP_LOWERING}`);
-    check(g.SDNAP_LOWERING === 1 && g.SDNAP_B_EFF === 0 && g.SDNAP_TAU0 < 0, `2c.2 opt-in: B_eff ${g.SDNAP_B_EFF}, tau0 ${g.SDNAP_TAU0}, LOWERING ${g.SDNAP_LOWERING}`);
-  }
-}
-
-// --- $PCF 1.0.2 (SDS 1.268.0): a FORCES.EMPIRICAL_TERMS table whose fields are unset (or written at their defaults)
-// reads as an absent table. A MEO SDN-AP truth (perigee above MEAN_ELEMENT.DRAG_REGIME_PERIGEE_KM, tauc and taus set)
-// fitted by fit SDNAP with no FORCES table, with an empty EMPIRICAL_TERMS table and with every field written at its
-// default gives the same $OMM and $OBD bytes, holding the terms after the arc (SDNAP_TAU_HELD 1);
-// HELD_ABOVE_DRAG_REGIME false decays them (no SDNAP_TAU_HELD). The SGP4XP fit and an SGP4XP set's propagate take
-// the empty table as no table and refuse a field set off its default by name.
-{
-  const meo = await propagate(sdnapOmm({ MeanMotion: 2.0056, Eccentricity: 0.01, Inclination: 55, RaOfAscNode: 10, ArgOfPericenter: 30, MeanAnomaly: 40, Bstar: 0, MeanMotionDdot: 0.02 },
-    { THEORY: "SDN-AP", SDNAP_TAUC: 3e-9, SDNAP_TAUS: -2e-9, SDNAP_ARC_END_MIN: 1440, SDNAP_TAU_HELD: 1 }));
-  const ephemeris = { portId: "ephemeris", typeRef: oemType, payload: oemInFrame(m, meo, "TEME", null) };
-  const forces = (EMPIRICAL_TERMS) => ({ EPHEMERIS_SOURCE: "", EMPIRICAL_TERMS });
-  const run = async (options, input = ephemeris, method = "fit") => command.invoke({ methodId: method, inputs: [configuration(options), input] });
-  const bytes = (r) => (r.statusCode !== 0 ? `${r.errorCode} ${r.errorMessage}` :
-    r.outputs.map((o) => `${o.portId}:${Buffer.from(o.payload).toString("base64")}`).join("|"));
-  const held = (r) => { const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload)); for (let k = 0; k < e.userDefinedParametersLength(); ++k) if (e.USER_DEFINED_PARAMETERS(k).PARAM_NAME() === "SDNAP_TAU_HELD") return Number(e.USER_DEFINED_PARAMETERS(k).PARAM_VALUE()); return 0; };
-  const none = await run({ theory: "SDNAP" });
-  const empty = await run({ theory: "SDNAP", forces: forces({}) });
-  const atDefaults = await run({ theory: "SDNAP", forces: forces(explicit(PCFEmpiricalTermsT, { HELD_ABOVE_DRAG_REGIME: true })) });
-  const decaying = await run({ theory: "SDNAP", forces: forces({ HELD_ABOVE_DRAG_REGIME: false }) });
-  const same = bytes(none) === bytes(empty) && bytes(none) === bytes(atDefaults);
-  console.log(`EMPIRICAL_TERMS on a MEO fit: no table, an empty table and every field at its default ${same ? "give the same $OMM and $OBD bytes" : "DIFFER"}; SDNAP_TAU_HELD ${none.statusCode === 0 ? held(none) : none.errorCode}, with HELD_ABOVE_DRAG_REGIME false ${decaying.statusCode === 0 ? held(decaying) : decaying.errorCode}`);
-  check(none.statusCode === 0 && same && held(none) === 1, `EMPIRICAL_TERMS at its defaults against no table: ${bytes(none).slice(0, 80)} / ${bytes(empty).slice(0, 80)} / ${bytes(atDefaults).slice(0, 80)}`);
-  check(decaying.statusCode === 0 && held(decaying) === 0 && bytes(decaying) !== bytes(none), `HELD_ABOVE_DRAG_REGIME false: ${bytes(decaying).slice(0, 80)}`);
-  const xpNone = await run({});
-  const xpEmpty = await run({ forces: forces({}) });
-  const xpOff = await run({ forces: forces({ PERSISTENCE_HOURS: 12 }) });
-  const omm = { portId: "omm", typeRef: ommType, payload: ommBytes };
-  const propNone = await run({}, omm, "propagate"), propEmpty = await run({ forces: forces({}) }, omm, "propagate");
-  const propOff = await run({ forces: forces({ HELD_ABOVE_DRAG_REGIME: false }) }, omm, "propagate");
-  console.log(`EMPIRICAL_TERMS with SGP4XP: fit with an empty table ${bytes(xpNone) === bytes(xpEmpty) ? "as with none" : "DIFFERENT"}, PERSISTENCE_HOURS 12 -> ${xpOff.errorCode} ${xpOff.errorMessage}; propagate with an empty table ${bytes(propNone) === bytes(propEmpty) ? "as with none" : "DIFFERENT"}, HELD_ABOVE_DRAG_REGIME false -> ${propOff.errorCode} ${propOff.errorMessage}`);
-  check(xpNone.statusCode === 0 && bytes(xpNone) === bytes(xpEmpty), `SGP4XP fit with an empty EMPIRICAL_TERMS table: ${xpEmpty.errorCode} ${xpEmpty.errorMessage}`);
-  check(xpOff.errorCode === "configuration-refused" && String(xpOff.errorMessage).startsWith("FORCES.EMPIRICAL_TERMS.PERSISTENCE_HOURS:"), `SGP4XP fit with PERSISTENCE_HOURS 12: ${xpOff.errorCode} ${xpOff.errorMessage}`);
-  check(propNone.statusCode === 0 && bytes(propNone) === bytes(propEmpty), `SGP4XP propagate with an empty EMPIRICAL_TERMS table: ${propEmpty.errorCode} ${propEmpty.errorMessage}`);
-  check(propOff.errorCode === "configuration-refused" && String(propOff.errorMessage).startsWith("FORCES.EMPIRICAL_TERMS.HELD_ABOVE_DRAG_REGIME:"), `SGP4XP propagate with HELD_ABOVE_DRAG_REGIME false: ${propOff.errorCode} ${propOff.errorMessage}`);
-}
-
-// --- Moon-centered SDN-AP (2h.1): a lunar set (100 km polar, GRGM660PRIM and the DE440 PA orientation pinned) through
-// propagate on a 24 h ICRF grid, fitted back by fit SDNAP from that Moon-centered $OEM, and the fitted set propagated
-// again: the round trip within 20 m over the day; the $OMM and $OEM carry CENTER_NAME MOON and ICRF axes
-{
-  const lunarOmm = (() => {
-    const b = new flatbuffers.Builder(1024);
-    const params = [["SDNAP_REGIME", "MOON"]].map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(v)));
-    const vec = OMM.createUserDefinedParametersVector(b, params);
-    const epoch = b.createString("2026-06-01T00:00:00.000000"), center = b.createString("MOON");
+  const sdnapOmm = (() => {
+    const b = new flatbuffers.Builder(256);
+    const epoch = b.createString("2026-10-20T12:00:00.000000");
     OMM.startOMM(b);
     OMM.addEpoch(b, epoch);
-    OMM.addCenterName(b, center);
-    OMM.addMeanMotion(b, 86400 / (2 * Math.PI * Math.sqrt(1838.0 ** 3 / 4902.7998)));
-    OMM.addEccentricity(b, 0.01);
-    OMM.addInclination(b, 90);
-    OMM.addRaOfAscNode(b, 30);
-    OMM.addArgOfPericenter(b, 90);
-    OMM.addMeanAnomaly(b, 10);
+    OMM.addMeanMotion(b, 15.06);
+    OMM.addEccentricity(b, 0.0002);
+    OMM.addInclination(b, 53);
     OMM.addNoradCatId(b, 90010);
-    OMM.addMeanElementTheory(b, 4);
-    OMM.addUserDefinedParameters(b, vec);
+    OMM.addMeanElementTheory(b, 4);  // meanElementSource SDNAP
     OMM.finishOMMBuffer(b, OMM.endOMM(b));
     return b.asUint8Array();
   })();
-  const lunarGrid = (() => {
-    const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(source)).unpack();
-    const b = t.EPHEMERIS_DATA_BLOCK[0];
-    b.EPHEMERIS_DATA_LINES = [];
-    b.START_TIME = "2026-06-01T00:00:00.000000";
-    b.STOP_TIME = "2026-06-02T00:00:00.000000";
-    b.STEP_SIZE = 300;
-    b.REFERENCE_FRAME = rfm("GCRF", "both");
-    b.CENTER_NAME = "MOON";  // the template names the set's center
-    t.EPHEMERIS_DATA_BLOCK = [b];
-    return packOem(t);
-  })();
-  {
-    // a template that names another center is refused by name
-    const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(lunarGrid)).unpack();
-    t.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME = "EARTH";
-    const r = await command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: lunarOmm }, { portId: "grid", typeRef: oemType, payload: packOem(t) }] });
-    console.log(`lunar set on an EARTH grid: ${r.statusCode === 0 ? "accepted" : r.errorCode}`);
-    check(r.statusCode !== 0 && r.errorCode === "grid-center-mismatch", `lunar set on an EARTH grid: ${r.errorCode}`);
+  for (const method of ["propagate", "ingest_omm"]) {
+    const r = await command.invoke({ methodId: method, inputs: [{ portId: "omm", typeRef: ommType, payload: sdnapOmm }] });
+    console.log(`${method}: MEAN_ELEMENT_THEORY SDNAP -> ${r.statusCode === 0 ? "accepted" : r.errorCode}`);
+    check(r.statusCode !== 0 && r.errorCode === "invalid-omm", `${method} with an SDNAP $OMM: ${r.errorCode}`);
   }
-  const prop = async (omm) => command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: omm }, { portId: "grid", typeRef: oemType, payload: lunarGrid }] });
-  const p1 = await prop(lunarOmm);
-  if (p1.statusCode !== 0) failures.push(`lunar propagate: ${p1.errorCode} ${p1.errorMessage}`);
-  else {
-    const traj = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p1.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
-    const f = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: p1.outputs[0].payload }] });
-    if (f.statusCode !== 0) failures.push(`lunar fit SDNAP: ${f.errorCode} ${f.errorMessage}`);
-    else {
-      const fitted = f.outputs.find((o) => o.portId === "elements").payload;
-      const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fitted));
-      const p2 = await prop(fitted);
-      const back = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p2.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-      let max = 0;
-      traj.EPHEMERIS_DATA_LINES.forEach((L, k) => { max = Math.max(max, Math.hypot(back[k].X - L.X, back[k].Y - L.Y, back[k].Z - L.Z) * 1e3); });
-      console.log(`lunar round trip: ${traj.EPHEMERIS_DATA_LINES.length} states, center ${traj.CENTER_NAME} / ${e.CENTER_NAME()}, axes ${traj.REFERENCE_FRAME.NAME}; ${e.COMMENT().replace(/^.*?; (\d+ states)/, "$1")}; refit vs truth max |dr| ${max.toFixed(3)} m`);
-      check(traj.CENTER_NAME === "MOON" && e.CENTER_NAME() === "MOON" && traj.REFERENCE_FRAME.NAME === "ICRF", "lunar center or axes");
-      check(max <= 20.0, `lunar round trip: ${max} m`);
-      // a maneuver-like break at 12 h (the second half from a set whose mean motion is 2e-4 higher): the fit must
-      // segment (the latest clean segment: USER_DEFINED_SDNAP_MANEUVER_BEFORE_SECONDS from 12 h to 18 h) instead of
-      // absorbing the break
-      const altered = (() => {
-        const t = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(lunarOmm)).unpack();
-        t.MEAN_MOTION *= 1.0002;
-        const b = new flatbuffers.Builder(1024);
-        OMM.finishOMMBuffer(b, t.pack(b));
-        return b.asUint8Array();
-      })();
-      const p3 = await prop(altered);
-      const second = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p3.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-      const stitched = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p1.outputs[0].payload)).unpack();
-      const lines = stitched.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-      for (let k = 145; k < lines.length; ++k) lines[k] = second[k];
-      const fm = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: packOem(stitched) }] });
-      if (fm.statusCode !== 0) failures.push(`lunar maneuver fit: ${fm.errorCode} ${fm.errorMessage}`);
-      else {
-        const em = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fm.outputs.find((o) => o.portId === "elements").payload));
-        const u = {};
-        for (let k = 0; k < em.userDefinedParametersLength(); ++k) { const q = em.USER_DEFINED_PARAMETERS(k); u[q.PARAM_NAME()] = Number(q.PARAM_VALUE()); }
-        console.log(`lunar break at 12 h: ${em.COMMENT().replace(/^.*?\); (\d+ states)/, "$1")}; maneuver before ${u.SDNAP_MANEUVER_BEFORE_SECONDS} s`);
-        check(u.SDNAP_MANEUVER_BEFORE_SECONDS >= 43200 && u.SDNAP_MANEUVER_BEFORE_SECONDS <= 64800, `lunar maneuver segmentation: ${u.SDNAP_MANEUVER_BEFORE_SECONDS}`);
-      }
-    }
-  }
-}
-
-// --- SDN-AP segment sets (2h.2 / 2h.3 / 2h.5): an NRHO-like Moon-centered set (apolune 70,300 km: beyond the averaged
-// theory's reach), an Earth orbit reaching the Moon (apogee 425,000 km) and a thrusting Sun-centered cruise set, each
-// through propagate on an ICRF grid of its center, fitted back by fit SDNAP (routed by the reach rule to a segment
-// fit) and propagated again: the round trip within 20 m; the sets carry SEMI_MAJOR_AXIS, GM and the regime; a grid of
-// another center and the batch refuse them by name
-{
-  const segmentSet = ({ center, gm, a, e, i, raan, argp, ma, params }) => {
-    const b = new flatbuffers.Builder(1024);
-    const ps = [...params].map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(String(v))));
-    const vec = OMM.createUserDefinedParametersVector(b, ps);
-    const epoch = b.createString("2026-06-01T00:00:00.000000"), c = b.createString(center);
-    OMM.startOMM(b);
-    OMM.addEpoch(b, epoch);
-    OMM.addCenterName(b, c);
-    OMM.addSemiMajorAxis(b, a);
-    OMM.addGm(b, gm);
-    OMM.addMeanMotion(b, (Math.sqrt(gm / Math.abs(a) ** 3) * 86400) / (2 * Math.PI));
-    OMM.addEccentricity(b, e);
-    OMM.addInclination(b, i);
-    OMM.addRaOfAscNode(b, raan);
-    OMM.addArgOfPericenter(b, argp);
-    OMM.addMeanAnomaly(b, ma);
-    OMM.addNoradCatId(b, 90020);
-    OMM.addMeanElementTheory(b, 4);
-    OMM.addUserDefinedParameters(b, vec);
-    OMM.finishOMMBuffer(b, OMM.endOMM(b));
-    return b.asUint8Array();
-  };
-  const gridOf = (center, days, step) => {
-    const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(source)).unpack();
-    const b = t.EPHEMERIS_DATA_BLOCK[0];
-    b.EPHEMERIS_DATA_LINES = [];
-    b.START_TIME = "2026-06-01T00:00:00.000000";
-    b.STOP_TIME = new Date(Date.parse("2026-06-01T00:00:00Z") + days * 86400e3).toISOString().replace("Z", "000");
-    b.STEP_SIZE = step;
-    b.REFERENCE_FRAME = rfm("GCRF", "both");
-    b.CENTER_NAME = center;
-    t.EPHEMERIS_DATA_BLOCK = [b];
-    return packOem(t);
-  };
-  const cases = [
-    { label: "NRHO-like (MOON)", center: "MOON", regime: "CISLUNAR", wrong: "EARTH", days: 4, step: 900,
-      set: { center: "MOON", gm: 4902.79980693169, a: 37000, e: 0.9, i: 88, raan: 30, argp: 90, ma: 180, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] } },
-    { label: "cislunar (EARTH)", center: "EARTH", regime: "CISLUNAR", wrong: "MOON", days: 4, step: 900,
-      set: { center: "EARTH", gm: 398600.4418, a: 250000, e: 0.7, i: 28.5, raan: 40, argp: 10, ma: 20, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] } },
-    { label: "cruise (SUN)", center: "SUN", regime: "HELIO", wrong: "EARTH", days: 30, step: 21600,
-      set: { center: "SUN", gm: 1.32712440018e11, a: 2.244e8, e: 0.2, i: 23.4, raan: 5, argp: 60, ma: 40, params: [["SDNAP_REGIME", "HELIO"], ["SDNAP_BETA", 1e-5], ["SDNAP_RTN_T", 5e-8]] } },
-  ];
-  for (const c of cases) {
-    const omm = segmentSet(c.set), grid = gridOf(c.center, c.days, c.step);
-    const prop = async (o, g = grid) => command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: o }, { portId: "grid", typeRef: oemType, payload: g }] });
-    const wrong = await prop(omm, gridOf(c.wrong, 1, 3600));
-    check(wrong.statusCode !== 0 && wrong.errorCode === "grid-center-mismatch", `${c.label} on a ${c.wrong} grid: ${wrong.errorCode}`);
-    const p1 = await prop(omm);
-    if (p1.statusCode !== 0) { failures.push(`${c.label} propagate: ${p1.errorCode} ${p1.errorMessage}`); continue; }
-    const traj = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p1.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
-    const f = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: p1.outputs[0].payload }] });
-    if (f.statusCode !== 0) { failures.push(`${c.label} fit SDNAP: ${f.errorCode} ${f.errorMessage}`); continue; }
-    const fitted = f.outputs.find((o) => o.portId === "elements").payload;
-    const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fitted));
-    const u = {};
-    for (let k = 0; k < e.userDefinedParametersLength(); ++k) u[e.USER_DEFINED_PARAMETERS(k).PARAM_NAME()] = e.USER_DEFINED_PARAMETERS(k).PARAM_VALUE();
-    const p2 = await prop(fitted);
-    if (p2.statusCode !== 0) { failures.push(`${c.label} propagate of the fitted set: ${p2.errorCode} ${p2.errorMessage}`); continue; }
-    const back = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p2.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
-    const byEpoch = new Map(back.EPHEMERIS_DATA_LINES.map((L) => [L.EPOCH, L]));
-    let max = 0, n = 0;
-    for (const L of traj.EPHEMERIS_DATA_LINES) { const q = byEpoch.get(L.EPOCH); if (!q) continue; ++n; max = Math.max(max, Math.hypot(q.X - L.X, q.Y - L.Y, q.Z - L.Z) * 1e3); }
-    console.log(`${c.label}: ${traj.EPHEMERIS_DATA_LINES.length} states; set ${e.CENTER_NAME()} ${u.SDNAP_REGIME}, a ${e.SEMI_MAJOR_AXIS().toFixed(1)} km, GM ${e.GM()}; ${e.COMMENT().replace(/^.*?\); /, "")}; round trip max |dr| ${max.toFixed(3)} m over ${n}`);
-    check(traj.CENTER_NAME === c.center && back.CENTER_NAME === c.center && e.CENTER_NAME() === c.center && traj.REFERENCE_FRAME.NAME === "ICRF", `${c.label}: center or axes`);
-    check(e.MEAN_ELEMENT_THEORY() === 4 && u.THEORY === undefined && u.SDNAP_REGIME === c.regime && e.GM() > 0 && e.SEMI_MAJOR_AXIS() !== 0, `${c.label}: regime ${u.SDNAP_REGIME}`);
-    check(n >= traj.EPHEMERIS_DATA_LINES.length / 4 && max <= 20.0, `${c.label} round trip: ${max} m over ${n}`);
-    if (c.center === "EARTH") {
-      const r = await command.invoke({ methodId: "ingest_omm", inputs: [{ portId: "omm", typeRef: ommType, payload: fitted }] });
-      check(r.statusCode !== 0 && r.errorCode === "unsupported-theory", `a segment set in the batch: ${r.errorCode}`);
-    }
-  }
+  const fitted = await command.invoke({ methodId: "fit", inputs: [configuration({ theory: "SDNAP" }), { portId: "ephemeris", typeRef: oemType, payload: source }] });
+  console.log(`fit: THEORY SDNAP -> ${fitted.statusCode === 0 ? "accepted" : fitted.errorCode}`);
+  check(fitted.statusCode !== 0 && fitted.errorCode === "configuration-refused", `fit with THEORY SDNAP: ${fitted.errorCode}`);
+  const rows = new Uint8Array(112);
+  new DataView(rows.buffer).setInt32(108, 16, true);  // theory 16 in an ElementRow
+  const p = m.x.sdnap_alloc(112);
+  new Uint8Array(m.harness.memory.buffer, p, 112).set(rows);
+  const held = m.x.sdnap_init_elements(p, 1), err = m.x.sdnap_init_error(0);
+  m.x.sdnap_free(p);
+  console.log(`sdnap_init_elements: a theory 16 row -> held ${held}, init error ${err}`);
+  check(held === 1 && err !== 0, `a theory 16 row: held ${held}, init error ${err}`);
 }
 
 console.log(failures.length === 0 ? "\nfit E2E: PASS" : `\nfit E2E: FAIL\n  ${failures.join("\n  ")}`);

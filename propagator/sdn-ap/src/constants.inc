@@ -18,7 +18,6 @@ constexpr double kJd1950 = 2433281.5;
 enum Theory : int32_t {
   kTheorySgp4 = 0,     ///< SGP4/SDP4 (STR#3, Vallado et al. 2006), ephemeris type 0.
   kTheorySgp4Xp = 4,   ///< SGP4-XP (US Space Force), ephemeris type 4: BTERM and AGOM.
-  kTheorySdnAp = 16,   ///< SDN-AP: SDN's own theory (labeled as its own, never "SGP4-XP").
 };
 
 /// Zonal gravity model of a theory (normalized to Earth radii and minutes).

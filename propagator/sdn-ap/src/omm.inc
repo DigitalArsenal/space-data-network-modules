@@ -119,16 +119,8 @@ inline bool& center_refused() {
   return refused;
 }
 
-/// Set by decode when a geocentric record is an SDN-AP segment set (USER_DEFINED_SDNAP_REGIME CISLUNAR or HELIO):
-/// propagate takes it apart from the batch; ingest refuses it.
-inline bool& segment_set() {
-  static thread_local bool segment = false;
-  return segment;
-}
-
 inline bool decode(const uint8_t* buf, uint32_t len, ElementRow& row) {
   center_refused() = false;
-  segment_set() = false;
   if (!plain_view(buf, len, "$OMM")) return false;
   {
     flatbuffers::Verifier v0(buf, len);
@@ -155,9 +147,9 @@ inline bool decode(const uint8_t* buf, uint32_t len, ElementRow& row) {
   uint32_t n = 0;
   if (!text(t, SDNAP_OMM_VT_EPOCH, s, n) || !epoch(s, n, row.epoch_jd_whole, row.epoch_jd_frac)) return false;
   const uint32_t theory_at = field(t, SDNAP_OMM_VT_MEAN_ELEMENT_THEORY, 1);
-  const uint8_t theory = theory_at ? t.buf[theory_at] : 0;  // meanElementSource: SGP4 0, SGP4XP 1, SDNAP 4
-  if (theory != 0 && theory != 1 && theory != 4) return false;
-  row.theory = theory == 4 ? kTheorySdnAp : theory == 1 ? kTheorySgp4Xp : kTheorySgp4;
+  const uint8_t theory = theory_at ? t.buf[theory_at] : 0;  // meanElementSource: SGP4 0, SGP4XP 1
+  if (theory != 0 && theory != 1) return false;
+  row.theory = theory == 1 ? kTheorySgp4Xp : kTheorySgp4;
   row.mean_motion_rev_day = number(t, SDNAP_OMM_VT_MEAN_MOTION, 0.0);
   row.eccentricity = number(t, SDNAP_OMM_VT_ECCENTRICITY, 0.0);
   row.inclination_deg = number(t, SDNAP_OMM_VT_INCLINATION, 0.0);
@@ -168,33 +160,9 @@ inline bool decode(const uint8_t* buf, uint32_t len, ElementRow& row) {
   row.norad_cat_id = norad_at ? u32(t.buf + norad_at) : 0;
   const double bstar = number(t, SDNAP_OMM_VT_BSTAR, 0.0);
   const double ddot = number(t, SDNAP_OMM_VT_MEAN_MOTION_DDOT, 0.0);
-  if (row.theory == kTheorySgp4Xp || row.theory == kTheorySdnAp) {
-    row.bterm = bstar;  // BTERM (SDNAP: the signed B_eff), m^2/kg
+  if (row.theory == kTheorySgp4Xp) {
+    row.bterm = bstar;  // BTERM, m^2/kg
     row.agom = ddot;    // AGOM, m^2/kg
-    if (row.theory == kTheorySdnAp) {
-      // the SDN-AP terms without an $OMM field: USER_DEFINED_SDNAP_KAPPA, _TAU0, _TAUC, _TAUS, _ARC_END_MIN,
-      // _LOWERING, _TAU_HELD; _REGIME CISLUNAR or HELIO marks a segment set
-      flatbuffers::Verifier verifier(buf, len);
-      if (!VerifyOMMBuffer(verifier)) return false;
-      const auto* ud = GetOMM(buf)->USER_DEFINED_PARAMETERS();
-      if (ud != nullptr) {
-        for (const OMMUserDefinedParameter* q : *ud) {
-          if (q == nullptr || q->PARAM_NAME() == nullptr || q->PARAM_VALUE() == nullptr) continue;
-          const char* name = q->PARAM_NAME()->c_str();
-          const char* value = q->PARAM_VALUE()->c_str();
-          if (std::strcmp(name, "SDNAP_KAPPA") == 0) row.kappa = std::strtod(value, nullptr);
-          else if (std::strcmp(name, "SDNAP_TAU0") == 0) row.tau0 = std::strtod(value, nullptr);
-          else if (std::strcmp(name, "SDNAP_TAUC") == 0) row.tauc = std::strtod(value, nullptr);
-          else if (std::strcmp(name, "SDNAP_TAUS") == 0) row.taus = std::strtod(value, nullptr);
-          else if (std::strcmp(name, "SDNAP_ARC_END_MIN") == 0) row.arc_end_min = std::strtod(value, nullptr);
-          else if (std::strcmp(name, "SDNAP_LOWERING") == 0 && std::strtod(value, nullptr) != 0.0) row.flags |= kFlagLowering;
-          else if (std::strcmp(name, "SDNAP_TAU_HELD") == 0 && std::strtod(value, nullptr) != 0.0) row.flags |= kFlagTauHeld;
-          else if (std::strcmp(name, "SDNAP_REGIME") == 0 && (std::strcmp(value, "CISLUNAR") == 0 || std::strcmp(value, "HELIO") == 0))
-            segment_set() = true;
-        }
-      }
-      if (segment_set()) return false;
-    }
   } else {
     row.bstar = bstar;
     row.mean_motion_dot = number(t, SDNAP_OMM_VT_MEAN_MOTION_DOT, 0.0);
@@ -234,11 +202,7 @@ extern "C" int ingest_omm(void) {
         plugin_set_error("unsupported-center", "An 'omm' record is not centered on the Earth (CENTER_NAME); the theories here are geocentric.");
         return 3;
       }
-      if (sdnap::omm::segment_set()) {
-        plugin_set_error("unsupported-theory", "An 'omm' record is an SDN-AP segment set (CISLUNAR or HELIO); 'propagate' takes it, the batch does not.");
-        return 3;
-      }
-      plugin_set_error("invalid-omm", "An 'omm' payload is not a decodable SGP4, SGP4XP or SDN-AP $OMM record.");
+      plugin_set_error("invalid-omm", "An 'omm' payload is not a decodable SGP4 or SGP4XP $OMM record (MEAN_ELEMENT_THEORY SGP4 or SGP4XP).");
       return 3;
     }
     rows[k++] = row;

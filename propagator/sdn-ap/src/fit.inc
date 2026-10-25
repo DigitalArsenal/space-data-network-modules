@@ -1,12 +1,12 @@
 // -----------------------------------------------------------------------------
 // fit: an ephemeris (TEME states at minutes from a reference epoch) to an
-// element set of the SGP4XP or SDN-AP theory by Levenberg-Marquardt.
+// element set of the SGP4XP theory by Levenberg-Marquardt.
 //
 // The residuals are the theory's own (each iteration ingests the trial set and
 // propagates it to every sample); the Jacobian is analytic: the exact
 // derivatives, by forward-mode differentiation, of the two-body motion with
 // the J2 secular drift of the node, the perigee and the mean longitude, in the
-// equinoctial elements of SPEC 1.5, plus the drag (or B_eff) column through the
+// equinoctial elements of SPEC 1.5, plus the drag column through the
 // mean-motion rate per unit B. Priors (DESIGN 2e.3) enter as extra rows.
 // -----------------------------------------------------------------------------
 
@@ -14,7 +14,7 @@ namespace sdnap {
 namespace fit {
 
 /// Forward-mode dual number with up to 8 partials.
-constexpr int kMaxParams = 11;
+constexpr int kMaxParams = 8;
 struct Dual {
   double v;
   double d[kMaxParams];
@@ -89,12 +89,11 @@ inline void model_position(const Dual* y, double t, Dual ndot, Dual out[3]) {
 
 /// Fit options (48 bytes, sdnap_fit).
 struct Options {
-  int32_t fit_drag;        ///< fit B (SGP4XP BTERM) or B_eff (SDN-AP, signed)
+  int32_t fit_drag;        ///< fit B (SGP4XP BTERM)
   int32_t max_iterations;  ///< 0: 30
   double drag_prior;       ///< prior mean of the drag term (DESIGN 2e.3)
   double drag_sigma;       ///< its sigma; <= 0: no prior
   int32_t fit_agom;        ///< fit AGOM (its column by a finite difference of the theory)
-  int32_t fit_tau;         ///< SDN-AP 2c: bit 0 tau0, bit 1 tauc and taus (columns by finite differences)
   double agom_prior;       ///< prior mean of AGOM
   double agom_sigma;       ///< its sigma; <= 0: no prior
 };
@@ -160,11 +159,6 @@ inline int params_of(const ElementRow& row, const Options& o, double* x) {
   int np = 6;
   if (o.fit_drag) x[np++] = row.bterm;
   if (o.fit_agom) x[np++] = row.agom;
-  if (o.fit_tau & 1) x[np++] = row.tau0;
-  if (o.fit_tau & 2) {
-    x[np++] = row.tauc;
-    x[np++] = row.taus;
-  }
   return np;
 }
 
@@ -180,11 +174,6 @@ inline void row_of(const double* x, const Options& o, ElementRow& row) {
   int np = 6;
   if (o.fit_drag) row.bterm = x[np++];
   if (o.fit_agom) row.agom = x[np++];
-  if (o.fit_tau & 1) row.tau0 = x[np++];
-  if (o.fit_tau & 2) {
-    row.tauc = x[np++];
-    row.taus = x[np++];
-  }
 }
 
 /// The finite-difference fallback of run(): where no step along the analytic Jacobian (two-body motion with the J2
@@ -197,11 +186,8 @@ inline bool& jacobian_fallback() {
 }
 
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
-/// fixed terms) and receives the fitted one. `variances`, when given, receives
-/// the parameters' variances (diagonal of the inverse normal matrix of the last
-/// step, scaled by the residual variance), in params_of order.
-inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o,
-                  double* variances = nullptr) {
+/// fixed terms) and receives the fitted one.
+inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
   Result out{};
   const int nres = 3 * count;
   const int max_it = o.max_iterations > 0 ? o.max_iterations : 30;
@@ -285,21 +271,6 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       if (residuals(bumped, t, r, count, trial))
         for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / step;
     }
-    // SDN-AP 2c tau columns: one-sided differences of the theory (m/s^2)
-    {
-      int col = 6 + (o.fit_drag ? 1 : 0) + (o.fit_agom ? 1 : 0);
-      double ElementRow::*taus[3] = {&ElementRow::tau0, &ElementRow::tauc, &ElementRow::taus};
-      for (int q = 0; q < 3; ++q) {
-        if (q == 0 ? !(o.fit_tau & 1) : !(o.fit_tau & 2)) continue;
-        ElementRow bumped = work;
-        const double v = work.*taus[q];
-        const double step = std::fabs(v) * 0.01 > 1e-9 ? std::fabs(v) * 0.01 : 1e-9;
-        bumped.*taus[q] = v + step;
-        if (residuals(bumped, t, r, count, trial))
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + col] = (trial[i] - res[i]) / step;
-        ++col;
-      }
-    }
     double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
     auto normal = [&]() {
     for (int q = 0; q < kMaxParams * kMaxParams; ++q) A[q] = 0.0;
@@ -321,15 +292,6 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       for (int b = 0; b < a; ++b) A[b * np + a] = A[a * np + b];
     };
     normal();
-    if (variances != nullptr) {
-      // diag(A^-1), A at this iteration's point, scaled below by the residual variance
-      for (int q = 0; q < np; ++q) {
-        double M[kMaxParams * kMaxParams], e[kMaxParams] = {};
-        for (int a = 0; a < np * np; ++a) M[a] = A[a];
-        e[q] = 1.0;
-        variances[q] = solve(M, e, np) ? e[q] : 0.0;
-      }
-    }
     bool improved = false;
     auto attempt = [&]() {
     for (int tries = 0; tries < 12 && !improved; ++tries) {
@@ -393,10 +355,6 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
     if (d > mx) mx = d;
   }
   row = work;
-  if (variances != nullptr) {
-    const double s2 = nres > np ? (ss / (nres - np)) : 0.0;  // km^2 per residual component
-    for (int q = 0; q < np; ++q) variances[q] *= s2;
-  }
   out.rms_km = std::sqrt(ss / (count > 0 ? count : 1));
   out.max_km = mx;
   out.iterations = it;

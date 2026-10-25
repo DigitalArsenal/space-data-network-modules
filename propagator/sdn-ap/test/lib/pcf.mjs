@@ -3,9 +3,6 @@
 import * as flatbuffers from "flatbuffers";
 import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
 import { PCFFitPolicyT } from "spacedatastandards.org/lib/js/PCF/PCFFitPolicy.js";
-import { PCFReentryT } from "spacedatastandards.org/lib/js/PCF/PCFReentry.js";
-import { PCFLaunchT } from "spacedatastandards.org/lib/js/PCF/PCFLaunch.js";
-import { PCFManeuverDetectionT } from "spacedatastandards.org/lib/js/PCF/PCFManeuverDetection.js";
 import { PCFMeanElementOptionsT } from "spacedatastandards.org/lib/js/PCF/PCFMeanElementOptions.js";
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { PCFForceModelT } from "spacedatastandards.org/lib/js/PCF/PCFForceModel.js";
@@ -17,13 +14,10 @@ export { pcfTheory };
 export const PCF_TYPE = { schemaName: "PCF.fbs", fileIdentifier: "$PCF", rootTypeName: "PCF" };
 
 /// The methods with a `configuration` port.
-export const CONFIGURED_METHODS = new Set(["propagate", "fit", "maneuver", "detect_maneuvers", "reentry", "launch_set", "launch_batch"]);
+export const CONFIGURED_METHODS = new Set(["propagate", "fit", "maneuver"]);
 
 const tables = {
   fit: ["FIT", PCFFitPolicyT],
-  reentry: ["REENTRY", PCFReentryT],
-  launch: ["LAUNCH", PCFLaunchT],
-  detect: ["MANEUVER_DETECTION", PCFManeuverDetectionT],
   mean: ["MEAN_ELEMENT", PCFMeanElementOptionsT],
   output: ["OUTPUT", PCFOutputT],
   forces: ["FORCES", PCFForceModelT],

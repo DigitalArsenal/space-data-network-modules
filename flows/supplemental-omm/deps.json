@@ -7,7 +7,5 @@
   "com.digitalarsenal.hostcap.http-request": "../../hostcap/http-request",
   "com.digitalarsenal.hostcap.storage-ingest": "../../hostcap/storage-ingest",
   "org.sdn.flows.supplemental-omm.od": "./nodes/od",
-  "org.sdn.flows.supplemental-omm.status": "./nodes/status",
-  "org.sdn.flows.supplemental-omm.sdnap": "./nodes/sdnap",
-  "com.spacedatanetwork.sdn-ap-propagator": "../../propagator/sdn-ap"
+  "org.sdn.flows.supplemental-omm.status": "./nodes/status"
 }

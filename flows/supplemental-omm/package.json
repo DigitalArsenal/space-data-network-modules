@@ -5,7 +5,7 @@
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "build": "node ./nodes/od/build.mjs && node ./nodes/status/build.mjs && node ./nodes/sdnap/build.mjs",
+    "build": "node ./nodes/od/build.mjs && node ./nodes/status/build.mjs",
     "check": "node ./node_modules/space-data-module-sdk/bin/space-data-module.js flow check ./flow.json --deps ./deps.json",
     "release": "node ./scripts/release.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",

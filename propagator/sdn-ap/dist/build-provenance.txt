@@ -1,15 +1,9 @@
 module com.spacedatanetwork.sdn-ap-propagator
 version 0.1.0
-sha256 9d8dec4c16c3b8d95c755592cbd33090f4093480826a572060f68654f78dc2f8
-nrlmsise00.source third_party/nrlmsise00
-nrlmsise00.pinnedModulesCommit 75fd4d9d29c8332e43c5daa443fd6cd77f9ecd17
-nrlmsise00.checkoutHead 02cc57d2c0f35446a675a6a0fb018693e165a9a8
-nrlmsise00.sha256.nrlmsise-00.h 22eb2ced40595717ef0b73044995e5613aabc8755ed6c43642bfd74335b55535
-nrlmsise00.sha256.nrlmsise-00_data.c d0b3022f3c3e7ffdf703cc0e0d02339dfee01c0bf1520b29c68d5f4afd8784d5
-nrlmsise00.sha256.nrlmsise-00.c 606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a
+sha256 7f054ceec88bc20cbd16461b5b61c200492b082d78818a310827d82b2d9b2282
 erfa.source higherpop/third_party/erfa
 erfa.pinnedModulesCommit 7d59ae2171b5b57fd3b3587ff012de75b8aabb0c
-erfa.checkoutHead 02cc57d2c0f35446a675a6a0fb018693e165a9a8
+erfa.checkoutHead ab9dd07357763bce90a2ebd98ec5c2bd28389d90
 erfa.license.spdx BSD-3-Clause
 erfa.license.carried LICENSES/ERFA.txt
 erfa.license.sha256 556abafd66857342b5f760bc42d323d1cfea310569267d3ae316d438b075424d
@@ -54,37 +48,3 @@ erfa.sha256.utctai.c 6c35d07f2db4ca305270205087d41c454a211fbb2c954bf8bf10c0e99f5
 table6.source SAO Special Report 313 (Jacchia 1970), Table 6, pp. 82-87
 table6.sha256 e79af1942bde529df8fcaa7f786ae073193659b7c15bda341956ffab46d46496
 table6.sgp4xpLibraryOverrides 17
-gravity.model egm96
-gravity.source propagator/ffm/lib/egm96_data.h
-gravity.pinnedModulesCommit 0e84a2c8fb6258d5e37b3c59839ea0e5794ffae1
-gravity.checkoutHead 02cc57d2c0f35446a675a6a0fb018693e165a9a8
-gravity.sha256 4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4
-gravity.records 2553
-lunar.field.source /opt/data/sdn-archive/hac/pds-grail-gravity/gggrx_0660pm_sha.tab
-lunar.field.sha256 a77ee9996aff7341ef89f69aa401f39ba0c2949ed80411505fb4826b771dd63e
-lunar.field.model GRGM660PRIM
-lunar.field.degree 100
-lunar.field.gmKm3s2 4902.79980693169
-lunar.field.radiusKm 1738
-lunar.orientation.source /opt/data/sdn-archive/hac/naif-kernels/pck/moon_pa_de440_200625.bpc
-lunar.orientation.sha256 60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f
-lunar.orientation.frame MOON_PA_DE440 (3-1-3 Euler angles from J2000)
-lunar.orientation.span 2022-01-01T00:00:00Z 2029-01-01T00:00:00Z
-lunar.orientation.recordDays 16
-lunar.orientation.degree 13
-lunar.orientation.records 160
-lunar.orientation.maxRefitErrorRad 5.8754156262441626e-9 2.604790994009676e-9 5.296897143125534e-9
-lunar.ephemeris.source /opt/data/sdn-archive/hac/naif-kernels/spk/planets/de440s.bsp
-lunar.ephemeris.sha256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2
-lunar.ephemeris.model DE440 (de440s)
-lunar.ephemeris.span 2022-01-01T00:00:00Z 2029-01-01T00:00:00Z
-lunar.ephemeris.moon.recordDays 16
-lunar.ephemeris.moon.degree 18
-lunar.ephemeris.moon.records 160
-lunar.ephemeris.moon.maxRefitErrorKm 0.001452951692044735 0.001570347318192944 0.0008019853848963976
-lunar.ephemeris.sun.recordDays 32
-lunar.ephemeris.sun.degree 12
-lunar.ephemeris.sun.records 80
-lunar.ephemeris.sun.maxRefitErrorKm 2.9746247828006744 3.257065700367093 1.5503243003040552
-lunar.ephemeris.planets.span 2012-01-01T00:00:00Z 2029-01-01T00:00:00Z
-lunar.ephemeris.planets.bodies [object Object] [object Object] [object Object] [object Object] [object Object]

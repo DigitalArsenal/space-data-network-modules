@@ -5,8 +5,8 @@
 //   element-sync module's output; a frame of one plain or size-prefixed record also reads), with the $PCF
 //   EPOCH_STORE table (SDS 1.270.0). A series is one (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR); its sets are kept by
 //   epoch: CACHE_DAYS back from the newest epoch of the load (not the wall clock: the store depends on its input
-//   alone), at most MAX_SETS_PER_OBJECT (the newest), THEORIES (empty: SGP4, SGP4XP and SDNAP). Segment sets (Moon,
-//   Sun, cislunar) are counted and not stored.
+//   alone), at most MAX_SETS_PER_OBJECT (the newest), THEORIES (empty: SGP4 and SGP4XP). Sets not centered on the Earth
+//   are counted and not stored.
 // - Selection (SELECTION): NEAREST, the set whose epoch is nearest the request (the switch between consecutive sets at
 //   their midpoint), or LATEST_BEFORE, the latest set at or before it (the switch at the later set's epoch; before the
 //   first set, the first). O(log n) per series.
@@ -29,7 +29,7 @@ struct Config {
   int selection = 0;          ///< 0 NEAREST, 1 LATEST_BEFORE
   double blend_seconds = 3600.0;
   int shape = 0;              ///< 0 SMOOTHSTEP, 1 HERMITE
-  uint32_t theories = 0;      ///< bit per pcfTheory (SGP4 1, SGP4XP 2, SDNAP 4); 0: all three
+  uint32_t theories = 0;      ///< bit per pcfTheory (SGP4 1, SGP4XP 2); 0: both
 };
 
 /// One kept set: the row and its covariance when the record carries one.
@@ -59,7 +59,7 @@ struct Series {
 };
 
 struct Stats {
-  double records = 0, kept = 0, aged = 0, capped = 0, theory = 0, segment = 0, duplicate = 0;
+  double records = 0, kept = 0, aged = 0, capped = 0, theory = 0, other_center = 0, duplicate = 0;
 };
 
 struct Store {
@@ -121,8 +121,7 @@ inline int read_config(Config& c) {
         const int v8 = th->Get(k);
         if (v8 == pcfTheory_SGP4) c.theories |= 1;
         else if (v8 == pcfTheory_SGP4XP) c.theories |= 2;
-        else if (v8 == pcfTheory_SDNAP) c.theories |= 4;
-        else return pcf::refuse("EPOCH_STORE.THEORIES", "SGP4, SGP4XP and SDNAP sets are stored");
+        else return pcf::refuse("EPOCH_STORE.THEORIES", "SGP4 and SGP4XP sets are stored");
       }
     }
     return 0;
@@ -130,9 +129,9 @@ inline int read_config(Config& c) {
   return 0;
 }
 
-inline uint32_t theory_bit(int32_t theory) { return theory == kTheorySgp4 ? 1u : theory == kTheorySgp4Xp ? 2u : 4u; }
+inline uint32_t theory_bit(int32_t theory) { return theory == kTheorySgp4 ? 1u : 2u; }
 
-/// One record of a snapshot, decoded. 1 kept, 0 skipped (segment set), -1 not a decodable $OMM.
+/// One record of a snapshot, decoded. 1 kept, 0 skipped (not centered on the Earth), -1 not a decodable $OMM.
 struct Record {
   ElementRow row{};
   uint32_t norad = 0;
@@ -141,7 +140,7 @@ struct Record {
 };
 inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r = Record{};
-  if (!omm::decode(p, n, r.row)) return omm::segment_set() || omm::center_refused() ? 0 : -1;
+  if (!omm::decode(p, n, r.row)) return omm::center_refused() ? 0 : -1;
   const uint8_t* q = p;
   uint32_t m = n;
   if (!plain_view(q, m, "$OMM")) return -1;
@@ -193,14 +192,14 @@ inline int build(Store& st, const Config& cfg) {
       const int d = decode_record(p, n, r);
       ++st.stats.records;
       if (d < 0) { bad = true; return false; }
-      if (d == 0) { ++st.stats.segment; return true; }
+      if (d == 0) { ++st.stats.other_center; return true; }
       if (cfg.theories != 0 && (cfg.theories & theory_bit(r.row.theory)) == 0) { ++st.stats.theory; delete r.cov; return true; }
       recs.push_back(std::move(r));
       return true;
     });
     if (!ok || bad) {
       for (Record& r : recs) delete r.cov;
-      plugin_set_error("invalid-omm", "An 'omm' frame is neither size-prefixed $OMM records end to end nor one $OMM record of an SGP4, SGP4XP or SDN-AP set.");
+      plugin_set_error("invalid-omm", "An 'omm' frame is neither size-prefixed $OMM records end to end nor one $OMM record of an SGP4 or SGP4XP set.");
       return 3;
     }
   }
@@ -285,7 +284,7 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
-  if (en.row.theory == kTheorySgp4Xp || en.row.theory == kTheorySdnAp) {
+  if (en.row.theory == kTheorySgp4Xp) {
     drag::table();
     q.xp = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
     q.error = q.xp == nullptr ? kPropRefused : xpt::xp_init(e, *q.xp);
@@ -435,10 +434,6 @@ inline uint64_t bytes_of(const Store& st) {
 extern "C" int load_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
-  {
-    bool have_spw = false, have_dcl = false;
-    if (const int st = envload::apply_frames(have_spw, have_dcl)) return st;
-  }
   if (const int rc = pcf::read(pcf::kPropagate)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
@@ -451,10 +446,6 @@ extern "C" int load_epochs(void) {
 extern "C" int propagate_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
-  {
-    bool have_spw = false, have_dcl = false;
-    if (const int st = envload::apply_frames(have_spw, have_dcl)) return st;
-  }
   if (const int rc = pcf::read(pcf::kPropagate)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
@@ -571,12 +562,12 @@ SDNAP_EXPORT("sdnap_epochs_count")
 uint32_t sdnap_epochs_count(void) { return static_cast<uint32_t>(sdnap::epochs::resident().series.size()); }
 
 /// The last load's counts, 8 doubles: records read, sets kept, dropped by CACHE_DAYS, by MAX_SETS_PER_OBJECT, by
-/// THEORIES, segment sets skipped, same-epoch duplicates replaced, and the store's bytes.
+/// THEORIES, sets not centered on the Earth skipped, same-epoch duplicates replaced, and the store's bytes.
 SDNAP_EXPORT("sdnap_epochs_stats")
 void sdnap_epochs_stats(double* out) {
   const auto& st = sdnap::epochs::resident();
   const auto& s = st.stats;
-  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.segment, s.duplicate, static_cast<double>(sdnap::epochs::bytes_of(st))};
+  const double v[8] = {s.records, s.kept, s.aged, s.capped, s.theory, s.other_center, s.duplicate, static_cast<double>(sdnap::epochs::bytes_of(st))};
   for (int k = 0; k < 8; ++k) out[k] = v[k];
 }
 

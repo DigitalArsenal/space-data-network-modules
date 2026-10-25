@@ -1,7 +1,0 @@
-{
-  "org.sdn.flows.supplemental-omm.sdnap": "../nodes/sdnap",
-  "com.digitalarsenal.data-source.retrieval": "../../../data-source/retrieval",
-  "com.spacedatanetwork.sdn-ap-propagator": "../../../propagator/sdn-ap",
-  "com.digitalarsenal.hostcap.storage-ingest": "../../../hostcap/storage-ingest",
-  "com.digitalarsenal.hostcap.http-request": "../../../hostcap/http-request"
-}

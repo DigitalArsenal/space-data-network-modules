@@ -9,9 +9,9 @@ import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphi
 export const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 export const wasmPath = process.env.SDNAP_WASM ? process.env.SDNAP_WASM : fileURLToPath(new URL("../../dist/isomorphic/module.wasm", import.meta.url));
 
-export const THEORY = Object.freeze({ SGP4: 0, SGP4XP: 4, SDNAP: 16 });
+export const THEORY = Object.freeze({ SGP4: 0, SGP4XP: 4 });
 export const FRAME = Object.freeze({ TEME: 0, ECEF: 3 });
-export const ROW_BYTES = 168;
+export const ROW_BYTES = 112;
 
 /** Builds dist/isomorphic/module.wasm unless it exists (or `force`). */
 export function ensureBuilt({ force = false } = {}) {
@@ -30,8 +30,6 @@ export function elementRows(sets) {
     doubles.forEach((value, k) => view.setFloat64(at + 8 * k, value, true));
     view.setUint32(at + 104, e.norad >>> 0, true);
     view.setInt32(at + 108, e.theory, true);
-    [e.kappa ?? 0, e.tau0 ?? 0, e.tauc ?? 0, e.taus ?? 0, e.arcEnd ?? 0, e.rhoArc ?? 0].forEach((value, k) => view.setFloat64(at + 112 + 8 * k, value, true));
-    view.setUint32(at + 160, e.flags ?? 0, true);
   });
   return new Uint8Array(buffer);
 }

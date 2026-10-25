@@ -2,7 +2,7 @@
 // E2E for data-source/sdn-element-sync: three SDN nodes (A publishes, B pulls, C is seeded by B) with the element
 // sets moving as bytes between them and the module's `merge` deciding what each node keeps.
 //
-//   A  publishes a signed catalog: SGP4, SGP4XP and SDN-AP $OMM sets, one per object per day for 9 days, and a
+//   A  publishes a signed catalog: SGP4 and SGP4XP $OMM sets (SGP4XP from two originators), one per object per day for 9 days, and a
 //      $PNV notice carrying the Ed25519 signature (verified by the receiving node's p2p connector, here node:crypto).
 //   B  pulls A's latest dataset through its p2p connector (no direct HTTP from the module), merges it into a rolling
 //      7-day window, writes the new sets to its cache and applies the expire cutoff; then restarts with the network
@@ -42,7 +42,7 @@ const sha = (...parts) => createHash("sha256").update(Buffer.concat(parts.map((p
 
 // --- node A: the publisher ------------------------------------------------------------------------------------------
 const OBJECTS = [25544, 43013, 48274, 90001];
-const LANES = [{ name: "SGP4", theory: 0, originator: "SDN" }, { name: "SGP4XP", theory: 1, originator: "SDN" }, { name: "SDNAP", theory: 1, originator: "SDN-AP" }];
+const LANES = [{ name: "SGP4", theory: 0, originator: "SDN" }, { name: "SGP4XP", theory: 1, originator: "SDN" }, { name: "SGP4XP-B", theory: 1, originator: "SDN-B" }];
 const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
 const publisherKey = publicKey.export({ type: "spki", format: "der" });
 function catalog(now, daysBack) {
@@ -125,7 +125,7 @@ const catalogSize = OBJECTS.length * LANES.length;
 const kept1 = unprefix(m1.omm);
 assert.equal(kept1.length, catalogSize * 7, "7 days back from now keeps the 7 daily epochs at or after the window start (the 06:00 epoch 7 days back is before 12:00)");
 assert.ok(epochsOf(m1.omm).every((t) => t >= NOW0 - 7 * DAY), "no set older than the window");
-assert.deepEqual(new Set(kept1.map((r) => keyOf(r)[3] + keyOf(r)[2])), new Set(["SDN0", "SDN1", "SDN-AP1"]), "SGP4, SGP4XP and SDN-AP sets all present");
+assert.deepEqual(new Set(kept1.map((r) => keyOf(r)[3] + keyOf(r)[2])), new Set(["SDN0", "SDN1", "SDN-B1"]), "SGP4 and SGP4XP sets of both originators all present");
 const ordered = kept1.map((r) => keyOf(r));
 assert.deepEqual(ordered, [...ordered].sort((x, y) => x[0] - y[0] || (x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0) || x[2] - y[2] || (x[3] < y[3] ? -1 : x[3] > y[3] ? 1 : 0) || (x[4] < y[4] ? -1 : x[4] > y[4] ? 1 : 0)), "snapshot sorted by object, theory, originator, epoch");
 assert.equal(Buffer.compare(m1.store, m1.omm), 0, "first pull: every kept set is new for the cache");

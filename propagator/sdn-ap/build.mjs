@@ -15,8 +15,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
-// NRLMSISE-00, ERFA and the gravity coefficients are read from this repository (propagator/sdn-ap sits two levels
-// below its root); SPACE_DATA_NETWORK_MODULES_ROOT names another checkout
+// ERFA is read from this repository (propagator/sdn-ap sits two levels below its root);
+// SPACE_DATA_NETWORK_MODULES_ROOT names another checkout
 const modulesRoot = path.resolve(packageRoot, "..", "..");
 // a source inside this checkout as a repository path in dist/build-provenance.txt; others as given
 const shownPath = (p) => {
@@ -36,7 +36,7 @@ const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.jso
 async function oemBindings() {
   const files = {};
   const deps = new Map();
-  const pending = ["OEM", "OMM", "SPW", "DCL", "PRW", "OBD", "MNV", "RDM", "LAM", "BOV", "OPM"];
+  const pending = ["OEM", "OMM", "PCF", "OBD", "MNV"];
   while (pending.length) {
     const code = pending.pop();
     if (deps.has(code)) continue;
@@ -52,7 +52,7 @@ async function oemBindings() {
     for (const dep of deps.get(code)) visit(dep);
     order.push(code);
   };
-  for (const code of ["OEM", "OMM", "SPW", "DCL", "PRW", "OBD", "MNV", "RDM", "LAM", "BOV", "OPM"]) visit(code);
+  for (const code of ["OEM", "OMM", "PCF", "OBD", "MNV"]) visit(code);
   const flatc = await FlatcRunner.init();
   return order
     .map((code) => {
@@ -101,46 +101,7 @@ async function ommSlots() {
   return lines.join("\n");
 }
 
-// NRLMSISE-00 (SDN-AP drag, DESIGN 2a): the public-domain Brodowski C port the FFM truth uses, read from the open
-// modules repository's vendored copy (the stack submodule path; this repository vendors nothing) and PINNED: every file
-// must match the SHA-256 recorded here (the copy at modules commit 75fd4d9d), or the build fails. The path and the
-// hashes are written to dist/build-provenance.txt.
-const NRLMSISE_PIN = Object.freeze({
-  modulesCommit: "75fd4d9d29c8332e43c5daa443fd6cd77f9ecd17",
-  files: Object.freeze({
-    "nrlmsise-00.h": "22eb2ced40595717ef0b73044995e5613aabc8755ed6c43642bfd74335b55535",
-    "nrlmsise-00_data.c": "d0b3022f3c3e7ffdf703cc0e0d02339dfee01c0bf1520b29c68d5f4afd8784d5",
-    "nrlmsise-00.c": "606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a",
-  }),
-});
-const provenance = { nrlmsise00: null, erfa: null, table6: null, gravity: null, lunar: null };
-async function nrlmsise() {
-  const modules = process.env.SPACE_DATA_NETWORK_MODULES_ROOT ?? modulesRoot;
-  const dir = process.env.SDNAP_NRLMSISE_DIR ?? path.join(modules, "third_party", "nrlmsise00");
-  const text = {};
-  const hashes = {};
-  for (const [name, want] of Object.entries(NRLMSISE_PIN.files)) {
-    const bytes = await fs.readFile(path.join(dir, name));
-    const got = createHash("sha256").update(bytes).digest("hex");
-    if (got !== want) throw new Error(`NRLMSISE-00 pin: ${path.join(dir, name)} has sha256 ${got}, expected ${want} (modules ${NRLMSISE_PIN.modulesCommit})`);
-    hashes[name] = got;
-    text[name] = bytes.toString("utf8");
-  }
-  let checkoutHead = null;
-  try {
-    checkoutHead = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  } catch {
-    checkoutHead = null;
-  }
-  provenance.nrlmsise00 = { source: shownPath(dir), pinnedModulesCommit: NRLMSISE_PIN.modulesCommit, checkoutHead, sha256: hashes };
-  const strip = (t) => t.replace(/^#include "nrlmsise-00\.h".*$/gm, "");
-  // One translation unit: the model's extern declarations of the data tables are redundant after the data file
-  // (and ptm is declared shorter than it is defined); C++ needs the cast on malloc.
-  const modelText = strip(text["nrlmsise-00.c"])
-    .replace(/^extern double [a-z]+(\[\d+\])+;.*$/gm, "")
-    .replace(/u=malloc\(/g, "u=(double *)malloc(");
-  return `extern "C" {\n${text["nrlmsise-00.h"]}\n${strip(text["nrlmsise-00_data.c"])}\n${modelText}\n}\n`;
-}
+const provenance = { erfa: null, table6: null };
 
 // ERFA (BSD-3-Clause, derived with permission from IAU SOFA; fit's GCRF input frame, IAU 2006/2000A), read from the
 // open modules repository's vendored copy (higherpop/third_party/erfa, the copy foundation/frames amalgamates) and
@@ -266,235 +227,6 @@ async function checkTable6() {
 }
 await checkTable6();
 
-// Gravity (SDN-AP 2d, tesseral m-daily and shallow-resonance terms): the fully normalized EGM-96 (default) or EGM2008
-// coefficients to degree and order 70 that this repository's FFM carries (propagator/ffm/lib), read from this
-// checkout and PINNED by SHA-256 (the copies at modules commit 0e84a2c8); SDNAP_GRAVITY=egm2008
-// selects EGM2008. Recorded in dist/build-provenance.txt.
-const GRAVITY_PIN = Object.freeze({
-  modulesCommit: "0e84a2c8fb6258d5e37b3c59839ea0e5794ffae1",
-  files: Object.freeze({
-    egm96: { file: "egm96_data.h", sha256: "4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4" },
-    egm2008: { file: "egm2008_data.h", sha256: "f4f49756761e4e391131a2ce12a25290948670bf889d467a13869a4c4c661250" },
-  }),
-});
-async function gravity() {
-  const model = process.env.SDNAP_GRAVITY ?? "egm96";
-  const pin = GRAVITY_PIN.files[model];
-  if (!pin) throw new Error(`SDNAP_GRAVITY=${model}: egm96 or egm2008`);
-  const modules = process.env.SPACE_DATA_NETWORK_MODULES_ROOT ?? modulesRoot;
-  const dir = process.env.SDNAP_GRAVITY_DIR ?? path.join(modules, "propagator", "ffm", "lib");
-  const bytes = await fs.readFile(path.join(dir, pin.file));
-  const got = createHash("sha256").update(bytes).digest("hex");
-  if (got !== pin.sha256) throw new Error(`gravity pin: ${path.join(dir, pin.file)} has sha256 ${got}, expected ${pin.sha256} (modules ${GRAVITY_PIN.modulesCommit})`);
-  const C = Array.from({ length: 71 }, () => new Array(71).fill("0.0"));
-  const S = Array.from({ length: 71 }, () => new Array(71).fill("0.0"));
-  let count = 0;
-  for (const m of bytes.toString("utf8").matchAll(/\{\s*(\d+),\s*(\d+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\s*\}/g)) {
-    const n = Number(m[1]), k = Number(m[2]);
-    if (n > 70 || k > n) continue;
-    C[n][k] = m[3];
-    S[n][k] = m[4];
-    count += 1;
-  }
-  if (count < 2550) throw new Error(`gravity: ${count} coefficient records in ${pin.file}`);
-  let checkoutHead = null;
-  try { checkoutHead = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(); } catch { checkoutHead = null; }
-  provenance.gravity = { model, source: shownPath(path.join(dir, pin.file)), pinnedModulesCommit: GRAVITY_PIN.modulesCommit, checkoutHead, sha256: got, records: count };
-  const rows = (A) => A.map((r) => `    {${r.join(", ")}},`).join("\n");
-  return `// ${model.toUpperCase()} fully normalized Stokes coefficients, degree and order <= 70 (pinned; build.mjs)\n` +
-    `constexpr const char* kEgmModel = "${model}";\n` +
-    `inline constexpr double kEgmC[71][71] = {\n${rows(C)}\n};\ninline constexpr double kEgmS[71][71] = {\n${rows(S)}\n};\n`;
-}
-
-// --- Lunar data (SDN-AP 2h.1), read from the local archive (never the repository) and PINNED by SHA-256:
-// the GRAIL field GRGM660PRIM (NASA GSFC, PDS: fully normalized, reference radius 1738.0 km, DE421 principal axes),
-// truncated to degree LUNAR_PIN.degree, and the DE440 lunar principal-axis orientation (NAIF moon_pa_de440_200625.bpc:
-// 3-1-3 Euler angles of MOON_PA_DE440 from J2000, Chebyshev records of 8 days), refitted over LUNAR_PIN.span to
-// records of spanDays days and degree spanDegree; the refit's error against the kernel is measured here and recorded
-// in dist/build-provenance.txt. SDNAP_HAC_ROOT moves the archive root.
-const LUNAR_PIN = Object.freeze({
-  field: { file: "pds-grail-gravity/gggrx_0660pm_sha.tab", sha256: "a77ee9996aff7341ef89f69aa401f39ba0c2949ed80411505fb4826b771dd63e" },
-  orientation: { file: "naif-kernels/pck/moon_pa_de440_200625.bpc", sha256: "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f" },
-  ephemeris: { file: "naif-kernels/spk/planets/de440s.bsp", sha256: "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2" },
-  degree: 100,
-  span: ["2022-01-01T00:00:00Z", "2029-01-01T00:00:00Z"],
-  // the geocentric Moon and Sun (J2000 = the DE440 ICRF axes, km), refitted from DE440 (Moon wrt EMB - Earth wrt EMB;
-  // Sun wrt SSB - EMB wrt SSB - Earth wrt EMB) to records of moonDays / sunDays days of degree moonDegree / sunDegree
-  moonDays: 16,
-  moonDegree: 18,
-  sunDays: 32,
-  sunDegree: 12,
-  // the heliocentric planets for cruise segments (2h.3: system barycentres - the Sun, DE440, J2000 = ICRF axes, km)
-  // over planetSpan, records of days / degree per body; GM the DE440 system values (km^3/s^2)
-  planetSpan: ["2012-01-01T00:00:00Z", "2029-01-01T00:00:00Z"],
-  planets: [
-    { name: "VENUS", naif: 2, gm: 324858.592, days: 64, degree: 14 },
-    { name: "EARTH-MOON", naif: 3, gm: 403503.235502, days: 64, degree: 12 },
-    { name: "MARS", naif: 4, gm: 42828.375816, days: 128, degree: 14 },
-    { name: "JUPITER", naif: 5, gm: 126712764.1, days: 128, degree: 12 },
-    { name: "SATURN", naif: 6, gm: 37940584.8418, days: 128, degree: 12 },
-  ],
-  spanDays: 16,   // measured: 16 d / degree 13 max 5.0e-9 rad (9 mm at the surface); the kernel's own 8-day records
-  spanDegree: 13, // (degree 9) leave a ~1e-9 floor that longer or higher refits do not go under
-});
-async function lunar() {
-  const root = process.env.SDNAP_HAC_ROOT ?? "/opt/data/sdn-archive/hac";
-  const read = async (pin) => {
-    const bytes = await fs.readFile(path.join(root, pin.file));
-    const got = createHash("sha256").update(bytes).digest("hex");
-    if (got !== pin.sha256) throw new Error(`lunar pin: ${path.join(root, pin.file)} has sha256 ${got}, expected ${pin.sha256}`);
-    return bytes;
-  };
-  // the field
-  const tab = (await read(LUNAR_PIN.field)).toString("utf8").split("\n");
-  const head = tab[0].split(",").map((x) => x.trim());
-  const radius = Number(head[0]), gm = Number(head[1]), normalized = Number(head[5]);
-  if (!(radius === 1738.0) || normalized !== 1) throw new Error(`lunar field header: ${tab[0]}`);
-  const L = LUNAR_PIN.degree, size = ((L + 1) * (L + 2)) / 2;
-  const C = new Array(size).fill(0), S = new Array(size).fill(0);
-  let count = 0;
-  for (let k = 1; k < tab.length; ++k) {
-    const f = tab[k].split(",");
-    if (f.length < 4) continue;
-    const l = Number(f[0]), m = Number(f[1]);
-    if (l > L) break;
-    C[(l * (l + 1)) / 2 + m] = Number(f[2]);
-    S[(l * (l + 1)) / 2 + m] = Number(f[3]);
-    count += 1;
-  }
-  if (count !== size - 1) throw new Error(`lunar field: ${count} records to degree ${L}`);
-  // the orientation: DAF/PCK type 2 segments of MOON_PA_DE440 (frame 31008)
-  const J2000 = Date.UTC(2000, 0, 1, 12, 0, 0);
-  const etOf = (iso) => (Date.parse(iso) - J2000) / 1000 + 69.184;  // TDB ~ UTC + 37 s + 32.184 s (2017- leap seconds)
-  const e0 = etOf(LUNAR_PIN.span[0]), e1 = etOf(LUNAR_PIN.span[1]);
-  const paSegs = dafType2(await read(LUNAR_PIN.orientation), "DAF/PCK ", (ints) => ints[0] === 31008);
-  const angles = (et) => chebAt(paSegs, et, "lunar orientation");
-  const days = Number(process.env.SDNAP_PA_DAYS ?? LUNAR_PIN.spanDays), N = Number(process.env.SDNAP_PA_DEGREE ?? LUNAR_PIN.spanDegree);
-  const pa = refitCheb(angles, e0, e1, days, N, true);
-  const { coef, records, maxErr } = pa, D = days * 86400;
-  if (process.env.SDNAP_PA_PROBE) console.log(`PA refit ${days} d, degree ${N}: max error ${maxErr.map((x) => x.toExponential(2))} rad, ${coef.length} doubles`);
-  if (Math.max(...maxErr) > 1e-8) throw new Error(`lunar orientation refit error ${maxErr} rad`);
-  // the geocentric Moon and Sun from DE440 (DAF/SPK type 2; ints: target, center, frame, type, start, end)
-  const spk = dafType2(await read(LUNAR_PIN.ephemeris), "DAF/SPK ", (ints) => ints[2] === 1);
-  const body = (target, center) => spk.filter((g) => g.ints[0] === target && g.ints[1] === center);
-  const moonEmb = body(301, 3), earthEmb = body(399, 3), embSsb = body(3, 0), sunSsb = body(10, 0);
-  const sub = (a, b) => a.map((v, c) => v - b[c]);
-  const moonGeo = (et) => sub(chebAt(moonEmb, et, "DE440 Moon"), chebAt(earthEmb, et, "DE440 Earth"));
-  const sunGeo = (et) => sub(sub(chebAt(sunSsb, et, "DE440 Sun"), chebAt(embSsb, et, "DE440 EMB")), chebAt(earthEmb, et, "DE440 Earth"));
-  const moonFit = refitCheb(moonGeo, e0, e1, LUNAR_PIN.moonDays, LUNAR_PIN.moonDegree, false);
-  const sunFit = refitCheb(sunGeo, e0, e1, LUNAR_PIN.sunDays, LUNAR_PIN.sunDegree, false);
-  const p0 = etOf(LUNAR_PIN.planetSpan[0]), p1 = etOf(LUNAR_PIN.planetSpan[1]);
-  const planetFits = LUNAR_PIN.planets.map((pl) => {
-    const bary = body(pl.naif, 0);
-    const fit = refitCheb((et) => sub(chebAt(bary, et, `DE440 ${pl.name}`), chebAt(sunSsb, et, "DE440 Sun")), p0, p1, pl.days, pl.degree, false);
-    if (process.env.SDNAP_PA_PROBE) console.log(`DE440 ${pl.name}: max error ${fit.maxErr.map((x) => x.toExponential(2))} km, ${fit.coef.length} doubles`);
-    if (Math.max(...fit.maxErr) > 1.0) throw new Error(`DE440 ${pl.name} refit error ${fit.maxErr} km`);
-    return { ...pl, ...fit };
-  });
-  if (process.env.SDNAP_PA_PROBE) console.log(`DE440 refits: Moon max error ${moonFit.maxErr.map((x) => x.toExponential(2))} km, Sun ${sunFit.maxErr.map((x) => x.toExponential(2))} km`);
-  // measured: Moon 1.6 m, Sun 3.3 km (the Earth's monthly wobble about the EMB): third-body forces move by < 1e-8
-  if (Math.max(...moonFit.maxErr) > 1e-2 || Math.max(...sunFit.maxErr) > 10.0) throw new Error(`DE440 refit error: Moon ${moonFit.maxErr}, Sun ${sunFit.maxErr} km`);
-  provenance.lunar = {
-    field: { source: path.join(root, LUNAR_PIN.field.file), sha256: LUNAR_PIN.field.sha256, model: "GRGM660PRIM", degree: L, gmKm3s2: gm, radiusKm: radius },
-    orientation: { source: path.join(root, LUNAR_PIN.orientation.file), sha256: LUNAR_PIN.orientation.sha256, frame: "MOON_PA_DE440 (3-1-3 Euler angles from J2000)",
-      span: LUNAR_PIN.span, recordDays: days, degree: N, records, maxRefitErrorRad: maxErr },
-    ephemeris: { source: path.join(root, LUNAR_PIN.ephemeris.file), sha256: LUNAR_PIN.ephemeris.sha256, model: "DE440 (de440s)", span: LUNAR_PIN.span,
-      moon: { recordDays: LUNAR_PIN.moonDays, degree: LUNAR_PIN.moonDegree, records: moonFit.records, maxRefitErrorKm: moonFit.maxErr },
-      sun: { recordDays: LUNAR_PIN.sunDays, degree: LUNAR_PIN.sunDegree, records: sunFit.records, maxRefitErrorKm: sunFit.maxErr },
-      planets: { span: LUNAR_PIN.planetSpan, bodies: planetFits.map((f) => ({ name: f.name, gmKm3s2: f.gm, recordDays: f.days, degree: f.degree, records: f.records, maxRefitErrorKm: f.maxErr })) } },
-  };
-  const list = (a) => a.map((v) => (v === 0 ? "0.0" : v.toExponential(17))).join(",\n  ");
-  return `// GRGM660PRIM to degree ${L} (fully normalized; triangular index l (l + 1) / 2 + m) and the DE440 lunar PA\n` +
-    `// orientation refitted over ${LUNAR_PIN.span[0]} .. ${LUNAR_PIN.span[1]} (pinned; build.mjs)\n` +
-    `constexpr int kLunarDegree = ${L};\nconstexpr double kLunarRadiusKm = ${radius.toFixed(1)};\nconstexpr double kLunarGmKm3s2 = ${gm.toPrecision(17)};\n` +
-    `inline constexpr double kLunarC[${size}] = {\n  ${list(C)}};\ninline constexpr double kLunarS[${size}] = {\n  ${list(S)}};\n` +
-    `constexpr double kLunarPaStartEt = ${e0.toFixed(3)};\nconstexpr double kLunarPaRecordSeconds = ${D.toFixed(1)};\n` +
-    `constexpr int kLunarPaRecords = ${records};\nconstexpr int kLunarPaDegree = ${N};\n` +
-    `inline constexpr double kLunarPa[${coef.length}] = {\n  ${list(coef)}};\n` +
-    `// DE440 geocentric Moon and Sun (km, J2000 = ICRF axes) over the same span\n` +
-    `constexpr double kDeStartEt = ${e0.toFixed(3)};\n` +
-    `constexpr double kDeMoonRecordSeconds = ${(LUNAR_PIN.moonDays * 86400).toFixed(1)};\nconstexpr int kDeMoonRecords = ${moonFit.records};\nconstexpr int kDeMoonDegree = ${LUNAR_PIN.moonDegree};\n` +
-    `inline constexpr double kDeMoon[${moonFit.coef.length}] = {\n  ${list(moonFit.coef)}};\n` +
-    `constexpr double kDeSunRecordSeconds = ${(LUNAR_PIN.sunDays * 86400).toFixed(1)};\nconstexpr int kDeSunRecords = ${sunFit.records};\nconstexpr int kDeSunDegree = ${LUNAR_PIN.sunDegree};\n` +
-    `inline constexpr double kDeSun[${sunFit.coef.length}] = {\n  ${list(sunFit.coef)}};\n` +
-    `// DE440 heliocentric planets (system barycentres - the Sun; km, ICRF axes) over ${LUNAR_PIN.planetSpan[0]} .. ${LUNAR_PIN.planetSpan[1]}\n` +
-    `constexpr double kDePlanetStartEt = ${p0.toFixed(3)};\nconstexpr int kDePlanets = ${planetFits.length};\n` +
-    planetFits.map((f, k) => `inline constexpr double kDePlanet${k}[${f.coef.length}] = {\n  ${list(f.coef)}};\n`).join("") +
-    `struct DePlanet { const char* name; double gm; const double* coef; double record_s; int records, degree; };\n` +
-    `inline constexpr DePlanet kDePlanet[${planetFits.length}] = {\n` +
-    planetFits.map((f, k) => `  {"${f.name}", ${f.gm.toPrecision(17)}, kDePlanet${k}, ${(f.days * 86400).toFixed(1)}, ${f.records}, ${f.degree}},\n`).join("") + `};\n`;
-}
-
-/// DAF type-2 Chebyshev segments (SPK positions or PCK Euler angles) of a little-endian kernel whose summary ints pass `keep`.
-function dafType2(bytes, magic, keep) {
-  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.toString("latin1", 0, 8) !== magic || bytes.toString("latin1", 88, 96) !== "LTL-IEEE") throw new Error(`not a little-endian ${magic.trim()}`);
-  const nd = dv.getInt32(8, true), ni = dv.getInt32(12, true), fward = dv.getInt32(76, true);
-  const word = (w) => dv.getFloat64((w - 1) * 8, true);
-  const segs = [];
-  for (let rec = fward; rec; ) {
-    const base = (rec - 1) * 1024;
-    const next = dv.getFloat64(base, true), nsum = dv.getFloat64(base + 16, true);
-    const ss = nd + Math.floor((ni + 1) / 2);
-    for (let k = 0; k < nsum; ++k) {
-      const o = base + 24 + k * ss * 8;
-      const ints = Array.from({ length: ni }, (_, j) => dv.getInt32(o + 8 * nd + 4 * j, true));
-      const [type, start, end] = ints.slice(ni - 3);
-      if (type !== 2 || !keep(ints)) continue;
-      segs.push({ ints, init: word(end - 3), intlen: word(end - 2), rsize: word(end - 1), n: word(end), start, word });
-    }
-    rec = next;
-  }
-  return segs;
-}
-
-/// The three Chebyshev components of the segment covering et.
-function chebAt(segs, et, what) {
-  const s = segs.find((g) => et >= g.init && et < g.init + g.n * g.intlen);
-  if (!s) throw new Error(`${what}: no record at ${et}`);
-  const r = Math.min(s.n - 1, Math.floor((et - s.init) / s.intlen));
-  const at = s.start + r * s.rsize;
-  const mid = s.word(at), rad = s.word(at + 1), x = (et - mid) / rad, deg = (s.rsize - 2) / 3 - 1;
-  const out = [];
-  for (let c = 0; c < 3; ++c) {
-    let t0 = 1, t1 = x, sum = s.word(at + 2 + c * (deg + 1)) + (deg >= 1 ? s.word(at + 3 + c * (deg + 1)) * x : 0);
-    for (let j = 2; j <= deg; ++j) { const t2 = 2 * x * t1 - t0; sum += s.word(at + 2 + c * (deg + 1) + j) * t2; t0 = t1; t1 = t2; }
-    out.push(sum);
-  }
-  return out;
-}
-
-/// Refit fn (three components) over [e0, e1) to records of `days` days and degree N at Chebyshev nodes; the error
-/// against fn is measured every 30 minutes (angles: unwrapped before the transform, compared modulo 2 pi).
-function refitCheb(fn, e0, e1, days, N, angles) {
-  const D = days * 86400, records = Math.ceil((e1 - e0) / D), coef = [];
-  for (let r = 0; r < records; ++r) {
-    const mid = e0 + (r + 0.5) * D, vals = [];
-    for (let k = 0; k <= N; ++k) vals.push(fn(mid + (D / 2) * Math.cos((Math.PI * (k + 0.5)) / (N + 1))));
-    for (let c = 0; c < 3; ++c) {
-      const seq = vals.map((v) => v[c]);
-      if (angles) for (let k = 1; k < seq.length; ++k) while (Math.abs(seq[k] - seq[k - 1]) > Math.PI) seq[k] -= Math.sign(seq[k] - seq[k - 1]) * 2 * Math.PI;
-      for (let j = 0; j <= N; ++j) {
-        let sum = 0;
-        for (let k = 0; k <= N; ++k) sum += seq[k] * Math.cos((Math.PI * j * (k + 0.5)) / (N + 1));
-        coef.push(((j === 0 ? 1 : 2) / (N + 1)) * sum);
-      }
-    }
-  }
-  const maxErr = [0, 0, 0];
-  for (let et = e0; et < e1; et += 1800) {
-    const r = Math.min(records - 1, Math.floor((et - e0) / D)), x = (et - (e0 + (r + 0.5) * D)) / (D / 2), ref = fn(et);
-    for (let c = 0; c < 3; ++c) {
-      let t0 = 1, t1 = x, base = (r * 3 + c) * (N + 1), sum = coef[base] + coef[base + 1] * x;
-      for (let j = 2; j <= N; ++j) { const t2 = 2 * x * t1 - t0; sum += coef[base + j] * t2; t0 = t1; t1 = t2; }
-      let d = sum - ref[c];
-      if (angles) d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
-      maxErr[c] = Math.max(maxErr[c], Math.abs(d));
-    }
-  }
-  return { coef, records, maxErr };
-}
-
 const source = await fs.readFile(path.join(packageRoot, "src", "sdn_ap_module.cpp"), "utf8");
 const partPattern = /^#include "([a-z0-9_]+\.inc)"\n/gm;
 // The SGP4/SDP4 base is the shared library foundation/sgp4-str3 of this checkout (analysis/od compiles it too);
@@ -514,10 +246,7 @@ const sourceCode = inlined
   .replace('#include "orbpro/orbpro_propagator_abi.h"', abiHeader)
   .replace('#include "omm_slots.h"', await ommSlots())
   .replace('#include "oem_generated.h"', await oemBindings())
-  .replace('#include "nrlmsise00.h"', await nrlmsise())
-  .replace('#include "erfa_pinned.h"', await erfa())
-  .replace('#include "gravity_egm.h"', await gravity())
-  .replace('#include "lunar_data.h"', await lunar());
+  .replace('#include "erfa_pinned.h"', await erfa());
 
 const buildRoot = path.join(packageRoot, ".build");
 // SDNAP_DIST_DIR builds elsewhere (experiments), leaving dist/ as the last pushed build

@@ -473,118 +473,6 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
   for (int m = 0; m < 6; ++m) out[m] += d[m];
 }
 
-/// SDN-AP 2a (DESIGN 2a.1, 2a.2): drag on NRLMSISE-00 x exp(s(t)) with
-/// a_D = -(1/2) B_eff rho |v_r| v_r, v_r = v - omega_E x r, averaged by the
-/// K-point trapezoid in eccentric anomaly (near-circular) or the SPEC 3.4
-/// perigee band (z = a e / H >= 3). theta_g: Greenwich angle at the time.
-inline void sdnap_drag_rates(const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag, double beff,
-                             double theta_g, double d50, double* out) {
-  const Perifocal pf = perifocal_of(ag);
-  const double a = fr.a, e = k.e, eta = fr.eta, n = fr.n;
-  double D, N;
-  drag::day_of_year(d50, D, N);
-  const int doy = static_cast<int>(std::floor(D)) + 1;
-  const double sec = (D - std::floor(D)) * 86400.0;
-  const double scale = -0.5 * beff * kRe * 1000.0;
-  kernel::Pair kp{};
-  const bool use_kernel = sdn::environment().kernel && kernel::prepare() && kernel::acquire_pair(d50, kp);
-  // the density is taken at the osculating radius: the mean orbit's plus the first-order J2 short-period terms (the
-  // arrangement of SPEC 3.4 / the SGP4 final step), whose constant part sets the mean height a few hundred meters off
-  // the mean elements' (at 53 deg -0.43 km at 300 km: about 1 % of the density, which fitted B_eff took up)
-  const double p_mean = a * eta * eta, cj2 = kJ2 / (4.0 * p_mean), th = ag.ci;
-  auto osc_scale = [&](double cn, double sn) {
-    const double Dn = 1.0 + e * cn, r = p_mean / Dn;
-    const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;
-    const double c2u = cu * cu - su * su;
-    const double dr = cj2 * ((1.0 - th * th) * c2u - (3.0 * th * th - 1.0) * (e * cn / (1.0 + eta) + 2.0 * eta / Dn + 1.0));
-    return (r + dr) / r;
-  };
-  auto node = [&](Vec3 rv, Vec3 vv, double w, double* acc, double rscale) {
-    const Vec3 rd = rscale * rv;
-    double lon = std::atan2(rd.y, rd.x) - theta_g;
-    lon -= kTwoPi * std::floor((lon + kPi) / kTwoPi);
-    double rho;
-    if (use_kernel) {
-      const double rr = norm(rd);
-      rho = kernel::density(kp, rr, std::asin(rd.z / rr), lon);
-    } else {
-      double phi, h;
-      drag::geodetic(rd.x, rd.y, rd.z, phi, h);
-      rho = h > 2500.0 ? 0.0 : sdn::msis_density(phi, lon, h, doy, sec, d50);
-    }
-    const Vec3 vrel = {vv.x + kOmegaE * rv.y, vv.y - kOmegaE * rv.x, vv.z};
-    const Vec3 d = (scale * rho * norm(vrel)) * vrel;
-    double g[6];
-    gauss(y, fr, rv, vv, d, g);
-    for (int m = 0; m < 6; ++m) acc[m] += w * g[m];
-  };
-  double acc[6] = {0, 0, 0, 0, 0, 0};
-  const double z = a * kRe * e / sdn::kScaleHeightKm;
-  if (z < 3.0) {
-    for (int j = 0; j < sdn::kTrapezoid; ++j) {
-      const double E = kTwoPi * j / sdn::kTrapezoid;
-      double sE, cE;
-      fm::sincos(E, sE, cE);
-      const double ome = 1.0 - e * cE;
-      const Vec3 rv = (a * (cE - e)) * pf.P + (a * eta * sE) * pf.Q;
-      const Vec3 vv = (-a * n * sE / ome) * pf.P + (a * n * eta * cE / ome) * pf.Q;
-      node(rv, vv, ome / sdn::kTrapezoid, acc, osc_scale((cE - e) / ome, eta * sE / ome));
-    }
-  } else {
-    static const double gx[13] = {-0.98418305471858814, -0.91759839922297803, -0.80157809073330988,
-                                  -0.64234933944034023, -0.44849275103644692, -0.23045831595513480, 0.0,
-                                  0.23045831595513480, 0.44849275103644692, 0.64234933944034023,
-                                  0.80157809073330988, 0.91759839922297803, 0.98418305471858814};
-    static const double gw[13] = {0.040484004765315877, 0.092121499837728452, 0.13887351021978719,
-                                  0.17814598076194571, 0.20781604753688851, 0.22628318026289720,
-                                  0.23255155323087390, 0.22628318026289720, 0.20781604753688851,
-                                  0.17814598076194571, 0.13887351021978719, 0.092121499837728452,
-                                  0.040484004765315877};
-    const double p = a * eta * eta, rp = a * (1.0 - e);
-    const double hp = kRe * (rp - 1.0 + kFlattening * ag.si * ag.si * ag.sw * ag.sw);
-    const double bb = hp < 90.0 ? 90.0 : (hp > 900.0 ? 900.0 : hp);
-    const double band = bb * (-3.130124 + bb * (0.061710434 + bb * (-3.4111266e-4 + bb * (8.7321429e-7 +
-                        bb * (-1.122534e-9 + bb * (7.1123451e-13 + bb * -1.776575e-16)))))) / kRe;
-    double nuc = kPi;
-    if (band < 2.0 * a * e) {
-      const double c = (rp * e - band) / (e * (rp + band));
-      nuc = std::acos(c < -1.0 ? -1.0 : (c > 1.0 ? 1.0 : c));
-    }
-    const double vs = std::sqrt(kMu / p);
-    for (int j = 0; j < 13; ++j) {
-      double sn, cn;
-      fm::sincos(nuc * gx[j], sn, cn);
-      const double r = p / (1.0 + e * cn);
-      const Vec3 rv = (r * cn) * pf.P + (r * sn) * pf.Q;
-      const Vec3 vv = (-vs * sn) * pf.P + (vs * (e + cn)) * pf.Q;
-      node(rv, vv, gw[j] * (r / a) * (r / a) / eta * nuc / kTwoPi, acc, osc_scale(cn, sn));
-    }
-  }
-  if (use_kernel) kernel::release_pair(kp);
-  for (int m = 0; m < 6; ++m) out[m] += acc[m];
-}
-
-/// SDN-AP 2c (DESIGN eq. 7): empirical transverse accelerations (ER/min^2)
-/// tau0 + tauc cos u + taus sin u, weighted by g(t), near-circular averaged
-/// rates: n-dot = -3 tau0 g / a, d(a_f + i a_g)/dt = e^{i Omega} (tauc + i taus) g / (n a).
-/// Diagnostic: tauc and taus held after the arc (g = 1) instead of the 2c Gauss-Markov decay.
-inline bool& tau_persist() {
-  static bool p = false;
-  return p;
-}
-
-inline void tau_rates(double tau0, double tauc, double taus, double arc_end, uint8_t lowering, uint8_t tau_held,
-                      double t, const Frame& fr, const AngleTrig& ag, double* out) {
-  if (tau0 == 0.0 && tauc == 0.0 && taus == 0.0) return;
-  const double decay = std::fabs(t) <= arc_end ? 1.0 : std::exp(-(std::fabs(t) - arc_end) / sdn::tau_persistence_minutes());
-  const double g = tau_held || tau_persist() ? 1.0 : decay;
-  const double na = fr.n * fr.a;
-  // 2c.2: a lowering (or raising) object's thrust is sustained, so tau0 keeps g = 1 after the arc
-  out[kN] += -3.0 * tau0 * (lowering ? 1.0 : decay) / fr.a;
-  out[kAf] += (ag.cO * tauc - ag.sO * taus) * g / na;
-  out[kAg] += (ag.sO * tauc + ag.cO * taus) * g / na;
-}
-
 /// SPEC 4 (amendment 3): cbrt(x) = sign(x) |pow(|x|, 1/3)|, 1/3 the double 0.3333333333333333.
 inline double cube_root(double x) {
   const double r = std::fabs(std::pow(std::fabs(x), 0.3333333333333333));
@@ -730,7 +618,7 @@ inline bool shadow_sequence(double A, double B, double e, double p, double& E1, 
   return true;
 }
 
-/// The shadow from caller-supplied direction cosines (the Moon-centered SRP of SDN-AP 2h.1 reuses it).
+/// The shadow from caller-supplied direction cosines.
 inline bool sunlit_arc(double A, double B, double e, double p, double& E1, double& E2) { return shadow_sequence(A, B, e, p, E1, E2); }
 
 /// SPEC 4 step 1 (amendment 3): the Sun's direction cosines A (on P) and B (on Q) from the current mean elements
@@ -800,7 +688,6 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 }
 
 #include "resonance.inc"
-#include "tesseral.inc"
 
 /// Per-object constants of the rate function.
 struct RateContext {
@@ -810,26 +697,7 @@ struct RateContext {
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour)
   const res::ResCoef* res_epoch;   ///< SGP4XP: the epoch class's terms at e_0, i_0, integrated (owned, xp_release)
   int32_t res_count;
-  const res::GTaylor* res_taylor;  ///< SDN-AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
-  double e0, i0;        ///< epoch e and i (rad): SDN-AP's shallow terms to first order about them
-  uint8_t sdnap;        ///< SDN-AP theory (DESIGN 2): NRLMSISE-00 drag, signed B_eff, tau terms
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
-  double tau0, tauc, taus;  ///< SDN-AP 2c, ER/min^2
-  double arc_end;           ///< SDN-AP 2c: end of the fit arc, minutes
-  uint8_t drag_nodes;       ///< SDN-AP in the drag regime: nodes at the density kernel's times
-  uint8_t lowering;         ///< SDN-AP 2c.2: tau0 persists after the arc (kFlagLowering)
-  uint8_t tau_held;         ///< SDN-AP above the drag regime: tauc and taus held after the arc (kFlagTauHeld)
-  const tess::ShallowCoef* shallow;  ///< SDN-AP 2d.5 shallow resonant terms (owned, xp_release)
-  const tess::ShallowCoef* near;     ///< SDN-AP 2d.5b near-resonant terms, output time (owned, xp_release)
-  int32_t near_count;
-  int32_t shallow_count;
-  const float* mdaily;          ///< SDN-AP 2d m-daily Fbar, dFbar/di pairs, float (owned, xp_release)
-  int32_t mdaily_degree;
-  const float* zt;              ///< SDN-AP 2d.6 zonal tail: Fbar, dFbar, g0, g1 (owned, xp_release)
-  int32_t zt_degree;
-  const float* sp;              ///< SDN-AP 2d.3b terms: Fbar, dFbar, g0, g1 (owned, xp_release)
-  int16_t sp_degree;
-  int16_t sp_mask;
 };
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
@@ -843,11 +711,10 @@ inline int state_test(const RateContext& ctx, const double* y) {
   return 0;
 }
 
-/// The averaged rates f(t, y) of SPEC 9. SGP4XP: false when the state fails the 9.9 tests (state_test); SDN-AP: when
-/// it is not elliptic with a positive mean motion, or a rate is not finite.
+/// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out) {
   const Frame fr = frame_of(y);
-  if (ctx.sdnap ? (!(fr.n > 0.0) || !(fr.e2 < 1.0)) : state_test(ctx, y) != 0) return false;
+  if (state_test(ctx, y) != 0) return false;
   const Kepler k = kepler_of(y, fr.a);
   const double s = std::sin(k.i), c = std::cos(k.i);
   const double p = fr.a * (1.0 - k.e * k.e);
@@ -869,42 +736,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       third_body_six(coef, A, B, C, C2, C2 * ar, six);
     }
   }
-  if (!ctx.sdnap) {
-    // SGP4XP integrates the epoch class with its functions at e_0, i_0 (SPEC 6.3; a native report is a fresh
-    // initialization at its time, abi.inc)
-    if (ctx.res_epoch != nullptr) res::resonance_six(ctx.res_epoch, ctx.res_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
-  } else {
-    // SDN-AP: the class of the current n, its terms at the current e and i
-    const int cls = tess::resonance_on() ? res::band_of(fr.n) : 0;
-    if (cls != 0) {
-      res::ResCoef terms[29];
-      const int count = res::current_terms(cls, k.e, ag.si, ag.ci, !ctx.sdnap, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
-      res::resonance_six(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
-    }
-  }
-  if (ctx.shallow != nullptr) {
-    // SDN-AP 2d.5, following the current elements: F G to first order about the epoch e and i, and each (k, m)
-    // weighted by the current distance from commensurability (tess::shallow_weight), so the term set does not depend
-    // on the epoch it was taken at (a set re-epoched by a map keeps the same rates)
-    res::ResCoef terms[tess::kShallowMax];
-    const double de = k.e - ctx.e0, di = k.i - ctx.i0;
-    const tess::SecularRates sr = tess::secular_rates(fr.n, k.e, k.i);
-    int last_k = 0, last_m = 0;
-    double wgt = 1.0;
-    for (int j = 0; j < ctx.shallow_count; ++j) {
-      terms[j] = tess::expand(ctx.shallow[j]);
-      if (terms[j].k != last_k || terms[j].m != last_m) {
-        last_k = terms[j].k;
-        last_m = terms[j].m;
-        wgt = tess::shallow_weight(sr, last_k, last_m, fr.n);
-      }
-      terms[j].fg = (terms[j].fg + terms[j].fdg * de + terms[j].dfg * di) * wgt;
-      terms[j].fdg *= wgt;
-      terms[j].dfg *= wgt;
-    }
-    res::resonance_six(terms, ctx.shallow_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
-  }
-  if (ctx.zt != nullptr) tess::zonal_six(ctx.zt, ctx.zt_degree, k, fr.n, fr.eta, ag.si, ag.ci, six);
+  // SGP4XP integrates the epoch class with its functions at e_0, i_0 (SPEC 6.3; a native report is a fresh
+  // initialization at its time, abi.inc)
+  if (ctx.res_epoch != nullptr) res::resonance_six(ctx.res_epoch, ctx.res_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
   if (ctx.long_period) {
@@ -932,15 +766,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     for (int j = 0; j < 6; ++j) out[j] += tb[j];
   }
   if (ctx.agom > 0.0) srp_rates(y, fr, k, pf, ctx.agom, b, out);
-  if (ctx.sdnap) {
-    if (ctx.bterm != 0.0) sdnap_drag_rates(y, fr, k, ag, ctx.bterm, ctx.theta_g0 + kOmegaE * t, ctx.d50_epoch + t / kMinutesPerDay, out);
-    tau_rates(ctx.tau0, ctx.tauc, ctx.taus, ctx.arc_end, ctx.lowering, ctx.tau_held, t, fr, ag, out);
-  } else if (ctx.bterm > 0.0) {
-    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, out);
-  }
-  if (ctx.sdnap)
-    for (int j = 0; j < 6; ++j)
-      if (!std::isfinite(out[j])) return false;
+  if (ctx.bterm > 0.0) drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, out);
   return true;
 }
 
@@ -951,10 +777,8 @@ struct Node {
   double y[6];
   double f[6];
   int32_t index;   ///< signed node index (negative: backward)
-  int32_t mode;    ///< 0 normal, 1 30-minute fallback for the remaining nodes
 };
 
-constexpr double kKernelStepDays = 0.125;  ///< the density kernel's time step (density_kernel.inc), from 0 UT
 /// One third-order Runge-Kutta step of length h from node `a` (SPEC 9): 0, or kStageFailed when a stage's rates fail
 /// (the step's fallbacks apply), kNodeFailed when the new node's own rates do (SPEC 8.4: the node cannot be used).
 constexpr int kStageFailed = 1, kNodeFailed = 2;
@@ -962,12 +786,10 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   double y2[6], y4[6], k2[6], k4[6];
   for (int j = 0; j < 6; ++j) y2[j] = a.y[j] + (3.0 / 8.0) * h * a.f[j];
   if (!rates(ctx, a.t + (3.0 / 8.0) * h, y2, k2)) return kStageFailed;
-  if (!ctx.sdnap) {
-    // k3 (SPEC 9): its rates do not enter the update, but its state is tested like the others
-    double y3[6];
-    for (int j = 0; j < 6; ++j) y3[j] = a.y[j] + (9.0 / 16.0) * h * k2[j];
-    if (state_test(ctx, y3) != 0) return kStageFailed;
-  }
+  // k3 (SPEC 9): its rates do not enter the update, but its state is tested like the others
+  double y3[6];
+  for (int j = 0; j < 6; ++j) y3[j] = a.y[j] + (9.0 / 16.0) * h * k2[j];
+  if (state_test(ctx, y3) != 0) return kStageFailed;
   for (int j = 0; j < 6; ++j) y4[j] = a.y[j] + h * (-(125.0 / 672.0) * a.f[j] + (325.0 / 336.0) * k2[j]);
   if (!rates(ctx, a.t + (25.0 / 32.0) * h, y4, k4)) return kStageFailed;
   for (int j = 0; j < 6; ++j)
@@ -979,43 +801,19 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
 /// The node after `a` in direction dir (+1, -1), with the SPEC 9 fallbacks.
 inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out) {
   double h;
-  if (a.mode == 1)
-    h = 30.0;
-  else if (ctx.long_period)
+  if (ctx.long_period)
     h = kLongPeriodStep;
   else
-    h = 2.0 * kTwoPi / a.y[kN] / (ctx.sdnap ? tess::step_divisor() : 1);
-  out.mode = a.mode;
+    h = 2.0 * kTwoPi / a.y[kN];
   out.index = a.index + dir;
-  if (ctx.sdnap && ctx.drag_nodes) {
-    // SDN-AP in the drag regime: a node at every density-kernel time (3-hourly in UT, 2a.4), where the drag rates have
-    // their kinks (the kernel linear in time between its grids) and, at 0 UT, the daily space weather its jump, so that
-    // no step integrates across one (a set re-epoched by a map then shares those nodes)
-    const double here = (ctx.d50_epoch + a.t / kMinutesPerDay) / kKernelStepDays;
-    const double next = dir > 0 ? std::floor(here + 1e-9) + 1.0 : std::ceil(here - 1e-9) - 1.0;
-    const double to = std::fabs(next - here) * kKernelStepDays * kMinutesPerDay;
-    if (to > 1e-6 && to < h) h = to;
-  }
-  if (ctx.sdnap) {
-    // and at the end of the fit arc, where the empirical terms' g(t) turns from 1 to its decay
-    if (ctx.tau0 != 0.0 || ctx.tauc != 0.0 || ctx.taus != 0.0) {
-      const double te = dir * (ctx.arc_end - a.t);
-      if (te > 1e-6 && te < h) h = te;
-    }
-  }
   // a failed stage retries the step once at 90 minutes; a node whose own rates fail, or a step that still fails, ends
-  // the grid: every time after the last good node is refused (SPEC 8.4, 9). 9.9 has no further fallback; SDN-AP keeps
-  // 30-minute steps for the remaining nodes after a failed retry
+  // the grid: every time after the last good node is refused (SPEC 8.4, 9). 9.9 has no further fallback
   int st = rk3(ctx, a, dir * h, out);
   if (st != kStageFailed) return st == 0;
   if (h > 90.0) {
     h = 90.0;
     st = rk3(ctx, a, dir * h, out);
     if (st != kStageFailed) return st == 0;
-  }
-  if (ctx.sdnap && h > 30.0) {
-    out.mode = 1;
-    return rk3(ctx, a, dir * 30.0, out) == 0;
   }
   return false;
 }
@@ -1094,25 +892,6 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     if (!(y[kN] > 0.0)) return kPropMeanMotion;
     Ewarm = Em;
   }
-  if (ctx.mdaily != nullptr || ctx.sp != nullptr || ctx.near != nullptr) {
-    // SDN-AP 2d: the tesseral m-daily short-periodics, first order at the mean elements
-    const Kepler km = kepler_of(ym);
-    if (km.e < 1.0) {
-      const AngleTrig agm = angle_trig(km);
-      double six[6] = {0, 0, 0, 0, 0, 0};
-      if (ctx.mdaily != nullptr)
-        tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
-                         ctx.theta_g0, six);
-      if (ctx.sp != nullptr)
-        tess::sp_six(ctx.sp, ctx.sp_degree, ctx.sp_mask, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
-                     ctx.theta_g0, six);
-      if (ctx.near != nullptr)
-        tess::near_six(ctx.near, ctx.near_count, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci, ctx.theta_g0, six);
-      double d[6];
-      six_to_equinoctial(agm, six, d);
-      for (int j = 0; j < 6; ++j) y[j] += d[j];
-    }
-  }
   const Kepler k = kepler_of(y);
   if (!(k.e < 1.0)) return kPropEccentricity;
   if (!std::isfinite(y[kLam]) || std::fabs(y[kLam]) > 1e10) return kPropEccentricity;
@@ -1186,9 +965,8 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
   v_out[0] = (rdotk * ux + rfdotk * vx) * vs;
   v_out[1] = (rdotk * uy + rfdotk * vy) * vs;
   v_out[2] = (rdotk * uz + rfdotk * vz) * vs;
-  // a mean perigee below the surface: SDN-AP refuses the state; SGP4XP serves it as the library does (SPEC 8.4: the
-  // 150 km perigee set is served to its first node with the native elements there already refused)
-  if (ctx.sdnap && a * (1.0 - e) < 1.0) return kPropDecayed;
+  // a mean perigee below the surface: SGP4XP serves the state as the library does (SPEC 8.4: the 150 km perigee set is
+  // served to its first node with the native elements there already refused)
   return kPropOk;
 }
 
@@ -1235,117 +1013,20 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
   const int8_t res = static_cast<int8_t>(res::band_of(n0));  // the epoch class (SPEC 6 bands)
   s.ctx.resonance = res;
-  s.ctx.e0 = e.eo;
-  s.ctx.i0 = e.xincl;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
-  if (e.theory == kTheorySdnAp) {
-    const double accel = 3600.0 / (1000.0 * kRe);  // m/s^2 -> ER/min^2
-    s.ctx.sdnap = 1;
-    {
-      // the drag regime: perigee below the density's 2500 km top, B_eff set
-      const double a_er = std::pow(kKe / n0, kX2o3);
-      s.ctx.drag_nodes = e.bterm != 0.0 && (a_er * (1.0 - e.eo) - 1.0) * kRe < 2500.0 ? 1 : 0;
-    }
-    s.ctx.tau0 = e.tau0 * accel;
-    s.ctx.tauc = e.tauc * accel;
-    s.ctx.taus = e.taus * accel;
-    s.ctx.arc_end = e.arc_end_min;
-    s.ctx.lowering = (e.flags & kFlagLowering) ? 1 : 0;
-    s.ctx.tau_held = (e.flags & kFlagTauHeld) ? 1 : 0;
-    const int md = tess::mdaily_degree() > 16 ? 16 : tess::mdaily_degree() & ~1;
-    if (md >= 2) {
-      double scratch[2 * 72];
-      const int count = tess::mdaily_terms(md, e.xincl, scratch);
-      float* kept = static_cast<float*>(std::malloc(2 * count * sizeof(float)));
-      if (kept == nullptr) {
-        s.init_error = kPropRefused;
-        return kPropRefused;
-      }
-      for (int q = 0; q < 2 * count; ++q) kept[q] = static_cast<float>(scratch[q]);
-      s.ctx.mdaily = kept;
-      s.ctx.mdaily_degree = md;
-    }
-    const int zd = tess::zonal_degree() > 70 ? 70 : tess::zonal_degree();
-    if (zd >= 6) {
-      const int count = tess::zonal_count(zd);
-      float* kept = static_cast<float*>(std::malloc(4 * count * sizeof(float)));
-      if (kept == nullptr) {
-        s.init_error = kPropRefused;
-        return kPropRefused;
-      }
-      tess::zonal_visit_terms(zd, e.xincl, e.eo, kept);
-      s.ctx.zt = kept;
-      s.ctx.zt_degree = zd;
-    }
-    const int spd = tess::sp_degree() > 16 ? 16 : tess::sp_degree();
-    if (spd >= 2) {
-      const int mask = tess::sp_mask();
-      const int count = tess::sp_count(spd, mask);
-      float* kept = static_cast<float*>(std::malloc(4 * (count > 0 ? count : 1) * sizeof(float)));
-      if (kept == nullptr) {
-        s.init_error = kPropRefused;
-        return kPropRefused;
-      }
-      tess::sp_terms(spd, mask, n0, e.xincl, e.eo, kept);
-      s.ctx.sp = kept;
-      s.ctx.sp_degree = static_cast<int16_t>(spd);
-      s.ctx.sp_mask = static_cast<int16_t>(mask);
-    }
-    if (res == 0 && !s.ctx.long_period) {
-      tess::ShallowTerms scratch, near_scratch;
-      const int count = tess::shallow_terms(n0, e.eo, e.xincl, scratch, &near_scratch);
-      if (near_scratch.count > 0) {
-        tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(near_scratch.count * sizeof(tess::ShallowCoef)));
-        if (kept == nullptr) {
-          s.init_error = kPropRefused;
-          return kPropRefused;
-        }
-        for (int j = 0; j < near_scratch.count; ++j)
-          kept[j] = tess::ShallowCoef{near_scratch.c[j].l, near_scratch.c[j].m, near_scratch.c[j].p, near_scratch.c[j].k,
-                                      static_cast<float>(near_scratch.c[j].fg), static_cast<float>(near_scratch.c[j].fdg),
-                                      static_cast<float>(near_scratch.c[j].dfg)};
-        s.ctx.near = kept;
-        s.ctx.near_count = near_scratch.count;
-      }
-      if (count > 0) {
-        tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(count * sizeof(tess::ShallowCoef)));
-        if (kept == nullptr) {
-          s.init_error = kPropRefused;
-          return kPropRefused;
-        }
-        for (int j = 0; j < count; ++j)
-          kept[j] = tess::ShallowCoef{scratch.c[j].l, scratch.c[j].m, scratch.c[j].p, scratch.c[j].k, static_cast<float>(scratch.c[j].fg),
-                                      static_cast<float>(scratch.c[j].fdg), static_cast<float>(scratch.c[j].dfg)};
-        s.ctx.shallow = kept;
-        s.ctx.shallow_count = count;
-      }
-    }
-  }
-  if (res != 0 && e.theory != kTheorySdnAp) {
+  if (res != 0) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
     res::ResCoef* rc = static_cast<res::ResCoef*>(std::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
     if (rc == nullptr) {
       s.init_error = kPropRefused;
       return kPropRefused;
     }
-    s.ctx.res_count = res::current_terms(res, e.eo, std::sin(e.xincl), std::cos(e.xincl), true, nullptr, 0, 0.0, rc);
+    s.ctx.res_count = res::current_terms(res, e.eo, std::sin(e.xincl), std::cos(e.xincl), rc);
     s.ctx.res_epoch = rc;
-  }
-  if (res != 0 && e.theory == kTheorySdnAp && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
-    // SDN-AP above the polynomial's range: the epoch class's G about e_0 (the terms follow the current e, 6.3)
-    const res::TermSet ts = res::class_terms(res);
-    res::GTaylor* g = static_cast<res::GTaylor*>(std::malloc(ts.count * sizeof(res::GTaylor)));
-    if (g == nullptr) {
-      s.init_error = kPropRefused;
-      return kPropRefused;
-    }
-    for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
-    s.ctx.res_taylor = g;
   }
   equinoctial_of(n0, e.eo, e.xincl, e.xnodeo, e.omegao, e.xmo, s.epoch.y);
   s.epoch.t = 0.0;
   s.epoch.index = 0;
-  s.epoch.mode = 0;
   bool finite = rates(s.ctx, 0.0, s.epoch.y, s.epoch.f);
   for (int j = 0; finite && j < 6; ++j) finite = std::isfinite(s.epoch.y[j]) && std::isfinite(s.epoch.f[j]);
   if (!finite) {  // an epoch state or rate that is not a number never starts a grid
@@ -1359,29 +1040,12 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   return kPropOk;
 }
 
-/// Frees what xp_init allocated (the resonance expansion, the SDN-AP tables); the XpSat stays usable
+/// Frees what xp_init allocated (the resonance expansion); the XpSat stays usable
 /// for nothing but a new xp_init.
 inline void xp_release(XpSat& s) {
   std::free(const_cast<res::ResCoef*>(s.ctx.res_epoch));
   s.ctx.res_epoch = nullptr;
   s.ctx.res_count = 0;
-  std::free(const_cast<res::GTaylor*>(s.ctx.res_taylor));
-  s.ctx.res_taylor = nullptr;
-  std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
-  std::free(const_cast<tess::ShallowCoef*>(s.ctx.near));
-  s.ctx.near = nullptr;
-  s.ctx.near_count = 0;
-  s.ctx.shallow = nullptr;
-  s.ctx.shallow_count = 0;
-  std::free(const_cast<float*>(s.ctx.mdaily));
-  s.ctx.mdaily = nullptr;
-  s.ctx.mdaily_degree = 0;
-  std::free(const_cast<float*>(s.ctx.zt));
-  s.ctx.zt = nullptr;
-  s.ctx.zt_degree = 0;
-  std::free(const_cast<float*>(s.ctx.sp));
-  s.ctx.sp = nullptr;
-  s.ctx.sp_degree = 0;
 }
 
 inline void lock(int32_t* word) {
@@ -1452,9 +1116,8 @@ inline bool mean_at(XpSat& s, double t, double* y) {
 
 /// SPEC 1.5 (amendment 6): the rates of a native-element report at t, a fresh initialization at t: a set with epoch t
 /// made from the mean elements y there (same B and AGOM, full precision), initialized (its resonance class and F, G
-/// from those elements, theta_G the 1.2 value at t), its epoch rates. SDN-AP reports its own rate function.
+/// from those elements, theta_G the 1.2 value at t), its epoch rates.
 inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
-  if (s.ctx.sdnap) return rates(s.ctx, t, y, f);
   if (t == 0.0) {  // the set's own epoch
     for (int j = 0; j < 6; ++j) f[j] = s.epoch.f[j];
     return true;

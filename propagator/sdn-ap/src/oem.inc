@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
-// The invoke surface: `propagate` takes SDS $OMM records (SGP4, SGP4XP or
-// SDN-AP) and returns one $OEM per record, km and km/s, UTC, on the grid an
+// The invoke surface: `propagate` takes SDS $OMM records (SGP4 or SGP4XP)
+// and returns one $OEM per record, km and km/s, UTC, on the grid an
 // optional 'grid' $OEM names (as modules propagator/sgp4-xp reads it): each grid
 // block gives either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE
 // (defaults: the set's epoch, one day later, 60 s) and its axes (TEME by
@@ -128,7 +128,7 @@ inline int refuse(const char* code, const char* message) {
 /// One grid block: explicit UTC epochs, or start / stop / step (defaults: the set's epoch, one day, 60 s).
 struct Grid {
   Axes axes = Axes::Teme;
-  int center = 0;  ///< the template's CENTER_NAME: 0 not given, 1 EARTH, 2 MOON, 3 SUN, 4 another body (segment::Center)
+  int center = 0;  ///< the template's CENTER_NAME: 0 not given, 1 EARTH, 4 another body
   bool explicit_times = false;
   std::vector<double> whole, frac;
   bool has_start = false, has_stop = false;
@@ -174,9 +174,7 @@ inline int read_grids(std::vector<Grid>& grids) {
           return pcf::refuse("OUTPUT.FRAME", "the grid template names other axes");
         g.axes = axes;
       }
-      if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0)
-        g.center = same_text(blk->CENTER_NAME()->c_str(), "EARTH") ? 1 : same_text(blk->CENTER_NAME()->c_str(), "MOON") ? 2
-                 : same_text(blk->CENTER_NAME()->c_str(), "SUN") ? 3 : 4;
+      if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0) g.center = same_text(blk->CENTER_NAME()->c_str(), "EARTH") ? 1 : 4;
       const auto* lines = blk->EPHEMERIS_DATA_LINES();
       if (lines != nullptr && lines->size() > 0) {
         g.explicit_times = true;
@@ -226,25 +224,6 @@ inline int grid_epochs(const Grid& g, double whole, double frac, size_t& budget,
   return 0;
 }
 
-/// One output block of inertial states (ICRF axes, UTC) about `center` at the grid's epochs.
-inline flatbuffers::Offset<ephemerisDataBlock> inertial_block(flatbuffers::FlatBufferBuilder& fbb, const char* center, const Grid& g,
-                                                              const std::vector<double>& tw, const std::vector<double>& tf,
-                                                              const std::vector<double>& out) {
-  char text[48], start[48], stop[48];
-  std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
-  lines.reserve(tw.size());
-  for (size_t k = 0; k < tw.size(); ++k) {
-    iso_text(tw[k], tf[k], 0.0, text, sizeof text);
-    const double* v = out.data() + 6 * k;
-    lines.push_back(CreateephemerisDataLineDirect(fbb, text, v[0], v[1], v[2], v[3], v[4], v[5]));
-  }
-  iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
-  iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
-  const auto frame = CreateRFMDirect(fbb, RFMUnion_CelestialFrameWrapper, CreateCelestialFrameWrapper(fbb, CelestialFrame_ICRF).Union(), 0, "ICRF");
-  return CreateephemerisDataBlockDirect(fbb, nullptr, 0, center, frame, nullptr, 0, timingStandard_UTC, start, nullptr, nullptr, stop,
-                                        nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines);
-}
-
 inline int push_oem(flatbuffers::FlatBufferBuilder& fbb, std::vector<flatbuffers::Offset<ephemerisDataBlock>>& blocks) {
   const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, "SDN", &blocks);
   FinishOEMBuffer(fbb, root);
@@ -258,178 +237,8 @@ inline int push_oem(flatbuffers::FlatBufferBuilder& fbb, std::vector<flatbuffers
 }  // namespace oem
 }  // namespace sdnap
 
-/// SDN-AP 2h.1: a Moon-centered SDN-AP $OMM (CENTER_NAME MOON, MEAN_ELEMENT_THEORY SDNAP, USER_DEFINED_SDNAP_REGIME
-/// MOON) on the grids: Moon-centered states in J2000 (ICRF) axes whatever axes an inertial grid names; 0, 1 when the
-/// record is not such a set (the caller refuses it), or a named refusal (3).
-static int lunar_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap::oem::Grid>& grids, size_t& budget) {
-  using namespace sdnap;
-  if (!plain_view(p, n, "$OMM")) return 1;
-  flatbuffers::Verifier verifier(p, n);
-  if (!VerifyOMMBuffer(verifier)) return 1;
-  const OMM* o = GetOMM(p);
-  if (o->CENTER_NAME() == nullptr || !oem::same_text(o->CENTER_NAME()->c_str(), "MOON")) return 1;
-  const bool sdnap_set = o->MEAN_ELEMENT_THEORY() == meanElementSource_SDNAP;
-  bool moon = false;
-  int degree = lunar::gravity_degree(), sdeg = lunar::short_degree(), qord = lunar::eccentricity_order();
-  double agom = 0.0;
-  if (const auto* ud = o->USER_DEFINED_PARAMETERS()) {
-    for (const OMMUserDefinedParameter* q : *ud) {
-      if (q == nullptr || q->PARAM_NAME() == nullptr || q->PARAM_VALUE() == nullptr) continue;
-      const char* name = q->PARAM_NAME()->c_str();
-      const char* value = q->PARAM_VALUE()->c_str();
-      if (std::strcmp(name, "SDNAP_REGIME") == 0) moon = oem::same_text(value, "MOON");
-      else if (std::strcmp(name, "SDNAP_LUNAR_DEGREE") == 0) degree = static_cast<int>(std::strtod(value, nullptr));
-      else if (std::strcmp(name, "SDNAP_LUNAR_SHORT_DEGREE") == 0) sdeg = static_cast<int>(std::strtod(value, nullptr));
-      else if (std::strcmp(name, "SDNAP_LUNAR_ECC_ORDER") == 0) qord = static_cast<int>(std::strtod(value, nullptr));
-      else if (std::strcmp(name, "SDNAP_AGOM") == 0) agom = std::strtod(value, nullptr);
-    }
-  }
-  if (!sdnap_set || !moon) return 1;
-  double whole, frac;
-  if (o->EPOCH() == nullptr || !omm::epoch(o->EPOCH()->c_str(), o->EPOCH()->size(), whole, frac)) {
-    plugin_set_error("invalid-omm", "A Moon-centered $OMM has no readable EPOCH.");
-    return 3;
-  }
-  const double rad = kPi / 180.0;
-  // the set's term-set degrees, the module's defaults restored afterwards
-  const int d0 = lunar::gravity_degree(), s0 = lunar::short_degree(), q0 = lunar::eccentricity_order();
-  lunar::gravity_degree() = degree > lunar::kLunarDegree ? lunar::kLunarDegree : degree;
-  lunar::short_degree() = sdeg > 16 ? 16 : sdeg;
-  lunar::eccentricity_order() = qord > 8 ? 8 : qord;
-  lunar::Sat s;
-  const bool ok = lunar::init_j2000(s, whole, frac, o->MEAN_MOTION() * kTwoPi / 86400.0, o->ECCENTRICITY(), o->INCLINATION() * rad,
-                                    o->RA_OF_ASC_NODE() * rad, o->ARG_OF_PERICENTER() * rad, o->MEAN_ANOMALY() * rad);
-  lunar::gravity_degree() = d0;
-  lunar::short_degree() = s0;
-  lunar::eccentricity_order() = q0;
-  if (!ok) {
-    plugin_set_error("element-set-refused", "The Moon-centered set's epoch is outside the embedded lunar orientation span.");
-    return 3;
-  }
-  s.agom = agom;
-  flatbuffers::FlatBufferBuilder fbb(1 << 16);
-  std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
-  for (const oem::Grid& g : grids) {
-    if (g.axes == oem::Axes::EarthFixed || g.axes == oem::Axes::Other) return oem::refuse("invalid-grid", "A Moon-centered set is written in ICRF (J2000) axes.");
-    if (g.center != 0 && g.center != 2) return oem::refuse("grid-center-mismatch", "The grid names a center other than the set's (MOON).");
-    std::vector<double> tw, tf;
-    if (const int rc = oem::grid_epochs(g, whole, frac, budget, tw, tf)) return rc;
-    std::vector<double> t(tw.size()), out(6 * tw.size());
-    for (size_t k = 0; k < tw.size(); ++k) t[k] = ((tw[k] - whole) + (tf[k] - frac)) * 86400.0;
-    for (size_t k = 1; k < t.size(); ++k)
-      if (t[k] < t[k - 1]) return oem::refuse("bad-grid", "A Moon-centered set's grid epochs must ascend.");
-    if (!lunar::states(s, t.data(), static_cast<int>(t.size()), out.data())) {
-      return oem::refuse("propagation-failed", "The Moon-centered set does not propagate over the grid (orientation span or a non-elliptic state).");
-    }
-    blocks.push_back(oem::inertial_block(fbb, "MOON", g, tw, tf, out));
-  }
-  return oem::push_oem(fbb, blocks);
-}
-
-/// SDN-AP 2h.2 / 2h.3 / 2h.5: a segment set ($OMM with MEAN_ELEMENT_THEORY SDNAP and USER_DEFINED_SDNAP_REGIME
-/// CISLUNAR, about the Earth or the Moon, or HELIO, about the Sun) on the grids: states about the set's center in ICRF
-/// axes; 1 when the record is not such a set (the caller goes on), 0 done, or a named refusal (3).
-static int segment_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap::oem::Grid>& grids, size_t& budget) {
-  using namespace sdnap;
-  if (!plain_view(p, n, "$OMM")) return 1;
-  flatbuffers::Verifier verifier(p, n);
-  if (!VerifyOMMBuffer(verifier)) return 1;
-  const OMM* o = GetOMM(p);
-  const bool sdnap_set = o->MEAN_ELEMENT_THEORY() == meanElementSource_SDNAP;
-  bool cislunar = false, helio = false;
-  double agom = 0.0, beta = 0.0, rtn[3] = {0, 0, 0}, rate[3] = {0, 0, 0};
-  if (const auto* ud = o->USER_DEFINED_PARAMETERS()) {
-    for (const OMMUserDefinedParameter* q : *ud) {
-      if (q == nullptr || q->PARAM_NAME() == nullptr || q->PARAM_VALUE() == nullptr) continue;
-      const char* name = q->PARAM_NAME()->c_str();
-      const char* value = q->PARAM_VALUE()->c_str();
-      const double x = std::strtod(value, nullptr);
-      if (std::strcmp(name, "SDNAP_REGIME") == 0) { cislunar = oem::same_text(value, "CISLUNAR"); helio = oem::same_text(value, "HELIO"); }
-      else if (std::strcmp(name, "SDNAP_AGOM") == 0) agom = x;
-      else if (std::strcmp(name, "SDNAP_BETA") == 0) beta = x;
-      else if (std::strcmp(name, "SDNAP_RTN_R") == 0) rtn[0] = x;
-      else if (std::strcmp(name, "SDNAP_RTN_T") == 0) rtn[1] = x;
-      else if (std::strcmp(name, "SDNAP_RTN_N") == 0) rtn[2] = x;
-      else if (std::strcmp(name, "SDNAP_RTN_RATE_R") == 0) rate[0] = x;
-      else if (std::strcmp(name, "SDNAP_RTN_RATE_T") == 0) rate[1] = x;
-      else if (std::strcmp(name, "SDNAP_RTN_RATE_N") == 0) rate[2] = x;
-    }
-  }
-  if (!sdnap_set || !(cislunar || helio)) return 1;
-  const char* cn = o->CENTER_NAME() != nullptr ? o->CENTER_NAME()->c_str() : "EARTH";
-  const int center = oem::same_text(cn, "EARTH") ? segment::kEarth : oem::same_text(cn, "MOON") ? segment::kMoon : oem::same_text(cn, "SUN") ? segment::kSun : segment::kOther;
-  if (helio ? center != segment::kSun : (center != segment::kEarth && center != segment::kMoon)) {
-    plugin_set_error("unsupported-center", helio ? "A HELIO segment set is Sun-centered (CENTER_NAME SUN)." : "A CISLUNAR segment set is centered on the Earth or the Moon (CENTER_NAME).");
-    return 3;
-  }
-  double whole, frac;
-  if (o->EPOCH() == nullptr || !omm::epoch(o->EPOCH()->c_str(), o->EPOCH()->size(), whole, frac)) {
-    plugin_set_error("invalid-omm", "A segment set has no readable EPOCH.");
-    return 3;
-  }
-  const double rad = kPi / 180.0, mu = o->GM() > 0.0 ? o->GM() : segment::mu_of(center);
-  const double nn = o->MEAN_MOTION() * kTwoPi / 86400.0, e = o->ECCENTRICITY();
-  double a = o->SEMI_MAJOR_AXIS();
-  if (a == 0.0 && nn > 0.0) a = std::cbrt(mu / (nn * nn)) * (e > 1.0 ? -1.0 : 1.0);
-  const double el[6] = {a, e, o->INCLINATION() * rad, o->RA_OF_ASC_NODE() * rad, o->ARG_OF_PERICENTER() * rad, o->MEAN_ANOMALY() * rad};
-  double r0[3], v0[3];
-  if (!segment::state_of(mu, el, r0, v0)) {
-    plugin_set_error("element-set-refused", "The segment set's elements give no state (SEMI_MAJOR_AXIS, ECCENTRICITY).");
-    return 3;
-  }
-  flatbuffers::FlatBufferBuilder fbb(1 << 16);
-  std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
-  for (const oem::Grid& g : grids) {
-    if (g.axes == oem::Axes::EarthFixed || g.axes == oem::Axes::Other) return oem::refuse("invalid-grid", "A segment set is written in ICRF axes.");
-    if (g.center != 0 && g.center != center) {
-      char why[120];
-      std::snprintf(why, sizeof why, "The grid names a center other than the set's (%s).", segment::name_of(center));
-      return oem::refuse("grid-center-mismatch", why);
-    }
-    std::vector<double> tw, tf;
-    if (const int rc = oem::grid_epochs(g, whole, frac, budget, tw, tf)) return rc;
-    std::vector<double> t(tw.size()), out(6 * tw.size());
-    for (size_t k = 0; k < tw.size(); ++k) t[k] = ((tw[k] - whole) + (tf[k] - frac)) * 86400.0;
-    for (size_t k = 1; k < t.size(); ++k)
-      if (t[k] < t[k - 1]) return oem::refuse("bad-grid", "A segment set's grid epochs must ascend.");
-    bool ok;
-    if (helio) {
-      helio::Sat sat;
-      for (int c = 0; c < 3; ++c) { sat.r0[c] = r0[c]; sat.v0[c] = v0[c]; sat.rtn[c] = rtn[c]; sat.rtn_rate[c] = rate[c]; }
-      sat.beta = beta;
-      sat.et0 = lunar::et_of(whole, frac);
-      std::vector<double> table;
-      ok = helio::tabulate(table, sat.tab_t0, sat.et0, std::fmin(t.front(), 0.0), std::fmax(t.back(), 0.0));
-      sat.planets = &table;
-      ok = ok && helio::states(sat, t.data(), static_cast<int>(t.size()), out.data(), 6);
-    } else {
-      cislunar::Seg seg;
-      seg.moon = center == segment::kMoon;
-      seg.et0 = lunar::et_of(whole, frac);
-      for (int c = 0; c < 3; ++c) { seg.r0[c] = r0[c]; seg.v0[c] = v0[c]; }
-      seg.agom = agom;
-      ok = cislunar::prepare(seg, std::fmin(t.front(), 0.0), std::fmax(t.back(), 0.0)) &&
-           cislunar::states(seg, t.data(), static_cast<int>(t.size()), out.data(), 6);
-    }
-    if (!ok) return oem::refuse("propagation-failed", "The segment set does not propagate over the grid (outside the embedded DE440 span: Moon and Sun 2022-2029, planets 2012-2029; or a non-finite state).");
-    blocks.push_back(oem::inertial_block(fbb, segment::name_of(center), g, tw, tf, out));
-  }
-  return oem::push_oem(fbb, blocks);
-}
-
-namespace sdnap {
-namespace opm {
-int set_bytes(const uint8_t* p, uint32_t n, flatbuffers::FlatBufferBuilder& fbb);  // opm.inc
-}  // namespace opm
-}  // namespace sdnap
-
 extern "C" int propagate(void) {
   plugin_reset_output_state();
-  {
-    // the environment of this invocation (SDN-AP's density: $SPW / $PRW space weather, $DCL), as fit_sdnap reads it
-    bool have_spw = false, have_dcl = false;
-    if (const int st = sdnap::envload::apply_frames(have_spw, have_dcl)) return st;
-  }
   if (const int rc = sdnap::pcf::read(sdnap::pcf::kPropagate)) return rc;
   std::vector<sdnap::oem::Grid> grids;
   if (const int rc = sdnap::oem::read_grids(grids)) return rc;
@@ -440,30 +249,15 @@ extern "C" int propagate(void) {
   for (uint32_t i = 0; i < frames; ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (f == nullptr || f->port_id == nullptr) continue;
-    const bool is_opm = std::strcmp(f->port_id, "opm") == 0;
-    if (!is_opm && std::strcmp(f->port_id, "omm") != 0) continue;
+    if (std::strcmp(f->port_id, "omm") != 0) continue;
     ++count;
-    // SPEC 13: an 'opm' $OPM (osculating elements or a state) through the module's own initialization to its set
-    flatbuffers::FlatBufferBuilder opm_fbb(is_opm ? 1024 : 1);
-    const uint8_t* payload = f->payload;
-    uint32_t payload_length = f->payload_length;
-    if (is_opm) {
-      if (const int rc = sdnap::opm::set_bytes(f->payload, f->payload_length, opm_fbb)) return rc;
-      payload = opm_fbb.GetBufferPointer();
-      payload_length = opm_fbb.GetSize();
-    }
     sdnap::ElementRow row{};
-    if (!sdnap::omm::decode(payload, payload_length, row)) {
-      if (sdnap::omm::center_refused() || sdnap::omm::segment_set()) {
-        if (const int tc = sdnap::pcf::check_set_theory(sdnap::kTheorySdnAp)) return tc;
-        int rc = segment_propagate(payload, payload_length, grids, budget);
-        if (rc == 1 && sdnap::omm::center_refused()) rc = lunar_propagate(payload, payload_length, grids, budget);
-        if (rc == 0) continue;
-        if (rc == 3) return 3;
-        plugin_set_error("unsupported-center", "An 'omm' record is centered neither on the Earth nor, as an SDN-AP Moon-centered or segment set, on the Moon or the Sun (CENTER_NAME).");
+    if (!sdnap::omm::decode(f->payload, f->payload_length, row)) {
+      if (sdnap::omm::center_refused()) {
+        plugin_set_error("unsupported-center", "An 'omm' record is not centered on the Earth (CENTER_NAME); the theories here are geocentric.");
         return 3;
       }
-      plugin_set_error("invalid-omm", "An 'omm' payload is not a decodable SGP4, SGP4XP or SDN-AP $OMM record.");
+      plugin_set_error("invalid-omm", "An 'omm' payload is not a decodable SGP4 or SGP4XP $OMM record.");
       return 3;
     }
     const sdnap::Elements e = sdnap::elements_of(row);
@@ -472,7 +266,7 @@ extern "C" int propagate(void) {
     sdnap::Sat sat{};
     double* nodes = nullptr;
     bool refused;
-    if ((e.theory == sdnap::kTheorySgp4Xp || e.theory == sdnap::kTheorySdnAp)) {
+    if (e.theory == sdnap::kTheorySgp4Xp) {
       xs = static_cast<sdnap::xpt::XpSat*>(std::malloc(sizeof(sdnap::xpt::XpSat)));
       sdnap::drag::table();
       refused = xs == nullptr || sdnap::xpt::xp_init(e, *xs) != sdnap::kPropOk;
@@ -492,12 +286,12 @@ extern "C" int propagate(void) {
       plugin_set_error("element-set-refused", "The element set describes no orbit this module propagates.");
       return 3;
     }
-    // SPEC 12: an SGP4XP or SDN-AP set carrying COVARIANCE gets its propagated covariance beside every state
+    // SPEC 12: an SGP4XP set carrying COVARIANCE gets its propagated covariance beside every state
     sdnap::cov::Propagator cprop;
     bool with_cov = false;
     if (xs != nullptr) {
       sdnap::cov::Set cs;
-      const int cr = sdnap::cov::read(payload, payload_length, row, cs);
+      const int cr = sdnap::cov::read(f->payload, f->payload_length, row, cs);
       const int pr = cr == 1 ? sdnap::cov::prepare(cs, cprop) : 0;
       if (cr < 0 || pr != 0) {
         sdnap::xpt::xp_release(*xs);
@@ -515,8 +309,8 @@ extern "C" int propagate(void) {
     // The object the set describes (NORAD number, name, designator) goes to every block, so a fit of the ephemeris names its set.
     flatbuffers::Offset<CAT> object_offset;
     {
-      const uint8_t* ob = payload;
-      uint32_t ol = payload_length;
+      const uint8_t* ob = f->payload;
+      uint32_t ol = f->payload_length;
       if (sdnap::plain_view(ob, ol, "$OMM")) {
         // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
         flatbuffers::Verifier::Options vopt;
@@ -656,7 +450,7 @@ extern "C" int propagate(void) {
     }
   }
   if (count == 0) {
-    plugin_set_error("missing-omm", "An 'omm' or 'opm' input frame is required.");
+    plugin_set_error("missing-omm", "An 'omm' input frame is required.");
     return 3;
   }
   return 0;

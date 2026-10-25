@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// SDN-AP 5.1 (DESIGN section 5): maneuvers as boundaries between Earth sets.
+// 5.1 (DESIGN section 5): maneuvers as boundaries between Earth sets.
 // One operator serves them: the inverse of the output map, y = h^-1(x, t), the
 // mean elements whose output state at their epoch is the osculating state x,
 // solved by the fixed-point iteration y_{k+1} = y_k + (q(x) - q(h(y_k))) in
@@ -14,7 +14,7 @@
 namespace sdnap {
 namespace events {
 
-/// The gravitational parameter of the SGP4XP / SDN-AP Earth theories (SPEC 1.3), km^3/s^2.
+/// The gravitational parameter of the SGP4XP Earth theory (SPEC 1.3), km^3/s^2.
 inline double mu_xp() { return xpt::kKe * xpt::kKe * xpt::kRe * xpt::kRe * xpt::kRe / 3600.0; }
 
 /// Equinoctial elements q = (n rad/min, a_f, a_g, chi, psi, lambda) of a set's mean elements.
@@ -45,7 +45,7 @@ inline bool set_eq(Elements& e, const double* q) {
 /// Osculating equinoctial elements of a TEME state (km, km/s) about mu_xp.
 inline bool eq_of_state(const double* r, const double* v, double* q) {
   double el[6];
-  if (!segment::elements_of(mu_xp(), r, v, el) || !(el[1] < 1.0)) return false;
+  if (!twobody::elements_of(mu_xp(), r, v, el) || !(el[1] < 1.0)) return false;
   const double varpi = el[3] + el[4], t = std::tan(0.5 * el[2]);
   q[0] = std::sqrt(mu_xp() / (el[0] * el[0] * el[0])) * 60.0;
   q[1] = el[1] * std::cos(varpi);
@@ -115,14 +115,13 @@ inline void uvw_to_teme(const double* r, const double* v, const double* uvw, dou
   for (int c = 0; c < 3; ++c) out[c] = q[0] * U[c] + q[1] * V[c] + q[2] * W[c];
 }
 
-/// The set's epoch moved by `minutes` (split Julian date kept normalized) and its epoch-referred SDN-AP times shifted.
+/// The set's epoch moved by `minutes` (split Julian date kept normalized).
 inline Elements moved(const Elements& e, double minutes) {
   Elements o = e;
   double frac = e.epoch_jd_frac + minutes / kMinutesPerDay;
   const double whole_days = std::floor(frac);
   o.epoch_jd_whole = e.epoch_jd_whole + whole_days;
   o.epoch_jd_frac = frac - whole_days;
-  o.arc_end_min = e.arc_end_min - minutes;
   return o;
 }
 

@@ -73,7 +73,7 @@ export const checks = [
       const bad = [["e = 1.2", { ecc: 1.2 }], ["e = -0.1", { ecc: -0.1 }], ["n = 0", { meanMotion: 0 }], ["n = -1", { meanMotion: -1 }],
         ["B* NaN", { bstar: NaN, bterm: NaN }], ["i = 200 deg", { inc: 200 }], ["n NaN", { meanMotion: NaN }]];
       const rows = [];
-      for (const theory of [THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]) for (const [name, edit] of bad) rows.push({ name: `${name} (theory ${theory})`, row: { ...good, bterm: 0.01, ...edit, theory } });
+      for (const theory of [THEORY.SGP4, THEORY.SGP4XP]) for (const [name, edit] of bad) rows.push({ name: `${name} (theory ${theory})`, row: { ...good, bterm: 0.01, ...edit, theory } });
       const out = moduleStates(module, rows.map((r) => r.row), rows.map(() => [0, 1440]));
       const accepted = rows.map((r, k) => ({ r, states: out[k].filter((s) => s.ok) })).filter((a) => a.states.length);
       return { pass: accepted.length === 0, evidence: [`${rows.length} malformed sets: ${rows.length - accepted.length} refused at every time`,

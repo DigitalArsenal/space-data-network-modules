@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
 // Covariance (SPEC 12): the fit's covariance carried forward by the theory's own state transition matrix.
 //
-// - The fit (fit_oem.inc, SDN-AP theory) forms the normal matrix of its parameters at the solution, every column a
+// - The fit (fit_oem.inc, SGP4XP theory) forms the normal matrix of its parameters at the solution, every column a
 //   central difference of the theory itself, with its priors; the inverse, the measurement variance being the post-fit
 //   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity) is the $OMM's
-//   COVARIANCE; the non-element parameters (B_eff, AGOM, tau) travel as USER_DEFINED_SDNAP_COV_x rows: their covariance
+//   COVARIANCE; the non-element parameters (BTERM, AGOM) travel as USER_DEFINED_SDNAP_COV_x rows: their covariance
 //   with the epoch state and with each other.
 // - The state transition matrix at t is the central difference of the propagated state in the parameters (the same
 //   columns); the epoch covariance is mapped back to the parameters through the epoch columns (their inverse), then
@@ -12,7 +12,7 @@
 // - Process noise: errors of the mean-element rates, constant from the end of the fit arc and mapped by the same
 //   columns: the eccentricity vector (s_e per day), the inclination vector (s_i per day), the mean longitude (s_l n,
 //   a relative mean-motion error) and, in the drag regime, the non-gravitational n-dot (s_d = c |n-dot_ng|). The
-//   sizes are fitted per theory (SDN-AP, SGP4XP) and regime (test/covariance-realism.mjs) on laser-ranged arcs apart
+//   sizes are fitted per regime (test/covariance-realism.mjs) on laser-ranged arcs apart
 //   from the held-out ones.
 // - Theory floor: the fit's residual covariance in UVW (USER_DEFINED_SDNAP_COV_FLOOR_UVW), added at every time in the
 //   state's own UVW axes (velocity: the same scaled by the orbit's angular rate squared).
@@ -26,41 +26,32 @@ namespace cov {
 struct Noise {
   double s_e, s_i, s_l, c;
 };
-/// [theory: 0 SDN-AP, 1 SGP4XP][regime: 0 perigee below kDragRegimeKm, 1 above]
-constexpr Noise kNoise[2][2] = {{{1.963e-06, 2.69e-07, 2.371e-13, 1.928}, {1.358e-06, 3.652e-07, 5.328e-08, 0}},
-                                 {{2.813e-06, 7.432e-06, 8.505e-07, 1.275e-06}, {2.308e-07, 3.752e-07, 2.666e-07, 0}}};
-constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height (the density kernel's top)
+/// SGP4XP's, [regime: 0 perigee below kDragRegimeKm, 1 above]
+constexpr Noise kNoise[2] = {{2.813e-06, 7.432e-06, 8.505e-07, 1.275e-06}, {2.308e-07, 3.752e-07, 2.666e-07, 0}};
+constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
 
-constexpr int kMaxConsider = 5;
+constexpr int kMaxConsider = 2;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");
 /// The consider rows, in params_of order (kind 6 + index).
 inline const char* consider_name(int kind) {
-  static const char* const names[kMaxConsider] = {"SDNAP_COV_DRAG", "SDNAP_COV_AGOM", "SDNAP_COV_TAU0", "SDNAP_COV_TAUC",
-                                                  "SDNAP_COV_TAUS"};
+  static const char* const names[kMaxConsider] = {"SDNAP_COV_DRAG", "SDNAP_COV_AGOM"};
   return kind >= 6 && kind < 6 + kMaxConsider ? names[kind - 6] : "";
 }
 
-/// Kinds of the parameter vector of options `o` (params_of order): 0-5 af, ag, chi, psi, lambda, n; 6 B_eff; 7 AGOM;
-/// 8 tau0; 9 tauc; 10 taus.
+/// Kinds of the parameter vector of options `o` (params_of order): 0-5 af, ag, chi, psi, lambda, n; 6 BTERM; 7 AGOM.
 inline int kinds_of(const fit::Options& o, int* kind) {
   int np = 0;
   for (; np < 6; ++np) kind[np] = np;
   if (o.fit_drag) kind[np++] = 6;
   if (o.fit_agom) kind[np++] = 7;
-  if (o.fit_tau & 1) kind[np++] = 8;
-  if (o.fit_tau & 2) {
-    kind[np++] = 9;
-    kind[np++] = 10;
-  }
   return np;
 }
 
 inline double step_of(int kind, double v) {
   if (kind < 5) return 1e-6;                    // af, ag, chi, psi; lambda (rad)
   if (kind == 5) return 1e-7 * std::fabs(v);    // n (rad/min)
-  if (kind <= 7) return std::fmax(1e-3 * std::fabs(v), 1e-5);  // m^2/kg
-  return std::fmax(1e-3 * std::fabs(v), 1e-10);                 // m/s^2
+  return std::fmax(1e-3 * std::fabs(v), 1e-5);  // m^2/kg
 }
 
 /// The theory at the set and at the set moved by +-h in each parameter (AGOM forward only where -h would switch SRP
@@ -232,13 +223,12 @@ struct Set {
 };
 
 /// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
-/// n-dot / n at epoch (1/day; the theory's epoch rates with and without B_eff and tau) and the sizes s_e, s_i, s_l, s_d
+/// n-dot / n at epoch (1/day; the theory's epoch rates with and without BTERM) and the sizes s_e, s_i, s_l, s_d
 /// with the noise start t_a (minutes). False when the theory refuses the set.
 inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise) {
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
-  none.tau0 = none.tauc = none.taus = 0.0;
   xpt::XpSat* s1 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
   xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
   drag::table();
@@ -253,7 +243,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
   regime = (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
-  const Noise& k = kNoise[row.theory == kTheorySdnAp ? 0 : 1][regime];
+  const Noise& k = kNoise[regime];
   noise[0] = k.s_e;
   noise[1] = k.s_i;
   noise[2] = k.s_l;
@@ -262,7 +252,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   return true;
 }
 
-/// The fit's covariance at its solution (fit_oem, SDN-AP sets): `t`, `r` the fit samples (minutes, TEME km). Fills
+/// The fit's covariance at its solution (fit_oem, SGP4XP sets): `t`, `r` the fit samples (minutes, TEME km). Fills
 /// `s` (row and options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not
 /// positive definite or the theory refuses a moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t, const double* r, int count, double arc_end_min,
@@ -374,10 +364,8 @@ inline int read(const uint8_t* buf, uint32_t len, const ElementRow& row, Set& s)
       }
     }
   }
-  if ((rows[3] == nullptr) != (rows[4] == nullptr)) return -1;
   s.o.fit_drag = rows[0] != nullptr;
   s.o.fit_agom = rows[1] != nullptr;
-  s.o.fit_tau = (rows[2] != nullptr ? 1 : 0) | (rows[3] != nullptr ? 2 : 0);
   int kind[fit::kMaxParams];
   s.np = kinds_of(s.o, kind);
   const int np = s.np;

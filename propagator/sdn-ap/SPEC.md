@@ -12,8 +12,8 @@ builds from this document and the oracle alone.
 **Version specified.** 9.9 (native MacOS ARM library of the archived 9.9 package). Its native library works as an
 oracle (the harness's leg `9.9`). Section 11 states where 9.1.1.0 (the vendored WebAssembly build) differs.
 
-**Implementation.** Side B builds SDN-AP, the SDN advanced propagator, from this document (`propagator/sdn-ap/` of the
-public modules repository, Apache-2.0).
+**Implementation.** Side B builds the bundle `propagator/sdn-ap/` of the public modules repository (Apache-2.0) from this
+document; it keeps the name SDN-AP and carries SGP4 and SGP4XP.
 
 **Status (2026-10-24, side A).** Sections 1-11 are complete, the refusal rules of 8 and 9 included. Not fixed by any
 specification: shadow decisions that are rounding-limited (4), for which both outcomes conform. Explicit and
@@ -1485,18 +1485,17 @@ follows 9.9.**
 
 ---
 
-## 12. SDN-AP covariance (side B's method, outside the SGP4-XP specification)
+## 12. SGP4XP covariance (side B's method, outside the SGP4-XP specification)
 
 This section is side B's own: it specifies how the module gives a covariance with the states of the sets it fits,
-SDN-AP (THEORY SDNAP) and SGP4XP alike. Nothing in it comes from the Space Force library, and no SGP4XP conformance
-vector depends on it.
+SGP4XP. Nothing in it comes from the Space Force library, and no SGP4XP conformance vector depends on it.
 
 **12.1 Fit covariance.** The parameter vector p of a fit is the fit's own (`params_of`): the mean equinoctial af, ag,
-chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (SDN-AP B_eff, SGP4XP BTERM; m^2/kg), AGOM
-(m^2/kg), tau0, tauc, taus (m/s^2) the fit solved for. At the solution (an SGP4XP set at its two-line digits), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
+chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (BTERM; m^2/kg) and AGOM
+(m^2/kg) the fit solved for. At the solution (an SGP4XP set at its two-line digits), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
 
 - J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
-  lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in B_eff and AGOM, max(1e-3 |p|, 1e-10) in tau; AGOM forward where p - h <= 0,
+  lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM; AGOM forward where p - h <= 0,
   the theory reading AGOM <= 0 as no SRP);
 - s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
 - A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR);
@@ -1506,7 +1505,7 @@ chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (SDN-AP B_eff,
 floor (12.4) at the epoch state, the $OMM carries
 
 - COVARIANCE = J_0 P_p J_0^T + F(x(0)), lower triangle (21 values, km^2, km^2/s, km^2/s^2), COV_REFERENCE_FRAME TEME;
-- USER_DEFINED_SDNAP_COV_DRAG, _AGOM, _TAU0, _TAUC, _TAUS (those fitted, in that order): for the k-th of them the
+- USER_DEFINED_SDNAP_COV_DRAG, _AGOM (those fitted, in that order): for the k-th of them the
   space-separated row of its covariance with X, Y, Z, X_DOT, Y_DOT, Z_DOT at epoch (J_0 P_p), with the earlier ones,
   then its variance (6 + k + 1 numbers);
 - USER_DEFINED_SDNAP_COV_FLOOR_UVW (6 numbers, km^2: uu, vu, vv, wu, wv, ww), _COV_NOISE (12.5), _COV_NG_RATE (1/day)
@@ -1535,12 +1534,12 @@ the prediction, with d = (t - t_a) / 1 day:
 - mean longitude: d lambda = s_l n_d d (s_l a relative mean-motion error, n_d in rad/day);
 - non-gravitational n-dot (drag regime): d n(t) = s_d d, d lambda(t) = s_d d^2 / 2, taken as the epoch perturbation
   that gives them at t: d n0 = d n(t), d lambda0 = d lambda(t) - t d n0; s_d = c |n-dot_ng| (rad/day^2), n-dot_ng the
-  non-gravitational part of the theory's epoch n-dot (its rates with and without B_eff and tau; USER_DEFINED_SDNAP_COV_NG_RATE
+  non-gravitational part of the theory's epoch n-dot (its rates with and without BTERM; USER_DEFINED_SDNAP_COV_NG_RATE
   = n-dot_ng / n per day).
 
 Each is a column g = J(t) dp of 12.3's J(t), and Q(t) = sum g g^T. The set carries its sizes and t_a as
-USER_DEFINED_SDNAP_COV_NOISE "s_e s_i s_l s_d t_a". They are fitted per theory and regime (DRAG: perigee below
-2500 km, the density kernel's top; ABOVE) by maximum likelihood, the Gaussian negative log-likelihood of the
+USER_DEFINED_SDNAP_COV_NOISE "s_e s_i s_l s_d t_a". They are fitted per regime (DRAG: perigee below
+2500 km; ABOVE) by maximum likelihood, the Gaussian negative log-likelihood of the
 position errors under P(t), on laser-ranged arcs of 2026-02-01 to 2026-05-31 (Ajisai, Starlette, Stella, LARETS,
 WESTPAC, LARES in DRAG; LARES-2, LAGEOS-2, Etalon-1, Etalon-2 ABOVE; LAGEOS-1 never: it is held out), 24 h fits
 scored every 30 min over the next 3 days (`test/covariance-realism.mjs --set calibration`,
@@ -1548,35 +1547,21 @@ scored every 30 min over the next 3 days (`test/covariance-realism.mjs --set cal
 
 | Theory | Regime | Windows | s_e (1/day) | s_i (1/day) | s_l | c |
 | --- | --- | --: | --: | --: | --: | --: |
-| SDN-AP | DRAG | 136 | 1.963e-6 | 2.69e-7 | 2.4e-13 | 1.928 |
-| SDN-AP | ABOVE | 62 | 1.358e-6 | 3.652e-7 | 5.328e-8 | 0 |
 | SGP4XP | DRAG | 136 | 2.813e-6 | 7.432e-6 | 8.505e-7 | 1.3e-6 |
 | SGP4XP | ABOVE | 62 | 2.308e-7 | 3.752e-7 | 2.666e-7 | 0 |
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
-rotated with the state) for an SGP4XP or SDN-AP set that carries COVARIANCE. An SGP4 set has none.
+rotated with the state) for an SGP4XP set that carries COVARIANCE. An SGP4 set has none.
 
 
 **12.7 Acceptance band.** Covariance realism acceptance band: mean d^2/3 in [0.8, 1.25] and 95 % coverage in [0.93, 0.97].
 Per regime and day of lead (the experiments' band, V1c4), with the coverage the share of samples inside the 95 %
-ellipsoid. The measured cells (test/results/covariance-realism-sdnap.json and -sgp4xp.json, README "Covariance
-realism"), 1 of 24 inside:
+ellipsoid. The measured cells (test/results/covariance-realism-sgp4xp.json, README "Covariance
+realism"), 0 of 12 inside:
 
 | Theory | Set | Day | Mean d^2/3 | Inside 95 % | Band |
 | --- | --- | --: | --: | --: | --- |
-| SDN-AP | LAGEOS-1 (experiment windows) | 1 | 1.51 | 0.836 | outside |
-| SDN-AP | LAGEOS-1 (experiment windows) | 2 | 1.24 | 0.912 | outside |
-| SDN-AP | LAGEOS-1 (experiment windows) | 3 | 1.15 | 0.917 | outside |
-| SDN-AP | LAGEOS-1 (2026-02 .. 05) | 1 | 1.32 | 0.901 | outside |
-| SDN-AP | LAGEOS-1 (2026-02 .. 05) | 2 | 1.19 | 0.922 | outside |
-| SDN-AP | LAGEOS-1 (2026-02 .. 05) | 3 | 1.08 | 0.91 | outside |
-| SDN-AP | LAGEOS-2, Etalon-1/2 | 1 | 2.43 | 0.758 | outside |
-| SDN-AP | LAGEOS-2, Etalon-1/2 | 2 | 0.844 | 0.996 | outside |
-| SDN-AP | LAGEOS-2, Etalon-1/2 | 3 | 0.649 | 1 | outside |
-| SDN-AP | LEO set | 1 | 1.36 | 0.878 | outside |
-| SDN-AP | LEO set | 2 | 0.991 | 0.942 | inside |
-| SDN-AP | LEO set | 3 | 0.744 | 0.98 | outside |
 | SGP4XP | LAGEOS-1 (experiment windows) | 1 | 1.82 | 0.725 | outside |
 | SGP4XP | LAGEOS-1 (experiment windows) | 2 | 1.93 | 0.738 | outside |
 | SGP4XP | LAGEOS-1 (experiment windows) | 3 | 1.91 | 0.773 | outside |
@@ -1590,53 +1575,28 @@ realism"), 1 of 24 inside:
 | SGP4XP | LEO set | 2 | 0.91 | 0.988 | outside |
 | SGP4XP | LEO set | 3 | 0.76 | 0.992 | outside |
 
-Outside the band: SDN-AP's day 1 on every set (mean d^2/3 1.32 to 2.43: the covariance is too small one day out); its
-days 2 and 3 on LAGEOS-1 (the mean inside, the coverage 0.91 to 0.92); its days 2 and 3 on LAGEOS-2 and the Etalons
-and day 3 on the LEO set (too large: coverage 0.98 to 1.0); and SGP4XP in every cell, LAGEOS-1 at 1.38 to 1.93
-throughout. Inside: SDN-AP day 2 on the LEO set (0.99, 0.94). These are a measured limit of the process-noise model of
-12.5, not of the band; the band is not widened.
+Outside the band: SGP4XP in every cell, LAGEOS-1 at 1.38 to 1.93 throughout, the LAGEOS-2 and Etalon and LEO cells
+too large from day 2 (coverage 0.98 to 1.0). These are a measured limit of the process-noise model of 12.5, not of the
+band; the band is not widened.
 
 ---
 
-## 13. SDN-AP osculating input (side B's method, outside the SGP4-XP specification)
+## 13. (removed)
 
-**13.1 Record.** An SDS $OPM about the Earth (CENTER_NAME EARTH or absent), TIME_SYSTEM UTC (or absent), EPOCH,
-REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000, and GM (km^3/s^2, about the Earth's). The Keplerian block is used when
-SEMI_MAJOR_AXIS is on the wire (the other elements as written, a scalar left off the wire being 0; TRUE_ANOMALY when
-written, else MEAN_ANOMALY), the state vector otherwise. Refused by name: no-elements (neither), unknown-frame,
-missing-gm, unsupported-time-system, unsupported-center, element-set-refused (an open orbit or a radius that is not an
-Earth orbit's).
-
-**13.2 State.** Keplerian: E from the true anomaly by tan(E/2) = sqrt((1 - e)/(1 + e)) tan(nu/2), M = E - e sin E, and
-the two-body state of (a, e, i, Omega, omega, M) about the record's GM. The axes to TEME at the epoch: GCRF by 10's
-GCRF -> TEME; EME2000 by the IAU 2006 frame bias B (r_EME2000 = B r_GCRF) then GCRF -> TEME.
-
-**13.3 Set.** y0 = h^-1(x, t) by the inverse map at the epoch, as launch_set does for an insertion orbit (DESIGN
-5.3.1): the mean set whose osculating state at t is x. B_eff and AGOM: C_D A/m and C_R A/m from MASS with DRAG_AREA and
-SOLAR_RAD_AREA (C_D 2.2 and C_R 1.0 where the record states none); otherwise the $PCF LAUNCH priors (B_eff 0.01 m^2/kg
-with the perigee below 2,500 km, else 0; AGOM 0.01 m^2/kg). The set records where it came from:
-USER_DEFINED_SDNAP_SOURCE OSCULATING_OPM, _SOURCE_ELEMENTS (KEPLERIAN or STATE), _SOURCE_FRAME, _SOURCE_GM,
-_CONVERSION INVERSE_MAP and _CONVERSION_STEPS, _FORCES (RECORD or REGIME_DEFAULT), and its COMMENT says the same.
-
-**13.4 Covariance.** A COVARIANCE (21 values, COV_REF_FRAME or else REF_FRAME) is rotated to TEME, P' = B P B^T with B
-= diag(M, M), and carried as the set's COVARIANCE with the regime's process noise from the epoch (12.5; no consider rows,
-no floor). None is made where the record has none.
-
-**13.5 Calls.** `opm_set` gives the set; `propagate` takes 'opm' frames through the same conversion (13.1-13.4), so an
-$OPM propagates as its set does. `sdnap_osculating_elements_about(r, v, gm, out)` and `sdnap_kepler_at(r, v, gm, s, out)`
-give a state's osculating elements and period, and its two-body motion, about a stated GM.
+The SDN-AP osculating input (`opm_set`, `propagate` with 'opm' frames) went with the SDN-AP theory (owner 2026-10-25); the
+number is not reused.
 
 ---
 
-## 14. SDN-AP epoch store (side B's method, outside the SGP4-XP specification)
+## 14. Epoch store (side B's method, outside the SGP4-XP specification)
 
 **14.1 Load.** `load_epochs` replaces the store with a snapshot: 'omm' frames of size-prefixed $OMM records end to end
-(or one record a frame), SGP4, SGP4XP and SDN-AP Earth sets, under the $PCF EPOCH_STORE table (SDS 1.270.0). A series is
+(or one record a frame), SGP4 and SGP4XP Earth sets, under the $PCF EPOCH_STORE table (SDS 1.270.0). A series is
 one (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR). Kept, per series and by epoch: the sets of the CACHE_DAYS (7) before
 the newest epoch of the load, the clock being the data's (no wall clock: the store is a function of its input); at
-most MAX_SETS_PER_OBJECT (0: no cap), the newest; THEORIES (empty: all three). Two records of one series at one epoch:
-the later in the snapshot replaces the earlier. Segment sets (Moon-centered, cislunar, heliocentric) are counted and
-not stored. A record's theory record (SGP4 Sat or SGP4XP / SDN-AP integrator) is made when first needed, two per
+most MAX_SETS_PER_OBJECT (0: no cap), the newest; THEORIES (empty: both). Two records of one series at one epoch:
+the later in the snapshot replaces the earlier. Sets not centered on the Earth are counted and
+not stored. A record's theory record (SGP4 Sat or SGP4XP integrator) is made when first needed, two per
 series held at a time.
 
 **14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
