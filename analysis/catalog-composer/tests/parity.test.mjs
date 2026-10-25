@@ -8,7 +8,8 @@ import { Builder } from 'flatbuffers';
 import { composeRecipe, integrateRecipe, matchRequest, recipeFrame } from './xmt-recipes.mjs';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 
-test('one artifact produces identical output in Chromium, native WasmEdge and container WasmEdge', { skip: process.env.SDN_RUN_CATALOG_PARITY !== '1' }, async () => {
+// The owner waived the Docker leg on 2026-10-22; it is never started: the lanes are the browser and native WasmEdge.
+test('one artifact produces identical output in Chromium and native WasmEdge', { skip: process.env.SDN_RUN_CATALOG_PARITY !== '1' }, async () => {
   const record = (name, id) => { const b = new Builder(); const n = b.createString(name), d=b.createString('2020-001A'); b.startObject(3); b.addFieldOffset(0,n,0); b.addFieldOffset(1,d,0); b.addFieldInt32(2,id,0); b.finishSizePrefixed(b.endObject(),'$CAT'); return new Uint8Array(b.asUint8Array()); };
   const config = { version:2, layers:['a','b'].map(id=>({id,node:`peer-${id}`,provider:id,source:'satcat',head:`snapshot-${id}`})),asOf:1000,maxAgeSeconds:100,stateSources:[],overrides:{'cospar:2020-001A':{catalogLayer:'b'}} };
   const request = { methodId:'compose',inputs:[
@@ -51,8 +52,8 @@ test('one artifact produces identical output in Chromium, native WasmEdge and co
   const refusedIntegration = structuredClone(integrationRequest);
   refusedIntegration.inputs[0] = recipeInput({});
   const plan = await normalizeParityFixture({name:'catalog-composer',threadCounts:[1],cases:[{id:'epoch-position-validation',request:epochRequest('validate_epoch',truth,[oemStates(affine(truth))]),expect:'ok'},{id:'epoch-fit-step',request:epochRequest('fit_epoch_step',truth,perturbed(truth)),expect:'ok'},{id:'endpoint-velocity-error',request:endpointRequest,expect:'ok'},{id:'circular-trajectory-match',request:matchingRequest,expect:'ok'},{id:'exact-id-override',request,expect:'ok'},{id:'malformed-recipe',request:invalid,expect:'ok'},{id:'integrate-selection-maneuvers-identity',request:integrationRequest,expect:'ok'},{id:'integrate-malformed-recipe',request:refusedIntegration,expect:'ok'}]});
-  const report = await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,autoBuildDockerImage:false,timeoutMs:30000,log:message=>console.log(message)});
+  const report = await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,lanes:['browser','wasmedge'],timeoutMs:30000,log:message=>console.log(message)});
   console.log(formatParityReport(report));
   assert.equal(report.ok,true,formatParityReport(report));
-  assert.equal(report.lanes.length,3);
+  assert.equal(report.lanes.length,2);
 });

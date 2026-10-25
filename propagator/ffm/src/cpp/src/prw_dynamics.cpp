@@ -248,9 +248,10 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
     out.thirdBody.includeSun=out.thirdBody.includeMoon=out.thirdBody.includeMercury=out.thirdBody.includeVenus=out.thirdBody.includeMars=out.thirdBody.includeJupiter=out.thirdBody.includeSaturn=out.thirdBody.includeUranus=out.thirdBody.includeNeptune=false;
     out.thirdBody.includeEarth=false;
     if(in->THIRD_BODY_IDS())for(const auto id:*in->THIRD_BODY_IDS()) {
-        // The central body is not its own third body; the Earth is one of the Moon's and Mars's (a point mass).
+        // The central body is not its own third body; the Earth is one of the Moon's and Mars's (a point mass). About the
+        // Earth its own ID is refused as every unlisted ID is.
         if(id==center||(center==planetary::MARS&&id==4)||(center==planetary::MOON&&id==301))
-            return prwError(error,"unsupported-third-body: The central body is not a third body.");
+            return prwError(error,earth?"unsupported-third-body: Unsupported NAIF force-body ID.":"unsupported-third-body: The central body is not a third body.");
         switch(id) {
         case 10:out.thirdBody.includeSun=true;break;case 301:out.thirdBody.includeMoon=true;break;
         case 399:out.thirdBody.includeEarth=true;break;

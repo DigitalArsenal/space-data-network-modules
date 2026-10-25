@@ -265,6 +265,8 @@ inline bool decodeFrame(const RFMCoordinateSystem* frame, coords::Frame& result,
     if(frame->AXIS_TYPE()==rfmAxisType::BODY_FIXED || frame->AXIS_TYPE()==rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE)
         return prwError(error,centralBody==399?"eop-data-required: This invocation has no authoritative Earth orientation data for the requested axes.":
             "unsupported-frame: A request about the Moon or Mars states its state in ICRF axes.");
+    if(centralBody==399)
+        return prwError(error,meanJ2000?"unsupported-frame: This profile requires Earth-centered ICRF (GCRF) or mean J2000 (EME2000) axes.":"unsupported-frame: This profile requires Earth-centered ICRF axes (GCRF).");
     return prwError(error,meanJ2000?"unsupported-frame: This profile requires ICRF (GCRF) or mean J2000 (EME2000) axes about the central body.":"unsupported-frame: This profile requires ICRF axes (GCRF) about the central body.");
 }
 inline bool readVector(const FRMVector3* in, astro::Vec3& out, double scale, std::string& error) {

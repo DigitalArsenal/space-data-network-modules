@@ -1,4 +1,5 @@
-// Persistent-instance parity complements the SDK's fresh-command parity lanes.
+// Persistent-instance parity (browser and native WasmEdge; the owner waived the Docker leg on 2026-10-22, it is never
+// started) complements the SDK's fresh-command parity lanes.
 // Identical public PIV requests enter the same resident instance sequentially.
 // C++ supplies all physics; this driver compares binary responses and checks
 // the published PRW protocol. Numerical oracle checks live in prw_resident.test.
@@ -12,7 +13,7 @@ import {promisify} from 'node:util';
 import {createHash} from 'node:crypto';
 import {encodePluginInvokeRequest,decodePluginInvokeResponse} from 'space-data-module-sdk/invoke';
 import {loadWasmEdgePin,assertWasmEdgeVersionMatchesPin} from 'space-data-module-sdk/testing';
-import {residentHarness,packageDir,wasmPath,dockerRunner} from './lib/residentRuntime.mjs';
+import {residentHarness,packageDir,wasmPath} from './lib/residentRuntime.mjs';
 import {headlessShell} from './lib/headlessShell.mjs';
 import {TYPE,makeTable,residentState,instant,coordinateSystem,encodePrw,decodePrw} from './lib/prwCodec.mjs';
 import {GM,environmentInputs,fullForceRequest,isoInstant,residentRecord} from './lib/fullForce.mjs';
@@ -134,20 +135,18 @@ await fetch('/done',{method:'POST',body:JSON.stringify({results})});})().catch(a
   try {return await done;} finally {clearTimeout(timeout);const exited=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGKILL');await exited;server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(profile,{recursive:true,force:true});}
 }
 assertWasmEdgeVersionMatchesPin((await execFile(process.env.SDM_WASMEDGE_BINARY??'wasmedge',['--version'])).stdout,pin,'resident native');
-const {image}=await dockerRunner();
-assertWasmEdgeVersionMatchesPin((await execFile('docker',['run','--rm',image,'--version'])).stdout,pin,'resident container');
 const runtimes={};
-for(const runtime of ['browser','wasmedge','docker-wasmedge']) {
+for(const runtime of ['browser','wasmedge']) {
   runtimes[runtime]=await (runtime==='browser'?runChrome():runProcess(runtime));
   console.log(`resident stateful ${runtime}: ${runtimes[runtime].length} responses`);
 }
 const steps=groups.flatMap(g=>g.steps.map(s=>({...s,group:g.id})));
-const evidence={wasmSha256:wasmSha,wasmBytes:wasm.length,wasmedgeVersion:pin.wasmedgeVersion,dockerImage:image,
+const evidence={wasmSha256:wasmSha,wasmBytes:wasm.length,wasmedgeVersion:pin.wasmedgeVersion,dockerLane:'waived by the owner 2026-10-22 (no Docker)',
   runtimeInstances:'One persistent direct instance per group',groups:groups.length,requests:steps.length,
-  runtimes:['Chromium headless shell/V8','native WasmEdge','container WasmEdge'],steps:[],ok:true};
+  runtimes:['Chromium headless shell/V8','native WasmEdge'],steps:[],ok:true};
 for(let i=0;i<steps.length;i++) {
   const item=steps[i],reference=runtimes.browser[i];
-  for(const runtime of ['wasmedge','docker-wasmedge'])assert.deepEqual(Buffer.from(runtimes[runtime][i]),Buffer.from(reference),`${runtime} ${item.group}/${item.label}`);
+  for(const runtime of ['wasmedge'])assert.deepEqual(Buffer.from(runtimes[runtime][i]),Buffer.from(reference),`${runtime} ${item.group}/${item.label}`);
   const response=decodePluginInvokeResponse(reference);
   if(item.error){assert.notEqual(response.statusCode,0,item.label);assert.equal(response.errorCode,item.error,item.label);assert.equal(response.outputs.length,0);}
   else assert.equal(response.statusCode,0,`${item.label}: ${response.errorMessage}`);
@@ -160,4 +159,4 @@ for(let i=0;i<steps.length;i++) {
 assert.equal(sha(fs.readFileSync(wasmPath)),wasmSha,'Artifact changed during resident parity run');
 fs.mkdirSync(new URL('./evidence/lane13/',import.meta.url),{recursive:true});
 fs.writeFileSync(new URL('./evidence/lane13/resident-stateful-parity.json',import.meta.url),JSON.stringify(evidence,null,2)+'\n');
-console.log(`PASS persistent resident parity: ${steps.length} requests x 3 runtimes, exact bytes/classifications; SHA256=${wasmSha}`);
+console.log(`PASS persistent resident parity: ${steps.length} requests x 2 runtimes, exact bytes/classifications; SHA256=${wasmSha}`);

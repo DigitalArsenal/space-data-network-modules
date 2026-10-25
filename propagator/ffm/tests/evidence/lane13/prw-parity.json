@@ -1,25 +1,20 @@
 {
   "ok": true,
   "fixture": "TMPL lane13 PRW malformed classifications",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--ffm-coords-classical-frames-fix-20261016/propagator/ffm/dist/isomorphic/module.wasm",
-  "artifactSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
-  "moduleSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
+  "moduleSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 72,
-      "durationMs": 1223
+      "durationMs": 1236
     },
     {
       "lane": "wasmedge",
       "runs": 72,
-      "durationMs": 4640
-    },
-    {
-      "lane": "docker-wasmedge",
-      "runs": 72,
-      "durationMs": 66944
+      "durationMs": 5252
     }
   ],
   "cases": [
@@ -42,7 +37,7 @@
     "duplicate-covariance",
     "valid-after-errors"
   ],
-  "comparisons": 381,
+  "comparisons": 249,
   "failures": [],
   "runs": [
     {
@@ -51,6 +46,15 @@
       "threadCount": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -61,6 +65,15 @@
       "threadCount": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -71,6 +84,15 @@
       "threadCount": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -81,6 +103,15 @@
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -91,6 +122,15 @@
       "threadCount": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -101,6 +141,15 @@
       "threadCount": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -111,6 +160,15 @@
       "threadCount": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -121,6 +179,15 @@
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -131,6 +198,15 @@
       "threadCount": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -141,6 +217,15 @@
       "threadCount": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -151,6 +236,15 @@
       "threadCount": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -161,6 +255,15 @@
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -171,6 +274,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -181,6 +286,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -191,6 +298,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -201,6 +310,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -211,6 +322,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -221,6 +334,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -231,6 +346,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -241,6 +358,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -251,6 +370,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -261,6 +382,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -271,6 +394,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -281,6 +406,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -291,6 +418,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -301,6 +430,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -311,6 +442,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -321,6 +454,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -331,6 +466,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -341,6 +478,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -351,6 +490,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -361,6 +502,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -371,6 +514,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -381,6 +526,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -391,6 +538,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -401,6 +550,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -411,9 +562,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
@@ -421,9 +574,11 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
@@ -431,9 +586,11 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
@@ -441,9 +598,11 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
@@ -451,6 +610,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -461,6 +622,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -471,6 +634,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -481,6 +646,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -491,6 +658,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -501,6 +670,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -511,6 +682,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -521,6 +694,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -531,6 +706,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -541,6 +718,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -551,6 +730,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -561,6 +742,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -571,6 +754,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -581,6 +766,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -591,6 +778,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -601,6 +790,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -611,6 +802,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -621,6 +814,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -631,6 +826,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -641,6 +838,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -651,6 +850,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -661,6 +862,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -671,6 +874,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -681,6 +886,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -691,6 +898,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -701,6 +910,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -711,6 +922,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -721,6 +934,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -731,8 +946,10 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -741,8 +958,10 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -751,8 +970,10 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -761,8 +982,10 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -771,6 +994,15 @@
       "threadCount": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -781,6 +1013,15 @@
       "threadCount": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -791,6 +1032,15 @@
       "threadCount": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -801,6 +1051,15 @@
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request bytes are empty. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request bytes are empty."
+      },
       "spawnCount": null,
       "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
       "stdoutLength": 136
@@ -811,6 +1070,15 @@
       "threadCount": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -821,6 +1089,15 @@
       "threadCount": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -831,6 +1108,15 @@
       "threadCount": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -841,6 +1127,15 @@
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -851,6 +1146,15 @@
       "threadCount": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -861,6 +1165,15 @@
       "threadCount": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -871,6 +1184,15 @@
       "threadCount": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -881,6 +1203,15 @@
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
+      "exitCode": 1,
+      "commandError": {
+        "name": "PluginInvokeError",
+        "message": "invalid-request: Invoke request must be an SDS PIV envelope. (status 400)",
+        "exitCode": 1,
+        "statusCode": 400,
+        "errorCode": "invalid-request",
+        "errorMessage": "Invoke request must be an SDS PIV envelope."
+      },
       "spawnCount": null,
       "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
       "stdoutLength": 148
@@ -891,6 +1222,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -901,6 +1234,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -911,6 +1246,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -921,6 +1258,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -931,6 +1270,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -941,6 +1282,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -951,6 +1294,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -961,6 +1306,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
       "stdoutLength": 164
@@ -971,6 +1318,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -981,6 +1330,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -991,6 +1342,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -1001,6 +1354,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -1011,6 +1366,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -1021,6 +1378,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -1031,6 +1390,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -1041,6 +1402,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
       "stdoutLength": 164
@@ -1051,6 +1414,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -1061,6 +1426,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -1071,6 +1438,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -1081,6 +1450,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
       "stdoutLength": 188
@@ -1091,6 +1462,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -1101,6 +1474,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -1111,6 +1486,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -1121,6 +1498,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
       "stdoutLength": 176
@@ -1131,9 +1510,11 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
@@ -1141,9 +1522,11 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
@@ -1151,9 +1534,11 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
@@ -1161,9 +1546,11 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
+      "stdoutSha256": "4f79daf3d5aed7a4a44cfab74ee647b454d85470ca77a5cf002975546db8cb37",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
@@ -1171,6 +1558,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -1181,6 +1570,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -1191,6 +1582,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -1201,6 +1594,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
       "stdoutLength": 216
@@ -1211,6 +1606,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -1221,6 +1618,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -1231,6 +1630,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -1241,6 +1642,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
       "stdoutLength": 208
@@ -1251,6 +1654,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -1261,6 +1666,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -1271,6 +1678,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -1281,6 +1690,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
       "stdoutLength": 164
@@ -1291,6 +1702,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -1301,6 +1714,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -1311,6 +1726,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -1321,6 +1738,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
       "stdoutLength": 164
@@ -1331,6 +1750,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -1341,6 +1762,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -1351,6 +1774,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -1361,6 +1786,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
       "stdoutLength": 172
@@ -1371,6 +1798,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -1381,6 +1810,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -1391,6 +1822,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -1401,6 +1834,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
       "stdoutLength": 172
@@ -1411,6 +1846,8 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -1421,6 +1858,8 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -1431,6 +1870,8 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -1441,6 +1882,8 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
       "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
       "stdoutLength": 200
@@ -1451,8 +1894,10 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -1461,8 +1906,10 @@
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -1471,8 +1918,10 @@
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     },
     {
@@ -1481,729 +1930,12 @@
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
+      "exitCode": 0,
+      "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
-      "stdoutLength": 312
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-stdin",
-      "threadCount": 1,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
-      "stdoutLength": 136
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-stdin",
-      "threadCount": 2,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
-      "stdoutLength": 136
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-stdin",
-      "threadCount": 4,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
-      "stdoutLength": 136
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-stdin",
-      "threadCount": 8,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
-      "stdoutLength": 136
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "malformed-stdin",
-      "threadCount": 1,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "malformed-stdin",
-      "threadCount": 2,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "malformed-stdin",
-      "threadCount": 4,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "malformed-stdin",
-      "threadCount": 8,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-piv-header",
-      "threadCount": 1,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-piv-header",
-      "threadCount": 2,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-piv-header",
-      "threadCount": 4,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-piv-header",
-      "threadCount": 8,
-      "exitClass": "guest-error",
-      "exitDetail": "exit=1",
-      "spawnCount": null,
-      "stdoutSha256": "6edf7ef51e6f1fd725efa6385ed5fb8bff8492100876893a84b40e0ce8d6aa85",
-      "stdoutLength": 148
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-prw",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-prw",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-prw",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "empty-prw",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "two-prw-arms",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "two-prw-arms",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "two-prw-arms",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "two-prw-arms",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "99672796534b4d7f41588f44d59be71ef5433863fba016e297b7c19dfd40c055",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-prw",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-prw",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-prw",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "truncated-prw",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "legacy-json-rejected",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "legacy-json-rejected",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "legacy-json-rejected",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "legacy-json-rejected",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1009da6b5b9d440148b7e39dbbfced2b353934155c65d616f7d86f1d16f03d68",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "request-arm-is-result",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
-      "stdoutLength": 188
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "request-arm-is-result",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
-      "stdoutLength": 188
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "request-arm-is-result",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
-      "stdoutLength": 188
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "request-arm-is-result",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "4fac96f511ca7a88fa9fb521fcd00bbd96b9147c38a941bd2503cacbcf0c48f2",
-      "stdoutLength": 188
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-stm-enum",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-stm-enum",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-stm-enum",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-stm-enum",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "8678cca7cc6af37bca89f6708694e524f19405441b040921b7be09e7291b0e03",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-integrator-enum",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-integrator-enum",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-integrator-enum",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-integrator-enum",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "1f6f0146c0ba7163197294103e756744ea2097b38b2dac3da823aac67edd15f8",
-      "stdoutLength": 176
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonuniform-absolute-tolerance",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
-      "stdoutLength": 216
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonuniform-absolute-tolerance",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
-      "stdoutLength": 216
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonuniform-absolute-tolerance",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
-      "stdoutLength": 216
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonuniform-absolute-tolerance",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "22ed1d8cfe7c15cef6384a62c6ddf3b730b916ffd384b0e43a0d22191c698e16",
-      "stdoutLength": 216
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-frame",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
-      "stdoutLength": 208
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-frame",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
-      "stdoutLength": 208
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-frame",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
-      "stdoutLength": 208
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "unknown-frame",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "878380079c7815ad46e8f11f3f3653029d536028ffab77f2c8c152e3a7a23cc4",
-      "stdoutLength": 208
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonfinite-state",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonfinite-state",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonfinite-state",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "nonfinite-state",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "cf9ebc4ae55c3c0bd3f67304fa00f8cae175641ddf3d53261fedd65b6311e94e",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "invalid-state",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "invalid-state",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "invalid-state",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "invalid-state",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "706d7159e9f1cb14f89f5969bad7d895da2bc332bf50236cafcbc43872252902",
-      "stdoutLength": 164
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "negative-covariance",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "negative-covariance",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "negative-covariance",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "negative-covariance",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b7e83a614e1242bd9e46bfe605799cbaa32086ad46212471ae54dc55bed4f298",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "asymmetric-covariance",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "asymmetric-covariance",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "asymmetric-covariance",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "asymmetric-covariance",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "b9de1aeb803d1799243fdfe90d95b07076d9a0c8c079880c660c333f7d548368",
-      "stdoutLength": 172
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "duplicate-covariance",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
-      "stdoutLength": 200
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "duplicate-covariance",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
-      "stdoutLength": 200
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "duplicate-covariance",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
-      "stdoutLength": 200
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "duplicate-covariance",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "0879890248540d8fc3dd5f5a20e786379d65f3a5b16e44d281b282a68d91a2a4",
-      "stdoutLength": 200
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "valid-after-errors",
-      "threadCount": 1,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
-      "stdoutLength": 312
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "valid-after-errors",
-      "threadCount": 2,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
-      "stdoutLength": 312
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "valid-after-errors",
-      "threadCount": 4,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
-      "stdoutLength": 312
-    },
-    {
-      "lane": "docker-wasmedge",
-      "caseId": "valid-after-errors",
-      "threadCount": 8,
-      "exitClass": "ok",
-      "exitDetail": null,
-      "spawnCount": null,
-      "stdoutSha256": "c079b859908c52b7ee13fea4ce60e67468cae02a14019fb339eae415183e6227",
+      "stdoutSha256": "8491a10fa1cc6bb8a6a2d0be843acd85aaa3cd5177a74f9fc55334263c485484",
       "stdoutLength": 312
     }
-  ]
+  ],
+  "dockerLane": "waived by the owner 2026-10-22 (no Docker)"
 }

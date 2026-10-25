@@ -1,6 +1,6 @@
 {
-  "artifactSha256": "4dc525a1c04d93106065920f1437509ceb8e8def49d1c53976ed9c313736d611",
-  "previousArtifactSha256": "a108e6ebb1e67d6d74c78111bde24750fcd01c877bee20a1eb4355cfdceaecab",
+  "artifactSha256": "11ed4293219aa7e1542cf7e1bf2b704b741a5a7dc1380127eb3a45d8ac8ea78a",
+  "previousArtifactSha256": "f2877a377ad682bf45f136455b3662c09afcd9871e8eaf3e83d3422594766d35",
   "memory": {
     "staticMinimumBytes": 23825072,
     "initialBytes": 28049408,
@@ -44,11 +44,11 @@
       "role": "resident-focus",
       "entities": 1,
       "baseBytes": 28049408,
-      "highWaterBytes": 28049408,
+      "highWaterBytes": 28377088,
       "samples": [
-        28049408,
-        28049408,
-        28049408
+        28377088,
+        28377088,
+        28377088
       ],
       "outputs": [
         "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
@@ -57,14 +57,14 @@
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "previousArtifactParity": "field-identical; SDS 1.259 RFM default fields change serialized layout only"
+      "previousArtifactParity": "field-identical"
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 1,
       "baseBytes": 28049408,
-      "highWaterBytes": 28049408,
+      "highWaterBytes": 28377088,
       "role": "resident-focus",
       "outputs": [
         "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
@@ -77,18 +77,18 @@
       "role": "catalog",
       "entities": 1000,
       "baseBytes": 28049408,
-      "configuredBytes": 31850496,
-      "highWaterBytes": 42598400,
+      "configuredBytes": 32309248,
+      "highWaterBytes": 43057152,
       "samples": [
-        37158912,
-        37224448,
-        37289984,
-        39845888,
-        39845888,
-        39911424,
-        39976960,
-        42598400,
-        42598400
+        37617664,
+        37683200,
+        37748736,
+        40304640,
+        40304640,
+        40370176,
+        40435712,
+        43057152,
+        43057152
       ],
       "outputs": [
         "ec2a4ac1bbe5c4c464cba006273ad23a897be3c664db5f26edb5b30d65411da8",
@@ -104,27 +104,27 @@
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
       "previousArtifactParity": "bit-identical",
-      "predictedBytes": 42635672.56729724,
-      "relativePredictionError": 0.0008749757572407081,
-      "seededBytes": 37158912
+      "predictedBytes": 43081465.13593107,
+      "relativePredictionError": 0.0005646712520853021,
+      "seededBytes": 37617664
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 1000,
       "baseBytes": 28049408,
-      "highWaterBytes": 42598400,
-      "configuredBytes": 31850496,
+      "highWaterBytes": 43057152,
+      "configuredBytes": 32309248,
       "samples": [
-        37158912,
-        37224448,
-        37289984,
-        39845888,
-        39845888,
-        39911424,
-        39976960,
-        42598400,
-        42598400
+        37617664,
+        37683200,
+        37748736,
+        40304640,
+        40304640,
+        40370176,
+        40435712,
+        43057152,
+        43057152
       ],
       "role": "catalog",
       "outputs": [
@@ -138,27 +138,27 @@
         "2b0382bb21e5f0206cf0ca9bb8ad18d3d1f37e715efedba81786882ef96e50af",
         "2bb1e95794f89d9ae642a3b661f7e982412ac447304d8dab67772acab12c06ed"
       ],
-      "predictedBytes": 42635672.56729724,
-      "relativePredictionError": 0.0008749757572407081,
-      "seededBytes": 37158912
+      "predictedBytes": 43081465.13593107,
+      "relativePredictionError": 0.0005646712520853021,
+      "seededBytes": 37617664
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 4000,
       "baseBytes": 28049408,
-      "configuredBytes": 43122688,
-      "highWaterBytes": 86573056,
+      "configuredBytes": 43909120,
+      "highWaterBytes": 87359488,
       "samples": [
-        64815104,
-        65077248,
-        65077248,
-        75563008,
-        75563008,
-        75759616,
-        76021760,
-        86573056,
-        86573056
+        65601536,
+        65863680,
+        65929216,
+        76349440,
+        76349440,
+        76611584,
+        76808192,
+        87359488,
+        87359488
       ],
       "outputs": [
         "b038a5f0042998738e1108b00a8f2761f0dbc5f15496655b780ffe3fcb10c200",
@@ -173,27 +173,27 @@
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "predictedBytes": 86562847.63135183,
-      "relativePredictionError": 0.00011791623306183653,
-      "seededBytes": 64815104
+      "predictedBytes": 87347498.91854486,
+      "relativePredictionError": 0.00013723845834743567,
+      "seededBytes": 65601536
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 4000,
       "baseBytes": 28049408,
-      "highWaterBytes": 86573056,
-      "configuredBytes": 43122688,
+      "highWaterBytes": 87359488,
+      "configuredBytes": 43909120,
       "samples": [
-        64815104,
-        65077248,
-        65077248,
-        75563008,
-        75563008,
-        75759616,
-        76021760,
-        86573056,
-        86573056
+        65601536,
+        65863680,
+        65929216,
+        76349440,
+        76349440,
+        76611584,
+        76808192,
+        87359488,
+        87359488
       ],
       "role": "catalog",
       "outputs": [
@@ -207,27 +207,27 @@
         "e99b1f6b1677f4c96efe6d36bb2cf3f777c1169b397bdf5db8e490a9bf6f05d9",
         "71c2a290c61d1af20fe65764948e52e9da243961339295acf563ee63e6b0b5c0"
       ],
-      "predictedBytes": 86562847.63135183,
-      "relativePredictionError": 0.00011791623306183653,
-      "seededBytes": 64815104
+      "predictedBytes": 87347498.91854486,
+      "relativePredictionError": 0.00013723845834743567,
+      "seededBytes": 65601536
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 10000,
       "baseBytes": 28049408,
-      "configuredBytes": 65798144,
-      "highWaterBytes": 174456832,
+      "configuredBytes": 67239936,
+      "highWaterBytes": 175898624,
       "samples": [
-        120127488,
-        120782848,
-        120848384,
-        146931712,
-        146931712,
-        147521536,
-        148176896,
-        174456832,
-        174456832
+        121569280,
+        122224640,
+        122290176,
+        148373504,
+        148373504,
+        148963328,
+        149618688,
+        175898624,
+        175898624
       ],
       "outputs": [
         "f45777aabd582b471e9f91a0f3866f678f9c16d8e506ac8f0feeb4fef097a659",
@@ -242,27 +242,27 @@
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "predictedBytes": 174417197.759461,
-      "relativePredictionError": 0.00022718651992381897,
-      "seededBytes": 120127488
+      "predictedBytes": 175879566.48377246,
+      "relativePredictionError": 0.0001083437482009146,
+      "seededBytes": 121569280
     },
     {
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 10000,
       "baseBytes": 28049408,
-      "highWaterBytes": 174456832,
-      "configuredBytes": 65798144,
+      "highWaterBytes": 175898624,
+      "configuredBytes": 67239936,
       "samples": [
-        120127488,
-        120782848,
-        120848384,
-        146931712,
-        146931712,
-        147521536,
-        148176896,
-        174456832,
-        174456832
+        121569280,
+        122224640,
+        122290176,
+        148373504,
+        148373504,
+        148963328,
+        149618688,
+        175898624,
+        175898624
       ],
       "role": "catalog",
       "outputs": [
@@ -276,27 +276,27 @@
         "64572e29780c90be9282e00089b718dc55c2409ce79887bfd73b482b575f8ee2",
         "221179445c4601d981a4a87f57d275de409319bda9b9869100c8ba54742e965b"
       ],
-      "predictedBytes": 174417197.759461,
-      "relativePredictionError": 0.00022718651992381897,
-      "seededBytes": 120127488
+      "predictedBytes": 175879566.48377246,
+      "relativePredictionError": 0.0001083437482009146,
+      "seededBytes": 121569280
     },
     {
       "runtime": "browser",
       "role": "catalog",
       "entities": 31814,
       "baseBytes": 28049408,
-      "configuredBytes": 148045824,
-      "highWaterBytes": 493813760,
+      "configuredBytes": 151977984,
+      "highWaterBytes": 497745920,
       "samples": [
-        320995328,
-        323158016,
-        323289088,
-        406257664,
-        406257664,
-        408223744,
+        324861952,
+        327090176,
+        327221248,
         410189824,
-        493813760,
-        493813760
+        410189824,
+        412155904,
+        414121984,
+        497745920,
+        497745920
       ],
       "outputs": [
         "7f5918fd1a6dc7206b2709f45f22e981b9fd277ba3c5e7c82ced04032a19e0cf",
@@ -311,12 +311,12 @@
       ],
       "crossOriginIsolated": true,
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
-      "predictedBytes": 493826330.0418899,
-      "relativePredictionError": 0.000025455025574633502,
-      "seededBytes": 320995328,
+      "predictedBytes": 497752653.4617516,
+      "relativePredictionError": 1.3527909483577963e-05,
+      "seededBytes": 324861952,
       "poolLaneRelativeError": [
-        -0.007435596784168213,
-        -0.013536177012907191
+        0.004520568954854669,
+        -0.0016534972341733251
       ]
     },
     {
@@ -324,18 +324,18 @@
       "version": "0.16.4",
       "entities": 31814,
       "baseBytes": 28049408,
-      "highWaterBytes": 493813760,
-      "configuredBytes": 148045824,
+      "highWaterBytes": 497745920,
+      "configuredBytes": 151977984,
       "samples": [
-        320995328,
-        323158016,
-        323289088,
-        406257664,
-        406257664,
-        408223744,
+        324861952,
+        327090176,
+        327221248,
         410189824,
-        493813760,
-        493813760
+        410189824,
+        412155904,
+        414121984,
+        497745920,
+        497745920
       ],
       "role": "catalog",
       "outputs": [
@@ -349,12 +349,12 @@
         "c967d540a0ef0774ec7f7f4dee3ceb1b9c6a365d9508b6c94076994b910bc05e",
         "b84b45b373dd57e03672491175e9df5cfb8c9596c725d21c423c54866e201b41"
       ],
-      "predictedBytes": 493826330.0418899,
-      "relativePredictionError": 0.000025455025574633502,
-      "seededBytes": 320995328,
+      "predictedBytes": 497752653.4617516,
+      "relativePredictionError": 1.3527909483577963e-05,
+      "seededBytes": 324861952,
       "poolLaneRelativeError": [
-        -0.007435596784168213,
-        -0.013536177012907191
+        0.004520568954854669,
+        -0.0016534972341733251
       ]
     }
   ],
@@ -362,7 +362,7 @@
   "aot": {
     "status": "PASS",
     "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
-    "artifactSha256": "4dc525a1c04d93106065920f1437509ceb8e8def49d1c53976ed9c313736d611",
+    "artifactSha256": "11ed4293219aa7e1542cf7e1bf2b704b741a5a7dc1380127eb3a45d8ac8ea78a",
     "runtime": "WasmEdge 0.16.4; node spacedatanetwork 1.1.0",
     "execution": "Every native row executed the exact flow artifact produced by node prewarm-aot."
   },
@@ -373,15 +373,15 @@
     ],
     "units": "bytes",
     "method": "least squares over catalog roles; max(initialBytes, baseBytes + entities * perEntityBytes)",
-    "baseBytes": 27993280.879279047,
-    "perEntityBytes": 14642.391688018195,
-    "focusHighWaterBytes": 28049408
+    "baseBytes": 28326120.54172647,
+    "perEntityBytes": 14755.344594204598,
+    "focusHighWaterBytes": 28377088
   },
   "seededModel": {
     "units": "bytes",
     "method": "least squares over the samples taken right after the pool seed sweep; not a sizing basis",
-    "baseBytes": 27975745.84239401,
-    "perEntityBytes": 9210.788410100055
+    "baseBytes": 28318739.057104677,
+    "perEntityBytes": 9321.473827734893
   },
   "poolLane": {
     "task": "orbpro-ffm-pool-ffm1-fast-20261022",

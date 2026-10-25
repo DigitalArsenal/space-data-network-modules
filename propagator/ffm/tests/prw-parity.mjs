@@ -1,13 +1,4 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { normalizeParityFixture,runParityHarness,formatParityReport } from 'space-data-module-sdk/testing';
-import { useHeadlessShell } from './lib/headlessShell.mjs';
+// Parity (browser and native WasmEdge, 1/2/4/8 workers) of the PRW malformed-request classifications.
+import { parity } from './lib/parity.mjs';
 import { cases } from './prw-contract-fixture.mjs';
-const plan=await normalizeParityFixture({name:'TMPL lane13 PRW malformed classifications',threadCounts:[1,2,4,8],cases});
-useHeadlessShell();  // the browser lane: Chromium headless shell only
-const report=await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,timeoutMs:60000,log:console.log});
-console.log(formatParityReport(report));
-fs.mkdirSync(new URL('./evidence/lane13/',import.meta.url),{recursive:true});
-fs.writeFileSync(new URL('./evidence/lane13/prw-parity.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
-assert.equal(report.ok,true,JSON.stringify(report.failures));
+await parity({ name: 'TMPL lane13 PRW malformed classifications', cases, receipt: 'lane13/prw-parity.json' });

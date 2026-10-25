@@ -1,13 +1,7 @@
-// Tri-runtime parity of the GNSS radiation pressure on the PRW request path:
-// every Orekit GNSS case (box-wing IIF and IIR, ECOM2 with its parameters)
-// plus box-wing IIF and ECOM2 together, byte-identical in Chrome, native
-// WasmEdge and Docker WasmEdge at 1/2/4/8 workers.
-//   PATH="$HOME/.wasmedge/bin:$PATH" node tests/prw-gnss-parity.mjs
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
-import { useHeadlessShell } from './lib/headlessShell.mjs';
+// Parity (browser and native WasmEdge, 1/2/4/8 workers) of the GNSS radiation pressure on the PRW request path: every Orekit
+// GNSS case (box-wing IIF and IIR, ECOM2 with its parameters) plus box-wing IIF and ECOM2 together.
+//   PATH="$HOME/.wasmedge/bin:$PATH" node tests/prw-gnss-parity.mjs   (through headless-run: the browser lane)
+import { parity } from './lib/parity.mjs';
 import { REFERENCE, inputs } from './lib/gnssSrpCases.mjs';
 import { sds } from './lib/prwCodec.mjs';
 
@@ -20,10 +14,4 @@ const cases = [
     e.FORCES.GNSS_BLOCK = sds.pcfGnssSpacecraftBlock.GPS_IIF;
   })) } },
 ];
-const plan = await normalizeParityFixture({ name: 'propagator/ffm PRW GNSS radiation pressure', threadCounts: [1, 2, 4, 8], cases });
-useHeadlessShell();  // the browser lane: Chromium headless shell only
-const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 120000, log: console.log });
-console.log(formatParityReport(report));
-fs.mkdirSync(new URL('./evidence/gnss-srp/', import.meta.url), { recursive: true });
-fs.writeFileSync(new URL('./evidence/gnss-srp/prw-gnss-parity.json', import.meta.url), `${JSON.stringify(report, null, 2)}\n`);
-assert.equal(report.ok, true, JSON.stringify(report.failures));
+await parity({ name: 'propagator/ffm PRW GNSS radiation pressure', cases, receipt: 'gnss-srp/prw-gnss-parity.json', timeoutMs: 120000 });

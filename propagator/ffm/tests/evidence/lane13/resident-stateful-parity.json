@@ -1,15 +1,14 @@
 {
-  "wasmSha256": "eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629",
-  "wasmBytes": 2064595,
+  "wasmSha256": "cb7b5b15827ffb609f23def40560453640adc3d96faef1fd2ed2a4b376ccf766",
+  "wasmBytes": 2630970,
   "wasmedgeVersion": "0.16.4",
-  "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
+  "dockerLane": "waived by the owner 2026-10-22 (no Docker)",
   "runtimeInstances": "One persistent direct instance per group",
   "groups": 4,
   "requests": 33,
   "runtimes": [
     "Chromium headless shell/V8",
-    "native WasmEdge",
-    "container WasmEdge"
+    "native WasmEdge"
   ],
   "steps": [
     {
@@ -24,8 +23,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "state-chunk-0",
-      "responseSha256": "cc1896ed8b0dec2f7145c0ae5f47e47964ebd5c88839ef2f648105fb0592e891",
-      "bytes": 592,
+      "responseSha256": "f4bccb18d07cd666e2f104baf007166de6ece76cf00ea2596b59b11105d630c4",
+      "bytes": 656,
       "errorCode": null,
       "yielded": true,
       "backlogRemaining": "1"
@@ -33,8 +32,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "state-chunk-1",
-      "responseSha256": "023a3f4b108eaa7340a0fe4708585ff9b71e370212bfa04562491efc1f06db0d",
-      "bytes": 584,
+      "responseSha256": "cad0a578ec8fffe9e9650921f84343a76f49be9d969945d6005d28033f4b31ae",
+      "bytes": 648,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -42,7 +41,7 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "prepare",
-      "responseSha256": "990cbadd95e968183ddd2dcc8d94a13a4052eed11d66a107b326cd769443aac3",
+      "responseSha256": "81952109c1b3a0d5c8ba41f3eb2afaa352e24d55bb4a9552ce82217bf059c1f3",
       "bytes": 352,
       "errorCode": null,
       "yielded": false,
@@ -51,8 +50,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "ppe-chunk-0",
-      "responseSha256": "260f6907befe9268b7cf4f10aff5541578fac13b8162985fead9eb21af599a3d",
-      "bytes": 2456,
+      "responseSha256": "196b1dc84d521b84a281e1718019c7b2f0b62c0b34939bcd5ab9b75e703723ec",
+      "bytes": 2520,
       "errorCode": null,
       "yielded": true,
       "backlogRemaining": "1"
@@ -60,8 +59,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "ppe-chunk-1",
-      "responseSha256": "ef45601f7b2cef8064c2fd86c6dc3c011ce71fc3dcdf94799bc8ec80ed184a3c",
-      "bytes": 2448,
+      "responseSha256": "ba35d604645e6ff6b6123ad2ff6294eda9887579e4fefdc5eb40d8a6ed6df22a",
+      "bytes": 2512,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -123,8 +122,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "new-state",
-      "responseSha256": "3847847d1269f311413220ae36952981369c2d9e0113b2697b44d2fa0ca33a3a",
-      "bytes": 584,
+      "responseSha256": "7e0994d508712d8c951198d84ee9d22f6b2381b659115cea1853f2030de2af47",
+      "bytes": 648,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -150,8 +149,8 @@
     {
       "group": "resident-atomic-rejection",
       "label": "old-generation-survives",
-      "responseSha256": "a28285b17f854f7ea548ea50ea686d7f18904e92aa6fb6bd37f8016089c0b353",
-      "bytes": 584,
+      "responseSha256": "96e7651469bd83d1ceb57eb4c91bbe0e691bb496de04ae2c2715809f5aca20bd",
+      "bytes": 648,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -204,8 +203,8 @@
     {
       "group": "configured-full-force",
       "label": "configured-state-chunk-0",
-      "responseSha256": "e836a753735958803469c7361e49443f92027a2da12eb95044bad9c4f5ae105c",
-      "bytes": 624,
+      "responseSha256": "c196e2db8fc54866c734eb01be0cc84210422648a338529827eb3339698bb27e",
+      "bytes": 688,
       "errorCode": null,
       "yielded": true,
       "backlogRemaining": "1"
@@ -213,25 +212,7 @@
     {
       "group": "configured-full-force",
       "label": "configured-state-chunk-1",
-      "responseSha256": "4d9457acd7dbd708da71e6f7a7a5a4a7c4b39d72eb9a97b166794ccad6a05b5f",
-      "bytes": 616,
-      "errorCode": null,
-      "yielded": false,
-      "backlogRemaining": "0"
-    },
-    {
-      "group": "configured-full-force",
-      "label": "configured-backward",
-      "responseSha256": "bdc63500d76293683891b483515e2a59b498845eac8defdf711e98f322528b47",
-      "bytes": 616,
-      "errorCode": null,
-      "yielded": false,
-      "backlogRemaining": "0"
-    },
-    {
-      "group": "configured-full-force",
-      "label": "configured-prepare",
-      "responseSha256": "27ced45f9929241c6c7bcb9e5b9affceef17a10ef3082af167faa88a2819f9bb",
+      "responseSha256": "ee071cb0eb54c1028e591acc8824a064f12e03df9f0103b2f9c87e29e6edda3e",
       "bytes": 680,
       "errorCode": null,
       "yielded": false,
@@ -239,9 +220,27 @@
     },
     {
       "group": "configured-full-force",
+      "label": "configured-backward",
+      "responseSha256": "8b98ed8d740dfbd126d09391ab3472f8a6001c4d1490f5b9f84d2d666c9c5aac",
+      "bytes": 680,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-prepare",
+      "responseSha256": "3daeff5899ea86b821f3aecee6520f1e8abaad545efc6c9d359dcf7341c36723",
+      "bytes": 768,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
       "label": "configured-ppe-chunk-0",
-      "responseSha256": "0281b8dc3cd2ad1cf0451d0d3e164a928527cf90015892276cbd207240c2e555",
-      "bytes": 10520,
+      "responseSha256": "aec179de5b6c0bc248d30bfe4d131162fd4a6c86dbb21339caf8ca143650a9df",
+      "bytes": 10688,
       "errorCode": null,
       "yielded": true,
       "backlogRemaining": "1"
@@ -249,8 +248,8 @@
     {
       "group": "configured-full-force",
       "label": "configured-ppe-chunk-1",
-      "responseSha256": "4d43503ee08836d6bf2f5147f317020234625d64139bc16d150eb2ffd2bc7b51",
-      "bytes": 10520,
+      "responseSha256": "478fe6962e7fbde2f057c7c4b16bf4740261460f4e45b4fa0b6356a6017467ee",
+      "bytes": 10688,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -276,8 +275,8 @@
     {
       "group": "configured-reentry",
       "label": "reentry-prepare-before",
-      "responseSha256": "5a17586aa74d4c4d254c9bd8397c67c87ae4f51353236179d248efd7d9b13ae1",
-      "bytes": 672,
+      "responseSha256": "046a4687ffe21f19d06c6c7d03d8c8be1123f12676ac4c0179138d9976e95cb6",
+      "bytes": 760,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -285,7 +284,7 @@
     {
       "group": "configured-reentry",
       "label": "reentry-prepare-across",
-      "responseSha256": "c3d9941299e47a23f3053f5ca502f7aacfab1dbe62b7722caa23f99c1cdca70f",
+      "responseSha256": "442e905b56cf6aa4234ad4c12956e50ab4c9d4b8d2db575b2c27dec7c4f9c36f",
       "bytes": 260,
       "errorCode": "reentry",
       "yielded": false,
@@ -294,7 +293,7 @@
     {
       "group": "configured-reentry",
       "label": "reentry-state-after",
-      "responseSha256": "c3d9941299e47a23f3053f5ca502f7aacfab1dbe62b7722caa23f99c1cdca70f",
+      "responseSha256": "442e905b56cf6aa4234ad4c12956e50ab4c9d4b8d2db575b2c27dec7c4f9c36f",
       "bytes": 260,
       "errorCode": "reentry",
       "yielded": false,
@@ -303,7 +302,7 @@
     {
       "group": "configured-reentry",
       "label": "reentry-execution",
-      "responseSha256": "c5e86aff6297725c4a09dd7e99881974febc2315406b8d123912b161f547080c",
+      "responseSha256": "fd13f6c3b136b73453b7274dd8aef836cb4f2eb84d1717d857a9fb9a198c7d48",
       "bytes": 228,
       "errorCode": "reentry",
       "yielded": false,
