@@ -82,7 +82,7 @@ as Space-Track writes it: a letter for the ten-thousands (A to Z without I and O
 is `A0000`, 123456 is `C3456` and 339999 is `Z9999`. A number outside 0 to 339999 has no two-line form and the fit
 fails with `unrepresentable-catalog-number`. `tests/alpha5_tle.test.mjs` checks the lines against the fitted elements
 and reads them back with data-source/catalog-source; `tests/parity_alpha5.mjs` holds the same cases byte-identical in
-the browser, WasmEdge and Docker WasmEdge.
+the browser and native WasmEdge (the owner waived the Docker leg on 2026-10-22).
 
 ## Workflow
 

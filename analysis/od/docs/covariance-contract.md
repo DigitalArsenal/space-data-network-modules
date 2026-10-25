@@ -86,8 +86,8 @@ hash through the authorized node publication API, verify the public signature,
 and install the signed result as `dist/isomorphic/module.wasm`. Signing keys
 never enter the build. `npm test` covers SDK loading and public reference fits;
 `npm run test:release` compares exact output payloads for text/OEM/error inputs
-across browser, native WasmEdge and Docker WasmEdge 0.16.4. The Docker test requires
-`space-data-module-sdk/parity-wasmedge:0.16.4` (or `OD_PARITY_DOCKER_IMAGE`).
+across the browser host and native WasmEdge 0.16.4 (its direct and command surfaces);
+the owner waived the Docker leg on 2026-10-22.
 WasmEdge must enable its threads feature to load WASI shared memory, even though
 the module itself spawns no threads. Browser delivery requires cross-origin
 isolation for the same shared memory.

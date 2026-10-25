@@ -116,3 +116,11 @@ acceptance uses 25. The native SDK runner accepts `WASMEDGE_INCLUDE_DIR` and
 owner-selected host to check a shipped artifact; this task does not deploy or
 restart production. Independent prediction validation remains a separate live
 check against the first hours of a fresh operator file.
+
+The last passing run's report is `conformance/operator-fit-e2e.json` (its `sha256` is
+the artifact's); `OD_REPORT=analysis/od/conformance/operator-fit-e2e.json` makes the
+E2E write it there, and `node tests/parity_alpha5.mjs` writes
+`conformance/parity-alpha5.json` (browser and native WasmEdge; Docker waived). The
+environment step fetches the space-weather files live and refuses with
+`Today's complete drivers and history unavailable` while the providers have not yet
+published the current UTC day.

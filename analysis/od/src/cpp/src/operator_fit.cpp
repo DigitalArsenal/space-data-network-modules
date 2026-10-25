@@ -175,12 +175,12 @@ OperatorFitResult fit_operator(const StateSeries& input,const OperatorEnvironmen
     if(!ffm::verifyPrw(in.configuration,in.configurationSize,configuration,out.error))return out;
     const auto* request=configuration->EXECUTION_REQUEST();
     const auto* forces=request?request->FORCES():nullptr;
-    if(!forces || !forces->ENABLE_DRAG() || forces->ATMOSPHERE_MODEL()!=prwAtmosphereFamily::NRLMSISE00 ||
-       !forces->ENABLE_SRP() || forces->RADIATION_PRESSURE_MODEL()!=prwRadiationPressureFamily::CANNONBALL ||
-       forces->GRAVITY_CHOICE()!=prwGravitySelection::EGM2008 || !forces->HAS_MAXIMUM_DEGREE() || forces->MAXIMUM_DEGREE()!=70 ||
+    if(!forces || !forces->ENABLE_DRAG() || forces->ATMOSPHERE_MODEL()!=pcfAtmosphereFamily::NRLMSISE00 ||
+       !forces->ENABLE_SRP() || forces->RADIATION_PRESSURE_MODEL()!=pcfRadiationPressureFamily::CANNONBALL ||
+       forces->GRAVITY_CHOICE()!=pcfGravitySelection::EGM2008 || !forces->HAS_MAXIMUM_DEGREE() || forces->MAXIMUM_DEGREE()!=70 ||
        !forces->HAS_MAXIMUM_ORDER() || forces->MAXIMUM_ORDER()!=70 || !forces->ENABLE_THIRD_BODY() ||
-       forces->SOLID_TIDES()!=prwSolidTideModel::IERS_2010 || forces->OCEAN_TIDES()!=prwOceanTideModel::FES2004 ||
-       forces->EARTH_RADIATION()!=prwEarthRadiationModel::KNOCKE || forces->RELATIVITY()!=prwRelativityTerms::IERS_2010 ||
+       forces->SOLID_TIDES()!=pcfSolidTideModel::IERS_2010 || forces->OCEAN_TIDES()!=pcfOceanTideModel::FES2004 ||
+       forces->EARTH_RADIATION()!=pcfEarthRadiationModel::KNOCKE || forces->RELATIVITY()!=pcfRelativityTerms::IERS_2010 ||
        !env.kernel.size || !env.earth_orientation.size || !env.space_weather.size){
         out.error="unsupported-force-profile: operator fitting requires full FFM-1 EGM2008 70x70, tides, radiation, relativity, NRLMSISE-00 and environment inputs";return out;
     }

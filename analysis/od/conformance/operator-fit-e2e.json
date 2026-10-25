@@ -1,0 +1,1118 @@
+{
+  "status": "PASS",
+  "sha256": "cbf687d960c3ffe2e083cdba901f0701d97797b796f0e066b3f3a430e803fbb5",
+  "rows": [
+    {
+      "file": "MEME_100001_STARLINK-38128_2820948_Operational_1475833740_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.429684417,
+      "cpuSeconds": 43.705325,
+      "concurrent": false,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3102511368471598,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3102511368471598
+    },
+    {
+      "file": "MEME_100001_STARLINK-38128_2820948_Operational_1475833740_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.15316775,
+      "cpuSeconds": 44.48597399999999,
+      "concurrent": false,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3102511367580831,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3102511367580831
+    },
+    {
+      "file": "MEME_100002_STARLINK-37711_2820958_Operational_1475834340_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.632632124999986,
+      "cpuSeconds": 43.884606999999995,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.16309616219268433,
+          "ballistic": 0.0066261594215656595,
+          "kappa": 0.6686920289217171,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.16309616219268433
+    },
+    {
+      "file": "MEME_100004_STARLINK-38107_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.78375254199999,
+      "cpuSeconds": 44.05381199999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.21386158150861215,
+          "ballistic": 0.0015226588490012858,
+          "kappa": 0.9238670575499357,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.21386158150861215
+    },
+    {
+      "file": "MEME_100007_STARLINK-38054_2820951_Operational_1475833920_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.85593325,
+      "cpuSeconds": 44.09732999999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.6534711404952278,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.6534711404952278
+    },
+    {
+      "file": "MEME_100005_STARLINK-38122_2820950_Operational_1475833860_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.942685708999996,
+      "cpuSeconds": 44.049178,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.4943983332515662,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.4943983332515662
+    },
+    {
+      "file": "MEME_100009_STARLINK-38119_2820950_Operational_1475833860_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.9183995,
+      "cpuSeconds": 44.100221999999995,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.45954780157490427,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.45954780157490427
+    },
+    {
+      "file": "MEME_100006_STARLINK-38117_2820949_Operational_1475833800_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.96739425,
+      "cpuSeconds": 44.08294600000001,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.19700790282287475,
+          "ballistic": 0.0007105638614659819,
+          "kappa": 0.9644718069267009,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.19700790282287475
+    },
+    {
+      "file": "MEME_100003_STARLINK-38123_2820952_Operational_1475833980_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 44.006172792000015,
+      "cpuSeconds": 44.06584599999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.22616028822495704,
+          "ballistic": 0.0013892542958154285,
+          "kappa": 0.9305372852092286,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.22616028822495704
+    },
+    {
+      "file": "MEME_100008_STARLINK-38124_2820949_Operational_1475833800_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.979521542,
+      "cpuSeconds": 44.11394799999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.13253768336342936,
+          "ballistic": 0.014533428256650754,
+          "kappa": 0.27332858716746233,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.13253768336342936
+    },
+    {
+      "file": "MEME_100002_STARLINK-37711_2820958_Operational_1475834340_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 43.974236291999986,
+      "cpuSeconds": 44.202118999999996,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.16309617416220737,
+          "ballistic": 0.0033130825210034194,
+          "kappa": 0.8343458739498291,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.16309617416220737
+    },
+    {
+      "file": "MEME_100004_STARLINK-38107_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.17748820799999,
+      "cpuSeconds": 44.471377000000004,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.21386158078004402,
+          "ballistic": 0.000761329446965424,
+          "kappa": 0.9619335276517288,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.21386158078004402
+    },
+    {
+      "file": "MEME_100007_STARLINK-38054_2820951_Operational_1475833920_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.08600829200002,
+      "cpuSeconds": 44.33072900000001,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.6534711341107869,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.6534711341107869
+    },
+    {
+      "file": "MEME_100009_STARLINK-38119_2820950_Operational_1475833860_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.190999792000014,
+      "cpuSeconds": 44.26920000000002,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.4595477887238106,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.4595477887238106
+    },
+    {
+      "file": "MEME_100003_STARLINK-38123_2820952_Operational_1475833980_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.23048429200001,
+      "cpuSeconds": 44.264646000000006,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.22616028958458534,
+          "ballistic": 0.0006946311227929441,
+          "kappa": 0.9652684438603528,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.22616028958458534
+    },
+    {
+      "file": "MEME_100006_STARLINK-38117_2820949_Operational_1475833800_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.33362608400002,
+      "cpuSeconds": 44.28679699999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.19700790758034026,
+          "ballistic": 0.00035528206638082223,
+          "kappa": 0.9822358966809589,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.19700790758034026
+    },
+    {
+      "file": "MEME_100008_STARLINK-38124_2820949_Operational_1475833800_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.388126499999984,
+      "cpuSeconds": 44.35849499999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.1325376893108329,
+          "ballistic": 0.007266713380099082,
+          "kappa": 0.6366643309950459,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.1325376893108329
+    },
+    {
+      "file": "MEME_100005_STARLINK-38122_2820950_Operational_1475833860_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.40203895799999,
+      "cpuSeconds": 44.388389000000004,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.4943983301149303,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.4943983301149303
+    },
+    {
+      "file": "MEME_100010_STARLINK-38045_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.585950125000004,
+      "cpuSeconds": 43.66655200000001,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.17869094797745239,
+          "ballistic": 0.007374307066145672,
+          "kappa": 0.6312846466927164,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.17869094797745239
+    },
+    {
+      "file": "MEME_100011_STARLINK-38051_2820955_Operational_1475834160_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.92971645800001,
+      "cpuSeconds": 43.802221999999986,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.30819065942865637,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.30819065942865637
+    },
+    {
+      "file": "MEME_100012_STARLINK-38092_2820955_Operational_1475834160_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.67109320800001,
+      "cpuSeconds": 43.80936000000003,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.29821243974041356,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.29821243974041356
+    },
+    {
+      "file": "MEME_100014_STARLINK-38106_2820953_Operational_1475834040_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.69540895899999,
+      "cpuSeconds": 43.573402,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.25886732218356645,
+          "ballistic": 0.011308001393395073,
+          "kappa": 0.43459993033024635,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.25886732218356645
+    },
+    {
+      "file": "MEME_100015_STARLINK-37299_2821009_Operational_1475835000_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.759323083,
+      "cpuSeconds": 43.576307,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.16005239204308294,
+          "ballistic": 0.005782582251851831,
+          "kappa": 0.7108708874074084,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.16005239204308294
+    },
+    {
+      "file": "MEME_100013_STARLINK-37719_2820957_Operational_1475834280_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.793210292000005,
+      "cpuSeconds": 43.59119599999998,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.1827686382538567,
+          "ballistic": 0.0036383499672228833,
+          "kappa": 0.8180825016388559,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.1827686382538567
+    },
+    {
+      "file": "MEME_100016_STARLINK-38052_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.86360783300002,
+      "cpuSeconds": 43.62993500000002,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.15264499500504095,
+          "ballistic": 0.006830243872320432,
+          "kappa": 0.6584878063839784,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.15264499500504095
+    },
+    {
+      "file": "MEME_100017_STARLINK-38114_2820938_Operational_1475833140_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 44.021208790999985,
+      "cpuSeconds": 43.732752000000005,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.32096673757376604,
+          "ballistic": 0.001414462199540791,
+          "kappa": 0.9292768900229604,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.32096673757376604
+    },
+    {
+      "file": "MEME_100010_STARLINK-38045_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 43.93477037499999,
+      "cpuSeconds": 44.275103,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.17869095901417895,
+          "ballistic": 0.003687156840058258,
+          "kappa": 0.8156421579970872,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.17869095901417895
+    },
+    {
+      "file": "MEME_100011_STARLINK-38051_2820955_Operational_1475834160_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 43.96717708300002,
+      "cpuSeconds": 44.30425299999999,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3081906592165961,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3081906592165961
+    },
+    {
+      "file": "MEME_100015_STARLINK-37299_2821009_Operational_1475835000_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 43.91609608300001,
+      "cpuSeconds": 44.153964,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.16005240081514815,
+          "ballistic": 0.002891293198586848,
+          "kappa": 0.8554353400706576,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.16005240081514815
+    },
+    {
+      "file": "MEME_100012_STARLINK-38092_2820955_Operational_1475834160_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.031077791000016,
+      "cpuSeconds": 44.348409999999944,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.2982124386128265,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.2982124386128265
+    },
+    {
+      "file": "MEME_100014_STARLINK-38106_2820953_Operational_1475834040_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.07218304099998,
+      "cpuSeconds": 44.404656999999986,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.2588673615221836,
+          "ballistic": 0.00565400155624524,
+          "kappa": 0.7172999221877381,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.2588673615221836
+    },
+    {
+      "file": "MEME_100016_STARLINK-38052_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.05622783300001,
+      "cpuSeconds": 44.275983999999966,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.15264499707552787,
+          "ballistic": 0.0034151205649166653,
+          "kappa": 0.8292439717541668,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.15264499707552787
+    },
+    {
+      "file": "MEME_100013_STARLINK-37719_2820957_Operational_1475834280_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.326913833,
+      "cpuSeconds": 44.48380900000001,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.18276864047511532,
+          "ballistic": 0.0018191747270369567,
+          "kappa": 0.9090412636481522,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.18276864047511532
+    },
+    {
+      "file": "MEME_100017_STARLINK-38114_2820938_Operational_1475833140_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.26985041599997,
+      "cpuSeconds": 44.52596,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3209667515835265,
+          "ballistic": 0.000707232181554489,
+          "kappa": 0.9646383909222755,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3209667515835265
+    },
+    {
+      "file": "MEME_100018_STARLINK-37239_2821005_Operational_1475834760_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.50664650000003,
+      "cpuSeconds": 43.584441,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.5473375976562739,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.5473375976562739
+    },
+    {
+      "file": "MEME_100019_STARLINK-37580_2821001_Operational_1475834520_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.55988900000003,
+      "cpuSeconds": 43.623662000000024,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3058343465455217,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3058343465455217
+    },
+    {
+      "file": "MEME_100020_STARLINK-38032_2820955_Operational_1475834160_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.56670629100001,
+      "cpuSeconds": 43.61807499999995,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.42023957499169007,
+          "ballistic": 0.007604682151843923,
+          "kappa": 0.6197658924078039,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.42023957499169007
+    },
+    {
+      "file": "MEME_100022_STARLINK-38103_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.59525104100001,
+      "cpuSeconds": 43.664022999999986,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.155888287670278,
+          "ballistic": 0.008833832511244382,
+          "kappa": 0.5583083744377809,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.155888287670278
+    },
+    {
+      "file": "MEME_100021_STARLINK-38110_2820949_Operational_1475833800_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.64086929199996,
+      "cpuSeconds": 43.71061000000003,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.4401539129516661,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.4401539129516661
+    },
+    {
+      "file": "MEME_100023_STARLINK-38102_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.63054800000001,
+      "cpuSeconds": 43.662372000000005,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.2670186488317487,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.2670186488317487
+    },
+    {
+      "file": "MEME_100024_STARLINK-38108_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.79284216700005,
+      "cpuSeconds": 43.877678,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.656184938276204,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.656184938276204
+    },
+    {
+      "file": "MEME_100025_STARLINK-38109_2820952_Operational_1475833980_UNCLASSIFIED.txt",
+      "dca": "absent",
+      "wallSeconds": 43.76016045899998,
+      "cpuSeconds": 43.855158999999986,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3804638696519452,
+          "ballistic": 0.0003359224957634092,
+          "kappa": 0.9832038752118295,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3804638696519452
+    },
+    {
+      "file": "MEME_100018_STARLINK-37239_2821005_Operational_1475834760_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.03960362499999,
+      "cpuSeconds": 44.34356699999998,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.5473375981753656,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.5473375981753656
+    },
+    {
+      "file": "MEME_100019_STARLINK-37580_2821001_Operational_1475834520_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.06596429099998,
+      "cpuSeconds": 44.37250700000004,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.30583434481487254,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.30583434481487254
+    },
+    {
+      "file": "MEME_100020_STARLINK-38032_2820955_Operational_1475834160_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.14959724999999,
+      "cpuSeconds": 44.43045500000008,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.42023957823017816,
+          "ballistic": 0.003802342114876655,
+          "kappa": 0.8098828942561673,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.42023957823017816
+    },
+    {
+      "file": "MEME_100022_STARLINK-38103_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.05068879099999,
+      "cpuSeconds": 44.350236999999964,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.1558883082642672,
+          "ballistic": 0.004416917781402034,
+          "kappa": 0.7791541109298983,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.1558883082642672
+    },
+    {
+      "file": "MEME_100021_STARLINK-38110_2820949_Operational_1475833800_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.08886416699999,
+      "cpuSeconds": 44.36791599999998,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.4401539145565704,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.4401539145565704
+    },
+    {
+      "file": "MEME_100023_STARLINK-38102_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.027095541000016,
+      "cpuSeconds": 44.37330399999996,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.26701864870774783,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.26701864870774783
+    },
+    {
+      "file": "MEME_100024_STARLINK-38108_2820954_Operational_1475834100_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.06383870900003,
+      "cpuSeconds": 44.37428500000004,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.6561849418276858,
+          "ballistic": 0,
+          "kappa": 1,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.6561849418276858
+    },
+    {
+      "file": "MEME_100025_STARLINK-38109_2820952_Operational_1475833980_UNCLASSIFIED.txt",
+      "dca": "constant ln(2) mechanics",
+      "wallSeconds": 44.02441437500005,
+      "cpuSeconds": 44.33902500000002,
+      "concurrent": true,
+      "maxIterations": 6,
+      "segments": [
+        {
+          "rmsKm": 0.3804638699949126,
+          "ballistic": 0.00016796149080513815,
+          "kappa": 0.9916019254597431,
+          "samples": 288,
+          "iterations": 6,
+          "convergence": "iteration_limit_or_stall",
+          "operatorCovariance": "1: operator supplied",
+          "formalCovariance": false
+        }
+      ],
+      "rmsKm": 0.3804638699949126
+    }
+  ],
+  "docker": "WAIVED by owner 2026-10-22",
+  "freshFilePrediction": "Not measured: historical fixture corpus has one issuance per satellite; fit RMS is forecast reproduction only.",
+  "weather": [
+    {
+      "url": "https://kp.gfz.de/fileadmin/files_for_gfz_cms/Kp_ap_Ap_SN_F107_since_1932.txt",
+      "sha256": "7c9571fa1c0a0812bfadec19d1ec298e67201e089b33b8445f930677a286209a"
+    },
+    {
+      "url": "https://kp.gfz.de/fileadmin/files_for_gfz_cms/Kp_ap_Ap_SN_F107_nowcast.txt",
+      "sha256": "219b50aa7d357ceea8ade9e8f5c3c01c74ad1772c11432b2ba13e65b6bb91606"
+    },
+    {
+      "url": "https://services.swpc.noaa.gov/text/45-day-forecast.txt",
+      "sha256": "b35d18cd8fc96e985614786d5173a2f86d9cce50d0a3db9104da5079570e1e11"
+    },
+    {
+      "url": "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json",
+      "sha256": "6e5764c5b40fd6554a11a843830d0798a753b5296f0a61c98eccfb81dcf78043"
+    }
+  ],
+  "referenceFrameGate": {
+    "referenceRmsKm": 2.1564352877386,
+    "limitKm": 5,
+    "source": "local captured SupGP; no raw row persisted"
+  },
+  "costContext": {
+    "cpus": 28,
+    "cpuModel": "Apple M3 Ultra",
+    "loadAverage": [
+      50.40869140625,
+      53.1513671875,
+      50.470703125
+    ],
+    "browser": "153.0.8010.12",
+    "cpuMeasurement": "CDP cumulative CPU seconds for this owned browser and its children; includes invocation overhead"
+  },
+  "warmReplay": {
+    "cpuSeconds": 14.093271000000001,
+    "wallSeconds": 14.176509290999995,
+    "rmsKm": 0.3102511224241273,
+    "kind": "same-epoch replay; previous-cycle state must first be propagated to the new source epoch by FFM"
+  },
+  "joinRefusal": "PASS",
+  "maneuverSegmentation": "PASS",
+  "maneuverFits": [
+    {
+      "rmsKm": 0.00012264958600101996,
+      "ballistic": 0.0031002935197067885
+    },
+    {
+      "rmsKm": 0.00012400522491220082,
+      "ballistic": 0.003073302269998166
+    }
+  ],
+  "oemCovariance": "PASS GCRF covariance retained identically from KVN and typed OEM",
+  "dcaMechanics": "PASS constant exp(s)=2 halves nonzero B_eff, same fitted trajectory",
+  "parity": "byte-identical headless browser/native WasmEdge; 2h, 3 iterations, constant DCA",
+  "medians": {
+    "absent": 0.29821243974041356,
+    "constant ln(2) mechanics": 0.2982124386128265
+  },
+  "aot": "PASS exact artifact, node WasmEdge 0.16.4"
+}

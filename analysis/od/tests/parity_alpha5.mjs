@@ -1,7 +1,8 @@
-// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of the OD fit's two-line output: the same fixture fitted
-// for catalog numbers on both sides of the five-digit limit and at the Alpha-5 ends, plus the one it must refuse.
-// Identical request bytes must give byte-identical outputs and the same exit class in every lane.
-//   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity_alpha5.mjs
+// Parity (browser and native WasmEdge; the owner waived the Docker leg on 2026-10-22, it is never started) of the OD fit's
+// two-line output: the same fixture fitted for catalog numbers on both sides of the five-digit limit and at the Alpha-5 ends,
+// plus the one it must refuse. Identical request bytes must give byte-identical outputs and the same exit class in every lane.
+// A failed run leaves the committed receipt untouched: assert, then write.
+//   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity_alpha5.mjs   (through headless-run: the browser lane)
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +20,8 @@ const fit = (noradCatId) => ({
 });
 const cases = [99999, 100000, 123456, 339999, 340000].map((norad) => ({ id: `fit-tle-${norad}`, request: fit(norad), expect: 'ok' }));
 const plan = await normalizeParityFixture({ name: 'analysis/od fit emitTle, Alpha-5 catalog numbers', cases });
-const report = await runParityHarness({ wasmPath, plan, timeoutMs: 600000, log: console.log });
+const report = await runParityHarness({ wasmPath, plan, lanes: ['browser', 'wasmedge'], timeoutMs: 600000, log: console.log });
 console.log(formatParityReport(report));
-fs.mkdirSync(new URL('../conformance/', import.meta.url), { recursive: true });
-fs.writeFileSync(new URL('../conformance/parity-alpha5.json', import.meta.url), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm' }, null, 2)}\n`);
 assert.equal(report.ok, true, JSON.stringify(report.failures));
+fs.mkdirSync(new URL('../conformance/', import.meta.url), { recursive: true });
+fs.writeFileSync(new URL('../conformance/parity-alpha5.json', import.meta.url), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' }, null, 2)}\n`);
