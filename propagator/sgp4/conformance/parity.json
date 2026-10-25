@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "propagator/sgp4",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde",
-  "moduleSha256": "18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde",
+  "artifactSha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
+  "moduleSha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 12,
-      "durationMs": 530
+      "durationMs": 716
     },
     {
       "lane": "wasmedge",
       "runs": 12,
-      "durationMs": 8910
+      "durationMs": 9978
     }
   ],
   "cases": [

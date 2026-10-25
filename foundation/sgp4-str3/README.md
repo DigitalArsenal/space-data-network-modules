@@ -31,6 +31,11 @@ and the black-box findings for what the sources leave open (a''o by Kepler's law
 - Against the reference, run only as a black box (element sets in, states out), on the 33 sets of the paper's Appendix
   D and the report's two cases, both modes: every error trap at the same samples; non-resonant sets within 1.2e-6 m,
   resonant ones within 2.3e-6 m once the epoch is rounded as the reference rounds it (one double Julian date).
+- Near 180 degrees: AIAA 2006-6753 VI.A drops the solar SH term within 3 degrees of 180 as well as below 3 degrees; the
+  improved mode does, the AFSPC mode keeps it there, as the reference does: from 177 to 179.9999 degrees the AFSPC mode
+  reproduces the reference within 1e-6 m (dropping it put the module 1.6 to 356 km off). At exactly 0 and 180 degrees
+  the theory's divisors vanish (XLCOF's 1 + cos i, the node terms' sin i); the reference returns the origin for a
+  near-Earth set at 180 degrees, and both answers for a deep-space set there are rounding noise (up to 58 km apart).
 - The small-eccentricity rule at its boundary: C3 and the delta-M term are dropped for e <= 1e-4, as the reference
   drops them (STR#3 computes them for every e; AIAA 2006-6753 drops them below 1e-4 and is silent at equality).
   `tests/ecc-boundary.e2e.mjs` holds the base to the reference's recorded states at e = 0.00009, 0.0001 and 0.00011

@@ -319,9 +319,20 @@ extrapolate. The cislunar segments predict (1.9 / 9.8 / 48.4 km at days 1 / 3 / 
   (`src/osculating.inc`: EGM96 20 x 20, Sun and Moon, NRLMSISE-00 x exp(s) with B_eff, radial SRP; RK4 at
   OSCULATING_STEP_SECONDS 10 s; hour chunks above 150 km, a chunk that runs into the ground redone in minute chunks)
   to ALTITUDE_KM (80 km) within the horizon; a lowering set (USER_DEFINED_SDNAP_LOWERING with a negative _TAU0) decays
-  by its sustained transverse thrust with B_eff at its prior; the window (20; WINDOW_DENSITY_SIGMA,
-  WINDOW_CORRELATION_DAYS, WINDOW_BALLISTIC_SIGMA else the set's own B_eff sigma) with the time to go from the data
-  cutoff (the fit arc's end, _ARC_END_MIN after the set's epoch), ORBIT_LIFETIME from the set's epoch; one `$RDM`.
+  by its sustained transverse thrust with B_eff at its prior; the window (20): sigma_L^2 = L^2 [b0^2 + (K s)^2 +
+  sigma_d^2 g(L / tau)], L the time to go from the data cutoff (the fit arc's end, _ARC_END_MIN after the set's epoch),
+  sigma_d WINDOW_DENSITY_SIGMA (0.15), tau WINDOW_CORRELATION_DAYS (2 d), b0 the WINDOW_BALLISTIC_SIGMA default (0.05),
+  s the set's fitted USER_DEFINED_SDNAP_B_EFF_SIGMA / B_eff and K = 216 (the fit's formal sigma measures how well one
+  B_eff holds the arc and its scale is the fit residual; K times it carries the variability of B_eff over the horizon),
+  never more than L; a WINDOW_BALLISTIC_SIGMA that is set replaces the whole ballistic term; ORBIT_LIFETIME from the
+  set's epoch; one `$RDM`. Calibrated on the experiment's M29, 1,740 predictions of 57 reentered objects (16
+  CORDS-observed, 41 Space-Track TIP; observed space weather): the earlier window held 50.2 % of them within 1 sigma and
+  72.6 % within 2 sigma; K is the value that gives the pooled coverage the most room to the 60-75 % and 90-98 % bands,
+  and each object scored with a K calibrated on the other 56 gives 74.0 % and 90.4 % (Starlinks 67.3 / 87.9, other
+  objects 96.9 / 99.0, CORDS 77.6 / 86.3, TIP 72.9 / 91.5). That is the edge of what these predictions allow: nine
+  Starlinks (16 % of the objects), seven of them with a B_eff that changes 1.6 to 3.1 times between the sets far from
+  the reentry and those near it, make 63 % of the misses at 2 sigma. The scoring used observed space weather, so the
+  error of a space-weather forecast is not in the window (test/results/reentry-calibration.json).
 - `launch_set` (5.3.1): the first set of a `$LAM` INSERTION orbit or a `$BOV` burnout vector (Earth-fixed km and km/s,
   rotated to TEME by GMST; the schema states no unit, a radius outside 6,000-100,000 km is refused) by the inverse
   map, B_eff and AGOM priors (LAUNCH, 0.01 m^2/kg each, or a 'prior' `$OMM`'s), the (21) sigmas for a `$LAM`; an early `$OEM` goes to `fit` (THEORY SDNAP).

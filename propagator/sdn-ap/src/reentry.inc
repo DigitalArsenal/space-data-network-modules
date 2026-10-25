@@ -8,7 +8,8 @@
 // EGM96 20 x 20, Sun and Moon, NRLMSISE-00 x exp(s) with the set's B_eff,
 // SRP) down to the reentry altitude (80 km). The window (20): sigma_L^2 / L^2 =
 // (sigma_B/B)^2 + sigma_d^2 (2 tau / L)(1 - (tau / L)(1 - e^(-L/tau))), sigma_d
-// 15 %, tau 2 days, sigma_B/B from USER_DEFINED_SDNAP_B_EFF_SIGMA or 5 %. Out:
+// 15 %, tau 2 days, (sigma_B/B)^2 = b0^2 + (K s)^2 with b0 5 % and s the set's
+// fitted USER_DEFINED_SDNAP_B_EFF_SIGMA / B_eff (K below). Out:
 // one $RDM (BALLISTIC_COEFF = 1 / B_eff, kg/m^2).
 // -----------------------------------------------------------------------------
 
@@ -73,6 +74,15 @@ inline Handoff find_handoff(xpt::XpSat& s, double step, double horizon) {
   h.criterion = 0;
   return h;
 }
+
+/// The inflation of the fit's formal sigma in the ballistic term. The formal sigma of B_eff (USER_DEFINED_SDNAP_B_EFF_SIGMA
+/// / B_eff; 0.02 to 0.5 % for nine in ten of the 1,740 scored predictions) is the precision of one constant B_eff on the
+/// arc, and its scale is the fit's residual. The relative error of the time to go follows it at K = 216 times
+/// its size: the ballistic coefficient of the weeks ahead is not the arc's. K gives the pooled 1-sigma and
+/// 2-sigma coverage of the experiment's M29 predictions (1,740 predictions of 57 reentered objects, observed space
+/// weather) the most room to the 60-75 % and 90-98 % bands; scored out of fold (each object with a K calibrated on the
+/// other 56) the coverage is 74.0 % and 90.4 % (test/results/reentry-calibration.json).
+constexpr double kFitInflation = 216.0;
 
 /// The window's fractional 1-sigma (20).
 inline double window_fraction(double L_days, double sigma_b) {
@@ -160,14 +170,16 @@ extern "C" int reentry(void) {
     const uint8_t* p = f->payload;
     if (f->payload_length >= 12 && std::memcmp(p + 4, "$OMM", 4) != 0 && std::memcmp(p + 8, "$OMM", 4) == 0) p += 4;
     const OMM* rec = GetOMM(p);
-    // sigma_B / B: REENTRY.WINDOW_BALLISTIC_SIGMA when set, else the set's own fitted USER_DEFINED_SDNAP_B_EFF_SIGMA,
-    // else the default 0.05
-    double sigma_b = po.window_ballistic_sigma;
-    if (!po.window_ballistic_set)
+    // sigma_B / B: REENTRY.WINDOW_BALLISTIC_SIGMA when set; else b0 (that option's default, 0.05) with the set's own fitted
+    // USER_DEFINED_SDNAP_B_EFF_SIGMA / B_eff taken K times (reentry::kFitInflation) in quadrature
+    double sigma_b = po.window_ballistic_sigma, fit_sigma = 0.0;
+    if (!po.window_ballistic_set) {
       if (const auto* ud = rec->USER_DEFINED_PARAMETERS())
         for (const OMMUserDefinedParameter* q : *ud)
           if (q != nullptr && q->PARAM_NAME() != nullptr && q->PARAM_VALUE() != nullptr && std::strcmp(q->PARAM_NAME()->c_str(), "SDNAP_B_EFF_SIGMA") == 0 && row.bterm != 0.0)
-            sigma_b = std::fabs(std::strtod(q->PARAM_VALUE()->c_str(), nullptr) / row.bterm);
+            fit_sigma = std::fabs(std::strtod(q->PARAM_VALUE()->c_str(), nullptr) / row.bterm);
+      sigma_b = std::hypot(sigma_b, reentry::kFitInflation * fit_sigma);
+    }
     const Elements e = elements_of(row);
     if (e.theory != kTheorySgp4Xp && e.theory != kTheorySdnAp) { plugin_set_error("unsupported-theory", "Reentry is predicted for SGP4XP and SDN-AP sets."); return 3; }
     if (const int tc = pcf::check_set_theory(e.theory)) return tc;
@@ -217,9 +229,12 @@ extern "C" int reentry(void) {
     // the epoch, a 48-120 h arc kept the window's 1 sigma above 6 h in the last hours (M29)
     const double cutoff_min = e.arc_end_min > 0.0 && e.arc_end_min * 60.0 < h.t * 60.0 + t_r ? e.arc_end_min : 0.0;
     const double L_days = (h.t * 60.0 + t_r - cutoff_min * 60.0) / 86400.0, life_days = (h.t * 60.0 + t_r) / 86400.0;
-    const double frac_sigma = reentry::window_fraction(L_days, sigma_b);
+    // never more than the time to go: the reentry follows the data cutoff, so a 1-sigma window reaches back to it at most
+    // (97 of the 1,740 scored predictions, the roughest fits, ask for 1 to 10 L)
+    const double frac_unbounded = reentry::window_fraction(L_days, sigma_b), frac_sigma = std::fmin(frac_unbounded, 1.0);
     const double sigma_days = frac_sigma * L_days;
-    char t_text[48], w0[48], w1[48], hand[48], comment[400], method[260], source[160];
+    char t_text[48], w0[48], w1[48], hand[48], comment[400], method[460], source[160], capped[64] = "";
+    if (frac_unbounded > 1.0) std::snprintf(capped, sizeof capped, ", the formula's %.0f %% capped at the time to go", 100.0 * frac_unbounded);
     oem::iso_text(m.jd_whole, m.jd_frac, t_r / 60.0, t_text, sizeof t_text);
     oem::iso_text(m.jd_whole, m.jd_frac, t_r / 60.0 - sigma_days * kMinutesPerDay, w0, sizeof w0);
     oem::iso_text(m.jd_whole, m.jd_frac, t_r / 60.0 + sigma_days * kMinutesPerDay, w1, sizeof w1);
@@ -228,8 +243,8 @@ extern "C" int reentry(void) {
                                  "C4 the perigee-pass sawtooth of an eccentric orbit", "the theory refused the next node"};
     std::snprintf(comment, sizeof comment, "SDN-AP reentry (DESIGN 5.2): averaged until %.3f d after the set's epoch (%s; perigee %.1f km, eps1 %.4f), then osculating integration to %.0f km",
                   h.t / kMinutesPerDay, kWhy[h.criterion], h.perigee_km, h.eps1, po.reentry_altitude_km);
-    std::snprintf(method, sizeof method, "linear (DESIGN 5.2.3, eq. 20): sigma_B/B %.3f, density sigma %.2f with tau %.0f d; 1 sigma %.2f %% of the %.3f d to go from the data cutoff (%.3f d after the set's epoch)",
-                  sigma_b, po.window_density_sigma, po.window_correlation_days, 100.0 * frac_sigma, L_days, cutoff_min / kMinutesPerDay);
+    std::snprintf(method, sizeof method, "linear (DESIGN 5.2.3, eq. 20): sigma_B/B %.3f (the fit's %.2e x %.0f beside the %.3f floor), density sigma %.2f with tau %.0f d; 1 sigma %.2f %% of the %.3f d to go from the data cutoff%s (%.3f d after the set's epoch)",
+                  sigma_b, fit_sigma, reentry::kFitInflation, po.window_ballistic_sigma, po.window_density_sigma, po.window_correlation_days, 100.0 * frac_sigma, L_days, capped, cutoff_min / kMinutesPerDay);
     std::snprintf(source, sizeof source, "SDN-AP set of epoch %s (B_eff %.6g m^2/kg)", rec->EPOCH() != nullptr ? rec->EPOCH()->c_str() : "?", e.bterm);
     flatbuffers::FlatBufferBuilder fbb(1024);
     const auto s_vers = fbb.CreateString("1.0");
