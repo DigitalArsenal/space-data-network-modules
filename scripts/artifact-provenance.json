@@ -428,17 +428,14 @@
       }
     },
     "analysis/catalog-composer/dist/isomorphic/module.wasm": {
-      "sha256": "02e3bc2baf7e2697306f6f975953be77c2e5b195417025bd037c5b778bd4ea38",
-      "bytes": 6850489,
+      "sha256": "5b5410a32c89b4bbf3083b67bb36bef89bf872d88e6f680394f3088a4580c8c5",
+      "bytes": 6850805,
       "module": "analysis/catalog-composer",
-      "lastCommit": "945d386ae7346e29a320bb91d6245a174f815557",
-      "lastCommitDate": "2026-10-25T02:20:21-04:00",
+      "lastCommit": "7fdec95df1ff6629619d16561ccb7a3947ccc27b",
+      "lastCommitDate": "2026-10-25T07:38:08-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -5002,17 +4999,14 @@
       }
     },
     "propagator/ffm/dist/browser/module.wasm": {
-      "sha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
-      "bytes": 2635446,
+      "sha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
+      "bytes": 2648613,
       "module": "propagator/ffm",
-      "lastCommit": "d369a33cbe030665d175e7a09c05cd5586c90511",
-      "lastCommitDate": "2026-10-25T01:21:08-04:00",
+      "lastCommit": "f475b3102ebf5eafb1da0bac3e3d484e00a259ec",
+      "lastCommitDate": "2026-10-25T05:58:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -5028,17 +5022,14 @@
       }
     },
     "propagator/ffm/dist/isomorphic/module.wasm": {
-      "sha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
-      "bytes": 2635446,
+      "sha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
+      "bytes": 2648613,
       "module": "propagator/ffm",
-      "lastCommit": "d369a33cbe030665d175e7a09c05cd5586c90511",
-      "lastCommitDate": "2026-10-25T01:21:08-04:00",
+      "lastCommit": "f475b3102ebf5eafb1da0bac3e3d484e00a259ec",
+      "lastCommitDate": "2026-10-25T05:58:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
