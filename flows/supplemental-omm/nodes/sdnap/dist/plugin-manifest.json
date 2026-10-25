@@ -1,0 +1,262 @@
+{
+  "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+  "name": "Supplemental OMM SDN-AP adapter",
+  "version": "1.0.0",
+  "description": "The two adapters around propagator/sdn-ap's fit in the Supplemental OMM flow (typed contracts 1.0: FlatBuffers only). prepare takes each source's SDS $OEM and emits it on `ephemeris` beside a $PCF (THEORY SDNAP) on `configuration`, one of each per invocation, so the fit's required configuration port is satisfied once per ephemeris. wrap takes the fit's $OMM (SDNAP, with COVARIANCE) and $OBD and emits each standard's IngestRequest (INGQ) on `<code>_meta` beside its size-prefixed record stream on `<code>`: SCHEMA, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public, RECONCILE Duplicates, PROVENANCE. No hostcalls.",
+  "pluginFamily": "orbit_determination",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "prepare",
+      "displayName": "Pair an ephemeris with the SDN-AP configuration",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "description": "SDS $OEM, one object per frame, from any of the flow's source modules.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM, one object per frame, from any of the flow's source modules."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "description": "The input $OEM, unchanged.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The input $OEM, unchanged."
+        },
+        {
+          "portId": "configuration",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "description": "A $PCF 1.0 with THEORY SDNAP and every table at its default: what propagator/sdn-ap fit reads.",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A $PCF 1.0 with THEORY SDNAP and every table at its default: what propagator/sdn-ap fit reads."
+        }
+      ]
+    },
+    {
+      "methodId": "wrap",
+      "displayName": "File the SDN-AP fit",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "description": "The fit's $OMM (MEAN_ELEMENT_THEORY SDNAP, with COVARIANCE).",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The fit's $OMM (MEAN_ELEMENT_THEORY SDNAP, with COVARIANCE)."
+        },
+        {
+          "portId": "determination",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd",
+              "description": "The fit's $OBD.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The fit's $OBD."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "description": "IngestRequest filing the omm stream: SCHEMA OMM.fbs, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "IngestRequest filing the omm stream: SCHEMA OMM.fbs, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-record-stream",
+              "description": "Size-prefixed $OMM records.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $OMM records."
+        },
+        {
+          "portId": "obd_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "description": "IngestRequest filing the obd stream.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "IngestRequest filing the obd stream."
+        },
+        {
+          "portId": "obd",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd-record-stream",
+              "description": "Size-prefixed $OBD records.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Size-prefixed $OBD records."
+        }
+      ]
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "PCF.fbs",
+      "fileIdentifier": "$PCF",
+      "rootTypeName": "PCF"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OBD.fbs",
+      "fileIdentifier": "$OBD",
+      "rootTypeName": "OBD"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "supplemental-omm-sdnap-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "Each method maps one frame set to its output frames in one pass; the node holds no state and creates no thread."
+  }
+}
