@@ -275,6 +275,7 @@ double density(const Vec3& r,const timesys::Instant& jd,const ForceModelSet& f,c
         case DragModelType::JB2008:return JB2008DensityAt(r,jd,atmosphereJD,axes,weather);
         case DragModelType::JacchiaRoberts:return JacchiaRobertsDensityAt(r,jd,atmosphereJD,axes,weather);
         case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,weather).density;
+        case DragModelType::MarsExponential:return 0;   // unreachable: configError refuses a set about another body
     }
     return 0;
 }
@@ -351,6 +352,8 @@ V earthRadiation(const V& r,const timesys::Instant& jd,const ForceModelSet& f) {
 }
 
 const char* configError(const ForceModelSet& f) {
+    if(f.centralBodyNaifId!=399)
+        return "ANALYTIC STM: the partials are the Earth's; a set about the Moon or Mars propagates the state only";
     if(f.useThermalReradiation || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
         return "ANALYTIC STM: thermal, pole tide, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
     if(f.useSRP && f.srp.model!=SRPModelType::Cannonball && f.srp.model!=SRPModelType::GnssBoxWing)

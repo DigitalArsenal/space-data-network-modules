@@ -241,7 +241,8 @@ enum class DragModelType {
     NRLMSISE00,     ///< NRLMSISE-00 empirical model
     JB2008,         ///< Jacchia-Bowman 2008
     DTM2020,        ///< Drag Temperature Model 2020
-    JacchiaRoberts  ///< Jacchia-Roberts (Roberts 1971, J71 constants; lib/jacchia_roberts.h)
+    JacchiaRoberts, ///< Jacchia-Roberts (Roberts 1971, J71 constants; lib/jacchia_roberts.h)
+    MarsExponential ///< Mars's banded exponential atmosphere, turning with the planet (lib/planetary_fields.h); about Mars only
 };
 
 /// Atmospheric drag configuration
@@ -807,8 +808,9 @@ struct PlanetaryFieldConfig {
 };
 
 /// A third body's harmonic field, not only its point mass, acting on the satellite (extended third-body gravity):
-/// the Moon's GRGM660PRIM on an Earth orbiter, the Earth's EGM2008 (degree 2 to 70) on a lunar orbiter. degree 0
-/// (the default) is the point mass alone, which the third-body list already holds.
+/// the Moon's GRGM660PRIM (degree 2 to 150) on an Earth orbiter, the Earth's EGM2008 (degree 2 to 70) on a lunar orbiter,
+/// each when that body is in the third-body list (PCFForceModel THIRD_BODY_MAXIMUM_DEGREE and _ORDER). degree 0 (the
+/// default) is the point mass alone, which the third-body list already holds.
 struct ThirdBodyFieldConfig {
     uint16_t degree{0};
     uint16_t order{0};
@@ -847,7 +849,8 @@ struct ForceModelSet {
     int centralBodyNaifId{399};
     PlanetaryFieldConfig planetary;
     /// The harmonics (degree 2 up) of the Moon's field on an Earth orbiter, or of the Earth's on a lunar orbiter, at
-    /// this truncation, added to their point masses; ThirdBodyHarmonics below. Degree 0: point masses only.
+    /// this truncation, added to that body's point mass when it is in the third-body list; ThirdBodyHarmonics below.
+    /// Degree 0: point masses only.
     ThirdBodyFieldConfig thirdBodyField;
 
     // Gravity

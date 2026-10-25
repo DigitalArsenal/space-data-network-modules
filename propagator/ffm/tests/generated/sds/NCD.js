@@ -107,8 +107,40 @@ export class NCD {
         const offset = this.bb.__offset(this.bb_pos, 42);
         return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
     }
+    SELECT_START_TIME(optionalEncoding) {
+        const offset = this.bb.__offset(this.bb_pos, 44);
+        return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+    }
+    SELECT_STOP_TIME(optionalEncoding) {
+        const offset = this.bb.__offset(this.bb_pos, 46);
+        return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+    }
+    SELECT_SAMPLE_INTERVAL_SECONDS() {
+        const offset = this.bb.__offset(this.bb_pos, 48);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    SELECT_SATELLITE_SYSTEMS(index, optionalEncoding) {
+        const offset = this.bb.__offset(this.bb_pos, 50);
+        return offset ? this.bb.__string(this.bb.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+    }
+    selectSatelliteSystemsLength() {
+        const offset = this.bb.__offset(this.bb_pos, 50);
+        return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+    }
+    SELECT_OBSERVATION_CODES(index, optionalEncoding) {
+        const offset = this.bb.__offset(this.bb_pos, 52);
+        return offset ? this.bb.__string(this.bb.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+    }
+    selectObservationCodesLength() {
+        const offset = this.bb.__offset(this.bb_pos, 52);
+        return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+    }
+    SELECT_CLOCK_ID() {
+        const offset = this.bb.__offset(this.bb_pos, 54);
+        return offset ? this.bb.readInt32(this.bb_pos + offset) : 0;
+    }
     static startNCD(builder) {
-        builder.startObject(20);
+        builder.startObject(26);
     }
     static addFormat(builder, FORMAT) {
         builder.addFieldInt8(0, FORMAT, ncdContainerFormat.UNSPECIFIED);
@@ -190,12 +222,50 @@ export class NCD {
     static addSourceCid(builder, SOURCE_CIDOffset) {
         builder.addFieldOffset(19, SOURCE_CIDOffset, 0);
     }
+    static addSelectStartTime(builder, SELECT_START_TIMEOffset) {
+        builder.addFieldOffset(20, SELECT_START_TIMEOffset, 0);
+    }
+    static addSelectStopTime(builder, SELECT_STOP_TIMEOffset) {
+        builder.addFieldOffset(21, SELECT_STOP_TIMEOffset, 0);
+    }
+    static addSelectSampleIntervalSeconds(builder, SELECT_SAMPLE_INTERVAL_SECONDS) {
+        builder.addFieldFloat64(22, SELECT_SAMPLE_INTERVAL_SECONDS, 0.0);
+    }
+    static addSelectSatelliteSystems(builder, SELECT_SATELLITE_SYSTEMSOffset) {
+        builder.addFieldOffset(23, SELECT_SATELLITE_SYSTEMSOffset, 0);
+    }
+    static createSelectSatelliteSystemsVector(builder, data) {
+        builder.startVector(4, data.length, 4);
+        for(let i = data.length - 1; i >= 0; i--){
+            builder.addOffset(data[i]);
+        }
+        return builder.endVector();
+    }
+    static startSelectSatelliteSystemsVector(builder, numElems) {
+        builder.startVector(4, numElems, 4);
+    }
+    static addSelectObservationCodes(builder, SELECT_OBSERVATION_CODESOffset) {
+        builder.addFieldOffset(24, SELECT_OBSERVATION_CODESOffset, 0);
+    }
+    static createSelectObservationCodesVector(builder, data) {
+        builder.startVector(4, data.length, 4);
+        for(let i = data.length - 1; i >= 0; i--){
+            builder.addOffset(data[i]);
+        }
+        return builder.endVector();
+    }
+    static startSelectObservationCodesVector(builder, numElems) {
+        builder.startVector(4, numElems, 4);
+    }
+    static addSelectClockId(builder, SELECT_CLOCK_ID) {
+        builder.addFieldInt32(25, SELECT_CLOCK_ID, 0);
+    }
     static endNCD(builder) {
         const offset = builder.endObject();
         return offset;
     }
     unpack() {
-        return new NCDT(this.FORMAT(), this.PROVIDER_DEFINED_FORMAT_NAME(), this.FORMAT_VERSION(), this.PRODUCER(), this.CREATION_DATE(), this.ORIGINATOR(), this.INTERNAL_FILE_NAME(), this.bb.createScalarList(this.COMMENT_AREA.bind(this), this.commentAreaLength()), this.NATIVE_FRAME_NAME(), this.NATIVE_FRAME_ID(), this.NATIVE_TIME_SYSTEM(), this.bb.createObjList(this.SEGMENTS.bind(this), this.segmentsLength()), this.SP3_HEADER() !== null ? this.SP3_HEADER().unpack() : null, this.SCENARIO_CONTAINER() !== null ? this.SCENARIO_CONTAINER().unpack() : null, this.CODE_500_HEADER() !== null ? this.CODE_500_HEADER().unpack() : null, this.START_TIME(), this.STOP_TIME(), this.SOURCE_BYTE_LENGTH(), this.SOURCE_SHA256(), this.SOURCE_CID());
+        return new NCDT(this.FORMAT(), this.PROVIDER_DEFINED_FORMAT_NAME(), this.FORMAT_VERSION(), this.PRODUCER(), this.CREATION_DATE(), this.ORIGINATOR(), this.INTERNAL_FILE_NAME(), this.bb.createScalarList(this.COMMENT_AREA.bind(this), this.commentAreaLength()), this.NATIVE_FRAME_NAME(), this.NATIVE_FRAME_ID(), this.NATIVE_TIME_SYSTEM(), this.bb.createObjList(this.SEGMENTS.bind(this), this.segmentsLength()), this.SP3_HEADER() !== null ? this.SP3_HEADER().unpack() : null, this.SCENARIO_CONTAINER() !== null ? this.SCENARIO_CONTAINER().unpack() : null, this.CODE_500_HEADER() !== null ? this.CODE_500_HEADER().unpack() : null, this.START_TIME(), this.STOP_TIME(), this.SOURCE_BYTE_LENGTH(), this.SOURCE_SHA256(), this.SOURCE_CID(), this.SELECT_START_TIME(), this.SELECT_STOP_TIME(), this.SELECT_SAMPLE_INTERVAL_SECONDS(), this.bb.createScalarList(this.SELECT_SATELLITE_SYSTEMS.bind(this), this.selectSatelliteSystemsLength()), this.bb.createScalarList(this.SELECT_OBSERVATION_CODES.bind(this), this.selectObservationCodesLength()), this.SELECT_CLOCK_ID());
     }
     unpackTo(_o) {
         _o.FORMAT = this.FORMAT();
@@ -218,6 +288,12 @@ export class NCD {
         _o.SOURCE_BYTE_LENGTH = this.SOURCE_BYTE_LENGTH();
         _o.SOURCE_SHA256 = this.SOURCE_SHA256();
         _o.SOURCE_CID = this.SOURCE_CID();
+        _o.SELECT_START_TIME = this.SELECT_START_TIME();
+        _o.SELECT_STOP_TIME = this.SELECT_STOP_TIME();
+        _o.SELECT_SAMPLE_INTERVAL_SECONDS = this.SELECT_SAMPLE_INTERVAL_SECONDS();
+        _o.SELECT_SATELLITE_SYSTEMS = this.bb.createScalarList(this.SELECT_SATELLITE_SYSTEMS.bind(this), this.selectSatelliteSystemsLength());
+        _o.SELECT_OBSERVATION_CODES = this.bb.createScalarList(this.SELECT_OBSERVATION_CODES.bind(this), this.selectObservationCodesLength());
+        _o.SELECT_CLOCK_ID = this.SELECT_CLOCK_ID();
     }
 }
 export class NCDT {
@@ -241,7 +317,13 @@ export class NCDT {
     SOURCE_BYTE_LENGTH;
     SOURCE_SHA256;
     SOURCE_CID;
-    constructor(FORMAT = ncdContainerFormat.UNSPECIFIED, PROVIDER_DEFINED_FORMAT_NAME = null, FORMAT_VERSION = null, PRODUCER = null, CREATION_DATE = null, ORIGINATOR = null, INTERNAL_FILE_NAME = null, COMMENT_AREA = [], NATIVE_FRAME_NAME = null, NATIVE_FRAME_ID = 0, NATIVE_TIME_SYSTEM = null, SEGMENTS = [], SP3_HEADER = null, SCENARIO_CONTAINER = null, CODE_500_HEADER = null, START_TIME = null, STOP_TIME = null, SOURCE_BYTE_LENGTH = BigInt('0'), SOURCE_SHA256 = null, SOURCE_CID = null){
+    SELECT_START_TIME;
+    SELECT_STOP_TIME;
+    SELECT_SAMPLE_INTERVAL_SECONDS;
+    SELECT_SATELLITE_SYSTEMS;
+    SELECT_OBSERVATION_CODES;
+    SELECT_CLOCK_ID;
+    constructor(FORMAT = ncdContainerFormat.UNSPECIFIED, PROVIDER_DEFINED_FORMAT_NAME = null, FORMAT_VERSION = null, PRODUCER = null, CREATION_DATE = null, ORIGINATOR = null, INTERNAL_FILE_NAME = null, COMMENT_AREA = [], NATIVE_FRAME_NAME = null, NATIVE_FRAME_ID = 0, NATIVE_TIME_SYSTEM = null, SEGMENTS = [], SP3_HEADER = null, SCENARIO_CONTAINER = null, CODE_500_HEADER = null, START_TIME = null, STOP_TIME = null, SOURCE_BYTE_LENGTH = BigInt('0'), SOURCE_SHA256 = null, SOURCE_CID = null, SELECT_START_TIME = null, SELECT_STOP_TIME = null, SELECT_SAMPLE_INTERVAL_SECONDS = 0.0, SELECT_SATELLITE_SYSTEMS = [], SELECT_OBSERVATION_CODES = [], SELECT_CLOCK_ID = 0){
         this.FORMAT = FORMAT;
         this.PROVIDER_DEFINED_FORMAT_NAME = PROVIDER_DEFINED_FORMAT_NAME;
         this.FORMAT_VERSION = FORMAT_VERSION;
@@ -262,6 +344,12 @@ export class NCDT {
         this.SOURCE_BYTE_LENGTH = SOURCE_BYTE_LENGTH;
         this.SOURCE_SHA256 = SOURCE_SHA256;
         this.SOURCE_CID = SOURCE_CID;
+        this.SELECT_START_TIME = SELECT_START_TIME;
+        this.SELECT_STOP_TIME = SELECT_STOP_TIME;
+        this.SELECT_SAMPLE_INTERVAL_SECONDS = SELECT_SAMPLE_INTERVAL_SECONDS;
+        this.SELECT_SATELLITE_SYSTEMS = SELECT_SATELLITE_SYSTEMS;
+        this.SELECT_OBSERVATION_CODES = SELECT_OBSERVATION_CODES;
+        this.SELECT_CLOCK_ID = SELECT_CLOCK_ID;
     }
     pack(builder) {
         const PROVIDER_DEFINED_FORMAT_NAME = this.PROVIDER_DEFINED_FORMAT_NAME !== null ? builder.createString(this.PROVIDER_DEFINED_FORMAT_NAME) : 0;
@@ -281,6 +369,10 @@ export class NCDT {
         const STOP_TIME = this.STOP_TIME !== null ? builder.createString(this.STOP_TIME) : 0;
         const SOURCE_SHA256 = this.SOURCE_SHA256 !== null ? builder.createString(this.SOURCE_SHA256) : 0;
         const SOURCE_CID = this.SOURCE_CID !== null ? builder.createString(this.SOURCE_CID) : 0;
+        const SELECT_START_TIME = this.SELECT_START_TIME !== null ? builder.createString(this.SELECT_START_TIME) : 0;
+        const SELECT_STOP_TIME = this.SELECT_STOP_TIME !== null ? builder.createString(this.SELECT_STOP_TIME) : 0;
+        const SELECT_SATELLITE_SYSTEMS = NCD.createSelectSatelliteSystemsVector(builder, builder.createObjectOffsetList(this.SELECT_SATELLITE_SYSTEMS));
+        const SELECT_OBSERVATION_CODES = NCD.createSelectObservationCodesVector(builder, builder.createObjectOffsetList(this.SELECT_OBSERVATION_CODES));
         NCD.startNCD(builder);
         NCD.addFormat(builder, this.FORMAT);
         NCD.addProviderDefinedFormatName(builder, PROVIDER_DEFINED_FORMAT_NAME);
@@ -302,6 +394,12 @@ export class NCDT {
         NCD.addSourceByteLength(builder, this.SOURCE_BYTE_LENGTH);
         NCD.addSourceSha256(builder, SOURCE_SHA256);
         NCD.addSourceCid(builder, SOURCE_CID);
+        NCD.addSelectStartTime(builder, SELECT_START_TIME);
+        NCD.addSelectStopTime(builder, SELECT_STOP_TIME);
+        NCD.addSelectSampleIntervalSeconds(builder, this.SELECT_SAMPLE_INTERVAL_SECONDS);
+        NCD.addSelectSatelliteSystems(builder, SELECT_SATELLITE_SYSTEMS);
+        NCD.addSelectObservationCodes(builder, SELECT_OBSERVATION_CODES);
+        NCD.addSelectClockId(builder, this.SELECT_CLOCK_ID);
         return NCD.endNCD(builder);
     }
 }

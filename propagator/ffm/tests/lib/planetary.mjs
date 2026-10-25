@@ -40,17 +40,18 @@ export function state(center, epoch, s) {
 
 // One execution request: the state at `epoch` propagated to `epoch + span` with a sample at every entry of `samples`
 // (TDB seconds). forces: { gm (km^3/s^2), degree, order, thirdBodies, massKg, areaM2 (the one cross-section both radiation
-// pressure and drag use), srp: {cr}, drag: {cd}, gravity }.
+// pressure and drag use), srp: {cr}, drag: {cd}, gravity, atmosphere, extra }. Each body's field and atmosphere are selected by
+// name: GRGM660PRIM for the Moon, MRO120F and MARS_EXPONENTIAL for Mars; `gravity` and `atmosphere` name another (the refusals).
 export function request({ center, epoch, initial, target, samples = [], forces, integrator = {} }) {
   const f = forces;
   const force = makeTable('PCFForceModel', {
-    GRAVITY_CHOICE: f.gravity ?? (center === MOON ? sds.pcfGravitySelection.GRGM660PRIM : sds.pcfGravitySelection.SPHERICAL_HARMONICS),
+    GRAVITY_CHOICE: f.gravity ?? (center === MOON ? sds.pcfGravitySelection.GRGM660PRIM : center === MARS ? sds.pcfGravitySelection.MRO120F : sds.pcfGravitySelection.SPHERICAL_HARMONICS),
     ENABLE_POINT_MASS: true, GRAVITATIONAL_PARAMETER: f.gm * 1e9, ENABLE_J2: false,
     MAXIMUM_DEGREE: f.degree, HAS_MAXIMUM_DEGREE: true, MAXIMUM_ORDER: f.order ?? f.degree, HAS_MAXIMUM_ORDER: true,
     ENABLE_THIRD_BODY: (f.thirdBodies ?? []).length > 0, THIRD_BODY_IDS: f.thirdBodies ?? [],
     ENABLE_SRP: !!f.srp, ENABLE_DRAG: !!f.drag, INITIAL_MASS_KG: f.massKg ?? 1000, AREA_M2: f.areaM2 ?? 10,
     REFLECTIVITY_COEFFICIENT: f.srp?.cr ?? 1.3, DRAG_COEFFICIENT: f.drag?.cd ?? 2.2,
-    ATMOSPHERE_MODEL: f.drag ? sds.pcfAtmosphereFamily.EXPONENTIAL : sds.pcfAtmosphereFamily.NRLMSISE00,
+    ATMOSPHERE_MODEL: f.atmosphere ?? (f.drag && center === MARS ? sds.pcfAtmosphereFamily.MARS_EXPONENTIAL : f.drag ? sds.pcfAtmosphereFamily.EXPONENTIAL : sds.pcfAtmosphereFamily.NRLMSISE00),
     EPHEMERIS_SOURCE: 'JPL_SPK', CENTRAL_BODY_NAIF_ID: center, ...(f.extra ?? {}) });
   if (f.maxTesseralDegree !== undefined) { force.MAXIMUM_TESSERAL_DEGREE = f.maxTesseralDegree; force.HAS_MAXIMUM_TESSERAL_DEGREE = true; }
   const tol = integrator.absM ?? 1e-6;

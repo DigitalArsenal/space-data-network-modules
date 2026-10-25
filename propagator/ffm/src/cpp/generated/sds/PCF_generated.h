@@ -824,11 +824,15 @@ enum class pcfGravitySelection : uint8_t {
   /// GRGM660PRIM (Lemoine et al. 2013, J. Geophys. Res. Planets 118), the
   /// Moon's field, in the Moon's principal-axis frame.
   GRGM660PRIM = 7,
+  /// MRO120F (Konopliv et al. 2020, Geophys. Res. Lett. 47,
+  /// doi:10.1029/2020GL090568), the Mars field, in the Mars-fixed frame of
+  /// its PDS label.
+  MRO120F = 8,
   MIN = INFER_FLAGS,
-  MAX = GRGM660PRIM
+  MAX = MRO120F
 };
 
-inline const pcfGravitySelection (&EnumValuespcfGravitySelection())[8] {
+inline const pcfGravitySelection (&EnumValuespcfGravitySelection())[9] {
   static const pcfGravitySelection values[] = {
     pcfGravitySelection::INFER_FLAGS,
     pcfGravitySelection::POINT_MASS,
@@ -837,13 +841,14 @@ inline const pcfGravitySelection (&EnumValuespcfGravitySelection())[8] {
     pcfGravitySelection::SPHERICAL_HARMONICS,
     pcfGravitySelection::EGM2008,
     pcfGravitySelection::EGM96,
-    pcfGravitySelection::GRGM660PRIM
+    pcfGravitySelection::GRGM660PRIM,
+    pcfGravitySelection::MRO120F
   };
   return values;
 }
 
 inline const char * const *EnumNamespcfGravitySelection() {
-  static const char * const names[9] = {
+  static const char * const names[10] = {
     "INFER_FLAGS",
     "POINT_MASS",
     "J2_ONLY",
@@ -852,13 +857,14 @@ inline const char * const *EnumNamespcfGravitySelection() {
     "EGM2008",
     "EGM96",
     "GRGM660PRIM",
+    "MRO120F",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamepcfGravitySelection(pcfGravitySelection e) {
-  if (::flatbuffers::IsOutRange(e, pcfGravitySelection::INFER_FLAGS, pcfGravitySelection::GRGM660PRIM)) return "";
+  if (::flatbuffers::IsOutRange(e, pcfGravitySelection::INFER_FLAGS, pcfGravitySelection::MRO120F)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamespcfGravitySelection()[index];
 }
@@ -880,11 +886,16 @@ enum class pcfAtmosphereFamily : uint8_t {
   /// Jacchia-Bowman 2008 (Bowman et al., AIAA 2008-6438): solar indices and
   /// Dst-derived temperature change from the request's JB2008 indices.
   JB2008 = 6,
+  /// Banded exponential atmosphere of Mars: the density falls as
+  /// exp(-(h - h0) / H) through altitude bands (Vallado, Fundamentals of
+  /// Astrodynamics and Applications, 4th ed., section 8.6), and it co-rotates
+  /// with Mars.
+  MARS_EXPONENTIAL = 7,
   MIN = UNSPECIFIED,
-  MAX = JB2008
+  MAX = MARS_EXPONENTIAL
 };
 
-inline const pcfAtmosphereFamily (&EnumValuespcfAtmosphereFamily())[7] {
+inline const pcfAtmosphereFamily (&EnumValuespcfAtmosphereFamily())[8] {
   static const pcfAtmosphereFamily values[] = {
     pcfAtmosphereFamily::UNSPECIFIED,
     pcfAtmosphereFamily::NRLMSISE00,
@@ -892,13 +903,14 @@ inline const pcfAtmosphereFamily (&EnumValuespcfAtmosphereFamily())[7] {
     pcfAtmosphereFamily::USSA1976,
     pcfAtmosphereFamily::HARRIS_PRIESTER,
     pcfAtmosphereFamily::JACCHIA_ROBERTS,
-    pcfAtmosphereFamily::JB2008
+    pcfAtmosphereFamily::JB2008,
+    pcfAtmosphereFamily::MARS_EXPONENTIAL
   };
   return values;
 }
 
 inline const char * const *EnumNamespcfAtmosphereFamily() {
-  static const char * const names[8] = {
+  static const char * const names[9] = {
     "UNSPECIFIED",
     "NRLMSISE00",
     "EXPONENTIAL",
@@ -906,13 +918,14 @@ inline const char * const *EnumNamespcfAtmosphereFamily() {
     "HARRIS_PRIESTER",
     "JACCHIA_ROBERTS",
     "JB2008",
+    "MARS_EXPONENTIAL",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamepcfAtmosphereFamily(pcfAtmosphereFamily e) {
-  if (::flatbuffers::IsOutRange(e, pcfAtmosphereFamily::UNSPECIFIED, pcfAtmosphereFamily::JB2008)) return "";
+  if (::flatbuffers::IsOutRange(e, pcfAtmosphereFamily::UNSPECIFIED, pcfAtmosphereFamily::MARS_EXPONENTIAL)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamespcfAtmosphereFamily()[index];
 }
@@ -3365,6 +3378,8 @@ struct PCFForceModelT : public ::flatbuffers::NativeTable {
   bool HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false;
   pcfNeutralWind NEUTRAL_WIND = pcfNeutralWind::NONE;
   std::unique_ptr<PCFEmpiricalTermsT> EMPIRICAL_TERMS{};
+  uint16_t THIRD_BODY_MAXIMUM_DEGREE = 0;
+  uint16_t THIRD_BODY_MAXIMUM_ORDER = 0;
   PCFForceModelT() = default;
   PCFForceModelT(const PCFForceModelT &o);
   PCFForceModelT(PCFForceModelT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3429,7 +3444,9 @@ struct PCFForceModel FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_DENSITY_CORRECTION_RELAXATION_HOURS = 96,
     VT_HAS_DENSITY_CORRECTION_RELAXATION_HOURS = 98,
     VT_NEUTRAL_WIND = 100,
-    VT_EMPIRICAL_TERMS = 102
+    VT_EMPIRICAL_TERMS = 102,
+    VT_THIRD_BODY_MAXIMUM_DEGREE = 104,
+    VT_THIRD_BODY_MAXIMUM_ORDER = 106
   };
   /// Gravity field. Default INFER_FLAGS (the ENABLE_ flags decide).
   pcfGravitySelection GRAVITY_CHOICE() const {
@@ -3664,6 +3681,17 @@ struct PCFForceModel FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const PCFEmpiricalTerms *EMPIRICAL_TERMS() const {
     return GetPointer<const PCFEmpiricalTerms *>(VT_EMPIRICAL_TERMS);
   }
+  /// Highest degree of the harmonic field of the third body that has one (the
+  /// Moon's on an Earth orbiter, the Earth's on a lunar orbiter); dimensionless.
+  /// The field's acceleration at the frame origin is subtracted. Default 0:
+  /// third bodies are point masses only.
+  uint16_t THIRD_BODY_MAXIMUM_DEGREE() const {
+    return GetField<uint16_t>(VT_THIRD_BODY_MAXIMUM_DEGREE, 0);
+  }
+  /// Highest order of that field; dimensionless. Default 0.
+  uint16_t THIRD_BODY_MAXIMUM_ORDER() const {
+    return GetField<uint16_t>(VT_THIRD_BODY_MAXIMUM_ORDER, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3722,6 +3750,8 @@ struct PCFForceModel FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_NEUTRAL_WIND, 1) &&
            VerifyOffset(verifier, VT_EMPIRICAL_TERMS) &&
            verifier.VerifyTable(EMPIRICAL_TERMS()) &&
+           VerifyField<uint16_t>(verifier, VT_THIRD_BODY_MAXIMUM_DEGREE, 2) &&
+           VerifyField<uint16_t>(verifier, VT_THIRD_BODY_MAXIMUM_ORDER, 2) &&
            verifier.EndTable();
   }
   PCFForceModelT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3883,6 +3913,12 @@ struct PCFForceModelBuilder {
   void add_EMPIRICAL_TERMS(::flatbuffers::Offset<PCFEmpiricalTerms> EMPIRICAL_TERMS) {
     fbb_.AddOffset(PCFForceModel::VT_EMPIRICAL_TERMS, EMPIRICAL_TERMS);
   }
+  void add_THIRD_BODY_MAXIMUM_DEGREE(uint16_t THIRD_BODY_MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint16_t>(PCFForceModel::VT_THIRD_BODY_MAXIMUM_DEGREE, THIRD_BODY_MAXIMUM_DEGREE, 0);
+  }
+  void add_THIRD_BODY_MAXIMUM_ORDER(uint16_t THIRD_BODY_MAXIMUM_ORDER) {
+    fbb_.AddElement<uint16_t>(PCFForceModel::VT_THIRD_BODY_MAXIMUM_ORDER, THIRD_BODY_MAXIMUM_ORDER, 0);
+  }
   explicit PCFForceModelBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3946,7 +3982,9 @@ inline ::flatbuffers::Offset<PCFForceModel> CreatePCFForceModel(
     double DENSITY_CORRECTION_RELAXATION_HOURS = 0.0,
     bool HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false,
     pcfNeutralWind NEUTRAL_WIND = pcfNeutralWind::NONE,
-    ::flatbuffers::Offset<PCFEmpiricalTerms> EMPIRICAL_TERMS = 0) {
+    ::flatbuffers::Offset<PCFEmpiricalTerms> EMPIRICAL_TERMS = 0,
+    uint16_t THIRD_BODY_MAXIMUM_DEGREE = 0,
+    uint16_t THIRD_BODY_MAXIMUM_ORDER = 0) {
   PCFForceModelBuilder builder_(_fbb);
   builder_.add_DENSITY_CORRECTION_RELAXATION_HOURS(DENSITY_CORRECTION_RELAXATION_HOURS);
   builder_.add_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
@@ -3964,6 +4002,8 @@ inline ::flatbuffers::Offset<PCFForceModel> CreatePCFForceModel(
   builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
   builder_.add_WEATHER(WEATHER);
   builder_.add_THIRD_BODY_IDS(THIRD_BODY_IDS);
+  builder_.add_THIRD_BODY_MAXIMUM_ORDER(THIRD_BODY_MAXIMUM_ORDER);
+  builder_.add_THIRD_BODY_MAXIMUM_DEGREE(THIRD_BODY_MAXIMUM_DEGREE);
   builder_.add_OCEAN_TIDE_MAXIMUM_ORDER(OCEAN_TIDE_MAXIMUM_ORDER);
   builder_.add_OCEAN_TIDE_MAXIMUM_DEGREE(OCEAN_TIDE_MAXIMUM_DEGREE);
   builder_.add_MAXIMUM_TESSERAL_DEGREE(MAXIMUM_TESSERAL_DEGREE);
@@ -4057,7 +4097,9 @@ inline ::flatbuffers::Offset<PCFForceModel> CreatePCFForceModelDirect(
     double DENSITY_CORRECTION_RELAXATION_HOURS = 0.0,
     bool HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false,
     pcfNeutralWind NEUTRAL_WIND = pcfNeutralWind::NONE,
-    ::flatbuffers::Offset<PCFEmpiricalTerms> EMPIRICAL_TERMS = 0) {
+    ::flatbuffers::Offset<PCFEmpiricalTerms> EMPIRICAL_TERMS = 0,
+    uint16_t THIRD_BODY_MAXIMUM_DEGREE = 0,
+    uint16_t THIRD_BODY_MAXIMUM_ORDER = 0) {
   auto THIRD_BODY_IDS__ = THIRD_BODY_IDS ? _fbb.CreateVector<int32_t>(*THIRD_BODY_IDS) : 0;
   auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
   return CreatePCFForceModel(
@@ -4111,7 +4153,9 @@ inline ::flatbuffers::Offset<PCFForceModel> CreatePCFForceModelDirect(
       DENSITY_CORRECTION_RELAXATION_HOURS,
       HAS_DENSITY_CORRECTION_RELAXATION_HOURS,
       NEUTRAL_WIND,
-      EMPIRICAL_TERMS);
+      EMPIRICAL_TERMS,
+      THIRD_BODY_MAXIMUM_DEGREE,
+      THIRD_BODY_MAXIMUM_ORDER);
 }
 
 ::flatbuffers::Offset<PCFForceModel> CreatePCFForceModel(::flatbuffers::FlatBufferBuilder &_fbb, const PCFForceModelT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5187,7 +5231,9 @@ inline PCFForceModelT::PCFForceModelT(const PCFForceModelT &o)
         DENSITY_CORRECTION_RELAXATION_HOURS(o.DENSITY_CORRECTION_RELAXATION_HOURS),
         HAS_DENSITY_CORRECTION_RELAXATION_HOURS(o.HAS_DENSITY_CORRECTION_RELAXATION_HOURS),
         NEUTRAL_WIND(o.NEUTRAL_WIND),
-        EMPIRICAL_TERMS((o.EMPIRICAL_TERMS) ? new PCFEmpiricalTermsT(*o.EMPIRICAL_TERMS) : nullptr) {
+        EMPIRICAL_TERMS((o.EMPIRICAL_TERMS) ? new PCFEmpiricalTermsT(*o.EMPIRICAL_TERMS) : nullptr),
+        THIRD_BODY_MAXIMUM_DEGREE(o.THIRD_BODY_MAXIMUM_DEGREE),
+        THIRD_BODY_MAXIMUM_ORDER(o.THIRD_BODY_MAXIMUM_ORDER) {
 }
 
 inline PCFForceModelT &PCFForceModelT::operator=(PCFForceModelT o) FLATBUFFERS_NOEXCEPT {
@@ -5241,6 +5287,8 @@ inline PCFForceModelT &PCFForceModelT::operator=(PCFForceModelT o) FLATBUFFERS_N
   std::swap(HAS_DENSITY_CORRECTION_RELAXATION_HOURS, o.HAS_DENSITY_CORRECTION_RELAXATION_HOURS);
   std::swap(NEUTRAL_WIND, o.NEUTRAL_WIND);
   std::swap(EMPIRICAL_TERMS, o.EMPIRICAL_TERMS);
+  std::swap(THIRD_BODY_MAXIMUM_DEGREE, o.THIRD_BODY_MAXIMUM_DEGREE);
+  std::swap(THIRD_BODY_MAXIMUM_ORDER, o.THIRD_BODY_MAXIMUM_ORDER);
   return *this;
 }
 
@@ -5303,6 +5351,8 @@ inline void PCFForceModel::UnPackTo(PCFForceModelT *_o, const ::flatbuffers::res
   { auto _e = HAS_DENSITY_CORRECTION_RELAXATION_HOURS(); _o->HAS_DENSITY_CORRECTION_RELAXATION_HOURS = _e; }
   { auto _e = NEUTRAL_WIND(); _o->NEUTRAL_WIND = _e; }
   { auto _e = EMPIRICAL_TERMS(); if (_e) { if(_o->EMPIRICAL_TERMS) { _e->UnPackTo(_o->EMPIRICAL_TERMS.get(), _resolver); } else { _o->EMPIRICAL_TERMS = std::unique_ptr<PCFEmpiricalTermsT>(_e->UnPack(_resolver)); } } else if (_o->EMPIRICAL_TERMS) { _o->EMPIRICAL_TERMS.reset(); } }
+  { auto _e = THIRD_BODY_MAXIMUM_DEGREE(); _o->THIRD_BODY_MAXIMUM_DEGREE = _e; }
+  { auto _e = THIRD_BODY_MAXIMUM_ORDER(); _o->THIRD_BODY_MAXIMUM_ORDER = _e; }
 }
 
 inline ::flatbuffers::Offset<PCFForceModel> CreatePCFForceModel(::flatbuffers::FlatBufferBuilder &_fbb, const PCFForceModelT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5363,6 +5413,8 @@ inline ::flatbuffers::Offset<PCFForceModel> PCFForceModel::Pack(::flatbuffers::F
   auto _HAS_DENSITY_CORRECTION_RELAXATION_HOURS = _o->HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
   auto _NEUTRAL_WIND = _o->NEUTRAL_WIND;
   auto _EMPIRICAL_TERMS = _o->EMPIRICAL_TERMS ? CreatePCFEmpiricalTerms(_fbb, _o->EMPIRICAL_TERMS.get(), _rehasher) : 0;
+  auto _THIRD_BODY_MAXIMUM_DEGREE = _o->THIRD_BODY_MAXIMUM_DEGREE;
+  auto _THIRD_BODY_MAXIMUM_ORDER = _o->THIRD_BODY_MAXIMUM_ORDER;
   return CreatePCFForceModel(
       _fbb,
       _GRAVITY_CHOICE,
@@ -5414,7 +5466,9 @@ inline ::flatbuffers::Offset<PCFForceModel> PCFForceModel::Pack(::flatbuffers::F
       _DENSITY_CORRECTION_RELAXATION_HOURS,
       _HAS_DENSITY_CORRECTION_RELAXATION_HOURS,
       _NEUTRAL_WIND,
-      _EMPIRICAL_TERMS);
+      _EMPIRICAL_TERMS,
+      _THIRD_BODY_MAXIMUM_DEGREE,
+      _THIRD_BODY_MAXIMUM_ORDER);
 }
 
 inline PCFT::PCFT(const PCFT &o)

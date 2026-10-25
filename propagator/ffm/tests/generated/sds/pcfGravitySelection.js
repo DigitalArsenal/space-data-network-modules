@@ -7,5 +7,6 @@ export var pcfGravitySelection = /*#__PURE__*/ function(pcfGravitySelection) {
     pcfGravitySelection[pcfGravitySelection["EGM2008"] = 5] = "EGM2008";
     pcfGravitySelection[pcfGravitySelection["EGM96"] = 6] = "EGM96";
     pcfGravitySelection[pcfGravitySelection["GRGM660PRIM"] = 7] = "GRGM660PRIM";
+    pcfGravitySelection[pcfGravitySelection["MRO120F"] = 8] = "MRO120F";
     return pcfGravitySelection;
 }({});

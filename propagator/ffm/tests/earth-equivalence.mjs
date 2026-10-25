@@ -68,13 +68,18 @@ function* edits(table, trail = [], depth = 0) {
   for (const key of Object.keys(table)) {
     const v = table[key];
     if (depth === 0 && key === 'FORCES') { yield [['FORCES'], null]; yield* edits(v, ['FORCES'], 1); continue; }
-    if (key === 'CENTRAL_BODY_NAIF_ID' || key.startsWith('CENTRAL_BODY')) continue;  // the Moon and Mars: what this change adds
+    // What the planetary changes add is not the Earth's to compare: the central body, the third body's field, the Moon's and
+    // Mars's field and atmosphere selections (their refusals about the Earth are worded for them).
+    if (key.startsWith('CENTRAL_BODY') || key.startsWith('THIRD_BODY_MAXIMUM_')) continue;
     if (v && typeof v === 'object' && !Array.isArray(v) && !ArrayBuffer.isView(v)) {
       yield [[...trail, key], null];
       if (depth < 3) yield* edits(v, [...trail, key], depth + 1);
       continue;
     }
-    for (const x of valuesFor(v, depth > 1)) yield [[...trail, key], x];
+    for (const x of valuesFor(v, depth > 1)) {
+      if ((key === 'GRAVITY_CHOICE' && (x === 7 || x === 8)) || (key === 'ATMOSPHERE_MODEL' && x === 7)) continue;
+      yield [[...trail, key], x];
+    }
     if (key === 'THIRD_BODY_IDS') for (const id of BODY_IDS) yield [[...trail, key], [id]];
   }
 }

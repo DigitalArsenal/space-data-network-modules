@@ -467,6 +467,10 @@ std::unique_ptr<ResidentDynamics> ResidentDynamics::configure(const Inputs& in, 
     if (!decodeResidentState(initial, probe, error, &axes)) return nullptr;
     if (axes != coords::Frame::GCRF) { prwError(error, "unsupported-frame: A resident configuration uses Earth-centered ICRF axes (GCRF)."); return nullptr; }
     if (!parseExecution(request, d->environment_.earth != nullptr, d->template_, error)) return nullptr;
+    if (d->template_.forces.thirdBodyField.degree) {
+        prwError(error, "unsupported-configuration: THIRD_BODY_MAXIMUM_DEGREE belongs to an execution request; a resident configuration integrates the third bodies as point masses.");
+        return nullptr;
+    }
     if (!d->template_.events.empty()) { prwError(error, "unsupported-events: A resident configuration does not locate events; use an execution request."); return nullptr; }
     const auto method = d->template_.integrator.method;
     if (method != IntegrationMethod::RK78 && method != IntegrationMethod::RKF78) {

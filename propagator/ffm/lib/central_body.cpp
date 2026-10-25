@@ -59,6 +59,8 @@ Vec3 ThirdBodyAboutCentral(const ForceModelSet& forces, const Vec3& sat, const t
 
 Vec3 PlanetaryDrag(const ForceModelSet& forces, const Vec3& position, const Vec3& velocity,
                    const timesys::Instant& jd, const DragForceConfig& drag) {
+    // The Mars profile about Mars: an Earth model about another body, or Mars's about another, is a force failure.
+    if (forces.dragModel != DragModelType::MarsExponential || forces.centralBodyNaifId != planetary::MARS) { flagForceFailure(); return Vec3(NAN, NAN, NAN); }
     // GCRF -> Mars-fixed through the set's rotation hook; the atmosphere turns with the planet about its pole.
     double m[3][3];
     GcrfToEarthFixed(jd, forces, m);

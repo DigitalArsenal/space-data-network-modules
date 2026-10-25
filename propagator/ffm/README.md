@@ -20,6 +20,7 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 | `JacchiaRoberts` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JACCHIA_ROBERTS`, a VCM's JACCHIA_70): Jacchia's static diffusion model as Roberts (1971) integrates it in closed form, the GTDS/GMAT "Jacchia-Roberts", with Jacchia 1971's constants (SR 332; SR 313's inflection temperature and 100 km composition differ); `lib/jacchia_roberts.h`, a port of NASA GMAT's density functions, bit for bit. Independently of GMAT, the diffusion equations integrated numerically from 90 km reproduce its closed forms to 1.6e-4, and with Jacchia's own arctangent temperature profile in place of Roberts' exponential fit agree within 4.3 % at 200 km and 2 % from 300 km (`tests/atmosphere_ports.test.mjs`). At equal exospheric temperature its density at 400-700 km is 2-3 times JB2008's. SatelliteToolbox.jl's `jr1971` example (2018-06-19 18:35 UT, 22 S 45 W, 700 km, F10.7 79/73.5, Kp 1.34) gives 9.68e-15 kg/m^3, 26 % below this port's 1.31e-14 although its exospheric temperature is 22 K higher; since the port reproduces the model's own equations, the difference is on SatelliteToolbox's side and is not pursued further. |
 | `DTM2020` | **Simplified approximation only** — mimics the DTM2020 F30/Hp temperature response. NOT the published DTM2020 spherical-harmonic model. |
 | `HarrisPriester` | Harris-Priester diurnal-bulge table (100-1000 km), with the apex taken from the Sun direction; outside the table the model declines and drag is zero. Selectable as `forces.dragModel` `HARRIS_PRIESTER` and the PRW `HARRIS_PRIESTER` family. |
+| `MarsExponential` | **Mars only** (`ATMOSPHERE_MODEL` `MARS_EXPONENTIAL`, with `CENTRAL_BODY_NAIF_ID` 499): the banded exponential profile NASA GMAT R2026a ships (Vallado 8.6), turning with the planet; see [Planetary central bodies](#planetary-central-bodies-the-moon-and-mars). Asked for about another body it is refused. |
 | `GOST2004` | Enum placeholder only; not implemented and not selectable. |
 
 The typed PRW `ATMOSPHERE_REQUEST` operation exposes only the implemented models
@@ -56,6 +57,7 @@ Gravity selections of the PRW execution request:
 | `J2_ONLY`, `J2_TO_J4` | The EGM2008 zonal field to degree 2 or 4 (order 0), in Earth-fixed axes. A degree or order with them is refused. |
 | `SPHERICAL_HARMONICS`, `EGM2008` | The EGM2008 field to the stated `MAXIMUM_DEGREE` and `MAXIMUM_ORDER` (both required, degree 2-70), every coefficient included; the J flags are not consulted. Order above 0 requires `earth_orientation` (`eop-data-required`). |
 | `EGM96` | The same evaluation of EGM96 (`lib/egm96_data.h`, degree 2-70, from NGA's `egm96_to360.ascii` via GMAT's `EGM96.cof`; `scripts/generate-egm96.mjs`; GM and radius as EGM2008's). |
+| `GRGM660PRIM`, `MRO120F` | The Moon's and Mars's embedded fields, each only about its own body (`CENTRAL_BODY_NAIF_ID` 301 and 499); about the Earth they are refused. See [Planetary central bodies](#planetary-central-bodies-the-moon-and-mars). |
 
 `MAXIMUM_TESSERAL_DEGREE` (with `SPHERICAL_HARMONICS`, `EGM2008`, `EGM96`)
 drops the tesseral and sectorial terms (order >= 1) above that degree while the
@@ -623,22 +625,27 @@ matrix, covariance, impulses, finite burns, dynamic parameters and process noise
 
 | | Moon | Mars |
 | --- | --- | --- |
-| Field | `GRAVITY_CHOICE` `GRGM660PRIM` (or `SPHERICAL_HARMONICS`), degree 2 to 150: GRGM660PRIM (Lemoine et al. 2013; 660 in the PDS table, 150 embedded; a higher degree is refused by name, `unsupported-gravity`), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `SPHERICAL_HARMONICS`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
+| Field | `GRAVITY_CHOICE` `GRGM660PRIM`, degree 2 to 150: GRGM660PRIM (Lemoine et al. 2013; 660 in the PDS table, 150 embedded; a higher degree is refused by name, `unsupported-gravity`), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `GRAVITY_CHOICE` `MRO120F`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
 | Axes | DE440 lunar libration (principal-axes frame, the Chebyshev records of `moon_pa_de440_200625.bpc` for 2021-12-28 to 2037-01-06 TDB, a day inside each end being the limit of an arc); outside it `orientation-out-of-range` | the Mars-fixed frame of MRO120F's PDS label: N, J fixed; PSI, I, PHI secular; PHI's seasonal spin terms (1, 1/2, 1/3, 1/4 Mars year from January 1999); the nutation corrections of Konopliv et al. 2006 are not in the label and not applied |
-| Atmosphere | none (drag refused) | `ATMOSPHERE_MODEL` `EXPONENTIAL`: the banded exponential profile NASA GMAT R2026a ships (Vallado 8.6), 0 to 2980 km above the reference ellipsoid (3396.19, 3376.20 km), turning with the planet at 350.891985314 deg/day. One mean profile: no solar-cycle, seasonal, diurnal, latitude or dust variation; scale the coefficient |
+| Atmosphere | none (drag refused) | `ATMOSPHERE_MODEL` `MARS_EXPONENTIAL`: the banded exponential profile NASA GMAT R2026a ships (Vallado 8.6), 0 to 2980 km above the reference ellipsoid (3396.19, 3376.20 km), turning with the planet at 350.891985314 deg/day. One mean profile: no solar-cycle, seasonal, diurnal, latitude or dust variation; scale the coefficient |
 | Radiation pressure | cannonball, conical shadow of the Moon | cannonball, conical shadow of Mars |
 
 `GRAVITATIONAL_PARAMETER` sets the central term and the field's own GM its harmonics, as for the Earth's EGM2008. The field
-tables are float32 reductions of the PDS tables (relative 6e-8, under 1e-11 of the acceleration). `SPHERICAL_HARMONICS` about the
-Moon or Mars selects the body's embedded field; EGM2008, EGM96, `J2_ONLY`, `J2_TO_J4` and `INFER_FLAGS` are the Earth's and are
-refused. Mars's center is the Mars system barycenter of the short DE440 kernel (Phobos and Deimos displace it by under 0.2 m);
+tables are float32 reductions of the PDS tables (relative 6e-8, under 1e-11 of the acceleration). A field and an atmosphere belong
+to their body and are selected by their own names; asked for about another body they are refused by name, and nothing is read
+as the central body's own: `SPHERICAL_HARMONICS`, `EGM2008`, `EGM96`, `J2_ONLY`, `J2_TO_J4`, `INFER_FLAGS` and the Earth's
+atmospheres (`EXPONENTIAL` among them) are the Earth's, `GRGM660PRIM` the Moon's, `MRO120F` and `MARS_EXPONENTIAL` Mars's. Mars's center is the Mars system barycenter of the short DE440 kernel (Phobos and Deimos displace it by under 0.2 m);
 Phobos and Deimos are not modeled. The Earth's models (tides, Earth radiation, relativity, space weather, GNSS radiation
 pressure) are refused for the other bodies.
 
-Extended third-body gravity (`ForceModelSet::thirdBodyField`, `ForceModel::ThirdBodyHarmonics`): the harmonics (degree 2 up) of
-the Moon's field on an Earth orbiter, or of the Earth's EGM2008 on a lunar orbiter, minus the same field's acceleration at the
-frame origin, added to the point masses of the third-body list. The request wire has no field for its degree yet, so it is set by
-native callers.
+Extended third-body gravity (`THIRD_BODY_MAXIMUM_DEGREE` and `THIRD_BODY_MAXIMUM_ORDER`, 0 by default: every third body a point
+mass): the harmonics (degree 2 up) of the Moon's GRGM660PRIM (to degree 150) on an Earth orbiter, or of the Earth's EGM2008 (to
+degree 70) on a lunar orbiter, minus the same field's acceleration at the frame origin, added to that body's point mass. The body
+must be in `THIRD_BODY_IDS` (301 about the Earth, 399 about the Moon) with `ENABLE_THIRD_BODY`, and the kernel supplied
+(`EPHEMERIS_SOURCE` `JPL_SPK`); the Moon's field is in its principal axes, so an Earth arc must lie in the libration span of the table's Axes row.
+No third body of Mars has a field. Any other request, a degree of 1, an order above the degree and a degree past the embedded
+field are refused by name, and a resident configuration (point-mass third bodies) refuses it. In the library it is
+`ForceModelSet::thirdBodyField` and `ForceModel::ThirdBodyHarmonics`.
 
 Sources, licenses, redistribution and hashes: `scripts/planetary-sources.json` (`node scripts/fetch-planetary-sources.mjs <dir>`
 downloads and verifies them; `node scripts/generate-planetary-data.mjs <dir>` writes `lib/data/planetary`). Truth and tests:

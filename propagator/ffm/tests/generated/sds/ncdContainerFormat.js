@@ -26,6 +26,12 @@ export var ncdContainerFormat = /*#__PURE__*/ function(ncdContainerFormat) {
     ncdContainerFormat[ncdContainerFormat["CCSDS_ACM_XML"] = 24] = "CCSDS_ACM_XML";
     ncdContainerFormat[ncdContainerFormat["CCSDS_RDM_KVN"] = 25] = "CCSDS_RDM_KVN";
     ncdContainerFormat[ncdContainerFormat["CCSDS_RDM_XML"] = 26] = "CCSDS_RDM_XML";
+    ncdContainerFormat[ncdContainerFormat["SENTINEL_EOF_XML"] = 27] = "SENTINEL_EOF_XML";
+    ncdContainerFormat[ncdContainerFormat["NAIF_CK_DAF"] = 28] = "NAIF_CK_DAF";
+    ncdContainerFormat[ncdContainerFormat["NAIF_SCLK_KERNEL"] = 29] = "NAIF_SCLK_KERNEL";
+    ncdContainerFormat[ncdContainerFormat["RINEX_OBS"] = 30] = "RINEX_OBS";
+    ncdContainerFormat[ncdContainerFormat["RINEX_NAV"] = 31] = "RINEX_NAV";
+    ncdContainerFormat[ncdContainerFormat["PCK_DAF"] = 32] = "PCK_DAF";
     ncdContainerFormat[ncdContainerFormat["PROVIDER_DEFINED"] = 255] = "PROVIDER_DEFINED";
     return ncdContainerFormat;
 }({});
