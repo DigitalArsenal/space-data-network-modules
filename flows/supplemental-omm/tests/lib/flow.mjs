@@ -106,7 +106,7 @@ export async function openRelease() {
 
 // The release in the isomorphic flow host. `config` is each plugin's node config (plugin.getConfig); the host answers
 // http.request from `responses` and storage.ingest_with_source by storing the records here.
-export async function runRelease({ config = {}, responses = fixtureResponses(), ticks = 1 } = {}) {
+export async function runRelease({ config = {}, responses = fixtureResponses(), ticks = 1, trace = null } = {}) {
   const { bundle, summary, entries, artifact } = await openRelease();
   const calls = [];
   const ingests = [];
@@ -131,6 +131,16 @@ export async function runRelease({ config = {}, responses = fixtureResponses(), 
     };
   });
   const host = await createIsomorphicFlowRuntimeHost({ wasmSource: bundle, children });
+  if (trace) {
+    for (const [nodeId, child] of host.children) {
+      const call = child.harness.invoke.bind(child.harness);
+      child.harness.invoke = async (request) => {
+        const response = await call(request);
+        trace.push({ nodeId, methodId: request.methodId, inputs: (request.inputs ?? []).map((f) => f.portId), outputs: (response.outputs ?? []).map((f) => f.portId), errors: response.errorCode ?? response.error ?? null, response });
+        return response;
+      };
+    }
+  }
   const egress = { results: [], notices: [], publications: [] };
   const routes = new Map();
   const handlers = {

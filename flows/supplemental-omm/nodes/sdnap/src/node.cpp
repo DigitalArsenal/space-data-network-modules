@@ -10,12 +10,14 @@
 //
 // The flow runtime hands a node one frame of each ready port per invocation and consumes it. propagator/sdn-ap fit
 // has a required `configuration` port, so one $PCF has to arrive with every ephemeris: prepare emits the pair in one
-// invocation, the two edges queue them in step, and the fit takes one of each.
+// invocation, the two edges queue them in step, and the fit takes one of each. A host that batches hands prepare
+// several ephemerides at once: they go out in order beside ONE $PCF, because the fit's configuration port takes one frame.
 
 #include "space_data_module_invoke.h"
 
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -79,7 +81,7 @@ bool framed(const plugin_input_frame_t* frame, const char* identifier, std::vect
 }
 
 bool push_batch(const char* code, const char* schema, const char* identifier, const char* root,
-                const std::vector<uint8_t>& stream) {
+                const std::vector<uint8_t>& stream, uint64_t count) {
   uint8_t digest[32];
   sdn_cid::sha256_raw(stream.data(), stream.size(), digest);
   const std::string batch_id = hex(digest, sizeof digest);
@@ -95,7 +97,7 @@ bool push_batch(const char* code, const char* schema, const char* identifier, co
   request.PROVENANCE->PARSER = kParser;
   request.PROVENANCE->PARSER_VERSION = kParserVersion;
   request.PROVENANCE->NORMALIZED_SHA256 = batch_id;
-  request.PROVENANCE->NORMALIZED_COUNT = 1;
+  request.PROVENANCE->NORMALIZED_COUNT = count;
   flatbuffers::FlatBufferBuilder b(512);
   R::FinishIngestRequestBuffer(b, R::IngestRequest::Pack(b, &request));
   const std::string meta_port = std::string(code) + "_meta";
@@ -106,53 +108,83 @@ bool push_batch(const char* code, const char* schema, const char* identifier, co
 
 }  // namespace
 
+// Ephemerides taken in and not yet sent: one goes out an invocation, so the fit sees one ephemeris with its $PCF at a
+// time and an ephemeris it refuses (too few states) costs only that object.
+std::deque<std::vector<uint8_t>> g_pending;
+
+int finish(int code) {
+  plugin_set_backlog_remaining(static_cast<uint32_t>(g_pending.size()));
+  plugin_set_yielded(g_pending.empty() ? 0 : 1);
+  return code;
+}
+
 extern "C" int prepare(void) {
   plugin_reset_output_state();
-  const plugin_input_frame_t* oem = frame_for("oem");
-  if (plugin_find_input_index("oem", 1) >= 0) {
-    plugin_set_error("batched-input-frames", "prepare takes ONE $OEM per invocation.");
-    return 500;
+  const uint32_t count = plugin_get_input_count();
+  for (uint32_t index = 0; index < count; ++index) {
+    const plugin_input_frame_t* oem = plugin_get_input_frame(index);
+    if (!oem || !oem->payload || oem->payload_length < 8) {
+      plugin_set_error("missing-oem-frame", "prepare requires an SDS $OEM.");
+      return finish(400);
+    }
+    flatbuffers::Verifier verifier(oem->payload, oem->payload_length);
+    if (!OEMBufferHasIdentifier(oem->payload) || !VerifyOEMBuffer(verifier)) {
+      plugin_set_error("invalid-oem-frame", "the frame is not an SDS $OEM.");
+      return finish(400);
+    }
   }
-  if (!oem || !oem->payload || oem->payload_length < 8) {
-    plugin_set_error("missing-oem-frame", "prepare requires an SDS $OEM.");
-    return 400;
+  for (uint32_t index = 0; index < count; ++index) {
+    const plugin_input_frame_t* oem = plugin_get_input_frame(index);
+    g_pending.emplace_back(oem->payload, oem->payload + oem->payload_length);
   }
-  flatbuffers::Verifier verifier(oem->payload, oem->payload_length);
-  if (!OEMBufferHasIdentifier(oem->payload) || !VerifyOEMBuffer(verifier)) {
-    plugin_set_error("invalid-oem-frame", "the frame is not an SDS $OEM.");
-    return 400;
-  }
+  if (g_pending.empty()) return finish(0);
+  const std::vector<uint8_t> oem = std::move(g_pending.front());
+  g_pending.pop_front();
   PCFT config;
   config.THEORY = pcfTheory::SDNAP;
   flatbuffers::FlatBufferBuilder b(128);
   FinishPCFBuffer(b, PCF::Pack(b, &config));
-  if (push("ephemeris", "OEM.fbs", OEMIdentifier(), "OEM", oem->payload, oem->payload_length) < 0 ||
+  if (push("ephemeris", "OEM.fbs", OEMIdentifier(), "OEM", oem.data(), oem.size()) < 0 ||
       push("configuration", "PCF.fbs", PCFIdentifier(), "PCF", b.GetBufferPointer(), b.GetSize()) < 0) {
     plugin_set_error("emit-failed", "unable to emit the ephemeris and its configuration.");
-    return 500;
+    return finish(500);
   }
-  return 0;
+  return finish(0);
 }
 
 extern "C" int wrap(void) {
   plugin_reset_output_state();
-  if (plugin_find_input_index("elements", 1) >= 0 || plugin_find_input_index("determination", 1) >= 0) {
-    plugin_set_error("batched-input-frames", "wrap takes ONE fit result per invocation.");
-    return 500;
-  }
+  // Every record of the invocation in one stream per standard, in the order the fit wrote them.
   std::vector<uint8_t> omm, obd;
-  if (!framed(frame_for("elements"), OMMIdentifier(), &omm)) {
-    plugin_set_error("invalid-elements-frame", "wrap requires the fit's $OMM.");
+  uint64_t omm_count = 0, obd_count = 0;
+  for (int32_t k = 0;; ++k) {
+    const int32_t at = plugin_find_input_index("elements", static_cast<uint32_t>(k));
+    if (at < 0) break;
+    std::vector<uint8_t> record;
+    if (!framed(plugin_get_input_frame(static_cast<uint32_t>(at)), OMMIdentifier(), &record)) {
+      plugin_set_error("invalid-elements-frame", "wrap requires the fit's $OMM.");
+      return 400;
+    }
+    omm.insert(omm.end(), record.begin(), record.end());
+    ++omm_count;
+  }
+  for (int32_t k = 0;; ++k) {
+    const int32_t at = plugin_find_input_index("determination", static_cast<uint32_t>(k));
+    if (at < 0) break;
+    std::vector<uint8_t> record;
+    if (!framed(plugin_get_input_frame(static_cast<uint32_t>(at)), OBDIdentifier(), &record)) {
+      plugin_set_error("invalid-determination-frame", "the determination frame is not an $OBD.");
+      return 400;
+    }
+    obd.insert(obd.end(), record.begin(), record.end());
+    ++obd_count;
+  }
+  if (omm_count == 0) {
+    plugin_set_error("missing-elements-frame", "wrap requires the fit's $OMM.");
     return 400;
   }
-  const plugin_input_frame_t* determination = frame_for("determination");
-  const bool has_obd = determination && determination->payload && determination->payload_length > 0;
-  if (has_obd && !framed(determination, OBDIdentifier(), &obd)) {
-    plugin_set_error("invalid-determination-frame", "the determination frame is not an $OBD.");
-    return 400;
-  }
-  if (!push_batch("omm", "OMM.fbs", OMMIdentifier(), "OMM", omm) ||
-      (has_obd && !push_batch("obd", "OBD.fbs", OBDIdentifier(), "OBD", obd))) {
+  if (!push_batch("omm", "OMM.fbs", OMMIdentifier(), "OMM", omm, omm_count) ||
+      (obd_count > 0 && !push_batch("obd", "OBD.fbs", OBDIdentifier(), "OBD", obd, obd_count))) {
     plugin_set_error("emit-failed", "unable to emit the batches.");
     return 500;
   }

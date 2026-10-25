@@ -2,7 +2,7 @@
   "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
   "name": "Supplemental OMM SDN-AP adapter",
   "version": "1.0.0",
-  "description": "The two adapters around propagator/sdn-ap's fit in the Supplemental OMM flow (typed contracts 1.0: FlatBuffers only). prepare takes each source's SDS $OEM and emits it on `ephemeris` beside a $PCF (THEORY SDNAP) on `configuration`, one of each per invocation, so the fit's required configuration port is satisfied once per ephemeris. wrap takes the fit's $OMM (SDNAP, with COVARIANCE) and $OBD and emits each standard's IngestRequest (INGQ) on `<code>_meta` beside its size-prefixed record stream on `<code>`: SCHEMA, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public, RECONCILE Duplicates, PROVENANCE. No hostcalls.",
+  "description": "The two adapters around propagator/sdn-ap's fit in the Supplemental OMM flow (typed contracts 1.0: FlatBuffers only). prepare takes each source's SDS $OEM and emits it on `ephemeris` beside a $PCF (THEORY SDNAP) on `configuration`, one ephemeris and one $PCF an invocation, yielding until every ephemeris it was handed is sent (the fit's configuration port takes one frame, and an ephemeris the fit refuses then costs only that object). wrap takes the fit's $OMM (SDNAP, with COVARIANCE) and $OBD and emits each standard's IngestRequest (INGQ) on `<code>_meta` beside its size-prefixed record stream on `<code>`: SCHEMA, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public, RECONCILE Duplicates, PROVENANCE. No hostcalls.",
   "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
@@ -17,8 +17,8 @@
     {
       "methodId": "prepare",
       "displayName": "Pair an ephemeris with the SDN-AP configuration",
-      "maxBatch": 1,
-      "drainPolicy": "single-shot",
+      "maxBatch": 65535,
+      "drainPolicy": "drain-until-yield",
       "inputPorts": [
         {
           "portId": "oem",
@@ -36,9 +36,9 @@
               ]
             }
           ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
           "description": "SDS $OEM, one object per frame, from any of the flow's source modules."
         }
       ],
@@ -83,14 +83,14 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "A $PCF 1.0 with THEORY SDNAP and every table at its default: what propagator/sdn-ap fit reads."
+          "description": "A $PCF 1.0 with THEORY SDNAP and every table at its default: what propagator/sdn-ap fit reads. One per invocation."
         }
       ]
     },
     {
       "methodId": "wrap",
       "displayName": "File the SDN-AP fit",
-      "maxBatch": 1,
+      "maxBatch": 65535,
       "drainPolicy": "single-shot",
       "inputPorts": [
         {
@@ -110,7 +110,7 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 65535,
           "required": true,
           "description": "The fit's $OMM (MEAN_ELEMENT_THEORY SDNAP, with COVARIANCE)."
         },
@@ -131,7 +131,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 65535,
           "required": false,
           "description": "The fit's $OBD."
         }
@@ -257,6 +257,6 @@
   "abiVersion": 1,
   "sequentialJustification": {
     "kind": "inherently-sequential-algorithm",
-    "detail": "Each method maps one frame set to its output frames in one pass; the node holds no state and creates no thread."
+    "detail": "Each method maps one frame set to its output frames in one pass; prepare keeps the ephemerides it has not sent yet in order; the node creates no thread."
   }
 }
