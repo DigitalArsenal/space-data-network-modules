@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {inspect} from 'node:util';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
@@ -14,10 +15,12 @@ await fs.rm(path.join(root,'dist'),{recursive:true,force:true});
 await fs.mkdir(path.dirname(outputPath),{recursive:true});
 // Single thread: one invocation's frames, nothing spawned or shared.
 const result=await compileModuleFromSource({manifest,sourceCode,language:'c++',outputPath,threadModel:'wasi-sequential'});
-if(!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
+if(!result.report?.ok) throw new Error(inspect(result.report?.issues,{depth:6}));
 const guest=path.join(root,'dist/guest-link');await fs.mkdir(guest,{recursive:true});
 await fs.writeFile(path.join(guest,'module-link.o'),result.guestLink.objectBytes);
 const {format,language,threadModel,symbolPrefix,methodSymbols}=result.guestLink;
-await fs.writeFile(path.join(guest,'metadata.json'),JSON.stringify({version:1,format,language,threadModel,symbolPrefix,methodSymbols},null,2)+'\n');
+// The flow compiler's guest-link metadata: a flat record of strings plus the method-symbol map, written line by line.
+const symbols=Object.entries(methodSymbols).map(([k,v])=>`    "${k}": "${v}"`).join(',\n');
+await fs.writeFile(path.join(guest,'metadata.json'),`{\n  "version": 1,\n  "format": "${format}",\n  "language": "${language}",\n  "threadModel": "${threadModel}",\n  "symbolPrefix": "${symbolPrefix}",\n  "methodSymbols": {\n${symbols}\n  }\n}\n`);
 await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(root,'dist/plugin-manifest.json'));
 console.log(`PASS SDK build ${manifest.pluginId} -> dist/isomorphic/module.wasm`);
