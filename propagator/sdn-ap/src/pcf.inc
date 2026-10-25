@@ -1,11 +1,12 @@
 // -----------------------------------------------------------------------------
-// $PCF 1.0.2 (SDS 1.268.0): the required `configuration` input of every method
+// $PCF 1.0.4 (SDS 1.270.0): the required `configuration` input of every method
 // with options. A method reads THEORY and its own tables:
 //   propagate, maneuver   MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES, INTEGRATOR, EVENTS
 //   fit                   FIT, MEAN_ELEMENT, SEGMENTS, FORCES, INTEGRATOR
 //   detect_maneuvers      MEAN_ELEMENT, MANEUVER_DETECTION, INTEGRATOR
 //   reentry               REENTRY, MEAN_ELEMENT, FORCES, INTEGRATOR
 //   launch_set, launch_batch  LAUNCH, MEAN_ELEMENT
+//   load_epochs, propagate_epochs  EPOCH_STORE and propagate's tables
 // and leaves the other tables to the methods that read them. Fields left unset
 // take the defaults schema/PCF/main.fbs documents (each equal to this module's
 // own, so a table whose fields are all unset reads as an absent one); a field

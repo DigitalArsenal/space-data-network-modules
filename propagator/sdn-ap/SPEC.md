@@ -1628,6 +1628,42 @@ give a state's osculating elements and period, and its two-body motion, about a 
 
 ---
 
+## 14. SDN-AP epoch store (side B's method, outside the SGP4-XP specification)
+
+**14.1 Load.** `load_epochs` replaces the store with a snapshot: 'omm' frames of size-prefixed $OMM records end to end
+(or one record a frame), SGP4, SGP4XP and SDN-AP Earth sets, under the $PCF EPOCH_STORE table (SDS 1.270.0). A series is
+one (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR). Kept, per series and by epoch: the sets of the CACHE_DAYS (7) before
+the newest epoch of the load, the clock being the data's (no wall clock: the store is a function of its input); at
+most MAX_SETS_PER_OBJECT (0: no cap), the newest; THEORIES (empty: all three). Two records of one series at one epoch:
+the later in the snapshot replaces the earlier. Segment sets (Moon-centered, cislunar, heliocentric) are counted and
+not stored. A record's theory record (SGP4 Sat or SGP4XP / SDN-AP integrator) is made when first needed, two per
+series held at a time.
+
+**14.2 Selection.** With E_0 < ... < E_{n-1} a series' epochs and t the request time: NEAREST takes the set whose
+epoch is nearest t (switch between E_i and E_{i+1} at tau_i = (E_i + E_{i+1}) / 2); LATEST_BEFORE the latest set at or
+before t (switch at tau_i = E_{i+1}; before E_0, set 0). Binary search: O(log n) per series and request.
+
+**14.3 Blend.** With W = BLEND_WINDOW_SECONDS (0: no blend), around each switch tau_i the half-width
+h_i = min(W / 2, (E_{i+1} - E_i) / 2) (LATEST_BEFORE also min((E_{i+2} - E_{i+1}) / 2)), so windows never overlap.
+For t in (tau_i - h_i, tau_i + h_i), s = (t - tau_i + h_i) / (2 h_i), and x_a, x_b the states of sets i and i + 1 at t:
+
+- SMOOTHSTEP: w = 3 s^2 - 2 s^3, r = (1 - w) r_a + w r_b, v = (1 - w) v_a + w v_b + w' (r_b - r_a) with
+  w' = 6 s (1 - s) / (2 h_i): v is the derivative of r, and w and w' are 0 and 0 at the window's start, 1 and 0 at its end.
+- HERMITE: r = r_a(t) + c(t), v = v_a(t) + c'(t), c the cubic Hermite with c = 0, c' = 0 at the start and
+  c = r_b - r_a, c' = v_b - v_a (both at the window's end) at the end: set a's motion plus a correction that lands on b.
+
+Position and velocity are continuous across the window's edges; the acceleration steps by w'' (r_b - r_a) there.
+
+**14.4 Covariance.** For sets that carry COVARIANCE (SPEC 12), P = (1 - w) P_a + w P_b + w (1 - w) d d^T with
+d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture.
+
+**14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
+bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a time), `_set_at` (one set without
+selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixed m, m/s, with the covariance); and
+`propagate_epochs`, the store of the call's own snapshot on a grid, one $OEM per series (stateless).
+
+---
+
 ## References
 
 - Brouwer, D. (1959). Solution of the problem of artificial satellite theory without drag. AJ 64, 378-397.

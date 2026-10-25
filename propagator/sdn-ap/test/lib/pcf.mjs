@@ -1,4 +1,4 @@
-// $PCF 1.0.2 (SDS 1.268.0) configurations for the tests: every method with options takes one on its
+// $PCF 1.0.4 (SDS 1.270.0) configurations for the tests: every method with options takes one on its
 // required `configuration` port.
 import * as flatbuffers from "flatbuffers";
 import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
@@ -10,6 +10,7 @@ import { PCFMeanElementOptionsT } from "spacedatastandards.org/lib/js/PCF/PCFMea
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { PCFForceModelT } from "spacedatastandards.org/lib/js/PCF/PCFForceModel.js";
 import { PCFEmpiricalTermsT } from "spacedatastandards.org/lib/js/PCF/PCFEmpiricalTerms.js";
+import { PCFEpochStoreT } from "spacedatastandards.org/lib/js/PCF/PCFEpochStore.js";
 import { pcfTheory } from "spacedatastandards.org/lib/js/PCF/pcfTheory.js";
 
 export { pcfTheory };
@@ -26,6 +27,7 @@ const tables = {
   mean: ["MEAN_ELEMENT", PCFMeanElementOptionsT],
   output: ["OUTPUT", PCFOutputT],
   forces: ["FORCES", PCFForceModelT],
+  epochStore: ["EPOCH_STORE", PCFEpochStoreT],
 };
 
 /// A table of scalars with every field on the wire, at its default where unset (forceDefaults for that table only: a

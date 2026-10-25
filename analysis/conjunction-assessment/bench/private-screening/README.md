@@ -14,7 +14,7 @@ build/private_screening_bench --days 3 --step 10 --pairs 8
 
 It prints JSON with:
 - costs per object-day for the requester and per pair-day for the
-  responder;
+  responder, at the `--step` given (`stepSeconds`);
 - ciphertext sizes and the remaining noise budget;
 - the per-step sign check against the plaintext distance (`signMismatches`
   must be 0; the exit code is 1 otherwise);

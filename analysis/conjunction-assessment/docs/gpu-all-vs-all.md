@@ -304,7 +304,8 @@ so times are upper bounds.
   earlier run by -4,871 and +47 events for the same reasons; both screens
   have the candidates of the earlier runs.
 - FFM's time is propagation: 99,929 CPU-seconds on 8 farm workers
-  (user and system time of each worker thread), 0.65 s per object-day; the
+  (user and system time of each worker thread), 0.65 s per object-day with
+  RK78 at tolerance 1e-12 and steps of at most 300 s; the
   first window, the catch-up from element epochs, took 36 % of it. Its
   end-to-end time is that CPU time on 16 dedicated cores plus search and
   refinement. Measured on the shared host (1-minute load average median 44,
@@ -364,7 +365,8 @@ Every row reports the same conjunctions.
 
 `screen_catalog` traps out of memory above about 7,000 objects per call.
 
-FFM's own cost at full force is about 0.65 s per object-day on one thread
+FFM's own cost at full force, RK78 at tolerance 1e-12 with steps of at most
+300 s, is about 0.65 s per object-day on one thread
 (0.69 s with perigee below 2,000 km, 0.19 s above; propagator/ffm README,
 "Catalog cost"). A day of its 300 s segments is about 240 KB per object, so a
 full catalog of PPE does not fit in one module instance; screen it in 1-hour
