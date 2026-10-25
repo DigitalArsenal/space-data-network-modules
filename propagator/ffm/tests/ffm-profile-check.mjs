@@ -46,6 +46,8 @@ function forces(p) {
     ATMOSPHERE_MODEL: enumValue('pcfAtmosphereFamily', p.drag.model.replaceAll('-', '').toUpperCase()),
     WEATHER: p.drag.weather,
     EPHEMERIS_SOURCE: p.thirdBodies.ephemerisSource,
+    THIRD_BODY_MAXIMUM_DEGREE: p.thirdBodies.fieldMaximumDegree,
+    THIRD_BODY_MAXIMUM_ORDER: p.thirdBodies.fieldMaximumOrder,
     CENTRAL_BODY_NAIF_ID: p.gravity.centralBodyNaifId,
     EPHEMERIS_KIND: enumValue('pcfEphemerisKind', p.thirdBodies.ephemerisKind),
     SHADOW_MODEL: enumValue('evlShadowModel', p.srp.shadowModel),

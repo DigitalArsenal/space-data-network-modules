@@ -600,6 +600,7 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
         case DragModelType::JB2008:         return AtmosphereModelType::JB2008;
         case DragModelType::DTM2020:        return AtmosphereModelType::DTM2020;
         case DragModelType::JacchiaRoberts:      break;  // force-set path only (DragAccelerationWith)
+        case DragModelType::MarsExponential:     break;  // force-set path only (DragAccelerationWith)
     }
     return AtmosphereModelType::NRLMSISE00;
 }
@@ -1681,7 +1682,8 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
 
 Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, const timesys::Instant& jd,
                           const ForceModelSet& forceSet, const DragForceConfig& drag) {
-    if (forceSet.centralBodyNaifId != 399) return PlanetaryDrag(forceSet, position, velocity, jd, drag);
+    // Mars's atmosphere is the one drag model of another body; PlanetaryDrag fails any other pairing of model and body.
+    if (forceSet.dragModel == DragModelType::MarsExponential || forceSet.centralBodyNaifId != 399) return PlanetaryDrag(forceSet, position, velocity, jd, drag);
     Vec3 totalAcc;
     const double atmosphereJD = forceSet.explicitEpochContract
         ? jd.utc().jd() : jd.jdTdb(); // retain the legacy density-clock convention
@@ -1778,7 +1780,9 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, const 
     if (forceSet.useThirdBody) {
         totalAcc += forceSet.centralBodyNaifId == 399 ? ThirdBody(position, jd, forceSet.thirdBody)
                                                        : ThirdBodyAboutCentral(forceSet, position, jd);
-        if (forceSet.thirdBodyField.degree >= 2) totalAcc += ThirdBodyHarmonics(forceSet.centralBodyNaifId, forceSet.thirdBodyField, position, jd);
+        // The harmonics of the third body that has a field, when that body is in the list (its point mass is the term above).
+        const bool fieldBody = forceSet.centralBodyNaifId == 399 ? forceSet.thirdBody.includeMoon : forceSet.thirdBody.includeEarth;
+        if (forceSet.thirdBodyField.degree >= 2 && fieldBody) totalAcc += ThirdBodyHarmonics(forceSet.centralBodyNaifId, forceSet.thirdBodyField, position, jd);
     }
 
     // 6. Solar Radiation Pressure

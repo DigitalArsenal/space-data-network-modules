@@ -52,6 +52,9 @@
     "ephemerisSource": "JPL_SPK",
     "ephemerisKind": "UNSPECIFIED",
     "ephemerisBinding": "DE440 is supplied by the full-force fixtures; the request selects JPL_SPK and does not enforce a DE release.",
+    "fieldMaximumDegree": 0,
+    "fieldMaximumOrder": 0,
+    "fieldNote": "THIRD_BODY_MAXIMUM_DEGREE and _ORDER: 0 keeps every third body a point mass; two and up adds the harmonics of the Moon's GRGM660PRIM (to degree 150), listed as a third body, about the Earth.",
     "reference": "Park et al. 2021, DE440"
   },
   "srp": {

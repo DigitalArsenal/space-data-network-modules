@@ -1,8 +1,8 @@
 {
-  "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
-  "previousArtifactSha256": "f2877a377ad682bf45f136455b3662c09afcd9871e8eaf3e83d3422594766d35",
+  "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
+  "previousArtifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
   "memory": {
-    "staticMinimumBytes": 24176704,
+    "staticMinimumBytes": 24178112,
     "initialBytes": 28377088,
     "maximumBytes": 754974720,
     "wasmSection": {
@@ -288,7 +288,7 @@
       "configuredBytes": 151977984,
       "highWaterBytes": 497745920,
       "samples": [
-        324861952,
+        324927488,
         327090176,
         327221248,
         410189824,
@@ -313,10 +313,10 @@
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
       "predictedBytes": 497752653.4617516,
       "relativePredictionError": 1.3527909483577963e-05,
-      "seededBytes": 324861952,
+      "seededBytes": 324927488,
       "poolLaneRelativeError": [
-        0.004520568954854669,
-        -0.0016534972341733251
+        0.00472321583178726,
+        -0.001452095881991395
       ]
     },
     {
@@ -327,7 +327,7 @@
       "highWaterBytes": 497745920,
       "configuredBytes": 151977984,
       "samples": [
-        324861952,
+        324927488,
         327090176,
         327221248,
         410189824,
@@ -351,10 +351,10 @@
       ],
       "predictedBytes": 497752653.4617516,
       "relativePredictionError": 1.3527909483577963e-05,
-      "seededBytes": 324861952,
+      "seededBytes": 324927488,
       "poolLaneRelativeError": [
-        0.004520568954854669,
-        -0.0016534972341733251
+        0.00472321583178726,
+        -0.001452095881991395
       ]
     }
   ],
@@ -362,7 +362,7 @@
   "aot": {
     "status": "PASS",
     "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
-    "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
+    "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
     "runtime": "WasmEdge 0.16.4; node spacedatanetwork 1.1.0",
     "execution": "Every native row executed the exact flow artifact produced by node prewarm-aot."
   },
@@ -380,8 +380,8 @@
   "seededModel": {
     "units": "bytes",
     "method": "least squares over the samples taken right after the pool seed sweep; not a sizing basis",
-    "baseBytes": 28318739.057104677,
-    "perEntityBytes": 9321.473827734893
+    "baseBytes": 28308585.504841447,
+    "perEntityBytes": 9323.741316286458
   },
   "poolLane": {
     "task": "orbpro-ffm-pool-ffm1-fast-20261022",

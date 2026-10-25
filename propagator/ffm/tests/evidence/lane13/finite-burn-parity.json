@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "TMPL lane13 canonical PRW finite burns artifact",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
-  "moduleSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
+  "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
+  "moduleSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 180,
-      "durationMs": 1729
+      "durationMs": 1427
     },
     {
       "lane": "wasmedge",
       "runs": 180,
-      "durationMs": 20601
+      "durationMs": 17588
     }
   ],
   "cases": [

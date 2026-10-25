@@ -3,9 +3,9 @@
 //
 //   node propagator/ffm/tests/planetary.e2e.mjs
 //
-// The requests are typed $PRW execution requests (PCFForceModel.CENTRAL_BODY_NAIF_ID, GRAVITY_CHOICE GRGM660PRIM or
-// SPHERICAL_HARMONICS for Mars's MRO120F, ATMOSPHERE_MODEL EXPONENTIAL for Mars's atmosphere) with the DE440 kernel as the
-// `kernel` input. Truth is the states of NAIF's reconstructed SPKs (tests/fixtures/planetary, hashes and derivation in
+// The requests are typed $PRW execution requests (PCFForceModel.CENTRAL_BODY_NAIF_ID, GRAVITY_CHOICE GRGM660PRIM for the Moon's
+// field and MRO120F for Mars's, ATMOSPHERE_MODEL MARS_EXPONENTIAL for Mars's atmosphere, THIRD_BODY_MAXIMUM_DEGREE and _ORDER for
+// the third body's field) with the DE440 kernel as the `kernel` input. Truth is the states of NAIF's reconstructed SPKs (tests/fixtures/planetary, hashes and derivation in
 // scripts/planetary-sources.json): LRO about the Moon, MRO and MAVEN about the Mars system barycenter (the SPKs' center;
 // FFM takes the barycenter for Mars's center, which Phobos and Deimos displace by under 0.2 m). JS builds requests, reads
 // results, solves the small normal equations of the fit and subtracts; every trajectory is integrated by the module.
@@ -19,8 +19,12 @@
 //      three, error by day; and the same arc at field degrees 2, 20, 60 and 150 (one window), so the field shows in the error;
 //   2. MRO and MAVEN: state, radiation pressure and drag (Mars's banded exponential atmosphere) fitted to the first day,
 //      predicted over three, error by day;
-//   3. refusals by name: what is the Earth's and what lies outside an embedded model's span;
-//   4. lane parity: the browser and native WasmEdge answers are identical bytes for a Moon and a Mars request.
+//   3. the third body's field through the wire (THIRD_BODY_MAXIMUM_DEGREE and _ORDER): the Earth's harmonics on a lunar orbiter and
+//      the Moon's on a high Earth orbiter move a short arc by what the module's own term gives, integrated twice along the path;
+//   4. refusals by name: a field or atmosphere asked for about a body that is not its own (the Earth's SPHERICAL_HARMONICS and
+//      EXPONENTIAL stand for no other body's), the third body's field where there is none, and what lies outside an embedded
+//      model's span;
+//   5. lane parity: the browser and native WasmEdge answers are identical bytes for a Moon and a Mars request.
 //
 // Bars are the measured error with a margin (reported next to each); they guard against regressions, not against the
 // truth's own uncertainty (reconstructed ephemerides are fits to tracking data, and FFM has no maneuvers, no
@@ -44,14 +48,18 @@ const KERNEL_2018 = kernel('de440-2018-04-11_2018-05-17.bsp'), KERNEL_2021 = ker
 const MOON_GM = 4902.7998069317;     // GRGM660PRIM's own GM (its PDS header), km^3/s^2
 const MARS_GM = 42828.3748574;       // the GM of Mars alone in the MRO120F label, km^3/s^2
 
+// The module's own third-body term, built natively (tests/third_body_harmonics_native.cpp): section 0 checks it against oracles,
+// section 3 uses it to predict what the wire's THIRD_BODY_MAXIMUM_DEGREE does to a trajectory.
+const third = buildNative('third-body', ['tests/third_body_harmonics_native.cpp', '../../third_party/hwm14/hwm14.cpp', '../../third_party/hwm14/hwm14_data.cpp', '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
+  ...physicsUnits.map((n) => `lib/${n}.cpp`)]);
+const DE440_2026 = new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url).pathname;
+
 // ---- 0. fields, axes and the third-body term against independent oracles ----------------------------------------------
 console.log('0. Embedded fields, axes and the third-body harmonic term against independent oracles');
 {
   const oracles = JSON.parse(fs.readFileSync(new URL('./fixtures/planetary/oracles.json', import.meta.url), 'utf8'));
   const lib = ['planetary_fields', 'ffm_gravity', 'time_convert'].map((n) => `lib/${n}.cpp`);
   const planetary = await buildNative('planetary', ['tests/planetary_native.cpp', ...lib]);
-  const third = buildNative('third-body', ['tests/third_body_harmonics_native.cpp', '../../third_party/hwm14/hwm14.cpp', '../../third_party/hwm14/hwm14_data.cpp', '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
-    ...physicsUnits.map((n) => `lib/${n}.cpp`)]);
   try {
     // Axes. The Moon's libration frame against CSPICE (pxform J2000 -> MOON_PA_DE440): bar 1e-9 on every element, measured 4e-11
     // (the two read the same Chebyshev records; the difference is the driver's instant, a single-double Julian date, 4e-5 s at
@@ -77,20 +85,20 @@ console.log('0. Embedded fields, axes and the third-body harmonic term against i
     // Extended third-body gravity: the Moon's harmonics on a GEO satellite minus their value at the Earth's center, against the
     // oracle (relative 1e-6, measured 3e-8), and its size against the Moon's point-mass tide it adds to.
     const thirdBinary = await third;
-    try {
+    {
       for (const t of oracles.thirdBody) {
-        const out = (await runNative(thirdBinary.binary, [new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url).pathname, t.central, t.degree, t.degree, t.etTdb, ...t.satellite])).trim().split('\n').map((l) => l.split(' ').map(Number));
+        const out = (await runNative(thirdBinary.binary, [DE440_2026, t.central, t.degree, t.degree, t.etTdb, ...t.satellite])).trim().split('\n').map((l) => l.split(' ').map(Number));
         const [h, pm] = out, norm = (v) => Math.hypot(...v);
         const diff = norm(h.map((v, i) => v - t.harmonic[i])) / norm(t.harmonic), ratio = norm(h) / norm(pm);
         check(diff < 1e-6, `third body, degree ${t.degree}: relative difference ${diff}`);
         check(ratio > 1e-9 && ratio < 1e-6, `third body, degree ${t.degree}: harmonic/point-mass ${ratio} is outside 1e-9..1e-6`);
         console.log(`  Moon's harmonics (degree ${t.degree}) on a GEO satellite: ${(norm(h) * 1000).toExponential(2)} m/s^2 against the point-mass tide ${(norm(pm) * 1000).toExponential(2)} m/s^2 (ratio ${ratio.toExponential(1)}), oracle difference ${diff.toExponential(1)}`);
       }
-      const lunar = (await runNative(thirdBinary.binary, [new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url).pathname, 301, 4, 4, 8.3e8, 1838, 0, 0])).trim().split('\n').map((l) => l.split(' ').map(Number));
+      const lunar = (await runNative(thirdBinary.binary, [DE440_2026, 301, 4, 4, 8.3e8, 1838, 0, 0])).trim().split('\n').map((l) => l.split(' ').map(Number));
       const ratio = Math.hypot(...lunar[0]) / Math.hypot(...lunar[1]);
       check(ratio > 1e-9 && ratio < 1e-5, `Earth's harmonics on a lunar orbiter: harmonic/point-mass ${ratio} is outside 1e-9..1e-5`);
       console.log(`  Earth's harmonics (degree 4) on a lunar orbiter: ${(Math.hypot(...lunar[0]) * 1000).toExponential(2)} m/s^2 against the point-mass tide ${(Math.hypot(...lunar[1]) * 1000).toExponential(2)} m/s^2 (ratio ${ratio.toExponential(1)})`);
-    } finally { thirdBinary.dispose(); }
+    }
   } finally { planetary.dispose(); }
 }
 
@@ -154,8 +162,53 @@ console.log('2. MRO and MAVEN about Mars (MRO120F in its own axes, banded expone
   check(days[0].rms < 10 && days[1].rms < 50 && days[2].rms < 320 && days[3].rms < 640, `MAVEN: prediction errors ${fmt(days)} exceed the 10, 50, 320 and 640 m bars`);
 }
 
-// ---- 3. refusals by name ------------------------------------------------------------------------------------------
-console.log('3. Refusals by name');
+// The Earth as a central body, point mass with the Sun and the Moon: the request the third-body field of an Earth orbiter rides on.
+const EARTH_FORCES = { gm: 398600.4418, degree: 2, order: 2, gravity: sds.pcfGravitySelection.POINT_MASS, thirdBodies: [10, 301], massKg: 1000, areaM2: 10 };
+
+// ---- 3. the third body's field through the wire ------------------------------------------------------------------------
+console.log("3. The third body's field through the wire (THIRD_BODY_MAXIMUM_DEGREE and THIRD_BODY_MAXIMUM_ORDER)");
+{
+  const thirdBinary = await third;
+  const truth = readTruth('lro-2026-03-20.json');
+  const t0 = truth.epochs[0];
+  // Two paired requests that differ only in the field: the same state and the same steps, so the difference of their final
+  // states is the field's doing. A short arc answers to the term alone: the orbit's response to a small acceleration is its
+  // double integral for as long as the arc is short against the orbital period, so the prediction integrates the module's own
+  // term (evaluated natively, tests/third_body_harmonics_native.cpp) along the path twice: dr(T) = int_0^T (T - s) a(s) ds.
+  const c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
+  const cases = [
+    { label: "Earth's harmonics (degree 4) on a lunar orbiter", center: MOON, initial: truth.states[0], span: 600, degree: 4, bar: 0.08,
+      forces: { ...lroForces(8), thirdBodies: [10, 399] } },
+    { label: "Moon's harmonics (degree 2) on a high Earth orbit", center: 399, initial: [1e5, 0, 0, 0, 1.9965 * c30, 1.9965 * s30], span: 3600, degree: 2, bar: 0.08,
+      forces: EARTH_FORCES },
+  ];
+  for (const c of cases) {
+    const step = 30, times = Array.from({ length: c.span / step }, (_, k) => t0 + (k + 1) * step);
+    const exec = (field) => request({ center: c.center, epoch: t0, initial: c.initial, target: t0 + c.span, samples: times, integrator: { absM: 1e-10, rel: 1e-14, initial: 5, max: 30 },
+      forces: { ...c.forces, extra: field ? { THIRD_BODY_MAXIMUM_DEGREE: c.degree, THIRD_BODY_MAXIMUM_ORDER: c.degree } : {} } });
+    const without = await run('browser', exec(false), KERNEL_2026), withField = await run('browser', exec(true), KERNEL_2026);
+    check(!without.error && !withField.error, `${c.label}: ${without.error ?? withField.error}`);
+    if (without.error || withField.error) continue;
+    // the module's term at the start and at each sample of the path with the field, km/s^2 -> m/s^2
+    const states = [c.initial, ...withField.samples], when = [t0, ...times];
+    const out = (await runNative(thirdBinary.binary, [DE440_2026, c.center, c.degree, c.degree, ...states.flatMap((state, k) => [when[k], ...state.slice(0, 3)])])).trim().split('\n');
+    const accel = states.map((_, k) => out[3 * k].split(' ').map((v) => Number(v) * 1000));
+    // trapezoid over the path of (T - s) a(s)
+    const T = c.span, predicted = [0, 0, 0];
+    for (let k = 0; k < states.length; ++k) {
+      const s = when[k] - t0, w = (k === 0 || k === states.length - 1 ? 0.5 : 1) * step;
+      for (let i = 0; i < 3; ++i) predicted[i] += w * (T - s) * accel[k][i];
+    }
+    const measured = [0, 1, 2].map((i) => (withField.final[i] - without.final[i]) * 1000);
+    const norm = (v) => Math.hypot(...v), error = norm(measured.map((v, i) => v - predicted[i])) / norm(predicted);
+    check(norm(predicted) > 1e-8 && norm(measured) > 1e-8, `${c.label}: the field did not move the orbit (measured ${norm(measured)} m, predicted ${norm(predicted)} m)`);
+    check(error < c.bar, `${c.label}: the orbit moved by ${measured.map((v) => v.toExponential(3))} m, the term integrated twice gives ${predicted.map((v) => v.toExponential(3))} m (difference ${error})`);
+    console.log(`  ${c.label}, ${c.span} s: the field moves the orbit by ${(norm(measured) * 1e6).toFixed(2)} um; the module's term integrated twice gives ${(norm(predicted) * 1e6).toFixed(2)} um (relative difference ${error.toExponential(1)})`);
+  }
+}
+
+// ---- 4. refusals by name ------------------------------------------------------------------------------------------
+console.log('4. Refusals by name');
 {
   const truth = readTruth('lro-2026-03-20.json');
   const base = (center, forces, extra = {}) => request({ center, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[12], forces, ...extra });
@@ -164,14 +217,40 @@ console.log('3. Refusals by name');
     check(out.error && pattern.test(out.error), `${label}: expected ${pattern}, got ${out.error ?? 'a result'}`);
     console.log(`  ${label}: ${out.error?.slice(0, 110)}`);
   };
-  const moon = lroForces(20);
-  await refused('drag about the Moon', base(MOON, { ...moon, drag: { cd: 2.2 } }), /unsupported-atmosphere/);
-  await refused('EGM2008 about the Moon', base(MOON, { ...moon, gravity: sds.pcfGravitySelection.EGM2008 }), /unsupported-gravity/);
-  await refused('GRGM660PRIM about the Earth', base(399, { ...moon, gravity: sds.pcfGravitySelection.GRGM660PRIM }), /unsupported-gravity/);
+  const moon = lroForces(20), mars = { gm: MARS_GM, degree: 20, order: 20, thirdBodies: [10, 399], massKg: 1150, areaM2: 15 };
+  const G = sds.pcfGravitySelection, A = sds.pcfAtmosphereFamily, field = (degree, order = degree) => ({ extra: { THIRD_BODY_MAXIMUM_DEGREE: degree, THIRD_BODY_MAXIMUM_ORDER: order } });
+  // A field or an atmosphere belongs to its body and is selected by its own name; asked for about another body it is refused
+  // (SPHERICAL_HARMONICS and EXPONENTIAL are the Earth's, not the central body's own).
+  await refused('SPHERICAL_HARMONICS about the Moon', base(MOON, { ...moon, gravity: G.SPHERICAL_HARMONICS }), /unsupported-gravity: SPHERICAL_HARMONICS, EGM2008 and EGM96 are the Earth's fields/);
+  await refused('SPHERICAL_HARMONICS about Mars', base(MARS, { ...mars, gravity: G.SPHERICAL_HARMONICS }), /unsupported-gravity: SPHERICAL_HARMONICS, EGM2008 and EGM96 are the Earth's fields/);
+  await refused('EGM2008 about the Moon', base(MOON, { ...moon, gravity: G.EGM2008 }), /unsupported-gravity: SPHERICAL_HARMONICS, EGM2008 and EGM96 are the Earth's fields/);
+  await refused('MRO120F about the Moon', base(MOON, { ...moon, gravity: G.MRO120F }), /unsupported-gravity: MRO120F is Mars's field/);
+  await refused('MRO120F about the Earth', base(399, { ...moon, gravity: G.MRO120F }), /unsupported-gravity: MRO120F is Mars's field/);
+  await refused('GRGM660PRIM about Mars', base(MARS, { ...mars, gravity: G.GRGM660PRIM }), /unsupported-gravity: GRGM660PRIM is the Moon's field/);
+  await refused('GRGM660PRIM about the Earth', base(399, { ...moon, gravity: G.GRGM660PRIM }), /unsupported-gravity: GRGM660PRIM is the Moon's field/);
+  await refused('EXPONENTIAL drag about Mars', base(MARS, { ...mars, drag: { cd: 2.2 }, atmosphere: A.EXPONENTIAL }), /unsupported-atmosphere: About Mars select ATMOSPHERE_MODEL MARS_EXPONENTIAL/);
+  await refused('NRLMSISE00 drag about Mars', base(MARS, { ...mars, drag: { cd: 2.2 }, atmosphere: A.NRLMSISE00 }), /unsupported-atmosphere: About Mars select ATMOSPHERE_MODEL MARS_EXPONENTIAL/);
+  await refused('MARS_EXPONENTIAL about the Earth', base(399, { ...EARTH_FORCES, atmosphere: A.MARS_EXPONENTIAL }), /unsupported-atmosphere: MARS_EXPONENTIAL is Mars's atmosphere/);
+  await refused('MARS_EXPONENTIAL about the Moon', base(MOON, { ...moon, atmosphere: A.MARS_EXPONENTIAL }), /unsupported-atmosphere: MARS_EXPONENTIAL is Mars's atmosphere/);
+  await refused('drag about the Moon', base(MOON, { ...moon, drag: { cd: 2.2 } }), /unsupported-atmosphere: FFM has no atmosphere model for Moon/);
   await refused('the Moon as its own third body', base(MOON, { ...moon, thirdBodies: [10, 301] }), /unsupported-third-body/);
   await refused('a body with no embedded field', base(599, moon), /unsupported-central-body/);
   await refused('a degree beyond the embedded field', base(MOON, lroForces(151)), /unsupported-gravity: GRGM660PRIM is embedded to degree 150 of its 660/);
-  await refused('a state about the wrong body', request({ center: MARS, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[12], forces: { ...moon, extra: { CENTRAL_BODY_NAIF_ID: MOON } } }), /unsupported-frame/);
+  await refused('a degree beyond the embedded field of Mars', base(MARS, { ...mars, degree: 121, order: 121 }), /unsupported-gravity: MRO120F is embedded to degree 120/);
+  await refused('a state about the wrong body', request({ center: MARS, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[12], forces: { ...moon, gravity: G.POINT_MASS, extra: { CENTRAL_BODY_NAIF_ID: MOON } } }), /unsupported-frame/);
+  // The third body's field (THIRD_BODY_MAXIMUM_DEGREE and _ORDER): where there is none, where it is not asked for, and past what is embedded.
+  await refused('a third-body field about Mars', base(MARS, { ...mars, ...field(4) }), /unsupported-third-body: No third body of Mars has an embedded harmonic field/);
+  await refused('third-body degree 1', base(MOON, { ...moon, ...field(1, 0) }), /invalid-forces: THIRD_BODY_MAXIMUM_DEGREE is 0 \(the third bodies are point masses\) or two and up/);
+  await refused('third-body order without degree', base(MOON, { ...moon, extra: { THIRD_BODY_MAXIMUM_ORDER: 2 } }), /invalid-presence: THIRD_BODY_MAXIMUM_ORDER requires THIRD_BODY_MAXIMUM_DEGREE/);
+  await refused('third-body order above the degree', base(MOON, { ...moon, ...field(4, 5) }), /unsupported-gravity: THIRD_BODY_MAXIMUM_ORDER must be between zero and THIRD_BODY_MAXIMUM_DEGREE/);
+  await refused('a third-body field without third bodies', base(MOON, { ...moon, thirdBodies: [], ...field(4) }), /invalid-forces: THIRD_BODY_MAXIMUM_DEGREE requires ENABLE_THIRD_BODY/);
+  await refused('the Earth not among the Moon\'s third bodies', base(MOON, { ...moon, thirdBodies: [10], ...field(4) }), /unsupported-third-body: THIRD_BODY_MAXIMUM_DEGREE is the Earth's field about the Moon; list the Earth \(399\)/);
+  await refused('the Moon not among the Earth\'s third bodies', base(399, { ...EARTH_FORCES, thirdBodies: [10], ...field(2) }), /unsupported-third-body: THIRD_BODY_MAXIMUM_DEGREE is the Moon's field about the Earth; list the Moon \(301\)/);
+  await refused('a third-body field beyond the Earth\'s embedded field', base(MOON, { ...moon, ...field(71) }), /unsupported-gravity: THIRD_BODY_MAXIMUM_DEGREE names degree 71; the Earth's EGM2008 is embedded to degree 70/);
+  await refused('a third-body field beyond the Moon\'s embedded field', base(399, { ...EARTH_FORCES, ...field(151) }), /unsupported-gravity: THIRD_BODY_MAXIMUM_DEGREE names degree 151; the Moon's GRGM660PRIM is embedded to degree 150/);
+  await refused('a third-body field without the kernel', base(399, { ...EARTH_FORCES, extra: { EPHEMERIS_SOURCE: 'Analytical', THIRD_BODY_MAXIMUM_DEGREE: 2, THIRD_BODY_MAXIMUM_ORDER: 2 } }), /missing-kernel: THIRD_BODY_MAXIMUM_DEGREE reads the planetary kernel/);
+  const earlyEarth = request({ center: 399, epoch: -3.0e8, initial: [1e5, 0, 0, 0, 1.9965, 0], target: -3.0e8 + 600, forces: { ...EARTH_FORCES, ...field(2) } });
+  await refused('the Moon\'s field on an Earth orbit before the lunar libration (1990)', earlyEarth, /orientation-out-of-range: The Moon's embedded orientation model covers/);
   const stm = base(MOON, moon); stm.INCLUDE_STM = true;
   await refused('the transition matrix about the Moon', stm, /unsupported-configuration/);
   const analytical = base(MOON, { ...moon, extra: { EPHEMERIS_SOURCE: 'Analytical' } });
@@ -183,8 +262,8 @@ console.log('3. Refusals by name');
   await refused('impact on the Moon', request({ center: MOON, epoch: truth.epochs[0], initial: surface, target: truth.epochs[0] + 3600, forces: { ...moon, thirdBodies: [] } }), /impact/);
 }
 
-// ---- 4. lane parity -----------------------------------------------------------------------------------------------
-console.log('4. Lane parity: the browser and native WasmEdge give the same bits');
+// ---- 5. lane parity -----------------------------------------------------------------------------------------------
+console.log('5. Lane parity: the browser and native WasmEdge give the same bits');
 {
   const cases = [
     ['Moon', MOON, readTruth('lro-2026-03-20.json'), KERNEL_2026, lroForces(8)],

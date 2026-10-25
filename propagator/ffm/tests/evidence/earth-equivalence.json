@@ -1,9 +1,9 @@
 {
   "reference": {
-    "artifactSha256": "f2877a377ad682bf45f136455b3662c09afcd9871e8eaf3e83d3422594766d35"
+    "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197"
   },
   "candidate": {
-    "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197"
+    "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76"
   },
   "dockerLane": "waived by the owner 2026-10-22 (no Docker)",
   "groups": [
@@ -24,8 +24,8 @@
     },
     {
       "name": "edit responses (browser), reference against this tree",
-      "compared": 2211,
-      "identical": 2211
+      "compared": 2208,
+      "identical": 2208
     },
     {
       "name": "orekit responses (wasmedge), reference against this tree",
@@ -44,18 +44,18 @@
     },
     {
       "name": "edit responses (wasmedge), reference against this tree",
-      "compared": 1145,
-      "identical": 1145
+      "compared": 1142,
+      "identical": 1142
     },
     {
       "name": "orekit, xval and edited-request responses, browser against WasmEdge (reference)",
-      "compared": 1312,
-      "identical": 1312
+      "compared": 1309,
+      "identical": 1309
     },
     {
       "name": "orekit, xval and edited-request responses, browser against WasmEdge (this tree)",
-      "compared": 1312,
-      "identical": 1312
+      "compared": 1309,
+      "identical": 1309
     },
     {
       "name": "prw-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
@@ -123,8 +123,8 @@
       "identical": 33
     }
   ],
-  "compared": 7431,
-  "identical": 7431,
+  "compared": 7419,
+  "identical": 7419,
   "notes": [
     "WasmEdge gave no answer (the host's wait ended) in both trees, V8 answers \"invalid-state\": edit/leo-full/FORCES.WEATHER.F107=1e+30",
     "WasmEdge gave no answer (the host's wait ended) in both trees, V8 answers \"invalid-state\": edit/leo-full/FORCES.WEATHER.F107_AVERAGE=1e+30"
