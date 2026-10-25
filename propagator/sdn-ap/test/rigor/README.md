@@ -25,7 +25,7 @@ source and the evidence it found. The paper and site claim tracing is in the sdn
 | Reviewer | Check | Tier | Question | Source |
 | --- | --- | --- | --- | --- |
 | Hoots | `hoots-225-min-boundary` | fast | Is the SGP4/SDP4 switch at 225 min of the recovered n''o, where the reference switches (41 mean motions across it)? | STR#3 sec. 6, 10; AIAA 2006-6753 sec. II; paper 1.1 |
-| Hoots | `hoots-singular-geometry` | fast | At e = 0, e at the 1e-4 rule, i = 0 and 180 deg and the critical inclinations, the reference's states and refusals (a reference state at the origin counts as no answer)? | STR#3 sec. 6; AIAA 2006-6753 VI.A, App. D |
+| Hoots | `hoots-singular-geometry` | fast | At e = 0, e at the 1e-4 rule, i = 0, 178, 179.9999 and 180 deg and the critical inclinations, the reference's states and refusals; where the reference gives no answer at an exact edge (SGP4XP i = 0 or e = 0; a state at the origin), the module's answer the limit of its own; SGP4 at exactly 180 deg (vanishing divisors) reported? | STR#3 sec. 6; AIAA 2006-6753 VI.A, App. D |
 | Hoots | `hoots-singular-geometry-sdnap` | fast | Does SDNAP stay finite at the same geometries (never a NaN reported good)? | paper 1.3, 2.1; SPEC 1.5 |
 | Hoots | `hoots-every-call-returns` | fast | Does every call return at the edges of the element domain, every theory: a state or a refusal, never a hang or a non-finite state reported good? | AIAA 2006-6753 App. D; SPEC 1.5 |
 | Hoots | `hoots-low-perigee` | fast | Below 220, 156 and 98 km of perigee and under the surface, the reference's states and the same decay refusals? | STR#3 sec. 6; AIAA 2006-6753 VI.A, App. D |
