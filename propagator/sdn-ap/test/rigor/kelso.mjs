@@ -11,7 +11,7 @@ import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { THEORY, wasmPath } from "../lib/module.mjs";
 import { configuration } from "../lib/pcf.mjs";
 import { elementsOf, tleLines } from "../lib/tle.mjs";
-import { defineCheck, hypot3, moduleStates, NotMeasured, REVIEWERS } from "./lib/rigor.mjs";
+import { defineCheck, EARTH_RADIUS_WGS72_KM, hypot3, moduleStates, NotMeasured, REVIEWERS } from "./lib/rigor.mjs";
 
 const OMM_TYPE = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 
@@ -48,17 +48,19 @@ export const checks = [
       const reference = await ctx.reference();
       let disagreeRefusal = 0, worst = 0, compared = 0;
       const oneSide = [];
+      let belowSurface = 0;
       for (const k of sample) {
         const ref = await reference.propagate([records[k].TLE_LINE1, records[k].TLE_LINE2], [0, 1440]);
         [0, 1].forEach((j) => {
           const m = states[k][j], o = ref ? ref[j] : null;
+          if (!m.ok && o && Math.hypot(...o.r) < EARTH_RADIUS_WGS72_KM) { belowSurface += 1; return; }  // the radius trap (paper 1.1)
           if (m.ok !== !!o) { disagreeRefusal += 1; oneSide.push(`catalog ${records[k].NORAD_CAT_ID} (epoch ${records[k].EPOCH}) at ${[0, 1440][j]} min: ${m.ok ? "module answers, reference refuses" : "reference answers, module refuses"}`); return; }
           if (m.ok) { compared += 1; worst = Math.max(worst, hypot3(m.r, o.r) * 1e3); }
         });
       }
       return { pass: disagreeRefusal === 0 && worst <= 1, evidence: [
         `${path.basename(file)}: ${rows.length} sets, 2 times each in ${seconds.toFixed(2)} s (${((seconds * 1e6) / (2 * rows.length)).toFixed(2)} us per state, one thread, report only)`,
-        `module refused ${refusedIdx.length} sets at epoch or +1 day; ${sample.size} sets against the reference: ${disagreeRefusal} samples where only one side answers, worst ${worst.toExponential(3)} m over ${compared} samples (limit 1 m)`, ...oneSide.map((l) => `  one side: ${l}`)] };
+        `module refused ${refusedIdx.length} sets at epoch or +1 day; ${sample.size} sets against the reference: ${disagreeRefusal} samples where only one side answers (besides ${belowSurface} reference states below one Earth radius that the module refuses, the radius trap), worst ${worst.toExponential(3)} m over ${compared} samples (limit 1 m)`, ...oneSide.map((l) => `  one side: ${l}`)] };
     },
   }),
   defineCheck({
