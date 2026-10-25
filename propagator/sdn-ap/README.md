@@ -578,10 +578,12 @@ third-order Runge-Kutta step with its fallbacks, cubic Hermite between nodes, Br
 Conformance (`test/results/conformance.json`; the oracle, USSF Sgp4Prop 9.9, black box; 8 times per set over
 7 days): SGP4 type-0 control, 1,200 sets: max 0.09 mm. SGP4XP, 10,200 sets: median 0.37 µm (LEO 49 µm, SSO
 4.9 µm, MEO 0.18 µm, GEO 0.25 µm, HEO 0.19 µm, VDS 0.24 µm); maxima LEO 28.7 m, SSO 3.58 m, MEO 26.9 m, GEO
-35.2 m, HEO 954 m, VDS 116 m. Accepted as inherent: 70 samples of decaying sets, 375 rounding-limited SPEC 4
-shadow decisions, the equator node (29 of 29 within 1 m flipped), the refusal epochs (164 of 164 within 1 % of
-the lifetime). Not accepted: 699 samples of 199 sets above 1 m (worst 623 m, HEO), listed with their element
-sets in `test/results/open-outliers.md`; the E2E's acceptance fails on them (xpMaxNonInherent). The corpus is
+35.2 m, HEO 954 m, VDS 116 m. Accepted as inherent: 70 samples of decaying sets; 1,070 rounding-limited SPEC 4
+shadow decisions (each envelope run on fresh nodes; the reference between the two runs, or within their spread
+where the decisions go in mixed directions); 4 samples where the reference's 9.1.1.0 build is within 1 m of the
+module and 9.9 is not; the equator node (29 of 29 within 1 m flipped); the refusal epochs (164 of 164 within 1 %
+of the lifetime). No sample is open, and the E2E passes. `test/results/open-outliers.md` names the tail's causes
+and the decisions that reproduce 9.9. The corpus is
 synthetic (seeded). The E2E prints the sha256 of every module output; `--worst N` lists the largest differences
 per regime; `--reproduce test/results/conformance.json` checks that a moved or rebuilt tree gives this run bit for
 bit. Rebuilt on foundation/sgp4-str3 tree b55a681a (C3 and the delta-M term dropped for e <= 1e-4; modules
@@ -632,7 +634,8 @@ LRU sweep that rebuilt them for every object, 2.8 s per object).
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
   over 7 days against the black-box oracle; per-regime maximum and median position difference. The oracle (the
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:
-  `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default), and the E2E and
+  `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
+  `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
   `spec-vectors/verify.mjs` refuse without it.
 - `test/bench.mjs`: memory per object and µs per object for a 60 s step, a 1-day jump and a 7-day jump.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day

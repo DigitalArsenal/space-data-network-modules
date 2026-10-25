@@ -5,17 +5,18 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-/** The oracle; propagate() is async. */
-export async function openReference() {
+/** The oracle (leg `version`, else SDN_AP_ORACLE_VERSION, else 9.9); propagate() is async. */
+export async function openReference({ version: leg } = {}) {
   const root = process.env.SDN_AP_ORACLE_ROOT;
   if (!root) {
     throw new Error("SDN_AP_ORACLE_ROOT is not set. The conformance E2E runs against the SGP4-XP oracle (the unmodified US Space Force Sgp4Prop library behind a black-box harness, closed-modules packages/sgp4-xp-oracle), which this repository does not carry.");
   }
-  const version = process.env.SDN_AP_ORACLE_VERSION || "9.9";
+  const version = leg || process.env.SDN_AP_ORACLE_VERSION || "9.9";
   const spec = await import(pathToFileURL(path.join(root, "oracle.mjs")).href);
   const oracle = await spec.openOracle({ version });
   return {
     name: `the SGP4-XP oracle (SDN_AP_ORACLE_ROOT), USSF Sgp4Prop ${oracle.version}, black box`,
+    version: oracle.version,
     async propagate(lines, minutes) {
       const states = await oracle.propagate(lines, minutes);
       if (!states) return null;
