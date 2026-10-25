@@ -1,9 +1,9 @@
 {
   "reference": {
-    "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197"
+    "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76"
   },
   "candidate": {
-    "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76"
+    "artifactSha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd"
   },
   "dockerLane": "waived by the owner 2026-10-22 (no Docker)",
   "groups": [

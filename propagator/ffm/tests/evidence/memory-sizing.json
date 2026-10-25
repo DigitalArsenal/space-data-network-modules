@@ -1,8 +1,8 @@
 {
-  "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
+  "artifactSha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
   "previousArtifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
   "memory": {
-    "staticMinimumBytes": 24178112,
+    "staticMinimumBytes": 24179840,
     "initialBytes": 28377088,
     "maximumBytes": 754974720,
     "wasmSection": {
@@ -81,7 +81,7 @@
       "highWaterBytes": 43057152,
       "samples": [
         37617664,
-        37683200,
+        37748736,
         37748736,
         40304640,
         40304640,
@@ -117,7 +117,7 @@
       "configuredBytes": 32309248,
       "samples": [
         37617664,
-        37683200,
+        37748736,
         37748736,
         40304640,
         40304640,
@@ -362,7 +362,7 @@
   "aot": {
     "status": "PASS",
     "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
-    "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
+    "artifactSha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
     "runtime": "WasmEdge 0.16.4; node spacedatanetwork 1.1.0",
     "execution": "Every native row executed the exact flow artifact produced by node prewarm-aot."
   },

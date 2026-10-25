@@ -157,6 +157,26 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "gravity_field",
+          "description": "Optional harmonic gravity field of the central body as $SHC: the Moon's GRGM660PRIM to degree 660 (fully normalized; GM in m^3/s^2 and reference radius in meters as the set carries them). A request about the Moon that selects GRGM660PRIM reads it in place of the embedded field, which stops at degree 150; the set must name the selected field and body. Refused for a request that selects no planetary field.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-shc",
+              "allowedTypes": [
+                {
+                  "schemaName": "SHC.fbs",
+                  "fileIdentifier": "$SHC",
+                  "rootTypeName": "SHC",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
         }
       ],
       "outputPorts": [

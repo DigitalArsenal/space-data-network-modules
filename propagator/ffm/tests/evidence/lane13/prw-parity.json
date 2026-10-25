@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "TMPL lane13 PRW malformed classifications",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
-  "moduleSha256": "bba268672fc297699546d3c1da47731cc5aec1549cda96ed97a16a1ea231fb76",
+  "artifactSha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
+  "moduleSha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 72,
-      "durationMs": 1007
+      "durationMs": 1102
     },
     {
       "lane": "wasmedge",
       "runs": 72,
-      "durationMs": 4073
+      "durationMs": 3883
     }
   ],
   "cases": [
