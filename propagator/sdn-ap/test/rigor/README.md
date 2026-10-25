@@ -16,6 +16,8 @@ source and the evidence it found. The paper and site claim tracing is in the sdn
 - The reference checks run the US Space Force Sgp4Prop 9.9 library as a black box through the SGP4-XP harness
   (`SDN_AP_ORACLE_ROOT`, or `GAUNTLET_STACK_ROOT`/`SDN_STACK_ROOT` naming the stack whose closed-modules checkout holds
   `packages/sgp4-xp-oracle`). Clean room: published inputs and outputs are data; no reference source code is read.
+- A reference state below one Earth radius (WGS-72, 6378.135 km) that the module refuses is the radius trap the paper
+  states (1.1: a decayed set is refused, not extrapolated), counted apart and never as a disagreement.
 - JS orchestrates and computes test statistics only; every state comes from the module or the reference.
 
 ## Checks
@@ -23,13 +25,14 @@ source and the evidence it found. The paper and site claim tracing is in the sdn
 | Reviewer | Check | Tier | Question | Source |
 | --- | --- | --- | --- | --- |
 | Hoots | `hoots-225-min-boundary` | fast | Is the SGP4/SDP4 switch at 225 min of the recovered n''o, where the reference switches (41 mean motions across it)? | STR#3 sec. 6, 10; AIAA 2006-6753 sec. II; paper 1.1 |
-| Hoots | `hoots-singular-geometry` | fast | At e = 0, e at the 1e-4 rule, i = 0 and 180 deg and the critical inclinations, the reference's states and refusals? | STR#3 sec. 6; AIAA 2006-6753 VI.A, App. D |
+| Hoots | `hoots-singular-geometry` | fast | At e = 0, e at the 1e-4 rule, i = 0, 178, 179.9999 and 180 deg and the critical inclinations, the reference's states and refusals; where the reference gives no answer at an exact edge (SGP4XP i = 0 or e = 0; a state at the origin), the module's answer the limit of its own; SGP4 at exactly 180 deg (vanishing divisors) reported? | STR#3 sec. 6; AIAA 2006-6753 VI.A, App. D |
 | Hoots | `hoots-singular-geometry-sdnap` | fast | Does SDNAP stay finite at the same geometries (never a NaN reported good)? | paper 1.3, 2.1; SPEC 1.5 |
+| Hoots | `hoots-every-call-returns` | fast | Does every call return at the edges of the element domain, every theory: a state or a refusal, never a hang or a non-finite state reported good? | AIAA 2006-6753 App. D; SPEC 1.5 |
 | Hoots | `hoots-low-perigee` | fast | Below 220, 156 and 98 km of perigee and under the surface, the reference's states and the same decay refusals? | STR#3 sec. 6; AIAA 2006-6753 VI.A, App. D |
 | Hoots | `hoots-resonance-classes` | fast | Synchronous, 12-hour, 16 h and 8 h classes and the DPINIT band edges match the reference over a week? | STR#3 sec. 10; USSF SGP4-XP; paper 1.2, 3.5 |
 | Hoots | `hoots-lyddane-node-quadrant` | fast | Below 0.2 rad of inclination, with the node near 0, 180 and 360 deg, the node in the reference's quadrant? | AIAA 2006-6753 VI.C; paper 1.1 |
 | Hoots | `hoots-mean-element-recovery` | fast | Does the integrated mean state at epoch give back the set, and the inverse map of its a the set's mean motion? | paper 2.1, 2.4; SPEC 1.1, 1.5 |
-| Vallado | `vallado-aiaa-2006-6753-verification` | fast | The 33 verification sets against their published outputs (1 mm, 1e-5 m/s) and their published error stops? | AIAA 2006-6753 App. D: SGP4-VER.TLE, tcppver.out (`data/`) |
+| Vallado | `vallado-aiaa-2006-6753-verification` | fast | The 33 verification sets: the base's improved mode against their published outputs (1 mm, 1e-5 m/s, the error stops); the module's AFSPC mode against the operational reference on the same samples (1e-6 m + the reference's epoch rounding); AFSPC against the published outputs reported? | AIAA 2006-6753 App. D: SGP4-VER.TLE, tcppver.out (`data/`); USSF Sgp4Prop 9.9 |
 | Vallado | `vallado-teme-to-gcrf` | fast | TEME to GCRF as the published AIAA 2006-6753 example (1 cm); the distance to pyerfa's GMST06 TEME (report only)? | AIAA 2006-6753 sec. V; analysis/epoch-state/tests/vallado-verification.json |
 | Vallado | `vallado-time-arguments` | fast | A UTC Julian date the same instant as minutes from epoch, every theory, across the 2016 leap second? | AIAA 2006-6753 II.F; IERS Bulletin C 52 |
 | Vallado | `vallado-wgs72-constants` | fast | SGP4 constants WGS-72 as AIAA 2006-6753 Table 2? | AIAA 2006-6753 VI.B; src/constants.inc |

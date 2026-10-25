@@ -90,9 +90,12 @@ constexpr double kThdt = 4.37526908801129966e-3;
 constexpr double kFasx2 = 0.13130908, kFasx4 = 2.8843198, kFasx6 = 0.37448087;
 // The integrator (STR#3 p. 64): steps of 720 minutes, STEP2 = 720^2 / 2.
 constexpr double kStepp = 720.0, kStepn = -720.0, kStep2 = 259200.0;
-// Inclination limits: SH dropped within 3 degrees of the poles of the
-// inclination range (STR#3 p. 61; near 180 degrees: AIAA 2006-6753 VI.A), and
-// the Lyddane modification below 0.2 rad (STR#3 p. 67).
+// Inclination limits: SH dropped below 3 degrees (STR#3 p. 61) and, in the
+// improved mode, within 3 degrees of 180 as well (AIAA 2006-6753 VI.A); the
+// AFSPC mode keeps SH there, as the operational library does (black box: from
+// 177 to 179.9999 degrees it reproduces the reference within 1e-6 m, against
+// 1.6 to 13 km with the term dropped). The Lyddane modification below 0.2 rad
+// (STR#3 p. 67).
 constexpr double kShInclination = 5.2359877e-2, kLyddaneInclination = 0.2;
 
 /// One body's lunar-solar periodic coefficients: the Sun's SE2, SE3, SI2, SI3,
@@ -138,7 +141,7 @@ struct Deep {
 /// DEEP's statement-20 block for one body (STR#3 pp. 60-61). zcosg .. zsinh
 /// place the body's orbit against the satellite's, cc is its strength, zn its
 /// mean motion and ze its eccentricity; xnoi = 1 / XNQ.
-inline BodyTerms body_terms(const DeepArgs& g, double xnoi, double zcosg, double zsing, double zcosi, double zsini,
+inline BodyTerms body_terms(const DeepArgs& g, Sgp4Mode mode, double xnoi, double zcosg, double zsing, double zcosi, double zsini,
                             double zcosh, double zsinh, double cc, double zn, double ze) {
   const double eq = g.eo, eqsq = g.eqsq, bsq = g.bsq, rteqsq = g.rteqsq;
   const double siniq = g.siniq, cosiq = g.cosiq, sinomo = g.sinomo, cosomo = g.cosomo;
@@ -188,7 +191,7 @@ inline BodyTerms body_terms(const DeepArgs& g, double xnoi, double zcosg, double
   b.sl = -zn * s3 * (z1 + z3 - 14.0 - 6.0 * eqsq);
   b.sgh = s4 * zn * (z31 + z33 - 6.0);
   b.sh = -zn * s2 * (z21 + z23);
-  if (g.xincl < kShInclination || g.xincl > kPi - kShInclination) b.sh = 0.0;
+  if (g.xincl < kShInclination || (mode == Sgp4Mode::kImproved && g.xincl > kPi - kShInclination)) b.sh = 0.0;
   b.p.e2 = 2.0 * s1 * s6;
   b.p.e3 = 2.0 * s1 * s7;
   b.p.i2 = 2.0 * s2 * z12;
@@ -244,8 +247,8 @@ inline void deep_init(Deep& d, const DeepArgs& g, Sgp4Mode mode) {
 
   // DO SOLAR TERMS (statement 10), then DO LUNAR TERMS (statement 30)
   const double xnoi = 1.0 / d.xnq;
-  const BodyTerms sun = body_terms(g, xnoi, kZcosgs, kZsings, kZcosis, kZsinis, cosq, sinq, kC1ss, kZns, kZes);
-  const BodyTerms moon = body_terms(g, xnoi, zcosgl, zsingl, zcosil, zsinil, zcoshl * cosq + zsinhl * sinq,
+  const BodyTerms sun = body_terms(g, mode, xnoi, kZcosgs, kZsings, kZcosis, kZsinis, cosq, sinq, kC1ss, kZns, kZes);
+  const BodyTerms moon = body_terms(g, mode, xnoi, zcosgl, zsingl, zcosil, zsinil, zcoshl * cosq + zsinhl * sinq,
                                     sinq * zcoshl - cosq * zsinhl, kC1l, kZnl, kZel);
   d.sun = sun.p;
   d.moon = moon.p;

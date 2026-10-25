@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Native WasmEdge parity of the shared artifact (with the SDN-AP segment sets: propagate, fit SDNAP, propagate): the `propagate` method (one $OMM in, one $OEM out) invoked with the
+// Native WasmEdge parity of the shared artifact (with the SDN-AP segment sets: propagate, fit SDNAP, propagate; and an osculating $OPM through opm_set and propagate): the `propagate` method (one $OMM in, one $OEM out) invoked with the
 // same SGP4 and SGP4XP sets, and the `fit` method ($OEM in; $OMM and $OBD out) on the first set's ephemeris in TEME,
 // GCRF (ERFA) and ITRF, `propagate` on a 4-day GCRF grid template, and SDN-AP: `fit` (THEORY SDNAP) on the TEME ephemeris
 // (NRLMSISE-00 drag through the shared kernel, the 2d tesseral terms) and its set propagated on the grid, a
@@ -236,6 +236,17 @@ const eventInputs = await (async () => {
   const batch = [...launch, ...[0, 1].map(() => ({ portId: "ephemeris", typeRef: oemType, payload: arc }))];
   return { launch, low, burnout, batch, detect: [{ portId: "ephemeris", typeRef: oemType, payload: eph }] };
 })();
+// an osculating $OPM: an HEO Keplerian block (EME2000, UTC, GM) with a covariance
+const opmInput = await (async () => {
+  const { OPM, OPMT } = await import("spacedatastandards.org/lib/js/OPM/OPM.js");
+  const t = Object.assign(new OPMT(), { CCSDS_OPM_VERS: "2.0", ORIGINATOR: "SDN-AP parity", OBJECT_NAME: "PARITY HEO", CENTER_NAME: "EARTH", REF_FRAME: "EME2000",
+    TIME_SYSTEM: "UTC", EPOCH: "2026-10-20T12:00:00.000Z", SEMI_MAJOR_AXIS: 24974.9, ECCENTRICITY: 0.68526, INCLINATION: 34.018, RA_OF_ASC_NODE: 243.148,
+    ARG_OF_PERICENTER: 189.804, TRUE_ANOMALY: 170.3, GM: 398600.4418, COV_REF_FRAME: "EME2000",
+    COVARIANCE: [1e-2, 1e-3, 2e-2, 1e-4, 2e-4, 3e-2, 1e-6, 2e-6, 3e-6, 1e-8, 2e-6, 1e-6, 4e-6, 1e-9, 2e-8, 3e-6, 2e-6, 1e-6, 1e-9, 1e-9, 3e-8] });
+  const b = new flatbuffers.Builder(1024);
+  OPM.finishSizePrefixedOPMBuffer(b, t.pack(b));
+  return { portId: "opm", typeRef: { schemaName: "OPM.fbs", fileIdentifier: "$OPM", rootTypeName: "OPM" }, payload: b.asUint8Array() };
+})();
 const digest = (result) => ({
   statusCode: result.statusCode,
   errorCode: result.errorCode ?? null,
@@ -265,6 +276,9 @@ for (const [lane, options] of [["browser", { surface: "command" }], ["wasmedge",
   lanes[lane].reentry = digest(await harness.invoke({ methodId: "reentry", inputs: eventInputs.low }));
   lanes[lane].detect = digest(await harness.invoke({ methodId: "detect_maneuvers", inputs: eventInputs.detect }));
   lanes[lane].bov = digest(await harness.invoke({ methodId: "launch_set", inputs: eventInputs.burnout }));
+  // SPEC 13: an osculating $OPM (an HEO Keplerian block with a covariance, EME2000) through opm_set and through propagate
+  lanes[lane].opmSet = digest(await harness.invoke({ methodId: "opm_set", inputs: [SDNAP, opmInput] }));
+  lanes[lane].opmGrid = digest(await harness.invoke({ methodId: "propagate", inputs: [SDNAP, opmInput, gridInput] }));
   lanes[lane].batch = digest(await harness.invoke({ methodId: "launch_batch", inputs: eventInputs.batch }));
   lanes[lane].segments = [];
   for (const c of segmentCases) {
@@ -283,6 +297,7 @@ const identical = JSON.stringify(lanes.browser) === JSON.stringify(lanes.wasmedg
   lanes.browser.segments.every((c) => c.prop.statusCode === 0 && c.fit.statusCode === 0 && c.again?.statusCode === 0) &&
   lanes.browser.maneuver.statusCode === 0 && lanes.browser.maneuver.outputs.length === 5 &&
   lanes.browser.launch.statusCode === 0 && lanes.browser.reentry.statusCode === 0 && lanes.browser.detect.statusCode === 0 &&
-  lanes.browser.bov.statusCode === 0 && lanes.browser.batch.statusCode === 0 && lanes.browser.batch.outputs.length === 2;
+  lanes.browser.bov.statusCode === 0 && lanes.browser.batch.statusCode === 0 && lanes.browser.batch.outputs.length === 2 &&
+  lanes.browser.opmSet.statusCode === 0 && lanes.browser.opmGrid.statusCode === 0;
 console.log(JSON.stringify({ wasmedge: "0.16.4 (SDK wasi-threads runner)", browser: lanes.browser, native: lanes.wasmedge, identical }, null, 1));
 process.exit(identical ? 0 : 1);

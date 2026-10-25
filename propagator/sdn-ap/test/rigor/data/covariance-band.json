@@ -1,0 +1,11 @@
+{
+ "//": "The covariance realism acceptance band the rigor check holds SPEC.md to. A change of the band in SPEC.md fails vallado-covariance-realism-bound until it is recorded here, with its reason, as a new entry; the last entry is the band in force.",
+ "history": [
+  {
+   "recorded": "2026-10-25",
+   "meanD2Over3": [0.8, 1.25],
+   "coverage95": [0.93, 0.97],
+   "reason": "coordinator 2026-10-25: the band side B states in SPEC 12 (modules-sdn-ap-osculating-opm-input-20261025); cells outside it are measured limits, reported by name"
+  }
+ ]
+}

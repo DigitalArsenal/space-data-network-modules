@@ -51,6 +51,15 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   per time, the TEME state and its 6 x 6 covariance (42 doubles), carried by the theory's own state transition matrix
   (central differences of the theory in its parameters) plus the fitted process noise; `propagate` writes a
   COVARIANCE_MATRIX_LINES line per state, in the block's axes, for a set that carries COVARIANCE.
+- Osculating input (SPEC 13; `test/opm.e2e.mjs`): `opm_set` takes SDS `$OPM` records (the Keplerian block or the state
+  vector, REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000, UTC, the record's GM) and gives each one's SDN-AP set through
+  the module's own initialization (the state in TEME, y0 = h^-1(x, t) by the inverse map), with its provenance as
+  USER_DEFINED_SDNAP_SOURCE OSCULATING_OPM, _SOURCE_ELEMENTS, _SOURCE_FRAME, _SOURCE_GM, _CONVERSION, _CONVERSION_STEPS and
+  _FORCES; B = C_D A/m and AGOM = C_R A/m from MASS and the areas, else the $PCF LAUNCH priors; a COVARIANCE rotated to
+  TEME with the regime's process noise, none made otherwise. `propagate` takes 'opm' frames through the same conversion
+  (the same `$OEM` bytes as `opm_set` then `propagate`). Refused by name: no-elements, unknown-frame, missing-gm,
+  unsupported-time-system, unsupported-center. `sdnap_osculating_elements_about(r, v, gm, out)` (a, e, i, RAAN, argp,
+  true and mean anomaly, period) and `sdnap_kepler_at(r, v, gm, seconds, out)` (two-body motion) about a stated GM.
 - Configuration (SDS 1.268.0, `$PCF` 1.0.2): `propagate`, `fit`, `maneuver`, `detect_maneuvers`, `reentry`, `launch_set` and
   `launch_batch` take one `$PCF` on their required `configuration` port. Each reads THEORY and its own tables
   (propagate and maneuver: MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES; fit: FIT, MEAN_ELEMENT, SEGMENTS, FORCES;
@@ -273,8 +282,18 @@ extrapolate. The cislunar segments predict (1.9 / 9.8 / 48.4 km at days 1 / 3 / 
 - `detect_maneuvers` (5.1.4): the six-element GLR (16) on the innovations of the inverse map against a fit of the
   arc (B_eff, then AGOM, as `fit` (THEORY SDNAP)), M_k = Phi(t_k, t_b) G(t_b) = S(t_k) N with the theory's own
   transition, MAD weights per revolution (MANEUVER_DETECTION: THRESHOLD 20, MARGIN_STATES 12, REFINE_WINDOW_HOURS 2,
-  MINIMUM_STATES 48). Detection: the largest Lambda against the burn-free fit (the calibrated form; 0 detections on
-  40 burn-free FFM-1 arcs of 72 h, largest 18.5). Epoch and Delta v: the likelihood profiled over the epoch elements
+  MINIMUM_STATES 48). Detection: the smaller of two Lambdas, each against THRESHOLD 20, the same for every orbit: the
+  largest over the candidate epochs against the burn-free fit (the form calibrated on burn-free FFM-1 arcs: 0 detections
+  on 40 arcs of 72 h, largest 18.5) and the largest of the profiled form below (the epoch elements and B_eff
+  re-estimated with and without the burn). The first alone holds the epoch elements at a fit that minimizes position
+  residuals while the test weights element residuals, and that mismatch reads as a burn the fewer revolutions the arc
+  holds: on QZSS 72 h windows it read a median 47 (maximum 173) in 789 of 989 windows, and on burn-free FFM-1
+  geostationary and IGSO arcs (3 revolutions) it passed 20 on 7 and on 6 of 10 where the profiled Lambda read 0.6 to
+  3.0; GPS arcs (6 revolutions) 6 to 13.6 against 3.2 to 6.5. Frozen plan, before and after: ISS archive 97 of 99
+  pre-burn windows detected and 1.37 false alarms per object-year (unchanged), GPS 37 false alarms in 22.2 object-years
+  to 0, QZSS 691 in 2.87 to 0; FFM-1 burns at 36 h of a 72 h arc detected on their axis: 10 mm/s V and W in
+  geostationary and IGSO orbit, 100 mm/s V in GPS orbit (test/events.e2e.mjs); test/results/maneuver-detector.json.
+  Epoch and Delta v: the likelihood profiled over the epoch elements
   and B_eff (the nuisance re-estimated with and without the burn: Lambda = u' Nt (Nt' P Nt)^-1 Nt' u, P = A+ - A+ A^-1 A+,
   u = b+ - A+ A^-1 b from suffix sums of J' W J and J' W e), so a long pre-burn arc no longer pulls the epoch to the
   arc's start; the $MNV names the epoch's interval (the profile within 3.84 of its peak) and a burn-free report the
@@ -372,12 +391,135 @@ rows/slr-low.jsonl; one LAGEOS-1 2026 window lacks reference states).
 | SGP4XP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 2 | 137 | 5853 | 0.91 | 0.988 | 2.4 | 0.689 |
 | SGP4XP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 3 | 81 | 3189 | 0.76 | 0.992 | 1.88 | 0.746 |
 
+Against the acceptance band of SPEC 12.7 (mean d^2/3 in [0.8, 1.25], 95 % coverage in [0.93, 0.97], per regime and day)
+1 of the 24 cells is inside (SDN-AP, LEO set, day 2); SDN-AP's day 1 and SGP4XP throughout are outside it.
+
 Reproduce (needs /opt/data/sdn-archive/reference-states and the experiment's rows and space-weather table):
 
     node test/covariance-realism.mjs --theory SDNAP --set calibration --out test/results/covariance-calibration-sdnap.json
     node test/covariance-realism.mjs --theory SGP4XP --set calibration --out test/results/covariance-calibration-sgp4xp.json
     node test/covariance-realism.mjs --theory SDNAP --set held-out --out test/results/covariance-realism-sdnap.json
     node test/covariance-realism.mjs --theory SGP4XP --set held-out --out test/results/covariance-realism-sgp4xp.json
+
+## Osculating input and SDN's derived Vimpel sets (SPEC 13; measured 2026-10-25, module e8ee7050dfe7)
+
+`opm_set` and `propagate`'s 'opm' frames take osculating elements (SPEC 13). Their first source is JSC Vimpel's
+osculating-element table (spacedata.vimpel.ru, a registered account), which carries no redistribution terms, so SDN
+makes its own sets from it (owner 2026-10-25) and only those are committed: test/fixtures/opm/vimpel-derived-20261012.opm.gz,
+13,976 sets from the 13,977 of the 2026-10-12 table (FFM refused one, invalid-earth-orientation: the table's one
+set of 2025, epoch 2025-10-21, outside the Earth-orientation record). Credit, in every set's COMMENT and in NOTICE: "Derived from JSC Vimpel orbit data (spacedata.vimpel.ru): each set propagated one quarter period with FFM and re-expressed as osculating elements."
+
+Method (test/opm-derive.mjs; every number from a module):
+
+1. files/orbit-products `normalize_vimpel`: each row's printed osculating elements (J2000) to its state at the
+   reference epoch, GM 398,600.4418 km^3/s^2.
+2. The epoch shift: a quarter of the state's period about that GM (`sdnap_osculating_elements_about`), to the
+   millisecond.
+3. propagator/ffm `invoke`, full force (`fullForceRequest` of propagator/ffm/catalog-configuration.mjs: $PCF
+   PCFForceModel EGM2008 70 x 70 with its GM 398,600.4415 km^3/s^2; the Sun, the Moon, Venus, Mars and Jupiter from
+   DE440s; cannonball SRP with the conical shadow, Cr A/m 0.02 m^2/kg; Knocke Earth radiation, 15 degree elements;
+   NRLMSISE-00 drag, Cd A/m 0.01 m^2/kg, on the GFZ daily space weather; IERS 2010 solid tides; FES2004 ocean tides
+   30 x 30; IERS 2010 relativity; PCFIntegratorSettings RK78, relative tolerance 1e-14, steps 0.01-120 s), in EME2000
+   (MEAN_EQUATOR_EQUINOX_J2000 axes, the IAU 2000 frame bias to and from GCRF), with the experiment's Earth-orientation
+   record.
+4. The carried state as osculating elements about the same GM (`sdnap_osculating_elements_about`): one $OPM per set,
+   EME2000, UTC, the state and the Keplerian block, GM, and MASS 1 kg with DRAG_AREA 0.01 / DRAG_COEFF 1 and
+   SOLAR_RAD_AREA 0.02 / SOLAR_RAD_COEFF 1 (the forces the derivation assumed; Vimpel's printed area-to-mass is not used).
+
+The derivation is deterministic (the same stream bytes on reruns).
+
+**Which Vimpel objects have an independent precise orbit?** None (test/opm-truth-match.mjs,
+test/results/opm-truth-match.json). Vimpel's datefirst file links 978 Vimpel numbers to NORAD numbers, none of
+them an object of a precise-orbit source held here; and by elements (the module's osculating a, e, i, RAAN and the
+argument of latitude at the nearest reference epoch, then the separation of the two states) no Vimpel object of the
+three tables lies within 50 km of a reference object:
+
+| Source | Objects | datefirst links | Pairs within a day | Within 50 km | Nearest by elements (Vimpel / reference: separation) |
+| --- | --: | --: | --: | --: | --- |
+| ESA finals (GNSS: GPS, GLONASS, Galileo, BeiDou, QZSS) | 118 | 0 | 300,898 | 0 | 130501 / J007 QZS-3G: 2,066 km |
+| IGS finals (GPS) | 32 | 0 | 0 | 0 | 72011 / G067 GPS-IIF (no reference epoch within a day) |
+| GFZ MGEX rapid (GNSS incl. BeiDou GEO/IGSO, QZSS) | 114 | 0 | 141,757 | 0 | 143186 / J003 QZS-2G: 9,893 km |
+| ILRS combination (LAGEOS-1/2, Etalon-1/2) | 4 | 0 | 1,010 | 0 | 67217 / ETALON 1: 3,060 km |
+| ILRS NSGF (Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2) | 7 | 0 | 0 | 0 | 22402 / LARES-2 (no reference epoch within a day) |
+| Swarm (ESA SP3C) | 3 | 0 | 0 | 0 | 31601 / SWARM B (no reference epoch within a day) |
+| LEO POD (Sentinel-6, CryoSat-2 and others) | 15 | 0 | 31 | 0 | 15501 / SENTINEL-6B: 8,624 km |
+
+TESS (a 246,000 km), Chandra (kernel to 2019-09), TDRSS (an SPK of two-line elements), ISS and the Starlink sample have
+no Vimpel counterpart either (the report's notes). THEMIS A, D and E (NASA SSCWeb definitive positions, GEI J2000):
+the nearest Vimpel object is 2026-09-07: A 3,657 km, D 4,175 km, E 3,574 km; 2026-09-21: A 2,011 km, D 3,870 km, E 3,558 km; 2026-10-12: A 4,341 km, D 4,010 km, E 4,393 km, a different object in each table. Against the public catalog (Space-Track GP of
+2026-10-13 by the module's SGP4, local; counts only), 248 of the 13,977 Vimpel objects of 2026-10-12 lie within 10 km of a
+catalogued object (rocket bodies, debris and retired GEO payloads), 0 of them with a precise orbit: Vimpel's public table
+is mostly Vimpel's own objects. So the scores below are agreement with Vimpel's own prediction and consistency with
+its later determinations, each beside the two-body motion of the same set (the floor); neither is an accuracy.
+
+Agreement with JSC Vimpel's own 7-day prediction (the 2026-10-12 table's ephemeris files, 600 s from each set's
+reference epoch, every 12th row after the derived epoch; position RMS of each day, km; 6,677 sets scored):
+
+| Regime | Sets | Day | SDN-AP median | SDN-AP p90 | Two-body median | Two-body p90 | SDN-AP closer |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| GEO | 1,843 | 1 | 24.1 | 52 | 25.6 | 55.1 | 65 % |
+| GEO | 1,843 | 2 | 28.6 | 99.9 | 39.6 | 111 | 72 % |
+| GEO | 1,843 | 3 | 32.9 | 149 | 58.8 | 164 | 79 % |
+| MEO | 804 | 1 | 41.8 | 182 | 51.3 | 199 | 76 % |
+| MEO | 804 | 2 | 83 | 362 | 106 | 417 | 82 % |
+| MEO | 804 | 3 | 128 | 553 | 165 | 636 | 82 % |
+| HEO | 3,726 | 1 | 9.41 | 53.3 | 52.2 | 158 | 96 % |
+| HEO | 3,726 | 2 | 13.5 | 94.8 | 145 | 412 | 98 % |
+| HEO | 3,726 | 3 | 18 | 159 | 244 | 686 | 98 % |
+| LEO | 8 | 1 | 9.13 | 29.4 | 385 | 745 | 100 % |
+| LEO | 8 | 2 | 18.4 | 113 | 915 | 2,033 | 100 % |
+| LEO | 8 | 3 | 27 | 344 | 1,515 | 3,364 | 100 % |
+| beyond GEO | 296 | 1 | 39.2 | 167 | 40.9 | 171 | 63 % |
+| beyond GEO | 296 | 2 | 63.2 | 304 | 75.8 | 317 | 72 % |
+| beyond GEO | 296 | 3 | 93 | 438 | 116 | 440 | 73 % |
+
+The table prints the argument of latitude to 0.1 deg, so a set's position at its own epoch is uncertain by up to
+0.05 deg along track (37 km in GEO) against the state Vimpel propagated: that bounds the agreement from below.
+
+Consistency with JSC Vimpel's later determination (every second derived set propagated to the same object's epoch in
+the later table; the separation from that table's state, km; maneuvers between the tables are not removed):
+
+| Tables | Regime | Sets | Horizon, days: median (range) | SDN-AP median | SDN-AP p90 | Two-body median | Two-body p90 | SDN-AP closer |
+| --- | --- | --: | --- | --: | --: | --: | --: | --: |
+| 09-07 -> 09-21 | GEO | 1,136 | 13.7 (12.4-15.2) | 168 | 1,386 | 398 | 1,589 | 85 % |
+| 09-07 -> 09-21 | MEO | 924 | 13.8 (12.5-14.9) | 1,466 | 5,647 | 1,773 | 6,285 | 76 % |
+| 09-07 -> 09-21 | HEO | 4,516 | 13.9 (10.6-15.3) | 568 | 5,468 | 1,302 | 6,013 | 73 % |
+| 09-07 -> 09-21 | LEO | 8 | 14.0 (13.9-14.0) | 420 | 8,966 | 10,610 | 14,400 | 88 % |
+| 09-07 -> 09-21 | beyond GEO | 317 | 13.6 (12.2-15.2) | 1,159 | 6,693 | 1,277 | 6,677 | 78 % |
+| 09-21 -> 10-12 | GEO | 1,168 | 20.7 (19.3-22.1) | 235 | 1,985 | 551 | 2,209 | 85 % |
+| 09-21 -> 10-12 | MEO | 996 | 20.7 (19.4-22.1) | 2,341 | 11,210 | 2,796 | 11,990 | 81 % |
+| 09-21 -> 10-12 | HEO | 4,483 | 20.9 (16.0-26.1) | 1,215 | 9,746 | 2,125 | 10,390 | 70 % |
+| 09-21 -> 10-12 | LEO | 6 | 21.0 (20.9-21.0) | 549 | 7,483 | 12,430 | 13,950 | 83 % |
+| 09-21 -> 10-12 | beyond GEO | 288 | 20.8 (19.3-22.1) | 1,435 | 10,270 | 1,535 | 10,520 | 75 % |
+
+Regimes: GEO a 41,000-43,500 km and e < 0.1; HEO e >= 0.25; LEO a < 8,378 km; beyond GEO a >= 43,500 km; MEO the rest.
+Space weather for SDN-AP and FFM: the GFZ history record (space-weather-history.prw).
+
+### Reproducing these results
+
+- Vimpel data is not redistributable: register at http://spacedata.vimpel.ru/ for your own access, and put
+  `{ "site": "http://spacedata.vimpel.ru/", "username": "...", "password": "..." }` in
+  ~/.sdn-keys/vimpel-credentials.json (or a file named by VIMPEL_CREDENTIALS). The portal logs in over plain HTTP.
+- Fetch (one login per run, no retry; files already present are not fetched again):
+  `node tools/fetch-vimpel.mjs --out DIR --files orbits.20260907.txt,orbits.20260921.txt,orbits.20261012.txt,ephem.20261012.rar`;
+  unpack the RAR (`bsdtar -xf ephem.20261012.rar`). The results came from these files (SHA-256):
+  orbits.20260907.txt `840cda6d499028c17a7e22228b1b22fe500078e996113ef5804c4fff7ba612fa`;
+  orbits.20260921.txt `61d4ceb343daeb713e0d4c7be9ae756fec3b817f3b29af77f07cb371491f5f47`;
+  orbits.20261012.txt `a4dd4c9a477191bb2d964cdbaa06695ef9539d6b8f39343d5ad8f084e61ef89d`;
+  ephem.20261012.rar `41c411f9954c835e398892bfbb8871d22f1a6cff4b5b8732e96bd72fb22c01e9`;
+- Inputs on the machine: propagator/ffm's DE440s kernel and the experiment's environment record (Earth orientation)
+  and GFZ space-weather history (SDNAP_KERNEL, SDNAP_FFM_ENVIRONMENT, SDNAP_SPACE_WEATHER), `npm ci` in this package,
+  files/orbit-products, propagator/ffm and analysis/od.
+- Derive (writes the stream; the 2026-10-12 stream gzipped is the committed fixture, SHA-256 of the stream
+  `a524a25d004cc6c072fb8b5aceec2e9781cc60af901cf20fba2f47df7193bc06`):
+  `node test/opm-derive.mjs --table orbits.20261012.txt --out derived.20261012.opm` (and the 09-07 and 09-21 tables).
+- Score: `node test/opm-vimpel-score.mjs --derived derived.20261012.opm --prediction ephem.20261012/ --out prediction.json`;
+  `node test/opm-vimpel-score.mjs --derived derived.20260907.opm --later orbits.20260921.txt --out later-0907.json`;
+  `node test/opm-vimpel-score.mjs --derived derived.20260921.opm --later orbits.20261012.txt --out later-0921.json`
+  (`--shard K/N --rows F` and `--merge` split a run across processes); test/results/opm-vimpel-scores.json holds all three.
+- The precise-orbit check: `node test/opm-truth-match.mjs --out test/results/opm-truth-match.json` (the archive's
+  reference states, the SSCWeb THEMIS files and a Space-Track GP snapshot; local).
+- `test/opm.e2e.mjs` needs none of this: it runs on synthetic records and the committed derived sets.
 
 ## Memory and time
 
@@ -480,6 +622,10 @@ LRU sweep that rebuilt them for every object, 2.8 s per object).
 - `test/covariance.e2e.mjs`: the covariance record of an SDN-AP and an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
+- `test/opm.e2e.mjs`: `opm_set` on synthetic GEO, HEO, MEO and LEO records (each set at its epoch back to the record's
+  elements), the same orbits as states in EME2000, GCRF and TEME, `propagate` with 'opm' frames against `opm_set` then
+  `propagate` (identical bytes), the forces from the record and the defaults, a COVARIANCE carried to TEME, the refusals,
+  the two-body exports over one period, and every 500th of the committed derived Vimpel sets.
 - `test/environment.e2e.mjs`: `$SPW` and `$DCL` read as FFM reads them.
 - `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `fit` (THEORY SDNAP) and its set on the grid,
   the lunar set, and the three segment sets (propagate, fit (THEORY SDNAP), propagate) through the browser host and native

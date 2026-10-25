@@ -1557,6 +1557,75 @@ scored every 30 min over the next 3 days (`test/covariance-realism.mjs --set cal
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
 rotated with the state) for an SGP4XP or SDN-AP set that carries COVARIANCE. An SGP4 set has none.
 
+
+**12.7 Acceptance band.** Covariance realism acceptance band: mean d^2/3 in [0.8, 1.25] and 95 % coverage in [0.93, 0.97].
+Per regime and day of lead (the experiments' band, V1c4), with the coverage the share of samples inside the 95 %
+ellipsoid. The measured cells (test/results/covariance-realism-sdnap.json and -sgp4xp.json, README "Covariance
+realism"), 1 of 24 inside:
+
+| Theory | Set | Day | Mean d^2/3 | Inside 95 % | Band |
+| --- | --- | --: | --: | --: | --- |
+| SDN-AP | LAGEOS-1 (experiment windows) | 1 | 1.51 | 0.836 | outside |
+| SDN-AP | LAGEOS-1 (experiment windows) | 2 | 1.24 | 0.912 | outside |
+| SDN-AP | LAGEOS-1 (experiment windows) | 3 | 1.15 | 0.917 | outside |
+| SDN-AP | LAGEOS-1 (2026-02 .. 05) | 1 | 1.32 | 0.901 | outside |
+| SDN-AP | LAGEOS-1 (2026-02 .. 05) | 2 | 1.19 | 0.922 | outside |
+| SDN-AP | LAGEOS-1 (2026-02 .. 05) | 3 | 1.08 | 0.91 | outside |
+| SDN-AP | LAGEOS-2, Etalon-1/2 | 1 | 2.43 | 0.758 | outside |
+| SDN-AP | LAGEOS-2, Etalon-1/2 | 2 | 0.844 | 0.996 | outside |
+| SDN-AP | LAGEOS-2, Etalon-1/2 | 3 | 0.649 | 1 | outside |
+| SDN-AP | LEO set | 1 | 1.36 | 0.878 | outside |
+| SDN-AP | LEO set | 2 | 0.991 | 0.942 | inside |
+| SDN-AP | LEO set | 3 | 0.744 | 0.98 | outside |
+| SGP4XP | LAGEOS-1 (experiment windows) | 1 | 1.82 | 0.725 | outside |
+| SGP4XP | LAGEOS-1 (experiment windows) | 2 | 1.93 | 0.738 | outside |
+| SGP4XP | LAGEOS-1 (experiment windows) | 3 | 1.91 | 0.773 | outside |
+| SGP4XP | LAGEOS-1 (2026-02 .. 05) | 1 | 1.38 | 0.913 | outside |
+| SGP4XP | LAGEOS-1 (2026-02 .. 05) | 2 | 1.44 | 0.908 | outside |
+| SGP4XP | LAGEOS-1 (2026-02 .. 05) | 3 | 1.44 | 0.93 | outside |
+| SGP4XP | LAGEOS-2, Etalon-1/2 | 1 | 1.34 | 0.909 | outside |
+| SGP4XP | LAGEOS-2, Etalon-1/2 | 2 | 0.84 | 0.994 | outside |
+| SGP4XP | LAGEOS-2, Etalon-1/2 | 3 | 0.69 | 0.998 | outside |
+| SGP4XP | LEO set | 1 | 1.09 | 0.98 | outside |
+| SGP4XP | LEO set | 2 | 0.91 | 0.988 | outside |
+| SGP4XP | LEO set | 3 | 0.76 | 0.992 | outside |
+
+Outside the band: SDN-AP's day 1 on every set (mean d^2/3 1.32 to 2.43: the covariance is too small one day out); its
+days 2 and 3 on LAGEOS-1 (the mean inside, the coverage 0.91 to 0.92); its days 2 and 3 on LAGEOS-2 and the Etalons
+and day 3 on the LEO set (too large: coverage 0.98 to 1.0); and SGP4XP in every cell, LAGEOS-1 at 1.38 to 1.93
+throughout. Inside: SDN-AP day 2 on the LEO set (0.99, 0.94). These are a measured limit of the process-noise model of
+12.5, not of the band; the band is not widened.
+
+---
+
+## 13. SDN-AP osculating input (side B's method, outside the SGP4-XP specification)
+
+**13.1 Record.** An SDS $OPM about the Earth (CENTER_NAME EARTH or absent), TIME_SYSTEM UTC (or absent), EPOCH,
+REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000, and GM (km^3/s^2, about the Earth's). The Keplerian block is used when
+SEMI_MAJOR_AXIS is on the wire (the other elements as written, a scalar left off the wire being 0; TRUE_ANOMALY when
+written, else MEAN_ANOMALY), the state vector otherwise. Refused by name: no-elements (neither), unknown-frame,
+missing-gm, unsupported-time-system, unsupported-center, element-set-refused (an open orbit or a radius that is not an
+Earth orbit's).
+
+**13.2 State.** Keplerian: E from the true anomaly by tan(E/2) = sqrt((1 - e)/(1 + e)) tan(nu/2), M = E - e sin E, and
+the two-body state of (a, e, i, Omega, omega, M) about the record's GM. The axes to TEME at the epoch: GCRF by 10's
+GCRF -> TEME; EME2000 by the IAU 2006 frame bias B (r_EME2000 = B r_GCRF) then GCRF -> TEME.
+
+**13.3 Set.** y0 = h^-1(x, t) by the inverse map at the epoch, as launch_set does for an insertion orbit (DESIGN
+5.3.1): the mean set whose osculating state at t is x. B_eff and AGOM: C_D A/m and C_R A/m from MASS with DRAG_AREA and
+SOLAR_RAD_AREA (C_D 2.2 and C_R 1.0 where the record states none); otherwise the $PCF LAUNCH priors (B_eff 0.01 m^2/kg
+with the perigee below 2,500 km, else 0; AGOM 0.01 m^2/kg). The set records where it came from:
+USER_DEFINED_SDNAP_SOURCE OSCULATING_OPM, _SOURCE_ELEMENTS (KEPLERIAN or STATE), _SOURCE_FRAME, _SOURCE_GM,
+_CONVERSION INVERSE_MAP and _CONVERSION_STEPS, _FORCES (RECORD or REGIME_DEFAULT), and its COMMENT says the same.
+
+**13.4 Covariance.** A COVARIANCE (21 values, COV_REF_FRAME or else REF_FRAME) is rotated to TEME, P' = B P B^T with B
+= diag(M, M), and carried as the set's COVARIANCE with the regime's process noise from the epoch (12.5; no consider rows,
+no floor). None is made where the record has none.
+
+**13.5 Calls.** `opm_set` gives the set; `propagate` takes 'opm' frames through the same conversion (13.1-13.4), so an
+$OPM propagates as its set does. `sdnap_osculating_elements_about(r, v, gm, out)` and `sdnap_kepler_at(r, v, gm, s, out)`
+give a state's osculating elements and period, and its two-body motion, about a stated GM.
+
 ---
 
 ## References
