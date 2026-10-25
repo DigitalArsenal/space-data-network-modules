@@ -94,10 +94,10 @@ target_include_directories(sgp4_erfa PUBLIC "${ERFA_DIR}")
 target_compile_options(sgp4_erfa PRIVATE -Wno-everything)
 
 # -------- Core propagator library --------------------------------------------
-# SGP4 (Vallado) + OrbPro's SDS PIV wasm surface.
+# SGP4/SDP4 (foundation/sgp4-str3, header-only) + OrbPro's SDS PIV wasm surface.
+set(SGP4_STR3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../foundation/sgp4-str3/include")
 add_library(
     sgp4_core STATIC
-    src/SGP4.cpp
     src/sgp4_plugin.cpp
     src/standalone_stubs.c
 )
@@ -110,6 +110,7 @@ target_include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/generated/sds"
     "${FLATBUFFERS_INCLUDE_DIR}"
     "${FRAMES_SRC_DIR}"
+    "${SGP4_STR3_INCLUDE_DIR}"
 )
 target_link_libraries(sgp4_core PUBLIC sgp4_sqlite3 sgp4_erfa)
 

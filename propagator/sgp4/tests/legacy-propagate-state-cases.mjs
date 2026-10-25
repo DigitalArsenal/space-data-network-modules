@@ -1,8 +1,8 @@
 // propagate_state as a 1.1.0 host drives it: the four-field request layout,
 // handles only, Earth-fixed answers. Each invocation's whole PIV response is
-// recorded by SHA-256. tests/fixtures/propagate-state-1.1.0-digests.json holds
-// the 1.1.0 artifact's digests (generate-propagate-state-digests.mjs), and
-// legacyPropagateState.test.mjs requires the current artifact to reproduce
+// recorded by SHA-256. tests/fixtures/propagate-state-digests.json holds
+// this release's digests (generate-propagate-state-digests.mjs), and
+// legacyPropagateState.test.mjs requires the built artifact to reproduce
 // them byte for byte.
 import crypto from "node:crypto";
 

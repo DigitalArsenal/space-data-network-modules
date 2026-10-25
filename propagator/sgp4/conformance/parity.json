@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "propagator/sgp4",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "27963743e6d485f08f89d8f161b66705b0581b2155af4874a8486e559e79adb2",
-  "moduleSha256": "27963743e6d485f08f89d8f161b66705b0581b2155af4874a8486e559e79adb2",
+  "artifactSha256": "18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1",
+  "moduleSha256": "18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 12,
-      "durationMs": 676
+      "durationMs": 552
     },
     {
       "lane": "wasmedge",
       "runs": 12,
-      "durationMs": 10054
+      "durationMs": 9208
     }
   ],
   "cases": [
@@ -55,7 +55,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "52083d97ca51ab81fdf6aae5a921a17b116c1def7b09f650cf06d9bd1b25cfa9",
+      "stdoutSha256": "388f1d2afca90c10907891a7b873e5b5d8cb2ade65e5684d7a9f12fcc46fa621",
       "stdoutLength": 624
     },
     {
@@ -67,7 +67,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "a00e8756f446877ea1bf78e3c5dcc40597e0c6244b5e0023b3fb09533234011a",
+      "stdoutSha256": "718ed15c071eb3d05e82732930261d0b364ae02c77bbd2b0ea26bff5e54c1aa5",
       "stdoutLength": 880
     },
     {
@@ -79,7 +79,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "65f798e7eb6b233b3f129439e3092802c2d22fcfc83e8c5a5bac63ce74d98221",
+      "stdoutSha256": "c119bb44dcae1ff35792f8234ba9041c95de0bbb14df1e0ec905b0bb5778165c",
       "stdoutLength": 1144
     },
     {
@@ -91,7 +91,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "40d15210d19d7d04809a0bb87cae7a8ffbea62f6c3aec064701f8ef0b3813608",
+      "stdoutSha256": "ba6345a8b3d578e7b53d9a55b8310779352de89a4282dba07a2ddd86e304cf41",
       "stdoutLength": 48272
     },
     {
@@ -103,7 +103,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "36d5605b5d9f5726c6676fc1ed79c3dcc668d088ae639f51a31b8632aa353a70",
+      "stdoutSha256": "aa2e5bb9b603a984f74852a36635ce1e3f07eacbc9ed70beb0bc7fbe27fde7b0",
       "stdoutLength": 13936
     },
     {
@@ -199,7 +199,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "52083d97ca51ab81fdf6aae5a921a17b116c1def7b09f650cf06d9bd1b25cfa9",
+      "stdoutSha256": "388f1d2afca90c10907891a7b873e5b5d8cb2ade65e5684d7a9f12fcc46fa621",
       "stdoutLength": 624
     },
     {
@@ -211,7 +211,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "a00e8756f446877ea1bf78e3c5dcc40597e0c6244b5e0023b3fb09533234011a",
+      "stdoutSha256": "718ed15c071eb3d05e82732930261d0b364ae02c77bbd2b0ea26bff5e54c1aa5",
       "stdoutLength": 880
     },
     {
@@ -223,7 +223,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "65f798e7eb6b233b3f129439e3092802c2d22fcfc83e8c5a5bac63ce74d98221",
+      "stdoutSha256": "c119bb44dcae1ff35792f8234ba9041c95de0bbb14df1e0ec905b0bb5778165c",
       "stdoutLength": 1144
     },
     {
@@ -235,7 +235,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "40d15210d19d7d04809a0bb87cae7a8ffbea62f6c3aec064701f8ef0b3813608",
+      "stdoutSha256": "ba6345a8b3d578e7b53d9a55b8310779352de89a4282dba07a2ddd86e304cf41",
       "stdoutLength": 48272
     },
     {
@@ -247,7 +247,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "36d5605b5d9f5726c6676fc1ed79c3dcc668d088ae639f51a31b8632aa353a70",
+      "stdoutSha256": "aa2e5bb9b603a984f74852a36635ce1e3f07eacbc9ed70beb0bc7fbe27fde7b0",
       "stdoutLength": 13936
     },
     {
