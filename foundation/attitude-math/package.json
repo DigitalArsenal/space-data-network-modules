@@ -22,5 +22,8 @@
   },
   "devDependencies": {
     "space-data-module-sdk": "0.8.25"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.2"
   }
 }

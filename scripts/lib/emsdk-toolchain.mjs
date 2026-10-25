@@ -57,6 +57,7 @@
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -90,6 +91,44 @@ const SHARED_EMSDK_CANDIDATES = Object.freeze([
   "propagator/ffm/deps/emsdk",
   "analysis/conjunction-assessment/deps/emsdk",
 ]);
+
+// THE MACHINE'S SHARED INSTALL. One emsdk per Emscripten version per machine at
+// ${SDN_TOOL_CACHE:-~/.cache/sdn-tools}/emsdk-<version>, the layout OrbPro's
+// scripts/shared-emsdk.sh and the stack's deps-bundle already use, instead of a
+// 1.7 GB install per module per tree. It is outside the repo, so it is named by
+// that layout rather than by a repo-relative path, and like every other
+// candidate it is used only when its identity matches the pin. The build.sh
+// lane resolves the same place (scripts/lib/emsdk-shared.sh).
+export function toolCacheRoot() {
+  return path.resolve(process.env.SDN_TOOL_CACHE || path.join(os.homedir(), ".cache", "sdn-tools"));
+}
+
+export function sharedEmsdkRoot(version = loadEmsdkPin().pin.emscriptenVersion) {
+  return path.join(toolCacheRoot(), `emsdk-${version}`);
+}
+
+// The emsdk a module build uses when SDN_LOCAL_EMSDK_DIR is not set: the
+// module's own deps/emsdk when it holds an installed Emscripten, else the shared
+// install when it does, else the module's deps/emsdk (whose absence the build
+// reports as before). Same order as scripts/lib/emsdk-shared.sh.
+export function defaultEmsdkDir(moduleRoot, version) {
+  const own = path.join(moduleRoot, "deps", "emsdk");
+  const shared = sharedEmsdkRoot(version);
+  const installed = (root) => fs.existsSync(path.join(root, "emsdk_env.sh")) && fs.existsSync(path.join(root, "upstream", "bin", "clang++"));
+  if (installed(own)) return own;
+  if (installed(shared)) return shared;
+  return own;
+}
+
+// What a build record calls an emsdk root: repo-relative inside the repo; the
+// tool-cache layout for the shared install, so the record does not depend on
+// whose home directory built it.
+function describeRootLocation(emsdkDir) {
+  const cache = toolCacheRoot();
+  const resolved = path.resolve(emsdkDir);
+  if (resolved.startsWith(cache + path.sep)) return `$SDN_TOOL_CACHE/${path.relative(cache, resolved)}`;
+  return path.relative(REPO_ROOT, emsdkDir);
+}
 
 function populated(emsdkDir) {
   return (
@@ -145,7 +184,7 @@ export function describeEmsdkRoot(emsdkDir) {
   const probed = emxxIdentity(emsdkDir);
   return {
     root: emsdkDir,
-    rootRelative: path.relative(REPO_ROOT, emsdkDir),
+    rootRelative: describeRootLocation(emsdkDir),
     emscriptenVersion: probed.version ?? fromFile,
     emscriptenRelease: readFirstLine(path.join(emsdkDir, "upstream", ".emsdk_version")),
     llvmRevision: probed.llvmRevision,
@@ -174,7 +213,7 @@ function matches(identity, expected) {
 // that measures reproducibility, which builds committed source in a THROWAWAY
 // worktree outside the repo. So the location check gives way to the identity
 // check; it is not simply dropped.
-function candidateRoots({ moduleDir, extraCandidates = [], onlyCandidates = false }) {
+function candidateRoots({ moduleDir, extraCandidates = [], onlyCandidates = false, version }) {
   const roots = [];
   const push = (p) => {
     const resolved = path.resolve(p);
@@ -189,6 +228,7 @@ function candidateRoots({ moduleDir, extraCandidates = [], onlyCandidates = fals
   if (process.env.SDN_LOCAL_EMSDK_DIR) ordered.push(process.env.SDN_LOCAL_EMSDK_DIR);
   if (moduleDir) ordered.push(path.join(REPO_ROOT, moduleDir, "deps", "emsdk"));
   ordered.push(...extraCandidates.map((e) => (path.isAbsolute(e) ? e : path.join(REPO_ROOT, e))));
+  if (version) ordered.push(sharedEmsdkRoot(version));
   ordered.push(...SHARED_EMSDK_CANDIDATES.map((shared) => path.join(REPO_ROOT, shared)));
   roots.length = 0;
   for (const candidate of ordered) push(candidate);
@@ -198,8 +238,8 @@ function candidateRoots({ moduleDir, extraCandidates = [], onlyCandidates = fals
 function provisionHint(expected, pinId) {
   return (
     `Provision it (this is the ONLY step permitted to use the network):\n` +
-    `    node scripts/provision-emsdk.mjs\n` +
-    `  or point SDN_LOCAL_EMSDK_DIR at an existing emsdk that is ${pinId} ` +
+    `    node scripts/provision-emsdk.mjs --into ${sharedEmsdkRoot(expected.emscriptenVersion)}\n` +
+    `  (the machine's shared install, found by every tree), or point SDN_LOCAL_EMSDK_DIR at an existing emsdk that is ${pinId} ` +
     `(emscripten ${expected.emscriptenVersion}, ${expected.emscriptenRelease}).`
   );
 }
@@ -228,7 +268,7 @@ export function resolveLaneToolchain(options = {}) {
   const wantedId = eraId ?? pin.pin.id;
   const expected = eraId ? pin.knownToolchains[eraId] : pin.pin;
 
-  const roots = candidateRoots(options);
+  const roots = candidateRoots({ ...options, version: expected.emscriptenVersion });
   const found = [];
   for (const root of roots) {
     if (!populated(root)) continue;

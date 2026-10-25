@@ -29,6 +29,7 @@ import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/ma
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
 import {
   activateLaneToolchain,
+  defaultEmsdkDir,
   recordLaneToolchain,
   resolveVendoredSource,
   REPO_ROOT as MODULES_REPO_ROOT,
@@ -39,7 +40,7 @@ import {
 const THREAD_MODEL = "single-thread";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EMSDK_DIR = path.resolve(process.env.SDN_LOCAL_EMSDK_DIR || path.join(__dirname, "deps", "emsdk"));
+const EMSDK_DIR = path.resolve(process.env.SDN_LOCAL_EMSDK_DIR || defaultEmsdkDir(__dirname));
 const EM_CACHE_DIR = path.join(__dirname, ".emcache");
 const BUILD_DIR = path.join(__dirname, ".build");
 const TYPED_DIR = path.join(BUILD_DIR, "typed");

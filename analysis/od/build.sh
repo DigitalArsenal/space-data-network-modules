@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-EMSDK_DIR="${SDN_LOCAL_EMSDK_DIR:-$SCRIPT_DIR/deps/emsdk}"
+EMSDK_VERSION="6.0.1"
+# shellcheck source=../../scripts/lib/emsdk-shared.sh
+. "$SCRIPT_DIR/../../scripts/lib/emsdk-shared.sh"
+EMSDK_DIR="$(sdn_emsdk_dir "$SCRIPT_DIR" "$EMSDK_VERSION")"
 SRC_DIR="$SCRIPT_DIR/src/cpp"
 BUILD_DIR="$SRC_DIR/build-isomorphic"
 DIST_DIR="$SCRIPT_DIR/dist"
@@ -48,13 +51,14 @@ ensure_emscripten() {
         echo "Installing emsdk..."
         (
             cd "$EMSDK_DIR"
-            ./emsdk install 6.0.1
-            ./emsdk activate 6.0.1
+            ./emsdk install "$EMSDK_VERSION"
+            ./emsdk activate "$EMSDK_VERSION"
         )
     fi
 
     # shellcheck disable=SC1090
     source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
+    sdn_emsdk_assert_active "$EMSDK_DIR" "$EMSDK_VERSION"
 }
 
 # ── Generated bindings shared by every Emscripten target ────────────────────

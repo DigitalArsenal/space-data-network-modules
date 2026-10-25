@@ -22,7 +22,7 @@
     "spacedatastandards.org": "1.261.0"
   },
   "overrides": {
-    "hd-wallet-wasm": "2.1.0"
+    "hd-wallet-wasm": "2.1.2"
   },
   "type": "module",
   "version": "0.7.0"

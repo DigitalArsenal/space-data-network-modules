@@ -6,13 +6,14 @@ import {compileModuleFromSource, cleanupCompilation} from 'space-data-module-sdk
 import createFlatc from 'flatc-wasm/module';
 import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
 import {assertArtifactThreadModel} from '../../scripts/lib/thread-model.mjs';
+import {defaultEmsdkDir} from '../../scripts/lib/emsdk-toolchain.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const scratch = path.join(root, '.build');
 await fs.mkdir(scratch, {recursive: true});
 // Every generated compiler file stays in this worktree. No downloads or toolchain bootstrap.
 process.env.TMPDIR = scratch;
-const emsdk = path.join(root, 'deps/emsdk');
+const emsdk = defaultEmsdkDir(root);
 await fs.access(path.join(emsdk, 'emsdk_env.sh'));
 await fs.access(path.join(emsdk, 'upstream/bin/clang++'));
 // SDK's real wasi-threads lane uses the repo-local LLVM driver, never emcc -pthread.

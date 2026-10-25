@@ -5,6 +5,7 @@ import {createRequire} from 'node:module';
 import {compileModuleFromSource, cleanupCompilation} from 'space-data-module-sdk/compiler';
 import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
 import {assertArtifactThreadModel} from '../../scripts/lib/thread-model.mjs';
+import {sharedEmsdkRoot} from '../../scripts/lib/emsdk-toolchain.mjs';
 
 const root=fileURLToPath(new URL('.',import.meta.url));
 const modules=path.resolve(root,'../..');
@@ -12,7 +13,8 @@ const sdk=path.resolve(path.dirname(createRequire(import.meta.url).resolve('spac
 // Existing repo-local toolchains only. Never bootstrap, download, or use PATH compilers.
 const candidates=[path.join(root,'deps/emsdk'),path.join(modules,'deps/emsdk'),
   path.join(modules,'analysis/conjunction-assessment/deps/emsdk'),
-  path.resolve(sdk,'../../main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk')];
+  path.resolve(sdk,'../../main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk'),
+  sharedEmsdkRoot()];
 let emsdk;
 for (const candidate of candidates) {
   try {await fs.access(path.join(candidate,'emsdk_env.sh'));await fs.access(path.join(candidate,'upstream/bin/clang++'));emsdk=candidate;break;} catch {}

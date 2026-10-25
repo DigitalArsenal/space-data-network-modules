@@ -778,11 +778,13 @@ async function rebuildAndCompareAll(checkout, moduleDir) {
     // in a throwaway checkout is the throwaway — and only the emsdk BOOTSTRAP is
     // committed, so every candidate there is present-but-unpopulated. Pointing the
     // variable at an unpopulated root would replace the resolver's precise "NO
-    // PINNED EMSCRIPTEN, provision it with …" with a silent skip. A census run
-    // that wants the 14 lane modules measured sets it at a POPULATED pinned
-    // checkout; `resolveLaneToolchain` still verifies version, release and LLVM
-    // revision against scripts/emsdk-pin.json and refuses anything that is not
-    // the pin, so naming one is not a bypass.
+    // PINNED EMSCRIPTEN, provision it with …" with a silent skip. The machine's
+    // shared install (${SDN_TOOL_CACHE:-~/.cache/sdn-tools}/emsdk-<pin>) is
+    // outside every checkout, so the throwaway finds it with nothing set; a run
+    // can still name another POPULATED pinned checkout here.
+    // `resolveLaneToolchain` verifies version, release and LLVM revision against
+    // scripts/emsdk-pin.json and refuses anything that is not the pin, so naming
+    // one is not a bypass.
     ORBPRO_ROOT: process.env.ORBPRO_ROOT ?? path.join(REPO_ROOT, "..", "OrbPro"),
   };
   await fsp.rm(path.join(pkgDir, "dist"), { recursive: true, force: true });
