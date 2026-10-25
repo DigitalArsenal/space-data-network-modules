@@ -2053,7 +2053,6 @@ struct MeshBody {
     BodyShape shape = kEarthShape;
     const std::vector<uint8_t>* oct_normals = nullptr;
     bool water_extension = true;
-    const std::vector<uint8_t>* source_mask = nullptr;
 };
 
 // Quantized-mesh topology serialization, shared by the mesh writer and lossless reconstruction.
@@ -2212,7 +2211,6 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
     }
     std::vector<uint32_t> indices = tile_mesh.indices;
 
-    std::vector<uint8_t> source_mask;
     std::vector<uint8_t> normals;  // in the renumbered vertex order, when the body carries them
 
     // HIGH-WATER-MARK PRECONDITION: a vertex's first appearance in the index
@@ -2236,10 +2234,6 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
                 normals[static_cast<size_t>(remap[v]) * 2] = lattice[static_cast<size_t>(v) * 2];
                 normals[static_cast<size_t>(remap[v]) * 2 + 1] = lattice[static_cast<size_t>(v) * 2 + 1];
             }
-        }
-        if(body.source_mask && body.source_mask->size()==n_verts) {
-            source_mask.resize(n_verts);
-            for(uint32_t v=0;v<n_verts;v++)source_mask[remap[v]]=(*body.source_mask)[v];
         }
         qu.swap(pu); qv.swap(pv); qh.swap(ph);
         heights.swap(ph_m); lats.swap(plat); lons.swap(plon);
@@ -2290,14 +2284,6 @@ void encode_mesh(const TileJob& job, const TileMesh& tile_mesh, const std::vecto
         put_u8(&mesh, 1);
         put_u32(&mesh, static_cast<uint32_t>(normals.size()));
         mesh.insert(mesh.end(), normals.begin(), normals.end());
-    }
-    if(!source_mask.empty()) {
-        // Quantized-mesh's standard metadata extension (id 4), UTF-8 JSON.
-        // One ASCII flag per FINAL vertex: 0 sphere, 1 source, 2 feather.
-        std::string flags;flags.reserve(source_mask.size());for(auto v:source_mask)flags+=char('0'+v);
-        const std::string metadata="{\"sourcePixelMask\":\""+flags+"\",\"sourcePixelMaskLegend\":\"0=sphere,1=source,2=feather\"}";
-        put_u8(&mesh,4);put_u32(&mesh,metadata.size()+4);put_u32(&mesh,metadata.size());
-        mesh.insert(mesh.end(),metadata.begin(),metadata.end());
     }
     if (!body.water_extension) return;
     // Watermask extension (extensionId 2): one byte uniform, or the raster.
@@ -4767,11 +4753,10 @@ int tile(void) {
             if (body.active) {
                 cand_shape = edge_matched_mesh(sample_grid, cand, body_edges);
                 cand_heights.resize(cand_shape.size());
-                std::vector<uint8_t> cand_normals(cand_shape.size() * 2), cand_mask(cand_shape.size());
+                std::vector<uint8_t> cand_normals(cand_shape.size() * 2);
                 for (size_t v = 0; v < cand_shape.size(); v++) {
                     const size_t from = static_cast<size_t>(cand_shape.row[v]) * sample_grid + cand_shape.col[v];
                     cand_heights[v] = heights[from];
-                    cand_mask[v] = source_mask[from];
                     cand_normals[v * 2] = lattice_normals[from * 2];
                     cand_normals[v * 2 + 1] = lattice_normals[from * 2 + 1];
                 }
@@ -4779,7 +4764,6 @@ int tile(void) {
                 mesh_body.shape = body.shape;
                 mesh_body.oct_normals = &cand_normals;
                 mesh_body.water_extension = false;
-                if(raster.active)mesh_body.source_mask=&cand_mask;
                 encode_mesh(job, cand_shape, cand_heights, water_raster, false, &cand_mesh, mesh_body);
             } else {
                 encode_quantized_mesh(job, cand, ext, cand_heights, water_raster,

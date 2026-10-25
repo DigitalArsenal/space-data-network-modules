@@ -1,6 +1,6 @@
 {
   "naif": 199,
-  "version": "mercury-messenger-v2-source-pixel-v1-20261023",
+  "version": "mercury-messenger-v2-source-pixel-v1-pole-axis-nomask-20261025",
   "radiusM": 2439400,
   "maxLevel": 7,
   "sourceResolutionM": 665.24315270546,
@@ -31,7 +31,7 @@
     "gridSize": 65,
     "maxLevel": 7,
     "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
-    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles.",
     "provenance": {
       "datasetId": "mercury-messenger-v2-sdn-source-pixel-v1",
       "nativeId": "mercury-messenger-v2@sha256:defce776241dcaf44cb0f081ee508c17dbea28aa5a22880bf7a5e8c25f96cbea",

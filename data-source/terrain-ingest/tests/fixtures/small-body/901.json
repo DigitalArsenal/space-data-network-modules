@@ -1,6 +1,6 @@
 {
   "naif": 901,
-  "version": "charon-global-source-pixel-v1-20261023",
+  "version": "charon-global-source-pixel-v1-pole-axis-nomask-20261025",
   "radiusM": 606000,
   "maxLevel": 6,
   "sourceResolutionM": 300.0,
@@ -30,7 +30,7 @@
     "gridSize": 65,
     "maxLevel": 6,
     "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
-    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles.",
     "provenance": {
       "datasetId": "charon-global",
       "nativeId": "charon-global@sha256:4496de98a9b682fd3440da616ef7f5adfbc315b438e4d18833ae3a843eb41bcc",

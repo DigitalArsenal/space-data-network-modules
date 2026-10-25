@@ -1,6 +1,6 @@
 {
   "naif": 999,
-  "version": "pluto-global-source-pixel-v1-20261023",
+  "version": "pluto-global-source-pixel-v1-pole-axis-nomask-20261025",
   "radiusM": 1188300,
   "maxLevel": 7,
   "sourceResolutionM": 300.0,
@@ -21,7 +21,7 @@
     "gridSize": 65,
     "maxLevel": 7,
     "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
-    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles.",
     "provenance": {
       "datasetId": "pluto-global",
       "datasetEpoch": "2017-07-14T00:00:00.000Z",

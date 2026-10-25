@@ -1,6 +1,6 @@
 {
   "naif": 299,
-  "version": "venus-gtdr-v2-source-pixel-v1-20261023",
+  "version": "venus-gtdr-v2-source-pixel-v1-pole-axis-nomask-20261025",
   "radiusM": 6051000,
   "maxLevel": 5,
   "sourceResolutionM": 4641.0589,
@@ -29,7 +29,7 @@
     "gridSize": 65,
     "maxLevel": 5,
     "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
-    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles.",
     "provenance": {
       "datasetId": "venus-gtdr-v2-sdn-source-pixel-v1",
       "nativeId": "venus-gtdr-v2@sha256:92dd2c8850b128f9dcceb400f1367e3df96229f5309840fee4275b74f192ea11",
