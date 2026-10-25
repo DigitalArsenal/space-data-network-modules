@@ -207,11 +207,15 @@ extern "C" int merge() {
     return a.pulled && !b.pulled;
   });
   std::vector<const Set*> kept, fresh;
-  std::vector<bool> cached_has;  // per kept entry: a cached set with the same key exists
+  std::vector<bool> cached_has;  // per kept entry: the cache holds this exact set (same key, same bytes)
   for (size_t i = 0; i < sets.size();) {
     size_t j = i + 1;
+    // the cache already holds this exact set: a cached member of the group with the same bytes as the winner
     bool cached = !sets[i].pulled;
-    while (j < sets.size() && key_equal(sets[i], sets[j])) { cached = cached || !sets[j].pulled; j++; }
+    while (j < sets.size() && key_equal(sets[i], sets[j])) {
+      if (!sets[j].pulled && sets[j].size == sets[i].size && std::memcmp(sets[j].bytes, sets[i].bytes, sets[i].size) == 0) cached = true;
+      j++;
+    }
     kept.push_back(&sets[i]);
     cached_has.push_back(cached);
     i = j;

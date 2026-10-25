@@ -160,13 +160,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Pulled sets in the window that the cache does not hold yet: size-prefixed $OMM streams for storage-ingest."
+              "description": "Pulled sets in the window that the cache does not hold yet (a new key, or the same key with different bytes): size-prefixed $OMM streams for storage-ingest."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1000000,
           "required": false,
-          "description": "Pulled sets in the window that the cache does not hold yet: size-prefixed $OMM streams for storage-ingest."
+          "description": "Pulled sets in the window that the cache does not hold yet (a new key, or the same key with different bytes): size-prefixed $OMM streams for storage-ingest."
         },
         {
           "portId": "expire",
