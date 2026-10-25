@@ -497,13 +497,16 @@ function refitCheb(fn, e0, e1, days, N, angles) {
 
 const source = await fs.readFile(path.join(packageRoot, "src", "sdn_ap_module.cpp"), "utf8");
 const partPattern = /^#include "([a-z0-9_]+\.inc)"\n/gm;
+// The SGP4/SDP4 base is the shared library foundation/sgp4-str3 of this checkout (analysis/od compiles it too);
+// every other part is this package's src/.
+const sharedParts = new Map(["sgp4_core.inc", "model.inc"].map((name) => [name, path.join(modulesRoot, "foundation", "sgp4-str3", "src", name)]));
 const parts = new Map();
 let inlined = source;
 for (let depth = 0; partPattern.test(inlined); ++depth) {
   partPattern.lastIndex = 0;
   if (depth > 4) throw new Error("src/*.inc includes nest too deep");
   for (const [, name] of inlined.matchAll(partPattern)) {
-    if (!parts.has(name)) parts.set(name, await fs.readFile(path.join(packageRoot, "src", name), "utf8"));
+    if (!parts.has(name)) parts.set(name, await fs.readFile(sharedParts.get(name) ?? path.join(packageRoot, "src", name), "utf8"));
   }
   inlined = inlined.replace(partPattern, (_, name) => parts.get(name));
 }

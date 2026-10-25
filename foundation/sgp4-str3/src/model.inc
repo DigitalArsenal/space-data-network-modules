@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
-// SGP4/SDP4 base, part 2 of 2: the SGP4 and SDP4 models of Spacetrack Report
-// No. 3 for one element set: the element record, the initialization section,
+// foundation/sgp4-str3 (compiled by propagator/sdn-ap and analysis/od), part 2 of
+// 2: the SGP4 and SDP4 models of Spacetrack Report No. 3 for one element set: the element record, the initialization section,
 // propagation, and the resonance checkpoints.
 //
 // Written clean room (task modules-sdn-ap-sgp4-from-str3-20261024) from

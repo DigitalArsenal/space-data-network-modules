@@ -4,7 +4,7 @@
  *
  * One translation unit: src/fit_pipeline.cpp and the analysis/od fit library it calls, read in place from
  * ../src/cpp (never copied): the $OEM reader, the SGP4 fitter, the $OMM / $OBD builders, the frame and time
- * transforms and Vallado SGP4. Their SDS headers are analysis/od's (licensing/core/src/cpp/generated/sds), the same
+ * transforms and the SGP4 base (foundation/sgp4-str3). Their SDS headers are analysis/od's (licensing/core/src/cpp/generated/sds), the same
  * ones analysis/od's `fit` compiles, so the records are byte-for-byte that module's for the same fit. The SDK
  * compiler stages the PIV bridge, the runtime types (TimerTick, FlowNotice, HostOps) and typedHostcall.hpp.
  *
@@ -34,7 +34,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(root, "../../..");
 const odCpp = path.resolve(root, "../src/cpp");
 const sdsDir = path.join(repo, "licensing/core/src/cpp/generated/sds");
-const includeRoots = [path.join(odCpp, "include"), path.join(odCpp, "include/od"), path.join(odCpp, "deps/vallado-sgp4"), sdsDir];
+const includeRoots = [path.join(odCpp, "include"), path.join(odCpp, "include/od"), path.join(repo, "foundation/sgp4-str3/include"), sdsDir];
 // Headers the SDK compiler stages itself.
 const staged = new Set(["space_data_module_invoke.h", "typedHostcall.hpp", "FlowNotice_generated.h", "TimerTick_generated.h"]);
 
@@ -72,7 +72,7 @@ async function inline(file) {
 const odSources = ["meme_parser", "frame_transform", "oem_fb_reader", "omm_fb_builder", "obd_fb_builder", "sgp4_fitter"]
   .map((name) => path.join(odCpp, "src", `${name}.cpp`));
 const pieces = [];
-for (const file of [path.join(root, "src/fit_pipeline.cpp"), ...odSources, path.join(odCpp, "deps/vallado-sgp4/SGP4.cpp")]) {
+for (const file of [path.join(root, "src/fit_pipeline.cpp"), ...odSources]) {
   pieces.push(await inline(file));
 }
 // The fit library's defines (analysis/od: -DNDEBUG -DEIGEN_DONT_PARALLELIZE; -O3 is the SDK's, -ffast-math build-driver.mjs's).

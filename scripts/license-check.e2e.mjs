@@ -49,7 +49,6 @@ const PINNED = {
 
 /** Third-party paths whose license basis prints on every run. A NOTICE row with no license text must be listed. */
 const NOTES = {
-  'analysis/od/src/cpp/deps/vallado-sgp4/': 'no license text in the tree, and none in the file headers',
   'third_party/hwm14/': 'public domain: U.S. Government work (17 U.S.C. § 105), released by NRL; see README.md',
 };
 
@@ -63,7 +62,6 @@ const TERMS = {
   'LicenseRef-USSF-SGP4': /OPEN SOURCE AGREEMENT for SGP4/,
   'LicenseRef-Public-Domain': /disclaims copyright|public domain/i,
   'LicenseRef-US-Government-Work': /17 U\.S\.C\. (?:§ )?105/,
-  'LicenseRef-Unstated': null,
 };
 
 const failures = [];
