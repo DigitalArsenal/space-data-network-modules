@@ -706,6 +706,7 @@ static FitResult lm_fit_equinoctial(
     double prev_sigma = rms;
     int iter;
     bool converged = false;
+    bool rejected = false;  // the last trial step raised the RMS
 
     const int max_iterations = config.max_iterations > 0 ? config.max_iterations : 50;
     for (iter = 0; iter < max_iterations; iter++) {
@@ -758,14 +759,36 @@ static FitResult lm_fit_equinoctial(
 
         Eigen::VectorXd delta_p = J_aug.bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(r_aug);
 
-        // Step limiting (Vallado: 90% for orbital, 40% for B*/ndot)
+        // Step limiting, in each parameter's own units. The semi-major axis moves by at most 10 % of itself, the mean
+        // longitude by at most 0.5 rad and the equinoctial eccentricity and inclination components (af, ag, pe, qe:
+        // dimensionless, near zero for a near-circular or near-equatorial orbit, and free to change sign) by at most
+        // 0.1. A limit relative to a component's own value let one that had to cross zero approach it only
+        // geometrically, so near-circular deep-space fits (GLONASS) crept along for the whole iteration budget. B* and
+        // ndot keep the limit relative to their value (40 %): a set that starts with none (above 1000 km) keeps none.
         for (int i = 0; i < NPARAMS; i++) {
-            double ref = std::abs(params[i]) + 1e-12;
-            double rel = std::abs(delta_p(i)) / ref;
-            double max_step = (i == IDX_BSTAR || i == IDX_NDOT) ? 0.4 : 0.9;
-            if (rel > max_step) {
-                delta_p(i) *= max_step / rel;
+            double max_abs;
+            if (i == IDX_BSTAR || i == IDX_NDOT) max_abs = 0.4 * (std::abs(params[i]) + 1e-12);
+            else if (i == IDX_A) max_abs = 0.1 * std::abs(params[i]);
+            else if (i == IDX_L) max_abs = 0.5;
+            else max_abs = 0.1;
+            if (std::abs(delta_p(i)) > max_abs) {
+                delta_p(i) *= max_abs / std::abs(delta_p(i));
             }
+        }
+
+        // Converged on the step: when the last trial was rejected and no parameter would now move by more than 1e-10
+        // of its own scale, the elements are at the residual minimum to working precision. Without this test a fit
+        // already at its noise floor (a few exact states, every trial within rounding of the last) rejected step
+        // after step until the iteration cap, and reported itself unconverged.
+        bool negligible = true;
+        for (int i = 0; i < NPARAMS && negligible; i++) {
+            const double typical = (i == IDX_A) ? 0.0 : (i == IDX_BSTAR) ? 1e-4 : (i == IDX_NDOT) ? 1e-6 : 1.0;
+            negligible = std::abs(delta_p(i)) <= 1e-10 * (std::abs(params[i]) + typical);
+        }
+        if (negligible && rejected) {
+            converged = true;
+            iter++;
+            break;
         }
 
         // Trial step
@@ -778,6 +801,7 @@ static FitResult lm_fit_equinoctial(
         Eigen::VectorXd trial_residuals;
         double trial_rms = compute_residuals_3d(trial_el, fit_points, trial_residuals);
 
+        rejected = !(trial_rms < rms);
         if (trial_rms < rms) {
             std::memcpy(params, trial_params, sizeof(params));
             el = trial_el;
