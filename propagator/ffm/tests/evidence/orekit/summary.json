@@ -1,8 +1,8 @@
 {
  "note": "FFM against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite's integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.",
  "module": {
-  "version": "1.4.1",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "version": "2.0.0",
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "reference": "tests/fixtures/orekit/orekit-reference.json",
  "orekit": {
@@ -157,7 +157,7 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018053847082007305,
+    "worstM": 0.018054791835982204,
     "met": true,
     "atHour": 24,
     "steps": 1343
@@ -174,7 +174,7 @@
     "atHour": 7,
     "steps": 8612
    },
-   "integrationErrorM": 0.01761099497433653
+   "integrationErrorM": 0.01761193873837784
   },
   {
    "id": "LEO400 Z1-zonal20-sun-moon",
@@ -182,10 +182,10 @@
    "forces": "Z1-zonal20-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018081732251339914,
+    "worstM": 0.01808509913639609,
     "met": true,
     "atHour": 24,
-    "steps": 1344
+    "steps": 1342
    },
    "steps30": {
     "worstM": 0.0010514680651463322,
@@ -197,9 +197,9 @@
     "worstM": 0.0010456186498764748,
     "met": true,
     "atHour": 7,
-    "steps": 8610
+    "steps": 8612
    },
-   "integrationErrorM": 0.017638402934500842
+   "integrationErrorM": 0.01764188202428456
   },
   {
    "id": "LEO400 Z2-zonal20-sun-moon-srp",
@@ -207,7 +207,7 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.018860715762137794,
+    "worstM": 0.018848598499297358,
     "met": true,
     "atHour": 24,
     "steps": 1415
@@ -219,12 +219,12 @@
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.001316637181235826,
+    "worstM": 0.0013236414417088192,
     "met": true,
     "atHour": 24,
-    "steps": 8638
+    "steps": 8637
    },
-   "integrationErrorM": 0.017544823263395962
+   "integrationErrorM": 0.017525697008799843
   },
   {
    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -232,7 +232,7 @@
    "forces": "Z3-zonal20-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.021645478596858142,
+    "worstM": 0.021650655011083444,
     "met": true,
     "atHour": 24,
     "steps": 1414
@@ -249,7 +249,7 @@
     "atHour": 24,
     "steps": 8634
    },
-   "integrationErrorM": 0.017675434996981793
+   "integrationErrorM": 0.017680612164094864
   },
   {
    "id": "LEO400 F3-field20x20",
@@ -257,10 +257,10 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01821440531773162,
+    "worstM": 0.018138090955428746,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1344
    },
    "steps30": {
     "worstM": 0.0010688613205635255,
@@ -274,7 +274,7 @@
     "atHour": 7,
     "steps": 8607
    },
-   "integrationErrorM": 0.017703390030906888
+   "integrationErrorM": 0.017630035307970294
   },
   {
    "id": "LEO400 F4-field-sun-moon",
@@ -282,10 +282,10 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018161721064460627,
+    "worstM": 0.018190984271017705,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1342
    },
    "steps30": {
     "worstM": 0.0010654325049240885,
@@ -299,7 +299,7 @@
     "atHour": 7,
     "steps": 8608
    },
-   "integrationErrorM": 0.017674481265225903
+   "integrationErrorM": 0.017703744066041454
   },
   {
    "id": "LEO400 F5-field-sun-moon-srp",
@@ -307,7 +307,7 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.01875449201334507,
+    "worstM": 0.0186993461722488,
     "met": true,
     "atHour": 24,
     "steps": 1414
@@ -319,12 +319,12 @@
     "steps": 2958
    },
    "finest": {
-    "worstM": 0.0012168404493368042,
+    "worstM": 0.0012151462548291169,
     "met": true,
     "atHour": 24,
-    "steps": 8638
+    "steps": 8636
    },
-   "integrationErrorM": 0.017538464192026523
+   "integrationErrorM": 0.017485011914711638
   },
   {
    "id": "LEO400 F6-field-sun-moon-srp-drag",
@@ -332,24 +332,24 @@
    "forces": "F6-field-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.021656500802447208,
+    "worstM": 0.021644844640502876,
     "met": true,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1414
    },
    "steps30": {
-    "worstM": 0.004159893680007468,
+    "worstM": 0.004157173381846838,
     "met": true,
     "atHour": 24,
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.004077094508153804,
+    "worstM": 0.004077848588497504,
     "met": true,
     "atHour": 24,
-    "steps": 8635
+    "steps": 8636
    },
-   "integrationErrorM": 0.017579433758524023
+   "integrationErrorM": 0.017567023670386036
   },
   {
    "id": "LEO400 R1-field-sun-moon-schwarzschild",
@@ -357,7 +357,7 @@
    "forces": "R1-field-sun-moon-schwarzschild",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01816459723488105,
+    "worstM": 0.018164392062329095,
     "met": true,
     "atHour": 24,
     "steps": 1343
@@ -369,12 +369,12 @@
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010615075441985505,
+    "worstM": 0.0010612653641667567,
     "met": true,
     "atHour": 7,
-    "steps": 8611
+    "steps": 8610
    },
-   "integrationErrorM": 0.01766305386273201
+   "integrationErrorM": 0.01766555430590977
   },
   {
    "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
@@ -382,7 +382,7 @@
    "forces": "R2-field-sun-moon-relativity-iers2010",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018093766722151922,
+    "worstM": 0.018091009782603692,
     "met": true,
     "atHour": 24,
     "steps": 1343
@@ -394,12 +394,12 @@
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010610385517957845,
+    "worstM": 0.0010610058724652757,
     "met": true,
     "atHour": 7,
-    "steps": 8607
+    "steps": 8611
    },
-   "integrationErrorM": 0.01760154321786437
+   "integrationErrorM": 0.017595454427570153
   },
   {
    "id": "LEO400 T1-field-sun-moon-solid-tides",
@@ -407,24 +407,24 @@
    "forces": "T1-field-sun-moon-solid-tides",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018114790902797856,
+    "worstM": 0.018081679009335563,
     "met": true,
     "atHour": 24,
     "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0010674893534762257,
+    "worstM": 0.0010664635120109344,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00106111026183149,
+    "worstM": 0.0010618238655459653,
     "met": true,
     "atHour": 7,
-    "steps": 8611
+    "steps": 8605
    },
-   "integrationErrorM": 0.017623394251529725
+   "integrationErrorM": 0.017576809203547233
   },
   {
    "id": "LEO400 I1-field-sun-moon-in-track",
@@ -432,10 +432,10 @@
    "forces": "I1-field-sun-moon-in-track",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018179494472963343,
+    "worstM": 0.01812781183745239,
     "met": true,
     "atHour": 24,
-    "steps": 1341
+    "steps": 1343
    },
    "steps30": {
     "worstM": 0.0010653809152931261,
@@ -444,12 +444,12 @@
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.001059216553409788,
+    "worstM": 0.001059249012373721,
     "met": true,
     "atHour": 7,
-    "steps": 8611
+    "steps": 8606
    },
-   "integrationErrorM": 0.017690016916363314
+   "integrationErrorM": 0.017636265607613992
   },
   {
    "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
@@ -457,10 +457,10 @@
    "forces": "B1-field-sun-moon-srp-drag-bdot",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.02117723563264562,
+    "worstM": 0.0211722885045981,
     "met": true,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1413
    },
    "steps30": {
     "worstM": 0.003706552682434959,
@@ -474,7 +474,7 @@
     "atHour": 24,
     "steps": 8636
    },
-   "integrationErrorM": 0.017559574143479428
+   "integrationErrorM": 0.017554626854247034
   },
   {
    "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
@@ -482,10 +482,10 @@
    "forces": "W1-field-sun-moon-srp-drag-cssi",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.021479749541868376,
+    "worstM": 0.021424498973429674,
     "met": true,
     "atHour": 24,
-    "steps": 1414
+    "steps": 1415
    },
    "steps30": {
     "worstM": 0.003973348437073216,
@@ -494,12 +494,12 @@
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.0038816104514408263,
+    "worstM": 0.0038817632953726637,
     "met": true,
     "atHour": 24,
     "steps": 8631
    },
-   "integrationErrorM": 0.017598198271124712
+   "integrationErrorM": 0.01754279519495366
   },
   {
    "id": "LEO400 E1-field-sun-moon-eme2000",
@@ -507,10 +507,10 @@
    "forces": "E1-field-sun-moon-eme2000",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018128607852443492,
+    "worstM": 0.018133409518871876,
     "met": true,
     "atHour": 24,
-    "steps": 1341
+    "steps": 1343
    },
    "steps30": {
     "worstM": 0.0010658970695768722,
@@ -522,9 +522,9 @@
     "worstM": 0.0010605558685721009,
     "met": true,
     "atHour": 7,
-    "steps": 8609
+    "steps": 8611
    },
-   "integrationErrorM": 0.017626399712549125
+   "integrationErrorM": 0.01763007660498056
   },
   {
    "id": "LEO400 G1-egm96-36x36-sun-moon",
@@ -532,10 +532,10 @@
    "forces": "G1-egm96-36x36-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.017309625137079777,
+    "worstM": 0.017159824471750684,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1345
    },
    "steps30": {
     "worstM": 0.0010646353931813414,
@@ -547,9 +547,9 @@
     "worstM": 0.0010580021699017666,
     "met": true,
     "atHour": 7,
-    "steps": 8605
+    "steps": 8607
    },
-   "integrationErrorM": 0.016807661568984625
+   "integrationErrorM": 0.016659284595475558
   },
   {
    "id": "LEO400 G2-egm2008-36z24t-sun-moon",
@@ -557,13 +557,13 @@
    "forces": "G2-egm2008-36z24t-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01822254230001454,
+    "worstM": 0.018170655295507376,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1344
    },
    "steps30": {
-    "worstM": 0.0010675092508190974,
+    "worstM": 0.0010675809640810082,
     "met": true,
     "atHour": 7,
     "steps": 2880
@@ -574,7 +574,7 @@
     "atHour": 7,
     "steps": 8609
    },
-   "integrationErrorM": 0.01772163714551411
+   "integrationErrorM": 0.017669750299177608
   },
   {
    "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
@@ -582,33 +582,33 @@
    "forces": "C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.005922449104175867,
+    "worstM": 0.005927736602672185,
     "met": true,
     "atHour": 24,
-    "steps": 1896,
+    "steps": 1893,
     "jacobians": {
      "parameters": {
-      "DRAG_AREA_OVER_MASS": 0.000005012133388455203,
-      "DRAG_AREA_OVER_MASS_RATE": 0.0000037089571593374546,
-      "IN_TRACK_ACCELERATION": 0.000005069693911462356,
-      "SRP_AREA_OVER_MASS": 0.00014052275879043334
+      "DRAG_AREA_OVER_MASS": 0.000005010265434642017,
+      "DRAG_AREA_OVER_MASS_RATE": 0.000003707591144262142,
+      "IN_TRACK_ACCELERATION": 0.000005067877561201793,
+      "SRP_AREA_OVER_MASS": 0.00014074762551686128
      },
-     "stm": 0.000011646691517555434
+     "stm": 0.00001164278337391471
     }
    },
    "steps30": {
-    "worstM": 0.0037808940538181413,
+    "worstM": 0.003780292798789153,
     "met": true,
     "atHour": 24,
     "steps": 2970
    },
    "finest": {
-    "worstM": 0.003970185264618113,
+    "worstM": 0.003977065754287566,
     "met": true,
     "atHour": 24,
-    "steps": 8724
+    "steps": 8730
    },
-   "integrationErrorM": 0.001952275666919963
+   "integrationErrorM": 0.001950682728559892
   },
   {
    "id": "LEO400 J1-field-sun-moon-srp-drag-jb2008",
@@ -616,10 +616,10 @@
    "forces": "J1-field-sun-moon-srp-drag-jb2008",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.025855702188580517,
+    "worstM": 0.024873095474002793,
     "met": true,
     "atHour": 24,
-    "steps": 1408
+    "steps": 1407
    },
    "steps30": {
     "worstM": 0.0034461146417417605,
@@ -628,12 +628,12 @@
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0014349286371713363,
+    "worstM": 0.0014888838405712722,
     "met": true,
     "atHour": 24,
-    "steps": 8632
+    "steps": 8631
    },
-   "integrationErrorM": 0.02728880597022487
+   "integrationErrorM": 0.026360237500885654
   },
   {
    "id": "SSO700 F0-point-mass",
@@ -666,13 +666,13 @@
    "forces": "F1-J2",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.014458667441939986,
+    "worstM": 0.014515238719285818,
     "met": true,
     "atHour": 24,
     "steps": 1258
    },
    "steps30": {
-    "worstM": 0.0012420935430765773,
+    "worstM": 0.0012396371382267693,
     "met": true,
     "atHour": 24,
     "steps": 2880
@@ -683,7 +683,7 @@
     "atHour": 24,
     "steps": 8606
    },
-   "integrationErrorM": 0.015732097450107674
+   "integrationErrorM": 0.015788669664672274
   },
   {
    "id": "SSO700 F2-zonal20",
@@ -691,10 +691,10 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0144841239087,
+    "worstM": 0.0144690887574691,
     "met": true,
     "atHour": 24,
-    "steps": 1257
+    "steps": 1258
    },
    "steps30": {
     "worstM": 0.0012245200970937497,
@@ -708,7 +708,7 @@
     "atHour": 24,
     "steps": 8609
    },
-   "integrationErrorM": 0.01574705216270861
+   "integrationErrorM": 0.01573201719204894
   },
   {
    "id": "SSO700 Z1-zonal20-sun-moon",
@@ -728,12 +728,12 @@
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0012851445646134682,
+    "worstM": 0.0012851470063434736,
     "met": true,
     "atHour": 24,
     "steps": 8610
    },
-   "integrationErrorM": 0.015880038881900323
+   "integrationErrorM": 0.01588004134469779
   },
   {
    "id": "SSO700 Z2-zonal20-sun-moon-srp",
@@ -741,13 +741,13 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.013887015572636377,
+    "worstM": 0.013830342793764938,
     "met": true,
     "atHour": 24,
-    "steps": 1342
+    "steps": 1344
    },
    "steps30": {
-    "worstM": 0.001670187817976622,
+    "worstM": 0.0016674377968314003,
     "met": true,
     "atHour": 24,
     "steps": 2957
@@ -758,7 +758,7 @@
     "atHour": 24,
     "steps": 8676
    },
-   "integrationErrorM": 0.015242129052888147
+   "integrationErrorM": 0.0151854559229194
   },
   {
    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -772,7 +772,7 @@
     "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0013431899653180213,
+    "worstM": 0.0013411550920793438,
     "met": true,
     "atHour": 24,
     "steps": 2957
@@ -791,13 +791,13 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.014505282763828262,
+    "worstM": 0.01442318013954344,
     "met": true,
     "atHour": 24,
-    "steps": 1255
+    "steps": 1256
    },
    "steps30": {
-    "worstM": 0.0012882707715226197,
+    "worstM": 0.0012828701852696503,
     "met": true,
     "atHour": 24,
     "steps": 2880
@@ -808,7 +808,7 @@
     "atHour": 24,
     "steps": 8609
    },
-   "integrationErrorM": 0.015834932878290787
+   "integrationErrorM": 0.01575282973783141
   },
   {
    "id": "SSO700 F4-field-sun-moon",
@@ -816,10 +816,10 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.014476714251589034,
+    "worstM": 0.01445059545666907,
     "met": true,
     "atHour": 24,
-    "steps": 1256
+    "steps": 1259
    },
    "steps30": {
     "worstM": 0.0012942783001173598,
@@ -833,7 +833,7 @@
     "atHour": 24,
     "steps": 8607
    },
-   "integrationErrorM": 0.01581120536160087
+   "integrationErrorM": 0.015785086549420176
   },
   {
    "id": "SSO700 F5-field-sun-moon-srp",
@@ -841,24 +841,24 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014092690378378325,
+    "worstM": 0.014092664100601292,
     "met": true,
     "atHour": 24,
     "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0014355425082787055,
+    "worstM": 0.0014353919042945319,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.001129145042693735,
+    "worstM": 0.0011175637009915999,
     "met": true,
     "atHour": 24,
-    "steps": 8673
+    "steps": 8675
    },
-   "integrationErrorM": 0.015221364132936153
+   "integrationErrorM": 0.01520975304719686
   },
   {
    "id": "SSO700 F6-field-sun-moon-srp-drag",
@@ -866,24 +866,24 @@
    "forces": "F6-field-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.01425949411748984,
+    "worstM": 0.014312170554162942,
     "met": true,
     "atHour": 24,
-    "steps": 1342
+    "steps": 1345
    },
    "steps30": {
-    "worstM": 0.0012370040067068123,
+    "worstM": 0.0012371611630075435,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0009397964104157208,
+    "worstM": 0.0009406799092037674,
     "met": true,
     "atHour": 24,
     "steps": 8674
    },
-   "integrationErrorM": 0.015198690876995278
+   "integrationErrorM": 0.0152522506276195
   },
   {
    "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
@@ -891,13 +891,13 @@
    "forces": "W1-field-sun-moon-srp-drag-cssi",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014464626442266855,
+    "worstM": 0.014408549632482441,
     "met": true,
     "atHour": 24,
     "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0010768265488633878,
+    "worstM": 0.0010752689232144436,
     "met": true,
     "atHour": 24,
     "steps": 2957
@@ -908,7 +908,7 @@
     "atHour": 24,
     "steps": 8676
    },
-   "integrationErrorM": 0.015221968486883593
+   "integrationErrorM": 0.015165891828968709
   },
   {
    "id": "SSO700 J1-field-sun-moon-srp-drag-jb2008",
@@ -916,24 +916,24 @@
    "forces": "J1-field-sun-moon-srp-drag-jb2008",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.01683382443919214,
+    "worstM": 0.01683285706287251,
     "met": true,
     "atHour": 24,
-    "steps": 1327
+    "steps": 1328
    },
    "steps30": {
-    "worstM": 0.0011227266305684329,
+    "worstM": 0.0011228345654814287,
     "met": true,
     "atHour": 24,
     "steps": 2954
    },
    "finest": {
-    "worstM": 0.0010658233845341073,
+    "worstM": 0.001073292662717567,
     "met": true,
     "atHour": 24,
-    "steps": 8623
+    "steps": 8624
    },
-   "integrationErrorM": 0.015768277312922598
+   "integrationErrorM": 0.015759837984131577
   },
   {
    "id": "GPS F0-point-mass",
@@ -1698,24 +1698,24 @@
    "forces": "A1-field-sun-moon-srp-knocke",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.018874733455214524,
+    "worstM": 0.01892255416517892,
     "met": true,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1414
    },
    "steps30": {
-    "worstM": 0.0012599299319340168,
+    "worstM": 0.0012638657231233133,
     "met": true,
     "atHour": 24,
     "steps": 2958
    },
    "finest": {
-    "worstM": 0.0011577841545210783,
+    "worstM": 0.0011581995481026231,
     "met": true,
     "atHour": 24,
-    "steps": 8638
+    "steps": 8639
    },
-   "integrationErrorM": 0.017717932833820726
+   "integrationErrorM": 0.017765320220711044
   },
   {
    "id": "SSO700 A1-field-sun-moon-srp-knocke",
@@ -1723,24 +1723,24 @@
    "forces": "A1-field-sun-moon-srp-knocke",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014573197568897607,
+    "worstM": 0.014624210234554333,
     "met": true,
     "atHour": 24,
-    "steps": 1344
+    "steps": 1341
    },
    "steps30": {
-    "worstM": 0.001290066827907736,
+    "worstM": 0.0012901871667849794,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0009650494143477725,
+    "worstM": 0.0009698003964581955,
     "met": true,
     "atHour": 24,
-    "steps": 8678
+    "steps": 8677
    },
-   "integrationErrorM": 0.015537662755665742
+   "integrationErrorM": 0.015593433100764718
   },
   {
    "id": "GPS A1-field-sun-moon-srp-knocke",
@@ -1773,24 +1773,24 @@
    "forces": "O1-field-sun-moon-ocean-tides30",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018114949299330715,
+    "worstM": 0.018176055903973993,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0010683677787374504,
+    "worstM": 0.0010679596830500267,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.001062086925672997,
+    "worstM": 0.0010620356794447587,
     "met": true,
     "atHour": 7,
     "steps": 8609
    },
-   "integrationErrorM": 0.017620804446705683
+   "integrationErrorM": 0.01767652126110211
   },
   {
    "id": "SSO700 O1-field-sun-moon-ocean-tides30",
@@ -1798,24 +1798,24 @@
    "forces": "O1-field-sun-moon-ocean-tides30",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.014480427319173553,
+    "worstM": 0.01449377705566176,
     "met": true,
     "atHour": 24,
     "steps": 1255
    },
    "steps30": {
-    "worstM": 0.0012778162951409804,
+    "worstM": 0.0012749025395093468,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0013194140100691134,
+    "worstM": 0.0013193217137432527,
     "met": true,
     "atHour": 24,
-    "steps": 8606
+    "steps": 8613
    },
-   "integrationErrorM": 0.01579949252969929
+   "integrationErrorM": 0.015812749053643427
   },
   {
    "id": "GPS O1-field-sun-moon-ocean-tides30",
@@ -1823,24 +1823,24 @@
    "forces": "O1-field-sun-moon-ocean-tides30",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00015165982133045024,
+    "worstM": 0.00015268054575926431,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017414916223125888,
+    "worstM": 0.00017266623910644003,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017285513864668872,
+    "worstM": 0.00017184904648394653,
     "met": true,
     "atHour": 22,
-    "steps": 8596
+    "steps": 8598
    },
-   "integrationErrorM": 0.000025810223711527783
+   "integrationErrorM": 0.0000236227313024102
   },
   {
    "id": "LEO400 O2-field-sun-moon-ocean-tides50",
@@ -1848,24 +1848,24 @@
    "forces": "O2-field-sun-moon-ocean-tides50",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018215304002190798,
+    "worstM": 0.01813168036461251,
     "met": true,
     "atHour": 24,
-    "steps": 1341
+    "steps": 1344
    },
    "steps30": {
-    "worstM": 0.0010671688025898746,
+    "worstM": 0.001066272331567946,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010617026067584953,
+    "worstM": 0.0010609938747389363,
     "met": true,
     "atHour": 7,
-    "steps": 8605
+    "steps": 8612
    },
-   "integrationErrorM": 0.01771447760982006
+   "integrationErrorM": 0.01763044536785359
   },
   {
    "id": "LEO400 C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
@@ -1873,32 +1873,32 @@
    "forces": "C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.005861106134137196,
+    "worstM": 0.00591558219286435,
     "met": true,
     "atHour": 24,
-    "steps": 1891,
+    "steps": 1892,
     "jacobians": {
      "parameters": {
-      "DRAG_AREA_OVER_MASS": 0.0000075424968750828915,
-      "DRAG_AREA_OVER_MASS_RATE": 0.000005512883851915548,
-      "SRP_AREA_OVER_MASS": 0.000026574937099157705
+      "DRAG_AREA_OVER_MASS": 0.000007544394945339203,
+      "DRAG_AREA_OVER_MASS_RATE": 0.000005514298209660545,
+      "SRP_AREA_OVER_MASS": 0.000027170724622898583
      },
-     "stm": 0.000017805670379440687
+     "stm": 0.00001781049771563471
     }
    },
    "steps30": {
-    "worstM": 0.003650184715848842,
+    "worstM": 0.003653302336183195,
     "met": true,
     "atHour": 24,
     "steps": 2969
    },
    "finest": {
-    "worstM": 0.0038763385178258933,
+    "worstM": 0.003885441296692167,
     "met": true,
     "atHour": 24,
-    "steps": 8719
+    "steps": 8725
    },
-   "integrationErrorM": 0.001984816126191907
+   "integrationErrorM": 0.002030168438631929
   },
   {
    "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
@@ -1906,30 +1906,30 @@
    "forces": "C2-field-sun-moon-srp-knocke-ocean-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00015292179511514854,
+    "worstM": 0.00015273104674066407,
     "met": true,
     "atHour": 22,
     "steps": 337,
     "jacobians": {
      "parameters": {
-      "SRP_AREA_OVER_MASS": 8.886581624218521e-9
+      "SRP_AREA_OVER_MASS": 7.902511490301345e-9
      },
-     "stm": 1.5555253772910364e-11
+     "stm": 1.5016102206669963e-11
     }
    },
    "steps30": {
-    "worstM": 0.0001729409831656779,
+    "worstM": 0.00017254357162209757,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017210759298914995,
+    "worstM": 0.00017220231545578797,
     "met": true,
     "atHour": 22,
-    "steps": 8644
+    "steps": 8642
    },
-   "integrationErrorM": 0.000023462659523954404
+   "integrationErrorM": 0.000023597429178674426
   }
  ],
  "differentials": [
@@ -1937,9 +1937,9 @@
    "added": "A1",
    "base": "F5",
    "orbit": "LEO400",
-   "suiteM": 0.0001668404949092289,
-   "steps30M": 0.00004429404171076492,
-   "finestM": 0.00005920617131778301
+   "suiteM": 0.00022365962274088611,
+   "steps30M": 0.00004036047993992274,
+   "finestM": 0.00005710655232309737
   },
   {
    "added": "A1",
@@ -1953,24 +1953,17 @@
    "added": "O1",
    "base": "F4",
    "orbit": "LEO400",
-   "suiteM": 0.00004677482938817228,
-   "steps30M": 0.0000031386837717715956,
-   "finestM": 0.000006907801545278619
+   "suiteM": 0.000017861234287627805,
+   "steps30M": 0.000003030241952898629,
+   "finestM": 0.000012297308832791283
   },
   {
    "added": "O1",
    "base": "F4",
    "orbit": "GPS",
-   "suiteM": 0.0000012614443686479208,
-   "steps30M": 0.0000018680856736199978,
-   "finestM": 0.000002935463787923683
+   "suiteM": 0.0000015012920624980913,
+   "steps30M": 0.0000036082960249655386,
+   "finestM": 0.0000036818803529927948
   }
- ],
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "92078a0285c0c888e4b2ee24b7b50104991a0f182a4200c13c56fa5f99e7e228",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
- }
+ ]
 }

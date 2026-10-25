@@ -1,8 +1,8 @@
 {
  "note": "FFM against Nyx Space (tests/evidence/nyx/score-nyx.mjs): the largest 3D position difference over 24 h, hourly samples, by case, FFM at three integrator settings; Orekit 13.1 against Nyx beside it; STM: largest relative column difference at the suite's request, and of the Cr*A/m and Cd*A/m columns.",
  "module": {
-  "version": "1.4.1",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "version": "2.0.0",
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "nyx": {
   "file": "nyx-2.6.0.json",
@@ -176,7 +176,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017600290028761303,
+    "worstM": 0.0176012338839315,
     "steps": 1343,
     "met": true
    },
@@ -218,8 +218,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01764614219916024,
-    "steps": 1344,
+    "worstM": 0.017649506538184954,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
@@ -232,8 +232,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00000778716513915122,
-    "steps": 8610,
+    "worstM": 0.000007671901545892537,
+    "steps": 8612,
     "met": true
    },
    "met": true,
@@ -260,7 +260,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016759939855430908,
+    "worstM": 0.016747822187817226,
     "steps": 1415,
     "met": true
    },
@@ -274,8 +274,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0007849126357860277,
-    "steps": 8638,
+    "worstM": 0.0007779046583226879,
+    "steps": 8637,
     "met": true
    },
    "met": true,
@@ -305,7 +305,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.055457965017233,
+    "worstM": 12.055452795646792,
     "steps": 1414,
     "met": false
    },
@@ -339,11 +339,11 @@
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
     "statement": "Stock Nyx differs by 12.073132878148073 m at FFM finest; the published two-line MSIS correction reduces this to 1.1015247310938898 m. With the current runner's WGS84 planetary-data correction it is 0.050569388385195924 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.077102919146183 m from stock and 0.054538862717651126 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00033752172744011956 m.",
     "evidence": {
-     "stockSuiteM": 12.055457965017233,
+     "stockSuiteM": 12.055452795646792,
      "stockSteps30M": 12.073040611819547,
      "stockFinestM": 12.073132878148073,
      "orekitMinusStockM": 12.077102919146183,
-     "publishedSuiteM": 1.0838493097904829,
+     "publishedSuiteM": 1.0838441313193663,
      "publishedSteps30M": 1.101432463544372,
      "publishedFinestM": 1.1015247310938898,
      "orekitMinusPublishedM": 1.105494743468034,
@@ -359,11 +359,11 @@
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
     "statement": "Stock Nyx differs by 12.073132878148073 m at FFM finest; the published two-line MSIS correction reduces this to 1.1015247310938898 m. With the current runner's WGS84 planetary-data correction it is 0.050569388385195924 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.077102919146183 m from stock and 0.054538862717651126 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00033752172744011956 m.",
     "evidence": {
-     "stockSuiteM": 12.055457965017233,
+     "stockSuiteM": 12.055452795646792,
      "stockSteps30M": 12.073040611819547,
      "stockFinestM": 12.073132878148073,
      "orekitMinusStockM": 12.077102919146183,
-     "publishedSuiteM": 1.0838493097904829,
+     "publishedSuiteM": 1.0838441313193663,
      "publishedSteps30M": 1.101432463544372,
      "publishedFinestM": 1.1015247310938898,
      "orekitMinusPublishedM": 1.105494743468034,
@@ -391,8 +391,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017718267580411933,
-    "steps": 1343,
+    "worstM": 0.017641954919630613,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
@@ -405,7 +405,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000014880318145522159,
+    "worstM": 0.000011922517590636152,
     "steps": 8607,
     "met": true
    },
@@ -413,7 +413,7 @@
    "stm": {
     "atHour": 5,
     "sampleCount": 24,
-    "worst": 25.31102944271733,
+    "worst": 25.311029442715956,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -433,14 +433,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01765167291737013,
-    "steps": 1343,
+    "worstM": 0.01768093579598087,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000056810466142941026,
+    "worstM": 0.000057003985523610165,
     "steps": 2880,
     "met": true
    },
@@ -475,7 +475,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017113269275842325,
+    "worstM": 0.017058121672239877,
     "steps": 1414,
     "met": true
    },
@@ -489,8 +489,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00042525618063352663,
-    "steps": 8638,
+    "worstM": 0.0004269518402307787,
+    "steps": 8636,
     "met": true
    },
    "met": true,
@@ -520,51 +520,51 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.051246710926454,
-    "steps": 1415,
+    "worstM": 12.051258366259797,
+    "steps": 1414,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.068742827095065,
+    "worstM": 12.068745547699452,
     "steps": 2959,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.068825625335506,
-    "steps": 8635,
+    "worstM": 12.068824871139913,
+    "steps": 8636,
     "met": false
    },
    "met": false,
    "stm": {
     "atHour": 5,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 22.61731678459541,
-     "SRP_AREA_OVER_MASS": 1.9341620386537333
+     "DRAG_AREA_OVER_MASS": 22.617316787449997,
+     "SRP_AREA_OVER_MASS": 1.9341620379996964
     },
     "sampleCount": 24,
-    "worst": 24.657048206115054,
+    "worst": 24.65704822895266,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    },
    "diagnosis": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 12.068825625335506 m at FFM finest; the published two-line MSIS correction reduces this to 1.101047731167793 m. With the current runner's WGS84 planetary-data correction it is 0.05072683557074616 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
+    "statement": "Stock Nyx differs by 12.068824871139913 m at FFM finest; the published two-line MSIS correction reduces this to 1.1010469775506375 m. With the current runner's WGS84 planetary-data correction it is 0.050726082886384236 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
     "evidence": {
-     "stockSuiteM": 12.051246710926454,
-     "stockSteps30M": 12.068742827095065,
-     "stockFinestM": 12.068825625335506,
+     "stockSuiteM": 12.051258366259797,
+     "stockSteps30M": 12.068745547699452,
+     "stockFinestM": 12.068824871139913,
      "orekitMinusStockM": 12.072902677238712,
-     "publishedSuiteM": 1.083468310757393,
-     "publishedSteps30M": 1.100964932862189,
-     "publishedFinestM": 1.101047731167793,
+     "publishedSuiteM": 1.0834799671977726,
+     "publishedSteps30M": 1.1009676530524113,
+     "publishedFinestM": 1.1010469775506375,
      "orekitMinusPublishedM": 1.1051247696449769,
      "stockMinusPublishedM": 10.967825535656939,
      "stockMinusFineNyxM": 0.0004135623349467645,
-     "publishedWgs84FinestM": 0.05072683557074616,
+     "publishedWgs84FinestM": 0.050726082886384236,
      "orekitMinusPublishedWgs84M": 0.05480334533881475,
      "cachedPublishedMinusWgs84M": 1.0503251772082687,
      "toleranceM": 0.1
@@ -572,19 +572,19 @@
    },
    "cause": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 12.068825625335506 m at FFM finest; the published two-line MSIS correction reduces this to 1.101047731167793 m. With the current runner's WGS84 planetary-data correction it is 0.05072683557074616 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
+    "statement": "Stock Nyx differs by 12.068824871139913 m at FFM finest; the published two-line MSIS correction reduces this to 1.1010469775506375 m. With the current runner's WGS84 planetary-data correction it is 0.050726082886384236 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
     "evidence": {
-     "stockSuiteM": 12.051246710926454,
-     "stockSteps30M": 12.068742827095065,
-     "stockFinestM": 12.068825625335506,
+     "stockSuiteM": 12.051258366259797,
+     "stockSteps30M": 12.068745547699452,
+     "stockFinestM": 12.068824871139913,
      "orekitMinusStockM": 12.072902677238712,
-     "publishedSuiteM": 1.083468310757393,
-     "publishedSteps30M": 1.100964932862189,
-     "publishedFinestM": 1.101047731167793,
+     "publishedSuiteM": 1.0834799671977726,
+     "publishedSteps30M": 1.1009676530524113,
+     "publishedFinestM": 1.1010469775506375,
      "orekitMinusPublishedM": 1.1051247696449769,
      "stockMinusPublishedM": 10.967825535656939,
      "stockMinusFineNyxM": 0.0004135623349467645,
-     "publishedWgs84FinestM": 0.05072683557074616,
+     "publishedWgs84FinestM": 0.050726082886384236,
      "orekitMinusPublishedWgs84M": 0.05480334533881475,
      "cachedPublishedMinusWgs84M": 1.0503251772082687,
      "toleranceM": 0.1
@@ -606,7 +606,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017668922189985038,
+    "worstM": 0.017668716577751018,
     "steps": 1343,
     "met": true
    },
@@ -620,8 +620,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00000600428129360153,
-    "steps": 8611,
+    "worstM": 0.0000033890941393827173,
+    "steps": 8610,
     "met": true
    },
    "met": true,
@@ -648,7 +648,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017608088726249024,
+    "worstM": 0.017605332005794984,
     "steps": 1343,
     "met": true
    },
@@ -662,8 +662,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000006625895949740012,
-    "steps": 8607,
+    "worstM": 0.00000992788550342353,
+    "steps": 8611,
     "met": true
    },
    "met": true,
@@ -690,29 +690,29 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017686481383564715,
-    "steps": 1341,
+    "worstM": 0.017634798673790166,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00007069498078779123,
+    "worstM": 0.00006840536263974689,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 19,
     "sampleCount": 24,
-    "worstM": 0.000004223934764349167,
-    "steps": 8611,
+    "worstM": 0.0000024636604523123666,
+    "steps": 8606,
     "met": true
    },
    "met": true,
    "stm": {
     "atHour": 5,
     "sampleCount": 24,
-    "worst": 25.310613344241148,
+    "worst": 25.310613344241123,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -732,8 +732,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.443962393283249,
-    "steps": 1415,
+    "worstM": 12.44396733884575,
+    "steps": 1413,
     "met": false
    },
    "steps30": {
@@ -754,11 +754,11 @@
    "stm": {
     "atHour": 5,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 22.53674158905494,
-     "SRP_AREA_OVER_MASS": 1.9343969623118626
+     "DRAG_AREA_OVER_MASS": 22.536741594141873,
+     "SRP_AREA_OVER_MASS": 1.9343969621248418
     },
     "sampleCount": 24,
-    "worst": 24.759423661780136,
+    "worst": 24.759423669355634,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    },
@@ -766,11 +766,11 @@
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
     "statement": "Stock Nyx differs by 12.461521408352226 m at FFM finest; the published two-line MSIS correction reduces this to 1.137713012612121 m. With the current runner's WGS84 planetary-data correction it is 0.052340773584865226 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.46513908057697 m from stock and 0.05595788402615605 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002458879949977074 m.",
     "evidence": {
-     "stockSuiteM": 12.443962393283249,
+     "stockSuiteM": 12.44396733884575,
      "stockSteps30M": 12.461432556895131,
      "stockFinestM": 12.461521408352226,
      "orekitMinusStockM": 12.46513908057697,
-     "publishedSuiteM": 1.1201534485305942,
+     "publishedSuiteM": 1.1201583960572283,
      "publishedSteps30M": 1.1376241601994925,
      "publishedFinestM": 1.137713012612121,
      "orekitMinusPublishedM": 1.1413306453513703,
@@ -786,11 +786,11 @@
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
     "statement": "Stock Nyx differs by 12.461521408352226 m at FFM finest; the published two-line MSIS correction reduces this to 1.137713012612121 m. With the current runner's WGS84 planetary-data correction it is 0.052340773584865226 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.46513908057697 m from stock and 0.05595788402615605 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002458879949977074 m.",
     "evidence": {
-     "stockSuiteM": 12.443962393283249,
+     "stockSuiteM": 12.44396733884575,
      "stockSteps30M": 12.461432556895131,
      "stockFinestM": 12.461521408352226,
      "orekitMinusStockM": 12.46513908057697,
-     "publishedSuiteM": 1.1201534485305942,
+     "publishedSuiteM": 1.1201583960572283,
      "publishedSteps30M": 1.1376241601994925,
      "publishedFinestM": 1.137713012612121,
      "orekitMinusPublishedM": 1.1413306453513703,
@@ -818,8 +818,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 8.606432144869606,
-    "steps": 1414,
+    "worstM": 8.606487395768024,
+    "steps": 1415,
     "met": false
    },
    "steps30": {
@@ -832,7 +832,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 8.624029872685211,
+    "worstM": 8.62402971981983,
     "steps": 8631,
     "met": false
    },
@@ -840,29 +840,29 @@
    "stm": {
     "atHour": 5,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 21.223776080868237,
-     "SRP_AREA_OVER_MASS": 1.934284128296879
+     "DRAG_AREA_OVER_MASS": 21.223776082227637,
+     "SRP_AREA_OVER_MASS": 1.9342841282968775
     },
     "sampleCount": 24,
-    "worst": 24.691978619021473,
+    "worst": 24.691978620252634,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    },
    "diagnosis": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 8.624029872685211 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614506393701972 m. With the current runner's WGS84 planetary-data correction it is 0.04194498912511606 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
+    "statement": "Stock Nyx differs by 8.62402971981983 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614504866092361 m. With the current runner's WGS84 planetary-data correction it is 0.041944836538694324 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
     "evidence": {
-     "stockSuiteM": 8.606432144869606,
+     "stockSuiteM": 8.606487395768024,
      "stockSteps30M": 8.623938135417447,
-     "stockFinestM": 8.624029872685211,
+     "stockFinestM": 8.62402971981983,
      "orekitMinusStockM": 8.627911472185124,
-     "publishedSuiteM": 0.8438524596114624,
+     "publishedSuiteM": 0.8439077093716665,
      "publishedSteps30M": 0.86135890079407,
-     "publishedFinestM": 0.8614506393701972,
+     "publishedFinestM": 0.8614504866092361,
      "orekitMinusPublishedM": 0.8653321405437189,
      "stockMinusPublishedM": 7.762615493833827,
      "stockMinusFineNyxM": 0.00024805860856717696,
-     "publishedWgs84FinestM": 0.04194498912511606,
+     "publishedWgs84FinestM": 0.041944836538694324,
      "orekitMinusPublishedWgs84M": 0.045825885365084945,
      "cachedPublishedMinusWgs84M": 0.8195092101611455,
      "toleranceM": 0.1
@@ -870,19 +870,19 @@
    },
    "cause": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 8.624029872685211 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614506393701972 m. With the current runner's WGS84 planetary-data correction it is 0.04194498912511606 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
+    "statement": "Stock Nyx differs by 8.62402971981983 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614504866092361 m. With the current runner's WGS84 planetary-data correction it is 0.041944836538694324 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
     "evidence": {
-     "stockSuiteM": 8.606432144869606,
+     "stockSuiteM": 8.606487395768024,
      "stockSteps30M": 8.623938135417447,
-     "stockFinestM": 8.624029872685211,
+     "stockFinestM": 8.62402971981983,
      "orekitMinusStockM": 8.627911472185124,
-     "publishedSuiteM": 0.8438524596114624,
+     "publishedSuiteM": 0.8439077093716665,
      "publishedSteps30M": 0.86135890079407,
-     "publishedFinestM": 0.8614506393701972,
+     "publishedFinestM": 0.8614504866092361,
      "orekitMinusPublishedM": 0.8653321405437189,
      "stockMinusPublishedM": 7.762615493833827,
      "stockMinusFineNyxM": 0.00024805860856717696,
-     "publishedWgs84FinestM": 0.04194498912511606,
+     "publishedWgs84FinestM": 0.041944836538694324,
      "orekitMinusPublishedWgs84M": 0.045825885365084945,
      "cachedPublishedMinusWgs84M": 0.8195092101611455,
      "toleranceM": 0.1
@@ -904,29 +904,29 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01763012232169888,
-    "steps": 1341,
+    "worstM": 0.017634927417121565,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00006762348493372179,
+    "worstM": 0.00006844386729963731,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000038710487065655285,
-    "steps": 8609,
+    "worstM": 0.0000049582355506368525,
+    "steps": 8611,
     "met": true
    },
    "met": true,
    "stm": {
     "atHour": 5,
     "sampleCount": 24,
-    "worst": 25.310579534095083,
+    "worst": 25.310579534094938,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -946,8 +946,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016824722812856307,
-    "steps": 1343,
+    "worstM": 0.016674915412986935,
+    "steps": 1345,
     "met": true
    },
    "steps30": {
@@ -960,15 +960,15 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000017069364849756508,
-    "steps": 8605,
+    "worstM": 0.000015640211157842845,
+    "steps": 8607,
     "met": true
    },
    "met": true,
    "stm": {
     "atHour": 5,
     "sampleCount": 24,
-    "worst": 25.310839691341588,
+    "worst": 25.310839691340167,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -988,14 +988,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017729355362490727,
-    "steps": 1343,
+    "worstM": 0.01767746855190511,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00008534080532720375,
+    "worstM": 0.00008581744370104781,
     "steps": 2880,
     "met": true
    },
@@ -1010,7 +1010,7 @@
    "stm": {
     "atHour": 5,
     "sampleCount": 24,
-    "worst": 25.31058169510442,
+    "worst": 25.310581695104243,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -1030,51 +1030,51 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.458805433695918,
-    "steps": 1896,
+    "worstM": 12.458800146030754,
+    "steps": 1893,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.460946943477603,
+    "worstM": 12.460947544593239,
     "steps": 2970,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 12.460757660670778,
-    "steps": 8724,
+    "worstM": 12.460750780084597,
+    "steps": 8730,
     "met": false
    },
    "met": false,
    "stm": {
     "atHour": 5,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 22.781990850718618,
-     "SRP_AREA_OVER_MASS": 1.9339514355432548
+     "DRAG_AREA_OVER_MASS": 22.78199086396668,
+     "SRP_AREA_OVER_MASS": 1.933951435721884
     },
     "sampleCount": 24,
-    "worst": 24.75359664072113,
+    "worst": 24.753596643112104,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    },
    "diagnosis": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 12.460757660670778 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375102021799257 m. With the current runner's WGS84 planetary-data correction it is 0.05211418097904907 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
+    "statement": "Stock Nyx differs by 12.460750780084597 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375033218387878 m. With the current runner's WGS84 planetary-data correction it is 0.05210730194837888 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
     "evidence": {
-     "stockSuiteM": 12.458805433695918,
-     "stockSteps30M": 12.460946943477603,
-     "stockFinestM": 12.460757660670778,
+     "stockSuiteM": 12.458800146030754,
+     "stockSteps30M": 12.460947544593239,
+     "stockFinestM": 12.460750780084597,
      "orekitMinusStockM": 12.464727810181634,
-     "publishedSuiteM": 1.1355579302578536,
-     "publishedSteps30M": 1.137699498965216,
-     "publishedFinestM": 1.1375102021799257,
+     "publishedSuiteM": 1.1355526431374703,
+     "publishedSteps30M": 1.1377000999894689,
+     "publishedFinestM": 1.1375033218387878,
      "orekitMinusPublishedM": 1.1414803190903273,
      "stockMinusPublishedM": 11.32329810284443,
      "stockMinusFineNyxM": 0.0002592799293260601,
-     "publishedWgs84FinestM": 0.05211418097904907,
+     "publishedWgs84FinestM": 0.05210730194837888,
      "orekitMinusPublishedWgs84M": 0.05608373974662184,
      "cachedPublishedMinusWgs84M": 1.0854005607293766,
      "toleranceM": 0.1
@@ -1082,19 +1082,19 @@
    },
    "cause": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 12.460757660670778 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375102021799257 m. With the current runner's WGS84 planetary-data correction it is 0.05211418097904907 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
+    "statement": "Stock Nyx differs by 12.460750780084597 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375033218387878 m. With the current runner's WGS84 planetary-data correction it is 0.05210730194837888 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
     "evidence": {
-     "stockSuiteM": 12.458805433695918,
-     "stockSteps30M": 12.460946943477603,
-     "stockFinestM": 12.460757660670778,
+     "stockSuiteM": 12.458800146030754,
+     "stockSteps30M": 12.460947544593239,
+     "stockFinestM": 12.460750780084597,
      "orekitMinusStockM": 12.464727810181634,
-     "publishedSuiteM": 1.1355579302578536,
-     "publishedSteps30M": 1.137699498965216,
-     "publishedFinestM": 1.1375102021799257,
+     "publishedSuiteM": 1.1355526431374703,
+     "publishedSteps30M": 1.1377000999894689,
+     "publishedFinestM": 1.1375033218387878,
      "orekitMinusPublishedM": 1.1414803190903273,
      "stockMinusPublishedM": 11.32329810284443,
      "stockMinusFineNyxM": 0.0002592799293260601,
-     "publishedWgs84FinestM": 0.05211418097904907,
+     "publishedWgs84FinestM": 0.05210730194837888,
      "orekitMinusPublishedWgs84M": 0.05608373974662184,
      "cachedPublishedMinusWgs84M": 1.0854005607293766,
      "toleranceM": 0.1
@@ -1158,14 +1158,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01574131623097254,
+    "worstM": 0.015797888844850283,
     "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00004079510298283326,
+    "worstM": 0.00004325150516152394,
     "steps": 2880,
     "met": true
    },
@@ -1200,8 +1200,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01574906249119974,
-    "steps": 1257,
+    "worstM": 0.015734027837058975,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
@@ -1222,7 +1222,7 @@
    "stm": {
     "atHour": 10,
     "sampleCount": 24,
-    "worst": 21.710989244732872,
+    "worst": 21.710989244732026,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -1256,7 +1256,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00000151306761703103,
+    "worstM": 0.000001515079273914241,
     "steps": 8610,
     "met": true
    },
@@ -1284,14 +1284,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015229431385037294,
-    "steps": 1342,
+    "worstM": 0.015172758195377745,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0003275790822945376,
+    "worstM": 0.0003248284457941806,
     "steps": 2957,
     "met": true
    },
@@ -1309,7 +1309,7 @@
      "SRP_AREA_OVER_MASS": 2.8111298951606742
     },
     "sampleCount": 24,
-    "worst": 26.303710894764865,
+    "worst": 26.303710890592512,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -1336,7 +1336,7 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.045718782830608075,
+    "worstM": 0.045716747271044564,
     "steps": 2957,
     "met": true
    },
@@ -1364,11 +1364,11 @@
     "statement": "Stock Nyx differs by 0.04541126814437769 m at FFM finest; the published two-line MSIS correction reduces this to 0.0021269429774417215 m. With the current runner's WGS84 planetary-data correction it is 0.0003531190057756934 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 0.04437597077762366 m from stock and 0.0007424990462990335 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00020591442686091656 m.",
     "evidence": {
      "stockSuiteM": 0.030234021556915323,
-     "stockSteps30M": 0.045718782830608075,
+     "stockSteps30M": 0.045716747271044564,
      "stockFinestM": 0.04541126814437769,
      "orekitMinusStockM": 0.04437597077762366,
      "publishedSuiteM": 0.01305145855574277,
-     "publishedSteps30M": 0.0024344586563182207,
+     "publishedSteps30M": 0.002432423169887672,
      "publishedFinestM": 0.0021269429774417215,
      "orekitMinusPublishedM": 0.0010916802676381619,
      "stockMinusPublishedM": 0.0432846245628139,
@@ -1395,14 +1395,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01582560403713358,
-    "steps": 1255,
+    "worstM": 0.015743500678658748,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000032414276314987755,
+    "worstM": 0.000037815514561938444,
     "steps": 2880,
     "met": true
    },
@@ -1417,7 +1417,7 @@
    "stm": {
     "atHour": 10,
     "sampleCount": 24,
-    "worst": 21.70212015930947,
+    "worst": 21.702120159308866,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -1437,8 +1437,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01581500475780365,
-    "steps": 1256,
+    "worstM": 0.015788885689910978,
+    "steps": 1259,
     "met": true
    },
    "steps30": {
@@ -1459,7 +1459,7 @@
    "stm": {
     "atHour": 10,
     "sampleCount": 24,
-    "worst": 21.70383229430306,
+    "worst": 21.70383229430277,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -1479,22 +1479,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014991831122824156,
+    "worstM": 0.014991804694894424,
     "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0005360740533826302,
+    "worstM": 0.0005359233765902043,
     "steps": 2957,
     "met": true
    },
    "finest": {
-    "atHour": 17,
+    "atHour": 14,
     "sampleCount": 24,
-    "worstM": 0.0002493065666836753,
-    "steps": 8673,
+    "worstM": 0.0002429324222345606,
+    "steps": 8675,
     "met": true
    },
    "met": true,
@@ -1504,7 +1504,7 @@
      "SRP_AREA_OVER_MASS": 2.8103530066160087
     },
     "sampleCount": 24,
-    "worst": 26.691667633213378,
+    "worst": 26.69166763334608,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    }
@@ -1524,21 +1524,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0302339914492421,
-    "steps": 1342,
+    "worstM": 0.030181296085741376,
+    "steps": 1345,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04572893171379638,
+    "worstM": 0.04572908848573232,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04543159241319656,
+    "worstM": 0.04543247706897905,
     "steps": 8674,
     "met": true
    },
@@ -1546,29 +1546,29 @@
    "stm": {
     "atHour": 10,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 5.169031049814489,
+     "DRAG_AREA_OVER_MASS": 5.16903105053144,
      "SRP_AREA_OVER_MASS": 2.8107052832762083
     },
     "sampleCount": 24,
-    "worst": 26.891488999215994,
+    "worst": 26.891489000169766,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    },
    "diagnosis": {
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-    "statement": "Stock Nyx differs by 0.04543159241319656 m at FFM finest; the published two-line MSIS correction reduces this to 0.002053328759429057 m. With the current runner's WGS84 planetary-data correction it is 0.0004382938606687607 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 0.04449252390413186 m from stock and 0.0005475498564391887 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00015716528944206734 m.",
+    "statement": "Stock Nyx differs by 0.04543247706897905 m at FFM finest; the published two-line MSIS correction reduces this to 0.0020542128106274425 m. With the current runner's WGS84 planetary-data correction it is 0.0004389659341212114 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 0.04449252390413186 m from stock and 0.0005475498564391887 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00015716528944206734 m.",
     "evidence": {
-     "stockSuiteM": 0.0302339914492421,
-     "stockSteps30M": 0.04572893171379638,
-     "stockFinestM": 0.04543159241319656,
+     "stockSuiteM": 0.030181296085741376,
+     "stockSteps30M": 0.04572908848573232,
+     "stockFinestM": 0.04543247706897905,
      "orekitMinusStockM": 0.04449252390413186,
-     "publishedSuiteM": 0.013145416557060296,
-     "publishedSteps30M": 0.0023506658395014545,
-     "publishedFinestM": 0.002053328759429057,
+     "publishedSuiteM": 0.013198093635860228,
+     "publishedSteps30M": 0.0023508230047205253,
+     "publishedFinestM": 0.0020542128106274425,
      "orekitMinusPublishedM": 0.001114409523145949,
      "stockMinusPublishedM": 0.0433785554499079,
      "stockMinusFineNyxM": 0.00015716528944206734,
-     "publishedWgs84FinestM": 0.0004382938606687607,
+     "publishedWgs84FinestM": 0.0004389659341212114,
      "orekitMinusPublishedWgs84M": 0.0005475498564391887,
      "cachedPublishedMinusWgs84M": 0.0016606683159639676,
      "toleranceM": 0.1
@@ -1590,14 +1590,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04560370459956329,
+    "worstM": 0.04565978125208227,
     "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.061144658413843415,
+    "worstM": 0.06114310078572223,
     "steps": 2957,
     "met": true
    },
@@ -1612,11 +1612,11 @@
    "stm": {
     "atHour": 10,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 4.956410129393754,
+     "DRAG_AREA_OVER_MASS": 4.956410129945001,
      "SRP_AREA_OVER_MASS": 2.8109467794461227
     },
     "sampleCount": 24,
-    "worst": 27.53235740374544,
+    "worst": 27.532357403745408,
     "agreement": "disagrees",
     "cause": "Nyx variational-equation defect; see diagnostics.stm."
    },
@@ -1624,12 +1624,12 @@
     "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
     "statement": "Stock Nyx differs by 0.060825672609726 m at FFM finest; the published two-line MSIS correction reduces this to 0.0011725791530993752 m. With the current runner's WGS84 planetary-data correction it is 0.00026563178519524075 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 0.060068298851573276 m from stock and 0.000552274697941693 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0001164048735860846 m.",
     "evidence": {
-     "stockSuiteM": 0.04560370459956329,
-     "stockSteps30M": 0.061144658413843415,
+     "stockSuiteM": 0.04565978125208227,
+     "stockSteps30M": 0.06114310078572223,
      "stockFinestM": 0.060825672609726,
      "orekitMinusStockM": 0.060068298851573276,
-     "publishedSuiteM": 0.01404944868068811,
-     "publishedSteps30M": 0.0014915499399978907,
+     "publishedSuiteM": 0.013993371589711104,
+     "publishedSteps30M": 0.0014899921125100563,
      "publishedFinestM": 0.0011725791530993752,
      "orekitMinusPublishedM": 0.0005801637442338199,
      "stockMinusPublishedM": 0.059653146535494514,
@@ -2984,7 +2984,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.0838493097904829,
+      "worstM": 1.0838441313193663,
       "steps": 1414,
       "met": false
      },
@@ -3028,30 +3028,30 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.083468310757393,
-      "steps": 1415,
+      "worstM": 1.0834799671977726,
+      "steps": 1414,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.100964932862189,
+      "worstM": 1.1009676530524113,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.101047731167793,
-      "steps": 8635,
+      "worstM": 1.1010469775506375,
+      "steps": 8636,
       "met": false
      },
      "cause": {
       "classification": "model-setting-mismatch",
-      "statement": "Stock Nyx differs by 12.068825625335506 m at FFM finest; the published two-line MSIS correction reduces this to 1.101047731167793 m. With the current runner's WGS84 planetary-data correction it is 0.05072683557074616 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
+      "statement": "Stock Nyx differs by 12.068824871139913 m at FFM finest; the published two-line MSIS correction reduces this to 1.1010469775506375 m. With the current runner's WGS84 planetary-data correction it is 0.050726082886384236 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
       "evidence": {
-       "publishedFinestM": 1.101047731167793,
-       "publishedWgs84FinestM": 0.05072683557074616,
+       "publishedFinestM": 1.1010469775506375,
+       "publishedWgs84FinestM": 0.050726082886384236,
        "cachedPublishedMinusWgs84M": 1.0503251772082687
       }
      }
@@ -3072,8 +3072,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.1201534485305942,
-      "steps": 1415,
+      "worstM": 1.1201583960572283,
+      "steps": 1413,
       "met": false
      },
      "steps30": {
@@ -3116,8 +3116,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.8438524596114624,
-      "steps": 1414,
+      "worstM": 0.8439077093716665,
+      "steps": 1415,
       "met": false
      },
      "steps30": {
@@ -3130,16 +3130,16 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.8614506393701972,
+      "worstM": 0.8614504866092361,
       "steps": 8631,
       "met": false
      },
      "cause": {
       "classification": "model-setting-mismatch",
-      "statement": "Stock Nyx differs by 8.624029872685211 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614506393701972 m. With the current runner's WGS84 planetary-data correction it is 0.04194498912511606 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
+      "statement": "Stock Nyx differs by 8.62402971981983 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614504866092361 m. With the current runner's WGS84 planetary-data correction it is 0.041944836538694324 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
       "evidence": {
-       "publishedFinestM": 0.8614506393701972,
-       "publishedWgs84FinestM": 0.04194498912511606,
+       "publishedFinestM": 0.8614504866092361,
+       "publishedWgs84FinestM": 0.041944836538694324,
        "cachedPublishedMinusWgs84M": 0.8195092101611455
       }
      }
@@ -3160,30 +3160,30 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.1355579302578536,
-      "steps": 1896,
+      "worstM": 1.1355526431374703,
+      "steps": 1893,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.137699498965216,
+      "worstM": 1.1377000999894689,
       "steps": 2970,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.1375102021799257,
-      "steps": 8724,
+      "worstM": 1.1375033218387878,
+      "steps": 8730,
       "met": false
      },
      "cause": {
       "classification": "model-setting-mismatch",
-      "statement": "Stock Nyx differs by 12.460757660670778 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375102021799257 m. With the current runner's WGS84 planetary-data correction it is 0.05211418097904907 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
+      "statement": "Stock Nyx differs by 12.460750780084597 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375033218387878 m. With the current runner's WGS84 planetary-data correction it is 0.05210730194837888 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
       "evidence": {
-       "publishedFinestM": 1.1375102021799257,
-       "publishedWgs84FinestM": 0.05211418097904907,
+       "publishedFinestM": 1.1375033218387878,
+       "publishedWgs84FinestM": 0.05210730194837888,
        "cachedPublishedMinusWgs84M": 1.0854005607293766
       }
      }
@@ -3211,7 +3211,7 @@
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0024344586563182207,
+      "worstM": 0.002432423169887672,
       "steps": 2957,
       "met": true
      },
@@ -3239,21 +3239,21 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.013145416557060296,
-      "steps": 1342,
+      "worstM": 0.013198093635860228,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0023506658395014545,
+      "worstM": 0.0023508230047205253,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.002053328759429057,
+      "worstM": 0.0020542128106274425,
       "steps": 8674,
       "met": true
      }
@@ -3274,14 +3274,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01404944868068811,
+      "worstM": 0.013993371589711104,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0014915499399978907,
+      "worstM": 0.0014899921125100563,
       "steps": 2957,
       "met": true
      },
@@ -3472,7 +3472,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01761326437343148,
+      "worstM": 0.017614208239263424,
       "steps": 1343,
       "met": true
      },
@@ -3507,8 +3507,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.017639739935099184,
-      "steps": 1344,
+      "worstM": 0.017643104279156482,
+      "steps": 1342,
       "met": true
      },
      "steps30": {
@@ -3522,7 +3522,7 @@
       "atHour": 14,
       "sampleCount": 24,
       "worstM": 0.0000070209051055825666,
-      "steps": 8610,
+      "steps": 8612,
       "met": true
      }
     },
@@ -3542,7 +3542,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.016742674921968532,
+      "worstM": 0.01673055733535934,
       "steps": 1415,
       "met": true
      },
@@ -3556,8 +3556,8 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0008022299117676719,
-      "steps": 8638,
+      "worstM": 0.0007952224039472625,
+      "steps": 8637,
       "met": true
      }
     },
@@ -3577,7 +3577,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.055795441109476,
+      "worstM": 12.055790271738555,
       "steps": 1414,
       "met": false
      },
@@ -3599,11 +3599,11 @@
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
       "statement": "Stock Nyx differs by 12.073132878148073 m at FFM finest; the published two-line MSIS correction reduces this to 1.1015247310938898 m. With the current runner's WGS84 planetary-data correction it is 0.050569388385195924 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.077102919146183 m from stock and 0.054538862717651126 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00033752172744011956 m.",
       "evidence": {
-       "stockSuiteM": 12.055457965017233,
+       "stockSuiteM": 12.055452795646792,
        "stockSteps30M": 12.073040611819547,
        "stockFinestM": 12.073132878148073,
        "orekitMinusStockM": 12.077102919146183,
-       "publishedSuiteM": 1.0838493097904829,
+       "publishedSuiteM": 1.0838441313193663,
        "publishedSteps30M": 1.101432463544372,
        "publishedFinestM": 1.1015247310938898,
        "orekitMinusPublishedM": 1.105494743468034,
@@ -3632,8 +3632,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01771591878913432,
-      "steps": 1343,
+      "worstM": 0.017639606137026267,
+      "steps": 1344,
       "met": true
      },
      "steps30": {
@@ -3646,7 +3646,7 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.000012537787750876917,
+      "worstM": 0.000009582859437988596,
       "steps": 8607,
       "met": true
      }
@@ -3667,14 +3667,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.017680262389898768,
-      "steps": 1343,
+      "worstM": 0.01770952527507545,
+      "steps": 1342,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0000854031408361681,
+      "worstM": 0.00008559692832610034,
       "steps": 2880,
       "met": true
      },
@@ -3702,7 +3702,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.016702700886104285,
+      "worstM": 0.016647553478817956,
       "steps": 1414,
       "met": true
      },
@@ -3716,8 +3716,8 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0008358437978584537,
-      "steps": 8638,
+      "worstM": 0.0008375395307208158,
+      "steps": 8636,
       "met": true
      }
     },
@@ -3737,39 +3737,39 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.051660175072604,
-      "steps": 1415,
+      "worstM": 12.051671830406077,
+      "steps": 1414,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.069156291341839,
+      "worstM": 12.069159011946201,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.069239089582563,
-      "steps": 8635,
+      "worstM": 12.069238335387018,
+      "steps": 8636,
       "met": false
      },
      "cause": {
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-      "statement": "Stock Nyx differs by 12.068825625335506 m at FFM finest; the published two-line MSIS correction reduces this to 1.101047731167793 m. With the current runner's WGS84 planetary-data correction it is 0.05072683557074616 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
+      "statement": "Stock Nyx differs by 12.068824871139913 m at FFM finest; the published two-line MSIS correction reduces this to 1.1010469775506375 m. With the current runner's WGS84 planetary-data correction it is 0.050726082886384236 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m.",
       "evidence": {
-       "stockSuiteM": 12.051246710926454,
-       "stockSteps30M": 12.068742827095065,
-       "stockFinestM": 12.068825625335506,
+       "stockSuiteM": 12.051258366259797,
+       "stockSteps30M": 12.068745547699452,
+       "stockFinestM": 12.068824871139913,
        "orekitMinusStockM": 12.072902677238712,
-       "publishedSuiteM": 1.083468310757393,
-       "publishedSteps30M": 1.100964932862189,
-       "publishedFinestM": 1.101047731167793,
+       "publishedSuiteM": 1.0834799671977726,
+       "publishedSteps30M": 1.1009676530524113,
+       "publishedFinestM": 1.1010469775506375,
        "orekitMinusPublishedM": 1.1051247696449769,
        "stockMinusPublishedM": 10.967825535656939,
        "stockMinusFineNyxM": 0.0004135623349467645,
-       "publishedWgs84FinestM": 0.05072683557074616,
+       "publishedWgs84FinestM": 0.050726082886384236,
        "orekitMinusPublishedWgs84M": 0.05480334533881475,
        "cachedPublishedMinusWgs84M": 1.0503251772082687,
        "toleranceM": 0.1
@@ -3792,7 +3792,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.017685318787437614,
+      "worstM": 0.017685113168956372,
       "steps": 1343,
       "met": true
      },
@@ -3806,8 +3806,8 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.000022268231049606277,
-      "steps": 8611,
+      "worstM": 0.000019562108557852893,
+      "steps": 8610,
       "met": true
      }
     },
@@ -3827,7 +3827,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.017597632763589846,
+      "worstM": 0.017594876040878827,
       "steps": 1343,
       "met": true
      },
@@ -3841,8 +3841,8 @@
      "finest": {
       "atHour": 18,
       "sampleCount": 24,
-      "worstM": 0.000007147019231073631,
-      "steps": 8607,
+      "worstM": 0.0000053686137301559966,
+      "steps": 8611,
       "met": true
      }
     },
@@ -3862,22 +3862,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01769928640156389,
-      "steps": 1341,
+      "worstM": 0.017647603691959654,
+      "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00008349993543723873,
+      "worstM": 0.00008121037112334781,
       "steps": 2880,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.000009305829368856778,
-      "steps": 8611,
+      "worstM": 0.000011368192172434594,
+      "steps": 8606,
       "met": true
      }
     },
@@ -3897,8 +3897,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.444187707529096,
-      "steps": 1415,
+      "worstM": 12.444192653091694,
+      "steps": 1413,
       "met": false
      },
      "steps30": {
@@ -3919,11 +3919,11 @@
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
       "statement": "Stock Nyx differs by 12.461521408352226 m at FFM finest; the published two-line MSIS correction reduces this to 1.137713012612121 m. With the current runner's WGS84 planetary-data correction it is 0.052340773584865226 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.46513908057697 m from stock and 0.05595788402615605 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002458879949977074 m.",
       "evidence": {
-       "stockSuiteM": 12.443962393283249,
+       "stockSuiteM": 12.44396733884575,
        "stockSteps30M": 12.461432556895131,
        "stockFinestM": 12.461521408352226,
        "orekitMinusStockM": 12.46513908057697,
-       "publishedSuiteM": 1.1201534485305942,
+       "publishedSuiteM": 1.1201583960572283,
        "publishedSteps30M": 1.1376241601994925,
        "publishedFinestM": 1.137713012612121,
        "orekitMinusPublishedM": 1.1413306453513703,
@@ -3952,8 +3952,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 8.606642557109735,
-      "steps": 1414,
+      "worstM": 8.606697808008246,
+      "steps": 1415,
       "met": false
      },
      "steps30": {
@@ -3966,25 +3966,25 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 8.624240285028392,
+      "worstM": 8.624240132163019,
       "steps": 8631,
       "met": false
      },
      "cause": {
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-      "statement": "Stock Nyx differs by 8.624029872685211 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614506393701972 m. With the current runner's WGS84 planetary-data correction it is 0.04194498912511606 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
+      "statement": "Stock Nyx differs by 8.62402971981983 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614504866092361 m. With the current runner's WGS84 planetary-data correction it is 0.041944836538694324 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m.",
       "evidence": {
-       "stockSuiteM": 8.606432144869606,
+       "stockSuiteM": 8.606487395768024,
        "stockSteps30M": 8.623938135417447,
-       "stockFinestM": 8.624029872685211,
+       "stockFinestM": 8.62402971981983,
        "orekitMinusStockM": 8.627911472185124,
-       "publishedSuiteM": 0.8438524596114624,
+       "publishedSuiteM": 0.8439077093716665,
        "publishedSteps30M": 0.86135890079407,
-       "publishedFinestM": 0.8614506393701972,
+       "publishedFinestM": 0.8614504866092361,
        "orekitMinusPublishedM": 0.8653321405437189,
        "stockMinusPublishedM": 7.762615493833827,
        "stockMinusFineNyxM": 0.00024805860856717696,
-       "publishedWgs84FinestM": 0.04194498912511606,
+       "publishedWgs84FinestM": 0.041944836538694324,
        "orekitMinusPublishedWgs84M": 0.045825885365084945,
        "cachedPublishedMinusWgs84M": 0.8195092101611455,
        "toleranceM": 0.1
@@ -4007,22 +4007,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01763964180030774,
-      "steps": 1341,
+      "worstM": 0.01764444693018694,
+      "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00007714999269798001,
+      "worstM": 0.00007797030583439753,
       "steps": 2880,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0000133315873242574,
-      "steps": 8609,
+      "worstM": 0.000014448486377865705,
+      "steps": 8611,
       "met": true
      }
     },
@@ -4042,8 +4042,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.016811917925430516,
-      "steps": 1343,
+      "worstM": 0.016662110547213334,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
@@ -4056,8 +4056,8 @@
      "finest": {
       "atHour": 23,
       "sampleCount": 24,
-      "worstM": 0.000004584263140136119,
-      "steps": 8605,
+      "worstM": 0.000003621112597894088,
+      "steps": 8607,
       "met": true
      }
     },
@@ -4077,14 +4077,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.017699216556512815,
-      "steps": 1343,
+      "worstM": 0.01764732974165253,
+      "steps": 1344,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00005520935031158078,
+      "worstM": 0.00005568557818182484,
       "steps": 2880,
       "met": true
      },
@@ -4112,39 +4112,39 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.459064690853603,
-      "steps": 1896,
+      "worstM": 12.45905940318845,
+      "steps": 1893,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.461206200639749,
+      "worstM": 12.461206801755383,
       "steps": 2970,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.461016917832263,
-      "steps": 8724,
+      "worstM": 12.461010037246083,
+      "steps": 8730,
       "met": false
      },
      "cause": {
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-      "statement": "Stock Nyx differs by 12.460757660670778 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375102021799257 m. With the current runner's WGS84 planetary-data correction it is 0.05211418097904907 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
+      "statement": "Stock Nyx differs by 12.460750780084597 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375033218387878 m. With the current runner's WGS84 planetary-data correction it is 0.05210730194837888 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m.",
       "evidence": {
-       "stockSuiteM": 12.458805433695918,
-       "stockSteps30M": 12.460946943477603,
-       "stockFinestM": 12.460757660670778,
+       "stockSuiteM": 12.458800146030754,
+       "stockSteps30M": 12.460947544593239,
+       "stockFinestM": 12.460750780084597,
        "orekitMinusStockM": 12.464727810181634,
-       "publishedSuiteM": 1.1355579302578536,
-       "publishedSteps30M": 1.137699498965216,
-       "publishedFinestM": 1.1375102021799257,
+       "publishedSuiteM": 1.1355526431374703,
+       "publishedSteps30M": 1.1377000999894689,
+       "publishedFinestM": 1.1375033218387878,
        "orekitMinusPublishedM": 1.1414803190903273,
        "stockMinusPublishedM": 11.32329810284443,
        "stockMinusFineNyxM": 0.0002592799293260601,
-       "publishedWgs84FinestM": 0.05211418097904907,
+       "publishedWgs84FinestM": 0.05210730194837888,
        "orekitMinusPublishedWgs84M": 0.05608373974662184,
        "cachedPublishedMinusWgs84M": 1.0854005607293766,
        "toleranceM": 0.1
@@ -4202,14 +4202,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015735058336981262,
+      "worstM": 0.015791630894931675,
       "steps": 1258,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00003453399128894349,
+      "worstM": 0.00003699050798816717,
       "steps": 2880,
       "met": true
      },
@@ -4237,8 +4237,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015726019935293555,
-      "steps": 1257,
+      "worstM": 0.015710985278629137,
+      "steps": 1258,
       "met": true
      },
      "steps30": {
@@ -4307,14 +4307,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014891452482220378,
-      "steps": 1342,
+      "worstM": 0.014834779518370107,
+      "steps": 1344,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006656198294621903,
+      "worstM": 0.0006628693391830733,
       "steps": 2957,
       "met": true
      },
@@ -4349,7 +4349,7 @@
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04592453685542262,
+      "worstM": 0.045922501293965155,
       "steps": 2957,
       "met": true
      },
@@ -4377,14 +4377,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01582053118209385,
-      "steps": 1255,
+      "worstM": 0.01573842789438618,
+      "steps": 1256,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0000273444643945331,
+      "worstM": 0.00003274488906841621,
       "steps": 2880,
       "met": true
      },
@@ -4412,8 +4412,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015812397591159898,
-      "steps": 1256,
+      "worstM": 0.015786278531443626,
+      "steps": 1259,
       "met": true
      },
      "steps30": {
@@ -4447,22 +4447,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014836264718662319,
+      "worstM": 0.01483623828653816,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006916726636705061,
+      "worstM": 0.0006915220042043708,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 21,
       "sampleCount": 24,
-      "worstM": 0.00039661452577953774,
-      "steps": 8673,
+      "worstM": 0.0003873655048094603,
+      "steps": 8675,
       "met": true
      }
     },
@@ -4482,21 +4482,21 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.03037776359154004,
-      "steps": 1342,
+      "worstM": 0.030325068452876268,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04587273563996389,
+      "worstM": 0.045872892415491244,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04557539604434692,
+      "worstM": 0.045576280696164116,
       "steps": 8674,
       "met": true
      }
@@ -4517,14 +4517,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.045714101988214954,
+      "worstM": 0.0457701786069803,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0612550554816222,
+      "worstM": 0.06125349785157647,
       "steps": 2957,
       "met": true
      },
@@ -5706,8 +5706,8 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.02718729104023654,
-      "steps": 1344,
+      "worstM": 0.027187546149579425,
+      "steps": 1342,
       "met": true
      },
      "steps30": {
@@ -5721,7 +5721,7 @@
       "atHour": 9,
       "sampleCount": 24,
       "worstM": 0.02966069672495274,
-      "steps": 8610,
+      "steps": 8612,
       "met": true
      }
     },
@@ -5756,7 +5756,7 @@
       "atHour": 9,
       "sampleCount": 24,
       "worstM": 0.02978422272508099,
-      "steps": 8638,
+      "steps": 8637,
       "met": true
      }
     },
@@ -5776,7 +5776,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.082591243502563,
+      "worstM": 12.082586074152836,
       "steps": 1414,
       "met": false
      },
@@ -5820,8 +5820,8 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.027442214385666668,
-      "steps": 1343,
+      "worstM": 0.02744300270689024,
+      "steps": 1344,
       "met": true
      },
      "steps30": {
@@ -5855,8 +5855,8 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.02743926632682907,
-      "steps": 1343,
+      "worstM": 0.027439762362871444,
+      "steps": 1342,
       "met": true
      },
      "steps30": {
@@ -5890,7 +5890,7 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.027622174436144977,
+      "worstM": 0.027622156188437594,
       "steps": 1414,
       "met": true
      },
@@ -5904,8 +5904,8 @@
      "finest": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.030070207889908163,
-      "steps": 8638,
+      "worstM": 0.03007067950250678,
+      "steps": 8636,
       "met": true
      }
     },
@@ -5925,30 +5925,30 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.079092217091425,
-      "steps": 1415,
+      "worstM": 12.079103872422243,
+      "steps": 1414,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.096588330146453,
+      "worstM": 12.096591050748483,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.096671128359187,
-      "steps": 8635,
+      "worstM": 12.096670374160864,
+      "steps": 8636,
       "met": false
      },
      "cause": {
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-      "statement": "Stock Nyx differs by 12.068825625335506 m at FFM finest; the published two-line MSIS correction reduces this to 1.101047731167793 m. With the current runner's WGS84 planetary-data correction it is 0.05072683557074616 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m. This diagnostic additionally uses NAIF ITRF93 orientation.",
+      "statement": "Stock Nyx differs by 12.068824871139913 m at FFM finest; the published two-line MSIS correction reduces this to 1.1010469775506375 m. With the current runner's WGS84 planetary-data correction it is 0.050726082886384236 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m. This diagnostic additionally uses NAIF ITRF93 orientation.",
       "evidence": {
-       "stockMatchedBpcFinestM": 12.068825625335506,
-       "naifBpcFinestM": 12.096671128359187,
+       "stockMatchedBpcFinestM": 12.068824871139913,
+       "naifBpcFinestM": 12.096670374160864,
        "stockMinusNaifM": 0.030027077480219155
       }
      }
@@ -5983,8 +5983,8 @@
      "finest": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.029922924729788473,
-      "steps": 8611,
+      "worstM": 0.029923383763582768,
+      "steps": 8610,
       "met": true
      }
     },
@@ -6004,7 +6004,7 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.02745738381993207,
+      "worstM": 0.027457717402970615,
       "steps": 1343,
       "met": true
      },
@@ -6018,8 +6018,8 @@
      "finest": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.029924654797959915,
-      "steps": 8607,
+      "worstM": 0.029924447539499213,
+      "steps": 8611,
       "met": true
      }
     },
@@ -6039,8 +6039,8 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.027449282026789628,
-      "steps": 1341,
+      "worstM": 0.027447348879330865,
+      "steps": 1343,
       "met": true
      },
      "steps30": {
@@ -6053,8 +6053,8 @@
      "finest": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.029922223331517624,
-      "steps": 8611,
+      "worstM": 0.02992197407259204,
+      "steps": 8606,
       "met": true
      }
     },
@@ -6074,8 +6074,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.471614592395301,
-      "steps": 1415,
+      "worstM": 12.471619537953057,
+      "steps": 1413,
       "met": false
      },
      "steps30": {
@@ -6118,8 +6118,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 8.634305508109419,
-      "steps": 1414,
+      "worstM": 8.634360759006002,
+      "steps": 1415,
       "met": false
      },
      "steps30": {
@@ -6132,16 +6132,16 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 8.65190323140495,
+      "worstM": 8.651903078538005,
       "steps": 8631,
       "met": false
      },
      "cause": {
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-      "statement": "Stock Nyx differs by 8.624029872685211 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614506393701972 m. With the current runner's WGS84 planetary-data correction it is 0.04194498912511606 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m. This diagnostic additionally uses NAIF ITRF93 orientation.",
+      "statement": "Stock Nyx differs by 8.62402971981983 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614504866092361 m. With the current runner's WGS84 planetary-data correction it is 0.041944836538694324 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m. This diagnostic additionally uses NAIF ITRF93 orientation.",
       "evidence": {
-       "stockMatchedBpcFinestM": 8.624029872685211,
-       "naifBpcFinestM": 8.65190323140495,
+       "stockMatchedBpcFinestM": 8.62402971981983,
+       "naifBpcFinestM": 8.651903078538005,
        "stockMinusNaifM": 0.03004317028257432
       }
      }
@@ -6162,8 +6162,8 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.027456970659592798,
-      "steps": 1341,
+      "worstM": 0.027454803617464517,
+      "steps": 1343,
       "met": true
      },
      "steps30": {
@@ -6177,7 +6177,7 @@
       "atHour": 9,
       "sampleCount": 24,
       "worstM": 0.029928274802934522,
-      "steps": 8609,
+      "steps": 8611,
       "met": true
      }
     },
@@ -6197,8 +6197,8 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.02755901236587349,
-      "steps": 1343,
+      "worstM": 0.02761434694282329,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
@@ -6211,8 +6211,8 @@
      "finest": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.02993322260498681,
-      "steps": 8605,
+      "worstM": 0.029933219088982586,
+      "steps": 8607,
       "met": true
      }
     },
@@ -6232,14 +6232,14 @@
      "suite": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.02743592604371239,
-      "steps": 1343,
+      "worstM": 0.027435926267633512,
+      "steps": 1344,
       "met": true
      },
      "steps30": {
       "atHour": 9,
       "sampleCount": 24,
-      "worstM": 0.029914707996625097,
+      "worstM": 0.029914554343622914,
       "steps": 2880,
       "met": true
      },
@@ -6267,30 +6267,30 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.486609292924367,
-      "steps": 1896,
+      "worstM": 12.486604005263915,
+      "steps": 1893,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.48875080235229,
+      "worstM": 12.488751403463024,
       "steps": 2970,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 12.488561519708933,
-      "steps": 8724,
+      "worstM": 12.488554639133175,
+      "steps": 8730,
       "met": false
      },
      "cause": {
       "classification": "Nyx NRLMSISE-00 port defect and model-setting mismatch",
-      "statement": "Stock Nyx differs by 12.460757660670778 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375102021799257 m. With the current runner's WGS84 planetary-data correction it is 0.05211418097904907 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m. This diagnostic additionally uses NAIF ITRF93 orientation.",
+      "statement": "Stock Nyx differs by 12.460750780084597 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375033218387878 m. With the current runner's WGS84 planetary-data correction it is 0.05210730194837888 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m. This diagnostic additionally uses NAIF ITRF93 orientation.",
       "evidence": {
-       "stockMatchedBpcFinestM": 12.460757660670778,
-       "naifBpcFinestM": 12.488561519708933,
+       "stockMatchedBpcFinestM": 12.460750780084597,
+       "naifBpcFinestM": 12.488554639133175,
        "stockMinusNaifM": 0.03005738789415254
       }
      }
@@ -6346,14 +6346,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.03820108691010641,
+      "worstM": 0.03825765763757966,
       "steps": 1258,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.022507815669552723,
+      "worstM": 0.0225102702410367,
       "steps": 2880,
       "met": true
      },
@@ -6381,8 +6381,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.03802752331440313,
-      "steps": 1257,
+      "worstM": 0.038012496479137875,
+      "steps": 1258,
       "met": true
      },
      "steps30": {
@@ -6430,7 +6430,7 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.022288802862846565,
+      "worstM": 0.022288800341325587,
       "steps": 8610,
       "met": true
      }
@@ -6451,14 +6451,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.03730951605908582,
-      "steps": 1342,
+      "worstM": 0.03725285635038083,
+      "steps": 1344,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.021760106090914368,
+      "worstM": 0.021762854632784503,
       "steps": 2957,
       "met": true
      },
@@ -6493,7 +6493,7 @@
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.02335526241856628,
+      "worstM": 0.023353228830581423,
       "steps": 2957,
       "met": true
      },
@@ -6521,14 +6521,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.03900026948432144,
-      "steps": 1255,
+      "worstM": 0.03891818219377078,
+      "steps": 1256,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.02321410666719102,
+      "worstM": 0.023219504427244082,
       "steps": 2880,
       "met": true
      },
@@ -6556,8 +6556,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.038981738938157574,
-      "steps": 1256,
+      "worstM": 0.03895562755122403,
+      "steps": 1259,
       "met": true
      },
      "steps30": {
@@ -6591,22 +6591,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0381948073022116,
+      "worstM": 0.03819478098916416,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.022674146735002003,
+      "worstM": 0.02267429727522329,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.02298039411249405,
-      "steps": 8673,
+      "worstM": 0.022991971784502258,
+      "steps": 8675,
       "met": true
      }
     },
@@ -6626,21 +6626,21 @@
      "suite": {
       "atHour": 12,
       "sampleCount": 24,
-      "worstM": 0.01357321228202315,
-      "steps": 1342,
+      "worstM": 0.013583922114675717,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.022367838627958308,
+      "worstM": 0.022367994765695558,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.022070835140290287,
+      "worstM": 0.022071719429167122,
       "steps": 8674,
       "met": true
      }
@@ -6661,14 +6661,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.022464738292065013,
+      "worstM": 0.02252077386484068,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.037998308679946906,
+      "worstM": 0.037996751590921626,
       "steps": 2957,
       "met": true
      },
@@ -7782,7 +7782,7 @@
   },
   "dragSettings": {
    "file": "drag-settings-diagnostic.json",
-   "sha256": "b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269",
+   "sha256": "069b92140af02f66561778ce4824e7a4959537820414e727e146004241c3fb7d",
    "classification": "model-setting-mismatch",
    "statement": "The cached runs predate the runner fix that writes WGS84 into ANISE planetary data. ANISE transform_to replaces supplied frame shape from that data; the old path uses pck08 Earth radii. The current prebuilt published-MSIS runner plus WGS84 brings every supported drag case below 0.1 m. Historical binaries are unavailable, so assignment of the cached residual to that old path is an inference from the documented source fix, file chronology, measured shape difference and corrected-run convergence.",
    "geodetic": {
@@ -7852,8 +7852,8 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.05072683557074616,
-      "steps": 8635,
+      "worstM": 0.050726082886384236,
+      "steps": 8636,
       "met": true
      },
      "cachedPublishedMinusWgs84": {
@@ -7902,7 +7902,7 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04194498912511606,
+      "worstM": 0.041944836538694324,
       "steps": 8631,
       "met": true
      },
@@ -7927,8 +7927,8 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.05211418097904907,
-      "steps": 8724,
+      "worstM": 0.05210730194837888,
+      "steps": 8730,
       "met": true
      },
      "cachedPublishedMinusWgs84": {
@@ -7977,7 +7977,7 @@
      "finest": {
       "atHour": 23,
       "sampleCount": 24,
-      "worstM": 0.0004382938606687607,
+      "worstM": 0.0004389659341212114,
       "steps": 8674,
       "met": true
      },
@@ -8034,41 +8034,31 @@
       "id": "LEO400 F0-point-mass",
       "atHour": 5,
       "sampleCount": 24,
-      "worst": 25.433905067333985,
-      "agreement": "disagrees",
-      "cause": "Nyx variational-equation defect; see diagnostics.stm."
+      "worst": 25.433905067333985
      },
      {
       "id": "SSO700 F0-point-mass",
       "atHour": 10,
       "sampleCount": 24,
-      "worst": 28.297562062163962,
-      "agreement": "disagrees",
-      "cause": "Nyx variational-equation defect; see diagnostics.stm."
+      "worst": 28.297562062163962
      },
      {
       "id": "GPS F0-point-mass",
       "atHour": 24,
       "sampleCount": 24,
-      "worst": 32.68665654229383,
-      "agreement": "disagrees",
-      "cause": "Nyx variational-equation defect; see diagnostics.stm."
+      "worst": 32.68665654229383
      },
      {
       "id": "GEO F0-point-mass",
       "atHour": 22,
       "sampleCount": 24,
-      "worst": 15.898569752128052,
-      "agreement": "disagrees",
-      "cause": "Nyx variational-equation defect; see diagnostics.stm."
+      "worst": 15.898569752128052
      },
      {
       "id": "MOLNIYA F0-point-mass",
       "atHour": 4,
       "sampleCount": 24,
-      "worst": 130.10479779773408,
-      "agreement": "disagrees",
-      "cause": "Nyx variational-equation defect; see diagnostics.stm."
+      "worst": 130.10479779773408
      }
     ],
     "source": "nyx-space 2.6.0 src/dynamics/spacecraft.rs:199-214; src/propagators/instance.rs:359-394; src/dynamics/orbital.rs:141-155 defines df/dx; spacecraft.rs:330-333 copies that gradient"
@@ -8153,7 +8143,7 @@
     "role": "informational",
     "sha256": "f9bc1f2ccbed9257b2575ebf6c3202abaa9b338a1242d3eaa0fd6d80fa5582a6",
     "currentFile": "/Users/tj/software/tools/xval/nyx/target/release/ffm-xval-nyx-msis",
-    "currentSha256": null,
+    "currentSha256": "4c1dacb9631fcdc48d2fd12cfd82986dd35623f9cd0080384c5e76fad6cb87d5",
     "note": "Historical and current Cargo executable hashes are informational build-output observations, not reproducible identity requirements."
    }
   ],
@@ -8195,7 +8185,7 @@
     },
     {
      "id": "LEO400 F6-field-sun-moon-srp-drag",
-     "worstM": 0.05072683557074616,
+     "worstM": 0.050726082886384236,
      "toleranceM": 0.1,
      "met": true
     },
@@ -8207,13 +8197,13 @@
     },
     {
      "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
-     "worstM": 0.04194498912511606,
+     "worstM": 0.041944836538694324,
      "toleranceM": 0.1,
      "met": true
     },
     {
      "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
-     "worstM": 0.05211418097904907,
+     "worstM": 0.05210730194837888,
      "toleranceM": 0.1,
      "met": true
     }
@@ -8288,11 +8278,11 @@
   },
   {
    "path": "../../../package.json",
-   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
+   "sha256": "aaa691e0d7db547e02378fc0c98cd45e371f34df9feac1feed33d3084f70d10c"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
   },
   {
    "path": "../../../src/cpp/include/nlohmann/json.hpp",
@@ -8300,11 +8290,11 @@
   },
   {
    "path": "../../lib/orekitCases.mjs",
-   "sha256": "58c483cde60d18997905607440e1a096f18d75368dd95de100132fecab838d85"
+   "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
   },
   {
    "path": "../../lib/prwCodec.mjs",
-   "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+   "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
   },
   {
    "path": "../../fixtures/orekit/orekit-reference.json",
@@ -8328,11 +8318,11 @@
   },
   {
    "path": "../erfa-spice/summary-erfa-spice.json",
-   "sha256": "9870522bd666ca130090b56451c1c36089cc81a4187bfcf35b041c14c5702a37"
+   "sha256": "0cd5004f86c425df78d56d32c87d5f6096210482d7b1acd97c474bee5530dc05"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   {
    "path": "../orekit/scoring.mjs",
@@ -8371,11 +8361,8 @@
    "sha256": "6ddc44fb8695224e9e234427194ee4a9a40ba8ccdfb5075c984e0588cd689557"
   },
   {
-   "path": "historical-inputs/ffm-itrf-2026-08.bpc",
-   "sha256": "9fd90010385711b8f49f64ddce61fa4b7514e8b05ae596304d8aa992e1f6d752",
-   "role": "historical-input",
-   "availability": "unavailable",
-   "reason": "Original input bytes were authenticated against this recorded checksum during refresh. They are not vendored in the evidence package; the path is a stable archive label, and the checker reports unavailable bytes as a provenance gap."
+   "path": "/Users/tj/software/tools/xval/nyx/data/ffm-itrf-2026-08.bpc",
+   "sha256": "9fd90010385711b8f49f64ddce61fa4b7514e8b05ae596304d8aa992e1f6d752"
   },
   {
    "path": "/Users/tj/software/tools/xval/nyx/work/EGM2008-2x0.cof",
@@ -8406,7 +8393,7 @@
    "sha256": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-rename-define-20261016/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "path": "/Users/tj/software/worktrees/space-data-network-modules--modules-ffm-evidence-repin-2-0-0-20261025/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
    "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
   },
   {
@@ -8438,16 +8425,16 @@
    "sha256": "f252308fc3abd7d319bc967bfab061f449c8a4654c79cf7c762507938459bf99"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-rename-define-20261016/third_party/nrlmsise00/nrlmsise-00.c",
+   "path": "/Users/tj/software/worktrees/space-data-network-modules--modules-ffm-evidence-repin-2-0-0-20261025/third_party/nrlmsise00/nrlmsise-00.c",
    "sha256": "606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-rename-define-20261016/third_party/nrlmsise00/README.md",
+   "path": "/Users/tj/software/worktrees/space-data-network-modules--modules-ffm-evidence-repin-2-0-0-20261025/third_party/nrlmsise00/README.md",
    "sha256": "7af093b320b6ef9bb4a07204222b9a1cf5369f9c619c701de58a1511175f73aa"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-rename-define-20261016/propagator/ffm/tests/evidence/nyx/drag-settings-diagnostic.json",
-   "sha256": "b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269"
+   "path": "/Users/tj/software/worktrees/space-data-network-modules--modules-ffm-evidence-repin-2-0-0-20261025/propagator/ffm/tests/evidence/nyx/drag-settings-diagnostic.json",
+   "sha256": "069b92140af02f66561778ce4824e7a4959537820414e727e146004241c3fb7d"
   },
   {
    "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/spacecraft.rs",
@@ -8461,12 +8448,5 @@
    "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/orbital.rs",
    "sha256": "481aa5d9e813aa17e71b2e62e8c4d87b93f0558dd31a20c9ac5d9fd0d4652c1b"
   }
- ],
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "0ce47942c5b42e335abd5f9c3a2368a4367e8ca31ca80d5a1f4b7d6ddff916df",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
- }
+ ]
 }

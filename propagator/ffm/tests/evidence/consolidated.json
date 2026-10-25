@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "module": {
-    "version": "1.4.1",
-    "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+    "version": "2.0.0",
+    "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   "protocol": {
     "arcS": 86400,
@@ -112,7 +112,7 @@
         "status": "unavailable",
         "reason": "The original Orekit 13.1 jar is not retained locally; the stored trajectory and generation source are pinned. Installed 13.1.2 and 13.1.6 jars are not substituted."
       },
-      "summarySha256": "d813e5738e8f972cf557aaf57a188a5892931b1c5657cf1d951136d327353a12",
+      "summarySha256": "415c36ebe20911bff1bff4cd43ecf270766a36b786aaa2b5d8d019190643aa77",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -174,9 +174,9 @@
             "worstM": 0.0010520712244648312
           },
           "suite": {
-            "display": "18.054 mm",
+            "display": "18.055 mm",
             "met": true,
-            "worstM": 0.018053847082007305
+            "worstM": 0.018054791835982204
           },
           "toleranceM": 0.05
         },
@@ -193,17 +193,17 @@
             "worstM": 0.0010514680651463322
           },
           "suite": {
-            "display": "18.082 mm",
+            "display": "18.085 mm",
             "met": true,
-            "worstM": 0.018081732251339914
+            "worstM": 0.01808509913639609
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.317 mm",
+            "display": "1.324 mm",
             "met": true,
-            "worstM": 0.001316637181235826
+            "worstM": 0.0013236414417088192
           },
           "id": "LEO400 Z2-zonal20-sun-moon-srp",
           "steps30": {
@@ -212,9 +212,9 @@
             "worstM": 0.0014101068402748895
           },
           "suite": {
-            "display": "18.861 mm",
+            "display": "18.849 mm",
             "met": true,
-            "worstM": 0.018860715762137794
+            "worstM": 0.018848598499297358
           },
           "toleranceM": 0.1
         },
@@ -231,9 +231,9 @@
             "worstM": 0.004062344864815861
           },
           "suite": {
-            "display": "21.645 mm",
+            "display": "21.651 mm",
             "met": true,
-            "worstM": 0.021645478596858142
+            "worstM": 0.021650655011083444
           },
           "toleranceM": 0.1
         },
@@ -250,9 +250,9 @@
             "worstM": 0.0010688613205635255
           },
           "suite": {
-            "display": "18.214 mm",
+            "display": "18.138 mm",
             "met": true,
-            "worstM": 0.01821440531773162
+            "worstM": 0.018138090955428746
           },
           "toleranceM": 0.05
         },
@@ -269,17 +269,17 @@
             "worstM": 0.0010654325049240885
           },
           "suite": {
-            "display": "18.162 mm",
+            "display": "18.191 mm",
             "met": true,
-            "worstM": 0.018161721064460627
+            "worstM": 0.018190984271017705
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.217 mm",
+            "display": "1.215 mm",
             "met": true,
-            "worstM": 0.0012168404493368042
+            "worstM": 0.0012151462548291169
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -288,36 +288,36 @@
             "worstM": 0.00130421441084764
           },
           "suite": {
-            "display": "18.754 mm",
+            "display": "18.699 mm",
             "met": true,
-            "worstM": 0.01875449201334507
+            "worstM": 0.0186993461722488
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "4.077 mm",
+            "display": "4.078 mm",
             "met": true,
-            "worstM": 0.004077094508153804
+            "worstM": 0.004077848588497504
           },
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "steps30": {
-            "display": "4.160 mm",
+            "display": "4.157 mm",
             "met": true,
-            "worstM": 0.004159893680007468
+            "worstM": 0.004157173381846838
           },
           "suite": {
-            "display": "21.657 mm",
+            "display": "21.645 mm",
             "met": true,
-            "worstM": 0.021656500802447208
+            "worstM": 0.021644844640502876
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "1.062 mm",
+            "display": "1.061 mm",
             "met": true,
-            "worstM": 0.0010615075441985505
+            "worstM": 0.0010612653641667567
           },
           "id": "LEO400 R1-field-sun-moon-schwarzschild",
           "steps30": {
@@ -326,9 +326,9 @@
             "worstM": 0.0010670724596074596
           },
           "suite": {
-            "display": "18.165 mm",
+            "display": "18.164 mm",
             "met": true,
-            "worstM": 0.01816459723488105
+            "worstM": 0.018164392062329095
           },
           "toleranceM": 0.05
         },
@@ -336,7 +336,7 @@
           "finest": {
             "display": "1.061 mm",
             "met": true,
-            "worstM": 0.0010610385517957845
+            "worstM": 0.0010610058724652757
           },
           "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
           "steps30": {
@@ -345,28 +345,28 @@
             "worstM": 0.0010670077214159249
           },
           "suite": {
-            "display": "18.094 mm",
+            "display": "18.091 mm",
             "met": true,
-            "worstM": 0.018093766722151922
+            "worstM": 0.018091009782603692
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.061 mm",
+            "display": "1.062 mm",
             "met": true,
-            "worstM": 0.00106111026183149
+            "worstM": 0.0010618238655459653
           },
           "id": "LEO400 T1-field-sun-moon-solid-tides",
           "steps30": {
-            "display": "1.067 mm",
+            "display": "1.066 mm",
             "met": true,
-            "worstM": 0.0010674893534762257
+            "worstM": 0.0010664635120109344
           },
           "suite": {
-            "display": "18.115 mm",
+            "display": "18.082 mm",
             "met": true,
-            "worstM": 0.018114790902797856
+            "worstM": 0.018081679009335563
           },
           "toleranceM": 0.05
         },
@@ -374,7 +374,7 @@
           "finest": {
             "display": "1.059 mm",
             "met": true,
-            "worstM": 0.001059216553409788
+            "worstM": 0.001059249012373721
           },
           "id": "LEO400 I1-field-sun-moon-in-track",
           "steps30": {
@@ -383,9 +383,9 @@
             "worstM": 0.0010653809152931261
           },
           "suite": {
-            "display": "18.179 mm",
+            "display": "18.128 mm",
             "met": true,
-            "worstM": 0.018179494472963343
+            "worstM": 0.01812781183745239
           },
           "toleranceM": 0.05
         },
@@ -402,9 +402,9 @@
             "worstM": 0.003706552682434959
           },
           "suite": {
-            "display": "21.177 mm",
+            "display": "21.172 mm",
             "met": true,
-            "worstM": 0.02117723563264562
+            "worstM": 0.0211722885045981
           },
           "toleranceM": 0.1
         },
@@ -412,7 +412,7 @@
           "finest": {
             "display": "3.882 mm",
             "met": true,
-            "worstM": 0.0038816104514408263
+            "worstM": 0.0038817632953726637
           },
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
@@ -421,9 +421,9 @@
             "worstM": 0.003973348437073216
           },
           "suite": {
-            "display": "21.480 mm",
+            "display": "21.424 mm",
             "met": true,
-            "worstM": 0.021479749541868376
+            "worstM": 0.021424498973429674
           },
           "toleranceM": 0.1
         },
@@ -440,9 +440,9 @@
             "worstM": 0.0010658970695768722
           },
           "suite": {
-            "display": "18.129 mm",
+            "display": "18.133 mm",
             "met": true,
-            "worstM": 0.018128607852443492
+            "worstM": 0.018133409518871876
           },
           "toleranceM": 0.05
         },
@@ -459,9 +459,9 @@
             "worstM": 0.0010646353931813414
           },
           "suite": {
-            "display": "17.310 mm",
+            "display": "17.160 mm",
             "met": true,
-            "worstM": 0.017309625137079777
+            "worstM": 0.017159824471750684
           },
           "toleranceM": 0.05
         },
@@ -475,39 +475,39 @@
           "steps30": {
             "display": "1.068 mm",
             "met": true,
-            "worstM": 0.0010675092508190974
+            "worstM": 0.0010675809640810082
           },
           "suite": {
-            "display": "18.223 mm",
+            "display": "18.171 mm",
             "met": true,
-            "worstM": 0.01822254230001454
+            "worstM": 0.018170655295507376
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "3.970 mm",
+            "display": "3.977 mm",
             "met": true,
-            "worstM": 0.003970185264618113
+            "worstM": 0.003977065754287566
           },
           "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
           "steps30": {
-            "display": "3.781 mm",
+            "display": "3.780 mm",
             "met": true,
-            "worstM": 0.0037808940538181413
+            "worstM": 0.003780292798789153
           },
           "suite": {
-            "display": "5.922 mm",
+            "display": "5.928 mm",
             "met": true,
-            "worstM": 0.005922449104175867
+            "worstM": 0.005927736602672185
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "1.435 mm",
+            "display": "1.489 mm",
             "met": true,
-            "worstM": 0.0014349286371713363
+            "worstM": 0.0014888838405712722
           },
           "id": "LEO400 J1-field-sun-moon-srp-drag-jb2008",
           "steps30": {
@@ -516,9 +516,9 @@
             "worstM": 0.0034461146417417605
           },
           "suite": {
-            "display": "25.856 mm",
+            "display": "24.873 mm",
             "met": true,
-            "worstM": 0.025855702188580517
+            "worstM": 0.024873095474002793
           },
           "toleranceM": 0.1
         },
@@ -549,14 +549,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "1.242 mm",
+            "display": "1.240 mm",
             "met": true,
-            "worstM": 0.0012420935430765773
+            "worstM": 0.0012396371382267693
           },
           "suite": {
-            "display": "14.459 mm",
+            "display": "14.515 mm",
             "met": true,
-            "worstM": 0.014458667441939986
+            "worstM": 0.014515238719285818
           },
           "toleranceM": 0.05
         },
@@ -573,9 +573,9 @@
             "worstM": 0.0012245200970937497
           },
           "suite": {
-            "display": "14.484 mm",
+            "display": "14.469 mm",
             "met": true,
-            "worstM": 0.0144841239087
+            "worstM": 0.0144690887574691
           },
           "toleranceM": 0.05
         },
@@ -583,7 +583,7 @@
           "finest": {
             "display": "1.285 mm",
             "met": true,
-            "worstM": 0.0012851445646134682
+            "worstM": 0.0012851470063434736
           },
           "id": "SSO700 Z1-zonal20-sun-moon",
           "steps30": {
@@ -606,14 +606,14 @@
           },
           "id": "SSO700 Z2-zonal20-sun-moon-srp",
           "steps30": {
-            "display": "1.670 mm",
+            "display": "1.667 mm",
             "met": true,
-            "worstM": 0.001670187817976622
+            "worstM": 0.0016674377968314003
           },
           "suite": {
-            "display": "13.887 mm",
+            "display": "13.830 mm",
             "met": true,
-            "worstM": 0.013887015572636377
+            "worstM": 0.013830342793764938
           },
           "toleranceM": 0.1
         },
@@ -625,9 +625,9 @@
           },
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
           "steps30": {
-            "display": "1.343 mm",
+            "display": "1.341 mm",
             "met": true,
-            "worstM": 0.0013431899653180213
+            "worstM": 0.0013411550920793438
           },
           "suite": {
             "display": "14.143 mm",
@@ -644,14 +644,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "1.288 mm",
+            "display": "1.283 mm",
             "met": true,
-            "worstM": 0.0012882707715226197
+            "worstM": 0.0012828701852696503
           },
           "suite": {
-            "display": "14.505 mm",
+            "display": "14.423 mm",
             "met": true,
-            "worstM": 0.014505282763828262
+            "worstM": 0.01442318013954344
           },
           "toleranceM": 0.05
         },
@@ -668,47 +668,47 @@
             "worstM": 0.0012942783001173598
           },
           "suite": {
-            "display": "14.477 mm",
+            "display": "14.451 mm",
             "met": true,
-            "worstM": 0.014476714251589034
+            "worstM": 0.01445059545666907
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.129 mm",
+            "display": "1.118 mm",
             "met": true,
-            "worstM": 0.001129145042693735
+            "worstM": 0.0011175637009915999
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
-            "display": "1.436 mm",
+            "display": "1.435 mm",
             "met": true,
-            "worstM": 0.0014355425082787055
+            "worstM": 0.0014353919042945319
           },
           "suite": {
             "display": "14.093 mm",
             "met": true,
-            "worstM": 0.014092690378378325
+            "worstM": 0.014092664100601292
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.940 mm",
+            "display": "0.941 mm",
             "met": true,
-            "worstM": 0.0009397964104157208
+            "worstM": 0.0009406799092037674
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "1.237 mm",
             "met": true,
-            "worstM": 0.0012370040067068123
+            "worstM": 0.0012371611630075435
           },
           "suite": {
-            "display": "14.259 mm",
+            "display": "14.312 mm",
             "met": true,
-            "worstM": 0.01425949411748984
+            "worstM": 0.014312170554162942
           },
           "toleranceM": 0.1
         },
@@ -720,33 +720,33 @@
           },
           "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
-            "display": "1.077 mm",
+            "display": "1.075 mm",
             "met": true,
-            "worstM": 0.0010768265488633878
+            "worstM": 0.0010752689232144436
           },
           "suite": {
-            "display": "14.465 mm",
+            "display": "14.409 mm",
             "met": true,
-            "worstM": 0.014464626442266855
+            "worstM": 0.014408549632482441
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "1.066 mm",
+            "display": "1.073 mm",
             "met": true,
-            "worstM": 0.0010658233845341073
+            "worstM": 0.001073292662717567
           },
           "id": "SSO700 J1-field-sun-moon-srp-drag-jb2008",
           "steps30": {
             "display": "1.123 mm",
             "met": true,
-            "worstM": 0.0011227266305684329
+            "worstM": 0.0011228345654814287
           },
           "suite": {
-            "display": "16.834 mm",
+            "display": "16.833 mm",
             "met": true,
-            "worstM": 0.01683382443919214
+            "worstM": 0.01683285706287251
           },
           "toleranceM": 0.1
         },
@@ -1324,37 +1324,37 @@
           "finest": {
             "display": "1.158 mm",
             "met": true,
-            "worstM": 0.0011577841545210783
+            "worstM": 0.0011581995481026231
           },
           "id": "LEO400 A1-field-sun-moon-srp-knocke",
           "steps30": {
-            "display": "1.260 mm",
+            "display": "1.264 mm",
             "met": true,
-            "worstM": 0.0012599299319340168
+            "worstM": 0.0012638657231233133
           },
           "suite": {
-            "display": "18.875 mm",
+            "display": "18.923 mm",
             "met": true,
-            "worstM": 0.018874733455214524
+            "worstM": 0.01892255416517892
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.965 mm",
+            "display": "0.970 mm",
             "met": true,
-            "worstM": 0.0009650494143477725
+            "worstM": 0.0009698003964581955
           },
           "id": "SSO700 A1-field-sun-moon-srp-knocke",
           "steps30": {
             "display": "1.290 mm",
             "met": true,
-            "worstM": 0.001290066827907736
+            "worstM": 0.0012901871667849794
           },
           "suite": {
-            "display": "14.573 mm",
+            "display": "14.624 mm",
             "met": true,
-            "worstM": 0.014573197568897607
+            "worstM": 0.014624210234554333
           },
           "toleranceM": 0.1
         },
@@ -1381,18 +1381,18 @@
           "finest": {
             "display": "1.062 mm",
             "met": true,
-            "worstM": 0.001062086925672997
+            "worstM": 0.0010620356794447587
           },
           "id": "LEO400 O1-field-sun-moon-ocean-tides30",
           "steps30": {
             "display": "1.068 mm",
             "met": true,
-            "worstM": 0.0010683677787374504
+            "worstM": 0.0010679596830500267
           },
           "suite": {
-            "display": "18.115 mm",
+            "display": "18.176 mm",
             "met": true,
-            "worstM": 0.018114949299330715
+            "worstM": 0.018176055903973993
           },
           "toleranceM": 0.05
         },
@@ -1400,75 +1400,75 @@
           "finest": {
             "display": "1.319 mm",
             "met": true,
-            "worstM": 0.0013194140100691134
+            "worstM": 0.0013193217137432527
           },
           "id": "SSO700 O1-field-sun-moon-ocean-tides30",
           "steps30": {
-            "display": "1.278 mm",
+            "display": "1.275 mm",
             "met": true,
-            "worstM": 0.0012778162951409804
+            "worstM": 0.0012749025395093468
           },
           "suite": {
-            "display": "14.480 mm",
+            "display": "14.494 mm",
             "met": true,
-            "worstM": 0.014480427319173553
+            "worstM": 0.01449377705566176
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.173 mm",
+            "display": "0.172 mm",
             "met": true,
-            "worstM": 0.00017285513864668872
+            "worstM": 0.00017184904648394653
           },
           "id": "GPS O1-field-sun-moon-ocean-tides30",
           "steps30": {
-            "display": "0.174 mm",
+            "display": "0.173 mm",
             "met": true,
-            "worstM": 0.00017414916223125888
+            "worstM": 0.00017266623910644003
           },
           "suite": {
-            "display": "0.152 mm",
+            "display": "0.153 mm",
             "met": true,
-            "worstM": 0.00015165982133045024
+            "worstM": 0.00015268054575926431
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.062 mm",
+            "display": "1.061 mm",
             "met": true,
-            "worstM": 0.0010617026067584953
+            "worstM": 0.0010609938747389363
           },
           "id": "LEO400 O2-field-sun-moon-ocean-tides50",
           "steps30": {
-            "display": "1.067 mm",
+            "display": "1.066 mm",
             "met": true,
-            "worstM": 0.0010671688025898746
+            "worstM": 0.001066272331567946
           },
           "suite": {
-            "display": "18.215 mm",
+            "display": "18.132 mm",
             "met": true,
-            "worstM": 0.018215304002190798
+            "worstM": 0.01813168036461251
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "3.876 mm",
+            "display": "3.885 mm",
             "met": true,
-            "worstM": 0.0038763385178258933
+            "worstM": 0.003885441296692167
           },
           "id": "LEO400 C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
           "steps30": {
-            "display": "3.650 mm",
+            "display": "3.653 mm",
             "met": true,
-            "worstM": 0.003650184715848842
+            "worstM": 0.003653302336183195
           },
           "suite": {
-            "display": "5.861 mm",
+            "display": "5.916 mm",
             "met": true,
-            "worstM": 0.005861106134137196
+            "worstM": 0.00591558219286435
           },
           "toleranceM": 0.1
         },
@@ -1476,18 +1476,18 @@
           "finest": {
             "display": "0.172 mm",
             "met": true,
-            "worstM": 0.00017210759298914995
+            "worstM": 0.00017220231545578797
           },
           "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
           "steps30": {
             "display": "0.173 mm",
             "met": true,
-            "worstM": 0.0001729409831656779
+            "worstM": 0.00017254357162209757
           },
           "suite": {
             "display": "0.153 mm",
             "met": true,
-            "worstM": 0.00015292179511514854
+            "worstM": 0.00015273104674066407
           },
           "toleranceM": 0.1
         }
@@ -1523,13 +1523,13 @@
       },
       "stm": {
         "compared": 4,
-        "display": "1.78057e-05",
-        "maxRelativeColumnDifference": 0.000017805670379440687,
+        "display": "1.78105e-05",
+        "maxRelativeColumnDifference": 0.00001781049771563471,
         "parameters": {
-          "DRAG_AREA_OVER_MASS": 0.0000075424968750828915,
-          "DRAG_AREA_OVER_MASS_RATE": 0.000005512883851915548,
-          "IN_TRACK_ACCELERATION": 0.000005069693911462356,
-          "SRP_AREA_OVER_MASS": 0.00014052275879043334
+          "DRAG_AREA_OVER_MASS": 0.000007544394945339203,
+          "DRAG_AREA_OVER_MASS_RATE": 0.000005514298209660545,
+          "IN_TRACK_ACCELERATION": 0.000005067877561201793,
+          "SRP_AREA_OVER_MASS": 0.00014074762551686128
         },
         "statement": "Relative column differences; exported protocol specifies no STM pass limit."
       },
@@ -1592,7 +1592,7 @@
         "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
         "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
       },
-      "summarySha256": "1a679dbae200521fdb44fbfb9ed76fc0a79afe6d40711362a37227f430986e72",
+      "summarySha256": "40120ce0bd555211baecaa3cc0922d793966cf98995c09bf589787d49efcf9b6",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -1654,9 +1654,9 @@
             "worstM": 0.0007347753654864578
           },
           "suite": {
-            "display": "18.218 mm",
+            "display": "18.219 mm",
             "met": true,
-            "worstM": 0.018217957408295692
+            "worstM": 0.018218901024469263
           },
           "toleranceM": 0.05
         },
@@ -1664,7 +1664,7 @@
           "finest": {
             "display": "0.680 mm",
             "met": true,
-            "worstM": 0.0006796496953427859
+            "worstM": 0.0006795430769795952
           },
           "id": "LEO400 Z1-zonal20-sun-moon",
           "steps30": {
@@ -1673,17 +1673,17 @@
             "worstM": 0.0007422809175155243
           },
           "suite": {
-            "display": "18.262 mm",
+            "display": "18.266 mm",
             "met": true,
-            "worstM": 0.018262370355793863
+            "worstM": 0.018265734046084513
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "22.108 mm",
+            "display": "22.109 mm",
             "met": true,
-            "worstM": 0.022107857788471984
+            "worstM": 0.02210905634915506
           },
           "id": "LEO400 Z2-zonal20-sun-moon-srp",
           "steps30": {
@@ -1692,9 +1692,9 @@
             "worstM": 0.022147231760249773
           },
           "suite": {
-            "display": "35.051 mm",
+            "display": "35.043 mm",
             "met": true,
-            "worstM": 0.03505144721815637
+            "worstM": 0.0350427788925
           },
           "toleranceM": 0.1
         },
@@ -1759,15 +1759,15 @@
           "suite": {
             "display": "2.332 m",
             "met": false,
-            "worstM": 2.3323448067816006
+            "worstM": 2.332349977944489
           },
           "toleranceM": 1.5
         },
         {
           "finest": {
-            "display": "0.717 mm",
+            "display": "0.714 mm",
             "met": true,
-            "worstM": 0.000716940214200276
+            "worstM": 0.0007142073375462166
           },
           "id": "LEO400 F3-field20x20",
           "steps30": {
@@ -1776,9 +1776,9 @@
             "worstM": 0.000782196577321602
           },
           "suite": {
-            "display": "18.367 mm",
+            "display": "18.291 mm",
             "met": true,
-            "worstM": 0.01836700522781307
+            "worstM": 0.018290701371919304
           },
           "toleranceM": 0.05
         },
@@ -1792,12 +1792,12 @@
           "steps30": {
             "display": "0.772 mm",
             "met": true,
-            "worstM": 0.0007720986949593079
+            "worstM": 0.0007722747074336801
           },
           "suite": {
-            "display": "18.318 mm",
+            "display": "18.348 mm",
             "met": true,
-            "worstM": 0.018318360782547
+            "worstM": 0.018347620734709493
           },
           "toleranceM": 0.05
         },
@@ -1805,7 +1805,7 @@
           "finest": {
             "display": "5.088 mm",
             "met": true,
-            "worstM": 0.005088449079145663
+            "worstM": 0.005088449279664194
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -1814,9 +1814,9 @@
             "worstM": 0.005088085002024659
           },
           "suite": {
-            "display": "17.310 mm",
+            "display": "17.255 mm",
             "met": true,
-            "worstM": 0.01731002713709803
+            "worstM": 0.01725488652734494
           },
           "toleranceM": 0.1
         },
@@ -1825,12 +1825,12 @@
             "classification": "model-setting difference (GMAT density without anomalous oxygen)",
             "correctedDefaultLimitM": 0.1,
             "correctedDefaultMet": true,
-            "correctedDifferenceM": 0.026503876030322483,
+            "correctedDifferenceM": 0.026501703961632338,
             "correctedLimitM": 1.5,
             "correctedMet": true,
             "evidence": {
               "correctedDefaultMet": true,
-              "correctedDifferenceM": 0.026503876030322483,
+              "correctedDifferenceM": 0.026501703961632338,
               "correctedMet": true,
               "dragEffectM": 43791.86632299737,
               "drivers": {
@@ -1841,16 +1841,16 @@
               "eps": 0.00005249850506094944,
               "epsFromMeanDensities": 0.00005249850506094944,
               "epsTimesDragEffectM": 2.2990075157862986,
-              "ffmMinusGmatCdScaledM": 0.026503876030322483,
-              "ffmMinusGmatM": 2.31955473394916,
+              "ffmMinusGmatCdScaledM": 0.026501703961632338,
+              "ffmMinusGmatM": 2.319552013582224,
               "ffmSetting": "steps30",
               "ffmSource": "../../../lib/nrlmsise00.cpp:92-104",
               "file": "anomalous-oxygen.json",
               "id": "LEO400 F6-field-sun-moon-srp-drag",
               "meanDensityGtd7KgM3": 3.3129832843739586e-12,
               "meanDensityGtd7dKgM3": 3.3131572110436803e-12,
-              "predictionMinusObservedM": -0.020547218162861203,
-              "predictionRelativeDifference": -0.00885825967463959,
+              "predictionMinusObservedM": -0.020544497795925487,
+              "predictionRelativeDifference": -0.008857097265172933,
               "samples": 1441,
               "sourceRelease": "R2026a",
               "sources": [
@@ -1870,26 +1870,26 @@
           "finest": {
             "display": "2.319 m",
             "met": false,
-            "worstM": 2.3194719351408617
+            "worstM": 2.3194726893866617
           },
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "2.320 m",
             "met": false,
-            "worstM": 2.31955473394916
+            "worstM": 2.319552013582224
           },
           "suite": {
             "display": "2.337 m",
             "met": false,
-            "worstM": 2.337051068478067
+            "worstM": 2.337039412954751
           },
           "toleranceM": 1.5
         },
         {
           "finest": {
-            "display": "5.401 mm",
+            "display": "5.403 mm",
             "met": true,
-            "worstM": 0.005400682863658647
+            "worstM": 0.005403220107777692
           },
           "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
           "steps30": {
@@ -1898,47 +1898,47 @@
             "worstM": 0.005461875744126276
           },
           "suite": {
-            "display": "22.594 mm",
+            "display": "22.591 mm",
             "met": true,
-            "worstM": 0.02259422591081837
+            "worstM": 0.02259147329437807
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "30.501 mm",
+            "display": "30.511 mm",
             "met": true,
-            "worstM": 0.030500550703478072
+            "worstM": 0.030510509409763752
           },
           "id": "LEO400 T1-field-sun-moon-solid-tides",
           "steps30": {
-            "display": "30.556 mm",
+            "display": "30.555 mm",
             "met": true,
-            "worstM": 0.030556198413012582
+            "worstM": 0.030554525801876394
           },
           "suite": {
-            "display": "45.162 mm",
+            "display": "45.131 mm",
             "met": true,
-            "worstM": 0.045162339449872906
+            "worstM": 0.04513058371651928
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.711 mm",
+            "display": "0.713 mm",
             "met": true,
-            "worstM": 0.0007106097739865525
+            "worstM": 0.0007125132774016836
           },
           "id": "LEO400 I1-field-sun-moon-in-track",
           "steps30": {
-            "display": "0.780 mm",
+            "display": "0.777 mm",
             "met": true,
-            "worstM": 0.0007795682920552765
+            "worstM": 0.0007774291652456197
           },
           "suite": {
-            "display": "18.347 mm",
+            "display": "18.295 mm",
             "met": true,
-            "worstM": 0.0183470784675679
+            "worstM": 0.01829540145055767
           },
           "toleranceM": 0.05
         },
@@ -1992,7 +1992,7 @@
           "finest": {
             "display": "1.528 m",
             "met": false,
-            "worstM": 1.527666086557858
+            "worstM": 1.5276662394192324
           },
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
@@ -2003,34 +2003,34 @@
           "suite": {
             "display": "1.545 m",
             "met": false,
-            "worstM": 1.5452639119520046
+            "worstM": 1.5452086609137987
           },
           "toleranceM": 1.5
         },
         {
           "finest": {
-            "display": "0.691 mm",
+            "display": "0.692 mm",
             "met": true,
-            "worstM": 0.00069124165862298
+            "worstM": 0.000692290811131217
           },
           "id": "LEO400 E1-field-sun-moon-eme2000",
           "steps30": {
-            "display": "0.750 mm",
+            "display": "0.751 mm",
             "met": true,
-            "worstM": 0.0007503155723725721
+            "worstM": 0.0007510780135062637
           },
           "suite": {
-            "display": "18.263 mm",
+            "display": "18.268 mm",
             "met": true,
-            "worstM": 0.018262757444150096
+            "worstM": 0.018267561995887582
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.715 mm",
+            "display": "0.714 mm",
             "met": true,
-            "worstM": 0.0007151754160575205
+            "worstM": 0.0007138602210946096
           },
           "id": "LEO400 G1-egm96-36x36-sun-moon",
           "steps30": {
@@ -2039,9 +2039,9 @@
             "worstM": 0.0007765756143907984
           },
           "suite": {
-            "display": "17.470 mm",
+            "display": "17.320 mm",
             "met": true,
-            "worstM": 0.017469515399339008
+            "worstM": 0.017319726438702516
           },
           "toleranceM": 0.05
         },
@@ -2053,14 +2053,14 @@
           },
           "id": "LEO400 G2-egm2008-36z24t-sun-moon",
           "steps30": {
-            "display": "0.778 mm",
+            "display": "0.779 mm",
             "met": true,
-            "worstM": 0.00077827886047731
+            "worstM": 0.0007787244392590816
           },
           "suite": {
-            "display": "18.374 mm",
+            "display": "18.322 mm",
             "met": true,
-            "worstM": 0.01837386119789474
+            "worstM": 0.01832198004395886
           },
           "toleranceM": 0.05
         },
@@ -2091,14 +2091,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "0.489 mm",
+            "display": "0.491 mm",
             "met": true,
-            "worstM": 0.0004893173354484813
+            "worstM": 0.0004909589558964476
           },
           "suite": {
-            "display": "16.169 mm",
+            "display": "16.226 mm",
             "met": true,
-            "worstM": 0.016168990036300436
+            "worstM": 0.016225561076284114
           },
           "toleranceM": 0.05
         },
@@ -2115,9 +2115,9 @@
             "worstM": 0.00048253577079502945
           },
           "suite": {
-            "display": "16.169 mm",
+            "display": "16.154 mm",
             "met": true,
-            "worstM": 0.01616944686285397
+            "worstM": 0.016154412315468204
           },
           "toleranceM": 0.05
         },
@@ -2150,12 +2150,12 @@
           "steps30": {
             "display": "10.605 mm",
             "met": true,
-            "worstM": 0.01060468546907966
+            "worstM": 0.010605027073009659
           },
           "suite": {
-            "display": "19.487 mm",
+            "display": "19.430 mm",
             "met": true,
-            "worstM": 0.019486572335730305
+            "worstM": 0.019429899111923474
           },
           "toleranceM": 0.1
         },
@@ -2164,12 +2164,12 @@
             "classification": "model-setting difference (GMAT density without anomalous oxygen)",
             "correctedDefaultLimitM": 0.1,
             "correctedDefaultMet": false,
-            "correctedDifferenceM": 0.12281742741555439,
+            "correctedDifferenceM": 0.12281562009139584,
             "correctedLimitM": 1.5,
             "correctedMet": true,
             "evidence": {
               "correctedDefaultMet": false,
-              "correctedDifferenceM": 0.12281742741555439,
+              "correctedDifferenceM": 0.12281562009139584,
               "correctedMet": true,
               "dragEffectM": 413.1350852945854,
               "drivers": {
@@ -2180,16 +2180,16 @@
               "eps": 0.01963280889061214,
               "epsFromMeanDensities": 0.01963280889061214,
               "epsTimesDragEffectM": 8.111002175595342,
-              "ffmMinusGmatCdScaledM": 0.12281742741555439,
-              "ffmMinusGmatM": 7.949933954682701,
+              "ffmMinusGmatCdScaledM": 0.12281562009139584,
+              "ffmMinusGmatM": 7.94993598997055,
               "ffmSetting": "steps30",
               "ffmSource": "../../../lib/nrlmsise00.cpp:92-104",
               "file": "anomalous-oxygen.json",
               "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
               "meanDensityGtd7KgM3": 2.849662738135624e-14,
               "meanDensityGtd7dKgM3": 2.905609622076139e-14,
-              "predictionMinusObservedM": 0.16106822091264128,
-              "predictionRelativeDifference": 0.02026032188830553,
+              "predictionMinusObservedM": 0.1610661856247919,
+              "predictionRelativeDifference": 0.020260060688285942,
               "samples": 1441,
               "sourceRelease": "R2026a",
               "sources": [
@@ -2215,7 +2215,7 @@
           "steps30": {
             "display": "7.950 m",
             "met": false,
-            "worstM": 7.949933954682701
+            "worstM": 7.94993598997055
           },
           "suite": {
             "display": "7.965 m",
@@ -2232,14 +2232,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "0.462 mm",
+            "display": "0.466 mm",
             "met": true,
-            "worstM": 0.0004620509096781252
+            "worstM": 0.0004661846406194118
           },
           "suite": {
-            "display": "16.222 mm",
+            "display": "16.140 mm",
             "met": true,
-            "worstM": 0.016221907336191877
+            "worstM": 0.016139806213969946
           },
           "toleranceM": 0.05
         },
@@ -2256,17 +2256,17 @@
             "worstM": 0.00047240899940647577
           },
           "suite": {
-            "display": "16.214 mm",
+            "display": "16.188 mm",
             "met": true,
-            "worstM": 0.016214293326258945
+            "worstM": 0.016188175186541677
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "6.609 mm",
+            "display": "6.601 mm",
             "met": true,
-            "worstM": 0.006609480546087898
+            "worstM": 0.006601077354899039
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
@@ -2286,12 +2286,12 @@
             "classification": "model-setting difference (GMAT density without anomalous oxygen)",
             "correctedDefaultLimitM": 0.1,
             "correctedDefaultMet": false,
-            "correctedDifferenceM": 0.10584640109899,
+            "correctedDifferenceM": 0.10584668186383847,
             "correctedLimitM": 1.5,
             "correctedMet": true,
             "evidence": {
               "correctedDefaultMet": false,
-              "correctedDifferenceM": 0.10584640109899,
+              "correctedDifferenceM": 0.10584668186383847,
               "correctedMet": true,
               "dragEffectM": 412.9995072518732,
               "drivers": {
@@ -2302,16 +2302,16 @@
               "eps": 0.019634957851031087,
               "epsFromMeanDensities": 0.019634957851031087,
               "epsTimesDragEffectM": 8.109227917387138,
-              "ffmMinusGmatCdScaledM": 0.10584640109899,
-              "ffmMinusGmatM": 7.93449101736126,
+              "ffmMinusGmatCdScaledM": 0.10584668186383847,
+              "ffmMinusGmatM": 7.934490860625266,
               "ffmSetting": "steps30",
               "ffmSource": "../../../lib/nrlmsise00.cpp:92-104",
               "file": "anomalous-oxygen.json",
               "id": "SSO700 F6-field-sun-moon-srp-drag",
               "meanDensityGtd7KgM3": 2.8492836415095334e-14,
               "meanDensityGtd7dKgM3": 2.905229205716205e-14,
-              "predictionMinusObservedM": 0.17473690002587716,
-              "predictionRelativeDifference": 0.022022446007379647,
+              "predictionMinusObservedM": 0.17473705676187112,
+              "predictionRelativeDifference": 0.022022466196161352,
               "samples": 1441,
               "sourceRelease": "R2026a",
               "sources": [
@@ -2331,18 +2331,18 @@
           "finest": {
             "display": "7.935 m",
             "met": false,
-            "worstM": 7.934788359900262
+            "worstM": 7.934787475042813
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "7.934 m",
             "met": false,
-            "worstM": 7.93449101736126
+            "worstM": 7.934490860625266
           },
           "suite": {
             "display": "7.950 m",
             "met": false,
-            "worstM": 7.949986547544851
+            "worstM": 7.950039235217515
           },
           "toleranceM": 1.5
         },
@@ -2351,12 +2351,12 @@
             "classification": "model-setting difference (GMAT density without anomalous oxygen)",
             "correctedDefaultLimitM": 0.1,
             "correctedDefaultMet": false,
-            "correctedDifferenceM": 0.12276561713645742,
+            "correctedDifferenceM": 0.12276417078366048,
             "correctedLimitM": 1.5,
             "correctedMet": true,
             "evidence": {
               "correctedDefaultMet": false,
-              "correctedDifferenceM": 0.12276561713645742,
+              "correctedDifferenceM": 0.12276417078366048,
               "correctedMet": true,
               "dragEffectM": 255.82940181861494,
               "drivers": {
@@ -2367,16 +2367,16 @@
               "eps": 0.025278904723321505,
               "epsFromMeanDensities": 0.025278904723321727,
               "epsTimesDragEffectM": 6.4670870739971,
-              "ffmMinusGmatCdScaledM": 0.12276561713645742,
-              "ffmMinusGmatM": 6.296095071713942,
+              "ffmMinusGmatCdScaledM": 0.12276417078366048,
+              "ffmMinusGmatM": 6.296096629271772,
               "ffmSetting": "steps30",
               "ffmSource": "../../../lib/nrlmsise00.cpp:92-104",
               "file": "anomalous-oxygen.json",
               "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
               "meanDensityGtd7KgM3": 1.760827370460082e-14,
               "meanDensityGtd7dKgM3": 1.8053391577921595e-14,
-              "predictionMinusObservedM": 0.17099200228315858,
-              "predictionRelativeDifference": 0.027158421265168514,
+              "predictionMinusObservedM": 0.17099044472532832,
+              "predictionRelativeDifference": 0.027158167161914357,
               "samples": 1441,
               "sourceRelease": "R2026a",
               "sources": [
@@ -2402,12 +2402,12 @@
           "steps30": {
             "display": "6.296 m",
             "met": false,
-            "worstM": 6.296095071713942
+            "worstM": 6.296096629271772
           },
           "suite": {
             "display": "6.312 m",
             "met": false,
-            "worstM": 6.3116354471968
+            "worstM": 6.311579369002062
           },
           "toleranceM": 1.5
         },
@@ -3119,7 +3119,7 @@
         "gmatConsoleSha256": "c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655",
         "gmatBaseSha256": "25ad1998de28ac0ac5676341b6ea8642ae7fc6fc23fee8b8b7e077392fbe6f98"
       },
-      "summarySha256": "83b25ee2f8ae9d3ca7d680724c6a2331be21d4fe71fb9645a935d83cb5a9be8e",
+      "summarySha256": "a90274fa8ccceb9ac55d9ab1f24846e16e79561506b803d29f1263204ca02f7d",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -3181,9 +3181,9 @@
             "worstM": 0.0007261125879748724
           },
           "suite": {
-            "display": "18.208 mm",
+            "display": "18.209 mm",
             "met": true,
-            "worstM": 0.018208445619508445
+            "worstM": 0.018209389244846042
           },
           "toleranceM": 0.05
         },
@@ -3191,7 +3191,7 @@
           "finest": {
             "display": "0.624 mm",
             "met": true,
-            "worstM": 0.0006241149010069746
+            "worstM": 0.0006240093747852722
           },
           "id": "LEO400 Z1-zonal20-sun-moon",
           "steps30": {
@@ -3200,17 +3200,17 @@
             "worstM": 0.0006861397488860079
           },
           "suite": {
-            "display": "18.205 mm",
+            "display": "18.208 mm",
             "met": true,
-            "worstM": 0.01820490051767189
+            "worstM": 0.01820826426079124
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "19.769 mm",
+            "display": "19.766 mm",
             "met": true,
-            "worstM": 0.019769394900159106
+            "worstM": 0.019765731496197134
           },
           "id": "LEO400 Z2-zonal20-sun-moon-srp",
           "steps30": {
@@ -3246,9 +3246,9 @@
         },
         {
           "finest": {
-            "display": "0.701 mm",
+            "display": "0.698 mm",
             "met": true,
-            "worstM": 0.0007005559273489713
+            "worstM": 0.0006978350224367063
           },
           "id": "LEO400 F3-field20x20",
           "steps30": {
@@ -3257,9 +3257,9 @@
             "worstM": 0.0007655613813242059
           },
           "suite": {
-            "display": "18.349 mm",
+            "display": "18.273 mm",
             "met": true,
-            "worstM": 0.018349049045167074
+            "worstM": 0.018272745246541846
           },
           "toleranceM": 0.05
         },
@@ -3273,20 +3273,20 @@
           "steps30": {
             "display": "0.722 mm",
             "met": true,
-            "worstM": 0.000721683254569162
+            "worstM": 0.0007218580692553584
           },
           "suite": {
-            "display": "18.267 mm",
+            "display": "18.297 mm",
             "met": true,
-            "worstM": 0.018267292206508596
+            "worstM": 0.018296552324859244
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "10.541 mm",
+            "display": "10.542 mm",
             "met": true,
-            "worstM": 0.010540877854656306
+            "worstM": 0.010542302944125196
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -3295,9 +3295,9 @@
             "worstM": 0.010461211708668889
           },
           "suite": {
-            "display": "8.993 mm",
+            "display": "8.938 mm",
             "met": true,
-            "worstM": 0.008992914317887749
+            "worstM": 0.008937806364410713
           },
           "toleranceM": 0.1
         },
@@ -3311,7 +3311,7 @@
           "steps30": {
             "display": "1.363 m",
             "met": true,
-            "worstM": 1.3626062785942812
+            "worstM": 1.3626049501813666
           },
           "suite": {
             "display": "1.380 m",
@@ -3322,9 +3322,9 @@
         },
         {
           "finest": {
-            "display": "5.363 mm",
+            "display": "5.366 mm",
             "met": true,
-            "worstM": 0.0053631263314893336
+            "worstM": 0.005365658451910145
           },
           "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
           "steps30": {
@@ -3333,74 +3333,74 @@
             "worstM": 0.005424196136933806
           },
           "suite": {
-            "display": "22.548 mm",
+            "display": "22.546 mm",
             "met": true,
-            "worstM": 0.0225483541534126
+            "worstM": 0.02254560150233322
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "30.482 mm",
+            "display": "30.492 mm",
             "met": true,
-            "worstM": 0.03048226048733499
+            "worstM": 0.030492216042513953
           },
           "id": "LEO400 T1-field-sun-moon-solid-tides",
           "steps30": {
-            "display": "30.538 mm",
+            "display": "30.536 mm",
             "met": true,
-            "worstM": 0.0305378905812967
+            "worstM": 0.030536218509566827
           },
           "suite": {
-            "display": "45.141 mm",
+            "display": "45.110 mm",
             "met": true,
-            "worstM": 0.04514127033877047
+            "worstM": 0.045109518036488674
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.656 mm",
+            "display": "0.658 mm",
             "met": true,
-            "worstM": 0.0006560411032531326
+            "worstM": 0.0006579261826140468
           },
           "id": "LEO400 I1-field-sun-moon-in-track",
           "steps30": {
-            "display": "0.724 mm",
+            "display": "0.722 mm",
             "met": true,
-            "worstM": 0.0007244444183308791
+            "worstM": 0.0007223198499523322
           },
           "suite": {
-            "display": "18.291 mm",
+            "display": "18.239 mm",
             "met": true,
-            "worstM": 0.018290855732069677
+            "worstM": 0.018239178426866915
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.650 mm",
+            "display": "0.651 mm",
             "met": true,
-            "worstM": 0.0006503443414069752
+            "worstM": 0.0006513875022891338
           },
           "id": "LEO400 E1-field-sun-moon-eme2000",
           "steps30": {
-            "display": "0.709 mm",
+            "display": "0.710 mm",
             "met": true,
-            "worstM": 0.0007091066616017792
+            "worstM": 0.0007098656996017026
           },
           "suite": {
-            "display": "18.221 mm",
+            "display": "18.226 mm",
             "met": true,
-            "worstM": 0.018221379958503876
+            "worstM": 0.01822618449120388
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.670 mm",
+            "display": "0.669 mm",
             "met": true,
-            "worstM": 0.0006698524031847593
+            "worstM": 0.0006685456746339657
           },
           "id": "LEO400 G1-egm96-36x36-sun-moon",
           "steps30": {
@@ -3409,9 +3409,9 @@
             "worstM": 0.0007309304908820066
           },
           "suite": {
-            "display": "17.424 mm",
+            "display": "17.274 mm",
             "met": true,
-            "worstM": 0.017423730806201587
+            "worstM": 0.017273940754952474
           },
           "toleranceM": 0.05
         },
@@ -3425,12 +3425,12 @@
           "steps30": {
             "display": "0.739 mm",
             "met": true,
-            "worstM": 0.0007389843632030098
+            "worstM": 0.0007394284303657396
           },
           "suite": {
-            "display": "18.335 mm",
+            "display": "18.283 mm",
             "met": true,
-            "worstM": 0.018334663080982368
+            "worstM": 0.018282781626361457
           },
           "toleranceM": 0.05
         },
@@ -3461,14 +3461,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "0.500 mm",
+            "display": "0.502 mm",
             "met": true,
-            "worstM": 0.0005004787683010924
+            "worstM": 0.0005021362137987345
           },
           "suite": {
-            "display": "16.184 mm",
+            "display": "16.241 mm",
             "met": true,
-            "worstM": 0.016184352145134924
+            "worstM": 0.01624092318771848
           },
           "toleranceM": 0.05
         },
@@ -3485,9 +3485,9 @@
             "worstM": 0.00048180186483016984
           },
           "suite": {
-            "display": "16.168 mm",
+            "display": "16.153 mm",
             "met": true,
-            "worstM": 0.016168143076754998
+            "worstM": 0.016153108551817237
           },
           "toleranceM": 0.05
         },
@@ -3520,26 +3520,26 @@
           "steps30": {
             "display": "12.748 mm",
             "met": true,
-            "worstM": 0.012747699943235144
+            "worstM": 0.012747699842429499
           },
           "suite": {
-            "display": "27.789 mm",
+            "display": "27.732 mm",
             "met": true,
-            "worstM": 0.027788683071167573
+            "worstM": 0.02773200854443035
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "179.928 mm",
+            "display": "179.929 mm",
             "met": true,
-            "worstM": 0.17992768292372618
+            "worstM": 0.1799286699499034
           },
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
           "steps30": {
             "display": "180.247 mm",
             "met": true,
-            "worstM": 0.18024698788474797
+            "worstM": 0.18024698430987632
           },
           "suite": {
             "display": "164.793 mm",
@@ -3556,14 +3556,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "0.464 mm",
+            "display": "0.468 mm",
             "met": true,
-            "worstM": 0.0004641915884106362
+            "worstM": 0.0004684070989581627
           },
           "suite": {
-            "display": "16.226 mm",
+            "display": "16.143 mm",
             "met": true,
-            "worstM": 0.01622555128647916
+            "worstM": 0.016143450220760462
           },
           "toleranceM": 0.05
         },
@@ -3580,23 +3580,23 @@
             "worstM": 0.00046152379341200166
           },
           "suite": {
-            "display": "16.210 mm",
+            "display": "16.183 mm",
             "met": true,
-            "worstM": 0.016209500535008962
+            "worstM": 0.01618338232270957
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "8.899 mm",
+            "display": "8.910 mm",
             "met": true,
-            "worstM": 0.008898929648754623
+            "worstM": 0.008909574271029107
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
             "display": "8.611 mm",
             "met": true,
-            "worstM": 0.008610773252050138
+            "worstM": 0.008610908685462406
           },
           "suite": {
             "display": "22.942 mm",
@@ -3607,15 +3607,15 @@
         },
         {
           "finest": {
-            "display": "178.028 mm",
+            "display": "178.042 mm",
             "met": true,
-            "worstM": 0.17802817953832603
+            "worstM": 0.17804163384430818
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "178.354 mm",
             "met": true,
-            "worstM": 0.17835374397253662
+            "worstM": 0.17835380842580636
           },
           "suite": {
             "display": "162.924 mm",
@@ -4347,7 +4347,7 @@
         "binarySha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
         "nyxCrateSha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
       },
-      "summarySha256": "93e887144eac288803148ce69d50cb25cf6f5bb60f12a4a930b0726a9b2a55dc",
+      "summarySha256": "6a8c2b33a50b8155a32150ff37b5a7dc4350c0869247e4a1afcb371155af94a4",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -4409,9 +4409,9 @@
             "worstM": 0.00006555301337739269
           },
           "suite": {
-            "display": "17.600 mm",
+            "display": "17.601 mm",
             "met": true,
-            "worstM": 0.017600290028761303
+            "worstM": 0.0176012338839315
           },
           "toleranceM": 0.05
         },
@@ -4419,7 +4419,7 @@
           "finest": {
             "display": "0.008 mm",
             "met": true,
-            "worstM": 0.00000778716513915122
+            "worstM": 0.000007671901545892537
           },
           "id": "LEO400 Z1-zonal20-sun-moon",
           "steps30": {
@@ -4428,17 +4428,17 @@
             "worstM": 0.00007564458096762409
           },
           "suite": {
-            "display": "17.646 mm",
+            "display": "17.650 mm",
             "met": true,
-            "worstM": 0.01764614219916024
+            "worstM": 0.017649506538184954
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.785 mm",
+            "display": "0.778 mm",
             "met": true,
-            "worstM": 0.0007849126357860277
+            "worstM": 0.0007779046583226879
           },
           "id": "LEO400 Z2-zonal20-sun-moon-srp",
           "steps30": {
@@ -4447,9 +4447,9 @@
             "worstM": 0.0006914015822735344
           },
           "suite": {
-            "display": "16.760 mm",
+            "display": "16.748 mm",
             "met": true,
-            "worstM": 0.016759939855430908
+            "worstM": 0.016747822187817226
           },
           "toleranceM": 0.1
         },
@@ -4463,13 +4463,13 @@
               "orekitMinusStockM": 12.077102919146183,
               "publishedFinestM": 1.1015247310938898,
               "publishedSteps30M": 1.101432463544372,
-              "publishedSuiteM": 1.0838493097904829,
+              "publishedSuiteM": 1.0838441313193663,
               "publishedWgs84FinestM": 0.050569388385195924,
               "stockFinestM": 12.073132878148073,
               "stockMinusFineNyxM": 0.00033752172744011956,
               "stockMinusPublishedM": 10.971655764233601,
               "stockSteps30M": 12.073040611819547,
-              "stockSuiteM": 12.055457965017233,
+              "stockSuiteM": 12.055452795646792,
               "toleranceM": 0.1
             },
             "statement": "Stock Nyx differs by 12.073132878148073 m at FFM finest; the published two-line MSIS correction reduces this to 1.1015247310938898 m. With the current runner's WGS84 planetary-data correction it is 0.050569388385195924 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.077102919146183 m from stock and 0.054538862717651126 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00033752172744011956 m."
@@ -4488,15 +4488,15 @@
           "suite": {
             "display": "12.055 m",
             "met": false,
-            "worstM": 12.055457965017233
+            "worstM": 12.055452795646792
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.015 mm",
+            "display": "0.012 mm",
             "met": true,
-            "worstM": 0.000014880318145522159
+            "worstM": 0.000011922517590636152
           },
           "id": "LEO400 F3-field20x20",
           "steps30": {
@@ -4505,9 +4505,9 @@
             "worstM": 0.0000850895858096343
           },
           "suite": {
-            "display": "17.718 mm",
+            "display": "17.642 mm",
             "met": true,
-            "worstM": 0.017718267580411933
+            "worstM": 0.017641954919630613
           },
           "toleranceM": 0.05
         },
@@ -4521,20 +4521,20 @@
           "steps30": {
             "display": "0.057 mm",
             "met": true,
-            "worstM": 0.000056810466142941026
+            "worstM": 0.000057003985523610165
           },
           "suite": {
-            "display": "17.652 mm",
+            "display": "17.681 mm",
             "met": true,
-            "worstM": 0.01765167291737013
+            "worstM": 0.01768093579598087
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.425 mm",
+            "display": "0.427 mm",
             "met": true,
-            "worstM": 0.00042525618063352663
+            "worstM": 0.0004269518402307787
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -4543,9 +4543,9 @@
             "worstM": 0.00033784985257401885
           },
           "suite": {
-            "display": "17.113 mm",
+            "display": "17.058 mm",
             "met": true,
-            "worstM": 0.017113269275842325
+            "worstM": 0.017058121672239877
           },
           "toleranceM": 0.1
         },
@@ -4557,42 +4557,42 @@
               "orekitMinusPublishedM": 1.1051247696449769,
               "orekitMinusPublishedWgs84M": 0.05480334533881475,
               "orekitMinusStockM": 12.072902677238712,
-              "publishedFinestM": 1.101047731167793,
-              "publishedSteps30M": 1.100964932862189,
-              "publishedSuiteM": 1.083468310757393,
-              "publishedWgs84FinestM": 0.05072683557074616,
-              "stockFinestM": 12.068825625335506,
+              "publishedFinestM": 1.1010469775506375,
+              "publishedSteps30M": 1.1009676530524113,
+              "publishedSuiteM": 1.0834799671977726,
+              "publishedWgs84FinestM": 0.050726082886384236,
+              "stockFinestM": 12.068824871139913,
               "stockMinusFineNyxM": 0.0004135623349467645,
               "stockMinusPublishedM": 10.967825535656939,
-              "stockSteps30M": 12.068742827095065,
-              "stockSuiteM": 12.051246710926454,
+              "stockSteps30M": 12.068745547699452,
+              "stockSuiteM": 12.051258366259797,
               "toleranceM": 0.1
             },
-            "statement": "Stock Nyx differs by 12.068825625335506 m at FFM finest; the published two-line MSIS correction reduces this to 1.101047731167793 m. With the current runner's WGS84 planetary-data correction it is 0.05072683557074616 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m."
+            "statement": "Stock Nyx differs by 12.068824871139913 m at FFM finest; the published two-line MSIS correction reduces this to 1.1010469775506375 m. With the current runner's WGS84 planetary-data correction it is 0.050726082886384236 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.072902677238712 m from stock and 0.05480334533881475 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0004135623349467645 m."
           },
           "finest": {
             "display": "12.069 m",
             "met": false,
-            "worstM": 12.068825625335506
+            "worstM": 12.068824871139913
           },
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "12.069 m",
             "met": false,
-            "worstM": 12.068742827095065
+            "worstM": 12.068745547699452
           },
           "suite": {
             "display": "12.051 m",
             "met": false,
-            "worstM": 12.051246710926454
+            "worstM": 12.051258366259797
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.006 mm",
+            "display": "0.003 mm",
             "met": true,
-            "worstM": 0.00000600428129360153
+            "worstM": 0.0000033890941393827173
           },
           "id": "LEO400 R1-field-sun-moon-schwarzschild",
           "steps30": {
@@ -4603,15 +4603,15 @@
           "suite": {
             "display": "17.669 mm",
             "met": true,
-            "worstM": 0.017668922189985038
+            "worstM": 0.017668716577751018
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.007 mm",
+            "display": "0.010 mm",
             "met": true,
-            "worstM": 0.000006625895949740012
+            "worstM": 0.00000992788550342353
           },
           "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
           "steps30": {
@@ -4620,28 +4620,28 @@
             "worstM": 0.00008224936026474075
           },
           "suite": {
-            "display": "17.608 mm",
+            "display": "17.605 mm",
             "met": true,
-            "worstM": 0.017608088726249024
+            "worstM": 0.017605332005794984
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.004 mm",
+            "display": "0.002 mm",
             "met": true,
-            "worstM": 0.000004223934764349167
+            "worstM": 0.0000024636604523123666
           },
           "id": "LEO400 I1-field-sun-moon-in-track",
           "steps30": {
-            "display": "0.071 mm",
+            "display": "0.068 mm",
             "met": true,
-            "worstM": 0.00007069498078779123
+            "worstM": 0.00006840536263974689
           },
           "suite": {
-            "display": "17.686 mm",
+            "display": "17.635 mm",
             "met": true,
-            "worstM": 0.017686481383564715
+            "worstM": 0.017634798673790166
           },
           "toleranceM": 0.05
         },
@@ -4655,13 +4655,13 @@
               "orekitMinusStockM": 12.46513908057697,
               "publishedFinestM": 1.137713012612121,
               "publishedSteps30M": 1.1376241601994925,
-              "publishedSuiteM": 1.1201534485305942,
+              "publishedSuiteM": 1.1201583960572283,
               "publishedWgs84FinestM": 0.052340773584865226,
               "stockFinestM": 12.461521408352226,
               "stockMinusFineNyxM": 0.0002458879949977074,
               "stockMinusPublishedM": 11.323859023950083,
               "stockSteps30M": 12.461432556895131,
-              "stockSuiteM": 12.443962393283249,
+              "stockSuiteM": 12.44396733884575,
               "toleranceM": 0.1
             },
             "statement": "Stock Nyx differs by 12.461521408352226 m at FFM finest; the published two-line MSIS correction reduces this to 1.137713012612121 m. With the current runner's WGS84 planetary-data correction it is 0.052340773584865226 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.46513908057697 m from stock and 0.05595788402615605 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002458879949977074 m."
@@ -4680,7 +4680,7 @@
           "suite": {
             "display": "12.444 m",
             "met": false,
-            "worstM": 12.443962393283249
+            "worstM": 12.44396733884575
           },
           "toleranceM": 0.1
         },
@@ -4692,23 +4692,23 @@
               "orekitMinusPublishedM": 0.8653321405437189,
               "orekitMinusPublishedWgs84M": 0.045825885365084945,
               "orekitMinusStockM": 8.627911472185124,
-              "publishedFinestM": 0.8614506393701972,
+              "publishedFinestM": 0.8614504866092361,
               "publishedSteps30M": 0.86135890079407,
-              "publishedSuiteM": 0.8438524596114624,
-              "publishedWgs84FinestM": 0.04194498912511606,
-              "stockFinestM": 8.624029872685211,
+              "publishedSuiteM": 0.8439077093716665,
+              "publishedWgs84FinestM": 0.041944836538694324,
+              "stockFinestM": 8.62402971981983,
               "stockMinusFineNyxM": 0.00024805860856717696,
               "stockMinusPublishedM": 7.762615493833827,
               "stockSteps30M": 8.623938135417447,
-              "stockSuiteM": 8.606432144869606,
+              "stockSuiteM": 8.606487395768024,
               "toleranceM": 0.1
             },
-            "statement": "Stock Nyx differs by 8.624029872685211 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614506393701972 m. With the current runner's WGS84 planetary-data correction it is 0.04194498912511606 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m."
+            "statement": "Stock Nyx differs by 8.62402971981983 m at FFM finest; the published two-line MSIS correction reduces this to 0.8614504866092361 m. With the current runner's WGS84 planetary-data correction it is 0.041944836538694324 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 8.627911472185124 m from stock and 0.045825885365084945 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.00024805860856717696 m."
           },
           "finest": {
             "display": "8.624 m",
             "met": false,
-            "worstM": 8.624029872685211
+            "worstM": 8.62402971981983
           },
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
@@ -4719,34 +4719,34 @@
           "suite": {
             "display": "8.606 m",
             "met": false,
-            "worstM": 8.606432144869606
+            "worstM": 8.606487395768024
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.004 mm",
+            "display": "0.005 mm",
             "met": true,
-            "worstM": 0.0000038710487065655285
+            "worstM": 0.0000049582355506368525
           },
           "id": "LEO400 E1-field-sun-moon-eme2000",
           "steps30": {
             "display": "0.068 mm",
             "met": true,
-            "worstM": 0.00006762348493372179
+            "worstM": 0.00006844386729963731
           },
           "suite": {
-            "display": "17.630 mm",
+            "display": "17.635 mm",
             "met": true,
-            "worstM": 0.01763012232169888
+            "worstM": 0.017634927417121565
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.017 mm",
+            "display": "0.016 mm",
             "met": true,
-            "worstM": 0.000017069364849756508
+            "worstM": 0.000015640211157842845
           },
           "id": "LEO400 G1-egm96-36x36-sun-moon",
           "steps30": {
@@ -4755,9 +4755,9 @@
             "worstM": 0.00008316918583544472
           },
           "suite": {
-            "display": "16.825 mm",
+            "display": "16.675 mm",
             "met": true,
-            "worstM": 0.016824722812856307
+            "worstM": 0.016674915412986935
           },
           "toleranceM": 0.05
         },
@@ -4769,14 +4769,14 @@
           },
           "id": "LEO400 G2-egm2008-36z24t-sun-moon",
           "steps30": {
-            "display": "0.085 mm",
+            "display": "0.086 mm",
             "met": true,
-            "worstM": 0.00008534080532720375
+            "worstM": 0.00008581744370104781
           },
           "suite": {
-            "display": "17.729 mm",
+            "display": "17.677 mm",
             "met": true,
-            "worstM": 0.017729355362490727
+            "worstM": 0.01767746855190511
           },
           "toleranceM": 0.05
         },
@@ -4788,34 +4788,34 @@
               "orekitMinusPublishedM": 1.1414803190903273,
               "orekitMinusPublishedWgs84M": 0.05608373974662184,
               "orekitMinusStockM": 12.464727810181634,
-              "publishedFinestM": 1.1375102021799257,
-              "publishedSteps30M": 1.137699498965216,
-              "publishedSuiteM": 1.1355579302578536,
-              "publishedWgs84FinestM": 0.05211418097904907,
-              "stockFinestM": 12.460757660670778,
+              "publishedFinestM": 1.1375033218387878,
+              "publishedSteps30M": 1.1377000999894689,
+              "publishedSuiteM": 1.1355526431374703,
+              "publishedWgs84FinestM": 0.05210730194837888,
+              "stockFinestM": 12.460750780084597,
               "stockMinusFineNyxM": 0.0002592799293260601,
               "stockMinusPublishedM": 11.32329810284443,
-              "stockSteps30M": 12.460946943477603,
-              "stockSuiteM": 12.458805433695918,
+              "stockSteps30M": 12.460947544593239,
+              "stockSuiteM": 12.458800146030754,
               "toleranceM": 0.1
             },
-            "statement": "Stock Nyx differs by 12.460757660670778 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375102021799257 m. With the current runner's WGS84 planetary-data correction it is 0.05211418097904907 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m."
+            "statement": "Stock Nyx differs by 12.460750780084597 m at FFM finest; the published two-line MSIS correction reduces this to 1.1375033218387878 m. With the current runner's WGS84 planetary-data correction it is 0.05210730194837888 m, within 0.1 m. The stock-to-published change identifies the NRLMSISE-00 port defect; the remaining cached-published gap is attributed to the Earth-shape mismatch as explained in diagnostics.dragSettings. FFM defect: not indicated; Orekit is 12.464727810181634 m from stock and 0.05608373974662184 m from the corrected diagnostic. Nyx fine-step convergence changes stock by only 0.0002592799293260601 m."
           },
           "finest": {
             "display": "12.461 m",
             "met": false,
-            "worstM": 12.460757660670778
+            "worstM": 12.460750780084597
           },
           "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
           "steps30": {
             "display": "12.461 m",
             "met": false,
-            "worstM": 12.460946943477603
+            "worstM": 12.460947544593239
           },
           "suite": {
             "display": "12.459 m",
             "met": false,
-            "worstM": 12.458805433695918
+            "worstM": 12.458800146030754
           },
           "toleranceM": 0.1
         },
@@ -4846,14 +4846,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "0.041 mm",
+            "display": "0.043 mm",
             "met": true,
-            "worstM": 0.00004079510298283326
+            "worstM": 0.00004325150516152394
           },
           "suite": {
-            "display": "15.741 mm",
+            "display": "15.798 mm",
             "met": true,
-            "worstM": 0.01574131623097254
+            "worstM": 0.015797888844850283
           },
           "toleranceM": 0.05
         },
@@ -4870,9 +4870,9 @@
             "worstM": 0.000040655205491630246
           },
           "suite": {
-            "display": "15.749 mm",
+            "display": "15.734 mm",
             "met": true,
-            "worstM": 0.01574906249119974
+            "worstM": 0.015734027837058975
           },
           "toleranceM": 0.05
         },
@@ -4880,7 +4880,7 @@
           "finest": {
             "display": "0.002 mm",
             "met": true,
-            "worstM": 0.00000151306761703103
+            "worstM": 0.000001515079273914241
           },
           "id": "SSO700 Z1-zonal20-sun-moon",
           "steps30": {
@@ -4903,14 +4903,14 @@
           },
           "id": "SSO700 Z2-zonal20-sun-moon-srp",
           "steps30": {
-            "display": "0.328 mm",
+            "display": "0.325 mm",
             "met": true,
-            "worstM": 0.0003275790822945376
+            "worstM": 0.0003248284457941806
           },
           "suite": {
-            "display": "15.229 mm",
+            "display": "15.173 mm",
             "met": true,
-            "worstM": 0.015229431385037294
+            "worstM": 0.015172758195377745
           },
           "toleranceM": 0.1
         },
@@ -4922,9 +4922,9 @@
           },
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
           "steps30": {
-            "display": "45.719 mm",
+            "display": "45.717 mm",
             "met": true,
-            "worstM": 0.045718782830608075
+            "worstM": 0.045716747271044564
           },
           "suite": {
             "display": "30.234 mm",
@@ -4941,14 +4941,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "0.032 mm",
+            "display": "0.038 mm",
             "met": true,
-            "worstM": 0.000032414276314987755
+            "worstM": 0.000037815514561938444
           },
           "suite": {
-            "display": "15.826 mm",
+            "display": "15.744 mm",
             "met": true,
-            "worstM": 0.01582560403713358
+            "worstM": 0.015743500678658748
           },
           "toleranceM": 0.05
         },
@@ -4965,28 +4965,28 @@
             "worstM": 0.0000443711880422678
           },
           "suite": {
-            "display": "15.815 mm",
+            "display": "15.789 mm",
             "met": true,
-            "worstM": 0.01581500475780365
+            "worstM": 0.015788885689910978
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.249 mm",
+            "display": "0.243 mm",
             "met": true,
-            "worstM": 0.0002493065666836753
+            "worstM": 0.0002429324222345606
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
             "display": "0.536 mm",
             "met": true,
-            "worstM": 0.0005360740533826302
+            "worstM": 0.0005359233765902043
           },
           "suite": {
             "display": "14.992 mm",
             "met": true,
-            "worstM": 0.014991831122824156
+            "worstM": 0.014991804694894424
           },
           "toleranceM": 0.1
         },
@@ -4994,18 +4994,18 @@
           "finest": {
             "display": "45.432 mm",
             "met": true,
-            "worstM": 0.04543159241319656
+            "worstM": 0.04543247706897905
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "45.729 mm",
             "met": true,
-            "worstM": 0.04572893171379638
+            "worstM": 0.04572908848573232
           },
           "suite": {
-            "display": "30.234 mm",
+            "display": "30.181 mm",
             "met": true,
-            "worstM": 0.0302339914492421
+            "worstM": 0.030181296085741376
           },
           "toleranceM": 0.1
         },
@@ -5017,14 +5017,14 @@
           },
           "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
-            "display": "61.145 mm",
+            "display": "61.143 mm",
             "met": true,
-            "worstM": 0.061144658413843415
+            "worstM": 0.06114310078572223
           },
           "suite": {
-            "display": "45.604 mm",
+            "display": "45.660 mm",
             "met": true,
-            "worstM": 0.04560370459956329
+            "worstM": 0.04565978125208227
           },
           "toleranceM": 0.1
         },
@@ -5614,7 +5614,7 @@
         "display": "135.001",
         "maxRelativeColumnDifference": 135.0010024183487,
         "parameters": {
-          "DRAG_AREA_OVER_MASS": 22.781990850718618,
+          "DRAG_AREA_OVER_MASS": 22.78199086396668,
           "SRP_AREA_OVER_MASS": 2.8111298951606742
         },
         "statement": "The STM comparison is not usable as an FFM check: Nyx uses the step-start ctx.stm and computes stm * grad, instead of grad * stage_stm, while the RK stages retain the same context."
@@ -5731,7 +5731,7 @@
         "kernelSha256": "18196bbc8fc5aaf77e2b990012bae60325ca15ad6062048c0bed23e874faf672",
         "python": "3.11.17"
       },
-      "summarySha256": "18159476cfecf3c29f3c5f202edbb2054de8a8a2bbcda29addb102d39e344245",
+      "summarySha256": "4c27394e16f85b1e76b9bd2063e02d66d4464aedc06d92a120aacd15fb49958f",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -5793,9 +5793,9 @@
             "worstM": 0.001019807388081994
           },
           "suite": {
-            "display": "17.981 mm",
+            "display": "17.982 mm",
             "met": true,
-            "worstM": 0.017981435316902238
+            "worstM": 0.0179823801768756
           },
           "toleranceM": 0.05
         },
@@ -5812,9 +5812,9 @@
             "worstM": 0.0010183748765221707
           },
           "suite": {
-            "display": "18.009 mm",
+            "display": "18.012 mm",
             "met": true,
-            "worstM": 0.018009109148368226
+            "worstM": 0.018012476225156417
           },
           "toleranceM": 0.05
         },
@@ -5831,9 +5831,9 @@
             "worstM": 0.0010225674936855487
           },
           "suite": {
-            "display": "17.926 mm",
+            "display": "17.914 mm",
             "met": true,
-            "worstM": 0.017925767676476717
+            "worstM": 0.01791365072784106
           },
           "toleranceM": 0.1
         },
@@ -5850,9 +5850,9 @@
             "worstM": 0.04048217677148565
           },
           "suite": {
-            "display": "22.899 mm",
+            "display": "22.894 mm",
             "met": true,
-            "worstM": 0.02289937420342034
+            "worstM": 0.02289418855372147
           },
           "toleranceM": 0.1
         },
@@ -5869,9 +5869,9 @@
             "worstM": 0.0010351648150076426
           },
           "suite": {
-            "display": "18.132 mm",
+            "display": "18.056 mm",
             "met": true,
-            "worstM": 0.018132488018757702
+            "worstM": 0.018056173545059253
           },
           "toleranceM": 0.05
         },
@@ -5888,9 +5888,9 @@
             "worstM": 0.0010337065908169972
           },
           "suite": {
-            "display": "18.089 mm",
+            "display": "18.119 mm",
             "met": true,
-            "worstM": 0.018089304120954337
+            "worstM": 0.018118567419490524
           },
           "toleranceM": 0.05
         },
@@ -5898,7 +5898,7 @@
           "finest": {
             "display": "1.032 mm",
             "met": true,
-            "worstM": 0.0010319772180673145
+            "worstM": 0.0010316869666233107
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -5907,28 +5907,28 @@
             "worstM": 0.0010380134414830465
           },
           "suite": {
-            "display": "17.955 mm",
+            "display": "17.900 mm",
             "met": true,
-            "worstM": 0.017955401979330713
+            "worstM": 0.01790025619060993
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "40.488 mm",
+            "display": "40.487 mm",
             "met": true,
-            "worstM": 0.040488215571574546
+            "worstM": 0.04048746220605004
           },
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "steps30": {
-            "display": "40.405 mm",
+            "display": "40.408 mm",
             "met": true,
-            "worstM": 0.040405419108455916
+            "worstM": 0.04040813906773188
           },
           "suite": {
-            "display": "22.909 mm",
+            "display": "22.921 mm",
             "met": true,
-            "worstM": 0.022909140155023305
+            "worstM": 0.022920796815261497
           },
           "toleranceM": 0.1
         },
@@ -5936,7 +5936,7 @@
           "finest": {
             "display": "1.029 mm",
             "met": true,
-            "worstM": 0.0010289574153571647
+            "worstM": 0.0010287153880337702
           },
           "id": "LEO400 R1-field-sun-moon-schwarzschild",
           "steps30": {
@@ -5947,15 +5947,15 @@
           "suite": {
             "display": "18.099 mm",
             "met": true,
-            "worstM": 0.018098993345263145
+            "worstM": 0.018098788239718968
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "22.897 mm",
+            "display": "22.895 mm",
             "met": true,
-            "worstM": 0.022897409418822182
+            "worstM": 0.022894945055327385
           },
           "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
           "steps30": {
@@ -5964,9 +5964,9 @@
             "worstM": 0.022838123437738073
           },
           "suite": {
-            "display": "12.476 mm",
+            "display": "12.477 mm",
             "met": true,
-            "worstM": 0.01247617591628389
+            "worstM": 0.012476890631945034
           },
           "toleranceM": 0.05
         },
@@ -5974,7 +5974,7 @@
           "finest": {
             "display": "1.028 mm",
             "met": true,
-            "worstM": 0.0010283428380372514
+            "worstM": 0.001028375544088942
           },
           "id": "LEO400 I1-field-sun-moon-in-track",
           "steps30": {
@@ -5983,9 +5983,9 @@
             "worstM": 0.0010344966784353762
           },
           "suite": {
-            "display": "18.109 mm",
+            "display": "18.057 mm",
             "met": true,
-            "worstM": 0.018108560108807438
+            "worstM": 0.0180568775434731
           },
           "toleranceM": 0.05
         },
@@ -6002,9 +6002,9 @@
             "worstM": 0.040974093335429375
           },
           "suite": {
-            "display": "23.504 mm",
+            "display": "23.509 mm",
             "met": true,
-            "worstM": 0.023503660479466462
+            "worstM": 0.023508609177749513
           },
           "toleranceM": 0.1
         },
@@ -6012,7 +6012,7 @@
           "finest": {
             "display": "32.397 mm",
             "met": true,
-            "worstM": 0.03239702996544922
+            "worstM": 0.032396877264085376
           },
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
@@ -6021,9 +6021,9 @@
             "worstM": 0.03230529352239328
           },
           "suite": {
-            "display": "14.906 mm",
+            "display": "14.960 mm",
             "met": true,
-            "worstM": 0.014905914307244313
+            "worstM": 0.014960358306004349
           },
           "toleranceM": 0.1
         },
@@ -6040,9 +6040,9 @@
             "worstM": 0.0010322991709613288
           },
           "suite": {
-            "display": "18.045 mm",
+            "display": "18.050 mm",
             "met": true,
-            "worstM": 0.01804478437605745
+            "worstM": 0.018049586051882647
           },
           "toleranceM": 0.05
         },
@@ -6059,9 +6059,9 @@
             "worstM": 0.0010359098095379829
           },
           "suite": {
-            "display": "17.247 mm",
+            "display": "17.098 mm",
             "met": true,
-            "worstM": 0.017247468901812092
+            "worstM": 0.017097668151749436
           },
           "toleranceM": 0.05
         },
@@ -6075,31 +6075,31 @@
           "steps30": {
             "display": "1.035 mm",
             "met": true,
-            "worstM": 0.0010354029712226476
+            "worstM": 0.001035474642407841
           },
           "suite": {
-            "display": "18.148 mm",
+            "display": "18.096 mm",
             "met": true,
-            "worstM": 0.01814802578541115
+            "worstM": 0.01809613881601795
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "40.816 mm",
+            "display": "40.809 mm",
             "met": true,
-            "worstM": 0.040816043097091866
+            "worstM": 0.040809162991320584
           },
           "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
           "steps30": {
-            "display": "41.005 mm",
+            "display": "41.006 mm",
             "met": true,
-            "worstM": 0.04100534113784038
+            "worstM": 0.04100594211487752
           },
           "suite": {
-            "display": "38.864 mm",
+            "display": "38.859 mm",
             "met": true,
-            "worstM": 0.03886379592162421
+            "worstM": 0.03885850913971417
           },
           "toleranceM": 0.1
         },
@@ -6130,14 +6130,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "1.484 mm",
+            "display": "1.482 mm",
             "met": true,
-            "worstM": 0.0014842673275314835
+            "worstM": 0.0014818108872633846
           },
           "suite": {
-            "display": "14.216 mm",
+            "display": "14.273 mm",
             "met": true,
-            "worstM": 0.014216408162745027
+            "worstM": 0.014272979760825763
           },
           "toleranceM": 0.05
         },
@@ -6154,9 +6154,9 @@
             "worstM": 0.001474557628742297
           },
           "suite": {
-            "display": "14.234 mm",
+            "display": "14.219 mm",
             "met": true,
-            "worstM": 0.014234002112831826
+            "worstM": 0.014218967248128989
           },
           "toleranceM": 0.05
         },
@@ -6164,7 +6164,7 @@
           "finest": {
             "display": "1.513 mm",
             "met": true,
-            "worstM": 0.0015129736523867422
+            "worstM": 0.001512976069169892
           },
           "id": "SSO700 Z1-zonal20-sun-moon",
           "steps30": {
@@ -6187,14 +6187,14 @@
           },
           "id": "SSO700 Z2-zonal20-sun-moon-srp",
           "steps30": {
-            "display": "1.463 mm",
+            "display": "1.460 mm",
             "met": true,
-            "worstM": 0.00146307739765316
+            "worstM": 0.0014603269692644299
           },
           "suite": {
-            "display": "14.094 mm",
+            "display": "14.037 mm",
             "met": true,
-            "worstM": 0.014094070941541905
+            "worstM": 0.014037397854622217
           },
           "toleranceM": 0.1
         },
@@ -6206,9 +6206,9 @@
           },
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
           "steps30": {
-            "display": "2.213 mm",
+            "display": "2.211 mm",
             "met": true,
-            "worstM": 0.002212862899165855
+            "worstM": 0.0022108274253315073
           },
           "suite": {
             "display": "13.273 mm",
@@ -6225,14 +6225,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "1.527 mm",
+            "display": "1.521 mm",
             "met": true,
-            "worstM": 0.0015266114974189025
+            "worstM": 0.0015212104576483485
           },
           "suite": {
-            "display": "14.267 mm",
+            "display": "14.185 mm",
             "met": true,
-            "worstM": 0.014266818144223946
+            "worstM": 0.014184715344576954
           },
           "toleranceM": 0.05
         },
@@ -6249,47 +6249,47 @@
             "worstM": 0.001511211981796205
           },
           "suite": {
-            "display": "14.260 mm",
+            "display": "14.234 mm",
             "met": true,
-            "worstM": 0.014259672879847366
+            "worstM": 0.014233553818792377
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.200 mm",
+            "display": "1.189 mm",
             "met": true,
-            "worstM": 0.0012003385839827918
+            "worstM": 0.0011887559768279435
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
             "display": "1.507 mm",
             "met": true,
-            "worstM": 0.0015067733021748885
+            "worstM": 0.0015066225580816373
           },
           "suite": {
             "display": "14.021 mm",
             "met": true,
-            "worstM": 0.014021334490557032
+            "worstM": 0.014021308062740656
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "1.980 mm",
+            "display": "1.981 mm",
             "met": true,
-            "worstM": 0.0019801287853306
+            "worstM": 0.0019810129444381057
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
-            "display": "2.277 mm",
+            "display": "2.278 mm",
             "met": true,
-            "worstM": 0.0022774538582666553
+            "worstM": 0.002277610922928746
           },
           "suite": {
-            "display": "13.219 mm",
+            "display": "13.271 mm",
             "met": true,
-            "worstM": 0.01321875344247953
+            "worstM": 0.013271429067268513
           },
           "toleranceM": 0.1
         },
@@ -6301,14 +6301,14 @@
           },
           "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
-            "display": "1.986 mm",
+            "display": "1.984 mm",
             "met": true,
-            "worstM": 0.0019858442276422046
+            "worstM": 0.001984286607294823
           },
           "suite": {
-            "display": "13.555 mm",
+            "display": "13.499 mm",
             "met": true,
-            "worstM": 0.013555303468733435
+            "worstM": 0.013499226632942967
           },
           "toleranceM": 0.1
         },
@@ -6899,9 +6899,9 @@
         "maxRelativeColumnDifference": 0.000025907250812835047,
         "parameters": {
           "DRAG_AREA_OVER_MASS": 0.00000991243205027924,
-          "DRAG_AREA_OVER_MASS_RATE": 0.0000041151263210813896,
-          "IN_TRACK_ACCELERATION": 0.000007660597089428694,
-          "SRP_AREA_OVER_MASS": 0.00009329472527532082
+          "DRAG_AREA_OVER_MASS_RATE": 0.000004116495101192126,
+          "IN_TRACK_ACCELERATION": 0.00000766241593295941,
+          "SRP_AREA_OVER_MASS": 0.00009271492777960142
         },
         "statement": "STM and Cd*A/m, Cr*A/m, Cd*A/m-rate, and in-track-acceleration sensitivity agreement is reported as maximum relative column difference, separately for position and velocity rows. Native aerodynamic state partials use central finite differences at 10 m position and 0.01 m/s velocity perturbations, also used by the time-varying-drag adapter. The native cannonball SRP partial omits the eclipse-attenuation position gradient; its effect is conditional on encountering eclipse transitions, not every SRP case. R2 STM omissions record unavailable native non-Schwarzschild partials. Every exported sensitivity is included where its variational case is supported; the shared export defines no STM pass/fail threshold."
       },
@@ -7049,7 +7049,7 @@
         "fixtureSha256": "7a3fdd5a912240e0330d03a8b777129d7530b26eb7c79b22786e8548fc3888bb"
       },
       "provenanceLimitations": "Committed C++ driver trajectory; the package Embind API cannot configure/run propagation (duplicate registrations, station-file initialization, missing STL/Eigen bindings). No Tudat rebuild or rerun was performed.",
-      "summarySha256": "1a6372800eefa204853fa1a7304b87c163fdf0411c5f00a9f7fca98ed22b2d3a",
+      "summarySha256": "0c52eb14027968d376ec3f3ea5645117475f1bf1d01b979ab073661dbf7254cd",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -7100,9 +7100,9 @@
         },
         {
           "finest": {
-            "display": "2.223 mm",
+            "display": "2.220 mm",
             "met": true,
-            "worstM": 0.002223182062693203
+            "worstM": 0.002220224314412244
           },
           "id": "LEO400 F3-field20x20",
           "steps30": {
@@ -7111,9 +7111,9 @@
             "worstM": 0.002293379286868139
           },
           "suite": {
-            "display": "19.926 mm",
+            "display": "19.850 mm",
             "met": true,
-            "worstM": 0.01992615167085987
+            "worstM": 0.019849838152759206
           },
           "toleranceM": 0.05
         },
@@ -7127,20 +7127,20 @@
           "steps30": {
             "display": "2.295 mm",
             "met": true,
-            "worstM": 0.0022949109215659345
+            "worstM": 0.0022951044999000515
           },
           "suite": {
-            "display": "19.889 mm",
+            "display": "19.919 mm",
             "met": true,
-            "worstM": 0.01988938659833762
+            "worstM": 0.01991864971715346
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "2.214 mm",
+            "display": "2.212 mm",
             "met": true,
-            "worstM": 0.002214089696063738
+            "worstM": 0.0022123937765910883
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -7149,28 +7149,28 @@
             "worstM": 0.00230150096352539
           },
           "suite": {
-            "display": "19.752 mm",
+            "display": "19.697 mm",
             "met": true,
-            "worstM": 0.019752140302338645
+            "worstM": 0.01969699346701158
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "34.192 mm",
+            "display": "34.191 mm",
             "met": true,
-            "worstM": 0.03419189286149575
+            "worstM": 0.0341911549292332
           },
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "steps30": {
-            "display": "34.113 mm",
+            "display": "34.116 mm",
             "met": true,
-            "worstM": 0.03411296992780939
+            "worstM": 0.034115577286201314
           },
           "suite": {
-            "display": "33.484 mm",
+            "display": "33.475 mm",
             "met": true,
-            "worstM": 0.033483560915126644
+            "worstM": 0.03347475911520099
           },
           "toleranceM": 0.1
         },
@@ -7201,14 +7201,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "1.477 mm",
+            "display": "1.475 mm",
             "met": true,
-            "worstM": 0.0014769913654113069
+            "worstM": 0.0014745349343985685
           },
           "suite": {
-            "display": "14.224 mm",
+            "display": "14.280 mm",
             "met": true,
-            "worstM": 0.014223690084463546
+            "worstM": 0.014280261682339158
           },
           "toleranceM": 0.05
         },
@@ -7220,14 +7220,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "1.995 mm",
+            "display": "1.990 mm",
             "met": true,
-            "worstM": 0.001995153229348643
+            "worstM": 0.00198975150438248
           },
           "suite": {
-            "display": "13.798 mm",
+            "display": "13.716 mm",
             "met": true,
-            "worstM": 0.013798070041467478
+            "worstM": 0.013715967471866642
           },
           "toleranceM": 0.05
         },
@@ -7244,28 +7244,28 @@
             "worstM": 0.002006511021081495
           },
           "suite": {
-            "display": "13.764 mm",
+            "display": "13.738 mm",
             "met": true,
-            "worstM": 0.013764156961582867
+            "worstM": 0.013738037819466552
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "1.692 mm",
+            "display": "1.680 mm",
             "met": true,
-            "worstM": 0.0016920769790124343
+            "worstM": 0.0016804915313918755
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
-            "display": "1.999 mm",
+            "display": "1.998 mm",
             "met": true,
-            "worstM": 0.0019985613438468293
+            "worstM": 0.0019984106081553437
           },
           "suite": {
             "display": "13.529 mm",
             "met": true,
-            "worstM": 0.013529329653833185
+            "worstM": 0.013529303220081668
           },
           "toleranceM": 0.1
         },
@@ -7273,18 +7273,18 @@
           "finest": {
             "display": "53.654 mm",
             "met": true,
-            "worstM": 0.05365416040371485
+            "worstM": 0.05365398675726875
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "53.424 mm",
             "met": true,
-            "worstM": 0.05342394937757551
+            "worstM": 0.053423730599096636
           },
           "suite": {
-            "display": "65.324 mm",
+            "display": "65.360 mm",
             "met": true,
-            "worstM": 0.06532421208818057
+            "worstM": 0.06535965437475881
           },
           "toleranceM": 0.1
         },
@@ -7930,7 +7930,7 @@
           }
         }
       },
-      "summarySha256": "d8de3594f3f7773b812d6b6f93f9502cdff8b960aad83ff75fe0ed5bea237736",
+      "summarySha256": "ec94fd003334d2ea84881d018ae0ed0141fb9e1508620d4f7b1809cc0829918a",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -7992,17 +7992,17 @@
             "worstM": 0.00009982319223681248
           },
           "suite": {
-            "display": "17.634 mm",
+            "display": "17.635 mm",
             "met": true,
-            "worstM": 0.01763437349294147
+            "worstM": 0.01763531736077077
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.033 mm",
+            "display": "0.032 mm",
             "met": true,
-            "worstM": 0.00003260422423904022
+            "worstM": 0.00003248964800732577
           },
           "id": "LEO400 Z1-zonal20-sun-moon",
           "steps30": {
@@ -8011,17 +8011,17 @@
             "worstM": 0.00010020478482235297
           },
           "suite": {
-            "display": "17.671 mm",
+            "display": "17.674 mm",
             "met": true,
-            "worstM": 0.01767056658717902
+            "worstM": 0.017673930947229133
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.084 mm",
+            "display": "0.077 mm",
             "met": true,
-            "worstM": 0.00008442329204010892
+            "worstM": 0.00007742837171128667
           },
           "id": "LEO400 Z2-zonal20-sun-moon-srp",
           "steps30": {
@@ -8030,9 +8030,9 @@
             "worstM": 0.000018868431414400565
           },
           "suite": {
-            "display": "17.461 mm",
+            "display": "17.448 mm",
             "met": true,
-            "worstM": 0.01746055270350535
+            "worstM": 0.01744843494196948
           },
           "toleranceM": 0.1
         },
@@ -8064,7 +8064,7 @@
                 "ffmWorstM": {
                   "finest": 5250.645918965623,
                   "steps30": 5250.64582669767,
-                  "suite": 5250.628243566877
+                  "suite": 5250.628238391655
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8093,7 +8093,7 @@
                 "ffmWorstM": {
                   "finest": 0.04341729580593022,
                   "steps30": 0.04332502944020785,
-                  "suite": 0.025742114074562374
+                  "suite": 0.025736929973257182
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8115,7 +8115,7 @@
                 "ffmWorstM": {
                   "finest": 2.297665069262368,
                   "steps30": 2.2977573363682957,
-                  "suite": 2.3153401848874315
+                  "suite": 2.3153453560315684
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8150,15 +8150,15 @@
           "suite": {
             "display": "5250.628 m",
             "met": false,
-            "worstM": 5250.628243566877
+            "worstM": 5250.628238391655
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.197 mm",
+            "display": "0.200 mm",
             "met": true,
-            "worstM": 0.00019669155949539915
+            "worstM": 0.0001996480570089532
           },
           "id": "LEO400 F3-field20x20",
           "steps30": {
@@ -8167,9 +8167,9 @@
             "worstM": 0.00012653009194635827
           },
           "suite": {
-            "display": "17.507 mm",
+            "display": "17.430 mm",
             "met": true,
-            "worstM": 0.01750678882552334
+            "worstM": 0.017430476124393437
           },
           "toleranceM": 0.05
         },
@@ -8183,20 +8183,20 @@
           "steps30": {
             "display": "0.109 mm",
             "met": true,
-            "worstM": 0.00010915065260299235
+            "worstM": 0.00010907749845243272
           },
           "suite": {
-            "display": "17.487 mm",
+            "display": "17.516 mm",
             "met": true,
-            "worstM": 0.017486587108352377
+            "worstM": 0.017515850006201986
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.143 mm",
+            "display": "0.145 mm",
             "met": true,
-            "worstM": 0.000143348719057264
+            "worstM": 0.0001450423543535714
           },
           "id": "LEO400 F5-field-sun-moon-srp",
           "steps30": {
@@ -8205,9 +8205,9 @@
             "worstM": 0.00006467794671736148
           },
           "suite": {
-            "display": "17.395 mm",
+            "display": "17.340 mm",
             "met": true,
-            "worstM": 0.017395198475822788
+            "worstM": 0.01734005057317653
           },
           "toleranceM": 0.1
         },
@@ -8237,9 +8237,9 @@
               "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
               "nominal": {
                 "ffmWorstM": {
-                  "finest": 5248.315400636357,
-                  "steps30": 5248.315317837306,
-                  "suite": 5248.297821238489
+                  "finest": 5248.315399882525,
+                  "steps30": 5248.315320557673,
+                  "suite": 5248.297832894634
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8266,9 +8266,9 @@
               "units": "m for position/altitude; s for steps",
               "wgs84AndGtd7d": {
                 "ffmWorstM": {
-                  "finest": 0.04350634650734576,
-                  "steps30": 0.04342354963664183,
-                  "suite": 0.025927170125828816
+                  "finest": 0.04350559309887055,
+                  "steps30": 0.04342626964011366,
+                  "suite": 0.025938826790937734
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8288,9 +8288,9 @@
               },
               "wgs84Only": {
                 "ffmWorstM": {
-                  "finest": 2.2993511436922622,
-                  "steps30": 2.2994339424428247,
-                  "suite": 2.316930259795462
+                  "finest": 2.2993518977844642,
+                  "steps30": 2.2994312218983213,
+                  "suite": 2.316918604178994
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8314,18 +8314,18 @@
           "finest": {
             "display": "5248.315 m",
             "met": false,
-            "worstM": 5248.315400636357
+            "worstM": 5248.315399882525
           },
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "5248.315 m",
             "met": false,
-            "worstM": 5248.315317837306
+            "worstM": 5248.315320557673
           },
           "suite": {
             "display": "5248.298 m",
             "met": false,
-            "worstM": 5248.297821238489
+            "worstM": 5248.297832894634
           },
           "toleranceM": 0.1
         },
@@ -8357,7 +8357,7 @@
                 "ffmWorstM": {
                   "finest": 5418.767004472957,
                   "steps30": 5418.766915620047,
-                  "suite": 5418.749444942692
+                  "suite": 5418.749449889554
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8386,7 +8386,7 @@
                 "ffmWorstM": {
                   "finest": 0.04406818751664551,
                   "steps30": 0.04397933624441474,
-                  "suite": 0.026508822241748917
+                  "suite": 0.02651377072476875
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8408,7 +8408,7 @@
                 "ffmWorstM": {
                   "finest": 2.3733818608401394,
                   "steps30": 2.3734707130228534,
-                  "suite": 2.3909410887549725
+                  "suite": 2.390936142784662
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8443,7 +8443,7 @@
           "suite": {
             "display": "5418.749 m",
             "met": false,
-            "worstM": 5418.749444942692
+            "worstM": 5418.749449889554
           },
           "toleranceM": 0.1
         },
@@ -8473,9 +8473,9 @@
               "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
               "nominal": {
                 "ffmWorstM": {
-                  "finest": 4094.031305933153,
+                  "finest": 4094.0313057803505,
                   "steps30": 4094.0312141942427,
-                  "suite": 4094.0137077697386
+                  "suite": 4094.013763020445
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8502,9 +8502,9 @@
               "units": "m for position/altitude; s for steps",
               "wgs84AndGtd7d": {
                 "ffmWorstM": {
-                  "finest": 0.034724897546067675,
+                  "finest": 0.034724744831536085,
                   "steps30": 0.03463316043469457,
-                  "suite": 0.01712714024363571
+                  "suite": 0.017182384754725978
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8524,9 +8524,9 @@
               },
               "wgs84Only": {
                 "ffmWorstM": {
-                  "finest": 1.54138295256226,
+                  "finest": 1.5413831054167066,
                   "steps30": 1.5414746903109726,
-                  "suite": 1.5589807983373387
+                  "suite": 1.5589255473540222
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8550,7 +8550,7 @@
           "finest": {
             "display": "4094.031 m",
             "met": false,
-            "worstM": 4094.031305933153
+            "worstM": 4094.0313057803505
           },
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
           "steps30": {
@@ -8561,15 +8561,15 @@
           "suite": {
             "display": "4094.014 m",
             "met": false,
-            "worstM": 4094.0137077697386
+            "worstM": 4094.013763020445
           },
           "toleranceM": 0.1
         },
         {
           "finest": {
-            "display": "0.233 mm",
+            "display": "0.234 mm",
             "met": true,
-            "worstM": 0.00023285790655096198
+            "worstM": 0.00023428740704335206
           },
           "id": "LEO400 G1-egm96-36x36-sun-moon",
           "steps30": {
@@ -8578,9 +8578,9 @@
             "worstM": 0.00016677092901224095
           },
           "suite": {
-            "display": "16.575 mm",
+            "display": "16.425 mm",
             "met": true,
-            "worstM": 0.016574854268796055
+            "worstM": 0.01642504703947514
           },
           "toleranceM": 0.05
         },
@@ -8594,12 +8594,12 @@
           "steps30": {
             "display": "0.075 mm",
             "met": true,
-            "worstM": 0.00007538667528618922
+            "worstM": 0.00007504331256379453
           },
           "suite": {
-            "display": "17.572 mm",
+            "display": "17.520 mm",
             "met": true,
-            "worstM": 0.017571557909445236
+            "worstM": 0.017519671091105124
           },
           "toleranceM": 0.05
         },
@@ -8630,14 +8630,14 @@
           },
           "id": "SSO700 F1-J2",
           "steps30": {
-            "display": "0.044 mm",
+            "display": "0.046 mm",
             "met": true,
-            "worstM": 0.00004378642979406077
+            "worstM": 0.00004624298085274439
           },
           "suite": {
-            "display": "15.744 mm",
+            "display": "15.801 mm",
             "met": true,
-            "worstM": 0.015744310520945378
+            "worstM": 0.015800883142445394
           },
           "toleranceM": 0.05
         },
@@ -8654,9 +8654,9 @@
             "worstM": 0.000048760825291079875
           },
           "suite": {
-            "display": "15.757 mm",
+            "display": "15.742 mm",
             "met": true,
-            "worstM": 0.01575716869430605
+            "worstM": 0.015742134068993312
           },
           "toleranceM": 0.05
         },
@@ -8687,14 +8687,14 @@
           },
           "id": "SSO700 Z2-zonal20-sun-moon-srp",
           "steps30": {
-            "display": "0.234 mm",
+            "display": "0.236 mm",
             "met": true,
-            "worstM": 0.0002335877629591459
+            "worstM": 0.00023633834256986454
           },
           "suite": {
-            "display": "15.791 mm",
+            "display": "15.734 mm",
             "met": true,
-            "worstM": 0.0157905657884756
+            "worstM": 0.01573389241843174
           },
           "toleranceM": 0.1
         },
@@ -8725,7 +8725,7 @@
               "nominal": {
                 "ffmWorstM": {
                   "finest": 58.143615025958056,
-                  "steps30": 58.143922550409165,
+                  "steps30": 58.14392051482217,
                   "suite": 58.128436758262
                 },
                 "orekitMinusBasilisk": {
@@ -8754,7 +8754,7 @@
               "wgs84AndGtd7d": {
                 "ffmWorstM": {
                   "finest": 0.00028898511801456016,
-                  "steps30": 0.0005964995626314769,
+                  "steps30": 0.0005944639841409924,
                   "suite": 0.014889388835976805
                 },
                 "orekitMinusBasilisk": {
@@ -8776,7 +8776,7 @@
               "wgs84Only": {
                 "ffmWorstM": {
                   "finest": 0.00028898511801456016,
-                  "steps30": 0.0005964995626314769,
+                  "steps30": 0.0005944639841409924,
                   "suite": 0.014889388835976805
                 },
                 "orekitMinusBasilisk": {
@@ -8807,7 +8807,7 @@
           "steps30": {
             "display": "58.144 m",
             "met": false,
-            "worstM": 58.143922550409165
+            "worstM": 58.14392051482217
           },
           "suite": {
             "display": "58.128 m",
@@ -8824,14 +8824,14 @@
           },
           "id": "SSO700 F3-field20x20",
           "steps30": {
-            "display": "0.124 mm",
+            "display": "0.121 mm",
             "met": true,
-            "worstM": 0.0001243766395184242
+            "worstM": 0.00012059806370359731
           },
           "suite": {
-            "display": "15.683 mm",
+            "display": "15.601 mm",
             "met": true,
-            "worstM": 0.01568267689652723
+            "worstM": 0.015600575006822843
           },
           "toleranceM": 0.05
         },
@@ -8848,28 +8848,28 @@
             "worstM": 0.00012947503640181742
           },
           "suite": {
-            "display": "15.652 mm",
+            "display": "15.626 mm",
             "met": true,
-            "worstM": 0.015651628103567176
+            "worstM": 0.015625508912971754
           },
           "toleranceM": 0.05
         },
         {
           "finest": {
-            "display": "0.488 mm",
+            "display": "0.500 mm",
             "met": true,
-            "worstM": 0.00048792578439501265
+            "worstM": 0.0004995103484218638
           },
           "id": "SSO700 F5-field-sun-moon-srp",
           "steps30": {
             "display": "0.187 mm",
             "met": true,
-            "worstM": 0.00018716809939672691
+            "worstM": 0.00018730318295390113
           },
           "suite": {
             "display": "15.709 mm",
             "met": true,
-            "worstM": 0.015709288897478895
+            "worstM": 0.01570926247785502
           },
           "toleranceM": 0.1
         },
@@ -8899,9 +8899,9 @@
               "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
               "nominal": {
                 "ffmWorstM": {
-                  "finest": 58.12821006651427,
-                  "steps30": 58.128507413974646,
-                  "suite": 58.113011452982775
+                  "finest": 58.128210950957914,
+                  "steps30": 58.12850757091858,
+                  "suite": 58.112958772464175
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8928,9 +8928,9 @@
               "units": "m for position/altitude; s for steps",
               "wgs84AndGtd7d": {
                 "ffmWorstM": {
-                  "finest": 0.00032401750875810684,
-                  "steps30": 0.0006213650660571282,
-                  "suite": 0.014874674167929126
+                  "finest": 0.0003249019132542631,
+                  "steps30": 0.0006215220373503716,
+                  "suite": 0.014927349351751246
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8950,9 +8950,9 @@
               },
               "wgs84Only": {
                 "ffmWorstM": {
-                  "finest": 0.00032401750875810684,
-                  "steps30": 0.0006213650660571282,
-                  "suite": 0.014874674167929126
+                  "finest": 0.0003249019132542631,
+                  "steps30": 0.0006215220373503716,
+                  "suite": 0.014927349351751246
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -8976,18 +8976,18 @@
           "finest": {
             "display": "58.128 m",
             "met": false,
-            "worstM": 58.12821006651427
+            "worstM": 58.128210950957914
           },
           "id": "SSO700 F6-field-sun-moon-srp-drag",
           "steps30": {
             "display": "58.129 m",
             "met": false,
-            "worstM": 58.128507413974646
+            "worstM": 58.12850757091858
           },
           "suite": {
             "display": "58.113 m",
             "met": false,
-            "worstM": 58.113011452982775
+            "worstM": 58.112958772464175
           },
           "toleranceM": 0.1
         },
@@ -9018,8 +9018,8 @@
               "nominal": {
                 "ffmWorstM": {
                   "finest": 34.81135551544844,
-                  "steps30": 34.81167450114866,
-                  "suite": 34.79613363413426
+                  "steps30": 34.811672943651104,
+                  "suite": 34.79618971201135
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -9047,8 +9047,8 @@
               "wgs84AndGtd7d": {
                 "ffmWorstM": {
                   "finest": 0.00004587672595960163,
-                  "steps30": 0.00028202035520363654,
-                  "suite": 0.015258935240370025
+                  "steps30": 0.0002804628364097783,
+                  "suite": 0.015202858476477892
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -9069,8 +9069,8 @@
               "wgs84Only": {
                 "ffmWorstM": {
                   "finest": 0.00004587672595960163,
-                  "steps30": 0.00028202035520363654,
-                  "suite": 0.015258935240370025
+                  "steps30": 0.0002804628364097783,
+                  "suite": 0.015202858476477892
                 },
                 "orekitMinusBasilisk": {
                   "atHour": 24,
@@ -9100,12 +9100,12 @@
           "steps30": {
             "display": "34.812 m",
             "met": false,
-            "worstM": 34.81167450114866
+            "worstM": 34.811672943651104
           },
           "suite": {
             "display": "34.796 m",
             "met": false,
-            "worstM": 34.79613363413426
+            "worstM": 34.79618971201135
           },
           "toleranceM": 0.1
         },
@@ -9745,7 +9745,7 @@
         },
         "toleranceRationale": "Precession 0.001 mas; classical ERFA identity 1e-7 mas (matrix rounding, <0.021 micrometer at GEO); CIO 0.022 mas includes 0.02 mas hourly CIP interpolation; kernel reads 1 mm. Model-spread rows are diagnostic, limits are not widened."
       },
-      "summarySha256": "9870522bd666ca130090b56451c1c36089cc81a4187bfcf35b041c14c5702a37",
+      "summarySha256": "0cd5004f86c425df78d56d32c87d5f6096210482d7b1acd97c474bee5530dc05",
       "counts": {
         "decomposition": 0,
         "diagnostic": 13,
@@ -10396,7 +10396,7 @@
         "jwstEpochUtc": "2026-06-10T00:00:00.000",
         "jwstFinalEpochUtc": "2026-06-11T00:00:00.000"
       },
-      "summarySha256": "42ecd6aca9783f062536dfdeba71ebf2497db7ef80581cfdd971dfb298e6c046",
+      "summarySha256": "eee7e530f9143cd7908f5bb5fb6975f9bdbf8f9709d30140ff77998c2ab480dd",
       "counts": {
         "decomposition": 0,
         "diagnostic": 4,
@@ -10738,7 +10738,7 @@
       "pins": [
         {
           "label": "shipped WASM (propagator/sgp4 dist/browser)",
-          "sha256": "18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1"
+          "sha256": "18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde"
         },
         {
           "label": "library_states.cpp",
@@ -10992,43 +10992,43 @@
     {
       "cells": {
         "basilisk": {
-          "display": "17.671 mm",
-          "maxM": 0.01767056658717902,
+          "display": "17.674 mm",
+          "maxM": 0.017673930947229133,
           "scored": 9
         },
         "gmat-2022": {
-          "display": "45.141 mm",
-          "maxM": 0.04514127033877047,
+          "display": "45.110 mm",
+          "maxM": 0.045109518036488674,
           "scored": 13
         },
         "gmat-2026": {
-          "display": "45.162 mm",
-          "maxM": 0.045162339449872906,
+          "display": "45.131 mm",
+          "maxM": 0.04513058371651928,
           "scored": 13
         },
         "nyx": {
-          "display": "17.729 mm",
-          "maxM": 0.017729355362490727,
+          "display": "17.681 mm",
+          "maxM": 0.01768093579598087,
           "scored": 13
         },
         "orekit": {
-          "display": "18.875 mm",
-          "maxM": 0.018874733455214524,
+          "display": "18.923 mm",
+          "maxM": 0.01892255416517892,
           "scored": 17
         },
         "orekit-finest": {
-          "display": "1.317 mm",
-          "maxM": 0.001316637181235826,
+          "display": "1.324 mm",
+          "maxM": 0.0013236414417088192,
           "scored": 17
         },
         "tudat-wasm": {
-          "display": "19.926 mm",
-          "maxM": 0.01992615167085987,
+          "display": "19.919 mm",
+          "maxM": 0.01991864971715346,
           "scored": 4
         },
         "tudatpy": {
-          "display": "18.148 mm",
-          "maxM": 0.01814802578541115,
+          "display": "18.119 mm",
+          "maxM": 0.018118567419490524,
           "scored": 13
         }
       },
@@ -11039,7 +11039,7 @@
       "cells": {
         "basilisk": {
           "display": "5418.749 m",
-          "maxM": 5418.749444942692,
+          "maxM": 5418.749449889554,
           "scored": 4
         },
         "gmat-2022": {
@@ -11049,32 +11049,32 @@
         },
         "gmat-2026": {
           "display": "2.337 m",
-          "maxM": 2.337051068478067,
+          "maxM": 2.337039412954751,
           "scored": 3
         },
         "nyx": {
           "display": "12.459 m",
-          "maxM": 12.458805433695918,
+          "maxM": 12.458800146030754,
           "scored": 5
         },
         "orekit": {
-          "display": "25.856 mm",
-          "maxM": 0.025855702188580517,
+          "display": "24.873 mm",
+          "maxM": 0.024873095474002793,
           "scored": 7
         },
         "orekit-finest": {
-          "display": "4.077 mm",
-          "maxM": 0.004077094508153804,
+          "display": "4.078 mm",
+          "maxM": 0.004077848588497504,
           "scored": 7
         },
         "tudat-wasm": {
-          "display": "33.484 mm",
-          "maxM": 0.033483560915126644,
+          "display": "33.475 mm",
+          "maxM": 0.03347475911520099,
           "scored": 1
         },
         "tudatpy": {
-          "display": "38.864 mm",
-          "maxM": 0.03886379592162421,
+          "display": "38.859 mm",
+          "maxM": 0.03885850913971417,
           "scored": 5
         }
       },
@@ -11135,13 +11135,13 @@
           "scored": 7
         },
         "gmat-2022": {
-          "display": "27.789 mm",
-          "maxM": 0.027788683071167573,
+          "display": "27.732 mm",
+          "maxM": 0.02773200854443035,
           "scored": 7
         },
         "gmat-2026": {
-          "display": "19.487 mm",
-          "maxM": 0.019486572335730305,
+          "display": "19.430 mm",
+          "maxM": 0.019429899111923474,
           "scored": 7
         },
         "nyx": {
@@ -11150,8 +11150,8 @@
           "scored": 7
         },
         "orekit": {
-          "display": "14.595 mm",
-          "maxM": 0.014595130077823898,
+          "display": "14.624 mm",
+          "maxM": 0.014624210234554333,
           "scored": 9
         },
         "orekit-finest": {
@@ -11160,8 +11160,8 @@
           "scored": 9
         },
         "tudat-wasm": {
-          "display": "14.224 mm",
-          "maxM": 0.014223690084463546,
+          "display": "14.280 mm",
+          "maxM": 0.014280261682339158,
           "scored": 4
         },
         "tudatpy": {
@@ -11191,28 +11191,28 @@
           "scored": 3
         },
         "nyx": {
-          "display": "45.604 mm",
-          "maxM": 0.04560370459956329,
+          "display": "45.660 mm",
+          "maxM": 0.04565978125208227,
           "scored": 3
         },
         "orekit": {
-          "display": "16.834 mm",
-          "maxM": 0.01683382443919214,
+          "display": "16.833 mm",
+          "maxM": 0.01683285706287251,
           "scored": 4
         },
         "orekit-finest": {
-          "display": "1.066 mm",
-          "maxM": 0.0010658233845341073,
+          "display": "1.073 mm",
+          "maxM": 0.001073292662717567,
           "scored": 4
         },
         "tudat-wasm": {
-          "display": "65.324 mm",
-          "maxM": 0.06532421208818057,
+          "display": "65.360 mm",
+          "maxM": 0.06535965437475881,
           "scored": 1
         },
         "tudatpy": {
-          "display": "13.555 mm",
-          "maxM": 0.013555303468733435,
+          "display": "13.499 mm",
+          "maxM": 0.013499226632942967,
           "scored": 3
         }
       },
@@ -11548,16 +11548,16 @@
           "met": true,
           "orbit": "LEO400",
           "replay": {
-            "recomputedM": 0.026503876030322483,
+            "recomputedM": 0.026501703961632338,
             "residualM": 0,
             "setting": "steps30",
-            "storedM": 0.026503876030322483,
+            "storedM": 0.026501703961632338,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 2.337051068478067,
+          "stockM": 2.337039412954751,
           "stockMet": false,
-          "suiteM": 0.04220735697923472
+          "suiteM": 0.04219764769535175
         },
         {
           "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -11572,9 +11572,9 @@
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 2.3323448067816006,
+          "stockM": 2.332349977944489,
           "stockMet": false,
-          "suiteM": 0.026312493255726908
+          "suiteM": 0.026317869662817517
         },
         {
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
@@ -11589,9 +11589,9 @@
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 1.5452639119520046,
+          "stockM": 1.5452086609137987,
           "stockMet": false,
-          "suiteM": 0.031772915740657354
+          "suiteM": 0.03171949283327359
         },
         {
           "id": "SSO700 F6-field-sun-moon-srp-drag",
@@ -11599,16 +11599,16 @@
           "met": true,
           "orbit": "SSO700",
           "replay": {
-            "recomputedM": 0.10584640109899,
+            "recomputedM": 0.10584668186383847,
             "residualM": 0,
             "setting": "steps30",
-            "storedM": 0.10584640109899,
+            "storedM": 0.10584668186383847,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 7.949986547544851,
+          "stockM": 7.950039235217515,
           "stockMet": false,
-          "suiteM": 0.1061888887209168
+          "suiteM": 0.10622409249693304
         },
         {
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -11616,10 +11616,10 @@
           "met": true,
           "orbit": "SSO700",
           "replay": {
-            "recomputedM": 0.12281742741555439,
+            "recomputedM": 0.12281562009139584,
             "residualM": 0,
             "setting": "steps30",
-            "storedM": 0.12281742741555439,
+            "storedM": 0.12281562009139584,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
@@ -11633,16 +11633,16 @@
           "met": true,
           "orbit": "SSO700",
           "replay": {
-            "recomputedM": 0.12276561713645742,
+            "recomputedM": 0.12276417078366048,
             "residualM": 0,
             "setting": "steps30",
-            "storedM": 0.12276561713645742,
+            "storedM": 0.12276417078366048,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 6.3116354471968,
+          "stockM": 6.311579369002062,
           "stockMet": false,
-          "suiteM": 0.10987143861238267
+          "suiteM": 0.10991664846180292
         }
       ],
       "evidence": "gmat/anomalous-oxygen.json",
@@ -11652,12 +11652,12 @@
         {
           "label": "FFM trajectories at suite / steps30 / finest",
           "path": "tudat/ffm-tudatpy-1.0.0.json",
-          "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
+          "sha256": "0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee"
         },
         {
           "label": "Anomalous-oxygen diagnostic",
           "path": "gmat/anomalous-oxygen.json",
-          "sha256": "9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63"
+          "sha256": "3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581"
         },
         {
           "label": "LEO400_F6-field-sun-moon-srp-drag.txt",
@@ -11723,14 +11723,14 @@
       "rows": [
         {
           "cases": 3,
-          "correctedDisplay": "42.207 mm",
-          "correctedM": 0.04220735697923472,
+          "correctedDisplay": "42.198 mm",
+          "correctedM": 0.04219764769535175,
           "limitDisplay": "1.500 m",
           "limitM": 1.5,
           "met": true,
           "orbit": "LEO400",
           "stockDisplay": "2.337 m",
-          "stockM": 2.337051068478067,
+          "stockM": 2.337039412954751,
           "stockMet": false
         },
         {
@@ -11764,9 +11764,9 @@
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 12.055457965017233,
+          "stockM": 12.055452795646792,
           "stockMet": false,
-          "suiteM": 0.03289658480986321
+          "suiteM": 0.03289138733301833
         },
         {
           "id": "LEO400 F6-field-sun-moon-srp-drag",
@@ -11774,16 +11774,16 @@
           "met": true,
           "orbit": "LEO400",
           "replay": {
-            "recomputedM": 0.05072683569804226,
-            "residualM": 1.2729610421313708e-10,
+            "recomputedM": 0.050726082847742465,
+            "residualM": 3.864177033907623e-11,
             "setting": "finest",
-            "storedM": 0.05072683557074616,
+            "storedM": 0.050726082886384236,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 12.051246710926454,
+          "stockM": 12.051258366259797,
           "stockMet": false,
-          "suiteM": 0.03314999343398517
+          "suiteM": 0.03316164888061085
         },
         {
           "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
@@ -11798,9 +11798,9 @@
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 12.443962393283249,
+          "stockM": 12.44396733884575,
           "stockMet": false,
-          "suiteM": 0.03478374173741847
+          "suiteM": 0.034788692143126805
         },
         {
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
@@ -11808,16 +11808,16 @@
           "met": true,
           "orbit": "LEO400",
           "replay": {
-            "recomputedM": 0.04194498916742779,
-            "residualM": 4.231173050817105e-11,
+            "recomputedM": 0.04194483658745514,
+            "residualM": 4.8760814830295374e-11,
             "setting": "finest",
-            "storedM": 0.04194498912511606,
+            "storedM": 0.041944836538694324,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 8.606432144869606,
+          "stockM": 8.606487395768024,
           "stockMet": false,
-          "suiteM": 0.024349809359940383
+          "suiteM": 0.024405036272841314
         },
         {
           "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
@@ -11825,16 +11825,16 @@
           "met": true,
           "orbit": "LEO400",
           "replay": {
-            "recomputedM": 0.0521141809885275,
-            "residualM": 9.47843192822262e-12,
+            "recomputedM": 0.05210730216179095,
+            "residualM": 2.134120727359523e-10,
             "setting": "finest",
-            "storedM": 0.05211418097904907,
+            "storedM": 0.05210730194837888,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 12.458805433695918,
+          "stockM": 12.458800146030754,
           "stockMet": false,
-          "suiteM": 0.050162128480865875
+          "suiteM": 0.05015684294244512
         },
         {
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -11859,16 +11859,16 @@
           "met": true,
           "orbit": "SSO700",
           "replay": {
-            "recomputedM": 0.00043829389636448565,
-            "residualM": 3.569572496744597e-11,
+            "recomputedM": 0.00043896594993175813,
+            "residualM": 1.581054671949758e-11,
             "setting": "finest",
-            "storedM": 0.0004382938606687607,
+            "storedM": 0.0004389659341212114,
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 0.0302339914492421,
+          "stockM": 0.030181296085741376,
           "stockMet": true,
-          "suiteM": 0.014805991659185534
+          "suiteM": 0.014858666465830504
         },
         {
           "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
@@ -11883,9 +11883,9 @@
             "toleranceM": 2e-8,
             "toleranceRationale": "20 nm allows native norm reduction and GMAT triad/decimal-transport roundoff; below the 1 micrometer GMAT position transport precision and the comparison limits."
           },
-          "stockM": 0.04560370459956329,
+          "stockM": 0.04565978125208227,
           "stockMet": true,
-          "suiteM": 0.015015940231732994
+          "suiteM": 0.014959863602246626
         }
       ],
       "evidence": "nyx/drag-settings-diagnostic.json",
@@ -11895,37 +11895,37 @@
         {
           "label": "FFM trajectories at suite / steps30 / finest",
           "path": "tudat/ffm-tudatpy-1.0.0.json",
-          "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
+          "sha256": "0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee"
         },
         {
           "label": "Published-formula / WGS84 trajectories",
           "path": "nyx/drag-settings-diagnostic.json",
-          "sha256": "b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269"
+          "sha256": "069b92140af02f66561778ce4824e7a4959537820414e727e146004241c3fb7d"
         }
       ],
       "rows": [
         {
           "cases": 5,
-          "correctedDisplay": "50.162 mm",
-          "correctedM": 0.050162128480865875,
+          "correctedDisplay": "50.157 mm",
+          "correctedM": 0.05015684294244512,
           "limitDisplay": "100.000 mm",
           "limitM": 0.1,
           "met": true,
           "orbit": "LEO400",
           "stockDisplay": "12.459 m",
-          "stockM": 12.458805433695918,
+          "stockM": 12.458800146030754,
           "stockMet": false
         },
         {
           "cases": 3,
-          "correctedDisplay": "15.016 mm",
-          "correctedM": 0.015015940231732994,
+          "correctedDisplay": "14.960 mm",
+          "correctedM": 0.014959863602246626,
           "limitDisplay": "100.000 mm",
           "limitM": 0.1,
           "met": true,
           "orbit": "SSO700",
-          "stockDisplay": "45.604 mm",
-          "stockM": 0.04560370459956329,
+          "stockDisplay": "45.660 mm",
+          "stockM": 0.04565978125208227,
           "stockMet": true
         }
       ],
@@ -11939,36 +11939,36 @@
           "limitM": 0.1,
           "met": true,
           "orbit": "LEO400",
-          "stockM": 5250.628243566877,
+          "stockM": 5250.628238391655,
           "stockMet": false,
-          "suiteM": 0.025742114074562374
+          "suiteM": 0.025736929973257182
         },
         {
           "id": "LEO400 F6-field-sun-moon-srp-drag",
           "limitM": 0.1,
           "met": true,
           "orbit": "LEO400",
-          "stockM": 5248.297821238489,
+          "stockM": 5248.297832894634,
           "stockMet": false,
-          "suiteM": 0.025927170125828816
+          "suiteM": 0.025938826790937734
         },
         {
           "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
           "limitM": 0.1,
           "met": true,
           "orbit": "LEO400",
-          "stockM": 5418.749444942692,
+          "stockM": 5418.749449889554,
           "stockMet": false,
-          "suiteM": 0.026508822241748917
+          "suiteM": 0.02651377072476875
         },
         {
           "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
           "limitM": 0.1,
           "met": true,
           "orbit": "LEO400",
-          "stockM": 4094.0137077697386,
+          "stockM": 4094.013763020445,
           "stockMet": false,
-          "suiteM": 0.01712714024363571
+          "suiteM": 0.017182384754725978
         },
         {
           "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -11984,18 +11984,18 @@
           "limitM": 0.1,
           "met": true,
           "orbit": "SSO700",
-          "stockM": 58.113011452982775,
+          "stockM": 58.112958772464175,
           "stockMet": false,
-          "suiteM": 0.014874674167929126
+          "suiteM": 0.014927349351751246
         },
         {
           "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
           "limitM": 0.1,
           "met": true,
           "orbit": "SSO700",
-          "stockM": 34.79613363413426,
+          "stockM": 34.79618971201135,
           "stockMet": false,
-          "suiteM": 0.015258935240370025
+          "suiteM": 0.015202858476477892
         }
       ],
       "evidence": "basilisk/summary-basilisk-2.12.0.json#/diagnostics/wgs84-gtd7d",
@@ -12011,20 +12011,20 @@
       "rows": [
         {
           "cases": 4,
-          "correctedDisplay": "26.509 mm",
-          "correctedM": 0.026508822241748917,
+          "correctedDisplay": "26.514 mm",
+          "correctedM": 0.02651377072476875,
           "limitDisplay": "100.000 mm",
           "limitM": 0.1,
           "met": true,
           "orbit": "LEO400",
           "stockDisplay": "5418.749 m",
-          "stockM": 5418.749444942692,
+          "stockM": 5418.749449889554,
           "stockMet": false
         },
         {
           "cases": 3,
-          "correctedDisplay": "15.259 mm",
-          "correctedM": 0.015258935240370025,
+          "correctedDisplay": "15.203 mm",
+          "correctedM": 0.015202858476477892,
           "limitDisplay": "100.000 mm",
           "limitM": 0.1,
           "met": true,

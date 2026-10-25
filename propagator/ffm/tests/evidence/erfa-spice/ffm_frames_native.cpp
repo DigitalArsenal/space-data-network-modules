@@ -2,8 +2,8 @@
 // PRW TT instant reaches each force API; single-JD fields below are labels only.
 #include "ffm/prw_codec.h"
 #include "ffm/prw_environment.h"
+#include "ephemeris.h" // before force_models.cpp, whose file-local macros rename these declarations
 #include "force_models.cpp" // file-local tides gmst2006, same implementation
-#include "ephemeris.h"
 #include "nlohmann/json.hpp"
 #include <fstream>
 #include <iostream>

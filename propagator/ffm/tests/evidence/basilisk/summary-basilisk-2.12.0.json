@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Basilisk: maximum 3D position difference over 24 h at hourly samples, suite/steps30/finest FFM settings and Orekit-minus-Basilisk. Every numerical reduction uses the shared Nyx C++ helper. Native half-step trajectories are stored inline.",
  "module": {
-  "version": "1.4.1",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "version": "2.0.0",
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "basilisk": {
   "file": "basilisk-2.12.0.json",
@@ -2229,7 +2229,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01763437349294147,
+    "worstM": 0.01763531736077077,
     "steps": 1343,
     "met": true
    },
@@ -2294,8 +2294,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01767056658717902,
-    "steps": 1344,
+    "worstM": 0.017673930947229133,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
@@ -2308,8 +2308,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00003260422423904022,
-    "steps": 8610,
+    "worstM": 0.00003248964800732577,
+    "steps": 8612,
     "met": true
    },
    "met": true,
@@ -2359,7 +2359,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01746055270350535,
+    "worstM": 0.01744843494196948,
     "steps": 1415,
     "met": true
    },
@@ -2373,8 +2373,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00008442329204010892,
-    "steps": 8638,
+    "worstM": 0.00007742837171128667,
+    "steps": 8637,
     "met": true
    },
    "met": true,
@@ -2472,7 +2472,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.628243566877,
+    "worstM": 5250.628238391655,
     "steps": 1414,
     "met": false
    },
@@ -2612,7 +2612,7 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
-       "suite": 5250.628243566877,
+       "suite": 5250.628238391655,
        "steps30": 5250.64582669767,
        "finest": 5250.645918965623
       },
@@ -2634,7 +2634,7 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
-       "suite": 2.3153401848874315,
+       "suite": 2.3153453560315684,
        "steps30": 2.2977573363682957,
        "finest": 2.297665069262368
       },
@@ -2656,7 +2656,7 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.025742114074562374,
+       "suite": 0.025736929973257182,
        "steps30": 0.04332502944020785,
        "finest": 0.04341729580593022
       },
@@ -2716,8 +2716,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01750678882552334,
-    "steps": 1343,
+    "worstM": 0.017430476124393437,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
@@ -2730,7 +2730,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00019669155949539915,
+    "worstM": 0.0001996480570089532,
     "steps": 8607,
     "met": true
    },
@@ -2809,14 +2809,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017486587108352377,
-    "steps": 1343,
+    "worstM": 0.017515850006201986,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00010915065260299235,
+    "worstM": 0.00010907749845243272,
     "steps": 2880,
     "met": true
    },
@@ -2902,7 +2902,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017395198475822788,
+    "worstM": 0.01734005057317653,
     "steps": 1414,
     "met": true
    },
@@ -2916,8 +2916,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000143348719057264,
-    "steps": 8638,
+    "worstM": 0.0001450423543535714,
+    "steps": 8636,
     "met": true
    },
    "met": true,
@@ -3022,22 +3022,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.297821238489,
-    "steps": 1415,
+    "worstM": 5248.297832894634,
+    "steps": 1414,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.315317837306,
+    "worstM": 5248.315320557673,
     "steps": 2959,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.315400636357,
-    "steps": 8635,
+    "worstM": 5248.315399882525,
+    "steps": 8636,
     "met": false
    },
    "met": false,
@@ -3169,9 +3169,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
-       "suite": 5248.297821238489,
-       "steps30": 5248.315317837306,
-       "finest": 5248.315400636357
+       "suite": 5248.297832894634,
+       "steps30": 5248.315320557673,
+       "finest": 5248.315399882525
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3191,9 +3191,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
-       "suite": 2.316930259795462,
-       "steps30": 2.2994339424428247,
-       "finest": 2.2993511436922622
+       "suite": 2.316918604178994,
+       "steps30": 2.2994312218983213,
+       "finest": 2.2993518977844642
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3213,9 +3213,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.025927170125828816,
-       "steps30": 0.04342354963664183,
-       "finest": 0.04350634650734576
+       "suite": 0.025938826790937734,
+       "steps30": 0.04342626964011366,
+       "finest": 0.04350559309887055
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3273,8 +3273,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.749444942692,
-    "steps": 1415,
+    "worstM": 5418.749449889554,
+    "steps": 1413,
     "met": false
    },
    "steps30": {
@@ -3420,7 +3420,7 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
-       "suite": 5418.749444942692,
+       "suite": 5418.749449889554,
        "steps30": 5418.766915620047,
        "finest": 5418.767004472957
       },
@@ -3442,7 +3442,7 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
-       "suite": 2.3909410887549725,
+       "suite": 2.390936142784662,
        "steps30": 2.3734707130228534,
        "finest": 2.3733818608401394
       },
@@ -3464,7 +3464,7 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.026508822241748917,
+       "suite": 0.02651377072476875,
        "steps30": 0.04397933624441474,
        "finest": 0.04406818751664551
       },
@@ -3524,8 +3524,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.0137077697386,
-    "steps": 1414,
+    "worstM": 4094.013763020445,
+    "steps": 1415,
     "met": false
    },
    "steps30": {
@@ -3538,7 +3538,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.031305933153,
+    "worstM": 4094.0313057803505,
     "steps": 8631,
     "met": false
    },
@@ -3671,9 +3671,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
-       "suite": 4094.0137077697386,
+       "suite": 4094.013763020445,
        "steps30": 4094.0312141942427,
-       "finest": 4094.031305933153
+       "finest": 4094.0313057803505
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3693,9 +3693,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
-       "suite": 1.5589807983373387,
+       "suite": 1.5589255473540222,
        "steps30": 1.5414746903109726,
-       "finest": 1.54138295256226
+       "finest": 1.5413831054167066
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3715,9 +3715,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.01712714024363571,
+       "suite": 0.017182384754725978,
        "steps30": 0.03463316043469457,
-       "finest": 0.034724897546067675
+       "finest": 0.034724744831536085
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -3775,8 +3775,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016574854268796055,
-    "steps": 1343,
+    "worstM": 0.01642504703947514,
+    "steps": 1345,
     "met": true
    },
    "steps30": {
@@ -3789,8 +3789,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00023285790655096198,
-    "steps": 8605,
+    "worstM": 0.00023428740704335206,
+    "steps": 8607,
     "met": true
    },
    "met": true,
@@ -3868,14 +3868,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017571557909445236,
-    "steps": 1343,
+    "worstM": 0.017519671091105124,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 20,
     "sampleCount": 24,
-    "worstM": 0.00007538667528618922,
+    "worstM": 0.00007504331256379453,
     "steps": 2880,
     "met": true
    },
@@ -4026,14 +4026,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015744310520945378,
+    "worstM": 0.015800883142445394,
     "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00004378642979406077,
+    "worstM": 0.00004624298085274439,
     "steps": 2880,
     "met": true
    },
@@ -4091,8 +4091,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01575716869430605,
-    "steps": 1257,
+    "worstM": 0.015742134068993312,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
@@ -4221,14 +4221,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0157905657884756,
-    "steps": 1342,
+    "worstM": 0.01573389241843174,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0002335877629591459,
+    "worstM": 0.00023633834256986454,
     "steps": 2957,
     "met": true
    },
@@ -4341,7 +4341,7 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.143922550409165,
+    "worstM": 58.14392051482217,
     "steps": 2957,
     "met": false
    },
@@ -4468,7 +4468,7 @@
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
        "suite": 58.128436758262,
-       "steps30": 58.143922550409165,
+       "steps30": 58.14392051482217,
        "finest": 58.143615025958056
       },
       "orekitMinusBasilisk": {
@@ -4490,7 +4490,7 @@
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
        "suite": 0.014889388835976805,
-       "steps30": 0.0005964995626314769,
+       "steps30": 0.0005944639841409924,
        "finest": 0.00028898511801456016
       },
       "orekitMinusBasilisk": {
@@ -4512,7 +4512,7 @@
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
        "suite": 0.014889388835976805,
-       "steps30": 0.0005964995626314769,
+       "steps30": 0.0005944639841409924,
        "finest": 0.00028898511801456016
       },
       "orekitMinusBasilisk": {
@@ -4571,14 +4571,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01568267689652723,
-    "steps": 1255,
+    "worstM": 0.015600575006822843,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.0001243766395184242,
+    "worstM": 0.00012059806370359731,
     "steps": 2880,
     "met": true
    },
@@ -4643,8 +4643,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015651628103567176,
-    "steps": 1256,
+    "worstM": 0.015625508912971754,
+    "steps": 1259,
     "met": true
    },
    "steps30": {
@@ -4715,22 +4715,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.015709288897478895,
+    "worstM": 0.01570926247785502,
     "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00018716809939672691,
+    "worstM": 0.00018730318295390113,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00048792578439501265,
-    "steps": 8673,
+    "worstM": 0.0004995103484218638,
+    "steps": 8675,
     "met": true
    },
    "met": true,
@@ -4828,21 +4828,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.113011452982775,
-    "steps": 1342,
+    "worstM": 58.112958772464175,
+    "steps": 1345,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.128507413974646,
+    "worstM": 58.12850757091858,
     "steps": 2957,
     "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.12821006651427,
+    "worstM": 58.128210950957914,
     "steps": 8674,
     "met": false
    },
@@ -4968,9 +4968,9 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
-       "suite": 58.113011452982775,
-       "steps30": 58.128507413974646,
-       "finest": 58.12821006651427
+       "suite": 58.112958772464175,
+       "steps30": 58.12850757091858,
+       "finest": 58.128210950957914
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -4990,9 +4990,9 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.014874674167929126,
-       "steps30": 0.0006213650660571282,
-       "finest": 0.00032401750875810684
+       "suite": 0.014927349351751246,
+       "steps30": 0.0006215220373503716,
+       "finest": 0.0003249019132542631
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5012,9 +5012,9 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.014874674167929126,
-       "steps30": 0.0006213650660571282,
-       "finest": 0.00032401750875810684
+       "suite": 0.014927349351751246,
+       "steps30": 0.0006215220373503716,
+       "finest": 0.0003249019132542631
       },
       "orekitMinusBasilisk": {
        "atHour": 24,
@@ -5072,14 +5072,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.79613363413426,
+    "worstM": 34.79618971201135,
     "steps": 1343,
     "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.81167450114866,
+    "worstM": 34.811672943651104,
     "steps": 2957,
     "met": false
    },
@@ -5212,8 +5212,8 @@
      "nominal": {
       "trajectory": "basilisk-2.12.0.json",
       "ffmWorstM": {
-       "suite": 34.79613363413426,
-       "steps30": 34.81167450114866,
+       "suite": 34.79618971201135,
+       "steps30": 34.811672943651104,
        "finest": 34.81135551544844
       },
       "orekitMinusBasilisk": {
@@ -5234,8 +5234,8 @@
      "wgs84Only": {
       "trajectory": "basilisk-wgs84-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.015258935240370025,
-       "steps30": 0.00028202035520363654,
+       "suite": 0.015202858476477892,
+       "steps30": 0.0002804628364097783,
        "finest": 0.00004587672595960163
       },
       "orekitMinusBasilisk": {
@@ -5256,8 +5256,8 @@
      "wgs84AndGtd7d": {
       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
       "ffmWorstM": {
-       "suite": 0.015258935240370025,
-       "steps30": 0.00028202035520363654,
+       "suite": 0.015202858476477892,
+       "steps30": 0.0002804628364097783,
        "finest": 0.00004587672595960163
       },
       "orekitMinusBasilisk": {
@@ -9277,7 +9277,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3153401848874315,
+      "worstM": 2.3153453560315684,
       "steps": 1414,
       "met": false
      },
@@ -9414,7 +9414,7 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "ffmWorstM": {
-         "suite": 2.3153401848874315,
+         "suite": 2.3153453560315684,
          "steps30": 2.2977573363682957,
          "finest": 2.297665069262368
         },
@@ -9436,7 +9436,7 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "ffmWorstM": {
-         "suite": 0.025742114074562374,
+         "suite": 0.025736929973257182,
          "steps30": 0.04332502944020785,
          "finest": 0.04341729580593022
         },
@@ -9480,22 +9480,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.316930259795462,
-      "steps": 1415,
+      "worstM": 2.316918604178994,
+      "steps": 1414,
       "met": false
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.2994339424428247,
+      "worstM": 2.2994312218983213,
       "steps": 2959,
       "met": false
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.2993511436922622,
-      "steps": 8635,
+      "worstM": 2.2993518977844642,
+      "steps": 8636,
       "met": false
      },
      "met": false,
@@ -9631,9 +9631,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "ffmWorstM": {
-         "suite": 2.316930259795462,
-         "steps30": 2.2994339424428247,
-         "finest": 2.2993511436922622
+         "suite": 2.316918604178994,
+         "steps30": 2.2994312218983213,
+         "finest": 2.2993518977844642
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9653,9 +9653,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "ffmWorstM": {
-         "suite": 0.025927170125828816,
-         "steps30": 0.04342354963664183,
-         "finest": 0.04350634650734576
+         "suite": 0.025938826790937734,
+         "steps30": 0.04342626964011366,
+         "finest": 0.04350559309887055
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -9697,8 +9697,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3909410887549725,
-      "steps": 1415,
+      "worstM": 2.390936142784662,
+      "steps": 1413,
       "met": false
      },
      "steps30": {
@@ -9848,7 +9848,7 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "ffmWorstM": {
-         "suite": 2.3909410887549725,
+         "suite": 2.390936142784662,
          "steps30": 2.3734707130228534,
          "finest": 2.3733818608401394
         },
@@ -9870,7 +9870,7 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "ffmWorstM": {
-         "suite": 0.026508822241748917,
+         "suite": 0.02651377072476875,
          "steps30": 0.04397933624441474,
          "finest": 0.04406818751664551
         },
@@ -9914,8 +9914,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.5589807983373387,
-      "steps": 1414,
+      "worstM": 1.5589255473540222,
+      "steps": 1415,
       "met": false
      },
      "steps30": {
@@ -9928,7 +9928,7 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.54138295256226,
+      "worstM": 1.5413831054167066,
       "steps": 8631,
       "met": false
      },
@@ -10065,9 +10065,9 @@
        "before": {
         "trajectory": "basilisk-wgs84-diagnostic.json",
         "ffmWorstM": {
-         "suite": 1.5589807983373387,
+         "suite": 1.5589255473540222,
          "steps30": 1.5414746903109726,
-         "finest": 1.54138295256226
+         "finest": 1.5413831054167066
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -10087,9 +10087,9 @@
        "after": {
         "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
         "ffmWorstM": {
-         "suite": 0.01712714024363571,
+         "suite": 0.017182384754725978,
          "steps30": 0.03463316043469457,
-         "finest": 0.034724897546067675
+         "finest": 0.034724744831536085
         },
         "orekitMinusBasilisk": {
          "atHour": 24,
@@ -10138,7 +10138,7 @@
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0005964995626314769,
+      "worstM": 0.0005944639841409924,
       "steps": 2957,
       "met": true
      },
@@ -10280,21 +10280,21 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014874674167929126,
-      "steps": 1342,
+      "worstM": 0.014927349351751246,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006213650660571282,
+      "worstM": 0.0006215220373503716,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00032401750875810684,
+      "worstM": 0.0003249019132542631,
       "steps": 8674,
       "met": true
      },
@@ -10429,14 +10429,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015258935240370025,
+      "worstM": 0.015202858476477892,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00028202035520363654,
+      "worstM": 0.0002804628364097783,
       "steps": 2957,
       "met": true
      },
@@ -12578,7 +12578,7 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.025742114074562374,
+      "worstM": 0.025736929973257182,
       "steps": 1414,
       "met": true
      },
@@ -12725,22 +12725,22 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.025927170125828816,
-      "steps": 1415,
+      "worstM": 0.025938826790937734,
+      "steps": 1414,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04342354963664183,
+      "worstM": 0.04342626964011366,
       "steps": 2959,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.04350634650734576,
-      "steps": 8635,
+      "worstM": 0.04350559309887055,
+      "steps": 8636,
       "met": true
      },
      "met": true,
@@ -12886,8 +12886,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.026508822241748917,
-      "steps": 1415,
+      "worstM": 0.02651377072476875,
+      "steps": 1413,
       "met": true
      },
      "steps30": {
@@ -13047,8 +13047,8 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.01712714024363571,
-      "steps": 1414,
+      "worstM": 0.017182384754725978,
+      "steps": 1415,
       "met": true
      },
      "steps30": {
@@ -13061,7 +13061,7 @@
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.034724897546067675,
+      "worstM": 0.034724744831536085,
       "steps": 8631,
       "met": true
      },
@@ -13215,7 +13215,7 @@
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0005964995626314769,
+      "worstM": 0.0005944639841409924,
       "steps": 2957,
       "met": true
      },
@@ -13362,21 +13362,21 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.014874674167929126,
-      "steps": 1342,
+      "worstM": 0.014927349351751246,
+      "steps": 1345,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.0006213650660571282,
+      "worstM": 0.0006215220373503716,
       "steps": 2957,
       "met": true
      },
      "finest": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00032401750875810684,
+      "worstM": 0.0003249019132542631,
       "steps": 8674,
       "met": true
      },
@@ -13516,14 +13516,14 @@
      "suite": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.015258935240370025,
+      "worstM": 0.015202858476477892,
       "steps": 1343,
       "met": true
      },
      "steps30": {
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 0.00028202035520363654,
+      "worstM": 0.0002804628364097783,
       "steps": 2957,
       "met": true
      },
@@ -13744,17 +13744,17 @@
    },
    {
     "path": "diagnoses.json",
-    "sha256": "47863fc8b3be20894c017508820b3cfb883ab744e3a799934b1bd416155a1b95"
+    "sha256": "b09482fb2be067f6b0257774a1ead83d5f4aaf0186107784715121d4e157bab8"
    }
   ],
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+    "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+    "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -13762,11 +13762,11 @@
    },
    {
     "path": "../../lib/orekitCases.mjs",
-    "sha256": "58c483cde60d18997905607440e1a096f18d75368dd95de100132fecab838d85"
+    "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
    },
    {
     "path": "../../lib/prwCodec.mjs",
-    "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+    "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
    },
    {
     "path": "../nyx/scoring.mjs",
@@ -13799,7 +13799,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-basilisk-2.12.0.json",
-   "sha256": "10a4ad654b6908bf82e5f0b2e87631375076dd541cf2b7f574b9ba51ac76801f"
+   "sha256": "4e051cd9048fa12a49172cd653d4fb4b7c6227e5edd7049e96053924579013d1"
   },
   "modelProbes": {
    "path": "model-probes.json",
@@ -17691,7 +17691,7 @@
   },
   "reusedFfmCache": {
    "path": "../tudat/ffm-tudatpy-1.0.0.json",
-   "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
+   "sha256": "0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee"
   },
   "reuseRule": "All propagation input paths and SHA-256s equal the current shipped-WASM request identity; only the three state settings of supported cases are retained.",
   "basilisk": {
@@ -17746,7 +17746,7 @@
   },
   {
    "path": "ffm-basilisk-2.12.0.json",
-   "sha256": "10a4ad654b6908bf82e5f0b2e87631375076dd541cf2b7f574b9ba51ac76801f"
+   "sha256": "4e051cd9048fa12a49172cd653d4fb4b7c6227e5edd7049e96053924579013d1"
   },
   {
    "path": "scoring.mjs",
@@ -17806,15 +17806,15 @@
   },
   {
    "path": "diagnoses.json",
-   "sha256": "47863fc8b3be20894c017508820b3cfb883ab744e3a799934b1bd416155a1b95"
+   "sha256": "b09482fb2be067f6b0257774a1ead83d5f4aaf0186107784715121d4e157bab8"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -17822,11 +17822,11 @@
   },
   {
    "path": "../../lib/orekitCases.mjs",
-   "sha256": "58c483cde60d18997905607440e1a096f18d75368dd95de100132fecab838d85"
+   "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
   },
   {
    "path": "../../lib/prwCodec.mjs",
-   "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+   "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
   },
   {
    "path": "../nyx/scoring.mjs",
@@ -19765,7 +19765,7 @@
   },
   {
    "path": "../tudat/ffm-tudatpy-1.0.0.json",
-   "sha256": "e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc"
+   "sha256": "0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee"
   },
   {
    "path": "diagnose-lst.py",
@@ -25393,12 +25393,5 @@
    "path": ".work/fields/EGM2008-20z-20t-20o.csv",
    "sha256": "1cc8937b08f85f079a5280d8f9249ef2c6ac5810c2dc36202ec731c77a9602f2"
   }
- ],
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "2a2e89920c6ab4b1c5888e2f8d84ab4a26c4b72f0ddce10f29d324a34150a891",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
- }
+ ]
 }

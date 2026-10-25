@@ -15,8 +15,8 @@
    "eps": 0.00005249850506094944,
    "dragEffectM": 43791.86632299737,
    "epsTimesDragEffectM": 2.2990075157862986,
-   "ffmMinusGmatM": 2.31955473394916,
-   "ffmMinusGmatCdScaledM": 0.026503876030322483
+   "ffmMinusGmatM": 2.319552013582224,
+   "ffmMinusGmatCdScaledM": 0.026501703961632338
   },
   {
    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -63,8 +63,8 @@
    "eps": 0.019634957851031087,
    "dragEffectM": 412.9995072518732,
    "epsTimesDragEffectM": 8.109227917387138,
-   "ffmMinusGmatM": 7.93449101736126,
-   "ffmMinusGmatCdScaledM": 0.10584640109899
+   "ffmMinusGmatM": 7.934490860625266,
+   "ffmMinusGmatCdScaledM": 0.10584668186383847
   },
   {
    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -79,8 +79,8 @@
    "eps": 0.01963280889061214,
    "dragEffectM": 413.1350852945854,
    "epsTimesDragEffectM": 8.111002175595342,
-   "ffmMinusGmatM": 7.949933954682701,
-   "ffmMinusGmatCdScaledM": 0.12281742741555439
+   "ffmMinusGmatM": 7.94993598997055,
+   "ffmMinusGmatCdScaledM": 0.12281562009139584
   },
   {
    "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
@@ -95,15 +95,15 @@
    "eps": 0.025278904723321505,
    "dragEffectM": 255.82940181861494,
    "epsTimesDragEffectM": 6.4670870739971,
-   "ffmMinusGmatM": 6.296095071713942,
-   "ffmMinusGmatCdScaledM": 0.12276561713645742
+   "ffmMinusGmatM": 6.296096629271772,
+   "ffmMinusGmatCdScaledM": 0.12276417078366048
   }
  ],
  "ffmRefresh": {
   "module": {
-   "version": "1.4.1",
+   "version": "2.0.0",
    "file": "../../../dist/isomorphic/module.wasm",
-   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   "source": {
    "path": "../refresh-derived-comparisons.mjs",
@@ -116,15 +116,8 @@
    },
    {
     "path": "../consolidated-metrics.cpp",
-    "sha256": "3974f561e035b2974da0ef885091871b081c8f1d83d975ee95d2a4ec3ddd39c9"
+    "sha256": "5e14c2ea24e16d1e638b1bb6d2610e30fd5ef95f82c2d296429ce02162e24be1"
    }
   ]
- },
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "bf3779399ffcc24d5a1f6aada8acde546aa391be5879c6cb679905dc3cf31550",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
  }
 }

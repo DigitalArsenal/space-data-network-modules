@@ -51,7 +51,7 @@
     },
     {
      "id": "LEO400 F4-field-sun-moon",
-     "ffmMinusGmatM": 0.02643359154761777,
+     "ffmMinusGmatM": 0.02643368872389987,
      "orekitMinusGmatM": 0.026198853488306518
     },
     {
@@ -61,7 +61,7 @@
     },
     {
      "id": "LEO400 F6-field-sun-moon-srp-drag",
-     "ffmMinusGmatM": 2.2922207600934077,
+     "ffmMinusGmatM": 2.2922180395438296,
      "orekitMinusGmatM": 2.2880608871716825
     },
     {
@@ -71,7 +71,7 @@
     },
     {
      "id": "LEO400 T1-field-sun-moon-solid-tides",
-     "ffmMinusGmatM": 0.02120545878840111,
+     "ffmMinusGmatM": 0.021204318970982555,
      "orekitMinusGmatM": 0.021001860972453795
     },
     {
@@ -86,7 +86,7 @@
     },
     {
      "id": "LEO400 E1-field-sun-moon-eme2000",
-     "ffmMinusGmatM": 0.019570080122831013,
+     "ffmMinusGmatM": 0.019570026326709622,
      "orekitMinusGmatM": 0.01985954600471869
     },
     {
@@ -96,7 +96,7 @@
     },
     {
      "id": "LEO400 G2-egm2008-36z24t-sun-moon",
-     "ffmMinusGmatM": 0.01525079886774007,
+     "ffmMinusGmatM": 0.015250454867681375,
      "orekitMinusGmatM": 0.015482115131953163
     },
     {
@@ -121,17 +121,17 @@
     },
     {
      "id": "SSO700 Z2-zonal20-sun-moon-srp",
-     "ffmMinusGmatM": 0.013023791192998587,
+     "ffmMinusGmatM": 0.013024913565351353,
      "orekitMinusGmatM": 0.0142204100172046
     },
     {
      "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
-     "ffmMinusGmatM": 7.9295792413613695,
+     "ffmMinusGmatM": 7.92958127693546,
      "orekitMinusGmatM": 7.930922094440362
     },
     {
      "id": "SSO700 F3-field20x20",
-     "ffmMinusGmatM": 0.007630587365896565,
+     "ffmMinusGmatM": 0.007635951055799722,
      "orekitMinusGmatM": 0.008827895523045385
     },
     {
@@ -141,17 +141,17 @@
     },
     {
      "id": "SSO700 F5-field-sun-moon-srp",
-     "ffmMinusGmatM": 0.010164036678617481,
+     "ffmMinusGmatM": 0.010164171837625517,
      "orekitMinusGmatM": 0.011490685367185402
     },
     {
      "id": "SSO700 F6-field-sun-moon-srp-drag",
-     "ffmMinusGmatM": 7.946656137648752,
+     "ffmMinusGmatM": 7.946655980833844,
      "orekitMinusGmatM": 7.947892595289634
     },
     {
      "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
-     "ffmMinusGmatM": 6.316762595210765,
+     "ffmMinusGmatM": 6.316764152483191,
      "orekitMinusGmatM": 6.317838844099961
     },
     {
@@ -342,7 +342,7 @@
     },
     {
      "id": "SSO700 Z2-zonal20-sun-moon-srp",
-     "ffmMinusGmatM": 0.023429567881419432,
+     "ffmMinusGmatM": 0.023427289564149315,
      "orekitMinusGmatM": 0.021887449841033763
     },
     {
@@ -403,7 +403,7 @@
     },
     {
      "id": "SSO700 Z2-zonal20-sun-moon-srp",
-     "ffmMinusGmatM": 0.014901707557193774,
+     "ffmMinusGmatM": 0.014903184913288788,
      "orekitMinusGmatM": 0.016257326045218866
     },
     {
@@ -464,7 +464,7 @@
     },
     {
      "id": "SSO700 Z2-zonal20-sun-moon-srp",
-     "ffmMinusGmatM": 0.018812045150795518,
+     "ffmMinusGmatM": 0.01881092283052414,
      "orekitMinusGmatM": 0.01761294104572897
     },
     {
@@ -495,7 +495,7 @@
    "cases": [
     {
      "id": "LEO400 T1-field-sun-moon-solid-tides",
-     "ffmMinusGmatM": 2.117894278358657,
+     "ffmMinusGmatM": 2.117896194672266,
      "orekitMinusGmatM": 2.118456900618746
     },
     {
@@ -516,7 +516,7 @@
    "cases": [
     {
      "id": "LEO400 T1-field-sun-moon-solid-tides",
-     "ffmMinusGmatM": 0.6100125671240342,
+     "ffmMinusGmatM": 0.6100101011563461,
      "orekitMinusGmatM": 0.6103015895654726
     },
     {
@@ -542,7 +542,7 @@
     },
     {
      "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
-     "ffmMinusGmatM": 9.254467125008741,
+     "ffmMinusGmatM": 9.254468682244692,
      "orekitMinusGmatM": 9.255543361553052
     }
    ]
@@ -563,7 +563,7 @@
     },
     {
      "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
-     "ffmMinusGmatM": 8.066642593859092,
+     "ffmMinusGmatM": 8.066644151265193,
      "orekitMinusGmatM": 8.067718892292831
     }
    ]
@@ -571,9 +571,9 @@
  ],
  "ffmRefresh": {
   "module": {
-   "version": "1.4.1",
+   "version": "2.0.0",
    "file": "../../../dist/isomorphic/module.wasm",
-   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   "source": {
    "path": "../refresh-derived-comparisons.mjs",
@@ -586,15 +586,8 @@
    },
    {
     "path": "../consolidated-metrics.cpp",
-    "sha256": "3974f561e035b2974da0ef885091871b081c8f1d83d975ee95d2a4ec3ddd39c9"
+    "sha256": "5e14c2ea24e16d1e638b1bb6d2610e30fd5ef95f82c2d296429ce02162e24be1"
    }
   ]
- },
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "6c6fdb13f1009602081e64c607b5cb469a2b1f3b813a4172df44ef2aa479fe02",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
  }
 }

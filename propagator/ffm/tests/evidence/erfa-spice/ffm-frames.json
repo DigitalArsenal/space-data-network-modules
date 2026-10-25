@@ -1,17 +1,17 @@
 {
  "about": "Source-built FFM force APIs at exact PRW two-part TT; native DE440 reads at Instant.tdb().secondsSinceJ2000(). Single-JD values label outputs only. Matrices row-major; states km and km/s in ICRF relative to Earth.",
  "module": {
-  "version": "1.4.1",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "version": "2.0.0",
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "sources": {
-  "propagator/ffm/src/cpp/include/ffm/prw_environment.h": "bd9c458937af4b51ecde01a6c92966b6492f89dfa30b5973171278d78c55377a",
-  "propagator/ffm/src/cpp/include/ffm/prw_codec.h": "54aa860f2d71d234b5503eb43556dfdb6237174e08c7b8efd2d2672ca19e7444",
+  "propagator/ffm/src/cpp/include/ffm/prw_environment.h": "070fc3c6cc1f876018363289bc1d600e2000d669c2dd4a13f80fe510caf0ca6c",
+  "propagator/ffm/src/cpp/include/ffm/prw_codec.h": "4e676f7e3bbdcd2fddeea2c744986272020f27ba5b644ca04b7a8682c5fc4f34",
   "propagator/ffm/lib/time_convert.cpp": "e34b6d6b3d1bf05505605750a8fc14ca3f4ba92dcba0fcf4c65a4a0a57a2163e",
   "propagator/ffm/lib/time_types.h": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76",
   "propagator/ffm/lib/coords.cpp": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677",
   "propagator/ffm/lib/coords.h": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5",
-  "propagator/ffm/lib/force_models.cpp": "a26364a9c8c2a8cfce78dd3f314f954e882ff3e7e51ea096e5d03676c0e14db3",
+  "propagator/ffm/lib/force_models.cpp": "3be1864f06883d99f9c098b9904a4887d91d2d8a9477ca9fbb77b68f02fc71f1",
   "propagator/ffm/lib/ephemeris.cpp": "ecead63da40c529f633217ef38f9bd3ed976c0ce0bb5d84b30d30d432b2dfa88",
   "foundation/frames/src/axis_engine.hpp": "693f37d79c61cc90bd3acc50530e50a4708d52da8116b4ad49f589439988e74a",
   "foundation/frames/src/eop_series.hpp": "399f0b10aad4a71e2001e8e96a5647ac15e16d5533141daf88a589136a849ddb"
@@ -5718,12 +5718,5 @@
    "utc1": 2461202,
    "utc2": 0.5
   }
- ],
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "c466e6582935add4035b263dec680f9035ba764e3f6bc5dd9ae0f0211c203cd9",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
- }
+ ]
 }

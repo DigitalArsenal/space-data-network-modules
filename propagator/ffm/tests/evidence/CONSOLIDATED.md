@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM profile](../../FFM.md).
 
 Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/ffm/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report.
 
-FFM 1.4.1, SHA-256 `e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+FFM 2.0.0, SHA-256 `d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
 
 ## Protocol and coverage
 
@@ -44,11 +44,11 @@ Maxima across each tool's supported cases, at FFM's suite setting; the Orekit fi
 | Orbit | Force class | Orekit | GMAT R2026a | GMAT R2022a | Nyx | tudatpy | Tudat WASM | Basilisk | Orekit finest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LEO400 | point mass | 0.479 mm | 0.322 mm | 0.316 mm | 0.305 mm | 0.325 mm | 0.319 mm | 0.315 mm | 0.152 mm |
-| LEO400 | field + third bodies + SRP (no drag) | 18.875 mm | 45.162 mm | 45.141 mm | 17.729 mm | 18.148 mm | 19.926 mm | 17.671 mm | 1.317 mm |
-| LEO400 | drag | 25.856 mm | 2.337 m | 1.380 m | 12.459 m | 38.864 mm | 33.484 mm | 5418.749 m | 4.077 mm |
+| LEO400 | field + third bodies + SRP (no drag) | 18.923 mm | 45.131 mm | 45.110 mm | 17.681 mm | 18.119 mm | 19.919 mm | 17.674 mm | 1.324 mm |
+| LEO400 | drag | 24.873 mm | 2.337 m | 1.380 m | 12.459 m | 38.859 mm | 33.475 mm | 5418.749 m | 4.078 mm |
 | SSO700 | point mass | 0.481 mm | 0.292 mm | 0.304 mm | 0.297 mm | 0.302 mm | 0.295 mm | 0.292 mm | 0.178 mm |
-| SSO700 | field + third bodies + SRP (no drag) | 14.595 mm | 19.487 mm | 27.789 mm | 15.879 mm | 14.367 mm | 14.224 mm | 15.880 mm | 1.355 mm |
-| SSO700 | drag | 16.834 mm | 7.965 m | 164.793 mm | 45.604 mm | 13.555 mm | 65.324 mm | 58.128 m | 1.066 mm |
+| SSO700 | field + third bodies + SRP (no drag) | 14.624 mm | 19.430 mm | 27.732 mm | 15.879 mm | 14.367 mm | 14.280 mm | 15.880 mm | 1.355 mm |
+| SSO700 | drag | 16.833 mm | 7.965 m | 164.793 mm | 45.660 mm | 13.499 mm | 65.360 mm | 58.128 m | 1.073 mm |
 | GPS | point mass | 0.143 mm | 0.024 mm | 0.017 mm | 0.017 mm | 0.021 mm | 0.021 mm | 0.023 mm | 0.159 mm |
 | GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.140 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.220 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |
@@ -67,12 +67,12 @@ Both columns use FFM's suite setting and the same supported drag cases per tool.
 
 | Tool | Orbit | Cases | Stock | Setting difference removed | Limit | Stock verdict | Diagnostic verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.207 mm | 1.500 m | not met | met |
+| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.198 mm | 1.500 m | not met | met |
 | GMAT R2026a | SSO700 | 3 | 7.965 m | 109.950 mm | 1.500 m | not met | met |
-| Nyx | LEO400 | 5 | 12.459 m | 50.162 mm | 100.000 mm | not met | met |
-| Nyx | SSO700 | 3 | 45.604 mm | 15.016 mm | 100.000 mm | met | met |
-| Basilisk | LEO400 | 4 | 5418.749 m | 26.509 mm | 100.000 mm | not met | met |
-| Basilisk | SSO700 | 3 | 58.128 m | 15.259 mm | 100.000 mm | not met | met |
+| Nyx | LEO400 | 5 | 12.459 m | 50.157 mm | 100.000 mm | not met | met |
+| Nyx | SSO700 | 3 | 45.660 mm | 14.960 mm | 100.000 mm | met | met |
+| Basilisk | LEO400 | 4 | 5418.749 m | 26.514 mm | 100.000 mm | not met | met |
+| Basilisk | SSO700 | 3 | 58.128 m | 15.203 mm | 100.000 mm | not met | met |
 
 - GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic. [Evidence](gmat/anomalous-oxygen.json).
 - Nyx: Published NRLMSISE-00 formulas + WGS84 shape. [Evidence](nyx/drag-settings-diagnostic.json).
@@ -86,7 +86,7 @@ No STM pass threshold is defined by the export.
 
 | Tool | STM maximum relative column difference | Interpretation |
 | --- | --- | --- |
-| Orekit | 1.78057e-05 | Relative column differences; exported protocol specifies no STM pass limit. |
+| Orekit | 1.78105e-05 | Relative column differences; exported protocol specifies no STM pass limit. |
 | GMAT R2026a | 2.5907e-05 | 57 suite STM comparisons; largest relative column difference 0.000025907000492078618. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol. |
 | GMAT R2022a | not exposed | R2022a has no stored STM comparisons; no agreement claim is made. |
 | Nyx | 135.001 | The STM comparison is not usable as an FFM check: Nyx uses the step-start ctx.stm and computes stm * grad, instead of grad * stage_stm, while the RK stages retain the same context. |
@@ -393,7 +393,7 @@ Provenance limit:
 
 Version: foundation/sgp4-str3; module 1.3.1. Evidence: [../../../sgp4/tests/evidence/str3/summary-str3.json](../../../sgp4/tests/evidence/str3/summary-str3.json).
 
-- shipped WASM (propagator/sgp4 dist/browser): `18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1`.
+- shipped WASM (propagator/sgp4 dist/browser): `18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde`.
 - library_states.cpp: `96b4bc227dcda1543aed3ac49b83564c8c74aa27df3f0a68d7d749b4f8093d89`.
 - run-str3.mjs: `8bafb16a48d2b9b79010924d1325a79603d97354754d27a51e3481fb131f2a83`.
 
@@ -426,8 +426,8 @@ Step setting: 640 sets × 7 times
 
 ### GMAT R2026a drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc`.
-- Anomalous-oxygen diagnostic: `9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63`.
+- FFM trajectories at suite / steps30 / finest: `0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee`.
+- Anomalous-oxygen diagnostic: `3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -443,8 +443,8 @@ Step setting: 640 sets × 7 times
 
 ### Nyx drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `e7a9c467fa412550e772460e16a6bb17d666658f61ad6f448c9b09f4dae388cc`.
-- Published-formula / WGS84 trajectories: `b80c5ce7d4d9a2a20a7ae662fcae80bc2deae4dc62be4c2c83299d1d43e6b269`.
+- FFM trajectories at suite / steps30 / finest: `0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee`.
+- Published-formula / WGS84 trajectories: `069b92140af02f66561778ce4824e7a4959537820414e727e146004241c3fb7d`.
 
 ### Basilisk drag diagnostic inputs
 

@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against pinned NASA GMAT trajectories; maximum hourly 3D position difference over 24 h in meters, and relative STM column differences. All numerical reductions are C++.",
  "module": {
-  "version": "1.4.1",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "version": "2.0.0",
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "gmat": {
   "file": "gmat-R2022a.json",
@@ -145,7 +145,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.018208445619508445,
+    "worstM": 0.018209389244846042,
     "steps": 1343,
     "met": true
    },
@@ -181,8 +181,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01820490051767189,
-    "steps": 1344,
+    "worstM": 0.01820826426079124,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
@@ -195,8 +195,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0006241149010069746,
-    "steps": 8610,
+    "worstM": 0.0006240093747852722,
+    "steps": 8612,
     "met": true
    },
    "met": true
@@ -231,8 +231,8 @@
    "finest": {
     "atHour": 19,
     "sampleCount": 24,
-    "worstM": 0.019769394900159106,
-    "steps": 8638,
+    "worstM": 0.019765731496197134,
+    "steps": 8637,
     "met": true
    },
    "met": true
@@ -286,8 +286,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.018349049045167074,
-    "steps": 1343,
+    "worstM": 0.018272745246541846,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
@@ -300,7 +300,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0007005559273489713,
+    "worstM": 0.0006978350224367063,
     "steps": 8607,
     "met": true
    },
@@ -322,14 +322,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.018267292206508596,
-    "steps": 1343,
+    "worstM": 0.018296552324859244,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000721683254569162,
+    "worstM": 0.0007218580692553584,
     "steps": 2880,
     "met": true
    },
@@ -358,7 +358,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.008992914317887749,
+    "worstM": 0.008937806364410713,
     "steps": 1414,
     "met": true
    },
@@ -372,8 +372,8 @@
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.010540877854656306,
-    "steps": 8638,
+    "worstM": 0.010542302944125196,
+    "steps": 8636,
     "met": true
    },
    "met": true
@@ -398,7 +398,7 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 1.3626062785942812,
+    "worstM": 1.3626049501813666,
     "steps": 2959,
     "met": true
    },
@@ -427,7 +427,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0225483541534126,
+    "worstM": 0.02254560150233322,
     "steps": 1343,
     "met": true
    },
@@ -441,8 +441,8 @@
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.0053631263314893336,
-    "steps": 8607,
+    "worstM": 0.005365658451910145,
+    "steps": 8611,
     "met": true
    },
    "met": true
@@ -463,22 +463,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04514127033877047,
+    "worstM": 0.045109518036488674,
     "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.0305378905812967,
+    "worstM": 0.030536218509566827,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.03048226048733499,
-    "steps": 8611,
+    "worstM": 0.030492216042513953,
+    "steps": 8605,
     "met": true
    },
    "met": true
@@ -499,22 +499,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.018290855732069677,
-    "steps": 1341,
+    "worstM": 0.018239178426866915,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0007244444183308791,
+    "worstM": 0.0007223198499523322,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0006560411032531326,
-    "steps": 8611,
+    "worstM": 0.0006579261826140468,
+    "steps": 8606,
     "met": true
    },
    "met": true
@@ -535,22 +535,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.018221379958503876,
-    "steps": 1341,
+    "worstM": 0.01822618449120388,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0007091066616017792,
+    "worstM": 0.0007098656996017026,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0006503443414069752,
-    "steps": 8609,
+    "worstM": 0.0006513875022891338,
+    "steps": 8611,
     "met": true
    },
    "met": true
@@ -571,8 +571,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.017423730806201587,
-    "steps": 1343,
+    "worstM": 0.017273940754952474,
+    "steps": 1345,
     "met": true
    },
    "steps30": {
@@ -585,8 +585,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0006698524031847593,
-    "steps": 8605,
+    "worstM": 0.0006685456746339657,
+    "steps": 8607,
     "met": true
    },
    "met": true
@@ -607,14 +607,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.018334663080982368,
-    "steps": 1343,
+    "worstM": 0.018282781626361457,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0007389843632030098,
+    "worstM": 0.0007394284303657396,
     "steps": 2880,
     "met": true
    },
@@ -679,14 +679,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016184352145134924,
+    "worstM": 0.01624092318771848,
     "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0005004787683010924,
+    "worstM": 0.0005021362137987345,
     "steps": 2880,
     "met": true
    },
@@ -715,8 +715,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016168143076754998,
-    "steps": 1257,
+    "worstM": 0.016153108551817237,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
@@ -787,14 +787,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.027788683071167573,
-    "steps": 1342,
+    "worstM": 0.02773200854443035,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 13,
     "sampleCount": 24,
-    "worstM": 0.012747699943235144,
+    "worstM": 0.012747699842429499,
     "steps": 2957,
     "met": true
    },
@@ -827,14 +827,14 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.18024698788474797,
+    "worstM": 0.18024698430987632,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.17992768292372618,
+    "worstM": 0.1799286699499034,
     "steps": 8674,
     "met": true
    },
@@ -856,14 +856,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01622555128647916,
-    "steps": 1255,
+    "worstM": 0.016143450220760462,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0004641915884106362,
+    "worstM": 0.0004684070989581627,
     "steps": 2880,
     "met": true
    },
@@ -892,8 +892,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.016209500535008962,
-    "steps": 1256,
+    "worstM": 0.01618338232270957,
+    "steps": 1259,
     "met": true
    },
    "steps30": {
@@ -935,15 +935,15 @@
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.008610773252050138,
+    "worstM": 0.008610908685462406,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.008898929648754623,
-    "steps": 8673,
+    "worstM": 0.008909574271029107,
+    "steps": 8675,
     "met": true
    },
    "met": true
@@ -968,14 +968,14 @@
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.17835374397253662,
+    "worstM": 0.17835380842580636,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.17802817953832603,
+    "worstM": 0.17804163384430818,
     "steps": 8676,
     "met": true
    },
@@ -2132,7 +2132,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63"
+   "sha256": "3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -2140,15 +2140,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
   },
   {
    "path": "../../../package.json",
-   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
+   "sha256": "aaa691e0d7db547e02378fc0c98cd45e371f34df9feac1feed33d3084f70d10c"
   },
   {
    "path": "../../fixtures/orekit/orekit-reference.json",
@@ -2195,7 +2195,7 @@
    },
    {
     "path": "score-gmat.mjs",
-    "sha256": "2caa98998d9c0a42c4f858109974a99d68f7e2c719ca5ea92cbdfe8c57598abd"
+    "sha256": "f1c84f49a1f5d40ae6ed3824d0ee56b2dc3de16122b80189c84238147e60460a"
    },
    {
     "path": "anomalous-oxygen.mjs",
@@ -2227,11 +2227,11 @@
    },
    {
     "path": "../../lib/orekitCases.mjs",
-    "sha256": "58c483cde60d18997905607440e1a096f18d75368dd95de100132fecab838d85"
+    "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
    },
    {
     "path": "../../lib/prwCodec.mjs",
-    "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+    "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
    },
    {
     "path": "../../../lib/nrlmsise00.cpp",
@@ -2262,7 +2262,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "9de65208a7ff47474707f50f3b168486f4d890c704ba6022cd2253691dc3fb63",
+   "sha256": "3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {
@@ -2679,12 +2679,5 @@
    }
   ],
   "hashPolicy": "Verify every available path against its declared digest; unavailable historical binaries, reports and input files are explicit provenance gaps, never silently re-pinned."
- },
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "c97794eb136cf44327d7d74a2bb1c07e474654d03434363ff3404b39a6daf74e",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
  }
 }

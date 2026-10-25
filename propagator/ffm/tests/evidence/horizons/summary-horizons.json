@@ -1,9 +1,9 @@
 {
  "about": "Offline Horizons sanity references. All dynamics and numerical arithmetic are C++/WASM/native CSPICE; JavaScript and Python only orchestrate transport.",
  "module": {
-  "version": "1.4.1",
+  "version": "2.0.0",
   "file": "../../../dist/isomorphic/module.wasm",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "horizons": {
   "version": "1.2",
@@ -941,19 +941,19 @@
   },
   {
    "file": "../../lib/prwCodec.mjs",
-   "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+   "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
   },
   {
    "file": "../../../plugin-manifest.json",
-   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
   },
   {
    "file": "../../../package.json",
-   "sha256": "8c7160335bd915d34f8081ac91e8c46d23a40cbebd5138b3e311286b02d56924"
+   "sha256": "aaa691e0d7db547e02378fc0c98cd45e371f34df9feac1feed33d3084f70d10c"
   },
   {
    "file": "../../../src/cpp/include/ffm/prw_codec.h",
-   "sha256": "54aa860f2d71d234b5503eb43556dfdb6237174e08c7b8efd2d2672ca19e7444"
+   "sha256": "4e676f7e3bbdcd2fddeea2c744986272020f27ba5b644ca04b7a8682c5fc4f34"
   },
   {
    "file": "../../../lib/time_convert.cpp",
@@ -979,12 +979,5 @@
    "file": "horizons-comparisons.json",
    "sha256": "560f9ef1e575dcae3b865774cc82454603a918370ef74e38b4ddf3031f61491c"
   }
- ],
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "f7e5db45289374e31f81dae396a4f3ef7ce96052a1cca82b08e354b050b22522",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
- }
+ ]
 }

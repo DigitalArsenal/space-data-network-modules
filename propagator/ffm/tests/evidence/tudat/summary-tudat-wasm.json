@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Tudat: largest 3D position difference over 24 h at hourly samples in each exported case frame; suite/steps30/finest FFM settings and Orekit-minus-Tudat; 6x6 STM and Cd/Cr, Cd*A/m-rate, and in-track-acceleration sensitivity comparisons where available. Numerical reductions are C++.",
  "module": {
-  "version": "1.4.1",
-  "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+  "version": "2.0.0",
+  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
  },
  "tudat": {
   "file": "../../fixtures/tudat/tudat-wasm-reference.json",
@@ -217,8 +217,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01992615167085987,
-    "steps": 1343,
+    "worstM": 0.019849838152759206,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
@@ -231,7 +231,7 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.002223182062693203,
+    "worstM": 0.002220224314412244,
     "steps": 8607,
     "met": true
    },
@@ -253,14 +253,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01988938659833762,
-    "steps": 1343,
+    "worstM": 0.01991864971715346,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0022949109215659345,
+    "worstM": 0.0022951044999000515,
     "steps": 2880,
     "met": true
    },
@@ -289,7 +289,7 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.019752140302338645,
+    "worstM": 0.01969699346701158,
     "steps": 1414,
     "met": true
    },
@@ -303,8 +303,8 @@
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.002214089696063738,
-    "steps": 8638,
+    "worstM": 0.0022123937765910883,
+    "steps": 8636,
     "met": true
    },
    "met": true
@@ -325,22 +325,22 @@
    "suite": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.033483560915126644,
-    "steps": 1415,
+    "worstM": 0.03347475911520099,
+    "steps": 1414,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.03411296992780939,
+    "worstM": 0.034115577286201314,
     "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.03419189286149575,
-    "steps": 8635,
+    "worstM": 0.0341911549292332,
+    "steps": 8636,
     "met": true
    },
    "met": true
@@ -397,14 +397,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014223690084463546,
+    "worstM": 0.014280261682339158,
     "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0014769913654113069,
+    "worstM": 0.0014745349343985685,
     "steps": 2880,
     "met": true
    },
@@ -433,14 +433,14 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013798070041467478,
-    "steps": 1255,
+    "worstM": 0.013715967471866642,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001995153229348643,
+    "worstM": 0.00198975150438248,
     "steps": 2880,
     "met": true
    },
@@ -469,8 +469,8 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013764156961582867,
-    "steps": 1256,
+    "worstM": 0.013738037819466552,
+    "steps": 1259,
     "met": true
    },
    "steps30": {
@@ -505,22 +505,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013529329653833185,
+    "worstM": 0.013529303220081668,
     "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0019985613438468293,
+    "worstM": 0.0019984106081553437,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0016920769790124343,
-    "steps": 8673,
+    "worstM": 0.0016804915313918755,
+    "steps": 8675,
     "met": true
    },
    "met": true
@@ -541,21 +541,21 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.06532421208818057,
-    "steps": 1342,
+    "worstM": 0.06535965437475881,
+    "steps": 1345,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.05342394937757551,
+    "worstM": 0.053423730599096636,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.05365416040371485,
+    "worstM": 0.05365398675726875,
     "steps": 8674,
     "met": true
    },
@@ -1353,11 +1353,11 @@
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+    "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+    "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -1365,11 +1365,11 @@
    },
    {
     "path": "../../lib/orekitCases.mjs",
-    "sha256": "58c483cde60d18997905607440e1a096f18d75368dd95de100132fecab838d85"
+    "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
    },
    {
     "path": "../../lib/prwCodec.mjs",
-    "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+    "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
    },
    {
     "path": "../nyx/scoring.mjs",
@@ -1402,7 +1402,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-tudat-wasm.json",
-   "sha256": "b4f47bcc0cebe7e4acc1ad6ed41a501eda4b733557ab59f39703ef84130cd0e8"
+   "sha256": "ea5f089710f36abe6e3cc1ac35ce8d0f4ad54dbcf36f073ada5a5bb01866640c"
   },
   "historicalFixture": {
    "path": "../../fixtures/tudat/tudat-wasm-reference.json",
@@ -1428,7 +1428,7 @@
   },
   {
    "path": "ffm-tudat-wasm.json",
-   "sha256": "b4f47bcc0cebe7e4acc1ad6ed41a501eda4b733557ab59f39703ef84130cd0e8"
+   "sha256": "ea5f089710f36abe6e3cc1ac35ce8d0f4ad54dbcf36f073ada5a5bb01866640c"
   },
   {
    "path": "scoring.mjs",
@@ -1468,11 +1468,11 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3"
+   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "3b88ae0dc0195958734a52fee332221847f14f06db3190e6792f17775f9ce1c1"
+   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -1480,11 +1480,11 @@
   },
   {
    "path": "../../lib/orekitCases.mjs",
-   "sha256": "58c483cde60d18997905607440e1a096f18d75368dd95de100132fecab838d85"
+   "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
   },
   {
    "path": "../../lib/prwCodec.mjs",
-   "sha256": "abf86351a2c7e73a595665246107d7db81b9c3ff8d0908401b657d2536028e9b"
+   "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
   },
   {
    "path": "../nyx/scoring.mjs",
@@ -1514,12 +1514,5 @@
    "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
    "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
   }
- ],
- "allocationEquivalence": {
-  "file": "../gravity-scratch-allocation/equivalence.json",
-  "sha256": "392a91b3d1bbf7558ba602054ceec8b308abfed2abcc5df1eb8282521c9fc790",
-  "previousCommit": "5cc2d3b68edcc89fcab61ab6168fa83f0ed32b86",
-  "previousSha256": "61b228b800fb949ed3500d1bc7a4838189a5fd03eb1635763c53821efc4e4737",
-  "statement": "Release identity refreshed after all 72 reference cases at three settings returned byte-identical responses through the authenticated same-version pre-fix and released WASM. Numerical fields and unrelated pins are unchanged."
- }
+ ]
 }
