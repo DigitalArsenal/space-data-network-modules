@@ -39,7 +39,7 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
   ...[1800, 3600].map(seconds => encodePluginInvokeRequest({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
     makeTable('PRWResidentRequest', { INSTANCE: instance, ENTITY_HANDLES: [seeds[0].handle], TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
-const predecessor = execFileSync('git', ['show', '8c6ff00332a6115579db9278f3e1d9c56daa9176:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+const predecessor = execFileSync('git', ['show', '560d835d3173fb5f7a1560f4f53e1eb37d7e177c:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 // The browser pool's own coverage window: the defaults of OrbPro
 // packages/orbpro-integration/propagator.ffm at main 7ad42e4e1c

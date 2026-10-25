@@ -13,7 +13,7 @@
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "memory": {
-    "staticMinimumBytes": 24176704,
+    "staticMinimumBytes": 24178112,
     "initialBytes": 28377088,
     "maximumBytes": 754974720
   },

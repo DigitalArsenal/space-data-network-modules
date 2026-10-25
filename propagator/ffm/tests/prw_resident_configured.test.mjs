@@ -149,6 +149,10 @@ test('the configured profile refuses what it cannot carry', async (t) => {
   refused(await ingest(h, [...states()]), 'missing-required-input');   // the manifest requires the port
   refused(await ingest(h, [...states(), configuration((r) => { r.SAMPLE_EPOCHS = [isoInstant(EPOCH_TT, 'TT')]; }), ...env]), 'unsupported-configuration');
   refused(await ingest(h, [...states(), configuration((r) => { r.INCLUDE_STM = true; }), ...env]), 'unsupported-configuration');
+  // The third body's harmonic field is an execution request's; a resident configuration holds the third bodies as point masses.
+  refused(await ingest(h, [...states(), configuration((r) => { r.FORCES.THIRD_BODY_MAXIMUM_DEGREE = 2; r.FORCES.THIRD_BODY_MAXIMUM_ORDER = 2; }), ...env]), 'unsupported-configuration');
+  // Resident objects are the Earth's: another central body is refused by name.
+  refused(await ingest(h, [...states(), configuration((r) => { r.FORCES.CENTRAL_BODY_NAIF_ID = 301; }), ...env]), 'unsupported-frame');
   refused(await ingest(h, [...states(), configuration((r) => { r.INTEGRATOR.ALGORITHM = sds.pcfIntegratorAlgorithm.RKF45; }), ...env]), 'unsupported-integrator');
   refused(await ingest(h, [...states(), configuration((r) => { r.FORCES.ENABLE_DRAG = false; }), ...env.filter((f) => f.portId !== 'space_weather')]), 'unsupported-configuration');
   refused(await ingest(h, [...states(1n, OBJECTS, { DRAG_AREA_OVER_MASS_RATE_M2_KG_S: 1e-9, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: true }), configuration(), ...env]), 'unsupported-configuration');

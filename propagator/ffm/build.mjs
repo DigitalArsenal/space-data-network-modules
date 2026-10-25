@@ -19,7 +19,7 @@ const emsdk=candidates.find(p=>fsSync.existsSync(path.join(p,'upstream/bin/clang
 if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SDN_LOCAL_EMSDK_DIR. This build never invokes emcc.');
 // Pilot builds can raise the ceiling to measure the largest role. The release
 // limits are recorded in the evidence and checked again on the final artifact.
-const staticMinimumBytes=24176704; // wasm-ld measurement, includes the 2 MiB stack.
+const staticMinimumBytes=24178112; // wasm-ld measurement, includes the 2 MiB stack.
 const evidencePath=path.join(packageRoot,'tests/evidence/memory-sizing.json');
 const sizing=fsSync.existsSync(evidencePath)?JSON.parse(fsSync.readFileSync(evidencePath,'utf8')):null;
 if(!sizing&&!process.env.FFM_MEASUREMENT_MAX_BYTES)throw new Error('Provision memory-sizing evidence or set FFM_MEASUREMENT_MAX_BYTES for a pilot measurement.');

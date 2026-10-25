@@ -21,8 +21,9 @@
 //      predicted over three, error by day;
 //   3. the third body's field through the wire (THIRD_BODY_MAXIMUM_DEGREE and _ORDER): the Earth's harmonics on a lunar orbiter and
 //      the Moon's on a high Earth orbiter move a short arc by what the module's own term gives, integrated twice along the path;
-//   4. refusals by name: a field or atmosphere asked for about a body that is not its own (the implicit mapping from the central
-//      body is gone), what is the Earth's, the third body's field where there is none, and what lies outside an embedded model's span;
+//   4. refusals by name: a field or atmosphere asked for about a body that is not its own (the Earth's SPHERICAL_HARMONICS and
+//      EXPONENTIAL stand for no other body's), the third body's field where there is none, and what lies outside an embedded
+//      model's span;
 //   5. lane parity: the browser and native WasmEdge answers are identical bytes for a Moon and a Mars request.
 //
 // Bars are the measured error with a margin (reported next to each); they guard against regressions, not against the
@@ -219,7 +220,7 @@ console.log('4. Refusals by name');
   const moon = lroForces(20), mars = { gm: MARS_GM, degree: 20, order: 20, thirdBodies: [10, 399], massKg: 1150, areaM2: 15 };
   const G = sds.pcfGravitySelection, A = sds.pcfAtmosphereFamily, field = (degree, order = degree) => ({ extra: { THIRD_BODY_MAXIMUM_DEGREE: degree, THIRD_BODY_MAXIMUM_ORDER: order } });
   // A field or an atmosphere belongs to its body and is selected by its own name; asked for about another body it is refused
-  // (SPHERICAL_HARMONICS and EXPONENTIAL no longer stand for the central body's own).
+  // (SPHERICAL_HARMONICS and EXPONENTIAL are the Earth's, not the central body's own).
   await refused('SPHERICAL_HARMONICS about the Moon', base(MOON, { ...moon, gravity: G.SPHERICAL_HARMONICS }), /unsupported-gravity: SPHERICAL_HARMONICS, EGM2008 and EGM96 are the Earth's fields/);
   await refused('SPHERICAL_HARMONICS about Mars', base(MARS, { ...mars, gravity: G.SPHERICAL_HARMONICS }), /unsupported-gravity: SPHERICAL_HARMONICS, EGM2008 and EGM96 are the Earth's fields/);
   await refused('EGM2008 about the Moon', base(MOON, { ...moon, gravity: G.EGM2008 }), /unsupported-gravity: SPHERICAL_HARMONICS, EGM2008 and EGM96 are the Earth's fields/);
