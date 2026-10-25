@@ -1,0 +1,332 @@
+{
+ "task": "modules-sdn-ap-osculating-opm-input-20261025",
+ "moduleSha256": "e8ee7050dfe790994b2e7578d807d7030cd8f0691c094305d90021d438a391be",
+ "note": "agreement with and consistency against JSC Vimpel data; neither is an accuracy (README, Osculating input)",
+ "inputs": {
+  "orbits.20260907.txt": "840cda6d499028c17a7e22228b1b22fe500078e996113ef5804c4fff7ba612fa",
+  "orbits.20260921.txt": "61d4ceb343daeb713e0d4c7be9ae756fec3b817f3b29af77f07cb371491f5f47",
+  "orbits.20261012.txt": "a4dd4c9a477191bb2d964cdbaa06695ef9539d6b8f39343d5ad8f084e61ef89d",
+  "ephem.20261012.rar": "41c411f9954c835e398892bfbb8871d22f1a6cff4b5b8732e96bd72fb22c01e9"
+ },
+ "derivation": {
+  "20260907": {
+   "sources": 13808,
+   "derived": 13807,
+   "refused": {
+    "ffm:invalid-earth-orientation": 1
+   },
+   "outSha256": "520965444ec91350698dfadcfa8f2cdea06ad700486c51327f4e57817cd538d6"
+  },
+  "20260921": {
+   "sources": 13889,
+   "derived": 13888,
+   "refused": {
+    "ffm:invalid-earth-orientation": 1
+   },
+   "outSha256": "c633e38c010a60ebff70f92cc3c3ae96fcf6bbe03c194c52e4b9216df5dec5ba"
+  },
+  "20261012": {
+   "sources": 13977,
+   "derived": 13976,
+   "refused": {
+    "ffm:invalid-earth-orientation": 1
+   },
+   "outSha256": "a524a25d004cc6c072fb8b5aceec2e9781cc60af901cf20fba2f47df7193bc06"
+  }
+ },
+ "prediction": {
+  "measure": "agreement with JSC Vimpel's own 7-day prediction",
+  "derived": "derived.20261012.opm",
+  "derivedSha256": "a524a25d004cc6c072fb8b5aceec2e9781cc60af901cf20fba2f47df7193bc06",
+  "truth": "ephemeris files of ephem.20261012",
+  "moduleSha256": "e8ee7050dfe790994b2e7578d807d7030cd8f0691c094305d90021d438a391be",
+  "scored": 6677,
+  "notScored": {
+   "no ephemeris": 7299
+  },
+  "summary": {
+   "GEO": {
+    "objects": 1843,
+    "day1": {
+     "sdnapMedianKm": 24.1,
+     "sdnapP90Km": 51.96,
+     "twoBodyMedianKm": 25.63,
+     "twoBodyP90Km": 55.13,
+     "sdnapCloser": 0.646
+    },
+    "day2": {
+     "sdnapMedianKm": 28.55,
+     "sdnapP90Km": 99.93,
+     "twoBodyMedianKm": 39.65,
+     "twoBodyP90Km": 110.9,
+     "sdnapCloser": 0.724
+    },
+    "day3": {
+     "sdnapMedianKm": 32.9,
+     "sdnapP90Km": 149.1,
+     "twoBodyMedianKm": 58.77,
+     "twoBodyP90Km": 164.3,
+     "sdnapCloser": 0.792
+    }
+   },
+   "MEO": {
+    "objects": 804,
+    "day1": {
+     "sdnapMedianKm": 41.79,
+     "sdnapP90Km": 181.6,
+     "twoBodyMedianKm": 51.3,
+     "twoBodyP90Km": 199,
+     "sdnapCloser": 0.76
+    },
+    "day2": {
+     "sdnapMedianKm": 82.99,
+     "sdnapP90Km": 362.4,
+     "twoBodyMedianKm": 105.7,
+     "twoBodyP90Km": 416.6,
+     "sdnapCloser": 0.821
+    },
+    "day3": {
+     "sdnapMedianKm": 128.1,
+     "sdnapP90Km": 552.6,
+     "twoBodyMedianKm": 164.6,
+     "twoBodyP90Km": 636.1,
+     "sdnapCloser": 0.823
+    }
+   },
+   "HEO": {
+    "objects": 3726,
+    "day1": {
+     "sdnapMedianKm": 9.412,
+     "sdnapP90Km": 53.27,
+     "twoBodyMedianKm": 52.23,
+     "twoBodyP90Km": 158.3,
+     "sdnapCloser": 0.957
+    },
+    "day2": {
+     "sdnapMedianKm": 13.47,
+     "sdnapP90Km": 94.83,
+     "twoBodyMedianKm": 145.4,
+     "twoBodyP90Km": 411.9,
+     "sdnapCloser": 0.979
+    },
+    "day3": {
+     "sdnapMedianKm": 18.03,
+     "sdnapP90Km": 159.3,
+     "twoBodyMedianKm": 244,
+     "twoBodyP90Km": 686,
+     "sdnapCloser": 0.978
+    }
+   },
+   "LEO": {
+    "objects": 8,
+    "day1": {
+     "sdnapMedianKm": 9.129,
+     "sdnapP90Km": 29.35,
+     "twoBodyMedianKm": 384.9,
+     "twoBodyP90Km": 744.7,
+     "sdnapCloser": 1
+    },
+    "day2": {
+     "sdnapMedianKm": 18.44,
+     "sdnapP90Km": 113.4,
+     "twoBodyMedianKm": 914.7,
+     "twoBodyP90Km": 2033,
+     "sdnapCloser": 1
+    },
+    "day3": {
+     "sdnapMedianKm": 27.04,
+     "sdnapP90Km": 343.6,
+     "twoBodyMedianKm": 1515,
+     "twoBodyP90Km": 3364,
+     "sdnapCloser": 1
+    }
+   },
+   "beyond GEO": {
+    "objects": 296,
+    "day1": {
+     "sdnapMedianKm": 39.18,
+     "sdnapP90Km": 167.1,
+     "twoBodyMedianKm": 40.91,
+     "twoBodyP90Km": 170.6,
+     "sdnapCloser": 0.632
+    },
+    "day2": {
+     "sdnapMedianKm": 63.24,
+     "sdnapP90Km": 304.1,
+     "twoBodyMedianKm": 75.82,
+     "twoBodyP90Km": 316.6,
+     "sdnapCloser": 0.716
+    },
+    "day3": {
+     "sdnapMedianKm": 93.04,
+     "sdnapP90Km": 438.2,
+     "twoBodyMedianKm": 116.3,
+     "twoBodyP90Km": 439.7,
+     "sdnapCloser": 0.73
+    }
+   }
+  }
+ },
+ "later": [
+  {
+   "measure": "consistency with JSC Vimpel's later determination",
+   "derived": "derived.20260907.opm",
+   "derivedSha256": "520965444ec91350698dfadcfa8f2cdea06ad700486c51327f4e57817cd538d6",
+   "truth": "orbits.20260921.txt",
+   "moduleSha256": "e8ee7050dfe790994b2e7578d807d7030cd8f0691c094305d90021d438a391be",
+   "scored": 6901,
+   "notScored": {
+    "not in the later table": 3
+   },
+   "summary": {
+    "GEO": {
+     "objects": 1136,
+     "horizonDaysMedian": 13.72,
+     "horizonDaysRange": [
+      12.4,
+      15.18
+     ],
+     "sdnapMedianKm": 167.6,
+     "sdnapP90Km": 1386,
+     "twoBodyMedianKm": 397.5,
+     "twoBodyP90Km": 1589,
+     "sdnapCloser": 0.847
+    },
+    "MEO": {
+     "objects": 924,
+     "horizonDaysMedian": 13.8,
+     "horizonDaysRange": [
+      12.47,
+      14.95
+     ],
+     "sdnapMedianKm": 1466,
+     "sdnapP90Km": 5647,
+     "twoBodyMedianKm": 1773,
+     "twoBodyP90Km": 6285,
+     "sdnapCloser": 0.76
+    },
+    "HEO": {
+     "objects": 4516,
+     "horizonDaysMedian": 13.87,
+     "horizonDaysRange": [
+      10.64,
+      15.3
+     ],
+     "sdnapMedianKm": 568,
+     "sdnapP90Km": 5468,
+     "twoBodyMedianKm": 1302,
+     "twoBodyP90Km": 6013,
+     "sdnapCloser": 0.73
+    },
+    "LEO": {
+     "objects": 8,
+     "horizonDaysMedian": 13.96,
+     "horizonDaysRange": [
+      13.9,
+      14.01
+     ],
+     "sdnapMedianKm": 419.6,
+     "sdnapP90Km": 8966,
+     "twoBodyMedianKm": 10610,
+     "twoBodyP90Km": 14400,
+     "sdnapCloser": 0.875
+    },
+    "beyond GEO": {
+     "objects": 317,
+     "horizonDaysMedian": 13.6,
+     "horizonDaysRange": [
+      12.18,
+      15.24
+     ],
+     "sdnapMedianKm": 1159,
+     "sdnapP90Km": 6693,
+     "twoBodyMedianKm": 1277,
+     "twoBodyP90Km": 6677,
+     "sdnapCloser": 0.779
+    }
+   }
+  },
+  {
+   "measure": "consistency with JSC Vimpel's later determination",
+   "derived": "derived.20260921.opm",
+   "derivedSha256": "c633e38c010a60ebff70f92cc3c3ae96fcf6bbe03c194c52e4b9216df5dec5ba",
+   "truth": "orbits.20261012.txt",
+   "moduleSha256": "e8ee7050dfe790994b2e7578d807d7030cd8f0691c094305d90021d438a391be",
+   "scored": 6941,
+   "notScored": {
+    "not in the later table": 3
+   },
+   "summary": {
+    "GEO": {
+     "objects": 1168,
+     "horizonDaysMedian": 20.72,
+     "horizonDaysRange": [
+      19.26,
+      22.11
+     ],
+     "sdnapMedianKm": 234.8,
+     "sdnapP90Km": 1985,
+     "twoBodyMedianKm": 550.6,
+     "twoBodyP90Km": 2209,
+     "sdnapCloser": 0.851
+    },
+    "MEO": {
+     "objects": 996,
+     "horizonDaysMedian": 20.74,
+     "horizonDaysRange": [
+      19.43,
+      22.11
+     ],
+     "sdnapMedianKm": 2341,
+     "sdnapP90Km": 11210,
+     "twoBodyMedianKm": 2796,
+     "twoBodyP90Km": 11990,
+     "sdnapCloser": 0.813
+    },
+    "HEO": {
+     "objects": 4483,
+     "horizonDaysMedian": 20.89,
+     "horizonDaysRange": [
+      16.01,
+      26.12
+     ],
+     "sdnapMedianKm": 1215,
+     "sdnapP90Km": 9746,
+     "twoBodyMedianKm": 2125,
+     "twoBodyP90Km": 10390,
+     "sdnapCloser": 0.701
+    },
+    "LEO": {
+     "objects": 6,
+     "horizonDaysMedian": 20.99,
+     "horizonDaysRange": [
+      20.94,
+      21.03
+     ],
+     "sdnapMedianKm": 549,
+     "sdnapP90Km": 7483,
+     "twoBodyMedianKm": 12430,
+     "twoBodyP90Km": 13950,
+     "sdnapCloser": 0.833
+    },
+    "beyond GEO": {
+     "objects": 288,
+     "horizonDaysMedian": 20.75,
+     "horizonDaysRange": [
+      19.33,
+      22.07
+     ],
+     "sdnapMedianKm": 1435,
+     "sdnapP90Km": 10270,
+     "twoBodyMedianKm": 1535,
+     "twoBodyP90Km": 10520,
+     "sdnapCloser": 0.75
+    }
+   }
+  }
+ ],
+ "sampling": {
+  "prediction": "every derived set with an ephemeris file",
+  "later": "every second derived set (stream index even; --shard K/24 for even K)"
+ }
+}
