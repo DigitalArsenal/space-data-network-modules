@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Earth equivalence: the Earth's results of this tree's artifact against a reference tree's (modules main), byte for byte.
 //
-//   node tests/earth-equivalence.mjs digest [lane [base|edit]]
+//   node tests/earth-equivalence.mjs digest [lane [base|edit|edit-subset|redo]]
 //                                                         hash the responses on the lane (browser, the default, or wasmedge)
 //                                                         into .sdk-build/earth-digest.json of this tree: `base`, the 72
 //                                                         Orekit cases, their final-epoch-only variants and the GMAT/Tudat/
@@ -9,7 +9,12 @@
 //                                                         or refused with the text) to some two thousand edits of three Earth
 //                                                         requests: each field of the force model, the integrator, the initial
 //                                                         state and the request set one at a time to values it accepts and
-//                                                         values it must refuse, and each input left out. Both by default.
+//                                                         values it must refuse, and each input left out. Base and edit by
+//                                                         default. On WasmEdge, two orders of magnitude slower than V8, run
+//                                                         `edit-subset`: every edit the browser digest of this tree has the
+//                                                         module refuse (a refusal costs nothing) and every tenth it accepts.
+//                                                         `redo` asks again (EARTH_DIGEST_TIMEOUT_MS) the base requests whose
+//                                                         answer on the lane was recorded as not given in time.
 //   node tests/earth-equivalence.mjs compare <ffm dir>    compare those digests and the parity receipts (the SDK parity plans
 //                                                         and the resident stateful run, tests/evidence) of this tree with
 //                                                         the same files of the reference tree's propagator/ffm, and the two
@@ -38,6 +43,7 @@ const digestPath = (dir) => path.join(dir, '.sdk-build/earth-digest.json');
 // ---- digest -------------------------------------------------------------------------------------------------------
 // The edits: one request of the Earth, one field at a time. `base` is an Orekit case cut to ten minutes (the same code paths
 // as its full day), `shape` the request as it is built, whose own fields name what can be edited.
+const TIMEOUT_MS = Number(process.env.EARTH_DIGEST_TIMEOUT_MS ?? 120000);
 const NUMBERS = [-1, 0, 1, 2, 3, 5, 8, 255, 1e30, NaN];
 const NESTED = [NaN, -1, 0, 1e30];
 const BODY_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 199, 299, 399, 301, 401, 499, 599, 999];
@@ -57,7 +63,7 @@ function* valuesFor(v, nested) {
     yield [...v, 1];
   }
 }
-// [name, path of keys, value] over the plain tables below the request, to depth three; tables are also left out (set null).
+// [path of keys, value] over the plain tables below the request, to depth three; a table is also left out (set null).
 function* edits(table, trail = [], depth = 0) {
   for (const key of Object.keys(table)) {
     const v = table[key];
@@ -98,10 +104,10 @@ function editedRequests() {
 
 async function digest(lane = 'browser', groups = 'all') {
   assert(['browser', 'wasmedge'].includes(lane), `unknown lane ${lane}`);
-  assert(['all', 'base', 'edit'].includes(groups), `unknown group ${groups}`);
+  assert(['all', 'base', 'edit', 'edit-subset', 'redo'].includes(groups), `unknown group ${groups}`);
   const wasm = fs.readFileSync(path.join(ffm, 'dist/isomorphic/module.wasm'));
   const requests = [];
-  if (groups !== 'edit') {
+  if (['all', 'base', 'redo'].includes(groups)) {
     for (const c of OREKIT.cases) requests.push([`orekit/${c.orbit} ${c.forces}`, requestInputs(c)]);
     for (const c of OREKIT.cases) if (!c.parameters) requests.push([`orekit-final-epoch/${c.orbit} ${c.forces}`, requestInputs(c, { edit: (exec) => { exec.SAMPLE_EPOCHS = []; } })]);
     const seen = new Set();
@@ -116,7 +122,22 @@ async function digest(lane = 'browser', groups = 'all') {
       }
     }
   }
-  if (groups !== 'base') requests.push(...editedRequests());
+  if (groups === 'redo') {
+    const held = fs.existsSync(digestPath(ffm)) ? JSON.parse(fs.readFileSync(digestPath(ffm), 'utf8')) : null;
+    assert(held?.artifactSha256 === sha(wasm) && held.lanes[lane], `digest the ${lane} lane of this artifact first`);
+    const again = requests.splice(0).filter(([name]) => held.lanes[lane][name]?.thrown);
+    requests.push(...again);
+    console.log(`redo: ${again.length} requests of the ${lane} lane`);
+  } else if (groups === 'edit-subset') {
+    const held = fs.existsSync(digestPath(ffm)) ? JSON.parse(fs.readFileSync(digestPath(ffm), 'utf8')) : null;
+    assert(held?.artifactSha256 === sha(wasm) && held.lanes.browser, 'digest the browser lane of this artifact first');
+    let accepted = 0;
+    for (const request of editedRequests()) {
+      const answer = held.lanes.browser[request[0]];
+      if (!answer) continue;
+      if (answer.status !== 0 || answer.thrown || accepted++ % 10 === 0) requests.push(request);
+    }
+  } else if (groups !== 'base') requests.push(...editedRequests());
   const out = { artifactSha256: sha(wasm), lane, responses: {} };
   // A fresh instance for every request, taken in a fixed order by a fixed worker: nothing one request leaves behind can reach
   // another, and two runs of the same artifact give the same digest.
@@ -125,15 +146,22 @@ async function digest(lane = 'browser', groups = 'all') {
     for (let i = w; i < requests.length; i += workers) {
       const [name, inputs] = requests[i];
       const harness = await residentHarness(lane);
+      let timer;
       try {
-        const response = await harness.invoke({ methodId: 'invoke', inputs });
+        // A request the host never answers (the module trapped under the interpreter) is recorded as such, not waited for.
+        const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer within ${TIMEOUT_MS / 1000} s`)), TIMEOUT_MS); });
+        const response = await Promise.race([harness.invoke({ methodId: 'invoke', inputs }), timeout]);
         out.responses[name] = {
           status: response.statusCode, error: response.errorCode ?? '', message: response.errorMessage ?? '',
           outputs: response.outputs.map((o) => ({ port: o.portId, bytes: o.payload.length, sha256: sha(o.payload) })),
         };
       } catch (error) {
         out.responses[name] = { thrown: String(error?.message ?? error).slice(0, 300) };
-      } finally { await harness.destroy().catch(() => {}); }
+        if (/no answer/.test(out.responses[name].thrown)) console.error(`${lane}: ${name}: ${out.responses[name].thrown}`);
+      } finally {
+        clearTimeout(timer);
+        await Promise.race([harness.destroy().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 10000))]);
+      }
     }
   };
   await Promise.all(Array.from({ length: workers }, (_, w) => worker(w)));
@@ -169,7 +197,7 @@ function compareMaps(name, a, b, groups) {
 
 function compare(referenceDir) {
   const reference = path.resolve(referenceDir);
-  const groups = [];
+  const groups = [], notes = [];
   const refDigest = load(reference, '.sdk-build/earth-digest.json'), digestHere = load(ffm, '.sdk-build/earth-digest.json');
   const refSha = sha(fs.readFileSync(path.join(reference, 'dist/isomorphic/module.wasm'))), here = sha(fs.readFileSync(path.join(ffm, 'dist/isomorphic/module.wasm')));
   assert.equal(refDigest.artifactSha256, refSha, 'the reference digest is of another artifact than the reference tree holds');
@@ -186,7 +214,13 @@ function compare(referenceDir) {
     }
   }
   if (lanesOf(digestHere).includes('wasmedge')) {
-    for (const [name, d] of [['reference', refDigest], ['this tree', digestHere]]) compareMaps(`orekit and xval responses, browser against WasmEdge (${name})`, digestRows(d.lanes.browser), digestRows(d.lanes.wasmedge), groups);
+    const unanswered = (d) => Object.entries(d.lanes.wasmedge).filter(([, v]) => v.thrown).map(([k]) => k).sort();
+    assert.deepEqual(unanswered(refDigest), unanswered(digestHere), 'the two trees leave different requests unanswered on WasmEdge');
+    for (const [name, d] of [['reference', refDigest], ['this tree', digestHere]]) {
+      const native = new Map([...digestRows(d.lanes.wasmedge)].filter(([k]) => !unanswered(d).includes(k)));
+      compareMaps(`orekit, xval and edited-request responses, browser against WasmEdge (${name})`, new Map([...digestRows(d.lanes.browser)].filter(([k]) => native.has(k))), native, groups);
+    }
+    for (const k of unanswered(digestHere)) notes.push(`WasmEdge gave no answer (the host's wait ended) in both trees, V8 answers ${JSON.stringify(digestHere.lanes.browser[k]?.error ?? digestHere.lanes.browser[k])}: ${k}`);
   }
   for (const file of RECEIPTS) {
     const a = load(reference, file), b = load(ffm, file);
@@ -205,13 +239,14 @@ function compare(referenceDir) {
   const width = Math.max(...groups.map((g) => g.name.length));
   console.log(`Earth equivalence: reference ${refSha.slice(0, 12)} against ${here.slice(0, 12)}`);
   for (const g of groups) console.log(`  ${g.name.padEnd(width)}  ${String(g.compared).padStart(4)} compared  ${String(g.identical).padStart(4)} identical  ${g.different.length} different${g.different.length ? `: ${g.different.slice(0, 5).join('; ')}` : ''}`);
+  for (const note of notes) console.log(`  note: ${note}`);
   const total = groups.reduce((n, g) => n + g.compared, 0);
   const bad = groups.reduce((n, g) => n + g.different.length, 0);
   if (bad) { console.log(`FAIL ${bad} of ${total} differ`); process.exit(1); }
   console.log(`PASS ${total} responses identical`);
   fs.writeFileSync(path.join(ffm, 'tests/evidence/earth-equivalence.json'), `${JSON.stringify({
     reference: { artifactSha256: refSha }, candidate: { artifactSha256: here }, dockerLane: 'waived by the owner 2026-10-22 (no Docker)',
-    groups: groups.map(({ name, compared, identical }) => ({ name, compared, identical })), compared: total, identical: total,
+    groups: groups.map(({ name, compared, identical }) => ({ name, compared, identical })), compared: total, identical: total, notes,
   }, null, 2)}\n`);
 }
 

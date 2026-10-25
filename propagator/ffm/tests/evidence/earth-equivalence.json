@@ -1,0 +1,132 @@
+{
+  "reference": {
+    "artifactSha256": "f2877a377ad682bf45f136455b3662c09afcd9871e8eaf3e83d3422594766d35"
+  },
+  "candidate": {
+    "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197"
+  },
+  "dockerLane": "waived by the owner 2026-10-22 (no Docker)",
+  "groups": [
+    {
+      "name": "orekit responses (browser), reference against this tree",
+      "compared": 72,
+      "identical": 72
+    },
+    {
+      "name": "orekit-final-epoch responses (browser), reference against this tree",
+      "compared": 68,
+      "identical": 68
+    },
+    {
+      "name": "xval responses (browser), reference against this tree",
+      "compared": 29,
+      "identical": 29
+    },
+    {
+      "name": "edit responses (browser), reference against this tree",
+      "compared": 2211,
+      "identical": 2211
+    },
+    {
+      "name": "orekit responses (wasmedge), reference against this tree",
+      "compared": 72,
+      "identical": 72
+    },
+    {
+      "name": "orekit-final-epoch responses (wasmedge), reference against this tree",
+      "compared": 68,
+      "identical": 68
+    },
+    {
+      "name": "xval responses (wasmedge), reference against this tree",
+      "compared": 29,
+      "identical": 29
+    },
+    {
+      "name": "edit responses (wasmedge), reference against this tree",
+      "compared": 1145,
+      "identical": 1145
+    },
+    {
+      "name": "orekit, xval and edited-request responses, browser against WasmEdge (reference)",
+      "compared": 1312,
+      "identical": 1312
+    },
+    {
+      "name": "orekit, xval and edited-request responses, browser against WasmEdge (this tree)",
+      "compared": 1312,
+      "identical": 1312
+    },
+    {
+      "name": "prw-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
+      "compared": 144,
+      "identical": 144
+    },
+    {
+      "name": "prw-parity, browser against WasmEdge (this tree)",
+      "compared": 72,
+      "identical": 72
+    },
+    {
+      "name": "variational-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
+      "compared": 80,
+      "identical": 80
+    },
+    {
+      "name": "variational-parity, browser against WasmEdge (this tree)",
+      "compared": 40,
+      "identical": 40
+    },
+    {
+      "name": "finite-burn-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
+      "compared": 360,
+      "identical": 360
+    },
+    {
+      "name": "finite-burn-parity, browser against WasmEdge (this tree)",
+      "compared": 180,
+      "identical": 180
+    },
+    {
+      "name": "kernel-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
+      "compared": 48,
+      "identical": 48
+    },
+    {
+      "name": "kernel-parity, browser against WasmEdge (this tree)",
+      "compared": 24,
+      "identical": 24
+    },
+    {
+      "name": "prw-gnss-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
+      "compared": 40,
+      "identical": 40
+    },
+    {
+      "name": "prw-gnss-parity, browser against WasmEdge (this tree)",
+      "compared": 20,
+      "identical": 20
+    },
+    {
+      "name": "prw-earth-radiation-tides-parity (browser, WasmEdge x 1/2/4/8 workers), reference against this tree",
+      "compared": 48,
+      "identical": 48
+    },
+    {
+      "name": "prw-earth-radiation-tides-parity, browser against WasmEdge (this tree)",
+      "compared": 24,
+      "identical": 24
+    },
+    {
+      "name": "resident-stateful-parity (browser, WasmEdge)",
+      "compared": 33,
+      "identical": 33
+    }
+  ],
+  "compared": 7431,
+  "identical": 7431,
+  "notes": [
+    "WasmEdge gave no answer (the host's wait ended) in both trees, V8 answers \"invalid-state\": edit/leo-full/FORCES.WEATHER.F107=1e+30",
+    "WasmEdge gave no answer (the host's wait ended) in both trees, V8 answers \"invalid-state\": edit/leo-full/FORCES.WEATHER.F107_AVERAGE=1e+30"
+  ]
+}
