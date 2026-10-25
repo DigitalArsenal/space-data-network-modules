@@ -786,7 +786,9 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
         kick.epoch=timesys::ttToTdb(tt.jdTt());
         if(impulse->VECTOR_BASIS()!=prwSteeringBasis::INTEGRATION_FRAME&&impulse->VECTOR_BASIS()!=prwSteeringBasis::RTN_AXES)return prwError(error,"unsupported-impulse-frame: Impulses support integration-frame or RTN components.");
         kick.inRTN=impulse->VECTOR_BASIS()==prwSteeringBasis::RTN_AXES;if(!kick.inRTN)kick.deltaV=toGcrf(out,kick.deltaV);
-        out.impulses.push_back(kick);
+        // At the initial epoch (to the TDB date's resolution): see Execution::startImpulses.
+        const bool atStart=!out.massDynamics&&elapsedSeconds(out.initialTT,tt)>=0&&kick.epoch<=out.initial.epoch;
+        (atStart?out.startImpulses:out.impulses).push_back(kick);
     }
     if(in->FINITE_BURNS()) {
         if(in->FINITE_BURNS()->size()>Integrator::MaxFiniteBurns)return prwError(error,"invalid-burn: At most 16 burns are supported.");
@@ -796,10 +798,10 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
             out.burns.push_back(std::move(burn));
         }
     }
-    if(center!=399&&(in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.impulses.empty()||!out.burns.empty()||!out.parameters.empty()||out.noise.enabled))
+    if(center!=399&&(in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.impulses.empty()||!out.startImpulses.empty()||!out.burns.empty()||!out.parameters.empty()||out.noise.enabled))
         return prwError(error,"unsupported-configuration: A request about the Moon or Mars propagates the state, its samples and its events; the transition matrix, covariance, impulses, finite burns, dynamic parameters and process noise are the Earth's.");
-    out.variational=in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.samples.empty()||!out.impulses.empty();
-    out.stateOnly=!in->INCLUDE_STM()&&!out.covariance&&!out.massCovariance&&!out.massDynamics&&out.impulses.empty()&&out.burns.empty()&&out.parameters.empty();
+    out.variational=in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.samples.empty()||!out.impulses.empty()||!out.startImpulses.empty();
+    out.stateOnly=!in->INCLUDE_STM()&&!out.covariance&&!out.massCovariance&&!out.massDynamics&&out.impulses.empty()&&out.startImpulses.empty()&&out.burns.empty()&&out.parameters.empty();
     return parseEvents(in,out,error);
 }
 bool preflightKernel(const Execution& in,const timesys::Instant& target,std::string& error) {

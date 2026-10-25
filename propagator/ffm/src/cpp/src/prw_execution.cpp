@@ -95,6 +95,30 @@ bool finish(const Execution& execution,const PRWExecutionRequest* request,const 
     if(!std::isfinite(state.POSITION->X)||!std::isfinite(state.POSITION->Y)||!std::isfinite(state.POSITION->Z)||!std::isfinite(state.VELOCITY->X)||!std::isfinite(state.VELOCITY->Y)||!std::isfinite(state.VELOCITY->Z))return prwError(error,"invoke-failed: Integration returned a nonfinite state.");
     return true;
 }
+// The impulses at the arc's initial epoch, applied to the cursor's initial state:
+// the velocity, the transition matrix (phi = J phi) and the covariance (P = J P J^T),
+// J the kick's Jacobian on the six state components and the identity on the parameters.
+bool applyStartImpulses(const Execution& execution,Cursor& c,std::string& error) {
+    const unsigned n=6+unsigned(execution.parameters.size());
+    for(const auto& kick:execution.startImpulses) {
+        if(kick.inRTN&&c.state.position.cross(c.state.velocity).magnitude()==0)return prwError(error,"invoke-failed: Singular RTN impulse frame.");
+        const Mat6 jump=ForceModel::ImpulsiveManeuverJacobian(c.state.position,c.state.velocity,kick);
+        c.state.velocity=ForceModel::ImpulsiveManeuver(c.state.velocity,c.state.position,kick);
+        const auto jacobian=[&](unsigned i,unsigned k){return i<6?(k<6?jump.m[i][k]:0.0):(i==k?1.0:0.0);};
+        const auto left=[&](std::vector<double>& m,unsigned dim) {
+            std::vector<double> out(dim*dim,0.0);
+            for(unsigned i=0;i<dim;++i)for(unsigned k=0;k<dim;++k){const double x=jacobian(i,k);if(x==0)continue;for(unsigned j=0;j<dim;++j)out[i*dim+j]+=x*m[k*dim+j];}
+            m.swap(out);
+        };
+        const auto transpose=[](std::vector<double>& m,unsigned dim){for(unsigned i=0;i<dim;++i)for(unsigned j=i+1;j<dim;++j)std::swap(m[i*dim+j],m[j*dim+i]);};
+        left(c.phi,n);
+        if(!c.p.empty()) {
+            const unsigned dim=c.p.size()==36?6u:n;
+            left(c.p,dim);transpose(c.p,dim);left(c.p,dim);transpose(c.p,dim);   // J P J^T
+        }
+    }
+    return true;
+}
 bool evaluateInOrder(Execution& execution,const PRWExecutionRequest* request,PRWExecutionResultT& result,std::string& error) {
     // Index 0 is the target epoch, k > 0 the k-th sample.
     std::vector<TTEpoch> epochs{execution.targetTT};
@@ -111,6 +135,10 @@ bool evaluateInOrder(Execution& execution,const PRWExecutionRequest* request,PRW
         Cursor c;c.state=execution.initial;c.tt=execution.initialTT;
         c.phi.assign(n*n,0.0);for(unsigned i=0;i<n;++i)c.phi[i*n+i]=1;
         if(execution.covariance)c.p=execution.parameters.empty()?std::vector<double>(&execution.p.m[0][0],&execution.p.m[0][0]+36):execution.pParameters;
+        if(!group->empty()&&!execution.startImpulses.empty()) {
+            if(group==&backward)return prwError(error,"invoke-failed: Backward propagation with scheduled impulses is unsupported.");
+            if(!applyStartImpulses(execution,c,error))return false;
+        }
         for(const auto& entry:*group) {
             const TTEpoch& epochTT=epochs[entry.second];
             if(!preflightKernel(execution,epochTT.instant(),error))return false;

@@ -39,6 +39,12 @@ struct Execution {
     TTEpoch initialTT, targetTT;
     std::vector<TTEpoch> samplesTT;
     std::vector<ForceModel::ImpulsiveManeuverDef> impulses;
+    // Impulses at the arc's initial epoch. The variational spans (lib/variational.cpp)
+    // skip a kick at their own start, because the span before it applied it at its
+    // end; the first span has none before it, so the cursor applies these to the
+    // initial state itself (applyStartImpulses). Finite-burn arcs keep theirs in
+    // `impulses`: that integrator runs the whole arc from the initial state.
+    std::vector<ForceModel::ImpulsiveManeuverDef> startImpulses;
     std::vector<Integrator::FiniteBurn> burns;
     Integrator::ProcessNoise noise;
     // The request's axes are EME2000 (mean equator and equinox of J2000.0):

@@ -243,7 +243,7 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
             c.throttle[k]=1;for(const auto& p:b.throttle)if(p.seconds<=t)c.throttle[k]=p.throttle;else break;
         }
         while(kick<kicks.size()&&(kicks[kick].epoch-initial.epoch)*86400<=t){const auto& b=kicks[kick++];
-            if(b.executed||b.epoch<=initial.epoch)continue;
+            if(b.executed||b.epoch<initial.epoch)continue;   // a kick at the initial epoch applies (this integrator runs the whole arc from it)
             Vec3 r(y[0],y[1],y[2]),v(y[3],y[4],y[5]);
             if(b.inRTN&&r.cross(v).magnitude()==0)return fail("Singular RTN impulse frame.");
             const Mat6 jump=ForceModel::ImpulsiveManeuverJacobian(r,v,b);Matrix7 m=identity();

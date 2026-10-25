@@ -168,6 +168,8 @@ VariationalResult scheduled(const StateVector& initial,double dt,const Integrato
     };
     for(const auto& b:sorted) {
         const double when=(b.epoch-initial.epoch)*86400.0;
+        // A kick at this span's own start belongs to the span before it (applied at its end), or, for the
+        // first span, to the caller (Execution::startImpulses): applying it here would apply it twice.
         if(b.executed||when<=0||when>dt)continue;
         if(!advance(when))return out;
         if(analytic) {
