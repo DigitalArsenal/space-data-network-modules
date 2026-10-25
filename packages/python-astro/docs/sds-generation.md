@@ -68,15 +68,11 @@ recorded. The current SDK and SGP4's legacy schema both define
 `orbpro.propagator.StateVector` with incompatible layouts. They are generated
 into separate namespaces; neither is overwritten or silently aliased.
 
-## Missing FFM schema source
+## FFM's request schema
 
-The name `orbpro.ffm.InvokeRequest` in FFM's manifest is not backed by an
-existing `.fbs` in the module or SDK. The current compiled source
-`propagator/ffm/src/cpp/src/plugin_entrypoints.cpp` calls `invoke_json_request`
-in `plugin_runtime.cpp`; JS SDK tests and fixtures send that JSON payload inside
-PIV. Thus no `orbpro.ffm.InvokeRequest` Python class is invented. FFM's Python
-wrapper mirrors the actual existing artifact contract. Migrating that payload
-to a ratified typed schema is separate upstream work.
+FFM's manifest no longer names `orbpro.ffm.InvokeRequest`; its `invoke` method takes the typed
+`$PRW` record (`PRWExecutionRequest`), and the JSON entry point that once backed the old name is
+removed from the source. No `orbpro.ffm.InvokeRequest` Python class is invented.
 
 `PropagatorTrajectorySegments_generated.h` also has no corresponding source in
 this checkout; its additional FFM trajectory methods are not claimed as Python

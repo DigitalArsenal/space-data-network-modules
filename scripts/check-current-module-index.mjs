@@ -21,6 +21,7 @@ assert.equal(checked.moduleCount, current.moduleCount, "module count drifted");
 assert.equal(checked.parityScopeModuleCount, current.parityScopeModuleCount, "parity module count drifted");
 assert.equal(checked.isomorphicWasmCount, current.isomorphicWasmCount, "isomorphic artifact count drifted");
 assert.deepEqual(checked.missingIsomorphicWasm, current.missingIsomorphicWasm, "missing isomorphic artifact list drifted");
+assert.deepEqual(checked.buildsOnDemand, current.buildsOnDemand, "build-on-demand module list drifted");
 assert.deepEqual(checked.parityScopeMissingCxx, current.parityScopeMissingCxx, "parity C/C++ gap list drifted");
 assert.deepEqual(checked.parityScopeTargetGaps, current.parityScopeTargetGaps, "parity runtime target gap list drifted");
 
@@ -28,6 +29,12 @@ assert.ok(checked.moduleCount >= 31, "current module inventory is unexpectedly s
 assert.ok(checked.parityScopeModuleCount >= 14, "parity-scope module inventory is unexpectedly small");
 assert.ok(checked.isomorphicWasmCount >= 29, "isomorphic module inventory is unexpectedly small");
 assert.deepEqual(checked.missingIsomorphicWasm.sort(), []);
+// A module with no committed artifact builds one: it, or the module it sits under, has a build script.
+for (const modulePath of checked.buildsOnDemand) {
+  let directory = path.join(repoRoot, modulePath);
+  while (directory.startsWith(repoRoot) && directory !== repoRoot && !fs.existsSync(path.join(directory, "build.mjs"))) directory = path.dirname(directory);
+  assert.ok(directory !== repoRoot, `${modulePath} has no committed artifact and no build.mjs to make one`);
+}
 assert.deepEqual(checked.parityScopeMissingCxx.sort(), []);
 assert.deepEqual(
   checked.parityScopeTargetGaps.sort(),

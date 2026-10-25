@@ -1,12 +1,17 @@
 {
-  "generatedAt": "2026-10-17T04:18:30.000Z",
-  "moduleCount": 126,
-  "parityScopeModuleCount": 50,
-  "isomorphicWasmCount": 125,
-  "missingIsomorphicWasm": [
-    "maneuver/star-search"
+  "generatedAt": "2026-10-25T13:41:03.169Z",
+  "moduleCount": 149,
+  "parityScopeModuleCount": 59,
+  "isomorphicWasmCount": 144,
+  "missingIsomorphicWasm": [],
+  "buildsOnDemand": [
+    "analysis/milky-way-model",
+    "data-source/dust-map-3d/host-adapter",
+    "data-source/dust-map-3d",
+    "data-source/gaia-octree/cones",
+    "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 117,
+  "browserWasmEdgeTargetCount": 134,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -27,14 +32,19 @@
     "analysis/launch-trajectory",
     "analysis/maneuver-detection",
     "analysis/maneuver",
+    "analysis/milky-way-model",
+    "analysis/mission-screening",
     "analysis/observation-simulator",
     "analysis/od/fit-pipeline",
     "analysis/od",
+    "analysis/optical-astrometry",
     "analysis/parameters",
     "analysis/private-screening",
     "analysis/reentry",
+    "analysis/reference-points",
     "analysis/reference-states",
     "analysis/rf-phased-array",
+    "analysis/rpo-history",
     "analysis/science-http",
     "analysis/targeting",
     "analysis/vcm-adapter",
@@ -43,7 +53,9 @@
     "files/geotiff",
     "files/misb-klv",
     "files/orbit-products",
+    "files/rinex",
     "foundation/attitude-math",
+    "foundation/cosmology",
     "foundation/frames",
     "foundation/http-respond",
     "foundation/http-route",
@@ -55,8 +67,10 @@
     "propagator/cislunar",
     "propagator/events",
     "propagator/ffm",
+    "propagator/ffm/tests/reference",
     "propagator/hypersonics",
     "propagator/keplerian-reference",
+    "propagator/sdn-ap",
     "propagator/sgp4-xp",
     "propagator/sgp4",
     "propagator/solar-system-bodies"
@@ -78,6 +92,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -127,6 +142,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -170,6 +186,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -228,6 +245,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -286,6 +304,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -558,6 +577,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -580,16 +600,19 @@
     {
       "modulePath": "analysis/density-calibration",
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
-      "name": "Thermospheric density calibration (JB2008 temperature corrections)",
+      "name": "Thermospheric density calibration",
       "pluginFamily": "analysis",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "methodIds": [
         "calibrate",
         "calibrate_decay",
+        "calibrate_log_density",
         "decay",
         "drag_work",
         "energy",
-        "evaluate"
+        "evaluate",
+        "fit_energy_arcs",
+        "prepare_operator_states"
       ],
       "runtimeTargets": [
         "browser",
@@ -598,12 +621,13 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 7,
+      "testFileCount": 8,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -616,6 +640,7 @@
         "tests/density_calibration.test.mjs",
         "tests/energy.test.mjs",
         "tests/nrlmsise.test.mjs",
+        "tests/open-dca.e2e.mjs",
         "tests/parity.mjs"
       ]
     },
@@ -635,6 +660,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -669,6 +695,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -694,12 +721,14 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "methodIds": [
         "evaluate_teag",
         "fit_batch",
         "initial_orbit",
+        "relative_state",
         "run_estimation",
+        "run_relative_navigation",
         "simulate_tracking"
       ],
       "runtimeTargets": [
@@ -709,12 +738,13 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 9,
+      "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 52,
+      "testFileCount": 57,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -722,6 +752,7 @@
         "src/espf.cpp",
         "src/estimation.cpp",
         "src/module.cpp",
+        "src/relative_nav.cpp",
         "tests/depth_validation.cpp",
         "tests/native_conformance.cpp",
         "tests/sequential_validation.cpp",
@@ -768,6 +799,11 @@
         "tests/native_conformance.cpp",
         "tests/parity.mjs",
         "tests/refresh-evidence.mjs",
+        "tests/relative-nav-recovery.e2e.mjs",
+        "tests/relnav-parity.mjs",
+        "tests/relnav-reference.mjs",
+        "tests/relnav-scoring.mjs",
+        "tests/relnav-truth.mjs",
         "tests/schema-compat.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/sequential.test.mjs",
@@ -788,7 +824,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.7.0",
+      "version": "0.10.0",
       "methodIds": [
         "accumulate",
         "attach_covariance",
@@ -804,10 +840,12 @@
         "fit_elements",
         "map_covariance",
         "noise_responses",
+        "object_covariance",
         "pair_statistics",
         "scale_model",
         "screening_cases",
-        "screening_evaluation"
+        "screening_evaluation",
+        "source_covariance"
       ],
       "runtimeTargets": [
         "browser",
@@ -816,20 +854,24 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 7,
+      "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 12,
+      "testFileCount": 14,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
+        "scripts/source-covariance-oracle.cpp",
         "src/common_epoch.cpp",
         "src/covariance_realism.cpp",
         "src/erm_bridge.cpp",
         "src/fit_elements.cpp",
         "src/gp_error_model.cpp",
+        "src/object_covariance.cpp",
+        "src/source_covariance.cpp",
         "src/source_products.cpp",
         "src/state_transition.cpp"
       ],
@@ -841,8 +883,10 @@
         "tests/fit-reference.py",
         "tests/fit_elements.test.mjs",
         "tests/gp_error_model.test.mjs",
+        "tests/object_covariance.test.mjs",
         "tests/parity.mjs",
         "tests/products-fixtures.mjs",
+        "tests/sdk_compat.test.mjs",
         "tests/source_products.test.mjs",
         "tests/stm-reference.json",
         "tests/stm-reference.py"
@@ -865,6 +909,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -916,6 +961,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -949,6 +995,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -981,6 +1028,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1007,7 +1055,7 @@
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
       "name": "Maneuver detection",
       "pluginFamily": "analysis",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "methodIds": [
         "compare_ephemerides",
         "detect_maneuvers",
@@ -1020,12 +1068,13 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 11,
+      "cxxSourceFileCount": 12,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -1033,6 +1082,7 @@
         "src/compare.cpp",
         "src/crossing.cpp",
         "src/glr.cpp",
+        "src/impulse.cpp",
         "src/maneuver_detection.cpp",
         "src/mde.cpp",
         "src/mnv.cpp",
@@ -1042,6 +1092,8 @@
         "src/trajectory.cpp"
       ],
       "testFiles": [
+        "tests/dv-mc-truth.json",
+        "tests/dv-uncertainty.e2e.mjs",
         "tests/fixtures.mjs",
         "tests/maneuver_detection.test.mjs",
         "tests/parity.mjs"
@@ -1064,6 +1116,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1121,6 +1174,96 @@
       ]
     },
     {
+      "modulePath": "analysis/milky-way-model",
+      "pluginId": "com.digitalarsenal.analysis.milky-way-model",
+      "name": "Milky Way volumetric model",
+      "pluginFamily": "analysis",
+      "version": "0.5.1",
+      "methodIds": [
+        "arm_curves",
+        "bake",
+        "bake_legacy",
+        "calibrate",
+        "extinction",
+        "face_on_columns",
+        "face_on_metrics",
+        "hii_population",
+        "load_dust_map",
+        "oracle_metrics",
+        "ridge_metrics",
+        "sample_stars",
+        "verify_legacy"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "buildsOnDemand": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 12,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/module.cpp",
+        "tests/literature-hypotheses.cpp"
+      ],
+      "testFiles": [
+        "tests/HYPOTHESES.md",
+        "tests/ORACLES.md",
+        "tests/PHYSICS.md",
+        "tests/appearance-fit-20261022.json",
+        "tests/band-vs-gaia.e2e.mjs",
+        "tests/browser-e2e.mjs",
+        "tests/dust-provider.mjs",
+        "tests/hypotheses-run3.csv",
+        "tests/literature-hypotheses.cpp",
+        "tests/literature-hypotheses.hpp",
+        "tests/oracle-sources.json",
+        "tests/reid2019-oracle.json"
+      ]
+    },
+    {
+      "modulePath": "analysis/mission-screening",
+      "pluginId": "com.digitalarsenal.analysis.mission-screening",
+      "name": "Ballistic Mission Screening Budgets",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "screen_grid"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/VERIFICATION.md",
+        "tests/mission-screening.e2e.test.mjs",
+        "tests/wasmedge-signing-host.mjs"
+      ]
+    },
+    {
       "modulePath": "analysis/observation-simulator",
       "pluginId": "com.digitalarsenal.analysis.observation-simulator",
       "name": "Observation simulator",
@@ -1136,6 +1279,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1169,6 +1313,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1189,9 +1334,10 @@
       "pluginId": "orbit-determination",
       "name": "Orbit Determination Plugin",
       "pluginFamily": "orbit_determination",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
-        "fit"
+        "fit",
+        "fit_ffm"
       ],
       "runtimeTargets": [
         "browser",
@@ -1201,18 +1347,17 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 28,
+      "cxxSourceFileCount": 30,
       "cSourceFileCount": 0,
-      "testFileCount": 64,
+      "testFileCount": 66,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "fit-pipeline/src/fit_pipeline.cpp",
-        "src/cpp/guest-link/od_batch_fit_entry.cpp",
-        "src/cpp/guest-link/od_fit_entry.cpp",
         "src/cpp/src/direct_initialize.cpp",
         "src/cpp/src/frame_transform.cpp",
         "src/cpp/src/meme_parser.cpp",
@@ -1224,6 +1369,9 @@
         "src/cpp/src/oem_fb_reader.cpp",
         "src/cpp/src/oem_parser.cpp",
         "src/cpp/src/omm_fb_builder.cpp",
+        "src/cpp/src/operator_fit.cpp",
+        "src/cpp/src/operator_mnv.cpp",
+        "src/cpp/src/operator_records.cpp",
         "src/cpp/src/orbit_determination.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
@@ -1237,6 +1385,7 @@
         "src/cpp/tests/test_od.cpp",
         "src/cpp/tests/test_oem_fb_parity.cpp",
         "src/cpp/tests/test_supgp.cpp",
+        "tests/fit_convergence.cpp",
         "tests/gen_oem_fixtures.cpp"
       ],
       "testFiles": [
@@ -1292,6 +1441,8 @@
         "tests/data/supgp-reference/starlink/meme/MEME_67857_STARLINK-36828_1340150_Operational_1463017860_UNCLASSIFIED.txt",
         "tests/data/supgp-reference/starlink/meme/MEME_67858_STARLINK-36837_1340140_Operational_1463017260_UNCLASSIFIED.txt",
         "tests/data/supgp-reference/starlink/meme/MEME_67859_STARLINK-36393_1340146_Operational_1463017620_UNCLASSIFIED.txt",
+        "tests/fit_convergence.cpp",
+        "tests/fit_convergence.sh",
         "tests/fit_harness.mjs",
         "tests/fixtures/hosted-runtime/od.single-plugin.flow.json",
         "tests/fixtures/request.fit.meme",
@@ -1304,6 +1455,51 @@
         "tests/wasi_release.test.mjs",
         "tests/wasi_threads_flow_harness.mjs",
         "tests/wasi_threads_harness.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/optical-astrometry",
+      "pluginId": "com.digitalarsenal.analysis.optical-astrometry",
+      "name": "Optical astrometry",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "reduce"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 14,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/base.cpp",
+        "src/calibrate.cpp",
+        "src/catalog.cpp",
+        "src/detect.cpp",
+        "src/ephem.cpp",
+        "src/image.cpp",
+        "src/locate.cpp",
+        "src/module.cpp",
+        "src/od.cpp",
+        "src/overlay.cpp",
+        "src/records.cpp",
+        "src/reduce.cpp",
+        "src/solve.cpp",
+        "src/wcs.cpp"
+      ],
+      "testFiles": [
+        "tests/s2a-video-od.e2e.mjs"
       ]
     },
     {
@@ -1323,6 +1519,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1360,6 +1557,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1392,6 +1590,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1406,6 +1605,38 @@
       "testFiles": [
         "tests/behavior.test.mjs",
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/reference-points",
+      "pluginId": "com.digitalarsenal.analysis.reference-points",
+      "name": "Astronomical reference geometry",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "describe"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/reference_points_module.cpp"
+      ],
+      "testFiles": [
+        "tests/reference_points.e2e.test.mjs"
       ]
     },
     {
@@ -1425,6 +1656,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1457,6 +1689,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1470,6 +1703,50 @@
       ],
       "testFiles": [
         "tests/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/rpo-history",
+      "pluginId": "com.digitalarsenal.analysis.rpo-history",
+      "name": "RPO history",
+      "pluginFamily": "analysis",
+      "version": "0.2.0",
+      "methodIds": [
+        "characterize",
+        "inspect"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 10,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/common.cpp",
+        "src/elements.cpp",
+        "src/encode.cpp",
+        "src/error_model.cpp",
+        "src/history.cpp",
+        "src/inspect.cpp",
+        "src/provenance.cpp",
+        "src/rpo_history.cpp",
+        "src/sets.cpp",
+        "src/uncertainty.cpp"
+      ],
+      "testFiles": [
+        "tests/cosmos2612-iceye-x36.e2e.mjs",
+        "tests/figures.mjs",
+        "tests/inspect.e2e.mjs"
       ]
     },
     {
@@ -1489,6 +1766,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1520,6 +1798,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1562,6 +1841,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1597,6 +1877,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1617,6 +1898,46 @@
       ]
     },
     {
+      "modulePath": "data-source/body-imagery-tiles",
+      "pluginId": "com.digitalarsenal.data-source.body-imagery-tiles",
+      "name": "Body Imagery Tiles (high-definition mosaics)",
+      "pluginFamily": "data_source",
+      "version": "0.5.0",
+      "methodIds": [
+        "tiles_direct",
+        "tiles_plan",
+        "tiles_reduce",
+        "tiles_window"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/body_imagery_tiles.cpp"
+      ],
+      "testFiles": [
+        "tests/big.e2e.test.mjs",
+        "tests/features.json",
+        "tests/hd.e2e.test.mjs",
+        "tests/hd.parity.mjs",
+        "tests/small.e2e.test.mjs",
+        "tests/themis.e2e.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/body-imagery/host-adapter",
       "pluginId": "com.digitalarsenal.data-source.body-imagery-host",
       "name": "Body imagery host adapter",
@@ -1633,6 +1954,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1665,6 +1987,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1699,6 +2022,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1733,6 +2057,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1771,6 +2096,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1814,6 +2140,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1856,6 +2183,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1890,6 +2218,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1930,6 +2259,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1969,6 +2299,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2004,6 +2335,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -2061,6 +2393,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2088,7 +2421,7 @@
       "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
       "name": "Notable deep-space spacecraft (Horizons)",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "advance",
         "build_oem",
@@ -2103,22 +2436,94 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 8,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/deep_space_spacecraft.cpp",
+        "tests/fixtures/classifier_cases.cpp"
+      ],
+      "testFiles": [
+        "tests/composed-flow.e2e.test.mjs",
+        "tests/fixtures/classifier_cases.cpp",
+        "tests/fixtures/horizons/cassette.json.gz",
+        "tests/fixtures/horizons/events-table.json",
+        "tests/fixtures/horizons/reference.json",
+        "tests/fixtures/horizons/regime-cassette.json.gz",
+        "tests/horizons-stages.mjs",
+        "tests/notable-trajectories.e2e.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/dust-map-3d/host-adapter",
+      "pluginId": "com.digitalarsenal.data-source.dust-map-3d-host",
+      "name": "3D dust map host adapter",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "prepare_scheduled",
+        "receipt_scheduled"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "buildsOnDemand": true,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 0,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "src/deep_space_spacecraft.cpp"
+        "src/adapter.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/dust-map-3d",
+      "pluginId": "com.digitalarsenal.data-source.dust-map-3d",
+      "name": "Local 3D interstellar dust (Edenhofer et al. 2024)",
+      "pluginFamily": "data_source",
+      "version": "0.2.1",
+      "methodIds": [
+        "advance_dust",
+        "build_dust",
+        "plan_dust"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "buildsOnDemand": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "host-adapter/src/adapter.cpp",
+        "src/dust_map_3d.cpp"
       ],
       "testFiles": [
-        "tests/fixtures/horizons/cassette.json.gz",
-        "tests/fixtures/horizons/events-table.json",
-        "tests/fixtures/horizons/reference.json",
-        "tests/notable-trajectories.e2e.test.mjs"
+        "tests/offline-retrieval.mjs",
+        "tests/typed-retrieval.e2e.mjs"
       ]
     },
     {
@@ -2139,6 +2544,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2180,6 +2586,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2214,6 +2621,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [],
       "cxxSourceFileCount": 0,
       "cSourceFileCount": 0,
@@ -2243,6 +2651,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2268,6 +2677,74 @@
       ]
     },
     {
+      "modulePath": "data-source/gaia-octree/cones",
+      "pluginId": "com.digitalarsenal.data-source.gaia-octree-cones",
+      "name": "Gaia DR3 cones",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "cone_rows",
+        "cone_tiles"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "buildsOnDemand": true,
+      "sourceLanguages": [],
+      "cxxSourceFileCount": 0,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/gaia-octree",
+      "pluginId": "com.digitalarsenal.data-source.gaia-octree",
+      "name": "Gaia DR3 over SDN",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "prepare_scheduled",
+        "retrieve_gaia"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "buildsOnDemand": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 3,
+      "cSourceFileCount": 0,
+      "testFileCount": 8,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/cones.cpp",
+        "src/gaia_octree.cpp",
+        "src/retrieve.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/s2a-cones.json.gz",
+        "tests/fixtures/simbad-named-stars.json",
+        "tests/gaia-octree.e2e.test.mjs",
+        "tests/lib/hips.mjs",
+        "tests/lib/provider-node.mjs",
+        "tests/lib/records.mjs",
+        "tests/lib/sdn-lanes.mjs",
+        "tests/lib/tap-proxy.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/geonames-ingest",
       "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
       "name": "Gazetteer Named Place Ingest Nodes",
@@ -2286,6 +2763,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2322,6 +2800,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -2366,6 +2845,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2399,6 +2879,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2447,6 +2928,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2484,6 +2966,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2518,6 +3001,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2554,6 +3038,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2590,6 +3075,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -2648,6 +3134,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2683,6 +3170,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2721,6 +3209,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2758,6 +3247,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2788,6 +3278,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2826,6 +3317,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2856,6 +3348,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2892,6 +3385,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2912,6 +3406,39 @@
       ]
     },
     {
+      "modulePath": "data-source/moon-imagery",
+      "pluginId": "com.digitalarsenal.data-source.moon-imagery",
+      "name": "Moon Imagery (LRO LROC WAC) Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "wac_plan",
+        "wac_tile"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/moon_imagery_module.cpp"
+      ],
+      "testFiles": [
+        "tests/wac-walk.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/naif-kernels/host-adapter",
       "pluginId": "com.digitalarsenal.data-source.naif-kernels-host",
       "name": "NAIF kernels host adapter",
@@ -2928,6 +3455,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2960,6 +3488,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -2997,6 +3526,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3037,6 +3567,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3079,6 +3610,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3112,6 +3644,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3148,6 +3681,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3178,6 +3712,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3198,6 +3733,42 @@
       ]
     },
     {
+      "modulePath": "data-source/operator-states-public",
+      "pluginId": "com.digitalarsenal.data-source.operator-states-public",
+      "name": "Private public-operator input for open DCA",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_operator",
+        "plan_operator",
+        "publish_correction",
+        "restore_response",
+        "route_request",
+        "wrap_eop",
+        "wrap_weather"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/operator_states.cpp"
+      ],
+      "testFiles": []
+    },
+    {
       "modulePath": "data-source/osm-source",
       "pluginId": "com.digitalarsenal.data-source.osm-source",
       "name": "OSM Context Epoch Source",
@@ -3213,6 +3784,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3245,6 +3817,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3277,6 +3850,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3309,6 +3883,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3344,6 +3919,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3382,6 +3958,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3400,6 +3977,43 @@
       ]
     },
     {
+      "modulePath": "data-source/space-weather",
+      "pluginId": "com.digitalarsenal.data-source.space-weather",
+      "name": "Licensed space weather",
+      "pluginFamily": "data_source",
+      "version": "0.2.0",
+      "methodIds": [
+        "parse_weather",
+        "plan_weather"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/space_weather.cpp"
+      ],
+      "testFiles": [
+        "tests/VERIFICATION.md",
+        "tests/local-node.mjs",
+        "tests/runtime-parity.mjs",
+        "tests/source-oracle.mjs",
+        "tests/space-weather.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/spacemapper-aoe-source",
       "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
       "name": "SpaceMapper AOE Source",
@@ -3415,6 +4029,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3449,6 +4064,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3484,6 +4100,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3543,6 +4160,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -3584,6 +4202,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3602,13 +4221,15 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
       "name": "Terrain Tile Ingest Scheduler Nodes",
       "pluginFamily": "data_source",
-      "version": "0.3.0",
+      "version": "0.9.0",
       "methodIds": [
         "announce_files",
+        "body_plan",
         "granule_plan",
+        "import_files",
+        "import_plan",
         "ingest_meta",
         "ingest_plan",
-        "lola_plan",
         "mark_query",
         "publish_request"
       ],
@@ -3619,12 +4240,13 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 8,
+      "testFileCount": 17,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -3634,12 +4256,54 @@
       "testFiles": [
         "tests/batched_inputs.test.mjs",
         "tests/built_artifact.test.mjs",
+        "tests/fixtures/nac-dtm-apollo15-2-hadley.f32.gz",
+        "tests/fixtures/nac-dtm-apollo15-2-hadley.json",
         "tests/granule_plan.test.mjs",
         "tests/host_adapter.test.mjs",
         "tests/irm_mark.test.mjs",
-        "tests/lola_plan.test.mjs",
+        "tests/ladder-reachable.e2e.mjs",
+        "tests/mars_megdr.test.mjs",
+        "tests/moon-import.e2e.mjs",
+        "tests/moon-north-twins.e2e.mjs",
+        "tests/moon-sldem-despike.e2e.mjs",
+        "tests/moon-sldem-destripe.e2e.mjs",
+        "tests/moon-sldem-ladder.e2e.mjs",
+        "tests/moon-sldem-published.e2e.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/typed.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/terrain-source-watch",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source-watch",
+      "name": "Terrain Source Watch",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "diff",
+        "plan"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/terrain_source_watch_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs",
+        "tests/terrain-source-watch.e2e.mjs"
       ]
     },
     {
@@ -3647,7 +4311,7 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "name": "Terrain Tile Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.3.0",
+      "version": "0.8.1",
       "methodIds": [
         "layer_json",
         "pack",
@@ -3663,13 +4327,14 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 72,
+      "testFileCount": 77,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -3734,6 +4399,10 @@
         "tests/granule-seams.test.mjs",
         "tests/helpers.mjs",
         "tests/lola-reference.mjs",
+        "tests/lossless-format.e2e.mjs",
+        "tests/mars-blend-l9.e2e.mjs",
+        "tests/mars-insets.e2e.mjs",
+        "tests/mars-l8-cap-fill.e2e.mjs",
         "tests/memory-bound.test.mjs",
         "tests/miss-synthesis.test.mjs",
         "tests/moon-body.test.mjs",
@@ -3742,6 +4411,7 @@
         "tests/parent-lod.test.mjs",
         "tests/parity-artifact.test.mjs",
         "tests/pds-img.test.mjs",
+        "tests/pole-fill-feather.e2e.mjs",
         "tests/produce-real-dtt.mjs",
         "tests/route-cost.test.mjs",
         "tests/sdk_compat.test.mjs",
@@ -3769,6 +4439,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3806,6 +4477,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3859,6 +4531,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3893,6 +4566,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -3949,6 +4623,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4002,6 +4677,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -4055,6 +4731,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4080,14 +4757,17 @@
       "pluginId": "com.digitalarsenal.files.orbit-products",
       "name": "Orbit Products Reader",
       "pluginFamily": "parser",
-      "version": "0.1.4",
+      "version": "0.2.0",
       "methodIds": [
         "describe_container",
+        "normalize_naif_ck",
+        "normalize_sentinel_eof",
         "normalize_ses_i11",
         "normalize_vcm",
         "normalize_vimpel",
         "read_container",
-        "vcm_to_ocm"
+        "vcm_to_ocm",
+        "write_naif_ck"
       ],
       "runtimeTargets": [
         "browser",
@@ -4096,16 +4776,19 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 12,
+      "cxxSourceFileCount": 14,
       "cSourceFileCount": 0,
-      "testFileCount": 37,
+      "testFileCount": 50,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
+        "src/naif_ck_module.cpp",
         "src/orbit_products_module.cpp",
+        "src/sentinel_eof_module.cpp",
         "src/ses_i11_module.cpp",
         "src/vcm_module.cpp",
         "src/vimpel_module.cpp",
@@ -4138,10 +4821,23 @@
         "tests/fixtures/de440/horizons.csv",
         "tests/fixtures/ses-i11/GenerateReference.java",
         "tests/fixtures/ses-i11/orekit-13.1-reference.json",
+        "tests/interchange_fuzz.test.mjs",
+        "tests/lib/ck_synthetic.mjs",
+        "tests/lib/mutate.mjs",
+        "tests/lib/ncd_frames.mjs",
+        "tests/naif_ck.test.mjs",
         "tests/oem_epoch.test.mjs",
         "tests/oem_epoch_native.cpp",
         "tests/orbit_products_module.test.mjs",
+        "tests/parity.mjs",
+        "tests/reference/av_frame_check.py",
+        "tests/reference/ck_readback.py",
+        "tests/reference/ck_reference.py",
+        "tests/reference/eof_excerpt.py",
+        "tests/reference/eof_reference.py",
+        "tests/reference/eof_resorb_vs_poe.py",
         "tests/sdk_compat.test.mjs",
+        "tests/sentinel_eof.test.mjs",
         "tests/ses_i11.test.mjs",
         "tests/sp3.test.mjs",
         "tests/sp3_native.cpp",
@@ -4159,11 +4855,117 @@
       ]
     },
     {
+      "modulePath": "files/rinex",
+      "pluginId": "com.digitalarsenal.files.rinex",
+      "name": "RINEX Reader",
+      "pluginFamily": "parser",
+      "version": "0.2.0",
+      "methodIds": [
+        "evaluate_navigation",
+        "read_observations"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 7,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/rinex_module.cpp"
+      ],
+      "testFiles": [
+        "tests/interchange.e2e.mjs",
+        "tests/parity.mjs",
+        "tests/reference/nav_reference.py",
+        "tests/reference/rinex_obs_reference.py",
+        "tests/rinex_fuzz.test.mjs",
+        "tests/rinex_nav.test.mjs",
+        "tests/rinex_obs.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "flows/eop",
+      "pluginId": "com.digitalarsenal.flows.eop.lane",
+      "name": "Earth orientation lane glue",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "attribute_lane",
+        "restore_response",
+        "route_request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/lane.cpp"
+      ],
+      "testFiles": [
+        "tests/local-node.e2e.mjs"
+      ]
+    },
+    {
+      "modulePath": "flows/object-covariance",
+      "pluginId": "com.digitalarsenal.flows.object-covariance.control",
+      "name": "Incremental object covariance controller",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "advance"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/control.cpp"
+      ],
+      "testFiles": [
+        "tests/bindings.mjs",
+        "tests/local-node.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "flows/supplemental-omm/nodes/od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "name": "Supplemental OMM Orbit Determination",
       "pluginFamily": "orbit_determination",
-      "version": "2.0.0",
+      "version": "2.0.2",
       "methodIds": [
         "fit",
         "publish_request"
@@ -4175,6 +4977,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4204,6 +5007,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4233,6 +5037,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4247,6 +5052,45 @@
       "testFiles": [
         "tests/rigid_body_kinematics.test.mjs",
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "foundation/cosmology",
+      "pluginId": "com.digitalarsenal.foundation.cosmology",
+      "name": "Planck 2018 cosmology",
+      "pluginFamily": "foundation",
+      "version": "0.1.0",
+      "methodIds": [
+        "cmb_redshift",
+        "distances",
+        "place",
+        "supergalactic"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/astropy-oracle.json",
+        "tests/browser-runner.mjs",
+        "tests/cosmology-vs-astropy.e2e.mjs",
+        "tests/exercise.mjs",
+        "tests/generate-oracle.py"
       ]
     },
     {
@@ -4265,6 +5109,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4320,6 +5165,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4355,6 +5201,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4389,6 +5236,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4425,6 +5273,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4482,6 +5331,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4518,6 +5368,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4551,6 +5402,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4583,6 +5435,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4617,6 +5470,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4648,6 +5502,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4686,6 +5541,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4717,6 +5573,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4748,6 +5605,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4782,6 +5640,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4813,6 +5672,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4834,7 +5694,7 @@
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "name": "SDN Host Storage Ingest Node",
       "pluginFamily": "infrastructure",
-      "version": "0.3.0",
+      "version": "0.6.0",
       "methodIds": [
         "ingest"
       ],
@@ -4845,6 +5705,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4875,6 +5736,7 @@
       "hasBrowserWasmEdgeTargets": false,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4906,6 +5768,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4946,6 +5809,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -4971,13 +5835,13 @@
       ]
     },
     {
-      "modulePath": "maneuver/star-search",
-      "pluginId": "com.digitalarsenal.maneuver.star-search",
-      "name": "Star Interplanetary Broad Search",
-      "pluginFamily": "maneuver",
+      "modulePath": "licensing/publication-seal",
+      "pluginId": "com.digitalarsenal.licensing.publication-seal",
+      "name": "Publication Seal",
+      "pluginFamily": "infrastructure",
       "version": "0.1.0",
       "methodIds": [
-        "search_trajectories"
+        "seal"
       ],
       "runtimeTargets": [
         "browser",
@@ -4985,11 +5849,52 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 16,
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 10,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/publication_seal.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/301-9-0_0.dtts.gz",
+        "tests/fixtures/301-root.dtts.gz",
+        "tests/fixtures/499-12-1462_615.dtts.gz",
+        "tests/fixtures/499-root.dtts.gz",
+        "tests/lib/lease.mjs",
+        "tests/lib/wire.mjs",
+        "tests/parity-receipt.json",
+        "tests/runtime-parity.mjs",
+        "tests/sdk_compat.test.mjs",
+        "tests/seal-grant-decrypt.e2e.mjs"
+      ]
+    },
+    {
+      "modulePath": "maneuver/star-search",
+      "pluginId": "com.digitalarsenal.maneuver.star-search",
+      "name": "Star Interplanetary Broad Search",
+      "pluginFamily": "maneuver",
+      "version": "0.2.0",
+      "methodIds": [
+        "search_trajectories"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 17,
       "cSourceFileCount": 0,
       "testFileCount": 19,
       "parityScope": false,
@@ -5006,6 +5911,7 @@
         "src/pipeline.cpp",
         "src/status.cpp",
         "src/threading.cpp",
+        "src/typed_module.cpp",
         "tests/harness/main.cpp",
         "tests/harness/problem_text.cpp",
         "tests/harness/test_core.cpp",
@@ -5050,6 +5956,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -5084,6 +5991,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -5133,6 +6041,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -5176,12 +6085,13 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 8,
+      "testFileCount": 9,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -5193,6 +6103,7 @@
         "tests/access-fixture.mjs",
         "tests/event_locator_conformance.cpp",
         "tests/event_locator_conformance.test.mjs",
+        "tests/events-angles.test.mjs",
         "tests/events.test.mjs",
         "tests/kernel-fixture.mjs",
         "tests/kernel-parity.mjs",
@@ -5204,7 +6115,7 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "1.4.0",
+      "version": "2.0.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
@@ -5220,39 +6131,44 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
+        "c",
         "c++"
       ],
-      "cxxSourceFileCount": 48,
-      "cSourceFileCount": 0,
-      "testFileCount": 476,
+      "cxxSourceFileCount": 57,
+      "cSourceFileCount": 1,
+      "testFileCount": 585,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "lib/astrodynamics.cpp",
         "lib/atmosphere_plugin.cpp",
         "lib/atmosphere_winds.cpp",
+        "lib/central_body.cpp",
         "lib/coords.cpp",
         "lib/environment_models.cpp",
         "lib/ephemeris.cpp",
+        "lib/ffm_gravity.cpp",
         "lib/finite_burn.cpp",
         "lib/force_models.cpp",
         "lib/force_partials.cpp",
+        "lib/integrator_events.cpp",
         "lib/integrators.cpp",
         "lib/nrlmsise00.cpp",
+        "lib/planetary_fields.cpp",
+        "lib/rk_engine.cpp",
         "lib/time_convert.cpp",
         "lib/us76.cpp",
         "lib/variational.cpp",
+        "scripts/boundary-states.cpp",
+        "scripts/compare-ca-sigma.cpp",
+        "scripts/export-truth.cpp",
         "src/cpp/src/kernel_store.cpp",
-        "src/cpp/src/plugin_entrypoints.cpp",
-        "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/prw_dynamics.cpp",
         "src/cpp/src/prw_execution.cpp",
         "src/cpp/src/prw_sdk_adapter.cpp",
         "src/cpp/src/resident_dynamics.cpp",
-        "src/cpp/wasm_api.cpp",
-        "src/cpp/wasm_api_reference.cpp",
         "src/ffm_plugin.cpp",
         "tests/atmosphere_ports_native.cpp",
         "tests/de440_force_native.cpp",
@@ -5274,6 +6190,13 @@
         "tests/force_partials_native.cpp",
         "tests/gnss_srp_native.cpp",
         "tests/gps_srp_accuracy_native.cpp",
+        "tests/gravity-scratch-alloc/alloc_probe.cpp",
+        "tests/planetary_native.cpp",
+        "tests/reference/sources/lib/force_models.cpp",
+        "tests/reference/sources/src/cpp/src/resident_dynamics.cpp",
+        "tests/reference/sources/src/ffm_plugin.cpp",
+        "tests/runtime/resident-runner.c",
+        "tests/third_body_harmonics_native.cpp",
         "tests/variational_controls_native.cpp",
         "tests/variational_native.cpp",
         "tests/zonal_crossvalidation.cpp"
@@ -5292,6 +6215,8 @@
         "tests/drag_frame_native.cpp",
         "tests/drag_winds_abi.test.mjs",
         "tests/e2e-ffm-rename.mjs",
+        "tests/e2e-gravity-scratch-alloc.mjs",
+        "tests/earth-equivalence.mjs",
         "tests/environment_conformance.cpp",
         "tests/environment_conformance.test.mjs",
         "tests/evidence/CONSOLIDATED.md",
@@ -5314,10 +6239,13 @@
         "tests/evidence/basilisk/summary-basilisk-2.12.0.json",
         "tests/evidence/cases/export-cases.mjs",
         "tests/evidence/cases/ffm-reference-cases.json",
+        "tests/evidence/catalog-coverage.json",
+        "tests/evidence/catalog-resident.json",
         "tests/evidence/check-all.mjs",
         "tests/evidence/consolidate.mjs",
         "tests/evidence/consolidated-metrics.cpp",
         "tests/evidence/consolidated.json",
+        "tests/evidence/earth-equivalence.json",
         "tests/evidence/earth-radiation-tides/prw-earth-radiation-tides-parity.json",
         "tests/evidence/erfa-spice/.gitignore",
         "tests/evidence/erfa-spice/OrekitFrames.java",
@@ -5356,6 +6284,7 @@
         "tests/evidence/gmat/check-gmat.mjs",
         "tests/evidence/gmat/evidence.mjs",
         "tests/evidence/gmat/gmat-R2022a.json",
+        "tests/evidence/gmat/gmat-R2026a-stm.json",
         "tests/evidence/gmat/gmat-R2026a.json",
         "tests/evidence/gmat/gmat-files.mjs",
         "tests/evidence/gmat/gmat-metrics.cpp",
@@ -5403,6 +6332,7 @@
         "tests/evidence/lane13/sdk-compat-final.log",
         "tests/evidence/lane13/variational-parity-final.log",
         "tests/evidence/lane13/variational-parity.json",
+        "tests/evidence/memory-sizing.json",
         "tests/evidence/nyx/Cargo.lock",
         "tests/evidence/nyx/Cargo.toml",
         "tests/evidence/nyx/check-density.mjs",
@@ -5453,6 +6383,7 @@
         "tests/finite_burn.test.mjs",
         "tests/finite_burn_invoke.test.mjs",
         "tests/finite_burn_native.cpp",
+        "tests/fixtures/README.md",
         "tests/fixtures/atmosphere/jacchia-roberts-gmat.json",
         "tests/fixtures/atmosphere/jb2008-orekit.json",
         "tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs",
@@ -5524,9 +6455,33 @@
         "tests/fixtures/orekit/orekit-gnss-srp-reference.json",
         "tests/fixtures/orekit/orekit-reference.json",
         "tests/fixtures/orekit/spw-2026-08.json",
+        "tests/fixtures/planetary/de440-2018-04-11_2018-05-17.bsp",
+        "tests/fixtures/planetary/de440-2021-01-21_2021-02-17.bsp",
+        "tests/fixtures/planetary/extract-truth.py",
+        "tests/fixtures/planetary/lro-2026-03-20.json",
+        "tests/fixtures/planetary/lro-2026-03-27.json",
+        "tests/fixtures/planetary/lro-2026-04-03.json",
+        "tests/fixtures/planetary/make-kernel-excerpt.py",
+        "tests/fixtures/planetary/make-oracles.py",
+        "tests/fixtures/planetary/maven-2021-01-22.json",
+        "tests/fixtures/planetary/maven-2021-02-12.json",
+        "tests/fixtures/planetary/mro-2018-04-12.json",
+        "tests/fixtures/planetary/mro-2018-05-12.json",
+        "tests/fixtures/planetary/oracles.json",
         "tests/fixtures/request.propagate.json",
         "tests/fixtures/resident/eop-2026-08.json",
         "tests/fixtures/resident/spw-2026-08-synthetic.json",
+        "tests/fixtures/seeds.json",
+        "tests/fixtures/standard.json",
+        "tests/fixtures/truth/GEO.f64",
+        "tests/fixtures/truth/GPS.f64",
+        "tests/fixtures/truth/GTO.f64",
+        "tests/fixtures/truth/ISS.f64",
+        "tests/fixtures/truth/LOW250.f64",
+        "tests/fixtures/truth/MOLNIYA.f64",
+        "tests/fixtures/truth/SSO800.f64",
+        "tests/fixtures/truth/STARLINK.f64",
+        "tests/fixtures/truth/truth.json",
         "tests/fixtures/tudat/NOTICE",
         "tests/fixtures/tudat/tudat-wasm-reference.json",
         "tests/fixtures/tudat/tudat-wasm-reference.mjs",
@@ -5548,6 +6503,18 @@
         "tests/generated/sds/DataType.js",
         "tests/generated/sds/DeviceType.js",
         "tests/generated/sds/EOP.js",
+        "tests/generated/sds/EVL.js",
+        "tests/generated/sds/EVLApsidesConfiguration.js",
+        "tests/generated/sds/EVLContactConfiguration.js",
+        "tests/generated/sds/EVLEclipseConfiguration.js",
+        "tests/generated/sds/EVLEvent.js",
+        "tests/generated/sds/EVLEventLocationRequest.js",
+        "tests/generated/sds/EVLEventReport.js",
+        "tests/generated/sds/EVLEventSample.js",
+        "tests/generated/sds/EVLIntrusionConfiguration.js",
+        "tests/generated/sds/EVLLatitudeExtremumConfiguration.js",
+        "tests/generated/sds/EVLNodeCrossingConfiguration.js",
+        "tests/generated/sds/EVLParameterConditionConfiguration.js",
         "tests/generated/sds/F107DataType.js",
         "tests/generated/sds/FRM.js",
         "tests/generated/sds/FRMFrameTransformRequest.js",
@@ -5578,6 +6545,23 @@
         "tests/generated/sds/PCEParameterValue.js",
         "tests/generated/sds/PCEStopReport.js",
         "tests/generated/sds/PCEStopRequest.js",
+        "tests/generated/sds/PCF.js",
+        "tests/generated/sds/PCFEcom2.js",
+        "tests/generated/sds/PCFEmpiricalTerms.js",
+        "tests/generated/sds/PCFEventDefinition.js",
+        "tests/generated/sds/PCFExpression.js",
+        "tests/generated/sds/PCFExpressionTerm.js",
+        "tests/generated/sds/PCFFitPolicy.js",
+        "tests/generated/sds/PCFForceModel.js",
+        "tests/generated/sds/PCFGaussianPrior.js",
+        "tests/generated/sds/PCFIntegratorSettings.js",
+        "tests/generated/sds/PCFLaunch.js",
+        "tests/generated/sds/PCFManeuverDetection.js",
+        "tests/generated/sds/PCFMeanElementOptions.js",
+        "tests/generated/sds/PCFOutput.js",
+        "tests/generated/sds/PCFReentry.js",
+        "tests/generated/sds/PCFSegmentOptions.js",
+        "tests/generated/sds/PCFSpaceWeather.js",
         "tests/generated/sds/PLD.js",
         "tests/generated/sds/PPE.js",
         "tests/generated/sds/PPEOrbitalElementRecord.js",
@@ -5592,19 +6576,17 @@
         "tests/generated/sds/PRWDescribeRequest.js",
         "tests/generated/sds/PRWDescribeResult.js",
         "tests/generated/sds/PRWEarthOrientation.js",
-        "tests/generated/sds/PRWEcom2.js",
         "tests/generated/sds/PRWEphemerisRequest.js",
         "tests/generated/sds/PRWEphemerisResult.js",
+        "tests/generated/sds/PRWEventRecord.js",
         "tests/generated/sds/PRWExecutionRequest.js",
         "tests/generated/sds/PRWExecutionResult.js",
         "tests/generated/sds/PRWFiniteBurn.js",
         "tests/generated/sds/PRWFitQuality.js",
-        "tests/generated/sds/PRWForceConfiguration.js",
         "tests/generated/sds/PRWImpulse.js",
         "tests/generated/sds/PRWInit.js",
         "tests/generated/sds/PRWInitSource.js",
         "tests/generated/sds/PRWInstance.js",
-        "tests/generated/sds/PRWIntegratorSettings.js",
         "tests/generated/sds/PRWJB2008Indices.js",
         "tests/generated/sds/PRWJB2008IndicesTable.js",
         "tests/generated/sds/PRWKeplerianElements.js",
@@ -5615,7 +6597,6 @@
         "tests/generated/sds/PRWPropagationSample.js",
         "tests/generated/sds/PRWResidentRequest.js",
         "tests/generated/sds/PRWResidentState.js",
-        "tests/generated/sds/PRWSpaceWeather.js",
         "tests/generated/sds/PRWSpaceWeatherTable.js",
         "tests/generated/sds/PRWSpeciesDensity.js",
         "tests/generated/sds/PRWStateMatrix.js",
@@ -5627,6 +6608,7 @@
         "tests/generated/sds/PRWWindowRefusal.js",
         "tests/generated/sds/PRWWindowReport.js",
         "tests/generated/sds/PRWWindowRequest.js",
+        "tests/generated/sds/PVN.js",
         "tests/generated/sds/PolarizationType.js",
         "tests/generated/sds/RFM.js",
         "tests/generated/sds/RFMCoordinateSystem.js",
@@ -5649,6 +6631,13 @@
         "tests/generated/sds/catalogProductKind.js",
         "tests/generated/sds/dataAvailability.js",
         "tests/generated/sds/eopSeries.js",
+        "tests/generated/sds/evlAberrationCorrection.js",
+        "tests/generated/sds/evlEventType.js",
+        "tests/generated/sds/evlFieldOfViewShape.js",
+        "tests/generated/sds/evlLocatorClass.js",
+        "tests/generated/sds/evlResultStatus.js",
+        "tests/generated/sds/evlSamplePoint.js",
+        "tests/generated/sds/evlShadowModel.js",
         "tests/generated/sds/frmOperationCode.js",
         "tests/generated/sds/frmResultStatus.js",
         "tests/generated/sds/frmStateRepresentation.js",
@@ -5668,29 +6657,44 @@
         "tests/generated/sds/pcePropagationDirection.js",
         "tests/generated/sds/pceResultStatus.js",
         "tests/generated/sds/pceUnit.js",
+        "tests/generated/sds/pcfAtmosphereFamily.js",
+        "tests/generated/sds/pcfDensityCorrection.js",
+        "tests/generated/sds/pcfEarthRadiationModel.js",
+        "tests/generated/sds/pcfEphemerisKind.js",
+        "tests/generated/sds/pcfEventAction.js",
+        "tests/generated/sds/pcfEventDirection.js",
+        "tests/generated/sds/pcfEventKind.js",
+        "tests/generated/sds/pcfExpressionOperation.js",
+        "tests/generated/sds/pcfGnssSpacecraftBlock.js",
+        "tests/generated/sds/pcfGravitySelection.js",
+        "tests/generated/sds/pcfInnovationCorrelation.js",
+        "tests/generated/sds/pcfIntegratorAlgorithm.js",
+        "tests/generated/sds/pcfNeutralWind.js",
+        "tests/generated/sds/pcfOceanTideModel.js",
+        "tests/generated/sds/pcfOutputFrame.js",
+        "tests/generated/sds/pcfRadiationPressureFamily.js",
+        "tests/generated/sds/pcfReentryWindowMethod.js",
+        "tests/generated/sds/pcfRelativityTerms.js",
+        "tests/generated/sds/pcfSolidTideModel.js",
+        "tests/generated/sds/pcfTheory.js",
+        "tests/generated/sds/pcfWeatherExtension.js",
+        "tests/generated/sds/pcfWeatherSource.js",
         "tests/generated/sds/polynomialBasisType.js",
         "tests/generated/sds/ppeAnomalyType.js",
         "tests/generated/sds/propagatorErrorCode.js",
         "tests/generated/sds/propagatorStateFlags.js",
-        "tests/generated/sds/prwAtmosphereFamily.js",
         "tests/generated/sds/prwDensitySpecies.js",
         "tests/generated/sds/prwDensityTreatment.js",
         "tests/generated/sds/prwDerivativeTechnique.js",
         "tests/generated/sds/prwDynamicParameter.js",
-        "tests/generated/sds/prwEarthRadiationModel.js",
-        "tests/generated/sds/prwGnssSpacecraftBlock.js",
-        "tests/generated/sds/prwGravitySelection.js",
-        "tests/generated/sds/prwOceanTideModel.js",
         "tests/generated/sds/prwProcessNoiseAxes.js",
         "tests/generated/sds/prwProcessNoiseModel.js",
         "tests/generated/sds/prwQualityEvidence.js",
-        "tests/generated/sds/prwRadiationPressureFamily.js",
-        "tests/generated/sds/prwRelativityTerms.js",
-        "tests/generated/sds/prwSolidTideModel.js",
-        "tests/generated/sds/prwSolverAlgorithm.js",
         "tests/generated/sds/prwSourceKind.js",
         "tests/generated/sds/prwSteeringBasis.js",
         "tests/generated/sds/prwThrustPrescription.js",
+        "tests/generated/sds/pvnLicenseClass.js",
+        "tests/generated/sds/pvnSourceKind.js",
         "tests/generated/sds/rfmAxisType.js",
         "tests/generated/sds/rfmLibrationPoint.js",
         "tests/generated/sds/rfmOriginKind.js",
@@ -5707,7 +6711,12 @@
         "tests/gps-srp-accuracy-prepare.mjs",
         "tests/gps-srp-accuracy-score.mjs",
         "tests/gps_srp_accuracy_native.cpp",
+        "tests/gravity-scratch-alloc/alloc_probe.cpp",
+        "tests/gravity-scratch-alloc/base.json",
+        "tests/gravity-scratch-alloc/before-1.4.1.wasm",
+        "tests/gravity-scratch-alloc/seeds.json",
         "tests/gravity_degree_abi.test.mjs",
+        "tests/integrator-events.e2e.mjs",
         "tests/intermodule_sgp4_import.test.mjs",
         "tests/jb2008_abi.test.mjs",
         "tests/kernel-parity.mjs",
@@ -5715,8 +6724,14 @@
         "tests/lib/fullForce.mjs",
         "tests/lib/gnssSrpCases.mjs",
         "tests/lib/headlessShell.mjs",
+        "tests/lib/impulseTruth.mjs",
+        "tests/lib/keplerReference.mjs",
+        "tests/lib/nativeBuild.mjs",
         "tests/lib/orekitCases.mjs",
+        "tests/lib/parity.mjs",
         "tests/lib/pivInvokeHelper.mjs",
+        "tests/lib/planetary.mjs",
+        "tests/lib/planetaryFit.mjs",
         "tests/lib/prwCodec.mjs",
         "tests/lib/residentRuntime.mjs",
         "tests/lib/xvalCases.mjs",
@@ -5725,6 +6740,9 @@
         "tests/orekit_reference.test.mjs",
         "tests/path_state_vectors.test.mjs",
         "tests/pivInvokeContract.test.mjs",
+        "tests/planetary-degree-sweep.mjs",
+        "tests/planetary.e2e.mjs",
+        "tests/planetary_native.cpp",
         "tests/prw-contract-fixture.mjs",
         "tests/prw-earth-radiation-tides-parity.mjs",
         "tests/prw-gnss-parity.mjs",
@@ -5739,8 +6757,22 @@
         "tests/prw_resident_configured.test.mjs",
         "tests/prw_sequence.test.mjs",
         "tests/reentry.test.mjs",
+        "tests/reference/README.md",
+        "tests/reference/catalog.mjs",
+        "tests/reference/forks.mjs",
+        "tests/reference/levers.json",
+        "tests/reference/phase2-qualification.json",
+        "tests/reference/plugin-manifest.json",
+        "tests/reference/sources/lib/force_models.cpp",
+        "tests/reference/sources/src/cpp/include/ffm/resident_dynamics.h",
+        "tests/reference/sources/src/cpp/src/resident_dynamics.cpp",
+        "tests/reference/sources/src/ffm_plugin.cpp",
+        "tests/runtime/resident-runner.c",
+        "tests/sample-epoch-impulse.e2e.mjs",
         "tests/sdk-build-preflight.mjs",
         "tests/sdk_compat.test.mjs",
+        "tests/start-epoch-impulse.e2e.mjs",
+        "tests/third_body_harmonics_native.cpp",
         "tests/variational-benchmark.mjs",
         "tests/variational-fixture.mjs",
         "tests/variational-kepler-reference.json",
@@ -5755,6 +6787,54 @@
         "tests/xval_reference.test.mjs",
         "tests/zonal_crossvalidation.cpp",
         "tests/zonal_crossvalidation.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "propagator/ffm/tests/reference",
+      "pluginId": "com.orbpro.ffm",
+      "name": "FFM Full Force Model propagator",
+      "pluginFamily": "propagator",
+      "version": "1.4.1",
+      "methodIds": [
+        "describe_trajectory_segments",
+        "ingest_state",
+        "ingest_state_gravity_only",
+        "invoke",
+        "prepare_trajectory_segments",
+        "propagate_state"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 3,
+      "cSourceFileCount": 0,
+      "testFileCount": 10,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "sources/lib/force_models.cpp",
+        "sources/src/cpp/src/resident_dynamics.cpp",
+        "sources/src/ffm_plugin.cpp"
+      ],
+      "testFiles": [
+        "README.md",
+        "catalog.mjs",
+        "forks.mjs",
+        "levers.json",
+        "phase2-qualification.json",
+        "plugin-manifest.json",
+        "sources/lib/force_models.cpp",
+        "sources/src/cpp/include/ffm/resident_dynamics.h",
+        "sources/src/cpp/src/resident_dynamics.cpp",
+        "sources/src/ffm_plugin.cpp"
       ]
     },
     {
@@ -5773,6 +6853,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -5806,6 +6887,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -5843,6 +6925,66 @@
       ]
     },
     {
+      "modulePath": "propagator/sdn-ap",
+      "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+      "name": "SDN-AP Propagator",
+      "pluginFamily": "propagator",
+      "version": "0.1.0",
+      "methodIds": [
+        "detect_maneuvers",
+        "fit",
+        "ingest_omm",
+        "launch_batch",
+        "launch_set",
+        "load_environment",
+        "maneuver",
+        "propagate",
+        "reentry"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 21,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/sdn_ap_module.cpp"
+      ],
+      "testFiles": [
+        "test/bench.mjs",
+        "test/conformance.e2e.mjs",
+        "test/covariance-realism.mjs",
+        "test/covariance.e2e.mjs",
+        "test/environment.e2e.mjs",
+        "test/events.e2e.mjs",
+        "test/exports.e2e.mjs",
+        "test/fit.e2e.mjs",
+        "test/lib/frames.mjs",
+        "test/lib/module.mjs",
+        "test/lib/oracle.mjs",
+        "test/lib/pcf.mjs",
+        "test/lib/tle.mjs",
+        "test/results/bench.json",
+        "test/results/conformance.json",
+        "test/results/covariance-calibration-sdnap.json",
+        "test/results/covariance-calibration-sgp4xp.json",
+        "test/results/covariance-realism-sdnap.json",
+        "test/results/covariance-realism-sgp4xp.json",
+        "test/results/open-outliers.md",
+        "test/wasmedge-parity.mjs"
+      ]
+    },
+    {
       "modulePath": "propagator/sgp4-xp",
       "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
       "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
@@ -5860,6 +7002,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -5917,6 +7060,7 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c",
         "c++"
@@ -6021,7 +7165,7 @@
       "pluginId": "com.digitalarsenal.propagator.solar-system-bodies",
       "name": "Solar-system bodies",
       "pluginFamily": "propagator",
-      "version": "0.5.0",
+      "version": "0.5.2",
       "methodIds": [
         "evaluate"
       ],
@@ -6032,12 +7176,13 @@
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 10,
+      "testFileCount": 12,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -6049,11 +7194,83 @@
         "tests/cspice_oracle.py",
         "tests/ephemeris.e2e.test.mjs",
         "tests/fixtures/horizons-apmag.json",
+        "tests/fixtures/horizons-moon-apmag.json",
+        "tests/moon-magnitude.e2e.test.mjs",
         "tests/observer_position.e2e.test.mjs",
         "tests/observer_state.e2e.test.mjs",
         "tests/orbits-labels.e2e.test.mjs",
         "tests/parity.mjs",
         "tests/threads.e2e.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "storage/credentials",
+      "pluginId": "com.digitalarsenal.storage.credentials",
+      "name": "Object-Store Credential Mediator",
+      "pluginFamily": "data_source",
+      "version": "0.1.1",
+      "methodIds": [
+        "mediate",
+        "serve"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/storage_credentials_module.cpp"
+      ],
+      "testFiles": [
+        "tests/credentials.e2e.mjs"
+      ]
+    },
+    {
+      "modulePath": "storage/object-s3",
+      "pluginId": "com.digitalarsenal.storage.object-s3",
+      "name": "S3-Compatible Object Store",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "assemble",
+        "finish",
+        "serve",
+        "sign",
+        "split"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 4,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/object_s3_module.cpp"
+      ],
+      "testFiles": [
+        "tests/node-r2.e2e.mjs",
+        "tests/object-s3-api.e2e.mjs",
+        "tests/object-s3.e2e.mjs",
+        "tests/r2-live.e2e.mjs"
       ]
     }
   ]

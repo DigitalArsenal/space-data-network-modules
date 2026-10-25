@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 // Build products, never sources: a checkout that has built a module (the
 // SDK compiler's .sdk-build holds FFM's generated ERFA amalgamation) must
@@ -45,7 +46,26 @@ const OUT_OF_PARITY_SCOPE_PREFIXES = [
   "licensing/",
 ];
 
+// The isomorphic artifact of a module is a committed file, so the index is a function of the commit and not of what a checkout
+// has built: a module's own `sdn-module` target, else dist/isomorphic/module.wasm, else the flow layout's dist/runtime/isomorphic.
+// A module whose dist is git-ignored builds on demand (build.mjs); it has no committed artifact and is listed apart, never as missing.
+const ARTIFACT_LAYOUTS = [["dist", "isomorphic", "module.wasm"], ["dist", "runtime", "isomorphic", "module.wasm"]];
+
+function trackedFiles(repoRoot) {
+  return new Set(execFileSync("git", ["-C", repoRoot, "ls-files", "-z"], { encoding: "utf8", maxBuffer: 1 << 28 }).split("\0").filter(Boolean));
+}
+
+function isGitIgnored(repoRoot, relativePath) {
+  try {
+    execFileSync("git", ["-C", repoRoot, "check-ignore", "-q", "--no-index", relativePath], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function createCurrentModuleIndex(repoRoot) {
+  const tracked = trackedFiles(repoRoot);
   const manifestPaths = walk(repoRoot, (file) => path.basename(file) === "plugin-manifest.json")
     .filter((file) => !path.relative(repoRoot, file).split(path.sep).some((part) => IGNORED_DIRS.has(part)))
     .sort();
@@ -62,7 +82,13 @@ export function createCurrentModuleIndex(repoRoot) {
       .filter((file) => !path.relative(moduleRoot, file).split(path.sep).some((part) => IGNORED_DIRS.has(part)))
       .map((file) => path.relative(moduleRoot, file))
       .sort();
-    const hasIsomorphicWasm = fs.existsSync(path.join(moduleRoot, "dist", "isomorphic", "module.wasm"));
+    const declaredTarget = readPackageConfig(moduleRoot)?.["sdn-module"];
+    const artifactPaths = [
+      ...(declaredTarget ? [path.join(modulePath, declaredTarget)] : []),
+      ...ARTIFACT_LAYOUTS.map((layout) => path.join(modulePath, ...layout)),
+    ].map((file) => path.normalize(file));
+    const hasIsomorphicWasm = artifactPaths.some((file) => tracked.has(file.split(path.sep).join("/")));
+    const buildsOnDemand = !hasIsomorphicWasm && artifactPaths.every((file) => isGitIgnored(repoRoot, file.split(path.sep).join("/")));
     const runtimeTargets = manifest.runtimeTargets ?? [];
     const packageConfig = readPackageConfig(moduleRoot);
     const isSharedBrowserDirectModule =
@@ -88,6 +114,7 @@ export function createCurrentModuleIndex(repoRoot) {
       hasBrowserWasmEdgeTargets,
       isSharedBrowserDirectModule,
       hasIsomorphicWasm,
+      buildsOnDemand,
       sourceLanguages,
       cxxSourceFileCount: sourceFiles.filter(isCxxSourceFile).length,
       cSourceFileCount: sourceFiles.filter((file) => path.extname(file) === ".c").length,
@@ -104,7 +131,8 @@ export function createCurrentModuleIndex(repoRoot) {
     moduleCount: modules.length,
     parityScopeModuleCount: modules.filter((entry) => entry.parityScope).length,
     isomorphicWasmCount: modules.filter((entry) => entry.hasIsomorphicWasm).length,
-    missingIsomorphicWasm: modules.filter((entry) => !entry.hasIsomorphicWasm).map((entry) => entry.modulePath),
+    missingIsomorphicWasm: modules.filter((entry) => !entry.hasIsomorphicWasm && !entry.buildsOnDemand).map((entry) => entry.modulePath),
+    buildsOnDemand: modules.filter((entry) => entry.buildsOnDemand).map((entry) => entry.modulePath),
     browserWasmEdgeTargetCount: modules.filter((entry) => entry.hasBrowserWasmEdgeTargets).length,
     parityScopeMissingCxx: modules
       .filter((entry) => entry.parityScope && entry.cxxSourceFileCount === 0 && entry.cSourceFileCount === 0)
