@@ -4931,7 +4931,7 @@ static bool seedOmmFromTemeState(const double r[3], const double v[3],
 ///
 /// The correction is a fixed point on the STATE, not on the elements. Whatever
 /// the element set means to SGP4 — Kozai mean motion, Brouwer short-period
-/// terms, the WGS-72 gravity model baked into `sgp4init` — the seed state is
+/// terms, the WGS-72 gravity model its initialization uses — the seed state is
 /// shifted by the error SGP4's own propagation made, and the elements are
 /// re-derived from the corrected seed. It converges because the map from seed
 /// state to achieved state is close to the identity.
