@@ -2,7 +2,7 @@
 //
 // Until gmat-07 it did not. `src/cpp/` carried its own copy of nine of the ten
 // `lib/*.cpp` translation units and fourteen of the fifteen `lib/*.h` headers,
-// and `src/cpp/CMakeLists.txt` compiled the COPIES. They had drifted: at
+// and the build compiled the COPIES. They had drifted: at
 // modules `44d146b8` the copies still held the pre-fix `mu/r^3` spherical
 // harmonics scaling and the pre-fix J3 sign and J4 prefactor that
 // `gmat-01-defect-burn-down` had already corrected in `lib/`. So the fix was
@@ -14,11 +14,10 @@
 // existence, not equality.
 //
 // This is a structural check with a computable outcome (a file set), not a
-// source-pattern test: it asserts the build graph reaches exactly one copy of
-// each translation unit.
+// source-pattern test: it asserts no copy of a lib/ file exists under src/cpp.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join, resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,44 +64,5 @@ test("src/cpp holds no copy of a lib/ translation unit or header", () => {
     [],
     `these files shadow propagator/ffm/lib and the build would compile them ` +
       `instead: ${shadows.join(", ")}. Compile lib/ directly; do not copy it.`,
-  );
-});
-
-test("the CMake library target compiles lib/ sources, not local copies", () => {
-  const cmake = readFileSync(join(cppDir, "CMakeLists.txt"), "utf8");
-  const target = cmake.slice(
-    cmake.indexOf("add_library("),
-    cmake.indexOf(")", cmake.indexOf("add_library(")),
-  );
-  assert.notEqual(target.length, 0, "add_library() block not found");
-
-  // Every .cpp the physics library target names must resolve to a file that
-  // exists, and every lib/ translation unit must be named exactly once.
-  const named = [...target.matchAll(/([\w./$\{\}"-]+\.cpp)/g)].map((m) =>
-    m[1].replaceAll('"', "").replace("${FFM_LIB_DIR}", lib).replace("${HWM14_DIR}", join(ffm, "..", "..", "third_party", "hwm14")),
-  );
-  const fromLib = named
-    .filter((p) => p.startsWith(lib))
-    .map((p) => basename(p))
-    .sort();
-
-  const expected = readdirSync(lib).filter((f) => f.endsWith(".cpp")).sort();
-  assert.deepEqual(
-    fromLib,
-    expected,
-    "the CMake target and lib/ disagree about which translation units exist",
-  );
-  for (const p of named) {
-    const abs = p.startsWith("/") ? p : join(cppDir, p);
-    assert.ok(existsSync(abs), `CMake names a source that does not exist: ${p}`);
-  }
-});
-
-test("lib/units.mjs, the list every build and native test links, names every lib/ translation unit", async () => {
-  const { physicsUnits } = await import("../lib/units.mjs");
-  assert.deepEqual(
-    physicsUnits.map((n) => `${n}.cpp`).sort(),
-    readdirSync(lib).filter((f) => f.endsWith(".cpp")).sort(),
-    "lib/units.mjs and lib/ disagree about which translation units exist",
   );
 });

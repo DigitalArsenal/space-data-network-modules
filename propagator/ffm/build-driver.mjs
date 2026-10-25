@@ -29,9 +29,8 @@ if(compile&&path.basename(source)==='module.cpp'){
   const objects=[];
   for(let i=0;i<units.length;i++){
     const unit=units[i],object=path.join(objectDir,`${i}-${path.basename(unit)}.o`);objects.push(object);
-    const unitFlags=unit.endsWith('plugin_runtime.cpp')?['-O0','-fno-inline','-fno-lto']:[];
     const cUnit=unit.endsWith('.c');
-    run(config.clangxx,[...common.filter(a=>!cUnit||!a.startsWith('-std=')),...flags,...unitFlags,...(cUnit?['-x','c']:[]),'-c',unit,'-o',object]);
+    run(config.clangxx,[...common.filter(a=>!cUnit||!a.startsWith('-std=')),...flags,...(cUnit?['-x','c']:[]),'-c',unit,'-o',object]);
   }
   run(config.linker,['-r',...objects,'-o',output]);
 }else if(compile){run(config.clangxx,[...args,...flags]);}
