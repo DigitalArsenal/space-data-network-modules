@@ -3,7 +3,9 @@ Copyright 2026 Edgesource Corporation
 
 Licensed under the Apache License, Version 2.0 (LICENSE).
 
-The SGP4/SDP4 base, src/sgp4_core.inc and src/model.inc, is written clean room
+The SGP4/SDP4 base, foundation/sgp4-str3/src/sgp4_core.inc and
+foundation/sgp4-str3/src/model.inc (the shared library build.mjs compiles), is
+written clean room
 from Spacetrack Report No. 3 (Hoots & Roehrich 1980, US Air Force, approved for
 public release) and the corrections documented in the text of Vallado,
 Crawford, Hujsak & Kelso (2006), AIAA 2006-6753; it is covered by the

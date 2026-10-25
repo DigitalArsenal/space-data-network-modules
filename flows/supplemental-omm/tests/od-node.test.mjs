@@ -1,21 +1,20 @@
 // The OD node as built (nodes/od/dist/isomorphic/module.wasm, unsigned) in the SDK's browser module harness, fed the
-// $OEM the flow's source modules make from their provider fixtures (and from NASA's ISS ephemeris), against the records
-// the legacy node (release 1.0.1, which parsed the providers' files itself) made of the same files
-// (tests/fixtures/legacy/PROVENANCE.md). The legacy release predates the node's SGP4-XP sets, so those are checked
-// against propagator/sgp4-xp's own fit of the same states.
+// $OEM the flow's source modules make from their provider fixtures (and from NASA's ISS ephemeris), against its
+// release's records of the same inputs (nodes/od/release-records, made by generate.mjs there), byte for byte. The
+// SGP4-XP sets are also checked against propagator/sgp4-xp's own fit of the same states.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { legacyRecords, modulesRoot, sha256, splitRecords } from "./lib/flow.mjs";
+import { modulesRoot, packageRoot, sha256, splitRecords } from "./lib/flow.mjs";
 import { fit, harnessFor, issOem, odNode, sourceOems } from "./lib/nodes.mjs";
 import { TYPE, decodeHttpRequest, decodeIngestRequest, decodeIngestResult, decodeObdRecord, decodeOem, decodeOmmRecord, encodeIngestRequest, encodeHttpResponse, encodeIngestResult, encodeOem, encodeOemSizePrefixed } from "./lib/sds.mjs";
 
 const SGP4 = 0;
 const SGP4XP = 1;
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
-const legacy = (name, standard) => splitRecords(fixture(`legacy/${name}-${standard}-records.bin`));
+const release = (name, standard) => splitRecords(fs.readFileSync(path.join(packageRoot, `nodes/od/release-records/${name}-${standard}-records.bin`)));
 const hex = (records) => records.map((r) => Buffer.from(r).toString("hex"));
 const isXpObd = (record) => (decodeObdRecord(record).ID ?? "").endsWith("-SGP4XP");
 const isXpOmm = (record) => decodeOmmRecord(record).MEAN_ELEMENT_THEORY === SGP4XP;
@@ -35,24 +34,16 @@ async function moduleFit(t, oemBytes, hours) {
 const ELEMENTS = ["EPOCH", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BSTAR", "MEAN_MOTION_DDOT"];
 const elementsOf = (omm) => Object.fromEntries(ELEMENTS.map((key) => [key, omm[key]]));
 
-// An $OEM with its first block's OBJECT_ID replaced.
-function withObjectId(bytes, objectId) {
-  const oem = decodeOem(bytes);
-  oem.EPHEMERIS_DATA_BLOCK[0].OBJECT.OBJECT_ID = objectId;
-  return encodeOem(oem);
-}
-
-test("every source's $OEM fits to the legacy node's records, byte for byte", async (t) => {
+test("every source's $OEM fits to the release's records, byte for byte", async (t) => {
   const oems = await sourceOems(t);
   assert.deepEqual(Object.fromEntries(Object.entries(oems).map(([k, v]) => [k, v.length])), { starlink: 2, glonass: 25, intelsat: 1, cpf: 1, iss: 1 });
-  // data-source/cpf-source writes LAGEOS-1's ILRS id as its international designator; the legacy node kept the id.
+  // data-source/cpf-source writes LAGEOS-1's international designator, which the records carry.
   assert.equal(decodeOem(oems.cpf[0]).EPHEMERIS_DATA_BLOCK[0].OBJECT.OBJECT_ID, "1976-039A");
-  oems.cpf = [withObjectId(oems.cpf[0], "7603901")];
   const node = await odNode(t);
   const out = await fit(node, oems);
   assert.equal(out.invocations, 30, "one object an invocation");
   for (const standard of ["omm", "ocm", "obd"]) {
-    assert.deepEqual(out[standard].map(sha256).sort(), legacyRecords(standard).map(sha256).sort(), standard);
+    assert.deepEqual(hex(out[standard]), hex(release("sources", standard)), standard);
   }
 });
 
@@ -79,12 +70,12 @@ test("each fit: one batch per standard, its IngestRequest naming the provider an
   ]);
 });
 
-test("NASA's ISS ephemeris: the core's records are the legacy node's, and one SGP4-XP set, propagator/sgp4-xp's, naming NASA and the source module", async (t) => {
+test("NASA's ISS ephemeris: the core's records are the release's, and one SGP4-XP set, propagator/sgp4-xp's, naming NASA and the source module", async (t) => {
   const oem = await issOem(t, fs.readFileSync(path.join(modulesRoot, "files/ccsds-messages/fixtures/real/nasa-iss.oem")));
   const out = await fit(await odNode(t), { iss: [oem] });
   for (const standard of ["omm", "ocm", "obd"]) {
     const core = out[standard].filter((r) => !(standard === "omm" && isXpOmm(r)) && !(standard === "obd" && isXpObd(r)));
-    assert.deepEqual(hex(core), hex(legacy("iss-12h", standard)), `${standard}: the OD core's records`);
+    assert.deepEqual(hex(core), hex(release("iss-12h", standard)), `${standard}: the OD core's records`);
   }
   const xp = out.omm.filter(isXpOmm).map(decodeOmmRecord);
   assert.equal(xp.length, 1, "twelve hours: eight to fit and four to score the fit");
@@ -98,7 +89,7 @@ test("NASA's ISS ephemeris: the core's records are the legacy node's, and one SG
   assert.deepEqual(out.notices.map((n) => n.items[0]), ["OD fit complete: ISS (NORAD 25544); SGP4-XP: 1 set"]);
 });
 
-test("a three-day ephemeris: two full-day SGP4-XP windows, the first recovering the set that made it; the core's records are the legacy node's", async (t) => {
+test("a three-day ephemeris: two full-day SGP4-XP windows, the first recovering the set that made it; the core's records are the release's", async (t) => {
   // The ephemeris of a known SGP4-XP set (15.5 rev/day, BTERM 0.005, AGOM 0.01), made by propagator/sgp4-xp
   // (tests/fixtures/PROVENANCE.md).
   const out = await fit(await odNode(t), { iss: [await issOem(t, fixture("iss-sgp4xp-3day.oem"))] });
@@ -109,7 +100,7 @@ test("a three-day ephemeris: two full-day SGP4-XP windows, the first recovering 
   assert.ok(Math.abs(xp[0].MEAN_MOTION_DDOT - 0.01) <= 1e-3 * 0.01 + 1e-6, `AGOM ${xp[0].MEAN_MOTION_DDOT}`);
   for (const standard of ["omm", "ocm", "obd"]) {
     const core = (records) => records.filter((r) => !(standard === "omm" && isXpOmm(r)) && !(standard === "obd" && isXpObd(r)));
-    assert.deepEqual(hex(core(out[standard])), hex(core(legacy("iss-3day", standard))), `${standard}: the OD core's records`);
+    assert.deepEqual(hex(core(out[standard])), hex(release("iss-3day", standard)), `${standard}: the OD core's records`);
   }
   assert.deepEqual(out.notices.map((n) => n.items[0]), ["OD fit complete: ISS (NORAD 25544); SGP4-XP: 2 sets"]);
   assert.ok(out.omm.filter((r) => decodeOmmRecord(r).MEAN_ELEMENT_THEORY === SGP4).length >= 1);

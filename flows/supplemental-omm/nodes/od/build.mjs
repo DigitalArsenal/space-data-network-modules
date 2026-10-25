@@ -60,7 +60,7 @@ const distRoot = path.join(nodeRoot, "dist");
 const manifestPath = path.join(nodeRoot, "plugin-manifest.json");
 const sourcePath = path.join(nodeRoot, "src/node.cpp");
 const fitCoreObject = path.join(nodeRoot, "vendor/od-fit-core.o");
-const fitCoreObjectSha256 = "7ebc7409148e085759c976ae07f01c378b2f4f5a3662bd21a7c9b6ed6608782e";
+const fitCoreObjectSha256 = "68660fb44ab2ab550f2c9363fa1ba1c45e938c333d6536dcf42e89094a003b3d";
 const sdsHeaders = path.join(modulesRoot, "licensing/core/src/cpp/generated/sds");
 // The standards the manifests are validated against: SPACE_DATA_STANDARDS_ROOT, else the spacedatastandards.org package
 // this flow pins (package.json devDependencies).

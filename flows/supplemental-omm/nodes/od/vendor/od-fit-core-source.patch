@@ -2,7 +2,10 @@ diff --git a/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp b/analysis/od
 index 25c36fa..6fee59a 100644
 --- a/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp
 +++ b/analysis/od/src/cpp/guest-link/od_batch_fit_entry.cpp
-@@ -126,0 +127,29 @@ extern "C" int fit(void) {
+@@ -124,6 +124,35 @@ extern "C" int fit(void) {
+       last_rc = emit_provenance(r.obd, provider);
+       if (last_rc < 0) return last_rc;
+     }
 +
 +    // Complete-arc continuation epochs for the same input object. Each local
 +    // fit carries its own epoch/RMS/covariance and the same provider sidecar;
@@ -32,11 +35,17 @@ index 25c36fa..6fee59a 100644
 +        if (last_rc < 0) return last_rc;
 +      }
 +    }
+   }
+   return 0;
+ }
 diff --git a/analysis/od/src/cpp/include/od/plugin_runtime.h b/analysis/od/src/cpp/include/od/plugin_runtime.h
 index bd6c937..a0cbe75 100644
 --- a/analysis/od/src/cpp/include/od/plugin_runtime.h
 +++ b/analysis/od/src/cpp/include/od/plugin_runtime.h
-@@ -59,0 +60,8 @@ PluginFitFBResult fit_ephemeris_fb(
+@@ -57,6 +57,14 @@ PluginFitFBResult fit_ephemeris_fb(
+     std::size_t oem_len,
+     std::string_view options_json = {});
+ 
 +/// Complete-arc flow path: parse one full SDS $OEM once, fit deterministic
 +/// overlapping local windows that cover its first through terminal state, and
 +/// return one epoch-specific $OMM/$OCM/$OBD record set per window.
@@ -45,13 +54,25 @@ index bd6c937..a0cbe75 100644
 +    std::size_t oem_len,
 +    std::string_view options_json = {});
 +
+ }  // namespace od
+ 
+ #endif  // OD_PLUGIN_RUNTIME_H
 diff --git a/analysis/od/src/cpp/include/od/sgp4_fitter.h b/analysis/od/src/cpp/include/od/sgp4_fitter.h
 index c416198..52fb4c0 100644
 --- a/analysis/od/src/cpp/include/od/sgp4_fitter.h
 +++ b/analysis/od/src/cpp/include/od/sgp4_fitter.h
-@@ -22,0 +23 @@
+@@ -20,6 +20,7 @@
+ 
+ #include "meme_parser.h"
+ #include "state_series.h"
 +#include <cstddef>
-@@ -151,0 +153,15 @@ FitResult fit_sgp4_series(
+ #include <cstdint>
+ #include <string>
+ #include <vector>
+@@ -149,6 +150,21 @@ FitResult fit_sgp4_series(
+     const StateSeries& series,
+     const FitterConfig& config = {});
+ 
 +/// Select deterministic local-fit epochs that cover the complete ephemeris.
 +/// Adjacent starts are no farther apart than fit_window_sec, the first index is
 +/// zero, and the final start leaves enough trailing samples while covering the
@@ -67,21 +88,33 @@ index c416198..52fb4c0 100644
 +    const StateSeries& series,
 +    const FitterConfig& config = {});
 +
+ /// Fit SGP4 elements from a MEME file. `data_source` is the provider/source
+ /// token supplied by the caller/manifest (empty = unlabeled); it is NOT
+ /// hardcoded to any operator.
 diff --git a/analysis/od/src/cpp/src/od_batch_fit.cpp b/analysis/od/src/cpp/src/od_batch_fit.cpp
 index effcb24..cb6b47f 100644
 --- a/analysis/od/src/cpp/src/od_batch_fit.cpp
 +++ b/analysis/od/src/cpp/src/od_batch_fit.cpp
-@@ -17 +17 @@ BatchResult fit_one(const BatchObject& obj) {
+@@ -14,8 +14,14 @@ namespace {
+ // Run the SACRED per-object fit for one $OEM and package its result records.
+ BatchResult fit_one(const BatchObject& obj) {
+     BatchResult r;
 -    PluginFitFBResult fr = fit_ephemeris_fb(
 +    std::vector<PluginFitFBResult> epochs = fit_ephemeris_epochs_fb(
-@@ -18,0 +19,6 @@ BatchResult fit_one(const BatchObject& obj) {
+         obj.oem.empty() ? nullptr : obj.oem.data(), obj.oem.size(), std::string_view{});
 +    if (epochs.empty()) {
 +        r.error_code = "fit-empty";
 +        r.error_message = "complete-arc fitter produced no epoch records";
 +        return r;
 +    }
 +    PluginFitFBResult& fr = epochs.front();
-@@ -30,0 +37,12 @@ BatchResult fit_one(const BatchObject& obj) {
+     if (!fr.ok) {
+         r.ok = false;
+         r.error_code = fr.error_code;
+@@ -28,6 +34,18 @@ BatchResult fit_one(const BatchObject& obj) {
+     r.ocm = std::move(fr.ocm);
+     r.rms_km = fr.rms_km;
+     r.converged = fr.converged;
 +    r.additional_epochs.reserve(epochs.size() - 1);
 +    for (std::size_t i = 1; i < epochs.size(); ++i) {
 +        PluginFitFBResult& epoch = epochs[i];
@@ -94,11 +127,17 @@ index effcb24..cb6b47f 100644
 +        additional.converged = epoch.converged;
 +        r.additional_epochs.push_back(std::move(additional));
 +    }
+     return r;
+ }
+ 
 diff --git a/analysis/od/src/cpp/src/od_batch_fit.hpp b/analysis/od/src/cpp/src/od_batch_fit.hpp
 index 697c10b..5d6f687 100644
 --- a/analysis/od/src/cpp/src/od_batch_fit.hpp
 +++ b/analysis/od/src/cpp/src/od_batch_fit.hpp
-@@ -27,0 +28,8 @@ struct BatchObject {
+@@ -25,6 +25,14 @@ struct BatchObject {
+     std::vector<uint8_t> oem;  // one in-memory $OEM FlatBuffer (non-size-prefixed)
+ };
+ 
 +struct BatchEpochResult {
 +    std::vector<uint8_t> omm;
 +    std::vector<uint8_t> obd;
@@ -107,16 +146,28 @@ index 697c10b..5d6f687 100644
 +    bool converged = false;
 +};
 +
-@@ -36,0 +45,4 @@ struct BatchResult {
+ struct BatchResult {
+     bool ok = false;
+     std::vector<uint8_t> omm;   // size-prefixed $OMM
+@@ -34,6 +42,10 @@ struct BatchResult {
+     bool converged = false;
+     std::string error_code;
+     std::string error_message;
 +    // The first local epoch stays in the legacy scalar fields above for the
 +    // command/resident benchmark ABI. Every later complete-arc local fit is
 +    // retained here and the composed flow emits all of them.
 +    std::vector<BatchEpochResult> additional_epochs;
+     unsigned long long worker_tid = 0;  // OS thread id (hashed) that ran this fit
+ };
+ 
 diff --git a/analysis/od/src/cpp/src/plugin_runtime.cpp b/analysis/od/src/cpp/src/plugin_runtime.cpp
 index ed6adb2..fae4584 100644
 --- a/analysis/od/src/cpp/src/plugin_runtime.cpp
 +++ b/analysis/od/src/cpp/src/plugin_runtime.cpp
-@@ -262,0 +263,29 @@ bool build_meme_series(std::string_view content, StateSeries* out,
+@@ -260,6 +260,35 @@ bool build_meme_series(std::string_view content, StateSeries* out,
+     return true;
+ }
+ 
 +PluginFitFBResult build_fit_record_set(const FitResult& fit,
 +                                       const FitterConfig& config,
 +                                       double fit_span_days) {
@@ -146,7 +197,13 @@ index ed6adb2..fae4584 100644
 +    return result;
 +}
 +
-@@ -399,0 +429,53 @@ PluginFitFBResult fit_ephemeris_fb(
+ }  // namespace
+ 
+ PluginFitResult fit_ephemeris_payload(
+@@ -397,4 +426,57 @@ PluginFitFBResult fit_ephemeris_fb(
+     return result;
+ }
+ 
 +std::vector<PluginFitFBResult> fit_ephemeris_epochs_fb(
 +    const uint8_t* oem_buf,
 +    std::size_t oem_len,
@@ -200,11 +257,210 @@ index ed6adb2..fae4584 100644
 +    return results;
 +}
 +
+ }  // namespace od
 diff --git a/analysis/od/src/cpp/src/sgp4_fitter.cpp b/analysis/od/src/cpp/src/sgp4_fitter.cpp
-index e160552..8b00257 100644
+index e160552..fca3f96 100644
 --- a/analysis/od/src/cpp/src/sgp4_fitter.cpp
 +++ b/analysis/od/src/cpp/src/sgp4_fitter.cpp
-@@ -1356,0 +1357,64 @@ FitResult fit_sgp4(
+@@ -20,7 +20,7 @@
+  */
+ 
+ #include "od/sgp4_fitter.h"
+-#include "SGP4.h"
++#include "sgp4_str3.h"  // foundation/sgp4-str3: the clean-room SGP4/SDP4 base
+ 
+ #include <Eigen/Dense>
+ #include <Eigen/SVD>
+@@ -35,7 +35,7 @@
+ 
+ namespace od {
+ 
+-// ── Constants (WGS72, matching Vallado SGP4) ──
++// ── Constants (WGS-72, as the SGP4 base, foundation/sgp4-str3) ──
+ 
+ static constexpr double MU_EARTH = 398600.8;            // km³/s² (WGS72)
+ static constexpr double RE_KM = 6378.135;               // Earth radius (km, WGS72)
+@@ -77,18 +77,40 @@ static double normalize_angle(double a) {
+ 
+ // ── JD ↔ Calendar conversion ──
+ 
+-// JD epoch for SGP4: Jan 0, 1950 00:00 UTC = JD 2433281.5
+-static constexpr double JD_EPOCH_1950 = 2433281.5;
++// Days from 1970-01-01 of a proleptic Gregorian date, and back (civil day counts, exact integers).
++static long days_from_civil(long y, int m, int d) {
++    y -= m <= 2 ? 1 : 0;
++    const long era = (y >= 0 ? y : y - 399) / 400;
++    const long yoe = y - era * 400;
++    const long doy = (153L * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
++    const long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
++    return era * 146097 + doe - 719468;
++}
+ 
+-static void jd_to_calendar(double jd, int& year, int& month, int& day,
+-                           int& hour, int& minute, double& sec) {
+-    SGP4Funcs::invjday_SGP4(std::floor(jd), jd - std::floor(jd),
+-                            year, month, day, hour, minute, sec);
++static void civil_from_days(long z, long& y, int& m, int& d) {
++    z += 719468;
++    const long era = (z >= 0 ? z : z - 146096) / 146097;
++    const long doe = z - era * 146097;
++    const long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
++    const long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
++    const long mp = (5 * doy + 2) / 153;
++    d = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
++    m = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
++    y = yoe + era * 400 + (m <= 2 ? 1 : 0);
+ }
+ 
+-// Convert JD to SGP4 epoch (days since Jan 0, 1950)
+-static double jd_to_sgp4_epoch(double jd) {
+-    return jd - JD_EPOCH_1950;
++// The UTC calendar date and time of a Julian date (a day starts at JD x.5).
++static void jd_to_calendar(double jd, int& year, int& month, int& day,
++                           int& hour, int& minute, double& sec) {
++    const double day0 = std::floor(jd - 0.5) + 0.5;  // the Julian date of 0h of that day
++    long y;
++    civil_from_days(static_cast<long>(day0 - 2440587.5), y, month, day);
++    year = static_cast<int>(y);
++    double s = (jd - day0) * SEC_PER_DAY;
++    hour = static_cast<int>(s / 3600.0);
++    s -= hour * 3600.0;
++    minute = static_cast<int>(s / 60.0);
++    sec = s - minute * 60.0;
+ }
+ 
+ // Convert JD to day-of-year (fractional)
+@@ -96,9 +118,28 @@ static double jd_to_day_of_year(double jd) {
+     int year, month, day, hour, minute;
+     double sec;
+     jd_to_calendar(jd, year, month, day, hour, minute, sec);
+-    double jd_jan1, jd_jan1_frac;
+-    SGP4Funcs::jday_SGP4(year, 1, 1, 0, 0, 0.0, jd_jan1, jd_jan1_frac);
+-    return (jd - (jd_jan1 + jd_jan1_frac)) + 1.0;
++    const double jd_jan1 = 2440587.5 + static_cast<double>(days_from_civil(year, 1, 1));  // 0h January 1
++    return (jd - jd_jan1) + 1.0;
++}
++
++// ── The SGP4/SDP4 base: foundation/sgp4-str3, improved mode, WGS-72 ──
++// One set from its mean elements (no two-line text): the epoch split as the base holds it, the mean motion in
++// rad/min, the angles in radians. A set is usable when it also gives a state at its epoch.
++static bool init_sat(const SGP4Elements& el, sdnap::Sat& sat) {
++    sdnap::Elements e{};
++    sdnap::split_jd(el.epoch_jd, e.epoch_jd_whole, e.epoch_jd_frac);
++    e.xno = el.mean_motion * TWO_PI / MIN_PER_DAY;
++    e.eo = el.eccentricity;
++    e.xincl = el.inclination * DEG2RAD;
++    e.xnodeo = el.ra_of_asc_node * DEG2RAD;
++    e.omegao = el.arg_of_pericenter * DEG2RAD;
++    e.xmo = el.mean_anomaly * DEG2RAD;
++    e.bstar = el.bstar;
++    e.ndot_rev_day2 = el.mean_motion_dot;
++    e.nddot_rev_day3 = el.mean_motion_ddot;
++    if (sdnap::sat_init(e, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) != sdnap::kPropOk) return false;
++    double r[3], v[3];
++    return sdnap::sat_propagate(sat, nullptr, 0.0, r, v) == sdnap::kPropOk;
+ }
+ 
+ // ── Generate TLE strings from mean elements ──
+@@ -336,24 +377,11 @@ static bool iterative_osc_to_mean(
+     for (int iter = 0; iter < 15; iter++) {
+         {
+             // Initialize SGP4 directly with element values (no TLE string round-trip)
+-            double sgp4_epoch = jd_to_sgp4_epoch(epoch_jd);
+-            double n_kozai_rad_min = trial.mean_motion * TWO_PI / MIN_PER_DAY;
+-            elsetrec satrec;
+-            bool init_ok = SGP4Funcs::sgp4init(
+-                wgs72, 'i', "99999", sgp4_epoch,
+-                trial.bstar, trial.mean_motion_dot / (MIN_PER_DAY * MIN_PER_DAY / TWO_PI),
+-                trial.mean_motion_ddot, trial.eccentricity,
+-                trial.arg_of_pericenter * DEG2RAD,
+-                trial.inclination * DEG2RAD,
+-                trial.mean_anomaly * DEG2RAD,
+-                n_kozai_rad_min,
+-                trial.ra_of_asc_node * DEG2RAD,
+-                satrec);
+-            if (!init_ok || satrec.error != 0) break;
++            sdnap::Sat sat;
++            if (!init_sat(trial, sat)) break;
+ 
+             double r[3], v[3];
+-            bool prop_ok = SGP4Funcs::sgp4(satrec, 0.0, r, v);
+-            if (!prop_ok || satrec.error != 0) break;
++            if (sdnap::sat_propagate(sat, nullptr, 0.0, r, v) != sdnap::kPropOk) break;
+ 
+             auto sgp4_osc = cartesian_to_keplerian(r[0], r[1], r[2], v[0], v[1], v[2]);
+ 
+@@ -549,43 +577,20 @@ static SGP4Elements set_equinoctial(const SGP4Elements& base, const double p[NPA
+     return el;
+ }
+ 
+-// ── SGP4 propagation via Vallado API ──
++// ── SGP4 propagation (foundation/sgp4-str3, init_sat above) ──
+ 
+ struct PropState {
+     double x, y, z, vx, vy, vz;
+ };
+ 
+-// Initialize elsetrec from our SGP4Elements (no TLE string formatting)
+-static bool init_satrec(const SGP4Elements& el, elsetrec& satrec) {
+-    double sgp4_epoch = jd_to_sgp4_epoch(el.epoch_jd);
+-    double n_kozai_rad_min = el.mean_motion * TWO_PI / MIN_PER_DAY;
+-    // ndot: our units are rev/day², Vallado wants rad/min² / 2
+-    // ndot_vallado = (ndot_rev_day * 2π / (1440²)) — but sgp4init
+-    // internally divides by xnodp convention. Pass as-is in TLE-compatible units.
+-    double ndot_tle = el.mean_motion_dot / (MIN_PER_DAY * MIN_PER_DAY / TWO_PI);
+-
+-    bool ok = SGP4Funcs::sgp4init(
+-        wgs72, 'i', "99999", sgp4_epoch,
+-        el.bstar, ndot_tle, el.mean_motion_ddot,
+-        el.eccentricity,
+-        el.arg_of_pericenter * DEG2RAD,
+-        el.inclination * DEG2RAD,
+-        el.mean_anomaly * DEG2RAD,
+-        n_kozai_rad_min,
+-        el.ra_of_asc_node * DEG2RAD,
+-        satrec);
+-    return ok && satrec.error == 0;
+-}
+-
+ static bool propagate_elements(
+     const SGP4Elements& el, double target_jd, PropState& out) {
+-    elsetrec satrec;
+-    if (!init_satrec(el, satrec)) return false;
++    sdnap::Sat sat;
++    if (!init_sat(el, sat)) return false;
+ 
+     double dt_min = (target_jd - el.epoch_jd) * MIN_PER_DAY;
+     double r[3], v[3];
+-    bool ok = SGP4Funcs::sgp4(satrec, dt_min, r, v);
+-    if (!ok || satrec.error != 0) return false;
++    if (sdnap::sat_propagate(sat, nullptr, dt_min, r, v) != sdnap::kPropOk) return false;
+ 
+     out.x = r[0]; out.y = r[1]; out.z = r[2];
+     out.vx = v[0]; out.vy = v[1]; out.vz = v[2];
+@@ -598,15 +603,14 @@ static bool propagate_batch(
+     const std::vector<EphemerisPoint>& points,
+     std::vector<PropState>& out) {
+ 
+-    elsetrec satrec;
+-    if (!init_satrec(el, satrec)) return false;
++    sdnap::Sat sat;
++    if (!init_sat(el, sat)) return false;
+ 
+     out.resize(points.size());
+     for (size_t i = 0; i < points.size(); i++) {
+         double dt_min = (points[i].epoch_jd - el.epoch_jd) * MIN_PER_DAY;
+         double r[3], v[3];
+-        bool ok = SGP4Funcs::sgp4(satrec, dt_min, r, v);
+-        if (!ok || satrec.error != 0) return false;
++        if (sdnap::sat_propagate(sat, nullptr, dt_min, r, v) != sdnap::kPropOk) return false;
+         out[i].x = r[0]; out[i].y = r[1]; out[i].z = r[2];
+         out[i].vx = v[0]; out[i].vy = v[1]; out[i].vz = v[2];
+     }
+@@ -1354,6 +1358,70 @@ FitResult fit_sgp4(
+     return best_result;
+ }
+ 
 +std::vector<std::size_t> select_fit_epoch_indices(
 +    const std::vector<EphemerisPoint>& points,
 +    double fit_window_sec) {
@@ -269,3 +525,6 @@ index e160552..8b00257 100644
 +    return results;
 +}
 +
+ FitResult fit_sgp4_series(
+     const StateSeries& series,
+     const FitterConfig& config) {

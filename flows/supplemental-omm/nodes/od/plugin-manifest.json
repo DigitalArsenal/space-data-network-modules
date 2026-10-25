@@ -1,7 +1,7 @@
 {
   "pluginId": "org.sdn.flows.supplemental-omm.od",
   "name": "Supplemental OMM Orbit Determination",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Supplemental OMM orbit determination (typed contracts 1.0: FlatBuffers only, no JSON and no FSB/FSO transport). fit: the flow's source modules' SDS $OEM (one object per frame, on the port of its provider: starlink, glonass, intelsat, cpf, iss) -> the frozen complete-arc OD core's epoch-specific $OMM, $OCM and $OBD, plus an SGP4-XP $OMM and $OBD for each full-day window of the ephemeris (propagator/sgp4-xp, the US Space Force Sgp4Prop joined in), each standard one size-prefixed record stream with the IngestRequest (INGQ) hostcap/storage-ingest files it by; one object an invocation, the rest yielded as backlog. Position-only sources (GLONASS SP3, Intelsat ECF, CPF) are fitted from positions alone in their own axes (Earth-fixed or EME2000; analysis/od refuses Earth-fixed frames), and an arc the core cannot fit is refused before it. FlowNotice (FNTC) on status: Info fitted (per object, the completion message), Skipped unfittable / fit-failed. publish_request: the IngestResult (INGR) storage-ingest answers + the IngestRequest it stored -> the dataset-publication POST (HttpRequest, HREQ; config omm_publish_url, nothing when unset or when the batch was refused). No capabilities but plugin.getConfig (publish_request).",
   "pluginFamily": "orbit_determination",
   "capabilities": [],
