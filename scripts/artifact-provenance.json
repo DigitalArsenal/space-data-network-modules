@@ -5110,17 +5110,14 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "9df647b089786b3866249d579c57863ecc4f2e3abb4ce63c07ea117cfa2fddda",
-      "bytes": 1442515,
+      "sha256": "327430d18c45f7935dfa5ffb5e6a6e25cdbd629bde111ad47f22253639c3ff7a",
+      "bytes": 1465956,
       "module": "propagator/sdn-ap",
-      "lastCommit": "0927befd6931669676651c7be0bf50ca9f0350e4",
-      "lastCommitDate": "2026-10-24T21:42:25-04:00",
+      "lastCommit": "021eb6fbd1fd5932df9be5bd3d1de18b1c1d2faf",
+      "lastCommitDate": "2026-10-25T05:05:39-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": false,
         "threadModels": [],
