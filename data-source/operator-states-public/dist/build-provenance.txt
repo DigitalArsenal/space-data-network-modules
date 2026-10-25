@@ -1,2 +1,2 @@
-spacedatastandards.org=1.259.0
+spacedatastandards.org=1.261.0
 threadModel=wasi-sequential

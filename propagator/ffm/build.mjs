@@ -8,13 +8,14 @@ import {compileModuleFromSource,cleanupCompilation} from 'space-data-module-sdk/
 import {generateSdsBindings,packageRoot,standardsRoot} from './generate-sds-bindings.mjs';
 import {composeErfaTranslationUnit} from '../../foundation/frames/erfa-amalgamation.mjs';
 import {physicsUnits} from './lib/units.mjs';
+import {sharedEmsdkRoot} from '../../scripts/lib/emsdk-toolchain.mjs';
 
 const manifest=JSON.parse(await fs.readFile(path.join(packageRoot,'plugin-manifest.json'),'utf8'));
 await generateSdsBindings();
 await import('./generate-catalog-profile.mjs');
 // Explicit provisioned toolchain, or this package's deps. No repository command
 // is needed to select a compiler; outputs and caches stay in this worktree.
-const candidates=[process.env.SDN_LOCAL_EMSDK_DIR,path.join(packageRoot,'deps/emsdk')].filter(Boolean);
+const candidates=[process.env.SDN_LOCAL_EMSDK_DIR,path.join(packageRoot,'deps/emsdk'),sharedEmsdkRoot()].filter(Boolean);
 const emsdk=candidates.find(p=>fsSync.existsSync(path.join(p,'upstream/bin/clang++')));
 if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SDN_LOCAL_EMSDK_DIR. This build never invokes emcc.');
 // Pilot builds can raise the ceiling to measure the largest role. The release

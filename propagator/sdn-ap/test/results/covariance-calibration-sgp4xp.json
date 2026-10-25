@@ -1,0 +1,355 @@
+{
+ "task": "modules-sdn-ap-covariance-20261025",
+ "set": "calibration",
+ "theory": "SGP4XP",
+ "created": "2026-10-25T10:34:14.038Z",
+ "moduleSha256": "1f66e6fdf443025658c1be4e6d882a4168126280be81299fb57a1d19e850784d",
+ "moduleNote": "this build carried zero process noise; the calibration sets each size itself",
+ "windows": 198,
+ "skipped": 0,
+ "sampleMinutes": 30,
+ "fitHours": 24,
+ "processNoise": {
+  "drag": {
+   "s_e": 2.813e-06,
+   "s_i": 7.432e-06,
+   "s_l": 8.505e-07,
+   "c": 1.275e-06,
+   "negativeLogLikelihood": -97629.42729303513,
+   "windows": 136,
+   "samples": 18255
+  },
+  "above": {
+   "s_e": 2.308e-07,
+   "s_i": 3.752e-07,
+   "s_l": 2.666e-07,
+   "c": 0,
+   "negativeLogLikelihood": -131117.62741008826,
+   "windows": 62,
+   "samples": 8637
+  },
+  "model": "rate errors constant from the arc end: eccentricity vector s_e/day, inclination vector s_i/day, mean longitude s_l n, n-dot c |n-dot_ng| (drag regime)"
+ },
+ "inSample": {
+  "high": {
+   "all": {
+    "1": {
+     "windows": 39,
+     "samples": 1869,
+     "meanD2Over3": 1.445,
+     "coverage95": 0.8871,
+     "medianD2": 3.414,
+     "positionRmsKm": 0.09179
+    },
+    "2": {
+     "windows": 36,
+     "samples": 1728,
+     "meanD2Over3": 0.9192,
+     "coverage95": 0.9821,
+     "medianD2": 2.337,
+     "positionRmsKm": 0.1457
+    },
+    "3": {
+     "windows": 36,
+     "samples": 1728,
+     "meanD2Over3": 0.7588,
+     "coverage95": 0.9925,
+     "medianD2": 2.007,
+     "positionRmsKm": 0.2068
+    }
+   },
+   "byObject": {
+    "etalon1": {
+     "1": {
+      "windows": 13,
+      "samples": 623,
+      "meanD2Over3": 1.477,
+      "coverage95": 0.878,
+      "medianD2": 3.451,
+      "positionRmsKm": 0.05592
+     },
+     "2": {
+      "windows": 12,
+      "samples": 576,
+      "meanD2Over3": 0.8333,
+      "coverage95": 0.9844,
+      "medianD2": 2.127,
+      "positionRmsKm": 0.1029
+     },
+     "3": {
+      "windows": 12,
+      "samples": 576,
+      "meanD2Over3": 0.6251,
+      "coverage95": 1,
+      "medianD2": 1.665,
+      "positionRmsKm": 0.1459
+     }
+    },
+    "etalon2": {
+     "1": {
+      "windows": 13,
+      "samples": 623,
+      "meanD2Over3": 1.729,
+      "coverage95": 0.8138,
+      "medianD2": 3.671,
+      "positionRmsKm": 0.05729
+     },
+     "2": {
+      "windows": 12,
+      "samples": 576,
+      "meanD2Over3": 0.9299,
+      "coverage95": 0.9809,
+      "medianD2": 2.295,
+      "positionRmsKm": 0.1016
+     },
+     "3": {
+      "windows": 12,
+      "samples": 576,
+      "meanD2Over3": 0.7428,
+      "coverage95": 0.9931,
+      "medianD2": 1.941,
+      "positionRmsKm": 0.1488
+     }
+    },
+    "lageos2": {
+     "1": {
+      "windows": 13,
+      "samples": 623,
+      "meanD2Over3": 1.13,
+      "coverage95": 0.9695,
+      "medianD2": 3.133,
+      "positionRmsKm": 0.1374
+     },
+     "2": {
+      "windows": 12,
+      "samples": 576,
+      "meanD2Over3": 0.9945,
+      "coverage95": 0.9809,
+      "medianD2": 2.617,
+      "positionRmsKm": 0.2068
+     },
+     "3": {
+      "windows": 12,
+      "samples": 576,
+      "meanD2Over3": 0.9085,
+      "coverage95": 0.9844,
+      "medianD2": 2.437,
+      "positionRmsKm": 0.2913
+     }
+    }
+   }
+  },
+  "leo": {
+   "all": {
+    "1": {
+     "windows": 159,
+     "samples": 7563,
+     "meanD2Over3": 1.227,
+     "coverage95": 0.9433,
+     "medianD2": 3.325,
+     "positionRmsKm": 0.6528
+    },
+    "2": {
+     "windows": 159,
+     "samples": 7563,
+     "meanD2Over3": 1.073,
+     "coverage95": 0.9662,
+     "medianD2": 2.853,
+     "positionRmsKm": 1.041
+    },
+    "3": {
+     "windows": 159,
+     "samples": 6441,
+     "meanD2Over3": 0.9046,
+     "coverage95": 0.9817,
+     "medianD2": 2.309,
+     "positionRmsKm": 1.421
+    }
+   },
+   "byObject": {
+    "AJISAI": {
+     "1": {
+      "windows": 23,
+      "samples": 1035,
+      "meanD2Over3": 1.019,
+      "coverage95": 0.9787,
+      "medianD2": 2.757,
+      "positionRmsKm": 0.3853
+     },
+     "2": {
+      "windows": 23,
+      "samples": 1035,
+      "meanD2Over3": 0.7072,
+      "coverage95": 0.999,
+      "medianD2": 1.906,
+      "positionRmsKm": 0.5708
+     },
+     "3": {
+      "windows": 23,
+      "samples": 902,
+      "meanD2Over3": 0.5487,
+      "coverage95": 1,
+      "medianD2": 1.365,
+      "positionRmsKm": 0.7813
+     }
+    },
+    "STARLETTE": {
+     "1": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.273,
+      "coverage95": 0.9357,
+      "medianD2": 3.601,
+      "positionRmsKm": 0.4813
+     },
+     "2": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.254,
+      "coverage95": 0.9275,
+      "medianD2": 3.404,
+      "positionRmsKm": 0.7243
+     },
+     "3": {
+      "windows": 23,
+      "samples": 952,
+      "meanD2Over3": 1.163,
+      "coverage95": 0.9443,
+      "medianD2": 3.121,
+      "positionRmsKm": 0.977
+     }
+    },
+    "STELLA": {
+     "1": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.352,
+      "coverage95": 0.9266,
+      "medianD2": 3.897,
+      "positionRmsKm": 0.887
+     },
+     "2": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.196,
+      "coverage95": 0.9656,
+      "medianD2": 3.496,
+      "positionRmsKm": 1.435
+     },
+     "3": {
+      "windows": 23,
+      "samples": 953,
+      "meanD2Over3": 0.8719,
+      "coverage95": 0.999,
+      "medianD2": 2.469,
+      "positionRmsKm": 1.939
+     }
+    },
+    "LARETS": {
+     "1": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.295,
+      "coverage95": 0.9339,
+      "medianD2": 3.55,
+      "positionRmsKm": 0.909
+     },
+     "2": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.084,
+      "coverage95": 0.9828,
+      "medianD2": 3.002,
+      "positionRmsKm": 1.382
+     },
+     "3": {
+      "windows": 23,
+      "samples": 852,
+      "meanD2Over3": 0.7896,
+      "coverage95": 0.9965,
+      "medianD2": 2.212,
+      "positionRmsKm": 1.771
+     }
+    },
+    "WESTPAC": {
+     "1": {
+      "windows": 22,
+      "samples": 1056,
+      "meanD2Over3": 1.11,
+      "coverage95": 0.9782,
+      "medianD2": 3.025,
+      "positionRmsKm": 0.746
+     },
+     "2": {
+      "windows": 22,
+      "samples": 1056,
+      "meanD2Over3": 1.032,
+      "coverage95": 0.9886,
+      "medianD2": 2.88,
+      "positionRmsKm": 1.274
+     },
+     "3": {
+      "windows": 22,
+      "samples": 739,
+      "meanD2Over3": 0.9246,
+      "coverage95": 0.9946,
+      "medianD2": 2.616,
+      "positionRmsKm": 2.061
+     }
+    },
+    "LARES": {
+     "1": {
+      "windows": 22,
+      "samples": 1056,
+      "meanD2Over3": 1.263,
+      "coverage95": 0.911,
+      "medianD2": 3.244,
+      "positionRmsKm": 0.6215
+     },
+     "2": {
+      "windows": 22,
+      "samples": 1056,
+      "meanD2Over3": 1.016,
+      "coverage95": 0.9602,
+      "medianD2": 2.526,
+      "positionRmsKm": 1.02
+     },
+     "3": {
+      "windows": 22,
+      "samples": 939,
+      "meanD2Over3": 0.8581,
+      "coverage95": 0.9915,
+      "medianD2": 2.093,
+      "positionRmsKm": 1.453
+     }
+    },
+    "LARES-2": {
+     "1": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.262,
+      "coverage95": 0.9411,
+      "medianD2": 3.458,
+      "positionRmsKm": 0.1824
+     },
+     "2": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.195,
+      "coverage95": 0.942,
+      "medianD2": 3.144,
+      "positionRmsKm": 0.2805
+     },
+     "3": {
+      "windows": 23,
+      "samples": 1104,
+      "meanD2Over3": 1.116,
+      "coverage95": 0.9556,
+      "medianD2": 2.849,
+      "positionRmsKm": 0.3932
+     }
+    }
+   }
+  }
+ }
+}

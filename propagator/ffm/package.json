@@ -55,5 +55,8 @@
     "type": "git",
     "url": "https://github.com/DigitalArsenal/space-data-network-plugin-ffm"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "overrides": {
+    "hd-wallet-wasm": "2.1.2"
+  }
 }

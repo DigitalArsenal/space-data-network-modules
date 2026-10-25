@@ -8,7 +8,15 @@ const require=createRequire(path.join(packageDir,'package.json'));
 const {compileModuleFromSource,resolveWasiThreadsToolchain}=await import(pathToFileURL(require.resolve('space-data-module-sdk/compiler')));
 const {compileFlowProgram,resolveFlowDependencies}=await import(pathToFileURL(require.resolve('space-data-module-sdk/flow/compiler')));
 const out=path.join(modules,'flows/open-dca/dist');
-process.env.SPACE_DATA_STANDARDS_ROOT=path.dirname(require.resolve('spacedatastandards.org/package.json'));
+// The flow's standards are its own pin (package.json); every module build resolves its own. So the override is set
+// only around this flow's own compiles (the EOP and host-hook units) and the link, never while a module's build runs,
+// and a module's dist stays what its own build makes of it.
+const standardsRoot=path.dirname(createRequire(path.join(modules,'flows/open-dca/package.json')).resolve('spacedatastandards.org/package.json'));
+delete process.env.SPACE_DATA_STANDARDS_ROOT;
+async function withFlowStandards(step){
+ process.env.SPACE_DATA_STANDARDS_ROOT=standardsRoot;
+ try{return await step();}finally{delete process.env.SPACE_DATA_STANDARDS_ROOT;}
+}
 export async function buildHook(folder,sourceFile){
  const original=path.join(modules,'hostcap',folder),target=path.join(out,'transport',folder);
  const manifest=JSON.parse(await fs.readFile(path.join(original,'plugin-manifest.json'),'utf8'));
@@ -31,12 +39,12 @@ export async function buildEop(kind="parser"){
  const entries=await resolveFlowDependencies({depsPath:original});return {...entries.get(manifest.pluginId),manifest,wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- const eop=await buildEop(),eopRequest=await buildEop('request');
+ const eop=await withFlowStandards(()=>buildEop()),eopRequest=await withFlowStandards(()=>buildEop('request'));
  if(process.argv.includes('--eop-only'))console.log(`Built EOP parser: ${eop.wasmPath}`);
  else{
  const operator=(await import('../../data-source/operator-states-public/build.mjs')).compilation;
  const weather=(await import('../../data-source/space-weather/build.mjs')).compilation;
- const http=await buildHook('http-request','http_request_module.cpp'),storage=await buildHook('storage-ingest','storage_ingest_module.cpp');
+ const http=await withFlowStandards(()=>buildHook('http-request','http_request_module.cpp')),storage=await withFlowStandards(()=>buildHook('storage-ingest','storage_ingest_module.cpp'));
  // Last: the EH-free typed energy compiler also supplies the final flow link.
  // The SDK owns composition; all physics stays in the linked WASM units.
  const density=(await import('../../analysis/density-calibration/build.mjs')).compilation;
@@ -61,7 +69,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
  for(const [folder,compilation] of [['data-source/operator-states-public',operator],['data-source/space-weather',weather],['analysis/density-calibration',density]]){const entries=await resolveFlowDependencies({depsPath:path.join(modules,folder)});for(const [id,entry]of entries)dependencies.set(id,{...entry,guestLink:{objectBytes:compilation.guestLink.objectBytes,metadata:compilation.guestLink}});}
  for(const entry of [eop,eopRequest,http,storage])dependencies.set(entry.manifest.pluginId,entry);
  resolveWasiThreadsToolchain({force:true});
- await compileFlowProgram({flow,dependencies,outDir:path.join(out,'runtime'),standardsRoot:process.env.SPACE_DATA_STANDARDS_ROOT});
+ await withFlowStandards(()=>compileFlowProgram({flow,dependencies,outDir:path.join(out,'runtime'),standardsRoot}));
  await fs.copyFile(path.join(out,'runtime/flow.json'),path.join(out,'flow.json'));
  }
 }

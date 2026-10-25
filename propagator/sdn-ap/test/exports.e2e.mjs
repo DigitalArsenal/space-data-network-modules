@@ -7,6 +7,9 @@
 //   and 180 at u = argp + 180 (apocenter).
 // - sdnap_mean_elements_at against the set itself: SGP4XP and SDN-AP rows of sdnap_init_elements at their epoch give
 //   their own e, i, RAAN, argp and mean anomaly back; an SGP4 row and an unknown row are refused.
+// - sdnap_mean_motion_of against sdnap_mean_elements_at: 200 seeded mean a (6,578 to 42,164 km), e and i; the mean
+//   motion it gives, set in an SGP4XP and an SDN-AP row, returns a at the epoch within 1e-12 relative; a <= 0 and
+//   e outside [0, 1) give NaN.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/exports.e2e.mjs
 import { openModule, THEORY } from "./lib/module.mjs";
@@ -80,6 +83,30 @@ const angle = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
   const sgp4 = x.sdnap_mean_elements_at(2, 0, p), none = x.sdnap_mean_elements_at(9, 0, p);
   console.log(`sdnap_mean_elements_at, an SGP4 row -> ${sgp4}, an unknown row -> ${none}`);
   check(sgp4 !== 0 && none !== 0, `refusals: SGP4 ${sgp4}, unknown ${none}`);
+}
+
+// mean motion from a mean semi-major axis, round trip through the sets
+{
+  const t = jdOf("2026-10-20T12:00:00.000000");
+  const cases = Array.from({ length: 200 }, () => {
+    const a = 6578 * (42164 / 6578) ** u();
+    return { a, e: Math.min(0.7 * u(), 1 - 6578 / a), inc: 180 * u() };  // perigee at 200 km or above
+  });
+  const sets = [];
+  for (const [k, c] of cases.entries())
+    for (const theory of [THEORY.SGP4XP, THEORY.SDNAP])
+      sets.push({ epochWhole: t.whole, epochFrac: t.frac, meanMotion: x.sdnap_mean_motion_of(c.a, c.e, c.inc), ecc: c.e, inc: c.inc, raan: 40, argp: 70, ma: 10, norad: 100 + k, theory });
+  m.init(sets);
+  let worst = 0, bad = 0;
+  sets.forEach((s, k) => {
+    const st = x.sdnap_mean_elements_at(k, 0, p);
+    const a = f64(0, 1)[0], want = cases[k >> 1].a;
+    if (st !== 0) ++bad;
+    else worst = Math.max(worst, Math.abs(a - want) / want);
+  });
+  const nan = [x.sdnap_mean_motion_of(0, 0, 0), x.sdnap_mean_motion_of(7000, 1, 0), x.sdnap_mean_motion_of(7000, -0.1, 0), x.sdnap_mean_motion_of(7000, 0, NaN)];
+  console.log(`sdnap_mean_motion_of against sdnap_mean_elements_at, ${sets.length} sets (SGP4XP and SDN-AP, a 6,578..42,164 km): ${bad} refused, worst a ${worst.toExponential(2)} relative; GEO 42,164 km -> ${x.sdnap_mean_motion_of(42164, 0, 0).toFixed(8)} rev/day`);
+  check(bad === 0 && worst <= 1e-12 && nan.every(Number.isNaN), `mean motion round trip: ${bad} refused, worst ${worst}, refusals ${nan}`);
 }
 
 x.sdnap_free(p);

@@ -29,5 +29,8 @@
     "playwright-core": "1.58.2",
     "space-data-module-sdk": "0.9.12"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "overrides": {
+    "hd-wallet-wasm": "2.1.2"
+  }
 }

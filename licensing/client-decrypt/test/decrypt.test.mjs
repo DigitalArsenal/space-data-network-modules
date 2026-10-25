@@ -169,12 +169,19 @@ import {
   getWasmWallet,
   hkdfBytes,
   randomBytes,
-  secp256k1PublicKey,
   x25519SharedSecret,
 } from "space-data-module-sdk/utils/wasm-crypto";
 import {
   createSdkBrowserShimHarness,
 } from "./lib/sdkBrowserShimHarness.mjs";
+
+// The SDK's secp256k1PublicKey (0.9.15 and earlier) calls curves.publicKeyFromPrivate
+// without a curve, which hd-wallet-wasm 2.1.1 and later refuse (GHSA-gvwv-r86g-4q35,
+// GHSA-wp9p-ffrh-ccwm); SDK 0.9.16 passes it. Name the curve here, as 0.9.16 does.
+const SECP256K1_CURVE = 0; // hd-wallet-wasm Curve.SECP256K1
+async function secp256k1PublicKey(privateKey) {
+  return (await getWasmWallet()).curves.publicKeyFromPrivate(privateKey, SECP256K1_CURVE);
+}
 import {
   buildRecWrappedKmfContentKeyFrame,
   encodeGrantResponse,

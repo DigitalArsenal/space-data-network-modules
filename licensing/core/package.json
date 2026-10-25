@@ -14,6 +14,6 @@
     "spacedatastandards.org": "1.265.0"
   },
   "overrides": {
-    "hd-wallet-wasm": "2.1.0"
+    "hd-wallet-wasm": "2.1.2"
   }
 }

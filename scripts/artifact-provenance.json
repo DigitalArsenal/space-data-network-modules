@@ -5110,11 +5110,11 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "0e06d0090e62cfd2ada62e524e21dfe42284243fc26a3b32aa0847dc9ea36140",
-      "bytes": 1467164,
+      "sha256": "5e2cf5255180769319b6dd519330506dd08835a4eb55259b96326f602b173084",
+      "bytes": 1502903,
       "module": "propagator/sdn-ap",
-      "lastCommit": "1bc876ba750958d2ba2c379e3204112eb17b0d43",
-      "lastCommitDate": "2026-10-25T05:17:40-04:00",
+      "lastCommit": "ce32b35a0b72cf8ffee3b1afe730e3fc8a6256aa",
+      "lastCommitDate": "2026-10-25T07:16:40-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,

@@ -66,6 +66,7 @@
 #include "nrho.inc"
 #include "events.inc"
 #include "omm.inc"
+#include "covariance.inc"
 #include "pcf.inc"
 #include "environment.inc"
 #include "oem.inc"
@@ -100,6 +101,18 @@ int32_t sdnap_mean_elements_at(uint32_t index, double minutes, double* out) {
   return ORBPRO_PROP_OK;
 }
 
+/// The mean motion (rev/day) an SGP4XP or SDN-AP set carries for a mean semi-major axis `a_km` (km), eccentricity `e`
+/// and inclination `i_deg` (deg): the inverse of sdnap_mean_elements_at, whose a is the theory's own
+/// (k_e / n)^(2/3) of the set's (Brouwer) mean motion (SPEC 1.1, 1.5); e and i do not enter that relation and are checked
+/// only. NaN for a <= 0, e outside [0, 1) or a non-finite i.
+SDNAP_EXPORT("sdnap_mean_motion_of")
+double sdnap_mean_motion_of(double a_km, double e, double i_deg) {
+  if (!(a_km > 0.0) || !(e >= 0.0) || !(e < 1.0) || !std::isfinite(i_deg)) return std::numeric_limits<double>::quiet_NaN();
+  const double a_er = a_km / sdnap::xpt::kRe;
+  const double n = sdnap::xpt::kKe / (a_er * std::sqrt(a_er));  // rad/min
+  return n * sdnap::kMinutesPerDay / sdnap::kTwoPi;
+}
+
 /// The osculating elements of a TEME state (km, km/s) about the Earth theories' gravitational parameter: out = a (km),
 /// e, i, RAAN, argument of pericenter, mean anomaly (deg, [0, 360); an open orbit: a < 0, the hyperbolic mean anomaly).
 /// 0, or ORBPRO_PROP_BAD_INPUT for a degenerate state.
@@ -127,4 +140,28 @@ void sdnap_frame_to_uvw(const double* r, const double* v, const double* vec, dou
   }
   const double q[3] = {vec[0], vec[1], vec[2]};
   for (int a = 0; a < 3; ++a) out[a] = q[0] * basis[a][0] + q[1] * basis[a][1] + q[2] * basis[a][2];
+}
+
+/// The propagated covariance of an $OMM set (SPEC 12): `omm` (`length` bytes, plain or size-prefixed) an SGP4XP or
+/// SDN-AP set carrying COVARIANCE (as `fit` writes it: the epoch TEME covariance and USER_DEFINED_SDNAP_COV_x); at
+/// each of `count` times (`minutes` from its epoch) `out` gets 42 doubles: the TEME state (km, km/s), then the 6 x 6
+/// covariance row-major (km^2, km^2/s, km^2/s^2). 0, or -1 not a decodable Earth set, -2 no COVARIANCE, -3 the theory
+/// refuses the set or does not reach a time, -4 an SGP4 set, -5 singular epoch columns, -6 a malformed covariance.
+SDNAP_EXPORT("sdnap_covariance_at")
+int32_t sdnap_covariance_at(const uint8_t* omm, uint32_t length, const double* minutes, uint32_t count, double* out) {
+  if (omm == nullptr || (count > 0 && (minutes == nullptr || out == nullptr))) return -1;
+  sdnap::ElementRow row{};
+  if (!sdnap::omm::decode(omm, length, row)) return -1;
+  if (row.theory != sdnap::kTheorySgp4Xp && row.theory != sdnap::kTheorySdnAp) return -4;
+  sdnap::cov::Set set;
+  const int rc = sdnap::cov::read(omm, length, row, set);
+  if (rc == 0) return -2;
+  if (rc < 0) return -6;
+  sdnap::cov::Propagator p;
+  if (const int pr = sdnap::cov::prepare(set, p)) return pr;
+  for (uint32_t k = 0; k < count; ++k) {
+    double* o = out + 42u * k;
+    if (!sdnap::cov::eval(p, minutes[k], o, o + 3, o + 6)) return -3;
+  }
+  return 0;
 }

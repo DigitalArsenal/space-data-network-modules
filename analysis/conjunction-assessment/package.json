@@ -37,6 +37,6 @@
     "tar": "^7.5.13"
   },
   "overrides": {
-    "hd-wallet-wasm": "2.1.0"
+    "hd-wallet-wasm": "2.1.2"
   }
 }
