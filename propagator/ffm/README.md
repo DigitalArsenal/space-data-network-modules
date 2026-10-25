@@ -605,8 +605,8 @@ element set's epoch through 6 h of 2 h windows, in milliseconds per object-day
 
 | Profile | All | Perigee below 2,000 km | Perigee above 2,000 km |
 | --- | ---: | ---: | ---: |
-| Configured, full force, RK78 1e-12, 300 s | 645 | 692 | 190 |
-| Gravity-only | 49 | 49 | 48 |
+| Full force (FFM 1.3.0), RK78 at tolerance 1e-12 with steps of at most 300 s | 645 | 692 | 190 |
+| Gravity-only, RK78 at tolerance 1e-12 with steps of at most 600 s | 49 | 49 | 48 |
 
 The tolerance: at 1e-12 the integration's own error after three days is
 0.1 m (LEO 400 km) to 1.2 m (SSO 700 km) and 0.18 m (Molniya), measured

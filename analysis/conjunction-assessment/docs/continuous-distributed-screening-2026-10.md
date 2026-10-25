@@ -165,8 +165,8 @@ An updated element set costs 0.34–0.56 CPU-s here against 0.77–1.05 s for th
 subsets' objects: FFM integrates from the element epoch, and a new set's
 epoch is recent. Computed from measured values: Space-Track changes 72,400
 element sets a day on average (Update cadence); propagating each over a 3-day
-horizon at 0.645 CPU-s per object-day (`propagator/ffm` README, "Catalog
-cost") is about 140,000 CPU-s a day, 1.6 cores, against 99,929 CPU-s for
+horizon at 0.645 CPU-s per object-day (RK78 at tolerance 1e-12 with steps of
+at most 300 s; `propagator/ffm` README, "Catalog cost") is about 140,000 CPU-s a day, 1.6 cores, against 99,929 CPU-s for
 each full re-screen.
 
 ## Work units and verification

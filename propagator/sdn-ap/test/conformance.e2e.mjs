@@ -11,8 +11,16 @@
 // - shadow: where the module's rounding-limited SPEC 4 decisions (amendment 6: a
 //   candidate with 1e-13 <= |S| <= 1e-11, or a decision that moving the inputs
 //   by up to 8 units in the last place changes), run both ways in every rate
-//   evaluation (every one a sunlit arc, every one wholly sunlit), give different
-//   states, the oracle must fall between them (in each coordinate, 1 m margin);
+//   evaluation (every one a sunlit arc, every one wholly sunlit; each run on
+//   fresh nodes, so that the setting reaches every node and stage), give
+//   different states, the oracle must fall between them (in each coordinate,
+//   1 m margin) or, where the decisions go in mixed directions (amendment 6:
+//   both outcomes of each conform), within the two runs' spread of the
+//   module's answer;
+// - reference split: a sample the classes above leave open is accepted when
+//   the reference's other build (SDN_AP_ORACLE_SECOND, default 9.1.1.0, black
+//   box) is within 1 m of the module: the two builds of the one library take a
+//   decision differently, so the decision rests on rounding;
 // - equator node: in a deterministic corpus of argp = 0 sets the hemisphere
 //   flipped at the node must reproduce the oracle where the unflipped one does
 //   not.
@@ -111,7 +119,7 @@ function shuffled(n) {
   return order;
 }
 
-async function measure(label, sets, oracle, module, inherent = false) {
+async function measure(label, sets, oracle, module, inherent = false, second = null) {
   // Oracle: each set alone, its times ascending.
   const started = performance.now();
   const reference = [];
@@ -149,6 +157,8 @@ async function measure(label, sets, oracle, module, inherent = false) {
     envA = []; envB = []; dragFree = [];
     for (const [policy, store] of [[1, envA], [2, envB]]) {
       module.x.sdnap_shadow_policy(policy);
+      // fresh nodes: the nominal run's cached nodes would carry policy 0's decisions into this run
+      module.init(sets.map((s) => elementsOf(s.lines)));
       for (let k = 0; k < TIMES; k += 1) store[k] = module.atMinutes(sets.map((s) => s.minutes[k]));
     }
     module.x.sdnap_shadow_policy(0);
@@ -166,8 +176,34 @@ async function measure(label, sets, oracle, module, inherent = false) {
     }
     if (refused || heavy) decaySets.add(i);
   });
+  // the class of a scored sample over 1 m (d, m from the oracle): "decay", "shadow" or null
+  const classOf = (i, k, d) => {
+    const p = answers[0][k], ref = reference[i][k];
+    if (decaySets.has(i) && dragFree[k].status[i] === 0) {
+      const disp = 1000 * Math.hypot(p.x[i] - dragFree[k].x[i], p.y[i] - dragFree[k].y[i], p.z[i] - dragFree[k].z[i]);
+      if (d <= 1e-4 * disp) return "decay";
+    }
+    if (envA[k].status[i] === 0 && envB[k].status[i] === 0) {
+      const a = [envA[k].x[i], envA[k].y[i], envA[k].z[i]], b = [envB[k].x[i], envB[k].y[i], envB[k].z[i]];
+      const width = 1000 * Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const inside = [0, 1, 2].every((c) => ref.r[c] >= Math.min(a[c], b[c]) - 1e-3 && ref.r[c] <= Math.max(a[c], b[c]) + 1e-3);
+      if (width > 0 && (inside || d <= width)) return "shadow";
+    }
+    return null;
+  };
+  const drOf = (i, k, r) => 1000 * Math.hypot(answers[0][k].x[i] - r[0], answers[0][k].y[i] - r[1], answers[0][k].z[i] - r[2]);
+  const scored = (i, k) => accepted[i] && reference[i][k] && answers[0][k].status[i] === 0;
+  // reference split: the other build, asked only for the sets with a sample the classes above leave open
+  const otherBuild = new Map();
+  if (inherent && second) {
+    for (const [i, s] of sets.entries()) {
+      let open = false;
+      for (let k = 0; k < TIMES && !open; k += 1) if (scored(i, k)) { const d = drOf(i, k, reference[i][k].r); open = d > 1.0 && !classOf(i, k, d); }
+      if (open) otherBuild.set(i, await second.propagate(s.lines, s.minutes));
+    }
+  }
   const failedSets = {};
-  const perRegime = Object.fromEntries(NAMES.map((n) => [n, { sets: 0, samples: 0, refused: 0, oracleErrors: 0, moduleErrors: 0, dr: [], dv: [], scoredDr: [], acceptedDecay: 0, acceptedShadow: 0, failed: 0 }]));
+  const perRegime = Object.fromEntries(NAMES.map((n) => [n, { sets: 0, samples: 0, refused: 0, oracleErrors: 0, moduleErrors: 0, dr: [], dv: [], scoredDr: [], acceptedDecay: 0, acceptedShadow: 0, acceptedSplit: 0, failed: 0 }]));
   sets.forEach((s, i) => {
     const row = perRegime[s.regime];
     if (!accepted[i]) { row.refused += 1; return; }
@@ -186,15 +222,14 @@ async function measure(label, sets, oracle, module, inherent = false) {
       if (inherent) {
         const d = row.dr[row.dr.length - 1];
         let ok = d <= 1.0;
-        if (!ok && decaySets.has(i) && dragFree[k].status[i] === 0) {
-          const disp = 1000 * Math.hypot(p.x[i] - dragFree[k].x[i], p.y[i] - dragFree[k].y[i], p.z[i] - dragFree[k].z[i]);
-          if (d <= 1e-4 * disp) { ok = true; row.acceptedDecay += 1; }
-        }
-        if (!ok && envA[k].status[i] === 0 && envB[k].status[i] === 0) {
-          const a = [envA[k].x[i], envA[k].y[i], envA[k].z[i]], b = [envB[k].x[i], envB[k].y[i], envB[k].z[i]];
-          const width = 1000 * Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-          const inside = [0, 1, 2].every((c) => ref.r[c] >= Math.min(a[c], b[c]) - 1e-3 && ref.r[c] <= Math.max(a[c], b[c]) + 1e-3);
-          if (width > 0 && inside) { ok = true; row.acceptedShadow += 1; }
+        if (!ok) {
+          const cls = classOf(i, k, d);
+          if (cls === "decay") { ok = true; row.acceptedDecay += 1; }
+          else if (cls === "shadow") { ok = true; row.acceptedShadow += 1; }
+          else {
+            const other = otherBuild.get(i);
+            if (other && other[k] && drOf(i, k, other[k].r) <= 1.0) { ok = true; row.acceptedSplit += 1; }
+          }
         }
         if (!ok) {
           row.failed += 1;
@@ -214,7 +249,7 @@ async function measure(label, sets, oracle, module, inherent = false) {
     const maxDv = row.dv.reduce((a, b) => Math.max(a, b), 0);
     return { regime: name, sets: row.sets, samples: row.samples, refused: row.refused, oracleErrors: row.oracleErrors,
       moduleErrors: row.moduleErrors, maxM: maxDr, medianM: median(row.dr), maxMmPerS: maxDv, medianMmPerS: median(row.dv),
-      ...(inherent ? { acceptedDecay: row.acceptedDecay, acceptedShadow: row.acceptedShadow, failed: row.failed,
+      ...(inherent ? { acceptedDecay: row.acceptedDecay, acceptedShadow: row.acceptedShadow, acceptedSplit: row.acceptedSplit, failed: row.failed,
         maxFailedM: row.scoredDr.reduce((a, b) => Math.max(a, b), 0) } : {}) };
   });
   if (WORST) for (const name of NAMES) for (const w of (perRegime[name].worst ?? []).sort((a, b) => b.dr - a.dr).slice(0, WORST))
@@ -263,15 +298,16 @@ function print(result) {
 }
 
 const oracle = await openReference();
+const second = await openReference({ version: process.env.SDN_AP_ORACLE_SECOND || "9.1.1.0" });
 const module = await openModule();
-console.log(`oracle: ${oracle.name}; corpus seed ${SEED}; ${TIMES} times per set over 7 days`);
+console.log(`oracle: ${oracle.name}; corpus seed ${SEED}; ${TIMES} times per set over 7 days; reference split against ${second.version}`);
 
 const control = await measure("SGP4 (type 0) public base vs oracle", corpus(SGP4_SETS, 0, 10000), oracle, module);
 print(control);
-const xp = await measure("SGP4XP (type 4) vs oracle", corpus(XP_SETS, 4, 40000), oracle, module, true);
+const xp = await measure("SGP4XP (type 4) vs oracle", corpus(XP_SETS, 4, 40000), oracle, module, true, second);
 print(xp);
-console.log("inherent classes: regime accepted-decay accepted-shadow failed max-failed (m)");
-for (const t of xp.table) console.log(`  ${t.regime.padEnd(5)} ${String(t.acceptedDecay).padStart(6)} ${String(t.acceptedShadow).padStart(6)} ${String(t.failed).padStart(6)}  ${t.maxFailedM.toExponential(3)}`);
+console.log("inherent classes: regime accepted-decay accepted-shadow accepted-split failed max-failed (m)");
+for (const t of xp.table) console.log(`  ${t.regime.padEnd(5)} ${String(t.acceptedDecay).padStart(6)} ${String(t.acceptedShadow).padStart(6)} ${String(t.acceptedSplit).padStart(6)} ${String(t.failed).padStart(6)}  ${t.maxFailedM.toExponential(3)}`);
 console.log(`decay sets ${xp.decaySets}; refusal epochs within 1 %: ${xp.refusalChecks.agree}/${xp.refusalChecks.sets}${xp.refusalChecks.worst ? ` (worst set ${xp.refusalChecks.worst.set}: module ${xp.refusalChecks.worst.module} min, oracle ${xp.refusalChecks.worst.oracle} min)` : ""}`);
 
 // Equator node: argp = 0 sets whose central drag node lies on the equator (perigee 200-250 km, the seasonal term
@@ -317,7 +353,7 @@ const acceptance = {
   spec6Eccentricity: hansenRows.length === 56 && hansenWorst <= 1e-12,
 };
 const pass = Object.values(acceptance).every(Boolean);
-const summary = { task: "modules-sdn-gp-propagator-20261023", oracle: oracle.name, seed: SEED, control, xp,
+const summary = { task: "sdn-ap-sgp4xp-conformance-tail-20261025", oracle: oracle.name, second: second.name, seed: SEED, control, xp,
   equatorNode: { cases: eqCases.length, differ: eqDiffer.length, fixedByFlip: eqFixed.length }, spec6Eccentricity: { terms: hansenRows.length, maxSeriesMinusExact: hansenWorst }, acceptance, pass };
 // Full-precision statistics are kept (exactMaxM, exactMedianM) so that a change can be held to a stated bound.
 for (const result of [control, xp]) for (const t of result.table) { t.exactMaxM = t.maxM; t.exactMedianM = t.medianM; t.maxM = +t.maxM.toPrecision(4); t.medianM = +t.medianM.toPrecision(4); t.maxMmPerS = +t.maxMmPerS.toPrecision(4); t.medianMmPerS = +t.medianMmPerS.toPrecision(4); }
@@ -335,4 +371,5 @@ if (REPRODUCE) {
 }
 module.destroy();
 await oracle.close();
+await second.close();
 process.exit(REPRODUCE ? (reproduced ? 0 : 1) : pass || REPORT_ONLY ? 0 : 1);

@@ -41,7 +41,7 @@ and the events stay on the machine that ran it.
 | Farm CPU time, propagation (8 worker threads, user and system) | 99,929 s |
 | of which the first window (catch-up from element epochs) | 36,190 s |
 | later windows, mean | 898 s |
-| Farm CPU time per object-day (153,120 object-days) | 0.65 s |
+| Farm CPU time per object-day (153,120 object-days; RK78 at 1e-12, steps of at most 300 s) | 0.65 s |
 | On 16 dedicated cores, plus search and refinement | 6,383 s |
 | Measured on the shared host: end to end | 15,210 s |
 | waiting on the farm | 15,060 s |
@@ -50,7 +50,8 @@ and the events stay on the machine that ran it.
 | Process CPU time (farm, module threads and host) | 100,914 s |
 
 On one thread of the same host (load 12–15), `propagator/ffm` README,
-"Catalog cost", measured 0.645 s per object-day on stride samples: the farm's
+"Catalog cost", measured 0.645 s per object-day on stride samples with the
+same integrator (RK78 at 1e-12, steps of at most 300 s): the farm's
 0.65 s is 1 % more.
 
 A day of FFM's 300 s segments is about 240 KB per object; a 1-hour window of
