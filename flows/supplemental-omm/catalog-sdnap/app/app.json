@@ -1,0 +1,36 @@
+{
+  "id": "catalog-sdnap",
+  "name": "Catalog SDN-AP sets",
+  "version": "1.0.0",
+  "description": "SDN-AP element sets for the whole current catalog, fitted and published by one composed isomorphic module (typed contracts 1.0).",
+  "modules": [
+    {
+      "id": "catalog-sdnap",
+      "pluginId": "org.sdn.flows.catalog-sdnap",
+      "version": "1.0.0",
+      "role": "primary",
+      "description": "The catalog read, propagator/sdn-ap propagate and fit, hostcap/storage-ingest storing and publication, as one signed bundle of isomorphic children.",
+      "maxMemoryPages": 16384,
+      "runtimeTarget": "node"
+    }
+  ],
+  "data": [
+    {
+      "id": "sdnap-omm",
+      "sdsType": "OMM",
+      "direction": "produces",
+      "moduleId": "catalog-sdnap"
+    },
+    {
+      "id": "sdnap-determination",
+      "sdsType": "OBD",
+      "direction": "produces",
+      "moduleId": "catalog-sdnap"
+    }
+  ],
+  "sources": [],
+  "pages": [],
+  "createdAt": "2026-07-21T00:00:00.000Z",
+  "updatedAt": "2026-10-14T00:00:00.000Z",
+  "dataflow": []
+}

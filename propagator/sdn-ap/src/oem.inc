@@ -495,6 +495,32 @@ extern "C" int propagate(void) {
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
     char text[48], start[48], stop[48], why[160];
     int rc = 0;
+    // The object the set describes (NORAD number, name, designator) goes to every block, so a fit of the ephemeris names its set.
+    flatbuffers::Offset<CAT> object_offset;
+    {
+      const uint8_t* ob = f->payload;
+      uint32_t ol = f->payload_length;
+      if (sdnap::plain_view(ob, ol, "$OMM")) {
+        // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
+        flatbuffers::Verifier::Options vopt;
+        vopt.check_alignment = false;
+        flatbuffers::Verifier vo(ob, ol, vopt);
+        if (VerifyOMMBuffer(vo)) {
+          const OMM* om = GetOMM(ob);
+          const bool named = om->OBJECT_NAME() != nullptr && om->OBJECT_NAME()->size() > 0;
+          const bool designated = om->OBJECT_ID() != nullptr && om->OBJECT_ID()->size() > 0;
+          if (om->NORAD_CAT_ID() != 0 || named || designated) {
+            const auto s_name = named ? fbb.CreateString(om->OBJECT_NAME()->c_str()) : 0;
+            const auto s_id = designated ? fbb.CreateString(om->OBJECT_ID()->c_str()) : 0;
+            CATBuilder cb(fbb);
+            if (om->NORAD_CAT_ID() != 0) cb.add_NORAD_CAT_ID(om->NORAD_CAT_ID());
+            if (named) cb.add_OBJECT_NAME(s_name);
+            if (designated) cb.add_OBJECT_ID(s_id);
+            object_offset = cb.Finish();
+          }
+        }
+      }
+    }
     for (const sdnap::oem::Grid& g : grids) {
       if (g.center != 0 && g.center != 1) { rc = sdnap::oem::refuse("grid-center-mismatch", "The grid names a center other than the set's (EARTH)."); break; }
       std::vector<double> tw, tf;
@@ -597,7 +623,7 @@ extern "C" int propagate(void) {
       sdnap::oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
       const auto frame = sdnap::oem::rfm_of(fbb, g.axes);
       const auto cov_frame = with_cov ? sdnap::oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, 0, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
+      blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, object_offset, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
                                                       nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
                                                       nullptr, &lines, with_cov ? &cov_lines : nullptr));
     }

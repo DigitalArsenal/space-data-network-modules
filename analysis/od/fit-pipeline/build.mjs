@@ -10,8 +10,8 @@
  *
  *   SDN_OD_EIGEN_DIR=<dir holding Eigen/Dense> node build.mjs
  *
- * build-driver.mjs is the SDK's compiler hook: it adds -ffast-math (as analysis/od compiles the fitter) and the Eigen
- * include to the module's compile.
+ * build-driver.mjs is the SDK's compiler hook: it adds the Eigen include to the module's compile, and nothing to the
+ * numerics (analysis/od compiles the fitter without -ffast-math).
  *
  * Output: dist/isomorphic/module.wasm (browser and wasmedge; storage_query, timers) and dist/guest-link/. The tests
  * load that artifact itself in the SDK's in-process harness with a stub host (test/module.test.mjs).
@@ -75,11 +75,11 @@ const pieces = [];
 for (const file of [path.join(root, "src/fit_pipeline.cpp"), ...odSources]) {
   pieces.push(await inline(file));
 }
-// The fit library's defines (analysis/od: -DNDEBUG -DEIGEN_DONT_PARALLELIZE; -O3 is the SDK's, -ffast-math build-driver.mjs's).
+// The fit library's defines (analysis/od: -DNDEBUG -DEIGEN_DONT_PARALLELIZE; -O3 is the SDK's).
 const sourceCode = ["#define NDEBUG 1", "#define EIGEN_DONT_PARALLELIZE 1", ...pieces].join("\n");
 
-// The SDK compiler hook (build-driver.mjs) adds -ffast-math (analysis/od's fitter flags) and the Eigen headers to
-// the module's compile; it runs the clang the SDK would have run.
+// The SDK compiler hook (build-driver.mjs) adds the Eigen headers to the module's compile; it runs the clang the SDK
+// would have run.
 process.env.FIT_PIPELINE_EIGEN_DIR = resolveEigen();
 process.env.FIT_PIPELINE_CLANGXX = process.env.SDN_WASI_CLANGXX || "wasm32-wasi-clang++";
 process.env.SDN_WASI_CLANGXX = path.join(root, "build-driver.mjs");

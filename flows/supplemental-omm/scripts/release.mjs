@@ -50,6 +50,9 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 // The standards the manifests are validated against: SPACE_DATA_STANDARDS_ROOT, else the spacedatastandards.org package
 // this flow pins (package.json devDependencies).
 process.env.SPACE_DATA_STANDARDS_ROOT ??= path.dirname(createRequire(import.meta.url).resolve("spacedatastandards.org/package.json"));
+// --flow-dir <dir under this package>: another flow of the package (its flow.json, deps.json and app/); default the package.
+const flowArg = process.argv.indexOf("--flow-dir");
+const flowRoot = flowArg > 0 ? path.resolve(packageRoot, process.argv[flowArg + 1]) : packageRoot;
 const outArg = process.argv.indexOf("--out");
 const outRoot = path.resolve(outArg > 0 ? process.argv[outArg + 1] : path.join(packageRoot, "dist"));
 const stageRoot = path.join(outRoot, ".release");
@@ -73,14 +76,14 @@ fs.mkdirSync(path.join(stageRoot, "compiled"), { recursive: true, mode: 0o700 })
 fs.mkdirSync(path.join(outRoot, "nodes"), { recursive: true });
 
 // 1. The children.
-const flowSource = readJson(path.join(packageRoot, "flow.json"));
-const depsMap = readJson(path.join(packageRoot, "deps.json"));
+const flowSource = readJson(path.join(flowRoot, "flow.json"));
+const depsMap = readJson(path.join(flowRoot, "deps.json"));
 const pluginIds = [...new Set(flowSource.nodes.map((node) => node.pluginId).filter((id) => id !== EGRESS))];
 const children = new Map();
 let publicKeyHex = null;
 for (const pluginId of pluginIds) {
   if (!depsMap[pluginId]) throw new Error(`deps.json names no package for ${pluginId}.`);
-  const dir = path.resolve(packageRoot, depsMap[pluginId]);
+  const dir = path.resolve(flowRoot, depsMap[pluginId]);
   const manifest = readJson(path.join(dir, "plugin-manifest.json"));
   if (manifest.pluginId !== pluginId) throw new Error(`${dir} is ${manifest.pluginId}, not ${pluginId}.`);
   const portable = new Uint8Array(fs.readFileSync(path.join(dir, "dist/isomorphic/module.wasm")));
@@ -155,7 +158,7 @@ if (dependencies.size !== children.size) {
 
 const portableWasmSha256 = (await computeCanonicalModuleHash(rawWasm)).hashHex;
 const appBytes = await (async () => {
-  const appRoot = path.join(packageRoot, "app");
+  const appRoot = path.join(flowRoot, "app");
   const app = readJson(path.join(appRoot, "app.json"));
   if (!Array.isArray(app.modules) || app.modules.length !== 1) throw new Error("The APP must reference exactly one composed module.");
   app.modules[0].contentHash = portableWasmSha256;
