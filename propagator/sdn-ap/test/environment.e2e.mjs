@@ -166,13 +166,13 @@ if (fs.existsSync(REAL)) {
   DCL.finishDCLBuffer(rb, DCL.endDCL(rb));
   const realBytes = rb.asUint8Array();
   // one SDN-AP row near Swarm A (430 km, 87.4 deg) at three window centers
-  const centres = [40, 120, 200].map((k) => wins[k]);
+  const centers = [40, 120, 200].map((k) => wins[k]);
   const rowAt = (w) => ({ epochWhole: Math.floor(w.startMs / 86400000) + 2440587.5, epochFrac: ((w.startMs % 86400000) + 6 * 3600000) / 86400000,
     meanMotion: 15.56, ecc: 0.0005, inc: 87.35, raan: 100, argp: 90, ma: 0, bterm: 0.01, agom: 0, norad: 39452, theory: 16 });
-  const ndot = () => centres.map((w, k) => m.xpNative(k, 0).rates[5]);
+  const ndot = () => centers.map((w, k) => m.xpNative(k, 0).rates[5]);
   // the drag's n-dot alone: the shallow tesseral resonance (2d, density-independent) is off for this leg
   const shallowDegree = x.sdnap_shallow_resonance(0, 0, 0);
-  m.init(centres.map(rowAt));
+  m.init(centers.map(rowAt));
   const res = {};
   for (const kernel of [1, 0]) {
     x.sdnap_set_density_kernel(kernel);
@@ -180,20 +180,20 @@ if (fs.existsSync(REAL)) {
     new Uint8Array(m.harness.memory.buffer, pf2, flat.length).set(flat);
     x.sdnap_load_density_correction(pf2, flat.length);
     x.sdnap_free(pf2);
-    m.init(centres.map(rowAt));
+    m.init(centers.map(rowAt));
     const base = ndot();
     const load = await m.harness.invoke({ methodId: "load_environment", inputs: [{ portId: "density_correction", typeRef: dclType, payload: realBytes }] });
     if (load.statusCode !== 0) failures.push(`real $DCL refused: ${load.errorCode}`);
-    m.init(centres.map(rowAt));
+    m.init(centers.map(rowAt));
     const withDcl = ndot();
     res[kernel ? "kernel" : "direct"] = { base, withDcl };
-    centres.forEach((w, k) => near(withDcl[k] / base[k], Math.exp(w.x), 1e-12 * Math.exp(Math.abs(w.x)), `exp(s) scaling, ${kernel ? "kernel" : "direct"} path, window ${k}`));
+    centers.forEach((w, k) => near(withDcl[k] / base[k], Math.exp(w.x), 1e-12 * Math.exp(Math.abs(w.x)), `exp(s) scaling, ${kernel ? "kernel" : "direct"} path, window ${k}`));
   }
   x.sdnap_set_density_kernel(1);
   x.sdnap_shallow_resonance(shallowDegree, 0, 0);
-  centres.forEach((w, k) => near(res.kernel.withDcl[k] / res.direct.withDcl[k], 1, 0.01, `kernel against direct path, window ${k}`));
-  realCheck = { source: REAL, nodes: wins.length, s: centres.map((w) => +w.x.toFixed(4)),
-    kernelOverDirect: centres.map((w, k) => +(res.kernel.withDcl[k] / res.direct.withDcl[k]).toFixed(5)) };
+  centers.forEach((w, k) => near(res.kernel.withDcl[k] / res.direct.withDcl[k], 1, 0.01, `kernel against direct path, window ${k}`));
+  realCheck = { source: REAL, nodes: wins.length, s: centers.map((w) => +w.x.toFixed(4)),
+    kernelOverDirect: centers.map((w, k) => +(res.kernel.withDcl[k] / res.direct.withDcl[k]).toFixed(5)) };
 }
 
 console.log(JSON.stringify({ spaceWeatherRows: rows.length, daysHeld: days, firstDate: rows[0].date, lastDate: rows[rows.length - 1].date,

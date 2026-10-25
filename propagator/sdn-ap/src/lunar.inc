@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// SDN-AP 2h.1: Moon-centred orbits (first version). Mean equinoctial elements
+// SDN-AP 2h.1: Moon-centered orbits (first version). Mean equinoctial elements
 // in the lunar principal-axis frame frozen at the epoch (LEI: an inertial frame,
 // the DE440 PA axes at the epoch); km and seconds.
 // - Lunar gravity: GRGM660PRIM (pinned, build.mjs) in the averaged rates, every
@@ -439,7 +439,7 @@ inline bool state_of(const double* y, double* r, double* v) {
   return true;
 }
 
-/// Moon-centred J2000 position and velocity (km, km/s) from the mean elements y at t seconds from the epoch.
+/// Moon-centered J2000 position and velocity (km, km/s) from the mean elements y at t seconds from the epoch.
 inline bool osculating(const Sat& s, double t, double* y, double* r, double* v) {
   if (!s.sp.empty()) {
     const double n = y[xpt::kN];
@@ -667,8 +667,8 @@ inline double fit(Sat& s, const double* t, const double* pos, int count, int ite
 }  // namespace lunar
 }  // namespace sdnap
 
-/// Diagnostic and first interface of the Moon-centred theory (2h.1): fit the mean elements to `nfit` J2000
-/// Moon-centred positions (km) at `t_fit` seconds from the epoch (UTC split Julian date), then write the fitted
+/// Diagnostic and first interface of the Moon-centered theory (2h.1): fit the mean elements to `nfit` J2000
+/// Moon-centered positions (km) at `t_fit` seconds from the epoch (UTC split Julian date), then write the fitted
 /// set's positions at `t_out` seconds into `out` (3 doubles each). `degrees` = gravity degree + 256 x short
 /// degree (0 keeps them). Returns the fit RMS (km), negative on refusal.
 SDNAP_EXPORT("sdnap_lunar_fit_predict")

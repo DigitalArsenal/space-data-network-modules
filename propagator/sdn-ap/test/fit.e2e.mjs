@@ -121,11 +121,11 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   conflict.EPHEMERIS_DATA_BLOCK[0].REFERENCE_FRAME.NAME = "TEME";
   const elsewhere = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(oemInFrame(m, source, "GCRF", null, undefined, "both"))).unpack();
   for (const method of ["fit", "fit SDNAP"]) {
-    // fit (SGP4XP) is geocentric; fit SDNAP fits Earth- and Moon-centred blocks, nothing else
+    // fit (SGP4XP) is geocentric; fit SDNAP fits Earth- and Moon-centered blocks, nothing else
     elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME = method === "fit" ? "MOON" : "MARS";
-    const centre = await code(method, packOem(elsewhere));
-    console.log(`${method}: CENTER_NAME ${elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME} -> ${centre}`);
-    check(centre === "unsupported-center", `${method} with a ${elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME}-centred block: ${centre}`);
+    const center = await code(method, packOem(elsewhere));
+    console.log(`${method}: CENTER_NAME ${elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME} -> ${center}`);
+    check(center === "unsupported-center", `${method} with a ${elsewhere.EPHEMERIS_DATA_BLOCK[0].CENTER_NAME}-centered block: ${center}`);
     const undeclared = await code(method, oemInFrame(m, source, null, null));
     const disagree = await code(method, packOem(conflict));
     console.log(`${method}: no REFERENCE_FRAME -> ${undeclared}; enumeration GCRF with NAME TEME -> ${disagree}`);
@@ -191,10 +191,10 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   check(same, "size-prefixed $OMM propagates differently");
   const lunar = (() => {
     const b = new flatbuffers.Builder(256);
-    const epoch = b.createString("2026-10-20T12:00:00.000000"), centre = b.createString("MOON");
+    const epoch = b.createString("2026-10-20T12:00:00.000000"), center = b.createString("MOON");
     OMM.startOMM(b);
     OMM.addEpoch(b, epoch);
-    OMM.addCenterName(b, centre);
+    OMM.addCenterName(b, center);
     OMM.addMeanMotion(b, 11.9);
     OMM.addEccentricity(b, 0.02);
     OMM.addInclination(b, 90);
@@ -206,7 +206,7 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   for (const method of ["propagate", "ingest_omm"]) {
     const r = await command.invoke({ methodId: method, inputs: [{ portId: "omm", typeRef: ommType, payload: lunar }] });
     console.log(`${method}: CENTER_NAME MOON -> ${r.statusCode === 0 ? "accepted" : r.errorCode}`);
-    check(r.statusCode !== 0 && r.errorCode === "unsupported-center", `${method} with a Moon-centred $OMM: ${r.errorCode}`);
+    check(r.statusCode !== 0 && r.errorCode === "unsupported-center", `${method} with a Moon-centered $OMM: ${r.errorCode}`);
   }
 }
 
@@ -280,18 +280,18 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
   }
 }
 
-// --- Moon-centred SDN-AP (2h.1): a lunar set (100 km polar, GRGM660PRIM and the DE440 PA orientation pinned) through
-// propagate on a 24 h ICRF grid, fitted back by fit SDNAP from that Moon-centred $OEM, and the fitted set propagated
+// --- Moon-centered SDN-AP (2h.1): a lunar set (100 km polar, GRGM660PRIM and the DE440 PA orientation pinned) through
+// propagate on a 24 h ICRF grid, fitted back by fit SDNAP from that Moon-centered $OEM, and the fitted set propagated
 // again: the round trip within 20 m over the day; the $OMM and $OEM carry CENTER_NAME MOON and ICRF axes
 {
   const lunarOmm = (() => {
     const b = new flatbuffers.Builder(1024);
     const params = [["SDNAP_REGIME", "MOON"]].map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(v)));
     const vec = OMM.createUserDefinedParametersVector(b, params);
-    const epoch = b.createString("2026-06-01T00:00:00.000000"), centre = b.createString("MOON");
+    const epoch = b.createString("2026-06-01T00:00:00.000000"), center = b.createString("MOON");
     OMM.startOMM(b);
     OMM.addEpoch(b, epoch);
-    OMM.addCenterName(b, centre);
+    OMM.addCenterName(b, center);
     OMM.addMeanMotion(b, 86400 / (2 * Math.PI * Math.sqrt(1838.0 ** 3 / 4902.7998)));
     OMM.addEccentricity(b, 0.01);
     OMM.addInclination(b, 90);
@@ -312,7 +312,7 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     b.STOP_TIME = "2026-06-02T00:00:00.000000";
     b.STEP_SIZE = 300;
     b.REFERENCE_FRAME = rfm("GCRF", "both");
-    b.CENTER_NAME = "MOON";  // the template names the set's centre
+    b.CENTER_NAME = "MOON";  // the template names the set's center
     t.EPHEMERIS_DATA_BLOCK = [b];
     return packOem(t);
   })();
@@ -369,17 +369,17 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
   }
 }
 
-// --- SDN-AP segment sets (2h.2 / 2h.3 / 2h.5): an NRHO-like Moon-centred set (apolune 70,300 km: beyond the averaged
-// theory's reach), an Earth orbit reaching the Moon (apogee 425,000 km) and a thrusting Sun-centred cruise set, each
+// --- SDN-AP segment sets (2h.2 / 2h.3 / 2h.5): an NRHO-like Moon-centered set (apolune 70,300 km: beyond the averaged
+// theory's reach), an Earth orbit reaching the Moon (apogee 425,000 km) and a thrusting Sun-centered cruise set, each
 // through propagate on an ICRF grid of its center, fitted back by fit SDNAP (routed by the reach rule to a segment
 // fit) and propagated again: the round trip within 20 m; the sets carry SEMI_MAJOR_AXIS, GM and the regime; a grid of
 // another center and the batch refuse them by name
 {
-  const segmentSet = ({ centre, gm, a, e, i, raan, argp, ma, params }) => {
+  const segmentSet = ({ center, gm, a, e, i, raan, argp, ma, params }) => {
     const b = new flatbuffers.Builder(1024);
     const ps = [...params].map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(String(v))));
     const vec = OMM.createUserDefinedParametersVector(b, ps);
-    const epoch = b.createString("2026-06-01T00:00:00.000000"), c = b.createString(centre);
+    const epoch = b.createString("2026-06-01T00:00:00.000000"), c = b.createString(center);
     OMM.startOMM(b);
     OMM.addEpoch(b, epoch);
     OMM.addCenterName(b, c);
@@ -397,7 +397,7 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     OMM.finishOMMBuffer(b, OMM.endOMM(b));
     return b.asUint8Array();
   };
-  const gridOf = (centre, days, step) => {
+  const gridOf = (center, days, step) => {
     const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(source)).unpack();
     const b = t.EPHEMERIS_DATA_BLOCK[0];
     b.EPHEMERIS_DATA_LINES = [];
@@ -405,20 +405,20 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     b.STOP_TIME = new Date(Date.parse("2026-06-01T00:00:00Z") + days * 86400e3).toISOString().replace("Z", "000");
     b.STEP_SIZE = step;
     b.REFERENCE_FRAME = rfm("GCRF", "both");
-    b.CENTER_NAME = centre;
+    b.CENTER_NAME = center;
     t.EPHEMERIS_DATA_BLOCK = [b];
     return packOem(t);
   };
   const cases = [
-    { label: "NRHO-like (MOON)", centre: "MOON", regime: "CISLUNAR", wrong: "EARTH", days: 4, step: 900,
-      set: { centre: "MOON", gm: 4902.79980693169, a: 37000, e: 0.9, i: 88, raan: 30, argp: 90, ma: 180, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] } },
-    { label: "cislunar (EARTH)", centre: "EARTH", regime: "CISLUNAR", wrong: "MOON", days: 4, step: 900,
-      set: { centre: "EARTH", gm: 398600.4418, a: 250000, e: 0.7, i: 28.5, raan: 40, argp: 10, ma: 20, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] } },
-    { label: "cruise (SUN)", centre: "SUN", regime: "HELIO", wrong: "EARTH", days: 30, step: 21600,
-      set: { centre: "SUN", gm: 1.32712440018e11, a: 2.244e8, e: 0.2, i: 23.4, raan: 5, argp: 60, ma: 40, params: [["SDNAP_REGIME", "HELIO"], ["SDNAP_BETA", 1e-5], ["SDNAP_RTN_T", 5e-8]] } },
+    { label: "NRHO-like (MOON)", center: "MOON", regime: "CISLUNAR", wrong: "EARTH", days: 4, step: 900,
+      set: { center: "MOON", gm: 4902.79980693169, a: 37000, e: 0.9, i: 88, raan: 30, argp: 90, ma: 180, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] } },
+    { label: "cislunar (EARTH)", center: "EARTH", regime: "CISLUNAR", wrong: "MOON", days: 4, step: 900,
+      set: { center: "EARTH", gm: 398600.4418, a: 250000, e: 0.7, i: 28.5, raan: 40, argp: 10, ma: 20, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] } },
+    { label: "cruise (SUN)", center: "SUN", regime: "HELIO", wrong: "EARTH", days: 30, step: 21600,
+      set: { center: "SUN", gm: 1.32712440018e11, a: 2.244e8, e: 0.2, i: 23.4, raan: 5, argp: 60, ma: 40, params: [["SDNAP_REGIME", "HELIO"], ["SDNAP_BETA", 1e-5], ["SDNAP_RTN_T", 5e-8]] } },
   ];
   for (const c of cases) {
-    const omm = segmentSet(c.set), grid = gridOf(c.centre, c.days, c.step);
+    const omm = segmentSet(c.set), grid = gridOf(c.center, c.days, c.step);
     const prop = async (o, g = grid) => command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: o }, { portId: "grid", typeRef: oemType, payload: g }] });
     const wrong = await prop(omm, gridOf(c.wrong, 1, 3600));
     check(wrong.statusCode !== 0 && wrong.errorCode === "grid-center-mismatch", `${c.label} on a ${c.wrong} grid: ${wrong.errorCode}`);
@@ -438,10 +438,10 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     let max = 0, n = 0;
     for (const L of traj.EPHEMERIS_DATA_LINES) { const q = byEpoch.get(L.EPOCH); if (!q) continue; ++n; max = Math.max(max, Math.hypot(q.X - L.X, q.Y - L.Y, q.Z - L.Z) * 1e3); }
     console.log(`${c.label}: ${traj.EPHEMERIS_DATA_LINES.length} states; set ${e.CENTER_NAME()} ${u.SDNAP_REGIME}, a ${e.SEMI_MAJOR_AXIS().toFixed(1)} km, GM ${e.GM()}; ${e.COMMENT().replace(/^.*?\); /, "")}; round trip max |dr| ${max.toFixed(3)} m over ${n}`);
-    check(traj.CENTER_NAME === c.centre && back.CENTER_NAME === c.centre && e.CENTER_NAME() === c.centre && traj.REFERENCE_FRAME.NAME === "ICRF", `${c.label}: center or axes`);
+    check(traj.CENTER_NAME === c.center && back.CENTER_NAME === c.center && e.CENTER_NAME() === c.center && traj.REFERENCE_FRAME.NAME === "ICRF", `${c.label}: center or axes`);
     check(e.MEAN_ELEMENT_THEORY() === 4 && u.THEORY === undefined && u.SDNAP_REGIME === c.regime && e.GM() > 0 && e.SEMI_MAJOR_AXIS() !== 0, `${c.label}: regime ${u.SDNAP_REGIME}`);
     check(n >= traj.EPHEMERIS_DATA_LINES.length / 4 && max <= 20.0, `${c.label} round trip: ${max} m over ${n}`);
-    if (c.centre === "EARTH") {
+    if (c.center === "EARTH") {
       const r = await command.invoke({ methodId: "ingest_omm", inputs: [{ portId: "omm", typeRef: ommType, payload: fitted }] });
       check(r.statusCode !== 0 && r.errorCode === "unsupported-theory", `a segment set in the batch: ${r.errorCode}`);
     }

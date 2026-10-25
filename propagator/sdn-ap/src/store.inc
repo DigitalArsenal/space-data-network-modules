@@ -68,15 +68,15 @@ inline Elements elements_of(const ElementRow& row) {
   Elements e{};
   e.epoch_jd_whole = row.epoch_jd_whole;
   e.epoch_jd_frac = row.epoch_jd_frac;
-  e.no_kozai = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
-  e.ecco = row.eccentricity;
-  e.inclo = row.inclination_deg * kDeg;
-  e.nodeo = row.raan_deg * kDeg;
-  e.argpo = row.arg_pericenter_deg * kDeg;
-  e.mo = row.mean_anomaly_deg * kDeg;
+  e.xno = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  e.eo = row.eccentricity;
+  e.xincl = row.inclination_deg * kDeg;
+  e.xnodeo = row.raan_deg * kDeg;
+  e.omegao = row.arg_pericenter_deg * kDeg;
+  e.xmo = row.mean_anomaly_deg * kDeg;
   e.bstar = row.bstar;
-  e.ndot = row.mean_motion_dot;
-  e.nddot = row.mean_motion_ddot;
+  e.ndot_rev_day2 = row.mean_motion_dot;
+  e.nddot_rev_day3 = row.mean_motion_ddot;
   e.bterm = row.bterm;
   e.agom = row.agom;
   e.norad = row.norad_cat_id;
@@ -122,7 +122,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
       st.slot[i] = st.sat_count;
       Sat& s = st.sats[st.sat_count++];
       sat_init(e, wgs72, s);
-      if (s.init_error == 0 && s.irez != 0) ++resonant;
+      if (s.init_error == 0 && s.deep.iresfl != 0) ++resonant;
     }
   }
   st.count = count;
@@ -135,7 +135,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
     }
     for (uint32_t i = 0; i < st.sat_count; ++i) {
       Sat& s = st.sats[i];
-      if (s.init_error != 0 || s.irez == 0) continue;
+      if (s.init_error != 0 || s.deep.iresfl == 0) continue;
       s.checkpoint_base = static_cast<uint32_t>(st.node_objects * per);
       s.checkpoint_count = kCheckpointNodes;
       fill_checkpoints(s, st.nodes + s.checkpoint_base, kCheckpointNodes);

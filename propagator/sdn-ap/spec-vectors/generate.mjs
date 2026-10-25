@@ -472,10 +472,10 @@ export async function build() {
     S('4.3').push({ el: { ...el, agom: 0.05 }, lines, ds50, state: st.r.concat(st.v), mean: st.out.slice(15, 21), osculating: st.out.slice(21, 27) });
   }
   // 6: resonance scans through 1, 2, 1.5 and 3 rev/day
-  for (const centre of [1.0027, 2.0055, 1.5041, 3.0082]) for (const dx of [-0.02, -0.005, 0, 0.005, 0.02]) {
-    const lines = xpLines({ mm: centre + dx, ecc: centre === 2.0055 ? 0.01 : 0.001, inc: 30, raan: 50, argp: 20, ma: 0 });
+  for (const center of [1.0027, 2.0055, 1.5041, 3.0082]) for (const dx of [-0.02, -0.005, 0, 0.005, 0.02]) {
+    const lines = xpLines({ mm: center + dx, ecc: center === 2.0055 ? 0.01 : 0.001, inc: 30, raan: 50, argp: 20, ma: 0 });
     const ds50 = await o.epoch(lines);
-    S('6').push({ mm: centre + dx, lines, ds50, native: await o.nativeElements(lines, [ds50]) });
+    S('6').push({ mm: center + dx, lines, ds50, native: await o.nativeElements(lines, [ds50]) });
   }
   // 6.3: resonant orbits of the 0.5-day, 8 h and 16 h classes in the averaged regime, drag and SRP off: rates at
   // epoch. Here n-dot is the resonance alone (zonal and averaged third-body terms have none).

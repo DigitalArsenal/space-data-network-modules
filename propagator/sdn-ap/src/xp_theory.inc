@@ -730,7 +730,7 @@ inline bool shadow_sequence(double A, double B, double e, double p, double& E1, 
   return true;
 }
 
-/// The shadow from caller-supplied direction cosines (the Moon-centred SRP of SDN-AP 2h.1 reuses it).
+/// The shadow from caller-supplied direction cosines (the Moon-centered SRP of SDN-AP 2h.1 reuses it).
 inline bool sunlit_arc(double A, double B, double e, double p, double& E1, double& E2) { return shadow_sequence(A, B, e, p, E1, E2); }
 
 /// SPEC 4 step 1 (amendment 3): the Sun's direction cosines A (on P) and B (on Q) from the current mean elements
@@ -1221,16 +1221,16 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.d50_epoch = (e.epoch_jd_whole - kJd1950) + e.epoch_jd_frac;
   s.ctx.bterm = e.bterm;
   s.ctx.agom = e.agom;
-  if (!(e.no_kozai > 0.0) || !(e.ecco >= 0.0) || !(e.ecco < 1.0) || !std::isfinite(e.inclo)) {
+  if (!(e.xno > 0.0) || !(e.eo >= 0.0) || !(e.eo < 1.0) || !std::isfinite(e.xincl)) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
-  const double n0 = e.no_kozai;  // Brouwer (SPEC 1.1)
+  const double n0 = e.xno;  // Brouwer (SPEC 1.1)
   s.ctx.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
   const int8_t res = static_cast<int8_t>(res::band_of(n0));  // the epoch class (SPEC 6 bands)
   s.ctx.resonance = res;
-  s.ctx.e0 = e.ecco;
-  s.ctx.i0 = e.inclo;
+  s.ctx.e0 = e.eo;
+  s.ctx.i0 = e.xincl;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
   if (e.theory == kTheorySdnAp) {
     const double accel = 3600.0 / (1000.0 * kRe);  // m/s^2 -> ER/min^2
@@ -1238,7 +1238,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     {
       // the drag regime: perigee below the density's 2500 km top, B_eff set
       const double a_er = std::pow(kKe / n0, kX2o3);
-      s.ctx.drag_nodes = e.bterm != 0.0 && (a_er * (1.0 - e.ecco) - 1.0) * kRe < 2500.0 ? 1 : 0;
+      s.ctx.drag_nodes = e.bterm != 0.0 && (a_er * (1.0 - e.eo) - 1.0) * kRe < 2500.0 ? 1 : 0;
     }
     s.ctx.tau0 = e.tau0 * accel;
     s.ctx.tauc = e.tauc * accel;
@@ -1249,7 +1249,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     const int md = tess::mdaily_degree() > 16 ? 16 : tess::mdaily_degree() & ~1;
     if (md >= 2) {
       double scratch[2 * 72];
-      const int count = tess::mdaily_terms(md, e.inclo, scratch);
+      const int count = tess::mdaily_terms(md, e.xincl, scratch);
       float* kept = static_cast<float*>(std::malloc(2 * count * sizeof(float)));
       if (kept == nullptr) {
         s.init_error = kPropRefused;
@@ -1267,7 +1267,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
         s.init_error = kPropRefused;
         return kPropRefused;
       }
-      tess::zonal_visit_terms(zd, e.inclo, e.ecco, kept);
+      tess::zonal_visit_terms(zd, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
       s.ctx.zt_degree = zd;
     }
@@ -1280,14 +1280,14 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
         s.init_error = kPropRefused;
         return kPropRefused;
       }
-      tess::sp_terms(spd, mask, n0, e.inclo, e.ecco, kept);
+      tess::sp_terms(spd, mask, n0, e.xincl, e.eo, kept);
       s.ctx.sp = kept;
       s.ctx.sp_degree = static_cast<int16_t>(spd);
       s.ctx.sp_mask = static_cast<int16_t>(mask);
     }
     if (res == 0 && !s.ctx.long_period) {
       tess::ShallowTerms scratch, near_scratch;
-      const int count = tess::shallow_terms(n0, e.ecco, e.inclo, scratch, &near_scratch);
+      const int count = tess::shallow_terms(n0, e.eo, e.xincl, scratch, &near_scratch);
       if (near_scratch.count > 0) {
         tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(near_scratch.count * sizeof(tess::ShallowCoef)));
         if (kept == nullptr) {
@@ -1322,10 +1322,10 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
       s.init_error = kPropRefused;
       return kPropRefused;
     }
-    s.ctx.res_count = res::current_terms(res, e.ecco, std::sin(e.inclo), std::cos(e.inclo), true, nullptr, 0, 0.0, rc);
+    s.ctx.res_count = res::current_terms(res, e.eo, std::sin(e.xincl), std::cos(e.xincl), true, nullptr, 0, 0.0, rc);
     s.ctx.res_epoch = rc;
   }
-  if (res != 0 && e.theory == kTheorySdnAp && e.ecco >= res::kSeriesE && e.ecco + 1e-3 < 1.0) {
+  if (res != 0 && e.theory == kTheorySdnAp && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
     // SDN-AP above the polynomial's range: the epoch class's G about e_0 (the terms follow the current e, 6.3)
     const res::TermSet ts = res::class_terms(res);
     res::GTaylor* g = static_cast<res::GTaylor*>(std::malloc(ts.count * sizeof(res::GTaylor)));
@@ -1333,10 +1333,10 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
       s.init_error = kPropRefused;
       return kPropRefused;
     }
-    for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.ecco);
+    for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
     s.ctx.res_taylor = g;
   }
-  equinoctial_of(n0, e.ecco, e.inclo, e.nodeo, e.argpo, e.mo, s.epoch.y);
+  equinoctial_of(n0, e.eo, e.xincl, e.xnodeo, e.omegao, e.xmo, s.epoch.y);
   s.epoch.t = 0.0;
   s.epoch.index = 0;
   s.epoch.mode = 0;
@@ -1459,12 +1459,12 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   e.agom = s.ctx.agom;
   const Kepler k = kepler_of(y);
   if (k.a * (1.0 - k.e) < 1.0) return false;  // a later report whose mean perigee is below the surface: code 2 (8.4)
-  e.no_kozai = y[kN];
-  e.ecco = k.e;
-  e.inclo = k.i;
-  e.nodeo = k.node;
-  e.argpo = k.argp;
-  e.mo = k.m;
+  e.xno = y[kN];
+  e.eo = k.e;
+  e.xincl = k.i;
+  e.xnodeo = k.node;
+  e.omegao = k.argp;
+  e.xmo = k.m;
   XpSat* x = static_cast<XpSat*>(std::calloc(1, sizeof(XpSat)));
   if (x == nullptr) return false;
   const bool ok = xp_init(e, *x) == kPropOk;

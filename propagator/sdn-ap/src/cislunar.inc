@@ -14,7 +14,7 @@ namespace cislunar {
 constexpr double kMuMoon = lunar::kMu, kMuEarth = 398600.4418, kMuSun = 1.32712440018e11;
 
 struct Seg {
-  bool moon = true;          // centre: the Moon, else the Earth (segment::kMoon / kEarth)
+  bool moon = true;          // center: the Moon, else the Earth (segment::kMoon / kEarth)
   double et0 = 0.0;          // TT seconds from J2000 at the epoch
   double pole[3] = {0, 0, 1};  // the Moon's pole (J2000) at the epoch
   double r0[3] = {}, v0[3] = {};

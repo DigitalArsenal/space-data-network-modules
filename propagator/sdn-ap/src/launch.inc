@@ -197,7 +197,7 @@ int32_t sdnap_insertion_state(double whole, double frac, const double* el, int32
 }
 
 /// Test helpers (the events E2E's FFM reference): a UVW vector of the state (r, v) in that state's axes, and the
-/// geodetic height (km, EGM-96 ellipsoid) of an Earth-centred inertial position (km).
+/// geodetic height (km, EGM-96 ellipsoid) of an Earth-centered inertial position (km).
 SDNAP_EXPORT("sdnap_uvw_to_frame")
 void sdnap_uvw_to_frame(const double* r, const double* v, const double* uvw, double* out) { sdnap::events::uvw_to_teme(r, v, uvw, out); }
 SDNAP_EXPORT("sdnap_geodetic_height_km")

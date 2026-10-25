@@ -3,11 +3,11 @@ Copyright 2026 Edgesource Corporation
 
 Licensed under the Apache License, Version 2.0 (LICENSE).
 
-Not covered by that license:
-- src/sgp4_core.inc and src/model.inc: derived from David Vallado's SGP4 (companion
-  code for Fundamentals of Astrodynamics and Applications), which the author
-  distributes freely with no license stated. These files are not covered by the
-  Apache-2.0 license of this package.
+The SGP4/SDP4 base, src/sgp4_core.inc and src/model.inc, is written clean room
+from Spacetrack Report No. 3 (Hoots & Roehrich 1980, US Air Force, approved for
+public release) and the corrections documented in the text of Vallado,
+Crawford, Hujsak & Kelso (2006), AIAA 2006-6753; it is covered by the
+Apache-2.0 license of this package like the rest.
 
 The module compiles, from this repository, pinned by SHA-256 in build.mjs:
 - ERFA (Essential Routines for Fundamental Astronomy), BSD-3-Clause, derived with

@@ -258,8 +258,8 @@ inline int push_oem(flatbuffers::FlatBufferBuilder& fbb, std::vector<flatbuffers
 }  // namespace oem
 }  // namespace sdnap
 
-/// SDN-AP 2h.1: a Moon-centred SDN-AP $OMM (CENTER_NAME MOON, MEAN_ELEMENT_THEORY SDNAP, USER_DEFINED_SDNAP_REGIME
-/// MOON) on the grids: Moon-centred states in J2000 (ICRF) axes whatever axes an inertial grid names; 0, 1 when the
+/// SDN-AP 2h.1: a Moon-centered SDN-AP $OMM (CENTER_NAME MOON, MEAN_ELEMENT_THEORY SDNAP, USER_DEFINED_SDNAP_REGIME
+/// MOON) on the grids: Moon-centered states in J2000 (ICRF) axes whatever axes an inertial grid names; 0, 1 when the
 /// record is not such a set (the caller refuses it), or a named refusal (3).
 static int lunar_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap::oem::Grid>& grids, size_t& budget) {
   using namespace sdnap;
@@ -287,7 +287,7 @@ static int lunar_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap
   if (!sdnap_set || !moon) return 1;
   double whole, frac;
   if (o->EPOCH() == nullptr || !omm::epoch(o->EPOCH()->c_str(), o->EPOCH()->size(), whole, frac)) {
-    plugin_set_error("invalid-omm", "A Moon-centred $OMM has no readable EPOCH.");
+    plugin_set_error("invalid-omm", "A Moon-centered $OMM has no readable EPOCH.");
     return 3;
   }
   const double rad = kPi / 180.0;
@@ -303,23 +303,23 @@ static int lunar_propagate(const uint8_t* p, uint32_t n, const std::vector<sdnap
   lunar::short_degree() = s0;
   lunar::eccentricity_order() = q0;
   if (!ok) {
-    plugin_set_error("element-set-refused", "The Moon-centred set's epoch is outside the embedded lunar orientation span.");
+    plugin_set_error("element-set-refused", "The Moon-centered set's epoch is outside the embedded lunar orientation span.");
     return 3;
   }
   s.agom = agom;
   flatbuffers::FlatBufferBuilder fbb(1 << 16);
   std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
   for (const oem::Grid& g : grids) {
-    if (g.axes == oem::Axes::EarthFixed || g.axes == oem::Axes::Other) return oem::refuse("invalid-grid", "A Moon-centred set is written in ICRF (J2000) axes.");
-    if (g.center != 0 && g.center != 2) return oem::refuse("grid-center-mismatch", "The grid names a centre other than the set's (MOON).");
+    if (g.axes == oem::Axes::EarthFixed || g.axes == oem::Axes::Other) return oem::refuse("invalid-grid", "A Moon-centered set is written in ICRF (J2000) axes.");
+    if (g.center != 0 && g.center != 2) return oem::refuse("grid-center-mismatch", "The grid names a center other than the set's (MOON).");
     std::vector<double> tw, tf;
     if (const int rc = oem::grid_epochs(g, whole, frac, budget, tw, tf)) return rc;
     std::vector<double> t(tw.size()), out(6 * tw.size());
     for (size_t k = 0; k < tw.size(); ++k) t[k] = ((tw[k] - whole) + (tf[k] - frac)) * 86400.0;
     for (size_t k = 1; k < t.size(); ++k)
-      if (t[k] < t[k - 1]) return oem::refuse("bad-grid", "A Moon-centred set's grid epochs must ascend.");
+      if (t[k] < t[k - 1]) return oem::refuse("bad-grid", "A Moon-centered set's grid epochs must ascend.");
     if (!lunar::states(s, t.data(), static_cast<int>(t.size()), out.data())) {
-      return oem::refuse("propagation-failed", "The Moon-centred set does not propagate over the grid (orientation span or a non-elliptic state).");
+      return oem::refuse("propagation-failed", "The Moon-centered set does not propagate over the grid (orientation span or a non-elliptic state).");
     }
     blocks.push_back(oem::inertial_block(fbb, "MOON", g, tw, tf, out));
   }
@@ -359,7 +359,7 @@ static int segment_propagate(const uint8_t* p, uint32_t n, const std::vector<sdn
   const char* cn = o->CENTER_NAME() != nullptr ? o->CENTER_NAME()->c_str() : "EARTH";
   const int center = oem::same_text(cn, "EARTH") ? segment::kEarth : oem::same_text(cn, "MOON") ? segment::kMoon : oem::same_text(cn, "SUN") ? segment::kSun : segment::kOther;
   if (helio ? center != segment::kSun : (center != segment::kEarth && center != segment::kMoon)) {
-    plugin_set_error("unsupported-center", helio ? "A HELIO segment set is Sun-centred (CENTER_NAME SUN)." : "A CISLUNAR segment set is centred on the Earth or the Moon (CENTER_NAME).");
+    plugin_set_error("unsupported-center", helio ? "A HELIO segment set is Sun-centered (CENTER_NAME SUN)." : "A CISLUNAR segment set is centered on the Earth or the Moon (CENTER_NAME).");
     return 3;
   }
   double whole, frac;
@@ -383,7 +383,7 @@ static int segment_propagate(const uint8_t* p, uint32_t n, const std::vector<sdn
     if (g.axes == oem::Axes::EarthFixed || g.axes == oem::Axes::Other) return oem::refuse("invalid-grid", "A segment set is written in ICRF axes.");
     if (g.center != 0 && g.center != center) {
       char why[120];
-      std::snprintf(why, sizeof why, "The grid names a centre other than the set's (%s).", segment::name_of(center));
+      std::snprintf(why, sizeof why, "The grid names a center other than the set's (%s).", segment::name_of(center));
       return oem::refuse("grid-center-mismatch", why);
     }
     std::vector<double> tw, tf;
@@ -443,7 +443,7 @@ extern "C" int propagate(void) {
         if (rc == 1 && sdnap::omm::center_refused()) rc = lunar_propagate(f->payload, f->payload_length, grids, budget);
         if (rc == 0) continue;
         if (rc == 3) return 3;
-        plugin_set_error("unsupported-center", "An 'omm' record is centred neither on the Earth nor, as an SDN-AP Moon-centred or segment set, on the Moon or the Sun (CENTER_NAME).");
+        plugin_set_error("unsupported-center", "An 'omm' record is centered neither on the Earth nor, as an SDN-AP Moon-centered or segment set, on the Moon or the Sun (CENTER_NAME).");
         return 3;
       }
       plugin_set_error("invalid-omm", "An 'omm' payload is not a decodable SGP4, SGP4XP or SDN-AP $OMM record.");
@@ -461,7 +461,7 @@ extern "C" int propagate(void) {
       refused = xs == nullptr || sdnap::xpt::xp_init(e, *xs) != sdnap::kPropOk;
     } else {
       refused = sdnap::sat_init(e, sdnap::gravity_wgs72(), sat) != sdnap::kPropOk;
-      if (!refused && sat.irez != 0) {
+      if (!refused && sat.deep.iresfl != 0) {
         nodes = static_cast<double*>(std::malloc(sizeof(double) * 4u * sdnap::kCheckpointNodes));
         if (nodes != nullptr) {
           sat.checkpoint_count = sdnap::kCheckpointNodes;
@@ -480,7 +480,7 @@ extern "C" int propagate(void) {
     char text[48], start[48], stop[48], why[160];
     int rc = 0;
     for (const sdnap::oem::Grid& g : grids) {
-      if (g.center != 0 && g.center != 1) { rc = sdnap::oem::refuse("grid-center-mismatch", "The grid names a centre other than the set's (EARTH)."); break; }
+      if (g.center != 0 && g.center != 1) { rc = sdnap::oem::refuse("grid-center-mismatch", "The grid names a center other than the set's (EARTH)."); break; }
       std::vector<double> tw, tf;
       if (g.explicit_times) {
         tw = g.whole;

@@ -231,7 +231,7 @@ extern "C" int ingest_omm(void) {
     if (!sdnap::omm::decode(f->payload, f->payload_length, row)) {
       std::free(rows);
       if (sdnap::omm::center_refused()) {
-        plugin_set_error("unsupported-center", "An 'omm' record is not centred on the Earth (CENTER_NAME); the theories here are geocentric.");
+        plugin_set_error("unsupported-center", "An 'omm' record is not centered on the Earth (CENTER_NAME); the theories here are geocentric.");
         return 3;
       }
       if (sdnap::omm::segment_set()) {

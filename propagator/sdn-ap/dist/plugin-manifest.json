@@ -2,7 +2,7 @@
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
   "version": "0.1.0",
-  "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006), SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification) and SDN-AP (SDN's own theory). Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed metres) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded memory per object, fixed at ingest; any time costs at most one checkpoint interval of integration, and results do not depend on the order times are requested in.",
+  "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006), SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification) and SDN-AP (SDN's own theory). Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded memory per object, fixed at ingest; any time costs at most one checkpoint interval of integration, and results do not depend on the order times are requested in.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -180,7 +180,7 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "One $OEM per element set: EPHEMERIS_DATA_LINES in km and km/s, UTC, centred on the Earth.",
+          "description": "One $OEM per element set: EPHEMERIS_DATA_LINES in km and km/s, UTC, centered on the Earth.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-trajectory",
@@ -373,7 +373,7 @@
     {
       "methodId": "load_environment",
       "displayName": "Load SDN-AP environment",
-      "description": "Replaces the SDN-AP environment with SDS records as FFM reads them (SDS 1.261.0): $SPW rows on 'space_weather', or a $PRW whose SPACE_WEATHER holds them on 'space_weather_table' (at a UTC instant on day d, F10.7 is the observed flux of day d-1, F10.7a the 81-day centred mean of day d and Ap the daily Ap of day d; days not covered keep the values in force), and the open-DCA common mode s(t) from a $DCL on 'density_correction' (Solved, NRLMSISE-00 baseline, LogDensityNodes: s linear between strictly increasing UTC nodes, held at the end values outside them; the same loader as the direct export sdnap_load_density_correction). Any one of the three inputs suffices; what is not given stays in force. Refused by name: missing-environment, invalid-space-weather, invalid-density-correction.",
+      "description": "Replaces the SDN-AP environment with SDS records as FFM reads them (SDS 1.261.0): $SPW rows on 'space_weather', or a $PRW whose SPACE_WEATHER holds them on 'space_weather_table' (at a UTC instant on day d, F10.7 is the observed flux of day d-1, F10.7a the 81-day centered mean of day d and Ap the daily Ap of day d; days not covered keep the values in force), and the open-DCA common mode s(t) from a $DCL on 'density_correction' (Solved, NRLMSISE-00 baseline, LogDensityNodes: s linear between strictly increasing UTC nodes, held at the end values outside them; the same loader as the direct export sdnap_load_density_correction). Any one of the three inputs suffices; what is not given stays in force. Refused by name: missing-environment, invalid-space-weather, invalid-density-correction.",
       "inputPorts": [
         {
           "portId": "space_weather",
