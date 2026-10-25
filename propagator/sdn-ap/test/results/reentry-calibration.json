@@ -2143,7 +2143,7 @@
 ]
  },
  "nine_starlinks": {
-  "statement": "Nine Starlinks cause 63 % of the misses at 2 sigma (101 of 160); they are 16 % of the 57 objects. Seven of them change B_eff by 1.6 to 3.1 times between the sets far from the reentry and those near it, in both directions (STARLINK-3373 and 1149 up, 1828, 30182 and 5693 down); the other two (2382, 30924) keep it near 0.02 m^2/kg and are predicted 33 to 36 % late. This is the known limit of the window and the reason controlled lowering and attitude change need their own treatment.",
+  "statement": "Nine Starlinks cause 63 % of the misses at 2 sigma (101 of 160); they are 16 % of the 57 objects. Seven of them change B_eff by 1.6 to 3.1 times between the sets far from the reentry and those near it, in both directions (STARLINK-3373 and 1149 up, 1828, 30182 and 5693 down); the other two (2382, 30924) keep it near 0.02 m^2/kg and are predicted 33 to 36 % late, and nothing in their sets explains it (unexplained cases). This is the known limit of the window and the reason controlled lowering and attitude change need their own treatment.",
   "columns": [
    "norad",
    "name",
