@@ -116,13 +116,10 @@ void nonsingular(const ElementSet& s, double p[6]) {
   p[4] = s.el[3];
   p[5] = s.el[5] + s.el[4];
 }
-bool init_elements(const ElementSet& s, const double p[6], elsetrec& rec) {
+bool init_elements(const ElementSet& s, const double p[6], sdnap::Sat& rec) {
   const double e = std::hypot(p[1], p[2]);
   const double w = e > 0 ? std::atan2(p[2], p[1]) : 0.0;
-  char satn[9] = "00000";
-  std::memset(&rec, 0, sizeof(rec));
-  return SGP4Funcs::sgp4init(wgs72, 'i', satn, s.sgp4_epoch, s.el[6], 0.0, 0.0, e, w, p[3], p[5] - w, p[0], p[4], rec) &&
-         rec.error == 0;
+  return sgp4_init(s.sgp4_epoch, s.el[6], e, w, p[3], p[5] - w, p[0], p[4], rec);
 }
 // J at each time (minutes from the set's epoch), TEME km and km/s per unit element.
 bool sgp4_jacobians(const ElementSet& s, const std::vector<double>& minutes, std::vector<Mat6>* jac) {
@@ -136,11 +133,11 @@ bool sgp4_jacobians(const ElementSet& s, const std::vector<double>& minutes, std
       double p[6];
       std::copy(p0, p0 + 6, p);
       p[k] += sign * step[k];
-      elsetrec rec;
+      sdnap::Sat rec;
       if (!init_elements(s, p, rec)) return false;
       for (size_t j = 0; j < minutes.size(); ++j) {
         double r[3], v[3];
-        if (!SGP4Funcs::sgp4(rec, minutes[j], r, v) || rec.error != 0) return false;
+        if (!sgp4_eval(rec, minutes[j], r, v)) return false;
         const double x[6] = {r[0], r[1], r[2], v[0], v[1], v[2]};
         if (sign > 0) {
           std::copy(x, x + 6, plus[j].begin());

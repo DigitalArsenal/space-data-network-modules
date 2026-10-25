@@ -3,7 +3,7 @@
   "erfaSourceFiles": 248,
   "jb2008": "propagator/ffm/lib/jb2008.h",
   "nrlmsise00": "third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)",
-  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
+  "sgp4": "foundation/sgp4-str3",
   "sdsHeaders": [
     "schema/ATM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/RFM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",

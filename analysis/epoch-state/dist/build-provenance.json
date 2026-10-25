@@ -25,6 +25,6 @@
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
-  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
+  "sgp4": "foundation/sgp4-str3",
   "threadModel": "wasi-sequential"
 }

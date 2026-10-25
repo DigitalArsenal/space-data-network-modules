@@ -14,8 +14,8 @@ import { generateSdsHeaders } from '../../scripts/lib/sds-cpp-headers.mjs';
 // (lib/jb2008.h, unchanged), the public-domain C port of NRLMSISE-00 in
 // third_party/nrlmsise00 (unchanged but for a malloc cast and an array bound, inside the
 // namespace nrlmsise00 so that its global names stay out of the rest),
-// propagator/sgp4's Vallado SGP4 (the element sets' trajectories for the
-// decay methods; as analysis/epoch-state compiles it) and this module's source.
+// the SGP4/SDP4 base foundation/sgp4-str3 (the element sets' trajectories for the
+// decay methods; as analysis/od compiles it) and this module's source.
 const root = fileURLToPath(new URL('.', import.meta.url));
 // FFM owns the typed force/propagation implementation; this consumer links
 // only that surface using the SDK EH-free compiler contract, with FFM's own
@@ -25,17 +25,21 @@ process.env.SDN_WASI_CLANG=process.env.SDN_WASI_CLANGXX;
 await fs.chmod(process.env.SDN_WASI_CLANGXX,0o755);
 const jb2008Header = path.resolve(root, '../../propagator/ffm/lib/jb2008.h');
 const egm2008Header = path.resolve(root, '../../propagator/ffm/lib/egm2008_data.h');
-const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
+const sgp4Dir = path.resolve(root, '../../foundation/sgp4-str3');
 const msisDir = path.resolve(root, '../../third_party/nrlmsise00');
 const erfa = await composeErfaTranslationUnit();
 await fs.mkdir(path.join(root,'.sdk-build'),{recursive:true});
 await fs.writeFile(path.join(root,'.sdk-build/erfa.cpp'),erfa.source);
 const jb2008 = await fs.readFile(jb2008Header, 'utf8');
 const egm2008 = await fs.readFile(egm2008Header, 'utf8');
-// SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that
-// must not leak past it.
-const sgp4Header = await fs.readFile(path.join(sgp4Src, 'SGP4.h'), 'latin1');
-const sgp4Source = (await fs.readFile(path.join(sgp4Src, 'SGP4.cpp'), 'latin1')).replace('#include "SGP4.h"', '');
+// The SGP4/SDP4 base: its header with its two parts in place of their #include lines.
+let sgp4 = await fs.readFile(path.join(sgp4Dir, 'include/sgp4_str3.h'), 'utf8');
+for (const part of ['sgp4_core.inc', 'model.inc']) {
+  const line = `#include "../src/${part}"`;
+  if (!sgp4.includes(line)) throw new Error(`foundation/sgp4-str3 no longer includes ${part}`);
+  const text = await fs.readFile(path.join(sgp4Dir, 'src', part), 'utf8');
+  sgp4 = sgp4.replace(line, () => text);
+}
 // NRLMSISE-00: header, coefficient data and model, as one C++ block in a namespace. The package includes its own header and the C standard headers
 // (taken out here and included once, before the namespace); the one construct C++ refuses is the void* from malloc in spline().
 const msisHeader = await fs.readFile(path.join(msisDir, 'nrlmsise-00.h'), 'latin1');
@@ -60,7 +64,7 @@ const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 export const compilation = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', '#include "erfa.h"', jb2008, egm2008, msis, sgp4Header, sgp4Source, '#undef pi', sha, source].join('\n\n'),
+  sourceCode: ['#include "space_data_module_invoke.h"', '#include "erfa.h"', jb2008, egm2008, msis, sgp4, sha, source].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'wasi-sequential',stackSize:2*1024*1024,
@@ -68,7 +72,7 @@ export const compilation = await compileModuleFromSource({
 if (!compilation.report?.ok) throw new Error('Density calibration validation failed',{cause:compilation.report?.issues});
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  spacedatastandards: sdsVersion, erfaSourceFiles: erfa.fileCount, jb2008: 'propagator/ffm/lib/jb2008.h', nrlmsise00: 'third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
+  spacedatastandards: sdsVersion, erfaSourceFiles: erfa.fileCount, jb2008: 'propagator/ffm/lib/jb2008.h', nrlmsise00: 'third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)', sgp4: 'foundation/sgp4-str3',
   sdsHeaders: ordered.map((code) => `schema/${code}/main.fbs (scripts/lib/sds-cpp-headers.mjs)`), threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath}`);

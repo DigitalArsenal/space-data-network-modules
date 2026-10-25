@@ -72,6 +72,29 @@ constexpr double kMu = 398600.4418;      // km^3/s^2, FFM states
 constexpr double kRe = 6378.1363;        // km
 constexpr double kJ2 = 1.08262668e-3;
 constexpr double kSgp4EpochFromUnixDays = 7306.0;  // days from 1949-12-31 00:00 to 1970-01-01
+
+// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, improved mode). sgp4_init: a set from its mean elements
+// (radians; the Kozai mean motion in rad/min, as element sets carry it), the epoch in days from 1949 December 31 0h UT
+// taken as one Julian date; initialization also evaluates the set at its epoch and refuses what SGP4 refuses there.
+// sgp4_eval: the TEME state (km, km/s) at `minutes` from the epoch, false where SGP4 refuses the point.
+bool sgp4_init(double ds50, double bstar, double e, double argp, double inc, double ma, double no_kozai, double node,
+               sdnap::Sat& sat) {
+  sdnap::Elements el{};
+  el.epoch_jd_whole = ds50 + sdnap::kJd1950;
+  el.xno = no_kozai;
+  el.eo = e;
+  el.xincl = inc;
+  el.xnodeo = node;
+  el.omegao = argp;
+  el.xmo = ma;
+  el.bstar = bstar;
+  double r[3], v[3];
+  return sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) == sdnap::kPropOk &&
+         sdnap::sat_propagate(sat, nullptr, 0.0, r, v) == sdnap::kPropOk;
+}
+bool sgp4_eval(const sdnap::Sat& sat, double minutes, double r[3], double v[3]) {
+  return sdnap::sat_propagate(sat, nullptr, minutes, r, v) == sdnap::kPropOk;
+}
 const double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 int fail(const char* code, const std::string& message) {
@@ -344,16 +367,13 @@ flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<LFVRow>>> write_hist
   return fbb.CreateVector(rows);
 }
 
-// ── SGP4 (WGS-72, opsmode i, the propagator/sgp4 sources) ──
-bool init_set(const Set& s, elsetrec* rec) {
-  std::memset(rec, 0, sizeof *rec);
-  char satn[9] = "00000";
-  return SGP4Funcs::sgp4init(wgs72, 'i', satn, s.t / kDay + kSgp4EpochFromUnixDays, s.bstar, 0.0, 0.0, s.e,
-                             s.argp * kDeg, s.i * kDeg, s.ma * kDeg, s.n * 2.0 * kPi / 1440.0, s.raan * kDeg, *rec) &&
-         rec->error == 0;
+// ── SGP4 (sgp4_init above: foundation/sgp4-str3, WGS-72, improved mode) ──
+bool init_set(const Set& s, sdnap::Sat* rec) {
+  return sgp4_init(s.t / kDay + kSgp4EpochFromUnixDays, s.bstar, s.e,
+                   s.argp * kDeg, s.i * kDeg, s.ma * kDeg, s.n * 2.0 * kPi / 1440.0, s.raan * kDeg, *rec);
 }
-double mean_a_km(const elsetrec& rec) {
-  const double n = rec.no_unkozai / 60.0;
+double mean_a_km(const sdnap::Sat& rec) {
+  const double n = rec.xnodp / 60.0;
   return std::cbrt(kMuWgs72 / (n * n));
 }
 constexpr double kRatePerDay = 1440.0 / kDeg;   // rad/min -> deg/day
@@ -402,14 +422,14 @@ struct Track {
   std::vector<double> t, a, e, i, raan;  // unix s, km, -, deg, deg
   std::vector<double> node_rate;         // expected secular node rate per point, deg/day
 };
-Track gp_track(const History& h, double w0, double w1, std::vector<elsetrec>* recs) {
+Track gp_track(const History& h, double w0, double w1, std::vector<sdnap::Sat>* recs) {
   Track tr;
   for (const Set& s : h.sets) {
     if (s.t < w0 || s.t >= w1) continue;
-    elsetrec rec;
+    sdnap::Sat rec;
     if (!init_set(s, &rec)) continue;
     tr.t.push_back(s.t), tr.a.push_back(mean_a_km(rec)), tr.e.push_back(s.e), tr.i.push_back(s.i);
-    tr.raan.push_back(s.raan), tr.node_rate.push_back(rec.nodedot * kRatePerDay);
+    tr.raan.push_back(s.raan), tr.node_rate.push_back(rec.xnodot * kRatePerDay);
     if (recs) recs->push_back(rec);
   }
   return tr;
@@ -643,14 +663,14 @@ void push_core(const Core& c, std::vector<double>* x) {
 struct Link {
   double dt, d[6], bstar;
 };
-std::vector<Link> links(const std::vector<elsetrec>& recs, const Track& tr) {
+std::vector<Link> links(const std::vector<sdnap::Sat>& recs, const Track& tr) {
   std::vector<Link> out;
   for (size_t k = 0; k + 1 < recs.size(); ++k) {
     const double dt = tr.t[k + 1] - tr.t[k];
     if (dt < 1.0 || dt > 3 * kDay) continue;
-    elsetrec a = recs[k], b = recs[k + 1];
+    sdnap::Sat a = recs[k], b = recs[k + 1];
     double r1[3], v1[3], r2[3], v2[3], dr[3], dv[3];
-    if (!SGP4Funcs::sgp4(a, dt / 60.0, r1, v1) || a.error || !SGP4Funcs::sgp4(b, 0.0, r2, v2) || b.error) continue;
+    if (!sgp4_eval(a, dt / 60.0, r1, v1) || !sgp4_eval(b, 0.0, r2, v2)) continue;
     for (int j = 0; j < 3; ++j) dr[j] = r1[j] - r2[j], dv[j] = v1[j] - v2[j];
     Link l{dt, {}, recs[k + 1].bstar};
     rtn(r1, v1, dr, l.d), rtn(r1, v1, dv, l.d + 3);
@@ -658,7 +678,7 @@ std::vector<Link> links(const std::vector<elsetrec>& recs, const Track& tr) {
   }
   return out;
 }
-std::array<double, 4> consecutive(const std::vector<elsetrec>& recs, const Track& tr) {
+std::array<double, 4> consecutive(const std::vector<sdnap::Sat>& recs, const Track& tr) {
   std::vector<double> r, t, n;
   double tmax = kNaN;
   for (const Link& l : links(recs, tr)) {
@@ -744,7 +764,7 @@ bool make_donor(const History& h, double w0, double w1, int days, Donor* d) {
   for (double w : argp) c += std::cos(w * kDeg), s += std::sin(w * kDeg);
   d->argp_mean = wrap_deg(std::atan2(s, c) / kDeg), d->argp_r = std::hypot(c, s) / argp.size();
   for (double w : argp) d->argp_res.push_back(std::remainder(w - d->argp_mean, 360.0));
-  std::vector<elsetrec> recs;
+  std::vector<sdnap::Sat> recs;
   const Track tr = gp_track(h, w0, w1, &recs);
   if (recs.size() < 6) return false;
   d->a_mean = median(tr.a), d->i_med = median(i);
@@ -752,12 +772,12 @@ bool make_donor(const History& h, double w0, double w1, int days, Donor* d) {
   for (size_t k = 0; k + 1 < d->sets.size(); ++k) {
     const Set &a = *d->sets[k], &b = *d->sets[k + 1];
     const double dt = b.t - a.t;
-    elsetrec rec;
+    sdnap::Sat rec;
     if (dt < 1.0 || dt > 3 * kDay || !init_set(a, &rec)) continue;
-    const double days = dt / kDay, w = (a.argp + rec.argpdot * kRatePerDay * days) * kDeg;
+    const double days = dt / kDay, w = (a.argp + rec.omgdot * kRatePerDay * days) * kDeg;
     Change c{dt, {b.n - a.n, b.e * std::cos(b.argp * kDeg) - a.e * std::cos(w), b.e * std::sin(b.argp * kDeg) - a.e * std::sin(w),
-                  b.i - a.i, std::remainder(b.raan - a.raan - rec.nodedot * kRatePerDay * days, 360.0),
-                  std::remainder(b.argp + b.ma - a.argp - a.ma - (rec.argpdot + rec.mdot) * kRatePerDay * days, 360.0)},
+                  b.i - a.i, std::remainder(b.raan - a.raan - rec.xnodot * kRatePerDay * days, 360.0),
+                  std::remainder(b.argp + b.ma - a.argp - a.ma - (rec.omgdot + rec.xmdot) * kRatePerDay * days, 360.0)},
              b.bstar};
     d->changes.push_back(c);
   }
@@ -824,9 +844,9 @@ bool integrate_angles(std::vector<Set>* sets, bool frozen_argp, double argp_fixe
   for (size_t k = 0; k < sets->size(); ++k) {
     Set& s = (*sets)[k];
     s.raan = raan, s.argp = argp, s.ma = u - argp;
-    elsetrec rec;
+    sdnap::Sat rec;
     if (!init_set(s, &rec)) return false;
-    const double rates[3] = {rec.nodedot * kRatePerDay, rec.argpdot * kRatePerDay, rec.mdot * kRatePerDay};
+    const double rates[3] = {rec.xnodot * kRatePerDay, rec.omgdot * kRatePerDay, rec.xmdot * kRatePerDay};
     if (k) {
       const double dt = (s.t - (*sets)[k - 1].t) / kDay;
       raan += 0.5 * (rates[0] + prev[0]) * dt;
@@ -922,17 +942,17 @@ History chained(const Donor& d, const std::vector<std::array<double, 3>>& offset
     x.e = std::max(1e-7, std::hypot(xc, xs)), x.argp = wrap_deg(std::atan2(xs, xc) / kDeg);
     x.raan = wrap_deg(node + scale[4] * rng.normal());
     x.ma = wrap_deg(u + scale[5] * rng.normal() - x.argp);
-    elsetrec rec;
+    sdnap::Sat rec;
     if (!init_set(x, &rec)) return {};
     h.sets.push_back(x);
     const Change& c = d.changes[at];
     at = (at + 1) % d.changes.size();
     if (t + c.dt >= o.w1) break;
-    const double days = c.dt / kDay, turn = rec.argpdot * kRatePerDay * days * kDeg;
+    const double days = c.dt / kDay, turn = rec.omgdot * kRatePerDay * days * kDeg;
     const double rc = ec * std::cos(turn) - es * std::sin(turn), rs = ec * std::sin(turn) + es * std::cos(turn);
     t += c.dt, n += c.d[0], ec = rc + c.d[1], es = rs + c.d[2], i += c.d[3];
-    node += rec.nodedot * kRatePerDay * days + c.d[4];
-    u += (rec.argpdot + rec.mdot) * kRatePerDay * days + c.d[5];
+    node += rec.xnodot * kRatePerDay * days + c.d[4];
+    u += (rec.omgdot + rec.xmdot) * kRatePerDay * days + c.d[5];
     bstar = c.bstar;
     if (!(n > 0) || std::hypot(ec, es) >= 0.9) return {};
   }
@@ -1315,7 +1335,7 @@ extern "C" int features() {
   if (!read_histories(histories, oem, &list, &error)) return fail("invalid-histories", error);
 
   std::vector<Track> tracks(list.size());
-  std::vector<std::vector<elsetrec>> recs(list.size());
+  std::vector<std::vector<sdnap::Sat>> recs(list.size());
   std::vector<Signature> sigs(list.size());
   std::vector<std::vector<double>> seqs(list.size());
   std::vector<std::vector<double>> real_daily;
