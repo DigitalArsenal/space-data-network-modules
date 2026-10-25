@@ -1,9 +1,4 @@
 {
  "//": "Rigor failures already filed as graph tasks: { check id: { task, summary } }. A listed check that fails prints KNOWN-FAIL and does not vote; a listed check that passes fails until its entry is removed (the list only shrinks).",
- "failures": {
-  "vallado-covariance-realism-bound": {
-   "task": "sdn-ap-covariance-realism-acceptance-band-20261025",
-   "summary": "no realism acceptance band is stated"
-  }
- }
+ "failures": {}
 }
