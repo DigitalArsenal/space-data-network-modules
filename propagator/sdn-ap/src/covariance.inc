@@ -346,7 +346,9 @@ inline int read(const uint8_t* buf, uint32_t len, const ElementRow& row, Set& s)
   const uint8_t* p = buf;
   uint32_t n = len;
   if (!plain_view(p, n, "$OMM")) return -1;
-  flatbuffers::Verifier verifier(p, n);
+  flatbuffers::Verifier::Options vopt;
+  vopt.check_alignment = false;  // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
+  flatbuffers::Verifier verifier(p, n, vopt);
   if (!VerifyOMMBuffer(verifier)) return -1;
   const OMM* omm = GetOMM(p);
   const auto* cv = omm->COVARIANCE();
