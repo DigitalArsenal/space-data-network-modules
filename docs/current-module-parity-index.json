@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-10-25T14:23:43.953Z",
-  "moduleCount": 150,
+  "generatedAt": "2026-10-25T20:04:07.727Z",
+  "moduleCount": 151,
   "parityScopeModuleCount": 59,
-  "isomorphicWasmCount": 145,
+  "isomorphicWasmCount": 146,
   "missingIsomorphicWasm": [],
   "buildsOnDemand": [
     "analysis/milky-way-model",
@@ -11,7 +11,7 @@
     "data-source/gaia-octree/cones",
     "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 135,
+  "browserWasmEdgeTargetCount": 136,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -4278,7 +4278,7 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 17,
+      "testFileCount": 22,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -4290,6 +4290,10 @@
         "tests/built_artifact.test.mjs",
         "tests/fixtures/nac-dtm-apollo15-2-hadley.f32.gz",
         "tests/fixtures/nac-dtm-apollo15-2-hadley.json",
+        "tests/fixtures/small-body/199.json",
+        "tests/fixtures/small-body/299.json",
+        "tests/fixtures/small-body/901.json",
+        "tests/fixtures/small-body/999.json",
         "tests/granule_plan.test.mjs",
         "tests/host_adapter.test.mjs",
         "tests/irm_mark.test.mjs",
@@ -4302,6 +4306,7 @@
         "tests/moon-sldem-ladder.e2e.mjs",
         "tests/moon-sldem-published.e2e.mjs",
         "tests/sdk_compat.test.mjs",
+        "tests/small-body-reproduce.e2e.mjs",
         "tests/typed.mjs"
       ]
     },
@@ -4343,7 +4348,7 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "name": "Terrain Tile Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "methodIds": [
         "layer_json",
         "pack",
@@ -4366,7 +4371,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 77,
+      "testFileCount": 78,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -4443,6 +4448,7 @@
         "tests/parent-lod.test.mjs",
         "tests/parity-artifact.test.mjs",
         "tests/pds-img.test.mjs",
+        "tests/pole-axis-normals.e2e.mjs",
         "tests/pole-fill-feather.e2e.mjs",
         "tests/produce-real-dtt.mjs",
         "tests/route-cost.test.mjs",
@@ -5001,6 +5007,40 @@
       "methodIds": [
         "fit",
         "publish_request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/node.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "flows/supplemental-omm/nodes/sdnap",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "name": "Supplemental OMM SDN-AP adapter",
+      "pluginFamily": "orbit_determination",
+      "version": "1.0.0",
+      "methodIds": [
+        "catalog_request",
+        "from_page",
+        "prepare",
+        "publish_request",
+        "wrap"
       ],
       "runtimeTargets": [
         "browser",
@@ -6970,6 +7010,7 @@
         "launch_set",
         "load_environment",
         "maneuver",
+        "opm_set",
         "propagate",
         "reentry"
       ],
@@ -6986,7 +7027,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 21,
+      "testFileCount": 41,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7001,18 +7042,38 @@
         "test/events.e2e.mjs",
         "test/exports.e2e.mjs",
         "test/fit.e2e.mjs",
+        "test/fixtures/opm/vimpel-derived-20261012.opm.gz",
         "test/lib/frames.mjs",
         "test/lib/module.mjs",
         "test/lib/oracle.mjs",
         "test/lib/pcf.mjs",
         "test/lib/tle.mjs",
+        "test/opm-derive.mjs",
+        "test/opm-truth-match.mjs",
+        "test/opm-vimpel-score.mjs",
+        "test/opm.e2e.mjs",
+        "test/reentry-calibration.e2e.mjs",
         "test/results/bench.json",
         "test/results/conformance.json",
         "test/results/covariance-calibration-sdnap.json",
         "test/results/covariance-calibration-sgp4xp.json",
         "test/results/covariance-realism-sdnap.json",
         "test/results/covariance-realism-sgp4xp.json",
+        "test/results/maneuver-detector.json",
         "test/results/open-outliers.md",
+        "test/results/opm-truth-match.json",
+        "test/results/opm-vimpel-scores.json",
+        "test/results/reentry-calibration.json",
+        "test/rigor/README.md",
+        "test/rigor/data/aiaa-2006-6753.json",
+        "test/rigor/data/build-aiaa.mjs",
+        "test/rigor/data/covariance-band.json",
+        "test/rigor/hoots.mjs",
+        "test/rigor/kelso.mjs",
+        "test/rigor/known-failures.json",
+        "test/rigor/lib/rigor.mjs",
+        "test/rigor/run.mjs",
+        "test/rigor/vallado.mjs",
         "test/wasmedge-parity.mjs"
       ]
     },
