@@ -3,7 +3,7 @@
 // same SGP4 and SGP4XP sets, and the `fit` method ($OEM in; $OMM and $OBD out) on the first set's ephemeris in TEME,
 // GCRF (ERFA) and ITRF, `propagate` on a 4-day GCRF grid template, and SDN-AP: `fit` (THEORY SDNAP) on the TEME ephemeris
 // (NRLMSISE-00 drag through the shared kernel, the 2d tesseral terms) and its set propagated on the grid, a
-// Moon-centred set (2h.1: GRGM660PRIM, the DE440 PA orientation) propagated on a grid, through
+// Moon-centered set (2h.1: GRGM660PRIM, the DE440 PA orientation) propagated on a grid, through
 // the browser host and the SDK's wasi-threads WasmEdge runner (WasmEdge 0.16.4); every output's bytes must be
 // identical. Docker lane waived (owner ruling 2026-10-22).
 import { createHash } from "node:crypto";
@@ -70,17 +70,17 @@ const runner = await runnerBinary();
 // fit inputs: the first set's ephemeris (browser host), in three frames rotated by the module
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
 let gridInput = null, lunarGrid = null;
-// a Moon-centred SDN-AP set (2h.1): 100 km polar
+// a Moon-centered SDN-AP set (2h.1): 100 km polar
 const lunarOmm = (() => {
   const b = new flatbuffers.Builder(1024);
   // light term sets (degree 8 averaged, 4 short-periodic): the native lane interprets the module
   const params = [["SDNAP_REGIME", "MOON"], ["SDNAP_LUNAR_DEGREE", "8"], ["SDNAP_LUNAR_SHORT_DEGREE", "4"]]
     .map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(v)));
   const vec = OMM.createUserDefinedParametersVector(b, params);
-  const epoch = b.createString("2026-06-01T00:00:00.000000"), centre = b.createString("MOON");
+  const epoch = b.createString("2026-06-01T00:00:00.000000"), center = b.createString("MOON");
   OMM.startOMM(b);
   OMM.addEpoch(b, epoch);
-  OMM.addCenterName(b, centre);
+  OMM.addCenterName(b, center);
   OMM.addMeanMotion(b, 86400 / (2 * Math.PI * Math.sqrt(1838.0 ** 3 / 4902.7998)));
   OMM.addEccentricity(b, 0.01);
   OMM.addInclination(b, 90);
@@ -122,14 +122,14 @@ const fitInputs = await (async () => {
   direct.destroy();
   return out;
 })();
-// SDN-AP segment sets (2h.2 / 2h.3): an NRHO-like Moon-centred set, an Earth orbit reaching the Moon and a thrusting
+// SDN-AP segment sets (2h.2 / 2h.3): an NRHO-like Moon-centered set, an Earth orbit reaching the Moon and a thrusting
 // cruise set; each lane propagates the set, fits the browser lane's ephemeris of it and propagates the fitted set
 const segmentCases = await (async () => {
-  const set = ({ centre, gm, a, e, i, raan, argp, ma, params }) => {
+  const set = ({ center, gm, a, e, i, raan, argp, ma, params }) => {
     const b = new flatbuffers.Builder(1024);
     const ps = [...params].map(([k, v]) => OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString(k), b.createString(String(v))));
     const vec = OMM.createUserDefinedParametersVector(b, ps);
-    const epoch = b.createString("2026-06-01T00:00:00.000000"), c = b.createString(centre);
+    const epoch = b.createString("2026-06-01T00:00:00.000000"), c = b.createString(center);
     OMM.startOMM(b);
     OMM.addEpoch(b, epoch);
     OMM.addCenterName(b, c);
@@ -147,20 +147,20 @@ const segmentCases = await (async () => {
     OMM.finishOMMBuffer(b, OMM.endOMM(b));
     return b.asUint8Array();
   };
-  const grid = (centre, hours, step) => {
+  const grid = (center, hours, step) => {
     const g = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(gridInput.payload)).unpack();
     const gb = g.EPHEMERIS_DATA_BLOCK[0];
     gb.START_TIME = "2026-06-01T00:00:00.000000";
     gb.STOP_TIME = new Date(Date.parse("2026-06-01T00:00:00Z") + hours * 3600e3).toISOString().replace("Z", "000");
     gb.STEP_SIZE = step;
-    gb.CENTER_NAME = centre;
+    gb.CENTER_NAME = center;
     g.EPHEMERIS_DATA_BLOCK = [gb];
     return { portId: "grid", typeRef: oemType, payload: packOem(g) };
   };
   const cases = [
-    { omm: set({ centre: "MOON", gm: 4902.79980693169, a: 37000, e: 0.9, i: 88, raan: 30, argp: 90, ma: 180, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] }), grid: grid("MOON", 24, 1800) },
-    { omm: set({ centre: "EARTH", gm: 398600.4418, a: 250000, e: 0.7, i: 28.5, raan: 40, argp: 10, ma: 20, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] }), grid: grid("EARTH", 24, 1800) },
-    { omm: set({ centre: "SUN", gm: 1.32712440018e11, a: 2.244e8, e: 0.2, i: 23.4, raan: 5, argp: 60, ma: 40, params: [["SDNAP_REGIME", "HELIO"], ["SDNAP_BETA", 1e-5], ["SDNAP_RTN_T", 5e-8]] }), grid: grid("SUN", 240, 21600) },
+    { omm: set({ center: "MOON", gm: 4902.79980693169, a: 37000, e: 0.9, i: 88, raan: 30, argp: 90, ma: 180, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] }), grid: grid("MOON", 24, 1800) },
+    { omm: set({ center: "EARTH", gm: 398600.4418, a: 250000, e: 0.7, i: 28.5, raan: 40, argp: 10, ma: 20, params: [["SDNAP_REGIME", "CISLUNAR"], ["SDNAP_AGOM", 0.01]] }), grid: grid("EARTH", 24, 1800) },
+    { omm: set({ center: "SUN", gm: 1.32712440018e11, a: 2.244e8, e: 0.2, i: 23.4, raan: 5, argp: 60, ma: 40, params: [["SDNAP_REGIME", "HELIO"], ["SDNAP_BETA", 1e-5], ["SDNAP_RTN_T", 5e-8]] }), grid: grid("SUN", 240, 21600) },
   ];
   const browser = withConfiguration(await createStandaloneHarness("browser", wasmPath, { surface: "command" }));
   for (const c of cases) {
