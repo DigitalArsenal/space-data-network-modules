@@ -1,0 +1,240 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.sdn-element-sync",
+  "name": "sdn-element-sync",
+  "version": "0.1.0",
+  "description": "SDN element-set sync (typed contracts 1.0: FlatBuffers only, no JSON). Pure C++ merge step of the SDN-AP data path; the host connectors move the bytes (p2p-discovery pulls a peer's latest $OMM dataset and its signed $PNV notice, flatsql-query reads the cache, storage-ingest writes it, the harness schedules), this module decides. Method \"merge\": ONE $QRP window Request (FROM_EPOCH_MS the cache window start = now minus the cache days, 7 days by default; AS_OF_MS now; TO_EPOCH_MS an optional upper bound; LIMIT an optional cap that drops the oldest first) with the $OMM sets read back from the cache (\"cached\") and the sets just pulled from a peer (\"pulled\", accepted only beside a $PNV notice whose entries are all signature-verified). It drops sets whose EPOCH is before the window (expiry by epoch), de-duplicates on object, theory, originator and EPOCH (a pulled set wins over a cached one), and answers the window snapshot sorted by NORAD_CAT_ID, OBJECT_ID, theory, EPOCH on \"omm\" (the epoch store's load port: size-prefixed $OMM streams of at most 4 MiB per frame), the sets not yet cached on \"store\" (for storage-ingest), the cutoff on \"expire\" (a $QRP Request: SCHEMA_NAME OMM, TO_EPOCH_MS the window start), the accepted $PNV notices byte for byte on \"notice\" (the signed provenance the host re-seeds with the sets; this module never signs and never alters a notice) and the counts on \"summary\" (a $QRP Page). No hostcalls, no capabilities.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "externalInterfaces": [],
+  "schemasUsed": [
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "PNV.fbs",
+      "fileIdentifier": "$PNV",
+      "rootTypeName": "PNV"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One merge of the frames of one invocation on the calling thread; nothing survives the invocation and no thread is created."
+  },
+  "methods": [
+    {
+      "methodId": "merge",
+      "displayName": "Merge Element Sets Into The Cache Window",
+      "inputPorts": [
+        {
+          "portId": "window",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP Request: FROM_EPOCH_MS the window start (0 = unbounded), AS_OF_MS now, TO_EPOCH_MS optional upper bound (0 = none), LIMIT optional cap (0 = none)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$QRP Request: FROM_EPOCH_MS the window start (0 = unbounded), AS_OF_MS now, TO_EPOCH_MS optional upper bound (0 = none), LIMIT optional cap (0 = none)."
+        },
+        {
+          "portId": "cached",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$OMM sets read back from the cache (single records or size-prefixed streams, any number of frames)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000000,
+          "required": false,
+          "description": "$OMM sets read back from the cache (single records or size-prefixed streams, any number of frames)."
+        },
+        {
+          "portId": "pulled",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$OMM sets pulled from a peer (single records or size-prefixed streams); refused unless a signature-verified $PNV notice rides with them."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000000,
+          "required": false,
+          "description": "$OMM sets pulled from a peer (single records or size-prefixed streams); refused unless a signature-verified $PNV notice rides with them."
+        },
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNV.fbs",
+                  "fileIdentifier": "$PNV",
+                  "rootTypeName": "PNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$PNV notice(s) of the pulled batch: every entry SIGNATURE_VERIFIED; passed on byte for byte."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000,
+          "required": false,
+          "description": "$PNV notice(s) of the pulled batch: every entry SIGNATURE_VERIFIED; passed on byte for byte."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The window snapshot, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH: size-prefixed $OMM streams, at most 4 MiB per frame (the epoch store's load port)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000000,
+          "required": false,
+          "description": "The window snapshot, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH: size-prefixed $OMM streams, at most 4 MiB per frame (the epoch store's load port)."
+        },
+        {
+          "portId": "store",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Pulled sets in the window that the cache does not hold yet (a new key, or the same key with different bytes): size-prefixed $OMM streams for storage-ingest."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000000,
+          "required": false,
+          "description": "Pulled sets in the window that the cache does not hold yet (a new key, or the same key with different bytes): size-prefixed $OMM streams for storage-ingest."
+        },
+        {
+          "portId": "expire",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP Request: SCHEMA_NAME OMM, TO_EPOCH_MS the window start; the cache drops its sets with an EPOCH before it."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$QRP Request: SCHEMA_NAME OMM, TO_EPOCH_MS the window start; the cache drops its sets with an EPOCH before it."
+        },
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "PNV.fbs",
+                  "fileIdentifier": "$PNV",
+                  "rootTypeName": "PNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The accepted $PNV notices byte for byte (signed provenance; never re-signed)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1000,
+          "required": false,
+          "description": "The accepted $PNV notices byte for byte (signed provenance; never re-signed)."
+        },
+        {
+          "portId": "summary",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "$QRP Page: SCANNED inputs, RECORD_COUNT emitted, STORED new, TOTAL_COUNT distinct kept; PARTIAL when the pulled batch was refused or capped; MESSAGE names the counts."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$QRP Page: SCANNED inputs, RECORD_COUNT emitted, STORED new, TOTAL_COUNT distinct kept; PARTIAL when the pulled batch was refused or capped; MESSAGE names the counts."
+        }
+      ],
+      "maxBatch": 1000000,
+      "drainPolicy": "single-shot",
+      "description": "Merge cached and pulled $OMM sets into the rolling window; see the module description."
+    }
+  ]
+}

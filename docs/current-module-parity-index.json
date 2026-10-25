@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-10-25T13:41:03.169Z",
-  "moduleCount": 149,
+  "generatedAt": "2026-10-25T14:23:43.953Z",
+  "moduleCount": 150,
   "parityScopeModuleCount": 59,
-  "isomorphicWasmCount": 144,
+  "isomorphicWasmCount": 145,
   "missingIsomorphicWasm": [],
   "buildsOnDemand": [
     "analysis/milky-way-model",
@@ -11,7 +11,7 @@
     "data-source/gaia-octree/cones",
     "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 134,
+  "browserWasmEdgeTargetCount": 135,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -3900,6 +3900,38 @@
         "tests/fixtures/PROVENANCE.md",
         "tests/fixtures/satnogs-transmitters.sample.json",
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/sdn-element-sync",
+      "pluginId": "com.digitalarsenal.data-source.sdn-element-sync",
+      "name": "sdn-element-sync",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "merge"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/sync.e2e.mjs"
       ]
     },
     {
