@@ -218,7 +218,10 @@ inline Recovered recover(double xke, double ck2, double xno, double eo, double x
   const double ao = a1 * (1.0 - del1 * (0.5 * kX2o3 + del1 * (1.0 + 134.0 / 81.0 * del1)));
   const double delo = 1.5 * ck2 * q.x3thm1 / (ao * ao * q.betao * q.betao2);
   q.xnodp = xno / (1.0 + delo);
-  q.aodp = ao / (1.0 - delo);
+  // a''o by Kepler's third law from n''o, the form STR#3's SDP4 gives A at every time (p. 28); its
+  // ao / (1 - deltao) (p. 10) agrees to 1e-12 while deltao is small and parts from it as e nears 1 (11 km at
+  // e = 0.995): the reference forms a''o this way (black box, AIAA 2006-6753 App. D set 33333)
+  q.aodp = std::pow(xke / q.xnodp, kX2o3);
   return q;
 }
 
