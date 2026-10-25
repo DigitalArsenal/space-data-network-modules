@@ -4,20 +4,22 @@
 independently signed Supplemental OMM OD node. Its SHA-256 is:
 
 ```text
-68660fb44ab2ab550f2c9363fa1ba1c45e938c333d6536dcf42e89094a003b3d
+2c83b2dc2ce5e59901c3ee422d88eae6f28c60750ea0d085f4b87502887232a4
 ```
 
 `build-fit-core.sh` rebuilds it byte for byte. It takes this repository's
 `analysis/od` fitter sources at base revision
 `551f6e178c3332cad46171fd1a0002345271144c`: OD's own files, `common/` and the
 generated SDS headers of `licensing/core`, never the `deps/` trees. It applies
-`od-fit-core-source.patch` (the multi-epoch complete-arc delta, and the fitter's
+`od-fit-core-source.patch` (the multi-epoch complete-arc delta, the fitter's
 SGP4 calls on the clean-room SGP4/SDP4 base `foundation/sgp4-str3`, as
-`analysis/od` makes them). It compiles the fitter's eleven translation units
+`analysis/od` makes them, and `analysis/od`'s convergence fixes: the gravity-aware position-only
+velocity seed, the 1e-4 step floor for the eccentricity and inclination
+components and the step-size convergence test). It compiles the fitter's eleven translation units
 with wasi-sdk 30.0 and partial-links them. The patch SHA-256 is:
 
 ```text
-09174a2c731afb6da671976429504a5956d978ed91590bf2c5153fbe56791779
+5bcf14846497fffc90c26ca91a2110ee72f99f6547d741f7d4a2db34d183d10a
 ```
 
 The build inputs:

@@ -1,6 +1,6 @@
 # Supplemental OMM OD node
 
-`org.sdn.flows.supplemental-omm.od` 2.0.1, typed contracts 1.0 (FlatBuffers only).
+`org.sdn.flows.supplemental-omm.od` 2.0.2, typed contracts 1.0 (FlatBuffers only).
 
 | method | in | out |
 | --- | --- | --- |
