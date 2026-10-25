@@ -192,6 +192,13 @@ const laneRows = (r, lane) => new Map(r.runs.filter((x) => x.lane === lane).map(
 const residentRows = (r) => new Map(r.steps.map((x) => [`${x.group}/${x.label}`, `${x.errorCode} ${x.bytes} ${x.responseSha256}`]));
 const digestRows = (responses) => new Map(Object.entries(responses).map(([k, v]) => [k, JSON.stringify(v)]));
 
+// Parity cases whose request carries an impulse. An impulse's time is seconds on the integration clock since
+// modules-ffm-sample-epoch-impulse-drop-20261025 (a Julian date cannot carry it to better than 40 us, and the labels are TDB where the arc
+// runs on TT), so these answer differently from the reference by design; the impulse E2Es hold them to the closed form
+// (start-epoch-impulse.e2e.mjs, sample-epoch-impulse.e2e.mjs). Every other request, Earth arcs without impulses, must be identical.
+const CARRIES_AN_IMPULSE = new Set(['RTN-impulse']);
+const withoutImpulses = (rows, excluded) => new Map([...rows].filter(([k]) => { const hit = CARRIES_AN_IMPULSE.has(k.split('/')[1]); if (hit) excluded.add(k.split('/')[1]); return !hit; }));
+
 function compareMaps(name, a, b, groups) {
   const keys = new Set([...a.keys(), ...b.keys()]);
   let identical = 0;
@@ -202,7 +209,7 @@ function compareMaps(name, a, b, groups) {
 
 function compare(referenceDir) {
   const reference = path.resolve(referenceDir);
-  const groups = [], notes = [];
+  const groups = [], notes = [], excluded = new Set();
   const refDigest = load(reference, '.sdk-build/earth-digest.json'), digestHere = load(ffm, '.sdk-build/earth-digest.json');
   const refSha = sha(fs.readFileSync(path.join(reference, 'dist/isomorphic/module.wasm'))), here = sha(fs.readFileSync(path.join(ffm, 'dist/isomorphic/module.wasm')));
   assert.equal(refDigest.artifactSha256, refSha, 'the reference digest is of another artifact than the reference tree holds');
@@ -232,7 +239,7 @@ function compare(referenceDir) {
     assert.equal(a.artifactSha256 ?? a.moduleSha256, refSha, `${file}: the reference receipt is of another artifact`);
     assert.equal(b.artifactSha256 ?? b.moduleSha256, here, `${file}: this tree's receipt is of another artifact: run its script again`);
     assert.deepEqual(a.lanes.map((l) => l.lane), ['browser', 'wasmedge'], `${file}: the reference receipt has lanes ${a.lanes.map((l) => l.lane)}`);
-    compareMaps(`${path.basename(file, '.json')} (browser, WasmEdge x 1/2/4/8 workers), reference against this tree`, parityRows(a), parityRows(b), groups);
+    compareMaps(`${path.basename(file, '.json')} (browser, WasmEdge x 1/2/4/8 workers), reference against this tree`, withoutImpulses(parityRows(a), excluded), withoutImpulses(parityRows(b), excluded), groups);
     compareMaps(`${path.basename(file, '.json')}, browser against WasmEdge (this tree)`, laneRows(b, 'browser'), laneRows(b, 'wasmedge'), groups);
   }
   const resident = 'tests/evidence/lane13/resident-stateful-parity.json';
@@ -241,6 +248,7 @@ function compare(referenceDir) {
   assert.equal(rb.wasmSha256, here, `${resident}: this tree's receipt is of another artifact: run its script again`);
   compareMaps('resident-stateful-parity (browser, WasmEdge)', residentRows(ra), residentRows(rb), groups);
 
+  for (const id of excluded) notes.push(`${id} carries an impulse: excluded from the identity count (its impulse time is exact on the integration clock now); both lanes of this tree still agree on it`);
   const width = Math.max(...groups.map((g) => g.name.length));
   console.log(`Earth equivalence: reference ${refSha.slice(0, 12)} against ${here.slice(0, 12)}`);
   for (const g of groups) console.log(`  ${g.name.padEnd(width)}  ${String(g.compared).padStart(4)} compared  ${String(g.identical).padStart(4)} identical  ${g.different.length} different${g.different.length ? `: ${g.different.slice(0, 5).join('; ')}` : ''}`);
