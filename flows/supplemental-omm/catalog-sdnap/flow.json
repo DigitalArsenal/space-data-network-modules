@@ -1,0 +1,341 @@
+{
+  "programId": "org.sdn.flows.catalog-sdnap",
+  "name": "Catalog SDN-AP sets",
+  "version": "1.0.0",
+  "description": "Fits SDN-AP element sets for the whole current catalog and publishes them beside the SGP4 sets (typed contracts 1.0: FlatBuffers only). A host-cron TimerTick starts sdnap.catalog_request, a $QRP Request for the node's current $OMM catalog (source celestrak-gp, nearest to now); data-source/retrieval omm_bulk answers it from the store with a page; sdnap.from_page sends the page's records one at a time, each with a default $PCF, to propagator/sdn-ap propagate (each set's own theory: its $OEM on the set's epoch grid); sdnap.prepare sends that $OEM on with a $PCF (THEORY SDNAP) to propagator/sdn-ap fit, one ephemeris an invocation so a set the fit refuses costs only its object; sdnap.wrap files the fit's $OMM (MEAN_ELEMENT_THEORY SDNAP, with COVARIANCE) and $OBD as IngestRequests with their record streams for two hostcap/storage-ingest nodes, and sdnap.publish_request turns each stored batch's IngestResult into the dataset-publication POST (config omm_publish_url). Egress: result (IngestResult), publication (HttpResponse). Every node is an independently signed isomorphic child of the release bundle (scripts/release.mjs --flow-dir catalog-sdnap).",
+  "nodes": [
+    {
+      "nodeId": "publish_omm",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_publish_omm",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "publish_obd",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_publish_obd",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "ingest_omm",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_obd",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "wrap",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "methodId": "wrap",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fit",
+      "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+      "methodId": "fit",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "prepare",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "methodId": "prepare",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "propagate",
+      "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+      "methodId": "propagate",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "from_page",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "methodId": "from_page",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "retrieval",
+      "pluginId": "com.digitalarsenal.data-source.retrieval",
+      "methodId": "omm_bulk",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "catalog_request",
+      "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
+      "methodId": "catalog_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "catalog_request.request->retrieval.request",
+      "fromNodeId": "catalog_request",
+      "fromPortId": "request",
+      "toNodeId": "retrieval",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "edgeId": "retrieval.page->from_page.page",
+      "fromNodeId": "retrieval",
+      "fromPortId": "page",
+      "toNodeId": "from_page",
+      "toPortId": "page",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "from_page.omm->propagate.omm",
+      "fromNodeId": "from_page",
+      "fromPortId": "omm",
+      "toNodeId": "propagate",
+      "toPortId": "omm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "from_page.configuration->propagate.configuration",
+      "fromNodeId": "from_page",
+      "fromPortId": "configuration",
+      "toNodeId": "propagate",
+      "toPortId": "configuration",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "propagate.ephemeris->prepare.oem",
+      "fromNodeId": "propagate",
+      "fromPortId": "ephemeris",
+      "toNodeId": "prepare",
+      "toPortId": "oem",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "prepare.ephemeris->fit.ephemeris",
+      "fromNodeId": "prepare",
+      "fromPortId": "ephemeris",
+      "toNodeId": "fit",
+      "toPortId": "ephemeris",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "prepare.configuration->fit.configuration",
+      "fromNodeId": "prepare",
+      "fromPortId": "configuration",
+      "toNodeId": "fit",
+      "toPortId": "configuration",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "fit.elements->wrap.elements",
+      "fromNodeId": "fit",
+      "fromPortId": "elements",
+      "toNodeId": "wrap",
+      "toPortId": "elements",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "fit.determination->wrap.determination",
+      "fromNodeId": "fit",
+      "fromPortId": "determination",
+      "toNodeId": "wrap",
+      "toPortId": "determination",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "wrap.omm_meta->ingest_omm.meta",
+      "fromNodeId": "wrap",
+      "fromPortId": "omm_meta",
+      "toNodeId": "ingest_omm",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "wrap.omm->ingest_omm.omm_records",
+      "fromNodeId": "wrap",
+      "fromPortId": "omm",
+      "toNodeId": "ingest_omm",
+      "toPortId": "omm_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "wrap.omm_meta->publish_omm.meta",
+      "fromNodeId": "wrap",
+      "fromPortId": "omm_meta",
+      "toNodeId": "publish_omm",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "ingest_omm.result->publish_omm.result",
+      "fromNodeId": "ingest_omm",
+      "fromPortId": "result",
+      "toNodeId": "publish_omm",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "ingest_omm.result->egress.result",
+      "fromNodeId": "ingest_omm",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "publish_omm.request->http_publish_omm.request",
+      "fromNodeId": "publish_omm",
+      "fromPortId": "request",
+      "toNodeId": "http_publish_omm",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64
+    },
+    {
+      "edgeId": "http_publish_omm.response->egress.publication",
+      "fromNodeId": "http_publish_omm",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "publication",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64
+    },
+    {
+      "edgeId": "wrap.obd_meta->ingest_obd.meta",
+      "fromNodeId": "wrap",
+      "fromPortId": "obd_meta",
+      "toNodeId": "ingest_obd",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "wrap.obd->ingest_obd.obd_records",
+      "fromNodeId": "wrap",
+      "fromPortId": "obd",
+      "toNodeId": "ingest_obd",
+      "toPortId": "obd_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "wrap.obd_meta->publish_obd.meta",
+      "fromNodeId": "wrap",
+      "fromPortId": "obd_meta",
+      "toNodeId": "publish_obd",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "ingest_obd.result->publish_obd.result",
+      "fromNodeId": "ingest_obd",
+      "fromPortId": "result",
+      "toNodeId": "publish_obd",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "ingest_obd.result->egress.result",
+      "fromNodeId": "ingest_obd",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 65536
+    },
+    {
+      "edgeId": "publish_obd.request->http_publish_obd.request",
+      "fromNodeId": "publish_obd",
+      "fromPortId": "request",
+      "toNodeId": "http_publish_obd",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64
+    },
+    {
+      "edgeId": "http_publish_obd.response->egress.publication",
+      "fromNodeId": "http_publish_obd",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "publication",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64
+    }
+  ],
+  "runtimeNodeRoutes": [],
+  "triggers": [
+    {
+      "triggerId": "timer-catalog-sdnap",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 10800000,
+      "description": "Every 3 h, after the GP catalog sync (timer-gp): one fit of the current catalog."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-catalog-sdnap",
+      "targetNodeId": "catalog_request",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "org.sdn.flows.supplemental-omm.sdnap",
+    "com.digitalarsenal.data-source.retrieval",
+    "com.spacedatanetwork.sdn-ap-propagator",
+    "com.digitalarsenal.hostcap.storage-ingest",
+    "com.digitalarsenal.hostcap.http-request"
+  ]
+}

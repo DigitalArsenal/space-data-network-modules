@@ -73,11 +73,11 @@ export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex"
 
 // The release, built once per test process by scripts/release.mjs with a key generated here and thrown away: the
 // signed bundle, its parsed entries and the throwaway public key.
-let release;
-export function buildRelease() {
-  release ??= (() => {
+const releases = new Map();
+export function buildRelease(flowDir = "") {
+  if (!releases.has(flowDir)) releases.set(flowDir, (() => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "supplemental-omm-release-"));
-    const stdout = execFileSync(process.execPath, [path.join(packageRoot, "scripts/release.mjs"), "--out", out], {
+    const stdout = execFileSync(process.execPath, [path.join(packageRoot, "scripts/release.mjs"), "--out", out, ...(flowDir ? ["--flow-dir", flowDir] : [])], {
       env: {
         ...process.env,
         NODE_ENV: "",
@@ -90,12 +90,12 @@ export function buildRelease() {
     });
     const summary = JSON.parse(stdout.trim().split("\n").at(-1));
     return { out, summary, bundle: new Uint8Array(fs.readFileSync(path.join(out, "isomorphic/module.wasm"))) };
-  })();
-  return release;
+  })());
+  return releases.get(flowDir);
 }
 
-export async function openRelease() {
-  const { bundle, summary, out } = buildRelease();
+export async function openRelease(flowDir = "") {
+  const { bundle, summary, out } = buildRelease(flowDir);
   const verified = await verifyModuleArtifact(bundle, { trustedPublicKeys: [summary.publicKeyHex], requireSignature: true });
   assert.equal(verified.verified, true);
   const parsed = await parseSingleFileBundle(bundle);
@@ -106,8 +106,8 @@ export async function openRelease() {
 
 // The release in the isomorphic flow host. `config` is each plugin's node config (plugin.getConfig); the host answers
 // http.request from `responses` and storage.ingest_with_source by storing the records here.
-export async function runRelease({ config = {}, responses = fixtureResponses(), ticks = 1, trace = null } = {}) {
-  const { bundle, summary, entries, artifact } = await openRelease();
+export async function runRelease({ config = {}, responses = fixtureResponses(), ticks = 1, trace = null, flowDir = "", hostcall = null, triggerId = "timer-supplemental-omm" } = {}) {
+  const { bundle, summary, entries, artifact } = await openRelease(flowDir);
   const calls = [];
   const ingests = [];
   const plugins = [...new Set(artifact.nodeArtifacts.map((node) => node.pluginId))];
@@ -126,6 +126,7 @@ export async function runRelease({ config = {}, responses = fixtureResponses(), 
           ingests.push({ ...params, records });
           return { schema: params.schema, batch_id: params.batch_id, inserted: records.length };
         }
+        if (hostcall) return hostcall(operation, params, pluginId);
         throw new Error(`${pluginId} asked for ${operation}`);
       },
     };
@@ -158,18 +159,20 @@ export async function runRelease({ config = {}, responses = fixtureResponses(), 
   // The status board reads the route outputs of the status child (runtimeNodeRoutes); the test keeps the last $DSS of
   // each by watching that child's invocations.
   const status = host.children.get("status");
-  const invoke = status.harness.invoke.bind(status.harness);
-  status.harness.invoke = async (request) => {
-    const response = await invoke(request);
-    for (const frame of response.outputs ?? []) routes.set(frame.portId, decodeDss(frame.payload));
-    return response;
-  };
+  if (status) {
+    const invoke = status.harness.invoke.bind(status.harness);
+    status.harness.invoke = async (request) => {
+      const response = await invoke(request);
+      for (const frame of response.outputs ?? []) routes.set(frame.portId, decodeDss(frame.payload));
+      return response;
+    };
+  }
   try {
     for (let tick = 0; tick < ticks; tick += 1) {
       host.enqueueTriggerFrame(0, {
         portId: "tick",
         typeRef: { schemaName: "TimerTick.fbs", fileIdentifier: "TICK", rootTypeName: "TimerTick", wireFormat: "flatbuffer" },
-        bytes: encodeTimerTick({ triggerId: "timer-supplemental-omm", scheduledMs: Date.UTC(2026, 6, 21, 12 + tick), firedMs: Date.UTC(2026, 6, 21, 12 + tick) }),
+        bytes: encodeTimerTick({ triggerId, scheduledMs: Date.UTC(2026, 6, 21, 12 + tick), firedMs: Date.UTC(2026, 6, 21, 12 + tick) }),
       });
       await host.drain({ handlers, maxIterations: 100000 });
     }

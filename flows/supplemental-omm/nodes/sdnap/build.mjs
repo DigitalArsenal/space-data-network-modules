@@ -21,7 +21,7 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const sdsDir = path.resolve(root, "../../../../licensing/core/src/cpp/generated/sds");
-const staged = new Set(["space_data_module_invoke.h", "IngestRequest_generated.h"]);
+const staged = new Set(["space_data_module_invoke.h", "typedHostcall.hpp", "IngestRequest_generated.h", "IngestResult_generated.h", "HttpRequest_generated.h"]);
 const commonDir = path.resolve(root, "../../../../common");
 // The standards the manifests are validated against: SPACE_DATA_STANDARDS_ROOT, else the spacedatastandards.org package
 // this flow pins (package.json devDependencies).

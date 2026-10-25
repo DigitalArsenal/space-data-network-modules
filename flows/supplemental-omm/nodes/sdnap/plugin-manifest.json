@@ -2,7 +2,7 @@
   "pluginId": "org.sdn.flows.supplemental-omm.sdnap",
   "name": "Supplemental OMM SDN-AP adapter",
   "version": "1.0.0",
-  "description": "The two adapters around propagator/sdn-ap's fit in the Supplemental OMM flow (typed contracts 1.0: FlatBuffers only). prepare takes each source's SDS $OEM and emits it on `ephemeris` beside a $PCF (THEORY SDNAP) on `configuration`, one ephemeris and one $PCF an invocation, yielding until every ephemeris it was handed is sent (the fit's configuration port takes one frame, and an ephemeris the fit refuses then costs only that object). wrap takes the fit's $OMM (SDNAP, with COVARIANCE) and $OBD and emits each standard's IngestRequest (INGQ) on `<code>_meta` beside its size-prefixed record stream on `<code>`: SCHEMA, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public, RECONCILE Duplicates, PROVENANCE. No hostcalls.",
+  "description": "The two adapters around propagator/sdn-ap's fit in the Supplemental OMM flow (typed contracts 1.0: FlatBuffers only). prepare takes each source's SDS $OEM and emits it on `ephemeris` beside a $PCF (THEORY SDNAP) on `configuration`, one ephemeris and one $PCF an invocation, yielding until every ephemeris it was handed is sent (the fit's configuration port takes one frame, and an ephemeris the fit refuses then costs only that object). wrap takes the fit's $OMM (SDNAP, with COVARIANCE) and $OBD and emits each standard's IngestRequest (INGQ) on `<code>_meta` beside its size-prefixed record stream on `<code>`: SCHEMA, TAGS PROVIDER_ID supplemental-omm, SOURCE_NAME sdn-ap, BATCH_ID the SHA-256 of the stream, CONTENT_KEY_ID public, RECONCILE Duplicates, PROVENANCE. No hostcalls. catalog_request asks the node's current $OMM catalog (a $QRP Request for data-source/retrieval omm_bulk) on each timer tick; from_page sends the page's records one at a time, each with a default $PCF, for propagator/sdn-ap propagate; publish_request is the OD node's, for this adapter's batches (config omm_publish_url).",
   "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
@@ -222,6 +222,204 @@
           "description": "Size-prefixed $OBD records."
         }
       ]
+    },
+    {
+      "methodId": "catalog_request",
+      "displayName": "Ask the node for its current catalog",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "timer-tick",
+              "description": "The flow trigger firing (TimerTick, TICK); its fields are not read.",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The flow trigger firing (TimerTick, TICK); its fields are not read."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-request",
+              "description": "A $QRP Request for the current $OMM catalog (SCHEMA_NAME OMM.fbs, SOURCE_NAME celestrak-gp, TIME_PROFILE Nearest), asking the host for the records inline.",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A $QRP Request for the current $OMM catalog (SCHEMA_NAME OMM.fbs, SOURCE_NAME celestrak-gp, TIME_PROFILE Nearest), asking the host for the records inline."
+        }
+      ]
+    },
+    {
+      "methodId": "from_page",
+      "displayName": "Send the catalog one record at a time",
+      "maxBatch": 65535,
+      "drainPolicy": "drain-until-yield",
+      "inputPorts": [
+        {
+          "portId": "page",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-qrp-page",
+              "description": "data-source/retrieval omm_bulk's page: the size-prefixed $QRP header, then the size-prefixed records.",
+              "allowedTypes": [
+                {
+                  "schemaName": "QRP.fbs",
+                  "fileIdentifier": "$QRP",
+                  "rootTypeName": "QRP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "data-source/retrieval omm_bulk's page: the size-prefixed $QRP header, then the size-prefixed records."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "description": "One catalog $OMM (not size-prefixed).",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One catalog $OMM (not size-prefixed)."
+        },
+        {
+          "portId": "configuration",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "description": "A $PCF 1.0 with every table at its default: propagator/sdn-ap propagate takes each set's own theory. One per record.",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A $PCF 1.0 with every table at its default: propagator/sdn-ap propagate takes each set's own theory. One per record."
+        }
+      ]
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Publish a stored batch",
+      "maxBatch": 65535,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "description": "IngestResult (INGR) from hostcap/storage-ingest.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "IngestResult (INGR) from hostcap/storage-ingest."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "description": "The IngestRequest (INGQ) that batch was stored by.",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The IngestRequest (INGQ) that batch was stored by."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-http-request",
+              "description": "HttpRequest for hostcap/http-request: POST omm_publish_url, BODY the IngestResult, content-type application/octet-stream.",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "HttpRequest for hostcap/http-request: POST omm_publish_url, BODY the IngestResult, content-type application/octet-stream."
+        }
+      ]
     }
   ],
   "schemasUsed": [
@@ -244,6 +442,11 @@
       "schemaName": "OBD.fbs",
       "fileIdentifier": "$OBD",
       "rootTypeName": "OBD"
+    },
+    {
+      "schemaName": "QRP.fbs",
+      "fileIdentifier": "$QRP",
+      "rootTypeName": "QRP"
     }
   ],
   "buildArtifacts": [
