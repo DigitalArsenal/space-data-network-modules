@@ -231,6 +231,37 @@ struct Set {
   int regime = 0;                    ///< 0 drag, 1 above (of_fit)
 };
 
+/// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
+/// n-dot / n at epoch (1/day; the theory's epoch rates with and without B_eff and tau) and the sizes s_e, s_i, s_l, s_d
+/// with the noise start t_a (minutes). False when the theory refuses the set.
+inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise) {
+  ng_rate = 0.0;
+  ElementRow none = row;
+  none.bterm = 0.0;
+  none.tau0 = none.tauc = none.taus = 0.0;
+  xpt::XpSat* s1 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+  xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+  drag::table();
+  const bool ok = s1 != nullptr && s0 != nullptr && xpt::xp_init(elements_of(row), *s1) == kPropOk;
+  if (ok && xpt::xp_init(elements_of(none), *s0) == kPropOk && s1->epoch.y[xpt::kN] > 0.0)
+    ng_rate = (s1->epoch.f[xpt::kN] - s0->epoch.f[xpt::kN]) / s1->epoch.y[xpt::kN] * kMinutesPerDay;
+  if (s1 != nullptr) xpt::xp_release(*s1);
+  if (s0 != nullptr) xpt::xp_release(*s0);
+  std::free(s1);
+  std::free(s0);
+  if (!ok) return false;
+  const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
+  regime = (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
+  const Noise& k = kNoise[row.theory == kTheorySdnAp ? 0 : 1][regime];
+  noise[0] = k.s_e;
+  noise[1] = k.s_i;
+  noise[2] = k.s_l;
+  noise[3] = k.c * std::fabs(ng_rate) * n_min * kMinutesPerDay;
+  noise[4] = t_a;
+  return true;
+}
+
 /// The fit's covariance at its solution (fit_oem, SDN-AP sets): `t`, `r` the fit samples (minutes, TEME km). Fills
 /// `s` (row and options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not
 /// positive definite or the theory refuses a moved set.
@@ -304,28 +335,7 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   for (int a = 6; a < np; ++a)
     for (int c = 6; c < np; ++c) s.C[a * np + c] = Pp[a * np + c];
   for (int k = 0; k < 6; ++k) s.floor[k] = floor[k];
-  // the non-gravitational n-dot / n at epoch (B_eff, tau): the theory's epoch rates with and without them
-  ng_rate = 0.0;
-  {
-    ElementRow none = row;
-    none.bterm = 0.0;
-    none.tau0 = none.tauc = none.taus = 0.0;
-    xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
-    if (s0 != nullptr && xpt::xp_init(elements_of(none), *s0) == kPropOk && b.sats[0].epoch.y[xpt::kN] > 0.0)
-      ng_rate = (b.sats[0].epoch.f[xpt::kN] - s0->epoch.f[xpt::kN]) / b.sats[0].epoch.y[xpt::kN] * kMinutesPerDay;
-    if (s0 != nullptr) xpt::xp_release(*s0);
-    std::free(s0);
-  }
-  const double a_er = std::pow(xpt::kKe / b.x[5], kX2o3);
-  s.regime = (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
-  const Noise& k = kNoise[row.theory == kTheorySdnAp ? 0 : 1][s.regime];
-  const double n_day = b.x[5] * kMinutesPerDay;
-  s.noise[4] = arc_end_min;
-  s.noise[0] = k.s_e;
-  s.noise[1] = k.s_i;
-  s.noise[2] = k.s_l;
-  s.noise[3] = k.c * std::fabs(ng_rate) * n_day;
-  return true;
+  return noise_of(row, arc_end_min, ng_rate, s.regime, s.noise);
 }
 
 /// Reads the covariance of an $OMM (COVARIANCE and the USER_DEFINED_SDNAP_COV_x rows) on top of its decoded row.

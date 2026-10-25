@@ -417,6 +417,12 @@ static int segment_propagate(const uint8_t* p, uint32_t n, const std::vector<sdn
   return oem::push_oem(fbb, blocks);
 }
 
+namespace sdnap {
+namespace opm {
+int set_bytes(const uint8_t* p, uint32_t n, flatbuffers::FlatBufferBuilder& fbb);  // opm.inc
+}  // namespace opm
+}  // namespace sdnap
+
 extern "C" int propagate(void) {
   plugin_reset_output_state();
   {
@@ -433,14 +439,25 @@ extern "C" int propagate(void) {
   uint32_t count = 0;
   for (uint32_t i = 0; i < frames; ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
-    if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "omm") != 0) continue;
+    if (f == nullptr || f->port_id == nullptr) continue;
+    const bool is_opm = std::strcmp(f->port_id, "opm") == 0;
+    if (!is_opm && std::strcmp(f->port_id, "omm") != 0) continue;
     ++count;
+    // SPEC 13: an 'opm' $OPM (osculating elements or a state) through the module's own initialization to its set
+    flatbuffers::FlatBufferBuilder opm_fbb(is_opm ? 1024 : 1);
+    const uint8_t* payload = f->payload;
+    uint32_t payload_length = f->payload_length;
+    if (is_opm) {
+      if (const int rc = sdnap::opm::set_bytes(f->payload, f->payload_length, opm_fbb)) return rc;
+      payload = opm_fbb.GetBufferPointer();
+      payload_length = opm_fbb.GetSize();
+    }
     sdnap::ElementRow row{};
-    if (!sdnap::omm::decode(f->payload, f->payload_length, row)) {
+    if (!sdnap::omm::decode(payload, payload_length, row)) {
       if (sdnap::omm::center_refused() || sdnap::omm::segment_set()) {
         if (const int tc = sdnap::pcf::check_set_theory(sdnap::kTheorySdnAp)) return tc;
-        int rc = segment_propagate(f->payload, f->payload_length, grids, budget);
-        if (rc == 1 && sdnap::omm::center_refused()) rc = lunar_propagate(f->payload, f->payload_length, grids, budget);
+        int rc = segment_propagate(payload, payload_length, grids, budget);
+        if (rc == 1 && sdnap::omm::center_refused()) rc = lunar_propagate(payload, payload_length, grids, budget);
         if (rc == 0) continue;
         if (rc == 3) return 3;
         plugin_set_error("unsupported-center", "An 'omm' record is centered neither on the Earth nor, as an SDN-AP Moon-centered or segment set, on the Moon or the Sun (CENTER_NAME).");
@@ -480,7 +497,7 @@ extern "C" int propagate(void) {
     bool with_cov = false;
     if (xs != nullptr) {
       sdnap::cov::Set cs;
-      const int cr = sdnap::cov::read(f->payload, f->payload_length, row, cs);
+      const int cr = sdnap::cov::read(payload, payload_length, row, cs);
       const int pr = cr == 1 ? sdnap::cov::prepare(cs, cprop) : 0;
       if (cr < 0 || pr != 0) {
         sdnap::xpt::xp_release(*xs);
@@ -498,8 +515,8 @@ extern "C" int propagate(void) {
     // The object the set describes (NORAD number, name, designator) goes to every block, so a fit of the ephemeris names its set.
     flatbuffers::Offset<CAT> object_offset;
     {
-      const uint8_t* ob = f->payload;
-      uint32_t ol = f->payload_length;
+      const uint8_t* ob = payload;
+      uint32_t ol = payload_length;
       if (sdnap::plain_view(ob, ol, "$OMM")) {
         // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
         flatbuffers::Verifier::Options vopt;
@@ -639,7 +656,7 @@ extern "C" int propagate(void) {
     }
   }
   if (count == 0) {
-    plugin_set_error("missing-omm", "An 'omm' input frame is required.");
+    plugin_set_error("missing-omm", "An 'omm' or 'opm' input frame is required.");
     return 3;
   }
   return 0;

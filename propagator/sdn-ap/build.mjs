@@ -36,7 +36,7 @@ const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.jso
 async function oemBindings() {
   const files = {};
   const deps = new Map();
-  const pending = ["OEM", "OMM", "SPW", "DCL", "PRW", "OBD", "MNV", "RDM", "LAM", "BOV"];
+  const pending = ["OEM", "OMM", "SPW", "DCL", "PRW", "OBD", "MNV", "RDM", "LAM", "BOV", "OPM"];
   while (pending.length) {
     const code = pending.pop();
     if (deps.has(code)) continue;
@@ -52,7 +52,7 @@ async function oemBindings() {
     for (const dep of deps.get(code)) visit(dep);
     order.push(code);
   };
-  for (const code of ["OEM", "OMM", "SPW", "DCL", "PRW", "OBD", "MNV", "RDM", "LAM", "BOV"]) visit(code);
+  for (const code of ["OEM", "OMM", "SPW", "DCL", "PRW", "OBD", "MNV", "RDM", "LAM", "BOV", "OPM"]) visit(code);
   const flatc = await FlatcRunner.init();
   return order
     .map((code) => {

@@ -49,7 +49,7 @@
     {
       "methodId": "propagate",
       "displayName": "Propagate OMM to OEM",
-      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP or SGP4; SDN-AP as USER_DEFINED_THEORY), plain or size-prefixed, to one $OEM, km and km/s, UTC, on the grid of an optional 'grid' $OEM: per grid block either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day later, 60 s), in the block's axes (TEME by default; GCRF or EME2000), one $OEM block per grid block; the grid's span decides how far a set runs, at most 500,000 states per request. Refused by name: missing-omm, invalid-omm, invalid-grid, bad-grid, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed.",
+      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP or SGP4; SDN-AP as USER_DEFINED_THEORY), plain or size-prefixed, to one $OEM, km and km/s, UTC, on the grid of an optional 'grid' $OEM: per grid block either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day later, 60 s), in the block's axes (TEME by default; GCRF or EME2000), one $OEM block per grid block; the grid's span decides how far a set runs, at most 500,000 states per request. An 'opm' $OPM (SPEC 13) is converted to its SDN-AP set first (opm_set's conversion). Refused by name: missing-omm, invalid-opm, unknown-frame, missing-gm, no-elements, unsupported-center, unsupported-time-system, invalid-omm, invalid-grid, bad-grid, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed.",
       "inputPorts": [
         {
           "portId": "omm",
@@ -66,10 +66,30 @@
               "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 65535,
-          "required": true,
-          "description": "OMM mean-element records."
+          "required": false,
+          "description": "OMM mean-element records (with or without 'opm' records; at least one of the two)."
+        },
+        {
+          "portId": "opm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.opm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                }
+              ],
+              "description": "Ratified SDS $OPM osculating elements or state; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Osculating $OPM records (SPEC 13): each through the module's own initialization (the state in TEME, y0 = h^-1(x, t)) to its SDN-AP set, then propagated as an 'omm' set."
         },
         {
           "portId": "configuration",
@@ -1037,6 +1057,78 @@
           "maxStreams": 65535,
           "required": true,
           "description": "One first $OMM per $LAM or $BOV.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "opm_set",
+      "displayName": "Set from osculating elements",
+      "description": "SPEC 13: the SDN-AP set of each SDS $OPM (osculating Keplerian block or state about the Earth; REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000; UTC; the record's GM): the state in TEME, then y0 = h^-1(x, t) by the inverse map, as launch_set does for an insertion orbit. MASS with DRAG_AREA and SOLAR_RAD_AREA give B = C_D A/m and AGOM = C_R A/m (C_D 2.2, C_R 1.0 where unstated); otherwise the $PCF LAUNCH priors (B_eff 0.01 m^2/kg below a 2,500 km perigee, else 0; AGOM 0.01 m^2/kg), stated in the set. A COVARIANCE is rotated to TEME and carried with the regime's process noise (SPEC 12.5); none is made where the record has none. Refused by name: missing-opm, invalid-opm, unknown-frame, missing-gm, no-elements, unsupported-center, unsupported-time-system, element-set-refused, inverse-failed, invalid-covariance.",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY (UNSPECIFIED or SDNAP), LAUNCH (the B_eff and AGOM priors a record without areas takes) and MEAN_ELEMENT; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "opm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.opm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                }
+              ],
+              "description": "Ratified SDS $OPM osculating elements or state; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Osculating $OPM records: the Keplerian block (with TRUE_ANOMALY or MEAN_ANOMALY) or the state vector, REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000, UTC, the record's GM."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One SDN-AP $OMM per $OPM (USER_DEFINED_SDNAP_SOURCE OSCULATING_OPM, the source elements, frame and GM, the conversion and the forces' origin; COVARIANCE when the record has one).",
           "acceptedTypeSets": [
             {
               "setId": "sds-omm-fit",
