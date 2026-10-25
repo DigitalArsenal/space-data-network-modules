@@ -1,12 +1,19 @@
 // -----------------------------------------------------------------------------
 // SDN-AP 2a.4: the catalog-shared density kernel. The atmosphere at a time is
-// the same for every object, so NRLMSISE-00 x exp(s) is evaluated once per
-// kernel time on a grid of geocentric-radius spheres (100-2500 km above the
-// equatorial radius), geocentric latitudes and local solar times, and every
+// the same for every object, so NRLMSISE-00 x exp(s) is a value of a grid of
+// geocentric-radius spheres (100-2500 km above the equatorial radius),
+// geocentric latitudes and local solar times for each kernel time, and every
 // object's drag nodes interpolate it: log rho linear in radius, four-point
 // Lagrange in latitude and (periodic) in local time, linear in time between
 // kernel times (3-hourly in UT). A kernel time's grid depends on that time and
 // the environment only, so results do not depend on which object asked first.
+// A grid cell is evaluated when a drag node first reads it, not when its
+// kernel time is first asked for: an orbit reads about a tenth of a grid, and
+// an orbit above the grid's top (2500 km) reads none, while the whole grid of
+// every 3 hours of a propagation used to be evaluated (0.55 s a day of span,
+// whatever the orbit). A cell's value is the same call whoever evaluates it
+// and whenever, so the results are the same bytes as with every cell evaluated
+// at once, at any thread count.
 // The direct path (sdnap_drag_rates with the kernel off) is the reference.
 // -----------------------------------------------------------------------------
 
@@ -17,7 +24,7 @@ constexpr int kLevels = 79;   // 100-400 km every 10, 420-1000 every 20, 1050-15
 constexpr int kLats = 13;     // -90..90 every 15 deg (geocentric)
 constexpr int kTimes = 16;    // local solar time every 1.5 h
 constexpr int kCells = kLevels * kLats * kTimes;
-constexpr int kSlots = 96;    // grids held at once (9 per day: eight 3-hourly and one late; 10.7 days)
+constexpr int kSlots = 252;   // grids held at once (9 per day: eight 3-hourly and one late; 28 days)
 constexpr double kStepDays = 0.125;
 constexpr double kReKm = 6378.1363;  // SPEC 1.3
 
@@ -40,20 +47,25 @@ inline int level_below(double h) {
   return k;
 }
 
+/// A cell not yet evaluated (the bits of a NaN: an evaluated cell is a finite log).
+constexpr uint32_t kEmpty = 0xFFFFFFFFu;
+
 struct Slot {
   int64_t key;      ///< 2 x kernel time index (floor(d50 / step)) + 1 for a late slot; -1 empty
   int32_t pins;     ///< readers holding the slot
-  int32_t pad;
-  float* logrho;    ///< kCells values, [level][lat][time]
+  int32_t doy;      ///< the kernel time's day of year
+  double sec;       ///< UT seconds of its day
+  sdn::Environment env;  ///< the drivers its cells are evaluated under, taken when the slot is keyed
+  uint32_t* logrho; ///< kCells float bit patterns, [level][lat][time]; kEmpty until a node reads the cell; null until a node reads any cell of the slot
 };
 
 struct Cache {
   int32_t lock;
+  int32_t eval_lock;  ///< one NRLMSISE-00 evaluation at a time (its port keeps state in static storage)
   int32_t ready;
   uint64_t clock;
   Slot slot[kSlots];
   uint64_t used[kSlots];
-  float* storage;
 };
 
 inline Cache& cache() {
@@ -61,16 +73,16 @@ inline Cache& cache() {
   return c;
 }
 
-/// One allocation for every slot (at the first SDN-AP ingest); nothing grows after.
+/// The slots (at the first SDN-AP ingest), none holding a grid yet: a slot's 64 KiB is allocated the first time a node
+/// reads a cell of it and kept, so the memory is that of the span a drag regime propagated (64 KiB per 3 hours), up to
+/// kSlots; an orbit above the grid's top allocates nothing.
 inline bool prepare() {
   Cache& c = cache();
   if (c.ready) return true;
-  c.storage = static_cast<float*>(std::malloc(sizeof(float) * kCells * kSlots));
-  if (c.storage == nullptr) return false;
   for (int j = 0; j < kSlots; ++j) {
     c.slot[j].key = -1;
     c.slot[j].pins = 0;
-    c.slot[j].logrho = c.storage + static_cast<size_t>(j) * kCells;
+    c.slot[j].logrho = nullptr;
     c.used[j] = 0;
   }
   c.ready = 1;
@@ -83,32 +95,57 @@ inline void spin_lock(int32_t* w) {
 }
 inline void spin_unlock(int32_t* w) { __atomic_store_n(w, 0, __ATOMIC_RELEASE); }
 
-/// Fills a slot's grid for kernel time index `key`.
+/// Keys a slot for kernel time index `key`: the time's drivers, no cell evaluated.
 inline void build(Slot& s, int64_t key) {
   const double d50 = static_cast<double>(key >> 1) * kStepDays;
   // a late slot (0 UT) carries the environment of the day that ends there
-  const sdn::Environment env = sdn::environment_at((key & 1) ? d50 - 1e-7 : d50);
+  s.env = sdn::environment_at((key & 1) ? d50 - 1e-7 : d50);
   double D, N;
   drag::day_of_year(d50, D, N);
-  const int doy = static_cast<int>(std::floor(D)) + 1;
-  const double sec = (d50 - std::floor(d50)) * 86400.0;
-  for (int k = 0; k < kLevels; ++k) {
-    const double r = 1.0 + level_height(k) / kReKm;
-    for (int a = 0; a < kLats; ++a) {
+  s.doy = static_cast<int>(std::floor(D)) + 1;
+  s.sec = (d50 - std::floor(d50)) * 86400.0;
+  if (s.logrho != nullptr) std::memset(s.logrho, 0xFF, sizeof(uint32_t) * kCells);
+  s.key = key;
+}
+
+/// log rho of cell (level k, latitude a, local-time b) of a slot, evaluated now if no node has read it yet. One thread
+/// evaluates at a time (NRLMSISE-00 keeps state in static storage, as when the whole grid was built under the cache's
+/// lock); a thread that waited for the lock finds the cell filled by the one before it, the same bits whoever fills it.
+inline float cell(Slot& s, int k, int a, int b) {
+  const int at = (k * kLats + a) * kTimes + b;
+  uint32_t* grid = __atomic_load_n(&s.logrho, __ATOMIC_ACQUIRE);
+  uint32_t bits = grid != nullptr ? __atomic_load_n(grid + at, __ATOMIC_RELAXED) : kEmpty;
+  if (bits == kEmpty) {
+    Cache& c = cache();
+    spin_lock(&c.eval_lock);
+    grid = s.logrho;
+    if (grid == nullptr) {
+      grid = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * kCells));
+      if (grid != nullptr) {
+        std::memset(grid, 0xFF, sizeof(uint32_t) * kCells);
+        __atomic_store_n(&s.logrho, grid, __ATOMIC_RELEASE);
+      }
+    }
+    bits = grid != nullptr ? __atomic_load_n(grid + at, __ATOMIC_RELAXED) : kEmpty;
+    if (bits == kEmpty) {
+      const double r = 1.0 + level_height(k) / kReKm;
       const double latc = (-90.0 + 15.0 * a) * kDeg;
       double sl, cl;
       fm::sincos(latc, sl, cl);
-      for (int b = 0; b < kTimes; ++b) {
-        const double lst = 1.5 * b;
-        const double lon = (lst - sec / 3600.0) * 15.0 * kDeg;
-        double phi, h;
-        drag::geodetic(r * cl, 0.0, r * sl, phi, h);
-        const double rho = sdn::msis_raw(phi, lon, h, doy, sec, env);
-        s.logrho[(k * kLats + a) * kTimes + b] = static_cast<float>(std::log(rho > 1e-300 ? rho : 1e-300));
-      }
+      const double lst = 1.5 * b;
+      const double lon = (lst - s.sec / 3600.0) * 15.0 * kDeg;
+      double phi, h;
+      drag::geodetic(r * cl, 0.0, r * sl, phi, h);
+      const double rho = sdn::msis_raw(phi, lon, h, s.doy, s.sec, s.env);
+      const float v = static_cast<float>(std::log(rho > 1e-300 ? rho : 1e-300));
+      std::memcpy(&bits, &v, sizeof bits);
+      if (grid != nullptr) __atomic_store_n(grid + at, bits, __ATOMIC_RELAXED);  // no grid to keep it in: the value is still the call's
     }
+    spin_unlock(&c.eval_lock);
   }
-  s.key = key;
+  float v;
+  std::memcpy(&v, &bits, sizeof v);
+  return v;
 }
 
 /// The slot of kernel time index `key`, built if absent, pinned for reading.
@@ -149,7 +186,7 @@ inline void lagrange4(double q, double w[4]) {
 
 /// log rho in one slot at height h above the equatorial radius, geocentric
 /// latitude latc, local solar time lst (hours).
-inline double sample(const Slot& s, double h, double latc, double lst) {
+inline double sample(Slot& s, double h, double latc, double lst) {
   const int k = level_below(h);
   const double h0 = level_height(k), h1 = level_height(k + 1);
   const double qr = (h - h0) / (h1 - h0);
@@ -167,12 +204,10 @@ inline double sample(const Slot& s, double h, double latc, double lst) {
   lagrange4(fb - b, wb);
   double out[2];
   for (int lev = 0; lev < 2; ++lev) {
-    const float* base = s.logrho + (k + lev) * kLats * kTimes;
     double acc = 0.0;
     for (int i = 0; i < 4; ++i) {
-      const float* row = base + (a - 1 + i) * kTimes;
       double accb = 0.0;
-      for (int j = 0; j < 4; ++j) accb += wb[j] * row[(b - 1 + j + kTimes) % kTimes];
+      for (int j = 0; j < 4; ++j) accb += wb[j] * cell(s, k + lev, a - 1 + i, (b - 1 + j + kTimes) % kTimes);
       acc += wa[i] * accb;
     }
     out[lev] = acc;
