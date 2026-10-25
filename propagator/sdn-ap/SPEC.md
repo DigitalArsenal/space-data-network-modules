@@ -1485,6 +1485,80 @@ follows 9.9.**
 
 ---
 
+## 12. SDN-AP covariance (side B's method, outside the SGP4-XP specification)
+
+This section is side B's own: it specifies how the module gives a covariance with the states of the sets it fits,
+SDN-AP (THEORY SDNAP) and SGP4XP alike. Nothing in it comes from the Space Force library, and no SGP4XP conformance
+vector depends on it.
+
+**12.1 Fit covariance.** The parameter vector p of a fit is the fit's own (`params_of`): the mean equinoctial af, ag,
+chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (SDN-AP B_eff, SGP4XP BTERM; m^2/kg), AGOM
+(m^2/kg), tau0, tauc, taus (m/s^2) the fit solved for. At the solution (an SGP4XP set at its two-line digits), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
+
+- J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
+  lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in B_eff and AGOM, max(1e-3 |p|, 1e-10) in tau; AGOM forward where p - h <= 0,
+  the theory reading AGOM <= 0 as no SRP);
+- s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
+- A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR);
+- P_p = A^-1.
+
+**12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
+floor (12.4) at the epoch state, the $OMM carries
+
+- COVARIANCE = J_0 P_p J_0^T + F(x(0)), lower triangle (21 values, km^2, km^2/s, km^2/s^2), COV_REFERENCE_FRAME TEME;
+- USER_DEFINED_SDNAP_COV_DRAG, _AGOM, _TAU0, _TAUC, _TAUS (those fitted, in that order): for the k-th of them the
+  space-separated row of its covariance with X, Y, Z, X_DOT, Y_DOT, Z_DOT at epoch (J_0 P_p), with the earlier ones,
+  then its variance (6 + k + 1 numbers);
+- USER_DEFINED_SDNAP_COV_FLOOR_UVW (6 numbers, km^2: uu, vu, vv, wu, wv, ww), _COV_NOISE (12.5), _COV_NG_RATE (1/day)
+  and _COV_REGIME (DRAG or ABOVE).
+
+**12.3 Propagation.** A set is read back as the augmented epoch covariance C (state block COVARIANCE - F(x(0)),
+consider rows as written). The columns J_0 = [J_x J_c] (elements, consider) give the parameters of a state:
+T = [[J_x^-1, -J_x^-1 J_c], [0, I]], P_p = T C T^T. At t minutes from the epoch, J(t) = d x(t) / d p by the same
+central differences and
+
+P(t) = J(t) P_p J(t)^T + Q(t) + F(x(t)).
+
+The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) is COVARIANCE.
+
+**12.4 Theory floor.** F is the fit's residual covariance in the UVW axes of the state (U radial, V in-track, W along
+r x v), R = (1/N) sum u_k u_k^T, u_k the residual e_k in the UVW axes of the model state at t_k; position block
+R in TEME axes, velocity block w^2 R (w = |r x v| / |r|^2), no position-velocity block. It is the part of the error a
+mean-element theory leaves at every time (short-period terms it does not carry) and does not shrink with N.
+
+**12.5 Process noise.** What a mean-element theory gets wrong over days are its element rates. From the end of the
+fit arc t_a (minutes from the epoch; from the epoch backward for t < 0) the rates carry errors constant over
+the prediction, with d = (t - t_a) / 1 day:
+
+- eccentricity vector: d af, d ag = s_e d each (independent);
+- inclination vector: d chi, d psi = s_i d each;
+- mean longitude: d lambda = s_l n_d d (s_l a relative mean-motion error, n_d in rad/day);
+- non-gravitational n-dot (drag regime): d n(t) = s_d d, d lambda(t) = s_d d^2 / 2, taken as the epoch perturbation
+  that gives them at t: d n0 = d n(t), d lambda0 = d lambda(t) - t d n0; s_d = c |n-dot_ng| (rad/day^2), n-dot_ng the
+  non-gravitational part of the theory's epoch n-dot (its rates with and without B_eff and tau; USER_DEFINED_SDNAP_COV_NG_RATE
+  = n-dot_ng / n per day).
+
+Each is a column g = J(t) dp of 12.3's J(t), and Q(t) = sum g g^T. The set carries its sizes and t_a as
+USER_DEFINED_SDNAP_COV_NOISE "s_e s_i s_l s_d t_a". They are fitted per theory and regime (DRAG: perigee below
+2500 km, the density kernel's top; ABOVE) by maximum likelihood, the Gaussian negative log-likelihood of the
+position errors under P(t), on laser-ranged arcs of 2026-02-01 to 2026-05-31 (Ajisai, Starlette, Stella, LARETS,
+WESTPAC, LARES in DRAG; LARES-2, LAGEOS-2, Etalon-1, Etalon-2 ABOVE; LAGEOS-1 never: it is held out), 24 h fits
+scored every 30 min over the next 3 days (`test/covariance-realism.mjs --set calibration`,
+`test/results/covariance-calibration-*.json`):
+
+| Theory | Regime | Windows | s_e (1/day) | s_i (1/day) | s_l | c |
+| --- | --- | --: | --: | --: | --: | --: |
+| SDN-AP | DRAG | 136 | 1.963e-6 | 2.69e-7 | 2.4e-13 | 1.928 |
+| SDN-AP | ABOVE | 62 | 1.358e-6 | 3.652e-7 | 5.328e-8 | 0 |
+| SGP4XP | DRAG | 136 | 2.813e-6 | 7.432e-6 | 8.505e-7 | 1.3e-6 |
+| SGP4XP | ABOVE | 62 | 2.308e-7 | 3.752e-7 | 2.666e-7 | 0 |
+
+**12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
+(42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
+rotated with the state) for an SGP4XP or SDN-AP set that carries COVARIANCE. An SGP4 set has none.
+
+---
+
 ## References
 
 - Brouwer, D. (1959). Solution of the problem of artificial satellite theory without drag. AJ 64, 378-397.

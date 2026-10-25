@@ -475,6 +475,22 @@ extern "C" int propagate(void) {
       plugin_set_error("element-set-refused", "The element set describes no orbit this module propagates.");
       return 3;
     }
+    // SPEC 12: an SGP4XP or SDN-AP set carrying COVARIANCE gets its propagated covariance beside every state
+    sdnap::cov::Propagator cprop;
+    bool with_cov = false;
+    if (xs != nullptr) {
+      sdnap::cov::Set cs;
+      const int cr = sdnap::cov::read(f->payload, f->payload_length, row, cs);
+      const int pr = cr == 1 ? sdnap::cov::prepare(cs, cprop) : 0;
+      if (cr < 0 || pr != 0) {
+        sdnap::xpt::xp_release(*xs);
+        std::free(xs);
+        plugin_set_error("invalid-covariance", cr < 0 ? "The set's COVARIANCE or its USER_DEFINED_SDNAP_COV rows are malformed."
+                                                      : "The set's covariance does not map onto its parameters (the theory refuses a moved set or the epoch columns are singular).");
+        return 3;
+      }
+      with_cov = cr == 1;
+    }
     flatbuffers::FlatBufferBuilder fbb(1 << 16);
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
     char text[48], start[48], stop[48], why[160];
@@ -501,6 +517,7 @@ extern "C" int propagate(void) {
       if (tw.size() > budget) { rc = sdnap::oem::refuse("too-many-states", "The request asks for more than 500,000 states."); break; }
       budget -= tw.size();
       std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
+      std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_lines;
       lines.reserve(tw.size());
       double bias[3][3];
       if (g.axes == sdnap::oem::Axes::Eme2000) sdnap::frames::frame_bias(bias);
@@ -514,6 +531,16 @@ extern "C" int propagate(void) {
           rc = sdnap::oem::refuse("propagation-failed", why);
           break;
         }
+        double P[36];
+        if (with_cov) {
+          double rq[3], vq[3];
+          if (!sdnap::cov::eval(cprop, t, rq, vq, P)) {
+            std::snprintf(why, sizeof why, "NORAD %u: no covariance at %s.", e.norad, text);
+            rc = sdnap::oem::refuse("propagation-failed", why);
+            break;
+          }
+        }
+        double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  // output = axes TEME
         if (g.axes != sdnap::oem::Axes::Teme) {
           double m[3][3];
           if (sdnap::frames::gcrf_to_teme(tw[k], tf[k], m) < 0) {
@@ -531,16 +558,48 @@ extern "C" int propagate(void) {
             std::memcpy(r, rg, sizeof r);
             std::memcpy(v, vg, sizeof v);
           }
+          for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) {
+              double a = 0.0;
+              if (g.axes == sdnap::oem::Axes::Eme2000)
+                for (int q = 0; q < 3; ++q) a += bias[i][q] * m[j][q];
+              else
+                a = m[j][i];
+              axes[i][j] = a;
+            }
         }
         lines.push_back(CreateephemerisDataLineDirect(fbb, text, r[0], r[1], r[2], v[0], v[1], v[2]));
+        if (with_cov) {
+          // P' = B P B^T, B = diag(axes, axes)
+          double B[36] = {}, BP[36], C[36];
+          for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) B[i * 6 + j] = B[(3 + i) * 6 + 3 + j] = axes[i][j];
+          for (int i = 0; i < 6; ++i)
+            for (int j = 0; j < 6; ++j) {
+              double a = 0.0;
+              for (int q = 0; q < 6; ++q) a += B[i * 6 + q] * P[q * 6 + j];
+              BP[i * 6 + j] = a;
+            }
+          for (int i = 0; i < 6; ++i)
+            for (int j = 0; j < 6; ++j) {
+              double a = 0.0;
+              for (int q = 0; q < 6; ++q) a += BP[i * 6 + q] * B[j * 6 + q];
+              C[i * 6 + j] = a;
+            }
+          auto c = [&](int i, int j) { return 0.5 * (C[i * 6 + j] + C[j * 6 + i]); };
+          cov_lines.push_back(CreatecovarianceMatrixLineDirect(fbb, text, c(0, 0), c(1, 0), c(1, 1), c(2, 0), c(2, 1), c(2, 2), c(3, 0),
+                                                                c(3, 1), c(3, 2), c(3, 3), c(4, 0), c(4, 1), c(4, 2), c(4, 3), c(4, 4),
+                                                                c(5, 0), c(5, 1), c(5, 2), c(5, 3), c(5, 4), c(5, 5)));
+        }
       }
       if (rc != 0) break;
       sdnap::oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
       sdnap::oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
       const auto frame = sdnap::oem::rfm_of(fbb, g.axes);
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, 0, "EARTH", frame, nullptr, 0, timingStandard_UTC, start,
+      const auto cov_frame = with_cov ? sdnap::oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
+      blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, 0, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
                                                       nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
-                                                      nullptr, &lines));
+                                                      nullptr, &lines, with_cov ? &cov_lines : nullptr));
     }
     if (xs != nullptr) sdnap::xpt::xp_release(*xs);
     std::free(xs);

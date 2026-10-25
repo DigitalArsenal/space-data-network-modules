@@ -1001,6 +1001,11 @@ static int fit_blocks(bool sdnap_mode) {
           row.kappa = kappa;
         }
       }
+      // SPEC 12: the fit's covariance at its solution (SDN-AP and SGP4XP sets, the latter at the two-line digits), its
+      // epoch image the $OMM's COVARIANCE
+      cov::Set fit_cov;
+      double ng_rate = 0.0;
+      const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), t_fit.back(), fit_cov, ng_rate);
       // held-out score
       double held_rms = 0.0, held_lead_days = 0.0;
       for (double t : t_out) held_lead_days += (t - t_fit.back()) / kMinutesPerDay;
@@ -1045,30 +1050,64 @@ static int fit_blocks(bool sdnap_mode) {
       const auto s_object_name = object != nullptr && object->OBJECT_NAME() != nullptr ? fbb.CreateString(object->OBJECT_NAME()->c_str()) : 0;
       const double unix_seconds = ((row.epoch_jd_whole - 2440587.5) + row.epoch_jd_frac) * 86400.0;
       const double whole_seconds = std::floor(unix_seconds);
-      // SDN-AP's terms without an $OMM field as USER_DEFINED_x (MEAN_ELEMENT_THEORY SDNAP)
+      // SDN-AP's terms without an $OMM field as USER_DEFINED_x (MEAN_ELEMENT_THEORY SDNAP); the covariance rows (SPEC 12)
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OMMUserDefinedParameter>>> s_user = 0;
-      if (sdnap_mode) {
+      if (sdnap_mode || have_cov) {
         std::vector<flatbuffers::Offset<OMMUserDefinedParameter>> ps;
         char v[64];
         auto put = [&](const char* name, double value) {
           std::snprintf(v, sizeof v, "%.17g", value);
           ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, name, v));
         };
-        put("SDNAP_B_EFF", row.bterm);
-        put("SDNAP_B_EFF_SIGMA", beff_sigma);
-        if (have_b_prior && !tau0_selected) {
-          put("SDNAP_B", b_prior);
-          put("SDNAP_B_SIGMA", b_prior_sigma);
-          put("SDNAP_KAPPA", kappa);
-          put("SDNAP_KAPPA_SIGMA", kappa_sigma);
+        if (sdnap_mode) {
+          put("SDNAP_B_EFF", row.bterm);
+          put("SDNAP_B_EFF_SIGMA", beff_sigma);
+          if (have_b_prior && !tau0_selected) {
+            put("SDNAP_B", b_prior);
+            put("SDNAP_B_SIGMA", b_prior_sigma);
+            put("SDNAP_KAPPA", kappa);
+            put("SDNAP_KAPPA_SIGMA", kappa_sigma);
+          }
+          put("SDNAP_TAU0", row.tau0);
+          put("SDNAP_TAUC", row.tauc);
+          put("SDNAP_TAUS", row.taus);
+          put("SDNAP_ARC_END_MIN", row.arc_end_min);
+          if (row.flags & kFlagLowering) put("SDNAP_LOWERING", 1.0);
+          if (row.flags & kFlagTauHeld) put("SDNAP_TAU_HELD", 1.0);
         }
-        put("SDNAP_TAU0", row.tau0);
-        put("SDNAP_TAUC", row.tauc);
-        put("SDNAP_TAUS", row.taus);
-        put("SDNAP_ARC_END_MIN", row.arc_end_min);
-        if (row.flags & kFlagLowering) put("SDNAP_LOWERING", 1.0);
-        if (row.flags & kFlagTauHeld) put("SDNAP_TAU_HELD", 1.0);
+        if (have_cov) {
+          auto put_list = [&](const char* name, const double* values, int count) {
+            std::string text;
+            char one[32];
+            for (int k = 0; k < count; ++k) {
+              std::snprintf(one, sizeof one, k == 0 ? "%.17g" : " %.17g", values[k]);
+              text += one;
+            }
+            ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, name, text.c_str()));
+          };
+          int kind[fit::kMaxParams];
+          const int np = cov::kinds_of(fit_cov.o, kind);
+          for (int a = 6; a < np; ++a) {
+            double values[fit::kMaxParams];
+            for (int j = 0; j <= a; ++j) values[j] = fit_cov.C[a * np + j];
+            put_list(cov::consider_name(kind[a]), values, a + 1);
+          }
+          put_list("SDNAP_COV_FLOOR_UVW", fit_cov.floor, 6);
+          put_list("SDNAP_COV_NOISE", fit_cov.noise, 5);
+          put("SDNAP_COV_NG_RATE", ng_rate);
+          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_COV_REGIME", fit_cov.regime == 0 ? "DRAG" : "ABOVE"));
+        }
         s_user = fbb.CreateVector(ps);
+      }
+      flatbuffers::Offset<flatbuffers::Vector<double>> s_cov = 0;
+      flatbuffers::Offset<RFM> s_cov_frame = 0;
+      if (have_cov) {
+        double c21[21];
+        int k21 = 0;
+        for (int i = 0; i < 6; ++i)
+          for (int j = 0; j <= i; ++j) c21[k21++] = fit_cov.C[i * fit_cov.np + j];
+        s_cov = fbb.CreateVector(c21, 21);
+        s_cov_frame = CreateRFMDirect(fbb, RFMUnion_NONE, 0, 0, "TEME");
       }
       OMMBuilder b(fbb);
       b.add_ORIGINATOR(s_orig);
@@ -1092,7 +1131,11 @@ static int fit_blocks(bool sdnap_mode) {
       b.add_USER_DEFINED_EARTH_MODEL(s_model);
       b.add_USER_DEFINED_EPOCH_TIMESTAMP(whole_seconds);
       b.add_USER_DEFINED_MICROSECONDS(std::round((unix_seconds - whole_seconds) * 1e6));
-      if (sdnap_mode) b.add_USER_DEFINED_PARAMETERS(s_user);
+      if (!s_user.IsNull()) b.add_USER_DEFINED_PARAMETERS(s_user);
+      if (have_cov) {
+        b.add_COV_REFERENCE_FRAME(s_cov_frame);
+        b.add_COVARIANCE(s_cov);
+      }
       FinishOMMBuffer(fbb, b.Finish());
       if (plugin_push_output("elements", "OMM.fbs", "$OMM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
         plugin_set_error("output-failed", "The $OMM could not be emitted.");

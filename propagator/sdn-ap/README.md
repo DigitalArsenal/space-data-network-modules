@@ -43,6 +43,12 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   row at minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating
   elements of a TEME state about the Earth theories' GM; `sdnap_frame_to_uvw(r, v, vec, out)` a vector's radial,
   in-track and cross-track components, the mirror of `sdnap_uvw_to_frame`.
+- Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SDN-AP and SGP4XP sets, the fit's covariance at
+  its epoch as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the drag, AGOM and tau parameters'
+  covariances, the theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives,
+  per time, the TEME state and its 6 x 6 covariance (42 doubles), carried by the theory's own state transition matrix
+  (central differences of the theory in its parameters) plus the fitted process noise; `propagate` writes a
+  COVARIANCE_MATRIX_LINES line per state, in the block's axes, for a set that carries COVARIANCE.
 - Configuration (SDS 1.268.0, `$PCF` 1.0.2): `propagate`, `fit`, `maneuver`, `detect_maneuvers`, `reentry`, `launch_set` and
   `launch_batch` take one `$PCF` on their required `configuration` port. Each reads THEORY and its own tables
   (propagate and maneuver: MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES; fit: FIT, MEAN_ELEMENT, SEGMENTS, FORCES;
@@ -327,6 +333,50 @@ their own day-2 catalog sets; days 1 / 2 / 3 2.12 / 10.43 / 25.96 km against 1.0
 fits of the same arcs (the shared parent and B take up the theory's error that per-object fits spread over their
 own elements, AGOM and tau).
 
+## Covariance realism (SPEC 12; measured 2026-10-25, module 74fbb9a89082)
+
+Held-out laser-ranged truth (ILRS combination orbits for LAGEOS and Etalon, NSGF arcs for the LEO set; GCRF): each
+window a 24 h `fit` (USEABLE_START_TIME to USEABLE_STOP_TIME), then `propagate` of its set onto the reference epochs
+of the next 3 days every 30 min, states and covariance lines from the module. d^2 = e^T P^-1 e on the position block,
+against chi-square(3): mean d^2 / 3 (1), share inside the 95 % ellipsoid (0.95), median d^2 (2.366). The process
+noise was fitted (SPEC 12.5) on 2026-02-01 .. 05-31 arcs of the other satellites; LAGEOS-1 never entered it, and
+nothing was tuned after that fit. The experiment's windows are those its rows score (rows/slr-high.jsonl,
+rows/slr-low.jsonl; one LAGEOS-1 2026 window lacks reference states).
+
+| Theory | Set | Day | Windows | Samples | Mean d^2/3 | Inside 95 % | Median d^2 | Position RMS (km) |
+| --- | --- | --: | --: | --: | --: | --: | --: | --: |
+| SDN-AP | LAGEOS-1, experiment windows (2025-09-28 .. 10-22) | 1 | 9 | 432 | 1.51 | 0.836 | 3.77 | 0.0462 |
+| SDN-AP | LAGEOS-1, experiment windows (2025-09-28 .. 10-22) | 2 | 9 | 432 | 1.24 | 0.912 | 3.25 | 0.0814 |
+| SDN-AP | LAGEOS-1, experiment windows (2025-09-28 .. 10-22) | 3 | 9 | 432 | 1.15 | 0.917 | 2.83 | 0.0995 |
+| SDN-AP | LAGEOS-1, 2026-02-01 .. 05-31 | 1 | 12 | 576 | 1.32 | 0.901 | 3.17 | 0.041 |
+| SDN-AP | LAGEOS-1, 2026-02-01 .. 05-31 | 2 | 12 | 576 | 1.19 | 0.922 | 2.91 | 0.0755 |
+| SDN-AP | LAGEOS-1, 2026-02-01 .. 05-31 | 3 | 12 | 575 | 1.08 | 0.91 | 2.39 | 0.088 |
+| SDN-AP | LAGEOS-2, Etalon-1, Etalon-2 (experiment windows) | 1 | 27 | 1296 | 2.43 | 0.758 | 3.91 | 0.0589 |
+| SDN-AP | LAGEOS-2, Etalon-1, Etalon-2 (experiment windows) | 2 | 27 | 1296 | 0.844 | 0.996 | 2.18 | 0.113 |
+| SDN-AP | LAGEOS-2, Etalon-1, Etalon-2 (experiment windows) | 3 | 27 | 1296 | 0.649 | 1 | 1.61 | 0.169 |
+| SDN-AP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 1 | 139 | 6621 | 1.36 | 0.878 | 3.17 | 0.101 |
+| SDN-AP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 2 | 137 | 5853 | 0.991 | 0.942 | 2.22 | 0.256 |
+| SDN-AP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 3 | 81 | 3189 | 0.744 | 0.98 | 1.61 | 0.461 |
+| SGP4XP | LAGEOS-1, experiment windows (2025-09-28 .. 10-22) | 1 | 9 | 432 | 1.82 | 0.725 | 5.43 | 0.234 |
+| SGP4XP | LAGEOS-1, experiment windows (2025-09-28 .. 10-22) | 2 | 9 | 432 | 1.93 | 0.738 | 5.49 | 0.417 |
+| SGP4XP | LAGEOS-1, experiment windows (2025-09-28 .. 10-22) | 3 | 9 | 432 | 1.91 | 0.773 | 5.33 | 0.608 |
+| SGP4XP | LAGEOS-1, 2026-02-01 .. 05-31 | 1 | 12 | 576 | 1.38 | 0.913 | 3.92 | 0.199 |
+| SGP4XP | LAGEOS-1, 2026-02-01 .. 05-31 | 2 | 12 | 576 | 1.44 | 0.908 | 4.09 | 0.332 |
+| SGP4XP | LAGEOS-1, 2026-02-01 .. 05-31 | 3 | 12 | 575 | 1.44 | 0.93 | 4.15 | 0.476 |
+| SGP4XP | LAGEOS-2, Etalon-1, Etalon-2 (experiment windows) | 1 | 27 | 1296 | 1.34 | 0.909 | 3.21 | 0.0876 |
+| SGP4XP | LAGEOS-2, Etalon-1, Etalon-2 (experiment windows) | 2 | 27 | 1296 | 0.84 | 0.994 | 2.17 | 0.138 |
+| SGP4XP | LAGEOS-2, Etalon-1, Etalon-2 (experiment windows) | 3 | 27 | 1296 | 0.69 | 0.998 | 1.86 | 0.195 |
+| SGP4XP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 1 | 139 | 6621 | 1.09 | 0.98 | 3.01 | 0.518 |
+| SGP4XP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 2 | 137 | 5853 | 0.91 | 0.988 | 2.4 | 0.689 |
+| SGP4XP | LEO set: Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 (experiment windows) | 3 | 81 | 3189 | 0.76 | 0.992 | 1.88 | 0.746 |
+
+Reproduce (needs /opt/data/sdn-archive/reference-states and the experiment's rows and space-weather table):
+
+    node test/covariance-realism.mjs --theory SDNAP --set calibration --out test/results/covariance-calibration-sdnap.json
+    node test/covariance-realism.mjs --theory SGP4XP --set calibration --out test/results/covariance-calibration-sgp4xp.json
+    node test/covariance-realism.mjs --theory SDNAP --set held-out --out test/results/covariance-realism-sdnap.json
+    node test/covariance-realism.mjs --theory SGP4XP --set held-out --out test/results/covariance-realism-sgp4xp.json
+
 ## Memory and time
 
 One allocation per ingest: a propagation record per object plus, for resonant objects, checkpoints of the
@@ -422,7 +472,10 @@ LRU sweep that rebuilt them for every object, 2.8 s per object).
   segmentation; the segment sets (an NRHO-like Moon-centered set, an Earth orbit reaching the Moon, a thrusting cruise
   set) through propagate, fit (THEORY SDNAP) and propagate again (within 20 m), a grid of another center refused
   (grid-center-mismatch) and the batch refusing a segment set (unsupported-theory).
+- `test/covariance.e2e.mjs`: the covariance record of an SDN-AP and an SGP4XP fit (positive definite, its rows),
+  `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
+  noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
 - `test/environment.e2e.mjs`: `$SPW` and `$DCL` read as FFM reads them.
 - `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `fit` (THEORY SDNAP) and its set on the grid,
   the lunar set, and the three segment sets (propagate, fit (THEORY SDNAP), propagate) through the browser host and native
-  WasmEdge 0.16.4: identical bytes.
+  WasmEdge 0.16.4: identical bytes (the fitted sets carry COVARIANCE, so their grids carry covariance lines).

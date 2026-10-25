@@ -66,6 +66,7 @@
 #include "nrho.inc"
 #include "events.inc"
 #include "omm.inc"
+#include "covariance.inc"
 #include "pcf.inc"
 #include "environment.inc"
 #include "oem.inc"
@@ -127,4 +128,28 @@ void sdnap_frame_to_uvw(const double* r, const double* v, const double* vec, dou
   }
   const double q[3] = {vec[0], vec[1], vec[2]};
   for (int a = 0; a < 3; ++a) out[a] = q[0] * basis[a][0] + q[1] * basis[a][1] + q[2] * basis[a][2];
+}
+
+/// The propagated covariance of an $OMM set (SPEC 12): `omm` (`length` bytes, plain or size-prefixed) an SGP4XP or
+/// SDN-AP set carrying COVARIANCE (as `fit` writes it: the epoch TEME covariance and USER_DEFINED_SDNAP_COV_x); at
+/// each of `count` times (`minutes` from its epoch) `out` gets 42 doubles: the TEME state (km, km/s), then the 6 x 6
+/// covariance row-major (km^2, km^2/s, km^2/s^2). 0, or -1 not a decodable Earth set, -2 no COVARIANCE, -3 the theory
+/// refuses the set or does not reach a time, -4 an SGP4 set, -5 singular epoch columns, -6 a malformed covariance.
+SDNAP_EXPORT("sdnap_covariance_at")
+int32_t sdnap_covariance_at(const uint8_t* omm, uint32_t length, const double* minutes, uint32_t count, double* out) {
+  if (omm == nullptr || (count > 0 && (minutes == nullptr || out == nullptr))) return -1;
+  sdnap::ElementRow row{};
+  if (!sdnap::omm::decode(omm, length, row)) return -1;
+  if (row.theory != sdnap::kTheorySgp4Xp && row.theory != sdnap::kTheorySdnAp) return -4;
+  sdnap::cov::Set set;
+  const int rc = sdnap::cov::read(omm, length, row, set);
+  if (rc == 0) return -2;
+  if (rc < 0) return -6;
+  sdnap::cov::Propagator p;
+  if (const int pr = sdnap::cov::prepare(set, p)) return pr;
+  for (uint32_t k = 0; k < count; ++k) {
+    double* o = out + 42u * k;
+    if (!sdnap::cov::eval(p, minutes[k], o, o + 3, o + 6)) return -3;
+  }
+  return 0;
 }
