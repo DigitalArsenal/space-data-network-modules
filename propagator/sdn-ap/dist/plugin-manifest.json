@@ -97,7 +97,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and MEAN_ELEMENT, SEGMENTS, OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES), FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads each set's own, another value must match it; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and MEAN_ELEMENT, SEGMENTS, OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES), FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads each set's own, another value must match it; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -219,6 +219,269 @@
       "drainPolicy": "drain-to-empty"
     },
     {
+      "methodId": "load_epochs",
+      "displayName": "Load the epoch store",
+      "description": "SPEC 14: replaces the resident epoch store with the snapshot on 'omm' under the $PCF EPOCH_STORE table: per series (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR) the sets of the last CACHE_DAYS before the newest epoch of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES; segment sets are counted and not stored. Read through the exports sdnap_epochs_count, _stats, _series, _select and _at (selection by SELECTION, the handover blend by BLEND_WINDOW_SECONDS and BLEND_SHAPE). Refused by name: configuration-missing, configuration-refused, invalid-omm.",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and the propagate tables (MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES), and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a set field this module cannot apply is refused by name (configuration-refused).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The snapshot: size-prefixed $OMM records end to end (the element-sync module's 'omm' output, at most 4 MiB a frame, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH), or one $OMM record a frame; SGP4, SGP4XP and SDN-AP Earth sets."
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "propagate_epochs",
+      "displayName": "Propagate an epoch store",
+      "description": "SPEC 14: the epoch store of the call's own snapshot (as load_epochs builds it) on a 'grid': one $OEM per series, each state from the selected set or, inside a handover window, the blend of two (SMOOTHSTEP: r = (1 - w) r_a + w r_b, v with the weight's derivative; HERMITE: the cubic Hermite of the two sets' states at the window's edges), with the covariance mixture where the sets carry COVARIANCE. Refused by name: configuration-missing, configuration-refused, invalid-omm, missing-omm, missing-grid, bad-grid, too-many-states, propagation-failed, frame-failed.",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and the propagate tables (MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES), and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a set field this module cannot apply is refused by name (configuration-refused).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The snapshot: size-prefixed $OMM records end to end (the element-sync module's 'omm' output, at most 4 MiB a frame, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH), or one $OMM record a frame; SGP4, SGP4XP and SDN-AP Earth sets."
+        },
+        {
+          "portId": "grid",
+          "displayName": "grid",
+          "minStreams": 1,
+          "maxStreams": 16,
+          "required": true,
+          "description": "The epochs: explicit EPOCHs, or START_TIME / STOP_TIME / STEP_SIZE (both times required), in the block's axes (TEME, GCRF or EME2000).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-grid",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OEM per series kept (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR): the selected and blended states, km and km/s, UTC, and a covariance line per state where the series' sets carry COVARIANCE.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-trajectory",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
       "methodId": "fit",
       "displayName": "Fit OEM to SGP4XP or SDN-AP elements",
       "description": "Fits an element set to each $OEM ephemeris block; the configuration's THEORY selects the theory. UNSPECIFIED or SGP4XP: the six mean elements, BTERM and AGOM of an SGP4XP set (Levenberg-Marquardt on TEME position residuals with analytic Jacobians for the elements and BTERM and a theory difference for AGOM, weak priors on BTERM and AGOM about zero), rounded to the two-line text's digits and searched on their lattice. SDNAP: an SDN-AP set (theory 16): the six mean elements, the signed effective ballistic coefficient B_eff = (1 - kappa) B (free), AGOM and the once-per-revolution transverse terms tauc and taus (DESIGN 2b, 2c), B_eff and tau0 only in the drag regime (perigee below MEAN_ELEMENT.DRAG_REGIME_PERIGEE_KM, 2500 km); the density NRLMSISE-00 times exp(s(t)) under the environment of this invocation ($SPW rows on 'space_weather', a $PRW on 'space_weather_table', an open-DCA $DCL on 'density_correction'); a 'prior' $OMM with USER_DEFINED_SDNAP_B and _B_SIGMA gives kappa (2b.2), one with a previous set's USER_DEFINED_SDNAP_B_EFF and _B_EFF_SIGMA the B_eff prior (sigma floored at 10 % of the value); full precision. Either theory: the arc grown from two revolutions by threes to the fit interval; the interval ends at the block's USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS before the data (later states held out and scored) and starts at USEABLE_START_TIME; without it the span rule (DESIGN 2e.3, $PCF FIT): FIT.DEFAULT_SPAN_HOURS (48 h; ECCENTRIC_DEFAULT_SPAN_HOURS 24 h above ECCENTRICITY_THRESHOLD 0.5), each candidate span fitted to the data before the latest TAIL_HOURS and scored on that tail, a longer one kept only when its tail error is within EXTENSION_MARGIN (0.9; eccentric 0.7) of the best shorter one's; a fit RMS beyond FIT.IMPLAUSIBLE_RMS_KM (100 km) is refused (fit-implausible). The $OMM carries MEAN_ELEMENT_THEORY SGP4XP or SDNAP, ORIGINATOR (the $OEM's), the block OBJECT's NORAD_CAT_ID, OBJECT_ID and OBJECT_NAME, the fit and held-out statistics in its COMMENT, and (SDNAP) USER_DEFINED_SDNAP_B_EFF, _B_EFF_SIGMA, _KAPPA, _KAPPA_SIGMA, _TAU0, _TAUC, _TAUS (m/s^2), _ARC_END_MIN, _LOWERING and _TAU_HELD; a $OBD per block carries the determination. The block's frame is read from its REFERENCE_FRAME, never assumed: TEME, GCRF or ICRF, EME2000 or J2000 and Earth-fixed (ITRF, ECEF, WGS84), time system UTC; Moon-, Sun- and segment blocks go to the SDN-AP segment fits (THEORY SDNAP). Plain or size-prefixed $OEM. Refused by name: configuration-missing, invalid-configuration, configuration-refused, missing-oem, invalid-oem, invalid-prior, reference-frame-undeclared, reference-frame-conflict, unsupported-frame, unsupported-time-system, too-few-states, fit-failed, fit-implausible.",
@@ -249,7 +512,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and FIT (the span rule, hold-out, implausibility bound, B_eff and AGOM priors), MEAN_ELEMENT, SEGMENTS, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set, SDNAP an SDN-AP set; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and FIT (the span rule, hold-out, implausibility bound, B_eff and AGOM priors), MEAN_ELEMENT, SEGMENTS, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set, SDNAP an SDN-AP set; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -491,7 +754,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and MEAN_ELEMENT, OUTPUT, FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and MEAN_ELEMENT, OUTPUT, FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -705,7 +968,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and MANEUVER_DETECTION (THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES, CORRELATION_MODEL WHITE or ONE_SAMPLE_PER_REVOLUTION, FALSE_ALARMS_PER_OBJECT_YEAR 1), MEAN_ELEMENT and INTEGRATOR (refused); THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and MANEUVER_DETECTION (THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES, CORRELATION_MODEL WHITE or ONE_SAMPLE_PER_REVOLUTION, FALSE_ALARMS_PER_OBJECT_YEAR 1), MEAN_ELEMENT and INTEGRATOR (refused); THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -858,7 +1121,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and REENTRY (every field; WINDOW_METHOD LINEAR), MEAN_ELEMENT, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and REENTRY (every field; WINDOW_METHOD LINEAR), MEAN_ELEMENT, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -971,7 +1234,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and LAUNCH (the B_eff and AGOM priors) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and LAUNCH (the B_eff and AGOM priors) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -1085,7 +1348,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY (UNSPECIFIED or SDNAP), LAUNCH (the B_eff and AGOM priors a record without areas takes) and MEAN_ELEMENT; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY (UNSPECIFIED or SDNAP), LAUNCH (the B_eff and AGOM priors a record without areas takes) and MEAN_ELEMENT; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -1157,7 +1420,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and LAUNCH (priors, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.4 (SDS 1.270.0): THEORY and LAUNCH (priors, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
