@@ -1,0 +1,1282 @@
+{
+  "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+  "name": "SDN-AP Propagator",
+  "version": "0.1.0",
+  "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006), SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification) and SDN-AP (SDN's own theory). Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed metres) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded memory per object, fixed at ingest; any time costs at most one checkpoint interval of integration, and results do not depend on the order times are requested in.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "threadModel": "emscripten-pthreads",
+  "methods": [
+    {
+      "methodId": "ingest_omm",
+      "displayName": "Ingest OMM",
+      "description": "Adopts mean elements from SDS $OMM records (MEAN_ELEMENT_THEORY SGP4 or SGP4XP; for SGP4XP, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT, both m^2/kg) and replaces the module's element set. Propagation is reached through the propagator ABI exports and the sdnap_* batch entry, not through this invoke surface.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "OMM mean-element records."
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "propagate",
+      "displayName": "Propagate OMM to OEM",
+      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP or SGP4; SDN-AP as USER_DEFINED_THEORY), plain or size-prefixed, to one $OEM, km and km/s, UTC, on the grid of an optional 'grid' $OEM: per grid block either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day later, 60 s), in the block's axes (TEME by default; GCRF or EME2000), one $OEM block per grid block; the grid's span decides how far a set runs, at most 500,000 states per request. Refused by name: missing-omm, invalid-omm, invalid-grid, bad-grid, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "OMM mean-element records."
+        },
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and MEAN_ELEMENT, SEGMENTS, OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES), FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads each set's own, another value must match it; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "grid",
+          "displayName": "grid",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "Optional $OEM grid template (as modules propagator/sgp4-xp): EPHEMERIS_DATA_LINES epochs, or START_TIME / STOP_TIME / STEP_SIZE; REFERENCE_FRAME TEME, GCRF or EME2000; UTC; CENTER_NAME EARTH.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-grid",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OEM per element set: EPHEMERIS_DATA_LINES in km and km/s, UTC, centred on the Earth.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-trajectory",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "fit",
+      "displayName": "Fit OEM to SGP4XP or SDN-AP elements",
+      "description": "Fits an element set to each $OEM ephemeris block; the configuration's THEORY selects the theory. UNSPECIFIED or SGP4XP: the six mean elements, BTERM and AGOM of an SGP4XP set (Levenberg-Marquardt on TEME position residuals with analytic Jacobians for the elements and BTERM and a theory difference for AGOM, weak priors on BTERM and AGOM about zero), rounded to the two-line text's digits and searched on their lattice. SDNAP: an SDN-AP set (theory 16): the six mean elements, the signed effective ballistic coefficient B_eff = (1 - kappa) B (free), AGOM and the once-per-revolution transverse terms tauc and taus (DESIGN 2b, 2c), B_eff and tau0 only in the drag regime (perigee below MEAN_ELEMENT.DRAG_REGIME_PERIGEE_KM, 2500 km); the density NRLMSISE-00 times exp(s(t)) under the environment of this invocation ($SPW rows on 'space_weather', a $PRW on 'space_weather_table', an open-DCA $DCL on 'density_correction'); a 'prior' $OMM with USER_DEFINED_SDNAP_B and _B_SIGMA gives kappa (2b.2), one with a previous set's USER_DEFINED_SDNAP_B_EFF and _B_EFF_SIGMA the B_eff prior (sigma floored at 10 % of the value); full precision. Either theory: the arc grown from two revolutions by threes to the fit interval; the interval ends at the block's USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS before the data (later states held out and scored) and starts at USEABLE_START_TIME; without it the span rule (DESIGN 2e.3, $PCF FIT): FIT.DEFAULT_SPAN_HOURS (48 h; ECCENTRIC_DEFAULT_SPAN_HOURS 24 h above ECCENTRICITY_THRESHOLD 0.5), each candidate span fitted to the data before the latest TAIL_HOURS and scored on that tail, a longer one kept only when its tail error is within EXTENSION_MARGIN (0.9; eccentric 0.7) of the best shorter one's; a fit RMS beyond FIT.IMPLAUSIBLE_RMS_KM (100 km) is refused (fit-implausible). The $OMM carries MEAN_ELEMENT_THEORY SGP4XP or SDNAP, ORIGINATOR (the $OEM's), the block OBJECT's NORAD_CAT_ID, OBJECT_ID and OBJECT_NAME, the fit and held-out statistics in its COMMENT, and (SDNAP) USER_DEFINED_SDNAP_B_EFF, _B_EFF_SIGMA, _KAPPA, _KAPPA_SIGMA, _TAU0, _TAUC, _TAUS (m/s^2), _ARC_END_MIN, _LOWERING and _TAU_HELD; a $OBD per block carries the determination. The block's frame is read from its REFERENCE_FRAME, never assumed: TEME, GCRF or ICRF, EME2000 or J2000 and Earth-fixed (ITRF, ECEF, WGS84), time system UTC; Moon-, Sun- and segment blocks go to the SDN-AP segment fits (THEORY SDNAP). Plain or size-prefixed $OEM. Refused by name: configuration-missing, invalid-configuration, configuration-refused, missing-oem, invalid-oem, invalid-prior, reference-frame-undeclared, reference-frame-conflict, unsupported-frame, unsupported-time-system, too-few-states, fit-failed, fit-implausible.",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "$OEM ephemerides, one fit per data block (EPHEMERIS_DATA_LINES, REFERENCE_FRAME declared: TEME, GCRF, EME2000 or Earth-fixed; UTC, km).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and FIT (the span rule, hold-out, implausibility bound, B_eff and AGOM priors), MEAN_ELEMENT, SEGMENTS, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set, SDNAP an SDN-AP set; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "prior",
+          "displayName": "prior",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $OMM whose USER_DEFINED_SDNAP_B and USER_DEFINED_SDNAP_B_SIGMA give the B prior (DESIGN 2e.3).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-prior",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OMM SGP4XP element set per block, in block order.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "determination",
+          "displayName": "determination",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OBD per block, in block order: the determination behind the $OMM.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "load_environment",
+      "displayName": "Load SDN-AP environment",
+      "description": "Replaces the SDN-AP environment with SDS records as FFM reads them (SDS 1.261.0): $SPW rows on 'space_weather', or a $PRW whose SPACE_WEATHER holds them on 'space_weather_table' (at a UTC instant on day d, F10.7 is the observed flux of day d-1, F10.7a the 81-day centred mean of day d and Ap the daily Ap of day d; days not covered keep the values in force), and the open-DCA common mode s(t) from a $DCL on 'density_correction' (Solved, NRLMSISE-00 baseline, LogDensityNodes: s linear between strictly increasing UTC nodes, held at the end values outside them; the same loader as the direct export sdnap_load_density_correction). Any one of the three inputs suffices; what is not given stays in force. Refused by name: missing-environment, invalid-space-weather, invalid-density-correction.",
+      "inputPorts": [
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "maneuver",
+      "displayName": "Maneuver an SDN-AP set",
+      "description": "DESIGN 5.1: an Earth SGP4XP or SDN-AP $OMM across the burns of its $MNV records, in time order. Each record gives EVENT_START_TIME, the duration (EVENT_END_TIME, or TOTAL_BURN_TIME in s; none: an impulse) and DELTA_VEL_U/V/W (km/s, UVW of the pre-maneuver state: U radial, W along r x v, V = W x U). The post-maneuver set is the inverse of the output map at the burn's centroid, h^-1(x(t_b) + (0, dv), t_b), by fixed-point iteration in equinoctial elements (14); a finite burn scales the eccentricity-vector and plane changes by sinc(dL/2), dL = n D (15). Outputs: the post-maneuver $OMM of every burn (epoch the centroid; drag, SRP and SDN-AP parameters carried), its $MNV with PRE_EVENT and POST_EVENT states (TEME, osculating elements, BALLISTIC_COEFF = 1/B_eff kg/m^2) and the CHARACTERIZATION from the dv direction, and with a 'grid' the TEME states across the burns.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The pre-maneuver Earth set (SGP4XP, or SDN-AP as USER_DEFINED_THEORY)."
+        },
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and MEAN_ELEMENT, OUTPUT, FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "maneuvers",
+          "displayName": "maneuvers",
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The burns: SDS $MNV records (STATUS kept).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.mnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV"
+                }
+              ],
+              "description": "Ratified SDS $MNV maneuver records (0.0.4)."
+            }
+          ]
+        },
+        {
+          "portId": "grid",
+          "displayName": "grid",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "Optional $OEM grid template (as propagate's): the TEME states across the burns.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-grid",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One post-maneuver $OMM per burn, in time order.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "maneuvers",
+          "displayName": "maneuvers",
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "One $MNV per burn with PRE_EVENT and POST_EVENT.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.mnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV"
+                }
+              ],
+              "description": "Ratified SDS $MNV maneuver records (0.0.4)."
+            }
+          ]
+        },
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "With a 'grid': one $OEM of TEME states across the burns.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-trajectory",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 4096,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "detect_maneuvers",
+      "displayName": "Detect maneuvers in an Earth ephemeris",
+      "description": "DESIGN 5.1.4: the six-element generalized likelihood ratio on the innovations of SDN-AP's own inverse map, e_k = h^-1(x_k, t_k) - y(t_k), against a burn's signature (a step in a_f, a_g, chi, psi and n, a ramp in lambda; G = dy/dv by the inverse map at the candidate epoch), F = sum M^T W M, g = sum M^T W e, Delta v = F^-1 g, Lambda = g^T F^-1 g (16), W the MAD inverse variances. One TEME $OEM block per call, UTC, at least 48 states. Without a burn (largest Lambda at or below the threshold, 20 by default): the burn-free SDN-AP set. With one: the pre-burn set fitted on the states before the burn, the post-burn set carried by the impulse map of the estimated Delta v, and a $MNV (STATUS DETECTED, EVENT_START_TIME, DELTA_VEL_U/V/W, PRE_EVENT, POST_EVENT, ALGORITHM with Lambda).",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One Earth TEME $OEM block.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and MANEUVER_DETECTION (THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES, CORRELATION_MODEL WHITE or ONE_SAMPLE_PER_REVOLUTION, FALSE_ALARMS_PER_OBJECT_YEAR 1), MEAN_ELEMENT and INTEGRATOR (refused); THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The burn-free set, or the pre- and post-burn sets.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "maneuvers",
+          "displayName": "maneuvers",
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One $MNV per detected burn.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.mnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV"
+                }
+              ],
+              "description": "Ratified SDS $MNV maneuver records (0.0.4)."
+            }
+          ]
+        }
+      ],
+      "maxBatch": 64,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "reentry",
+      "displayName": "Predict reentry",
+      "description": "DESIGN 5.2: each Earth SGP4XP or SDN-AP $OMM walked along its mean trajectory ($PCF REENTRY: nodes every NODE_STEP_MINUTES, 30, within HORIZON_DAYS, 120) until an averaging limit trips (18): C1 4 pi |a-dot| / (n H(h_p)) > HANDOFF_DECAY_RATIO (0.05), C2 perigee below HANDOFF_PERIGEE_ALTITUDE_KM (180 km), C3 |Delta(ae)_rev| / (ae) > HANDOFF_ECCENTRICITY_COLLAPSE (0.01) with e > HANDOFF_MINIMUM_ECCENTRICITY (0.01), C4 the perigee-pass sawtooth (3 pi / 8) |Delta a_rev| > 0.5 km with e > 0.02; then, one way, osculating integration in the module (EGM96 20 x 20, Sun and Moon, NRLMSISE-00 x exp(s(t)) with the set's B_eff and the environment of this invocation, radial SRP) down to ALTITUDE_KM (80 km) in OSCULATING_STEP_SECONDS (10 s) steps, within the horizon. One $RDM per set: REENTRY_EPOCH, REENTRY_LATITUDE/LONGITUDE, the window (20) with sigma_B/B from WINDOW_BALLISTIC_SIGMA when set, else the set's USER_DEFINED_SDNAP_B_EFF_SIGMA, else 5 %, density WINDOW_DENSITY_SIGMA (15 %) with WINDOW_CORRELATION_DAYS (2) (REENTRY_EPOCH_UNC hours, REENTRY_WINDOW_START/END, ORBIT_LIFETIME and its window in days, 68.27 %), INITIAL_STATE the hand-off state (TEME), BALLISTIC_COEFF = 1 / B_eff kg/m^2, the models named.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Earth SGP4XP or SDN-AP sets with a positive B_eff."
+        },
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and REENTRY (every field; WINDOW_METHOD LINEAR), MEAN_ELEMENT, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "reentry",
+          "displayName": "reentry",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $RDM per set.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.rdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "RDM.fbs",
+                  "fileIdentifier": "$RDM",
+                  "rootTypeName": "RDM"
+                }
+              ],
+              "description": "Ratified SDS $RDM reentry data (0.0.4)."
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "launch_set",
+      "displayName": "First set from a launch",
+      "description": "DESIGN 5.3.1: the first Earth SDN-AP set of each SDS $LAM's INSERTION orbit or $BOV burnout vector (osculating a, e, i, Omega, omega and the argument of latitude u at EPOCH in REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000): y0 = h^-1(x_ins, t_ins) by the inverse map; B_eff and AGOM from a 'prior' $OMM's USER_DEFINED_SDNAP_B_EFF and _AGOM, else 0.01 m^2/kg each; the $LAM sigmas give sigma_a, sigma_e, sigma_lambda and sigma_RAAN (21) in the COMMENT. A $BOV's EFG state is rotated to TEME by GMST. One of 'launch' and 'burnout' is required. An early $OEM goes to fit_sdnap.",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and LAUNCH (the B_eff and AGOM priors) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "launch",
+          "displayName": "launch",
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "SDS $LAM launch messages with an INSERTION orbit.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.lam",
+              "allowedTypes": [
+                {
+                  "schemaName": "LAM.fbs",
+                  "fileIdentifier": "$LAM",
+                  "rootTypeName": "LAM"
+                }
+              ],
+              "description": "Ratified SDS $LAM."
+            }
+          ]
+        },
+        {
+          "portId": "burnout",
+          "displayName": "burnout",
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "SDS $BOV burnout vectors: EFG position and velocity at EPOCH, read in km and km/s (the schema states no unit; refused when the radius is not an Earth orbit's), rotated to TEME by GMST.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.bov",
+              "allowedTypes": [
+                {
+                  "schemaName": "BOV.fbs",
+                  "fileIdentifier": "$BOV",
+                  "rootTypeName": "BOV"
+                }
+              ],
+              "description": "Ratified SDS $BOV."
+            }
+          ]
+        },
+        {
+          "portId": "prior",
+          "displayName": "prior",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional $OMM whose USER_DEFINED_SDNAP_B and USER_DEFINED_SDNAP_B_SIGMA give the B prior (DESIGN 2e.3).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-prior",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One first $OMM per $LAM or $BOV.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "launch_batch",
+      "displayName": "Batch-joint fit of a deployment",
+      "description": "DESIGN 5.3.3: a batch released from one parent state x0 at t0 ($LAM INSERTION or $BOV), each object the impulse map of the parent set with its own separation Delta v_k (UVW at t0) and B_k. The batch-joint fit estimates the parent's six elements and the batch mean B, and per object Delta v_k and B_k, with B_k ~ N(B_mean, sigma_B^2) (sigma_B half the prior B_eff, Stein shrinkage) and Delta v_k ~ N(0, (1 m/s)^2); the arrowhead normal matrix is solved by the Schur complement in O(N). The objects' along-track order at the latest state (22) associates them with 'catalog' sets (both sorted, matched in order).",
+      "inputPorts": [
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and LAUNCH (priors, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "launch",
+          "displayName": "launch",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The parent state: an SDS $LAM with an INSERTION orbit (or a 'burnout' $BOV).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.lam",
+              "allowedTypes": [
+                {
+                  "schemaName": "LAM.fbs",
+                  "fileIdentifier": "$LAM",
+                  "rootTypeName": "LAM"
+                }
+              ],
+              "description": "Ratified SDS $LAM."
+            }
+          ]
+        },
+        {
+          "portId": "burnout",
+          "displayName": "burnout",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The parent state: an SDS $BOV burnout vector (EFG km, km/s at EPOCH; or a 'launch' $LAM).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.bov",
+              "allowedTypes": [
+                {
+                  "schemaName": "BOV.fbs",
+                  "fileIdentifier": "$BOV",
+                  "rootTypeName": "BOV"
+                }
+              ],
+              "description": "Ratified SDS $BOV."
+            }
+          ]
+        },
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "SDS $OEM early ephemerides of the batch's objects: one TEME UTC block per object (6 or more states after the parent epoch; the block's OBJECT names it).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "prior",
+          "displayName": "prior",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A prior $OMM: USER_DEFINED_SDNAP_B_EFF (the batch mean's prior) and _AGOM; else 0.01 m^2/kg each.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-prior",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "catalog",
+          "displayName": "catalog",
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "Later catalog $OMM sets (SGP4XP or SDN-AP, with NORAD numbers): associated with the batch's objects by along-track order at the latest state.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-prior",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space weather rows",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$SPW rows.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather_table",
+          "displayName": "space weather table",
+          "minStreams": 0,
+          "maxStreams": 16,
+          "required": false,
+          "description": "A $PRW whose SPACE_WEATHER holds $SPW rows (FFM's input).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw-space-weather",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An open-DCA $DCL: the NRLMSISE-00 log-density common mode s(t) as LogDensityNodes.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OMM per object at the parent epoch: the impulse map of the fitted parent set with the object's separation Delta v and B_eff; the COMMENT gives them, the along-track order and the association.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "sdn-ap-propagator-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

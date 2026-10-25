@@ -21,7 +21,7 @@
     "test:native": "sh tests/harness/build-native.sh && ./tests/harness/star_native",
     "vectors": "node scripts/generate-vectors.mjs"
   },
-  "license": "MIT",
+  "license": "Apache-2.0 AND MIT",
   "devDependencies": {
     "space-data-module-sdk": "0.9.12",
     "flatc-wasm": "26.1.38"

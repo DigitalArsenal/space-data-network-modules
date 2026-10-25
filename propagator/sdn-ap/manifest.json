@@ -1,0 +1,16 @@
+{
+  "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
+  "name": "SDN-AP Propagator",
+  "version": "0.1.0",
+  "type": "Propagator",
+  "encrypted": false,
+  "requiresProtection": false,
+  "description": "General-perturbations propagation of whole catalogs: SGP4XP (the US Space Force SGP4-XP theory, clean-room) and SDN-AP (SDN's own theory), batch and structure-of-arrays, bounded memory, deterministic random access in time.",
+  "delivery": {
+    "channel": "sdn-module-delivery",
+    "catalogId": "com.spacedatanetwork.sdn-ap-propagator"
+  },
+  "wasmModule": {
+    "file": "dist/isomorphic/module.wasm"
+  }
+}

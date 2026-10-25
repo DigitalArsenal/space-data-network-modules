@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "vCard 3.0 projection of $EPM to $VCF (and $VCF back to $EPM) — pure WASM exporter module, typed contracts 1.0",
   "type": "module",
+  "license": "Apache-2.0",
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test tests/*.test.mjs",

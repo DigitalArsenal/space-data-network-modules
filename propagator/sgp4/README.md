@@ -22,7 +22,11 @@ Objects with one NORAD number share one entity and its element-set history.
 ### Catalog records (`$CAT`)
 
 The catalog keeps each `$CAT` as a FlatBuffer (1.3.0): a direct `$CAT`
-byte for byte, one carried in a `$REC` re-finished as its own `$CAT`. The
+byte for byte, one carried in a `$REC` re-finished as its own `$CAT`. A
+`$CAT` is verified against the origin it was finished at (1.3.1): a root
+buffer as is, a frame finished behind a 4-byte size prefix (every frame of
+a size-prefixed stream, and one sliced out of it) as size-prefixed, then
+re-finished as its own `$CAT`. The
 direct-call pair `plugin_get_cat_record_flatbuffer_size` /
 `plugin_get_cat_record_flatbuffer` answers that FlatBuffer by NORAD number.
 Records enter only as FlatBuffers (`upsert_cat`,

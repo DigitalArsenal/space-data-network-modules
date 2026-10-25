@@ -25,8 +25,15 @@ These inputs are vendored so a release build never reads unstaged source or
 objects outside `flows/supplemental-omm/`.
 
 The fit core contains the repository's SGP4 orbit-determination implementation
-and the bundled SGP4 implementation. Its applicable Apache-2.0 license is
-copied from `analysis/od/src/cpp/deps/sgp4/LICENSE` into
-`SGP4-LICENSE.txt` (SHA-256
-`771e7128d338686ef6321a67cd2e074c537c400225ea05e115bbd065236e609c`).
-This notice records provenance and does not alter those terms.
+(`analysis/od/src/cpp/src/sgp4_fitter.cpp`) and the Vallado SGP4 propagator it
+calls (`analysis/od/src/cpp/deps/vallado-sgp4/SGP4.cpp`, namespace `SGP4Funcs`,
+by David Vallado). The object holds no libsgp4 code. The Vallado source carries
+no license text in the tree; the root `NOTICE` lists it as LicenseRef-Unstated,
+and this notice does not settle its terms.
+
+`SGP4-LICENSE.txt` is the Apache-2.0 text of libsgp4 (Daniel Warner), copied
+from `analysis/od/src/cpp/deps/sgp4/LICENSE` (SHA-256
+`771e7128d338686ef6321a67cd2e074c537c400225ea05e115bbd065236e609c`). libsgp4 is
+not compiled into this object; the file is the Apache-2.0 text, which is also
+the repository's license for this directory's own files.
+This notice records provenance and does not alter any terms.

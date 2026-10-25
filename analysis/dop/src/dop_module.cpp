@@ -1,5 +1,5 @@
 /*
- ISC License
+ Copyright 2026 Edgesource Corporation. SPDX-License-Identifier: Apache-2.0
 
  Native GNSS dilution-of-precision kernel for the SDK standalone C++ surface.
  The aligned-binary layout keeps the initial contract intentionally small:

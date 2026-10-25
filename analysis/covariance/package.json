@@ -2,6 +2,7 @@
   "name": "@orbpro/module-analysis-covariance",
   "version": "0.2.0",
   "type": "module",
+  "license": "Apache-2.0",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
