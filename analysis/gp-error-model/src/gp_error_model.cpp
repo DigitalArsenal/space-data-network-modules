@@ -11,8 +11,8 @@
 
 // Empirical SGP4 prediction error, by orbit regime and prediction age.
 //
-// accumulate: each $OMM element set is propagated by SGP4 (Vallado 2020,
-// WGS-72, opsmode i, the propagator/sgp4 sources) to comparison epochs, and
+// accumulate: each $OMM element set is propagated by SGP4 (the SGP4/SDP4 base
+// foundation/sgp4-str3, WGS-72, improved mode) to comparison epochs, and
 // the difference "prediction minus comparison state" is taken in the
 // comparison state's RTN axes (R radial, N orbit normal, T = N x R):
 //   gp-differences  the comparison state is a later element set of the same
@@ -62,6 +62,29 @@ constexpr double kDeg = kPi / 180.0;
 constexpr double kMuWgs72 = 398600.8;    // km^3/s^2, SGP4's constant
 constexpr double kReWgs72 = 6378.135;    // km
 constexpr double kSgp4EpochFromUnixDays = 7306.0;  // days from 1949-12-31 00:00 to 1970-01-01
+
+// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, improved mode). sgp4_init: a set from its mean elements
+// (radians; the Kozai mean motion in rad/min, as element sets carry it), the epoch in days from 1949 December 31 0h UT
+// taken as one Julian date; initialization also evaluates the set at its epoch and refuses what SGP4 refuses there.
+// sgp4_eval: the TEME state (km, km/s) at `minutes` from the epoch, false where SGP4 refuses the point.
+bool sgp4_init(double ds50, double bstar, double e, double argp, double inc, double ma, double no_kozai, double node,
+               sdnap::Sat& sat) {
+  sdnap::Elements el{};
+  el.epoch_jd_whole = ds50 + sdnap::kJd1950;
+  el.xno = no_kozai;
+  el.eo = e;
+  el.xincl = inc;
+  el.xnodeo = node;
+  el.omegao = argp;
+  el.xmo = ma;
+  el.bstar = bstar;
+  double r[3], v[3];
+  return sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) == sdnap::kPropOk &&
+         sdnap::sat_propagate(sat, nullptr, 0.0, r, v) == sdnap::kPropOk;
+}
+bool sgp4_eval(const sdnap::Sat& sat, double minutes, double r[3], double v[3]) {
+  return sdnap::sat_propagate(sat, nullptr, minutes, r, v) == sdnap::kPropOk;
+}
 constexpr int kBinsPerDecade = 20;
 constexpr int kDecades = 14;  // 1e-9 .. 1e5
 constexpr int kMaxBin = kBinsPerDecade * kDecades;
@@ -375,7 +398,7 @@ struct ElementSet {
   std::string epoch_text;
   uint32_t order = 0;  // input order, the later copy of a duplicate epoch wins
   int regime = -1;
-  elsetrec rec;
+  sdnap::Sat rec;
   double r[3], v[3];  // TEME at epoch, km and km/s
   // SGP4's inputs, kept so perturbed copies can be initialized (state
   // transition matrices): Kozai mean motion (rad/min), e, i, node, argument
@@ -424,22 +447,20 @@ bool load_elements(const Options& o, std::vector<ElementSet>& sets, Counts& coun
         continue;
       }
       s.epoch_text = omm->EPOCH()->str();
-      std::memset(&s.rec, 0, sizeof(s.rec));
       const double epoch = static_cast<double>(s.epoch.day) + kSgp4EpochFromUnixDays + s.epoch.sec / 86400.0;
       const double inputs[7] = {omm->MEAN_MOTION() * 2.0 * kPi / 1440.0, omm->ECCENTRICITY(), omm->INCLINATION() * kDeg,
                                 omm->RA_OF_ASC_NODE() * kDeg, omm->ARG_OF_PERICENTER() * kDeg, omm->MEAN_ANOMALY() * kDeg,
                                 omm->BSTAR()};
       std::copy(inputs, inputs + 7, s.el);
       s.sgp4_epoch = epoch;
-      char satn[9] = "00000";
-      if (!SGP4Funcs::sgp4init(wgs72, 'i', satn, epoch, omm->BSTAR(), 0.0, 0.0, omm->ECCENTRICITY(),
+      if (!sgp4_init(epoch, omm->BSTAR(), omm->ECCENTRICITY(),
                                omm->ARG_OF_PERICENTER() * kDeg, omm->INCLINATION() * kDeg, omm->MEAN_ANOMALY() * kDeg,
                                omm->MEAN_MOTION() * 2.0 * kPi / 1440.0, omm->RA_OF_ASC_NODE() * kDeg, s.rec) ||
-          s.rec.error != 0 || !SGP4Funcs::sgp4(s.rec, 0.0, s.r, s.v) || s.rec.error != 0) {
+          !sgp4_eval(s.rec, 0.0, s.r, s.v)) {
         ++counts.refused;
         continue;
       }
-      const double n_rad_s = s.rec.no_unkozai / 60.0;
+      const double n_rad_s = s.rec.xnodp / 60.0;
       const double alt = std::cbrt(kMuWgs72 / (n_rad_s * n_rad_s)) - kReWgs72;
       s.regime = regime_of(o, alt, omm->ECCENTRICITY());
       if (s.regime < 0) { ++counts.unclassified; if (!keep_unclassified) continue; }
@@ -564,10 +585,10 @@ std::string load_coverage_model(Accumulator& acc, const nlohmann::json& model) {
   return {};
 }
 
-// sgp4 keeps per-call state in the record (and SDP4 its resonance
-// integrator), which it restarts as needed for any time order.
+// Each evaluation starts from the set's epoch (SDP4's resonance integrator
+// too), so any time order gives the same states.
 bool propagate(ElementSet& s, double minutes, double r[3], double v[3]) {
-  return SGP4Funcs::sgp4(s.rec, minutes, r, v) && s.rec.error == 0 && std::isfinite(r[0]) &&
+  return sgp4_eval(s.rec, minutes, r, v) && std::isfinite(r[0]) &&
          std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]) > kReWgs72;
 }
 
@@ -883,7 +904,7 @@ extern "C" int finalize() {
                      ? "SGP4 predictions minus independent reference states, in the reference state's RTN axes."
                      : "SGP4 predictions minus later element sets of the same object at their epochs, in the later "
                        "set's RTN axes. A later set is an estimate, not truth.";
-  out["propagator"] = "SGP4 (Vallado " SGP4Version ", WGS-72, opsmode i)";
+  out["propagator"] = "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, improved mode";
   out["units"] = {{"position", "km"}, {"velocity", "km/s"},
                   {"components", {"R", "T", "N", "dR", "dT", "dN"}},
                   {"covariance", "lower triangle, row-major: RR, TR, TT, NR, NT, NN, dR R, ..."}};

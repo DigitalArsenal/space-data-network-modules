@@ -6,7 +6,7 @@ import { generateSdsHeaders } from './sds-headers.mjs';
 import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgamation.mjs';
 
 // One translation unit: SDS headers, ERFA and the foundation/frames axis
-// engine (TEME -> GCRF), the Vallado SGP4 that propagator/sgp4 compiles,
+// engine (TEME -> GCRF), the SGP4/SDP4 base foundation/sgp4-str3,
 // Izzo's Lambert kernel (analysis/lambert-izzo), the SHA-256 that orbit-products
 // uses for record hashes, and nlohmann::json for the methods' working values. src/erm_bridge.cpp is the wire boundary:
 // every data, option and report port carries one SDS $ERM record (typed contracts 1.0), and the node config
@@ -28,7 +28,7 @@ for (let at = 0; at < defaultModel.length; at += 16)
 const defaultModelSource = `static const unsigned char kDefaultModelErm[] = {\n${defaultModelRows.join('\n')}\n};\n` +
   'static const size_t kDefaultModelErmSize = sizeof(kDefaultModelErm);';
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
-const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
+const sgp4Dir = path.resolve(root, '../../foundation/sgp4-str3');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
 const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'CDM', 'PRW', 'MNV', 'ERM'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
@@ -36,9 +36,14 @@ const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp')
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
   .replace('#include "iau_body_models.hpp"', '')
   .replace(/extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/, '// ERFA is amalgamated ahead of this header by build.mjs.\n');
-// SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that must not leak.
-const sgp4Header = await fs.readFile(path.join(sgp4Src, 'SGP4.h'), 'latin1');
-const sgp4Source = (await fs.readFile(path.join(sgp4Src, 'SGP4.cpp'), 'latin1')).replace('#include "SGP4.h"', '');
+// The SGP4/SDP4 base: its header with its two parts in place of their #include lines.
+let sgp4 = await fs.readFile(path.join(sgp4Dir, 'include/sgp4_str3.h'), 'utf8');
+for (const part of ['sgp4_core.inc', 'model.inc']) {
+  const line = `#include "../src/${part}"`;
+  if (!sgp4.includes(line)) throw new Error(`foundation/sgp4-str3 no longer includes ${part}`);
+  const text = await fs.readFile(path.join(sgp4Dir, 'src', part), 'utf8');
+  sgp4 = sgp4.replace(line, () => text);
+}
 const json = await fs.readFile(jsonHeader, 'utf8');
 const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 // The module's sources in dependency order (one translation unit), and the
@@ -53,11 +58,10 @@ await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
   sourceCode: ['#include "space_data_module_invoke.h"', '#include "typedHostcall.hpp"', '#define JSON_NOEXCEPTION 1', json, header, erfa.source, bodyModels, axisEngine,
-    // The vendored SGP4 has internal linkage: analysis/od, analysis/epoch-state and this module each compile the same
-    // SGP4Funcs, and the flow compiler links their objects into one artifact, where equal external C++ symbols are
-    // duplicates. The standard headers SGP4.h includes come first, outside the namespace.
-    '#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {', sgp4Header, sgp4Source, '}  // namespace',
-    '#undef pi', lambert, sha256, bridge, ...sources].join('\n\n'),
+    // The SGP4 base has internal linkage: the flow compiler links this module's object with others that compile their
+    // own copy (analysis/epoch-state, analysis/maneuver-detection). The standard headers it includes come first,
+    // outside the namespace.
+    '#include <cmath>\n#include <cstdint>\nnamespace {', sgp4, '}  // namespace', lambert, sha256, bridge, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'wasi-sequential',
@@ -77,7 +81,7 @@ await fs.writeFile(path.join(guestLinkDir, 'metadata.json'), `${JSON.stringify({
 }, null, 2)}\n`);
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   spacedatastandards: version, sdsFamilies: families, erfaSourceFiles: erfa.fileCount,
-  axisEngine: 'foundation/frames/src/axis_engine.hpp', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
+  axisEngine: 'foundation/frames/src/axis_engine.hpp', sgp4: 'foundation/sgp4-str3',
   lambert: 'analysis/lambert-izzo/include/lambert_izzo/solver.hpp',
   threadModel: 'wasi-sequential',
 }, null, 2)}\n`);

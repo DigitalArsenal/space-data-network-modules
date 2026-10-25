@@ -6,8 +6,8 @@ handoff.
 
 For each `$MPE` on the `elements` stream:
 
-1. SGP4 at zero elapsed time: Vallado 2020-07-13, WGS-72, opsmode `i`. These
-   are the same sources and constants as `propagator/sgp4`.
+1. SGP4 at zero elapsed time: the clean-room SGP4/SDP4 base
+   `foundation/sgp4-str3`, WGS-72, improved mode, as `analysis/od` compiles it.
 2. TEME to GCRF at the same instant, using the `foundation/frames` axis engine:
    IAU 2006/2000A precession-nutation and the equation of the equinoxes from
    the vendored ERFA. TT comes from UTC through the ERFA leap-second table. The

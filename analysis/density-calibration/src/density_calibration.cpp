@@ -593,9 +593,10 @@ double median_of(std::vector<double> v) {
 }
 
 // ── Orbit decay from element sets ──
-// Each element set is propagated by Vallado's SGP4 (propagator/sgp4's
-// sources: WGS-72, opsmode 'i') from its epoch to the next set's epoch. Its
-// mean semi-major axis is SGP4's own (Brouwer, un-Kozai'd) a. Drag changes
+// Each element set is propagated by SGP4 (the SGP4/SDP4 base
+// foundation/sgp4-str3: WGS-72, improved mode) from its epoch to the next
+// set's epoch. Its mean semi-major axis is SGP4's own recovered (Brouwer,
+// un-Kozai'd) a''. Drag changes
 // the semi-major axis at
 //   da/dt = -(a^2 / mu) B rho |v_r| (v . v_r),   v_r = v - omega_E x r
 // (Gauss's equation for the drag acceleration -1/2 B rho |v_r| v_r, B =
@@ -611,7 +612,7 @@ constexpr double kSgp4EpochMjd = 33281.0;    // SGP4 epochs count days from 1949
 
 struct ElementSet {
   double mjd = 0, aKm = 0, ecc = 0, perigeeKm = 0, bstar = 0;
-  elsetrec rec{};
+  sdnap::Sat sat{};
 };
 std::string load_set(const OMM* s, ElementSet& out) {
   const auto num = [&](double value, double& x) {
@@ -624,15 +625,25 @@ std::string load_set(const OMM* s, ElementSet& out) {
       !num(s->BSTAR(), out.bstar))
     return "fields";
   if (!(n > 0) || !(e >= 0 && e < 1)) return "mean-motion-or-eccentricity";
-  std::memset(&out.rec, 0, sizeof(out.rec));
-  const char satn[9] = "00000";
-  if (!SGP4Funcs::sgp4init(wgs72, 'i', satn, out.mjd - kSgp4EpochMjd, out.bstar, 0.0, 0.0, e, argp * kDeg, inc * kDeg, ma * kDeg,
-                           n * 2 * kPi / 1440.0, raan * kDeg, out.rec) || out.rec.error != 0)
+  // The epoch as one Julian date, as SGP4 counts it (days from 1949 December 31 0h UT, + JD 2433281.5).
+  sdnap::Elements el{};
+  el.epoch_jd_whole = (out.mjd - kSgp4EpochMjd) + sdnap::kJd1950;
+  el.xno = n * 2 * kPi / 1440.0;
+  el.eo = e;
+  el.xincl = inc * kDeg;
+  el.xnodeo = raan * kDeg;
+  el.omegao = argp * kDeg;
+  el.xmo = ma * kDeg;
+  el.bstar = out.bstar;
+  const sdnap::Gravity wgs72 = sdnap::gravity_wgs72();
+  double r0[3], v0[3];
+  if (sdnap::sat_init(el, wgs72, out.sat, sdnap::Sgp4Mode::kImproved) != sdnap::kPropOk ||
+      sdnap::sat_propagate(out.sat, nullptr, 0.0, r0, v0) != sdnap::kPropOk)
     return "sgp4-init";
-  if (out.rec.method != 'n') return "deep-space";
-  out.aKm = out.rec.a * out.rec.radiusearthkm;
+  if (out.sat.ideep) return "deep-space";
+  out.aKm = out.sat.aodp * wgs72.radius_km;
   out.ecc = e;
-  out.perigeeKm = out.aKm * (1 - e) - out.rec.radiusearthkm;
+  out.perigeeKm = out.aKm * (1 - e) - wgs72.radius_km;
   return "";
 }
 
@@ -688,14 +699,14 @@ class SunTable {
 constexpr int kPointFailed = 0, kPointOk = 1, kPointAbove = 2;
 int trajectory_point(ElementSet& set, double mjd, const Jb2008Table& table, const SunTable& sun, Point& p, double& q, double* rv) {
   double r[3], v[3];
-  if (!SGP4Funcs::sgp4(set.rec, (mjd - set.mjd) * 1440.0, r, v) || set.rec.error != 0) return kPointFailed;
+  if (sdnap::sat_propagate(set.sat, nullptr, (mjd - set.mjd) * 1440.0, r, v) != sdnap::kPropOk) return kPointFailed;
   const double rm[3] = {r[0] * 1e3, r[1] * 1e3, r[2] * 1e3}, vm[3] = {v[0] * 1e3, v[1] * 1e3, v[2] * 1e3};
   const double rr = std::sqrt(rm[0] * rm[0] + rm[1] * rm[1] + rm[2] * rm[2]), vv = vm[0] * vm[0] + vm[1] * vm[1] + vm[2] * vm[2];
   const double a = 1.0 / (2.0 / rr - vv / kMu);
   const double vr[3] = {vm[0] + kOmegaEarth * rm[1], vm[1] - kOmegaEarth * rm[0], vm[2]};
   const double vrn = std::sqrt(vr[0] * vr[0] + vr[1] * vr[1] + vr[2] * vr[2]);
   q = a * a / kMu * vrn * (vm[0] * vr[0] + vm[1] * vr[1] + vm[2] * vr[2]);
-  const double g = SGP4Funcs::gstime_SGP4(mjd + 2400000.5);
+  const double g = sdnap::str3::gmst_iau82(mjd + 2400000.5, 0.0);
   const double cg = std::cos(g), sg = std::sin(g);
   double ef[3] = {cg * rm[0] + sg * rm[1], -sg * rm[0] + cg * rm[1], rm[2]};
   double elong = 0, phi = 0, height = 0;
