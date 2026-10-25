@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "propagator/sgp4",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1",
-  "moduleSha256": "18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1",
+  "artifactSha256": "18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde",
+  "moduleSha256": "18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 12,
-      "durationMs": 552
+      "durationMs": 530
     },
     {
       "lane": "wasmedge",
       "runs": 12,
-      "durationMs": 9208
+      "durationMs": 8910
     }
   ],
   "cases": [
@@ -55,7 +55,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "388f1d2afca90c10907891a7b873e5b5d8cb2ade65e5684d7a9f12fcc46fa621",
+      "stdoutSha256": "5d8423b71f416ffc7f99713181a6e66910a31a81f1c08d1bc881922e71fd8093",
       "stdoutLength": 624
     },
     {
@@ -103,7 +103,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "aa2e5bb9b603a984f74852a36635ce1e3f07eacbc9ed70beb0bc7fbe27fde7b0",
+      "stdoutSha256": "d7ac69f30efb370c685d516ad7c54604bf9b2ecf28a726bba849a6dd5d4c3d3d",
       "stdoutLength": 13936
     },
     {
@@ -199,7 +199,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "388f1d2afca90c10907891a7b873e5b5d8cb2ade65e5684d7a9f12fcc46fa621",
+      "stdoutSha256": "5d8423b71f416ffc7f99713181a6e66910a31a81f1c08d1bc881922e71fd8093",
       "stdoutLength": 624
     },
     {
@@ -247,7 +247,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "aa2e5bb9b603a984f74852a36635ce1e3f07eacbc9ed70beb0bc7fbe27fde7b0",
+      "stdoutSha256": "d7ac69f30efb370c685d516ad7c54604bf9b2ecf28a726bba849a6dd5d4c3d3d",
       "stdoutLength": 13936
     },
     {

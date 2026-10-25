@@ -295,8 +295,9 @@ inline int32_t sat_init(const Elements& e, const Gravity& g, Sat& s, Sgp4Mode mo
   s.c1 = s.bstar * c2;
   s.epoch = str3::inclination_terms(e.xincl, s.a3ovk2);
   const double sinio = s.epoch.sinio, cosio = s.epoch.cosio;
-  // C3 and the delta-M coefficient divide by e: dropped below e = 1e-4 (AIAA 2006-6753 App. D, set 28057)
-  const bool small_e = eo < 1.0e-4;
+  // C3 and the delta-M coefficient divide by e: dropped for e <= 1e-4. STR#3 computes both for every e; AIAA 2006-6753
+  // drops them for set 28057 (e = 8.84e-5, "< 1.0e-4"), and the reference drops them at e = 1e-4 itself.
+  const bool small_e = eo <= 1.0e-4;
   const double c3 = small_e ? 0.0 : coef * tsi * s.a3ovk2 * xnodp * sinio / eo;
   const double x1mth2 = s.epoch.x1mth2;
   s.c4 = 2.0 * xnodp * coef1 * aodp * betao2 *
