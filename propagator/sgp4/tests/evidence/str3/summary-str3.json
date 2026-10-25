@@ -1,0 +1,44 @@
+{
+  "module": "propagator/sgp4",
+  "reference": "foundation/sgp4-str3, native, no -ffast-math (library_states.cpp)",
+  "minutes": [
+    -1440,
+    -60,
+    0,
+    10,
+    90,
+    360,
+    720,
+    1440,
+    2880,
+    4320,
+    7200,
+    10080
+  ],
+  "regimes": {
+    "near-earth": {
+      "sets": 6,
+      "states": 72,
+      "refusedBoth": 0,
+      "maxPositionM": 0.000003669122110340506,
+      "maxVelocityMps": 4.458907947699428e-9,
+      "at": "90004 at 10080.000 min"
+    },
+    "deep": {
+      "sets": 5,
+      "states": 60,
+      "refusedBoth": 0,
+      "maxPositionM": 0.000006289257582762383,
+      "maxVelocityMps": 5.5159778125821425e-9,
+      "at": "11801 at 4320.000 min"
+    },
+    "geo": {
+      "sets": 2,
+      "states": 24,
+      "refusedBoth": 0,
+      "maxPositionM": 8.997946272970379e-7,
+      "maxVelocityMps": 6.571104328475311e-11,
+      "at": "90002 at 10080.000 min"
+    }
+  }
+}

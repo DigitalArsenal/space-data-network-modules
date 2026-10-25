@@ -1,7 +1,7 @@
 // sgp4_plugin.cpp - SGP4/SDP4 Propagator Plugin for OrbPro
 // =============================================================================
-// Uses Vallado's reference SGP4 implementation (SGP4.cpp / SGP4.h) directly.
-// No modifications to the core algorithm — line-for-line Vallado 2020-07-13.
+// SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (WGS-72, improved mode),
+// with the time and element helpers of sgp4_base.hpp.
 //
 // Exports:
 //   plugin_init_omm(records, count)           → init from binary OMM records
@@ -36,7 +36,7 @@
 
 #include "orbpro_plugin.h"
 #include "orbpro_propagator.h"
-#include "SGP4.h"
+#include "sgp4_base.hpp"
 #include "generated/CatalogQueryRequest_generated.h"
 #include "generated/CatalogQueryResult_generated.h"
 #include "generated/EntityMetadata_generated.h"
@@ -129,7 +129,7 @@ static OrbProPluginInfo PLUGIN_INFO = {
 
 struct SatelliteEntity {
     uint32_t noradId;
-    elsetrec satrec;       // Current/active satellite record
+    sgp4base::Sgp4Set satrec;       // Current/active satellite record
     double r[3];           // Last position (km, TEME)
     double v[3];           // Last velocity (km/s, TEME)
     double lastEpochJD;
@@ -138,7 +138,7 @@ struct SatelliteEntity {
     // Multi-OMM storage: map of epoch JD → satrec
     // When empty, single-satrec mode (entity.satrec is the sole source).
     // When populated, entity.satrec is a copy of the currently active satrec.
-    std::map<double, elsetrec> satrecs;
+    std::map<double, sgp4base::Sgp4Set> satrecs;
     std::map<double, int64_t> ommPointers; // epoch JD -> sqlite row id
     int64_t currentOmmPointer;
     double currentSatrecEpoch;  // JD of the currently active satrec
@@ -1150,7 +1150,7 @@ bool parseEpochIso8601ToJulianDate(const std::string& epochText, double& julianD
 
     double jd = 0.0;
     double jdFrac = 0.0;
-    SGP4Funcs::jday_SGP4(year, mon, day, hr, minute, sec, jd, jdFrac);
+    sgp4base::julianDay(year, mon, day, hr, minute, sec, jd, jdFrac);
     julianDate = jd + jdFrac;
     return std::isfinite(julianDate);
 }
@@ -1777,7 +1777,7 @@ void temeToEcef(const double posTeme[3], const double velTeme[3],
 // Write state vector to OrbProStateVector buffer (ECEF, meters)
 void writeStateVector(const SatelliteEntity& entity, double epochJulian,
                       OrbProStateVector* out) {
-    double gmst = SGP4Funcs::gstime_SGP4(epochJulian);
+    double gmst = sgp4base::gmst(epochJulian);
 
     double posEcef[3], velEcef[3];
     temeToEcef(entity.r, entity.v, gmst, posEcef, velEcef);
@@ -1803,7 +1803,7 @@ void writeStateVector(const SatelliteEntity& entity, double epochJulian,
 // Find the closest satrec epoch JD to a given julian_date.
 // Uses std::map::lower_bound for O(log n) binary search.
 // Returns the epoch JD key, or -1.0 if the map is empty.
-double findSatrecIndex(const std::map<double, elsetrec>& satrecs, double jd) {
+double findSatrecIndex(const std::map<double, sgp4base::Sgp4Set>& satrecs, double jd) {
     if (satrecs.empty()) return -1.0;
 
     auto it = satrecs.lower_bound(jd);
@@ -1821,7 +1821,7 @@ double findSatrecIndex(const std::map<double, elsetrec>& satrecs, double jd) {
 
 // Find two bracketing satrec epoch JDs around a given julian_date.
 // Returns {before, after}. Either may be -1.0 if the query is outside range.
-std::pair<double, double> findSatrecIndices(const std::map<double, elsetrec>& satrecs, double jd) {
+std::pair<double, double> findSatrecIndices(const std::map<double, sgp4base::Sgp4Set>& satrecs, double jd) {
     if (satrecs.empty()) return {-1.0, -1.0};
 
     auto it = satrecs.lower_bound(jd);
@@ -1838,13 +1838,9 @@ std::pair<double, double> findSatrecIndices(const std::map<double, elsetrec>& sa
 
 // Initialize a satrec from a binary OrbProOMMRecord.
 // Returns true on success. Sets jdsatepoch/jdsatepochF on the satrec.
-bool initSatrecFromOMM(const OrbProOMMRecord& omm, elsetrec& satrec) {
-    int year, mon, day, hr, minute;
-    double sec;
-    SGP4Funcs::invjday_SGP4(omm.epoch_jd, 0.0, year, mon, day, hr, minute, sec);
-
+bool initSatrecFromOMM(const OrbProOMMRecord& omm, sgp4base::Sgp4Set& satrec) {
     double jd, jdFrac;
-    SGP4Funcs::jday_SGP4(year, mon, day, hr, minute, sec, jd, jdFrac);
+    sgp4base::splitJulianDate(omm.epoch_jd, jd, jdFrac);
 
     double epoch = jd + jdFrac - 2433281.5;
 
@@ -1856,11 +1852,8 @@ bool initSatrecFromOMM(const OrbProOMMRecord& omm, elsetrec& satrec) {
     double xargpo  = omm.arg_of_pericenter * DEG_TO_RAD;
     double xmo     = omm.mean_anomaly     * DEG_TO_RAD;
 
-    char satn[6];
-    snprintf(satn, sizeof(satn), "%05u", omm.norad_cat_id);
-
-    bool initOk = SGP4Funcs::sgp4init(
-        wgs72, 'i', satn, epoch,
+    bool initOk = sgp4base::sgp4Init(
+        epoch,
         omm.bstar, xndot, xnddot,
         omm.eccentricity, xargpo, xinclo, xmo, xno, xnodeo,
         satrec
@@ -1873,14 +1866,14 @@ bool initSatrecFromOMM(const OrbProOMMRecord& omm, elsetrec& satrec) {
 
     // Validate with test propagation at epoch
     double r[3], v[3];
-    bool propOk = SGP4Funcs::sgp4(satrec, 0.0, r, v);
+    bool propOk = sgp4base::sgp4At(satrec, 0.0, r, v);
     return propOk && satrec.error == 0;
 }
 
 // Keep the cached propagator and its OMM readout on the same history record.
 // Called only when selecting from a multi-OMM map; the single-OMM fast path
 // does not need another lookup.
-void setActiveSatrec(SatelliteEntity& entity, const elsetrec& satrec, double epoch) {
+void setActiveSatrec(SatelliteEntity& entity, const sgp4base::Sgp4Set& satrec, double epoch) {
     entity.satrec = satrec;
     entity.currentSatrecEpoch = epoch;
     const auto pointer = entity.ommPointers.find(epoch);
@@ -1902,7 +1895,7 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
     if (entity.satrecs.size() <= 1) {
         double tleEpoch = entity.satrec.jdsatepoch + entity.satrec.jdsatepochF;
         double tsince = (julian_date - tleEpoch) * 1440.0;
-        bool ok = SGP4Funcs::sgp4(entity.satrec, tsince, r, v);
+        bool ok = sgp4base::sgp4At(entity.satrec, tsince, r, v);
         return ok && entity.satrec.error == 0;
     }
 
@@ -1916,7 +1909,7 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
             auto& sat = entity.satrecs[nearest];
             double tleEpoch = sat.jdsatepoch + sat.jdsatepochF;
             double tsince = (julian_date - tleEpoch) * 1440.0;
-            bool ok = SGP4Funcs::sgp4(sat, tsince, r, v);
+            bool ok = sgp4base::sgp4At(sat, tsince, r, v);
             if (ok && sat.error == 0) {
                 setActiveSatrec(entity, sat, nearest);
             }
@@ -1931,15 +1924,15 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
         double epoch2 = sat2.jdsatepoch + sat2.jdsatepochF;
 
         double r1[3], v1[3], r2[3], v2[3];
-        bool ok1 = SGP4Funcs::sgp4(sat1, (julian_date - epoch1) * 1440.0, r1, v1);
-        bool ok2 = SGP4Funcs::sgp4(sat2, (julian_date - epoch2) * 1440.0, r2, v2);
+        bool ok1 = sgp4base::sgp4At(sat1, (julian_date - epoch1) * 1440.0, r1, v1);
+        bool ok2 = sgp4base::sgp4At(sat2, (julian_date - epoch2) * 1440.0, r2, v2);
 
         if (!ok1 || sat1.error != 0 || !ok2 || sat2.error != 0) {
             // Error — fall back to nearest
             double nearest = findSatrecIndex(entity.satrecs, julian_date);
             auto& sat = entity.satrecs[nearest];
             double tleEpoch = sat.jdsatepoch + sat.jdsatepochF;
-            bool ok = SGP4Funcs::sgp4(sat, (julian_date - tleEpoch) * 1440.0, r, v);
+            bool ok = sgp4base::sgp4At(sat, (julian_date - tleEpoch) * 1440.0, r, v);
             if (ok && sat.error == 0) {
                 setActiveSatrec(entity, sat, nearest);
             }
@@ -1973,7 +1966,7 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
     auto& sat = entity.satrecs[nearest];
     double tleEpoch = sat.jdsatepoch + sat.jdsatepochF;
     double tsince = (julian_date - tleEpoch) * 1440.0;
-    bool ok = SGP4Funcs::sgp4(sat, tsince, r, v);
+    bool ok = sgp4base::sgp4At(sat, tsince, r, v);
     if (ok && sat.error == 0) {
         setActiveSatrec(entity, sat, nearest);
     }
@@ -2090,7 +2083,7 @@ bool addNewEntityFromOmmRecord(
     const OrbProOMMRecord& omm,
     const PendingCatalogMetadata* metadata = nullptr
 ) {
-    elsetrec satrec;
+    sgp4base::Sgp4Set satrec;
     if (!initSatrecFromOMM(omm, satrec)) {
         return false;
     }
@@ -2103,7 +2096,7 @@ bool addNewEntityFromOmmRecord(
 
     double r[3];
     double v[3];
-    const bool propOk = SGP4Funcs::sgp4(satrec, 0.0, r, v);
+    const bool propOk = sgp4base::sgp4At(satrec, 0.0, r, v);
     if (!propOk || satrec.error != 0) {
         return false;
     }
@@ -2747,7 +2740,7 @@ struct EphemerisBlock {
 // step from the start, then the stop itself. From one element set alone when
 // `set` is given, else through the entity's own set selection (nearest or
 // interpolated). TEME, or GCRF when `gcrf`.
-bool sampleSpan(SatelliteEntity& entity, const elsetrec* set, double startJd, double stopJd,
+bool sampleSpan(SatelliteEntity& entity, const sgp4base::Sgp4Set* set, double startJd, double stopJd,
                 double stepSeconds, bool gcrf, size_t& budget, EphemerisBlock& block,
                 std::string& error) {
     const double stepDays = stepSeconds / 86400.0;
@@ -2764,14 +2757,14 @@ bool sampleSpan(SatelliteEntity& entity, const elsetrec* set, double startJd, do
         return false;
     }
     budget -= instants.size();
-    elsetrec copy{};
+    sgp4base::Sgp4Set copy{};
     if (set != nullptr) copy = *set;
     for (double jd : instants) {
         double r[3], v[3];
         bool ok;
         if (set != nullptr) {
             const double epoch = copy.jdsatepoch + copy.jdsatepochF;
-            ok = SGP4Funcs::sgp4(copy, (jd - epoch) * 1440.0, r, v) && copy.error == 0;
+            ok = sgp4base::sgp4At(copy, (jd - epoch) * 1440.0, r, v) && copy.error == 0;
         } else {
             ok = propagateEntityTEME(entity, jd, r, v);
         }
@@ -2866,7 +2859,7 @@ bool ephemerisBlocks(const orbpro::propagator::PropagatorBatchRequest* batchRequ
         return true;
     }
     // The history in epoch order (a single set lives in entity.satrec).
-    std::vector<std::pair<double, const elsetrec*>> sets;
+    std::vector<std::pair<double, const sgp4base::Sgp4Set*>> sets;
     if (entity.satrecs.empty()) {
         sets.emplace_back(entity.satrec.jdsatepoch + entity.satrec.jdsatepochF, &entity.satrec);
     } else {
@@ -2961,7 +2954,7 @@ int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
     for (uint32_t i = 0; i < count; i++) {
         const OrbProOMMRecord& omm = records[i];
 
-        elsetrec satrec;
+        sgp4base::Sgp4Set satrec;
         if (!initSatrecFromOMM(omm, satrec)) {
             continue;
         }
@@ -2974,7 +2967,7 @@ int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
 
         // Test propagation at epoch (t=0)
         double r[3], v[3];
-        bool propOk = SGP4Funcs::sgp4(satrec, 0.0, r, v);
+        bool propOk = sgp4base::sgp4At(satrec, 0.0, r, v);
         if (!propOk || satrec.error != 0) {
             continue;
         }
@@ -3812,7 +3805,7 @@ int32_t plugin_propagate_path(uint32_t entity_index, double start_jd,
             continue;
         }
 
-        double gmst = SGP4Funcs::gstime_SGP4(jd);
+        double gmst = sgp4base::gmst(jd);
         double cosG = cos(gmst);
         double sinG = sin(gmst);
 
@@ -4334,7 +4327,7 @@ int32_t plugin_propagate_path_adaptive(
     double epochBegin = update_jd - epochWindowHalf;
     bool doneWithEpoch = (update_jd <= start_jd || update_jd >= stop_jd);
 
-    // Gravity parameter for rv2coe (km³/s²)
+    // Gravity parameter for the osculating elements (km³/s²)
     double mus = entity.satrec.mus;
 
     uint32_t written = 0;
@@ -4347,7 +4340,7 @@ int32_t plugin_propagate_path_adaptive(
         bool ok = propagateEntityTEME(entity, jd, r, v);
         if (!ok) return true; // skip but continue
 
-        double gmst = SGP4Funcs::gstime_SGP4(jd);
+        double gmst = sgp4base::gmst(jd);
         double cosG = cos(gmst);
         double sinG = sin(gmst);
 
@@ -4385,7 +4378,7 @@ int32_t plugin_propagate_path_adaptive(
 
         // Write ECEF position
         {
-            double gmst = SGP4Funcs::gstime_SGP4(currentJD);
+            double gmst = sgp4base::gmst(currentJD);
             double cosG = cos(gmst);
             double sinG = sin(gmst);
             if (written < max_samples) {
@@ -4397,9 +4390,8 @@ int32_t plugin_propagate_path_adaptive(
         }
 
         // Compute true anomaly and eccentricity from state vector (TEME)
-        double p, a, ecc, incl, omega, argp, nu, m, arglat, truelon, lonper;
-        SGP4Funcs::rv2coe_SGP4(r, v, mus, p, a, ecc, incl, omega, argp,
-                                nu, m, arglat, truelon, lonper);
+        const sgp4base::Osculating elements = sgp4base::osculatingElements(r, v, mus);
+        const double nu = elements.nu, ecc = elements.ecc;
 
         if (nu != nu || ecc != ecc || ecc > 0.99) {
             currentJD += periodDays / samples_per_period;
@@ -4423,8 +4415,8 @@ int32_t plugin_propagate_path_adaptive(
 
         // Convert true anomaly step to mean anomaly step, then to time
         double e0_old, m_old, e0_new, m_new;
-        SGP4Funcs::newtonnu_SGP4(ecc, nu, e0_old, m_old);
-        SGP4Funcs::newtonnu_SGP4(ecc, nextNu, e0_new, m_new);
+        sgp4base::trueToMean(ecc, nu, e0_old, m_old);
+        sgp4base::trueToMean(ecc, nextNu, e0_new, m_new);
 
         double dm = fabs(m_new - m_old);
         if (dm > PI) dm = TWOPI - dm;
@@ -4468,7 +4460,7 @@ int32_t plugin_propagate_all_positions(double julian_date,
     uint32_t n = static_cast<uint32_t>(g_satellites.size());
     if (n > max_count) n = max_count;
 
-    double gmst = SGP4Funcs::gstime_SGP4(julian_date);
+    double gmst = sgp4base::gmst(julian_date);
     double cosG = cos(gmst);
     double sinG = sin(gmst);
 
@@ -4528,14 +4520,14 @@ int32_t plugin_propagate_to_registry(
     static constexpr double FD_DT_DAYS = FD_DT_SEC / 86400.0;
     static constexpr double FD_INV_DT = 1.0 / FD_DT_SEC; // 1000.0
 
-    double gmst = SGP4Funcs::gstime_SGP4(julian_date);
+    double gmst = sgp4base::gmst(julian_date);
     double cosG = cos(gmst);
     double sinG = sin(gmst);
 
     // GMST at t+dt for velocity finite differencing
     double gmst2, cosG2, sinG2;
     if (velocities_out) {
-        gmst2 = SGP4Funcs::gstime_SGP4(julian_date + FD_DT_DAYS);
+        gmst2 = sgp4base::gmst(julian_date + FD_DT_DAYS);
         cosG2 = cos(gmst2);
         sinG2 = sin(gmst2);
     }
@@ -4619,7 +4611,7 @@ double plugin_entity_add_omm(uint32_t entity_index, const OrbProOMMRecord* recor
 
     SatelliteEntity& entity = g_satellites[entity_index];
 
-    elsetrec newSatrec;
+    sgp4base::Sgp4Set newSatrec;
     if (!initSatrecFromOMM(*record, newSatrec)) {
         return -1.0;
     }
@@ -4765,7 +4757,7 @@ int32_t plugin_entity_remove_all_omm_except(uint32_t entity_index, double epoch_
     auto ptrIt = entity.ommPointers.find(epoch_jd);
     int64_t keeperPointer = ptrIt != entity.ommPointers.end() ? ptrIt->second : -1;
 
-    elsetrec keeper = it->second;
+    sgp4base::Sgp4Set keeper = it->second;
     entity.satrecs.clear();
     entity.ommPointers.clear();
     entity.satrecs[epoch_jd] = keeper;
@@ -4910,9 +4902,9 @@ static bool seedOmmFromTemeState(const double r[3], const double v[3],
     double vv[3] = { v[0], v[1], v[2] };
     const double mus = g_satellites.empty() ? 398600.8 : g_satellites[0].satrec.mus;
 
-    double p, a, ecc, incl, omega, argp, nu, m, arglat, truelon, lonper;
-    SGP4Funcs::rv2coe_SGP4(rr, vv, mus, p, a, ecc, incl, omega, argp,
-                           nu, m, arglat, truelon, lonper);
+    const sgp4base::Osculating elements = sgp4base::osculatingElements(rr, vv, mus);
+    const double a = elements.a, ecc = elements.ecc, incl = elements.incl, omega = elements.node,
+                 argp = elements.argp, m = elements.m;
 
     if (!std::isfinite(a) || a <= 0.0 || !std::isfinite(ecc) ||
         ecc < 0.0 || ecc >= 1.0 || !std::isfinite(m)) {
@@ -4939,7 +4931,7 @@ static bool seedOmmFromTemeState(const double r[3], const double v[3],
 ///
 /// The correction is a fixed point on the STATE, not on the elements. Whatever
 /// the element set means to SGP4 — Kozai mean motion, Brouwer short-period
-/// terms, the WGS-72 gravity model baked into `sgp4init` — the seed state is
+/// terms, the WGS-72 gravity model its initialization uses — the seed state is
 /// shifted by the error SGP4's own propagation made, and the elements are
 /// re-derived from the corrected seed. It converges because the map from seed
 /// state to achieved state is close to the identity.
@@ -4972,18 +4964,18 @@ static bool deriveMeanElementsFromState(const double targetR[3],
             break;
         }
 
-        elsetrec satrec;
+        sgp4base::Sgp4Set satrec;
         if (!initSatrecFromOMM(candidate, satrec)) {
             break;
         }
 
         // tsince is measured from the satrec's own epoch, which
-        // initSatrecFromOMM rounds through invjday/jday. Use that epoch rather
+        // initSatrecFromOMM splits into a day and its fraction. Use that epoch rather
         // than assuming it is exactly epochJD, or the residual absorbs a
         // sub-second epoch shift and the correction chases it forever.
         const double satrecEpoch = satrec.jdsatepoch + satrec.jdsatepochF;
         double achievedR[3], achievedV[3];
-        if (!SGP4Funcs::sgp4(satrec, (epochJD - satrecEpoch) * 1440.0,
+        if (!sgp4base::sgp4At(satrec, (epochJD - satrecEpoch) * 1440.0,
                              achievedR, achievedV) || satrec.error != 0) {
             break;
         }
@@ -5151,7 +5143,7 @@ int32_t plugin_entity_apply_impulsive_burn(
         // that answered in TEME while the propagate surface answered in ECEF
         // would put the frame conversion back in JavaScript, one seam later.
         double posEcef[3], velEcef[3];
-        temeToEcef(r, postV, SGP4Funcs::gstime_SGP4(burnJD), posEcef, velEcef);
+        temeToEcef(r, postV, sgp4base::gmst(burnJD), posEcef, velEcef);
         orbpro_state_init(out_state);
         out_state->epoch = burnJD;
         out_state->position[0] = posEcef[0];
