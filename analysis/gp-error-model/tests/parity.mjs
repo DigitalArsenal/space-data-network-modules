@@ -1,4 +1,4 @@
-// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of the methods E2b
+// Parity (browser and native WasmEdge; the owner waived the Docker leg on 2026-10-22, it is never started) of the methods E2b
 // added, on the inputs of tests/covariance_mapping.test.mjs, plus accumulate and
 // E14's pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance,
 // and fit_elements and element_residuals on inputs of tests/fit_elements.test.mjs:
@@ -6,7 +6,7 @@
 // byte-identical outputs in every lane. attach_covariance and attribute_maneuvers
 // read their recipe from the node config (plugin.getConfig), which the parity
 // harness does not answer: tests/source_products.test.mjs covers them.
-//   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
+//   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs   (through headless-run: the browser lane)
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -161,7 +161,7 @@ void productCases;
 for (const c of cases) c.request.inputs = c.request.inputs.map((f) => (f.pending ? frame(f.portId, ARM_OF[c.request.methodId][f.portId], f.value) : f));
 const plan = await normalizeParityFixture({ name: 'gp-error-model e2b and e14 methods, the catalog pipeline and the element fit', cases: cases.map((c) => ({ ...c, request: { ...c.request,
   inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });
-const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 120000, log: console.log });
+const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, lanes: ['browser', 'wasmedge'], timeoutMs: 120000, log: console.log });
 console.log(formatParityReport(report));
-fs.writeFileSync(new URL('../conformance/parity.json', import.meta.url), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm' }, null, 2)}\n`);
 assert.equal(report.ok, true, JSON.stringify(report.failures));
+fs.writeFileSync(new URL('../conformance/parity.json', import.meta.url), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' }, null, 2)}\n`);
