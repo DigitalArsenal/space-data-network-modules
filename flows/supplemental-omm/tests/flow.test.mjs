@@ -41,7 +41,9 @@ test("one tick: every source fetched through hostcap/http-request, every object 
   assert.ok(gets.filter((c) => /MEME_/.test(c.params.url)).every((c) => c.params.headers.range === "bytes=0-131071"), "Starlink files by their leading range");
 
   // Every object: one batch per standard, filed under its provider's source name.
-  assert.equal(ingests.length, 3 * 30);
+  // The OD node's three standards for each of the 30 objects, and the SDN-AP set and determination (OMM, OBD) of the one
+  // ephemeris the SDN-AP fit takes (tests/sdnap.e2e.mjs); the rest are refused by the fit, one object each.
+  assert.equal(ingests.length, 3 * 30 + 2);
   for (const [source, objects] of Object.entries(SOURCES)) {
     for (const schema of ["OMM.fbs", "OCM.fbs", "OBD.fbs"]) {
       assert.equal(ingests.filter((i) => i.source_name === source && i.schema === schema).length, objects, `${source} ${schema}`);
@@ -57,9 +59,9 @@ test("one tick: every source fetched through hostcap/http-request, every object 
 
   // Every stored batch published: the POST body the IngestResult naming it.
   const posts = calls.filter((c) => c.operation === "http.request" && c.params.url === PUBLISH_URL);
-  assert.equal(posts.length, 90);
-  assert.equal(egress.results.length, 90);
-  assert.equal(egress.publications.length, 90);
+  assert.equal(posts.length, 92);
+  assert.equal(egress.results.length, 92);
+  assert.equal(egress.publications.length, 92);
   assert.ok(egress.publications.every((p) => p.status === 202));
   const posted = posts.map((c) => decodeIngestResult(c.params.body));
   assert.deepEqual(posted.map((r) => r.batchId).sort(), ingests.map((i) => i.batch_id).sort());
@@ -77,7 +79,7 @@ test("the stored records are the OD node's release records for the same provider
   const { ingests } = await flowRun();
   const release = (standard) => splitRecords(fs.readFileSync(path.join(packageRoot, `nodes/od/release-records/sources-${standard.toLowerCase()}-records.bin`)));
   for (const standard of ["OMM", "OCM", "OBD"]) {
-    const stored = ingests.filter((i) => i.schema === `${standard}.fbs`).flatMap((i) => i.records);
+    const stored = ingests.filter((i) => i.source_name !== "sdn-ap" && i.schema === `${standard}.fbs`).flatMap((i) => i.records);
     assert.deepEqual(stored.map(sha256).sort(), release(standard).map(sha256).sort(), standard);
   }
   // data-source/cpf-source writes LAGEOS-1's international designator.
@@ -93,7 +95,7 @@ test("the status board: every provider lane, the OD lane and the store lane", as
     return [dss.STATUS, Number(dss.SYNCED_ROWS), Number(dss.TOTAL_ROWS), Number(dss.MISSING_ROWS), dss.ERROR ?? null];
   };
   assert.deepEqual(row("od.dss"), [2, 30, 30, 0, null], "30 objects fitted (SYNCED)");
-  assert.deepEqual(row("store.dss"), [2, 93, 93, 0, null], "93 records stored");
+  assert.deepEqual(row("store.dss"), [2, 94, 94, 0, null], "94 records stored");
   for (const provider of ["starlink", "glonass", "intelsat", "cpf", "iss"]) {
     const [status, synced, total, missing] = row(`provider-${provider}.dss`);
     assert.equal(status, 1);
@@ -109,7 +111,7 @@ test("a source that answers nothing: its lane says so, the other sources' object
   assert.equal(missing.length, 1);
   assert.match(missing[0].items[0], /STARLINK-36348 \(67851\): HTTP 404/);
   assert.equal(ingests.filter((i) => i.source_name === "spacex-starlink").length, 3, "the other Starlink object");
-  assert.equal(ingests.length, 3 * 29);
+  assert.equal(ingests.length, 3 * 29 + 2);
   const starlink = routes.get("provider-starlink.dss");
   assert.equal(starlink.STATUS, 4);
   assert.equal(Number(starlink.MISSING_ROWS), 1);
