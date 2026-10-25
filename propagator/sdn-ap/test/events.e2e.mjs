@@ -316,6 +316,76 @@ for (const [label, at, dv] of [["V 1 m/s at 60 h", 60, [0, 1e-3, 0]], ["V 10 m/s
   console.log(`GLR burn-free FFM-1 arcs: ${alarms} detections on ${lams.length} arcs of 72 h; largest Lambda ${lams.map((x) => x.toFixed(1)).join(", ")}`);
   check(alarms === 0 && lams.length === 8, `GLR false alarms: ${alarms} on ${lams.length} burn-free arcs`);
 }
+// the detector in the high orbits (task modules-sdn-ap-maneuver-detector-qzss-20261025): QZSS windows read a burn every
+// 1.5 days of 1.8 mm/s because the detection statistic, Lambda against the burn-free fit, holds the epoch elements at a
+// fit that minimizes position residuals while the test weights element residuals, and an IGSO, geostationary or GPS 72 h
+// arc holds 3 to 6 revolutions. On FFM-1 arcs of those orbits (EGM2008 70 x 70, Sun, Moon, planets, SRP; no drag) the
+// burn-free-fit form passes the threshold on part of the burn-free arcs; the detection statistic is the smaller of it and
+// the profiled Lambda (epoch elements and B_eff re-estimated with and without the burn), which does not.
+//   - burn-free: ten arcs per orbit class, no detection; the fit form is reported beside the statistic;
+//   - burns at 36 h: 10 mm/s along V and W in a geostationary arc, 10 mm/s along V and 20 mm/s along W in an IGSO arc, 100 mm/s along V in a GPS arc: one detection,
+//     its epoch and its Delta v on the burn's axis.
+{
+  let sd = 9137;
+  const rnd = () => { sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0; return sd / 4294967296; };
+  const classes = [["GEO", 42164.17, 0.0003, 0.05], ["IGSO", 42164.17, 0.075, 41], ["GPS", 26560, 0.01, 55]];
+  const arcOf = async (a, e, inc, angles, burns) => {
+    const pe = m.x.sdnap_alloc(48), py = m.x.sdnap_alloc(48);
+    new Float64Array(m.harness.memory.buffer, pe, 6).set([a, e, inc, angles[0], angles[1], angles[2]]);
+    m.x.sdnap_insertion_state(ep.whole, ep.frac, pe, 0, py);
+    const yk = Array.from(new Float64Array(m.harness.memory.buffer, py, 6));
+    [pe, py].forEach((q) => m.x.sdnap_free(q));
+    const ts = Array.from({ length: 72 * 3600 / STEP + 1 }, (_, q) => q * STEP);
+    const tr = await ffmTruth(yk, epochMs, ts, burns, 0, 0.02);
+    const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(template)).unpack();
+    const blk = t.EPHEMERIS_DATA_BLOCK[0];
+    blk.START_TIME = blk.STOP_TIME = blk.USEABLE_START_TIME = blk.USEABLE_STOP_TIME = null;
+    blk.REFERENCE_FRAME = rfm("TEME", "both");
+    blk.EPHEMERIS_DATA_LINES = ts.map((s2, q) => new ephemerisDataLineT(iso(s2), ...tr[q]));
+    t.EPHEMERIS_DATA_BLOCK = [blk];
+    return packOem(t);
+  };
+  const detectOn = async (bytes) => {
+    const r = await command.invoke({ methodId: "detect_maneuvers", inputs: [{ portId: "ephemeris", typeRef: oemType, payload: bytes }] });
+    if (r.statusCode !== 0) return { error: `${r.errorCode} ${r.errorMessage}` };
+    const mnvs = r.outputs.filter((o) => o.portId === "maneuvers").map((o) => MNV.getRootAsMNV(new flatbuffers.ByteBuffer(o.payload)));
+    const comment = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload)).COMMENT();
+    return { mnvs, comment, lambda: Number(/Lambda ([\d.]+)/.exec(mnvs[0]?.ALGORITHM() ?? comment)?.[1]), fitForm: Number(/burn-free-fit form ([\d.]+)/.exec(comment)?.[1]) };
+  };
+  for (const [name, a, e, inc] of classes) {
+    let alarms = 0, fitFormOver = 0;
+    const lams = [], fits = [];
+    for (let k = 0; k < 10; ++k) {
+      const out = await detectOn(await arcOf(a, e, inc, [360 * rnd(), 360 * rnd(), 360 * rnd()], []));
+      if (out.error) { failures.push(`burn-free ${name} arc ${k}: ${out.error}`); continue; }
+      alarms += out.mnvs.length;
+      lams.push(out.lambda);
+      if (out.fitForm !== undefined && !Number.isNaN(out.fitForm)) { fits.push(out.fitForm); if (out.fitForm > 20) fitFormOver += 1; }
+    }
+    console.log(`GLR burn-free FFM-1 ${name} arcs: ${alarms} detections on ${lams.length} arcs of 72 h; Lambda ${lams.map((x) => x.toFixed(1)).join(", ")}; the burn-free-fit form of the arcs that did not detect ${fits.map((x) => x.toFixed(1)).join(", ")}`);
+    check(alarms === 0 && lams.length === 10, `GLR false alarms on burn-free ${name} arcs: ${alarms} of ${lams.length}`);
+    // the old statistic alone would have raised false alarms here (the arcs of the orbits whose revolutions are few)
+    if (name !== "GPS") check(fitFormOver >= 3, `${name}: the burn-free-fit form passes the threshold on ${fitFormOver} of ${fits.length} arcs (expected at least 3: the case the statistic guards against)`);
+  }
+  for (const [label, name, [a, e, inc], angles, dv] of [
+    ["GEO V 10 mm/s", "GEO", classes[0].slice(1), [80, 200, 100], [0, 1e-5, 0]],
+    ["GEO W 10 mm/s", "GEO", classes[0].slice(1), [80, 200, 100], [0, 0, 1e-5]],
+    ["IGSO V 10 mm/s", "IGSO", classes[1].slice(1), [150, 270, 0], [0, 1e-5, 0]],
+    ["IGSO W 20 mm/s", "IGSO", classes[1].slice(1), [150, 270, 0], [0, 0, 2e-5]],
+    ["GPS V 100 mm/s", "GPS", classes[2].slice(1), [10, 20, 30], [0, 1e-4, 0]],
+  ]) {
+    const tb2 = 36 * 3600;
+    const out = await detectOn(await arcOf(a, e, inc, angles, [[tb2, tb2, ...dv]]));
+    if (out.error) { failures.push(`${label}: ${out.error}`); continue; }
+    if (out.mnvs.length !== 1) { failures.push(`${label}: ${out.mnvs.length} detections; ${out.comment}`); continue; }
+    const mv = out.mnvs[0];
+    const dt = (Date.parse(mv.EVENT_START_TIME() + "Z") - (epochMs + tb2 * 1000)) / 60000;
+    const est = [mv.DELTA_VEL_U(), mv.DELTA_VEL_V(), mv.DELTA_VEL_W()];
+    const axis = dv.findIndex((x) => x !== 0), err = Math.abs(est[axis] - dv[axis]) / Math.abs(dv[axis]);
+    console.log(`GLR ${label}: Lambda ${out.lambda.toFixed(1)}, epoch ${dt.toFixed(1)} min from the burn, dv (${est.map((x) => (1e6 * x).toFixed(2)).join(", ")}) mm/s (error on the burn's axis ${(100 * err).toFixed(1)} %)`);
+    check(Math.abs(dt) <= 90 && err <= 0.25, `GLR ${label}: epoch ${dt} min, error ${err}`);
+  }
+}
 // M28 kind, synthetic: a decaying SDN-AP set (250 km, B_eff 0.02 m^2/kg; NRLMSISE-00 x exp(s) on both sides): the 'reentry' method (averaged until a limit of
 // (18) trips, then osculating integration) against the osculating integration of the set's epoch state all the way
 // down; the epochs within 5 % of the lifetime and the reference inside the window

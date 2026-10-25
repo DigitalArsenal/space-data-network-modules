@@ -345,8 +345,6 @@ extern "C" int maneuver(void) {
 namespace sdnap {
 namespace evd {
 
-inline std::string& dbg_log() { static std::string s; return s; }
-
 /// Osculating equinoctial elements in the theory's state order (a_f, a_g, chi, psi, lambda, n rad/min).
 inline bool eq_internal(const double* r, const double* v, double* y) {
   double q[6];
@@ -402,9 +400,15 @@ struct Scan {
   double lambda = 0.0, t_b = 0.0, dv[3] = {0, 0, 0}, cov[9] = {};
   double t_lo = 0.0, t_hi = 0.0;  ///< the epochs (min) whose Lambda is within 3.84 of the best (the 95 % profile interval)
   double fdiag[3] = {0, 0, 0};    ///< the profiled information's diagonal (U, V, W; (km/s)^-2): the floor sqrt(threshold / F_cc)
-  /// the detection statistic: the largest over the candidates of Lambda against the burn-free fit itself (the form whose
-  /// false-alarm rate is calibrated: THRESHOLD 20 for 1 per object-year, MANEUVER_DETECTION); the epoch and Delta v
-  /// are the profile's (`lambda`, `t_b`, `dv`)
+  /// the largest over the candidates of Lambda against the burn-free fit itself (the form whose false-alarm rate is
+  /// calibrated on burn-free arcs: THRESHOLD 20 for 1 per object-year, MANEUVER_DETECTION)
+  double detect_fit = 0.0;
+  /// the detection statistic: the smaller of `detect_fit` and the largest profiled Lambda (`lambda`): both must pass the
+  /// threshold. The burn-free-fit form holds the epoch elements at a fit that minimizes position residuals, not the
+  /// element-metric residuals the test weights, and the mismatch grows as the arc holds fewer revolutions (an
+  /// IGSO or geostationary 72 h arc has three): on QZSS windows it read 77 to 165 where the profile, which
+  /// re-estimates the epoch elements and B_eff with and without the burn, read 5 to 12. The epoch and Delta v are the
+  /// profile's (`lambda`, `t_b`, `dv`)
   double detect = 0.0;
 };
 
@@ -445,25 +449,6 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
     const double floor = j == 5 ? 1.5e-7 * std::fabs(ym[5]) : 1.5e-7;
     const double sig = std::fmax(1.4826 * sorted[nn / 2], floor);
     w[j] = 1.0 / (sig * sig);
-  }
-  if (ok) {  // DEBUG
-    std::string& L = dbg_log();
-    L.clear();
-    char b[64];
-    L += "DBG sigma(MAD):";
-    for (int j = 0; j < 6; ++j) { std::snprintf(b, sizeof b, " %.3e", 1.0 / std::sqrt(w[j])); L += b; }
-    L += " | blocks(e per 3h, scaled by sigma):";
-    const int blk = std::max(1, static_cast<int>(180.0 / ((t[n - 1] - t[0]) / (n - 1))));
-    for (int j = 0; j < 6; ++j) {
-      L += " [";
-      for (int k0 = 0; k0 + blk <= n; k0 += blk) {
-        double sum = 0;
-        for (int k = k0; k < k0 + blk; ++k) sum += e[6 * k + j];
-        std::snprintf(b, sizeof b, "%.1f,", sum / blk * std::sqrt(w[j]));
-        L += b;
-      }
-      L += "]";
-    }
   }
   // the innovations are correlated over a revolution (the theory's own model error): weights per revolution, not per
   // state (DESIGN 5.1.4 (17): the per-period noise), so W is divided by the states per period
@@ -738,7 +723,8 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
     detect = std::fmax(detect, c.detect);
     if (c.lambda > best.lambda) best = c;
   }
-  best.detect = best.lambda;   // CANDIDATE: the detection statistic is the profiled Lambda
+  best.detect_fit = detect;
+  best.detect = std::fmin(detect, best.lambda);
   // the evidence for the epoch: the run of candidates around the best within 3.84 of its Lambda (chi^2_1, 95 %)
   if (best.index > 0) {
     int a = best.index, z = best.index;
@@ -759,8 +745,9 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
         if (candidate(tb, k1, c) && c.lambda > best.lambda) {
           c.t_lo = best.t_lo;
           c.t_hi = best.t_hi;
+          c.detect = best.detect;
+          c.detect_fit = best.detect_fit;
           best = c;
-          best.detect = best.lambda;
         }
       }
     }
@@ -987,16 +974,15 @@ extern "C" int detect_maneuvers(void) {
       evd::Scan scan;
       const int margin = static_cast<int>(pcf::options().margin_states);
       if (!evd::glr(all, t, r, v, margin, scan)) { plugin_set_error("detection-failed", "The innovations could not be formed."); return 3; }
-      char comment[6000];
+      char comment[400];
       if (!(scan.detect > glr_threshold())) {
         // no burn: the burn-free set, with the floor at the best epoch: the Delta v along each axis whose expected
         // Lambda reaches the threshold, sqrt(threshold / F_cc) of the profiled information
         double floor_mm[3];
         for (int c = 0; c < 3; ++c) floor_mm[c] = scan.fdiag[c] > 0.0 ? 1e6 * std::sqrt(glr_threshold() / scan.fdiag[c]) : 0.0;
         std::snprintf(comment, sizeof comment,
-                      "SDN-AP set, no maneuver detected (six-element GLR, DESIGN 5.1.4: largest Lambda %.2f against %.1f; the profile over the epoch elements and B_eff peaks at %.2f at %.1f min, its floor there U %.1f, V %.1f, W %.1f mm/s; fit RMS %.6f km)",
-                      scan.detect, glr_threshold(), scan.lambda, scan.t_b, floor_mm[0], floor_mm[1], floor_mm[2], fr_all.rms_km);
-        if (glr_threshold() == 12345.0) std::snprintf(comment + std::strlen(comment), sizeof comment - std::strlen(comment), " %s", evd::dbg_log().c_str());
+                      "SDN-AP set, no maneuver detected (six-element GLR, DESIGN 5.1.4: largest Lambda %.2f against %.1f, the smaller of the burn-free-fit form %.2f and the profile over the epoch elements and B_eff, which peaks at %.2f at %.1f min, its floor there U %.1f, V %.1f, W %.1f mm/s; fit RMS %.6f km)",
+                      scan.detect, glr_threshold(), scan.detect_fit, scan.lambda, scan.t_b, floor_mm[0], floor_mm[1], floor_mm[2], fr_all.rms_km);
         flatbuffers::FlatBufferBuilder tb(256);
         const auto c = tb.CreateString("EARTH");
         OMMBuilder ob(tb);
