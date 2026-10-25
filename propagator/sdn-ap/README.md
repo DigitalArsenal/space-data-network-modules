@@ -38,6 +38,11 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   `sdnap_propagate_minutes_soa(minutes, first, count, out, status)` write six planes (x, y, z, vx, vy, vz) of
   `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
   the same bytes at any thread count.
+- Display quantities (the module's own conversions; `test/exports.e2e.mjs` checks each against its inverse):
+  `sdnap_mean_elements_at(index, minutes, out)` the mean a (km), e, i, RAAN, argp and M (deg) of an SGP4XP or SDN-AP
+  row at minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating
+  elements of a TEME state about the Earth theories' GM; `sdnap_frame_to_uvw(r, v, vec, out)` a vector's radial,
+  in-track and cross-track components, the mirror of `sdnap_uvw_to_frame`.
 - Configuration (SDS 1.268.0, `$PCF` 1.0.2): `propagate`, `fit`, `maneuver`, `detect_maneuvers`, `reentry`, `launch_set` and
   `launch_batch` take one `$PCF` on their required `configuration` port. Each reads THEORY and its own tables
   (propagate and maneuver: MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES; fit: FIT, MEAN_ELEMENT, SEGMENTS, FORCES;

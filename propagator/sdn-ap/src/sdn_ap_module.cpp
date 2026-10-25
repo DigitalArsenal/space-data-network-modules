@@ -75,3 +75,56 @@
 #include "reentry.inc"
 #include "launch.inc"
 #include "launch_batch.inc"
+
+// ---- Display quantities (the module's own conversions, so a tool does no physics of its own) ----------------------
+
+/// The mean elements of row `index` (an SGP4XP or SDN-AP set of sdnap_init_elements / plugin_init_omm) at `minutes`
+/// from its epoch, from the theory's integrated mean equinoctial state: out = a (km), e, i, RAAN, argument of
+/// pericenter, mean anomaly (deg, [0, 360)), TEME of date. An SGP4 set, an unknown row or a refused set: an error code.
+SDNAP_EXPORT("sdnap_mean_elements_at")
+int32_t sdnap_mean_elements_at(uint32_t index, double minutes, double* out) {
+  sdnap::Store& st = sdnap::store();
+  if (out == nullptr || index >= st.count || st.kind[index] != 1) return ORBPRO_PROP_BAD_INPUT;
+  sdnap::xpt::XpSat& s = st.xps[st.slot[index]];
+  if (s.init_error != 0) return ORBPRO_PROP_UNPHYSICAL;
+  double y[6];
+  if (!sdnap::xpt::mean_at(s, minutes, y)) return ORBPRO_PROP_UNPHYSICAL;
+  const sdnap::xpt::Kepler k = sdnap::xpt::kepler_of(y);
+  const double deg = 180.0 / sdnap::kPi;
+  out[0] = k.a * sdnap::xpt::kRe;
+  out[1] = k.e;
+  out[2] = k.i * deg;
+  out[3] = k.node * deg;
+  out[4] = k.argp * deg;
+  out[5] = k.m * deg;
+  return ORBPRO_PROP_OK;
+}
+
+/// The osculating elements of a TEME state (km, km/s) about the Earth theories' gravitational parameter: out = a (km),
+/// e, i, RAAN, argument of pericenter, mean anomaly (deg, [0, 360); an open orbit: a < 0, the hyperbolic mean anomaly).
+/// 0, or ORBPRO_PROP_BAD_INPUT for a degenerate state.
+SDNAP_EXPORT("sdnap_osculating_elements")
+int32_t sdnap_osculating_elements(const double* r, const double* v, double* out) {
+  if (r == nullptr || v == nullptr || out == nullptr) return ORBPRO_PROP_BAD_INPUT;
+  double el[6];
+  if (!sdnap::segment::elements_of(sdnap::events::mu_xp(), r, v, el)) return ORBPRO_PROP_BAD_INPUT;
+  const double deg = 180.0 / sdnap::kPi;
+  out[0] = el[0];
+  out[1] = el[1];
+  out[2] = el[2] * deg;
+  for (int j = 3; j < 6; ++j) out[j] = sdnap::xpt::wrap(el[j]) * deg;
+  return ORBPRO_PROP_OK;
+}
+
+/// A vector in the frame of the state (r, v) as its UVW components (U radial, V in-track, W along r x v): the mirror
+/// of sdnap_uvw_to_frame. `out` may alias `vec`.
+SDNAP_EXPORT("sdnap_frame_to_uvw")
+void sdnap_frame_to_uvw(const double* r, const double* v, const double* vec, double* out) {
+  double basis[3][3];
+  for (int a = 0; a < 3; ++a) {
+    const double e[3] = {a == 0 ? 1.0 : 0.0, a == 1 ? 1.0 : 0.0, a == 2 ? 1.0 : 0.0};
+    sdnap::events::uvw_to_teme(r, v, e, basis[a]);  // the U, V and W unit vectors, in the frame
+  }
+  const double q[3] = {vec[0], vec[1], vec[2]};
+  for (int a = 0; a < 3; ++a) out[a] = q[0] * basis[a][0] + q[1] * basis[a][1] + q[2] * basis[a][2];
+}
