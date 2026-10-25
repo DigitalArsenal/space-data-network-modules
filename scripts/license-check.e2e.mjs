@@ -44,7 +44,7 @@ const HELD = {
 /** License texts copied verbatim from another repository and pinned by a lock; naming Digital Arsenal is reported, not failed. */
 const PINNED = {
   'packages/python-astro/src/spacedatanetwork_astro/invoke/SDK-LICENSE.txt':
-    'bindings.lock.json and build_backend.py pin its SHA-256 and tests/test_vendoring.py asserts its text; changing it takes those two files',
+    'bindings.lock.json pins its SHA-256 (build_backend.py refuses a mismatch) and tests/test_vendoring.py asserts its text; re-vendor against the current SDK, whose LICENSE reads Edgesource Corporation',
 };
 
 /** Third-party paths whose license basis prints on every run. A NOTICE row with no license text must be listed. */
