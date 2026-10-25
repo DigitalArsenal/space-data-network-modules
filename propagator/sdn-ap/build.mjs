@@ -376,7 +376,7 @@ async function lunar() {
   if (Math.max(...maxErr) > 1e-8) throw new Error(`lunar orientation refit error ${maxErr} rad`);
   // the geocentric Moon and Sun from DE440 (DAF/SPK type 2; ints: target, center, frame, type, start, end)
   const spk = dafType2(await read(LUNAR_PIN.ephemeris), "DAF/SPK ", (ints) => ints[2] === 1);
-  const body = (target, centre) => spk.filter((g) => g.ints[0] === target && g.ints[1] === centre);
+  const body = (target, center) => spk.filter((g) => g.ints[0] === target && g.ints[1] === center);
   const moonEmb = body(301, 3), earthEmb = body(399, 3), embSsb = body(3, 0), sunSsb = body(10, 0);
   const sub = (a, b) => a.map((v, c) => v - b[c]);
   const moonGeo = (et) => sub(chebAt(moonEmb, et, "DE440 Moon"), chebAt(earthEmb, et, "DE440 Earth"));

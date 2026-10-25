@@ -147,7 +147,7 @@ inline bool positions(const Series& f, const double* t, int n, double* out, doub
   return true;
 }
 
-/// Fit the series to Moon-centred ICRF positions at t (s from et_arc). In-span RMS (km), < 0 on refusal.
+/// Fit the series to Moon-centered ICRF positions at t (s from et_arc). In-span RMS (km), < 0 on refusal.
 inline double fit(Series& f, double et_arc, const double* t, const double* pos, int n) {
   f.et_arc = et_arc;
   std::vector<double> r(n), s(n, 0.0), xi(3 * n);
@@ -212,7 +212,7 @@ inline double fit(Series& f, double et_arc, const double* t, const double* pos, 
 
 /// Diagnostic (2h.2): fit the quasi-periodic series (K theta1 harmonics, L theta2 harmonics, with the Sun's 2D as a third
 /// phase to the same L when `orders` & 65536; `orders` = K + 256 L)
-/// to `nfit` Moon-centred ICRF positions at `t_fit` seconds from the UTC epoch whole + frac and write positions at
+/// to `nfit` Moon-centered ICRF positions at `t_fit` seconds from the UTC epoch whole + frac and write positions at
 /// `t_out` (s, ascending, after the fit) into `out`. Returns the in-span RMS (km), negative on refusal.
 SDNAP_EXPORT("sdnap_nrho_series_fit_predict")
 double sdnap_nrho_series_fit_predict(double whole, double frac, const double* t_fit, const double* pos_fit, int32_t nfit, const double* t_out,

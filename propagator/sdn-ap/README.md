@@ -9,8 +9,8 @@ with three theories:
 | SGP4XP | type 4: BTERM, AGOM (m^2/kg) | the US Space Force SGP4-XP theory, clean room (side B): the public change list, then SPEC.md section by section |
 | SDN-AP | SDN's own | SDN's improved theory, labeled as its own |
 
-License: Apache-2.0 ([LICENSE](LICENSE)), except `src/sgp4_core.inc` and `src/model.inc`, derived from David
-Vallado's SGP4 and not covered by it; [NOTICE](NOTICE) names them and what the build compiles and reads.
+License: Apache-2.0 ([LICENSE](LICENSE)), the SGP4/SDP4 base included (written clean room from Spacetrack Report No. 3
+and the corrections AIAA 2006-6753 documents); [NOTICE](NOTICE) names what the build compiles and reads.
 
 Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`, no exception handling) writes
 `dist/isomorphic/module.wasm`; it reads NRLMSISE-00, ERFA and EGM96 from this repository and the build data below
@@ -77,8 +77,8 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   span with the smallest tail error (a longer one only when within EXTENSION_MARGIN 0.9, eccentric 0.7, of the best
   shorter one's) is refitted on all the data. The arc grows from two revolutions by threes to the fit interval. A 'prior' `$OMM` carrying a previous set's SDNAP_B_EFF and _B_EFF_SIGMA makes that
   B_eff the next arc's prior (sigma floored at 10 %).
-- Segment sets (SDN-AP 2h.2 / 2h.3 / 2h.5) through the same methods: `fit` (THEORY SDNAP) routes a Sun-centred block, a
-  Moon-centred block whose first state's apocentre lies beyond 10,000 km (or an open orbit) and an Earth-centred
+- Segment sets (SDN-AP 2h.2 / 2h.3 / 2h.5) through the same methods: `fit` (THEORY SDNAP) routes a Sun-centered block, a
+  Moon-centered block whose first state's apocentre lies beyond 10,000 km (or an open orbit) and an Earth-centered
   block whose apocentre lies beyond 250,000 km (the documented reach rule) to a segment fit, in ICRF / J2000 axes
   (UTC; a TEME or Earth-fixed far block is refused by name); the `$OMM` carries CENTER_NAME (EARTH, MOON, SUN),
   REFERENCE_FRAME ICRF, the fitted epoch state's osculating elements with SEMI_MAJOR_AXIS and GM (an open orbit:
@@ -87,7 +87,7 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   SDNAP_MANEUVER_BEFORE_SECONDS when the set's epoch was carried past a maneuver or a sphere-of-influence passage
   and SDNAP_ARC_END_SECONDS. `propagate` writes such a set's states about its center in ICRF axes on a grid whose
   CENTER_NAME is absent or the set's (else grid-center-mismatch); `ingest_omm` refuses it (unsupported-theory). A
-  Sun-centred block ending inside a planet's sphere of influence is refused (inside-sphere-of-influence).
+  Sun-centered block ending inside a planet's sphere of influence is refused (inside-sphere-of-influence).
 - Third-party code, read from the open modules repository (this repository vendors nothing) and pinned by SHA-256
   in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.txt` records the path, commits and
   hashes): NRLMSISE-00 (Brodowski's public-domain port) and ERFA (BSD-3-Clause, derived with permission from IAU
@@ -150,11 +150,11 @@ Resonance (SPEC 6) in SDN-AP uses the correct functions where the Space Force li
 analytic Jacobians (exact derivatives of two-body motion with the J2 secular drifts; the drag column through the
 theory's n-dot per unit B) and a prior row on B (DESIGN 2e.3); SGP4XP or SDN-AP rows (160-byte ElementRow).
 
-## SDN-AP Moon-centred (DESIGN 2h.1, first version)
+## SDN-AP Moon-centered (DESIGN 2h.1, first version)
 
-`fit` (THEORY SDNAP) fits an `$OEM` block with CENTER_NAME MOON (ICRF or J2000 axes, UTC) and `propagate` writes a Moon-centred
+`fit` (THEORY SDNAP) fits an `$OEM` block with CENTER_NAME MOON (ICRF or J2000 axes, UTC) and `propagate` writes a Moon-centered
 SDN-AP `$OMM` (CENTER_NAME MOON, USER_DEFINED_SDNAP_REGIME MOON) on a grid template, in ICRF axes; `ingest_omm` and
-the batch entries stay geocentric (a Moon-centred record is refused there by name). Mean equinoctial elements in the
+the batch entries stay geocentric (a Moon-centered record is refused there by name). Mean equinoctial elements in the
 DE440 principal-axis frame frozen at the epoch; the $OMM carries them referred to ICRF.
 
 - Data (the build data above, pinned by SHA-256; never in the repository): GRGM660PRIM (Lemoine et al. 2013, NASA GSFC, PDS) truncated to degree 100, and the DE440 lunar
@@ -186,14 +186,14 @@ The averaged degree: 10 / 30 / 50 / 70 gives LRO day 3 6.5 / 3.7 / 1.95 / 1.83 k
 
 ## SDN-AP heliocentric cruise segments (DESIGN 2h.3 / 2h.5; `fit` (THEORY SDNAP) and `propagate`, CENTER_NAME SUN)
 
-`src/helio.inc`: the ICRF Sun-centred epoch state with mu_eff = mu_Sun (1 - beta) (radial SRP), the DE440 planets
+`src/helio.inc`: the ICRF Sun-centered epoch state with mu_eff = mu_Sun (1 - beta) (radial SRP), the DE440 planets
 (Venus, the Earth-Moon barycenter, Mars, Jupiter, Saturn; system GMs; tabulated every 6 h over the segment) and an
 RTN acceleration a0 + a1 t (thrust arcs, and what the planets leave); RK4 at 1800 s on a fixed node grid, each node
 step cut into parts of 2 % of the distance over the speed inside a planet's sphere of influence a_p (m_p /
 M_Sun)^(2/5). Levenberg-Marquardt with Jacobi scaling, weak priors on beta and the RTN terms. Hand-offs: the arc is
 cut after its latest sphere-of-influence passage (the set's epoch carried across the flyby), then the segmentation
 rule (src/segment.inc: the whole arc and its latest 1/2 and 1/4, at least 5 days; the longest within max(2 r, r +
-0.05 km) of the shortest's RMS r; a thrust change before it). Not yet: planet-centred sets inside a sphere, the
+0.05 km) of the shortest's RMS r; a thrust change before it). Not yet: planet-centered sets inside a sphere, the
 Laplace-Lagrange secular terms. Measured on the experiment's 90 cruise windows (720 h fits, hourly; lead days
 1 / 3 / 7 / 15, medians, km; 0.31 s CPU per window): Psyche (20, solar-electric thrust, the May 2026 Mars flyby)
 0.1 / 0.3 / 1.4 / 5.6; Lucy reconstruction (15) 0.0 / 0.1 / 0.6 / 4.3; Lucy reference (33) 0.1 / 0.2 / 0.6 / 3.5;
@@ -216,9 +216,9 @@ Sundman-phase series. From the truth state with no fit, the SPEC 5 Sun and Moon 
   36.4 / 48.4 (fit 0.42); the whole arc (station-keeping maneuvers inside) 20.6 / 28.4 / 37.9 / 41.7 / 51.4 / 63.1 /
   67.2. About 0.4 s CPU per window. (The earlier 1.7 / 2.8 / 4.3 / ... came from a scorer that dropped states whose
   time stamps carry 1 ms of jitter; these are re-scored on every state.)
-- Artemis I, Earth-centred (11 windows, 24 h fits, days 1 / 2 / 3): 26.1 / 209 / 17,727 (149 / 266 / 17,740 unsegmented:
+- Artemis I, Earth-centered (11 windows, 24 h fits, days 1 / 2 / 3): 26.1 / 209 / 17,727 (149 / 266 / 17,740 unsegmented:
   the correction burns inside the arcs; day 3 holds the powered lunar flyby, not predictable without the burn plan);
-  Moon-centred (2 windows, 336 h across the flyby and the DRO insertion): 2,193 at day 1.
+  Moon-centered (2 windows, 336 h across the flyby and the DRO insertion): 2,193 at day 1.
 
 ## SDN-AP libration-point series (DESIGN 2h.2; diagnostic export `sdnap_nrho_series_fit_predict`)
 
@@ -390,7 +390,7 @@ LRU sweep that rebuilt them for every object, 2.8 s per object).
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
   GCRF and EME2000 grids; the default 48 h span; a size-prefixed `$OMM`; the lunar round trip and maneuver
-  segmentation; the segment sets (an NRHO-like Moon-centred set, an Earth orbit reaching the Moon, a thrusting cruise
+  segmentation; the segment sets (an NRHO-like Moon-centered set, an Earth orbit reaching the Moon, a thrusting cruise
   set) through propagate, fit (THEORY SDNAP) and propagate again (within 20 m), a grid of another center refused
   (grid-center-mismatch) and the batch refusing a segment set (unsupported-theory).
 - `test/environment.e2e.mjs`: `$SPW` and `$DCL` read as FFM reads them.

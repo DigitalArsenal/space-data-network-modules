@@ -368,7 +368,7 @@ extern "C" int launch_batch(void) {
     if (oemr->EPHEMERIS_DATA_BLOCK() == nullptr) continue;
     for (const ephemerisDataBlock* blk : *oemr->EPHEMERIS_DATA_BLOCK()) {
       if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0 && !oem::same_text(blk->CENTER_NAME()->c_str(), "EARTH")) {
-        plugin_set_error("unsupported-center", "A batch's ephemerides are Earth-centred (CENTER_NAME EARTH).");
+        plugin_set_error("unsupported-center", "A batch's ephemerides are Earth-centered (CENTER_NAME EARTH).");
         return 3;
       }
       if (oem::axes_of(blk->REFERENCE_FRAME()) != oem::Axes::Teme) { plugin_set_error("unsupported-frame", "launch_batch reads TEME ephemerides."); return 3; }

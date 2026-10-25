@@ -19,13 +19,13 @@ inline double mu_xp() { return xpt::kKe * xpt::kKe * xpt::kRe * xpt::kRe * xpt::
 
 /// Equinoctial elements q = (n rad/min, a_f, a_g, chi, psi, lambda) of a set's mean elements.
 inline void eq_of_elements(const Elements& e, double* q) {
-  const double varpi = e.argpo + e.nodeo, t = std::tan(0.5 * e.inclo);
-  q[0] = e.no_kozai;
-  q[1] = e.ecco * std::cos(varpi);
-  q[2] = e.ecco * std::sin(varpi);
-  q[3] = t * std::sin(e.nodeo);
-  q[4] = t * std::cos(e.nodeo);
-  q[5] = e.mo + varpi;
+  const double varpi = e.omegao + e.xnodeo, t = std::tan(0.5 * e.xincl);
+  q[0] = e.xno;
+  q[1] = e.eo * std::cos(varpi);
+  q[2] = e.eo * std::sin(varpi);
+  q[3] = t * std::sin(e.xnodeo);
+  q[4] = t * std::cos(e.xnodeo);
+  q[5] = e.xmo + varpi;
 }
 
 /// The set's mean elements from q (its other fields kept). False for e >= 1 or a non-positive mean motion.
@@ -33,12 +33,12 @@ inline bool set_eq(Elements& e, const double* q) {
   const double ecc = std::sqrt(q[1] * q[1] + q[2] * q[2]);
   if (!(q[0] > 0.0) || !(ecc < 1.0)) return false;
   const double node = std::atan2(q[3], q[4]), varpi = std::atan2(q[2], q[1]);
-  e.no_kozai = q[0];
-  e.ecco = ecc;
-  e.inclo = 2.0 * std::atan(std::sqrt(q[3] * q[3] + q[4] * q[4]));
-  e.nodeo = xpt::wrap(node);
-  e.argpo = xpt::wrap(varpi - node);
-  e.mo = xpt::wrap(q[5] - varpi);
+  e.xno = q[0];
+  e.eo = ecc;
+  e.xincl = 2.0 * std::atan(std::sqrt(q[3] * q[3] + q[4] * q[4]));
+  e.xnodeo = xpt::wrap(node);
+  e.omegao = xpt::wrap(varpi - node);
+  e.xmo = xpt::wrap(q[5] - varpi);
   return true;
 }
 

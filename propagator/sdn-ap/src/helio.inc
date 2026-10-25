@@ -3,10 +3,10 @@
 // mu_eff = mu_Sun (1 - beta) (radial SRP, the lightness number), the DE440
 // planets (Venus, the Earth-Moon barycenter, Mars, Jupiter, Saturn as system
 // point masses, tabulated every 6 h over the segment) and an RTN acceleration
-// a0 + a1 t (thrust arcs; DESIGN 2h.3); RK4 on the ICRF Sun-centred state (km, s)
+// a0 + a1 t (thrust arcs; DESIGN 2h.3); RK4 on the ICRF Sun-centered state (km, s)
 // at 1800 s, the node steps cut into parts inside a planet's sphere of influence
 // (2 % of the distance over the relative speed). Not yet: the Laplace-Lagrange
-// secular terms for long segments, planet-centred sets.
+// secular terms for long segments, planet-centered sets.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -134,7 +134,7 @@ inline bool states(const Sat& s, const double* t, int count, double* out, int st
 inline bool positions(const Sat& s, const double* t, int count, double* out) { return states(s, t, count, out, 3); }
 
 /// Levenberg-Marquardt on the epoch state, beta and the RTN acceleration (10 parameters; weak priors on the last
-/// four) against J2000 Sun-centred positions (km). Returns the RMS (km) or a negative number.
+/// four) against J2000 Sun-centered positions (km). Returns the RMS (km) or a negative number.
 inline double fit(Sat& s, const double* t, const double* pos, int count, int iterations, int np = 13) {
   constexpr int NP = 13;
   std::vector<double> res(3 * count), trial(3 * count), J(3 * count * NP, 0.0), p3(3 * count);
@@ -244,7 +244,7 @@ inline double fit_segmented(double et_arc, const double* t_fit, const double* po
 }
 
 /// A cruise arc's set (2h.3 / 2h.5): the arc cut after its latest sphere-of-influence passage (the set's epoch carried
-/// across the flyby), then fit_segmented. -5 when the arc ends inside a sphere of influence (a planet-centred set);
+/// across the flyby), then fit_segmented. -5 when the arc ends inside a sphere of influence (a planet-centered set);
 /// first indexes the whole arc.
 inline double fit_cruise(double et_arc, const double* t_fit, const double* pos_fit, const double* vel_fit, int nfit, double t_hi, int np,
                          bool segment, Sat& out, int& first, std::vector<double>& table) {
@@ -260,7 +260,7 @@ inline double fit_cruise(double et_arc, const double* t_fit, const double* pos_f
 }  // namespace helio
 }  // namespace sdnap
 
-/// Diagnostic of the heliocentric baseline (2h.3): fit to `nfit` J2000 Sun-centred states (positions and velocities,
+/// Diagnostic of the heliocentric baseline (2h.3): fit to `nfit` J2000 Sun-centered states (positions and velocities,
 /// km and km/s) at `t_fit` seconds (ascending, from 0); `mode` & 7: 0 two-body, 1 with beta, 2 with beta and the RTN
 /// acceleration, 3 with its linear rate; `mode` & 8 segments at a thrust change (segment::choose_segment). Positions
 /// at `t_out` (s, same origin) into `out`; returns the kept fit's RMS (km), negative on refusal; *start_out the kept

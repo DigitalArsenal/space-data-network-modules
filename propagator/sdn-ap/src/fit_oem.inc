@@ -191,7 +191,7 @@ inline bool beyond_reach(const ephemerisDataBlock* blk, int center) {
 }  // namespace fitoem
 }  // namespace sdnap
 
-/// SDN-AP 2h.1: the fit of a Moon-centred block (fit_sdnap): ICRF / J2000 axes (GCRF, ICRF, EME2000, J2000 are
+/// SDN-AP 2h.1: the fit of a Moon-centered block (fit_sdnap): ICRF / J2000 axes (GCRF, ICRF, EME2000, J2000 are
 /// taken as the J2000 axes at the Moon; the 23 mas frame bias is 0.2 m there), UTC; the fit interval USEABLE_START_TIME
 /// to USEABLE_STOP_TIME or the whole block; one $OMM (CENTER_NAME MOON, REFERENCE_FRAME ICRF, J2000-referred mean
 /// elements, MEAN_ELEMENT_THEORY SDNAP, USER_DEFINED_SDNAP_REGIME = MOON and the term-set degrees) and one $OBD.
@@ -353,7 +353,7 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
   using namespace sdnap;
   std::vector<double> t, pos, vel;
   double e_w = 0, e_f = 0;
-  if (const int rc = read_inertial_block(blk, "Moon-centred", t, pos, vel, e_w, e_f)) return rc;
+  if (const int rc = read_inertial_block(blk, "Moon-centered", t, pos, vel, e_w, e_f)) return rc;
   const double v0[3] = {vel[0], vel[1], vel[2]};
   lunar::Sat probe;
   probe.et0 = lunar::et_of(e_w, e_f);
@@ -439,10 +439,10 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
   o.el[0] = nn * 86400.0 / kTwoPi; o.el[1] = e; o.el[2] = inc * deg; o.el[3] = node * deg; o.el[4] = argp * deg; o.el[5] = M * deg;
   char comment[320];
   std::snprintf(comment, sizeof comment,
-                "SDN-AP fit: theory SDN-AP, Moon-centred (2h.1: GRGM660PRIM averaged to degree %d, short-periodics to degree %d, SRP with the Moon's shadow, AGOM %.5f m^2/kg); %u states fitted; fit RMS %.6f km",
+                "SDN-AP fit: theory SDN-AP, Moon-centered (2h.1: GRGM660PRIM averaged to degree %d, short-periodics to degree %d, SRP with the Moon's shadow, AGOM %.5f m^2/kg); %u states fitted; fit RMS %.6f km",
                 lunar::gravity_degree(), lunar::short_degree(), s.agom, static_cast<unsigned>(t.size()), rms);
   o.comment = comment;
-  o.method_source = "sdn-ap-propagator fit (THEORY SDNAP): Levenberg-Marquardt on Moon-centred J2000 position residuals, unit weights, km; theory SDN-AP, Moon-centred (2h.1)";
+  o.method_source = "sdn-ap-propagator fit (THEORY SDNAP): Levenberg-Marquardt on Moon-centered J2000 position residuals, unit weights, km; theory SDN-AP, Moon-centered (2h.1)";
   o.text("SDNAP_REGIME", "MOON");
   o.number("SDNAP_LUNAR_DEGREE", lunar::gravity_degree());
   o.number("SDNAP_LUNAR_SHORT_DEGREE", lunar::short_degree());
@@ -455,7 +455,7 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
   return emit_set(oem, blk, o);
 }
 
-/// SDN-AP 2h.2 / 2h.3 / 2h.5: the segment-set fit of a cislunar (Earth- or Moon-centred, beyond the averaged
+/// SDN-AP 2h.2 / 2h.3 / 2h.5: the segment-set fit of a cislunar (Earth- or Moon-centered, beyond the averaged
 /// theories' reach) or heliocentric block: the latest segment by the documented rule (segment::choose_segment, the
 /// set's epoch carried past a detected burn or thrust change), one $OMM (CENTER_NAME the block's, REFERENCE_FRAME
 /// ICRF, the epoch state's osculating elements with SEMI_MAJOR_AXIS and GM, MEAN_ELEMENT_THEORY SDNAP,
@@ -464,7 +464,7 @@ static int segment_fit_block(const OEM* oem, const ephemerisDataBlock* blk, int 
   using namespace sdnap;
   std::vector<double> t, pos, vel;
   double e_w = 0, e_f = 0;
-  const char* who = center == segment::kSun ? "Sun-centred" : center == segment::kMoon ? "Moon-centred" : "Earth-centred cislunar";
+  const char* who = center == segment::kSun ? "Sun-centered" : center == segment::kMoon ? "Moon-centered" : "Earth-centered cislunar";
   if (const int rc = read_inertial_block(blk, who, t, pos, vel, e_w, e_f)) return rc;
   const int n = static_cast<int>(t.size());
   double r0[3], v0[3], rms = -1.0, extra[7] = {0, 0, 0, 0, 0, 0, 0};
@@ -479,7 +479,7 @@ static int segment_fit_block(const OEM* oem, const ephemerisDataBlock* blk, int 
       return 3;
     }
     if (rms == -5.0) {
-      plugin_set_error("inside-sphere-of-influence", "The block ends inside a planet's sphere of influence; a planet-centred set is not fitted here (SUN sets end at the sphere's edge).");
+      plugin_set_error("inside-sphere-of-influence", "The block ends inside a planet's sphere of influence; a planet-centered set is not fitted here (SUN sets end at the sphere's edge).");
       return 3;
     }
     for (int c = 0; c < 3; ++c) { r0[c] = sat.r0[c]; v0[c] = sat.v0[c]; extra[1 + c] = sat.rtn[c]; extra[4 + c] = sat.rtn_rate[c]; }
@@ -535,7 +535,7 @@ static int segment_fit_block(const OEM* oem, const ephemerisDataBlock* blk, int 
                   t[first] / 3600.0, t.back() / 3600.0, rms);
   o.comment = comment;
   o.method_source = center == segment::kSun
-                        ? "sdn-ap-propagator fit (THEORY SDNAP): Levenberg-Marquardt on Sun-centred ICRF position residuals, unit weights, km; theory SDN-AP, heliocentric segment (2h.3)"
+                        ? "sdn-ap-propagator fit (THEORY SDNAP): Levenberg-Marquardt on Sun-centered ICRF position residuals, unit weights, km; theory SDN-AP, heliocentric segment (2h.3)"
                         : "sdn-ap-propagator fit (THEORY SDNAP): Levenberg-Marquardt on ICRF position residuals, unit weights, km; theory SDN-AP, cislunar segment (2h.2)";
   o.text("SDNAP_REGIME", center == segment::kSun ? "HELIO" : "CISLUNAR");
   if (center == segment::kSun) {
@@ -598,7 +598,7 @@ static int fit_blocks(bool sdnap_mode) {
     const auto* blocks = oem->EPHEMERIS_DATA_BLOCK();
     if (blocks == nullptr) continue;
     for (const ephemerisDataBlock* blk : *blocks) {
-      // the block's center: Earth (the theories here are geocentric; a Moon-centred or heliocentric block is
+      // the block's center: Earth (the theories here are geocentric; a Moon-centered or heliocentric block is
       // refused by name, never read as geocentric)
       if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0 && !oem::same_text(blk->CENTER_NAME()->c_str(), "EARTH")) {
         const bool moon = oem::same_text(blk->CENTER_NAME()->c_str(), "MOON"), sun = oem::same_text(blk->CENTER_NAME()->c_str(), "SUN");
@@ -610,8 +610,8 @@ static int fit_blocks(bool sdnap_mode) {
           ++blocks_done;
           continue;
         }
-        plugin_set_error("unsupported-center", sdnap_mode ? "An 'ephemeris' block is centred neither on the Earth, the Moon nor the Sun (CENTER_NAME)."
-                                                          : "An 'ephemeris' block is not centred on the Earth (CENTER_NAME); fit (SGP4XP) is geocentric, fit_sdnap also fits Moon- and Sun-centred blocks.");
+        plugin_set_error("unsupported-center", sdnap_mode ? "An 'ephemeris' block is centered neither on the Earth, the Moon nor the Sun (CENTER_NAME)."
+                                                          : "An 'ephemeris' block is not centered on the Earth (CENTER_NAME); fit (SGP4XP) is geocentric, fit_sdnap also fits Moon- and Sun-centered blocks.");
         return 3;
       }
       if (sdnap_mode && fitoem::beyond_reach(blk, segment::kEarth)) {
