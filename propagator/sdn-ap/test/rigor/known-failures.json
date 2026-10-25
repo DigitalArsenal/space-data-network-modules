@@ -8,10 +8,6 @@
   "vallado-covariance-realism-bound": {
    "task": "sdn-ap-covariance-realism-acceptance-band-20261025",
    "summary": "no realism acceptance band is stated"
-  },
-  "kelso-malformed-sets-refused": {
-   "task": "sdn-ap-malformed-sets-accepted-20261025",
-   "summary": "inclination 200 deg and a NaN BTERM are propagated"
   }
  }
 }
