@@ -51,6 +51,15 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   per time, the TEME state and its 6 x 6 covariance (42 doubles), carried by the theory's own state transition matrix
   (central differences of the theory in its parameters) plus the fitted process noise; `propagate` writes a
   COVARIANCE_MATRIX_LINES line per state, in the block's axes, for a set that carries COVARIANCE.
+- Osculating input (SPEC 13; `test/opm.e2e.mjs`): `opm_set` takes SDS `$OPM` records (the Keplerian block or the state
+  vector, REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000, UTC, the record's GM) and gives each one's SDN-AP set through
+  the module's own initialization (the state in TEME, y0 = h^-1(x, t) by the inverse map), with its provenance as
+  USER_DEFINED_SDNAP_SOURCE OSCULATING_OPM, _SOURCE_ELEMENTS, _SOURCE_FRAME, _SOURCE_GM, _CONVERSION, _CONVERSION_STEPS and
+  _FORCES; B = C_D A/m and AGOM = C_R A/m from MASS and the areas, else the $PCF LAUNCH priors; a COVARIANCE rotated to
+  TEME with the regime's process noise, none made otherwise. `propagate` takes 'opm' frames through the same conversion
+  (the same `$OEM` bytes as `opm_set` then `propagate`). Refused by name: no-elements, unknown-frame, missing-gm,
+  unsupported-time-system, unsupported-center. `sdnap_osculating_elements_about(r, v, gm, out)` (a, e, i, RAAN, argp,
+  true and mean anomaly, period) and `sdnap_kepler_at(r, v, gm, seconds, out)` (two-body motion) about a stated GM.
 - Configuration (SDS 1.268.0, `$PCF` 1.0.2): `propagate`, `fit`, `maneuver`, `detect_maneuvers`, `reentry`, `launch_set` and
   `launch_batch` take one `$PCF` on their required `configuration` port. Each reads THEORY and its own tables
   (propagate and maneuver: MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES; fit: FIT, MEAN_ELEMENT, SEGMENTS, FORCES;
@@ -490,6 +499,10 @@ LRU sweep that rebuilt them for every object, 2.8 s per object).
 - `test/covariance.e2e.mjs`: the covariance record of an SDN-AP and an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
+- `test/opm.e2e.mjs`: `opm_set` on synthetic GEO, HEO, MEO and LEO records (each set at its epoch back to the record's
+  elements), the same orbits as states in EME2000, GCRF and TEME, `propagate` with 'opm' frames against `opm_set` then
+  `propagate` (identical bytes), the forces from the record and the defaults, a COVARIANCE carried to TEME, the refusals,
+  the two-body exports over one period, and every 500th of the committed derived Vimpel sets.
 - `test/environment.e2e.mjs`: `$SPW` and `$DCL` read as FFM reads them.
 - `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `fit` (THEORY SDNAP) and its set on the grid,
   the lunar set, and the three segment sets (propagate, fit (THEORY SDNAP), propagate) through the browser host and native

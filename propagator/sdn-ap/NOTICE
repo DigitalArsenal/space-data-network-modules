@@ -32,3 +32,10 @@ the states and intermediate quantities that the unmodified US Space Force
 Sgp4Prop library returns for them, run as a black box. The library is not in
 this package; it is used and its outputs redistributed under the USSF open
 source agreement (propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt).
+
+test/fixtures/opm/vimpel-derived-20261012.opm.gz holds SDN's own osculating sets,
+each made by test/opm-derive.mjs from one set of JSC Vimpel's osculating-element
+table of 2026-10-12 (SHA-256 a4dd4c9a477191bb2d964cdbaa06695ef9539d6b8f39343d5ad8f084e61ef89d):
+"Derived from JSC Vimpel orbit data (spacedata.vimpel.ru): each set propagated one quarter period with FFM and re-expressed as osculating elements."
+No row or file of Vimpel's is in this package; their table and ephemerides carry
+no redistribution terms and are read locally only.

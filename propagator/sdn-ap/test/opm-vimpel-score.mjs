@@ -5,12 +5,14 @@
 // numbers, differences them and takes statistics. Two measures (local data; only these aggregates are committed):
 //   --prediction DIR   agreement with JSC Vimpel's own 7-day prediction: the table's ephemeris files (DIR holds the
 //                      unpacked RAR: <id>_<YYYYMMDD>_<HHMMSS>, rows "index, x, y, z" km J2000 every 600 s from the
-//                      file's epoch), day 1, 2 and 3 after the derived set's epoch. Not an accuracy: Vimpel's prediction
-//                      is itself a propagation of its elements.
+//                      file's epoch), every 12th row (2 h) after the derived set's epoch, the RMS of day 1, 2 and 3. Not
+//                      an accuracy: Vimpel's prediction is itself a propagation of its elements.
 //   --later TABLE      consistency with Vimpel's later determination: the same object's state in a later table
 //                      (files/orbit-products normalize_vimpel: the printed elements' J2000 state at their epoch).
 //   node test/opm-vimpel-score.mjs --derived derived.20261012.opm --prediction ephem.20261012/ --out prediction.json
 //   node test/opm-vimpel-score.mjs --derived derived.20260907.opm --later orbits.20260921.txt --out later-0907.json
+// --shard K/N scores every N-th set from the K-th and writes its per-set rows (--rows F, numbers only); --merge
+// F1,F2,... --derived F (--prediction DIR | --later TABLE) --out F sums shards into the report.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,6 +33,7 @@ import { configuration } from "./lib/pcf.mjs";
 
 const arg = (name, fallback = null) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : fallback; };
 const DERIVED = arg("derived"), PRED = arg("prediction"), LATER = arg("later"), OUT = arg("out"), LIMIT = Number(arg("limit", "0"));
+const SHARD = arg("shard"), ROWS = arg("rows"), MERGE = arg("merge");
 if (!DERIVED || (!PRED && !LATER)) { console.error("usage: opm-vimpel-score.mjs --derived F (--prediction DIR | --later TABLE) [--out F] [--limit N]"); process.exit(1); }
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MODULES = path.resolve(here, "../../..");
@@ -57,18 +60,29 @@ function records(bytes) {
 const regimeOf = (o) => (o.ECCENTRICITY >= 0.25 ? "HEO" : o.SEMI_MAJOR_AXIS < 8378 ? "LEO" : o.SEMI_MAJOR_AXIS > 41000 && o.SEMI_MAJOR_AXIS < 43500 && o.ECCENTRICITY < 0.1 ? "GEO" : o.SEMI_MAJOR_AXIS >= 43500 ? "beyond GEO" : "MEO");
 const idOf = (o) => String(Number(o.OBJECT_NAME.replace(/^vimpel:/, "")));
 
-/** SDN-AP's EME2000 positions of a derived record at `times` (ms), or null when the module refuses it. */
-async function sdnap(rec, times) {
+/** SDN-AP's EME2000 positions of a batch of derived records on the union of their times (ms): one propagate call
+ * (the call's density kernel is built once for the batch). Per record: { r: Map(time -> position) } or { error }. */
+async function sdnapBatch(recs, timesList) {
+  const union = [...new Set(timesList.flat())].sort((a, b) => a - b);
   const block = new ephemerisDataBlockT();
   block.CENTER_NAME = "EARTH"; block.REFERENCE_FRAME = rfm("EME2000"); block.TIME_SYSTEM = timingStandard.UTC;
-  block.START_TIME = iso(times[0]); block.STOP_TIME = iso(times.at(-1));
-  block.EPHEMERIS_DATA_LINES = times.map((t) => new ephemerisDataLineT(iso(t)));
+  block.START_TIME = iso(union[0]); block.STOP_TIME = iso(union.at(-1));
+  block.EPHEMERIS_DATA_LINES = union.map((t) => new ephemerisDataLineT(iso(t)));
   const o = new OEMT(); o.CCSDS_OEM_VERS = 3.0; o.ORIGINATOR = "SDN-AP score grid"; o.EPHEMERIS_DATA_BLOCK = [block];
   const b = new flatbuffers.Builder(1 << 16); OEM.finishOEMBuffer(b, o.pack(b));
-  const r = await command.invoke({ methodId: "propagate", inputs: [SDNAP, weather, { portId: "opm", typeRef: { schemaName: "OPM.fbs", fileIdentifier: "$OPM", rootTypeName: "OPM" }, payload: rec.bytes },
-    { portId: "grid", typeRef: { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" }, payload: b.asUint8Array() }] });
-  if (r.statusCode !== 0) return { error: r.errorCode };
-  return { r: OEM.getRootAsOEM(new flatbuffers.ByteBuffer(r.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map((L) => [L.X, L.Y, L.Z]) };
+  const grid = { portId: "grid", typeRef: { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" }, payload: b.asUint8Array() };
+  const opmType = { schemaName: "OPM.fbs", fileIdentifier: "$OPM", rootTypeName: "OPM" };
+  const r = await command.invoke({ methodId: "propagate", inputs: [SDNAP, weather, ...recs.map((rec) => ({ portId: "opm", typeRef: opmType, payload: rec.bytes })), grid] });
+  if (r.statusCode !== 0) {
+    if (recs.length === 1) return [{ error: r.errorCode }];
+    // one refused record refuses the call: halve the batch until the refused ones stand alone
+    const h = recs.length >> 1;
+    return [...(await sdnapBatch(recs.slice(0, h), timesList.slice(0, h))), ...(await sdnapBatch(recs.slice(h), timesList.slice(h)))];
+  }
+  return r.outputs.map((f) => {
+    const lines = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(f.payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+    return { r: new Map(lines.map((L, i) => [union[i], [L.X, L.Y, L.Z]])) };
+  });
 }
 /** Two-body positions of the record's own state about its GM (sdnap_kepler_at). */
 function twoBody(o, times) {
@@ -83,32 +97,46 @@ const q = (arr, f) => { const s = arr.filter(Number.isFinite).sort((a, b) => a -
 
 let derived = records(fs.readFileSync(DERIVED));
 if (LIMIT > 0) derived = derived.slice(0, LIMIT);
+if (SHARD) { const [k, n] = SHARD.split("/").map(Number); derived = derived.filter((_, i) => i % n === k); }
 const per = [];  // { regime, ... }
 const refused = {};
-if (PRED) {
+const BATCH = Number(arg("batch", "100"));
+if (MERGE) {
+  for (const f of MERGE.split(",")) {
+    const j = JSON.parse(fs.readFileSync(f, "utf8"));
+    per.push(...j.per);
+    for (const [k, v] of Object.entries(j.refused)) refused[k] = (refused[k] ?? 0) + v;
+  }
+} else if (PRED) {
   const files = new Map(fs.readdirSync(PRED).map((f) => [String(Number(f.split("_")[0])), f]));
-  for (const [k, rec] of derived.entries()) {
+  const jobs = [];
+  for (const rec of derived) {
     const o = rec.opm, f = files.get(idOf(o));
     if (!f) { refused["no ephemeris"] = (refused["no ephemeris"] ?? 0) + 1; continue; }
     const [, ymd, hms] = f.split("_");
     const t0 = Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6, 8), +hms.slice(0, 2), +hms.slice(2, 4), +hms.slice(4, 6));
     const rows = fs.readFileSync(path.join(PRED, f), "utf8").split("\n").map((l) => l.split(",").map(Number)).filter((c) => c.length === 4 && c.every(Number.isFinite));
     const tD = Date.parse(o.EPOCH);
-    const pts = rows.map((c) => ({ t: t0 + c[0] * 600000, r: c.slice(1) })).filter((pt) => pt.t > tD && pt.t <= tD + 3 * DAY);
-    if (pts.length < 10) { refused["prediction span"] = (refused["prediction span"] ?? 0) + 1; continue; }
-    const times = pts.map((pt) => pt.t);
-    const a = await sdnap(rec, times);
-    if (a.error) { refused[a.error] = (refused[a.error] ?? 0) + 1; continue; }
-    const b = twoBody(o, times);
-    const days = {};
-    for (let day = 1; day <= 3; ++day) {
-      const sel = pts.map((pt, i) => [pt, i]).filter(([pt]) => pt.t > tD + (day - 1) * DAY && pt.t <= tD + day * DAY);
-      if (!sel.length) continue;
-      const rms = (ff) => Math.sqrt(sel.reduce((s, [pt, i]) => s + dist(ff[i], pt.r) ** 2, 0) / sel.length);
-      days[day] = { sdnap: rms(a.r), twoBody: rms(b) };
-    }
-    per.push({ regime: regimeOf(o), days });
-    if ((k + 1) % 1000 === 0) console.log(`${k + 1}/${derived.length}`);
+    const pts = rows.map((c) => ({ t: t0 + c[0] * 600000, r: c.slice(1) })).filter((pt) => pt.t > tD && pt.t <= tD + 3 * DAY).filter((_, i) => i % 12 === 0);
+    if (pts.length < 6) { refused["prediction span"] = (refused["prediction span"] ?? 0) + 1; continue; }
+    jobs.push({ rec, pts, tD });
+  }
+  for (let k = 0; k < jobs.length; k += BATCH) {
+    const batch = jobs.slice(k, k + BATCH);
+    const res = await sdnapBatch(batch.map((j) => j.rec), batch.map((j) => j.pts.map((pt) => pt.t)));
+    batch.forEach((j, i) => {
+      if (res[i].error) { refused[res[i].error] = (refused[res[i].error] ?? 0) + 1; return; }
+      const times = j.pts.map((pt) => pt.t), a = times.map((t) => res[i].r.get(t)), b = twoBody(j.rec.opm, times);
+      const days = {};
+      for (let day = 1; day <= 3; ++day) {
+        const sel = j.pts.map((pt, n) => [pt, n]).filter(([pt]) => pt.t > j.tD + (day - 1) * DAY && pt.t <= j.tD + day * DAY);
+        if (!sel.length) continue;
+        const rms = (ff) => Math.sqrt(sel.reduce((acc, [pt, n]) => acc + dist(ff[n], pt.r) ** 2, 0) / sel.length);
+        days[day] = { sdnap: rms(a), twoBody: rms(b) };
+      }
+      per.push({ regime: regimeOf(j.rec.opm), days });
+    });
+    console.log(`${Math.min(k + BATCH, jobs.length)}/${jobs.length}`);
   }
 } else {
   // the later table's states by normalize_vimpel
@@ -122,18 +150,26 @@ if (PRED) {
   const r = await op.invoke({ methodId: "normalize_vimpel", inputs: [{ portId: "container", typeRef: { schemaName: "NCD.fbs", fileIdentifier: "$NCD", rootTypeName: "NCD", wireFormat: "aligned-binary", requiredAlignment: 8, byteLength: ncd.length }, payload: ncd }] });
   if (r.statusCode !== 0) throw new Error(`normalize_vimpel: ${r.errorCode}`);
   const later = new Map(r.outputs.filter((o) => o.portId === "states").map((o) => OPM.getSizePrefixedRootAsOPM(new flatbuffers.ByteBuffer(new Uint8Array(o.payload))).unpack()).map((o) => [idOf(o), o]));
-  for (const [k, rec] of derived.entries()) {
+  const jobs = [];
+  for (const rec of derived) {
     const o = rec.opm, l = later.get(idOf(o));
     if (!l) { refused["not in the later table"] = (refused["not in the later table"] ?? 0) + 1; continue; }
     const t = Date.parse(l.EPOCH), tD = Date.parse(o.EPOCH);
     if (!(t > tD)) { refused["later epoch not after"] = (refused["later epoch not after"] ?? 0) + 1; continue; }
-    const a = await sdnap(rec, [t]);
-    if (a.error) { refused[a.error] = (refused[a.error] ?? 0) + 1; continue; }
-    const truth = [l.X, l.Y, l.Z];
-    per.push({ regime: regimeOf(o), horizonDays: (t - tD) / DAY, sdnap: dist(a.r[0], truth), twoBody: dist(twoBody(o, [t])[0], truth) });
-    if ((k + 1) % 1000 === 0) console.log(`${k + 1}/${derived.length}`);
+    jobs.push({ rec, l, t, tD });
+  }
+  for (let k = 0; k < jobs.length; k += BATCH) {
+    const batch = jobs.slice(k, k + BATCH);
+    const res = await sdnapBatch(batch.map((j) => j.rec), batch.map((j) => [j.t]));
+    batch.forEach((j, i) => {
+      if (res[i].error) { refused[res[i].error] = (refused[res[i].error] ?? 0) + 1; return; }
+      const truth = [j.l.X, j.l.Y, j.l.Z];
+      per.push({ regime: regimeOf(j.rec.opm), horizonDays: (j.t - j.tD) / DAY, sdnap: dist(res[i].r.get(j.t), truth), twoBody: dist(twoBody(j.rec.opm, [j.t])[0], truth) });
+    });
+    console.log(`${Math.min(k + BATCH, jobs.length)}/${jobs.length}`);
   }
 }
+if (ROWS) { fs.writeFileSync(ROWS, JSON.stringify({ per, refused })); process.exit(0); }
 const summary = {};
 for (const regime of ["GEO", "MEO", "HEO", "LEO", "beyond GEO"]) {
   const rows = per.filter((p) => p.regime === regime);

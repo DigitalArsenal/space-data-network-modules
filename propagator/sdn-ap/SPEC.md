@@ -1559,6 +1559,36 @@ rotated with the state) for an SGP4XP or SDN-AP set that carries COVARIANCE. An 
 
 ---
 
+## 13. SDN-AP osculating input (side B's method, outside the SGP4-XP specification)
+
+**13.1 Record.** An SDS $OPM about the Earth (CENTER_NAME EARTH or absent), TIME_SYSTEM UTC (or absent), EPOCH,
+REF_FRAME TEME, GCRF / ICRF or EME2000 / J2000, and GM (km^3/s^2, about the Earth's). The Keplerian block is used when
+SEMI_MAJOR_AXIS is on the wire (the other elements as written, a scalar left off the wire being 0; TRUE_ANOMALY when
+written, else MEAN_ANOMALY), the state vector otherwise. Refused by name: no-elements (neither), unknown-frame,
+missing-gm, unsupported-time-system, unsupported-center, element-set-refused (an open orbit or a radius that is not an
+Earth orbit's).
+
+**13.2 State.** Keplerian: E from the true anomaly by tan(E/2) = sqrt((1 - e)/(1 + e)) tan(nu/2), M = E - e sin E, and
+the two-body state of (a, e, i, Omega, omega, M) about the record's GM. The axes to TEME at the epoch: GCRF by 10's
+GCRF -> TEME; EME2000 by the IAU 2006 frame bias B (r_EME2000 = B r_GCRF) then GCRF -> TEME.
+
+**13.3 Set.** y0 = h^-1(x, t) by the inverse map at the epoch, as launch_set does for an insertion orbit (DESIGN
+5.3.1): the mean set whose osculating state at t is x. B_eff and AGOM: C_D A/m and C_R A/m from MASS with DRAG_AREA and
+SOLAR_RAD_AREA (C_D 2.2 and C_R 1.0 where the record states none); otherwise the $PCF LAUNCH priors (B_eff 0.01 m^2/kg
+with the perigee below 2,500 km, else 0; AGOM 0.01 m^2/kg). The set records where it came from:
+USER_DEFINED_SDNAP_SOURCE OSCULATING_OPM, _SOURCE_ELEMENTS (KEPLERIAN or STATE), _SOURCE_FRAME, _SOURCE_GM,
+_CONVERSION INVERSE_MAP and _CONVERSION_STEPS, _FORCES (RECORD or REGIME_DEFAULT), and its COMMENT says the same.
+
+**13.4 Covariance.** A COVARIANCE (21 values, COV_REF_FRAME or else REF_FRAME) is rotated to TEME, P' = B P B^T with B
+= diag(M, M), and carried as the set's COVARIANCE with the regime's process noise from the epoch (12.5; no consider rows,
+no floor). None is made where the record has none.
+
+**13.5 Calls.** `opm_set` gives the set; `propagate` takes 'opm' frames through the same conversion (13.1-13.4), so an
+$OPM propagates as its set does. `sdnap_osculating_elements_about(r, v, gm, out)` and `sdnap_kepler_at(r, v, gm, s, out)`
+give a state's osculating elements and period, and its two-body motion, about a stated GM.
+
+---
+
 ## References
 
 - Brouwer, D. (1959). Solution of the problem of artificial satellite theory without drag. AJ 64, 378-397.

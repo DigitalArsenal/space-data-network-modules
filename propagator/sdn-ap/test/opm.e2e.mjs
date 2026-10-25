@@ -14,8 +14,12 @@
 // - Refused by name: no-elements, unknown-frame, missing-gm, unsupported-time-system, unsupported-center.
 // - sdnap_osculating_elements_about and sdnap_kepler_at: the elements of kepler_at(state, one period) are the state's
 //   (a within 1e-9 relative, the anomaly within 1e-7 deg).
+// - The committed derived sets (test/fixtures/opm/vimpel-derived-20261012.opm.gz, test/opm-derive.mjs): every 500th of
+//   the stream through opm_set, each set at its epoch within 1 m of the record's own state, with the credit in COMMENT.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/opm.e2e.mjs
+import fs from "node:fs";
+import zlib from "node:zlib";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
@@ -168,6 +172,26 @@ for (const [label, fields, code] of [
 }
 const empty = await command.invoke({ methodId: "propagate", inputs: [SDNAP] });
 check(empty.statusCode !== 0 && empty.errorCode === "missing-omm", `propagate with neither: ${empty.errorCode}`);
+
+// the committed derived sets
+{
+  const bytes = zlib.gunzipSync(fs.readFileSync(new URL("./fixtures/opm/vimpel-derived-20261012.opm.gz", import.meta.url)));
+  const recs = [];
+  for (let off = 0; off + 4 <= bytes.length; off += 4 + bytes.readUInt32LE(off)) recs.push(new Uint8Array(bytes.subarray(off, off + 4 + bytes.readUInt32LE(off))));
+  let worst = 0, n = 0, credited = 0;
+  for (let k = 0; k < recs.length; k += 500) {
+    const rec = OPM.getSizePrefixedRootAsOPM(new flatbuffers.ByteBuffer(recs[k])).unpack();
+    const r = await opmSet(recs[k]);
+    if (r.statusCode !== 0) { failures.push(`derived ${rec.OBJECT_NAME}: ${r.errorCode} ${r.errorMessage}`); continue; }
+    const g = await command.invoke({ methodId: "propagate", inputs: [SDNAP, { portId: "omm", typeRef: ommType, payload: r.outputs[0].payload }, { portId: "grid", typeRef: oemType, payload: gridAt("EME2000", [rec.EPOCH.replace("Z", "")]) }] });
+    const L = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(g.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
+    worst = Math.max(worst, Math.hypot(L.X - rec.X, L.Y - rec.Y, L.Z - rec.Z) * 1e3);
+    credited += rec.COMMENT?.startsWith("Derived from JSC Vimpel orbit data (spacedata.vimpel.ru)") ? 1 : 0;
+    ++n;
+  }
+  console.log(`committed derived sets: ${recs.length} records; ${n} through opm_set, worst epoch state ${worst.toExponential(2)} m; credited ${credited}`);
+  check(recs.length > 13000 && n >= 20 && worst <= 1.0 && credited === n, `derived sets: ${n}, ${worst} m, ${credited} credited`);
+}
 
 // the exports: one period of two-body motion returns the elements
 {
