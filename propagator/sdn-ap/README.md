@@ -273,8 +273,18 @@ extrapolate. The cislunar segments predict (1.9 / 9.8 / 48.4 km at days 1 / 3 / 
 - `detect_maneuvers` (5.1.4): the six-element GLR (16) on the innovations of the inverse map against a fit of the
   arc (B_eff, then AGOM, as `fit` (THEORY SDNAP)), M_k = Phi(t_k, t_b) G(t_b) = S(t_k) N with the theory's own
   transition, MAD weights per revolution (MANEUVER_DETECTION: THRESHOLD 20, MARGIN_STATES 12, REFINE_WINDOW_HOURS 2,
-  MINIMUM_STATES 48). Detection: the largest Lambda against the burn-free fit (the calibrated form; 0 detections on
-  40 burn-free FFM-1 arcs of 72 h, largest 18.5). Epoch and Delta v: the likelihood profiled over the epoch elements
+  MINIMUM_STATES 48). Detection: the smaller of two Lambdas, each against THRESHOLD 20, the same for every orbit: the
+  largest over the candidate epochs against the burn-free fit (the form calibrated on burn-free FFM-1 arcs: 0 detections
+  on 40 arcs of 72 h, largest 18.5) and the largest of the profiled form below (the epoch elements and B_eff
+  re-estimated with and without the burn). The first alone holds the epoch elements at a fit that minimizes position
+  residuals while the test weights element residuals, and that mismatch reads as a burn the fewer revolutions the arc
+  holds: on QZSS 72 h windows it read a median 47 (maximum 173) in 789 of 989 windows, and on burn-free FFM-1
+  geostationary and IGSO arcs (3 revolutions) it passed 20 on 7 and on 6 of 10 where the profiled Lambda read 0.6 to
+  3.0; GPS arcs (6 revolutions) 6 to 13.6 against 3.2 to 6.5. Frozen plan, before and after: ISS archive 97 of 99
+  pre-burn windows detected and 1.37 false alarms per object-year (unchanged), GPS 37 false alarms in 22.2 object-years
+  to 0, QZSS 691 in 2.87 to 0; FFM-1 burns at 36 h of a 72 h arc detected on their axis: 10 mm/s V and W in
+  geostationary and IGSO orbit, 100 mm/s V in GPS orbit (test/events.e2e.mjs); test/results/maneuver-detector.json.
+  Epoch and Delta v: the likelihood profiled over the epoch elements
   and B_eff (the nuisance re-estimated with and without the burn: Lambda = u' Nt (Nt' P Nt)^-1 Nt' u, P = A+ - A+ A^-1 A+,
   u = b+ - A+ A^-1 b from suffix sums of J' W J and J' W e), so a long pre-burn arc no longer pulls the epoch to the
   arc's start; the $MNV names the epoch's interval (the profile within 3.84 of its peak) and a burn-free report the

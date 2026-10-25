@@ -10,15 +10,16 @@
 //      (`fullForceRequest`: EGM2008 70x70; Sun, Moon, Venus, Mars, Jupiter from DE440s; cannonball SRP with the conical
 //      shadow, Cr*A/m 0.02 m^2/kg; Knocke Earth radiation; NRLMSISE-00 drag, Cd*A/m 0.01 m^2/kg, on the daily space
 //      weather; IERS 2010 solid tides, FES2004 ocean tides 30x30, IERS 2010 relativity; RK78 at 1e-14), in EME2000
-//      (INITIAL.COORDINATE_SYSTEM MEAN_EQUATOR_EQUINOX_J2000), with the Earth orientation and space weather of the
-//      experiment's environment record.
+//      (INITIAL.COORDINATE_SYSTEM MEAN_EQUATOR_EQUINOX_J2000), with the Earth orientation of the experiment's
+//      environment record and the GFZ space-weather history (2019-06 .. 2026-11, space-weather-history.prw).
 //   4. sdn-ap `sdnap_osculating_elements_about`: the carried state as osculating elements about the same GM.
 // Each derived set is one size-prefixed $OPM (EME2000, UTC, the state and the Keplerian block, GM, MASS 1 kg with
 // DRAG_AREA 0.01 / DRAG_COEFF 1 and SOLAR_RAD_AREA 0.02 / SOLAR_RAD_COEFF 1: the forces the derivation assumed), the
 // credit in COMMENT, the stream written to --out. Vimpel's own rows are read here and never written.
 //   node test/opm-derive.mjs --table orbits.YYYYMMDD.txt --out derived.opm [--limit N]
 // Needs: npm ci in this package, files/orbit-products, propagator/ffm and analysis/od; the DE440s kernel and the
-// environment record (paths below, or SDNAP_KERNEL / SDNAP_FFM_ENVIRONMENT).
+// environment record and the space-weather history (paths below, or SDNAP_KERNEL / SDNAP_FFM_ENVIRONMENT /
+// SDNAP_SPACE_WEATHER).
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -37,6 +38,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const MODULES = path.resolve(here, "../../..");
 const KERNEL = process.env.SDNAP_KERNEL ?? "/opt/data/sdn-archive/hac/naif-kernels/spk/planets/de440s.bsp";
 const ENV_FILE = process.env.SDNAP_FFM_ENVIRONMENT ?? "/opt/data/sdn-archive/sdn-gp-starlink-ffm-match/environment/environment.json";
+const WEATHER = process.env.SDNAP_SPACE_WEATHER ?? "/opt/data/sdn-archive/sdn-gp-starlink-ffm-match/environment/space-weather-history.prw";
 const imp = (p) => import(pathToFileURL(path.join(MODULES, p)));
 const catalog = await imp("propagator/ffm/catalog.mjs");
 const envmod = await imp("analysis/od/scripts/operator-environment.mjs");
@@ -67,7 +69,8 @@ export async function derive({ tablePath, limit = 0, onRow }) {
   const ffm = await harness("propagator/ffm", "direct");
   const env = JSON.parse(fs.readFileSync(ENV_FILE, "utf8"));
   const ffmInputs = [envmod.input("kernel", "PRW", catalog.kernelRecord(fs.readFileSync(KERNEL))),
-    ...Object.entries(env.inputs).map(([k, b64]) => envmod.input(k, "PRW", new Uint8Array(Buffer.from(b64, "base64"))))];
+    envmod.input("earth_orientation", "PRW", new Uint8Array(Buffer.from(env.inputs.earth_orientation, "base64"))),
+    envmod.input("space_weather", "PRW", new Uint8Array(fs.readFileSync(WEATHER)))];
   const eme = () => Object.assign(new P.RFMCoordinateSystemT(), { NAME: "EME2000", AXIS_TYPE: P.rfmAxisType.MEAN_EQUATOR_EQUINOX_J2000, AXIS_REFERENCE_BODY_ID: 399,
     ORIGIN: Object.assign(new P.RFMOriginT(), { KIND: P.rfmOriginKind.CELESTIAL_BODY, CELESTIAL_BODY_ID: 399 }) });
   const m = await openModule();
@@ -101,8 +104,8 @@ export async function derive({ tablePath, limit = 0, onRow }) {
       USER_DEFINED_PARAMETERS: [["SDN_DERIVATION", "FFM full force, one quarter period (propagator/ffm catalog-configuration fullForceRequest), EME2000"],
         ["SDN_EPOCH_SHIFT_SECONDS", (shiftMs / 1000).toFixed(3)]].map(([k, v]) => new OPMUserDefinedParameterT(k, v)),
     });
+    // (a scalar at 0 is left off the wire, and read as 0: opm_set takes the Keplerian block by SEMI_MAJOR_AXIS)
     const b = new flatbuffers.Builder(1024);
-    b.forceDefaults(true);  // every scalar on the wire: a zero element is an element
     OPM.finishSizePrefixedOPMBuffer(b, d.pack(b));
     const bytes = b.asUint8Array().slice();
     out.push(bytes);
