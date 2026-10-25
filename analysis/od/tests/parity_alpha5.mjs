@@ -24,4 +24,6 @@ const report = await runParityHarness({ wasmPath, plan, lanes: ['browser', 'wasm
 console.log(formatParityReport(report));
 assert.equal(report.ok, true, JSON.stringify(report.failures));
 fs.mkdirSync(new URL('../conformance/', import.meta.url), { recursive: true });
-fs.writeFileSync(new URL('../conformance/parity-alpha5.json', import.meta.url), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' }, null, 2)}\n`);
+// Run times (durationMs) stay out of the receipt: it is a function of the artifact and the cases, so a rerun on the
+// same artifact writes the same bytes (the console report above keeps them).
+fs.writeFileSync(new URL('../conformance/parity-alpha5.json', import.meta.url), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' }, (key, value) => (key === 'durationMs' ? undefined : value), 2)}\n`);

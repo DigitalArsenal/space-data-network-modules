@@ -8,13 +8,11 @@
   "lanes": [
     {
       "lane": "browser",
-      "runs": 5,
-      "durationMs": 440
+      "runs": 5
     },
     {
       "lane": "wasmedge",
-      "runs": 5,
-      "durationMs": 1386
+      "runs": 5
     }
   ],
   "cases": [
