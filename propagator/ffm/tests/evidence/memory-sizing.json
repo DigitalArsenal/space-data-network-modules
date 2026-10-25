@@ -1,14 +1,14 @@
 {
-  "artifactSha256": "11ed4293219aa7e1542cf7e1bf2b704b741a5a7dc1380127eb3a45d8ac8ea78a",
+  "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
   "previousArtifactSha256": "f2877a377ad682bf45f136455b3662c09afcd9871e8eaf3e83d3422594766d35",
   "memory": {
-    "staticMinimumBytes": 23825072,
-    "initialBytes": 28049408,
+    "staticMinimumBytes": 24176704,
+    "initialBytes": 28377088,
     "maximumBytes": 754974720,
     "wasmSection": {
       "source": "declared",
       "flags": 3,
-      "min": 428,
+      "min": 433,
       "max": 11520,
       "shared": true,
       "growable": true
@@ -43,7 +43,7 @@
       "runtime": "browser",
       "role": "resident-focus",
       "entities": 1,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "highWaterBytes": 28377088,
       "samples": [
         28377088,
@@ -63,7 +63,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 1,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "highWaterBytes": 28377088,
       "role": "resident-focus",
       "outputs": [
@@ -76,7 +76,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 1000,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "configuredBytes": 32309248,
       "highWaterBytes": 43057152,
       "samples": [
@@ -112,7 +112,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 1000,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "highWaterBytes": 43057152,
       "configuredBytes": 32309248,
       "samples": [
@@ -146,7 +146,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 4000,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "configuredBytes": 43909120,
       "highWaterBytes": 87359488,
       "samples": [
@@ -181,7 +181,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 4000,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "highWaterBytes": 87359488,
       "configuredBytes": 43909120,
       "samples": [
@@ -215,7 +215,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 10000,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "configuredBytes": 67239936,
       "highWaterBytes": 175898624,
       "samples": [
@@ -250,7 +250,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 10000,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "highWaterBytes": 175898624,
       "configuredBytes": 67239936,
       "samples": [
@@ -284,7 +284,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 31814,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "configuredBytes": 151977984,
       "highWaterBytes": 497745920,
       "samples": [
@@ -323,7 +323,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 31814,
-      "baseBytes": 28049408,
+      "baseBytes": 28377088,
       "highWaterBytes": 497745920,
       "configuredBytes": 151977984,
       "samples": [
@@ -362,7 +362,7 @@
   "aot": {
     "status": "PASS",
     "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
-    "artifactSha256": "11ed4293219aa7e1542cf7e1bf2b704b741a5a7dc1380127eb3a45d8ac8ea78a",
+    "artifactSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
     "runtime": "WasmEdge 0.16.4; node spacedatanetwork 1.1.0",
     "execution": "Every native row executed the exact flow artifact produced by node prewarm-aot."
   },

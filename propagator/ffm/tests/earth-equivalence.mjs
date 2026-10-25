@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Earth equivalence: the Earth's results of this tree's artifact against a reference tree's (modules main), byte for byte.
 //
-//   node tests/earth-equivalence.mjs digest [lane]        hash every response of the Orekit and cross-validation requests
-//                                                         (the 72 Orekit cases, their final-epoch-only variants and the
-//                                                         GMAT/Tudat/Nyx/Orekit cross-validation requests) on the lane
-//                                                         (browser, the default, or wasmedge) into .sdk-build/earth-digest.json
-//                                                         of this tree; on the browser lane also the answers (accepted or
-//                                                         refused, with the text) to some thousand edits of three Earth
-//                                                         requests: each field of the force model, the integrator, the
-//                                                         initial state and the request set one at a time to values it
-//                                                         accepts and values it must refuse, and each input left out
+//   node tests/earth-equivalence.mjs digest [lane [base|edit]]
+//                                                         hash the responses on the lane (browser, the default, or wasmedge)
+//                                                         into .sdk-build/earth-digest.json of this tree: `base`, the 72
+//                                                         Orekit cases, their final-epoch-only variants and the GMAT/Tudat/
+//                                                         Nyx/Orekit cross-validation requests; `edit`, the answers (accepted,
+//                                                         or refused with the text) to some two thousand edits of three Earth
+//                                                         requests: each field of the force model, the integrator, the initial
+//                                                         state and the request set one at a time to values it accepts and
+//                                                         values it must refuse, and each input left out. Both by default.
 //   node tests/earth-equivalence.mjs compare <ffm dir>    compare those digests and the parity receipts (the SDK parity plans
 //                                                         and the resident stateful run, tests/evidence) of this tree with
 //                                                         the same files of the reference tree's propagator/ffm, and the two
@@ -17,8 +17,10 @@
 //                                                         tests/evidence/earth-equivalence.json when every response is
 //                                                         identical (a difference exits 1 and writes nothing)
 //
-// Run `digest` (browser through headless-run) and the parity scripts in each tree first: each tree runs its own artifact.
-// Every parity receipt records both lanes, so the lanes are compared with each other inside each tree as well.
+// Run `digest` and the parity scripts in each tree first: each tree runs its own artifact. The digest's browser lane is the
+// SDK's browser host (createBrowserModuleHarness, the WASI shim and the module under V8) in this process; the parity
+// receipts' browser lane is the same host in Chromium's headless shell. Every parity receipt records both lanes, so the lanes
+// are compared with each other inside each tree as well.
 // Conformance tooling: it hashes bytes and does no physics.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -94,24 +96,27 @@ function editedRequests() {
   return out;
 }
 
-async function digest(lane = 'browser') {
+async function digest(lane = 'browser', groups = 'all') {
   assert(['browser', 'wasmedge'].includes(lane), `unknown lane ${lane}`);
+  assert(['all', 'base', 'edit'].includes(groups), `unknown group ${groups}`);
   const wasm = fs.readFileSync(path.join(ffm, 'dist/isomorphic/module.wasm'));
   const requests = [];
-  for (const c of OREKIT.cases) requests.push([`orekit/${c.orbit} ${c.forces}`, requestInputs(c)]);
-  for (const c of OREKIT.cases) if (!c.parameters) requests.push([`orekit-final-epoch/${c.orbit} ${c.forces}`, requestInputs(c, { edit: (exec) => { exec.SAMPLE_EPOCHS = []; } })]);
-  const seen = new Set();
-  for (const name of XVAL_CASES) {
-    for (const tool of XVAL_TOOLS) {
-      const c = tool.cases.get(name);
-      if (!c) continue;
-      const inputs = ffmInputs(c), key = sha(Buffer.concat(inputs.map((i) => Buffer.concat([Buffer.from(i.portId), Buffer.from(i.payload)]))));
-      if (seen.has(key)) continue;
-      seen.add(key);
-      requests.push([`xval/${name}/${c.atmosphere ?? 'NRLMSISE00'}`, inputs]);
+  if (groups !== 'edit') {
+    for (const c of OREKIT.cases) requests.push([`orekit/${c.orbit} ${c.forces}`, requestInputs(c)]);
+    for (const c of OREKIT.cases) if (!c.parameters) requests.push([`orekit-final-epoch/${c.orbit} ${c.forces}`, requestInputs(c, { edit: (exec) => { exec.SAMPLE_EPOCHS = []; } })]);
+    const seen = new Set();
+    for (const name of XVAL_CASES) {
+      for (const tool of XVAL_TOOLS) {
+        const c = tool.cases.get(name);
+        if (!c) continue;
+        const inputs = ffmInputs(c), key = sha(Buffer.concat(inputs.map((i) => Buffer.concat([Buffer.from(i.portId), Buffer.from(i.payload)]))));
+        if (seen.has(key)) continue;
+        seen.add(key);
+        requests.push([`xval/${name}/${c.atmosphere ?? 'NRLMSISE00'}`, inputs]);
+      }
     }
   }
-  if (lane === 'browser') requests.push(...editedRequests());
+  if (groups !== 'base') requests.push(...editedRequests());
   const out = { artifactSha256: sha(wasm), lane, responses: {} };
   // A fresh instance for every request, taken in a fixed order by a fixed worker: nothing one request leaves behind can reach
   // another, and two runs of the same artifact give the same digest.
@@ -136,7 +141,7 @@ async function digest(lane = 'browser') {
   const file = digestPath(ffm);
   const held = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
   const lanes = held?.artifactSha256 === out.artifactSha256 && held.lanes ? held.lanes : {};
-  lanes[lane] = out.responses;
+  lanes[lane] = { ...lanes[lane], ...out.responses };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify({ artifactSha256: out.artifactSha256, lanes }, null, 1)}\n`);
   console.log(`digest: ${Object.keys(out.responses).length} responses of ${out.artifactSha256.slice(0, 16)} on ${lane} -> ${path.relative(process.cwd(), file)}`);
@@ -176,6 +181,7 @@ function compare(referenceDir) {
   for (const lane of lanesOf(digestHere)) {
     for (const group of ['orekit/', 'orekit-final-epoch/', 'xval/', 'edit/']) {
       const pick = (d) => new Map([...digestRows(d.lanes[lane])].filter(([k]) => k.startsWith(group)));
+      assert(pick(refDigest).size > 0 && pick(digestHere).size > 0, `no ${group} responses on the ${lane} lane: run digest ${lane}`);
       compareMaps(`${group.slice(0, -1)} responses (${lane}), reference against this tree`, pick(refDigest), pick(digestHere), groups);
     }
   }
@@ -210,6 +216,6 @@ function compare(referenceDir) {
 }
 
 const [command, argument] = process.argv.slice(2);
-if (command === 'digest') await digest(argument);
+if (command === 'digest') await digest(argument, process.argv[4]);
 else if (command === 'compare' && argument) compare(argument);
 else { console.error('usage: earth-equivalence.mjs digest | compare <reference propagator/ffm dir>'); process.exit(2); }

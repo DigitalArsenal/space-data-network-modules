@@ -1,5 +1,5 @@
 {
-  "wasmSha256": "cb7b5b15827ffb609f23def40560453640adc3d96faef1fd2ed2a4b376ccf766",
+  "wasmSha256": "c5c8110182a34484092cf3fd4b623f693b02de3cc6098b746a2af6cc590b8197",
   "wasmBytes": 2630970,
   "wasmedgeVersion": "0.16.4",
   "dockerLane": "waived by the owner 2026-10-22 (no Docker)",
