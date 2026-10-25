@@ -10,6 +10,6 @@
     "space-data-module-sdk": "0.9.12"
   },
   "overrides": {
-    "hd-wallet-wasm": "2.1.1"
+    "hd-wallet-wasm": "2.1.2"
   }
 }
