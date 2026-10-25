@@ -3,9 +3,15 @@ Copyright 2026 Edgesource Corporation
 
 Licensed under the Apache License, Version 2.0 (LICENSE).
 
+Not covered by that license:
+- src/sgp4_core.inc and src/model.inc: derived from David Vallado's SGP4 (companion
+  code for Fundamentals of Astrodynamics and Applications), which the author
+  distributes freely with no license stated. These files are not covered by the
+  Apache-2.0 license of this package.
+
 The module compiles, from this repository, pinned by SHA-256 in build.mjs:
 - ERFA (Essential Routines for Fundamental Astronomy), BSD-3-Clause, derived with
-  permission from IAU SOFA (higherpop/third_party/erfa); its licence is carried
+  permission from IAU SOFA (higherpop/third_party/erfa); its license is carried
   as LICENSES/ERFA.txt and dist/LICENSES/ERFA.txt.
 - NRLMSISE-00, the C port by Dominik Brodowski, public domain
   (third_party/nrlmsise00).

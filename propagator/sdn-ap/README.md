@@ -9,7 +9,8 @@ with three theories:
 | SGP4XP | type 4: BTERM, AGOM (m^2/kg) | the US Space Force SGP4-XP theory, clean room (side B): the public change list, then SPEC.md section by section |
 | SDN-AP | SDN's own | SDN's improved theory, labeled as its own |
 
-License: Apache-2.0 ([LICENSE](LICENSE)); [NOTICE](NOTICE) names what the build compiles and reads.
+License: Apache-2.0 ([LICENSE](LICENSE)), except `src/sgp4_core.inc` and `src/model.inc`, derived from David
+Vallado's SGP4 and not covered by it; [NOTICE](NOTICE) names them and what the build compiles and reads.
 
 Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`, no exception handling) writes
 `dist/isomorphic/module.wasm`; it reads NRLMSISE-00, ERFA and EGM96 from this repository and the build data below

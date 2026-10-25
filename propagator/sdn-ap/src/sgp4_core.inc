@@ -1,7 +1,11 @@
 // -----------------------------------------------------------------------------
+// Derived from David Vallado's SGP4 (companion code for Fundamentals of Astrodynamics and Applications), which the
+// author distributes freely with no license stated. This file is not covered by the Apache-2.0 license of this
+// package.
+//
 // The public base: SGP4/SDP4 after Hoots & Roehrich (SPACETRACK REPORT No. 3,
 // 1980) and Vallado, Crawford, Hujsak & Kelso, "Revisiting Spacetrack Report
-// #3" (AIAA 2006-6753), AFSPC operations mode. Written for this module:
+// #3" (AIAA 2006-6753), AFSPC operations mode. Adapted for this module:
 // propagation is a pure function of the stored element record (no state is
 // written while propagating) and the deep-space resonance integrator reads
 // per-object checkpoints. SGP4XP sets have their own theory (xp_theory.inc).

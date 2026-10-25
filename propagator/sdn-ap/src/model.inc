@@ -1,4 +1,8 @@
 // -----------------------------------------------------------------------------
+// Derived from David Vallado's SGP4 (companion code for Fundamentals of Astrodynamics and Applications), which the
+// author distributes freely with no license stated. This file is not covered by the Apache-2.0 license of this
+// package.
+//
 // Ingest (sgp4init) and propagation (sgp4) of one object.
 //
 // Random access in time: the only integrated quantity of the theory is the
