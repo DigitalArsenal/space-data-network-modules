@@ -8,7 +8,7 @@
 //   set's COVARIANCE within 1e-6 relative (Frobenius).
 // - propagate of that set writes one covariance line per state: in TEME equal to sdnap_covariance_at at the same
 //   times (1e-9 relative); in GCRF the same matrices rotated (position trace equal within 1e-9 relative).
-// - The process noise is the one documented: a mean-longitude rate error s_l = 1e-6 (SDNAP_COV_NOISE "0 0 1e-6 0") adds
+// - The process noise is the one documented: a mean-longitude rate error s_l = 1e-6 (SDNAP_COV_NOISE "0 0 1e-6 0 t_a 0", constant rate errors) adds
 //   (a s_l n d)^2 of in-track variance d = 2 days after the arc within 10 %; the position covariance grows to 3 days.
 // - A set without COVARIANCE: sdnap_covariance_at -2 and no covariance lines; an SGP4 set -4; a consider row of the
 //   wrong length -6, and propagate refuses it (invalid-covariance).
@@ -157,7 +157,7 @@ check(trace(at.rows[3].P) > trace(at.rows[0].P), "the covariance grows over 3 da
   const sl = 1e-6;
   const edit = (value) => repack(omm, (t) => { t.USER_DEFINED_PARAMETERS.find((u) => u.PARAM_NAME === "SDNAP_COV_NOISE").PARAM_VALUE = value; });
   const t = arcEnd + 2880;
-  const a0 = covarianceAt(edit(`0 0 0 0 ${arcEnd}`), [t]).rows[0], a1 = covarianceAt(edit(`0 0 ${sl} 0 ${arcEnd}`), [t]).rows[0];
+  const a0 = covarianceAt(edit(`0 0 0 0 ${arcEnd} 0`), [t]).rows[0], a1 = covarianceAt(edit(`0 0 ${sl} 0 ${arcEnd} 0`), [t]).rows[0];
   const r = a0.state.slice(0, 3), v = a0.state.slice(3);
   const vn = Math.hypot(...v), V = v.map((c) => c / vn);
   const proj = (P) => { let s = 0; for (let i = 0; i < 3; ++i) for (let j = 0; j < 3; ++j) s += V[i] * P[i * 6 + j] * V[j]; return s; };

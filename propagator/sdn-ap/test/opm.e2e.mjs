@@ -154,7 +154,7 @@ for (const c of cases) {
   const lower = []; for (let i = 0; i < 6; ++i) for (let j = 0; j <= i; ++j) lower.push(P[i * 6 + j]);
   const rt = Math.hypot(...lower.map((v, k) => v - set.COVARIANCE[k])) / Math.hypot(...set.COVARIANCE);
   console.log(`covariance: TEME position trace vs EME2000's ${dtr.toExponential(2)}; sdnap_covariance_at at the epoch ${st}, ${rt.toExponential(2)} relative; noise ${u.SDNAP_COV_NOISE}`);
-  check(set.COVARIANCE.length === 21 && set.COV_REFERENCE_FRAME?.NAME === "TEME" && dtr <= 1e-12 && st === 0 && rt <= 1e-9 && u.SDNAP_COV_NOISE?.split(" ").length === 5, "covariance carried");
+  check(set.COVARIANCE.length === 21 && set.COV_REFERENCE_FRAME?.NAME === "TEME" && dtr <= 1e-12 && st === 0 && rt <= 1e-9 && u.SDNAP_COV_NOISE?.split(" ").length === 6, "covariance carried");
   const none = setOf(await opmSet(opmBytes(cases[0].el)));
   check(none.COVARIANCE.length === 0, "no covariance made");
 }

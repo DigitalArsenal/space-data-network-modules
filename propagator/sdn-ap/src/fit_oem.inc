@@ -1093,7 +1093,7 @@ static int fit_blocks(bool sdnap_mode) {
             put_list(cov::consider_name(kind[a]), values, a + 1);
           }
           put_list("SDNAP_COV_FLOOR_UVW", fit_cov.floor, 6);
-          put_list("SDNAP_COV_NOISE", fit_cov.noise, 5);
+          put_list("SDNAP_COV_NOISE", fit_cov.noise, 6);
           put("SDNAP_COV_NG_RATE", ng_rate);
           ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_COV_REGIME", fit_cov.regime == 0 ? "DRAG" : "ABOVE"));
         }

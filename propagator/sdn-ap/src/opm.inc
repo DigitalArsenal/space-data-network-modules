@@ -177,7 +177,7 @@ inline int set_of(const Source& s, flatbuffers::FlatBufferBuilder& fbb) {
   int steps = 0;
   if (!events::inverse_at_epoch(e, s.r, s.v, &steps)) return refuse("inverse-failed", "The inverse map did not converge at the $OPM state.");
   // the covariance's process noise: the regime's (SPEC 12.5), from the epoch
-  double noise[5] = {};
+  double noise[6] = {};
   if (s.has_cov) {
     ElementRow row{};
     row.epoch_jd_whole = e.epoch_jd_whole;
@@ -225,7 +225,7 @@ inline int set_of(const Source& s, flatbuffers::FlatBufferBuilder& fbb) {
   if (s.has_cov) {
     std::string text;
     char one[32];
-    for (int k = 0; k < 5; ++k) {
+    for (int k = 0; k < 6; ++k) {
       std::snprintf(one, sizeof one, k == 0 ? "%.17g" : " %.17g", noise[k]);
       text += one;
     }

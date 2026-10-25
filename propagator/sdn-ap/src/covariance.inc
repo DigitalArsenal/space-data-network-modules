@@ -25,6 +25,7 @@ namespace cov {
 /// fitted by `test/covariance-realism.mjs --set calibration` (test/results/covariance-calibration.json).
 struct Noise {
   double s_e, s_i, s_l, c;
+  double tau;  ///< days: the rate errors' Gauss-Markov correlation time (0: constant rate errors)
 };
 /// [theory: 0 SDN-AP, 1 SGP4XP][regime: 0 perigee below kDragRegimeKm, 1 above]
 constexpr Noise kNoise[2][2] = {{{1.963e-06, 2.69e-07, 2.371e-13, 1.928}, {1.358e-06, 3.652e-07, 5.328e-08, 0}},
@@ -227,7 +228,7 @@ struct Set {
   int np = 0;
   double C[kMaxAug * kMaxAug] = {};  ///< augmented epoch covariance (np x np): state block total, then consider
   double floor[6] = {};
-  double noise[5] = {};              ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2), the noise start t_a (min)
+  double noise[6] = {};              ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2), the noise start t_a (min), tau (days)
   int regime = 0;                    ///< 0 drag, 1 above (of_fit)
 };
 
@@ -259,6 +260,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   noise[2] = k.s_l;
   noise[3] = k.c * std::fabs(ng_rate) * n_min * kMinutesPerDay;
   noise[4] = t_a;
+  noise[5] = k.tau;
   return true;
 }
 
@@ -366,7 +368,7 @@ inline int read(const uint8_t* buf, uint32_t len, const ElementRow& row, Set& s)
       if (floor || noise) {
         const char* c = q->PARAM_VALUE()->c_str();
         char* end = nullptr;
-        for (int k = 0; k < (floor ? 6 : 5); ++k) {
+        for (int k = 0; k < 6; ++k) {
           (floor ? s.floor : s.noise)[k] = std::strtod(c, &end);
           if (end == c) return -1;
           c = end;
@@ -473,6 +475,11 @@ inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P) {
   const double t_a = p.s.noise[4];
   const double start = t > t_a ? t_a : t < 0.0 ? 0.0 : t;
   const double d = (t - start) / kMinutesPerDay;  // days, signed
+  // the element errors of Gauss-Markov rate errors of correlation time tau: sigma h(d), h = tau sqrt(2 (|d|/tau - 1 +
+  // exp(-|d|/tau))), d for |d| << tau and sqrt(2 tau |d|) for |d| >> tau (tau 0: constant rate errors, h = d)
+  const double tau = p.s.noise[5];
+  const double ad = std::fabs(d);
+  const double hd = tau > 0.0 ? std::copysign(tau * std::sqrt(2.0 * (ad / tau - 1.0 + std::exp(-ad / tau))), d) : d;
   if (d != 0.0) {
     const double n_min = p.b.x[5], n_day = n_min * kMinutesPerDay;
     auto add = [&](const double* g) {
@@ -484,12 +491,12 @@ inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P) {
     const double sizes[4] = {p.s.noise[0], p.s.noise[0], p.s.noise[1], p.s.noise[1]};
     for (int k = 0; k < 4; ++k) {
       if (sizes[k] == 0.0) continue;
-      for (int i = 0; i < 6; ++i) g[i] = J[i * np + k] * sizes[k] * d;
+      for (int i = 0; i < 6; ++i) g[i] = J[i * np + k] * sizes[k] * hd;
       add(g);
     }
     // mean longitude: d lambda = s_l n d
     if (p.s.noise[2] != 0.0) {
-      for (int i = 0; i < 6; ++i) g[i] = J[i * np + 4] * p.s.noise[2] * n_day * d;
+      for (int i = 0; i < 6; ++i) g[i] = J[i * np + 4] * p.s.noise[2] * n_day * hd;
       add(g);
     }
     // non-gravitational n-dot: d n(t) = s_d d, d lambda(t) = s_d d^2 / 2, as the epoch lambda0 and n that give them at t
