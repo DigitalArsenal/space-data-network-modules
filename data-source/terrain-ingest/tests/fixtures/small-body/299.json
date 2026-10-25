@@ -1,0 +1,66 @@
+{
+  "naif": 299,
+  "version": "venus-gtdr-v2-source-pixel-v1-20261023",
+  "radiusM": 6051000,
+  "maxLevel": 5,
+  "sourceResolutionM": 4641.0589,
+  "gridsByLevel": [
+    17,
+    17,
+    17,
+    17,
+    17,
+    65
+  ],
+  "outputPostSpacingM": 9282.117747496015,
+  "sourceFile": "/Users/tj/software/terrain-work/body-terrain/venus-gtdr-v2/Venus_Magellan_Topography_Global_4641m_v02.tif",
+  "sourceSha256": "92dd2c8850b128f9dcceb400f1367e3df96229f5309840fee4275b74f192ea11",
+  "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif",
+  "plan": {
+    "tilesetId": "usgs-venus-terrain",
+    "scheme": "GEOGRAPHIC_TWO_ROOT_BODY",
+    "centerName": "VENUS",
+    "referenceRadiiM": [
+      6051000
+    ],
+    "horizontalDatumName": "Venus simple cylindrical east-positive",
+    "verticalDatum": "REFERENCE_SPHERE",
+    "verticalDatumName": "6051000 m reference sphere",
+    "gridSize": 65,
+    "maxLevel": 5,
+    "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "provenance": {
+      "datasetId": "venus-gtdr-v2-sdn-source-pixel-v1",
+      "nativeId": "venus-gtdr-v2@sha256:92dd2c8850b128f9dcceb400f1367e3df96229f5309840fee4275b74f192ea11",
+      "datasetEpoch": "2026-10-23T13:05:16.000Z",
+      "retrievedAt": "2026-10-23T13:05:16.000Z",
+      "license": "Public domain; Please cite authors (primary USGS access/use constraints)",
+      "licenseUrl": "",
+      "attribution": "Magellan Team: Peter Ford, Gordon Pettengill, Fang Liu, Joan Quigley; USGS Astrogeology, GTDR version 2 (1997)",
+      "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Venus_Magellan_Topography_Global_4641m_v02.tif"
+    }
+  },
+  "options": {
+    "bodySampling": "source-pixel",
+    "rasterWidth": 8192,
+    "rasterHeight": 4096,
+    "rasterBits": 16,
+    "rasterType": "int16",
+    "rasterFirstByte": 33415,
+    "rasterFileBytes": 67142279,
+    "rasterRadiusM": 6051000,
+    "rasterSpacingM": 4641.0589,
+    "rasterOriginX": -19009777.2544,
+    "rasterOriginY": 9504888.6272,
+    "rasterCenterLongitude": 0,
+    "rasterScale": 1,
+    "rasterOffsetM": 0,
+    "rasterNoData": -32768.0,
+    "featherPixels": 16,
+    "minGridSize": 65,
+    "maxGridSize": 65,
+    "measureAccuracy": false,
+    "levelZeroErrorM": 0
+  }
+}

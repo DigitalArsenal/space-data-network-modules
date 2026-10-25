@@ -1,0 +1,68 @@
+{
+  "naif": 199,
+  "version": "mercury-messenger-v2-source-pixel-v1-20261023",
+  "radiusM": 2439400,
+  "maxLevel": 7,
+  "sourceResolutionM": 665.24315270546,
+  "gridsByLevel": [
+    17,
+    17,
+    17,
+    17,
+    17,
+    33,
+    65,
+    65
+  ],
+  "outputPostSpacingM": 935.4981834920583,
+  "sourceFile": "/Users/tj/software/terrain-work/body-terrain/mercury-messenger-v2/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif",
+  "sourceSha256": "defce776241dcaf44cb0f081ee508c17dbea28aa5a22880bf7a5e8c25f96cbea",
+  "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif",
+  "plan": {
+    "tilesetId": "usgs-mercury-terrain",
+    "scheme": "GEOGRAPHIC_TWO_ROOT_BODY",
+    "centerName": "MERCURY",
+    "referenceRadiiM": [
+      2439400
+    ],
+    "horizontalDatumName": "Mercury simple cylindrical east-positive",
+    "verticalDatum": "REFERENCE_SPHERE",
+    "verticalDatumName": "2439400 m reference sphere",
+    "gridSize": 65,
+    "maxLevel": 7,
+    "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "provenance": {
+      "datasetId": "mercury-messenger-v2-sdn-source-pixel-v1",
+      "nativeId": "mercury-messenger-v2@sha256:defce776241dcaf44cb0f081ee508c17dbea28aa5a22880bf7a5e8c25f96cbea",
+      "datasetEpoch": "2026-10-23T13:05:16.000Z",
+      "retrievedAt": "2026-10-23T13:05:16.000Z",
+      "license": "CC BY 4.0 per owner authorization; primary USGS metadata: access constraints None, use constraints Please cite authors",
+      "licenseUrl": "",
+      "attribution": "K. Becker et al.; NASA/USGS/ASU/JHUAPL/Carnegie Institution for Science, MESSENGER MDIS, version 2 (2016)",
+      "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Mercury_Messenger_USGS_DEM_Global_665m_v2.tif"
+    }
+  },
+  "options": {
+    "bodySampling": "source-pixel",
+    "rasterWidth": 23040,
+    "rasterHeight": 11520,
+    "rasterBits": 16,
+    "rasterType": "int16",
+    "rasterFirstByte": 92981,
+    "rasterFileBytes": 530934581,
+    "rasterRadiusM": 2439400,
+    "rasterSpacingM": 665.24315270546,
+    "rasterOriginX": -7663601.1191669,
+    "rasterOriginY": 3831800.5595835,
+    "rasterCenterLongitude": 180,
+    "rasterScale": 0.5,
+    "rasterOffsetM": 0,
+    "rasterNoData": -32768.0,
+    "featherPixels": 16,
+    "minGridSize": 65,
+    "maxGridSize": 65,
+    "measureAccuracy": false,
+    "levelZeroErrorM": 0
+  }
+}

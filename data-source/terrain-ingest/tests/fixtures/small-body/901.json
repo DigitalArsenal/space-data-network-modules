@@ -1,0 +1,67 @@
+{
+  "naif": 901,
+  "version": "charon-global-source-pixel-v1-20261023",
+  "radiusM": 606000,
+  "maxLevel": 6,
+  "sourceResolutionM": 300.0,
+  "gridsByLevel": [
+    17,
+    17,
+    17,
+    17,
+    17,
+    33,
+    65
+  ],
+  "outputPostSpacingM": 464.79617872934926,
+  "sourceFile": "/Users/tj/software/terrain-work/body-terrain/charon-global/Charon_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+  "sourceSha256": "4496de98a9b682fd3440da616ef7f5adfbc315b438e4d18833ae3a843eb41bcc",
+  "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Charon_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+  "plan": {
+    "tilesetId": "usgs-charon-terrain",
+    "scheme": "GEOGRAPHIC_TWO_ROOT_BODY",
+    "centerName": "CHARON",
+    "referenceRadiiM": [
+      606000
+    ],
+    "horizontalDatumName": "Charon simple cylindrical east-positive",
+    "verticalDatum": "REFERENCE_SPHERE",
+    "verticalDatumName": "606000 m reference sphere",
+    "gridSize": 65,
+    "maxLevel": 6,
+    "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "provenance": {
+      "datasetId": "charon-global",
+      "nativeId": "charon-global@sha256:4496de98a9b682fd3440da616ef7f5adfbc315b438e4d18833ae3a843eb41bcc",
+      "datasetEpoch": "2017-07-14T00:00:00.000Z",
+      "retrievedAt": "2026-10-23T13:05:16.000Z",
+      "license": "public-domain",
+      "licenseUrl": "http://www.usa.gov/publicdomain/label/1.0/",
+      "attribution": "NASA/JHUAPL/SwRI/LPI, New Horizons, Schenk et al.",
+      "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Charon_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif"
+    }
+  },
+  "options": {
+    "bodySampling": "source-pixel",
+    "rasterWidth": 12693,
+    "rasterHeight": 6347,
+    "rasterBits": 16,
+    "rasterType": "int16",
+    "rasterFirstByte": 51427,
+    "rasterFileBytes": 161176369,
+    "rasterRadiusM": 606000,
+    "rasterSpacingM": 300.0,
+    "rasterOriginX": -1903950.0,
+    "rasterOriginY": 952200.0,
+    "rasterCenterLongitude": 0,
+    "rasterScale": 1,
+    "rasterOffsetM": 0,
+    "rasterNoData": -32768.0,
+    "featherPixels": 16,
+    "minGridSize": 65,
+    "maxGridSize": 65,
+    "measureAccuracy": false,
+    "levelZeroErrorM": 0
+  }
+}

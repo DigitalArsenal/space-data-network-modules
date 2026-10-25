@@ -1,0 +1,67 @@
+{
+  "naif": 999,
+  "version": "pluto-global-source-pixel-v1-20261023",
+  "radiusM": 1188300,
+  "maxLevel": 7,
+  "sourceResolutionM": 300.0,
+  "outputPostSpacingM": 455.70734256112684,
+  "sourceFile": "/Users/tj/software/terrain-work/body-terrain/pluto-global/Pluto_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+  "sourceSha256": "259b3e962540285f9833b13b4ad28c6b38aadb68300a52d733990b4b8870a640",
+  "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif",
+  "plan": {
+    "tilesetId": "usgs-pluto-terrain",
+    "scheme": "GEOGRAPHIC_TWO_ROOT_BODY",
+    "centerName": "PLUTO",
+    "referenceRadiiM": [
+      1188300
+    ],
+    "horizontalDatumName": "Pluto simple cylindrical east-positive",
+    "verticalDatum": "REFERENCE_SPHERE",
+    "verticalDatumName": "1188300 m reference sphere",
+    "gridSize": 65,
+    "maxLevel": 7,
+    "sourceClass": "SPACEBORNE_OPTICAL_STEREO",
+    "remarks": "Nearest original source pixel; 16-source-pixel smoothstep feather to sphere at NoData cells and poles. QM metadata sourcePixelMask: 0 sphere, 1 original pixel, 2 feather; final vertex order.",
+    "provenance": {
+      "datasetId": "pluto-global",
+      "datasetEpoch": "2017-07-14T00:00:00.000Z",
+      "retrievedAt": "2026-10-23T13:05:16.000Z",
+      "license": "public-domain",
+      "licenseUrl": "http://www.usa.gov/publicdomain/label/1.0/",
+      "attribution": "NASA/JHUAPL/SwRI/LPI, New Horizons, Schenk et al.",
+      "sourceUrl": "https://asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/Pluto_NewHorizons_Global_DEM_300m_Jul2017_16bit.tif"
+    }
+  },
+  "options": {
+    "bodySampling": "source-pixel",
+    "rasterWidth": 24888,
+    "rasterHeight": 12444,
+    "rasterBits": 16,
+    "rasterType": "int16",
+    "rasterFirstByte": 100199,
+    "rasterFileBytes": 619512743,
+    "rasterRadiusM": 1188300,
+    "rasterSpacingM": 300.0,
+    "rasterOriginX": -3733200.0,
+    "rasterOriginY": 1866600.0,
+    "rasterCenterLongitude": 180,
+    "rasterScale": 1,
+    "rasterOffsetM": 0,
+    "rasterNoData": -32768.0,
+    "featherPixels": 16,
+    "minGridSize": 65,
+    "maxGridSize": 65,
+    "measureAccuracy": false,
+    "levelZeroErrorM": 0
+  },
+  "gridsByLevel": [
+    17,
+    17,
+    17,
+    17,
+    17,
+    33,
+    65,
+    65
+  ]
+}
