@@ -6,12 +6,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {composeErfaTranslationUnit} from '../../foundation/frames/erfa-amalgamation.mjs';
 import {resolveWasiThreadsToolchain,getFlatbuffersCppRuntimeHeaders,getInvokeCppSchemaHeaders,assertSequentialArtifact} from 'space-data-module-sdk/compiler';
 import {encodePluginManifest} from 'space-data-module-sdk/manifest';
 import {appendWasmCustomSection,SDS_MANIFEST_SECTION_NAME} from 'space-data-module-sdk/bundle';
 import {validatePluginArtifact} from 'space-data-module-sdk/compliance';
-import {physicsUnits} from '../../propagator/ffm/lib/units.mjs';
+import {modelDefinitions,modelIncludeDirs,modelUnits,odUnits} from './units.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url)),cpp=path.join(root,'src/cpp');
 const out=path.resolve(process.argv[2]??path.join(root,'dist/isomorphic/module.unsigned.wasm'));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json')));
@@ -26,27 +25,20 @@ try {
  }
  const manifestBytes=encodePluginManifest(manifest);
  await fs.writeFile(path.join(build,'plugin_manifest_bytes.h'),`#include <stdint.h>\nstatic const uint8_t od_plugin_manifest_bytes[]={${[...manifestBytes].join(',')}};\nstatic const uint32_t od_plugin_manifest_bytes_len=${manifestBytes.length};\n`);
- const sources=['meme_parser','frame_transform','oem_parser','oem_fb_reader','omm_fb_builder','obd_fb_builder','ocm_fb_builder','sgp4_fitter','plugin_runtime','plugin_entrypoints','plugin_invoke_bridge','operator_fit','operator_records','operator_mnv','noexcept_stubs'].map(x=>path.join(cpp,'src',x+'.cpp'));
- const modules=path.resolve(root,'../..'),ffm=path.join(modules,'propagator/ffm');
- const ffmManifest=JSON.parse(await fs.readFile(path.join(ffm,'plugin-manifest.json')));
- const cIdentity=value=>{if(!/^[A-Za-z0-9_.-]+$/.test(value))throw new Error('Invalid FFM build identity');return '"'+value+'"';};
- sources.push(...physicsUnits.map(n=>path.join(ffm,'lib',n+'.cpp')));
- sources.push(...['prw_dynamics','resident_dynamics','kernel_store'].map(n=>path.join(ffm,'src/cpp/src',n+'.cpp')));
- sources.push(...['hwm14/hwm14.cpp','hwm14/hwm14_data.cpp','nrlmsise00/nrlmsise-00.c','nrlmsise00/nrlmsise-00_data.c'].map(n=>path.join(modules,'third_party',n)));
- const erfa=path.join(build,'erfa.cpp');await fs.writeFile(erfa,(await composeErfaTranslationUnit()).source);sources.push(erfa);
- const ffmIncludes=['lib','src','src/cpp/include','src/cpp/generated','src/cpp/generated/sds'].map(p=>'-I'+path.join(ffm,p));
- ffmIncludes.push(...['third_party/nrlmsise00','third_party/hwm14','foundation/frames/src','higherpop/third_party/erfa'].map(p=>'-I'+path.join(modules,p)));
+ // units.mjs: the units CMake's browser build compiles too; this build's own glue is noexcept_stubs, after OD's units.
+ const modules=path.resolve(root,'../..');
+ const sources=[...odUnits,{path:path.join(cpp,'src/noexcept_stubs.cpp'),language:'c++',exceptions:'ignore'},...await modelUnits({erfaPath:path.join(build,'erfa.cpp')})];
+ const ffmIncludes=modelIncludeDirs.map(p=>'-I'+p);
  const executable=path.join(build,'module.wasm');
  const exports=['_start','_initialize','plugin_alloc','plugin_free','plugin_invoke_stream','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','fit','fit_ffm'];
  const common=[...toolchain.toolchainArgs,'-O3','-fno-c++-static-destructors','-msimd128','-mbulk-memory','-DNDEBUG','-DEIGEN_DONT_PARALLELIZE',
-  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,'-DFFM_MODULE_ID='+cIdentity(ffmManifest.pluginId),'-DFFM_MODULE_VERSION='+cIdentity(ffmManifest.version),'-DFFM_TYPED_INPUTS_ONLY=1',
+  '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),...ffmIncludes,...(await modelDefinitions()).map(d=>'-D'+d),
   '-I'+build,'-I'+path.join(cpp,'include'),'-I'+path.join(cpp,'generated'),'-I'+path.resolve(root,'../../foundation/sgp4-str3/include'),'-I'+path.resolve(root,'../../common'),'-I'+eigen,'-I'+path.resolve(root,'../../licensing/core/src/cpp/generated/sds')];
  const run=args=>{const r=spawnSync(toolchain.clangxx,args,{encoding:'utf8',timeout:180000});if(r.status!==0)throw new Error(r.error?.message??r.stderr);};
  const objects=[];
- for(const [i,source] of sources.entries()){
-  const object=path.join(build,i+'.o');objects.push(object);console.log('compile '+path.relative(modules,source));
-  const c=source.endsWith('.c');
-  run([...common,...(c?['-x','c']:['-std=c++17',source.startsWith(ffm)?'-fno-exceptions':'-fignore-exceptions']),'-DOD_REACTOR_BUILD','-c',source,'-o',object]);
+ for(const [i,unit] of sources.entries()){
+  const object=path.join(build,i+'.o');objects.push(object);console.log('compile '+path.relative(modules,unit.path));
+  run([...common,...(unit.language==='c'?['-x','c']:['-std=c++17',unit.exceptions==='none'?'-fno-exceptions':'-fignore-exceptions']),'-DOD_REACTOR_BUILD','-c',unit.path,'-o',object]);
  }
  run([...common,...objects,'-mexec-model=reactor','-Wl,--initial-memory=67108864','-Wl,--max-memory=2147483648','-Wl,-z,stack-size=2097152',...exports.map(x=>'-Wl,--export='+x),'-o',executable]);
  let bytes=new Uint8Array(await fs.readFile(executable));
