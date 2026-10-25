@@ -113,6 +113,14 @@ build_browser() {
     echo ""
     echo "Building browser-compatible standalone (command) artifact..."
     cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
+    # The link allows undefined symbols (the module host's imports), so a unit left out of the build would become an
+    # `env` import no host provides: refuse any import but WASI's and the module host's.
+    node --input-type=module -e '
+import fs from "node:fs";
+const allowed = new Set(["wasi_snapshot_preview1", "space_data_module_host"]);
+const stray = WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(process.argv[1]))).filter((i) => !allowed.has(i.module));
+if (stray.length) { console.error(`unresolved imports: ${stray.map((i) => `${i.module}.${i.name}`).join(", ")}`); process.exit(1); }
+' "$BUILD_DIR/${BROWSER_TARGET}.wasm"
     cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
     cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
     mkdir -p "$ISOMORPHIC_DIST_DIR"
