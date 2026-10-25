@@ -464,7 +464,7 @@ inline int read(Method method) {
   fitoem::tau_terms() = 2;
   fitoem::beff_rule_limit() = __builtin_inf();
   fitoem::tau_above_regime() = false;
-  glr_threshold() = 20.0;
+  glr_threshold() = 6.0;
   const plugin_input_frame_t* cf = nullptr;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);

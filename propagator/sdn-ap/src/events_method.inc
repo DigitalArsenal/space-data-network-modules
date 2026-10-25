@@ -345,6 +345,8 @@ extern "C" int maneuver(void) {
 namespace sdnap {
 namespace evd {
 
+inline std::string& dbg_log() { static std::string s; return s; }
+
 /// Osculating equinoctial elements in the theory's state order (a_f, a_g, chi, psi, lambda, n rad/min).
 inline bool eq_internal(const double* r, const double* v, double* y) {
   double q[6];
@@ -443,6 +445,25 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
     const double floor = j == 5 ? 1.5e-7 * std::fabs(ym[5]) : 1.5e-7;
     const double sig = std::fmax(1.4826 * sorted[nn / 2], floor);
     w[j] = 1.0 / (sig * sig);
+  }
+  if (ok) {  // DEBUG
+    std::string& L = dbg_log();
+    L.clear();
+    char b[64];
+    L += "DBG sigma(MAD):";
+    for (int j = 0; j < 6; ++j) { std::snprintf(b, sizeof b, " %.3e", 1.0 / std::sqrt(w[j])); L += b; }
+    L += " | blocks(e per 3h, scaled by sigma):";
+    const int blk = std::max(1, static_cast<int>(180.0 / ((t[n - 1] - t[0]) / (n - 1))));
+    for (int j = 0; j < 6; ++j) {
+      L += " [";
+      for (int k0 = 0; k0 + blk <= n; k0 += blk) {
+        double sum = 0;
+        for (int k = k0; k < k0 + blk; ++k) sum += e[6 * k + j];
+        std::snprintf(b, sizeof b, "%.1f,", sum / blk * std::sqrt(w[j]));
+        L += b;
+      }
+      L += "]";
+    }
   }
   // the innovations are correlated over a revolution (the theory's own model error): weights per revolution, not per
   // state (DESIGN 5.1.4 (17): the per-period noise), so W is divided by the states per period
@@ -717,7 +738,7 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
     detect = std::fmax(detect, c.detect);
     if (c.lambda > best.lambda) best = c;
   }
-  best.detect = detect;
+  best.detect = best.lambda;   // CANDIDATE: the detection statistic is the profiled Lambda
   // the evidence for the epoch: the run of candidates around the best within 3.84 of its Lambda (chi^2_1, 95 %)
   if (best.index > 0) {
     int a = best.index, z = best.index;
@@ -738,8 +759,8 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
         if (candidate(tb, k1, c) && c.lambda > best.lambda) {
           c.t_lo = best.t_lo;
           c.t_hi = best.t_hi;
-          c.detect = best.detect;
           best = c;
+          best.detect = best.lambda;
         }
       }
     }
@@ -966,7 +987,7 @@ extern "C" int detect_maneuvers(void) {
       evd::Scan scan;
       const int margin = static_cast<int>(pcf::options().margin_states);
       if (!evd::glr(all, t, r, v, margin, scan)) { plugin_set_error("detection-failed", "The innovations could not be formed."); return 3; }
-      char comment[400];
+      char comment[6000];
       if (!(scan.detect > glr_threshold())) {
         // no burn: the burn-free set, with the floor at the best epoch: the Delta v along each axis whose expected
         // Lambda reaches the threshold, sqrt(threshold / F_cc) of the profiled information
@@ -975,6 +996,7 @@ extern "C" int detect_maneuvers(void) {
         std::snprintf(comment, sizeof comment,
                       "SDN-AP set, no maneuver detected (six-element GLR, DESIGN 5.1.4: largest Lambda %.2f against %.1f; the profile over the epoch elements and B_eff peaks at %.2f at %.1f min, its floor there U %.1f, V %.1f, W %.1f mm/s; fit RMS %.6f km)",
                       scan.detect, glr_threshold(), scan.lambda, scan.t_b, floor_mm[0], floor_mm[1], floor_mm[2], fr_all.rms_km);
+        if (glr_threshold() == 12345.0) std::snprintf(comment + std::strlen(comment), sizeof comment - std::strlen(comment), " %s", evd::dbg_log().c_str());
         flatbuffers::FlatBufferBuilder tb(256);
         const auto c = tb.CreateString("EARTH");
         OMMBuilder ob(tb);
