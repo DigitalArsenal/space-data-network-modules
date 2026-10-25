@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { physicsUnits } from '../lib/units.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const repo=resolve(here,'../../..');
 test('FFM third-body and SRP forces consume authoritative DE440 vectors',(t)=>{
@@ -21,7 +22,7 @@ test('FFM third-body and SRP forces consume authoritative DE440 vectors',(t)=>{
     }
     const binary=join(work,'de440-force');
     execFileSync('c++',['-std=c++17','-O2','-I',lib,'-I',nrl,'-I',join(repo,'third_party/hwm14'),join(repo,'third_party/hwm14/hwm14.cpp'),join(repo,'third_party/hwm14/hwm14_data.cpp'),join(here,'de440_force_native.cpp'),
-      ...['astrodynamics','coords','ephemeris','environment_models','force_models','atmosphere_winds','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin'].map(name=>join(lib,`${name}.cpp`)),
+      ...physicsUnits.map(name=>join(lib,`${name}.cpp`)),
       ...objects,'-o',binary],{stdio:'pipe'});
     const run=spawnSync(binary,[join(repo,'files/orbit-products/tests/fixtures/de440')],{encoding:'utf8'});
     process.stdout.write(run.stdout??'');

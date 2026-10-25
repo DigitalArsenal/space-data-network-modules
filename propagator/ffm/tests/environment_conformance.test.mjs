@@ -15,6 +15,7 @@ import { mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { physicsUnits } from '../lib/units.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ffm = resolve(here, "..");            // propagator/ffm
@@ -45,9 +46,7 @@ test("ffm environment models conform to their stated authorities", (t) => {
     "-I", join(ffm, "lib"),
     "-I",nrl,"-I",join(repo,"third_party/hwm14"),join(repo,"third_party/hwm14/hwm14.cpp"),join(repo,"third_party/hwm14/hwm14_data.cpp"),
     join(here, "environment_conformance.cpp"),
-    ...["astrodynamics", "coords", "ephemeris", "environment_models",
-        "force_models","atmosphere_winds", "integrators", "nrlmsise00", "time_convert", "us76",
-        "atmosphere_plugin"].map((f) => join(ffm, "lib", `${f}.cpp`)),
+    ...physicsUnits.map((f) => join(ffm, "lib", `${f}.cpp`)),
     ...objs,
     "-o", bin,
   ], { stdio: "pipe" });

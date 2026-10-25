@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { composeErfaTranslationUnit } from '../../../../../foundation/frames/erfa-amalgamation.mjs';
+import { physicsUnits } from '../../../lib/units.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const FFM = path.resolve(here, '../../..');
@@ -38,7 +39,7 @@ export async function buildFfmFrames(work, flatbuffers = DEFAULT_FLATBUFFERS) {
     return obj;
   });
   execFileSync('c++', ['-std=c++17', '-O2', ...inc.flatMap((d) => ['-I', d]), '-I', nrl, '-I', hwm, path.join(here, 'ffm_frames_native.cpp'),
-    ...['astrodynamics', 'coords', 'ephemeris', 'environment_models', 'atmosphere_winds', 'integrators', 'nrlmsise00', 'time_convert', 'us76', 'atmosphere_plugin']
+    ...physicsUnits.filter((n) => n !== 'force_models')
       .map((f) => path.join(FFM, 'lib', `${f}.cpp`)),
     path.join(hwm, 'hwm14.cpp'), path.join(hwm, 'hwm14_data.cpp'), ...objects, erfaUnit, '-o', bin], { stdio: 'pipe', env: {...process.env, TMPDIR: work, TMP: work, TEMP: work} });
   return {

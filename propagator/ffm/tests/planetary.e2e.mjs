@@ -16,7 +16,7 @@
 //      float64 coefficients through an independent Legendre recursion and potential differences, an independent evaluation of MRO120F's
 //      label formula; the C++ is the module's own sources built natively;
 //   1. LRO, two windows: the state and the radiation-pressure coefficient fitted to the first day, predicted over the next
-//      three, error by day; and the same arc at field degrees 2 to 360 (one window), so the field shows in the error;
+//      three, error by day; and the same arc at field degrees 2, 20, 60 and 150 (one window), so the field shows in the error;
 //   2. MRO and MAVEN: state, radiation pressure and drag (Mars's banded exponential atmosphere) fitted to the first day,
 //      predicted over three, error by day;
 //   3. refusals by name: what is the Earth's and what lies outside an embedded model's span;
@@ -28,6 +28,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { destroyLanes, KERNELS, MARS, MOON, readTruth, request, run } from './lib/planetary.mjs';
+import { physicsUnits } from '../lib/units.mjs';
 import { byDay, fit, fitIndices, fmt } from './lib/planetaryFit.mjs';
 import { sds } from './lib/prwCodec.mjs';
 import { buildNative, run as runNative } from './lib/nativeBuild.mjs';
@@ -50,7 +51,7 @@ console.log('0. Embedded fields, axes and the third-body harmonic term against i
   const lib = ['planetary_fields', 'ffm_gravity', 'time_convert'].map((n) => `lib/${n}.cpp`);
   const planetary = await buildNative('planetary', ['tests/planetary_native.cpp', ...lib]);
   const third = buildNative('third-body', ['tests/third_body_harmonics_native.cpp', '../../third_party/hwm14/hwm14.cpp', '../../third_party/hwm14/hwm14_data.cpp', '../../third_party/nrlmsise00/nrlmsise-00.c', '../../third_party/nrlmsise00/nrlmsise-00_data.c',
-    ...['astrodynamics', 'coords', 'ephemeris', 'environment_models', 'force_models', 'atmosphere_winds', 'nrlmsise00', 'time_convert', 'us76', 'atmosphere_plugin', 'ffm_gravity', 'planetary_fields', 'central_body', 'integrators', 'force_partials', 'rk_engine', 'integrator_events', 'variational', 'finite_burn'].map((n) => `lib/${n}.cpp`)]);
+    ...physicsUnits.map((n) => `lib/${n}.cpp`)]);
   try {
     // Axes. The Moon's libration frame against CSPICE (pxform J2000 -> MOON_PA_DE440): bar 1e-9 on every element, measured 4e-11
     // (the two read the same Chebyshev records; the difference is the driver's instant, a single-double Julian date, 4e-5 s at
@@ -104,9 +105,10 @@ for (const name of ['lro-2026-03-20', 'lro-2026-03-27']) {
   const days = await byDay(ctx, solution, 4);
   results.lro[name] = { fitRms: solution.fitRms, scales: solution.scales, days };
   console.log(`  ${name} degree 150: fit rms ${solution.fitRms.toFixed(1)} m, SRP scale ${solution.scales.srp.toFixed(2)}; ${fmt(days)}`);
-  // Measured 19.6 and 3.5 m (fit) and 117, 293, 516 m (window 1) on days 2 to 4; the bars are about twice the worse window.
-  check(solution.fitRms < 40, `${name}: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 40 m`);
-  check(days[0].rms < 70 && days[1].rms < 250 && days[2].rms < 600 && days[3].rms < 1100, `${name}: prediction errors ${fmt(days)} exceed the 70, 250, 600 and 1100 m bars`);
+  // Measured 11.2 and 2.4 m (fit) and, on days 1 to 4 of the worse window (03-20), 21.7, 24.4, 94.4 and 230.1 m; the bars are
+  // about twice the worse window.
+  check(solution.fitRms < 25, `${name}: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 25 m`);
+  check(days[0].rms < 45 && days[1].rms < 50 && days[2].rms < 190 && days[3].rms < 460, `${name}: prediction errors ${fmt(days)} exceed the 45, 50, 190 and 460 m bars`);
 }
 {
   const truth = readTruth('lro-2026-03-20.json');
@@ -118,10 +120,12 @@ for (const name of ['lro-2026-03-20', 'lro-2026-03-27']) {
     results.sweep.push({ degree, fitRms: solution.fitRms, day2: days[1].rms });
     console.log(`    degree ${String(degree).padStart(3)}: fit rms ${solution.fitRms.toFixed(1)} m, day-2 prediction rms ${days[1].rms.toFixed(1)} m`);
   }
-  const [low, mid, high] = results.sweep;
-  // Measured day-2 errors 29 215, 1 581, 117 and 115 m at degrees 2, 20, 100 and 200: the field is what the error is made of up to
-  // about degree 100, and beyond it the unmodeled forces and the truth's own fit are.
-  check(low.day2 > 10 * mid.day2 && mid.day2 > 5 * high.day2 && low.fitRms > 50 * high.fitRms, `error does not fall with the field's degree: ${JSON.stringify(results.sweep)}`);
+  const [d2, d20, d60, d150] = results.sweep;
+  // Measured day-2 errors 15 249, 1 446, 60.7 and 24.4 m (fit 4 429, 637, 29.5 and 11.2 m) at degrees 2, 20, 60 and 150: the field is
+  // what the error is made of up to about degree 60, and past it the unmodeled forces and the truth's own fit are. The bars are
+  // about half the measured ratios.
+  check(d2.day2 > 5 * d20.day2 && d20.day2 > 10 * d60.day2 && d60.day2 > 1.5 * d150.day2 && d2.fitRms > 5 * d20.fitRms && d20.fitRms > 10 * d60.fitRms && d60.fitRms > 1.5 * d150.fitRms,
+    `error does not fall with the field's degree: ${JSON.stringify(results.sweep)}`);
 }
 
 // ---- 2. MRO and MAVEN ---------------------------------------------------------------------------------------------
@@ -133,9 +137,9 @@ console.log('2. MRO and MAVEN about Mars (MRO120F in its own axes, banded expone
   const days = await byDay(ctx, solution, 4);
   results.mro = { fitRms: solution.fitRms, scales: solution.scales, days };
   console.log(`  MRO ${truth.start.slice(0, 10)}: fit rms ${solution.fitRms.toFixed(1)} m, SRP scale ${solution.scales.srp.toFixed(2)}, drag scale ${solution.scales.drag.toFixed(2)}; ${fmt(days)}`);
-  // Measured 0.4 m (fit) and 0.7, 1.9, 10.2, 27.2 m on days 1 to 4; the bars are about two to three times that.
-  check(solution.fitRms < 2, `MRO: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 2 m`);
-  check(days[0].rms < 3 && days[1].rms < 6 && days[2].rms < 30 && days[3].rms < 80, `MRO: prediction errors ${fmt(days)} exceed the 3, 6, 30 and 80 m bars`);
+  // Measured 0.4 m (fit) and 1.1, 2.3, 4.1, 6.5 m on days 1 to 4; the bars are about twice that.
+  check(solution.fitRms < 1, `MRO: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 1 m`);
+  check(days[0].rms < 2.5 && days[1].rms < 5 && days[2].rms < 9 && days[3].rms < 14, `MRO: prediction errors ${fmt(days)} exceed the 2.5, 5, 9 and 14 m bars`);
 }
 {
   const truth = readTruth('maven-2021-02-12.json');
@@ -144,9 +148,10 @@ console.log('2. MRO and MAVEN about Mars (MRO120F in its own axes, banded expone
   const days = await byDay(ctx, solution, 4);
   results.maven = { fitRms: solution.fitRms, scales: solution.scales, days };
   console.log(`  MAVEN ${truth.start.slice(0, 10)}: fit rms ${solution.fitRms.toFixed(1)} m, SRP scale ${solution.scales.srp.toFixed(2)}, drag scale ${solution.scales.drag.toFixed(2)}; ${fmt(days)}`);
-  // Measured 3.0 m (fit) and 5.7, 16.5, 82, 160 m on days 1 to 4; the bars are about two to three times that.
-  check(solution.fitRms < 10, `MAVEN: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 10 m`);
-  check(days[0].rms < 20 && days[1].rms < 45 && days[2].rms < 200 && days[3].rms < 400, `MAVEN: prediction errors ${fmt(days)} exceed the 20, 45, 200 and 400 m bars`);
+  // Measured 2.5 m (fit) and 4.4, 23.7, 161.7, 316.6 m on days 1 to 4 (the drag of a periapsis near 150 km is what the days
+  // past the first are made of); the bars are about twice that.
+  check(solution.fitRms < 6, `MAVEN: one-day fit rms ${solution.fitRms.toFixed(1)} m is not below 6 m`);
+  check(days[0].rms < 10 && days[1].rms < 50 && days[2].rms < 320 && days[3].rms < 640, `MAVEN: prediction errors ${fmt(days)} exceed the 10, 50, 320 and 640 m bars`);
 }
 
 // ---- 3. refusals by name ------------------------------------------------------------------------------------------

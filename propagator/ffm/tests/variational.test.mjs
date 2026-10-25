@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { physicsUnits } from '../lib/units.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
@@ -28,9 +29,7 @@ test('FFM variational equations: independent Kepler STM, J2, covariance and timi
     const binary = join(work, 'variational');
     execFileSync('c++', ['-std=c++17', '-O2', '-I', lib, '-I',nrl,'-I',join(repo,'third_party/hwm14'),join(repo,'third_party/hwm14/hwm14.cpp'),join(repo,'third_party/hwm14/hwm14_data.cpp'),
       join(here, 'variational_native.cpp'),
-      ...['astrodynamics', 'coords', 'ephemeris', 'environment_models', 'force_models','atmosphere_winds',
-        'force_partials', 'variational', 'integrators', 'nrlmsise00', 'time_convert',
-        'us76', 'atmosphere_plugin'].map(name => join(lib, `${name}.cpp`)),
+      ...physicsUnits.map(name => join(lib, `${name}.cpp`)),
       ...objects, '-o', binary], { stdio: 'pipe' });
     // Explicit maintainer mode: regenerate solely from the independent closed-
     // form reference. Normal test runs never modify the committed fixture.

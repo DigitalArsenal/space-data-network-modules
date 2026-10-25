@@ -623,8 +623,8 @@ matrix, covariance, impulses, finite burns, dynamic parameters and process noise
 
 | | Moon | Mars |
 | --- | --- | --- |
-| Field | `GRAVITY_CHOICE` `GRGM660PRIM` (or `SPHERICAL_HARMONICS`), degree 2 to 660: GRGM660PRIM (Lemoine et al. 2013), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `SPHERICAL_HARMONICS`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
-| Axes | DE440 lunar libration (principal-axes frame, the Chebyshev records of `moon_pa_de440_200625.bpc`), 2000-01-02 to 2049-12-31; outside it `orientation-out-of-range` | the Mars-fixed frame of MRO120F's PDS label: N, J fixed; PSI, I, PHI secular; PHI's seasonal spin terms (1, 1/2, 1/3, 1/4 Mars year from January 1999); the nutation corrections of Konopliv et al. 2006 are not in the label and not applied |
+| Field | `GRAVITY_CHOICE` `GRGM660PRIM` (or `SPHERICAL_HARMONICS`), degree 2 to 150: GRGM660PRIM (Lemoine et al. 2013; 660 in the PDS table, 150 embedded; a higher degree is refused by name, `unsupported-gravity`), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `SPHERICAL_HARMONICS`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
+| Axes | DE440 lunar libration (principal-axes frame, the Chebyshev records of `moon_pa_de440_200625.bpc` for 2021-12-28 to 2037-01-06 TDB, a day inside each end being the limit of an arc); outside it `orientation-out-of-range` | the Mars-fixed frame of MRO120F's PDS label: N, J fixed; PSI, I, PHI secular; PHI's seasonal spin terms (1, 1/2, 1/3, 1/4 Mars year from January 1999); the nutation corrections of Konopliv et al. 2006 are not in the label and not applied |
 | Atmosphere | none (drag refused) | `ATMOSPHERE_MODEL` `EXPONENTIAL`: the banded exponential profile NASA GMAT R2026a ships (Vallado 8.6), 0 to 2980 km above the reference ellipsoid (3396.19, 3376.20 km), turning with the planet at 350.891985314 deg/day. One mean profile: no solar-cycle, seasonal, diurnal, latitude or dust variation; scale the coefficient |
 | Radiation pressure | cannonball, conical shadow of the Moon | cannonball, conical shadow of Mars |
 
@@ -644,8 +644,10 @@ Sources, licenses, redistribution and hashes: `scripts/planetary-sources.json` (
 downloads and verifies them; `node scripts/generate-planetary-data.mjs <dir>` writes `lib/data/planetary`). Truth and tests:
 `tests/planetary.e2e.mjs` fits the state and the radiation-pressure and drag coefficients to the first day of NAIF's reconstructed
 LRO, MRO and MAVEN states and predicts the next three (measured error by day in the file's header comments and output; LRO
-window 2026-03-27: 6.9, 8.8, 33, 97 m; MRO: 0.7, 1.9, 10, 27 m; MAVEN: 5.7, 17, 82, 160 m); the field's degree is visible in the
-error (29 km, 1.6 km, 117 m, 115 m at degrees 2, 20, 100, 200 on one LRO window).
+window 2026-03-27: 7.4, 13, 19, 49 m, window 2026-03-20: 22, 24, 94, 230 m; MRO: 1.1, 2.3, 4.1, 6.5 m; MAVEN: 4.4, 24, 162, 317 m);
+the field's degree is visible in the error (15 km, 1.4 km, 61 m, 24 m at degrees 2, 20, 60, 150 on one LRO window). Past degree
+120 the error of the two LRO windows scatters by about a third between degrees (46, 28, 38, 31 m on day 2 at 120, 150, 200, 260,
+`tests/planetary-degree-sweep.mjs`), which is why the embedded field stops at 150.
 
 ## Integrators and events
 

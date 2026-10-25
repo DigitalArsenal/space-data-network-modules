@@ -11,6 +11,7 @@ import {resolveWasiThreadsToolchain,getFlatbuffersCppRuntimeHeaders,getInvokeCpp
 import {encodePluginManifest} from 'space-data-module-sdk/manifest';
 import {appendWasmCustomSection,SDS_MANIFEST_SECTION_NAME} from 'space-data-module-sdk/bundle';
 import {validatePluginArtifact} from 'space-data-module-sdk/compliance';
+import {physicsUnits} from '../../propagator/ffm/lib/units.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url)),cpp=path.join(root,'src/cpp');
 const out=path.resolve(process.argv[2]??path.join(root,'dist/isomorphic/module.unsigned.wasm'));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json')));
@@ -30,8 +31,7 @@ try {
  const modules=path.resolve(root,'../..'),ffm=path.join(modules,'propagator/ffm');
  const ffmManifest=JSON.parse(await fs.readFile(path.join(ffm,'plugin-manifest.json')));
  const cIdentity=value=>{if(!/^[A-Za-z0-9_.-]+$/.test(value))throw new Error('Invalid FFM build identity');return '"'+value+'"';};
- const ffmUnits=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76','ffm_gravity'];
- sources.push(...ffmUnits.map(n=>path.join(ffm,'lib',n+'.cpp')));
+ sources.push(...physicsUnits.map(n=>path.join(ffm,'lib',n+'.cpp')));
  sources.push(...['prw_dynamics','resident_dynamics','kernel_store'].map(n=>path.join(ffm,'src/cpp/src',n+'.cpp')));
  sources.push(...['hwm14/hwm14.cpp','hwm14/hwm14_data.cpp','nrlmsise00/nrlmsise-00.c','nrlmsise00/nrlmsise-00_data.c'].map(n=>path.join(modules,'third_party',n)));
  const erfa=path.join(build,'erfa.cpp');await fs.writeFile(erfa,(await composeErfaTranslationUnit()).source);sources.push(erfa);

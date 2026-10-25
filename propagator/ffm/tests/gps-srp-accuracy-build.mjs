@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getFlatbuffersCppRuntimeHeaders } from 'space-data-module-sdk';
+import { physicsUnits } from '../lib/units.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ffm = path.resolve(here, '..'), repo = path.resolve(ffm, '../..');
@@ -29,8 +30,7 @@ const compile = (compiler, source, flags) => {
   objects.push(object);
 };
 for (const name of ['nrlmsise-00.c', 'nrlmsise-00_data.c']) compile('cc', path.join(repo, 'third_party/nrlmsise00', name), ['-std=c11']);
-const units = ['astrodynamics', 'integrators', 'variational', 'finite_burn', 'force_partials', 'coords', 'atmosphere_plugin', 'environment_models',
-  'ephemeris', 'force_models', 'atmosphere_winds', 'nrlmsise00', 'time_convert', 'us76'].map((n) => path.join(ffm, 'lib', `${n}.cpp`));
+const units = physicsUnits.map((n) => path.join(ffm, 'lib', `${n}.cpp`));
 units.push(path.join(repo, 'third_party/hwm14/hwm14.cpp'), path.join(repo, 'third_party/hwm14/hwm14_data.cpp'),
   path.join(ffm, '.sdk-build/erfa-amalgamation.cpp'), path.join(here, 'gps_srp_accuracy_native.cpp'));
 for (const unit of units) compile('c++', unit, ['-std=c++17']);

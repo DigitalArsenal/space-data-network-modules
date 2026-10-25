@@ -97,3 +97,12 @@ test("the CMake library target compiles lib/ sources, not local copies", () => {
     assert.ok(existsSync(abs), `CMake names a source that does not exist: ${p}`);
   }
 });
+
+test("lib/units.mjs, the list every build and native test links, names every lib/ translation unit", async () => {
+  const { physicsUnits } = await import("../lib/units.mjs");
+  assert.deepEqual(
+    physicsUnits.map((n) => `${n}.cpp`).sort(),
+    readdirSync(lib).filter((f) => f.endsWith(".cpp")).sort(),
+    "lib/units.mjs and lib/ disagree about which translation units exist",
+  );
+});

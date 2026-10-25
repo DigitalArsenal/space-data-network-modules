@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {compileModuleFromSource,cleanupCompilation} from 'space-data-module-sdk/compiler';
 import {generateSdsBindings,packageRoot,standardsRoot} from './generate-sds-bindings.mjs';
 import {composeErfaTranslationUnit} from '../../foundation/frames/erfa-amalgamation.mjs';
+import {physicsUnits} from './lib/units.mjs';
 
 const manifest=JSON.parse(await fs.readFile(path.join(packageRoot,'plugin-manifest.json'),'utf8'));
 await generateSdsBindings();
@@ -18,7 +19,7 @@ const emsdk=candidates.find(p=>fsSync.existsSync(path.join(p,'upstream/bin/clang
 if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SDN_LOCAL_EMSDK_DIR. This build never invokes emcc.');
 // Pilot builds can raise the ceiling to measure the largest role. The release
 // limits are recorded in the evidence and checked again on the final artifact.
-const staticMinimumBytes=23825072; // wasm-ld measurement, includes the 2 MiB stack.
+const staticMinimumBytes=24176704; // wasm-ld measurement, includes the 2 MiB stack.
 const evidencePath=path.join(packageRoot,'tests/evidence/memory-sizing.json');
 const sizing=fsSync.existsSync(evidencePath)?JSON.parse(fsSync.readFileSync(evidencePath,'utf8')):null;
 if(!sizing&&!process.env.FFM_MEASUREMENT_MAX_BYTES)throw new Error('Provision memory-sizing evidence or set FFM_MEASUREMENT_MAX_BYTES for a pilot measurement.');
@@ -26,8 +27,7 @@ const measuredBase=Math.max(staticMinimumBytes,sizing?.model.baseBytes||0);
 const measuredMaximum=sizing?Math.ceil(Math.max(...sizing.rows.map(row=>row.highWaterBytes))*1.5/(16*1024*1024))*16*1024*1024:0;
 const memory={staticMinimumBytes,initialBytes:Math.max(16*1024*1024,Math.ceil(measuredBase/65536)*65536),maximumBytes:Number(process.env.FFM_MEASUREMENT_MAX_BYTES||measuredMaximum)};
 if(!Number.isSafeInteger(memory.maximumBytes)||memory.maximumBytes<memory.initialBytes||memory.maximumBytes%65536)throw new Error('Invalid FFM memory ceiling');
-const units=['astrodynamics','integrators','rk_engine','integrator_events','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76'].map(n=>path.join(packageRoot,`lib/${n}.cpp`));
-units.push(path.join(packageRoot,'lib/ffm_gravity.cpp'),path.join(packageRoot,'lib/planetary_fields.cpp'),path.join(packageRoot,'lib/central_body.cpp'));
+const units=physicsUnits.map(n=>path.join(packageRoot,`lib/${n}.cpp`));
 units.push(path.join(packageRoot,'../../third_party/hwm14/hwm14.cpp'),path.join(packageRoot,'../../third_party/hwm14/hwm14_data.cpp'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00.c'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00_data.c'),path.join(packageRoot,'src/ffm_plugin.cpp'),path.join(packageRoot,'src/cpp/src/prw_execution.cpp'),path.join(packageRoot,'src/cpp/src/prw_dynamics.cpp'),path.join(packageRoot,'src/cpp/src/resident_dynamics.cpp'),path.join(packageRoot,'src/cpp/src/kernel_store.cpp'));
 // Earth orientation for the earth_orientation input (prw_execution.cpp): the
 // vendored ERFA amalgamated exactly as foundation/frames compiles it, so both
