@@ -1306,6 +1306,43 @@ bool parseCatFlatBufferTable(
     return true;
 }
 
+// A verified $CAT table, finished as its own root $CAT buffer.
+void finishCatRootBuffer(const CAT* cat, size_t sizeHint, std::vector<uint8_t>& out) {
+    std::unique_ptr<CATT> unpacked(cat->UnPack());
+    flatbuffers::FlatBufferBuilder builder(sizeHint);
+    FinishCATBuffer(builder, CAT::Pack(builder, unpacked.get()));
+    out.assign(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+}
+
+// A $CAT is finished either as a root buffer or behind a 4-byte size prefix:
+// every frame of a size-prefixed stream, and a frame sliced out of one (the
+// form OrbPro's loader hands over, alone or repacked behind new prefixes).
+// Its scalars are aligned to the origin it was finished at, so it is verified
+// against that origin. A prefix-finished frame is then re-finished as its own
+// root $CAT, as a $CAT carried in a $REC is, so every stored record is a root
+// buffer; a root $CAT is kept byte for byte.
+bool verifiedCatRootBytes(const uint8_t* payload, size_t payloadLen, std::vector<uint8_t>& out) {
+    flatbuffers::Verifier rootVerifier(payload, payloadLen);
+    if (VerifyCATBuffer(rootVerifier)) {
+        out.assign(payload, payload + payloadLen);
+        return true;
+    }
+    constexpr size_t prefixSize = sizeof(flatbuffers::uoffset_t);
+    if (payloadLen > std::numeric_limits<flatbuffers::uoffset_t>::max() - prefixSize) {
+        return false;
+    }
+    std::vector<uint8_t> framed(prefixSize + payloadLen);
+    flatbuffers::WriteScalar<flatbuffers::uoffset_t>(
+        framed.data(), static_cast<flatbuffers::uoffset_t>(payloadLen));
+    std::memcpy(framed.data() + prefixSize, payload, payloadLen);
+    flatbuffers::Verifier prefixedVerifier(framed.data(), framed.size());
+    if (!VerifySizePrefixedCATBuffer(prefixedVerifier)) {
+        return false;
+    }
+    finishCatRootBuffer(GetSizePrefixedCAT(framed.data()), payloadLen, out);
+    return true;
+}
+
 bool parseCatFlatBufferPayload(
     const uint8_t* payload,
     size_t payloadLen,
@@ -1323,12 +1360,12 @@ bool parseCatFlatBufferPayload(
         return false;
     }
 
-    flatbuffers::Verifier verifier(payload, payloadLen);
-    if (!VerifyCATBuffer(verifier) ||
+    std::vector<uint8_t> rootBytes;
+    if (!verifiedCatRootBytes(payload, payloadLen, rootBytes) ||
         !parseCatFlatBufferTable(payload, payloadLen, tablePos, vtablePos, vtableLen, out)) {
         return false;
     }
-    out.catBytes.assign(payload, payload + payloadLen);
+    out.catBytes = std::move(rootBytes);
     return true;
 }
 
@@ -1548,12 +1585,7 @@ bool parseRecFlatBufferCatPayload(
         if (!cat->Verify(verifier)) {
             return false;
         }
-        std::unique_ptr<CATT> unpacked(cat->UnPack());
-        flatbuffers::FlatBufferBuilder builder(payloadLen);
-        FinishCATBuffer(builder, CAT::Pack(builder, unpacked.get()));
-        record.catBytes.assign(
-            builder.GetBufferPointer(),
-            builder.GetBufferPointer() + builder.GetSize());
+        finishCatRootBuffer(cat, payloadLen, record.catBytes);
         recordsOut.push_back(std::move(record));
         parsedAny = true;
     }

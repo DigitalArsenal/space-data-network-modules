@@ -69,6 +69,16 @@ ensure_emscripten() {
 
     # shellcheck disable=SC1090
     source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
+    # An emsdk that was installed but never activated leaves PATH's emcc in
+    # charge (Homebrew's, a different version): refuse rather than build with it.
+    local expected_emcc found_emcc
+    expected_emcc="$(cd "$EMSDK_DIR/upstream/emscripten" && pwd -P)/emcc"
+    found_emcc="$(command -v emcc || true)"
+    [ -n "$found_emcc" ] && found_emcc="$(cd "$(dirname "$found_emcc")" && pwd -P)/emcc"
+    if [ "$found_emcc" != "$expected_emcc" ]; then
+        echo "emsdk at $EMSDK_DIR is not active (emcc resolves to ${found_emcc:-nothing}); run ./emsdk activate 6.0.1 there" >&2
+        exit 1
+    fi
 }
 
 ensure_sqlite_amalgamation() {

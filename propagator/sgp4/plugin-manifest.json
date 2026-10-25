@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.sgp4",
   "name": "SGP4/SDP4 Propagator",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "SGP4/SDP4 analytical orbit propagator for OMM element sets, ported from OrbPro main with a canonical SDS PIV/TAB invoke surface.",
   "pluginFamily": "propagator",
   "capabilities": [],
