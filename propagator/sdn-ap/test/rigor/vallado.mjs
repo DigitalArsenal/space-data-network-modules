@@ -3,13 +3,15 @@
 // behave as a numerical method should (path independence, conservation where conservative, convergence,
 // deterministic bytes, a covariance that is a covariance)?
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openModule, THEORY } from "../lib/module.mjs";
 import { FRAME_PROBE, jdOf, rotate } from "../lib/frames.mjs";
 import { elementsOf, tleLines } from "../lib/tle.mjs";
-import { days, defineCheck, hypot3, moduleStates, NotMeasured, REVIEWERS } from "./lib/rigor.mjs";
+import { againstReference, days, defineCheck, hypot3, moduleStates, NotMeasured, REVIEWERS } from "./lib/rigor.mjs";
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const AIAA = JSON.parse(fs.readFileSync(here("./data/aiaa-2006-6753.json"), "utf8"));
@@ -29,50 +31,86 @@ function requested({ start, stop, step }) {
 export const checks = [
   defineCheck({
     id: "vallado-aiaa-2006-6753-verification", reviewer: REVIEWERS.VALLADO, tier: "fast",
-    question: "Does the SGP4 base reproduce the published outputs of the 33 verification sets of AIAA 2006-6753 at every time they list, and return no state at the first time where the published run stopped on an error?",
-    source: "Vallado, Crawford, Hujsak, Kelso (2006), AIAA 2006-6753, App. D: SGP4-VER.TLE and tcppver.out (data/aiaa-2006-6753.json; inputs and outputs only, no reference code read)",
+    question: "Does the SGP4 base reproduce the published outputs of the 33 verification sets of AIAA 2006-6753 in the improved mode that produced them (1 mm, 1e-5 m/s, the same error stops), and does its AFSPC mode, the module's, give the operational reference's states and refusals on the same samples?",
+    source: "Vallado, Crawford, Hujsak, Kelso (2006), AIAA 2006-6753, App. D: SGP4-VER.TLE and tcppver.out (data/aiaa-2006-6753.json; inputs and outputs only, no reference code read); USSF Sgp4Prop 9.9 as a black box; paper 1.1",
     async run(ctx) {
-      const module = await ctx.module();
-      const rows = [], times = [], expect = [];
-      let prefixFaults = 0;
-      const missingAt = [], prefixAt = [];
-      for (const s of AIAA.sets) {
+      // the published run's driver prints the previous set's last state when a set fails to initialize (33334's t = 0
+      // equals 33333's last state): such a set is an error stop at the epoch, its listed state an artifact
+      const stale = new Set(AIAA.sets.filter((s, k) => k > 0 && s.states.length === 1 && AIAA.sets[k - 1].states.length > 0
+        && hypot3(s.states[0].r, AIAA.sets[k - 1].states.at(-1).r) === 0).map((s) => s.satnum));
+      const cases = AIAA.sets.map((s) => {
         const want = requested(s.request);
-        const listed = s.states.map((x) => x.t);
-        const prefix = listed.every((t, k) => Math.abs(t - want[k]) < 1e-6);
-        if (!prefix && listed.length < want.length) { prefixFaults += 1; prefixAt.push(`${s.satnum} (${listed.length} listed, requested ${want.length})`); }
+        const listed = stale.has(s.satnum) ? [] : s.states.map((x) => x.t);
         const refusal = listed.length < want.length ? want[listed.length] : null;
-        rows.push({ ...elementsOf(s.lines), theory: THEORY.SGP4 });
-        times.push(refusal === null ? listed : [...listed, refusal]);
-        expect.push({ s, refusal });
-      }
-      const out = moduleStates(module, rows, times);
-      let worstR = { d: 0 }, worstV = { d: 0 }, missing = 0, refusalsHeld = 0, refusalsMissed = [];
-      const perSet = [];
-      expect.forEach(({ s, refusal }, k) => {
-        let setWorst = 0;
-        s.states.forEach((ref, j) => {
-          const m = out[k][j];
-          if (!m.ok) { missing += 1; missingAt.push(`${s.satnum} t=${ref.t}`); return; }
-          const dr = hypot3(m.r, ref.r) * 1e3, dv = hypot3(m.v, ref.v) * 1e3;
-          setWorst = Math.max(setWorst, dr);
+        return { s, states: stale.has(s.satnum) ? [] : s.states, times: refusal === null ? listed : [...listed, refusal], refusal };
+      });
+      // improved mode: the base built natively (foundation/sgp4-str3, tests/states.cpp)
+      const work = fs.mkdtempSync(path.join(os.tmpdir(), "rigor-str3-"));
+      let blocks;
+      try {
+        const driver = path.join(work, "states");
+        try {
+          execFileSync("clang++", ["-std=c++17", "-O2", `-I${here("../../../../foundation/sgp4-str3/include")}`, here("../../../../foundation/sgp4-str3/tests/states.cpp"), "-o", driver], { stdio: "pipe" });
+        } catch { throw new NotMeasured("clang++ is absent: the improved-mode leg builds foundation/sgp4-str3 natively"); }
+        const d = Math.PI / 180;
+        const input = cases.map(({ s, times }) => { const e = elementsOf(s.lines);
+          return [e.epochWhole + e.epochFrac - 2433281.5, (e.meanMotion * 2 * Math.PI) / 1440, e.ecc, e.inc * d, e.raan * d, e.argp * d, e.ma * d, e.bstar, times.length, ...times]
+            .map((x) => (Number.isInteger(x) ? String(x) : x.toPrecision(17))).join(" "); });
+        blocks = execFileSync(driver, { input: `${input.join("\n")}\n`, encoding: "utf8" }).split("X\n").slice(0, -1);
+      } finally { fs.rmSync(work, { recursive: true, force: true }); }
+      let worstR = { d: 0 }, worstV = { d: 0 }, missing = [], stopsHeld = 0, stopsMissed = [];
+      cases.forEach(({ s, states, refusal }, k) => {
+        const rows = blocks[k].trim() ? blocks[k].trim().split("\n").map((l) => l.split(" ").map(Number)) : [];
+        states.forEach((ref, j) => {
+          const [, status, ...rv] = rows[j];
+          if (status !== 0) { missing.push(`${s.satnum} t=${ref.t}`); return; }
+          const dr = hypot3(rv, ref.r) * 1e3, dv = hypot3(rv.slice(3), ref.v) * 1e3;
           if (dr > worstR.d) worstR = { d: dr, at: `${s.satnum} t=${ref.t}` };
           if (dv > worstV.d) worstV = { d: dv, at: `${s.satnum} t=${ref.t}` };
         });
-        perSet.push([s.satnum, setWorst]);
-        if (refusal !== null) { if (!out[k].at(-1).ok) refusalsHeld += 1; else refusalsMissed.push(`${s.satnum} t=${refusal}`); }
+        if (refusal !== null) { if (rows.at(-1)[1] !== 0) stopsHeld += 1; else stopsMissed.push(`${s.satnum} t=${refusal}`); }
       });
-      // tcppver.out prints km to 1e-8 and km/s to 1e-9: 10 um and 1 um/s are its resolution; the bound is 1 mm, 1 um/s x 10
-      const LIMIT_R = 1e-3, LIMIT_V = 1e-5;
-      const states = AIAA.sets.reduce((a, s) => a + s.states.length, 0);
+      const LIMIT_R = 1e-3, LIMIT_V = 1e-5;  // tcppver.out prints km to 1e-8 and km/s to 1e-9
+      const improvedOk = missing.length === 0 && stopsMissed.length === 0 && worstR.d <= LIMIT_R && worstV.d <= LIMIT_V;
+      // AFSPC mode (the module) against the operational reference on the same samples
+      // The reference takes the epoch as one double Julian date (paper 1.1: its rounding is the residual on the resonant
+      // sets), so its instant is off by up to half an ulp of that date (2^-32 day, 2.0e-5 s, near JD 2.45e6): a sample's
+      // bound is 1e-6 m + |v| ulp(JD)/2. A published error stop (an AIAA 2006-6753 trap) where the module refuses and
+      // the reference answers is the module keeping the documented trap (paper 1.1), not a disagreement.
+      const module = await ctx.module();
+      const refSets = cases.filter((c) => c.times.length).map((c) => ({ name: String(c.s.satnum), lines: c.s.lines, minutes: c.times, refusal: c.refusal }));
+      const samples = await againstReference(ctx, refSets);
+      const speeds = moduleStates(module, refSets.map((c) => ({ ...elementsOf(c.lines), theory: THEORY.SGP4 })), refSets.map((c) => c.minutes));
+      const halfUlpS = (jd) => (2 ** (Math.floor(Math.log2(jd)) - 52) / 2) * 86400;
+      let si = 0, trapped = 0;
+      for (const [k, c] of refSets.entries()) {
+        const e = elementsOf(c.lines);
+        for (let j = 0; j < c.minutes.length; j += 1, si += 1) {
+          const smp = samples[si], v = speeds[k][j];
+          smp.limit = 1e-6 + (v.ok ? Math.hypot(...v.v) * 1e3 : 0) * halfUlpS(e.epochWhole + e.epochFrac);
+          if (smp.onlyReference && c.minutes[j] === c.refusal) { smp.onlyReference = false; trapped += 1; }
+        }
+      }
+      const both = samples.filter((x) => x.both);
+      const over = both.filter((x) => !(x.dr <= x.limit));
+      const oneSide = samples.filter((x) => x.onlyModule || x.onlyReference);
+      const worst = both.reduce((w, x) => (x.dr > w.dr ? x : w), { dr: 0 });
+      const median = both.map((x) => x.dr).sort((p, q) => p - q)[both.length >> 1];
+      const afspc = { pass: over.length === 0 && oneSide.length === 0, evidence: [
+        `AFSPC mode (the module) against the reference: ${samples.length} samples, ${both.length} answered by both, median ${median.toExponential(2)} m, worst ${worst.dr.toExponential(3)} m (set ${worst.set?.name} at ${worst.t} min, bound there ${worst.limit?.toExponential(2)} m); ${over.length} over 1e-6 m + |v| ulp(epoch JD)/2`,
+        `published error stops where the module refuses and the reference answers (the AIAA 2006-6753 traps the module keeps): ${trapped}; other one-sided samples: ${oneSide.length}`,
+        ...over.slice(0, 5).map((x) => `  over: ${x.set.name} t=${x.t} min ${x.dr.toExponential(3)} m, bound ${x.limit.toExponential(2)} m`),
+        ...oneSide.slice(0, 5).map((x) => `  one side: ${x.set.name} t=${x.t} min (${x.onlyModule ? "module answers, reference refuses" : "reference answers, module refuses"})`)] };
+      // AFSPC mode against the published outputs: reported (the improved mode produced them)
+      const mine = moduleStates(module, cases.map((c) => ({ ...elementsOf(c.s.lines), theory: THEORY.SGP4 })), cases.map((c) => c.states.map((x) => x.t)));
+      const departures = cases.map((c, k) => [c.s.satnum, Math.max(0, ...c.states.map((x, j) => (mine[k][j].ok ? hypot3(mine[k][j].r, x.r) * 1e3 : 0)))]).filter(([, dm]) => dm > 1e-3);
       return {
-        pass: prefixFaults === 0 && missing === 0 && refusalsMissed.length === 0 && worstR.d <= LIMIT_R && worstV.d <= LIMIT_V,
+        pass: improvedOk && afspc.pass,
         evidence: [
-          `${AIAA.sets.length} sets, ${states} published states (tcppver.out sha256 ${AIAA.inputs["tcppver.out"].slice(0, 12)})`,
-          `worst position ${worstR.d.toExponential(3)} m (${worstR.at}), worst velocity ${worstV.d.toExponential(3)} m/s (${worstV.at}); limits ${LIMIT_R} m, ${LIMIT_V} m/s`,
-          `module refused ${missing} published states${missing ? ` (${missingAt.join(", ")})` : ""}; published error stops held ${refusalsHeld}, missed ${refusalsMissed.length}${refusalsMissed.length ? `: ${refusalsMissed.join(", ")}` : ""}`,
-          `sets over 1 um: ${perSet.filter(([, d]) => d > 1e-6).map(([n, d]) => `${n} ${d.toExponential(2)} m`).join(", ") || "none"}`,
-          ...(prefixFaults ? [`${prefixFaults} sets whose listed times are not the head of their requested times: ${prefixAt.join(", ")}`] : []),
+          `${AIAA.sets.length} sets, ${AIAA.sets.reduce((a, s) => a + s.states.length, 0)} published states (tcppver.out sha256 ${AIAA.inputs["tcppver.out"].slice(0, 12)}); initialization error stops recognized by their stale printed state: ${[...stale].join(", ") || "none"}`,
+          `improved mode against the published outputs: worst ${worstR.d.toExponential(3)} m (${worstR.at}), ${worstV.d.toExponential(3)} m/s (${worstV.at}); limits ${LIMIT_R} m, ${LIMIT_V} m/s; refused ${missing.length} published states${missing.length ? ` (${missing.join(", ")})` : ""}; error stops held ${stopsHeld}, missed ${stopsMissed.length}${stopsMissed.length ? ` (${stopsMissed.join(", ")})` : ""}`,
+          ...afspc.evidence,
+          `report only, AFSPC mode against the published outputs, sets over 1 mm: ${departures.map(([n, dm]) => `${n} ${dm.toExponential(2)} m`).join(", ") || "none"} (AFSPC holds the Lyddane node in [0, 2 pi), as the operational library does; paper 1.1)`,
         ],
       };
     },
