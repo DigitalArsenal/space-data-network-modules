@@ -13,10 +13,6 @@
    "task": "sdn-ap-sgp4-refuses-where-reference-answers-20261025",
    "summary": "catalog 101037 at +1 day: the reference answers, the module refuses"
   },
-  "vallado-aiaa-2006-6753-verification": {
-   "task": "sdn-ap-aiaa-verification-published-outputs-20261025",
-   "summary": "23599 up to 964 m from tcppver.out (Lyddane case); 23333 4.1 mm; 33334 t = 0 refused"
-  },
   "vallado-covariance-realism-bound": {
    "task": "sdn-ap-covariance-realism-acceptance-band-20261025",
    "summary": "no realism acceptance band is stated"
