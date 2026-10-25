@@ -31,6 +31,10 @@ and the black-box findings for what the sources leave open (a''o by Kepler's law
 - Against the reference, run only as a black box (element sets in, states out), on the 33 sets of the paper's Appendix
   D and the report's two cases, both modes: every error trap at the same samples; non-resonant sets within 1.2e-6 m,
   resonant ones within 2.3e-6 m once the epoch is rounded as the reference rounds it (one double Julian date).
+- The small-eccentricity rule at its boundary: C3 and the delta-M term are dropped for e <= 1e-4, as the reference
+  drops them (STR#3 computes them for every e; AIAA 2006-6753 drops them below 1e-4 and is silent at equality).
+  `tests/ecc-boundary.e2e.mjs` holds the base to the reference's recorded states at e = 0.00009, 0.0001 and 0.00011
+  (within 1 µm; measured 9.3e-8 m).
 - `propagator/sdn-ap`: against the US Space Force Sgp4Prop 9.9 library (`test/conformance.e2e.mjs`, type-0 control),
   median 2.1e-7 m and max 9.1e-5 m over 7 days; the module's bytes are the same built from here.
 - `analysis/od`: its fits on 21 operator ephemerides match the previous build within 0.14 m over the fit day.
