@@ -4158,29 +4158,6 @@
         "inferenceHazard": false
       }
     },
-    "flows/supplemental-omm/nodes/sdnap/dist/isomorphic/module.wasm": {
-      "sha256": "7b1b29c6611d1490d1cd955507531a296598817adff786e566d0d00c6d7332e9",
-      "bytes": 192186,
-      "module": "flows/supplemental-omm/nodes/sdnap",
-      "lastCommit": "b60ab1f1715da7ae67a90a567865e7c82c3fc53c",
-      "lastCommitDate": "2026-10-25T10:53:29-04:00",
-      "provenance": "inferred",
-      "toolchain": null,
-      "sdkPinAtCommit": null,
-      "declaration": {
-        "declares": true,
-        "threadModels": [
-          "wasi-sequential"
-        ],
-        "unknownThreadModels": [],
-        "emitsWasm": true,
-        "runtimeTargets": [
-          "browser",
-          "wasmedge"
-        ],
-        "inferenceHazard": false
-      }
-    },
     "flows/supplemental-omm/nodes/status/dist/isomorphic/module.wasm": {
       "sha256": "c90d019b6af5654c8efc2b353320552ee50e2579026e241264c0ed81e9280ba0",
       "bytes": 105756,
@@ -5123,11 +5100,11 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "9d8dec4c16c3b8d95c755592cbd33090f4093480826a572060f68654f78dc2f8",
-      "bytes": 1580289,
+      "sha256": "7f054ceec88bc20cbd16461b5b61c200492b082d78818a310827d82b2d9b2282",
+      "bytes": 588545,
       "module": "propagator/sdn-ap",
-      "lastCommit": "6e8f2c2fe74bc7bacb265a4784ee280b7cce388b",
-      "lastCommitDate": "2026-10-25T16:06:50-04:00",
+      "lastCommit": "052ae13a94e68256c300af21cc48310ee50be247",
+      "lastCommitDate": "2026-10-25T19:37:58-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
