@@ -12,12 +12,12 @@
     "refused": 0,
     "oracleErrors": 0,
     "moduleErrors": 0,
-    "maxM": 0.000003316,
-    "medianM": 2.464e-7,
-    "maxMmPerS": 3.851e-9,
-    "medianMmPerS": 2.793e-10,
-    "exactMaxM": 0.00000331591520585115,
-    "exactMedianM": 2.464203380543172e-7
+    "maxM": 0.000002941,
+    "medianM": 2.418e-7,
+    "maxMmPerS": 3.416e-9,
+    "medianMmPerS": 2.728e-10,
+    "exactMaxM": 0.0000029412233236534566,
+    "exactMedianM": 2.418134344263682e-7
    },
    {
     "regime": "SSO",
@@ -26,12 +26,12 @@
     "refused": 0,
     "oracleErrors": 0,
     "moduleErrors": 0,
-    "maxM": 0.000002936,
-    "medianM": 2.256e-7,
-    "maxMmPerS": 3.228e-9,
-    "medianMmPerS": 2.425e-10,
-    "exactMaxM": 0.0000029363942124413564,
-    "exactMedianM": 2.2556536738148824e-7
+    "maxM": 0.000003004,
+    "medianM": 2.345e-7,
+    "maxMmPerS": 3.231e-9,
+    "medianMmPerS": 2.523e-10,
+    "exactMaxM": 0.0000030043849452319954,
+    "exactMedianM": 2.3450432243688667e-7
    },
    {
     "regime": "MEO",
@@ -40,12 +40,12 @@
     "refused": 0,
     "oracleErrors": 0,
     "moduleErrors": 0,
-    "maxM": 0.000001725,
-    "medianM": 1.558e-7,
-    "maxMmPerS": 7.351e-10,
-    "medianMmPerS": 4.315e-11,
-    "exactMaxM": 0.0000017249062312564295,
-    "exactMedianM": 1.5581320637567079e-7
+    "maxM": 0.000001913,
+    "medianM": 1.663e-7,
+    "maxMmPerS": 6.256e-10,
+    "medianMmPerS": 4.341e-11,
+    "exactMaxM": 0.0000019131253479673185,
+    "exactMedianM": 1.6629613411445996e-7
    },
    {
     "regime": "GEO",
@@ -54,12 +54,12 @@
     "refused": 0,
     "oracleErrors": 0,
     "moduleErrors": 0,
-    "maxM": 0.000001522,
-    "medianM": 1.316e-7,
-    "maxMmPerS": 1.109e-10,
-    "medianMmPerS": 9.543e-12,
-    "exactMaxM": 0.0000015221306324563082,
-    "exactMedianM": 1.315646332146377e-7
+    "maxM": 0.000002024,
+    "medianM": 1.586e-7,
+    "maxMmPerS": 1.473e-10,
+    "medianMmPerS": 1.153e-11,
+    "exactMaxM": 0.0000020240335665824648,
+    "exactMedianM": 1.5864463038529198e-7
    },
    {
     "regime": "HEO",
@@ -68,12 +68,12 @@
     "refused": 0,
     "oracleErrors": 0,
     "moduleErrors": 0,
-    "maxM": 0.00009182,
-    "medianM": 2.586e-7,
-    "maxMmPerS": 4.206e-8,
-    "medianMmPerS": 4.217e-11,
-    "exactMaxM": 0.00009182376128392638,
-    "exactMedianM": 2.585715281769111e-7
+    "maxM": 0.00009059,
+    "medianM": 2.753e-7,
+    "maxMmPerS": 4.163e-8,
+    "medianMmPerS": 4.159e-11,
+    "exactMaxM": 0.00009059104730216959,
+    "exactMedianM": 2.7533512752869894e-7
    },
    {
     "regime": "VDS",
@@ -82,23 +82,23 @@
     "refused": 0,
     "oracleErrors": 0,
     "moduleErrors": 0,
-    "maxM": 0.000009006,
-    "medianM": 2e-7,
-    "maxMmPerS": 2.352e-10,
-    "medianMmPerS": 5.255e-12,
-    "exactMaxM": 0.000009005969924474972,
-    "exactMedianM": 2.0004438282645624e-7
+    "maxM": 0.000009199,
+    "medianM": 2.093e-7,
+    "maxMmPerS": 2.223e-10,
+    "medianMmPerS": 5.429e-12,
+    "exactMaxM": 0.0000091990788445674,
+    "exactMedianM": 2.0928077475321836e-7
    }
   ],
   "overall": {
    "sets": 1200,
    "samples": 9600,
-   "maxM": 0.00009182376128392638,
-   "medianM": 1.8973573490318865e-7
+   "maxM": 0.00009059104730216959,
+   "medianM": 2.0712461441017425e-7
   },
   "orderDependent": 0,
-  "digest": "7512fba24406065e7a00834461a999d7fcddee02c2b226c54364356ab1166b93",
-  "oracleMs": 387,
+  "digest": "9ecfafcd9027539964710dac0d478831e36a97d388df1984482761bc5dd76857",
+  "oracleMs": 411,
   "decaySets": 0,
   "refusalChecks": null
  },
@@ -223,7 +223,7 @@
   },
   "orderDependent": 0,
   "digest": "72dcf60050464606b1aaddb63ed121f965845a957d05adcb4c4f06ccc8a7bedc",
-  "oracleMs": 41816,
+  "oracleMs": 37086,
   "decaySets": 934,
   "refusalChecks": {
    "sets": 164,
