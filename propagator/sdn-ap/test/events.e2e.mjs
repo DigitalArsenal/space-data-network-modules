@@ -12,6 +12,7 @@
 //     within 10 % (+ 100 m) of the burn-free error.
 //   - Refusals by name: a burn before the set's epoch, no $MNV.
 // JS orchestrates and scores; the dynamics, the fit and the maps are the module's.
+// `--only detect` runs the detection sections alone (the GLR on a LEO arc and in the geostationary, IGSO and GPS orbits).
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
@@ -31,6 +32,13 @@ import { PCF_TYPE, configuration, pcf, withConfiguration } from "./lib/pcf.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
+// `--only detect`: the detection sections alone (the six-element GLR on a LEO arc, then in the geostationary, IGSO and GPS orbits); no argument runs all
+const detectOnly = process.argv.includes("--only") && process.argv[process.argv.indexOf("--only") + 1] === "detect";
+const finish = (name) => {
+  console.log(failures.length === 0 ? `\n${name}: PASS` : `\n${name}: FAIL\n  ${failures.join("\n  ")}`);
+  m.destroy();
+  process.exit(failures.length === 0 ? 0 : 1);
+};
 const m = await openModule();
 // every configured method takes a $PCF (the defaults unless a call names its own); THEORY SDNAP selects the SDN-AP fit
 const command0 = withConfiguration(await createStandaloneHarness("browser", wasmPath, { surface: "command" }));
@@ -211,7 +219,7 @@ const mnv = (startS, endS, dv) => {
 const across = async (startS, endS, dv) => command.invoke({ methodId: "maneuver", inputs: [{ portId: "omm", typeRef: ommType, payload: set }, { portId: "maneuvers", typeRef: mnvType, payload: mnv(startS, endS, dv) }, grid] });
 const tb = FIT_H * 3600;
 // M22: impulses at the end of the fit arc
-for (const [label, dv] of (process.env.QUICK ? [] : [["V 1 mm/s", [0, 1e-6, 0]], ["V 10 cm/s", [0, 1e-4, 0]], ["V 1 m/s", [0, 1e-3, 0]], ["U 1 m/s", [1e-3, 0, 0]], ["W 1 m/s", [0, 0, 1e-3]]])) {
+for (const [label, dv] of (process.env.QUICK || detectOnly ? [] : [["V 1 mm/s", [0, 1e-6, 0]], ["V 10 cm/s", [0, 1e-4, 0]], ["V 1 m/s", [0, 1e-3, 0]], ["U 1 m/s", [1e-3, 0, 0]], ["W 1 m/s", [0, 0, 1e-3]]])) {
   const truth = await reference([[tb, tb, ...dv]]);
   const r = await across(tb, tb, dv);
   if (r.statusCode !== 0) { failures.push(`maneuver ${label}: ${r.errorCode} ${r.errorMessage}`); continue; }
@@ -225,7 +233,7 @@ for (const [label, dv] of (process.env.QUICK ? [] : [["V 1 mm/s", [0, 1e-6, 0]],
 }
 // M23: 60-minute burns of 1 m/s along V, U and W, centered at the end of the fit arc: the finite-burn map adds no more
 // error than the centroid impulse (days 1-3 summed), and along V stays within 10 % (+ 100 m) of the burn-free error
-for (const [label, axis] of [["V", 1], ["U", 0], ["W", 2]]) {
+for (const [label, axis] of (detectOnly ? [] : [["V", 1], ["U", 0], ["W", 2]])) {
   const D = 3600, dir = [0, 0, 0];
   dir[axis] = 1e-3;
   const truth = await reference([[tb - D / 2, tb + D / 2, ...dir.map((x) => x / D)]]);
@@ -386,6 +394,7 @@ for (const [label, at, dv] of [["V 1 m/s at 60 h", 60, [0, 1e-3, 0]], ["V 10 m/s
     check(Math.abs(dt) <= 90 && err <= 0.25, `GLR ${label}: epoch ${dt} min, error ${err}`);
   }
 }
+if (detectOnly) finish("events E2E (detection)");
 // M28 kind, synthetic: a decaying SDN-AP set (250 km, B_eff 0.02 m^2/kg; NRLMSISE-00 x exp(s) on both sides): the 'reentry' method (averaged until a limit of
 // (18) trips, then osculating integration) against the osculating integration of the set's epoch state all the way
 // down; the epochs within 5 % of the lifetime and the reference inside the window
@@ -831,6 +840,4 @@ const lamPayload = await lamOf(lamEl);
   check(bad.statusCode !== 0 && bad.errorCode === "fit-implausible", `a torn arc: ${bad.errorCode} ${bad.errorMessage}`);
   console.log(`refusals: ${early.errorCode}, ${none.errorCode}, ${bad.errorCode} (${bad.errorMessage})`);
 }
-console.log(failures.length === 0 ? "\nevents E2E: PASS" : `\nevents E2E: FAIL\n  ${failures.join("\n  ")}`);
-m.destroy();
-process.exit(failures.length === 0 ? 0 : 1);
+finish("events E2E");
