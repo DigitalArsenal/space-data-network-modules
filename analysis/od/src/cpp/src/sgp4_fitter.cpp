@@ -21,7 +21,7 @@
 
 #include "od/sgp4_fitter.h"
 #include "od/covariance_validation.h"
-#include "SGP4.h"
+#include "sgp4_str3.h"  // foundation/sgp4-str3: the clean-room SGP4/SDP4 base
 #include "od/tle_text.h"
 
 #include <Eigen/Dense>
@@ -37,7 +37,7 @@
 
 namespace od {
 
-// ── Constants (WGS72, matching Vallado SGP4) ──
+// ── Constants (WGS-72, as the SGP4 base, foundation/sgp4-str3) ──
 
 static constexpr double MU_EARTH = 398600.8;            // km³/s² (WGS72)
 static constexpr double RE_KM = 6378.135;               // Earth radius (km, WGS72)
@@ -79,18 +79,40 @@ static double normalize_angle(double a) {
 
 // ── JD ↔ Calendar conversion ──
 
-// JD epoch for SGP4: Jan 0, 1950 00:00 UTC = JD 2433281.5
-static constexpr double JD_EPOCH_1950 = 2433281.5;
-
-static void jd_to_calendar(double jd, int& year, int& month, int& day,
-                           int& hour, int& minute, double& sec) {
-    SGP4Funcs::invjday_SGP4(std::floor(jd), jd - std::floor(jd),
-                            year, month, day, hour, minute, sec);
+// Days from 1970-01-01 of a proleptic Gregorian date, and back (civil day counts, exact integers).
+static long days_from_civil(long y, int m, int d) {
+    y -= m <= 2 ? 1 : 0;
+    const long era = (y >= 0 ? y : y - 399) / 400;
+    const long yoe = y - era * 400;
+    const long doy = (153L * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
 }
 
-// Convert JD to SGP4 epoch (days since Jan 0, 1950)
-static double jd_to_sgp4_epoch(double jd) {
-    return jd - JD_EPOCH_1950;
+static void civil_from_days(long z, long& y, int& m, int& d) {
+    z += 719468;
+    const long era = (z >= 0 ? z : z - 146096) / 146097;
+    const long doe = z - era * 146097;
+    const long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const long mp = (5 * doy + 2) / 153;
+    d = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
+    m = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
+    y = yoe + era * 400 + (m <= 2 ? 1 : 0);
+}
+
+// The UTC calendar date and time of a Julian date (a day starts at JD x.5).
+static void jd_to_calendar(double jd, int& year, int& month, int& day,
+                           int& hour, int& minute, double& sec) {
+    const double day0 = std::floor(jd - 0.5) + 0.5;  // the Julian date of 0h of that day
+    long y;
+    civil_from_days(static_cast<long>(day0 - 2440587.5), y, month, day);
+    year = static_cast<int>(y);
+    double s = (jd - day0) * SEC_PER_DAY;
+    hour = static_cast<int>(s / 3600.0);
+    s -= hour * 3600.0;
+    minute = static_cast<int>(s / 60.0);
+    sec = s - minute * 60.0;
 }
 
 // Convert JD to day-of-year (fractional)
@@ -98,9 +120,28 @@ static double jd_to_day_of_year(double jd) {
     int year, month, day, hour, minute;
     double sec;
     jd_to_calendar(jd, year, month, day, hour, minute, sec);
-    double jd_jan1, jd_jan1_frac;
-    SGP4Funcs::jday_SGP4(year, 1, 1, 0, 0, 0.0, jd_jan1, jd_jan1_frac);
-    return (jd - (jd_jan1 + jd_jan1_frac)) + 1.0;
+    const double jd_jan1 = 2440587.5 + static_cast<double>(days_from_civil(year, 1, 1));  // 0h January 1
+    return (jd - jd_jan1) + 1.0;
+}
+
+// ── The SGP4/SDP4 base: foundation/sgp4-str3, improved mode, WGS-72 ──
+// One set from its mean elements (no two-line text): the epoch split as the base holds it, the mean motion in
+// rad/min, the angles in radians. A set is usable when it also gives a state at its epoch.
+static bool init_sat(const SGP4Elements& el, sdnap::Sat& sat) {
+    sdnap::Elements e{};
+    sdnap::split_jd(el.epoch_jd, e.epoch_jd_whole, e.epoch_jd_frac);
+    e.xno = el.mean_motion * TWO_PI / MIN_PER_DAY;
+    e.eo = el.eccentricity;
+    e.xincl = el.inclination * DEG2RAD;
+    e.xnodeo = el.ra_of_asc_node * DEG2RAD;
+    e.omegao = el.arg_of_pericenter * DEG2RAD;
+    e.xmo = el.mean_anomaly * DEG2RAD;
+    e.bstar = el.bstar;
+    e.ndot_rev_day2 = el.mean_motion_dot;
+    e.nddot_rev_day3 = el.mean_motion_ddot;
+    if (sdnap::sat_init(e, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) != sdnap::kPropOk) return false;
+    double r[3], v[3];
+    return sdnap::sat_propagate(sat, nullptr, 0.0, r, v) == sdnap::kPropOk;
 }
 
 // ── Generate TLE strings from mean elements ──
@@ -345,24 +386,11 @@ static bool iterative_osc_to_mean(
     for (int iter = 0; iter < 15; iter++) {
         {
             // Initialize SGP4 directly with element values (no TLE string round-trip)
-            double sgp4_epoch = jd_to_sgp4_epoch(epoch_jd);
-            double n_kozai_rad_min = trial.mean_motion * TWO_PI / MIN_PER_DAY;
-            elsetrec satrec;
-            bool init_ok = SGP4Funcs::sgp4init(
-                wgs72, 'i', "99999", sgp4_epoch,
-                trial.bstar, trial.mean_motion_dot / (MIN_PER_DAY * MIN_PER_DAY / TWO_PI),
-                trial.mean_motion_ddot, trial.eccentricity,
-                trial.arg_of_pericenter * DEG2RAD,
-                trial.inclination * DEG2RAD,
-                trial.mean_anomaly * DEG2RAD,
-                n_kozai_rad_min,
-                trial.ra_of_asc_node * DEG2RAD,
-                satrec);
-            if (!init_ok || satrec.error != 0) break;
+            sdnap::Sat sat;
+            if (!init_sat(trial, sat)) break;
 
             double r[3], v[3];
-            bool prop_ok = SGP4Funcs::sgp4(satrec, 0.0, r, v);
-            if (!prop_ok || satrec.error != 0) break;
+            if (sdnap::sat_propagate(sat, nullptr, 0.0, r, v) != sdnap::kPropOk) break;
 
             auto sgp4_osc = cartesian_to_keplerian(r[0], r[1], r[2], v[0], v[1], v[2]);
 
@@ -558,43 +586,20 @@ static SGP4Elements set_equinoctial(const SGP4Elements& base, const double p[NPA
     return el;
 }
 
-// ── SGP4 propagation via Vallado API ──
+// ── SGP4 propagation (foundation/sgp4-str3, init_sat above) ──
 
 struct PropState {
     double x, y, z, vx, vy, vz;
 };
 
-// Initialize elsetrec from our SGP4Elements (no TLE string formatting)
-static bool init_satrec(const SGP4Elements& el, elsetrec& satrec) {
-    double sgp4_epoch = jd_to_sgp4_epoch(el.epoch_jd);
-    double n_kozai_rad_min = el.mean_motion * TWO_PI / MIN_PER_DAY;
-    // ndot: our units are rev/day², Vallado wants rad/min² / 2
-    // ndot_vallado = (ndot_rev_day * 2π / (1440²)) — but sgp4init
-    // internally divides by xnodp convention. Pass as-is in TLE-compatible units.
-    double ndot_tle = el.mean_motion_dot / (MIN_PER_DAY * MIN_PER_DAY / TWO_PI);
-
-    bool ok = SGP4Funcs::sgp4init(
-        wgs72, 'i', "99999", sgp4_epoch,
-        el.bstar, ndot_tle, el.mean_motion_ddot,
-        el.eccentricity,
-        el.arg_of_pericenter * DEG2RAD,
-        el.inclination * DEG2RAD,
-        el.mean_anomaly * DEG2RAD,
-        n_kozai_rad_min,
-        el.ra_of_asc_node * DEG2RAD,
-        satrec);
-    return ok && satrec.error == 0;
-}
-
 static bool propagate_elements(
     const SGP4Elements& el, double target_jd, PropState& out) {
-    elsetrec satrec;
-    if (!init_satrec(el, satrec)) return false;
+    sdnap::Sat sat;
+    if (!init_sat(el, sat)) return false;
 
     double dt_min = (target_jd - el.epoch_jd) * MIN_PER_DAY;
     double r[3], v[3];
-    bool ok = SGP4Funcs::sgp4(satrec, dt_min, r, v);
-    if (!ok || satrec.error != 0) return false;
+    if (sdnap::sat_propagate(sat, nullptr, dt_min, r, v) != sdnap::kPropOk) return false;
 
     out.x = r[0]; out.y = r[1]; out.z = r[2];
     out.vx = v[0]; out.vy = v[1]; out.vz = v[2];
@@ -607,15 +612,14 @@ static bool propagate_batch(
     const std::vector<EphemerisPoint>& points,
     std::vector<PropState>& out) {
 
-    elsetrec satrec;
-    if (!init_satrec(el, satrec)) return false;
+    sdnap::Sat sat;
+    if (!init_sat(el, sat)) return false;
 
     out.resize(points.size());
     for (size_t i = 0; i < points.size(); i++) {
         double dt_min = (points[i].epoch_jd - el.epoch_jd) * MIN_PER_DAY;
         double r[3], v[3];
-        bool ok = SGP4Funcs::sgp4(satrec, dt_min, r, v);
-        if (!ok || satrec.error != 0) return false;
+        if (sdnap::sat_propagate(sat, nullptr, dt_min, r, v) != sdnap::kPropOk) return false;
         out[i].x = r[0]; out[i].y = r[1]; out[i].z = r[2];
         out[i].vx = v[0]; out[i].vy = v[1]; out[i].vz = v[2];
     }

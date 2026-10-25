@@ -1,6 +1,7 @@
 // -----------------------------------------------------------------------------
-// SGP4/SDP4 base, part 1 of 2: the deep-space subroutine and the function
-// subroutines of Spacetrack Report No. 3.
+// foundation/sgp4-str3 (compiled by propagator/sdn-ap and analysis/od), part 1 of
+// 2: the deep-space subroutine and the function subroutines of Spacetrack
+// Report No. 3.
 //
 // Written clean room (task modules-sdn-ap-sgp4-from-str3-20261024) from:
 //   - Hoots & Roehrich (1980), Spacetrack Report No. 3, "Models for Propagation
