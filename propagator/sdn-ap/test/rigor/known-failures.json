@@ -5,14 +5,6 @@
    "task": "sdn-ap-sgp4xp-retrograde-equatorial-hang-20261025",
    "summary": "SGP4XP never returns at i = 180 deg, e = 0, LEO"
   },
-  "hoots-low-perigee": {
-   "task": "sdn-ap-sgp4-refuses-where-reference-answers-20261025",
-   "summary": "SGP4 refuses sub-surface-perigee samples the reference returns"
-  },
-  "kelso-catalog-scale": {
-   "task": "sdn-ap-sgp4-refuses-where-reference-answers-20261025",
-   "summary": "catalog 101037 at +1 day: the reference answers, the module refuses"
-  },
   "vallado-covariance-realism-bound": {
    "task": "sdn-ap-covariance-realism-acceptance-band-20261025",
    "summary": "no realism acceptance band is stated"

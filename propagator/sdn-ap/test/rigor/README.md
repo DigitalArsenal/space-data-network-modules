@@ -16,6 +16,8 @@ source and the evidence it found. The paper and site claim tracing is in the sdn
 - The reference checks run the US Space Force Sgp4Prop 9.9 library as a black box through the SGP4-XP harness
   (`SDN_AP_ORACLE_ROOT`, or `GAUNTLET_STACK_ROOT`/`SDN_STACK_ROOT` naming the stack whose closed-modules checkout holds
   `packages/sgp4-xp-oracle`). Clean room: published inputs and outputs are data; no reference source code is read.
+- A reference state below one Earth radius (WGS-72, 6378.135 km) that the module refuses is the radius trap the paper
+  states (1.1: a decayed set is refused, not extrapolated), counted apart and never as a disagreement.
 - JS orchestrates and computes test statistics only; every state comes from the module or the reference.
 
 ## Checks

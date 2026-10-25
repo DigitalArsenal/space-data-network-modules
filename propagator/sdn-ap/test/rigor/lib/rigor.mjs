@@ -60,6 +60,9 @@ export function context() {
   };
 }
 
+/** WGS-72 equatorial radius (AIAA 2006-6753 Table 2): the SGP4 radius trap's one Earth radius. */
+export const EARTH_RADIUS_WGS72_KM = 6378.135;
+
 export const hypot3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 /**
@@ -88,12 +91,18 @@ export async function againstReference(ctx, sets, { rowOf = elementsOf } = {}) {
   const reference = await ctx.reference();
   const mine = moduleStates(module, sets.map((s) => rowOf(s.lines)), sets.map((s) => s.minutes));
   const samples = [];
+  const trapped = { count: 0 };
+  samples.trapped = trapped;
   for (let k = 0; k < sets.length; k += 1) {
     const ref = await reference.propagate(sets[k].lines, sets[k].minutes);
     sets[k].minutes.forEach((t, j) => {
       const m = mine[k][j], o = ref ? ref[j] : null;
       const mOk = m.ok && m.r.every(Number.isFinite);
-      samples.push({ set: sets[k], t, both: mOk && !!o, onlyModule: mOk && !o, onlyReference: !mOk && !!o,
+      // the radius trap (paper 1.1; AIAA 2006-6753 App. D): the module refuses a state below one Earth radius, which the
+      // reference returns; such a sample is the documented departure, not a disagreement
+      const belowSurface = !mOk && !!o && Math.hypot(...o.r) < EARTH_RADIUS_WGS72_KM;
+      if (belowSurface) trapped.count += 1;
+      samples.push({ set: sets[k], t, both: mOk && !!o, onlyModule: mOk && !o, onlyReference: !mOk && !!o && !belowSurface,
         dr: mOk && o ? hypot3(m.r, o.r) * 1e3 : NaN });
     });
   }
@@ -107,7 +116,7 @@ export function verdict(samples, limitM, label) {
   const over = both.filter((s) => !(s.dr <= limitM));
   const mismatch = samples.filter((s) => s.onlyModule || s.onlyReference);
   const evidence = [
-    `${label}: ${samples.length} samples, ${both.length} answered by both, ${mismatch.length} answered by one side only`,
+    `${label}: ${samples.length} samples, ${both.length} answered by both, ${mismatch.length} answered by one side only${samples.trapped?.count ? `; ${samples.trapped.count} reference states below one Earth radius that the module refuses (the radius trap, paper 1.1)` : ""}`,
     `worst ${worst.dr.toExponential(3)} m${worst.set ? ` (set ${worst.set.name || worst.set.lines[0].slice(2, 7)} at ${worst.t} min)` : ""}; limit ${limitM} m; ${over.length} over`,
     ...over.slice(0, 5).map((s) => `  over: ${s.set.name || s.set.lines[0].slice(2, 7)} t=${s.t} min ${s.dr.toExponential(3)} m`),
     ...Object.entries(mismatch.reduce((g, s) => {
