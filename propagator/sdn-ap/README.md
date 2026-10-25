@@ -335,7 +335,7 @@ their own day-2 catalog sets; days 1 / 2 / 3 2.12 / 10.43 / 25.96 km against 1.0
 fits of the same arcs (the shared parent and B take up the theory's error that per-object fits spread over their
 own elements, AGOM and tau).
 
-## Covariance realism (SPEC 12; measured 2026-10-25, module 74fbb9a89082)
+## Covariance realism (SPEC 12; measured 2026-10-25, module f20f5a059b76; the same numbers as 74fbb9a89082)
 
 Held-out laser-ranged truth (ILRS combination orbits for LAGEOS and Etalon, NSGF arcs for the LEO set; GCRF): each
 window a 24 h `fit` (USEABLE_START_TIME to USEABLE_STOP_TIME), then `propagate` of its set onto the reference epochs
@@ -419,7 +419,10 @@ the lifetime). Not accepted: 699 samples of 199 sets above 1 m (worst 623 m, HEO
 sets in `test/results/open-outliers.md`; the E2E's acceptance fails on them (xpMaxNonInherent). The corpus is
 synthetic (seeded). The E2E prints the sha256 of every module output; `--worst N` lists the largest differences
 per regime; `--reproduce test/results/conformance.json` checks that a moved or rebuilt tree gives this run bit for
-bit.
+bit. Rebuilt on foundation/sgp4-str3 tree b55a681a (C3 and the delta-M term dropped for e <= 1e-4; modules
+de85f301), the run reproduces bit for bit (XP 72dcf6005046, control 9ecfafcd9027): the XP theory does not use that
+library, and the control corpus's one set at e = 1e-4 (NORAD 10393, 0.994 rev/day) is deep space, where neither term
+applies.
 
 Guard rule for changes that move last bits (coordinator, 2026-10-24): every per-regime median and maximum of the
 conformance E2E may move by no more than 1e-6 m, or 1e-12 relative to that value, whichever is larger; otherwise
