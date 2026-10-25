@@ -29,7 +29,7 @@ export async function createRasterLane(config,{wasmPath=path.join(sourceRoot,'di
     }
     if(probe.statusCode!==0)throw Error(`range plan: ${probe.errorCode}: ${probe.errorMessage}`);
     const request=decodeFlowNotice(probe.outputs.find(o=>o.portId==='report').payload);
-    if(request.reason!=='source-pixel-ranges')throw Error(`unexpected range report: ${JSON.stringify(request)}`);
+    if(request.reason!=='source-pixel-ranges')throw Error(`unexpected range report: ${request.reason}`);
     const boundary='sdn-body-source-pixels';
     const parts=[];
     for(const item of request.items) {
@@ -91,10 +91,11 @@ async function main() {
       }
       count++;if(global.gc)global.gc();
       if(process.resourceUsage().maxRSS*1024>=2_000_000_000)throw Error('encoder exceeded the 2 GB RSS acceptance limit');
-      if(count%10===0||block.index===0)console.log(JSON.stringify({worker,block:block.index,count,bytes,peakRssBytes:process.resourceUsage().maxRSS*1024}));
+      if(count%10===0||block.index===0)console.log(`worker ${worker} block ${block.index} count ${count} bytes ${bytes} peakRssBytes ${process.resourceUsage().maxRSS*1024}`);
     }
   }finally{await lane.destroy();}
-  const report={worker,count,bytes,peakRssBytes:process.resourceUsage().maxRSS*1024,wasmSha256:createHash('sha256').update(fs.readFileSync(path.join(sourceRoot,'dist/isomorphic/module.wasm'))).digest('hex')};
-  fs.writeFileSync(path.join(opt.out,`worker-${worker}.json`),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
+  const wasmSha256=createHash('sha256').update(fs.readFileSync(path.join(sourceRoot,'dist/isomorphic/module.wasm'))).digest('hex');
+  const report=`worker ${worker}\ncount ${count}\nbytes ${bytes}\npeakRssBytes ${process.resourceUsage().maxRSS*1024}\nwasmSha256 ${wasmSha256}\n`;
+  fs.writeFileSync(path.join(opt.out,`worker-${worker}.txt`),report);console.log(report.trimEnd().replace(/\n/g,' '));
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();
