@@ -1,15 +1,15 @@
 module com.spacedatanetwork.sdn-ap-propagator
 version 0.1.0
-sha256 74fbb9a89082c23f70aae061435f2bc1db0c716e07cc6054b1eef41ad2028f81
+sha256 5e2cf5255180769319b6dd519330506dd08835a4eb55259b96326f602b173084
 nrlmsise00.source third_party/nrlmsise00
 nrlmsise00.pinnedModulesCommit 75fd4d9d29c8332e43c5daa443fd6cd77f9ecd17
-nrlmsise00.checkoutHead 7a8533ba5fa7c78a94543fa4126bd113641214ed
+nrlmsise00.checkoutHead 2c03c36ba38c4b9215af2ab7096e70b2b5c26171
 nrlmsise00.sha256.nrlmsise-00.h 22eb2ced40595717ef0b73044995e5613aabc8755ed6c43642bfd74335b55535
 nrlmsise00.sha256.nrlmsise-00_data.c d0b3022f3c3e7ffdf703cc0e0d02339dfee01c0bf1520b29c68d5f4afd8784d5
 nrlmsise00.sha256.nrlmsise-00.c 606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a
 erfa.source higherpop/third_party/erfa
 erfa.pinnedModulesCommit 7d59ae2171b5b57fd3b3587ff012de75b8aabb0c
-erfa.checkoutHead 7a8533ba5fa7c78a94543fa4126bd113641214ed
+erfa.checkoutHead 2c03c36ba38c4b9215af2ab7096e70b2b5c26171
 erfa.license.spdx BSD-3-Clause
 erfa.license.carried LICENSES/ERFA.txt
 erfa.license.sha256 556abafd66857342b5f760bc42d323d1cfea310569267d3ae316d438b075424d
@@ -57,7 +57,7 @@ table6.sgp4xpLibraryOverrides 17
 gravity.model egm96
 gravity.source propagator/ffm/lib/egm96_data.h
 gravity.pinnedModulesCommit 0e84a2c8fb6258d5e37b3c59839ea0e5794ffae1
-gravity.checkoutHead 7a8533ba5fa7c78a94543fa4126bd113641214ed
+gravity.checkoutHead 2c03c36ba38c4b9215af2ab7096e70b2b5c26171
 gravity.sha256 4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4
 gravity.records 2553
 lunar.field.source /opt/data/sdn-archive/hac/pds-grail-gravity/gggrx_0660pm_sha.tab

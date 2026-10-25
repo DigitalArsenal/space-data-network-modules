@@ -101,6 +101,18 @@ int32_t sdnap_mean_elements_at(uint32_t index, double minutes, double* out) {
   return ORBPRO_PROP_OK;
 }
 
+/// The mean motion (rev/day) an SGP4XP or SDN-AP set carries for a mean semi-major axis `a_km` (km), eccentricity `e`
+/// and inclination `i_deg` (deg): the inverse of sdnap_mean_elements_at, whose a is the theory's own
+/// (k_e / n)^(2/3) of the set's (Brouwer) mean motion (SPEC 1.1, 1.5); e and i do not enter that relation and are checked
+/// only. NaN for a <= 0, e outside [0, 1) or a non-finite i.
+SDNAP_EXPORT("sdnap_mean_motion_of")
+double sdnap_mean_motion_of(double a_km, double e, double i_deg) {
+  if (!(a_km > 0.0) || !(e >= 0.0) || !(e < 1.0) || !std::isfinite(i_deg)) return std::numeric_limits<double>::quiet_NaN();
+  const double a_er = a_km / sdnap::xpt::kRe;
+  const double n = sdnap::xpt::kKe / (a_er * std::sqrt(a_er));  // rad/min
+  return n * sdnap::kMinutesPerDay / sdnap::kTwoPi;
+}
+
 /// The osculating elements of a TEME state (km, km/s) about the Earth theories' gravitational parameter: out = a (km),
 /// e, i, RAAN, argument of pericenter, mean anomaly (deg, [0, 360); an open orbit: a < 0, the hyperbolic mean anomaly).
 /// 0, or ORBPRO_PROP_BAD_INPUT for a degenerate state.

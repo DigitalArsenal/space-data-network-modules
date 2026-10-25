@@ -41,7 +41,9 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
 - Display quantities (the module's own conversions; `test/exports.e2e.mjs` checks each against its inverse):
   `sdnap_mean_elements_at(index, minutes, out)` the mean a (km), e, i, RAAN, argp and M (deg) of an SGP4XP or SDN-AP
   row at minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating
-  elements of a TEME state about the Earth theories' GM; `sdnap_frame_to_uvw(r, v, vec, out)` a vector's radial,
+  elements of a TEME state about the Earth theories' GM; `sdnap_mean_motion_of(a, e, i)` the mean motion (rev/day) an
+  SGP4XP or SDN-AP set carries for a mean a (km), the inverse of `sdnap_mean_elements_at` (a round trip within
+  1e-12 relative from LEO to GEO); `sdnap_frame_to_uvw(r, v, vec, out)` a vector's radial,
   in-track and cross-track components, the mirror of `sdnap_uvw_to_frame`.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SDN-AP and SGP4XP sets, the fit's covariance at
   its epoch as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the drag, AGOM and tau parameters'
