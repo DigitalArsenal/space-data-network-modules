@@ -40,19 +40,19 @@ if [ ! -f "$BUILD_DIR/eigen3/Eigen/Dense" ]; then
   rm -rf "$BUILD_DIR/eigen3"; cp -RL "$EIGEN_SRC/" "$BUILD_DIR/eigen3/"
 fi
 
-# od_lib TUs + Vallado + threaded batch core + weak exception stubs.
+# od_lib TUs + threaded batch core + weak exception stubs (the SGP4 base is the header-only foundation/sgp4-str3).
 LIB_TUS=(
   src/sgp4_fitter.cpp src/meme_parser.cpp src/frame_transform.cpp
   src/oem_parser.cpp src/oem_fb_reader.cpp src/omm_fb_builder.cpp
   src/obd_fb_builder.cpp src/ocm_fb_builder.cpp src/plugin_runtime.cpp
-  deps/vallado-sgp4/SGP4.cpp src/od_batch_fit.cpp src/noexcept_stubs.cpp
+  src/od_batch_fit.cpp src/noexcept_stubs.cpp
 )
 
 echo "Building threaded guest-link object via $WASI_SDK_IMAGE ..."
 docker run --rm -v "$MP_ROOT":/mp -v "$BUILD_DIR":/work "$WASI_SDK_IMAGE" bash -lc "
 set -e
 OD=/mp/space-data-network-modules/analysis/od/src/cpp
-INC=\"-I\$OD/include -I\$OD/src -I/mp/space-data-network-modules/common -I\$OD/deps/vallado-sgp4 -I/work/eigen3 -I/mp/flatbuffers/include -I/mp/space-data-network-modules/licensing/core/src/cpp/generated/sds\"
+INC=\"-I\$OD/include -I\$OD/src -I/mp/space-data-network-modules/common -I/mp/space-data-network-modules/foundation/sgp4-str3/include -I/work/eigen3 -I/mp/flatbuffers/include -I/mp/space-data-network-modules/licensing/core/src/cpp/generated/sds\"
 CF=\"--target=wasm32-wasip1-threads -std=c++17 -O3 -matomics -mbulk-memory -fignore-exceptions -pthread -DNDEBUG -DEIGEN_DONT_PARALLELIZE -ffast-math\"
 mkdir -p /work/gl
 OBJS=''

@@ -72,10 +72,10 @@ if(NOT EXISTS "${SDN_CORE_SDS_GENERATED_DIR}/OEM_generated.h")
     message(FATAL_ERROR "SDS generated headers not found at ${SDN_CORE_SDS_GENERATED_DIR} (need OEM_generated.h/OMM_generated.h). Set -DSDN_CORE_SDS_GENERATED_DIR.")
 endif()
 
-# Vallado SGP4 library (CelesTrak/fundamentals-of-astrodynamics)
-set(VALLADO_SGP4_DIR "${CMAKE_SOURCE_DIR}/deps/vallado-sgp4")
-add_library(sgp4_lib STATIC "${VALLADO_SGP4_DIR}/SGP4.cpp")
-target_include_directories(sgp4_lib PUBLIC "${VALLADO_SGP4_DIR}")
+# The SGP4/SDP4 base: foundation/sgp4-str3, header-only (propagator/sdn-ap compiles the same parts)
+set(SGP4_STR3_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../../../../foundation/sgp4-str3/include")
+add_library(sgp4_lib INTERFACE)
+target_include_directories(sgp4_lib INTERFACE "${SGP4_STR3_INCLUDE_DIR}")
 
 # OD library
 set(OD_SOURCES
@@ -92,7 +92,7 @@ set(OD_SOURCES
 )
 
 add_library(od_lib STATIC ${OD_SOURCES})
-target_include_directories(od_lib PUBLIC include "${VALLADO_SGP4_DIR}")
+target_include_directories(od_lib PUBLIC include "${SGP4_STR3_INCLUDE_DIR}")
 # The $OEM reader / $OMM builder TUs (oem_fb_reader.cpp / omm_fb_builder.cpp)
 # include the generated SDS + flatbuffers headers. PRIVATE: the reader/builder
 # public headers stay plain-C++ (no FlatBuffers types leak), so od_lib consumers
@@ -149,7 +149,7 @@ if(EMSCRIPTEN)
         od_wasm PRIVATE
         include
         generated
-        "${VALLADO_SGP4_DIR}"
+        "${SGP4_STR3_INCLUDE_DIR}"
         "${FLATBUFFERS_INCLUDE_DIR}"
     )
     target_link_libraries(od_wasm od_lib)
@@ -183,7 +183,7 @@ if(EMSCRIPTEN)
         od_wasm_reactor PRIVATE
         include
         generated
-        "${VALLADO_SGP4_DIR}"
+        "${SGP4_STR3_INCLUDE_DIR}"
         "${FLATBUFFERS_INCLUDE_DIR}"
     )
     target_compile_definitions(od_wasm_reactor PRIVATE OD_REACTOR_BUILD)
@@ -215,7 +215,7 @@ elseif(WASI_SDK)
         od_standalone PRIVATE
         include
         generated
-        "${VALLADO_SGP4_DIR}"
+        "${SGP4_STR3_INCLUDE_DIR}"
         "${FLATBUFFERS_INCLUDE_DIR}"
     )
     target_link_libraries(od_standalone od_lib)

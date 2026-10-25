@@ -54,7 +54,6 @@ TUS=(
   src/obd_fb_builder.cpp
   src/ocm_fb_builder.cpp
   src/plugin_runtime.cpp
-  deps/vallado-sgp4/SGP4.cpp
   src/od_batch_fit.cpp
   src/od_isomorphic_main.cpp
   src/noexcept_stubs.cpp
@@ -68,7 +67,7 @@ set -e
 /opt/wasi-sdk/bin/clang++ --target=wasm32-wasip1-threads \
   -std=c++17 -O3 -matomics -fignore-exceptions -pthread -mbulk-memory -DNDEBUG -DEIGEN_DONT_PARALLELIZE -ffast-math \
   -I/mp/space-data-network-modules/analysis/od/src/cpp/include \
-  -I/mp/space-data-network-modules/analysis/od/src/cpp/deps/vallado-sgp4 \
+  -I/mp/space-data-network-modules/foundation/sgp4-str3/include \
   -I/mp/space-data-network-modules/common \
   -I/work/eigen3 -I/mp/flatbuffers/include \
   -I/mp/space-data-network-modules/licensing/core/src/cpp/generated/sds \

@@ -14,7 +14,7 @@ REACTOR_TARGET="od_wasm_reactor"
 
 # Guest-link (flow-bake) build inputs. Same header roots the CMake WASM build
 # resolves; overridable via env, defaults mirror CMakeLists.txt.
-VALLADO_DIR="$SRC_DIR/deps/vallado-sgp4"
+SGP4_STR3_INCLUDE_DIR="$SCRIPT_DIR/../../foundation/sgp4-str3/include"   # the SGP4/SDP4 base (header-only)
 FLATBUFFERS_INCLUDE_DIR="${SDN_FLATBUFFERS_INCLUDE_DIR:-${FLATBUFFERS_INCLUDE_DIR:-$SCRIPT_DIR/../../../flatbuffers/include}}"
 SDS_GENERATED_DIR="${SDN_CORE_SDS_GENERATED_DIR:-$SCRIPT_DIR/../../licensing/core/src/cpp/generated/sds}"
 
@@ -238,16 +238,15 @@ build_guest_link() {
     local CFLAGS=(
         -std=c++17 -O3 -mbulk-memory -DNDEBUG -DEMSCRIPTEN
         -DEIGEN_DONT_PARALLELIZE -fignore-exceptions
-        -I"$SRC_DIR/include" -I"$VALLADO_DIR"
+        -I"$SRC_DIR/include" -I"$SGP4_STR3_INCLUDE_DIR"
         -I"$FLATBUFFERS_INCLUDE_DIR" -I"$SDS_GENERATED_DIR" -I"$EIGEN_DIR"
     )
 
-    # od_lib TUs (every .cpp CMake compiles into od_lib) + sgp4_lib (Vallado).
+    # od_lib TUs (every .cpp CMake compiles into od_lib); the SGP4 base is the header-only foundation/sgp4-str3.
     local LIB_TUS=(
         "src/orbit_determination.cpp" "src/meme_parser.cpp" "src/frame_transform.cpp"
         "src/oem_parser.cpp" "src/oem_fb_reader.cpp" "src/omm_fb_builder.cpp" "src/obd_fb_builder.cpp"
         "src/sgp4_fitter.cpp" "src/plugin_runtime.cpp"
-        "deps/vallado-sgp4/SGP4.cpp"
     )
     local OBJS=()
     for tu in "${LIB_TUS[@]}"; do
