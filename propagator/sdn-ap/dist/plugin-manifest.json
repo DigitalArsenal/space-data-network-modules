@@ -77,7 +77,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and MEAN_ELEMENT, SEGMENTS, OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES), FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads each set's own, another value must match it; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and MEAN_ELEMENT, SEGMENTS, OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES), FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads each set's own, another value must match it; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -229,7 +229,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and FIT (the span rule, hold-out, implausibility bound, B_eff and AGOM priors), MEAN_ELEMENT, SEGMENTS, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set, SDNAP an SDN-AP set; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and FIT (the span rule, hold-out, implausibility bound, B_eff and AGOM priors), MEAN_ELEMENT, SEGMENTS, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set, SDNAP an SDN-AP set; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -471,7 +471,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and MEAN_ELEMENT, OUTPUT, FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and MEAN_ELEMENT, OUTPUT, FORCES (EMPIRICAL_TERMS only), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -685,7 +685,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and MANEUVER_DETECTION (THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES, CORRELATION_MODEL WHITE or ONE_SAMPLE_PER_REVOLUTION, FALSE_ALARMS_PER_OBJECT_YEAR 1), MEAN_ELEMENT and INTEGRATOR (refused); THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and MANEUVER_DETECTION (THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES, CORRELATION_MODEL WHITE or ONE_SAMPLE_PER_REVOLUTION, FALSE_ALARMS_PER_OBJECT_YEAR 1), MEAN_ELEMENT and INTEGRATOR (refused); THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -838,7 +838,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and REENTRY (every field; WINDOW_METHOD LINEAR), MEAN_ELEMENT, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and REENTRY (every field; WINDOW_METHOD LINEAR), MEAN_ELEMENT, FORCES (EMPIRICAL_TERMS only) and INTEGRATOR (refused); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -951,7 +951,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and LAUNCH (the B_eff and AGOM priors) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and LAUNCH (the B_eff and AGOM priors) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -1065,7 +1065,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0 (SDS 1.264.0): THEORY and LAUNCH (priors, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.2 (SDS 1.268.0): THEORY and LAUNCH (priors, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) and MEAN_ELEMENT; THEORY UNSPECIFIED or SDNAP; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",

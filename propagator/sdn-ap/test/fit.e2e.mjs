@@ -27,7 +27,7 @@ import { OBD } from "spacedatastandards.org/lib/js/OBD/OBD.js";
 import { odMethod } from "spacedatastandards.org/lib/js/OBD/odMethod.js";
 import { FRAME_PROBE, jdOf, oemInFrame, packOem, rfm, rotate } from "./lib/frames.mjs";
 import { openModule, wasmPath } from "./lib/module.mjs";
-import { configuration, withConfiguration } from "./lib/pcf.mjs";
+import { PCFEmpiricalTermsT, configuration, explicit, withConfiguration } from "./lib/pcf.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
@@ -278,6 +278,42 @@ const priorOmm = sdnapOmm({ MeanMotion: 15.3 }, { THEORY: "SDN-AP", SDNAP_B: 0.1
     check(Math.abs(f.SDNAP_B_EFF - 1.0) < 0.02 && !f.SDNAP_LOWERING, `default fit: B_eff ${f.SDNAP_B_EFF}, LOWERING ${f.SDNAP_LOWERING}`);
     check(g.SDNAP_LOWERING === 1 && g.SDNAP_B_EFF === 0 && g.SDNAP_TAU0 < 0, `2c.2 opt-in: B_eff ${g.SDNAP_B_EFF}, tau0 ${g.SDNAP_TAU0}, LOWERING ${g.SDNAP_LOWERING}`);
   }
+}
+
+// --- $PCF 1.0.2 (SDS 1.268.0): a FORCES.EMPIRICAL_TERMS table whose fields are unset (or written at their defaults)
+// reads as an absent table. A MEO SDN-AP truth (perigee above MEAN_ELEMENT.DRAG_REGIME_PERIGEE_KM, tauc and taus set)
+// fitted by fit SDNAP with no FORCES table, with an empty EMPIRICAL_TERMS table and with every field written at its
+// default gives the same $OMM and $OBD bytes, holding the terms after the arc (SDNAP_TAU_HELD 1);
+// HELD_ABOVE_DRAG_REGIME false decays them (no SDNAP_TAU_HELD). The SGP4XP fit and an SGP4XP set's propagate take
+// the empty table as no table and refuse a field set off its default by name.
+{
+  const meo = await propagate(sdnapOmm({ MeanMotion: 2.0056, Eccentricity: 0.01, Inclination: 55, RaOfAscNode: 10, ArgOfPericenter: 30, MeanAnomaly: 40, Bstar: 0, MeanMotionDdot: 0.02 },
+    { THEORY: "SDN-AP", SDNAP_TAUC: 3e-9, SDNAP_TAUS: -2e-9, SDNAP_ARC_END_MIN: 1440, SDNAP_TAU_HELD: 1 }));
+  const ephemeris = { portId: "ephemeris", typeRef: oemType, payload: oemInFrame(m, meo, "TEME", null) };
+  const forces = (EMPIRICAL_TERMS) => ({ EPHEMERIS_SOURCE: "", EMPIRICAL_TERMS });
+  const run = async (options, input = ephemeris, method = "fit") => command.invoke({ methodId: method, inputs: [configuration(options), input] });
+  const bytes = (r) => (r.statusCode !== 0 ? `${r.errorCode} ${r.errorMessage}` :
+    r.outputs.map((o) => `${o.portId}:${Buffer.from(o.payload).toString("base64")}`).join("|"));
+  const held = (r) => { const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload)); for (let k = 0; k < e.userDefinedParametersLength(); ++k) if (e.USER_DEFINED_PARAMETERS(k).PARAM_NAME() === "SDNAP_TAU_HELD") return Number(e.USER_DEFINED_PARAMETERS(k).PARAM_VALUE()); return 0; };
+  const none = await run({ theory: "SDNAP" });
+  const empty = await run({ theory: "SDNAP", forces: forces({}) });
+  const atDefaults = await run({ theory: "SDNAP", forces: forces(explicit(PCFEmpiricalTermsT, { HELD_ABOVE_DRAG_REGIME: true })) });
+  const decaying = await run({ theory: "SDNAP", forces: forces({ HELD_ABOVE_DRAG_REGIME: false }) });
+  const same = bytes(none) === bytes(empty) && bytes(none) === bytes(atDefaults);
+  console.log(`EMPIRICAL_TERMS on a MEO fit: no table, an empty table and every field at its default ${same ? "give the same $OMM and $OBD bytes" : "DIFFER"}; SDNAP_TAU_HELD ${none.statusCode === 0 ? held(none) : none.errorCode}, with HELD_ABOVE_DRAG_REGIME false ${decaying.statusCode === 0 ? held(decaying) : decaying.errorCode}`);
+  check(none.statusCode === 0 && same && held(none) === 1, `EMPIRICAL_TERMS at its defaults against no table: ${bytes(none).slice(0, 80)} / ${bytes(empty).slice(0, 80)} / ${bytes(atDefaults).slice(0, 80)}`);
+  check(decaying.statusCode === 0 && held(decaying) === 0 && bytes(decaying) !== bytes(none), `HELD_ABOVE_DRAG_REGIME false: ${bytes(decaying).slice(0, 80)}`);
+  const xpNone = await run({});
+  const xpEmpty = await run({ forces: forces({}) });
+  const xpOff = await run({ forces: forces({ PERSISTENCE_HOURS: 12 }) });
+  const omm = { portId: "omm", typeRef: ommType, payload: ommBytes };
+  const propNone = await run({}, omm, "propagate"), propEmpty = await run({ forces: forces({}) }, omm, "propagate");
+  const propOff = await run({ forces: forces({ HELD_ABOVE_DRAG_REGIME: false }) }, omm, "propagate");
+  console.log(`EMPIRICAL_TERMS with SGP4XP: fit with an empty table ${bytes(xpNone) === bytes(xpEmpty) ? "as with none" : "DIFFERENT"}, PERSISTENCE_HOURS 12 -> ${xpOff.errorCode} ${xpOff.errorMessage}; propagate with an empty table ${bytes(propNone) === bytes(propEmpty) ? "as with none" : "DIFFERENT"}, HELD_ABOVE_DRAG_REGIME false -> ${propOff.errorCode} ${propOff.errorMessage}`);
+  check(xpNone.statusCode === 0 && bytes(xpNone) === bytes(xpEmpty), `SGP4XP fit with an empty EMPIRICAL_TERMS table: ${xpEmpty.errorCode} ${xpEmpty.errorMessage}`);
+  check(xpOff.errorCode === "configuration-refused" && String(xpOff.errorMessage).startsWith("FORCES.EMPIRICAL_TERMS.PERSISTENCE_HOURS:"), `SGP4XP fit with PERSISTENCE_HOURS 12: ${xpOff.errorCode} ${xpOff.errorMessage}`);
+  check(propNone.statusCode === 0 && bytes(propNone) === bytes(propEmpty), `SGP4XP propagate with an empty EMPIRICAL_TERMS table: ${propEmpty.errorCode} ${propEmpty.errorMessage}`);
+  check(propOff.errorCode === "configuration-refused" && String(propOff.errorMessage).startsWith("FORCES.EMPIRICAL_TERMS.HELD_ABOVE_DRAG_REGIME:"), `SGP4XP propagate with HELD_ABOVE_DRAG_REGIME false: ${propOff.errorCode} ${propOff.errorMessage}`);
 }
 
 // --- Moon-centered SDN-AP (2h.1): a lunar set (100 km polar, GRGM660PRIM and the DE440 PA orientation pinned) through

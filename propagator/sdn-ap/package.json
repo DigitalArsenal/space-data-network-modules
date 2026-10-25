@@ -27,6 +27,6 @@
   "devDependencies": {
     "flatc-wasm": "26.1.38",
     "space-data-module-sdk": "0.9.14",
-    "spacedatastandards.org": "1.264.0"
+    "spacedatastandards.org": "1.268.0"
   }
 }

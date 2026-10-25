@@ -664,6 +664,322 @@ inline double fit(Sat& s, const double* t, const double* pos, int count, int ite
   return std::sqrt(c0 / count);
 }
 
+
+// ---- Maneuvers inside a Moon-centered arc (DESIGN 5.1.4 on the 2h.1 theory) ----------------------------------------
+
+/// Gaussian elimination with partial pivoting, A (n x n, row-major) and b in place; false when singular.
+inline bool solve_n(double* A, double* b, int n) {
+  for (int c = 0; c < n; ++c) {
+    int pv = c;
+    for (int r = c + 1; r < n; ++r) if (std::fabs(A[r * n + c]) > std::fabs(A[pv * n + c])) pv = r;
+    if (!(std::fabs(A[pv * n + c]) > 0.0)) return false;
+    for (int j = 0; j < n; ++j) std::swap(A[c * n + j], A[pv * n + j]);
+    std::swap(b[c], b[pv]);
+    for (int r = c + 1; r < n; ++r) {
+      const double f = A[r * n + c] / A[c * n + c];
+      for (int j = c; j < n; ++j) A[r * n + j] -= f * A[c * n + j];
+      b[r] -= f * b[c];
+    }
+  }
+  for (int c = n - 1; c >= 0; --c) {
+    double sum = b[c];
+    for (int j = c + 1; j < n; ++j) sum -= A[c * n + j] * b[j];
+    b[c] = sum / A[c * n + c];
+  }
+  return true;
+}
+
+/// The UVW axes (radial, in-track, cross-track) of a state, as three unit vectors.
+inline void uvw_axes(const double* r, const double* v, double* U, double* V, double* W) {
+  const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  double h[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
+  const double hn = std::sqrt(h[0] * h[0] + h[1] * h[1] + h[2] * h[2]);
+  for (int c = 0; c < 3; ++c) { U[c] = r[c] / rn; W[c] = h[c] / hn; }
+  V[0] = W[1] * U[2] - W[2] * U[1];
+  V[1] = W[2] * U[0] - W[0] * U[2];
+  V[2] = W[0] * U[1] - W[1] * U[0];
+}
+
+/// The set after an impulse dv (km/s, UVW of the state) at t_b seconds from `pre`'s epoch: its epoch t_b, its mean
+/// elements the pre-burn mean elements there plus the burn's change of the osculating elements (first order: the
+/// short-periodic part is the same on both sides of the impulse).
+inline bool after_burn(const Sat& pre, double t_b, const double* dv, Sat& post, const Sat* terms_from = nullptr) {
+  double y[6], z[6], r[3], v[3];
+  if (!mean_at(pre, t_b, y)) return false;
+  for (int j = 0; j < 6; ++j) z[j] = y[j];
+  if (!osculating(pre, t_b, z, r, v)) return false;
+  double U[3], V[3], W[3], v1[3], q0[6], q1[6];
+  uvw_axes(r, v, U, V, W);
+  for (int c = 0; c < 3; ++c) v1[c] = v[c] + dv[0] * U[c] + dv[1] * V[c] + dv[2] * W[c];
+  if (!elements_of_state(pre, r, v, q0) || !elements_of_state(pre, r, v1, q1)) return false;
+  post = pre;
+  post.epoch_frac = pre.epoch_frac + t_b / 86400.0;
+  post.et0 = pre.et0 + t_b;
+  for (int j = 0; j < 6; ++j) {
+    double d = q1[j] - q0[j];
+    if (j == xpt::kLam) d = std::remainder(d, kTwoPi);
+    post.y0[j] = y[j] + d;
+  }
+  if (terms_from != nullptr) {
+    post.avg = terms_from->avg;
+    post.sp = terms_from->sp;
+  } else {
+    build_terms(post);
+  }
+  return post.y0[xpt::kN] > 0.0;
+}
+
+struct Burn {
+  int index = -1;           ///< the first state after the burn
+  double t_b = -1.0;        ///< seconds from the arc's epoch
+  double dv[3] = {0, 0, 0};  ///< km/s, UVW
+  double lambda = 0.0;      ///< the profiled likelihood ratio at the epoch
+};
+
+/// The six-element GLR of (16) on the theory's own position residuals of the whole-arc set `s`, the likelihood
+/// profiled over the epoch elements (15): the transition S(t) = dy(t)/dy0 and the position columns P = dx/dy0 by
+/// one-sided differences of six sets perturbed in y0, the burn's signature P S(t_b)^-1 G(t_b) with G the change of
+/// the osculating elements per unit impulse; weights 1 / (1.4826 MAD)^2 per axis (floor 1 m), counted once per
+/// revolution. Candidate epochs keep `pre_s` of data before and `post_s` after them.
+inline bool locate_burn(const Sat& s, const double* t, const double* pos, int count, double pre_s, double post_s, Burn& out) {
+  if (count < 16) return false;
+  std::vector<double> model(3 * count), res(3 * count), P(static_cast<size_t>(3) * count * 6), Y(static_cast<size_t>(6) * count),
+      Sm(static_cast<size_t>(36) * count), X(static_cast<size_t>(6) * count);
+  if (!states(s, t, count, X.data())) return false;
+  for (int k = 0; k < count; ++k)
+    for (int c = 0; c < 3; ++c) { model[3 * k + c] = X[6 * k + c]; res[3 * k + c] = pos[3 * k + c] - X[6 * k + c]; }
+  if (!dense_means(s, t, count, [&](int k, double* z) { for (int j = 0; j < 6; ++j) Y[6 * k + j] = z[j]; return true; })) return false;
+  const double step[6] = {1e-10, 1e-7, 1e-7, 1e-7, 1e-7, 1e-7};
+  std::vector<double> pq(3 * count);
+  for (int p = 0; p < 6; ++p) {
+    Sat q = s;
+    q.y0[p] += step[p];
+    if (!positions(q, t, count, pq.data())) return false;
+    for (int i = 0; i < 3 * count; ++i) P[static_cast<size_t>(i) * 6 + p] = (pq[i] - model[i]) / step[p];
+    if (!dense_means(q, t, count, [&](int k, double* z) {
+          for (int j = 0; j < 6; ++j) {
+            double d = z[j] - Y[6 * k + j];
+            if (j == xpt::kLam) d = std::remainder(d, kTwoPi);
+            Sm[static_cast<size_t>(36) * k + 6 * j + p] = d / step[p];
+          }
+          return true;
+        }))
+      return false;
+  }
+  // robust weights per axis, once per revolution
+  double w[3];
+  {
+    const double period = kTwoPi / s.y0[xpt::kN];
+    const double dt = (t[count - 1] - t[0]) / (count - 1);
+    const double per_rev = std::fmax(1.0, period / dt);
+    for (int c = 0; c < 3; ++c) {
+      std::vector<double> a(count);
+      for (int k = 0; k < count; ++k) a[k] = std::fabs(res[3 * k + c]);
+      std::nth_element(a.begin(), a.begin() + count / 2, a.end());
+      const double sig = std::fmax(1.4826 * a[count / 2], 1e-3);
+      w[c] = 1.0 / (sig * sig * per_rev);
+    }
+  }
+  // the suffix sums of P' W P and P' W r
+  std::vector<double> Asuf(static_cast<size_t>(36) * (count + 1), 0.0), bsuf(static_cast<size_t>(6) * (count + 1), 0.0);
+  for (int k = count - 1; k >= 0; --k) {
+    double* A = Asuf.data() + 36 * k;
+    double* b = bsuf.data() + 6 * k;
+    for (int q = 0; q < 36; ++q) A[q] = Asuf[36 * (k + 1) + q];
+    for (int q = 0; q < 6; ++q) b[q] = bsuf[6 * (k + 1) + q];
+    for (int c = 0; c < 3; ++c) {
+      const double* row = P.data() + static_cast<size_t>(3 * k + c) * 6;
+      for (int a = 0; a < 6; ++a) {
+        b[a] += row[a] * w[c] * res[3 * k + c];
+        for (int bb = 0; bb < 6; ++bb) A[a * 6 + bb] += row[a] * w[c] * row[bb];
+      }
+    }
+  }
+  const double* A0 = Asuf.data();
+  const double* b0 = bsuf.data();
+  double best = -1.0;
+  for (int k = 1; k < count; ++k) {
+    const double tb = 0.5 * (t[k - 1] + t[k]);
+    if (tb - t[0] < pre_s || t[count - 1] - tb < post_s) continue;
+    // G at the state before the burn: d(osculating elements) / d(dv) in UVW
+    const double* xb = X.data() + 6 * (k - 1);
+    double U[3], V[3], Wv[3], q0[6], G[18];
+    uvw_axes(xb, xb + 3, U, V, Wv);
+    if (!elements_of_state(s, xb, xb + 3, q0)) continue;
+    const double* axes[3] = {U, V, Wv};
+    bool ok = true;
+    for (int a = 0; a < 3 && ok; ++a) {
+      double v1[3], q1[6];
+      for (int c = 0; c < 3; ++c) v1[c] = xb[3 + c] + 1e-6 * axes[a][c];
+      ok = elements_of_state(s, xb, v1, q1);
+      for (int j = 0; j < 6 && ok; ++j) {
+        double d = q1[j] - q0[j];
+        if (j == xpt::kLam) d = std::remainder(d, kTwoPi);
+        G[j * 3 + a] = d / 1e-6;
+      }
+    }
+    if (!ok) continue;
+    // N = S(t_b)^-1 G
+    double N[18];
+    {
+      const double* Sb = Sm.data() + static_cast<size_t>(36) * (k - 1);
+      for (int a = 0; a < 3 && ok; ++a) {
+        double M[36], col[6];
+        for (int q = 0; q < 36; ++q) M[q] = Sb[q];
+        for (int j = 0; j < 6; ++j) col[j] = G[j * 3 + a];
+        ok = solve_n(M, col, 6);
+        for (int j = 0; j < 6; ++j) N[j * 3 + a] = col[j];
+      }
+    }
+    if (!ok) continue;
+    // the profile (15): P = A+ - A+ A^-1 A+, u = b+ - A+ A^-1 b
+    const double* Ap = Asuf.data() + 36 * k;
+    const double* bp = bsuf.data() + 6 * k;
+    double Ainv_Ap[36], Ainv_b[6];
+    for (int a = 0; a < 6 && ok; ++a) {
+      double M[36], col[6];
+      for (int q = 0; q < 36; ++q) M[q] = A0[q];
+      for (int j = 0; j < 6; ++j) col[j] = Ap[j * 6 + a];
+      ok = solve_n(M, col, 6);
+      for (int j = 0; j < 6; ++j) Ainv_Ap[j * 6 + a] = col[j];
+    }
+    {
+      double M[36];
+      for (int q = 0; q < 36; ++q) M[q] = A0[q];
+      for (int j = 0; j < 6; ++j) Ainv_b[j] = b0[j];
+      ok = ok && solve_n(M, Ainv_b, 6);
+    }
+    if (!ok) continue;
+    double Pm[36], u[6];
+    for (int a = 0; a < 6; ++a) {
+      double su = bp[a];
+      for (int j = 0; j < 6; ++j) su -= Ap[a * 6 + j] * Ainv_b[j];
+      u[a] = su;
+      for (int bb = 0; bb < 6; ++bb) {
+        double sp = Ap[a * 6 + bb];
+        for (int j = 0; j < 6; ++j) sp -= Ap[a * 6 + j] * Ainv_Ap[j * 6 + bb];
+        Pm[a * 6 + bb] = sp;
+      }
+    }
+    double F[9] = {}, g[3] = {};
+    for (int a = 0; a < 3; ++a) {
+      for (int j = 0; j < 6; ++j) g[a] += N[j * 3 + a] * u[j];
+      for (int bb = 0; bb < 3; ++bb)
+        for (int i = 0; i < 6; ++i)
+          for (int j = 0; j < 6; ++j) F[a * 3 + bb] += N[i * 3 + a] * Pm[i * 6 + j] * N[j * 3 + bb];
+    }
+    double Fs[9], dv[3] = {g[0], g[1], g[2]};
+    for (int q = 0; q < 9; ++q) Fs[q] = F[q];
+    if (!solve_n(Fs, dv, 3)) continue;
+    const double lam = g[0] * dv[0] + g[1] * dv[1] + g[2] * dv[2];
+    if (lam > best) {
+      best = lam;
+      out.index = k;
+      out.t_b = tb;
+      out.lambda = lam;
+      for (int c = 0; c < 3; ++c) out.dv[c] = dv[c];
+    }
+  }
+  return out.index >= 0;
+}
+
+/// The joint segment fit (DESIGN 5.1.4) about the Moon: the pre-burn set's six mean elements and AGOM and the
+/// impulse dv at t_b (fixed) over the whole arc, the post-burn set after_burn() of it; LM on the position residuals
+/// with differences of the theory. `pre` starts at the whole-arc set, `dv` at the GLR's estimate; on success `post` is
+/// the set after the burn and the return the whole arc's RMS (km), negative otherwise.
+inline double joint_fit(Sat& pre, double t_b, const double* t, const double* pos, int count, double* dv, Sat& post, int iterations) {
+  int split = 0;
+  while (split < count && t[split] <= t_b) ++split;
+  if (split < 4 || count - split < 4) return -1.0;
+  std::vector<double> tpost(t + split, t + count);
+  for (double& x : tpost) x -= t_b;
+  std::vector<double> m(3 * count);
+  // the term lists (F and G at each set's epoch) are rebuilt for the trial steps; the difference columns reuse the
+  // current point's, a change of 1e-7 in the elements moving them below the columns' own precision
+  Sat cur_post;
+  const Sat* terms = nullptr;
+  auto model = [&](const Sat& a, const double* d, Sat& b, std::vector<double>& out) {
+    if (!positions(a, t, split, out.data())) return false;
+    if (!after_burn(a, t_b, d, b, terms)) return false;
+    return positions(b, tpost.data(), count - split, out.data() + 3 * split);
+  };
+  constexpr int NP = 10;  // y0 (6), AGOM, dv (3)
+  const double step[NP] = {1e-10, 1e-7, 1e-7, 1e-7, 1e-7, 1e-7, 1e-3, 1e-6, 1e-6, 1e-6};
+  auto apply = [&](const Sat& a, const double* d, const double* x, Sat& out, double* dout, bool rebuild) {
+    out = a;
+    for (int j = 0; j < 6; ++j) out.y0[j] += x[j];
+    out.agom += x[6];
+    for (int c = 0; c < 3; ++c) dout[c] = d[c] + x[7 + c];
+    if (rebuild) build_terms(out);
+  };
+  Sat cur = pre;
+  double d[3] = {dv[0], dv[1], dv[2]};
+  std::vector<double> res(3 * count), trial(3 * count), J(static_cast<size_t>(3) * count * NP);
+  if (!model(cur, d, cur_post, m)) return -1.0;
+  for (int i = 0; i < 3 * count; ++i) res[i] = m[i] - pos[i];
+  auto cost = [&](const std::vector<double>& r, const Sat& a) {
+    double c = 0.0;
+    for (double x : r) c += x * x;
+    return c + (a.agom / 0.1) * (a.agom / 0.1);
+  };
+  double c0 = cost(res, cur), lambda = 1e-3;
+  for (int it = 0; it < iterations; ++it) {
+    terms = &cur_post;
+    for (int p = 0; p < NP; ++p) {
+      double x[NP] = {}, dd[3];
+      x[p] = step[p];
+      Sat q, qb;
+      apply(cur, d, x, q, dd, false);
+      if (!model(q, dd, qb, trial)) return -1.0;
+      for (int i = 0; i < 3 * count; ++i) J[static_cast<size_t>(i) * NP + p] = (trial[i] - pos[i] - res[i]) / step[p];
+    }
+    double N[NP * NP] = {}, g[NP] = {};
+    for (int i = 0; i < 3 * count; ++i)
+      for (int a = 0; a < NP; ++a) {
+        g[a] += J[static_cast<size_t>(i) * NP + a] * res[i];
+        for (int b = 0; b < NP; ++b) N[a * NP + b] += J[static_cast<size_t>(i) * NP + a] * J[static_cast<size_t>(i) * NP + b];
+      }
+    N[6 * NP + 6] += 1.0 / (0.1 * 0.1);
+    g[6] += cur.agom / (0.1 * 0.1);
+    terms = nullptr;
+    bool improved = false;
+    for (int tries = 0; tries < 8 && !improved; ++tries) {
+      double A[NP * NP], b[NP];
+      for (int q = 0; q < NP * NP; ++q) A[q] = N[q];
+      for (int a = 0; a < NP; ++a) { A[a * NP + a] *= 1.0 + lambda; b[a] = -g[a]; }
+      if (solve_n(A, b, NP)) {
+        Sat q, qb;
+        double dd[3];
+        apply(cur, d, b, q, dd, true);
+        if (model(q, dd, qb, m)) {
+          for (int i = 0; i < 3 * count; ++i) trial[i] = m[i] - pos[i];
+          const double c1 = cost(trial, q);
+          if (c1 < c0) {
+            const bool converged = (c0 - c1) < 1e-10 * c0;
+            cur = q;
+            cur_post = qb;
+            for (int c = 0; c < 3; ++c) d[c] = dd[c];
+            res = trial;
+            c0 = c1;
+            lambda *= 0.3;
+            improved = true;
+            if (converged) it = iterations;
+            continue;
+          }
+        }
+      }
+      lambda *= 10.0;
+    }
+    if (!improved) break;
+  }
+  if (!after_burn(cur, t_b, d, post)) return -1.0;
+  pre = cur;
+  for (int c = 0; c < 3; ++c) dv[c] = d[c];
+  double ss = 0.0;
+  for (double x : res) ss += x * x;
+  return std::sqrt(ss / count);
+}
+
 }  // namespace lunar
 }  // namespace sdnap
 

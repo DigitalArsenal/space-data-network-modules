@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// $PCF 1.0 (SDS 1.264.0): the required `configuration` input of every method
+// $PCF 1.0.2 (SDS 1.268.0): the required `configuration` input of every method
 // with options. A method reads THEORY and its own tables:
 //   propagate, maneuver   MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES, INTEGRATOR, EVENTS
 //   fit                   FIT, MEAN_ELEMENT, SEGMENTS, FORCES, INTEGRATOR
@@ -8,7 +8,8 @@
 //   launch_set, launch_batch  LAUNCH, MEAN_ELEMENT
 // and leaves the other tables to the methods that read them. Fields left unset
 // take the defaults schema/PCF/main.fbs documents (each equal to this module's
-// own); a field set to a value this module cannot apply is refused by name
+// own, so a table whose fields are all unset reads as an absent one); a field
+// set to a value this module cannot apply is refused by name
 // (configuration-refused). Each command invocation is a fresh instance: the
 // values below live for one call.
 // -----------------------------------------------------------------------------
@@ -48,6 +49,7 @@ struct Options {
   // REENTRY
   double reentry_altitude_km = 80.0, handoff_perigee_km = 180.0, handoff_decay_ratio = 0.05;
   double handoff_collapse = 0.01, handoff_minimum_e = 0.01, node_step_min = 30.0, horizon_days = 120.0;
+  double handoff_sawtooth_km = 0.5, handoff_sawtooth_minimum_e = 0.02;  // C4
   double window_density_sigma = 0.15, window_correlation_days = 2.0, window_ballistic_sigma = 0.05;
   bool window_ballistic_set = false;
   double osculating_step_s = 10.0;
@@ -63,7 +65,7 @@ struct Options {
   // SGP4 or SGP4XP set; FORCES.EMPIRICAL_TERMS likewise (SDN-AP's terms)
   double drag_regime_km = 2500.0;
   const char* mean_set = nullptr;
-  bool empirical_set = false;
+  const char* empirical_set = nullptr;
 };
 inline Options& options() {
   static Options o;
@@ -352,6 +354,11 @@ inline int read_reentry(const PCFReentry* r, Options& o) {
   if (!(o.window_ballistic_sigma >= 0.0)) return refuse("REENTRY.WINDOW_BALLISTIC_SIGMA", "a sigma >= 0");
   o.osculating_step_s = r->OSCULATING_STEP_SECONDS();
   if (!(o.osculating_step_s >= 0.5 && o.osculating_step_s <= 60.0)) return refuse("REENTRY.OSCULATING_STEP_SECONDS", "a step from 0.5 to 60 s");
+  o.handoff_sawtooth_km = r->HANDOFF_SAWTOOTH_KM();
+  if (!(o.handoff_sawtooth_km > 0.0)) return refuse("REENTRY.HANDOFF_SAWTOOTH_KM", "a positive length");
+  o.handoff_sawtooth_minimum_e = r->HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY();
+  if (!(o.handoff_sawtooth_minimum_e >= 0.0 && o.handoff_sawtooth_minimum_e < 1.0))
+    return refuse("REENTRY.HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY", "an eccentricity in [0, 1)");
   return 0;
 }
 
@@ -411,7 +418,11 @@ inline int read_forces(const PCFForceModel* f, Options& o) {
   if (f->HAS_DENSITY_CORRECTION_RELAXATION_HOURS() && f->DENSITY_CORRECTION_RELAXATION_HOURS() != 0.0)
     return refuse("FORCES.DENSITY_CORRECTION_RELAXATION_HOURS", "this module holds the last density-correction node (0)");
   if (const PCFEmpiricalTerms* e = f->EMPIRICAL_TERMS()) {
-    o.empirical_set = true;
+    // the first field off its default (a table at its defaults reads as an absent one)
+    o.empirical_set = !e->ONCE_PER_REVOLUTION() ? "FORCES.EMPIRICAL_TERMS.ONCE_PER_REVOLUTION"
+                      : e->HAS_TAU0_RULE_LIMIT_M2_KG() ? "FORCES.EMPIRICAL_TERMS.HAS_TAU0_RULE_LIMIT_M2_KG"
+                      : !e->HELD_ABOVE_DRAG_REGIME() ? "FORCES.EMPIRICAL_TERMS.HELD_ABOVE_DRAG_REGIME"
+                      : e->PERSISTENCE_HOURS() != 24.0 ? "FORCES.EMPIRICAL_TERMS.PERSISTENCE_HOURS" : nullptr;
     fitoem::tau_terms() = e->ONCE_PER_REVOLUTION() ? 2 : 0;
     if (e->HAS_TAU0_RULE_LIMIT_M2_KG()) {
       if (!(e->TAU0_RULE_LIMIT_M2_KG() > 0.0)) return refuse("FORCES.EMPIRICAL_TERMS.TAU0_RULE_LIMIT_M2_KG", "a positive limit");
@@ -522,9 +533,8 @@ inline int read(Method method) {
   if (tables & kTOutput)
     if (const int rc = read_output(c->OUTPUT(), o)) return rc;
   if (tables & kTForces) {
-    if (sgp4xp_only && c->FORCES() != nullptr && c->FORCES()->EMPIRICAL_TERMS() != nullptr)
-      return refuse("FORCES.EMPIRICAL_TERMS", "SGP4XP carries no empirical terms");
     if (const int rc = read_forces(c->FORCES(), o)) return rc;
+    if (sgp4xp_only && o.empirical_set != nullptr) return refuse(o.empirical_set, "SGP4XP carries no empirical terms");
   }
   return 0;
 }
@@ -538,8 +548,8 @@ inline int check_set_theory(int set_theory) {
   }
   if (set_theory != kTheorySdnAp && o.mean_set != nullptr)
     return refuse(o.mean_set, "an SGP4 or SGP4XP set's truncations and switches are fixed by its specification");
-  if (set_theory != kTheorySdnAp && o.empirical_set)
-    return refuse("FORCES.EMPIRICAL_TERMS", "an SGP4 or SGP4XP set carries no empirical terms");
+  if (set_theory != kTheorySdnAp && o.empirical_set != nullptr)
+    return refuse(o.empirical_set, "an SGP4 or SGP4XP set carries no empirical terms");
   return 0;
 }
 

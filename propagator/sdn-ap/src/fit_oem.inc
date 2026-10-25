@@ -373,12 +373,18 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
     return 3;
   }
   // A maneuver inside the arc, from the residual structure (documented rule): each half fitted on its own; when the
-  // whole arc's RMS exceeds 3 x the cleaner half's RMS + 0.05 km, one set does not hold across the arc. The set is
-  // then refitted on the longest latest segment (the last 3/4, 2/3, 1/2, 1/3 or 1/4 of the arc, at least 6 h) whose
-  // RMS is within max(2 x, 0.05 km more than) the cleaner half's, and carries USER_DEFINED_SDNAP_MANEUVER_BEFORE_SECONDS
-  // (the segment's start from the arc's first epoch: the maneuver lies before it); with no such segment the block is
-  // refused by name (maneuver-suspected: the set would have to cross the maneuver).
+  // whole arc's RMS exceeds 3 x the cleaner half's RMS + 0.05 km, one set does not hold across the arc. The burn's
+  // epoch is then the arg max of the six-element GLR on the whole-arc set's residuals, profiled over the epoch
+  // elements (lunar::locate_burn, at least 2 h of data before and 6 h after it), and the joint segment fit estimates the
+  // pre-burn set, AGOM and the impulse over the whole arc (lunar::joint_fit); its post-burn set is the result when its
+  // RMS is within max(2 x, 0.05 km more than) the cleaner half's. Otherwise the set is refitted on the longest latest
+  // segment (the last 3/4, 2/3, 1/2, 1/3 or 1/4 of the arc, at least 6 h) within that bound. Either carries
+  // USER_DEFINED_SDNAP_MANEUVER_BEFORE_SECONDS (the post-burn set's epoch from the arc's first epoch); with neither the
+  // block is refused by name (maneuver-suspected: the set would have to cross the maneuver).
   double maneuver_before = -1.0;
+  double joint_dv[3] = {0, 0, 0}, joint_lambda = -1.0;
+  size_t fitted_states = t.size();
+  double fitted_seconds = t.back() - t.front();
   if (t.back() - t.front() >= 8.0 * 3600.0) {
     auto fit_part = [&](size_t from, size_t to, lunar::Sat& out) -> double {
       std::vector<double> tp(t.begin() + from, t.begin() + to), pp(pos.begin() + 3 * from, pos.begin() + 3 * to);
@@ -397,7 +403,25 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
     lunar::Sat sa, sb;
     const double ra = fit_part(0, half, sa), rb = fit_part(half, t.size(), sb);
     const double ref = ra >= 0.0 && rb >= 0.0 ? std::fmin(ra, rb) : -1.0;
+    bool joint = false;
     if (ref >= 0.0 && rms > 3.0 * ref + 0.05) {
+      lunar::Burn burn;
+      if (lunar::locate_burn(s, t.data(), pos.data(), static_cast<int>(t.size()), 2.0 * 3600.0, 6.0 * 3600.0, burn)) {
+        lunar::Sat pre = s, post;
+        double dv[3] = {burn.dv[0], burn.dv[1], burn.dv[2]};
+        const double jr = lunar::joint_fit(pre, burn.t_b, t.data(), pos.data(), static_cast<int>(t.size()), dv, post, 6);
+        if (jr >= 0.0 && jr <= std::fmax(2.0 * ref, ref + 0.05)) {
+          joint = true;
+          s = post;
+          rms = jr;
+          maneuver_before = burn.t_b;
+          e_f += burn.t_b / 86400.0;
+          for (int c = 0; c < 3; ++c) joint_dv[c] = dv[c];
+          joint_lambda = burn.lambda;
+        }
+      }
+    }
+    if (!joint && ref >= 0.0 && rms > 3.0 * ref + 0.05) {
       const size_t starts[5] = {t.size() / 4, t.size() / 3, t.size() / 2, (2 * t.size()) / 3, (3 * t.size()) / 4};
       int pick = -1;
       lunar::Sat seg;
@@ -427,6 +451,8 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
       std::vector<double> tb(t.begin() + from, t.end());
       for (double& x : tb) x -= maneuver_before;
       t.swap(tb);
+      fitted_states = t.size();
+      fitted_seconds = t.back() - t.front();
     }
   }
   double nn, e, inc, node, argp, M;
@@ -437,10 +463,13 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
   o.frac = e_f;
   const double deg = 180.0 / kPi;
   o.el[0] = nn * 86400.0 / kTwoPi; o.el[1] = e; o.el[2] = inc * deg; o.el[3] = node * deg; o.el[4] = argp * deg; o.el[5] = M * deg;
-  char comment[320];
-  std::snprintf(comment, sizeof comment,
+  char comment[480];
+  int cl = std::snprintf(comment, sizeof comment,
                 "SDN-AP fit: theory SDN-AP, Moon-centered (2h.1: GRGM660PRIM averaged to degree %d, short-periodics to degree %d, SRP with the Moon's shadow, AGOM %.5f m^2/kg); %u states fitted; fit RMS %.6f km",
-                lunar::gravity_degree(), lunar::short_degree(), s.agom, static_cast<unsigned>(t.size()), rms);
+                lunar::gravity_degree(), lunar::short_degree(), s.agom, static_cast<unsigned>(fitted_states), rms);
+  if (joint_lambda >= 0.0 && cl > 0 && cl < static_cast<int>(sizeof comment))
+    std::snprintf(comment + cl, sizeof comment - cl, "; joint segment fit across a maneuver %.3f h into the arc (GLR epoch, Lambda %.1f): dv U %.2f V %.2f W %.2f mm/s",
+                  maneuver_before / 3600.0, joint_lambda, 1e6 * joint_dv[0], 1e6 * joint_dv[1], 1e6 * joint_dv[2]);
   o.comment = comment;
   o.method_source = "sdn-ap-propagator fit (THEORY SDNAP): Levenberg-Marquardt on Moon-centered J2000 position residuals, unit weights, km; theory SDN-AP, Moon-centered (2h.1)";
   o.text("SDNAP_REGIME", "MOON");
@@ -449,8 +478,8 @@ static int lunar_fit_block(const OEM* oem, const ephemerisDataBlock* blk) {
   o.number("SDNAP_LUNAR_ECC_ORDER", lunar::eccentricity_order());
   o.number("SDNAP_AGOM", s.agom);
   if (maneuver_before >= 0.0) o.number("SDNAP_MANEUVER_BEFORE_SECONDS", maneuver_before);
-  o.fit_seconds = t.back() - t.front();
-  o.count = static_cast<uint32_t>(t.size());
+  o.fit_seconds = fitted_seconds;
+  o.count = static_cast<uint32_t>(fitted_states);
   o.rms = rms;
   return emit_set(oem, blk, o);
 }
@@ -864,6 +893,12 @@ static int fit_blocks(bool sdnap_mode) {
       // EXTENSION_MARGIN, ECCENTRIC_EXTENSION_MARGIN, ECCENTRIC_MAXIMUM_PERIOD_HOURS, TAIL_HOURS)
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       const double default_span = (eccentric ? po.eccentric_default_span_h : po.default_span_h) * 60.0;
+      // an eccentric orbit's fits take the finite-difference columns where the analytic ones stall (fit::run)
+      struct FallbackScope {
+        bool prev;
+        explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
+        ~FallbackScope() { fit::jacobian_fallback() = prev; }
+      } fallback_scope{eccentric};
       Pass chosen;
       {
         const int rc = run_pass(default_span, chosen, last_useable);

@@ -162,7 +162,7 @@ inline void mdaily_six(const float* F, int degree, double t, const Kepler& k, do
       double central = 1.0;  // C(s, s/2)
       for (int r = 1; r <= s2 / 2; ++r) central = central * (s2 / 2 + r) / r;
       Q += binom * central * es;
-      if (s2 > 0) dQ += binom * central * s2 * es / e;
+      if (s2 > 0 && e > 0.0) dQ += binom * central * s2 * es / e;  // 0 at e = 0 (every term has a factor e)
       binom = binom * (l - 1 - s2) * (l - 2 - s2) / ((s2 + 1.0) * (s2 + 2.0));
       es *= 0.25 * e * e;
     }

@@ -38,12 +38,15 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   `sdnap_propagate_minutes_soa(minutes, first, count, out, status)` write six planes (x, y, z, vx, vy, vz) of
   `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
   the same bytes at any thread count.
-- Configuration (SDS 1.264.0, `$PCF` 1.0): `propagate`, `fit`, `maneuver`, `detect_maneuvers`, `reentry`, `launch_set` and
+- Configuration (SDS 1.268.0, `$PCF` 1.0.2): `propagate`, `fit`, `maneuver`, `detect_maneuvers`, `reentry`, `launch_set` and
   `launch_batch` take one `$PCF` on their required `configuration` port. Each reads THEORY and its own tables
   (propagate and maneuver: MEAN_ELEMENT, SEGMENTS, OUTPUT, FORCES; fit: FIT, MEAN_ELEMENT, SEGMENTS, FORCES;
   detect_maneuvers: MEAN_ELEMENT, MANEUVER_DETECTION; reentry: REENTRY, MEAN_ELEMENT, FORCES; launch_set and
   launch_batch: LAUNCH, MEAN_ELEMENT); another method's tables are left to it. Fields left unset take the defaults
-  schema/PCF/main.fbs documents; a field set to a value the module cannot apply is refused by name
+  schema/PCF/main.fbs documents, each this module's own, so a table whose fields are all unset (or written at their
+  defaults) reads as an absent one: FORCES.EMPIRICAL_TERMS holds tauc and taus above the drag regime by default
+  (HELD_ABOVE_DRAG_REGIME true), and an SGP4 or SGP4XP set or fit refuses that table only for a field set off its
+  default ("FORCES.EMPIRICAL_TERMS.<FIELD>: ..."); a field set to a value the module cannot apply is refused by name
   (configuration-refused, "TABLE.FIELD: why"; configuration-missing without one). THEORY: propagate, maneuver and
   reentry read UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP) or
   SDN-AP (SDNAP); detect_maneuvers, launch_set and launch_batch work with SDNAP (UNSPECIFIED); FFM and KEPLER are
@@ -51,7 +54,8 @@ The build reads these files from `SDNAP_HAC_ROOT` (default `/opt/data/sdn-archiv
   an SGP4 or SGP4XP set). FORCES carries only EMPIRICAL_TERMS (SDN-AP), the density-correction relaxation 0 (held)
   and an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the averaged theories apply their
   own forces. INTEGRATOR is refused (the averaged theories integrate on their own grid), EVENTS when not empty.
-  Applied with their documented ranges: FIT (every field), REENTRY (WINDOW_METHOD LINEAR), LAUNCH, OUTPUT (TEME,
+  Applied with their documented ranges: FIT (every field), REENTRY (WINDOW_METHOD LINEAR; C4 from
+  HANDOFF_SAWTOOTH_KM, a positive length, and HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY, an eccentricity in [0, 1)), LAUNCH, OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states), MANEUVER_DETECTION (FALSE_ALARMS_PER_OBJECT_YEAR 1, CORRELATION_MODEL
   WHITE or ONE_SAMPLE_PER_REVOLUTION), SEGMENTS (the cislunar and heliocentric steps and the 6 h cislunar segment
   at their defaults).
@@ -171,11 +175,20 @@ DE440 principal-axis frame frozen at the epoch; the $OMM carries them referred t
   eclipse, is left out). Output: the first-order j != 0 terms to degree 8 with |q| <= 2 (q = 0 alone made the fit
   worse: the q = +-1 terms carry the eccentricity vector's O(1) part).
 - Maneuvers (documented rule): each half of the arc fitted on its own; when the whole arc's RMS exceeds 3 x the
-  cleaner half's + 0.05 km, the set is refitted on the longest latest segment (3/4 .. 1/4 of the arc, at least 6 h)
-  whose RMS is within max(2 x, 0.05 km more than) the cleaner half's, and carries
-  USER_DEFINED_SDNAP_MANEUVER_BEFORE_SECONDS; with no such segment the block is refused (maneuver-suspected). On
-  the 04-27 LRO maneuver (2.9 cm/s) inside the arc: day 3 5.68 -> 1.32 km and 10.42 -> 1.05 km; no false trigger
-  on the 16 windows below.
+  cleaner half's + 0.05 km, the burn's epoch is the arg max of the six-element GLR on the whole-arc set's position
+  residuals, profiled over the epoch elements (DESIGN 5.1.4 (15) on the Moon-centered theory: S(t) and dx/dy0 by
+  one-sided differences of six sets, the osculating elements' change per unit impulse, robust weights once per
+  revolution; at least 2 h before and 6 h after the epoch), and the joint segment fit (the pre-burn elements, AGOM
+  and the impulse over the whole arc; the post-burn set the pre-burn mean elements at the epoch plus the impulse's
+  change of the osculating ones) gives the post-burn set when its RMS is within max(2 x, 0.05 km more than) the
+  cleaner half's (the COMMENT carries the epoch, Lambda and dv). Otherwise the set is refitted on the longest latest
+  segment (3/4 .. 1/4 of the arc, at least 6 h) within that bound. Either carries
+  USER_DEFINED_SDNAP_MANEUVER_BEFORE_SECONDS; with neither the block is refused (maneuver-suspected). FFM-1 about
+  the Moon (GRGM660PRIM 70, Earth, Sun, SRP; 100 km polar, 24 h at 300 s): 2 and 5 cm/s in-track impulses at 12 h
+  give segments from 11.63 and 11.71 h with dv V 20.7 and 50.6 mm/s (U and W absorb the theory's own 0.1 km);
+  the same arc without the burn and with a 3 cm/s radial one is fitted whole (about 30 s CPU in the browser host).
+  On the 04-27 LRO maneuver (2.9 cm/s) inside the arc, the split-half rule alone: day 3 5.68 -> 1.32 km and 10.42 ->
+  1.05 km.
 - CPU: a 24 h fit (289 states, degree 70) 4.6-6.1 s in the browser host (the term angles by recurrence, Hermite
   dense output between grid nodes; 24.7 s before).
 
@@ -236,7 +249,9 @@ extrapolate. The cislunar segments predict (1.9 / 9.8 / 48.4 km at days 1 / 3 / 
 ## Maneuvers, reentry and launch (DESIGN 5; methods `maneuver`, `detect_maneuvers`, `reentry`, `launch_set`, `launch_batch`)
 
 - The inverse map y = h^-1(x, t) (`src/events.inc`): the mean elements whose output state is x, by fixed-point
-  iteration in equinoctial elements from the osculating ones (4 steps to 1e-9 km).
+  iteration in equinoctial elements from the osculating ones (4 steps to 1e-9 km and 1e-12 km/s; where the output
+  map's rounding floor stays above that, a few um at a circular orbit, the best of the 20 steps within 1e-6 km and
+  1e-9 km/s). An SDN-AP set of eccentricity exactly 0 propagates (the m-daily terms' dG/de is 0 there).
 - `maneuver`: an Earth SGP4XP or SDN-AP `$OMM` across `$MNV` (0.0.4) burns: the impulse map (14) at EVENT_START_TIME,
   or a finite burn (EVENT_END_TIME or TOTAL_BURN_TIME) at its centroid with the eccentricity-vector and plane changes
   scaled by sinc(dL/2) (15); out: one post-burn `$OMM` per burn (epoch the centroid), one `$MNV` with PRE_EVENT and
@@ -271,10 +286,19 @@ extrapolate. The cislunar segments predict (1.9 / 9.8 / 48.4 km at days 1 / 3 / 
   per-object Delta v_k and B_k (priors B_k ~ N(B_mean, SHRINK_SIGMA_M2_KG^2), absent the prior B; Delta v_k ~
   N(0, SEPARATION_SIGMA_M_S^2), 1 m/s; B_mean ~ N(B_prior, BATCH_MEAN_SIGMA_M2_KG^2)), the arrowhead
   normal matrix by the Schur complement; each object's set with its along-track order (22), and with 'catalog' sets
-  the association by that order at the latest catalog epoch.
+  the association by that order at the latest catalog epoch. Synthetic FFM-1 batches of 27 objects from a 300 km
+  insertion (separations uniform within 30 cm/s per axis, B_eff 0.008-0.012 m^2/kg; 3 seeds), median day 3 joint
+  against per-object fits: 6 h 5.1 / 33.9 / 13.9 against 15.5 / 51.0 / 23.4 km, 12 h 3.3 / 0.34 / 3.6 against 4.6 /
+  0.71 / 4.0 km; the events E2E's six-object draw is the case where the per-object fits lead at 6 h. 24 h batches
+  of 27 from 252 km converge (a joint fit that stopped at the inverse map's rounding floor, 2.5e-9 km, now takes its
+  best iterate).
 - `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half, down to
   FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible), and the span rule keeps 24
-  h for e > 0.5 (a longer span only on a 30 % better tail, none past a 36 h period).
+  h for e > 0.5 (a longer span only on a 30 % better tail, none past a 36 h period). An eccentric block's fits
+  (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where no
+  step along the analytic Jacobian lowers the cost: on a THEMIS-like FFM-1 orbit (1.05 rev/day, e 0.82) the 48 h fit
+  stopped at 6 iterations with B_eff and tau at 0 and RMS 0.32-0.51 km; it now converges to 0.13-0.14 km (24 h fits
+  0.08-0.10 km, which the rule keeps).
 
 Measured (`test/events.e2e.mjs`; reference FFM-1, the modules' propagator/ffm, of a LEO state with the same burns,
 under the same space weather; an SDN-AP set fitted on 48 h, days 1 / 2 / 3 after a burn at the arc's end; burn-free

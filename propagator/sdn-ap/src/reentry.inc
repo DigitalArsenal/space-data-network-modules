@@ -15,12 +15,12 @@
 namespace sdnap {
 namespace reentry {
 
-// C1-C3, the altitude, the node step, the horizon, the window's sigmas and the osculating step are the call's $PCF
-// REENTRY values (defaults 180 km, 80 km, 0.05, 0.01 with e > 0.01, 30 min, 120 d, 0.15 / 2 d / 0.05, 10 s)
-/// C4 (eccentric orbits, e > kSawtoothEcc): drag acts mostly in the perigee pass, so the osculating a steps at each pass
-/// and a mean theory misses an along-track sawtooth of (3 pi / 8) |Delta a per revolution|; the hand-off when that
-/// passes kSawtoothKm (half the 1 km the averaged phase is held to)
-constexpr double kSawtoothEcc = 0.02, kSawtoothKm = 0.5;
+// C1-C4, the altitude, the node step, the horizon, the window's sigmas and the osculating step are the call's $PCF
+// REENTRY values (defaults 180 km, 80 km, 0.05, 0.01 with e > 0.01, 0.5 km with e > 0.02, 30 min, 120 d,
+// 0.15 / 2 d / 0.05, 10 s). C4 (eccentric orbits, e > HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY): drag acts mostly in the
+// perigee pass, so the osculating a steps at each pass and a mean theory misses an along-track sawtooth of
+// (3 pi / 8) |Delta a per revolution|; the hand-off when that passes HANDOFF_SAWTOOTH_KM (by default half the 1 km the
+// averaged phase is held to).
 
 struct Handoff {
   double t = 0.0;     ///< minutes from the set's epoch
@@ -65,7 +65,10 @@ inline Handoff find_handoff(xpt::XpSat& s, double step, double horizon) {
     if (eps1 > o.handoff_decay_ratio) { h.criterion = 1; return h; }
     if (hp < o.handoff_perigee_km) { h.criterion = 2; return h; }
     if (e > o.handoff_minimum_e && c3 > o.handoff_collapse) { h.criterion = 3; return h; }
-    if (e > kSawtoothEcc && (3.0 * kPi / 8.0) * std::fabs(adot) * (kTwoPi / n) * xpt::kRe > kSawtoothKm) { h.criterion = 4; return h; }
+    if (e > o.handoff_sawtooth_minimum_e && (3.0 * kPi / 8.0) * std::fabs(adot) * (kTwoPi / n) * xpt::kRe > o.handoff_sawtooth_km) {
+      h.criterion = 4;
+      return h;
+    }
   }
   h.criterion = 0;
   return h;
@@ -188,7 +191,7 @@ extern "C" int reentry(void) {
     std::free(s);
     if (h.criterion == 0) {
       char why[160];
-      std::snprintf(why, sizeof why, "No averaging limit trips within %.0f days (REENTRY.HORIZON_DAYS): no reentry predicted in that horizon.", po.horizon_days);
+      std::snprintf(why, sizeof why, "No averaging limit trips within %g days (REENTRY.HORIZON_DAYS): no reentry predicted in that horizon.", po.horizon_days);
       plugin_set_error("no-reentry", why);
       return 3;
     }
@@ -204,7 +207,7 @@ extern "C" int reentry(void) {
     if (!reentry::integrate_down(m, xh, po.horizon_days - h.t / kMinutesPerDay, t_r, xr, lat, lon)) {
       char why[260];
       static const char* const names[] = {"none", "C1", "C2", "C3", "C4", "the theory refusing the next node"};
-      std::snprintf(why, sizeof why, "The osculating integration from the hand-off (%.3f d after the set's epoch, %s, perigee %.1f km) does not reach %.0f km within the %.0f-day horizon (REENTRY.HORIZON_DAYS).",
+      std::snprintf(why, sizeof why, "The osculating integration from the hand-off (%.3f d after the set's epoch, %s, perigee %.1f km) does not reach %.0f km within the %g-day horizon (REENTRY.HORIZON_DAYS).",
                     h.t / kMinutesPerDay, names[h.criterion], h.perigee_km, po.reentry_altitude_km, po.horizon_days);
       plugin_set_error("reentry-not-reached", why);
       return 3;

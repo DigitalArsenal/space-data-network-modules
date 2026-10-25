@@ -383,6 +383,44 @@ for (const [label, at, dv] of [["V 1 m/s at 60 h", 60, [0, 1e-3, 0]], ["V 10 m/s
     m.x.sdnap_free(py); m.x.sdnap_free(pl);
   }
 }
+// C4 from $PCF 1.0.2 REENTRY (SDS 1.268.0): an eccentric decaying SDN-AP set (perigee 250 km, apogee 1,500 km, B_eff
+// 0.25 m^2/kg) hands off at its first node by C4 under the defaults (the perigee-pass sawtooth above 0.5 km, e > 0.02),
+// and no limit trips within half a day with HANDOFF_SAWTOOTH_KM 1e6 or HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY 0.5 (a
+// half-day horizon keeps the call to the averaged phase); a length of 0 and an eccentricity of 1 are refused by name
+{
+  const eccentric = (() => {
+    const a = 6378.137 + (250 + 1500) / 2, e = (1500 - 250) / (2 * a);
+    const b = new flatbuffers.Builder(256);
+    const epoch = b.createString(EPOCH);
+    OMM.startOMM(b);
+    OMM.addEpoch(b, epoch);
+    OMM.addMeanMotion(b, (Math.sqrt(398600.4418 / a ** 3) * 86400) / (2 * Math.PI));
+    OMM.addEccentricity(b, e);
+    OMM.addInclination(b, 63.4);
+    OMM.addRaOfAscNode(b, 40);
+    OMM.addArgOfPericenter(b, 270);
+    OMM.addMeanAnomaly(b, 0);
+    OMM.addNoradCatId(b, 90041);
+    OMM.addMeanElementTheory(b, 4);
+    OMM.addBstar(b, 0.25);
+    OMM.addMeanMotionDdot(b, 0.01);
+    OMM.finishOMMBuffer(b, OMM.endOMM(b));
+    return b.asUint8Array();
+  })();
+  const halfDay = async (reentry) => command.invoke({ methodId: "reentry", inputs: [configuration({ reentry: { HORIZON_DAYS: 0.5, ...reentry } }), { portId: "omm", typeRef: ommType, payload: eccentric }] });
+  const byDefault = await halfDay({});
+  const noLength = await halfDay({ HANDOFF_SAWTOOTH_KM: 1e6 });
+  const noEccentricity = await halfDay({ HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY: 0.5 });
+  console.log(`C4 on an eccentric decaying set (half-day horizon): defaults -> ${byDefault.errorCode} (${String(byDefault.errorMessage).match(/C\d/)?.[0] ?? "no criterion"}); HANDOFF_SAWTOOTH_KM 1e6 -> ${noLength.errorCode}; HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY 0.5 -> ${noEccentricity.errorCode}`);
+  check(byDefault.errorCode === "reentry-not-reached" && /0\.000 d after the set's epoch, C4,/.test(String(byDefault.errorMessage)), `C4 by default: ${byDefault.errorCode} ${byDefault.errorMessage}`);
+  check(noLength.errorCode === "no-reentry" && noEccentricity.errorCode === "no-reentry", `C4 off by its fields: ${noLength.errorCode} ${noLength.errorMessage} / ${noEccentricity.errorCode} ${noEccentricity.errorMessage}`);
+  for (const [reentry, text] of [[{ HANDOFF_SAWTOOTH_KM: 0 }, "REENTRY.HANDOFF_SAWTOOTH_KM: a positive length"],
+    [{ HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY: 1 }, "REENTRY.HANDOFF_SAWTOOTH_MINIMUM_ECCENTRICITY: an eccentricity in [0, 1)"]]) {
+    const r = await halfDay(reentry);
+    console.log(`$PCF refusal, reentry ${JSON.stringify(reentry)}: ${r.errorCode} ${r.errorMessage}`);
+    check(r.errorCode === "configuration-refused" && r.errorMessage === text, `reentry ${JSON.stringify(reentry)}: ${r.errorCode} ${r.errorMessage}`);
+  }
+}
 // the launch cases' insertion: an SDS $LAM INSERTION orbit (TEME osculating a km, e, i, Omega, omega, u deg)
 const lamEl = [6778.137, 0.001, 53.0, 100.0, 80.0, 30.0];
 const lamType = { schemaName: "LAM.fbs", fileIdentifier: "$LAM", rootTypeName: "LAM" };
@@ -448,6 +486,42 @@ const lamPayload = await lamOf(lamEl);
     }
     [pe, py, pt, po, pb].forEach((q) => m.x.sdnap_free(q));
   }
+}
+// an exactly circular insertion (the 29th of a seeded set of 400 random circular LEO insertions, the one whose start, the
+// osculating elements taken as mean, has an eccentricity of exactly 0): launch_set converges, and an SDN-AP set of
+// ECCENTRICITY 0 propagates within 1 m of the same set at 1e-12 (the m-daily terms' dG/de is 0 there, not 0 / 0)
+{
+  const r = await command.invoke({ methodId: "launch_set", inputs: [{ portId: "launch", typeRef: lamType,
+    payload: await lamOf([6942.541023250669, 0, 61.837499155662954, 331.5486299805343, 68.3028191048652, 234.95499595999718]) }] });
+  console.log(`launch_set, an exactly circular insertion: ${r.statusCode === 0 ? "converged" : `${r.errorCode} ${r.errorMessage}`}`);
+  check(r.statusCode === 0, `launch_set of an exactly circular insertion: ${r.errorCode} ${r.errorMessage}`);
+  const circular = (ecc) => {
+    const b = new flatbuffers.Builder(256);
+    const epoch = b.createString(EPOCH);
+    OMM.startOMM(b);
+    OMM.addEpoch(b, epoch);
+    OMM.addMeanMotion(b, 15.0);
+    OMM.addEccentricity(b, ecc);
+    OMM.addInclination(b, 61.8375);
+    OMM.addRaOfAscNode(b, 331.5);
+    OMM.addArgOfPericenter(b, 68.3);
+    OMM.addMeanAnomaly(b, 166.6);
+    OMM.addBstar(b, 0.01);
+    OMM.addMeanMotionDdot(b, 0.01);
+    OMM.addNoradCatId(b, 90042);
+    OMM.addMeanElementTheory(b, 4);
+    OMM.finishOMMBuffer(b, OMM.endOMM(b));
+    return b.asUint8Array();
+  };
+  const [p0, p1] = [await command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: circular(0) }] }),
+    await command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: circular(1e-12) }] })];
+  let max = NaN;
+  if (p0.statusCode === 0 && p1.statusCode === 0) {
+    const [a, b] = [p0, p1].map((p) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(p.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES);
+    max = Math.max(...a.map((q, k) => Math.hypot(q.X - b[k].X, q.Y - b[k].Y, q.Z - b[k].Z) * 1e3));
+  }
+  console.log(`SDN-AP set of ECCENTRICITY 0: ${p0.statusCode === 0 ? `propagates, within ${max.toExponential(2)} m of e 1e-12 over the day` : `${p0.errorCode} ${p0.errorMessage}`}`);
+  check(p0.statusCode === 0 && max <= 1.0, `SDN-AP set of ECCENTRICITY 0: ${p0.errorCode} ${p0.errorMessage} (${max} m)`);
 }
 // launch batch (5.3.3, M31/M32 kind, synthetic against FFM-1): six objects released from a 300 km $LAM insertion with
 // separation Delta v up to 30 cm/s per axis and B_eff within 20 % of 0.01 m^2/kg; the batch-joint fit of their first
@@ -535,6 +609,7 @@ const lamPayload = await lamOf(lamEl);
     console.log(`launch batch, ${spanH} h arcs: ${N} objects, days 1 / 2 / 3 after them: joint ${mj.map((x) => x.toFixed(3)).join(" / ")} km, per-object fits ${ms.map((x) => x.toFixed(3)).join(" / ")} km; separations relative to the batch mean within ${Math.max(...relErr).toFixed(1)} mm/s; ${est}`);
     check(Math.max(...relErr) <= 25, `launch batch ${spanH} h: relative separations within ${Math.max(...relErr)} mm/s`);
     if (spanH === 24) check(mj.every((x, d) => x <= 1.1 * ms[d]), `launch batch 24 h: joint ${mj} km against per-object ${ms} km`);
+    if (spanH === 12) check(mj.every((x, d) => x <= ms[d]), `launch batch 12 h: joint ${mj} km against per-object ${ms} km`);
     // association (6 h arcs): day-2 catalog sets of the same objects with NORAD numbers, in shuffled order
     if (spanH !== 6) continue;
     const cats = [];
@@ -553,6 +628,119 @@ const lamPayload = await lamOf(lamEl);
     }
   }
   }
+}
+// Lunar segments (item 6): a 100 km polar lunar orbit in FFM-1 about the Moon (GRGM660PRIM to degree 70, the Earth and
+// the Sun, SRP), 24 h at 300 s with a 2 cm/s in-track impulse at 12 h (FFM-1 restarted with it), fitted by fit SDNAP.
+// The split-half test flags the arc; the burn's epoch is the GLR's arg max and the joint segment fit's post-burn set
+// is the result: the segment starts within 1 h of the burn and the fitted in-track dv within 20 %. The same arc without
+// the burn is fitted whole.
+{
+  const E0 = "2026-06-01T00:00:00.000000", e0ms = Date.parse(E0 + "Z"), STEPL = 300, TB = 12 * 3600;
+  const isoL = (s) => new Date(e0ms + s * 1000).toISOString().replace("Z", "000");
+  const lunarSet = (() => {
+    const b = new flatbuffers.Builder(1024);
+    const vec = OMM.createUserDefinedParametersVector(b, [OMMUserDefinedParameter.createOMMUserDefinedParameter(b, b.createString("SDNAP_REGIME"), b.createString("MOON"))]);
+    const epoch = b.createString(E0), center = b.createString("MOON");
+    OMM.startOMM(b);
+    OMM.addEpoch(b, epoch);
+    OMM.addCenterName(b, center);
+    OMM.addMeanMotion(b, 86400 / (2 * Math.PI * Math.sqrt(1838.0 ** 3 / 4902.7998)));
+    OMM.addEccentricity(b, 0.01);
+    OMM.addInclination(b, 90);
+    OMM.addRaOfAscNode(b, 30);
+    OMM.addArgOfPericenter(b, 90);
+    OMM.addMeanAnomaly(b, 10);
+    OMM.addNoradCatId(b, 90043);
+    OMM.addMeanElementTheory(b, 4);
+    OMM.addUserDefinedParameters(b, vec);
+    OMM.finishOMMBuffer(b, OMM.endOMM(b));
+    return b.asUint8Array();
+  })();
+  const lunarBlock = (lines, step) => {
+    const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(template)).unpack();
+    const b = t.EPHEMERIS_DATA_BLOCK[0];
+    b.START_TIME = b.STOP_TIME = b.USEABLE_START_TIME = b.USEABLE_STOP_TIME = null;
+    b.REFERENCE_FRAME = rfm("GCRF", "both");
+    b.CENTER_NAME = "MOON";
+    b.EPHEMERIS_DATA_LINES = lines;
+    if (step) { b.START_TIME = E0; b.STOP_TIME = isoL(3600); b.STEP_SIZE = step; }
+    t.EPHEMERIS_DATA_BLOCK = [b];
+    return packOem(t);
+  };
+  const first = await command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: lunarSet }, { portId: "grid", typeRef: oemType, payload: lunarBlock([], 3600) }] });
+  const L0 = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(first.outputs[0].payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
+  const P = catalog.prw;
+  const moon = async (st, startMs, sampleMs) => {
+    const request = catalog.fullForceRequest({ epoch: isoMs(startMs), state: st.map((x) => x * 1000), target: isoMs(sampleMs.at(-1)), cdAm: 0, crAm: 0.01,
+      forces: { CENTRAL_BODY_NAIF_ID: 301, GRAVITY_CHOICE: P.pcfGravitySelection.GRGM660PRIM, GRAVITATIONAL_PARAMETER: 4902.7998069317e9, MAXIMUM_DEGREE: 70, MAXIMUM_ORDER: 70,
+        THIRD_BODY_IDS: [10, 399], ENABLE_DRAG: false, SOLID_TIDES: 0, RELATIVITY: 0, EARTH_RADIATION: 0, OCEAN_TIDES: 0, OCEAN_TIDE_MAXIMUM_DEGREE: 0, OCEAN_TIDE_MAXIMUM_ORDER: 0 } });
+    request.SAMPLE_EPOCHS = sampleMs.map((t) => catalog.instant(isoMs(t)));
+    request.INITIAL.STATE.COORDINATE_SYSTEM_NAME = "ICRF";
+    request.INITIAL.COORDINATE_SYSTEM = Object.assign(new P.RFMCoordinateSystemT(), { NAME: "ICRF", AXIS_TYPE: P.rfmAxisType.ICRF, AXIS_REFERENCE_BODY_ID: 301,
+      ORIGIN: Object.assign(new P.RFMOriginT(), { KIND: P.rfmOriginKind.CELESTIAL_BODY, CELESTIAL_BODY_ID: 301 }) });
+    const r = await ffm.invoke({ methodId: "invoke", inputs: [{ portId: "request", typeRef: catalog.TYPE, payload: catalog.encode("EXECUTION_REQUEST", request) }, ffmInputs[0]] });
+    if (r.statusCode !== 0) throw new Error(`FFM-1 about the Moon: ${r.errorCode} ${r.errorMessage}`);
+    const res = catalog.prw.PRW.getSizePrefixedRootAsPRW(new ffb.ByteBuffer(new Uint8Array(r.outputs.find((f) => f.portId === "response").payload))).unpack().EXECUTION_RESULT;
+    return res.SAMPLES.map((q) => { const v = q.STATE.STATE; return ["POSITION", "VELOCITY"].flatMap((k) => ["X", "Y", "Z"].map((c) => v[k][c] / 1000)); });
+  };
+  const tl = Array.from({ length: 24 * 3600 / STEPL + 1 }, (_, k) => k * STEPL);
+  const x0 = [L0.X, L0.Y, L0.Z, L0.X_DOT, L0.Y_DOT, L0.Z_DOT];
+  const before = tl.filter((s2) => s2 <= TB);
+  const pre = await moon(x0, e0ms, [...before, TB].map((s2) => e0ms + s2 * 1000));
+  const whole = await moon(x0, e0ms, tl.map((s2) => e0ms + s2 * 1000));
+  const post = await moon(uvwAdd(pre.at(-1), [0, 2e-5, 0]), e0ms + TB * 1000, tl.filter((s2) => s2 > TB).map((s2) => e0ms + s2 * 1000));
+  const burned = [...pre.slice(0, before.length), ...post];
+  const fitLunar = async (states) => {
+    const r = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: lunarBlock(tl.map((s2, j) => new ephemerisDataLineT(isoL(s2), ...states[j]))) }] });
+    if (r.statusCode !== 0) return { error: `${r.errorCode} ${r.errorMessage}` };
+    const e = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload));
+    let before_s = null;
+    for (let q = 0; q < e.userDefinedParametersLength(); ++q) if (e.USER_DEFINED_PARAMETERS(q).PARAM_NAME() === "SDNAP_MANEUVER_BEFORE_SECONDS") before_s = Number(e.USER_DEFINED_PARAMETERS(q).PARAM_VALUE());
+    const dvV = Number(/dv U -?[\d.]+ V (-?[\d.]+) W/.exec(e.COMMENT())?.[1]);
+    return { before_s, dvV, c: e.COMMENT() };
+  };
+  const withBurn = await fitLunar(burned), clean = await fitLunar(whole);
+  console.log(`lunar 2 cm/s burn at 12 h: ${withBurn.error ?? `segment from ${(withBurn.before_s / 3600).toFixed(3)} h, ${withBurn.c.replace(/^.*?\); /, "")}`}; the same arc without it: ${clean.error ?? (clean.before_s === null ? "fitted whole" : `segment from ${clean.before_s} s`)}`);
+  check(withBurn.before_s !== null && Math.abs(withBurn.before_s - TB) <= 3600 && Math.abs(withBurn.dvV - 20) <= 4, `lunar burn: ${withBurn.error ?? withBurn.c}`);
+  check(clean.before_s === null && !clean.error, `lunar arc without a burn: ${clean.error ?? clean.c}`);
+}
+// HEO fit span (item 7): a THEMIS-like orbit (1.05 rev/day, e 0.82, perigee 800 km) in FFM-1, fitted by fit SDNAP over
+// 24 and 48 h ending at the same time. Over two revolutions the analytic Jacobian (two-body motion with the J2 drifts)
+// leaves the LM short of the minimum; an eccentric block's fits take the theory's finite-difference columns there,
+// so the 48 h fit converges (fit RMS within 2x the 24 h fit's, not 6x), and on 144 h of data the default span rule
+// keeps the 24 h span that predicts best here
+{
+  const STEPH = 300, el = [40900, 0.8247, 40, 40, 250, 10];
+  const pe = m.x.sdnap_alloc(48), py = m.x.sdnap_alloc(48);
+  new Float64Array(m.harness.memory.buffer, pe, 6).set(el);
+  m.x.sdnap_insertion_state(ep.whole, ep.frac, pe, 0, py);
+  const yh = Array.from(new Float64Array(m.harness.memory.buffer, py, 6));
+  [pe, py].forEach((q) => m.x.sdnap_free(q));
+  const th = Array.from({ length: (144 + 72) * 3600 / STEPH + 1 }, (_, k) => k * STEPH);
+  const truth = await ffmTruth(yh, epochMs, th, [], 0.01, 0.02);
+  const STOP = 144 * 3600;
+  const heoOem = (from, useable) => {
+    const t = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(template)).unpack();
+    const b = t.EPHEMERIS_DATA_BLOCK[0];
+    b.START_TIME = b.STOP_TIME = null;
+    b.USEABLE_START_TIME = useable ? iso(from) : null;
+    b.USEABLE_STOP_TIME = iso(STOP);
+    b.REFERENCE_FRAME = rfm("TEME", "both");
+    b.EPHEMERIS_DATA_LINES = [];
+    th.forEach((s2, j) => { if (s2 >= from && s2 <= STOP) b.EPHEMERIS_DATA_LINES.push(new ephemerisDataLineT(iso(s2), ...truth[j])); });
+    t.EPHEMERIS_DATA_BLOCK = [b];
+    return packOem(t);
+  };
+  const fitHeo = async (from, useable) => {
+    const r = await command.invoke({ methodId: "fit", inputs: [SDNAP, { portId: "ephemeris", typeRef: oemType, payload: heoOem(from, useable) }] });
+    if (r.statusCode !== 0) return { error: `${r.errorCode} ${r.errorMessage}` };
+    const c = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload)).COMMENT();
+    return { rms: Number(/fit RMS ([\d.]+) km/.exec(c)[1]), span: Number(/span ([\d.]+) h/.exec(c)[1]), c };
+  };
+  const day = await fitHeo(STOP - 24 * 3600, true), two = await fitHeo(STOP - 48 * 3600, true), rule = await fitHeo(0, false);
+  console.log(`HEO (THEMIS-like) fits: 24 h RMS ${day.rms ?? day.error} km, 48 h RMS ${two.rms ?? two.error} km; the default rule on 144 h: span ${rule.span ?? rule.error} h`);
+  check(day.rms > 0 && two.rms > 0 && two.rms <= 2 * day.rms, `HEO 48 h fit: ${two.rms ?? two.error} km against 24 h ${day.rms ?? day.error} km`);
+  check(Math.abs(rule.span - 24) < 0.01, `HEO default span: ${rule.span ?? rule.error} h`);
 }
 // refusals by name
 {

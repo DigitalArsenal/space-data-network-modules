@@ -187,6 +187,15 @@ inline void row_of(const double* x, const Options& o, ElementRow& row) {
   }
 }
 
+/// The finite-difference fallback of run(): where no step along the analytic Jacobian (two-body motion with the J2
+/// secular drifts, the drag column through n-dot) lowers the cost, the element and drag columns are taken again by
+/// one-sided differences of the theory itself before the fit stops. Set by the caller for the fits that need it (an
+/// eccentric orbit's arc of several revolutions, where the analytic columns leave the LM short of the minimum).
+inline bool& jacobian_fallback() {
+  static bool b = false;
+  return b;
+}
+
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
 /// fixed terms) and receives the fitted one. `variances`, when given, receives
 /// the parameters' variances (diagonal of the inverse normal matrix of the last
@@ -292,6 +301,9 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       }
     }
     double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
+    auto normal = [&]() {
+    for (int q = 0; q < kMaxParams * kMaxParams; ++q) A[q] = 0.0;
+    for (int q = 0; q < kMaxParams; ++q) g[q] = 0.0;
     for (int i = 0; i < nres; ++i)
       for (int a = 0; a < np; ++a) {
         g[a] -= jac[i * kMaxParams + a] * res[i];
@@ -307,6 +319,8 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
     }
     for (int a = 0; a < np; ++a)
       for (int b = 0; b < a; ++b) A[b * np + a] = A[a * np + b];
+    };
+    normal();
     if (variances != nullptr) {
       // diag(A^-1), A at this iteration's point, scaled below by the residual variance
       for (int q = 0; q < np; ++q) {
@@ -317,6 +331,7 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       }
     }
     bool improved = false;
+    auto attempt = [&]() {
     for (int tries = 0; tries < 12 && !improved; ++tries) {
       double M[kMaxParams * kMaxParams], dx[kMaxParams];
       for (int a = 0; a < np * np; ++a) M[a] = A[a];
@@ -345,6 +360,29 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
         }
       }
       mu *= 10.0;
+    }
+    };
+    attempt();
+    if (!improved && jacobian_fallback()) {
+      // the element and drag columns by one-sided differences of the theory, then the same trial
+      const int analytic = o.fit_drag ? 7 : 6;
+      bool fd_ok = true;
+      for (int a = 0; a < analytic && fd_ok; ++a) {
+        const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
+        double xh[kMaxParams];
+        for (int q = 0; q < np; ++q) xh[q] = x[q];
+        xh[a] += h;
+        ElementRow bumped = work;
+        row_of(xh, o, bumped);
+        fd_ok = residuals(bumped, t, r, count, trial);
+        if (fd_ok)
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
+      }
+      if (fd_ok) {
+        normal();
+        mu = 1e-3;
+        attempt();
+      }
     }
     if (!improved) converged = true;  // no step lowers the cost: at the minimum
   }

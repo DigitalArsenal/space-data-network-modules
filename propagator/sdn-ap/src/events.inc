@@ -68,13 +68,17 @@ inline bool state_of_set(const Elements& e, double t, double* r, double* v) {
 }
 
 /// The inverse map at the epoch of `e`: its mean elements replaced so that the set's output state at its epoch is
-/// (r, v); the other fields (theory, drag and SRP parameters) kept. Iterations in *iterations; false when it does
-/// not converge to 1e-9 km and 1e-12 km/s in 20 steps.
+/// (r, v); the other fields (theory, drag and SRP parameters) kept. Iterations in *iterations. Converged at 1e-9 km
+/// and 1e-12 km/s; where the output map's rounding floor stays above that (a few um at a circular parent), the best
+/// iterate of the 20 steps within 1e-6 km and 1e-9 km/s; false otherwise.
 inline bool inverse_at_epoch(Elements& e, const double* r, const double* v, int* iterations = nullptr) {
   double target[6], q[6];
   if (!eq_of_state(r, v, target)) return false;
   // the start: the osculating elements taken as mean
   if (!set_eq(e, target)) return false;
+  Elements best = e;
+  double best_dr = HUGE_VAL, best_dv = HUGE_VAL;
+  int best_it = 0;
   for (int it = 0; it < 20; ++it) {
     double ro[3], vo[3], qo[6];
     if (!state_of_set(e, 0.0, ro, vo) || !eq_of_state(ro, vo, qo)) return false;
@@ -82,6 +86,7 @@ inline bool inverse_at_epoch(Elements& e, const double* r, const double* v, int*
     const double dv = std::sqrt((vo[0] - v[0]) * (vo[0] - v[0]) + (vo[1] - v[1]) * (vo[1] - v[1]) + (vo[2] - v[2]) * (vo[2] - v[2]));
     if (iterations) *iterations = it;
     if (dr < 1e-9 && dv < 1e-12) return true;
+    if (dr < best_dr) { best = e; best_dr = dr; best_dv = dv; best_it = it; }
     eq_of_elements(e, q);
     for (int j = 0; j < 6; ++j) {
       double d = target[j] - qo[j];
@@ -89,6 +94,11 @@ inline bool inverse_at_epoch(Elements& e, const double* r, const double* v, int*
       q[j] += d;
     }
     if (!set_eq(e, q)) return false;
+  }
+  if (best_dr < 1e-6 && best_dv < 1e-9) {
+    e = best;
+    if (iterations) *iterations = best_it;
+    return true;
   }
   return false;
 }
