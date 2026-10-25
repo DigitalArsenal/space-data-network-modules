@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "TMPL lane13 canonical PRW variational artifact",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "027cd9e24cc24f189bbe7396657a32fcf14ffa6ea02e93aef2fba1d2205e468f",
-  "moduleSha256": "027cd9e24cc24f189bbe7396657a32fcf14ffa6ea02e93aef2fba1d2205e468f",
+  "artifactSha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f",
+  "moduleSha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 40,
-      "durationMs": 735
+      "durationMs": 715
     },
     {
       "lane": "wasmedge",
       "runs": 40,
-      "durationMs": 17786
+      "durationMs": 17269
     }
   ],
   "cases": [
@@ -329,7 +329,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -341,7 +341,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -353,7 +353,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -365,7 +365,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -809,7 +809,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -821,7 +821,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -833,7 +833,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {
@@ -845,7 +845,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "b5f3b3279d35e544cc8ac66b54289367f594fd11373be1d8b1833513674b4d82",
+      "stdoutSha256": "c4578c0a82207523435000455f19f9a43220c57e06553b9e94c54f8a4442a41b",
       "stdoutLength": 976
     },
     {

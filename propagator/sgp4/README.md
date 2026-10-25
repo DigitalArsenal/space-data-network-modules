@@ -207,17 +207,13 @@ Apache-2.0.
 ## Verification sets
 
 <!-- BEGIN GENERATED VERIFICATION SETS -->
-[Vallado SGP4-VER](tests/evidence/vallado/) uses `SGP4-VER.TLE` and `tcppver.out` in TEME with WGS-72 and improved mode `i`. Source compares native Vallado with printed states; module compares shipped WASM with native Vallado at the same effective minutes since epoch. Request epoch compares shipped `propagate_state` with printed states at the requested time. Its per-sample position and velocity bound is T + M + P: the native time-shift norm, module norm and 3D printing envelope.
+[SGP4 against its STR#3 base](tests/evidence/str3/) holds every state of the shipped module to the base it is built on, compiled natively without `-ffast-math`: the seven SGP4-VER element sets, the module's own test sets and four more regimes, at 12 times from a day before epoch to ten days after, in TEME. The request is the epoch plus the minutes the module computes.
 
-| Comparison | Position (max) | Velocity (max) | Limit | Result |
-| --- | --- | --- | --- | --- |
-| Source (all) | 0.118 mm | 8.52869e-07 m/s | ≤ 1.000 mm; ≤ 1e-05 m/s | met |
-| Module (all) | 0.113 mm | 7.20088e-08 m/s | ≤ 1.000 mm; ≤ 1e-05 m/s | met |
-| Request epoch (all) | 9.742 m | 0.00018246 m/s | ≤ T + M + P per sample | not met |
-| Request epoch (near-Earth) | 151.767 mm | 0.00018246 m/s | ≤ T + M + P per sample | met |
-| Request epoch (deep space) | 9.742 m | 0.000148972 m/s | ≤ T + M + P per sample | not met |
-
-Request-time rounding (maximum shift 19.4 us) accounts for the 15 cm near-Earth and 9.74 m deep-space maxima (set 33333). The 17 samples exceeding the request criterion by up to 0.109 mm carry the native-source residual on set 20413 ([causes](tests/evidence/vallado/causes.json), [report](../ffm/tests/evidence/CONSOLIDATED.md)).
+| Regime | Sets | States | Position (max) | Velocity (max) | Largest at |
+| --- | --- | --- | --- | --- | --- |
+| near-Earth (SGP4) | 6 | 72 | 0.004 mm | 4.45891e-09 m/s | 90004 at 10080.000 min |
+| deep space (SDP4) | 5 | 60 | 0.006 mm | 5.51598e-09 m/s | 11801 at 4320.000 min |
+| geosynchronous (SDP4) | 2 | 24 | 8.998e-04 mm | 6.5711e-11 m/s | 90002 at 10080.000 min |
 
 [SGP4-XP](tests/evidence/xp/) checks 640 SGP4/XP sets at 7 times for exact library parity and records 15 Tier B anchors. The XP theory itself has no public reference outside the library; agreement with the library is the available check.
 

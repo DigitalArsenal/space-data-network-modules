@@ -34,7 +34,7 @@ The GMAT limits apply only to GMAT. These are agreement limits from the shared p
 | Basilisk | 2.12.0 | 50 | 22 | 43 | 7 | 0 | 0 |
 | ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 12 | 1 | 13 | 0 |
 | JPL Horizons | 1.2 | 6 | 1 | 6 | 0 | 4 | 0 |
-| Vallado SGP4-VER | python-sgp4 2.27 (Brandon Rhodes; MIT), source distribution; module 1.2.0 | 9 | 0 | 7 | 2 | 0 | 21 |
+| SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.3.1 | 0 | 0 | 0 | 0 | 3 | 0 |
 | SGP4-XP | 9.1.1.0; module 0.1.1 | 1 | 0 | 1 | 0 | 0 | 0 |
 
 ## Maximum position difference
@@ -95,7 +95,7 @@ No STM pass threshold is defined by the export.
 | Basilisk | not exposed | Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped. |
 | ERFA / SPICE | not exposed | not exposed |
 | JPL Horizons | not exposed | not exposed |
-| Vallado SGP4-VER | not exposed | not exposed |
+| SGP4 against its STR#3 base | not exposed | not exposed |
 | SGP4-XP | not exposed | not exposed |
 
 ## Frame, time, ephemeris and SGP4 rows
@@ -146,49 +146,13 @@ No STM pass threshold is defined by the export.
 | JWST withSrp | position: 450.958 m | position: < 10000.000 m | met |  |
 | JWST noSrp | position: 766.706 m | position: < 10000.000 m | met |  |
 
-### Vallado SGP4-VER
+### SGP4 against its STR#3 base
 
-Source and module use fixed 3D limits of 1.000 mm and 1e-05 m/s. The identical pinned Vallado algorithm, WGS-72 constants and improved operation mode isolate native floating-point evaluation against the printed states. Fixed 1 mm and 10 micrometres/s agreement limits assess that evaluation; the 5 micrometre position component printing envelope is a separate diagnostic. The same fixed agreement limits apply to shipped WASM against native improved-mode Vallado at the same effective minutes since epoch. The elements, build, emccFast and emccStrict controlled subtractions isolate initialization and compiler arithmetic; their observed spread does not raise the limit. No printed reference rows exist at these perturbed times. The recorded compiler decompositions have position maxima 4.116 mm (emccFast) and 0.037 mm (emccStrict); these measurements do not enlarge the fixed limit.
-
-Printing resolution remains a diagnostic: 5e-09 km / 5e-10 km/s per component, giving Euclidean 3D envelopes 0.009 mm and 8.66025e-07 m/s. The request-epoch criterion is evaluated on every paired sample, not on table maxima. The per-sample bound has no acceptance epsilon. The exact vector identity is W-P=module+timeOnly+source, so the two-subtraction bound with printing alone is conditional on native-source-versus-print agreement within the printing envelope. Exceedances retain the measured source residual as their cause; the allowance is not enlarged. The maximum absolute request-time shift is 19.3701 us.
-
-| Table | Comparison | Maximum 3D position difference | Maximum 3D velocity difference | Primary criterion | Verdict | Printing diagnostic | Cause / interpretation |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| near-Earth (SGP4) | source: native Vallado vs printed | 0.007 mm | 7.77585e-07 m/s | position ≤ 1.000 mm; velocity ≤ 1e-05 m/s | met | component maxima 5.02723e-09 km; 4.98346e-10 km/s; 1/158 samples exceed the printing envelope | The native build of the same Vallado SGP4.cpp exceeds the decimal output's rounding envelope, including the long-propagation 20413 block. The pinned upstream source is identical after CR removal; this residual is isolated to native floating-point evaluation versus the published printed values, not the WASM adapter. Maximum on set 28872, tsince 40 min. |
-| near-Earth (SGP4) | module: shipped WASM vs native Vallado at effective minutes since epoch | 4.087e-04 mm | 4.2584e-10 m/s | position ≤ 1.000 mm; velocity ≤ 1e-05 m/s | met | component maxima 3.99041e-10 km; 3.98348e-13 km/s; 0/158 samples exceed the printing envelope | The stored module subtraction compares shipped WASM with native Vallado at the same effective minutes since epoch; there is no tcppver.out row at the shifted time. OMM/epoch conversion and shipped build arithmetic are isolated by elements and build. The fixed 1 mm / 1e-5 m/s criterion is not enlarged for the emccFast versus emccStrict compiler-arithmetic spread; any exceedance retains this measured cause. Maximum on set 28057, tsince 2880 min. |
-| near-Earth (SGP4) | wasm: shipped propagate_state vs printed at request epoch | 151.767 mm | 0.00018246 m/s | Each sample: ‖wasm‖ ≤ ‖timeOnly‖ + ‖module‖ + 3D printing envelope, for position and velocity | met; 0/158 samples exceed; maximum excess 0 mm, 0 m/s | component maxima 0.000139242 km; 1.72467e-07 km/s; 106/158 samples exceed the printing envelope | The request-epoch difference is module + timeOnly + source as vectors. The requested norm inequality uses only the module and timeOnly norms plus the 3D printing envelope. It can miss when the native-source-versus-printed residual exceeds that envelope, as measured in source; printing alone is not a bound on native evaluation error. Request-time rounding accounts for the large absolute differences. The literal inequality is reported without enlarging its allowance or substituting a sum of table maxima. Maximum on set 22312, tsince 394.2028672 min. The time-only maximum is 151.764 mm at set 22312, tsince 394.2028672 min. |
-| deep space (SDP4) | source: native Vallado vs printed | 0.118 mm | 8.52869e-07 m/s | position ≤ 1.000 mm; velocity ≤ 1e-05 m/s | met | component maxima 1.16545e-07 km; 4.99695e-10 km/s; 28/508 samples exceed the printing envelope | The native build of the same Vallado SGP4.cpp exceeds the decimal output's rounding envelope, including the long-propagation 20413 block. The pinned upstream source is identical after CR removal; this residual is isolated to native floating-point evaluation versus the published printed values, not the WASM adapter. Maximum on set 20413, tsince 1844335 min. |
-| deep space (SDP4) | module: shipped WASM vs native Vallado at effective minutes since epoch | 0.113 mm | 7.20088e-08 m/s | position ≤ 1.000 mm; velocity ≤ 1e-05 m/s | met | component maxima 1.11355e-07 km; 6.74163e-11 km/s; 63/508 samples exceed the printing envelope | The stored module subtraction compares shipped WASM with native Vallado at the same effective minutes since epoch; there is no tcppver.out row at the shifted time. OMM/epoch conversion and shipped build arithmetic are isolated by elements and build. The fixed 1 mm / 1e-5 m/s criterion is not enlarged for the emccFast versus emccStrict compiler-arithmetic spread; any exceedance retains this measured cause. Maximum on set 26900, tsince 9400 min. |
-| deep space (SDP4) | wasm: shipped propagate_state vs printed at request epoch | 9.742 m | 0.000148972 m/s | Each sample: ‖wasm‖ ≤ ‖timeOnly‖ + ‖module‖ + 3D printing envelope, for position and velocity | missed; 17/508 samples exceed; maximum excess 0.109 mm, 0 m/s | component maxima 0.00864842 km; 1.21384e-07 km/s; 393/508 samples exceed the printing envelope | The request-epoch difference is module + timeOnly + source as vectors. The requested norm inequality uses only the module and timeOnly norms plus the 3D printing envelope. It can miss when the native-source-versus-printed residual exceeds that envelope, as measured in source; printing alone is not a bound on native evaluation error. Request-time rounding accounts for the large absolute differences. The literal inequality is reported without enlarging its allowance or substituting a sum of table maxima. Maximum on set 33333, tsince 20 min. The time-only maximum is 9.742 m at set 33333, tsince 20 min. Largest criterion excess: set 20413, tsince 1844335 min, with native-source-versus-print residual 0.118 mm. |
-| all | source: native Vallado vs printed | 0.118 mm | 8.52869e-07 m/s | position ≤ 1.000 mm; velocity ≤ 1e-05 m/s | met | component maxima 1.16545e-07 km; 4.99695e-10 km/s; 29/666 samples exceed the printing envelope | The native build of the same Vallado SGP4.cpp exceeds the decimal output's rounding envelope, including the long-propagation 20413 block. The pinned upstream source is identical after CR removal; this residual is isolated to native floating-point evaluation versus the published printed values, not the WASM adapter. Maximum on set 20413, tsince 1844335 min. |
-| all | module: shipped WASM vs native Vallado at effective minutes since epoch | 0.113 mm | 7.20088e-08 m/s | position ≤ 1.000 mm; velocity ≤ 1e-05 m/s | met | component maxima 1.11355e-07 km; 6.74163e-11 km/s; 63/666 samples exceed the printing envelope | The stored module subtraction compares shipped WASM with native Vallado at the same effective minutes since epoch; there is no tcppver.out row at the shifted time. OMM/epoch conversion and shipped build arithmetic are isolated by elements and build. The fixed 1 mm / 1e-5 m/s criterion is not enlarged for the emccFast versus emccStrict compiler-arithmetic spread; any exceedance retains this measured cause. Maximum on set 26900, tsince 9400 min. |
-| all | wasm: shipped propagate_state vs printed at request epoch | 9.742 m | 0.00018246 m/s | Each sample: ‖wasm‖ ≤ ‖timeOnly‖ + ‖module‖ + 3D printing envelope, for position and velocity | missed; 17/666 samples exceed; maximum excess 0.109 mm, 0 m/s | component maxima 0.00864842 km; 1.72467e-07 km/s; 499/666 samples exceed the printing envelope | The request-epoch difference is module + timeOnly + source as vectors. The requested norm inequality uses only the module and timeOnly norms plus the 3D printing envelope. It can miss when the native-source-versus-printed residual exceeds that envelope, as measured in source; printing alone is not a bound on native evaluation error. Request-time rounding accounts for the large absolute differences. The literal inequality is reported without enlarging its allowance or substituting a sum of table maxima. Maximum on set 33333, tsince 20 min. The time-only maximum is 9.742 m at set 33333, tsince 20 min. Largest criterion excess: set 20413, tsince 1844335 min, with native-source-versus-print residual 0.118 mm. |
-
-Controlled subtractions explain the primary differences. The rows below remain decomposition rows and do not contribute to met/missed counts.
-
-| Table | Subtraction | Maximum 3D position difference | Maximum 3D velocity difference | Printing diagnostic (samples beyond envelope) | Role | Cause |
-| --- | --- | --- | --- | --- | --- | --- |
-| near-Earth (SGP4) | afspc | 0.007 mm | 7.77585e-07 m/s | 1/158 | decomposition | operation-mode-convention: AFSPC mode a is intentionally different from the printed improved-mode i reference; the source comparison separately measures the native-versus-print residual. |
-| near-Earth (SGP4) | fastMath | 4.085e-04 mm | 4.28628e-10 m/s | 0/158 | decomposition | compiler-floating-point-flags: The same native Vallado path and times are subtracted with and without -ffast-math, isolating the compiler arithmetic setting. |
-| near-Earth (SGP4) | emccFast | 4.087e-04 mm | 4.2584e-10 m/s | 0/158 | decomposition | wasm-compiler-arithmetic: The same Vallado path is compiled to WASM with fast-math and compared with the strict native evaluation; emccStrict separately isolates the result without fast-math. |
-| near-Earth (SGP4) | emccStrict | 5.323e-06 mm | 4.21446e-12 m/s | 0/158 | decomposition | native-versus-wasm-floating-point: The strict WASM and native builds evaluate the same source, elements and times. Their subtraction isolates cross-target floating-point evaluation, including accumulated error in the long 20413 arc. |
-| near-Earth (SGP4) | elements | 4.099e-04 mm | 4.38873e-10 m/s | 0/158 | decomposition | element-and-epoch-representation: The module OMM initialization path is compared with Vallado TLE initialization at the identical effective tsince, isolating element conversion and the single-double Julian-date epoch representation. |
-| near-Earth (SGP4) | build | 8.132e-04 mm | 8.4944e-10 m/s | 0/158 | decomposition | shipped-build-floating-point: The shipped WASM and native module path use the identical OMM initialization and request, isolating the shipped build's arithmetic. |
-| near-Earth (SGP4) | timeOnly | 151.764 mm | 0.000183048 m/s | 106/158 | decomposition | single-double-request-epoch: Vallado is evaluated at both the intended tsince and the tsince recovered from a single-double Julian-date request; only request-time rounding differs. |
-| deep space (SDP4) | afspc | 963.987 m | 0.389232 m/s | 45/508 | decomposition | operation-mode-convention: AFSPC mode a is intentionally different from the printed improved-mode i reference; the source comparison separately measures the native-versus-print residual. |
-| deep space (SDP4) | fastMath | 4.073 mm | 1.79785e-06 m/s | 185/508 | decomposition | compiler-floating-point-flags: The same native Vallado path and times are subtracted with and without -ffast-math, isolating the compiler arithmetic setting. |
-| deep space (SDP4) | emccFast | 4.116 mm | 1.81707e-06 m/s | 185/508 | decomposition | wasm-compiler-arithmetic: The same Vallado path is compiled to WASM with fast-math and compared with the strict native evaluation; emccStrict separately isolates the result without fast-math. |
-| deep space (SDP4) | emccStrict | 0.037 mm | 1.21119e-09 m/s | 2/508 | decomposition | native-versus-wasm-floating-point: The strict WASM and native builds evaluate the same source, elements and times. Their subtraction isolates cross-target floating-point evaluation, including accumulated error in the long 20413 arc. |
-| deep space (SDP4) | elements | 2.257e-04 mm | 9.58107e-11 m/s | 0/508 | decomposition | element-and-epoch-representation: The module OMM initialization path is compared with Vallado TLE initialization at the identical effective tsince, isolating element conversion and the single-double Julian-date epoch representation. |
-| deep space (SDP4) | build | 0.113 mm | 7.20088e-08 m/s | 63/508 | decomposition | shipped-build-floating-point: The shipped WASM and native module path use the identical OMM initialization and request, isolating the shipped build's arithmetic. |
-| deep space (SDP4) | timeOnly | 9.742 m | 0.000149275 m/s | 361/508 | decomposition | single-double-request-epoch: Vallado is evaluated at both the intended tsince and the tsince recovered from a single-double Julian-date request; only request-time rounding differs. |
-| all | afspc | 963.987 m | 0.389232 m/s | 46/666 | decomposition | operation-mode-convention: AFSPC mode a is intentionally different from the printed improved-mode i reference; the source comparison separately measures the native-versus-print residual. |
-| all | fastMath | 4.073 mm | 1.79785e-06 m/s | 185/666 | decomposition | compiler-floating-point-flags: The same native Vallado path and times are subtracted with and without -ffast-math, isolating the compiler arithmetic setting. |
-| all | emccFast | 4.116 mm | 1.81707e-06 m/s | 185/666 | decomposition | wasm-compiler-arithmetic: The same Vallado path is compiled to WASM with fast-math and compared with the strict native evaluation; emccStrict separately isolates the result without fast-math. |
-| all | emccStrict | 0.037 mm | 1.21119e-09 m/s | 2/666 | decomposition | native-versus-wasm-floating-point: The strict WASM and native builds evaluate the same source, elements and times. Their subtraction isolates cross-target floating-point evaluation, including accumulated error in the long 20413 arc. |
-| all | elements | 4.099e-04 mm | 4.38873e-10 m/s | 0/666 | decomposition | element-and-epoch-representation: The module OMM initialization path is compared with Vallado TLE initialization at the identical effective tsince, isolating element conversion and the single-double Julian-date epoch representation. |
-| all | build | 0.113 mm | 7.20088e-08 m/s | 63/666 | decomposition | shipped-build-floating-point: The shipped WASM and native module path use the identical OMM initialization and request, isolating the shipped build's arithmetic. |
-| all | timeOnly | 9.742 m | 0.000183048 m/s | 467/666 | decomposition | single-double-request-epoch: Vallado is evaluated at both the intended tsince and the tsince recovered from a single-double Julian-date request; only request-time rounding differs. |
+| Row | Maximum difference | Limit | Verdict / role | Cause / note |
+| --- | --- | --- | --- | --- |
+| near-Earth (SGP4): 6 sets, 72 states | position 3D: 0.004 mm; velocity 3D: 4.45891e-09 m/s | not specified | diagnostic | Largest on set 90004 at 10080.000 min; 0 states refused by both |
+| deep space (SDP4): 5 sets, 60 states | position 3D: 0.006 mm; velocity 3D: 5.51598e-09 m/s | not specified | diagnostic | Largest on set 11801 at 4320.000 min; 0 states refused by both |
+| geosynchronous (SDP4): 2 sets, 24 states | position 3D: 8.998e-04 mm; velocity 3D: 6.5711e-11 m/s | not specified | diagnostic | Largest on set 90002 at 10080.000 min; 0 states refused by both |
 
 ### SGP4-XP
 
@@ -425,30 +389,21 @@ Provenance limit:
 
 - availability: Remote Horizons engine binary is not distributed; API version and exact response bytes are pinned.
 
-### Vallado SGP4-VER
+### SGP4 against its STR#3 base
 
-Version: python-sgp4 2.27 (Brandon Rhodes; MIT), source distribution; module 1.2.0. Evidence: [../../../sgp4/tests/evidence/vallado/summary-vallado.json](../../../sgp4/tests/evidence/vallado/summary-vallado.json).
+Version: foundation/sgp4-str3; module 1.3.1. Evidence: [../../../sgp4/tests/evidence/str3/summary-str3.json](../../../sgp4/tests/evidence/str3/summary-str3.json).
 
-- python-sgp4 source distribution: `06d37247c6985739b707b8b39b6b83e06e8af783b2531e31965501ba983985f9`.
-- SGP4.cpp source: `3388a777d710a169f780dfec83ea42f8e51d2c2652b7efe8a3187a3da0a0191d`.
-- shipped WASM: `fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347`.
-- SGP4-VER.TLE: `d246d1d9d768ace445a38a965713fa9ba52d80fd8a41a0502ff83d7acffe2881`.
-- tcppver.out: `687bf28dbe52df86e8e60ab5cb4a08d1aa3dbcaf4e63b1f7ab95f044fbe3833b`.
+- shipped WASM (propagator/sgp4 dist/browser): `18291081e26cd9d870a9c052ff1ce215dc07a612696711accd64c4e6db2aa1a1`.
+- library_states.cpp: `96b4bc227dcda1543aed3ac49b83564c8c74aa27df3f0a68d7d749b4f8093d89`.
+- run-str3.mjs: `8bafb16a48d2b9b79010924d1325a79603d97354754d27a51e3481fb131f2a83`.
 
 Model settings:
 
 - frame: TEME.
-- gravity: WGS72.
-- operations: improved (i); AFSPC (a) separately.
-- compiler · compiler: Apple clang version 21.0.0 (clang-2100.1.1.101).
-- compiler · flags: -std=c++17 -O2 -ffp-contract=off -w.
-- compiler · fast Math Flags: -std=c++17 -O3 -ffast-math -w.
-- compiler · emcc: emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 4.0.23-git.
-- compiler · emcc Flags · emcc Fast: -O3 -flto -ffast-math -msimd128.
-- compiler · emcc Flags · emcc Strict: -O3 -flto -msimd128.
-- compiler · harness Sha256: 31b85b3d1b2ab6e93e686372b46bc6efb14a6bffe0ce31c22480acf83e863f90.
+- reference: foundation/sgp4-str3, native, no -ffast-math (library_states.cpp).
+- minutes From Epoch: -1440, -60, 0, 10, 90, 360, 720, 1440, 2880, 4320, 7200, 10080.
 
-Step setting: every printed tcppver time; intended and single-JD times separated
+Step setting: 12 times per set, from -1440 to 10080 minutes from epoch
 
 ### SGP4-XP
 

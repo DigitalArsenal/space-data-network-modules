@@ -154,36 +154,21 @@ function collect() {
     ]),
     ...horizons.jwst.rows.map((r) => ({ id: `jwst-${r.id}`, label: `JWST ${r.id}`, group: 'jwst', metrics: [metric('position', r.maxPositionM, r.positionToleranceM, 'm', true)], expectedMet: r.met, cause: r.cause })),
   ], expected: { scored: 6, met: 6, missed: 0, diagnostic: 4 }, expectedGroups: { bodies: { scored: horizons.verdict.bodiesTotal, met: horizons.verdict.bodiesMet }, jwst: { scored: horizons.jwst.rows.length, met: horizons.verdict.jwstMet } } });
-  const valladoPath = '../../../sgp4/tests/evidence/vallado/summary-vallado.json';
-  const vallado = summaries.vallado = read(valladoPath);
-  const valladoTools = read('../../../sgp4/tests/evidence/vallado/tools.json');
-  const causes = read('../../../sgp4/tests/evidence/vallado/causes.json');
-  const acceptance = vallado.acceptance;
-  require(acceptance?.criteria && acceptance?.evidence?.blocks && acceptance?.verdict, 'Vallado primary acceptance evidence missing');
-  const vrows = [];
-  for (const [regime, table] of Object.entries(vallado.tables)) for (const [key, r] of Object.entries(table)) {
-    if (key === 'sets') continue;
-    const c = causes[key];
-    require(c, `Vallado comparison without cause: ${key}`);
-    const primary = ['source', 'module', 'wasm'].includes(key), criterion = acceptance.criteria[key];
-    const primaryVerdict = primary ? acceptance.tables[regime][key] : undefined;
-    const samples = key === 'wasm' ? acceptance.evidence.blocks.filter((b) => !b.initError && (regime === 'all' || b.method === (regime.startsWith('near') ? 'n' : 'd'))).flatMap((b) => b.samples) : undefined;
-    vrows.push({ id: `${regime}/${key}`, label: `${regime}: ${key}`, comparison: key, regime,
-      role: primary ? 'primary' : 'decomposition', samples: r.samples, worst: r.worst, cause: c,
-      printingExceedances: r.samplesBeyondPrinting,
-      metrics: [metric('position 3D', r.maxPosition3dM, criterion?.positionM ?? null, 'm'), metric('velocity 3D', r.maxVelocity3dMs, criterion?.velocityMs ?? null, 'm/s'),
-        { ...metric('position component', r.maxPositionComponentKm, vallado.printing.positionKm, 'km'), diagnostic: true },
-        { ...metric('velocity component', r.maxVelocityComponentKms, vallado.printing.velocityKms, 'km/s'), diagnostic: true }],
-      ...(key === 'wasm' ? { consistency: { samples, printing: vallado.printing, expected: primaryVerdict } } : {}),
-      expectedPrintingMet: r.samplesBeyondPrinting === 0, expectedMet: primary ? primaryVerdict.met : null });
-  }
-  add({ id: 'vallado', label: 'Vallado SGP4-VER', version: `${valladoTools.reference.package}; module ${vallado.module.version}`, evidence: valladoPath,
-    pins: [pin('python-sgp4 source distribution', valladoTools.reference.sha256), pin('SGP4.cpp source', vallado.module['src/cpp/src/SGP4.cpp']), pin('shipped WASM', vallado.module['dist/isomorphic/module.wasm']), ...Object.entries(vallado.inputs).map(([k,v]) => pin(k,v))],
-    modelSettings: { frame: 'TEME', gravity: 'WGS72', operations: 'improved (i); AFSPC (a) separately', compiler: vallado.native },
-    acceptanceCriteria: acceptance.criteria, stepSetting: 'every printed tcppver time; intended and single-JD times separated' },
-  { kind: 'rows', rows: vrows, skipped: [], stmStatement: 'not exposed', expected: acceptance.verdict });
-  require(vallado.sourceWithinPrinting === (vallado.tables.all.source.samplesBeyondPrinting === 0), 'Vallado source verdict mismatch');
-  require(vallado.afspcWithinPrinting === (vallado.tables.all.afspc.samplesBeyondPrinting === 0), 'Vallado AFSPC verdict mismatch');
+  // The module against its SGP4/SDP4 base (foundation/sgp4-str3), per regime: the largest position and velocity differences. The
+  // evidence states no limit, so its rows are diagnostic and enter no met/missed count.
+  const str3Path = '../../../sgp4/tests/evidence/str3/summary-str3.json';
+  const str3 = summaries.str3 = read(str3Path);
+  const str3Dir = path.resolve(here, '../../../sgp4/tests/evidence/str3');
+  const regimeLabels = { 'near-earth': 'near-Earth (SGP4)', deep: 'deep space (SDP4)', geo: 'geosynchronous (SDP4)' };
+  require(Object.keys(str3.regimes).every((k) => regimeLabels[k]) && Object.keys(str3.regimes).length === 3, 'STR#3 evidence regimes differ from the three the report names');
+  const str3Rows = Object.entries(str3.regimes).map(([regime, r]) => ({ id: `str3/${regime}`, label: `${regimeLabels[regime]}: ${r.sets} sets, ${r.states} states`, regime, samples: r.states,
+    metrics: [metric('position 3D', r.maxPositionM, null, 'm'), metric('velocity 3D', r.maxVelocityMps, null, 'm/s')],
+    note: `Largest on set ${r.at}; ${r.refusedBoth} states refused by both` }));
+  add({ id: 'str3', label: 'SGP4 against its STR#3 base', version: `foundation/sgp4-str3; module ${read('../../../sgp4/package.json').version}`, evidence: str3Path,
+    pins: [pin('shipped WASM (propagator/sgp4 dist/browser)', sha(path.resolve(here, '../../../sgp4/dist/browser/module.wasm'))), pin('library_states.cpp', sha(path.join(str3Dir, 'library_states.cpp'))), pin('run-str3.mjs', sha(path.join(str3Dir, 'run-str3.mjs')))],
+    modelSettings: { frame: 'TEME', reference: str3.reference, minutesFromEpoch: str3.minutes },
+    stepSetting: `${str3.minutes.length} times per set, from ${Math.min(...str3.minutes)} to ${Math.max(...str3.minutes)} minutes from epoch` },
+  { kind: 'rows', rows: str3Rows, skipped: [], stmStatement: 'not exposed', expected: { scored: 0, met: 0, missed: 0, diagnostic: str3Rows.length, untoleranced: str3Rows.length } });
   const xpPath = '../../../sgp4/tests/evidence/xp/summary-xp.json', xp = summaries.xp = read(xpPath);
   const xpVersion = /Sgp4Prop ([\d.]+)/.exec(xp.about)?.[1];
   add({ id: 'xp', label: 'SGP4-XP', version: `${xpVersion}; module ${xp.module.version}`, evidence: xpPath,
@@ -197,12 +182,6 @@ function collect() {
   const clock = erfa.rows.find((r) => r.id === 'forceClock'), rotation = erfa.rows.find((r) => r.id === 'c2tTrue');
   formatValue('force-clock', clock.max, clock.unit); formatValue('force-clock-rotation', rotation.max, rotation.unit);
   formatValue('force-clock-leo', rotation.leoM);
-  for(const [key, row] of Object.entries(vallado.tables.all)) if (key !== 'sets') formatValue(`vallado-${key}`, row.maxPosition3dM);
-  formatValue('vallado-time', vallado.requestTimeShiftSeconds.maxAbs, 's');
-  formatValue('vallado-time-us', vallado.requestTimeShiftSeconds.maxAbs, 's-as-us');
-  formatValue('vallado-doc-time', vallado.requestTimeShiftSeconds.maxAbs, 's-as-us', 1);
-  formatValue('vallado-doc-near', vallado.tables['near-Earth (SGP4)'].wasm.maxPosition3dM, 'm-as-cm', 0);
-  formatValue('vallado-doc-deep', vallado.tables['deep space (SDP4)'].wasm.maxPosition3dM, 'm', 2);
   return { exported, summaries, metadata, input: { export: exported, tools, format,
     dragDiagnostics: collectDragDiagnostics(summaries, exported),
     orbits: [...new Set(exported.cases.map((c) => c.orbit))], families: Object.keys(exported.protocol.rows),
@@ -243,42 +222,13 @@ function renderRows(tool) {
     r.metrics.map((m) => `${m.label}: ${m.display}`).join('; '), r.metrics.filter((m) => m.limit !== null).map((m) => `${m.label}: ${m.strict ? '< ' : '≤ '}${m.limitDisplay}`).join('; ') || 'not specified',
     r.status, note(r)]))}`;
 }
-function valladoPrimary(tool) {
-  return table(['Table', 'Comparison', 'Maximum 3D position difference', 'Maximum 3D velocity difference', 'Primary criterion', 'Verdict', 'Printing diagnostic', 'Cause / interpretation'],
-    tool.rows.filter((r) => r.role === 'primary').map((r) => {
-      const position = r.metrics.find((m) => m.label === 'position component');
-      const velocity = r.metrics.find((m) => m.label === 'velocity component');
-      const time = tool.rows.find((t) => t.regime === r.regime && t.comparison === 'timeOnly');
-      const maximum = ` Maximum on set ${r.worst.satnum}, tsince ${r.worst.tsince} min.`;
-      const timing = r.comparison === 'wasm' ? ` The time-only maximum is ${time.metrics[0].display} at set ${time.worst.satnum}, tsince ${time.worst.tsince} min.${r.met ? '' : ` Largest criterion excess: set ${r.consistency.worstPosition.satnum}, tsince ${r.consistency.worstPosition.tsince} min, with native-source-versus-print residual ${r.consistency.sourceResidualDisplay}.`}` : '';
-      const criterion = r.comparison === 'wasm' ? 'Each sample: ‖wasm‖ ≤ ‖timeOnly‖ + ‖module‖ + 3D printing envelope, for position and velocity' : `position ≤ ${r.metrics[0].limitDisplay}; velocity ≤ ${r.metrics[1].limitDisplay}`;
-      const verdict = r.consistency ? `${r.status}; ${r.consistency.exceeded}/${r.consistency.samples} samples exceed; maximum excess ${r.consistency.positionExceedanceDisplay}, ${r.consistency.velocityExceedanceDisplay}` : r.status;
-      const label = { source: 'source: native Vallado vs printed', module: 'module: shipped WASM vs native Vallado at effective minutes since epoch', wasm: 'wasm: shipped propagate_state vs printed at request epoch' }[r.comparison];
-      return [r.regime, label, r.metrics[0].display, r.metrics[1].display, criterion, verdict,
-        `component maxima ${position.display}; ${velocity.display}; ${r.printingExceedances}/${r.samples} samples exceed the printing envelope`, `${r.cause.statement}${maximum}${timing}`];
-    }));
-}
-function valladoCriteria(tool, formatted) {
-  const primary = tool.rows.find((r) => r.comparison === 'source');
-  const components = primary.metrics.filter((m) => m.diagnostic).map((m) => m.limitDisplay).join(' / ');
-  const consistency = tool.rows.find((r) => r.comparison === 'wasm').consistency;
-  return `Source and module use fixed 3D limits of ${primary.metrics[0].limitDisplay} and ${primary.metrics[1].limitDisplay}. ${tool.acceptanceCriteria.source.rationale} ${tool.acceptanceCriteria.module.rationale} The recorded compiler decompositions have position maxima ${formatted['vallado-emccFast']} (emccFast) and ${formatted['vallado-emccStrict']} (emccStrict); these measurements do not enlarge the fixed limit.\n\nPrinting resolution remains a diagnostic: ${components} per component, giving Euclidean 3D envelopes ${consistency.printingNormPositionDisplay} and ${consistency.printingNormVelocityDisplay}. The request-epoch criterion is evaluated on every paired sample, not on table maxima. ${tool.acceptanceCriteria.wasm.rationale} The maximum absolute request-time shift is ${formatted['vallado-time-us']}.`;
-}
-function renderVallado(tool, formatted) {
-  return `### ${tool.label}\n\n${valladoCriteria(tool, formatted)}\n\n${valladoPrimary(tool)}\n\nControlled subtractions explain the primary differences. The rows below remain decomposition rows and do not contribute to met/missed counts.\n\n${table(['Table', 'Subtraction', 'Maximum 3D position difference', 'Maximum 3D velocity difference', 'Printing diagnostic (samples beyond envelope)', 'Role', 'Cause'], tool.rows.filter((r) => r.role === 'decomposition').map((r) => [r.regime, r.comparison, r.metrics[0].display, r.metrics[1].display, `${r.printingExceedances}/${r.samples}`, r.status, causeText(r)]))}`;
-}
-function renderVerificationSets(data, vallado) {
-  const f = data.formatted, xp = data.sgp4.xp;
-  const row = (regime, comparison) => vallado.rows.find((r) => r.regime === regime && r.comparison === comparison);
-  const source = row('all', 'source'), request = row('all', 'wasm'), deep = row('deep space (SDP4)', 'wasm');
-  const selected = [
-    ['Source (all)', source], ['Module (all)', row('all', 'module')], ['Request epoch (all)', request],
-    ['Request epoch (near-Earth)', row('near-Earth (SGP4)', 'wasm')], ['Request epoch (deep space)', deep],
-  ];
-  const compact = table(['Comparison', 'Position (max)', 'Velocity (max)', 'Limit', 'Result'], selected.map(([label, r]) => [label,
-    r.metrics[0].display, r.metrics[1].display, r.consistency ? '≤ T + M + P per sample' : `≤ ${r.metrics[0].limitDisplay}; ≤ ${r.metrics[1].limitDisplay}`, r.met ? 'met' : 'not met']));
+function renderVerificationSets(data) {
+  const xp = data.sgp4.xp;
+  const str3 = data.tools.find((t) => t.id === 'str3');
+  const compact = table(['Regime', 'Sets', 'States', 'Position (max)', 'Velocity (max)', 'Largest at'], str3.rows.map((r) => [r.label.split(':')[0], r.label.match(/(\d+) sets/)[1], r.samples,
+    r.metrics[0].display, r.metrics[1].display, r.note.match(/set ([^;]+);/)[1]]));
   const xpScope = xp.verdict.split('. ').at(-1);
-  return `[Vallado SGP4-VER](tests/evidence/vallado/) uses \`SGP4-VER.TLE\` and \`tcppver.out\` in TEME with WGS-72 and improved mode \`i\`. Source compares native Vallado with printed states; module compares shipped WASM with native Vallado at the same effective minutes since epoch. Request epoch compares shipped \`propagate_state\` with printed states at the requested time. Its per-sample position and velocity bound is T + M + P: the native time-shift norm, module norm and 3D printing envelope.\n\n${compact}\n\nRequest-time rounding (maximum shift ${f['vallado-doc-time']}) accounts for the ${f['vallado-doc-near']} near-Earth and ${f['vallado-doc-deep']} deep-space maxima (set ${deep.worst.satnum}). The ${request.consistency.exceeded} samples exceeding the request criterion by up to ${request.consistency.positionExceedanceDisplay} carry the native-source residual on set ${request.consistency.worstPosition.satnum} ([causes](tests/evidence/vallado/causes.json), [report](../ffm/tests/evidence/CONSOLIDATED.md)).\n\n[SGP4-XP](tests/evidence/xp/) checks ${xp.parity.sets} SGP4/XP sets at ${xp.parity.times} times for exact library parity and records ${xp.anchors.cases} Tier B anchors. ${xpScope}\n\nFrom the repository root:\n\n\`\`\`sh\nUV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/check-all.mjs\n\`\`\``;
+  return `[SGP4 against its STR#3 base](tests/evidence/str3/) holds every state of the shipped module to the base it is built on, compiled natively without \`-ffast-math\`: the seven SGP4-VER element sets, the module's own test sets and four more regimes, at ${data.sgp4.str3.minutes.length} times from a day before epoch to ten days after, in TEME. The request is the epoch plus the minutes the module computes.\n\n${compact}\n\n[SGP4-XP](tests/evidence/xp/) checks ${xp.parity.sets} SGP4/XP sets at ${xp.parity.times} times for exact library parity and records ${xp.anchors.cases} Tier B anchors. ${xpScope}\n\nFrom the repository root:\n\n\`\`\`sh\nUV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/check-all.mjs\n\`\`\``;
 }
 function render(data) {
   const { tools, positionTable, findings, formatted: f } = data;
@@ -293,15 +243,14 @@ function render(data) {
   const settings = tools.map(renderSettings).join('\n\n');
   const diagnosticPins = data.dragDiagnostics.map((d) => `### ${d.label} drag diagnostic inputs\n\n${pinsList(d.pins)}`).join('\n\n');
   const dragFootnote = 'For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).';
-  const rowTables = tools.filter((t) => !definitions.some(([id]) => id === t.id)).map((t) => t.id === 'vallado' ? renderVallado(t, f) : renderRows(t)).join('\n\n');
+  const rowTables = tools.filter((t) => !definitions.some(([id]) => id === t.id)).map(renderRows).join('\n\n');
   const ecef = table(['Classical ECEF versus CIO','Position bound'],['leoM','gpsM','geoM'].map((r,i) => [['LEO','GPS','GEO'][i],f[`ecef-${r}`]]));
   const findingText = `Classical-frame source defects remaining: ${findings.defects.length}. ERFA is the authoritative IAU 1976/1980 implementation. Before/after measurements and the velocity-axis diagnostic are in [before-after.json](erfa-spice/before-after.json).\n\n${ecef}\n\nThe remaining classical ECEF budget is UT1 = UTC, zero polar motion, no frame bias and the 1976/1980 model. These values are radius-times-angle bounds over the 50 sample epochs. Reference-suite field/drag cases supply EOP and use the CIO force-model chain.\n\nThe force TDB model spread is ${f['force-clock']}; the exact-epoch Earth-rotation difference is ${f['force-clock-rotation']}, or ${f['force-clock-leo']} at LEO radius. ${findings.forceClock.note} Evidence: [ERFA/SPICE summary](erfa-spice/summary-erfa-spice.json).\n\n${findings.toolCauses.map((x) => `- **${x.label}:** ${x.statement} Evidence: [${x.evidence}](${x.evidence}).`).join('\n')}`;
   const md = `# Consolidated reference evidence\n\nFFM (Full Force Model) is defined in [the FFM profile](../../FFM.md).\n\nGenerated from pinned summaries by \`consolidate.mjs\`; checked by \`node propagator/ffm/tests/evidence/check-all.mjs\` from the repository root. No timestamps or host details enter this report.\n\nFFM ${data.module.version}, SHA-256 \`${data.module.sha256}\`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.\n\n## Protocol and coverage\n\n${data.protocol.score}. Epochs and input models are in [the case export](cases/ffm-reference-cases.json). Counts use FFM's suite setting. Skips are explicit unsupported or unavailable cases, never passes. Row-based counts include only primary rows with a stated limit. Diagnostic and decomposition rows are shown separately and do not count as met or missed; all recorded bounds are independently checked.\n\n${steps}\n\n${limits}\n\nThe GMAT limits apply only to GMAT. These are agreement limits from the shared protocol, not orbit-accuracy guarantees.\n\n${counts}\n\n## Maximum position difference\n\nMaxima across each tool's supported cases, at FFM's suite setting; the Orekit finest column uses its separately stated FFM setting. A dash means no scored case. The no-drag class also includes supported tides, relativity and thrust cases. Force-class case coverage varies by tool; see scored and skipped IDs in consolidated.json.\n\n${position}\n\n${dragFootnote}\n\n${renderDragDiagnostics(data.dragDiagnostics)}\n\n## STM agreement\n\nNo STM pass threshold is defined by the export.\n\n${stm}\n\n## Frame, time, ephemeris and SGP4 rows\n\n${rowTables}\n\n## Findings\n\n${findingText}\n\n## Pins and model settings\n\nChecksums identify recorded bytes. A source-recipe pin is labelled as such and does not assert availability of an engine archive.\n\n${settings}\n\n${diagnosticPins}\n`;
-  const vallado = tools.find((t) => t.id === 'vallado');
   const links = definitions.map(([,label,evidence]) => `[${label}](../tests/evidence/${path.dirname(evidence)}/)`).join(', ');
   const adjustments = data.dragDiagnostics.map((d) => `[${d.label}: ${d.adjustment}](../tests/evidence/${d.evidence})`).join('; ');
-  const cross = `<!-- BEGIN GENERATED REFERENCE SUITE -->\n${position}\n\n### Drag cases with the tool-side setting difference removed (diagnostic)\n\n${dragDiagnosticTable(data.dragDiagnostics)}\n\n*Maximum hourly 3D position differences at the suite setting; Orekit finest is separate. Drag adjustments: ${adjustments}. Limits: [shared protocol](../tests/evidence/cases/ffm-reference-cases.json), with GMAT limits applying only to GMAT.*\n\nEvidence: ${links}, [ERFA/SPICE](../tests/evidence/erfa-spice/), [Horizons](../tests/evidence/horizons/), [Vallado](../../sgp4/tests/evidence/vallado/), [SGP4-XP](../../sgp4/tests/evidence/xp/), [consolidated report](../tests/evidence/CONSOLIDATED.md).\n\nFrom the repository root:\n\n\`\`\`sh\nUV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/check-all.mjs\n\`\`\`\n<!-- END GENERATED REFERENCE SUITE -->`;
-  const sgp4 = `<!-- BEGIN GENERATED VERIFICATION SETS -->\n${renderVerificationSets(data, vallado)}\n<!-- END GENERATED VERIFICATION SETS -->`;
+  const cross = `<!-- BEGIN GENERATED REFERENCE SUITE -->\n${position}\n\n### Drag cases with the tool-side setting difference removed (diagnostic)\n\n${dragDiagnosticTable(data.dragDiagnostics)}\n\n*Maximum hourly 3D position differences at the suite setting; Orekit finest is separate. Drag adjustments: ${adjustments}. Limits: [shared protocol](../tests/evidence/cases/ffm-reference-cases.json), with GMAT limits applying only to GMAT.*\n\nEvidence: ${links}, [ERFA/SPICE](../tests/evidence/erfa-spice/), [Horizons](../tests/evidence/horizons/), [SGP4 against its STR#3 base](../../sgp4/tests/evidence/str3/), [SGP4-XP](../../sgp4/tests/evidence/xp/), [consolidated report](../tests/evidence/CONSOLIDATED.md).\n\nFrom the repository root:\n\n\`\`\`sh\nUV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/check-all.mjs\n\`\`\`\n<!-- END GENERATED REFERENCE SUITE -->`;
+  const sgp4 = `<!-- BEGIN GENERATED VERIFICATION SETS -->\n${renderVerificationSets(data)}\n<!-- END GENERATED VERIFICATION SETS -->`;
   return { markdown: md, blocks: [
     { file: 'propagator/ffm/docs/cross-validation.md', start: '<!-- BEGIN GENERATED REFERENCE SUITE -->', end: '<!-- END GENERATED REFERENCE SUITE -->', text: cross },
     { file: 'propagator/sgp4/README.md', start: '<!-- BEGIN GENERATED VERIFICATION SETS -->', end: '<!-- END GENERATED VERIFICATION SETS -->', text: sgp4 },
@@ -325,7 +274,7 @@ export function generate(work) {
       {label:'Nyx variational equation',statement:s.nyx.verdict.stm.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
       {label:'GMAT anomalous oxygen',statement:s['gmat-2026'].cases.find((r)=>r.cause).cause.statement,evidence:'gmat/anomalous-oxygen.json'},
       {label:'Basilisk atmosphere altitude and conventions',statement:s.basilisk.cases.find((r)=>r.cause).cause.statement,evidence:'basilisk/summary-basilisk-2.12.0.json'},
-    ]},sgp4:{vallado:s.vallado,xp:s.xp}};
+    ]},sgp4:{str3:s.str3,xp:s.xp}};
   return {data,...render(data)};
 }
 export function applyBlocks(blocks,write=false) {

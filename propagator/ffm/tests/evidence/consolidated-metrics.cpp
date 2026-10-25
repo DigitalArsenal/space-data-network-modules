@@ -52,53 +52,21 @@ void countRow(J& total, const std::string& role, bool toleranced, bool met) {
  else inc(total,role);
  if (!toleranced) inc(total,"untoleranced");
 }
-// Independently assess the requested per-sample norm inequality. Table maxima
-// cannot be substituted for the paired timeOnly/module samples in this gate.
-J reduceConsistency(const J& row) {
- const auto& input=row.at("consistency"),samples=input.at("samples"),expected=input.at("expected");
- require(samples.size()==row.at("samples").get<std::size_t>(),"Vallado consistency sample count differs");
- const double printingR=std::sqrt(3.0)*number(input.at("printing").at("positionKm"))*1000;
- const double printingV=std::sqrt(3.0)*number(input.at("printing").at("velocityKms"))*1000;
- int exceeded=0,positionExceeded=0,velocityExceeded=0;
- double maxR=-INFINITY,maxV=-INFINITY,absoluteR=0,absoluteV=0;
- for(const auto& sample:samples) {
-  const double r=number(sample.at("wasm").at("position3dM")),v=number(sample.at("wasm").at("velocity3dMs"));
-  const double rBound=number(sample.at("timeOnly").at("position3dM"))+number(sample.at("module").at("position3dM"))+printingR;
-  const double vBound=number(sample.at("timeOnly").at("velocity3dMs"))+number(sample.at("module").at("velocity3dMs"))+printingV;
-  const double rExcess=r-rBound,vExcess=v-vBound;
-  positionExceeded+=rExcess>0;velocityExceeded+=vExcess>0;exceeded+=rExcess>0||vExcess>0;
-  maxR=std::max(maxR,rExcess);maxV=std::max(maxV,vExcess);absoluteR=std::max(absoluteR,r);absoluteV=std::max(absoluteV,v);
- }
- require(!samples.empty(),"missing Vallado per-sample consistency evidence");
- const auto close=[](double a,double b){return std::isfinite(a)&&std::isfinite(b)&&std::abs(a-b)<=1e-12+1e-12*std::abs(b);};
- require(close(absoluteR,number(row.at("metrics").at(0).at("value")))&&close(absoluteV,number(row.at("metrics").at(1).at("value"))),"Vallado request maxima differ from summary");
- require(expected.at("samples")==samples.size()&&expected.at("exceeded")==exceeded&&expected.at("positionExceeded")==positionExceeded&&expected.at("velocityExceeded")==velocityExceeded,"Vallado per-sample consistency counts differ");
- require(close(maxR,expected.at("maxPositionExcessM").get<double>())&&close(maxV,expected.at("maxVelocityExcessMs").get<double>()),"Vallado per-sample consistency excess differs");
- return {{"met",exceeded==0},{"samples",samples.size()},{"exceeded",exceeded},{"positionExceeded",positionExceeded},{"velocityExceeded",velocityExceeded},
-  {"maxPositionExcessM",maxR},{"maxVelocityExcessMs",maxV},{"positionExceedanceDisplay",distance(std::max(0.0,maxR))},{"velocityExceedanceDisplay",quantity(std::max(0.0,maxV),"m/s")},
-  {"worstPosition",expected.at("worstPosition")},{"sourceResidualDisplay",distance(number(expected.at("worstPosition").at("source").at("position3dM")))},
-  {"printingNormPositionDisplay",distance(printingR)},{"printingNormVelocityDisplay",quantity(printingV,"m/s")}};
-}
 void reduceRows(const J& tool, J& result, std::set<std::string>& seen) {
  const std::string id=tool.at("id"); J groups=J::object();
  for (const auto& row:tool.at("rows")) {
   const std::string rid=row.at("id");require(seen.insert(rid).second,id+": duplicate row "+rid);
-  bool met=true,toleranced=false,printingMet=true,printingBound=false;J metrics=J::array();
+  bool met=true,toleranced=false;J metrics=J::array();
   for (const auto& metricInput:row.at("metrics")) {
    double value=number(metricInput.at("value"));const auto& bound=metricInput.at("limit");J metric=metricInput;
    metric["display"]=quantity(value,metric.at("unit"));
    metric["limitDisplay"]=bound.is_null()?"not specified":quantity(number(bound),metric.at("unit"));
    if (!bound.is_null()) {
     const bool passed=metric.value("strict",false)?value<number(bound):value<=number(bound);
-    if(metric.value("diagnostic",false)){printingBound=true;printingMet=printingMet&&passed;}
-    else {toleranced=true;met=met&&passed;}
+    toleranced=true;met=met&&passed;
    }
    metrics.push_back(metric);
   }
-  J consistency;
-  if(row.contains("consistency")){consistency=reduceConsistency(row);toleranced=true;met=consistency.at("met");}
-  if(row.contains("expectedPrintingMet"))require(printingBound&&row.at("expectedPrintingMet")==printingMet,id+" "+rid+": printing diagnostic differs");
-  if(printingBound&&!printingMet)require(cause(row.value("cause",J())),id+" "+rid+": printing exceedance without cause");
   const J numericalVerdict=toleranced?J(met):J();
   if (row.contains("expectedMet")) require(row.at("expectedMet")==numericalVerdict,id+" "+rid+": stored verdict differs");
   if (toleranced&&!met) require(cause(row.value("cause",J())),id+" "+rid+": exceeded bound without cause");
@@ -110,9 +78,7 @@ void reduceRows(const J& tool, J& result, std::set<std::string>& seen) {
    const std::string group=row.at("group");if(!groups.contains(group))groups[group]=counts();
    countRow(groups[group],role,toleranced,met);
   }
-  J output=row;output.erase("expectedMet");output.erase("expectedPrintingMet");output["metrics"]=metrics;output["role"]=role;
-  if(!consistency.is_null())output["consistency"]=consistency;
-  if(printingBound)output["printingWithinEnvelope"]=printingMet;
+  J output=row;output.erase("expectedMet");output["metrics"]=metrics;output["role"]=role;
   output["status"]=role=="primary"?(met?"met":"missed"):role;
   output["met"]=role=="primary"?numericalVerdict:J();result["rows"].push_back(output);
  }

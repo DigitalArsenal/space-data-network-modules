@@ -534,13 +534,13 @@ The GMAT diagnostic inputs are the provisioned local reports under
 `/Users/tj/software/tools/xval/gmat-work/{anomalous-oxygen,variants}`;
 this refresh step does not run or fetch an external reference engine.
 
-## SGP4: Vallado's verification set
+## SGP4 against its STR#3 base
 
-Vallado's `SGP4-VER.TLE` and `tcppver.out` define the mean elements, UTC
-sample times and TEME states. The evidence separates native-source arithmetic,
-operation mode, compiler flags, OMM conversion and single-JD request rounding.
-[Verification sets](../../sgp4/README.md#verification-sets) gives generated
-numbers and links to the authenticated inputs and replay check.
+The SGP4 module is built on `foundation/sgp4-str3`. Every state it returns is held to the base,
+compiled natively without `-ffast-math`, for the seven SGP4-VER element sets, the module's own
+test sets and four more regimes, from a day before epoch to ten days after.
+[Verification sets](../../sgp4/README.md#verification-sets) gives generated numbers and links to
+the evidence and its replay.
 
 SGP4-XP is checked for exact agreement with the Space Force library's own
 runtime. Its theory has no independent public reference outside that library;
@@ -587,7 +587,7 @@ runtime. Its theory has no independent public reference outside that library;
 
 *Maximum hourly 3D position differences at the suite setting; Orekit finest is separate. Drag adjustments: [GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic](../tests/evidence/gmat/anomalous-oxygen.json); [Nyx: Published NRLMSISE-00 formulas + WGS84 shape](../tests/evidence/nyx/drag-settings-diagnostic.json); [Basilisk: WGS84 coordinates + native gtd7d density](../tests/evidence/basilisk/summary-basilisk-2.12.0.json#/diagnostics/wgs84-gtd7d). Limits: [shared protocol](../tests/evidence/cases/ffm-reference-cases.json), with GMAT limits applying only to GMAT.*
 
-Evidence: [Orekit](../tests/evidence/orekit/), [GMAT R2026a](../tests/evidence/gmat/), [GMAT R2022a](../tests/evidence/gmat/), [Nyx](../tests/evidence/nyx/), [tudatpy](../tests/evidence/tudat/), [Tudat WASM](../tests/evidence/tudat/), [Basilisk](../tests/evidence/basilisk/), [ERFA/SPICE](../tests/evidence/erfa-spice/), [Horizons](../tests/evidence/horizons/), [Vallado](../../sgp4/tests/evidence/vallado/), [SGP4-XP](../../sgp4/tests/evidence/xp/), [consolidated report](../tests/evidence/CONSOLIDATED.md).
+Evidence: [Orekit](../tests/evidence/orekit/), [GMAT R2026a](../tests/evidence/gmat/), [GMAT R2022a](../tests/evidence/gmat/), [Nyx](../tests/evidence/nyx/), [tudatpy](../tests/evidence/tudat/), [Tudat WASM](../tests/evidence/tudat/), [Basilisk](../tests/evidence/basilisk/), [ERFA/SPICE](../tests/evidence/erfa-spice/), [Horizons](../tests/evidence/horizons/), [SGP4 against its STR#3 base](../../sgp4/tests/evidence/str3/), [SGP4-XP](../../sgp4/tests/evidence/xp/), [consolidated report](../tests/evidence/CONSOLIDATED.md).
 
 From the repository root:
 

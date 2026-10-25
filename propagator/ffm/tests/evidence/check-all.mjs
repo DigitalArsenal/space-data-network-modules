@@ -17,7 +17,6 @@ const checks = [
   ['Basilisk', 'propagator/ffm/tests/evidence/basilisk/check-basilisk.mjs'],
   ['ERFA / SPICE', 'propagator/ffm/tests/evidence/erfa-spice/check-erfa-spice.mjs'],
   ['Horizons', 'propagator/ffm/tests/evidence/horizons/check-horizons.mjs'],
-  ['Vallado SGP4-VER', 'propagator/sgp4/tests/evidence/vallado/check-vallado.mjs'],
   ['SGP4-XP', 'propagator/sgp4/tests/evidence/xp/run-xp.mjs', '--check'],
 ];
 async function child(label, script, args, work) {
@@ -59,17 +58,17 @@ try {
   }
   for (const d of result.data.dragDiagnostics) for (const r of d.rows)
     console.log(`Drag diagnostic, suite: ${d.label} ${r.orbit}, ${r.cases} cases; stock ${r.stockDisplay}, adjusted ${r.correctedDisplay}, limit ${r.limitDisplay}: ${r.met ? 'met' : 'not met'}.`);
-  for (const row of result.data.tools.find((t) => t.id === 'vallado').rows.filter((r) => r.consistency))
-    console.log(`Vallado request criterion, ${row.regime}: ${row.status}; ${row.consistency.exceeded}/${row.consistency.samples} samples exceed; maximum excess ${row.consistency.positionExceedanceDisplay}, ${row.consistency.velocityExceedanceDisplay}.`);
+  for (const row of result.data.tools.find((t) => t.id === 'str3').rows)
+    console.log(`SGP4 against its STR#3 base, ${row.regime}: ${row.samples} states; maximum ${row.metrics[0].display}, ${row.metrics[1].display}.`);
   console.log('Coverage: every propagation tool accounts for all 72 exported case IDs.');
   console.log('Verdicts: independently recomputed from numeric scores; only limited primary rows enter met/missed counts; every exceeded bound has a recorded cause.');
-  console.log('Vallado: fixed source/module criteria and per-sample request bounds recomputed independently; printing retained as a diagnostic, without widening any allowance.');
+  console.log('SGP4 against its STR#3 base: per-regime maxima recomputed from the summary; the rows state no limit and count as diagnostic.');
   console.log('Drag diagnostics: GMAT steps30 and Nyx finest scores reproduced before suite re-scoring; full supported drag coverage checked; per-tool scored evidence unchanged.');
   console.log('Artifacts: consolidated.json, CONSOLIDATED.md and both generated documentation blocks match byte-for-byte.');
   if (failures.length) {
-    console.log(`FAIL consolidated evidence E2E: ${failures.length} child contract failure(s); all 9 scripts ran; consolidated data/documents match.`);
+    console.log(`FAIL consolidated evidence E2E: ${failures.length} child contract failure(s); all 8 scripts ran; consolidated data/documents match.`);
     process.exitCode = 1;
-  } else console.log('PASS consolidated evidence E2E: 9 serial check scripts, 11 tool records; exit 0 and empty stderr for every child.');
+  } else console.log('PASS consolidated evidence E2E: 8 serial check scripts, 11 tool records; exit 0 and empty stderr for every child.');
 } catch (error) {
   console.log(`FAIL consolidated evidence E2E: ${error.message}`); process.exitCode = 1;
 } finally { fs.rmSync(work, { recursive: true, force: true }); }

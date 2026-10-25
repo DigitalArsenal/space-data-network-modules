@@ -39,7 +39,6 @@
     "analysis/conjunction-assessment/src/cpp/src/pc_*.cpp",
     "analysis/conjunction-assessment/src/cpp/include/conjunction/conjunction_engine.h",
     "analysis/conjunction-assessment/src/cpp/include/conjunction/pc_method.h",
-    "propagator/sgp4/tests/evidence/vallado/check-vallado.mjs",
     "analysis/launch-ascent/dist/**",
     "analysis/reentry/dist/**",
     "analysis/conjunction-assessment/README.md"
