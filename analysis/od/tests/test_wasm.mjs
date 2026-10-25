@@ -570,9 +570,13 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     assert.ok(result.EPOCH.startsWith("2026-03-10T20:16:42"));
     // Fitted from the MEME states rotated EME2000 -> TEME, with the module's
     // build (build-wasi.mjs: units compiled apart, no -ffast-math) and the SGP4
-    // base foundation/sgp4-str3. The fixture barely determines BSTAR, so its
-    // mean motion follows the build's rounding.
-    assert.ok(Math.abs(result.MEAN_MOTION - 15.08815177) < 1e-8);
+    // base foundation/sgp4-str3. Three states a minute apart barely determine
+    // the set: the fit stops at its iteration cap, and where it stops follows
+    // the last bits of the step arithmetic. Scored against the 72-h ephemeris
+    // the states come from (src/cpp/tests/data/test_meme.txt), this set and the
+    // previous one (15.08815177) predict alike: 98.95 m and 98.91 m RMS over the
+    // first hour, 4109.2 km and 4110.6 km over the first day.
+    assert.ok(Math.abs(result.MEAN_MOTION - 15.08815183) < 1e-8);
     assert.ok(Math.abs(result.ECCENTRICITY - 0.0001660) < 1e-7);
     assert.ok(Math.abs(result.INCLINATION - 53.2150) < 1e-4);
     assert.ok(Number.parseFloat(result.RMS) <= 0.001);
