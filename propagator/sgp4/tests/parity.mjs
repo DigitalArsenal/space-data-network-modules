@@ -68,6 +68,10 @@ const cases = [
   // A multi-record `$REC` shares one vtable among its CAT tables.
   { id: "upsert-cat-rec-shared-vtable", request: invoke("upsert_cat",
     [rec(encodeRecWithCat(...[1, 2, 3].map((k) => encodeCatPayload({ noradId: 99000 + k, objectName: `CAT REC ${k}`, objectId: "2024-001A" }))))]) },
+  // The provider's own SATCAT frames (size-prefixed, each finished behind its
+  // prefix): 97 records the SpaceAware console read over SDN on 2026-10-24.
+  { id: "upsert-cat-provider-size-prefixed-stream", request: invoke("upsert_cat",
+    [cat(fs.readFileSync(new URL("./fixtures/celestrak-satcat-csv-97.cat", import.meta.url)))]) },
   { id: "refuse-handle-mismatch", request: invoke("propagate_state",
     [request(encodePropagatorBatchRequest({ epoch: 2460310.75, entityHandles: [0], catalogNumbers: [99002] })), omm([encodeOmmPayload(), encodeOmmPayload(SYNTHETIC_SSO)])], 1) },
   { id: "refuse-unknown-object", request: invoke("propagate_ephemeris",
@@ -75,7 +79,10 @@ const cases = [
 ];
 
 const plan = await normalizeParityFixture({ name: "propagator/sgp4", threadEnvVar: "SDM_WORKER_COUNT", threadCounts: [1], cases });
-const report = await runParityHarness({ wasmPath, plan, timeoutMs: 120000, log: console.log });
+// SDM_PARITY_LANES narrows the lanes (comma-separated SDK lane names), for a
+// box without Docker; the report names the lanes that ran.
+const lanes = process.env.SDM_PARITY_LANES?.split(",").filter(Boolean);
+const report = await runParityHarness({ wasmPath, plan, lanes, timeoutMs: 120000, log: console.log });
 console.log(formatParityReport(report));
 const summary = { ...report, wasmPath: "dist/isomorphic/module.wasm" };
 fs.mkdirSync(new URL("../conformance/", import.meta.url), { recursive: true });
