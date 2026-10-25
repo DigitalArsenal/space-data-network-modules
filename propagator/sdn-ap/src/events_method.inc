@@ -400,9 +400,15 @@ struct Scan {
   double lambda = 0.0, t_b = 0.0, dv[3] = {0, 0, 0}, cov[9] = {};
   double t_lo = 0.0, t_hi = 0.0;  ///< the epochs (min) whose Lambda is within 3.84 of the best (the 95 % profile interval)
   double fdiag[3] = {0, 0, 0};    ///< the profiled information's diagonal (U, V, W; (km/s)^-2): the floor sqrt(threshold / F_cc)
-  /// the detection statistic: the largest over the candidates of Lambda against the burn-free fit itself (the form whose
-  /// false-alarm rate is calibrated: THRESHOLD 20 for 1 per object-year, MANEUVER_DETECTION); the epoch and Delta v
-  /// are the profile's (`lambda`, `t_b`, `dv`)
+  /// the largest over the candidates of Lambda against the burn-free fit itself (the form whose false-alarm rate is
+  /// calibrated on burn-free arcs: THRESHOLD 20 for 1 per object-year, MANEUVER_DETECTION)
+  double detect_fit = 0.0;
+  /// the detection statistic: the smaller of `detect_fit` and the largest profiled Lambda (`lambda`): both must pass the
+  /// threshold. The burn-free-fit form holds the epoch elements at a fit that minimizes position residuals, not the
+  /// element-metric residuals the test weights, and the mismatch grows as the arc holds fewer revolutions (an
+  /// IGSO or geostationary 72 h arc has three): on QZSS windows it read 77 to 165 where the profile, which
+  /// re-estimates the epoch elements and B_eff with and without the burn, read 5 to 12. The epoch and Delta v are the
+  /// profile's (`lambda`, `t_b`, `dv`)
   double detect = 0.0;
 };
 
@@ -717,7 +723,8 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
     detect = std::fmax(detect, c.detect);
     if (c.lambda > best.lambda) best = c;
   }
-  best.detect = detect;
+  best.detect_fit = detect;
+  best.detect = std::fmin(detect, best.lambda);
   // the evidence for the epoch: the run of candidates around the best within 3.84 of its Lambda (chi^2_1, 95 %)
   if (best.index > 0) {
     int a = best.index, z = best.index;
@@ -739,6 +746,7 @@ inline bool glr(const ElementRow& row, const std::vector<double>& t, const std::
           c.t_lo = best.t_lo;
           c.t_hi = best.t_hi;
           c.detect = best.detect;
+          c.detect_fit = best.detect_fit;
           best = c;
         }
       }
@@ -973,8 +981,8 @@ extern "C" int detect_maneuvers(void) {
         double floor_mm[3];
         for (int c = 0; c < 3; ++c) floor_mm[c] = scan.fdiag[c] > 0.0 ? 1e6 * std::sqrt(glr_threshold() / scan.fdiag[c]) : 0.0;
         std::snprintf(comment, sizeof comment,
-                      "SDN-AP set, no maneuver detected (six-element GLR, DESIGN 5.1.4: largest Lambda %.2f against %.1f; the profile over the epoch elements and B_eff peaks at %.2f at %.1f min, its floor there U %.1f, V %.1f, W %.1f mm/s; fit RMS %.6f km)",
-                      scan.detect, glr_threshold(), scan.lambda, scan.t_b, floor_mm[0], floor_mm[1], floor_mm[2], fr_all.rms_km);
+                      "SDN-AP set, no maneuver detected (six-element GLR, DESIGN 5.1.4: largest Lambda %.2f against %.1f, the smaller of the burn-free-fit form %.2f and the profile over the epoch elements and B_eff, which peaks at %.2f at %.1f min, its floor there U %.1f, V %.1f, W %.1f mm/s; fit RMS %.6f km)",
+                      scan.detect, glr_threshold(), scan.detect_fit, scan.lambda, scan.t_b, floor_mm[0], floor_mm[1], floor_mm[2], fr_all.rms_km);
         flatbuffers::FlatBufferBuilder tb(256);
         const auto c = tb.CreateString("EARTH");
         OMMBuilder ob(tb);

@@ -1,0 +1,492 @@
+{
+ "task": "modules-sdn-ap-maneuver-detector-qzss-20261025",
+ "method": "detect_maneuvers",
+ "plan": "orbit-accuracy-experiments experiments/sdn-gp-starlink-ffm-match (frozen), sources m24, m24a, m24b, m24c, m24p, m27, m27bp, scored by lib/events-tables.mjs on the rows of each build",
+ "threshold": {
+  "value": 20.0,
+  "note": "unchanged (MANEUVER_DETECTION.THRESHOLD default); one value for every orbit"
+ },
+ "builds": {
+  "before": {
+   "wasmSha256Prefix": "5e2cf5255180",
+   "source": "modules main 422d0d5d"
+  },
+  "after": {
+   "wasmSha256Prefix": "5c9f4ab89cde",
+   "source": "this change, built with the default threshold lowered to 6 so that rows below 20 are kept; the table is read at 20"
+  }
+ },
+ "statistic": {
+  "before": "Lambda against the burn-free fit (the epoch elements held at the position fit)",
+  "after": "the smaller of that form and the profiled Lambda (epoch elements and B_eff re-estimated with and without the burn); both must pass the threshold"
+ },
+ "cause": {
+  "finding": "The burn-free-fit form holds the epoch elements at a fit that minimizes position residuals while the test weights element residuals; the mismatch is read as a burn, and it grows as the arc holds fewer revolutions. On QZSS 72 h windows it read a median 47 (maximum 173) in 789 of 989 windows; the profiled Lambda, which re-estimates the nuisance, read under 6 in 744 of those and at most 14.8 in the rest.",
+  "qzssWindowsWithFitFormAtLeast20": 789,
+  "ofThose_minLambdaUnder6": 744,
+  "ofThose_minLambda6to14.8": 45,
+  "ofThose_minLambdaAtLeast20": 0,
+  "gpsWindowsWithFitFormAtLeast20": 41,
+  "gpsOfThose_minLambdaAtLeast20": 3,
+  "ruledOut": "SRP: burn-free FFM-1 arcs with SRP area-to-mass 0, 0.005, 0.02 and 0.05 m^2/kg give the same fit-form Lambda on geostationary and IGSO arcs (31.8 to 91.8 against 33.6 to 91.8 with SRP)."
+ },
+ "ffm1BurnFreeArcs": {
+  "note": "72 h at 300 s, EGM2008 70 x 70, Sun, Moon, planets, SRP, no drag; ten arcs per orbit; test/events.e2e.mjs",
+  "GEO": {
+   "detections": 0,
+   "lambda": [
+    0.7,
+    0.6,
+    0.7,
+    0.6,
+    0.7,
+    0.7,
+    0.7,
+    0.6,
+    0.6,
+    0.9
+   ],
+   "burnFreeFitForm": [
+    4.4,
+    28.4,
+    51.9,
+    40.3,
+    85.2,
+    85.2,
+    3.2,
+    5.4,
+    113.5,
+    178.0
+   ]
+  },
+  "IGSO": {
+   "detections": 0,
+   "lambda": [
+    1.9,
+    2.5,
+    2.9,
+    2.1,
+    1.7,
+    1.2,
+    2.8,
+    1.9,
+    3.0,
+    2.1
+   ],
+   "burnFreeFitForm": [
+    51.4,
+    5.2,
+    55.8,
+    63.8,
+    26.9,
+    27.3,
+    3.1,
+    60.7,
+    5.0,
+    40.2
+   ]
+  },
+  "GPS": {
+   "detections": 0,
+   "lambda": [
+    3.4,
+    4.5,
+    6.1,
+    3.2,
+    6.5,
+    3.7,
+    6.1,
+    5.9,
+    5.1,
+    4.9
+   ],
+   "burnFreeFitForm": [
+    11.0,
+    9.8,
+    8.9,
+    7.2,
+    12.5,
+    13.6,
+    8.1,
+    8.4,
+    8.2,
+    6.2
+   ]
+  }
+ },
+ "ffm1Burns": {
+  "GEO V 10 mm/s": {
+   "lambda": 258.1,
+   "epochMin": 9.8,
+   "dvOnAxisErrorPct": 0.3
+  },
+  "GEO W 10 mm/s": {
+   "lambda": 66.8,
+   "epochMin": -10.0,
+   "dvOnAxisErrorPct": 4.8
+  },
+  "IGSO V 10 mm/s": {
+   "lambda": 259.4,
+   "epochMin": -47.2,
+   "dvOnAxisErrorPct": 1.3
+  },
+  "IGSO W 10 mm/s (earlier run; the test now plants 20 mm/s)": {
+   "lambda": 24.2,
+   "epochMin": -40.9,
+   "dvOnAxisErrorPct": 11.0
+  },
+  "GPS V 100 mm/s": {
+   "lambda": 250.1,
+   "epochMin": -3.9,
+   "dvOnAxisErrorPct": 0.0
+  }
+ },
+ "scored": {
+  "issArchive": {
+   "before": {
+    "preBurnWindows": 99,
+    "preBurnHits": 97,
+    "preBurnWrongEpoch": 2,
+    "preBurnNone": 0,
+    "postBurnWindows": 6,
+    "postBurnHits": 6,
+    "burnFreeWindows": 650,
+    "burnFreeWindowsWithDetection": 7,
+    "burnFreeObjectYears": 4.369,
+    "falseAlarmsPerObjectYear": 1.37,
+    "epochErrorMin": {
+     "median": 5.62,
+     "p10": -0.15,
+     "p90": 10.2,
+     "maxAbs": 16.17
+    },
+    "dvRatio": {
+     "median": 1.011,
+     "p10": 0.971,
+     "p90": 1.157
+    }
+   },
+   "after": {
+    "preBurnWindows": 99,
+    "preBurnHits": 97,
+    "preBurnWrongEpoch": 2,
+    "preBurnNone": 0,
+    "postBurnWindows": 6,
+    "postBurnHits": 6,
+    "burnFreeWindows": 650,
+    "burnFreeWindowsWithDetection": 7,
+    "burnFreeObjectYears": 4.369,
+    "falseAlarmsPerObjectYear": 1.37,
+    "epochErrorMin": {
+     "median": 5.62,
+     "p10": -0.15,
+     "p90": 10.2,
+     "maxAbs": 16.17
+    },
+    "dvRatio": {
+     "median": 1.011,
+     "p10": 0.971,
+     "p90": 1.157
+    }
+   }
+  },
+  "issOemCapturesBurnFree": {
+   "windows": 26,
+   "before": 0,
+   "after": 0
+  },
+  "starlinkFfm1BurnFreeArcs": {
+   "windows": 96,
+   "before": 4,
+   "after": 2
+  },
+  "plantedImpulseArcs_m24p": {
+   "before": {
+    "ctl": {
+     "arcs": 48,
+     "hits": 0
+    },
+    "imp-V-0.1": {
+     "arcs": 48,
+     "hits": 11
+    },
+    "imp-V-1": {
+     "arcs": 48,
+     "hits": 48
+    },
+    "imp-V-10": {
+     "arcs": 48,
+     "hits": 48
+    },
+    "imp-U-1": {
+     "arcs": 48,
+     "hits": 48
+    },
+    "imp-W-1": {
+     "arcs": 48,
+     "hits": 48
+    }
+   },
+   "after": {
+    "ctl": {
+     "arcs": 48,
+     "hits": 0
+    },
+    "imp-V-0.1": {
+     "arcs": 48,
+     "hits": 12
+    },
+    "imp-V-1": {
+     "arcs": 48,
+     "hits": 48
+    },
+    "imp-V-10": {
+     "arcs": 48,
+     "hits": 48
+    },
+    "imp-U-1": {
+     "arcs": 48,
+     "hits": 48
+    },
+    "imp-W-1": {
+     "arcs": 48,
+     "hits": 48
+    }
+   }
+  },
+  "diagnosticIssWindows_m24b": {
+   "before": {
+    "sub-before": {
+     "scored": 96,
+     "hits": 0,
+     "windowsWithDetection": 1
+    },
+    "sub-across": {
+     "scored": 96,
+     "hits": 95,
+     "windowsWithDetection": 96
+    },
+    "sub-after": {
+     "scored": 96,
+     "hits": 0,
+     "windowsWithDetection": 0
+    },
+    "sub-tight": {
+     "scored": 96,
+     "hits": 96,
+     "windowsWithDetection": 96
+    },
+    "sub-p6": {
+     "scored": 96,
+     "hits": 95,
+     "windowsWithDetection": 96
+    },
+    "sub-p8": {
+     "scored": 96,
+     "hits": 96,
+     "windowsWithDetection": 96
+    },
+    "sub-p24": {
+     "scored": 93,
+     "hits": 90,
+     "windowsWithDetection": 93
+    }
+   },
+   "after": {
+    "sub-before": {
+     "scored": 96,
+     "hits": 0,
+     "windowsWithDetection": 1
+    },
+    "sub-across": {
+     "scored": 96,
+     "hits": 95,
+     "windowsWithDetection": 96
+    },
+    "sub-after": {
+     "scored": 96,
+     "hits": 0,
+     "windowsWithDetection": 0
+    },
+    "sub-tight": {
+     "scored": 96,
+     "hits": 96,
+     "windowsWithDetection": 96
+    },
+    "sub-p6": {
+     "scored": 96,
+     "hits": 95,
+     "windowsWithDetection": 96
+    },
+    "sub-p8": {
+     "scored": 96,
+     "hits": 96,
+     "windowsWithDetection": 96
+    },
+    "sub-p24": {
+     "scored": 93,
+     "hits": 90,
+     "windowsWithDetection": 92
+    }
+   }
+  },
+  "plantedImpulsesAcrossAHole_m27bp": {
+   "before": {
+    "ctl": {
+     "arcs": 48,
+     "detected": 2,
+     "located": 1
+    },
+    "imp-V-0.1": {
+     "arcs": 48,
+     "detected": 48,
+     "located": 48
+    },
+    "imp-V-1": {
+     "arcs": 48,
+     "detected": 48,
+     "located": 47
+    },
+    "imp-V-10": {
+     "arcs": 48,
+     "detected": 48,
+     "located": 47
+    },
+    "imp-U-1": {
+     "arcs": 48,
+     "detected": 31,
+     "located": 31
+    },
+    "imp-W-1": {
+     "arcs": 48,
+     "detected": 30,
+     "located": 30
+    }
+   },
+   "after": {
+    "ctl": {
+     "arcs": 48,
+     "detected": 1,
+     "located": 1
+    },
+    "imp-V-0.1": {
+     "arcs": 48,
+     "detected": 48,
+     "located": 48
+    },
+    "imp-V-1": {
+     "arcs": 48,
+     "detected": 48,
+     "located": 47
+    },
+    "imp-V-10": {
+     "arcs": 48,
+     "detected": 48,
+     "located": 47
+    },
+    "imp-U-1": {
+     "arcs": 48,
+     "detected": 31,
+     "located": 31
+    },
+    "imp-W-1": {
+     "arcs": 48,
+     "detected": 24,
+     "located": 24
+    }
+   }
+  },
+  "gps": {
+   "before": {
+    "windowsAnswered": 7923,
+    "windowsWithDetection": 41,
+    "distinctDetections": 38,
+    "falseAlarms": 37,
+    "objectYears": 22.17,
+    "falseAlarmsPerObjectYear": 1.67,
+    "outagesInNotices": 24,
+    "scoreableOutages": 1,
+    "detectedInForecastWindow": 1,
+    "outagesWithActualInterval": 1,
+    "detectedInActualInterval": 1,
+    "expectedInActualIntervalAtOffNoticeRate": 0.0
+   },
+   "after": {
+    "windowsAnswered": 7923,
+    "windowsWithDetection": 3,
+    "distinctDetections": 1,
+    "falseAlarms": 0,
+    "objectYears": 22.17,
+    "falseAlarmsPerObjectYear": 0.0,
+    "outagesInNotices": 24,
+    "scoreableOutages": 1,
+    "detectedInForecastWindow": 1,
+    "outagesWithActualInterval": 1,
+    "detectedInActualInterval": 1,
+    "expectedInActualIntervalAtOffNoticeRate": 0
+   }
+  },
+  "qzss": {
+   "before": {
+    "windowsAnswered": 989,
+    "windowsWithDetection": 789,
+    "distinctDetections": 721,
+    "falseAlarms": 691,
+    "objectYears": 2.87,
+    "falseAlarmsPerObjectYear": 241.06,
+    "outagesInNotices": 33,
+    "scoreableOutages": 13,
+    "detectedInForecastWindow": 13,
+    "outagesWithActualInterval": 13,
+    "detectedInActualInterval": 0,
+    "expectedInActualIntervalAtOffNoticeRate": 10.09
+   },
+   "after": {
+    "windowsAnswered": 989,
+    "windowsWithDetection": 0,
+    "distinctDetections": 0,
+    "falseAlarms": 0,
+    "objectYears": 2.87,
+    "falseAlarmsPerObjectYear": 0.0,
+    "outagesInNotices": 33,
+    "scoreableOutages": 13,
+    "detectedInForecastWindow": 0,
+    "outagesWithActualInterval": 13,
+    "detectedInActualInterval": 0,
+    "expectedInActualIntervalAtOffNoticeRate": 0
+   }
+  }
+ },
+ "qzssHoleScan": {
+  "note": "detect_maneuvers on the QZSS series across every hole of 3 h to 3 days with up to 36 h of states each side (a scan not in the frozen plan; read at Lambda 20). The geostationary satellite J003 (QZS-2G) loses 0.08 to 0.125 degrees of inclination (4.1 to 6.7 m/s) across the 2-day holes at the north-south maneuvers, and J004 loses 13 km of semi-major axis (0.47 m/s) across one: the maneuvers of the large outages lie in the data holes, not in the windows the plan scores. The arc fits across such a hole are 7 to 92 km in RMS and the linearization of the test does not hold there.",
+  "before": {
+   "holes": 23,
+   "skipped": 0,
+   "holesWithAnOutage": 16,
+   "outageHolesDetected": 2,
+   "plainHolesDetected": 4,
+   "plainHoles": 7
+  },
+  "after": {
+   "holes": 23,
+   "skipped": 0,
+   "holesWithAnOutage": 16,
+   "outageHolesDetected": 1,
+   "plainHolesDetected": 0,
+   "plainHoles": 7
+  }
+ },
+ "qzssOutageWindows": {
+  "windowsOverlappingAnActualInterval": 32,
+  "outages": 16,
+  "profiledLambda": {
+   "min": 1.86,
+   "max": 9.58
+  },
+  "burnFreeFitForm": {
+   "min": 6.87,
+   "max": 168.59
+  },
+  "reading": "No window that overlaps an actual outage interval shows a step: the profiled Lambda is 1.9 to 9.6 there, below the threshold 20, while the burn-free-fit form reads 6.9 to 169 in the same windows and in the windows without an outage alike."
+ }
+}
