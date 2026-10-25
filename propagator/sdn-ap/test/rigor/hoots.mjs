@@ -2,10 +2,10 @@
 // its edges, as the reference does?
 import { THEORY } from "../lib/module.mjs";
 import { elementsOf, tleLines } from "../lib/tle.mjs";
-import { againstReference, days, defineCheck, moduleStates, REVIEWERS, verdict } from "./lib/rigor.mjs";
+import { againstReference, days, defineCheck, hypot3, moduleStates, REVIEWERS, verdict } from "./lib/rigor.mjs";
 
 const LIMIT_M = 1;  // the conformance acceptance per sample (test/conformance.e2e.mjs; paper 12.1)
-const set = (name, fields, minutes) => ({ name, lines: tleLines({ year: 26, day: 290.25, rev: 0, argp: 0, ma: 0, raan: 0, ...fields }), minutes });
+const set = (name, fields, minutes) => ({ name, fields, lines: tleLines({ year: 26, day: 290.25, rev: 0, argp: 0, ma: 0, raan: 0, ...fields }), minutes });
 const both = (name, fields, minutes, low = false) => [
   set(`${name}/SGP4`, { ...fields, type: 0, bstar: low ? 1e-4 : 1e-6 }, minutes),
   set(`${name}/SGP4XP`, { ...fields, type: 4, bterm: low ? 0.01 : 0.002, agom: 0.01 }, minutes),
@@ -28,15 +28,50 @@ export const checks = [
   }),
   defineCheck({
     id: "hoots-singular-geometry", reviewer: REVIEWERS.HOOTS, tier: "fast", timeoutSec: 30,
-    question: "At the singular and critical geometries (e = 0, e at the 1e-4 drag rule, i = 0 and 180 deg, the critical inclination 63.4349 deg and its retrograde twin), does the module give the reference's states, and refuse where it refuses?",
+    question: "At the singular and critical geometries (e = 0, e at the 1e-4 drag rule, i = 0, 178, 179.9999 and 180 deg, the critical inclination 63.4349 deg and its retrograde twin), does the module give the reference's states, and refuse where it refuses; and where the reference gives no answer at an exact edge, is the module's answer the limit of its own?",
     source: "STR#3 sec. 6 (1/(1-5 cos^2 i) and 1 + cos i divisors); AIAA 2006-6753 sec. VI.A, App. D; paper 1.1",
     async run(ctx) {
       const sets = [];
-      for (const ecc of [0, 0.00009, 0.0001, 0.00011, 0.01]) for (const inc of [0, 63.4349, 116.5651, 180]) {
+      for (const ecc of [0, 0.00009, 0.0001, 0.00011, 0.01]) for (const inc of [0, 63.4349, 116.5651, 178, 179.9999, 180]) {
         sets.push(...both(`LEO e=${ecc} i=${inc}`, { mm: 15.2, ecc, inc, argp: 45, ma: 10 }, WEEK, true));
         sets.push(...both(`GEO e=${ecc} i=${inc}`, { mm: 1.0027, ecc, inc, argp: 45, ma: 10 }, WEEK));
       }
-      return verdict(await againstReference(ctx, sets), LIMIT_M, "5 eccentricities x 4 inclinations, LEO and GEO, SGP4 and SGP4XP, 7 days");
+      const samples = await againstReference(ctx, sets);
+      // The exact edges. SGP4XP at exactly i = 0 or e = 0: the reference stops (error 2) from its first step past the
+      // epoch, or returns the origin; there the module's answer must be the limit of its answers: within
+      // 2 |r| (di + 2 de) + 1 m of its state at the next printable elements (i 0.0001 deg, e 1e-7).
+      // SGP4 at exactly i = 180 deg: the theory's own divisors vanish (near Earth XLCOF's 1 + cos i, held finite as
+      // AIAA 2006-6753 VI.A holds it; deep space the node terms' sin i = 1.2e-16), and the reference returns the
+      // origin near Earth: reported, not bounded.
+      const module = await ctx.module();
+      const DI = 0.0001, DE = 1e-7;
+      const xpEdge = (f) => f.type === 4 && (f.inc === 0 || f.ecc === 0);
+      const sgp4Edge = (f) => f.type === 0 && f.inc === 180;
+      const companions = sets.filter((x) => xpEdge(x.fields)).map((x) => ({ ...x,
+        lines: tleLines({ year: 26, day: 290.25, rev: 0, argp: 0, ma: 0, raan: 0, ...x.fields, inc: x.fields.inc === 0 ? DI : x.fields.inc, ecc: x.fields.ecc === 0 ? DE : x.fields.ecc }) }));
+      const near = new Map(companions.map((c, k) => [c.name, k]));
+      const nearStates = moduleStates(module, companions.map((c) => elementsOf(c.lines)), companions.map((c) => c.minutes));
+      const mine = new Map(sets.map((x, k) => [x.name, k]));
+      const own = moduleStates(module, sets.map((x) => elementsOf(x.lines)), sets.map((x) => x.minutes));
+      let continuous = 0, broken = 0, singular = 0, singularWorst = 0, singularModuleOnly = 0;
+      for (const x of samples) {
+        const f = x.set.fields;
+        if (sgp4Edge(f)) {
+          if (x.both) { singular += 1; singularWorst = Math.max(singularWorst, x.dr); }
+          if (x.onlyModule) singularModuleOnly += 1;
+          x.both = false; x.onlyModule = false; x.onlyReference = false;
+          continue;
+        }
+        if (!xpEdge(f) || !x.onlyModule) continue;
+        const j = x.set.minutes.indexOf(x.t);
+        const a = own[mine.get(x.set.name)][j], b = nearStates[near.get(x.set.name)][j];
+        const bound = 2 * Math.hypot(...a.r) * ((f.inc === 0 ? (DI * Math.PI) / 180 : 0) + (f.ecc === 0 ? 2 * DE : 0)) + 1e-3;
+        if (b.ok && hypot3(a.r, b.r) <= bound) { x.onlyModule = false; continuous += 1; } else broken += 1;
+      }
+      const r = verdict(samples, LIMIT_M, "5 eccentricities x 6 inclinations, LEO and GEO, SGP4 and SGP4XP, 7 days");
+      r.evidence.push(`SGP4XP at exactly i = 0 or e = 0 where the reference gives no answer: ${continuous} module states the limit of i = ${DI} deg / e = ${DE}, ${broken} not`);
+      r.evidence.push(`report only, SGP4 at exactly i = 180 deg (singular divisors): ${singular} samples both answer, up to ${(singularWorst / 1e3).toFixed(1)} km apart; ${singularModuleOnly} where only the module answers (the reference's origin)`);
+      return { pass: r.pass && broken === 0, evidence: r.evidence };
     },
   }),
   defineCheck({
@@ -56,6 +91,28 @@ export const checks = [
       out.forEach((states, k) => states.forEach((s) => { if (!s.ok) { refused += 1; refusedSets.add(rows[k].label); } else if ([...s.r, ...s.v].every(Number.isFinite)) good += 1; else bad += 1; }));
       return { pass: bad === 0 && good > 0, evidence: [`${rows.length} SDNAP sets x ${WEEK.length} times: ${good} finite states, ${refused} refused, ${bad} non-finite states reported good`,
         `refused (report only): ${[...refusedSets].join("; ") || "none"}`] };
+    },
+  }),
+  defineCheck({
+    id: "hoots-every-call-returns", reviewer: REVIEWERS.HOOTS, tier: "fast", timeoutSec: 60,
+    question: "Does every call return, for every theory, at the edges of the element domain (e = 0, 1e-4, 0.5, 0.95; i = 0, 90, 179.9999, 180 deg; LEO, 12 h and GEO; up to 7 days either way): a state or a refusal, never a hang and never a non-finite state reported good?",
+    source: "AIAA 2006-6753 App. D (a set is refused, not extrapolated); SPEC 1.5 (the equinoctial state for i < 180 deg); paper 1.1",
+    async run(ctx) {
+      const module = await ctx.module();
+      const rows = [];
+      for (const theory of [THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]) for (const ecc of [0, 0.0001, 0.5, 0.95]) for (const inc of [0, 90, 179.9999, 180]) for (const mm of [15.2, 2.006, 1.0027]) {
+        if (ecc >= 0.5 && mm > 3) continue;
+        const fields = { year: 26, day: 290.25, rev: 0, inc, raan: 30, ecc, argp: 45, ma: 10, mm };
+        rows.push({ ...elementsOf(tleLines(theory === THEORY.SGP4 ? { ...fields, type: 0, bstar: 1e-4 } : { ...fields, type: 4, bterm: 0.005, agom: 0.01 })), theory });
+      }
+      // SDNAP a day either way (its integration costs about 60 ms per object-day), the others a week
+      const timesOf = (row) => (row.theory === THEORY.SDNAP ? [-1440, 0, 720, 1440] : [-10080, -1440, 0, 720, 1440, 10080]);
+      const t0 = performance.now();
+      const out = moduleStates(module, rows, rows.map(timesOf));
+      const seconds = (performance.now() - t0) / 1e3;
+      let good = 0, refused = 0, bad = 0;
+      out.flat().forEach((s) => { if (!s.ok) refused += 1; else if ([...s.r, ...s.v].every(Number.isFinite)) good += 1; else bad += 1; });
+      return { pass: bad === 0, evidence: [`${rows.length} sets (SGP4, SGP4XP: 7 days either way; SDNAP: 1 day) x 4 to 6 times returned in ${seconds.toFixed(1)} s: ${good} finite states, ${refused} refused, ${bad} non-finite states reported good (a hang is a FAIL at the 60 s cap)`] };
     },
   }),
   defineCheck({

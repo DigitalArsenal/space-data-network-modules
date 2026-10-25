@@ -4,7 +4,7 @@
 independently signed Supplemental OMM OD node. Its SHA-256 is:
 
 ```text
-c0637f5e987f8674727094bb5c20396ec0b7d1debade9f54d6102c62d1968721
+b12c399ac48d3e8de42f11d1ba9b551fca95f10d2643dd1287098204afdbb29b
 ```
 
 `build-fit-core.sh` rebuilds it byte for byte. It takes this repository's
@@ -27,7 +27,7 @@ The build inputs:
 | Input | Version |
 | --- | --- |
 | wasi-sdk | 30.0 (clang 21.1.4, libc++ 21), `wasi-sdk-30.0-arm64-macos.tar.gz` from the WebAssembly/wasi-sdk GitHub release, SHA-256 `2c2ed99296857e60fd14c3f40fe226231f296409502491094704089c31a16740` as published |
-| `foundation/sgp4-str3` | tree `b55a681ac2dcc58449a0b90d6b61677138fa2d0b` |
+| `foundation/sgp4-str3` | tree `b944826dfad8d5e69a0b8c454b812eab23b76f35` |
 | Eigen | 5.0.1 (Homebrew, `SDN_OD_EIGEN_DIR`) |
 | FlatBuffers headers | main-packages `flatbuffers` `01c1c01e6c9cf3ac55ecfea42169e1ce3136a7de` (`SDN_FLATBUFFERS_INCLUDE`) |
 

@@ -6,6 +6,11 @@ EMSDK_VERSION="6.0.1"
 # shellcheck source=../../scripts/lib/emsdk-shared.sh
 . "$SCRIPT_DIR/../../scripts/lib/emsdk-shared.sh"
 EMSDK_DIR="$(sdn_emsdk_dir "$SCRIPT_DIR" "$EMSDK_VERSION")"
+# The pinned headers (scripts/toolchain.mjs, docs/BUILDING.md) unless named, and the SDS package the lockfile pins
+TOOLCHAIN="$SCRIPT_DIR/../../scripts/toolchain.mjs"
+export SDN_OD_EIGEN_DIR="${SDN_OD_EIGEN_DIR:-$(node "$TOOLCHAIN" path eigen)}"
+export SDN_FLATBUFFERS_INCLUDE_DIR="${SDN_FLATBUFFERS_INCLUDE_DIR:-$(node "$TOOLCHAIN" path flatbuffers)}"
+export SPACE_DATA_STANDARDS_ROOT="${SPACE_DATA_STANDARDS_ROOT:-$SCRIPT_DIR/node_modules/spacedatastandards.org}"
 SRC_DIR="$SCRIPT_DIR/src/cpp"
 BUILD_DIR="$SRC_DIR/build-isomorphic"
 DIST_DIR="$SCRIPT_DIR/dist"
@@ -113,7 +118,8 @@ build_browser() {
     rm -rf "$BUILD_DIR" "$BROWSER_DIST_DIR"
     mkdir -p "$BROWSER_DIST_DIR"
     echo "Configuring Emscripten build..."
-    emcmake cmake -S "$SRC_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+    emcmake cmake -S "$SRC_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_DISABLE_FIND_PACKAGE_Eigen3=ON -DEIGEN3_INCLUDE_DIR="$SDN_OD_EIGEN_DIR"
     echo ""
     echo "Building browser-compatible standalone (command) artifact..."
     cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"

@@ -17,8 +17,8 @@ const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json
 const toolchain=resolveWasiThreadsToolchain();
 if(toolchain.target!=='wasm32-wasip1-threads')throw new Error('OD requires the canonical WASI target');
 const build=path.join(root,'.build-operator');await fs.mkdir(build,{recursive:true});
-const eigen=process.env.SDN_OD_EIGEN_DIR;
-if(!eigen)throw new Error('Set SDN_OD_EIGEN_DIR to the Eigen headers directory');
+// Eigen: SDN_OD_EIGEN_DIR, else the pinned headers (scripts/toolchain.mjs, docs/BUILDING.md)
+const eigen=process.env.SDN_OD_EIGEN_DIR??(await import('../../scripts/toolchain.mjs')).resolve('eigen');
 try {
  for(const [name,content] of Object.entries({...await getFlatbuffersCppRuntimeHeaders(),...await getInvokeCppSchemaHeaders()})){
   const p=path.join(build,name);await fs.mkdir(path.dirname(p),{recursive:true});await fs.writeFile(p,content);

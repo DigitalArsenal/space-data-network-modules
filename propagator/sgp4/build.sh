@@ -126,7 +126,11 @@ ensure_sqlite_amalgamation() {
 ensure_emscripten
 ensure_sqlite_amalgamation
 
-node "$SCRIPT_DIR/generate-sds-headers.mjs"
+# The SDS headers are committed (src/cpp/generated/sds): the build compiles them as committed. Regenerating them from the
+# installed spacedatastandards.org is a deliberate standards bump: SDN_SGP4_REGENERATE_SDS=1, then commit the headers.
+if [ "${SDN_SGP4_REGENERATE_SDS:-0}" = "1" ]; then
+    node "$SCRIPT_DIR/generate-sds-headers.mjs"
+fi
 node "$SCRIPT_DIR/generate-local-headers.mjs"
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 node "$SCRIPT_DIR/generate-test-bindings.mjs"
@@ -135,6 +139,8 @@ rm -rf "$BUILD_DIR"
 rm -rf "$DIST_DIR"
 mkdir -p "$BROWSER_DIST_DIR" "$BROWSER_SHARED_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
 
+# The pinned flatbuffers headers (scripts/toolchain.mjs, docs/BUILDING.md) unless named
+export FLATBUFFERS_INCLUDE_DIR="${FLATBUFFERS_INCLUDE_DIR:-$(node "$SCRIPT_DIR/../../scripts/toolchain.mjs" path flatbuffers)}"
 echo "Configuring Emscripten build..."
 emcmake cmake \
     -S "$SRC_DIR" \

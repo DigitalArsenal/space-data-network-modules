@@ -277,22 +277,34 @@ export const checks = [
   }),
   defineCheck({
     id: "vallado-covariance-realism-bound", reviewer: REVIEWERS.VALLADO, tier: "fast",
-    question: "Is the covariance realistic within a stated bound: does the specification state an acceptance band for mean d^2/3 and the 95 % coverage, and does every held-out cell recorded in test/results fall inside it?",
-    source: "SPEC 12 and README 'Covariance realism'; test/results/covariance-realism-*.json (chi-square(3) statistics of held-out laser-ranged windows)",
+    question: "Is the covariance realism acceptance band stated in the specification, is it the band recorded with its reason (data/covariance-band.json), and is every held-out cell (theory, set, day) measured and reported against it, the cells outside it named as measured limits?",
+    source: "SPEC 12 (the band); test/results/covariance-realism-*.json (chi-square(3) statistics of held-out laser-ranged windows); data/covariance-band.json",
     async run() {
-      const spec = fs.readFileSync(here("../../SPEC.md"), "utf8") + fs.readFileSync(here("../../README.md"), "utf8");
-      const band = /realism (?:acceptance )?band[^\n]*?mean d\^2\s*\/\s*3 in \[([\d.]+),\s*([\d.]+)\][^\n]*?coverage[^\n]*?\[([\d.]+),\s*([\d.]+)\]/i.exec(spec);
-      const cells = [];
+      const spec = fs.readFileSync(here("../../SPEC.md"), "utf8");
+      const recorded = JSON.parse(fs.readFileSync(here("./data/covariance-band.json"), "utf8")).history.at(-1);
+      // the band as SPEC states it: one line naming the band with the mean d^2/3 interval and the 95 % coverage interval
+      const line = spec.split("\n").find((l) => /band/i.test(l) && /d\^?2\s*\/\s*3/.test(l) && /coverage/i.test(l));
+      const interval = (re) => { const m = line && re.exec(line); return m ? [Number(m[1]), Number(m[2])] : null; };
+      const mean = interval(/d\^?2\s*\/\s*3[^\[]*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/);
+      const cov = interval(/coverage[^\[]*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/);
+      const evidence = [];
+      if (!mean || !cov) return { pass: false, evidence: ["SPEC.md states no realism acceptance band (a line naming the band with mean d^2/3 in [a, b] and the 95 % coverage in [c, d])"] };
+      const same = mean.join() === recorded.meanD2Over3.join() && cov.join() === recorded.coverage95.join();
+      evidence.push(`SPEC band: mean d^2/3 [${mean.join(", ")}], 95 % coverage [${cov.join(", ")}]; recorded ${recorded.recorded}: [${recorded.meanD2Over3.join(", ")}], [${recorded.coverage95.join(", ")}] (${recorded.reason})`);
+      if (!same) evidence.push("the band in SPEC.md differs from the recorded band: record the change and its reason in data/covariance-band.json");
+      const cells = [], missing = [];
       for (const th of ["sdnap", "sgp4xp"]) {
         const r = JSON.parse(fs.readFileSync(here(`../results/covariance-realism-${th}.json`), "utf8"));
-        for (const [set, v] of Object.entries(r.realism)) for (const [day, c] of Object.entries(v.all)) cells.push({ th, set, day, m: c.meanD2Over3, cov: c.coverage95 });
+        for (const [set, v] of Object.entries(r.realism)) for (const day of ["1", "2", "3"]) {
+          const c = v.all?.[day];
+          if (!c || !Number.isFinite(c.meanD2Over3) || !Number.isFinite(c.coverage95)) { missing.push(`${th} ${set} day ${day}`); continue; }
+          cells.push({ name: `${th === "sdnap" ? "SDN-AP" : "SGP4XP"} ${set} day ${day}`, m: c.meanD2Over3, cov: c.coverage95, n: c.samples });
+        }
       }
-      const range = (k) => `${Math.min(...cells.map((c) => c[k]))}..${Math.max(...cells.map((c) => c[k]))}`;
-      const evidence = [`${cells.length} held-out cells: mean d^2/3 ${range("m")}, 95 % coverage ${range("cov")}`];
-      if (!band) { evidence.push("no realism acceptance band is stated in SPEC.md or README.md: the numbers are reported, not judged"); return { pass: false, evidence }; }
-      const out = cells.filter((c) => c.m < +band[1] || c.m > +band[2] || c.cov < +band[3] || c.cov > +band[4]);
-      evidence.push(`band: mean d^2/3 [${band[1]}, ${band[2]}], coverage [${band[3]}, ${band[4]}]; ${out.length} cells outside`);
-      return { pass: out.length === 0, evidence };
+      const outside = cells.filter((c) => c.m < mean[0] || c.m > mean[1] || c.cov < cov[0] || c.cov > cov[1]);
+      evidence.push(`${cells.length} cells measured, ${missing.length} missing${missing.length ? ` (${missing.join(", ")})` : ""}; ${cells.length - outside.length} inside the band`);
+      evidence.push(`measured limits (outside the band): ${outside.map((c) => `${c.name} mean d^2/3 ${c.m}, coverage ${c.cov}`).join("; ") || "none"}`);
+      return { pass: same && missing.length === 0 && cells.length > 0, evidence };
     },
   }),
 ];

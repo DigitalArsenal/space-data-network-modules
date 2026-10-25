@@ -60,7 +60,7 @@ const distRoot = path.join(nodeRoot, "dist");
 const manifestPath = path.join(nodeRoot, "plugin-manifest.json");
 const sourcePath = path.join(nodeRoot, "src/node.cpp");
 const fitCoreObject = path.join(nodeRoot, "vendor/od-fit-core.o");
-const fitCoreObjectSha256 = "c0637f5e987f8674727094bb5c20396ec0b7d1debade9f54d6102c62d1968721";
+const fitCoreObjectSha256 = "b12c399ac48d3e8de42f11d1ba9b551fca95f10d2643dd1287098204afdbb29b";
 const sdsHeaders = path.join(modulesRoot, "licensing/core/src/cpp/generated/sds");
 // The standards the manifests are validated against: SPACE_DATA_STANDARDS_ROOT, else the spacedatastandards.org package
 // this flow pins (package.json devDependencies).
@@ -74,7 +74,12 @@ async function run(command, args) {
   }
 }
 
-// The toolchain: wasi-sdk (WASI_SDK_PATH) unless the SDK's variables name one.
+// The toolchain: wasi-sdk (WASI_SDK_PATH) unless the SDK's variables name one; without either, the pinned
+// wasi-sdk 30 (scripts/toolchain.mjs, docs/BUILDING.md). The SDK's compile cache is off unless asked for: a replayed stub
+// compile stages none of the support headers the link below reads from the stub's temp directory.
+const toolchainPins = await import(new URL("../../../../scripts/toolchain.mjs", import.meta.url));
+if (!process.env.WASI_SDK_PATH && !process.env.SDN_WASI_CLANGXX) process.env.WASI_SDK_PATH = toolchainPins.resolve("wasi-sdk");
+process.env.SPACE_DATA_MODULE_SDK_COMPILE_CACHE ??= "0";
 if (process.env.WASI_SDK_PATH) {
   const sdk = path.resolve(process.env.WASI_SDK_PATH);
   const clangVersion = (await readdir(path.join(sdk, "lib/clang"))).sort().at(-1);

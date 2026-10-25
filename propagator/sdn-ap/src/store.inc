@@ -90,6 +90,17 @@ inline Elements elements_of(const ElementRow& row) {
   return e;
 }
 
+/// A row the ingest takes for any theory: every field a number and the inclination within [0, 180] deg (CCSDS
+/// 502.0-B-3). Any other row is held refused (init_error), never initialized or propagated.
+inline bool row_well_formed(const ElementRow& r) {
+  const double fields[] = {r.epoch_jd_whole, r.epoch_jd_frac, r.mean_motion_rev_day, r.eccentricity, r.inclination_deg,
+                           r.raan_deg, r.arg_pericenter_deg, r.mean_anomaly_deg, r.bstar, r.mean_motion_dot,
+                           r.mean_motion_ddot, r.bterm, r.agom, r.kappa, r.tau0, r.tauc, r.taus, r.arc_end_min, r.rho_arc};
+  for (const double v : fields)
+    if (!std::isfinite(v)) return false;
+  return r.inclination_deg >= 0.0 && r.inclination_deg <= 180.0;
+}
+
 /// Replaces the element set. Returns the number of rows held (refused sets
 /// are held too, flagged, so indices match the input rows), or -1 when memory
 /// is exhausted.
@@ -113,15 +124,27 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
   uint32_t resonant = 0;
   for (uint32_t i = 0; i < count; ++i) {
     const Elements e = elements_of(rows[i]);
+    const bool well_formed = row_well_formed(rows[i]);
     if (e.theory == kTheorySgp4Xp || e.theory == kTheorySdnAp) {
       st.kind[i] = 1;
       st.slot[i] = st.xp_count;
-      xpt::xp_init(e, st.xps[st.xp_count++]);
+      xpt::XpSat& x = st.xps[st.xp_count++];
+      if (well_formed) {
+        xpt::xp_init(e, x);
+      } else {
+        x = xpt::XpSat{};
+        x.init_error = kPropRefused;
+      }
     } else {
       st.kind[i] = 0;
       st.slot[i] = st.sat_count;
       Sat& s = st.sats[st.sat_count++];
-      sat_init(e, wgs72, s);
+      if (well_formed) {
+        sat_init(e, wgs72, s);
+      } else {
+        s = Sat{};
+        s.init_error = kPropRefused;
+      }
       if (s.init_error == 0 && s.deep.iresfl != 0) ++resonant;
     }
   }
