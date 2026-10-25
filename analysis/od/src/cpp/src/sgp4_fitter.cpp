@@ -759,18 +759,17 @@ static FitResult lm_fit_equinoctial(
 
         Eigen::VectorXd delta_p = J_aug.bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(r_aug);
 
-        // Step limiting, in each parameter's own units. The semi-major axis moves by at most 10 % of itself, the mean
-        // longitude by at most 0.5 rad and the equinoctial eccentricity and inclination components (af, ag, pe, qe:
-        // dimensionless, near zero for a near-circular or near-equatorial orbit, and free to change sign) by at most
-        // 0.1. A limit relative to a component's own value let one that had to cross zero approach it only
-        // geometrically, so near-circular deep-space fits (GLONASS) crept along for the whole iteration budget. B* and
-        // ndot keep the limit relative to their value (40 %): a set that starts with none (above 1000 km) keeps none.
+        // Step limiting: each parameter moves by at most 90 % of its value (B* and ndot 40 %), and an equinoctial
+        // eccentricity or inclination component (af, ag, pe, qe: near zero for a near-circular or near-equatorial
+        // orbit, and free to change sign) by at least 1e-4. A limit relative to the value alone let a component that
+        // had to cross zero approach it only geometrically, so near-circular deep-space fits (GLONASS) crept along
+        // for the whole iteration budget. B* and ndot keep the relative limit: a set that starts with none (above
+        // 1000 km) keeps none.
         for (int i = 0; i < NPARAMS; i++) {
             double max_abs;
             if (i == IDX_BSTAR || i == IDX_NDOT) max_abs = 0.4 * (std::abs(params[i]) + 1e-12);
-            else if (i == IDX_A) max_abs = 0.1 * std::abs(params[i]);
-            else if (i == IDX_L) max_abs = 0.5;
-            else max_abs = 0.1;
+            else if (i == IDX_A || i == IDX_L) max_abs = 0.9 * (std::abs(params[i]) + 1e-12);
+            else max_abs = std::max(0.9 * std::abs(params[i]), 1e-4);
             if (std::abs(delta_p(i)) > max_abs) {
                 delta_p(i) *= max_abs / std::abs(delta_p(i));
             }
@@ -1038,15 +1037,23 @@ static FitResult differential_evolution(
 // ── Position-only initial-guess velocity seed ────────────────────────────────
 //
 // Position-only ephemerides (SP3/CPF/ECF) have no sample velocities, yet the
-// initial Keplerian guess (cartesian_to_keplerian) needs a velocity. We estimate
-// it by differentiating a quadratic (3-point Lagrange) fit of position vs time at
-// the epoch index — a documented, standard finite-difference initializer. It is
-// ONLY the LM seed: the fit minimizes POSITION residuals and the reported orbit's
-// velocity is the SGP4 dynamics' velocity, never this difference. Using the 3
-// points nearest the epoch index makes it valid at the series boundary (idx 0)
-// too. Second-order accurate; for MEO/GEO arcs the seed error is well within the
-// LM's basin of convergence (empirically the fit lands on the same orbit as a
-// Gibbs seed).
+// initial Keplerian guess (cartesian_to_keplerian) needs a velocity. It comes from
+// the three points nearest the epoch index: a quartic in time about the epoch point,
+// fitted to the other two points' positions with its second derivative at all three
+// the gravitational acceleration there (point mass and J2, WGS-72). It is ONLY the LM seed:
+// the fit minimizes POSITION residuals and the reported orbit's velocity is the
+// SGP4 dynamics'. A quadratic through the positions alone, the earlier seed, missed
+// the curvature: at GLONASS's 15-minute spacing its velocity was off by about
+// 26 m/s, the fit started some 30 km from the arc and on a near-circular orbit spent
+// its iterations walking the eccentricity back.
+static void gravity_acceleration(const EphemerisPoint& p, double a[3]) {
+    const double r2 = p.x * p.x + p.y * p.y + p.z * p.z, r = std::sqrt(r2);
+    const double k = -MU_EARTH / (r2 * r), j = 1.5 * (2.0 * CK2) * (RE_KM * RE_KM / r2), z2 = p.z * p.z / r2;
+    a[0] = k * p.x * (1.0 + j * (1.0 - 5.0 * z2));
+    a[1] = k * p.y * (1.0 + j * (1.0 - 5.0 * z2));
+    a[2] = k * p.z * (1.0 + j * (3.0 - 5.0 * z2));
+}
+
 static void estimate_velocity_from_positions(
     const std::vector<EphemerisPoint>& pts, size_t idx,
     double& vx, double& vy, double& vz) {
@@ -1074,15 +1081,36 @@ static void estimate_velocity_from_positions(
     double t1 = (p1.epoch_jd - p0.epoch_jd) * SEC_PER_DAY;
     double t2 = (p2.epoch_jd - p0.epoch_jd) * SEC_PER_DAY;
     double te = (pts[idx].epoch_jd - p0.epoch_jd) * SEC_PER_DAY;
-    double d01 = t0 - t1, d02 = t0 - t2, d12 = t1 - t2;
-    if (std::abs(d01) < 1e-12 || std::abs(d02) < 1e-12 || std::abs(d12) < 1e-12) return;
-    // d/dt of the quadratic Lagrange interpolant at te.
-    double L0 = (2.0 * te - t1 - t2) / (d01 * d02);
-    double L1 = (2.0 * te - t0 - t2) / ((t1 - t0) * d12);
-    double L2 = (2.0 * te - t0 - t1) / ((t2 - t0) * (t2 - t1));
-    vx = p0.x * L0 + p1.x * L1 + p2.x * L2;
-    vy = p0.y * L0 + p1.y * L1 + p2.y * L2;
-    vz = p0.z * L0 + p1.z * L1 + p2.z * L2;
+    if (std::abs(t1 - t0) < 1e-6 || std::abs(t2 - t0) < 1e-6 || std::abs(t2 - t1) < 1e-6) return;
+    // About the epoch point e (one of the three): x(t) = x_e + v s + a_e s^2/2 + j s^3/6 + k s^4/24, s = t - t_e in
+    // units of 1000 s, a_e the gravitational acceleration at e. The other two points give their positions and
+    // accelerations: four equations per axis in v, j and k, solved by least squares. (A quintic through the same
+    // conditions is singular on equally spaced points.)
+    const EphemerisPoint* p[3] = {&p0, &p1, &p2};
+    const double t[3] = {(t0 - te) / 1000.0, (t1 - te) / 1000.0, (t2 - te) / 1000.0};
+    const size_t e = idx - i0;
+    double acc[3][3];
+    for (int i = 0; i < 3; i++) gravity_acceleration(*p[i], acc[i]);
+    Eigen::Matrix<double, 4, 3> m;
+    Eigen::Matrix<double, 4, 3> rhs;
+    int row = 0;
+    for (int i = 0; i < 3; i++) {
+        if (static_cast<size_t>(i) == e) continue;
+        const double u = t[i];
+        const double xe[3] = {p[e]->x, p[e]->y, p[e]->z}, xi[3] = {p[i]->x, p[i]->y, p[i]->z};
+        m.row(row) << u, u * u * u / 6.0, u * u * u * u / 24.0;
+        m.row(row + 2) << 0.0, u, u * u / 2.0;
+        for (int c = 0; c < 3; c++) {
+            const double ae = acc[e][c] * 1e6, ai = acc[i][c] * 1e6;  // km/s^2 -> km/(1000 s)^2
+            rhs(row, c) = xi[c] - xe[c] - ae * u * u / 2.0;
+            rhs(row + 2, c) = ai - ae;
+        }
+        row++;
+    }
+    const Eigen::Matrix3d coef = m.colPivHouseholderQr().solve(rhs);
+    vx = coef(0, 0) / 1000.0;
+    vy = coef(0, 1) / 1000.0;
+    vz = coef(0, 2) / 1000.0;
 }
 
 // ── Fit-covariance (SDN OD-Flow $OCM) ──────────────────────────────────────
