@@ -1,6 +1,6 @@
 # Science HTTP adapter
 
-A transport-only, MIT-licensed WASM module. `route` accepts one SDK `$HTQ`
+A transport-only, Apache-2.0-licensed WASM module. `route` accepts one SDK `$HTQ`
 HTTP envelope containing a POSTed canonical `$CQR` FlatBuffer. It emits the
 unchanged record to `conjunction-assessment:screen_catalog`. `respond` turns
 all result records into an aligned, size-prefixed FlatBuffer HTTP stream.

@@ -8,6 +8,7 @@ name = "spacedatanetwork-astro"
 dynamic = ["version"]
 description = "NumPy interfaces to pinned C++ astrodynamics WASM modules through WasmEdge"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24,<3", "flatbuffers==25.12.19", "cryptography==46.0.4"]
 classifiers = [

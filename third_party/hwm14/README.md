@@ -38,13 +38,17 @@ Science paper (supporting information 2,
   three data files byte for byte and the model refuses to load if their
   SHA-256 differs.
 
-License: the NRL package carries no license text. It was written by NRL
-employees as part of their duties (a work of the United States Government,
-not subject to copyright in the United States, 17 U.S.C. 105) and was
-published as journal supporting information. The same basis covers the
-NRLMSISE-00 code vendored in `third_party/nrlmsise00`. The derivative ports
-in the mirrors above add their own licenses (Apache-2.0, MIT); nothing here is
-taken from those ports.
+License: public domain. HWM14 is a work of the U.S. Government, not subject
+to copyright in the United States (17 U.S.C. § 105): D. P. Drob and J. T.
+Emmert wrote it as employees of the Naval Research Laboratory. NRL released
+the FORTRAN source as public-domain software, and NRL's public directory and
+NASA's Community Coordinated Modeling Center (CCMC,
+https://ccmc.gsfc.nasa.gov/models/HWM14~2014/) distribute it freely. The
+files in `nrl/` are NRL's release, unchanged. The C++ port in this directory
+is ours, under the repository's Apache-2.0 license. The same basis covers the
+NRLMSISE-00 code in `third_party/nrlmsise00`. The derivative ports in the
+mirrors above carry their own licenses (Apache-2.0, MIT); nothing here is
+taken from them.
 
 ## Verification
 
