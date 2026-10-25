@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { assertArtifactThreadModel } from "../../scripts/lib/thread-model.mjs";
 import {
   activateLaneToolchain,
+  defaultEmsdkDir,
   recordLaneToolchain,
   resolveVendoredSource,
   REPO_ROOT as MODULES_REPO_ROOT,
@@ -54,7 +55,7 @@ const THREAD_MODEL = "single-thread";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EMSDK_DIR = path.resolve(
-  process.env.SDN_LOCAL_EMSDK_DIR || path.join(__dirname, "deps", "emsdk"),
+  process.env.SDN_LOCAL_EMSDK_DIR || defaultEmsdkDir(__dirname),
 );
 const EM_CACHE_DIR = path.join(__dirname, ".emcache");
 const BUILD_DIR = path.join(__dirname, ".build");

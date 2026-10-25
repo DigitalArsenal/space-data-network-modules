@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { compileModuleFromSource, cleanupCompilation } from 'space-data-module-sdk/compiler';
 import { generateSdsHeaders, packageRoot, standardsRoot } from './generate-sds-headers.mjs';
 import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgamation.mjs';
+import { sharedEmsdkRoot } from '../../scripts/lib/emsdk-toolchain.mjs';
 
 const cppRoot = path.join(packageRoot, 'src/cpp');
 const manifestPath = path.join(packageRoot, 'plugin-manifest.json');
@@ -18,7 +19,7 @@ const {version, provenance} = await generateSdsHeaders();
 // Reuse a repo-local LLVM toolchain via the SDK's public compiler hook, as in
 // the FFM PRW build. Outputs stay in this worktree. No emcc is invoked.
 const toolchainRoots = [process.env.SDN_LOCAL_EMSDK_DIR, path.join(packageRoot,'deps/emsdk'),
-  path.resolve(packageRoot,'../../propagator/ffm/deps/emsdk')].filter(Boolean);
+  path.resolve(packageRoot,'../../propagator/ffm/deps/emsdk'), sharedEmsdkRoot()].filter(Boolean);
 const llvmRoot = toolchainRoots.find(root => fsSync.existsSync(path.join(root,'upstream/bin/clang++')));
 const compiler = process.env.SDN_WASI_CLANGXX || (llvmRoot && path.join(llvmRoot,'upstream/bin/clang++'));
 if (!compiler) throw new Error('Set SDN_LOCAL_EMSDK_DIR or SDN_WASI_CLANGXX to a local LLVM/WASI SDK compiler.');

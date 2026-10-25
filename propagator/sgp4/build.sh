@@ -10,7 +10,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-EMSDK_DIR="${SDN_LOCAL_EMSDK_DIR:-$SCRIPT_DIR/deps/emsdk}"
+EMSDK_VERSION="6.0.1"
+# shellcheck source=../../scripts/lib/emsdk-shared.sh
+. "$SCRIPT_DIR/../../scripts/lib/emsdk-shared.sh"
+EMSDK_DIR="$(sdn_emsdk_dir "$SCRIPT_DIR" "$EMSDK_VERSION")"
 SRC_DIR="$SCRIPT_DIR/src/cpp"
 BUILD_DIR="$SRC_DIR/build-wasm"
 DIST_DIR="$SCRIPT_DIR/dist"
@@ -62,23 +65,14 @@ ensure_emscripten() {
         echo "Installing emsdk..."
         (
             cd "$EMSDK_DIR"
-            ./emsdk install 6.0.1
-            ./emsdk activate 6.0.1
+            ./emsdk install "$EMSDK_VERSION"
+            ./emsdk activate "$EMSDK_VERSION"
         )
     fi
 
     # shellcheck disable=SC1090
     source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
-    # An emsdk that was installed but never activated leaves PATH's emcc in
-    # charge (Homebrew's, a different version): refuse rather than build with it.
-    local expected_emcc found_emcc
-    expected_emcc="$(cd "$EMSDK_DIR/upstream/emscripten" && pwd -P)/emcc"
-    found_emcc="$(command -v emcc || true)"
-    [ -n "$found_emcc" ] && found_emcc="$(cd "$(dirname "$found_emcc")" && pwd -P)/emcc"
-    if [ "$found_emcc" != "$expected_emcc" ]; then
-        echo "emsdk at $EMSDK_DIR is not active (emcc resolves to ${found_emcc:-nothing}); run ./emsdk activate 6.0.1 there" >&2
-        exit 1
-    fi
+    sdn_emsdk_assert_active "$EMSDK_DIR" "$EMSDK_VERSION"
 }
 
 ensure_sqlite_amalgamation() {
