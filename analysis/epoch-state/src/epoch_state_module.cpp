@@ -5,8 +5,8 @@
 // stream, one single-row OEM per element set, plus a FlowNotice (FNTC) report.
 //
 // Per element set:
-//   1. SGP4 (Vallado 2020-07-13, WGS-72, opsmode 'i' — the same
-//      implementation and constants as propagator/sgp4) evaluated at zero
+//   1. SGP4 (the SGP4/SDP4 base foundation/sgp4-str3, WGS-72, improved mode,
+//      as analysis/od compiles it) evaluated at zero
 //      elapsed time, near-Earth or deep-space as the elements require. Its
 //      TEME position and velocity are used; the mean elements are never read
 //      as osculating elements.
@@ -241,6 +241,26 @@ struct ElementInput {
 
 // Returns an empty string on success, or the refusal reason. `at` is the
 // row's instant and `tsince_minutes` its elapsed time from the set's epoch.
+// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, improved mode) from mean elements in degrees and rev/day,
+// the epoch one Julian date. Initialization also evaluates the set at its epoch. Returns sdnap::kPropOk or why the set
+// was refused.
+int32_t sgp4_set(double epoch_jd, double n_rev_day, double e, double inc_deg, double raan_deg, double argp_deg,
+                 double ma_deg, double bstar, sdnap::Sat* sat) {
+    sdnap::Elements el{};
+    el.epoch_jd_whole = epoch_jd;
+    el.xno = n_rev_day * kTwoPi / 1440.0;
+    el.eo = e;
+    el.xincl = inc_deg * kDegToRad;
+    el.xnodeo = raan_deg * kDegToRad;
+    el.omegao = argp_deg * kDegToRad;
+    el.xmo = ma_deg * kDegToRad;
+    el.bstar = bstar;
+    const int32_t init = sdnap::sat_init(el, sdnap::gravity_wgs72(), *sat, sdnap::Sgp4Mode::kImproved);
+    if (init != sdnap::kPropOk) return init;
+    double r[3], v[3];
+    return sdnap::sat_propagate(*sat, nullptr, 0.0, r, v);
+}
+
 std::string derive_state(const ElementInput& in, const UtcInstant& at, double tsince_minutes,
                          DerivedState* out, int* sgp4_error) {
     *sgp4_error = 0;
@@ -254,23 +274,19 @@ std::string derive_state(const ElementInput& in, const UtcInstant& at, double ts
     }
     if (!(in.mean_motion > 0.0)) return "non-positive-mean-motion";
 
-    elsetrec satrec;
-    std::memset(&satrec, 0, sizeof(satrec));
+    sdnap::Sat sat;
     const double sgp4_epoch = static_cast<double>(in.instant.unix_day) + kSgp4EpochToUnixDays +
                               static_cast<double>(in.instant.micro_of_day) / 86400.0e6;
-    const char satn[9] = "00000";
-    const bool initialized = SGP4Funcs::sgp4init(
-        wgs72, 'i', satn, sgp4_epoch, in.bstar, 0.0, 0.0, in.eccentricity,
-        in.argp * kDegToRad, in.inclination * kDegToRad,
-        in.mean_anomaly * kDegToRad, in.mean_motion * kTwoPi / 1440.0,
-        in.raan * kDegToRad, satrec);
-    if (!initialized || satrec.error != 0) {
-        *sgp4_error = satrec.error;
+    const int32_t initialized = sgp4_set(sgp4_epoch + sdnap::kJd1950, in.mean_motion, in.eccentricity, in.inclination,
+                                         in.raan, in.argp, in.mean_anomaly, in.bstar, &sat);
+    if (initialized != sdnap::kPropOk) {
+        *sgp4_error = initialized;
         return "sgp4-init";
     }
     double r[3], v[3];
-    if (!SGP4Funcs::sgp4(satrec, tsince_minutes, r, v) || satrec.error != 0) {
-        *sgp4_error = satrec.error;
+    const int32_t propagated = sdnap::sat_propagate(sat, nullptr, tsince_minutes, r, v);
+    if (propagated != sdnap::kPropOk) {
+        *sgp4_error = propagated;
         return tsince_minutes == 0.0 ? "sgp4-epoch" : "sgp4-propagate";
     }
     out->r_teme = {r[0], r[1], r[2]};
@@ -336,7 +352,7 @@ std::string lineage_comment(const ElementInput& in, const std::vector<Row>& rows
     comment += " EPOCH=";
     comment += in.instant.iso;
     comment += " (UTC), MEAN_ELEMENT_THEORY=SGP4. ";
-    comment += "SGP4: Vallado " SGP4Version ", WGS-72 constants, opsmode i, ";
+    comment += "SGP4: foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72 constants, improved mode, ";
     if (epoch_only) {
         comment += "zero elapsed time; ";
     } else {
@@ -638,16 +654,11 @@ std::string answer_query(const OMM& omm, int64_t start_us, int64_t stop_us, doub
     if (!(steps_exact >= 1.0) || steps_exact + 1.0 > static_cast<double>(kMaxSamplesPerQuery)) return "span-too-long";
     const size_t steps = static_cast<size_t>(steps_exact);
 
-    elsetrec satrec;
-    std::memset(&satrec, 0, sizeof(satrec));
+    sdnap::Sat sat;
     const double sgp4_epoch = static_cast<double>(in.instant.unix_day) + kSgp4EpochToUnixDays +
                               static_cast<double>(in.instant.micro_of_day) / 86400.0e6;
-    const char satn[9] = "00000";
-    if (!SGP4Funcs::sgp4init(wgs72, 'i', satn, sgp4_epoch, omm.BSTAR(), 0.0, 0.0, omm.ECCENTRICITY(),
-                             omm.ARG_OF_PERICENTER() * kDegToRad, omm.INCLINATION() * kDegToRad,
-                             omm.MEAN_ANOMALY() * kDegToRad, omm.MEAN_MOTION() * kTwoPi / 1440.0,
-                             omm.RA_OF_ASC_NODE() * kDegToRad, satrec) ||
-        satrec.error != 0) {
+    if (sgp4_set(sgp4_epoch + sdnap::kJd1950, omm.MEAN_MOTION(), omm.ECCENTRICITY(), omm.INCLINATION(),
+                 omm.RA_OF_ASC_NODE(), omm.ARG_OF_PERICENTER(), omm.MEAN_ANOMALY(), omm.BSTAR(), &sat) != sdnap::kPropOk) {
         return "sgp4-init";
     }
     const int64_t epoch_us = unix_micros(in.instant);
@@ -659,7 +670,7 @@ std::string answer_query(const OMM& omm, int64_t start_us, int64_t stop_us, doub
                                          : start_us + std::llround(static_cast<double>(i) * static_cast<double>(stop_us - start_us) /
                                                                    static_cast<double>(steps));
         double r[3], v[3];
-        if (!SGP4Funcs::sgp4(satrec, static_cast<double>(at_us - epoch_us) / 60.0e6, r, v) || satrec.error != 0) {
+        if (sdnap::sat_propagate(sat, nullptr, static_cast<double>(at_us - epoch_us) / 60.0e6, r, v) != sdnap::kPropOk) {
             return "sgp4-propagate";
         }
         if (!std::isfinite(r[0] + r[1] + r[2] + v[0] + v[1] + v[2])) return "sgp4-non-finite";
@@ -683,8 +694,8 @@ std::string answer_query(const OMM& omm, int64_t start_us, int64_t stop_us, doub
     const auto reference_frame =
         CreateRFM(builder, RFMUnion::CelestialFrameWrapper, celestial.Union(), 0, frame_name);
     const std::string comment = "SGP4 trajectory of " + in.parent + " EPOCH=" + in.instant.iso +
-                                " in TEME, UTC, km and km/s: Vallado " SGP4Version
-                                ", WGS-72 constants, opsmode i, every " + format_double(span_s / static_cast<double>(steps)) +
+                                " in TEME, UTC, km and km/s: foundation/sgp4-str3 (Spacetrack Report No. 3)"
+                                ", WGS-72 constants, improved mode, every " + format_double(span_s / static_cast<double>(steps)) +
                                 " s from " + first.iso + " to " + last.iso + ".";
     const auto block = CreateephemerisDataBlockDirect(
         builder, comment.c_str(), object, "EARTH", reference_frame, nullptr, 0, timingStandard::UTC, first.iso.c_str(),
@@ -1037,7 +1048,7 @@ int answer_propagation_requests(void) {
     const auto summary = CreatePRWWindowReportDirect(
         report, static_cast<uint32_t>(query_count), static_cast<uint32_t>(query_count) - refused, refused,
         static_cast<uint32_t>(records.size()), &refusal_offsets,
-        "SGP4, Vallado " SGP4Version ", WGS-72, opsmode i; TEME, UTC, km and km/s");
+        "SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, improved mode; TEME, UTC, km and km/s");
     PRWBuilder envelope(report);
     envelope.add_WINDOW_REPORT(summary);
     FinishSizePrefixedPRWBuffer(report, envelope.Finish());

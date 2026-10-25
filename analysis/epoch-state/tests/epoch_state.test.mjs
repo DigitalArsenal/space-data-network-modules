@@ -110,7 +110,7 @@ test("GCRF epoch states reproduce the Vallado verification set", async (t) => {
     // tcppver.out prints 1e-8 km and 1e-9 km/s.
     assert.ok(distance(r, expected.gcrfR) < 5e-8, `${expected.satnum} position ${distance(r, expected.gcrfR)} km`);
     assert.ok(distance(v, expected.gcrfV) < 5e-9, `${expected.satnum} velocity ${distance(v, expected.gcrfV)} km/s`);
-    // A rotation preserves |r|: SGP4 itself matches the Vallado TEME state.
+    // A rotation preserves |r|: SGP4 itself matches the verification set's TEME state.
     assert.ok(Math.abs(magnitude(r) - magnitude(expected.temeR)) < 5e-8);
   });
   assert.ok(report.max_round_trip_position_km < 1e-8);
@@ -142,7 +142,7 @@ test("each OEM is one GCRF row with the parent identity and lineage", async (t) 
     assert.equal(block.EPHEMERIS_DATA_LINES.length, 1);
     assert.equal(block.EPHEMERIS_DATA_LINES[0].EPOCH, expected.epochIso);
     assert.match(block.COMMENT, new RegExp(`ENTITY_ID=${expected.entityId} EPOCH=${expected.epochIso}`));
-    assert.match(block.COMMENT, /WGS-72 constants, opsmode i, zero elapsed time/);
+    assert.match(block.COMMENT, /foundation\/sgp4-str3 \(Spacetrack Report No\. 3\), WGS-72 constants, improved mode, zero elapsed time/);
     assert.match(block.COMMENT, /Initial-condition uncertainty: unknown/);
   });
 });
@@ -321,7 +321,7 @@ test("answer_propagation_requests: a $PRW WINDOW_REQUEST is answered with the se
     [1, 1 - index, "mean-element-theory-not-sgp4:SGP4XP"],
     [2, 9, "set-out-of-range"],
   ]);
-  assert.match(report.PROVIDER, /^SGP4, Vallado .*, WGS-72, opsmode i; TEME, UTC, km and km\/s$/);
+  assert.match(report.PROVIDER, /^SGP4, foundation\/sgp4-str3 \(Spacetrack Report No\. 3\), WGS-72, improved mode; TEME, UTC, km and km\/s$/);
 });
 
 test("answer_propagation_requests refuses what is not a $PRW WINDOW_REQUEST", async (t) => {

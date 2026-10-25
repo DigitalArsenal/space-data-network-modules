@@ -10,7 +10,7 @@ import { composeErfaTranslationUnit } from "../../foundation/frames/erfa-amalgam
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const framesSrc = path.join(packageRoot, "..", "..", "foundation", "frames", "src");
-const sgp4Src = path.join(packageRoot, "..", "..", "propagator", "sgp4", "src", "cpp", "src");
+const sgp4Dir = path.join(packageRoot, "..", "..", "foundation", "sgp4-str3");
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
@@ -46,13 +46,15 @@ const axisEngine = (await fs.readFile(path.join(framesSrc, "axis_engine.hpp"), "
     "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
   );
 
-// The same Vallado SGP4 propagator/sgp4 compiles. SGP4.cpp carries Latin-1
-// bytes in comments, and defines a `pi` macro that must not leak past it.
-const sgp4Header = await fs.readFile(path.join(sgp4Src, "SGP4.h"), "latin1");
-const sgp4Source = (await fs.readFile(path.join(sgp4Src, "SGP4.cpp"), "latin1")).replace(
-  '#include "SGP4.h"',
-  "",
-);
+// The SGP4/SDP4 base, foundation/sgp4-str3 (as analysis/od compiles it): its header with its two parts in place of
+// their #include lines.
+let sgp4 = await fs.readFile(path.join(sgp4Dir, "include", "sgp4_str3.h"), "utf8");
+for (const part of ["sgp4_core.inc", "model.inc"]) {
+  const line = `#include "../src/${part}"`;
+  if (!sgp4.includes(line)) throw new Error(`foundation/sgp4-str3 no longer includes ${part}`);
+  const text = await fs.readFile(path.join(sgp4Dir, "src", part), "utf8");
+  sgp4 = sgp4.replace(line, () => text);
+}
 
 const implementationSource = await fs.readFile(
   path.join(packageRoot, "src", "epoch_state_module.cpp"),
@@ -64,14 +66,12 @@ const sourceCode = [
   erfa.source,
   bodyModels,
   axisEngine,
-  // The vendored SGP4 has internal linkage here: analysis/od, analysis/gp-error-model and this module each
-  // compile the same SGP4Funcs, and the flow compiler links their objects into one artifact, where equal
-  // external C++ symbols are duplicates. The standard headers SGP4.h includes come first, outside the namespace.
-  "#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {",
-  sgp4Header,
-  sgp4Source,
+  // The SGP4 base has internal linkage here: the flow compiler links this module's object with others that compile
+  // their own copy (analysis/gp-error-model, analysis/maneuver-detection). The standard headers it includes come
+  // first, outside the namespace.
+  "#include <cmath>\n#include <cstdint>\nnamespace {",
+  sgp4,
   "}  // namespace",
-  "#undef pi",
   implementationSource,
 ].join("\n\n");
 
@@ -120,7 +120,7 @@ await fs.writeFile(
       sdsFamilies: families,
       erfaSourceFiles: erfa.fileCount,
       axisEngine: "foundation/frames/src/axis_engine.hpp",
-      sgp4: "propagator/sgp4/src/cpp/src/SGP4.cpp",
+      sgp4: "foundation/sgp4-str3",
       threadModel: "wasi-sequential",
     },
     null,

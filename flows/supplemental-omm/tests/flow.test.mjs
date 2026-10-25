@@ -4,15 +4,14 @@
 // here from the source modules' provider fixtures; their $OEM reach the OD node; each fit's $OMM, $OCM and $OBD go to
 // hostcap/storage-ingest children (storage.ingest_with_source answered here) and each stored batch is published.
 //
-// Equivalence: the records the flow stores are the records the legacy flow (release 1.0.1: provider copies, FSB
-// transport, FlatSQL and pubsub nodes) published for the same provider fixtures (tests/fixtures/legacy), byte for byte,
-// but for LAGEOS-1's: data-source/cpf-source writes the ILRS id as the international designator (OBJECT_ID 1976-039A,
-// the legacy node wrote 7603901), and only that differs (tests/od-node.test.mjs fits the source's $OEM with the legacy
-// identity and gets the legacy records exactly).
+// Equivalence: the records the flow stores are the OD node's release records for the same provider fixtures
+// (nodes/od/release-records/sources-*, which tests/od-node.test.mjs holds the node to), byte for byte.
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
-import { CODE_SP3, PUBLISH_URL, fixtureResponses, legacyRecords, runRelease, sha256 } from "./lib/flow.mjs";
+import { CODE_SP3, PUBLISH_URL, fixtureResponses, packageRoot, runRelease, sha256, splitRecords } from "./lib/flow.mjs";
 import { decodeIngestResult, decodeOmmRecord } from "./lib/sds.mjs";
 
 const CONFIG = {
@@ -74,23 +73,16 @@ test("one tick: every source fetched through hostcap/http-request, every object 
   assert.ok(fitted.some((n) => n.items[0] === "OD fit complete: ISS (NORAD 25544)"));
 });
 
-test("the stored records are the legacy flow's for the same provider input; LAGEOS-1 differs only in OBJECT_ID", async () => {
+test("the stored records are the OD node's release records for the same provider input", async () => {
   const { ingests } = await flowRun();
+  const release = (standard) => splitRecords(fs.readFileSync(path.join(packageRoot, `nodes/od/release-records/sources-${standard.toLowerCase()}-records.bin`)));
   for (const standard of ["OMM", "OCM", "OBD"]) {
     const stored = ingests.filter((i) => i.schema === `${standard}.fbs`).flatMap((i) => i.records);
-    const legacy = legacyRecords(standard);
-    assert.equal(stored.length, legacy.length, standard);
-    const legacyHashes = new Set(legacy.map(sha256));
-    const fresh = stored.filter((r) => !legacyHashes.has(sha256(r)));
-    assert.equal(fresh.length, 1, `${standard}: every record but LAGEOS-1's is byte-identical to the legacy flow's`);
-    const cpf = ingests.find((i) => i.schema === `${standard}.fbs` && i.source_name === "cpf").records;
-    assert.deepEqual(fresh, cpf);
+    assert.deepEqual(stored.map(sha256).sort(), release(standard).map(sha256).sort(), standard);
   }
-  const legacyLageos = legacyRecords("OMM").map(decodeOmmRecord).find((o) => o.OBJECT_NAME === "lageos1");
+  // data-source/cpf-source writes LAGEOS-1's international designator.
   const lageos = decodeOmmRecord(ingests.find((i) => i.schema === "OMM.fbs" && i.source_name === "cpf").records[0]);
-  assert.equal(legacyLageos.OBJECT_ID, "7603901");
   assert.equal(lageos.OBJECT_ID, "1976-039A");
-  assert.deepEqual({ ...lageos, OBJECT_ID: legacyLageos.OBJECT_ID }, { ...legacyLageos }, "the fitted elements are the legacy's");
 });
 
 test("the status board: every provider lane, the OD lane and the store lane", async () => {

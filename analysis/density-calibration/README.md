@@ -85,8 +85,8 @@ robust editing off (0.4.0's `editSigma: 0`).
   as JB2008's geomagnetic term. A constant dT is the same model as ffm with
   every DTC value raised by dT.
 - **Orbital decay** (`decay`, `calibrate_decay`): each element set is
-  propagated by Vallado's SGP4 (`propagator/sgp4`'s sources; WGS-72, opsmode
-  `i`) from its epoch to the next set's; its mean semi-major axis is SGP4's own
+  propagated by SGP4 (the clean-room SGP4/SDP4 base `foundation/sgp4-str3`;
+  WGS-72, improved mode) from its epoch to the next set's; its mean semi-major axis is SGP4's own
   (Brouwer) a. Drag changes the semi-major axis at da/dt = −(a²/μ) B ρ |v_r|
   (v · v_r), v_r = v − ω_E × r (Gauss's equation for the acceleration −½ B ρ
   |v_r| v_r, B = Cd·A/m, the atmosphere co-rotating), integrated along the

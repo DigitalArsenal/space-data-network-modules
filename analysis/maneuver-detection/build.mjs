@@ -7,7 +7,7 @@ import { generateSdsHeaders } from './sds-headers.mjs';
 // One translation unit: the SDS headers ($OMM in, $OEM in, $MNV in and out,
 // $MDE reports out, $PRW window requests out, the $ERM error model in),
 // nlohmann::json without exceptions for the in-memory evidence tree and the
-// config adapter, the Vallado SGP4 that propagator/sgp4 compiles (an element
+// config adapter, the SGP4/SDP4 base foundation/sgp4-str3 (an element
 // set's un-Kozai'd mean motion places it in an error-model regime, as
 // analysis/gp-error-model does), and the module's sources in dependency order.
 // The module holds no propagator: trajectories come from the caller, or
@@ -17,12 +17,17 @@ import { generateSdsHeaders } from './sds-headers.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'MNV', 'MDE', 'PRW', 'ERM'], import.meta.url);
 const json = await fs.readFile(path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
-// SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that must not leak. Internal linkage: the flow
-// compiler links this module's object with others that compile the same SGP4Funcs.
-const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
-const sgp4Header = await fs.readFile(path.join(sgp4Src, 'SGP4.h'), 'latin1');
-const sgp4Source = (await fs.readFile(path.join(sgp4Src, 'SGP4.cpp'), 'latin1')).replace('#include "SGP4.h"', '');
-const sgp4 = ['#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {', sgp4Header, sgp4Source, '}  // namespace', '#undef pi'];
+// The SGP4/SDP4 base: its header with its two parts in place of their #include lines. Internal linkage: the flow
+// compiler links this module's object with others that compile their own copy.
+const sgp4Dir = path.resolve(root, '../../foundation/sgp4-str3');
+let sgp4Base = await fs.readFile(path.join(sgp4Dir, 'include/sgp4_str3.h'), 'utf8');
+for (const part of ['sgp4_core.inc', 'model.inc']) {
+  const line = `#include "../src/${part}"`;
+  if (!sgp4Base.includes(line)) throw new Error(`foundation/sgp4-str3 no longer includes ${part}`);
+  const text = await fs.readFile(path.join(sgp4Dir, 'src', part), 'utf8');
+  sgp4Base = sgp4Base.replace(line, () => text);
+}
+const sgp4 = ['#include <cmath>\n#include <cstdint>\nnamespace {', sgp4Base, '}  // namespace'];
 const files = ['common.cpp', 'provenance.cpp', 'trajectory.cpp', 'queries.cpp', 'impulse.cpp', 'crossing.cpp', 'glr.cpp', 'mnv.cpp', 'compare.cpp', 'score.cpp', 'mde.cpp', 'maneuver_detection.cpp'];
 const sources = await Promise.all(files.map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
@@ -50,6 +55,6 @@ await fs.writeFile(path.join(guestLinkDir, 'metadata.json'), `${JSON.stringify({
   symbolPrefix: result.guestLink.symbolPrefix, methodSymbols: result.guestLink.methodSymbols,
 }, null, 2)}\n`);
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp', threadModel: 'wasi-sequential',
+  spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), sgp4: 'foundation/sgp4-str3', threadModel: 'wasi-sequential',
 }, null, 2)}\n`);
 console.log(`Built ${outputPath} against spacedatastandards.org@${version}`);

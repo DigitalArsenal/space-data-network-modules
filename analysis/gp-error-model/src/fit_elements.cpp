@@ -26,8 +26,8 @@
 // nonsingular equinoctial mean elements p = (n, af = e cos(w + O),
 // ag = e sin(w + O), chi = tan(i/2) sin O, psi = tan(i/2) cos O,
 // lambda = M + w + O), with n the Kozai mean motion (rad/min) that SGP4 takes,
-// and optionally B*. The model is SGP4 (Vallado 2020, WGS-72, opsmode i, the
-// propagator/sgp4 sources). The Jacobian is central differences: steps 1e-7 n
+// and optionally B*. The model is SGP4 (the SGP4/SDP4 base foundation/sgp4-str3,
+// WGS-72, improved mode). The Jacobian is central differences: steps 1e-7 n
 // for n, 1e-7 for the five dimensionless elements and 1e-7 + 1e-5 |B*| for
 // B*. Steps are Levenberg-Marquardt on the Jacobi-scaled normal equations,
 // starting as Gauss-Newton (damping 0, then 1e-8, multiplied by 10 on every
@@ -409,17 +409,14 @@ void equinoctial(const double el[kMaxP], double p[kMaxP]) {
   p[5] = el[5] + varpi;
   p[6] = el[6];
 }
-bool init_rec(double sgp4_epoch, const double p[kMaxP], elsetrec& rec) {
+bool init_rec(double sgp4_epoch, const double p[kMaxP], sdnap::Sat& rec) {
   double el[kMaxP];
   if (!classical(p, el)) return false;
-  char satn[9] = "00000";
-  std::memset(&rec, 0, sizeof(rec));
-  return SGP4Funcs::sgp4init(wgs72, 'i', satn, sgp4_epoch, el[6], 0.0, 0.0, el[1], el[4], el[2], el[5], el[0], el[3], rec) &&
-         rec.error == 0;
+  return sgp4_init(sgp4_epoch, el[6], el[1], el[4], el[2], el[5], el[0], el[3], rec);
 }
-bool sgp4_at(elsetrec& rec, double minutes, double x[6]) {
+bool sgp4_at(sdnap::Sat& rec, double minutes, double x[6]) {
   double r[3], v[3];
-  if (!SGP4Funcs::sgp4(rec, minutes, r, v) || rec.error != 0 || !std::isfinite(r[0])) return false;
+  if (!sgp4_eval(rec, minutes, r, v) || !std::isfinite(r[0])) return false;
   std::copy(r, r + 3, x);
   std::copy(v, v + 3, x + 3);
   return true;
@@ -658,7 +655,7 @@ struct Problem {
 
 // Model states at every observation; false when SGP4 fails anywhere.
 bool evaluate(const Problem& pr, const double p[kMaxP], const std::vector<Obs>& obs, std::vector<std::array<double, 6>>* x) {
-  elsetrec rec;
+  sdnap::Sat rec;
   if (!init_rec(pr.sgp4_epoch, p, rec)) return false;
   x->resize(obs.size());
   for (size_t k = 0; k < obs.size(); ++k)
@@ -981,7 +978,7 @@ void refine_start(double sgp4_epoch, double minutes, const double r[3], const do
   // Position miss of SGP4's state at the seed time; the iterate with the
   // smallest miss is kept, so the start is never worse than the osculating one.
   auto miss = [&](const double q[kMaxP], double x[6]) -> double {
-    elsetrec rec;
+    sdnap::Sat rec;
     if (!init_rec(sgp4_epoch, q, rec) || !sgp4_at(rec, minutes, x)) return HUGE_VAL;
     return std::sqrt((x[0] - r[0]) * (x[0] - r[0]) + (x[1] - r[1]) * (x[1] - r[1]) + (x[2] - r[2]) * (x[2] - r[2]));
   };
@@ -1182,7 +1179,7 @@ Core core_fit(const std::vector<const State*>& pts, const FitOptions& o, const A
 // Residual statistics of a fitted model over states (every state given).
 Stats score(const Core& c, const std::vector<const State*>& pts, nlohmann::json* samples) {
   Stats st;
-  elsetrec rec;
+  sdnap::Sat rec;
   if (!init_rec(c.pr.sgp4_epoch, c.p, rec)) { st.failures = pts.size(); return st; }
   for (const State* s : pts) {
     double x[6];
@@ -1302,7 +1299,7 @@ nlohmann::json fit_one(uint32_t norad, Track& tr, const FitOptions& o, const Apr
   }
   std::vector<double> rsw21;
   double x0[6];
-  elsetrec r0;
+  sdnap::Sat r0;
   if (!P.empty() && init_rec(pr.sgp4_epoch, p, r0) && sgp4_at(r0, 0.0, x0)) {
     std::vector<double> Jx(6 * pr.np);
     bool ok = true;
@@ -1314,7 +1311,7 @@ nlohmann::json fit_one(uint32_t norad, Track& tr, const FitOptions& o, const Apr
       std::copy(p, p + kMaxP, pm);
       pp[j] += hh;
       pm[j] -= hh;
-      elsetrec a, b;
+      sdnap::Sat a, b;
       ok = init_rec(pr.sgp4_epoch, pp, a) && init_rec(pr.sgp4_epoch, pm, b) && sgp4_at(a, 0.0, xp) && sgp4_at(b, 0.0, xm);
       for (int k = 0; k < 6 && ok; ++k) Jx[k * pr.np + col] = (xp[k] - xm[k]) / (2 * hh);
       ++col;
@@ -1461,7 +1458,7 @@ extern "C" int fit_elements() {
   nlohmann::json frames = nlohmann::json::object();
   for (const auto& [k, v] : lc.frames) frames[k] = v;
   return emit("report", {{"kind", "element-fit"}, {"version", 1},
-                         {"model", "SGP4 (Vallado 2020), WGS-72, opsmode i; TEME"},
+                         {"model", "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, improved mode; TEME"},
                          {"residualSign", "model minus ephemeris"},
                          {"units", "km, km/s; rmsPerCoordinateKm = rms3dKm / sqrt(3)"},
                          {"counts", {{"streams", lc.streams}, {"blocks", lc.blocks}, {"states", lc.states}, {"duplicateEpochs", lc.duplicates},
@@ -1542,7 +1539,7 @@ extern "C" int element_residuals() {
     results.push_back(row);
   }
   return emit("residuals", {{"kind", "element-residuals"}, {"version", 1},
-                            {"model", "SGP4 (Vallado 2020), WGS-72, opsmode i; TEME"},
+                            {"model", "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, improved mode; TEME"},
                             {"residualSign", "prediction minus ephemeris"},
                             {"units", "km, km/s; rmsPerCoordinateKm = rms3dKm / sqrt(3)"},
                             {"counts", {{"elementSets", counts.records}, {"refused", counts.refused}, {"states", lc.states},

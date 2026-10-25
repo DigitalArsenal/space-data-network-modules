@@ -344,18 +344,15 @@ bool load_sets(const std::vector<RawRecord>& records, std::vector<SetRec>* sets,
       const double el[] = {omm->MEAN_MOTION(), omm->ECCENTRICITY(), omm->INCLINATION(), omm->RA_OF_ASC_NODE(), omm->ARG_OF_PERICENTER(), omm->MEAN_ANOMALY(), omm->BSTAR()};
       bool finite = true;
       for (double x : el) finite = finite && std::isfinite(x);
-      elsetrec rec;
-      std::memset(&rec, 0, sizeof(rec));
-      char satn[9] = "00000";
+      sdnap::Sat rec;
       const double epoch = static_cast<double>(s.epoch.day) + kSgp4EpochFromUnixDays + s.epoch.sec / 86400.0;
       if (!finite || !(omm->MEAN_MOTION() > 0) ||
-          !SGP4Funcs::sgp4init(wgs72, 'i', satn, epoch, omm->BSTAR(), 0.0, 0.0, omm->ECCENTRICITY(), omm->ARG_OF_PERICENTER() * kDeg,
+          !sgp4_init(epoch, omm->BSTAR(), omm->ECCENTRICITY(), omm->ARG_OF_PERICENTER() * kDeg,
                                omm->INCLINATION() * kDeg, omm->MEAN_ANOMALY() * kDeg, omm->MEAN_MOTION() * 2.0 * kPi / 1440.0,
-                               omm->RA_OF_ASC_NODE() * kDeg, rec) ||
-          rec.error != 0) {
+                               omm->RA_OF_ASC_NODE() * kDeg, rec)) {
         s.unusable = "sgp4-init";
       } else {
-        const double n_rad_s = rec.no_unkozai / 60.0;
+        const double n_rad_s = rec.xnodp / 60.0;
         s.alt_km = std::cbrt(kMuWgs72 / (n_rad_s * n_rad_s)) - kReWgs72;
         s.ecc = omm->ECCENTRICITY();
       }

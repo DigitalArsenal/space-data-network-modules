@@ -16,14 +16,24 @@ constexpr double kMuWgs72 = 398600.8, kReWgs72 = 6378.135;  // SGP4's WGS-72
 // altitude analysis/gp-error-model places a set in a regime by; NaN when SGP4
 // refuses the set.
 double meanAltitudeOf(const OMM* omm, double epoch) {
-  elsetrec rec{};
-  char satn[9] = "00000";
+  // SGP4: the SGP4/SDP4 base foundation/sgp4-str3 (WGS-72, improved mode), the epoch one Julian date; a set SGP4
+  // refuses at its epoch has no altitude.
   const double days1950 = epoch / 86400.0 + 2440587.5 - 2433281.5;
-  if (!SGP4Funcs::sgp4init(wgs72, 'i', satn, days1950, omm->BSTAR(), 0.0, 0.0, omm->ECCENTRICITY(), omm->ARG_OF_PERICENTER() / kDeg,
-                           omm->INCLINATION() / kDeg, omm->MEAN_ANOMALY() / kDeg, omm->MEAN_MOTION() * kTwoPi / 1440.0,
-                           omm->RA_OF_ASC_NODE() / kDeg, rec) || rec.error != 0)
+  sdnap::Elements el{};
+  el.epoch_jd_whole = days1950 + sdnap::kJd1950;
+  el.xno = omm->MEAN_MOTION() * kTwoPi / 1440.0;
+  el.eo = omm->ECCENTRICITY();
+  el.xincl = omm->INCLINATION() / kDeg;
+  el.xnodeo = omm->RA_OF_ASC_NODE() / kDeg;
+  el.omegao = omm->ARG_OF_PERICENTER() / kDeg;
+  el.xmo = omm->MEAN_ANOMALY() / kDeg;
+  el.bstar = omm->BSTAR();
+  sdnap::Sat sat;
+  double r[3], v[3];
+  if (sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) != sdnap::kPropOk ||
+      sdnap::sat_propagate(sat, nullptr, 0.0, r, v) != sdnap::kPropOk)
     return kNaN;
-  const double n = rec.no_unkozai / 60.0;
+  const double n = sat.xnodp / 60.0;
   return std::cbrt(kMuWgs72 / (n * n)) - kReWgs72;
 }
 

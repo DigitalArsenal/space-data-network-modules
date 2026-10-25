@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
+  "spacedatastandards": "1.261.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -37,6 +37,6 @@
     "src/mde.cpp",
     "src/maneuver_detection.cpp"
   ],
-  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
+  "sgp4": "foundation/sgp4-str3",
   "threadModel": "wasi-sequential"
 }

@@ -137,22 +137,44 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(test_oem_fb_parity od_lib)
 endif()
 
-# WASM target (Emscripten)
+# WASM target (Emscripten): the browser bundle and command module build.sh builds. Its units are ../../units.mjs, the
+# list build-wasi.mjs compiles too (OD's units, FFM's physics from propagator/ffm/lib/units.mjs, HWM14, NRLMSISE-00 and
+# the ERFA amalgamation), plus direct_initialize, the bundle's _initialize.
 if(EMSCRIPTEN)
+    enable_language(C)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -flto -ffast-math -DNDEBUG")
+    find_program(NODE_EXECUTABLE node REQUIRED)
+    execute_process(
+        COMMAND "${NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../units.mjs"
+            --cmake "${CMAKE_CURRENT_BINARY_DIR}/od-units.cmake"
+            --erfa "${CMAKE_CURRENT_BINARY_DIR}/erfa.cpp"
+        RESULT_VARIABLE OD_UNITS_RESULT
+    )
+    if(NOT OD_UNITS_RESULT EQUAL 0)
+        message(FATAL_ERROR "analysis/od/units.mjs could not list the module's units")
+    endif()
+    include("${CMAKE_CURRENT_BINARY_DIR}/od-units.cmake")
+    set_source_files_properties(${OD_UNITS_IGNORE_EXCEPTIONS} PROPERTIES COMPILE_OPTIONS "-fignore-exceptions")
+    set_source_files_properties(${OD_UNITS_NO_EXCEPTIONS} PROPERTIES COMPILE_OPTIONS "-fno-exceptions")
     add_executable(
         od_wasm
-        src/plugin_entrypoints.cpp
-        src/plugin_invoke_bridge.cpp
+        ${OD_UNITS_IGNORE_EXCEPTIONS}
+        ${OD_UNITS_NO_EXCEPTIONS}
+        ${OD_UNITS_C}
         src/direct_initialize.cpp
     )
     target_include_directories(
         od_wasm PRIVATE
         include
         generated
+        ${OD_MODEL_INCLUDE_DIRS}
         "${SGP4_STR3_INCLUDE_DIR}"
         "${FLATBUFFERS_INCLUDE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../common"
+        "${SDN_CORE_SDS_GENERATED_DIR}"
     )
-    target_link_libraries(od_wasm od_lib)
+    target_compile_definitions(od_wasm PRIVATE ${OD_MODEL_DEFINITIONS})
+    target_link_libraries(od_wasm Eigen3::Eigen)
     set_target_properties(od_wasm PROPERTIES
         SUFFIX ".js"
         LINK_FLAGS "\
@@ -169,66 +191,5 @@ if(EMSCRIPTEN)
             -s MALLOC='emmalloc' \
             -s FILESYSTEM=0 \
         "
-    )
-
-    # Resident artifact with an additional command entry point. Both surfaces
-    # share typed PIV dispatch; _initialize runs once for resident invocation,
-    # while _start also supports the manifest's command/SDK CLI contract.
-    add_executable(
-        od_wasm_reactor
-        src/plugin_entrypoints.cpp
-        src/plugin_invoke_bridge.cpp
-    )
-    target_include_directories(
-        od_wasm_reactor PRIVATE
-        include
-        generated
-        "${SGP4_STR3_INCLUDE_DIR}"
-        "${FLATBUFFERS_INCLUDE_DIR}"
-    )
-    target_compile_definitions(od_wasm_reactor PRIVATE OD_REACTOR_BUILD)
-    target_link_libraries(od_wasm_reactor od_lib)
-    set_target_properties(od_wasm_reactor PROPERTIES
-        SUFFIX ".js"
-        LINK_FLAGS "\
-            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\"]' \
-            -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
-            -s STANDALONE_WASM=1 \
-            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
-            -Wl,--allow-undefined \
-            -Wl,--export=__wasm_call_ctors \
-            -Wl,--export=_start \
-            --no-entry \
-            -s INITIAL_MEMORY=67108864 \
-            -s STACK_SIZE=2097152 \
-            -s MALLOC='emmalloc' \
-            -s FILESYSTEM=0 \
-        "
-    )
-elseif(WASI_SDK)
-    add_executable(
-        od_standalone
-        src/plugin_entrypoints.cpp
-        src/plugin_invoke_bridge.cpp
-    )
-    target_include_directories(
-        od_standalone PRIVATE
-        include
-        generated
-        "${SGP4_STR3_INCLUDE_DIR}"
-        "${FLATBUFFERS_INCLUDE_DIR}"
-    )
-    target_link_libraries(od_standalone od_lib)
-    set_target_properties(
-        od_standalone PROPERTIES
-        SUFFIX ".wasm"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    )
-    target_link_options(od_standalone PRIVATE
-        -Wl,--export=plugin_alloc
-        -Wl,--export=plugin_free
-        -Wl,--export=plugin_invoke_stream
-        -Wl,--export=plugin_get_manifest_flatbuffer
-        -Wl,--export=plugin_get_manifest_flatbuffer_size
     )
 endif()
