@@ -413,7 +413,7 @@ std::string propagate_json(const json& params, std::string& operation_error) {
             throw std::runtime_error("maneuvers must be an array.");
         if(params.contains("maneuvers")) for(const auto& item:params.at("maneuvers")) {
             ForceModel::ImpulsiveManeuverDef burn;
-            burn.epoch=item.at("epochJD").get<double>();
+            burn.seconds=(item.at("epochJD").get<double>()-epoch_jd)*86400.0;
             const auto& dv=item.at("deltaV");
             if(dv.size()!=3)throw std::runtime_error("Maneuver deltaV must contain three km/s components.");
             burn.deltaV=Vec3(dv.at(0).get<double>(),dv.at(1).get<double>(),dv.at(2).get<double>());

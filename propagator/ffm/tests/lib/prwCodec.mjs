@@ -136,12 +136,12 @@ export function execution(params,withKernel=false) {
       F107:w.F107??w.f107??150,F107_AVERAGE:w.F107a??w.f107a??150,AP_INDEX:w.Ap??w.ap??15,KP_INDEX:w.Kp??w.kp??3});
   }
   return makeTable('PRWExecutionRequest',{
-    INITIAL:residentState({...params,massKg:seven?mass:params.massKg}),TARGET_EPOCH:instant(params.targetJD),INTEGRATOR:settings,FORCES:forces,
+    INITIAL:residentState({...params,massKg:seven?mass:params.massKg}),TARGET_EPOCH:instant(params.targetJD,params.targetTimeScale),INTEGRATOR:settings,FORCES:forces,
     INCLUDE_STM:params.includeSTM??false,STM_TECHNIQUE:choice('prwDerivativeTechnique',params.STM_METHOD,'ANALYTIC'),
     DENSITY_TREATMENT:choice('prwDensityTreatment',params.DENSITY_GRADIENT,'NEGLECTED'),
     INITIAL_COVARIANCE:matrix(params.covariance,6),INITIAL_MASS_COVARIANCE:matrix(params.covariance7,7),
-    SAMPLE_EPOCHS:(params.sampleEpochsJD??[]).map(jd=>instant(number(jd))),
-    IMPULSES:(params.maneuvers??[]).map(m=>makeTable('PRWImpulse',{EPOCH:instant(m.epochJD),DELTA_V:vec(m.deltaV,1000),VECTOR_BASIS:basis(m.frame)})),
+    SAMPLE_EPOCHS:(params.sampleEpochsJD??[]).map(jd=>typeof jd==='object'?instant(jd.jd,jd.scale):instant(number(jd))),   // a Julian date (TDB), or {jd, scale}
+    IMPULSES:(params.maneuvers??[]).map(m=>makeTable('PRWImpulse',{EPOCH:instant(m.epochJD,m.epochTimeScale),DELTA_V:vec(m.deltaV,1000),VECTOR_BASIS:basis(m.frame)})),
     INCLUDE_MASS_DYNAMICS:seven,FINITE_BURNS:(params.finiteBurns??[]).map(b=>finiteBurn(b,params.epochJD)),
     PROCESS_NOISE:processNoise(params.processNoise),
   });

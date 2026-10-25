@@ -640,22 +640,17 @@ double FiniteManeuverMassRate(const FiniteManeuverConfig& config);
 
 /// Impulsive maneuver definition
 struct ImpulsiveManeuverDef {
-    double epoch{0.0};              ///< Maneuver epoch (JD)
+    // When the kick happens: seconds on the integration clock (TT) after the initial state of the
+    // propagation it is passed to. A Julian date cannot carry it: a double at JD 2.46e6 resolves 40 us.
+    // A propagation applies the kicks with 0 <= seconds <= its duration, once each; a caller that cuts an
+    // arc into spans gives each span the kicks that fall in it (prw_execution.cpp, kicksOfSpan).
+    double seconds{0.0};
     Vec3 deltaV{0, 0, 0};           ///< Delta-V vector (km/s)
 
     bool inRTN{true};               ///< Delta-V in RTN frame (else inertial)
-    bool executed{false};           ///< Flag: has been executed
 
     double magnitude() const { return deltaV.magnitude(); }
 };
-
-/// Check if impulsive maneuver should be applied
-/// @param currentTime Current time (JD)
-/// @param previousTime Previous time (JD)
-/// @param maneuver Maneuver definition
-/// @return True if maneuver epoch is between previousTime and currentTime
-bool ImpulsiveManeuverDue(double currentTime, double previousTime,
-                          const ImpulsiveManeuverDef& maneuver);
 
 /// Apply impulsive maneuver to velocity
 /// @param velocity Current velocity (km/s)

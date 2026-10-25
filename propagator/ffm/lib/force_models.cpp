@@ -1395,15 +1395,6 @@ Vec3 RTNToInertial(const Vec3& deltaV_RTN, const Vec3& position, const Vec3& vel
     return R * deltaV_RTN.x + T * deltaV_RTN.y + N * deltaV_RTN.z;
 }
 
-bool ImpulsiveManeuverDue(double currentTime, double previousTime,
-                          const ImpulsiveManeuverDef& maneuver) {
-    if (maneuver.executed) return false;
-
-    // Check if maneuver epoch falls within time step
-    return (maneuver.epoch > previousTime && maneuver.epoch <= currentTime) ||
-           (maneuver.epoch < previousTime && maneuver.epoch >= currentTime);  // Backward propagation
-}
-
 Vec3 ImpulsiveManeuver(const Vec3& velocity, const Vec3& position,
                        const ImpulsiveManeuverDef& maneuver) {
     Vec3 dv = maneuver.deltaV;

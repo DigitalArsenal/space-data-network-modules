@@ -214,8 +214,8 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
         for(const auto& e:{b.startEvent,b.stopEvent})if(e.kind<BurnEventKind::None||e.kind>BurnEventKind::Mass||
             !std::isfinite(e.goal)||!std::isfinite(e.goalTolerance)||e.goalTolerance<0||e.direction< -1||e.direction>1)return fail("Invalid finite-burn event condition.");
     }
-    auto kicks=impulses;std::stable_sort(kicks.begin(),kicks.end(),[](const auto&a,const auto&b){return a.epoch<b.epoch;});
-    for(const auto& b:kicks)if(!std::isfinite(b.epoch)||!finite(b.deltaV))return fail("Invalid impulsive maneuver.");
+    auto kicks=impulses;std::stable_sort(kicks.begin(),kicks.end(),[](const auto&a,const auto&b){return a.seconds<b.seconds;});
+    for(const auto& b:kicks)if(!std::isfinite(b.seconds)||!finite(b.deltaV))return fail("Invalid impulsive maneuver.");
     clearPropagationStop();   // reentry.h: this integration starts without a stop
     Context c{forces,burns,density,ForceModel::StateEpoch(forces,initial.epoch),std::vector<int>(burns.size()),std::vector<double>(burns.size(),1)};
     if(c.forces.explicitEpochContract)c.forces.integrationEpochTT=c.epoch;
@@ -242,8 +242,8 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
             if(c.status[k]==0&&t>=b.startSeconds&&b.startEvent.kind==BurnEventKind::None)mark(k,true);
             c.throttle[k]=1;for(const auto& p:b.throttle)if(p.seconds<=t)c.throttle[k]=p.throttle;else break;
         }
-        while(kick<kicks.size()&&(kicks[kick].epoch-initial.epoch)*86400<=t){const auto& b=kicks[kick++];
-            if(b.executed||b.epoch<initial.epoch)continue;   // a kick at the initial epoch applies (this integrator runs the whole arc from it)
+        while(kick<kicks.size()&&kicks[kick].seconds<=t){const auto& b=kicks[kick++];
+            if(b.seconds<0)continue;   // before the initial state; a kick at it applies
             Vec3 r(y[0],y[1],y[2]),v(y[3],y[4],y[5]);
             if(b.inRTN&&r.cross(v).magnitude()==0)return fail("Singular RTN impulse frame.");
             const Mat6 jump=ForceModel::ImpulsiveManeuverJacobian(r,v,b);Matrix7 m=identity();
@@ -255,7 +255,7 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
         double edge=dt;
         for(const auto& b:burns){if(b.startSeconds>t)edge=std::min(edge,b.startSeconds);if(b.stopSeconds>t)edge=std::min(edge,b.stopSeconds);
             for(const auto& p:b.throttle)if(p.seconds>t)edge=std::min(edge,p.seconds);}
-        if(kick<kicks.size()){double kt=(kicks[kick].epoch-initial.epoch)*86400;if(kt>t)edge=std::min(edge,kt);}
+        if(kick<kicks.size()){double kt=kicks[kick].seconds;if(kt>t)edge=std::min(edge,kt);}
         h=std::min(h,edge-t);if(t+h==t)return fail("Finite-burn integration step underflow.");
         step(t,h,y,next,error,cfg,c);
         // A trial stage may overshoot depletion before a positive-mass cutoff
@@ -312,7 +312,7 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
                 ambiguous=ambiguous||coincides(b.startSeconds)||coincides(b.stopSeconds);
                 for(const auto& p:b.throttle)ambiguous=ambiguous||coincides(p.seconds);
             }
-            for(const auto& b:kicks)if(!b.executed)ambiguous=ambiguous||coincides((b.epoch-initial.epoch)*86400);
+            for(const auto& b:kicks)ambiguous=ambiguous||coincides(b.seconds);
             if(ambiguous)return fail("State-triggered burn edge coincides with a scheduled edge or output epoch; no unique STM.");
             h=eventTime-t;
             // A transverse root can round to the accepted boundary when its

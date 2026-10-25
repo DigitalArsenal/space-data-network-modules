@@ -313,12 +313,12 @@ static void testScheduledImpulses() {
     const auto config=accurateConfig(20);const auto initial=leoState();
     const auto n=std::sqrt(mu/(7000.L*7000.L*7000.L)),period=2*pi/n;
     ForceModel::ImpulsiveManeuverDef inertial,rtn;
-    inertial.epoch=initial.epoch+double(.3L*period)/86400;inertial.inRTN=false;
+    inertial.seconds=double(.3L*period);inertial.inRTN=false;
     inertial.deltaV={.008,-.011,.003};
-    rtn.epoch=initial.epoch+double(.7L*period)/86400;rtn.inRTN=true;
+    rtn.seconds=double(.7L*period);rtn.inRTN=true;
     rtn.deltaV={-.007,.013,.009};
     const std::vector<ForceModel::ImpulsiveManeuverDef> burns={inertial,rtn};
-    const double firstDuration=(inertial.epoch-initial.epoch)*86400;
+    const double firstDuration=inertial.seconds;
     const auto atFirst=Integrator::PropagateWithSTM(initial,firstDuration,config,force,
         Integrator::STMMethod::Analytic,ForceModel::DensityGradient::Neglected,burns);
     if(!atFirst.success) throw std::runtime_error(atFirst.errorMessage);
@@ -331,16 +331,16 @@ static void testScheduledImpulses() {
     check("impulse_inertial_endpoint_STM",relative(matrix(atFirst.stm),expectedSTM,n),1e-9L);
     // Each sample starts from the original epoch, so the second and final
     // samples include both earlier jumps instead of resetting covariance/STM.
-    const std::array<double,3> targets={inertial.epoch,rtn.epoch,initial.epoch+double(period)/86400};
+    const std::array<double,3> targets={inertial.seconds,rtn.seconds,double(period)};   // seconds after the initial epoch
     for(int sample=0;sample<3;++sample) {
-        const auto dt=(targets[sample]-initial.epoch)*86400;
+        const auto dt=targets[sample];
         const auto a=Integrator::PropagateWithSTM(initial,dt,config,force,Integrator::STMMethod::Analytic,
             ForceModel::DensityGradient::Neglected,burns);
         const auto f=Integrator::PropagateWithSTM(initial,dt,config,force,Integrator::STMMethod::FiniteDifference,
             ForceModel::DensityGradient::Neglected,burns);
         if(!a.success||!f.success) throw std::runtime_error("scheduled impulse propagation: "+a.errorMessage+f.errorMessage);
         check("impulse_chain_sample_"+std::to_string(sample),relative(matrix(a.stm),matrix(f.stm),n),1e-6L);
-        check("impulse_sample_epoch_"+std::to_string(sample),std::abs(a.finalState.epoch-targets[sample]),0);
+        check("impulse_sample_epoch_"+std::to_string(sample),std::abs(a.finalState.epoch-(initial.epoch+targets[sample]/86400)),0);
     }
 }
 

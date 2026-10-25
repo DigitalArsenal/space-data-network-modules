@@ -63,7 +63,7 @@ int main() {
           "finite difference exhaustion cannot report success");
     check(forces.weather.epoch==savedEpoch,"weather epoch restored after finite difference failure");
 
-    ForceModel::ImpulsiveManeuverDef invalidBurn;invalidBurn.epoch=nan;
+    ForceModel::ImpulsiveManeuverDef invalidBurn;invalidBurn.seconds=nan;
     check(!PropagateWithSTM(initial,30,config,forces,STMMethod::Analytic,
         ForceModel::DensityGradient::Neglected,{invalidBurn}).success,"reject invalid burn before sorting");
     std::cout<<(failures?"FAIL ":"PASS ")<<"FFM variational controls cases="<<cases<<" failures="<<failures<<'\n';

@@ -20,81 +20,15 @@
 //   7. a backward sample with a t0 impulse is refused by name; 8. lane parity: identical bytes.
 //
 //   node propagator/ffm/tests/start-epoch-impulse.e2e.mjs
-import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { destroyLanes, lane } from './lib/planetary.mjs';
-import { decodeResult, requestFor } from './lib/prwCodec.mjs';
-import { orbit as keplerOrbit } from './lib/keplerReference.mjs';
+import { destroyLanes } from './lib/planetary.mjs';
+import { add, ask, at, base, calibrate, check, DV, DV_RTN, exact, failures, HALF, kick, kicked, norm, R0, report, rtn, SAMPLE, scale, SPAN, state, V0 } from './lib/impulseTruth.mjs';
 
 process.env.PATH = `${process.env.HOME}/.wasmedge/bin:${process.env.PATH}`;
-const failures = [];
-const check = (ok, message) => { if (!ok) { failures.push(message); console.log(`FAIL ${message}`); } };
-
-const MU = 398600.4418;
-const T0 = 2460000.5;                       // exact in a double
-const DAY = 86400;
-const at = (seconds) => T0 + seconds / DAY; // exact for the offsets used below (5400 s = 1/16 d, 2700 s = 1/32 d, 84.375 s = 1/1024 d)
-const R0 = [6878.137, 120.5, -45.25], V0 = [0.05, 7.62, 1.2];
-const controls = { method: 'RKF78', initialStep: 20, minStep: 0.001, maxStep: 20, absTolerance: 1e-14, relTolerance: 1e-14 };
-const forces = { gravityMode: 'POINT_MASS', j2: false, mu: MU };
-const base = { epochJD: T0, position: R0, velocity: V0, forces, integrator: controls };
-const SPAN = 5400, HALF = 2700, SAMPLE = 4050;   // 3/64 d
-
-const add = (a, b) => a.map((x, i) => x + b[i]);
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm = (a) => Math.sqrt(dot(a, a));
-const scale = (a, s) => a.map((x) => x * s);
-const meters = (a, b) => 1000 * norm(a.map((x, i) => x - b[i]));
-
-// The orbit through a Cartesian state (km, km/s) as the reference's elements; mean anomaly at the state's own time.
-function through(r, v) {
-  const rn = norm(r), h = cross(r, v), hn = norm(h);
-  const ev = add(scale(r, (dot(v, v) - MU / rn) / MU), scale(v, -dot(r, v) / MU)), e = norm(ev);
-  const a = 1 / (2 / rn - dot(v, v) / MU), i = Math.acos(h[2] / hn);
-  const nodeVec = [-h[1], h[0], 0], nn = norm(nodeVec);
-  const raan = Math.atan2(nodeVec[1], nodeVec[0]);
-  let argp = Math.acos(Math.max(-1, Math.min(1, dot(nodeVec, ev) / (nn * e)))); if (ev[2] < 0) argp = 2 * Math.PI - argp;
-  let nu = Math.acos(Math.max(-1, Math.min(1, dot(ev, r) / (e * rn)))); if (dot(r, v) < 0) nu = 2 * Math.PI - nu;
-  const E = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2));
-  return keplerOrbit({ a, e, i, raan, argp, meanAnomaly0: E - e * Math.sin(E), mu: MU });
-}
-// The request's epochs are TDB labels and the integration clock is TT: an arc labelled `seconds` long lasts
-// seconds * TT_PER_LABEL on it (the module reports the duration of the whole arc; TDB - TT drifts by under 2 ms per year's
-// phase, so the ratio holds over an arc to 1e-12). The closed form integrates that duration.
-let TT_PER_LABEL = 1;
-const exact = (r, v, seconds) => { const s = through(r, v).state(seconds * TT_PER_LABEL); return [...s.position, ...s.velocity]; };
-// A kick at `kickSeconds` into the arc: the orbit of (r0, v0) up to it, of the kicked state after.
-function kicked(dv, kickSeconds, seconds) {
-  if (kickSeconds === 0) return exact(R0, add(V0, dv), seconds);
-  const s = exact(R0, V0, kickSeconds);
-  return exact(s.slice(0, 3), add(s.slice(3), dv), seconds - kickSeconds);
-}
-const rtn = (dv, r, v) => { const R = scale(r, 1 / norm(r)), N0 = cross(r, v), N = scale(N0, 1 / norm(N0)), T = cross(N, R);
-  return add(add(scale(R, dv[0]), scale(T, dv[1])), scale(N, dv[2])); };
-
-async function ask(kind, params) {
-  const h = await lane(kind);
-  const response = await h.invoke(requestFor('propagate', params));
-  if (response.statusCode !== 0) return { error: `${response.errorCode ?? ''}: ${response.errorMessage ?? ''}`, response };
-  return { ...decodeResult(response), response };
-}
-const state = (o) => [...o.position, ...o.velocity];
-const worst = (a, b) => ({ position: meters(a.slice(0, 3), b.slice(0, 3)), velocity: 1000 * norm(a.slice(3).map((x, i) => x - b[3 + i])) }); // m, m/s
-const BAR = { position: 1e-4, velocity: 1e-7 };   // 0.1 mm, 0.1 um/s; measured 1e-5 m and 1e-8 m/s at worst (the integrator's own error)
-const report = (label, a, b) => {
-  const w = worst(a, b);
-  console.log(`  ${label}: ${w.position.toExponential(2)} m, ${w.velocity.toExponential(2)} m/s`);
-  check(w.position <= BAR.position && w.velocity <= BAR.velocity, `${label}: ${w.position} m, ${w.velocity} m/s from the closed form`);
-};
-
-const DV = [0.002, 0.0031, -0.0012];                 // km/s (about 4 m/s)
-const DV_RTN = [0.0011, 0.0023, 0.0007];
-const kick = (dv, seconds, frame) => ({ epochJD: at(seconds), deltaV: dv, ...(frame ? { frame } : {}) });
 
 for (const kind of ['browser', 'wasmedge']) {
   console.log(`\n== ${kind} ==`);
-  TT_PER_LABEL = (await ask(kind, { ...base, targetJD: at(SPAN) })).propagatedDeltaSeconds / SPAN;
+  await calibrate(kind);
   console.log('1. an inertial impulse at t0 against the closed form');
   for (const includeSTM of [false, true]) {
     const o = await ask(kind, { ...base, targetJD: at(SPAN), includeSTM, maneuvers: [kick(DV, 0)] });

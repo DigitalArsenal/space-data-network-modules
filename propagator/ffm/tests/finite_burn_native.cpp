@@ -98,11 +98,11 @@ static void rocketSpiral() {
 }
 static void impulsiveLimit() {
  auto s=initial();const double m=1000,isp=300,dv=.001,center=100,end=400;
- ForceModel::ImpulsiveManeuverDef impulse;impulse.epoch=s.epoch+center/86400;impulse.deltaV={0,dv,0};impulse.inRTN=false;
+ ForceModel::ImpulsiveManeuverDef impulse;impulse.seconds=center;impulse.deltaV={0,dv,0};impulse.inRTN=false;
  auto f=gravity();auto ref=PropagateWithSTM(s,end,controls(2),f,STMMethod::Analytic,
  ForceModel::DensityGradient::Neglected,{impulse});
  if(!ref.success)throw std::runtime_error(ref.errorMessage);
- const double representedCenter=(impulse.epoch-s.epoch)*86400;
+ const double representedCenter=impulse.seconds;
  double prior=0;
  for(double dur:{10.,1.,.1}) {
   FiniteBurn b;b.startSeconds=representedCenter-dur/2;b.stopSeconds=representedCenter+dur/2;b.ispSeconds=isp;b.direction={0,1,0};
@@ -213,10 +213,10 @@ static void overlappingImpulses() {
  StateVector s{{7000,100,-50},{1,7,.4},2451545};const double end=200,isp=300;
  FiniteBurn x;x.startSeconds=10;x.stopSeconds=110;x.accelerationKmS2=1e-5;x.ispSeconds=isp;x.direction={1,0,0};
  FiniteBurn y=x;y.startSeconds=50;y.stopSeconds=150;y.accelerationKmS2=2e-5;y.direction={0,1,0};
- ForceModel::ImpulsiveManeuverDef kick;kick.epoch=s.epoch+100/86400.;kick.inRTN=false;kick.deltaV={1e-4,-2e-4,3e-5};
+ ForceModel::ImpulsiveManeuverDef kick;kick.seconds=100;kick.inRTN=false;kick.deltaV={1e-4,-2e-4,3e-5};
  auto r=PropagateFiniteBurns(s,1000,end,controls(7),vacuum(),{x,y},ForceModel::DensityGradient::Neglected,{kick});
  if(!r.success)throw std::runtime_error(r.errorMessage);
- const double kt=(kick.epoch-s.epoch)*86400,decay=std::exp(-1000*(x.accelerationKmS2*100+y.accelerationKmS2*100)/(isp*G0));
+ const double kt=kick.seconds,decay=std::exp(-1000*(x.accelerationKmS2*100+y.accelerationKmS2*100)/(isp*G0));
  const Vec3 vx=x.direction*(x.accelerationKmS2*100),vy=y.direction*(y.accelerationKmS2*100);
  const Vec3 expectedV=s.velocity+vx+vy+kick.deltaV;
  const Vec3 expectedR=s.position+s.velocity*end+vx*(end-x.startSeconds-50)+vy*(end-y.startSeconds-50)+kick.deltaV*(end-kt);

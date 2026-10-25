@@ -126,9 +126,9 @@ VariationalResult scheduled(const StateVector& initial,double dt,const Integrato
     if(dt<0 && !burns.empty())return fail(out,"Backward propagation with scheduled impulses is unsupported.");
     auto sorted=burns;
     for(const auto& b:sorted)
-        if(!std::isfinite(b.epoch)||!std::isfinite(b.deltaV.x)||!std::isfinite(b.deltaV.y)||!std::isfinite(b.deltaV.z))
-            return fail(out,"Impulse epoch and deltaV must be finite.");
-    std::stable_sort(sorted.begin(),sorted.end(),[](const auto& a,const auto& b){return a.epoch<b.epoch;});
+        if(!std::isfinite(b.seconds)||!std::isfinite(b.deltaV.x)||!std::isfinite(b.deltaV.y)||!std::isfinite(b.deltaV.z))
+            return fail(out,"Impulse time and deltaV must be finite.");
+    std::stable_sort(sorted.begin(),sorted.end(),[](const auto& a,const auto& b){return a.seconds<b.seconds;});
     auto dispatch=config;
     if(!analytic&&!finiteDifferenceConfig(config,dispatch))
         return fail(out,"FINITE_DIFFERENCE STM supports RK4, RKF45, RKF78, RK78, COWELL, RKDP87 and BS; this integrator has no verified result dispatcher.");
@@ -167,10 +167,9 @@ VariationalResult scheduled(const StateVector& initial,double dt,const Integrato
         elapsed=until;return true;
     };
     for(const auto& b:sorted) {
-        const double when=(b.epoch-initial.epoch)*86400.0;
-        // A kick at this span's own start belongs to the span before it (applied at its end), or, for the
-        // first span, to the caller (Execution::startImpulses): applying it here would apply it twice.
-        if(b.executed||when<=0||when>dt)continue;
+        // The kicks passed in are this propagation's: a kick at its start applies first, one at its end last.
+        const double when=b.seconds;
+        if(when<0||when>dt)continue;
         if(!advance(when))return out;
         if(analytic) {
             if(b.inRTN&&(out.finalState.position.magnitude()==0||out.finalState.position.cross(out.finalState.velocity).magnitude()==0))

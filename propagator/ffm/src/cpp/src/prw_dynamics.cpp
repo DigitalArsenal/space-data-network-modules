@@ -783,11 +783,14 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
         ForceModel::ImpulsiveManeuverDef kick;
         TTEpoch tt;
         if(!impulse||!decodeEpochTT(impulse->EPOCH(),tt,error)||!readVector(impulse->DELTA_V(),kick.deltaV,0.001,error))return false;
-        kick.epoch=timesys::ttToTdb(tt.jdTt());
+        // The kick's time on the integration clock (TT), from the same instants and the same function as every span
+        // boundary, so equal instants compare equal: no date, no tolerance.
+        kick.seconds=elapsedSeconds(out.initialTT,tt);
+        if(kick.seconds<0)return prwError(error,"invalid-impulse: An impulse precedes the arc's initial epoch; a maneuver before it belongs in the initial state.");
         if(impulse->VECTOR_BASIS()!=prwSteeringBasis::INTEGRATION_FRAME&&impulse->VECTOR_BASIS()!=prwSteeringBasis::RTN_AXES)return prwError(error,"unsupported-impulse-frame: Impulses support integration-frame or RTN components.");
         kick.inRTN=impulse->VECTOR_BASIS()==prwSteeringBasis::RTN_AXES;if(!kick.inRTN)kick.deltaV=toGcrf(out,kick.deltaV);
-        // At the initial epoch (to the TDB date's resolution): see Execution::startImpulses.
-        const bool atStart=!out.massDynamics&&elapsedSeconds(out.initialTT,tt)>=0&&kick.epoch<=out.initial.epoch;
+        // At the initial epoch exactly: see Execution::startImpulses.
+        const bool atStart=!out.massDynamics&&kick.seconds==0;
         (atStart?out.startImpulses:out.impulses).push_back(kick);
     }
     if(in->FINITE_BURNS()) {
@@ -913,9 +916,24 @@ bool propagateState(Execution& execution,StateVector& state,TTEpoch& at,const TT
     }
     return true;
 }
+// The kicks that fall in the span from c.tt to `to`, with their times from the span's start: those after the
+// start up to and including the end (a kick at the start was applied with the span before it). Start, end and
+// kick are all elapsed seconds from the arc's initial epoch by the one function, so a kick at the end compares
+// equal to it; its time in the span is then the span's duration itself.
+std::vector<ForceModel::ImpulsiveManeuverDef> kicksOfSpan(const Execution& execution,const Cursor& c,const TTEpoch& to,double duration) {
+    std::vector<ForceModel::ImpulsiveManeuverDef> kicks;
+    const double start=elapsedSeconds(execution.initialTT,c.tt),end=elapsedSeconds(execution.initialTT,to);
+    for(auto kick:execution.impulses) {
+        if(!(kick.seconds>start&&kick.seconds<=end))continue;
+        kick.seconds=kick.seconds==end?duration:std::min(kick.seconds-start,duration);
+        kicks.push_back(kick);
+    }
+    return kicks;
+}
 bool advanceSpan(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error) {
     const double seconds=elapsedSeconds(c.tt,to);
     if(seconds==0)return true;
+    const auto kicks=kicksOfSpan(execution,c,to,seconds);
     struct Restore { timesys::Instant& value; timesys::Instant saved; ~Restore(){value=saved;} }
         restore{execution.forces.integrationEpochTT,execution.forces.integrationEpochTT};
     execution.forces.integrationEpochTT=c.tt.instant();
@@ -924,12 +942,12 @@ bool advanceSpan(Execution& execution,Cursor& c,const TTEpoch& to,std::string& e
     std::vector<double> span(n*n,0.0),p;
     StateVector state;uint32_t steps=0,rejections=0;
     if(!execution.parameters.empty()) {
-        const auto v=Integrator::PropagateParameterCovariance(c.state,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.parameters,c.p,execution.noise);
+        const auto v=Integrator::PropagateParameterCovariance(c.state,seconds,execution.integrator,execution.forces,execution.technique,execution.density,kicks,execution.parameters,c.p,execution.noise);
         if(!v.success){error="invoke-failed: "+v.errorMessage;return false;}
         span=v.phi;p=v.covariance;state=v.finalState;steps=v.steps;rejections=v.rejections;
     } else {
         Mat6 p0{};if(c.p.size()==36)std::copy(c.p.begin(),c.p.end(),&p0.m[0][0]);
-        const auto v=Integrator::PropagateCovariance(c.state,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,p0,execution.noise);
+        const auto v=Integrator::PropagateCovariance(c.state,seconds,execution.integrator,execution.forces,execution.technique,execution.density,kicks,p0,execution.noise);
         if(!v.success){error="invoke-failed: "+v.errorMessage;return false;}
         std::copy(&v.stm.m[0][0],&v.stm.m[0][0]+36,span.begin());
         if(execution.covariance)p.assign(&v.covariance.m[0][0],&v.covariance.m[0][0]+36);
