@@ -218,10 +218,12 @@ bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasE
             if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER(),choice==pcfGravitySelection::EGM96?ForceModel::EmbeddedEarthField::EGM96:ForceModel::EmbeddedEarthField::EGM2008))return false;
             break;
         }
-        const int degree=in->MAXIMUM_DEGREE(),order=in->MAXIMUM_ORDER(),highest=planetary::fieldInfo(center).degree;
+        // The published field's whole degree may be named: the default artifact embeds the first part, and attachEnvironment
+        // refuses a degree past it unless the gravity_field input supplies the field.
+        const int degree=in->MAXIMUM_DEGREE(),order=in->MAXIMUM_ORDER(),highest=planetary::fieldInfo(center).sourceDegree;
         if(degree<2||degree>highest) {
             const auto info=planetary::fieldInfo(center);
-            return prwError(error,(std::string("unsupported-gravity: ")+info.name+" is embedded to degree "+std::to_string(highest)+(info.sourceDegree>highest?" of its "+std::to_string(info.sourceDegree):std::string())+"; the request names degree "+std::to_string(degree)+" (two through "+std::to_string(highest)+" are available).").c_str());
+            return prwError(error,(std::string("unsupported-gravity: ")+info.name+" is a field of degree "+std::to_string(highest)+"; the request names degree "+std::to_string(degree)+" (two through "+std::to_string(highest)+" are available).").c_str());
         }
         if(order<0||order>degree)return prwError(error,"unsupported-gravity: Field order must be between zero and the degree.");
         int tesseral=UINT16_MAX;
@@ -991,6 +993,11 @@ bool loadEnvironment(const PrwEnvironment& frames,bool own,Environment& out,std:
         }
         if(out.secondTrajectory->epoch.size()<2)return prwError(error,"invalid-second-trajectory: The $OEM needs at least two samples.");
     }
+    if(frames.gravityFieldSize) {
+        flatbuffers::Verifier verifier(frames.gravityField,frames.gravityFieldSize);
+        if(!VerifySHCBuffer(verifier))return prwError(error,"invalid-gravity-field: gravity_field is not a valid $SHC.");
+        out.gravityField=GetSHC(frames.gravityField);
+    }
     if(frames.jb2008IndicesSize) {
         const PRW* root=nullptr;if(!verifyPrw(jb2008,frames.jb2008IndicesSize,root,error))return false;
         if(!root->JB2008_INDICES())return prwError(error,"invalid-prw-arm: jb2008_indices requires JB2008_INDICES.");
@@ -1058,7 +1065,61 @@ bool bindSecondTrajectory(Execution& execution,const Environment& environment,st
     return true;
 }
 }
+// The harmonic field of a request about the Moon or Mars: the embedded one to the degree the default artifact carries, or the
+// $SHC of the gravity_field input, which a request needs for a degree past the embedded one and which then answers in its place.
+// The set must be the selected field of the central body (its name, body and normalization), carry the degree and order the
+// request names, and give every coefficient of the truncation exactly once.
+static bool attachPlanetaryField(Execution& execution,const Environment& environment,std::string& error) {
+    auto& config=execution.forces.planetary;
+    const auto info=planetary::fieldInfo(config.body);
+    const SHC* set=environment.gravityField;
+    if(!set) {
+        if(config.degree>info.degree)
+            return prwError(error,(std::string("unsupported-gravity: ")+info.name+" is embedded to degree "+std::to_string(info.degree)+" of its "+std::to_string(info.sourceDegree)+"; the request names degree "+std::to_string(config.degree)+" (two through "+std::to_string(info.degree)+" are available; the gravity_field input carries the whole field).").c_str());
+        config.loaded.reset();
+        return true;
+    }
+    const auto refuse=[&](const std::string& why){return prwError(error,("invalid-gravity-field: "+why).c_str());};
+    if(set->CENTRAL_BODY_NAIF_ID()!=config.body)return refuse("the set is the field of NAIF body "+std::to_string(set->CENTRAL_BODY_NAIF_ID())+", the request flies about "+std::to_string(config.body)+".");
+    if(!set->MODEL_NAME()||set->MODEL_NAME()->str()!=info.name)return refuse(std::string("the request selects ")+info.name+"; the set is "+(set->MODEL_NAME()?set->MODEL_NAME()->str():std::string("unnamed"))+".");
+    if(set->NORMALIZATION()!=shcNormalization::FULLY_NORMALIZED)return refuse("the set is not fully normalized.");
+    if(!(std::isfinite(set->GM())&&set->GM()>0)||!(std::isfinite(set->REFERENCE_RADIUS())&&set->REFERENCE_RADIUS()>0))return refuse("GM and REFERENCE_RADIUS must be positive and finite.");
+    if(set->VARIABLE_TERMS()&&set->VARIABLE_TERMS()->size())return refuse("time-variable terms are not read.");
+    const auto *D=set->DEGREES(),*O=set->ORDERS();const auto *C=set->C(),*S=set->S();
+    if(!D||!O||!C||!S||D->size()!=O->size()||D->size()!=C->size()||D->size()!=S->size())return refuse("DEGREES, ORDERS, C and S must be present and of one length.");
+    const int degree=config.degree,order=config.order,tesseral=config.tesseralDegree;
+    if(degree>set->MAX_DEGREE()||order>set->MAX_ORDER())
+        return prwError(error,(std::string("unsupported-gravity: the supplied ")+info.name+" is of degree "+std::to_string(set->MAX_DEGREE())+" and order "+std::to_string(set->MAX_ORDER())+"; the request names degree "+std::to_string(degree)+" and order "+std::to_string(order)+".").c_str());
+    auto field=std::make_shared<ExtendedGravityField>();
+    field->model=GravityModelType::Custom;
+    field->mu=set->GM()*1e-9;
+    field->referenceRadius=set->REFERENCE_RADIUS()*1e-3;
+    field->normalized=true;
+    field->allocate(uint16_t(degree),uint16_t(order));
+    std::vector<char> seen(size_t(degree+1)*size_t(degree+2)/2,0);
+    for(flatbuffers::uoffset_t i=0;i<D->size();++i) {
+        const int n=D->Get(i),m=O->Get(i);
+        if(m>n||n>set->MAX_DEGREE())return refuse("coefficient ("+std::to_string(n)+", "+std::to_string(m)+") is outside the set's degree or has an order above its degree.");
+        if(n<2||n>degree||m>order)continue;
+        if(m>=1&&n>tesseral)continue;
+        const size_t at=size_t(n)*size_t(n+1)/2+size_t(m);
+        if(seen[at])return refuse("coefficient ("+std::to_string(n)+", "+std::to_string(m)+") appears twice.");
+        if(!std::isfinite(C->Get(i))||!std::isfinite(S->Get(i)))return refuse("coefficient ("+std::to_string(n)+", "+std::to_string(m)+") is not finite.");
+        seen[at]=1;field->Cnm[n][m]=C->Get(i);field->Snm[n][m]=S->Get(i);
+    }
+    for(int n=2;n<=degree;++n)for(int m=0;m<=std::min(n,order);++m) {
+        if(m>=1&&n>tesseral)continue;
+        if(!seen[size_t(n)*size_t(n+1)/2+size_t(m)])return refuse("coefficient ("+std::to_string(n)+", "+std::to_string(m)+") is missing.");
+    }
+    config.loaded=std::move(field);
+    return true;
+}
 bool attachEnvironment(Execution& execution,const Environment& environment,bool requestWeather,std::string& error) {
+    if(execution.forces.gravityMode==ForceModel::GravityMode::PlanetaryField) {
+        if(!attachPlanetaryField(execution,environment,error))return false;
+    } else if(environment.gravityField) {
+        return prwError(error,"unsupported-environment: gravity_field is the harmonic field of a request about the Moon or Mars that selects GRGM660PRIM or MRO120F.");
+    }
     if(execution.forces.centralBodyNaifId!=399&&(environment.earth||environment.weather||environment.jb2008||environment.densityCorrection))
         return prwError(error,"unsupported-environment: earth_orientation, space_weather, jb2008_indices and the density correction are the Earth's inputs; a request about the Moon or Mars carries none.");
     if(!bindSecondTrajectory(execution,environment,error))return false;

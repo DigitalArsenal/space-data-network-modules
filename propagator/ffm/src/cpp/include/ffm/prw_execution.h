@@ -18,6 +18,9 @@ struct PrwEnvironment {
     const uint8_t* densityCorrection = nullptr; size_t densityCorrectionSize = 0;
     // second_trajectory: an OEM that EVENTS of kind CLOSEST_APPROACH read.
     const uint8_t* secondTrajectory = nullptr; size_t secondTrajectorySize = 0;
+    // gravity_field: a $SHC, the harmonic field of the central body (the Moon's GRGM660PRIM to its full degree), which a request about
+    // that body reads in place of the embedded field when it names a degree the embedded field does not reach.
+    const uint8_t* gravityField = nullptr; size_t gravityFieldSize = 0;
 };
 bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,
                       const PrwEnvironment& environment,

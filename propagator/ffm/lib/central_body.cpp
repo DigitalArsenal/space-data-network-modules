@@ -116,7 +116,8 @@ Vec3 ThirdBodyHarmonics(int centralBodyNaifId, const ThirdBodyFieldConfig& confi
 }
 
 Vec3 PlanetaryHarmonics(const Vec3& position, const PlanetaryFieldConfig& config) {
-    const ExtendedGravityField& field = planetary::embeddedField(config.body, config.degree, config.order, config.tesseralDegree);
+    const ExtendedGravityField& field = config.loaded ? *config.loaded
+        : planetary::embeddedField(config.body, config.degree, config.order, config.tesseralDegree);
     return ffm::computeGravity(position, field).zonalHarmonics;
 }
 

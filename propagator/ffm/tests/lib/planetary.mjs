@@ -2,6 +2,10 @@
 // built as typed tables, and the comparison of a returned trajectory with NAIF's reconstructed ephemeris. Only
 // representation and subtraction happen here; propagation runs in the module.
 import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire, } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { createStandaloneHarness } from 'space-data-module-sdk/testing/isomorphic';
 import { decodePrw, encodePrw, makeTable, nativeInput, sds, TYPE } from './prwCodec.mjs';
 
@@ -64,9 +68,12 @@ export function request({ center, epoch, initial, target, samples = [], forces, 
     SAMPLE_EPOCHS: samples.map((t) => instant(t)) });
 }
 
-export const inputs = (exec, kernel) => [
+export const SHC_TYPE = { schemaName: 'SHC.fbs', fileIdentifier: '$SHC', rootTypeName: 'SHC', wireFormat: 'flatbuffer' };
+// `field`: the bytes of a $SHC for the gravity_field input.
+export const inputs = (exec, kernel, field) => [
   { portId: 'request', typeRef: TYPE, payload: encodePrw('EXECUTION_REQUEST', exec) },
-  { portId: 'kernel', typeRef: TYPE, payload: nativeInput(kernel) }];
+  { portId: 'kernel', typeRef: TYPE, payload: nativeInput(kernel) },
+  ...(field ? [{ portId: 'gravity_field', typeRef: SHC_TYPE, payload: field }] : [])];
 
 const harnesses = {};
 export async function lane(kind) {
@@ -75,12 +82,45 @@ export async function lane(kind) {
 }
 export const destroyLanes = async () => { for (const h of Object.values(harnesses)) await h.destroy?.(); };
 // Runs a request on a lane; returns { samples: [[x y z vx vy vz] km, km/s ...], final, steps } or { error }.
-export async function run(kind, exec, kernel) {
+export async function run(kind, exec, kernel, field) {
   const h = await lane(kind);
-  const response = await h.invoke({ methodId: 'invoke', inputs: inputs(exec, kernel) });
+  const response = await h.invoke({ methodId: 'invoke', inputs: inputs(exec, kernel, field) });
   if (response.statusCode !== 0) return { error: `${response.errorCode ?? ''}: ${response.errorMessage ?? ''}`, statusCode: response.statusCode };
   const result = decodePrw(response.outputs.find((o) => o.portId === 'response').payload).EXECUTION_RESULT;
   const read = (sample) => { const s = sample.STATE.STATE; return [s.POSITION.X, s.POSITION.Y, s.POSITION.Z, s.VELOCITY.X, s.VELOCITY.Y, s.VELOCITY.Z].map((v) => v / 1000); };
   return { final: read(result.FINAL_SAMPLE), samples: result.SAMPLES.map(read), steps: Number(result.FINAL_SAMPLE.ACCEPTED_STEPS), raw: result };
 }
 export const dist = (a, b) => 1000 * Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);   // meters
+
+// ---- the gravity_field input ---------------------------------------------------------------------------------------
+const ffmRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+const requireFfm = createRequire(path.join(ffmRoot, 'package.json'));
+let shcBindings;
+export async function shc() {
+  return shcBindings ??= await import(pathToFileURL(path.join(path.dirname(requireFfm.resolve('spacedatastandards.org/package.json')), 'lib/js/SHC/main.js')));
+}
+/** The Moon's GRGM660PRIM as a $SHC to degree 660: the pinned PDS table (fetched and verified into PLANETARY_SOURCES, default
+ * .sdk-build/planetary-sources, when absent) written by scripts/make-gravity-field-input.mjs. */
+export function grgm660primField() {
+  const sources = process.env.PLANETARY_SOURCES ?? path.join(ffmRoot, '.sdk-build/planetary-sources');
+  const out = path.join(ffmRoot, '.sdk-build/grgm660prim.shc');
+  if (!fs.existsSync(out)) {
+    execFileSync(process.execPath, [path.join(ffmRoot, 'scripts/fetch-planetary-sources.mjs'), sources, 'grgm660prim'], { stdio: 'inherit' });
+    execFileSync(process.execPath, [path.join(ffmRoot, 'scripts/make-gravity-field-input.mjs'), sources, out], { stdio: 'inherit' });
+  }
+  return new Uint8Array(fs.readFileSync(out));
+}
+/** A small valid $SHC of the Moon (degree 4, every coefficient C = S = 1e-6 apart from the sectorial/zonal pattern) and the
+ * edits that make it invalid, for the refusals. */
+export async function smallField(edit = {}) {
+  const { SHCT, shcNormalization, shcTideSystem } = await shc();
+  const flatbuffers = await import(pathToFileURL(requireFfm.resolve('flatbuffers')));
+  const D = [], O = [], C = [], S = [];
+  for (let n = 2; n <= 4; ++n) for (let m = 0; m <= n; ++m) { D.push(n); O.push(m); C.push(1e-6 / n); S.push(m ? 1e-6 / m : 0); }
+  const record = Object.assign(new SHCT(), {
+    MODEL_NAME: 'GRGM660PRIM', CENTRAL_BODY_NAIF_ID: 301, GM: 4902.7998069317e9, REFERENCE_RADIUS: 1738e3, MAX_DEGREE: 4, MAX_ORDER: 4,
+    NORMALIZATION: shcNormalization.FULLY_NORMALIZED, PERMANENT_TIDE_SYSTEM: shcTideSystem.UNSPECIFIED, DEGREES: D, ORDERS: O, C, S, ...edit });
+  const builder = new flatbuffers.Builder(4096);
+  builder.finish(record.pack(builder), '$SHC');
+  return new Uint8Array(builder.asUint8Array());
+}

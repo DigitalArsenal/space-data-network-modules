@@ -805,6 +805,9 @@ struct PlanetaryFieldConfig {
     uint16_t degree{0};
     uint16_t order{0};
     uint16_t tesseralDegree{UINT16_MAX};
+    /// The field supplied with the request (a $SHC on the gravity_field input), already truncated to the degree, order and
+    /// tesseral degree above; empty: the embedded field answers.
+    std::shared_ptr<const ExtendedGravityField> loaded;
 };
 
 /// A third body's harmonic field, not only its point mass, acting on the satellite (extended third-body gravity):

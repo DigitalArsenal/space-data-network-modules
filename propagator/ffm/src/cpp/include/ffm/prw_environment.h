@@ -8,6 +8,7 @@
 #include "astrodynamics.h"
 #include "EOP_generated.h"
 #include "OEM_generated.h"
+#include "SHC_generated.h"
 extern "C" {
 #include "erfa.h"
 #include "erfam.h"
@@ -212,6 +213,8 @@ struct Environment {
     std::shared_ptr<SpaceWeatherTable> weather;
     std::shared_ptr<JB2008IndicesTable> jb2008;
     std::shared_ptr<DensityCorrection> densityCorrection;
+    // The verified $SHC of the gravity_field input, read in place: it lives as long as the invocation that supplied it.
+    const SHC* gravityField=nullptr;
     std::vector<std::shared_ptr<std::vector<uint8_t>>> owned;
 };
 // own: copy the frames first (a resident instance keeps them).

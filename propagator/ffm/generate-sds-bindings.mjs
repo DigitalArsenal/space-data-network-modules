@@ -26,6 +26,7 @@ export async function generateSdsBindings() {
   const visit = family => { if (families.includes(family)) return; for (const dep of dependencies.get(family) ?? []) visit(dep); families.push(family); };
   visit('PRW');
   visit('DCL');
+  visit('SHC');
   const outDir = path.join(packageRoot, 'src/cpp/generated/sds');
   fs.mkdirSync(outDir, {recursive:true});
   for (const family of families) {

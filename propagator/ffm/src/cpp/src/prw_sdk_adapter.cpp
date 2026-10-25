@@ -47,6 +47,8 @@ extern "C" int invoke(void) {
   const int correctionIndex=plugin_find_input_index("density_correction",0);
   const int jb2008Index=plugin_find_input_index("jb2008_indices",0);
   const int secondIndex=plugin_find_input_index("second_trajectory",0);
+  const int fieldIndex=plugin_find_input_index("gravity_field",0);
+  if(plugin_find_input_index("gravity_field",1)>=0)return fail("invalid-gravity-field: Supply one gravity_field record.");
   if(plugin_find_input_index("second_trajectory",1)>=0)return fail("invalid-second-trajectory: Supply one second_trajectory record.");
   if(plugin_find_input_index("density_correction",1)>=0)return fail("invalid-density-correction: Supply one density_correction record.");
   if(index<0)return fail("invalid-request: missing request");
@@ -58,8 +60,10 @@ extern "C" int invoke(void) {
   const auto* jb2008=jb2008Index<0?nullptr:plugin_get_input_frame(jb2008Index);
   const auto* correction=correctionIndex<0?nullptr:plugin_get_input_frame(correctionIndex);
   const auto* second=secondIndex<0?nullptr:plugin_get_input_frame(secondIndex);
+  const auto* field=fieldIndex<0?nullptr:plugin_get_input_frame(fieldIndex);
   ffm::PrwEnvironment environment;
   if(second){environment.secondTrajectory=second->payload;environment.secondTrajectorySize=second->payload_length;}
+  if(field){environment.gravityField=field->payload;environment.gravityFieldSize=field->payload_length;}
   if(correction){environment.densityCorrection=correction->payload;environment.densityCorrectionSize=correction->payload_length;}
   if(eop){environment.earthOrientation=eop->payload;environment.earthOrientationSize=eop->payload_length;}
   if(weather){environment.spaceWeather=weather->payload;environment.spaceWeatherSize=weather->payload_length;}

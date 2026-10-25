@@ -625,7 +625,7 @@ matrix, covariance, impulses, finite burns, dynamic parameters and process noise
 
 | | Moon | Mars |
 | --- | --- | --- |
-| Field | `GRAVITY_CHOICE` `GRGM660PRIM`, degree 2 to 150: GRGM660PRIM (Lemoine et al. 2013; 660 in the PDS table, 150 embedded; a higher degree is refused by name, `unsupported-gravity`), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `GRAVITY_CHOICE` `MRO120F`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
+| Field | `GRAVITY_CHOICE` `GRGM660PRIM`, degree 2 to 660: GRGM660PRIM (Lemoine et al. 2013; 150 embedded, the rest on the `gravity_field` input below; a degree the request cannot reach is refused by name, `unsupported-gravity`), fully normalized, R 1738.0 km, GM 4902.7998069317 km^3/s^2 in its harmonics | `GRAVITY_CHOICE` `MRO120F`, degree 2 to 120: MRO120F (Konopliv et al. 2020), R 3396.0 km, GM 42828.375663957 km^3/s^2 in its harmonics |
 | Axes | DE440 lunar libration (principal-axes frame, the Chebyshev records of `moon_pa_de440_200625.bpc` for 2021-12-28 to 2037-01-06 TDB, a day inside each end being the limit of an arc); outside it `orientation-out-of-range` | the Mars-fixed frame of MRO120F's PDS label: N, J fixed; PSI, I, PHI secular; PHI's seasonal spin terms (1, 1/2, 1/3, 1/4 Mars year from January 1999); the nutation corrections of Konopliv et al. 2006 are not in the label and not applied |
 | Atmosphere | none (drag refused) | `ATMOSPHERE_MODEL` `MARS_EXPONENTIAL`: the banded exponential profile NASA GMAT R2026a ships (Vallado 8.6), 0 to 2980 km above the reference ellipsoid (3396.19, 3376.20 km), turning with the planet at 350.891985314 deg/day. One mean profile: no solar-cycle, seasonal, diurnal, latitude or dust variation; scale the coefficient |
 | Radiation pressure | cannonball, conical shadow of the Moon | cannonball, conical shadow of Mars |
@@ -637,6 +637,20 @@ as the central body's own: `SPHERICAL_HARMONICS`, `EGM2008`, `EGM96`, `J2_ONLY`,
 atmospheres (`EXPONENTIAL` among them) are the Earth's, `GRGM660PRIM` the Moon's, `MRO120F` and `MARS_EXPONENTIAL` Mars's. Mars's center is the Mars system barycenter of the short DE440 kernel (Phobos and Deimos displace it by under 0.2 m);
 Phobos and Deimos are not modeled. The Earth's models (tides, Earth radiation, relativity, space weather, GNSS radiation
 pressure) are refused for the other bodies.
+
+The whole Moon field: the default artifact embeds GRGM660PRIM to degree 150 (the degree past which the LRO prediction error stops
+falling), and a request that selects it and names a degree from 151 to 660 supplies the field on the optional `gravity_field`
+input, a `$SHC` (1.166.0; `MODEL_NAME` `GRGM660PRIM`, `CENTRAL_BODY_NAIF_ID` 301, fully normalized, `GM` in m^3/s^2 and
+`REFERENCE_RADIUS` in meters, `DEGREES`, `ORDERS`, `C` and `S` of degrees 2 to 660, every coefficient once). When the input is
+present it answers in place of the embedded field at any degree; absent, a degree past 150 is refused naming the input
+(`unsupported-gravity`). A set that is not the selected field of the central body, is not fully normalized, lacks or repeats a
+coefficient, or is of lower degree than the request is refused (`invalid-gravity-field`, `unsupported-gravity`), and the input is
+refused for a request that selects no planetary field (`unsupported-environment`). `scripts/make-gravity-field-input.mjs
+<sources-dir> <out.shc>` writes the record (4.4 MB) from the PDS table that `scripts/fetch-planetary-sources.mjs` downloads and
+verifies; it is derived data and is not committed. Measured (`tests/planetary.e2e.mjs`): at degree 100, where the two overlap, a
+day of LRO ends 0.019 m apart (the embedded tables are float32); a polar orbit 20 km over the surface moves 45 m in two hours
+between degrees 150 and 660, 2.6 m between 300 and 660 and 0.6 m between 450 and 660, so degrees past about 300 matter only that
+close to the surface.
 
 Extended third-body gravity (`THIRD_BODY_MAXIMUM_DEGREE` and `THIRD_BODY_MAXIMUM_ORDER`, 0 by default: every third body a point
 mass): the harmonics (degree 2 up) of the Moon's GRGM660PRIM (to degree 150) on an Earth orbiter, or of the Earth's EGM2008 (to

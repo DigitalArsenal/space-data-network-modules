@@ -21,17 +21,20 @@
 //      predicted over three, error by day;
 //   3. the third body's field through the wire (THIRD_BODY_MAXIMUM_DEGREE and _ORDER): the Earth's harmonics on a lunar orbiter and
 //      the Moon's on a high Earth orbiter move a short arc by what the module's own term gives, integrated twice along the path;
-//   4. refusals by name: a field or atmosphere asked for about a body that is not its own (the Earth's SPHERICAL_HARMONICS and
+//   4. the whole lunar field through the gravity_field input ($SHC, GRGM660PRIM to degree 660, built from the pinned PDS table): where
+//      it overlaps the embedded field (degree 150) the two give the same orbit, a low orbit moves by what degrees 151 to 660 add and
+//      the difference converges with the degree, and the input is read only for a request that selects that field;
+//   5. refusals by name: a field or atmosphere asked for about a body that is not its own (the Earth's SPHERICAL_HARMONICS and
 //      EXPONENTIAL stand for no other body's), the third body's field where there is none, and what lies outside an embedded
 //      model's span;
-//   5. lane parity: the browser and native WasmEdge answers are identical bytes for a Moon and a Mars request.
+//   6. lane parity: the browser and native WasmEdge answers are identical bytes for a Moon and a Mars request.
 //
 // Bars are the measured error with a margin (reported next to each); they guard against regressions, not against the
 // truth's own uncertainty (reconstructed ephemerides are fits to tracking data, and FFM has no maneuvers, no
 // Phobos/Deimos and the atmosphere is one mean profile).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { destroyLanes, KERNELS, MARS, MOON, readTruth, request, run } from './lib/planetary.mjs';
+import { destroyLanes, grgm660primField, KERNELS, MARS, MOON, readTruth, request, run, shc, smallField } from './lib/planetary.mjs';
 import { physicsUnits } from '../lib/units.mjs';
 import { byDay, fit, fitIndices, fmt } from './lib/planetaryFit.mjs';
 import { sds } from './lib/prwCodec.mjs';
@@ -207,13 +210,49 @@ console.log("3. The third body's field through the wire (THIRD_BODY_MAXIMUM_DEGR
   }
 }
 
-// ---- 4. refusals by name ------------------------------------------------------------------------------------------
-console.log('4. Refusals by name');
+// ---- 4. the whole lunar field through the gravity_field input -----------------------------------------------------------------
+console.log('4. The whole lunar field (GRGM660PRIM to degree 660) through the gravity_field input ($SHC)');
+const FIELD = grgm660primField();
+{
+  const truth = readTruth('lro-2026-03-27.json');
+  const t0 = truth.epochs[0];
+  const norm = (a, b) => 1000 * Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  // Where the supplied field and the embedded one overlap (degree 100, one day of LRO) they give the same orbit: the embedded
+  // tables are float32 (relative 6e-8), the supplied record float64. Measured 0.02 m.
+  const day = (degree) => request({ center: MOON, epoch: t0, initial: truth.states[0], target: t0 + 86400, forces: lroForces(degree), integrator: { absM: 1e-8, rel: 1e-13 } });
+  const embedded = await run('browser', day(100), KERNEL_2026), supplied = await run('browser', day(100), KERNEL_2026, FIELD);
+  check(!embedded.error && !supplied.error, `degree 100 over a day: ${embedded.error ?? supplied.error}`);
+  if (!embedded.error && !supplied.error) {
+    const d = norm(embedded.final, supplied.final);
+    check(d < 0.2, `the supplied field and the embedded one differ by ${d} m over a day at degree 100`);
+    console.log(`  degree 100, one day of LRO: the supplied field and the embedded field end ${d.toFixed(3)} m apart`);
+  }
+  // A low orbit (20 km over the surface, polar, two hours): the degrees past the embedded 150 move it by tens of meters and the
+  // answer converges as the degree rises (each difference to degree 660 is smaller than the one before).
+  const radius = 1737.4 + 20, speed = Math.sqrt(MOON_GM / radius);
+  const low = (degree, field) => run('browser', request({ center: MOON, epoch: t0, initial: [radius, 0, 0, 0, 0, speed], target: t0 + 7200,
+    forces: { ...lroForces(degree), srp: undefined, areaM2: 10 }, integrator: { absM: 1e-8, rel: 1e-13, max: 60 } }), KERNEL_2026, field);
+  const ends = {};
+  for (const degree of [150, 300, 450, 660]) {
+    const out = await low(degree, degree > 150 ? FIELD : undefined);
+    check(!out.error, `low orbit at degree ${degree}: ${out.error}`);
+    ends[degree] = out.final;
+  }
+  if (Object.values(ends).every(Boolean)) {
+    const gain = norm(ends[660], ends[150]), tail300 = norm(ends[660], ends[300]), tail450 = norm(ends[660], ends[450]);
+    check(gain > 10, `degrees 151 to 660 moved a 20 km orbit by only ${gain} m`);
+    check(tail300 < gain / 5 && tail450 < tail300 / 3, `the orbit does not converge with the degree: ${gain}, ${tail300}, ${tail450} m from degree 660 at 150, 300, 450`);
+    console.log(`  20 km polar orbit, two hours: degree 660 against 150 ${gain.toFixed(1)} m, against 300 ${tail300.toFixed(2)} m, against 450 ${tail450.toFixed(2)} m`);
+  }
+}
+
+// ---- 5. refusals by name ------------------------------------------------------------------------------------------
+console.log('5. Refusals by name');
 {
   const truth = readTruth('lro-2026-03-20.json');
   const base = (center, forces, extra = {}) => request({ center, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[12], forces, ...extra });
-  const refused = async (label, exec, pattern, kernelBytes = KERNEL_2026) => {
-    const out = await run('browser', exec, kernelBytes);
+  const refused = async (label, exec, pattern, kernelBytes = KERNEL_2026, field) => {
+    const out = await run('browser', exec, kernelBytes, field);
     check(out.error && pattern.test(out.error), `${label}: expected ${pattern}, got ${out.error ?? 'a result'}`);
     console.log(`  ${label}: ${out.error?.slice(0, 110)}`);
   };
@@ -236,7 +275,22 @@ console.log('4. Refusals by name');
   await refused('the Moon as its own third body', base(MOON, { ...moon, thirdBodies: [10, 301] }), /unsupported-third-body/);
   await refused('a body with no embedded field', base(599, moon), /unsupported-central-body/);
   await refused('a degree beyond the embedded field', base(MOON, lroForces(151)), /unsupported-gravity: GRGM660PRIM is embedded to degree 150 of its 660/);
-  await refused('a degree beyond the embedded field of Mars', base(MARS, { ...mars, degree: 121, order: 121 }), /unsupported-gravity: MRO120F is embedded to degree 120/);
+  await refused('a degree past the embedded field without the gravity_field input', base(MOON, lroForces(151)), /unsupported-gravity: GRGM660PRIM is embedded to degree 150 of its 660; the request names degree 151 \(two through 150 are available; the gravity_field input carries the whole field\)/);
+  await refused('a degree past the published field with it', base(MOON, lroForces(661)), /unsupported-gravity: GRGM660PRIM is a field of degree 660; the request names degree 661/, KERNEL_2026, FIELD);
+  const bad = async (label, edit, pattern, degree = 4) => refused(label, base(MOON, lroForces(degree)), pattern, KERNEL_2026, await smallField(edit));
+  await refused('bytes that are not a $SHC', base(MOON, lroForces(4)), /invalid-gravity-field: gravity_field is not a valid \$SHC/, KERNEL_2026, new Uint8Array(64));
+  await bad('the field of another body', { CENTRAL_BODY_NAIF_ID: 499 }, /invalid-gravity-field: the set is the field of NAIF body 499, the request flies about 301/);
+  await bad('the field of another model', { MODEL_NAME: 'GRGM1200A' }, /invalid-gravity-field: the request selects GRGM660PRIM; the set is GRGM1200A/);
+  await bad('an unnormalized set', { NORMALIZATION: (await shc()).shcNormalization.UNNORMALIZED }, /invalid-gravity-field: the set is not fully normalized/);
+  await bad('a set of lower degree than the request', {}, /unsupported-gravity: the supplied GRGM660PRIM is of degree 4 and order 4; the request names degree 5 and order 5/, 5);
+  await bad('a set with a coefficient missing', { DEGREES: [2, 2, 2, 3], ORDERS: [0, 1, 2, 0], C: [1e-6, 1e-6, 1e-6, 1e-6], S: [0, 0, 0, 0], MAX_DEGREE: 4, MAX_ORDER: 4 }, /invalid-gravity-field: coefficient \(3, 1\) is missing/, 3);
+  await bad('a set with a coefficient twice', { DEGREES: [2, 2, 2, 2], ORDERS: [0, 1, 2, 2], C: [1e-6, 1e-6, 1e-6, 1e-6], S: [0, 0, 0, 0] }, /invalid-gravity-field: coefficient \(2, 2\) appears twice/, 2);
+  await bad('a set with arrays of different lengths', { C: [1e-6] }, /invalid-gravity-field: DEGREES, ORDERS, C and S must be present and of one length/);
+  await bad('a set with no GM', { GM: 0 }, /invalid-gravity-field: GM and REFERENCE_RADIUS must be positive and finite/);
+  await refused('a gravity_field about the Earth', base(399, { ...EARTH_FORCES }), /unsupported-environment: gravity_field is the harmonic field of a request about the Moon or Mars/, KERNEL_2026, FIELD);
+  await refused('a gravity_field with a point-mass Moon', base(MOON, { ...moon, gravity: G.POINT_MASS }), /unsupported-environment: gravity_field is the harmonic field of a request about the Moon or Mars/, KERNEL_2026, FIELD);
+  await refused('a gravity_field of the Moon about Mars', base(MARS, mars), /invalid-gravity-field: the set is the field of NAIF body 301, the request flies about 499/, KERNEL_2018, FIELD);
+  await refused('a degree beyond the embedded field of Mars', base(MARS, { ...mars, degree: 121, order: 121 }), /unsupported-gravity: MRO120F is a field of degree 120; the request names degree 121/);
   await refused('a state about the wrong body', request({ center: MARS, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[12], forces: { ...moon, gravity: G.POINT_MASS, extra: { CENTRAL_BODY_NAIF_ID: MOON } } }), /unsupported-frame/);
   // The third body's field (THIRD_BODY_MAXIMUM_DEGREE and _ORDER): where there is none, where it is not asked for, and past what is embedded.
   await refused('a third-body field about Mars', base(MARS, { ...mars, ...field(4) }), /unsupported-third-body: No third body of Mars has an embedded harmonic field/);
@@ -262,16 +316,17 @@ console.log('4. Refusals by name');
   await refused('impact on the Moon', request({ center: MOON, epoch: truth.epochs[0], initial: surface, target: truth.epochs[0] + 3600, forces: { ...moon, thirdBodies: [] } }), /impact/);
 }
 
-// ---- 5. lane parity -----------------------------------------------------------------------------------------------
-console.log('5. Lane parity: the browser and native WasmEdge give the same bits');
+// ---- 6. lane parity -----------------------------------------------------------------------------------------------
+console.log('6. Lane parity: the browser and native WasmEdge give the same bits');
 {
   const cases = [
     ['Moon', MOON, readTruth('lro-2026-03-20.json'), KERNEL_2026, lroForces(8)],
     ['Mars', MARS, readTruth('mro-2018-05-12.json'), KERNEL_2018, { gm: MARS_GM, degree: 8, order: 8, thirdBodies: [10, 399], massKg: 1150, areaM2: 15, srp: { cr: 1.3 }, drag: { cd: 2.2 } }],
+    ['Moon with the gravity_field input', MOON, readTruth('lro-2026-03-20.json'), KERNEL_2026, lroForces(160), FIELD],
   ];
-  for (const [label, center, truth, kernelBytes, forces] of cases) {
+  for (const [label, center, truth, kernelBytes, forces, field] of cases) {
     const exec = request({ center, epoch: truth.epochs[0], initial: truth.states[0], target: truth.epochs[24], samples: [6, 12, 18].map((k) => truth.epochs[k]), forces });
-    const a = await run('browser', exec, kernelBytes), b = await run('wasmedge', exec, kernelBytes);
+    const a = await run('browser', exec, kernelBytes, field), b = await run('wasmedge', exec, kernelBytes, field);
     const same = !a.error && !b.error && JSON.stringify([a.final, ...a.samples]) === JSON.stringify([b.final, ...b.samples]);
     check(same, `${label}: browser and WasmEdge differ (${a.error ?? b.error ?? 'values'})`);
     console.log(`  ${label}: ${same ? 'identical' : 'DIFFERENT'} (${createHash('sha256').update(JSON.stringify(a.final)).digest('hex').slice(0, 16)})`);
