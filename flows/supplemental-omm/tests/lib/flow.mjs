@@ -58,13 +58,6 @@ export function serve(responses, { url, method, headers = {}, body }) {
   return { url, status: 200, headers: {}, body: file };
 }
 
-// The record streams the legacy flow (release 1.0.1, the FSB/JSON lane) published for these fixtures, in publication
-// order (tests/fixtures/legacy/PROVENANCE.md).
-export function legacyRecords(standard) {
-  const bytes = fs.readFileSync(new URL(`../fixtures/legacy/${standard.toLowerCase()}-records.bin`, import.meta.url));
-  return splitRecords(bytes);
-}
-
 export function splitRecords(stream) {
   const bytes = Buffer.from(stream);
   const out = [];

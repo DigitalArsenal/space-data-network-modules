@@ -60,5 +60,4 @@ environment (`nodes/signing.mjs`); the tests build the release with a key they g
 
 The tests run the built artifacts end to end: the release in the SDK's isomorphic flow host on the source modules'
 provider fixtures (`tests/flow.test.mjs`), the OD and status nodes in the browser module harness. The stored records
-equal the legacy flow's (release 1.0.1) for the same provider input byte for byte, LAGEOS-1's but for its OBJECT_ID
-(`tests/fixtures/legacy/PROVENANCE.md`).
+are the OD node's release records (`nodes/od/release-records`) for the same provider input, byte for byte.
