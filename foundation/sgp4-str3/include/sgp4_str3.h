@@ -2,7 +2,7 @@
 // foundation/sgp4-str3: SGP4/SDP4 after Spacetrack Report No. 3 (Hoots &
 // Roehrich 1980) with the corrections Vallado, Crawford, Hujsak & Kelso (2006),
 // AIAA 2006-6753, document in their text; written clean room (src/*.inc name
-// their sources). Apache-2.0 (LICENSE, NOTICE).
+// their sources). Apache-2.0 (the repository's LICENSE).
 //
 // One translation unit includes this header. It supplies what the two parts
 // read from their includer (pi, 2 pi, 2/3, the 1950 epoch and the zonal
