@@ -3,7 +3,8 @@
 # extracted), od-fit-core-source.patch applied, the clean-room SGP4/SDP4 base foundation/sgp4-str3, compiled with
 # wasi-sdk 30.0 and partial-linked into <directory>/od-fit-core.o (default: here; the file name is in the object).
 # Prints the object's SHA-256; build.mjs refuses any other object.
-#   WASI_SDK_PATH=<wasi-sdk-30.0> [SDN_OD_EIGEN_DIR=<eigen3>] [SDN_FLATBUFFERS_INCLUDE=<flatbuffers/include>] \
+# The toolchains are the pins of scripts/toolchain.mjs (docs/BUILDING.md) unless named:
+#   [WASI_SDK_PATH=<wasi-sdk-30.0>] [SDN_OD_EIGEN_DIR=<eigen3>] [SDN_FLATBUFFERS_INCLUDE=<flatbuffers/include>] \
 #     ./build-fit-core.sh [directory]
 set -euo pipefail
 
@@ -11,9 +12,10 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo="$(git -C "$here" rev-parse --show-toplevel)"
 base=551f6e178c3332cad46171fd1a0002345271144c
 out="${1:-$here}/od-fit-core.o"
-sdk="${WASI_SDK_PATH:?WASI_SDK_PATH names wasi-sdk 30.0}"
-eigen="${SDN_OD_EIGEN_DIR:-/opt/homebrew/include/eigen3}"
-flatbuffers="${SDN_FLATBUFFERS_INCLUDE:-$repo/../flatbuffers/include}"
+toolchain="$repo/scripts/toolchain.mjs"
+sdk="${WASI_SDK_PATH:-$(node "$toolchain" path wasi-sdk)}"
+eigen="${SDN_OD_EIGEN_DIR:-$(node "$toolchain" path eigen)}"
+flatbuffers="${SDN_FLATBUFFERS_INCLUDE:-$(node "$toolchain" path flatbuffers)}"
 for need in "$sdk/bin/clang++" "$sdk/bin/wasm-ld" "$eigen/Eigen/Dense" "$flatbuffers/flatbuffers/flatbuffers.h"; do
   [ -e "$need" ] || { echo "missing $need" >&2; exit 1; }
 done
