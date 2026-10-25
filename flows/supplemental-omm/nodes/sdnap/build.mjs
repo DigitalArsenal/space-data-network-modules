@@ -67,7 +67,7 @@ const compilation = await compileModuleFromSource({
   threadModel: "wasi-sequential",
   allowUndefinedImports: true,
 });
-if (!compilation.report?.ok) throw new Error(`SDK validation failed:\n${JSON.stringify(compilation.report?.issues ?? [], null, 2)}`);
+if (!compilation.report?.ok) throw new Error(`SDK validation failed: ${(compilation.report?.issues ?? []).map((issue) => `${issue.code ?? "issue"} ${issue.message ?? ""}`).join("; ")}`);
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 const wasm = await fs.readFile(outputPath);
 console.log(`Built ${manifest.pluginId} ${manifest.version} ${createHash("sha256").update(wasm).digest("hex")} (${wasm.length} bytes, unsigned)`);
