@@ -91,12 +91,16 @@ export async function againstReference(ctx, sets, { rowOf = elementsOf } = {}) {
   const reference = await ctx.reference();
   const mine = moduleStates(module, sets.map((s) => rowOf(s.lines)), sets.map((s) => s.minutes));
   const samples = [];
-  const trapped = { count: 0 };
+  const trapped = { count: 0 }, degenerate = { count: 0 };
   samples.trapped = trapped;
+  samples.degenerate = degenerate;
   for (let k = 0; k < sets.length; k += 1) {
     const ref = await reference.propagate(sets[k].lines, sets[k].minutes);
     sets[k].minutes.forEach((t, j) => {
-      const m = mine[k][j], o = ref ? ref[j] : null;
+      // a reference state at the origin (|r| < 1 km, error 0: Sgp4Prop 9.9 at i = 180 deg for SGP4XP) is no answer
+      const m = mine[k][j], raw = ref ? ref[j] : null;
+      const o = raw && Math.hypot(...raw.r) >= 1 ? raw : null;
+      if (raw && !o) degenerate.count += 1;
       const mOk = m.ok && m.r.every(Number.isFinite);
       // the radius trap (paper 1.1; AIAA 2006-6753 App. D): the module refuses a state below one Earth radius, which the
       // reference returns; such a sample is the documented departure, not a disagreement
@@ -116,7 +120,7 @@ export function verdict(samples, limitM, label) {
   const over = both.filter((s) => !(s.dr <= limitM));
   const mismatch = samples.filter((s) => s.onlyModule || s.onlyReference);
   const evidence = [
-    `${label}: ${samples.length} samples, ${both.length} answered by both, ${mismatch.length} answered by one side only${samples.trapped?.count ? `; ${samples.trapped.count} reference states below one Earth radius that the module refuses (the radius trap, paper 1.1)` : ""}`,
+    `${label}: ${samples.length} samples, ${both.length} answered by both, ${mismatch.length} answered by one side only${samples.trapped?.count ? `; ${samples.trapped.count} reference states below one Earth radius that the module refuses (the radius trap, paper 1.1)` : ""}${samples.degenerate?.count ? `; ${samples.degenerate.count} reference states at the origin counted as no answer` : ""}`,
     `worst ${worst.dr.toExponential(3)} m${worst.set ? ` (set ${worst.set.name || worst.set.lines[0].slice(2, 7)} at ${worst.t} min)` : ""}; limit ${limitM} m; ${over.length} over`,
     ...over.slice(0, 5).map((s) => `  over: ${s.set.name || s.set.lines[0].slice(2, 7)} t=${s.t} min ${s.dr.toExponential(3)} m`),
     ...Object.entries(mismatch.reduce((g, s) => {

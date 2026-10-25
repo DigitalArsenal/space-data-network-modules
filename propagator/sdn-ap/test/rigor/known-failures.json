@@ -2,8 +2,8 @@
  "//": "Rigor failures already filed as graph tasks: { check id: { task, summary } }. A listed check that fails prints KNOWN-FAIL and does not vote; a listed check that passes fails until its entry is removed (the list only shrinks).",
  "failures": {
   "hoots-singular-geometry": {
-   "task": "sdn-ap-sgp4xp-retrograde-equatorial-hang-20261025",
-   "summary": "SGP4XP never returns at i = 180 deg, e = 0, LEO"
+   "task": "sdn-ap-domain-edges-vs-reference-20261025",
+   "summary": "SGP4 deep space at i = 180 deg 2.9 to 653 km from the reference; SGP4XP GEO e = 0 answered where the reference refuses from 1260 min"
   },
   "vallado-covariance-realism-bound": {
    "task": "sdn-ap-covariance-realism-acceptance-band-20261025",

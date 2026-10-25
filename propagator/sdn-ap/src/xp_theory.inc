@@ -1225,6 +1225,12 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
+  // the equinoctial state's domain (SPEC 1.5: direct/retrograde factor +1, i < 180 deg): chi and psi carry tan(i/2),
+  // unbounded at 180 deg, where the state and its rates are not numbers
+  if (!(e.xincl >= 0.0) || !(e.xincl < kPi)) {
+    s.init_error = kPropRefused;
+    return kPropRefused;
+  }
   const double n0 = e.xno;  // Brouwer (SPEC 1.1)
   s.ctx.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
   const int8_t res = static_cast<int8_t>(res::band_of(n0));  // the epoch class (SPEC 6 bands)
@@ -1340,7 +1346,9 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.epoch.t = 0.0;
   s.epoch.index = 0;
   s.epoch.mode = 0;
-  if (!rates(s.ctx, 0.0, s.epoch.y, s.epoch.f)) {
+  bool finite = rates(s.ctx, 0.0, s.epoch.y, s.epoch.f);
+  for (int j = 0; finite && j < 6; ++j) finite = std::isfinite(s.epoch.y[j]) && std::isfinite(s.epoch.f[j]);
+  if (!finite) {  // an epoch state or rate that is not a number never starts a grid
     s.init_error = kPropRefused;
     return kPropRefused;
   }
@@ -1406,6 +1414,8 @@ inline bool bracket(XpSat& s, double t, Node& lo, Node& hi) {
   Node nxt;
   for (;;) {
     if (!next_node(s.ctx, cur, dir, nxt)) return false;
+    // a node that is not a number, or does not advance, ends the grid: every later time is refused, never looped on
+    if (!std::isfinite(nxt.t) || !(dir * nxt.t > dir * cur.t)) return false;
     const int32_t idx = dir * nxt.index;
     if (idx % s.stride == 0) {
       const int32_t slot = idx / s.stride - 1;

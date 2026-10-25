@@ -59,6 +59,28 @@ export const checks = [
     },
   }),
   defineCheck({
+    id: "hoots-every-call-returns", reviewer: REVIEWERS.HOOTS, tier: "fast", timeoutSec: 60,
+    question: "Does every call return, for every theory, at the edges of the element domain (e = 0, 1e-4, 0.5, 0.95; i = 0, 90, 179.9999, 180 deg; LEO, 12 h and GEO; up to 7 days either way): a state or a refusal, never a hang and never a non-finite state reported good?",
+    source: "AIAA 2006-6753 App. D (a set is refused, not extrapolated); SPEC 1.5 (the equinoctial state for i < 180 deg); paper 1.1",
+    async run(ctx) {
+      const module = await ctx.module();
+      const rows = [];
+      for (const theory of [THEORY.SGP4, THEORY.SGP4XP, THEORY.SDNAP]) for (const ecc of [0, 0.0001, 0.5, 0.95]) for (const inc of [0, 90, 179.9999, 180]) for (const mm of [15.2, 2.006, 1.0027]) {
+        if (ecc >= 0.5 && mm > 3) continue;
+        const fields = { year: 26, day: 290.25, rev: 0, inc, raan: 30, ecc, argp: 45, ma: 10, mm };
+        rows.push({ ...elementsOf(tleLines(theory === THEORY.SGP4 ? { ...fields, type: 0, bstar: 1e-4 } : { ...fields, type: 4, bterm: 0.005, agom: 0.01 })), theory });
+      }
+      // SDNAP a day either way (its integration costs about 60 ms per object-day), the others a week
+      const timesOf = (row) => (row.theory === THEORY.SDNAP ? [-1440, 0, 720, 1440] : [-10080, -1440, 0, 720, 1440, 10080]);
+      const t0 = performance.now();
+      const out = moduleStates(module, rows, rows.map(timesOf));
+      const seconds = (performance.now() - t0) / 1e3;
+      let good = 0, refused = 0, bad = 0;
+      out.flat().forEach((s) => { if (!s.ok) refused += 1; else if ([...s.r, ...s.v].every(Number.isFinite)) good += 1; else bad += 1; });
+      return { pass: bad === 0, evidence: [`${rows.length} sets (SGP4, SGP4XP: 7 days either way; SDNAP: 1 day) x 4 to 6 times returned in ${seconds.toFixed(1)} s: ${good} finite states, ${refused} refused, ${bad} non-finite states reported good (a hang is a FAIL at the 60 s cap)`] };
+    },
+  }),
+  defineCheck({
     id: "hoots-low-perigee", reviewer: REVIEWERS.HOOTS, tier: "fast",
     question: "Below 220 km perigee (the simplified drag equations), below 156 km and 98 km (the s* adjustments), and for a perigee under the Earth's surface, does SGP4 give the reference's states and refuse at the same sample (decay: radius below one Earth radius)?",
     source: "STR#3 sec. 6 (isimp, s* for perigee < 156 km and < 98 km); AIAA 2006-6753 sec. VI.A and App. D error traps; paper 1.1",
