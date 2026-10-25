@@ -1,6 +1,6 @@
 {
-  "wasmSha256": "9d4ae7a98c6d395cecbef007ece5a457a8ea69dffbac19ddd1feae2a9d74febd",
-  "wasmBytes": 2648613,
+  "wasmSha256": "027cd9e24cc24f189bbe7396657a32fcf14ffa6ea02e93aef2fba1d2205e468f",
+  "wasmBytes": 2650567,
   "wasmedgeVersion": "0.16.4",
   "dockerLane": "waived by the owner 2026-10-22 (no Docker)",
   "runtimeInstances": "One persistent direct instance per group",
