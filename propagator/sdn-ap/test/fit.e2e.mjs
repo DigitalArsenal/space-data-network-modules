@@ -16,8 +16,8 @@
 //   states fitted back (declared EME2000) reproduce the TEME fit within 1 m; a 4-day ephemeris is fitted over its
 //   latest 48 h or 72 h (the span rule, validated on the latest 24 h); a size-prefixed $OMM propagates as the plain
 //   one.
-// - The SDN-AP theory was removed: an $OMM naming it (MEAN_ELEMENT_THEORY SDNAP) is refused by propagate and
-//   ingest_omm (invalid-omm), a fit with THEORY SDNAP by configuration-refused, and an ElementRow of theory 16 is
+// - The SDN-AP theory was removed: an $OMM naming its number (MEAN_ELEMENT_THEORY 4) is refused by propagate and
+//   ingest_omm (invalid-omm), a fit with THEORY 3 by configuration-refused, and an ElementRow of theory 16 is
 //   held refused.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
@@ -220,18 +220,18 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
     OMM.addEccentricity(b, 0.0002);
     OMM.addInclination(b, 53);
     OMM.addNoradCatId(b, 90010);
-    OMM.addMeanElementTheory(b, 4);  // meanElementSource SDNAP
+    OMM.addMeanElementTheory(b, 4);  // the number of the removed theory
     OMM.finishOMMBuffer(b, OMM.endOMM(b));
     return b.asUint8Array();
   })();
   for (const method of ["propagate", "ingest_omm"]) {
     const r = await command.invoke({ methodId: method, inputs: [{ portId: "omm", typeRef: ommType, payload: sdnapOmm }] });
-    console.log(`${method}: MEAN_ELEMENT_THEORY SDNAP -> ${r.statusCode === 0 ? "accepted" : r.errorCode}`);
-    check(r.statusCode !== 0 && r.errorCode === "invalid-omm", `${method} with an SDNAP $OMM: ${r.errorCode}`);
+    console.log(`${method}: MEAN_ELEMENT_THEORY 4 -> ${r.statusCode === 0 ? "accepted" : r.errorCode}`);
+    check(r.statusCode !== 0 && r.errorCode === "invalid-omm", `${method} with an $OMM of the removed theory: ${r.errorCode}`);
   }
-  const fitted = await command.invoke({ methodId: "fit", inputs: [configuration({ theory: "SDNAP" }), { portId: "ephemeris", typeRef: oemType, payload: source }] });
-  console.log(`fit: THEORY SDNAP -> ${fitted.statusCode === 0 ? "accepted" : fitted.errorCode}`);
-  check(fitted.statusCode !== 0 && fitted.errorCode === "configuration-refused", `fit with THEORY SDNAP: ${fitted.errorCode}`);
+  const fitted = await command.invoke({ methodId: "fit", inputs: [configuration({ theory: 3 }), { portId: "ephemeris", typeRef: oemType, payload: source }] });
+  console.log(`fit: THEORY 3 -> ${fitted.statusCode === 0 ? "accepted" : fitted.errorCode}`);
+  check(fitted.statusCode !== 0 && fitted.errorCode === "configuration-refused", `fit with the removed THEORY 3: ${fitted.errorCode}`);
   const rows = new Uint8Array(112);
   new DataView(rows.buffer).setInt32(108, 16, true);  // theory 16 in an ElementRow
   const p = m.x.sdnap_alloc(112);

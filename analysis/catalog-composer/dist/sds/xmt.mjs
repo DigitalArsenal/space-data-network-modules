@@ -10281,6 +10281,7 @@ var ncdContainerFormat = /* @__PURE__ */ ((ncdContainerFormat2) => {
   ncdContainerFormat2[ncdContainerFormat2["NAIF_SCLK_KERNEL"] = 29] = "NAIF_SCLK_KERNEL";
   ncdContainerFormat2[ncdContainerFormat2["RINEX_OBS"] = 30] = "RINEX_OBS";
   ncdContainerFormat2[ncdContainerFormat2["RINEX_NAV"] = 31] = "RINEX_NAV";
+  ncdContainerFormat2[ncdContainerFormat2["PCK_DAF"] = 32] = "PCK_DAF";
   ncdContainerFormat2[ncdContainerFormat2["PROVIDER_DEFINED"] = 255] = "PROVIDER_DEFINED";
   return ncdContainerFormat2;
 })(ncdContainerFormat || {});
@@ -13065,16 +13066,188 @@ var PCET = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCF.ts
-import * as flatbuffers79 from "flatbuffers";
+import * as flatbuffers74 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEpochStore.ts
+import * as flatbuffers61 from "flatbuffers";
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfBlendShape.ts
+var pcfBlendShape = /* @__PURE__ */ ((pcfBlendShape2) => {
+  pcfBlendShape2[pcfBlendShape2["SMOOTHSTEP"] = 0] = "SMOOTHSTEP";
+  pcfBlendShape2[pcfBlendShape2["HERMITE"] = 1] = "HERMITE";
+  return pcfBlendShape2;
+})(pcfBlendShape || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfEpochSelection.ts
+var pcfEpochSelection = /* @__PURE__ */ ((pcfEpochSelection2) => {
+  pcfEpochSelection2[pcfEpochSelection2["NEAREST"] = 0] = "NEAREST";
+  pcfEpochSelection2[pcfEpochSelection2["LATEST_BEFORE"] = 1] = "LATEST_BEFORE";
+  return pcfEpochSelection2;
+})(pcfEpochSelection || {});
+
+// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEpochStore.ts
+var PCFEpochStore = class _PCFEpochStore {
+  bb = null;
+  bb_pos = 0;
+  __init(i, bb) {
+    this.bb_pos = i;
+    this.bb = bb;
+    return this;
+  }
+  static getRootAsPCFEpochStore(bb, obj) {
+    return (obj || new _PCFEpochStore()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  static getSizePrefixedRootAsPCFEpochStore(bb, obj) {
+    bb.setPosition(bb.position() + flatbuffers61.SIZE_PREFIX_LENGTH);
+    return (obj || new _PCFEpochStore()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  }
+  /**
+   * Days of element sets kept, counted back from now by epoch. Default 7.
+   */
+  CACHE_DAYS() {
+    const offset = this.bb.__offset(this.bb_pos, 4);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 7;
+  }
+  /**
+   * Most sets kept per object and theory, the oldest epochs dropping first.
+   * Default 0 (no cap beyond CACHE_DAYS).
+   */
+  MAX_SETS_PER_OBJECT() {
+    const offset = this.bb.__offset(this.bb_pos, 6);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Which set answers a request time. Default NEAREST.
+   */
+  SELECTION() {
+    const offset = this.bb.__offset(this.bb_pos, 8);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NEAREST */;
+  }
+  /**
+   * Width, seconds, of the blend window centered on the midpoint between two
+   * consecutive sets; 0 switches sets without a blend. Default 3600.
+   */
+  BLEND_WINDOW_SECONDS() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 3600;
+  }
+  /**
+   * The weight curve across the blend window. Default SMOOTHSTEP.
+   */
+  BLEND_SHAPE() {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* SMOOTHSTEP */;
+  }
+  /**
+   * Theories whose sets are stored (SGP4, SGP4XP). Default empty: all.
+   */
+  THEORIES(index) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.readUint8(this.bb.__vector(this.bb_pos + offset) + index) : null;
+  }
+  theoriesLength() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  theoriesArray() {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? new Uint8Array(this.bb.bytes().buffer, this.bb.bytes().byteOffset + this.bb.__vector(this.bb_pos + offset), this.bb.__vector_len(this.bb_pos + offset)) : null;
+  }
+  static startPCFEpochStore(builder) {
+    builder.startObject(6);
+  }
+  static addCacheDays(builder, CACHE_DAYS) {
+    builder.addFieldFloat64(0, CACHE_DAYS, 7);
+  }
+  static addMaxSetsPerObject(builder, MAX_SETS_PER_OBJECT) {
+    builder.addFieldInt32(1, MAX_SETS_PER_OBJECT, 0);
+  }
+  static addSelection(builder, SELECTION) {
+    builder.addFieldInt8(2, SELECTION, 0 /* NEAREST */);
+  }
+  static addBlendWindowSeconds(builder, BLEND_WINDOW_SECONDS) {
+    builder.addFieldFloat64(3, BLEND_WINDOW_SECONDS, 3600);
+  }
+  static addBlendShape(builder, BLEND_SHAPE) {
+    builder.addFieldInt8(4, BLEND_SHAPE, 0 /* SMOOTHSTEP */);
+  }
+  static addTheories(builder, THEORIESOffset) {
+    builder.addFieldOffset(5, THEORIESOffset, 0);
+  }
+  static createTheoriesVector(builder, data) {
+    builder.startVector(1, data.length, 1);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addInt8(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startTheoriesVector(builder, numElems) {
+    builder.startVector(1, numElems, 1);
+  }
+  static endPCFEpochStore(builder) {
+    const offset = builder.endObject();
+    return offset;
+  }
+  static createPCFEpochStore(builder, CACHE_DAYS, MAX_SETS_PER_OBJECT, SELECTION, BLEND_WINDOW_SECONDS, BLEND_SHAPE, THEORIESOffset) {
+    _PCFEpochStore.startPCFEpochStore(builder);
+    _PCFEpochStore.addCacheDays(builder, CACHE_DAYS);
+    _PCFEpochStore.addMaxSetsPerObject(builder, MAX_SETS_PER_OBJECT);
+    _PCFEpochStore.addSelection(builder, SELECTION);
+    _PCFEpochStore.addBlendWindowSeconds(builder, BLEND_WINDOW_SECONDS);
+    _PCFEpochStore.addBlendShape(builder, BLEND_SHAPE);
+    _PCFEpochStore.addTheories(builder, THEORIESOffset);
+    return _PCFEpochStore.endPCFEpochStore(builder);
+  }
+  unpack() {
+    return new PCFEpochStoreT(
+      this.CACHE_DAYS(),
+      this.MAX_SETS_PER_OBJECT(),
+      this.SELECTION(),
+      this.BLEND_WINDOW_SECONDS(),
+      this.BLEND_SHAPE(),
+      this.bb.createScalarList(this.THEORIES.bind(this), this.theoriesLength())
+    );
+  }
+  unpackTo(_o) {
+    _o.CACHE_DAYS = this.CACHE_DAYS();
+    _o.MAX_SETS_PER_OBJECT = this.MAX_SETS_PER_OBJECT();
+    _o.SELECTION = this.SELECTION();
+    _o.BLEND_WINDOW_SECONDS = this.BLEND_WINDOW_SECONDS();
+    _o.BLEND_SHAPE = this.BLEND_SHAPE();
+    _o.THEORIES = this.bb.createScalarList(this.THEORIES.bind(this), this.theoriesLength());
+  }
+};
+var PCFEpochStoreT = class {
+  constructor(CACHE_DAYS = 7, MAX_SETS_PER_OBJECT = 0, SELECTION = 0 /* NEAREST */, BLEND_WINDOW_SECONDS = 3600, BLEND_SHAPE = 0 /* SMOOTHSTEP */, THEORIES = []) {
+    this.CACHE_DAYS = CACHE_DAYS;
+    this.MAX_SETS_PER_OBJECT = MAX_SETS_PER_OBJECT;
+    this.SELECTION = SELECTION;
+    this.BLEND_WINDOW_SECONDS = BLEND_WINDOW_SECONDS;
+    this.BLEND_SHAPE = BLEND_SHAPE;
+    this.THEORIES = THEORIES;
+  }
+  pack(builder) {
+    const THEORIES = PCFEpochStore.createTheoriesVector(builder, this.THEORIES);
+    return PCFEpochStore.createPCFEpochStore(
+      builder,
+      this.CACHE_DAYS,
+      this.MAX_SETS_PER_OBJECT,
+      this.SELECTION,
+      this.BLEND_WINDOW_SECONDS,
+      this.BLEND_SHAPE,
+      THEORIES
+    );
+  }
+};
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFEventDefinition.ts
-import * as flatbuffers63 from "flatbuffers";
+import * as flatbuffers64 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpression.ts
-import * as flatbuffers62 from "flatbuffers";
+import * as flatbuffers63 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFExpressionTerm.ts
-import * as flatbuffers61 from "flatbuffers";
+import * as flatbuffers62 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/pcfExpressionOperation.ts
 var pcfExpressionOperation = /* @__PURE__ */ ((pcfExpressionOperation2) => {
@@ -13108,7 +13281,7 @@ var PCFExpressionTerm = class _PCFExpressionTerm {
     return (obj || new _PCFExpressionTerm()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFExpressionTerm(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers61.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers62.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFExpressionTerm()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13197,7 +13370,7 @@ var PCFExpression = class _PCFExpression {
     return (obj || new _PCFExpression()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFExpression(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers62.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers63.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFExpression()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13302,7 +13475,7 @@ var PCFEventDefinition = class _PCFEventDefinition {
     return (obj || new _PCFEventDefinition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFEventDefinition(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers63.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers64.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFEventDefinition()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13456,10 +13629,10 @@ var PCFEventDefinitionT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
-import * as flatbuffers65 from "flatbuffers";
+import * as flatbuffers66 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFGaussianPrior.ts
-import * as flatbuffers64 from "flatbuffers";
+import * as flatbuffers65 from "flatbuffers";
 var PCFGaussianPrior = class _PCFGaussianPrior {
   bb = null;
   bb_pos = 0;
@@ -13472,7 +13645,7 @@ var PCFGaussianPrior = class _PCFGaussianPrior {
     return (obj || new _PCFGaussianPrior()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFGaussianPrior(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers64.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers65.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFGaussianPrior()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13561,7 +13734,7 @@ var PCFFitPolicy = class _PCFFitPolicy {
     return (obj || new _PCFFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFFitPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers65.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers66.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -13673,7 +13846,7 @@ var PCFFitPolicy = class _PCFFitPolicy {
   }
   /**
    * Prior on B_eff, the signed drag area-to-mass ratio Cd*A/m, m2/kg. Absent
-   * or without sigma: mean 0; sigma 1.0 for SDNAP, 0.05 for SGP4XP.
+   * or without sigma: mean 0, sigma 0.05.
    */
   DRAG_PRIOR(obj) {
     const offset = this.bb.__offset(this.bb_pos, 30);
@@ -13832,7 +14005,7 @@ var PCFFitPolicyT = class {
 import * as flatbuffers71 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFEcom2.ts
-import * as flatbuffers66 from "flatbuffers";
+import * as flatbuffers67 from "flatbuffers";
 var PCFEcom2 = class _PCFEcom2 {
   bb = null;
   bb_pos = 0;
@@ -13845,7 +14018,7 @@ var PCFEcom2 = class _PCFEcom2 {
     return (obj || new _PCFEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFEcom2(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers66.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers67.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFEcom2()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   D0_M_S2() {
@@ -14004,131 +14177,6 @@ var PCFEcom2T = class {
       this.B1_SIN_M_S2,
       this.B3_COS_M_S2,
       this.B3_SIN_M_S2
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFEmpiricalTerms.ts
-import * as flatbuffers67 from "flatbuffers";
-var PCFEmpiricalTerms = class _PCFEmpiricalTerms {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCFEmpiricalTerms(bb, obj) {
-    return (obj || new _PCFEmpiricalTerms()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCFEmpiricalTerms(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers67.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCFEmpiricalTerms()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * Fit the once-per-revolution pair (TAUC, TAUS). Default true.
-   */
-  ONCE_PER_REVOLUTION() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
-  }
-  /**
-   * The constant term TAU0 is free only when this rule selects it: a fitted
-   * B_eff above this limit, m2/kg, is replaced by TAU0 with B_eff at its
-   * prior. Default 0.5; the rule applies only when HAS_TAU0_RULE_LIMIT_M2_KG.
-   */
-  TAU0_RULE_LIMIT_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.5;
-  }
-  /**
-   * True turns the TAU0 rule on with TAU0_RULE_LIMIT_M2_KG; false (the
-   * default) leaves TAU0 off.
-   */
-  HAS_TAU0_RULE_LIMIT_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * True holds TAUC and TAUS after the arc end above the drag regime
-   * instead of decaying them. Default false.
-   */
-  HELD_ABOVE_DRAG_REGIME() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Persistence time of the empirical force after the arc end, hours.
-   * Default 24.
-   */
-  PERSISTENCE_HOURS() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 24;
-  }
-  static startPCFEmpiricalTerms(builder) {
-    builder.startObject(5);
-  }
-  static addOncePerRevolution(builder, ONCE_PER_REVOLUTION) {
-    builder.addFieldInt8(0, +ONCE_PER_REVOLUTION, 1);
-  }
-  static addTau0RuleLimitM2Kg(builder, TAU0_RULE_LIMIT_M2_KG) {
-    builder.addFieldFloat64(1, TAU0_RULE_LIMIT_M2_KG, 0.5);
-  }
-  static addHasTau0RuleLimitM2Kg(builder, HAS_TAU0_RULE_LIMIT_M2_KG) {
-    builder.addFieldInt8(2, +HAS_TAU0_RULE_LIMIT_M2_KG, 0);
-  }
-  static addHeldAboveDragRegime(builder, HELD_ABOVE_DRAG_REGIME) {
-    builder.addFieldInt8(3, +HELD_ABOVE_DRAG_REGIME, 0);
-  }
-  static addPersistenceHours(builder, PERSISTENCE_HOURS) {
-    builder.addFieldFloat64(4, PERSISTENCE_HOURS, 24);
-  }
-  static endPCFEmpiricalTerms(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCFEmpiricalTerms(builder, ONCE_PER_REVOLUTION, TAU0_RULE_LIMIT_M2_KG, HAS_TAU0_RULE_LIMIT_M2_KG, HELD_ABOVE_DRAG_REGIME, PERSISTENCE_HOURS) {
-    _PCFEmpiricalTerms.startPCFEmpiricalTerms(builder);
-    _PCFEmpiricalTerms.addOncePerRevolution(builder, ONCE_PER_REVOLUTION);
-    _PCFEmpiricalTerms.addTau0RuleLimitM2Kg(builder, TAU0_RULE_LIMIT_M2_KG);
-    _PCFEmpiricalTerms.addHasTau0RuleLimitM2Kg(builder, HAS_TAU0_RULE_LIMIT_M2_KG);
-    _PCFEmpiricalTerms.addHeldAboveDragRegime(builder, HELD_ABOVE_DRAG_REGIME);
-    _PCFEmpiricalTerms.addPersistenceHours(builder, PERSISTENCE_HOURS);
-    return _PCFEmpiricalTerms.endPCFEmpiricalTerms(builder);
-  }
-  unpack() {
-    return new PCFEmpiricalTermsT(
-      this.ONCE_PER_REVOLUTION(),
-      this.TAU0_RULE_LIMIT_M2_KG(),
-      this.HAS_TAU0_RULE_LIMIT_M2_KG(),
-      this.HELD_ABOVE_DRAG_REGIME(),
-      this.PERSISTENCE_HOURS()
-    );
-  }
-  unpackTo(_o) {
-    _o.ONCE_PER_REVOLUTION = this.ONCE_PER_REVOLUTION();
-    _o.TAU0_RULE_LIMIT_M2_KG = this.TAU0_RULE_LIMIT_M2_KG();
-    _o.HAS_TAU0_RULE_LIMIT_M2_KG = this.HAS_TAU0_RULE_LIMIT_M2_KG();
-    _o.HELD_ABOVE_DRAG_REGIME = this.HELD_ABOVE_DRAG_REGIME();
-    _o.PERSISTENCE_HOURS = this.PERSISTENCE_HOURS();
-  }
-};
-var PCFEmpiricalTermsT = class {
-  constructor(ONCE_PER_REVOLUTION = true, TAU0_RULE_LIMIT_M2_KG = 0.5, HAS_TAU0_RULE_LIMIT_M2_KG = false, HELD_ABOVE_DRAG_REGIME = false, PERSISTENCE_HOURS = 24) {
-    this.ONCE_PER_REVOLUTION = ONCE_PER_REVOLUTION;
-    this.TAU0_RULE_LIMIT_M2_KG = TAU0_RULE_LIMIT_M2_KG;
-    this.HAS_TAU0_RULE_LIMIT_M2_KG = HAS_TAU0_RULE_LIMIT_M2_KG;
-    this.HELD_ABOVE_DRAG_REGIME = HELD_ABOVE_DRAG_REGIME;
-    this.PERSISTENCE_HOURS = PERSISTENCE_HOURS;
-  }
-  pack(builder) {
-    return PCFEmpiricalTerms.createPCFEmpiricalTerms(
-      builder,
-      this.ONCE_PER_REVOLUTION,
-      this.TAU0_RULE_LIMIT_M2_KG,
-      this.HAS_TAU0_RULE_LIMIT_M2_KG,
-      this.HELD_ABOVE_DRAG_REGIME,
-      this.PERSISTENCE_HOURS
     );
   }
 };
@@ -14657,6 +14705,7 @@ var pcfAtmosphereFamily = /* @__PURE__ */ ((pcfAtmosphereFamily2) => {
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["HARRIS_PRIESTER"] = 4] = "HARRIS_PRIESTER";
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["JACCHIA_ROBERTS"] = 5] = "JACCHIA_ROBERTS";
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["JB2008"] = 6] = "JB2008";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["MARS_EXPONENTIAL"] = 7] = "MARS_EXPONENTIAL";
   return pcfAtmosphereFamily2;
 })(pcfAtmosphereFamily || {});
 
@@ -14701,6 +14750,7 @@ var pcfGravitySelection = /* @__PURE__ */ ((pcfGravitySelection2) => {
   pcfGravitySelection2[pcfGravitySelection2["EGM2008"] = 5] = "EGM2008";
   pcfGravitySelection2[pcfGravitySelection2["EGM96"] = 6] = "EGM96";
   pcfGravitySelection2[pcfGravitySelection2["GRGM660PRIM"] = 7] = "GRGM660PRIM";
+  pcfGravitySelection2[pcfGravitySelection2["MRO120F"] = 8] = "MRO120F";
   return pcfGravitySelection2;
 })(pcfGravitySelection || {});
 
@@ -15154,15 +15204,24 @@ var PCFForceModel = class _PCFForceModel {
     return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* NONE */;
   }
   /**
-   * Empirical along-track terms of the averaged theories. Absent (the
-   * default): the theory's own.
+   * Highest degree of the harmonic field of the third body that has one (the
+   * Moon's on an Earth orbiter, the Earth's on a lunar orbiter); dimensionless.
+   * The field's acceleration at the frame origin is subtracted. Default 0:
+   * third bodies are point masses only.
    */
-  EMPIRICAL_TERMS(obj) {
+  THIRD_BODY_MAXIMUM_DEGREE() {
     const offset = this.bb.__offset(this.bb_pos, 102);
-    return offset ? (obj || new PCFEmpiricalTerms()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Highest order of that field; dimensionless. Default 0.
+   */
+  THIRD_BODY_MAXIMUM_ORDER() {
+    const offset = this.bb.__offset(this.bb_pos, 104);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
   }
   static startPCFForceModel(builder) {
-    builder.startObject(50);
+    builder.startObject(51);
   }
   static addGravityChoice(builder, GRAVITY_CHOICE) {
     builder.addFieldInt8(0, GRAVITY_CHOICE, 0 /* INFER_FLAGS */);
@@ -15321,8 +15380,11 @@ var PCFForceModel = class _PCFForceModel {
   static addNeutralWind(builder, NEUTRAL_WIND) {
     builder.addFieldInt8(48, NEUTRAL_WIND, 0 /* NONE */);
   }
-  static addEmpiricalTerms(builder, EMPIRICAL_TERMSOffset) {
-    builder.addFieldOffset(49, EMPIRICAL_TERMSOffset, 0);
+  static addThirdBodyMaximumDegree(builder, THIRD_BODY_MAXIMUM_DEGREE) {
+    builder.addFieldInt16(49, THIRD_BODY_MAXIMUM_DEGREE, 0);
+  }
+  static addThirdBodyMaximumOrder(builder, THIRD_BODY_MAXIMUM_ORDER) {
+    builder.addFieldInt16(50, THIRD_BODY_MAXIMUM_ORDER, 0);
   }
   static endPCFForceModel(builder) {
     const offset = builder.endObject();
@@ -15380,7 +15442,8 @@ var PCFForceModel = class _PCFForceModel {
       this.DENSITY_CORRECTION_RELAXATION_HOURS(),
       this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS(),
       this.NEUTRAL_WIND(),
-      this.EMPIRICAL_TERMS() !== null ? this.EMPIRICAL_TERMS().unpack() : null
+      this.THIRD_BODY_MAXIMUM_DEGREE(),
+      this.THIRD_BODY_MAXIMUM_ORDER()
     );
   }
   unpackTo(_o) {
@@ -15433,11 +15496,12 @@ var PCFForceModel = class _PCFForceModel {
     _o.DENSITY_CORRECTION_RELAXATION_HOURS = this.DENSITY_CORRECTION_RELAXATION_HOURS();
     _o.HAS_DENSITY_CORRECTION_RELAXATION_HOURS = this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS();
     _o.NEUTRAL_WIND = this.NEUTRAL_WIND();
-    _o.EMPIRICAL_TERMS = this.EMPIRICAL_TERMS() !== null ? this.EMPIRICAL_TERMS().unpack() : null;
+    _o.THIRD_BODY_MAXIMUM_DEGREE = this.THIRD_BODY_MAXIMUM_DEGREE();
+    _o.THIRD_BODY_MAXIMUM_ORDER = this.THIRD_BODY_MAXIMUM_ORDER();
   }
 };
 var PCFForceModelT = class {
-  constructor(GRAVITY_CHOICE = 0 /* INFER_FLAGS */, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1e3, AREA_M2 = 10, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = 1 /* NRLMSISE00 */, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = 0 /* NONE */, RELATIVITY = 0 /* NONE */, IN_TRACK_ACCELERATION_M_S2 = 0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false, RADIATION_PRESSURE_MODEL = 0 /* CANNONBALL */, GNSS_BLOCK = 0 /* UNSPECIFIED */, ECOM2 = null, EARTH_RADIATION = 0 /* NONE */, EARTH_RADIATION_RESOLUTION_DEG = 15, EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false, OCEAN_TIDES = 0 /* NONE */, OCEAN_TIDE_MAXIMUM_DEGREE = 30, OCEAN_TIDE_MAXIMUM_ORDER = 30, CENTRAL_BODY_NAIF_ID = 399, EPHEMERIS_KIND = 0 /* UNSPECIFIED */, SHADOW_MODEL = 0 /* UNSPECIFIED */, WEATHER_SOURCE = 0 /* UNSPECIFIED */, WEATHER_EXTENSION = 0 /* UNSPECIFIED */, DENSITY_CORRECTION = 0 /* NONE */, DENSITY_CORRECTION_RELAXATION_HOURS = 0, HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false, NEUTRAL_WIND = 0 /* NONE */, EMPIRICAL_TERMS = null) {
+  constructor(GRAVITY_CHOICE = 0 /* INFER_FLAGS */, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1e3, AREA_M2 = 10, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = 1 /* NRLMSISE00 */, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = 0 /* NONE */, RELATIVITY = 0 /* NONE */, IN_TRACK_ACCELERATION_M_S2 = 0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false, RADIATION_PRESSURE_MODEL = 0 /* CANNONBALL */, GNSS_BLOCK = 0 /* UNSPECIFIED */, ECOM2 = null, EARTH_RADIATION = 0 /* NONE */, EARTH_RADIATION_RESOLUTION_DEG = 15, EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0, HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false, OCEAN_TIDES = 0 /* NONE */, OCEAN_TIDE_MAXIMUM_DEGREE = 30, OCEAN_TIDE_MAXIMUM_ORDER = 30, CENTRAL_BODY_NAIF_ID = 399, EPHEMERIS_KIND = 0 /* UNSPECIFIED */, SHADOW_MODEL = 0 /* UNSPECIFIED */, WEATHER_SOURCE = 0 /* UNSPECIFIED */, WEATHER_EXTENSION = 0 /* UNSPECIFIED */, DENSITY_CORRECTION = 0 /* NONE */, DENSITY_CORRECTION_RELAXATION_HOURS = 0, HAS_DENSITY_CORRECTION_RELAXATION_HOURS = false, NEUTRAL_WIND = 0 /* NONE */, THIRD_BODY_MAXIMUM_DEGREE = 0, THIRD_BODY_MAXIMUM_ORDER = 0) {
     this.GRAVITY_CHOICE = GRAVITY_CHOICE;
     this.ENABLE_POINT_MASS = ENABLE_POINT_MASS;
     this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
@@ -15487,14 +15551,14 @@ var PCFForceModelT = class {
     this.DENSITY_CORRECTION_RELAXATION_HOURS = DENSITY_CORRECTION_RELAXATION_HOURS;
     this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS = HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
     this.NEUTRAL_WIND = NEUTRAL_WIND;
-    this.EMPIRICAL_TERMS = EMPIRICAL_TERMS;
+    this.THIRD_BODY_MAXIMUM_DEGREE = THIRD_BODY_MAXIMUM_DEGREE;
+    this.THIRD_BODY_MAXIMUM_ORDER = THIRD_BODY_MAXIMUM_ORDER;
   }
   pack(builder) {
     const THIRD_BODY_IDS = PCFForceModel.createThirdBodyIdsVector(builder, this.THIRD_BODY_IDS);
     const WEATHER = this.WEATHER !== null ? this.WEATHER.pack(builder) : 0;
     const EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE !== null ? builder.createString(this.EPHEMERIS_SOURCE) : 0;
     const ECOM2 = this.ECOM2 !== null ? this.ECOM2.pack(builder) : 0;
-    const EMPIRICAL_TERMS = this.EMPIRICAL_TERMS !== null ? this.EMPIRICAL_TERMS.pack(builder) : 0;
     PCFForceModel.startPCFForceModel(builder);
     PCFForceModel.addGravityChoice(builder, this.GRAVITY_CHOICE);
     PCFForceModel.addEnablePointMass(builder, this.ENABLE_POINT_MASS);
@@ -15545,7 +15609,8 @@ var PCFForceModelT = class {
     PCFForceModel.addDensityCorrectionRelaxationHours(builder, this.DENSITY_CORRECTION_RELAXATION_HOURS);
     PCFForceModel.addHasDensityCorrectionRelaxationHours(builder, this.HAS_DENSITY_CORRECTION_RELAXATION_HOURS);
     PCFForceModel.addNeutralWind(builder, this.NEUTRAL_WIND);
-    PCFForceModel.addEmpiricalTerms(builder, EMPIRICAL_TERMS);
+    PCFForceModel.addThirdBodyMaximumDegree(builder, this.THIRD_BODY_MAXIMUM_DEGREE);
+    PCFForceModel.addThirdBodyMaximumOrder(builder, this.THIRD_BODY_MAXIMUM_ORDER);
     return PCFForceModel.endPCFForceModel(builder);
   }
 };
@@ -15748,511 +15813,8 @@ var PCFIntegratorSettingsT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFLaunch.ts
-import * as flatbuffers73 from "flatbuffers";
-var PCFLaunch = class _PCFLaunch {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCFLaunch(bb, obj) {
-    return (obj || new _PCFLaunch()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCFLaunch(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers73.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCFLaunch()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * A priori B_eff (Cd*A/m) of a new object, m2/kg. Default 0.01.
-   */
-  DRAG_AREA_OVER_MASS_PRIOR_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
-  }
-  /**
-   * A priori AGOM (Cr*A/m) of a new object, m2/kg. Default 0.01.
-   */
-  SRP_AREA_OVER_MASS_PRIOR_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
-  }
-  /**
-   * Prior 1-sigma of each object's separation velocity per axis, m/s.
-   * Default 1.
-   */
-  SEPARATION_SIGMA_M_S() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
-  }
-  /**
-   * Shrinkage 1-sigma of each object's B_eff about the batch mean, m2/kg.
-   * Absent, it is DRAG_AREA_OVER_MASS_PRIOR_M2_KG.
-   */
-  SHRINK_SIGMA_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * True when SHRINK_SIGMA_M2_KG carries a value; false means absent.
-   */
-  HAS_SHRINK_SIGMA_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
-  }
-  /**
-   * Prior 1-sigma of the batch-mean B_eff, m2/kg. Default 1.
-   */
-  BATCH_MEAN_SIGMA_M2_KG() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
-  }
-  static startPCFLaunch(builder) {
-    builder.startObject(6);
-  }
-  static addDragAreaOverMassPriorM2Kg(builder, DRAG_AREA_OVER_MASS_PRIOR_M2_KG) {
-    builder.addFieldFloat64(0, DRAG_AREA_OVER_MASS_PRIOR_M2_KG, 0.01);
-  }
-  static addSrpAreaOverMassPriorM2Kg(builder, SRP_AREA_OVER_MASS_PRIOR_M2_KG) {
-    builder.addFieldFloat64(1, SRP_AREA_OVER_MASS_PRIOR_M2_KG, 0.01);
-  }
-  static addSeparationSigmaMS(builder, SEPARATION_SIGMA_M_S) {
-    builder.addFieldFloat64(2, SEPARATION_SIGMA_M_S, 1);
-  }
-  static addShrinkSigmaM2Kg(builder, SHRINK_SIGMA_M2_KG) {
-    builder.addFieldFloat64(3, SHRINK_SIGMA_M2_KG, 0);
-  }
-  static addHasShrinkSigmaM2Kg(builder, HAS_SHRINK_SIGMA_M2_KG) {
-    builder.addFieldInt8(4, +HAS_SHRINK_SIGMA_M2_KG, 0);
-  }
-  static addBatchMeanSigmaM2Kg(builder, BATCH_MEAN_SIGMA_M2_KG) {
-    builder.addFieldFloat64(5, BATCH_MEAN_SIGMA_M2_KG, 1);
-  }
-  static endPCFLaunch(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCFLaunch(builder, DRAG_AREA_OVER_MASS_PRIOR_M2_KG, SRP_AREA_OVER_MASS_PRIOR_M2_KG, SEPARATION_SIGMA_M_S, SHRINK_SIGMA_M2_KG, HAS_SHRINK_SIGMA_M2_KG, BATCH_MEAN_SIGMA_M2_KG) {
-    _PCFLaunch.startPCFLaunch(builder);
-    _PCFLaunch.addDragAreaOverMassPriorM2Kg(builder, DRAG_AREA_OVER_MASS_PRIOR_M2_KG);
-    _PCFLaunch.addSrpAreaOverMassPriorM2Kg(builder, SRP_AREA_OVER_MASS_PRIOR_M2_KG);
-    _PCFLaunch.addSeparationSigmaMS(builder, SEPARATION_SIGMA_M_S);
-    _PCFLaunch.addShrinkSigmaM2Kg(builder, SHRINK_SIGMA_M2_KG);
-    _PCFLaunch.addHasShrinkSigmaM2Kg(builder, HAS_SHRINK_SIGMA_M2_KG);
-    _PCFLaunch.addBatchMeanSigmaM2Kg(builder, BATCH_MEAN_SIGMA_M2_KG);
-    return _PCFLaunch.endPCFLaunch(builder);
-  }
-  unpack() {
-    return new PCFLaunchT(
-      this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG(),
-      this.SRP_AREA_OVER_MASS_PRIOR_M2_KG(),
-      this.SEPARATION_SIGMA_M_S(),
-      this.SHRINK_SIGMA_M2_KG(),
-      this.HAS_SHRINK_SIGMA_M2_KG(),
-      this.BATCH_MEAN_SIGMA_M2_KG()
-    );
-  }
-  unpackTo(_o) {
-    _o.DRAG_AREA_OVER_MASS_PRIOR_M2_KG = this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG();
-    _o.SRP_AREA_OVER_MASS_PRIOR_M2_KG = this.SRP_AREA_OVER_MASS_PRIOR_M2_KG();
-    _o.SEPARATION_SIGMA_M_S = this.SEPARATION_SIGMA_M_S();
-    _o.SHRINK_SIGMA_M2_KG = this.SHRINK_SIGMA_M2_KG();
-    _o.HAS_SHRINK_SIGMA_M2_KG = this.HAS_SHRINK_SIGMA_M2_KG();
-    _o.BATCH_MEAN_SIGMA_M2_KG = this.BATCH_MEAN_SIGMA_M2_KG();
-  }
-};
-var PCFLaunchT = class {
-  constructor(DRAG_AREA_OVER_MASS_PRIOR_M2_KG = 0.01, SRP_AREA_OVER_MASS_PRIOR_M2_KG = 0.01, SEPARATION_SIGMA_M_S = 1, SHRINK_SIGMA_M2_KG = 0, HAS_SHRINK_SIGMA_M2_KG = false, BATCH_MEAN_SIGMA_M2_KG = 1) {
-    this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG = DRAG_AREA_OVER_MASS_PRIOR_M2_KG;
-    this.SRP_AREA_OVER_MASS_PRIOR_M2_KG = SRP_AREA_OVER_MASS_PRIOR_M2_KG;
-    this.SEPARATION_SIGMA_M_S = SEPARATION_SIGMA_M_S;
-    this.SHRINK_SIGMA_M2_KG = SHRINK_SIGMA_M2_KG;
-    this.HAS_SHRINK_SIGMA_M2_KG = HAS_SHRINK_SIGMA_M2_KG;
-    this.BATCH_MEAN_SIGMA_M2_KG = BATCH_MEAN_SIGMA_M2_KG;
-  }
-  pack(builder) {
-    return PCFLaunch.createPCFLaunch(
-      builder,
-      this.DRAG_AREA_OVER_MASS_PRIOR_M2_KG,
-      this.SRP_AREA_OVER_MASS_PRIOR_M2_KG,
-      this.SEPARATION_SIGMA_M_S,
-      this.SHRINK_SIGMA_M2_KG,
-      this.HAS_SHRINK_SIGMA_M2_KG,
-      this.BATCH_MEAN_SIGMA_M2_KG
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFManeuverDetection.ts
-import * as flatbuffers74 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfInnovationCorrelation.ts
-var pcfInnovationCorrelation = /* @__PURE__ */ ((pcfInnovationCorrelation2) => {
-  pcfInnovationCorrelation2[pcfInnovationCorrelation2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pcfInnovationCorrelation2[pcfInnovationCorrelation2["WHITE"] = 1] = "WHITE";
-  pcfInnovationCorrelation2[pcfInnovationCorrelation2["ONE_SAMPLE_PER_REVOLUTION"] = 2] = "ONE_SAMPLE_PER_REVOLUTION";
-  pcfInnovationCorrelation2[pcfInnovationCorrelation2["CORRELATION_TIME"] = 3] = "CORRELATION_TIME";
-  return pcfInnovationCorrelation2;
-})(pcfInnovationCorrelation || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFManeuverDetection.ts
-var PCFManeuverDetection = class _PCFManeuverDetection {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCFManeuverDetection(bb, obj) {
-    return (obj || new _PCFManeuverDetection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCFManeuverDetection(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers74.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCFManeuverDetection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * False-alarm rate the THRESHOLD is calibrated for, per object-year. A
-   * provider that cannot recalibrate refuses another rate. Default 1.
-   */
-  FALSE_ALARMS_PER_OBJECT_YEAR() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1;
-  }
-  /**
-   * How innovation correlation is weighted. Default ONE_SAMPLE_PER_REVOLUTION.
-   */
-  CORRELATION_MODEL() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 2 /* ONE_SAMPLE_PER_REVOLUTION */;
-  }
-  /**
-   * The statistic Lambda (chi-square, 3 degrees of freedom) above which a
-   * maneuver is declared. Default 20.
-   */
-  THRESHOLD() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 20;
-  }
-  /**
-   * States kept clear at each end of the arc when scanning. Default 12.
-   */
-  MARGIN_STATES() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readUint32(this.bb_pos + offset) : 12;
-  }
-  /**
-   * Half-width of the window the burn epoch is refined in, hours. Default 2.
-   */
-  REFINE_WINDOW_HOURS() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2;
-  }
-  /**
-   * Fewest states an arc must hold to be scanned. Default 48.
-   */
-  MINIMUM_STATES() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readUint32(this.bb_pos + offset) : 48;
-  }
-  static startPCFManeuverDetection(builder) {
-    builder.startObject(6);
-  }
-  static addFalseAlarmsPerObjectYear(builder, FALSE_ALARMS_PER_OBJECT_YEAR) {
-    builder.addFieldFloat64(0, FALSE_ALARMS_PER_OBJECT_YEAR, 1);
-  }
-  static addCorrelationModel(builder, CORRELATION_MODEL) {
-    builder.addFieldInt8(1, CORRELATION_MODEL, 2 /* ONE_SAMPLE_PER_REVOLUTION */);
-  }
-  static addThreshold(builder, THRESHOLD) {
-    builder.addFieldFloat64(2, THRESHOLD, 20);
-  }
-  static addMarginStates(builder, MARGIN_STATES) {
-    builder.addFieldInt32(3, MARGIN_STATES, 12);
-  }
-  static addRefineWindowHours(builder, REFINE_WINDOW_HOURS) {
-    builder.addFieldFloat64(4, REFINE_WINDOW_HOURS, 2);
-  }
-  static addMinimumStates(builder, MINIMUM_STATES) {
-    builder.addFieldInt32(5, MINIMUM_STATES, 48);
-  }
-  static endPCFManeuverDetection(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCFManeuverDetection(builder, FALSE_ALARMS_PER_OBJECT_YEAR, CORRELATION_MODEL, THRESHOLD, MARGIN_STATES, REFINE_WINDOW_HOURS, MINIMUM_STATES) {
-    _PCFManeuverDetection.startPCFManeuverDetection(builder);
-    _PCFManeuverDetection.addFalseAlarmsPerObjectYear(builder, FALSE_ALARMS_PER_OBJECT_YEAR);
-    _PCFManeuverDetection.addCorrelationModel(builder, CORRELATION_MODEL);
-    _PCFManeuverDetection.addThreshold(builder, THRESHOLD);
-    _PCFManeuverDetection.addMarginStates(builder, MARGIN_STATES);
-    _PCFManeuverDetection.addRefineWindowHours(builder, REFINE_WINDOW_HOURS);
-    _PCFManeuverDetection.addMinimumStates(builder, MINIMUM_STATES);
-    return _PCFManeuverDetection.endPCFManeuverDetection(builder);
-  }
-  unpack() {
-    return new PCFManeuverDetectionT(
-      this.FALSE_ALARMS_PER_OBJECT_YEAR(),
-      this.CORRELATION_MODEL(),
-      this.THRESHOLD(),
-      this.MARGIN_STATES(),
-      this.REFINE_WINDOW_HOURS(),
-      this.MINIMUM_STATES()
-    );
-  }
-  unpackTo(_o) {
-    _o.FALSE_ALARMS_PER_OBJECT_YEAR = this.FALSE_ALARMS_PER_OBJECT_YEAR();
-    _o.CORRELATION_MODEL = this.CORRELATION_MODEL();
-    _o.THRESHOLD = this.THRESHOLD();
-    _o.MARGIN_STATES = this.MARGIN_STATES();
-    _o.REFINE_WINDOW_HOURS = this.REFINE_WINDOW_HOURS();
-    _o.MINIMUM_STATES = this.MINIMUM_STATES();
-  }
-};
-var PCFManeuverDetectionT = class {
-  constructor(FALSE_ALARMS_PER_OBJECT_YEAR = 1, CORRELATION_MODEL = 2 /* ONE_SAMPLE_PER_REVOLUTION */, THRESHOLD = 20, MARGIN_STATES = 12, REFINE_WINDOW_HOURS = 2, MINIMUM_STATES = 48) {
-    this.FALSE_ALARMS_PER_OBJECT_YEAR = FALSE_ALARMS_PER_OBJECT_YEAR;
-    this.CORRELATION_MODEL = CORRELATION_MODEL;
-    this.THRESHOLD = THRESHOLD;
-    this.MARGIN_STATES = MARGIN_STATES;
-    this.REFINE_WINDOW_HOURS = REFINE_WINDOW_HOURS;
-    this.MINIMUM_STATES = MINIMUM_STATES;
-  }
-  pack(builder) {
-    return PCFManeuverDetection.createPCFManeuverDetection(
-      builder,
-      this.FALSE_ALARMS_PER_OBJECT_YEAR,
-      this.CORRELATION_MODEL,
-      this.THRESHOLD,
-      this.MARGIN_STATES,
-      this.REFINE_WINDOW_HOURS,
-      this.MINIMUM_STATES
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFMeanElementOptions.ts
-import * as flatbuffers75 from "flatbuffers";
-var PCFMeanElementOptions = class _PCFMeanElementOptions {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCFMeanElementOptions(bb, obj) {
-    return (obj || new _PCFMeanElementOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCFMeanElementOptions(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers75.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCFMeanElementOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * Highest even degree of the m-daily short-periodic gravity terms; 0
-   * omits them. Range 0 to 16. Default 12.
-   */
-  M_DAILY_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 12;
-  }
-  /**
-   * Highest degree of the zonal tail (secular and long-period terms past
-   * J5). Range 6 to 70. Default 20.
-   */
-  ZONAL_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 20;
-  }
-  /**
-   * Highest degree of the eccentricity-vector short-periodic terms. Range
-   * 2 to 16. Default 7.
-   */
-  SHORT_PERIODIC_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 7;
-  }
-  /**
-   * Resonance terms on or off. Default true.
-   */
-  ENABLE_RESONANCE() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
-  }
-  /**
-   * Highest odd degree of the shallow-resonance terms. Default 31.
-   */
-  RESONANCE_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 31;
-  }
-  /**
-   * Resonance band: terms whose angle drifts slower than this fraction of
-   * the mean motion are integrated with the rates. Default 0.045.
-   */
-  RESONANCE_BAND() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.045;
-  }
-  /**
-   * Highest multiple of the mean anomaly in a resonance angle. Default 1.
-   */
-  RESONANCE_MAXIMUM_K() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1;
-  }
-  /**
-   * Near-resonance band at output time, as a fraction of the mean motion
-   * beyond RESONANCE_BAND; 0 is off. Default 0.
-   */
-  NEAR_RESONANCE_BAND() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Divisor of the integration grid step; >= 1. Default 1.
-   */
-  GRID_STEP_DIVISOR() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1;
-  }
-  /**
-   * The catalog-shared density kernel (a gridded log-density table shared by
-   * every object) on or off; off evaluates the atmosphere model directly.
-   * Default true.
-   */
-  DENSITY_KERNEL() {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
-  }
-  /**
-   * Perigee height below which B_eff and TAU0 act (the drag regime), km.
-   * Default 2500.
-   */
-  DRAG_REGIME_PERIGEE_KM() {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2500;
-  }
-  static startPCFMeanElementOptions(builder) {
-    builder.startObject(11);
-  }
-  static addMDailyMaximumDegree(builder, M_DAILY_MAXIMUM_DEGREE) {
-    builder.addFieldInt8(0, M_DAILY_MAXIMUM_DEGREE, 12);
-  }
-  static addZonalMaximumDegree(builder, ZONAL_MAXIMUM_DEGREE) {
-    builder.addFieldInt8(1, ZONAL_MAXIMUM_DEGREE, 20);
-  }
-  static addShortPeriodicMaximumDegree(builder, SHORT_PERIODIC_MAXIMUM_DEGREE) {
-    builder.addFieldInt8(2, SHORT_PERIODIC_MAXIMUM_DEGREE, 7);
-  }
-  static addEnableResonance(builder, ENABLE_RESONANCE) {
-    builder.addFieldInt8(3, +ENABLE_RESONANCE, 1);
-  }
-  static addResonanceMaximumDegree(builder, RESONANCE_MAXIMUM_DEGREE) {
-    builder.addFieldInt8(4, RESONANCE_MAXIMUM_DEGREE, 31);
-  }
-  static addResonanceBand(builder, RESONANCE_BAND) {
-    builder.addFieldFloat64(5, RESONANCE_BAND, 0.045);
-  }
-  static addResonanceMaximumK(builder, RESONANCE_MAXIMUM_K) {
-    builder.addFieldInt8(6, RESONANCE_MAXIMUM_K, 1);
-  }
-  static addNearResonanceBand(builder, NEAR_RESONANCE_BAND) {
-    builder.addFieldFloat64(7, NEAR_RESONANCE_BAND, 0);
-  }
-  static addGridStepDivisor(builder, GRID_STEP_DIVISOR) {
-    builder.addFieldInt8(8, GRID_STEP_DIVISOR, 1);
-  }
-  static addDensityKernel(builder, DENSITY_KERNEL) {
-    builder.addFieldInt8(9, +DENSITY_KERNEL, 1);
-  }
-  static addDragRegimePerigeeKm(builder, DRAG_REGIME_PERIGEE_KM) {
-    builder.addFieldFloat64(10, DRAG_REGIME_PERIGEE_KM, 2500);
-  }
-  static endPCFMeanElementOptions(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCFMeanElementOptions(builder, M_DAILY_MAXIMUM_DEGREE, ZONAL_MAXIMUM_DEGREE, SHORT_PERIODIC_MAXIMUM_DEGREE, ENABLE_RESONANCE, RESONANCE_MAXIMUM_DEGREE, RESONANCE_BAND, RESONANCE_MAXIMUM_K, NEAR_RESONANCE_BAND, GRID_STEP_DIVISOR, DENSITY_KERNEL, DRAG_REGIME_PERIGEE_KM) {
-    _PCFMeanElementOptions.startPCFMeanElementOptions(builder);
-    _PCFMeanElementOptions.addMDailyMaximumDegree(builder, M_DAILY_MAXIMUM_DEGREE);
-    _PCFMeanElementOptions.addZonalMaximumDegree(builder, ZONAL_MAXIMUM_DEGREE);
-    _PCFMeanElementOptions.addShortPeriodicMaximumDegree(builder, SHORT_PERIODIC_MAXIMUM_DEGREE);
-    _PCFMeanElementOptions.addEnableResonance(builder, ENABLE_RESONANCE);
-    _PCFMeanElementOptions.addResonanceMaximumDegree(builder, RESONANCE_MAXIMUM_DEGREE);
-    _PCFMeanElementOptions.addResonanceBand(builder, RESONANCE_BAND);
-    _PCFMeanElementOptions.addResonanceMaximumK(builder, RESONANCE_MAXIMUM_K);
-    _PCFMeanElementOptions.addNearResonanceBand(builder, NEAR_RESONANCE_BAND);
-    _PCFMeanElementOptions.addGridStepDivisor(builder, GRID_STEP_DIVISOR);
-    _PCFMeanElementOptions.addDensityKernel(builder, DENSITY_KERNEL);
-    _PCFMeanElementOptions.addDragRegimePerigeeKm(builder, DRAG_REGIME_PERIGEE_KM);
-    return _PCFMeanElementOptions.endPCFMeanElementOptions(builder);
-  }
-  unpack() {
-    return new PCFMeanElementOptionsT(
-      this.M_DAILY_MAXIMUM_DEGREE(),
-      this.ZONAL_MAXIMUM_DEGREE(),
-      this.SHORT_PERIODIC_MAXIMUM_DEGREE(),
-      this.ENABLE_RESONANCE(),
-      this.RESONANCE_MAXIMUM_DEGREE(),
-      this.RESONANCE_BAND(),
-      this.RESONANCE_MAXIMUM_K(),
-      this.NEAR_RESONANCE_BAND(),
-      this.GRID_STEP_DIVISOR(),
-      this.DENSITY_KERNEL(),
-      this.DRAG_REGIME_PERIGEE_KM()
-    );
-  }
-  unpackTo(_o) {
-    _o.M_DAILY_MAXIMUM_DEGREE = this.M_DAILY_MAXIMUM_DEGREE();
-    _o.ZONAL_MAXIMUM_DEGREE = this.ZONAL_MAXIMUM_DEGREE();
-    _o.SHORT_PERIODIC_MAXIMUM_DEGREE = this.SHORT_PERIODIC_MAXIMUM_DEGREE();
-    _o.ENABLE_RESONANCE = this.ENABLE_RESONANCE();
-    _o.RESONANCE_MAXIMUM_DEGREE = this.RESONANCE_MAXIMUM_DEGREE();
-    _o.RESONANCE_BAND = this.RESONANCE_BAND();
-    _o.RESONANCE_MAXIMUM_K = this.RESONANCE_MAXIMUM_K();
-    _o.NEAR_RESONANCE_BAND = this.NEAR_RESONANCE_BAND();
-    _o.GRID_STEP_DIVISOR = this.GRID_STEP_DIVISOR();
-    _o.DENSITY_KERNEL = this.DENSITY_KERNEL();
-    _o.DRAG_REGIME_PERIGEE_KM = this.DRAG_REGIME_PERIGEE_KM();
-  }
-};
-var PCFMeanElementOptionsT = class {
-  constructor(M_DAILY_MAXIMUM_DEGREE = 12, ZONAL_MAXIMUM_DEGREE = 20, SHORT_PERIODIC_MAXIMUM_DEGREE = 7, ENABLE_RESONANCE = true, RESONANCE_MAXIMUM_DEGREE = 31, RESONANCE_BAND = 0.045, RESONANCE_MAXIMUM_K = 1, NEAR_RESONANCE_BAND = 0, GRID_STEP_DIVISOR = 1, DENSITY_KERNEL = true, DRAG_REGIME_PERIGEE_KM = 2500) {
-    this.M_DAILY_MAXIMUM_DEGREE = M_DAILY_MAXIMUM_DEGREE;
-    this.ZONAL_MAXIMUM_DEGREE = ZONAL_MAXIMUM_DEGREE;
-    this.SHORT_PERIODIC_MAXIMUM_DEGREE = SHORT_PERIODIC_MAXIMUM_DEGREE;
-    this.ENABLE_RESONANCE = ENABLE_RESONANCE;
-    this.RESONANCE_MAXIMUM_DEGREE = RESONANCE_MAXIMUM_DEGREE;
-    this.RESONANCE_BAND = RESONANCE_BAND;
-    this.RESONANCE_MAXIMUM_K = RESONANCE_MAXIMUM_K;
-    this.NEAR_RESONANCE_BAND = NEAR_RESONANCE_BAND;
-    this.GRID_STEP_DIVISOR = GRID_STEP_DIVISOR;
-    this.DENSITY_KERNEL = DENSITY_KERNEL;
-    this.DRAG_REGIME_PERIGEE_KM = DRAG_REGIME_PERIGEE_KM;
-  }
-  pack(builder) {
-    return PCFMeanElementOptions.createPCFMeanElementOptions(
-      builder,
-      this.M_DAILY_MAXIMUM_DEGREE,
-      this.ZONAL_MAXIMUM_DEGREE,
-      this.SHORT_PERIODIC_MAXIMUM_DEGREE,
-      this.ENABLE_RESONANCE,
-      this.RESONANCE_MAXIMUM_DEGREE,
-      this.RESONANCE_BAND,
-      this.RESONANCE_MAXIMUM_K,
-      this.NEAR_RESONANCE_BAND,
-      this.GRID_STEP_DIVISOR,
-      this.DENSITY_KERNEL,
-      this.DRAG_REGIME_PERIGEE_KM
-    );
-  }
-};
-
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFOutput.ts
-import * as flatbuffers76 from "flatbuffers";
+import * as flatbuffers73 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/pcfOutputFrame.ts
 var pcfOutputFrame = /* @__PURE__ */ ((pcfOutputFrame2) => {
@@ -16277,7 +15839,7 @@ var PCFOutput = class _PCFOutput {
     return (obj || new _PCFOutput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCFOutput(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers76.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers73.SIZE_PREFIX_LENGTH);
     return (obj || new _PCFOutput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -16355,434 +15917,11 @@ var PCFOutputT = class {
   }
 };
 
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFReentry.ts
-import * as flatbuffers77 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/pcfReentryWindowMethod.ts
-var pcfReentryWindowMethod = /* @__PURE__ */ ((pcfReentryWindowMethod2) => {
-  pcfReentryWindowMethod2[pcfReentryWindowMethod2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
-  pcfReentryWindowMethod2[pcfReentryWindowMethod2["LINEAR"] = 1] = "LINEAR";
-  pcfReentryWindowMethod2[pcfReentryWindowMethod2["UNSCENTED"] = 2] = "UNSCENTED";
-  return pcfReentryWindowMethod2;
-})(pcfReentryWindowMethod || {});
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFReentry.ts
-var PCFReentry = class _PCFReentry {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCFReentry(bb, obj) {
-    return (obj || new _PCFReentry()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCFReentry(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers77.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCFReentry()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * Altitude at which the trajectory ends as reentered, km. Default 80.
-   */
-  ALTITUDE_KM() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 80;
-  }
-  /**
-   * Hand-off when the perigee altitude falls below this, km. Default 180.
-   */
-  HANDOFF_PERIGEE_ALTITUDE_KM() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 180;
-  }
-  /**
-   * Hand-off when the decay over one step, 4 pi |da/dt| / (n H), passes this
-   * fraction of the density scale height H. Default 0.05.
-   */
-  HANDOFF_DECAY_RATIO() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.05;
-  }
-  /**
-   * Hand-off when the eccentricity collapses by more than this fraction of
-   * a e per revolution, with the eccentricity above
-   * HANDOFF_MINIMUM_ECCENTRICITY. Default 0.01.
-   */
-  HANDOFF_ECCENTRICITY_COLLAPSE() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
-  }
-  /**
-   * Eccentricity above which the collapse test applies. Default 0.01.
-   */
-  HANDOFF_MINIMUM_ECCENTRICITY() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.01;
-  }
-  /**
-   * Spacing of the nodes the hand-off tests are evaluated at, minutes.
-   * Default 30.
-   */
-  NODE_STEP_MINUTES() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 30;
-  }
-  /**
-   * Longest look-ahead for a hand-off or reentry, days. Default 120.
-   */
-  HORIZON_DAYS() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 120;
-  }
-  /**
-   * How the reentry window is computed. Default LINEAR.
-   */
-  WINDOW_METHOD() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 1 /* LINEAR */;
-  }
-  /**
-   * Fractional 1-sigma density error of the window. Default 0.15.
-   */
-  WINDOW_DENSITY_SIGMA() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.15;
-  }
-  /**
-   * Correlation time of the density error, days. Default 2.
-   */
-  WINDOW_CORRELATION_DAYS() {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2;
-  }
-  /**
-   * Fractional 1-sigma error of the ballistic coefficient. Default 0.05.
-   */
-  WINDOW_BALLISTIC_SIGMA() {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.05;
-  }
-  /**
-   * Step of the osculating integration after the hand-off, seconds. Default
-   * 10.
-   */
-  OSCULATING_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 26);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 10;
-  }
-  static startPCFReentry(builder) {
-    builder.startObject(12);
-  }
-  static addAltitudeKm(builder, ALTITUDE_KM) {
-    builder.addFieldFloat64(0, ALTITUDE_KM, 80);
-  }
-  static addHandoffPerigeeAltitudeKm(builder, HANDOFF_PERIGEE_ALTITUDE_KM) {
-    builder.addFieldFloat64(1, HANDOFF_PERIGEE_ALTITUDE_KM, 180);
-  }
-  static addHandoffDecayRatio(builder, HANDOFF_DECAY_RATIO) {
-    builder.addFieldFloat64(2, HANDOFF_DECAY_RATIO, 0.05);
-  }
-  static addHandoffEccentricityCollapse(builder, HANDOFF_ECCENTRICITY_COLLAPSE) {
-    builder.addFieldFloat64(3, HANDOFF_ECCENTRICITY_COLLAPSE, 0.01);
-  }
-  static addHandoffMinimumEccentricity(builder, HANDOFF_MINIMUM_ECCENTRICITY) {
-    builder.addFieldFloat64(4, HANDOFF_MINIMUM_ECCENTRICITY, 0.01);
-  }
-  static addNodeStepMinutes(builder, NODE_STEP_MINUTES) {
-    builder.addFieldFloat64(5, NODE_STEP_MINUTES, 30);
-  }
-  static addHorizonDays(builder, HORIZON_DAYS) {
-    builder.addFieldFloat64(6, HORIZON_DAYS, 120);
-  }
-  static addWindowMethod(builder, WINDOW_METHOD) {
-    builder.addFieldInt8(7, WINDOW_METHOD, 1 /* LINEAR */);
-  }
-  static addWindowDensitySigma(builder, WINDOW_DENSITY_SIGMA) {
-    builder.addFieldFloat64(8, WINDOW_DENSITY_SIGMA, 0.15);
-  }
-  static addWindowCorrelationDays(builder, WINDOW_CORRELATION_DAYS) {
-    builder.addFieldFloat64(9, WINDOW_CORRELATION_DAYS, 2);
-  }
-  static addWindowBallisticSigma(builder, WINDOW_BALLISTIC_SIGMA) {
-    builder.addFieldFloat64(10, WINDOW_BALLISTIC_SIGMA, 0.05);
-  }
-  static addOsculatingStepSeconds(builder, OSCULATING_STEP_SECONDS) {
-    builder.addFieldFloat64(11, OSCULATING_STEP_SECONDS, 10);
-  }
-  static endPCFReentry(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCFReentry(builder, ALTITUDE_KM, HANDOFF_PERIGEE_ALTITUDE_KM, HANDOFF_DECAY_RATIO, HANDOFF_ECCENTRICITY_COLLAPSE, HANDOFF_MINIMUM_ECCENTRICITY, NODE_STEP_MINUTES, HORIZON_DAYS, WINDOW_METHOD, WINDOW_DENSITY_SIGMA, WINDOW_CORRELATION_DAYS, WINDOW_BALLISTIC_SIGMA, OSCULATING_STEP_SECONDS) {
-    _PCFReentry.startPCFReentry(builder);
-    _PCFReentry.addAltitudeKm(builder, ALTITUDE_KM);
-    _PCFReentry.addHandoffPerigeeAltitudeKm(builder, HANDOFF_PERIGEE_ALTITUDE_KM);
-    _PCFReentry.addHandoffDecayRatio(builder, HANDOFF_DECAY_RATIO);
-    _PCFReentry.addHandoffEccentricityCollapse(builder, HANDOFF_ECCENTRICITY_COLLAPSE);
-    _PCFReentry.addHandoffMinimumEccentricity(builder, HANDOFF_MINIMUM_ECCENTRICITY);
-    _PCFReentry.addNodeStepMinutes(builder, NODE_STEP_MINUTES);
-    _PCFReentry.addHorizonDays(builder, HORIZON_DAYS);
-    _PCFReentry.addWindowMethod(builder, WINDOW_METHOD);
-    _PCFReentry.addWindowDensitySigma(builder, WINDOW_DENSITY_SIGMA);
-    _PCFReentry.addWindowCorrelationDays(builder, WINDOW_CORRELATION_DAYS);
-    _PCFReentry.addWindowBallisticSigma(builder, WINDOW_BALLISTIC_SIGMA);
-    _PCFReentry.addOsculatingStepSeconds(builder, OSCULATING_STEP_SECONDS);
-    return _PCFReentry.endPCFReentry(builder);
-  }
-  unpack() {
-    return new PCFReentryT(
-      this.ALTITUDE_KM(),
-      this.HANDOFF_PERIGEE_ALTITUDE_KM(),
-      this.HANDOFF_DECAY_RATIO(),
-      this.HANDOFF_ECCENTRICITY_COLLAPSE(),
-      this.HANDOFF_MINIMUM_ECCENTRICITY(),
-      this.NODE_STEP_MINUTES(),
-      this.HORIZON_DAYS(),
-      this.WINDOW_METHOD(),
-      this.WINDOW_DENSITY_SIGMA(),
-      this.WINDOW_CORRELATION_DAYS(),
-      this.WINDOW_BALLISTIC_SIGMA(),
-      this.OSCULATING_STEP_SECONDS()
-    );
-  }
-  unpackTo(_o) {
-    _o.ALTITUDE_KM = this.ALTITUDE_KM();
-    _o.HANDOFF_PERIGEE_ALTITUDE_KM = this.HANDOFF_PERIGEE_ALTITUDE_KM();
-    _o.HANDOFF_DECAY_RATIO = this.HANDOFF_DECAY_RATIO();
-    _o.HANDOFF_ECCENTRICITY_COLLAPSE = this.HANDOFF_ECCENTRICITY_COLLAPSE();
-    _o.HANDOFF_MINIMUM_ECCENTRICITY = this.HANDOFF_MINIMUM_ECCENTRICITY();
-    _o.NODE_STEP_MINUTES = this.NODE_STEP_MINUTES();
-    _o.HORIZON_DAYS = this.HORIZON_DAYS();
-    _o.WINDOW_METHOD = this.WINDOW_METHOD();
-    _o.WINDOW_DENSITY_SIGMA = this.WINDOW_DENSITY_SIGMA();
-    _o.WINDOW_CORRELATION_DAYS = this.WINDOW_CORRELATION_DAYS();
-    _o.WINDOW_BALLISTIC_SIGMA = this.WINDOW_BALLISTIC_SIGMA();
-    _o.OSCULATING_STEP_SECONDS = this.OSCULATING_STEP_SECONDS();
-  }
-};
-var PCFReentryT = class {
-  constructor(ALTITUDE_KM = 80, HANDOFF_PERIGEE_ALTITUDE_KM = 180, HANDOFF_DECAY_RATIO = 0.05, HANDOFF_ECCENTRICITY_COLLAPSE = 0.01, HANDOFF_MINIMUM_ECCENTRICITY = 0.01, NODE_STEP_MINUTES = 30, HORIZON_DAYS = 120, WINDOW_METHOD = 1 /* LINEAR */, WINDOW_DENSITY_SIGMA = 0.15, WINDOW_CORRELATION_DAYS = 2, WINDOW_BALLISTIC_SIGMA = 0.05, OSCULATING_STEP_SECONDS = 10) {
-    this.ALTITUDE_KM = ALTITUDE_KM;
-    this.HANDOFF_PERIGEE_ALTITUDE_KM = HANDOFF_PERIGEE_ALTITUDE_KM;
-    this.HANDOFF_DECAY_RATIO = HANDOFF_DECAY_RATIO;
-    this.HANDOFF_ECCENTRICITY_COLLAPSE = HANDOFF_ECCENTRICITY_COLLAPSE;
-    this.HANDOFF_MINIMUM_ECCENTRICITY = HANDOFF_MINIMUM_ECCENTRICITY;
-    this.NODE_STEP_MINUTES = NODE_STEP_MINUTES;
-    this.HORIZON_DAYS = HORIZON_DAYS;
-    this.WINDOW_METHOD = WINDOW_METHOD;
-    this.WINDOW_DENSITY_SIGMA = WINDOW_DENSITY_SIGMA;
-    this.WINDOW_CORRELATION_DAYS = WINDOW_CORRELATION_DAYS;
-    this.WINDOW_BALLISTIC_SIGMA = WINDOW_BALLISTIC_SIGMA;
-    this.OSCULATING_STEP_SECONDS = OSCULATING_STEP_SECONDS;
-  }
-  pack(builder) {
-    return PCFReentry.createPCFReentry(
-      builder,
-      this.ALTITUDE_KM,
-      this.HANDOFF_PERIGEE_ALTITUDE_KM,
-      this.HANDOFF_DECAY_RATIO,
-      this.HANDOFF_ECCENTRICITY_COLLAPSE,
-      this.HANDOFF_MINIMUM_ECCENTRICITY,
-      this.NODE_STEP_MINUTES,
-      this.HORIZON_DAYS,
-      this.WINDOW_METHOD,
-      this.WINDOW_DENSITY_SIGMA,
-      this.WINDOW_CORRELATION_DAYS,
-      this.WINDOW_BALLISTIC_SIGMA,
-      this.OSCULATING_STEP_SECONDS
-    );
-  }
-};
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/PCFSegmentOptions.ts
-import * as flatbuffers78 from "flatbuffers";
-var PCFSegmentOptions = class _PCFSegmentOptions {
-  bb = null;
-  bb_pos = 0;
-  __init(i, bb) {
-    this.bb_pos = i;
-    this.bb = bb;
-    return this;
-  }
-  static getRootAsPCFSegmentOptions(bb, obj) {
-    return (obj || new _PCFSegmentOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  static getSizePrefixedRootAsPCFSegmentOptions(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers78.SIZE_PREFIX_LENGTH);
-    return (obj || new _PCFSegmentOptions()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-  }
-  /**
-   * Moon-centered gravity field degree. Default 70.
-   */
-  MOON_GRAVITY_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 4);
-    return offset ? this.bb.readUint16(this.bb_pos + offset) : 70;
-  }
-  /**
-   * Moon-centered short-periodic degree. Default 8.
-   */
-  MOON_SHORT_PERIODIC_MAXIMUM_DEGREE() {
-    const offset = this.bb.__offset(this.bb_pos, 6);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 8;
-  }
-  /**
-   * Moon-centered eccentricity order (highest |q| of the mean-anomaly
-   * multiple kept). Default 2.
-   */
-  MOON_ECCENTRICITY_ORDER() {
-    const offset = this.bb.__offset(this.bb_pos, 8);
-    return offset ? this.bb.readUint8(this.bb_pos + offset) : 2;
-  }
-  /**
-   * Moon-centered integration step, seconds. Default 240.
-   */
-  MOON_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 10);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 240;
-  }
-  /**
-   * Cislunar integration step, seconds. Default 60.
-   */
-  CISLUNAR_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 12);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 60;
-  }
-  /**
-   * Heliocentric integration step, seconds. Default 1800.
-   */
-  HELIOCENTRIC_STEP_SECONDS() {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 1800;
-  }
-  /**
-   * A segment is accepted when its RMS is within max(RMS_FACTOR x the
-   * cleanest segment's RMS, that RMS + RMS_MARGIN_KM). Factor, default 2.
-   */
-  SEGMENT_RMS_FACTOR() {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 2;
-  }
-  /**
-   * The additive term of the same rule, km. Default 0.05.
-   */
-  SEGMENT_RMS_MARGIN_KM() {
-    const offset = this.bb.__offset(this.bb_pos, 18);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.05;
-  }
-  /**
-   * Shortest cislunar segment, hours. Default 6.
-   */
-  CISLUNAR_MINIMUM_SEGMENT_HOURS() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
-    return offset ? this.bb.readFloat64(this.bb_pos + offset) : 6;
-  }
-  static startPCFSegmentOptions(builder) {
-    builder.startObject(9);
-  }
-  static addMoonGravityMaximumDegree(builder, MOON_GRAVITY_MAXIMUM_DEGREE) {
-    builder.addFieldInt16(0, MOON_GRAVITY_MAXIMUM_DEGREE, 70);
-  }
-  static addMoonShortPeriodicMaximumDegree(builder, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE) {
-    builder.addFieldInt8(1, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE, 8);
-  }
-  static addMoonEccentricityOrder(builder, MOON_ECCENTRICITY_ORDER) {
-    builder.addFieldInt8(2, MOON_ECCENTRICITY_ORDER, 2);
-  }
-  static addMoonStepSeconds(builder, MOON_STEP_SECONDS) {
-    builder.addFieldFloat64(3, MOON_STEP_SECONDS, 240);
-  }
-  static addCislunarStepSeconds(builder, CISLUNAR_STEP_SECONDS) {
-    builder.addFieldFloat64(4, CISLUNAR_STEP_SECONDS, 60);
-  }
-  static addHeliocentricStepSeconds(builder, HELIOCENTRIC_STEP_SECONDS) {
-    builder.addFieldFloat64(5, HELIOCENTRIC_STEP_SECONDS, 1800);
-  }
-  static addSegmentRmsFactor(builder, SEGMENT_RMS_FACTOR) {
-    builder.addFieldFloat64(6, SEGMENT_RMS_FACTOR, 2);
-  }
-  static addSegmentRmsMarginKm(builder, SEGMENT_RMS_MARGIN_KM) {
-    builder.addFieldFloat64(7, SEGMENT_RMS_MARGIN_KM, 0.05);
-  }
-  static addCislunarMinimumSegmentHours(builder, CISLUNAR_MINIMUM_SEGMENT_HOURS) {
-    builder.addFieldFloat64(8, CISLUNAR_MINIMUM_SEGMENT_HOURS, 6);
-  }
-  static endPCFSegmentOptions(builder) {
-    const offset = builder.endObject();
-    return offset;
-  }
-  static createPCFSegmentOptions(builder, MOON_GRAVITY_MAXIMUM_DEGREE, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE, MOON_ECCENTRICITY_ORDER, MOON_STEP_SECONDS, CISLUNAR_STEP_SECONDS, HELIOCENTRIC_STEP_SECONDS, SEGMENT_RMS_FACTOR, SEGMENT_RMS_MARGIN_KM, CISLUNAR_MINIMUM_SEGMENT_HOURS) {
-    _PCFSegmentOptions.startPCFSegmentOptions(builder);
-    _PCFSegmentOptions.addMoonGravityMaximumDegree(builder, MOON_GRAVITY_MAXIMUM_DEGREE);
-    _PCFSegmentOptions.addMoonShortPeriodicMaximumDegree(builder, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE);
-    _PCFSegmentOptions.addMoonEccentricityOrder(builder, MOON_ECCENTRICITY_ORDER);
-    _PCFSegmentOptions.addMoonStepSeconds(builder, MOON_STEP_SECONDS);
-    _PCFSegmentOptions.addCislunarStepSeconds(builder, CISLUNAR_STEP_SECONDS);
-    _PCFSegmentOptions.addHeliocentricStepSeconds(builder, HELIOCENTRIC_STEP_SECONDS);
-    _PCFSegmentOptions.addSegmentRmsFactor(builder, SEGMENT_RMS_FACTOR);
-    _PCFSegmentOptions.addSegmentRmsMarginKm(builder, SEGMENT_RMS_MARGIN_KM);
-    _PCFSegmentOptions.addCislunarMinimumSegmentHours(builder, CISLUNAR_MINIMUM_SEGMENT_HOURS);
-    return _PCFSegmentOptions.endPCFSegmentOptions(builder);
-  }
-  unpack() {
-    return new PCFSegmentOptionsT(
-      this.MOON_GRAVITY_MAXIMUM_DEGREE(),
-      this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE(),
-      this.MOON_ECCENTRICITY_ORDER(),
-      this.MOON_STEP_SECONDS(),
-      this.CISLUNAR_STEP_SECONDS(),
-      this.HELIOCENTRIC_STEP_SECONDS(),
-      this.SEGMENT_RMS_FACTOR(),
-      this.SEGMENT_RMS_MARGIN_KM(),
-      this.CISLUNAR_MINIMUM_SEGMENT_HOURS()
-    );
-  }
-  unpackTo(_o) {
-    _o.MOON_GRAVITY_MAXIMUM_DEGREE = this.MOON_GRAVITY_MAXIMUM_DEGREE();
-    _o.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE = this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE();
-    _o.MOON_ECCENTRICITY_ORDER = this.MOON_ECCENTRICITY_ORDER();
-    _o.MOON_STEP_SECONDS = this.MOON_STEP_SECONDS();
-    _o.CISLUNAR_STEP_SECONDS = this.CISLUNAR_STEP_SECONDS();
-    _o.HELIOCENTRIC_STEP_SECONDS = this.HELIOCENTRIC_STEP_SECONDS();
-    _o.SEGMENT_RMS_FACTOR = this.SEGMENT_RMS_FACTOR();
-    _o.SEGMENT_RMS_MARGIN_KM = this.SEGMENT_RMS_MARGIN_KM();
-    _o.CISLUNAR_MINIMUM_SEGMENT_HOURS = this.CISLUNAR_MINIMUM_SEGMENT_HOURS();
-  }
-};
-var PCFSegmentOptionsT = class {
-  constructor(MOON_GRAVITY_MAXIMUM_DEGREE = 70, MOON_SHORT_PERIODIC_MAXIMUM_DEGREE = 8, MOON_ECCENTRICITY_ORDER = 2, MOON_STEP_SECONDS = 240, CISLUNAR_STEP_SECONDS = 60, HELIOCENTRIC_STEP_SECONDS = 1800, SEGMENT_RMS_FACTOR = 2, SEGMENT_RMS_MARGIN_KM = 0.05, CISLUNAR_MINIMUM_SEGMENT_HOURS = 6) {
-    this.MOON_GRAVITY_MAXIMUM_DEGREE = MOON_GRAVITY_MAXIMUM_DEGREE;
-    this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE = MOON_SHORT_PERIODIC_MAXIMUM_DEGREE;
-    this.MOON_ECCENTRICITY_ORDER = MOON_ECCENTRICITY_ORDER;
-    this.MOON_STEP_SECONDS = MOON_STEP_SECONDS;
-    this.CISLUNAR_STEP_SECONDS = CISLUNAR_STEP_SECONDS;
-    this.HELIOCENTRIC_STEP_SECONDS = HELIOCENTRIC_STEP_SECONDS;
-    this.SEGMENT_RMS_FACTOR = SEGMENT_RMS_FACTOR;
-    this.SEGMENT_RMS_MARGIN_KM = SEGMENT_RMS_MARGIN_KM;
-    this.CISLUNAR_MINIMUM_SEGMENT_HOURS = CISLUNAR_MINIMUM_SEGMENT_HOURS;
-  }
-  pack(builder) {
-    return PCFSegmentOptions.createPCFSegmentOptions(
-      builder,
-      this.MOON_GRAVITY_MAXIMUM_DEGREE,
-      this.MOON_SHORT_PERIODIC_MAXIMUM_DEGREE,
-      this.MOON_ECCENTRICITY_ORDER,
-      this.MOON_STEP_SECONDS,
-      this.CISLUNAR_STEP_SECONDS,
-      this.HELIOCENTRIC_STEP_SECONDS,
-      this.SEGMENT_RMS_FACTOR,
-      this.SEGMENT_RMS_MARGIN_KM,
-      this.CISLUNAR_MINIMUM_SEGMENT_HOURS
-    );
-  }
-};
-
 // node_modules/spacedatastandards.org/lib/ts/XMT/pcfTheory.ts
 var pcfTheory = /* @__PURE__ */ ((pcfTheory2) => {
   pcfTheory2[pcfTheory2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfTheory2[pcfTheory2["SGP4"] = 1] = "SGP4";
   pcfTheory2[pcfTheory2["SGP4XP"] = 2] = "SGP4XP";
-  pcfTheory2[pcfTheory2["SDNAP"] = 3] = "SDNAP";
   pcfTheory2[pcfTheory2["FFM"] = 4] = "FFM";
   pcfTheory2[pcfTheory2["KEPLER"] = 5] = "KEPLER";
   return pcfTheory2;
@@ -16801,7 +15940,7 @@ var PCF = class _PCF {
     return (obj || new _PCF()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPCF(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers79.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers74.SIZE_PREFIX_LENGTH);
     return (obj || new _PCF()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -16837,67 +15976,39 @@ var PCF = class _PCF {
     return offset ? (obj || new PCFForceModel()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   /**
-   * Truncations and switches of the averaged theories (SGP4XP, SDNAP).
-   */
-  MEAN_ELEMENT(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 14);
-    return offset ? (obj || new PCFMeanElementOptions()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
-   * Beyond-Earth segment sets.
-   */
-  SEGMENTS(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 16);
-    return offset ? (obj || new PCFSegmentOptions()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
    * Fit policy.
    */
   FIT(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 18);
+    const offset = this.bb.__offset(this.bb_pos, 14);
     return offset ? (obj || new PCFFitPolicy()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   /**
    * Events located while integrating. Default empty.
    */
   EVENTS(index, obj) {
-    const offset = this.bb.__offset(this.bb_pos, 20);
+    const offset = this.bb.__offset(this.bb_pos, 16);
     return offset ? (obj || new PCFEventDefinition()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
   }
   eventsLength() {
-    const offset = this.bb.__offset(this.bb_pos, 20);
+    const offset = this.bb.__offset(this.bb_pos, 16);
     return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
-  }
-  /**
-   * Maneuver detection.
-   */
-  MANEUVER_DETECTION(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 22);
-    return offset ? (obj || new PCFManeuverDetection()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
-   * Reentry hand-off and window.
-   */
-  REENTRY(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 24);
-    return offset ? (obj || new PCFReentry()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
-  }
-  /**
-   * Launch initialization priors.
-   */
-  LAUNCH(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 26);
-    return offset ? (obj || new PCFLaunch()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
   /**
    * Output states.
    */
   OUTPUT(obj) {
-    const offset = this.bb.__offset(this.bb_pos, 28);
+    const offset = this.bb.__offset(this.bb_pos, 18);
     return offset ? (obj || new PCFOutput()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
+  /**
+   * The multi-epoch element store and its sync harness. Absent: the defaults of PCFEpochStore.
+   */
+  EPOCH_STORE(obj) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? (obj || new PCFEpochStore()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+  }
   static startPCF(builder) {
-    builder.startObject(13);
+    builder.startObject(9);
   }
   static addConfigurationId(builder, CONFIGURATION_IDOffset) {
     builder.addFieldOffset(0, CONFIGURATION_IDOffset, 0);
@@ -16914,17 +16025,11 @@ var PCF = class _PCF {
   static addForces(builder, FORCESOffset) {
     builder.addFieldOffset(4, FORCESOffset, 0);
   }
-  static addMeanElement(builder, MEAN_ELEMENTOffset) {
-    builder.addFieldOffset(5, MEAN_ELEMENTOffset, 0);
-  }
-  static addSegments(builder, SEGMENTSOffset) {
-    builder.addFieldOffset(6, SEGMENTSOffset, 0);
-  }
   static addFit(builder, FITOffset) {
-    builder.addFieldOffset(7, FITOffset, 0);
+    builder.addFieldOffset(5, FITOffset, 0);
   }
   static addEvents(builder, EVENTSOffset) {
-    builder.addFieldOffset(8, EVENTSOffset, 0);
+    builder.addFieldOffset(6, EVENTSOffset, 0);
   }
   static createEventsVector(builder, data) {
     builder.startVector(4, data.length, 4);
@@ -16936,17 +16041,11 @@ var PCF = class _PCF {
   static startEventsVector(builder, numElems) {
     builder.startVector(4, numElems, 4);
   }
-  static addManeuverDetection(builder, MANEUVER_DETECTIONOffset) {
-    builder.addFieldOffset(9, MANEUVER_DETECTIONOffset, 0);
-  }
-  static addReentry(builder, REENTRYOffset) {
-    builder.addFieldOffset(10, REENTRYOffset, 0);
-  }
-  static addLaunch(builder, LAUNCHOffset) {
-    builder.addFieldOffset(11, LAUNCHOffset, 0);
-  }
   static addOutput(builder, OUTPUTOffset) {
-    builder.addFieldOffset(12, OUTPUTOffset, 0);
+    builder.addFieldOffset(7, OUTPUTOffset, 0);
+  }
+  static addEpochStore(builder, EPOCH_STOREOffset) {
+    builder.addFieldOffset(8, EPOCH_STOREOffset, 0);
   }
   static endPCF(builder) {
     const offset = builder.endObject();
@@ -16965,14 +16064,10 @@ var PCF = class _PCF {
       this.THEORY(),
       this.INTEGRATOR() !== null ? this.INTEGRATOR().unpack() : null,
       this.FORCES() !== null ? this.FORCES().unpack() : null,
-      this.MEAN_ELEMENT() !== null ? this.MEAN_ELEMENT().unpack() : null,
-      this.SEGMENTS() !== null ? this.SEGMENTS().unpack() : null,
       this.FIT() !== null ? this.FIT().unpack() : null,
       this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength()),
-      this.MANEUVER_DETECTION() !== null ? this.MANEUVER_DETECTION().unpack() : null,
-      this.REENTRY() !== null ? this.REENTRY().unpack() : null,
-      this.LAUNCH() !== null ? this.LAUNCH().unpack() : null,
-      this.OUTPUT() !== null ? this.OUTPUT().unpack() : null
+      this.OUTPUT() !== null ? this.OUTPUT().unpack() : null,
+      this.EPOCH_STORE() !== null ? this.EPOCH_STORE().unpack() : null
     );
   }
   unpackTo(_o) {
@@ -16981,59 +16076,43 @@ var PCF = class _PCF {
     _o.THEORY = this.THEORY();
     _o.INTEGRATOR = this.INTEGRATOR() !== null ? this.INTEGRATOR().unpack() : null;
     _o.FORCES = this.FORCES() !== null ? this.FORCES().unpack() : null;
-    _o.MEAN_ELEMENT = this.MEAN_ELEMENT() !== null ? this.MEAN_ELEMENT().unpack() : null;
-    _o.SEGMENTS = this.SEGMENTS() !== null ? this.SEGMENTS().unpack() : null;
     _o.FIT = this.FIT() !== null ? this.FIT().unpack() : null;
     _o.EVENTS = this.bb.createObjList(this.EVENTS.bind(this), this.eventsLength());
-    _o.MANEUVER_DETECTION = this.MANEUVER_DETECTION() !== null ? this.MANEUVER_DETECTION().unpack() : null;
-    _o.REENTRY = this.REENTRY() !== null ? this.REENTRY().unpack() : null;
-    _o.LAUNCH = this.LAUNCH() !== null ? this.LAUNCH().unpack() : null;
     _o.OUTPUT = this.OUTPUT() !== null ? this.OUTPUT().unpack() : null;
+    _o.EPOCH_STORE = this.EPOCH_STORE() !== null ? this.EPOCH_STORE().unpack() : null;
   }
 };
 var PCFT = class {
-  constructor(CONFIGURATION_ID = null, PROFILE = null, THEORY = 0 /* UNSPECIFIED */, INTEGRATOR = null, FORCES = null, MEAN_ELEMENT = null, SEGMENTS = null, FIT = null, EVENTS = [], MANEUVER_DETECTION = null, REENTRY = null, LAUNCH = null, OUTPUT = null) {
+  constructor(CONFIGURATION_ID = null, PROFILE = null, THEORY = 0 /* UNSPECIFIED */, INTEGRATOR = null, FORCES = null, FIT = null, EVENTS = [], OUTPUT = null, EPOCH_STORE = null) {
     this.CONFIGURATION_ID = CONFIGURATION_ID;
     this.PROFILE = PROFILE;
     this.THEORY = THEORY;
     this.INTEGRATOR = INTEGRATOR;
     this.FORCES = FORCES;
-    this.MEAN_ELEMENT = MEAN_ELEMENT;
-    this.SEGMENTS = SEGMENTS;
     this.FIT = FIT;
     this.EVENTS = EVENTS;
-    this.MANEUVER_DETECTION = MANEUVER_DETECTION;
-    this.REENTRY = REENTRY;
-    this.LAUNCH = LAUNCH;
     this.OUTPUT = OUTPUT;
+    this.EPOCH_STORE = EPOCH_STORE;
   }
   pack(builder) {
     const CONFIGURATION_ID = this.CONFIGURATION_ID !== null ? builder.createString(this.CONFIGURATION_ID) : 0;
     const PROFILE = this.PROFILE !== null ? builder.createString(this.PROFILE) : 0;
     const INTEGRATOR = this.INTEGRATOR !== null ? this.INTEGRATOR.pack(builder) : 0;
     const FORCES = this.FORCES !== null ? this.FORCES.pack(builder) : 0;
-    const MEAN_ELEMENT = this.MEAN_ELEMENT !== null ? this.MEAN_ELEMENT.pack(builder) : 0;
-    const SEGMENTS = this.SEGMENTS !== null ? this.SEGMENTS.pack(builder) : 0;
     const FIT = this.FIT !== null ? this.FIT.pack(builder) : 0;
     const EVENTS = PCF.createEventsVector(builder, builder.createObjectOffsetList(this.EVENTS));
-    const MANEUVER_DETECTION = this.MANEUVER_DETECTION !== null ? this.MANEUVER_DETECTION.pack(builder) : 0;
-    const REENTRY = this.REENTRY !== null ? this.REENTRY.pack(builder) : 0;
-    const LAUNCH = this.LAUNCH !== null ? this.LAUNCH.pack(builder) : 0;
     const OUTPUT = this.OUTPUT !== null ? this.OUTPUT.pack(builder) : 0;
+    const EPOCH_STORE = this.EPOCH_STORE !== null ? this.EPOCH_STORE.pack(builder) : 0;
     PCF.startPCF(builder);
     PCF.addConfigurationId(builder, CONFIGURATION_ID);
     PCF.addProfile(builder, PROFILE);
     PCF.addTheory(builder, this.THEORY);
     PCF.addIntegrator(builder, INTEGRATOR);
     PCF.addForces(builder, FORCES);
-    PCF.addMeanElement(builder, MEAN_ELEMENT);
-    PCF.addSegments(builder, SEGMENTS);
     PCF.addFit(builder, FIT);
     PCF.addEvents(builder, EVENTS);
-    PCF.addManeuverDetection(builder, MANEUVER_DETECTION);
-    PCF.addReentry(builder, REENTRY);
-    PCF.addLaunch(builder, LAUNCH);
     PCF.addOutput(builder, OUTPUT);
+    PCF.addEpochStore(builder, EPOCH_STORE);
     return PCF.endPCF(builder);
   }
 };
@@ -17049,10 +16128,10 @@ var polynomialBasisType = /* @__PURE__ */ ((polynomialBasisType2) => {
 })(polynomialBasisType || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPE.ts
-import * as flatbuffers85 from "flatbuffers";
+import * as flatbuffers80 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPEOrbitalElementRecord.ts
-import * as flatbuffers80 from "flatbuffers";
+import * as flatbuffers75 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/ppeAnomalyType.ts
 var ppeAnomalyType = /* @__PURE__ */ ((ppeAnomalyType2) => {
@@ -17082,7 +16161,7 @@ var PPEOrbitalElementRecord = class _PPEOrbitalElementRecord {
     return (obj || new _PPEOrbitalElementRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPPEOrbitalElementRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers80.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers75.SIZE_PREFIX_LENGTH);
     return (obj || new _PPEOrbitalElementRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH_MID(optionalEncoding) {
@@ -17450,7 +16529,7 @@ var PPEOrbitalElementRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PPEPositionRecord.ts
-import * as flatbuffers81 from "flatbuffers";
+import * as flatbuffers76 from "flatbuffers";
 var PPEPositionRecord = class _PPEPositionRecord {
   bb = null;
   bb_pos = 0;
@@ -17463,7 +16542,7 @@ var PPEPositionRecord = class _PPEPositionRecord {
     return (obj || new _PPEPositionRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPPEPositionRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers81.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers76.SIZE_PREFIX_LENGTH);
     return (obj || new _PPEPositionRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH_MID(optionalEncoding) {
@@ -17814,10 +16893,10 @@ var PPEPositionRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/RFM.ts
-import * as flatbuffers84 from "flatbuffers";
+import * as flatbuffers79 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/RFMCoordinateSystemWrapper.ts
-import * as flatbuffers82 from "flatbuffers";
+import * as flatbuffers77 from "flatbuffers";
 var RFMCoordinateSystemWrapper = class _RFMCoordinateSystemWrapper {
   bb = null;
   bb_pos = 0;
@@ -17830,7 +16909,7 @@ var RFMCoordinateSystemWrapper = class _RFMCoordinateSystemWrapper {
     return (obj || new _RFMCoordinateSystemWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsRFMCoordinateSystemWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers82.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers77.SIZE_PREFIX_LENGTH);
     return (obj || new _RFMCoordinateSystemWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   COORDINATE_SYSTEM(obj) {
@@ -17875,7 +16954,7 @@ var RFMCoordinateSystemWrapperT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrameWrapper.ts
-import * as flatbuffers83 from "flatbuffers";
+import * as flatbuffers78 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SpacecraftFrame.ts
 var SpacecraftFrame = /* @__PURE__ */ ((SpacecraftFrame2) => {
@@ -17911,7 +16990,7 @@ var SpacecraftFrameWrapper = class _SpacecraftFrameWrapper {
     return (obj || new _SpacecraftFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsSpacecraftFrameWrapper(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers83.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers78.SIZE_PREFIX_LENGTH);
     return (obj || new _SpacecraftFrameWrapper()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   frame() {
@@ -18014,7 +17093,7 @@ var RFM = class _RFM {
     return (obj || new _RFM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsRFM(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers84.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers79.SIZE_PREFIX_LENGTH);
     return (obj || new _RFM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -18129,7 +17208,7 @@ var PPE = class _PPE {
     return (obj || new _PPE()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPPE(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers85.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers80.SIZE_PREFIX_LENGTH);
     return (obj || new _PPE()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -18427,10 +17506,10 @@ var propagatorStateFlags = /* @__PURE__ */ ((propagatorStateFlags2) => {
 })(propagatorStateFlags || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRW.ts
-import * as flatbuffers128 from "flatbuffers";
+import * as flatbuffers123 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereRequest.ts
-import * as flatbuffers86 from "flatbuffers";
+import * as flatbuffers81 from "flatbuffers";
 var PRWAtmosphereRequest = class _PRWAtmosphereRequest {
   bb = null;
   bb_pos = 0;
@@ -18443,7 +17522,7 @@ var PRWAtmosphereRequest = class _PRWAtmosphereRequest {
     return (obj || new _PRWAtmosphereRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWAtmosphereRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers86.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers81.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWAtmosphereRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ATMOSPHERE_MODEL() {
@@ -18599,10 +17678,10 @@ var PRWAtmosphereRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWAtmosphereResult.ts
-import * as flatbuffers88 from "flatbuffers";
+import * as flatbuffers83 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpeciesDensity.ts
-import * as flatbuffers87 from "flatbuffers";
+import * as flatbuffers82 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwDensitySpecies.ts
 var prwDensitySpecies = /* @__PURE__ */ ((prwDensitySpecies2) => {
@@ -18631,7 +17710,7 @@ var PRWSpeciesDensity = class _PRWSpeciesDensity {
     return (obj || new _PRWSpeciesDensity()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWSpeciesDensity(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers87.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers82.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWSpeciesDensity()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   CONSTITUENT() {
@@ -18699,7 +17778,7 @@ var PRWAtmosphereResult = class _PRWAtmosphereResult {
     return (obj || new _PRWAtmosphereResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWAtmosphereResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers88.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers83.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWAtmosphereResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ATMOSPHERE_MODEL() {
@@ -18888,7 +17967,7 @@ var PRWAtmosphereResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchRequest.ts
-import * as flatbuffers89 from "flatbuffers";
+import * as flatbuffers84 from "flatbuffers";
 var PRWBatchRequest = class _PRWBatchRequest {
   bb = null;
   bb_pos = 0;
@@ -18901,7 +17980,7 @@ var PRWBatchRequest = class _PRWBatchRequest {
     return (obj || new _PRWBatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBatchRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers89.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers84.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -19025,7 +18104,7 @@ var PRWBatchRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBatchResponse.ts
-import * as flatbuffers90 from "flatbuffers";
+import * as flatbuffers85 from "flatbuffers";
 var PRWBatchResponse = class _PRWBatchResponse {
   bb = null;
   bb_pos = 0;
@@ -19038,7 +18117,7 @@ var PRWBatchResponse = class _PRWBatchResponse {
     return (obj || new _PRWBatchResponse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBatchResponse(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers90.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers85.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBatchResponse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -19190,10 +18269,10 @@ var PRWBatchResponseT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeRequest.ts
-import * as flatbuffers92 from "flatbuffers";
+import * as flatbuffers87 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWInstance.ts
-import * as flatbuffers91 from "flatbuffers";
+import * as flatbuffers86 from "flatbuffers";
 var PRWInstance = class _PRWInstance {
   bb = null;
   bb_pos = 0;
@@ -19206,7 +18285,7 @@ var PRWInstance = class _PRWInstance {
     return (obj || new _PRWInstance()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWInstance(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers91.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers86.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWInstance()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   MODULE_ID(optionalEncoding) {
@@ -19293,7 +18372,7 @@ var PRWDescribeRequest = class _PRWDescribeRequest {
     return (obj || new _PRWDescribeRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWDescribeRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers92.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers87.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWDescribeRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -19382,13 +18461,13 @@ var PRWDescribeRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWDescribeResult.ts
-import * as flatbuffers95 from "flatbuffers";
+import * as flatbuffers90 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWTrajectorySource.ts
-import * as flatbuffers94 from "flatbuffers";
+import * as flatbuffers89 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWFitQuality.ts
-import * as flatbuffers93 from "flatbuffers";
+import * as flatbuffers88 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwQualityEvidence.ts
 var prwQualityEvidence = /* @__PURE__ */ ((prwQualityEvidence2) => {
@@ -19411,7 +18490,7 @@ var PRWFitQuality = class _PRWFitQuality {
     return (obj || new _PRWFitQuality()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWFitQuality(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers93.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers88.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWFitQuality()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EVIDENCE_KIND() {
@@ -19550,7 +18629,7 @@ var PRWTrajectorySource = class _PRWTrajectorySource {
     return (obj || new _PRWTrajectorySource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWTrajectorySource(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers94.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers89.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWTrajectorySource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_HANDLE() {
@@ -19654,7 +18733,7 @@ var PRWDescribeResult = class _PRWDescribeResult {
     return (obj || new _PRWDescribeResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWDescribeResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers95.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers90.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWDescribeResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -19766,7 +18845,7 @@ var PRWDescribeResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEarthOrientation.ts
-import * as flatbuffers96 from "flatbuffers";
+import * as flatbuffers91 from "flatbuffers";
 var PRWEarthOrientation = class _PRWEarthOrientation {
   bb = null;
   bb_pos = 0;
@@ -19779,7 +18858,7 @@ var PRWEarthOrientation = class _PRWEarthOrientation {
     return (obj || new _PRWEarthOrientation()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEarthOrientation(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers96.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers91.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEarthOrientation()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ROWS(index, obj) {
@@ -19839,7 +18918,7 @@ var PRWEarthOrientationT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisRequest.ts
-import * as flatbuffers97 from "flatbuffers";
+import * as flatbuffers92 from "flatbuffers";
 var PRWEphemerisRequest = class _PRWEphemerisRequest {
   bb = null;
   bb_pos = 0;
@@ -19852,7 +18931,7 @@ var PRWEphemerisRequest = class _PRWEphemerisRequest {
     return (obj || new _PRWEphemerisRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEphemerisRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers97.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers92.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEphemerisRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH(obj) {
@@ -19922,13 +19001,13 @@ var PRWEphemerisRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEphemerisResult.ts
-import * as flatbuffers101 from "flatbuffers";
+import * as flatbuffers96 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentState.ts
-import * as flatbuffers100 from "flatbuffers";
+import * as flatbuffers95 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWProcessNoise.ts
-import * as flatbuffers98 from "flatbuffers";
+import * as flatbuffers93 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/prwProcessNoiseAxes.ts
 var prwProcessNoiseAxes = /* @__PURE__ */ ((prwProcessNoiseAxes2) => {
@@ -19959,7 +19038,7 @@ var PRWProcessNoise = class _PRWProcessNoise {
     return (obj || new _PRWProcessNoise()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWProcessNoise(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers98.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers93.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWProcessNoise()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   MODEL() {
@@ -20064,7 +19143,7 @@ var PRWProcessNoiseT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWStateMatrix.ts
-import * as flatbuffers99 from "flatbuffers";
+import * as flatbuffers94 from "flatbuffers";
 var PRWStateMatrix = class _PRWStateMatrix {
   bb = null;
   bb_pos = 0;
@@ -20077,7 +19156,7 @@ var PRWStateMatrix = class _PRWStateMatrix {
     return (obj || new _PRWStateMatrix()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWStateMatrix(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers99.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers94.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWStateMatrix()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   DIMENSION() {
@@ -20165,7 +19244,7 @@ var PRWResidentState = class _PRWResidentState {
     return (obj || new _PRWResidentState()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWResidentState(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers100.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers95.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWResidentState()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -20454,7 +19533,7 @@ var PRWEphemerisResult = class _PRWEphemerisResult {
     return (obj || new _PRWEphemerisResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEphemerisResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers101.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers96.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEphemerisResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   TARGET_NAIF_ID() {
@@ -20532,13 +19611,13 @@ var PRWEphemerisResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionRequest.ts
-import * as flatbuffers106 from "flatbuffers";
+import * as flatbuffers101 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWFiniteBurn.ts
-import * as flatbuffers104 from "flatbuffers";
+import * as flatbuffers99 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnBoundary.ts
-import * as flatbuffers102 from "flatbuffers";
+import * as flatbuffers97 from "flatbuffers";
 var PRWBurnBoundary = class _PRWBurnBoundary {
   bb = null;
   bb_pos = 0;
@@ -20551,7 +19630,7 @@ var PRWBurnBoundary = class _PRWBurnBoundary {
     return (obj || new _PRWBurnBoundary()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBurnBoundary(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers102.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers97.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBurnBoundary()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ELAPSED_SECONDS() {
@@ -20618,7 +19697,7 @@ var PRWBurnBoundaryT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWThrottlePoint.ts
-import * as flatbuffers103 from "flatbuffers";
+import * as flatbuffers98 from "flatbuffers";
 var PRWThrottlePoint = class _PRWThrottlePoint {
   bb = null;
   bb_pos = 0;
@@ -20631,7 +19710,7 @@ var PRWThrottlePoint = class _PRWThrottlePoint {
     return (obj || new _PRWThrottlePoint()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWThrottlePoint(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers103.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers98.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWThrottlePoint()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ELAPSED_SECONDS() {
@@ -20718,7 +19797,7 @@ var PRWFiniteBurn = class _PRWFiniteBurn {
     return (obj || new _PRWFiniteBurn()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWFiniteBurn(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers104.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers99.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWFiniteBurn()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   START(obj) {
@@ -20910,7 +19989,7 @@ var PRWFiniteBurnT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWImpulse.ts
-import * as flatbuffers105 from "flatbuffers";
+import * as flatbuffers100 from "flatbuffers";
 var PRWImpulse = class _PRWImpulse {
   bb = null;
   bb_pos = 0;
@@ -20923,7 +20002,7 @@ var PRWImpulse = class _PRWImpulse {
     return (obj || new _PRWImpulse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWImpulse(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers105.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers100.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWImpulse()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   EPOCH(obj) {
@@ -21015,7 +20094,7 @@ var PRWExecutionRequest = class _PRWExecutionRequest {
     return (obj || new _PRWExecutionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWExecutionRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers106.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers101.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWExecutionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INITIAL(obj) {
@@ -21326,10 +20405,10 @@ var PRWExecutionRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWExecutionResult.ts
-import * as flatbuffers110 from "flatbuffers";
+import * as flatbuffers105 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWEventRecord.ts
-import * as flatbuffers107 from "flatbuffers";
+import * as flatbuffers102 from "flatbuffers";
 var PRWEventRecord = class _PRWEventRecord {
   bb = null;
   bb_pos = 0;
@@ -21342,7 +20421,7 @@ var PRWEventRecord = class _PRWEventRecord {
     return (obj || new _PRWEventRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWEventRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers107.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers102.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWEventRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -21485,10 +20564,10 @@ var PRWEventRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWPropagationSample.ts
-import * as flatbuffers109 from "flatbuffers";
+import * as flatbuffers104 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWBurnReport.ts
-import * as flatbuffers108 from "flatbuffers";
+import * as flatbuffers103 from "flatbuffers";
 var PRWBurnReport = class _PRWBurnReport {
   bb = null;
   bb_pos = 0;
@@ -21501,7 +20580,7 @@ var PRWBurnReport = class _PRWBurnReport {
     return (obj || new _PRWBurnReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWBurnReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers108.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers103.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWBurnReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   BURN_INDEX() {
@@ -21694,7 +20773,7 @@ var PRWPropagationSample = class _PRWPropagationSample {
     return (obj || new _PRWPropagationSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWPropagationSample(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers109.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers104.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWPropagationSample()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATE(obj) {
@@ -21860,7 +20939,7 @@ var PRWExecutionResult = class _PRWExecutionResult {
     return (obj || new _PRWExecutionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWExecutionResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers110.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers105.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWExecutionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   FINAL_SAMPLE(obj) {
@@ -22096,13 +21175,13 @@ var PRWExecutionResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWInit.ts
-import * as flatbuffers114 from "flatbuffers";
+import * as flatbuffers109 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWInitSource.ts
-import * as flatbuffers113 from "flatbuffers";
+import * as flatbuffers108 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWKeplerianElements.ts
-import * as flatbuffers111 from "flatbuffers";
+import * as flatbuffers106 from "flatbuffers";
 var PRWKeplerianElements = class _PRWKeplerianElements {
   bb = null;
   bb_pos = 0;
@@ -22115,7 +21194,7 @@ var PRWKeplerianElements = class _PRWKeplerianElements {
     return (obj || new _PRWKeplerianElements()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWKeplerianElements(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers111.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers106.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWKeplerianElements()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22267,7 +21346,7 @@ var PRWKeplerianElementsT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWTleLines.ts
-import * as flatbuffers112 from "flatbuffers";
+import * as flatbuffers107 from "flatbuffers";
 var PRWTleLines = class _PRWTleLines {
   bb = null;
   bb_pos = 0;
@@ -22280,7 +21359,7 @@ var PRWTleLines = class _PRWTleLines {
     return (obj || new _PRWTleLines()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWTleLines(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers112.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers107.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWTleLines()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   LINE1(optionalEncoding) {
@@ -22389,7 +21468,7 @@ var PRWInitSource = class _PRWInitSource {
     return (obj || new _PRWInitSource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWInitSource(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers113.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers108.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWInitSource()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22517,7 +21596,7 @@ var PRWInit = class _PRWInit {
     return (obj || new _PRWInit()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWInit(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers114.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers109.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWInit()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -22613,10 +21692,10 @@ var PRWInitT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008IndicesTable.ts
-import * as flatbuffers116 from "flatbuffers";
+import * as flatbuffers111 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWJB2008Indices.ts
-import * as flatbuffers115 from "flatbuffers";
+import * as flatbuffers110 from "flatbuffers";
 var PRWJB2008Indices = class _PRWJB2008Indices {
   bb = null;
   bb_pos = 0;
@@ -22629,7 +21708,7 @@ var PRWJB2008Indices = class _PRWJB2008Indices {
     return (obj || new _PRWJB2008Indices()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWJB2008Indices(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers115.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers110.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWJB2008Indices()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   DATE(optionalEncoding) {
@@ -22830,7 +21909,7 @@ var PRWJB2008IndicesTable = class _PRWJB2008IndicesTable {
     return (obj || new _PRWJB2008IndicesTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWJB2008IndicesTable(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers116.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers111.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWJB2008IndicesTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ROWS(index, obj) {
@@ -22890,7 +21969,7 @@ var PRWJB2008IndicesTableT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWNativeInput.ts
-import * as flatbuffers117 from "flatbuffers";
+import * as flatbuffers112 from "flatbuffers";
 var PRWNativeInput = class _PRWNativeInput {
   bb = null;
   bb_pos = 0;
@@ -22903,7 +21982,7 @@ var PRWNativeInput = class _PRWNativeInput {
     return (obj || new _PRWNativeInput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWNativeInput(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers117.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers112.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWNativeInput()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   DESCRIPTOR(obj) {
@@ -22984,7 +22063,7 @@ var PRWNativeInputT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareRequest.ts
-import * as flatbuffers118 from "flatbuffers";
+import * as flatbuffers113 from "flatbuffers";
 var PRWPrepareRequest = class _PRWPrepareRequest {
   bb = null;
   bb_pos = 0;
@@ -22997,7 +22076,7 @@ var PRWPrepareRequest = class _PRWPrepareRequest {
     return (obj || new _PRWPrepareRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWPrepareRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers118.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers113.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWPrepareRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -23114,7 +22193,7 @@ var PRWPrepareRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWPrepareResult.ts
-import * as flatbuffers119 from "flatbuffers";
+import * as flatbuffers114 from "flatbuffers";
 var PRWPrepareResult = class _PRWPrepareResult {
   bb = null;
   bb_pos = 0;
@@ -23127,7 +22206,7 @@ var PRWPrepareResult = class _PRWPrepareResult {
     return (obj || new _PRWPrepareResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWPrepareResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers119.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers114.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWPrepareResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -23202,7 +22281,7 @@ var PRWPrepareResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWResidentRequest.ts
-import * as flatbuffers120 from "flatbuffers";
+import * as flatbuffers115 from "flatbuffers";
 var PRWResidentRequest = class _PRWResidentRequest {
   bb = null;
   bb_pos = 0;
@@ -23215,7 +22294,7 @@ var PRWResidentRequest = class _PRWResidentRequest {
     return (obj || new _PRWResidentRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWResidentRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers120.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers115.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWResidentRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   INSTANCE(obj) {
@@ -23322,10 +22401,10 @@ var PRWResidentRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWSpaceWeatherTable.ts
-import * as flatbuffers122 from "flatbuffers";
+import * as flatbuffers117 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SPW.ts
-import * as flatbuffers121 from "flatbuffers";
+import * as flatbuffers116 from "flatbuffers";
 var SPW = class _SPW {
   bb = null;
   bb_pos = 0;
@@ -23338,7 +22417,7 @@ var SPW = class _SPW {
     return (obj || new _SPW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsSPW(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers121.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers116.SIZE_PREFIX_LENGTH);
     return (obj || new _SPW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -23833,7 +22912,7 @@ var PRWSpaceWeatherTable = class _PRWSpaceWeatherTable {
     return (obj || new _PRWSpaceWeatherTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWSpaceWeatherTable(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers122.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers117.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWSpaceWeatherTable()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ROWS(index, obj) {
@@ -23893,7 +22972,7 @@ var PRWSpaceWeatherTableT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWVersionResult.ts
-import * as flatbuffers123 from "flatbuffers";
+import * as flatbuffers118 from "flatbuffers";
 var PRWVersionResult = class _PRWVersionResult {
   bb = null;
   bb_pos = 0;
@@ -23906,7 +22985,7 @@ var PRWVersionResult = class _PRWVersionResult {
     return (obj || new _PRWVersionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWVersionResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers123.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers118.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWVersionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   VERSION(optionalEncoding) {
@@ -23966,10 +23045,10 @@ var PRWVersionResultT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowReport.ts
-import * as flatbuffers125 from "flatbuffers";
+import * as flatbuffers120 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRefusal.ts
-import * as flatbuffers124 from "flatbuffers";
+import * as flatbuffers119 from "flatbuffers";
 var PRWWindowRefusal = class _PRWWindowRefusal {
   bb = null;
   bb_pos = 0;
@@ -23982,7 +23061,7 @@ var PRWWindowRefusal = class _PRWWindowRefusal {
     return (obj || new _PRWWindowRefusal()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowRefusal(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers124.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers119.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowRefusal()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -24069,7 +23148,7 @@ var PRWWindowReport = class _PRWWindowReport {
     return (obj || new _PRWWindowReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers125.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers120.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -24195,10 +23274,10 @@ var PRWWindowReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowRequest.ts
-import * as flatbuffers127 from "flatbuffers";
+import * as flatbuffers122 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/PRWWindowQuery.ts
-import * as flatbuffers126 from "flatbuffers";
+import * as flatbuffers121 from "flatbuffers";
 var PRWWindowQuery = class _PRWWindowQuery {
   bb = null;
   bb_pos = 0;
@@ -24211,7 +23290,7 @@ var PRWWindowQuery = class _PRWWindowQuery {
     return (obj || new _PRWWindowQuery()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowQuery(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers126.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers121.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowQuery()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -24392,7 +23471,7 @@ var PRWWindowRequest = class _PRWWindowRequest {
     return (obj || new _PRWWindowRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRWWindowRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers127.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers122.SIZE_PREFIX_LENGTH);
     return (obj || new _PRWWindowRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   QUERIES(index, obj) {
@@ -24518,7 +23597,7 @@ var PRW = class _PRW {
     return (obj || new _PRW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsPRW(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers128.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers123.SIZE_PREFIX_LENGTH);
     return (obj || new _PRW()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -24856,7 +23935,7 @@ var prwDynamicParameter = /* @__PURE__ */ ((prwDynamicParameter2) => {
 })(prwDynamicParameter || {});
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/SPWCOLLECTION.ts
-import * as flatbuffers129 from "flatbuffers";
+import * as flatbuffers124 from "flatbuffers";
 var SPWCOLLECTION = class _SPWCOLLECTION {
   bb = null;
   bb_pos = 0;
@@ -24869,7 +23948,7 @@ var SPWCOLLECTION = class _SPWCOLLECTION {
     return (obj || new _SPWCOLLECTION()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsSPWCOLLECTION(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers129.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers124.SIZE_PREFIX_LENGTH);
     return (obj || new _SPWCOLLECTION()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   RECORDS(index, obj) {
@@ -24928,10 +24007,10 @@ var SPWCOLLECTIONT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/TIM.ts
-import * as flatbuffers132 from "flatbuffers";
+import * as flatbuffers127 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionRequest.ts
-import * as flatbuffers130 from "flatbuffers";
+import * as flatbuffers125 from "flatbuffers";
 var TIMConversionRequest = class _TIMConversionRequest {
   bb = null;
   bb_pos = 0;
@@ -24944,7 +24023,7 @@ var TIMConversionRequest = class _TIMConversionRequest {
     return (obj || new _TIMConversionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsTIMConversionRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers130.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers125.SIZE_PREFIX_LENGTH);
     return (obj || new _TIMConversionRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -25095,7 +24174,7 @@ var TIMConversionRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/TIMConversionResult.ts
-import * as flatbuffers131 from "flatbuffers";
+import * as flatbuffers126 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/timConversionStatus.ts
 var timConversionStatus = /* @__PURE__ */ ((timConversionStatus2) => {
@@ -25121,7 +24200,7 @@ var TIMConversionResult = class _TIMConversionResult {
     return (obj || new _TIMConversionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsTIMConversionResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers131.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers126.SIZE_PREFIX_LENGTH);
     return (obj || new _TIMConversionResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -25242,7 +24321,7 @@ var TIM = class _TIM {
     return (obj || new _TIM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsTIM(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers132.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers127.SIZE_PREFIX_LENGTH);
     return (obj || new _TIM()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -25337,13 +24416,13 @@ var TIMT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMT.ts
-import * as flatbuffers163 from "flatbuffers";
+import * as flatbuffers158 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeRecipe.ts
-import * as flatbuffers137 from "flatbuffers";
+import * as flatbuffers132 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayer.ts
-import * as flatbuffers133 from "flatbuffers";
+import * as flatbuffers128 from "flatbuffers";
 var XMTLayer = class _XMTLayer {
   bb = null;
   bb_pos = 0;
@@ -25356,7 +24435,7 @@ var XMTLayer = class _XMTLayer {
     return (obj || new _XMTLayer()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTLayer(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers133.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers128.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTLayer()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ID(optionalEncoding) {
@@ -25480,7 +24559,7 @@ var XMTLayerT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTObjectOverride.ts
-import * as flatbuffers134 from "flatbuffers";
+import * as flatbuffers129 from "flatbuffers";
 var XMTObjectOverride = class _XMTObjectOverride {
   bb = null;
   bb_pos = 0;
@@ -25493,7 +24572,7 @@ var XMTObjectOverride = class _XMTObjectOverride {
     return (obj || new _XMTObjectOverride()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTObjectOverride(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers134.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers129.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTObjectOverride()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   OBJECT_KEY(optionalEncoding) {
@@ -25593,7 +24672,7 @@ var XMTObjectOverrideT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTSourceCoverage.ts
-import * as flatbuffers135 from "flatbuffers";
+import * as flatbuffers130 from "flatbuffers";
 var XMTSourceCoverage = class _XMTSourceCoverage {
   bb = null;
   bb_pos = 0;
@@ -25606,7 +24685,7 @@ var XMTSourceCoverage = class _XMTSourceCoverage {
     return (obj || new _XMTSourceCoverage()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTSourceCoverage(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers135.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers130.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTSourceCoverage()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -25691,7 +24770,7 @@ var XMTSourceCoverageT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateCandidate.ts
-import * as flatbuffers136 from "flatbuffers";
+import * as flatbuffers131 from "flatbuffers";
 var XMTStateCandidate = class _XMTStateCandidate {
   bb = null;
   bb_pos = 0;
@@ -25704,7 +24783,7 @@ var XMTStateCandidate = class _XMTStateCandidate {
     return (obj || new _XMTStateCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTStateCandidate(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers136.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers131.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTStateCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   OBJECT_KEY(optionalEncoding) {
@@ -25809,7 +24888,7 @@ var XMTComposeRecipe = class _XMTComposeRecipe {
     return (obj || new _XMTComposeRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTComposeRecipe(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers137.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers132.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTComposeRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   IDENTITY_RULE() {
@@ -26021,13 +25100,13 @@ var XMTComposeRecipeT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposeReport.ts
-import * as flatbuffers141 from "flatbuffers";
+import * as flatbuffers136 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTComposedObject.ts
-import * as flatbuffers140 from "flatbuffers";
+import * as flatbuffers135 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTLayerRecord.ts
-import * as flatbuffers138 from "flatbuffers";
+import * as flatbuffers133 from "flatbuffers";
 var XMTLayerRecord = class _XMTLayerRecord {
   bb = null;
   bb_pos = 0;
@@ -26040,7 +25119,7 @@ var XMTLayerRecord = class _XMTLayerRecord {
     return (obj || new _XMTLayerRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTLayerRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers138.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers133.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTLayerRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   LAYER(optionalEncoding) {
@@ -26139,7 +25218,7 @@ var XMTLayerRecordT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTStateSelection.ts
-import * as flatbuffers139 from "flatbuffers";
+import * as flatbuffers134 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtStateChoice.ts
 var xmtStateChoice = /* @__PURE__ */ ((xmtStateChoice2) => {
@@ -26167,7 +25246,7 @@ var XMTStateSelection = class _XMTStateSelection {
     return (obj || new _XMTStateSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTStateSelection(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers139.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers134.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTStateSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   STATUS() {
@@ -26300,7 +25379,7 @@ var XMTComposedObject = class _XMTComposedObject {
     return (obj || new _XMTComposedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTComposedObject(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers140.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers135.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTComposedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KEY(optionalEncoding) {
@@ -26439,7 +25518,7 @@ var XMTComposeReport = class _XMTComposeReport {
     return (obj || new _XMTComposeReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTComposeReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers141.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers136.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTComposeReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -26543,7 +25622,7 @@ var XMTComposeReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitPolicy.ts
-import * as flatbuffers142 from "flatbuffers";
+import * as flatbuffers137 from "flatbuffers";
 var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
   bb = null;
   bb_pos = 0;
@@ -26556,7 +25635,7 @@ var XMTEpochFitPolicy = class _XMTEpochFitPolicy {
     return (obj || new _XMTEpochFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTEpochFitPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers142.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers137.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTEpochFitPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   PROPAGATOR_ID(optionalEncoding) {
@@ -26773,7 +25852,7 @@ var XMTEpochFitPolicyT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTEpochFitReport.ts
-import * as flatbuffers143 from "flatbuffers";
+import * as flatbuffers138 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtFitVerdict.ts
 var xmtFitVerdict = /* @__PURE__ */ ((xmtFitVerdict2) => {
@@ -26798,7 +25877,7 @@ var XMTEpochFitReport = class _XMTEpochFitReport {
     return (obj || new _XMTEpochFitReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTEpochFitReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers143.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers138.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTEpochFitReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   VERDICT() {
@@ -27091,10 +26170,10 @@ var XMTEpochFitReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateRecipe.ts
-import * as flatbuffers150 from "flatbuffers";
+import * as flatbuffers145 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverPolicy.ts
-import * as flatbuffers144 from "flatbuffers";
+import * as flatbuffers139 from "flatbuffers";
 var XMTManeuverPolicy = class _XMTManeuverPolicy {
   bb = null;
   bb_pos = 0;
@@ -27107,7 +26186,7 @@ var XMTManeuverPolicy = class _XMTManeuverPolicy {
     return (obj || new _XMTManeuverPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTManeuverPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers144.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers139.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTManeuverPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -27252,10 +26331,10 @@ var XMTManeuverPolicyT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchRequest.ts
-import * as flatbuffers147 from "flatbuffers";
+import * as flatbuffers142 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchPolicy.ts
-import * as flatbuffers145 from "flatbuffers";
+import * as flatbuffers140 from "flatbuffers";
 var XMTMatchPolicy = class _XMTMatchPolicy {
   bb = null;
   bb_pos = 0;
@@ -27268,7 +26347,7 @@ var XMTMatchPolicy = class _XMTMatchPolicy {
     return (obj || new _XMTMatchPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMatchPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers145.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers140.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMatchPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -27361,7 +26440,7 @@ var XMTMatchPolicyT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTTrajectory.ts
-import * as flatbuffers146 from "flatbuffers";
+import * as flatbuffers141 from "flatbuffers";
 var XMTTrajectory = class _XMTTrajectory {
   bb = null;
   bb_pos = 0;
@@ -27374,7 +26453,7 @@ var XMTTrajectory = class _XMTTrajectory {
     return (obj || new _XMTTrajectory()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTTrajectory(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers146.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers141.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTTrajectory()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   ID(optionalEncoding) {
@@ -27470,7 +26549,7 @@ var XMTMatchRequest = class _XMTMatchRequest {
     return (obj || new _XMTMatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMatchRequest(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers147.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers142.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMatchRequest()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   POLICY(obj) {
@@ -27578,10 +26657,10 @@ var XMTMatchRequestT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTSelectionPolicy.ts
-import * as flatbuffers149 from "flatbuffers";
+import * as flatbuffers144 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMeasuredError.ts
-import * as flatbuffers148 from "flatbuffers";
+import * as flatbuffers143 from "flatbuffers";
 var XMTMeasuredError = class _XMTMeasuredError {
   bb = null;
   bb_pos = 0;
@@ -27594,7 +26673,7 @@ var XMTMeasuredError = class _XMTMeasuredError {
     return (obj || new _XMTMeasuredError()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMeasuredError(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers148.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers143.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMeasuredError()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -27722,7 +26801,7 @@ var XMTSelectionPolicy = class _XMTSelectionPolicy {
     return (obj || new _XMTSelectionPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTSelectionPolicy(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers149.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers144.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTSelectionPolicy()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -27883,7 +26962,7 @@ var XMTIntegrateRecipe = class _XMTIntegrateRecipe {
     return (obj || new _XMTIntegrateRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTIntegrateRecipe(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers150.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers145.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTIntegrateRecipe()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -27963,16 +27042,16 @@ var XMTIntegrateRecipeT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegrateReport.ts
-import * as flatbuffers162 from "flatbuffers";
-
-// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
 import * as flatbuffers157 from "flatbuffers";
 
+// node_modules/spacedatastandards.org/lib/ts/XMT/XMTIntegratedObject.ts
+import * as flatbuffers152 from "flatbuffers";
+
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverEvent.ts
-import * as flatbuffers153 from "flatbuffers";
+import * as flatbuffers148 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTManeuverMember.ts
-import * as flatbuffers151 from "flatbuffers";
+import * as flatbuffers146 from "flatbuffers";
 var XMTManeuverMember = class _XMTManeuverMember {
   bb = null;
   bb_pos = 0;
@@ -27985,7 +27064,7 @@ var XMTManeuverMember = class _XMTManeuverMember {
     return (obj || new _XMTManeuverMember()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTManeuverMember(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers151.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers146.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTManeuverMember()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -28070,7 +27149,7 @@ var XMTManeuverMemberT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTRecordRef.ts
-import * as flatbuffers152 from "flatbuffers";
+import * as flatbuffers147 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtRecordKind.ts
 var xmtRecordKind = /* @__PURE__ */ ((xmtRecordKind2) => {
@@ -28096,7 +27175,7 @@ var XMTRecordRef = class _XMTRecordRef {
     return (obj || new _XMTRecordRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTRecordRef(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers152.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers147.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTRecordRef()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KIND() {
@@ -28178,7 +27257,7 @@ var XMTManeuverEvent = class _XMTManeuverEvent {
     return (obj || new _XMTManeuverEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTManeuverEvent(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers153.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers148.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTManeuverEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -28288,10 +27367,10 @@ var XMTManeuverEventT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductChoice.ts
-import * as flatbuffers156 from "flatbuffers";
+import * as flatbuffers151 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductCandidate.ts
-import * as flatbuffers154 from "flatbuffers";
+import * as flatbuffers149 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtCandidateStanding.ts
 var xmtCandidateStanding = /* @__PURE__ */ ((xmtCandidateStanding2) => {
@@ -28317,7 +27396,7 @@ var XMTProductCandidate = class _XMTProductCandidate {
     return (obj || new _XMTProductCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTProductCandidate(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers154.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers149.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTProductCandidate()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -28464,7 +27543,7 @@ var XMTProductCandidateT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTProductSelection.ts
-import * as flatbuffers155 from "flatbuffers";
+import * as flatbuffers150 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtCovarianceOrigin.ts
 var xmtCovarianceOrigin = /* @__PURE__ */ ((xmtCovarianceOrigin2) => {
@@ -28496,7 +27575,7 @@ var XMTProductSelection = class _XMTProductSelection {
     return (obj || new _XMTProductSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTProductSelection(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers155.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers150.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTProductSelection()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   SOURCE_ID(optionalEncoding) {
@@ -28654,7 +27733,7 @@ var XMTProductChoice = class _XMTProductChoice {
     return (obj || new _XMTProductChoice()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTProductChoice(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers156.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers151.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTProductChoice()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   PRODUCT(optionalEncoding) {
@@ -28755,7 +27834,7 @@ var XMTIntegratedObject = class _XMTIntegratedObject {
     return (obj || new _XMTIntegratedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTIntegratedObject(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers157.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers152.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTIntegratedObject()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KEY(optionalEncoding) {
@@ -28950,10 +28029,10 @@ var XMTIntegratedObjectT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTMatchReport.ts
-import * as flatbuffers159 from "flatbuffers";
+import * as flatbuffers154 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTPairResult.ts
-import * as flatbuffers158 from "flatbuffers";
+import * as flatbuffers153 from "flatbuffers";
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/xmtPairVerdict.ts
 var xmtPairVerdict = /* @__PURE__ */ ((xmtPairVerdict2) => {
@@ -28978,7 +28057,7 @@ var XMTPairResult = class _XMTPairResult {
     return (obj || new _XMTPairResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTPairResult(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers158.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers153.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTPairResult()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   /**
@@ -29182,7 +28261,7 @@ var XMTMatchReport = class _XMTMatchReport {
     return (obj || new _XMTMatchReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTMatchReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers159.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers154.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTMatchReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   POLICY(obj) {
@@ -29281,7 +28360,7 @@ var XMTMatchReportT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTReasonCount.ts
-import * as flatbuffers160 from "flatbuffers";
+import * as flatbuffers155 from "flatbuffers";
 var XMTReasonCount = class _XMTReasonCount {
   bb = null;
   bb_pos = 0;
@@ -29294,7 +28373,7 @@ var XMTReasonCount = class _XMTReasonCount {
     return (obj || new _XMTReasonCount()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTReasonCount(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers160.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers155.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTReasonCount()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   REASON(optionalEncoding) {
@@ -29351,7 +28430,7 @@ var XMTReasonCountT = class {
 };
 
 // node_modules/spacedatastandards.org/lib/ts/XMT/XMTUnplacedRecord.ts
-import * as flatbuffers161 from "flatbuffers";
+import * as flatbuffers156 from "flatbuffers";
 var XMTUnplacedRecord = class _XMTUnplacedRecord {
   bb = null;
   bb_pos = 0;
@@ -29364,7 +28443,7 @@ var XMTUnplacedRecord = class _XMTUnplacedRecord {
     return (obj || new _XMTUnplacedRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTUnplacedRecord(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers161.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers156.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTUnplacedRecord()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   KIND() {
@@ -29502,7 +28581,7 @@ var XMTIntegrateReport = class _XMTIntegrateReport {
     return (obj || new _XMTIntegrateReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMTIntegrateReport(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers162.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers157.SIZE_PREFIX_LENGTH);
     return (obj || new _XMTIntegrateReport()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   AS_OF_MS() {
@@ -29872,7 +28951,7 @@ var XMT = class _XMT {
     return (obj || new _XMT()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static getSizePrefixedRootAsXMT(bb, obj) {
-    bb.setPosition(bb.position() + flatbuffers163.SIZE_PREFIX_LENGTH);
+    bb.setPosition(bb.position() + flatbuffers158.SIZE_PREFIX_LENGTH);
     return (obj || new _XMT()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
   }
   static bufferHasIdentifier(bb) {
@@ -30118,8 +29197,8 @@ export {
   PCF,
   PCFEcom2,
   PCFEcom2T,
-  PCFEmpiricalTerms,
-  PCFEmpiricalTermsT,
+  PCFEpochStore,
+  PCFEpochStoreT,
   PCFEventDefinition,
   PCFEventDefinitionT,
   PCFExpression,
@@ -30134,18 +29213,8 @@ export {
   PCFGaussianPriorT,
   PCFIntegratorSettings,
   PCFIntegratorSettingsT,
-  PCFLaunch,
-  PCFLaunchT,
-  PCFManeuverDetection,
-  PCFManeuverDetectionT,
-  PCFMeanElementOptions,
-  PCFMeanElementOptionsT,
   PCFOutput,
   PCFOutputT,
-  PCFReentry,
-  PCFReentryT,
-  PCFSegmentOptions,
-  PCFSegmentOptionsT,
   PCFSpaceWeather,
   PCFSpaceWeatherT,
   PCFT,
@@ -30376,22 +29445,22 @@ export {
   pceResultStatus,
   pceUnit,
   pcfAtmosphereFamily,
+  pcfBlendShape,
   pcfDensityCorrection,
   pcfEarthRadiationModel,
   pcfEphemerisKind,
+  pcfEpochSelection,
   pcfEventAction,
   pcfEventDirection,
   pcfEventKind,
   pcfExpressionOperation,
   pcfGnssSpacecraftBlock,
   pcfGravitySelection,
-  pcfInnovationCorrelation,
   pcfIntegratorAlgorithm,
   pcfNeutralWind,
   pcfOceanTideModel,
   pcfOutputFrame,
   pcfRadiationPressureFamily,
-  pcfReentryWindowMethod,
   pcfRelativityTerms,
   pcfSolidTideModel,
   pcfTheory,

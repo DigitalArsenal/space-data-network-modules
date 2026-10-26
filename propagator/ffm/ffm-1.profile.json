@@ -89,7 +89,6 @@
     "neutralWind": "NONE",
     "weatherSource": "UNSPECIFIED",
     "weatherExtension": "UNSPECIFIED",
-    "empiricalTerms": null,
     "cdAreaOverMass_m2_kg": 0.01,
     "bstarRule": "The C++ export plugin_drag_area_over_mass_from_bstar returns 2 * B* / 0.15696615 for finite positive B* (1/Earth radii), in m\u00b2/kg; zero, negative or nonfinite B* uses cdAreaOverMass_m2_kg.",
     "areaOverMassRate_m2_kg_s": 0,

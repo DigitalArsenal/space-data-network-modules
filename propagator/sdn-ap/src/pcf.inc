@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
-// $PCF 1.0.4 (SDS 1.270.0): the required `configuration` input of every method
+// $PCF 1.0.5 (SDS 1.271.0): the required `configuration` input of every method
 // with options. A method reads THEORY and its own tables:
-//   propagate, maneuver   MEAN_ELEMENT, OUTPUT, FORCES, INTEGRATOR, EVENTS
-//   fit                   FIT, MEAN_ELEMENT, FORCES, INTEGRATOR
+//   propagate, maneuver   OUTPUT, FORCES, INTEGRATOR, EVENTS
+//   fit                   FIT, FORCES, INTEGRATOR
 //   load_epochs, propagate_epochs  EPOCH_STORE and propagate's tables
 // and leaves the other tables to the methods that read them. Fields left unset
 // take the defaults schema/PCF/main.fbs documents (each equal to this module's
@@ -79,9 +79,9 @@ constexpr ForceField kForceFields[] = {
     {"OCEAN_TIDE_MAXIMUM_ORDER", Kind::U16, 30}, {"CENTRAL_BODY_NAIF_ID", Kind::I32, 399}, {"EPHEMERIS_KIND", Kind::U8, 0},
     {"SHADOW_MODEL", Kind::U8, 0}, {"WEATHER_SOURCE", Kind::U8, 0}, {"WEATHER_EXTENSION", Kind::U8, 0},
     {"DENSITY_CORRECTION", Kind::U8, 0}, {"DENSITY_CORRECTION_RELAXATION_HOURS", Kind::F64, 0},
-    {"HAS_DENSITY_CORRECTION_RELAXATION_HOURS", Kind::U8, 0}, {"NEUTRAL_WIND", Kind::U8, 0}, {"EMPIRICAL_TERMS", Kind::Tab, 0}};
+    {"HAS_DENSITY_CORRECTION_RELAXATION_HOURS", Kind::U8, 0}, {"NEUTRAL_WIND", Kind::U8, 0}};
 
-static_assert(sizeof kForceFields / sizeof kForceFields[0] == 50 && PCFForceModel::VT_EMPIRICAL_TERMS == 4 + 2 * 49 &&
+static_assert(sizeof kForceFields / sizeof kForceFields[0] == 49 && PCFForceModel::VT_NEUTRAL_WIND == 4 + 2 * 48 &&
                   PCFForceModel::VT_EPHEMERIS_SOURCE == 4 + 2 * 21 && PCFForceModel::VT_THIRD_BODY_IDS == 4 + 2 * 12,
               "kForceFields follows PCFForceModel's declaration order");
 
@@ -104,12 +104,12 @@ inline bool off_default(const flatbuffers::Table* t, uint16_t vt, const ForceFie
 }
 
 /// The table masks of each method (bit per PCF table).
-enum Table : uint32_t { kTFit = 1, kTMean = 2, kTOutput = 4, kTForces = 8, kTIntegrator = 16, kTEvents = 32 };
+enum Table : uint32_t { kTFit = 1, kTOutput = 4, kTForces = 8, kTIntegrator = 16, kTEvents = 32 };
 inline uint32_t tables_of(Method m) {
   switch (m) {
     case kPropagate:
-    case kManeuver: return kTMean | kTOutput | kTForces | kTIntegrator | kTEvents;
-    case kFit: return kTFit | kTMean | kTForces | kTIntegrator;
+    case kManeuver: return kTOutput | kTForces | kTIntegrator | kTEvents;
+    case kFit: return kTFit | kTForces | kTIntegrator;
   }
   return 0;
 }
@@ -178,28 +178,6 @@ inline int read_fit(const PCFFitPolicy* f, Options& o) {
   return 0;
 }
 
-/// MEAN_ELEMENT holds the truncations and switches of a theory this module does not carry; SGP4 and SGP4XP are fixed by
-/// their specifications, so a field away from its documented default is refused by name.
-inline int read_mean(const PCFMeanElementOptions* m) {
-  if (m == nullptr) return 0;
-  struct Slot { uint16_t vt; const char* name; bool differs; };
-  const Slot slots[] = {
-      {PCFMeanElementOptions::VT_M_DAILY_MAXIMUM_DEGREE, "MEAN_ELEMENT.M_DAILY_MAXIMUM_DEGREE", m->M_DAILY_MAXIMUM_DEGREE() != 12},
-      {PCFMeanElementOptions::VT_ZONAL_MAXIMUM_DEGREE, "MEAN_ELEMENT.ZONAL_MAXIMUM_DEGREE", m->ZONAL_MAXIMUM_DEGREE() != 20},
-      {PCFMeanElementOptions::VT_SHORT_PERIODIC_MAXIMUM_DEGREE, "MEAN_ELEMENT.SHORT_PERIODIC_MAXIMUM_DEGREE", m->SHORT_PERIODIC_MAXIMUM_DEGREE() != 7},
-      {PCFMeanElementOptions::VT_ENABLE_RESONANCE, "MEAN_ELEMENT.ENABLE_RESONANCE", !m->ENABLE_RESONANCE()},
-      {PCFMeanElementOptions::VT_RESONANCE_MAXIMUM_DEGREE, "MEAN_ELEMENT.RESONANCE_MAXIMUM_DEGREE", m->RESONANCE_MAXIMUM_DEGREE() != 31},
-      {PCFMeanElementOptions::VT_RESONANCE_BAND, "MEAN_ELEMENT.RESONANCE_BAND", m->RESONANCE_BAND() != 0.045},
-      {PCFMeanElementOptions::VT_RESONANCE_MAXIMUM_K, "MEAN_ELEMENT.RESONANCE_MAXIMUM_K", m->RESONANCE_MAXIMUM_K() != 1},
-      {PCFMeanElementOptions::VT_NEAR_RESONANCE_BAND, "MEAN_ELEMENT.NEAR_RESONANCE_BAND", m->NEAR_RESONANCE_BAND() != 0.0},
-      {PCFMeanElementOptions::VT_GRID_STEP_DIVISOR, "MEAN_ELEMENT.GRID_STEP_DIVISOR", m->GRID_STEP_DIVISOR() != 1},
-      {PCFMeanElementOptions::VT_DENSITY_KERNEL, "MEAN_ELEMENT.DENSITY_KERNEL", !m->DENSITY_KERNEL()},
-      {PCFMeanElementOptions::VT_DRAG_REGIME_PERIGEE_KM, "MEAN_ELEMENT.DRAG_REGIME_PERIGEE_KM", m->DRAG_REGIME_PERIGEE_KM() != 2500.0}};
-  for (const Slot& k : slots)
-    if (has(m, k.vt) && k.differs) return refuse(k.name, "SGP4's and SGP4XP's truncations and switches are fixed by their specifications");
-  return 0;
-}
-
 inline int read_output(const PCFOutput* p, Options& o) {
   if (p == nullptr) return 0;
   switch (p->FRAME()) {
@@ -218,27 +196,18 @@ inline int read_output(const PCFOutput* p, Options& o) {
 
 /// FORCES for the averaged theories: their forces are the theory's own; a FORCES table carries only the required
 /// EPHEMERIS_SOURCE, empty (the theory's own analytic Sun and Moon series). A field away from its default, the
-/// EMPIRICAL_TERMS table and the density-correction relaxation (a theory this module does not carry) included, is
-/// refused by name; an EMPIRICAL_TERMS table at its defaults reads as an absent one.
+/// density-correction relaxation (a theory this module does not carry) included, is refused by name.
 inline int read_forces(const PCFForceModel* f) {
   if (f == nullptr) return 0;
   for (size_t k = 0; k < sizeof kForceFields / sizeof kForceFields[0]; ++k) {
     const uint16_t vt = static_cast<uint16_t>(4 + 2 * k);
-    if (vt == PCFForceModel::VT_EMPIRICAL_TERMS || vt == PCFForceModel::VT_EPHEMERIS_SOURCE || !off_default(raw(f), vt, kForceFields[k])) continue;
+    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || !off_default(raw(f), vt, kForceFields[k])) continue;
     char name[96];
     std::snprintf(name, sizeof name, "FORCES.%s", kForceFields[k].name);
     return refuse(name, "the averaged theories (SGP4XP) apply their own forces; FORCES carries no field of its own");
   }
   if (f->EPHEMERIS_SOURCE() != nullptr && f->EPHEMERIS_SOURCE()->size() != 0)
     return refuse("FORCES.EPHEMERIS_SOURCE", "the averaged theories read their own analytic Sun and Moon series (leave it empty)");
-  if (const PCFEmpiricalTerms* e = f->EMPIRICAL_TERMS()) {
-    // the first field off its default (a table at its defaults reads as an absent one)
-    const char* off = !e->ONCE_PER_REVOLUTION() ? "FORCES.EMPIRICAL_TERMS.ONCE_PER_REVOLUTION"
-                      : e->HAS_TAU0_RULE_LIMIT_M2_KG() ? "FORCES.EMPIRICAL_TERMS.HAS_TAU0_RULE_LIMIT_M2_KG"
-                      : !e->HELD_ABOVE_DRAG_REGIME() ? "FORCES.EMPIRICAL_TERMS.HELD_ABOVE_DRAG_REGIME"
-                      : e->PERSISTENCE_HOURS() != 24.0 ? "FORCES.EMPIRICAL_TERMS.PERSISTENCE_HOURS" : nullptr;
-    if (off != nullptr) return refuse(off, "SGP4XP carries no empirical terms");
-  }
   return 0;
 }
 
@@ -292,8 +261,6 @@ inline int read(Method method) {
     return refuse("EVENTS", "this module locates no events");
   if (tables & kTFit)
     if (const int rc = read_fit(c->FIT(), o)) return rc;
-  if (tables & kTMean)
-    if (const int rc = read_mean(c->MEAN_ELEMENT())) return rc;
   if (tables & kTOutput)
     if (const int rc = read_output(c->OUTPUT(), o)) return rc;
   if (tables & kTForces)

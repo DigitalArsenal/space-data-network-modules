@@ -183,8 +183,7 @@ const commentOf = (r) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.f
   const calm = await arcAcross(30 * 24 * 3600, [0, 0, 0]);
   const refusals = [
     [{ theory: "FFM" }, "THEORY"],
-    [{ theory: "SDNAP" }, "THEORY"],
-    [{ theory: "SGP4XP", mean: { ZONAL_MAXIMUM_DEGREE: 30 } }, "MEAN_ELEMENT.ZONAL_MAXIMUM_DEGREE"],
+    [{ theory: 3 }, "THEORY"],  // the number of the removed theory
     [{ theory: "SGP4XP", forces: { EPHEMERIS_SOURCE: "", ENABLE_DRAG: true } }, "FORCES.ENABLE_DRAG"],
   ];
   for (const [options, field] of refusals) {
@@ -201,11 +200,11 @@ const commentOf = (r) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.f
   // a missing required port is refused by the SDK's command surface before the module runs
   const none = await command.invoke({ methodId: "maneuver", inputs: [{ portId: "omm", typeRef: ommType, payload: seed }] }).catch((e) => ({ statusCode: 400, errorCode: e?.response?.errorCode ?? String(e) }));
   check(none.statusCode !== 0 && (none.errorCode === "missing-required-input" || none.errorCode === "missing-input"), `no $MNV: ${none.errorCode}`);
-  const sdnap = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(seed)).unpack();
-  sdnap.MEAN_ELEMENT_THEORY = 4;
-  const sb = new flatbuffers.Builder(256); OMM.finishOMMBuffer(sb, sdnap.pack(sb));
+  const removed = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(seed)).unpack();
+  removed.MEAN_ELEMENT_THEORY = 4;  // the number of the removed theory
+  const sb = new flatbuffers.Builder(256); OMM.finishOMMBuffer(sb, removed.pack(sb));
   const gone = await across(sb.asUint8Array(), tb, tb, [0, 1e-3, 0]);
-  check(gone.statusCode !== 0 && gone.errorCode === "invalid-omm", `an SDNAP set: ${gone.errorCode}`);
+  check(gone.statusCode !== 0 && gone.errorCode === "invalid-omm", `a set of the removed theory: ${gone.errorCode}`);
   console.log(`refusals: ${early.errorCode}, ${none.errorCode}, ${gone.errorCode}`);
 }
 

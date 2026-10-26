@@ -26,7 +26,7 @@
   "devDependencies": {
     "flatc-wasm": "26.1.38",
     "space-data-module-sdk": "0.9.14",
-    "spacedatastandards.org": "1.270.0"
+    "spacedatastandards.org": "1.271.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

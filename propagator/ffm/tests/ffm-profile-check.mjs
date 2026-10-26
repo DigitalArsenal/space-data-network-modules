@@ -57,7 +57,6 @@ function forces(p) {
     DENSITY_CORRECTION_RELAXATION_HOURS: p.drag.densityCorrectionRelaxationHours,
     HAS_DENSITY_CORRECTION_RELAXATION_HOURS: p.drag.densityCorrectionRelaxationSpecified,
     NEUTRAL_WIND: enumValue('pcfNeutralWind', p.drag.neutralWind),
-    EMPIRICAL_TERMS: p.drag.empiricalTerms,
     SOLID_TIDES: enumValue('pcfSolidTideModel', p.solidTides.selection),
     RELATIVITY: enumValue('pcfRelativityTerms', p.relativity.selection),
     IN_TRACK_ACCELERATION_M_S2: p.inTrackAcceleration.value_m_s2,

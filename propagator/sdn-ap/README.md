@@ -1,8 +1,9 @@
 # sdn-ap-propagator
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
-theories. The bundle keeps its name; the SDN-AP theory it once carried was removed (owner 2026-10-25), and an `$OMM` that
-names it (MEAN_ELEMENT_THEORY SDNAP), a `$PCF` with THEORY SDNAP and an `ElementRow` of theory 16 are refused.
+theories. The bundle keeps its name; the SDN-AP theory it once carried was removed (owner 2026-10-25), and an `$OMM` whose
+MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
+`ElementRow` of theory 16 are refused.
 
 | Theory | Sets | Source |
 |---|---|---|
@@ -50,16 +51,15 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
   13 frames of at most 4 MiB) load in 0.1 s into 30,931 series and 106,813 sets, 17.0 MiB (577 bytes a series) before
   any series is propagated.
-- Configuration (SDS 1.270.0, `$PCF` 1.0.4): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
-  `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: MEAN_ELEMENT, OUTPUT, FORCES;
-  fit: FIT, MEAN_ELEMENT, FORCES); another method's tables are left to it. Fields left unset take the defaults
+- Configuration (SDS 1.271.0, `$PCF` 1.0.5): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
+  `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
+  fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults
   schema/PCF/main.fbs documents, each this module's own, so a table whose fields are all unset (or written at their
   defaults) reads as an absent one; a field set to a value the module cannot apply is refused by name
   (configuration-refused, "TABLE.FIELD: why"; configuration-missing without one). THEORY: propagate and maneuver read
-  UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); SDNAP, FFM and
-  KEPLER are refused. MEAN_ELEMENT holds the truncations of a theory this module does not carry: a field off its default
-  is refused. FORCES carries only an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
-  averaged theories apply their own forces, and EMPIRICAL_TERMS off its defaults is refused. INTEGRATOR is refused
+  UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
+  KEPLER are refused. FORCES carries only an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
+  averaged theories apply their own forces. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states) apply with their documented ranges.
 - Invoke surface (SDS buffers plain or size-prefixed): `ingest_omm` takes `$OMM` records (MEAN_ELEMENT_THEORY SGP4 or

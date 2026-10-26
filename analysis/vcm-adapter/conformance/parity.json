@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "analysis/vcm-adapter methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "626d229ec2c0c1228f54699cbf86cf56bf71ebeefbb00dfca912ca424973b51e",
-  "moduleSha256": "b57aef45391bcd81611ac73e5a7581af82f4bdcfe8355a9cd29ad84c40a3c577",
+  "artifactSha256": "b8eebbd8184144433d767657e3d96dfdcd2b43c5684bfb68b819756addc0b58d",
+  "moduleSha256": "706aab0cda4d21a03285e89a675b49a462a6fa18cca2dbdffa0a2666630b73b8",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 6,
-      "durationMs": 679
+      "durationMs": 654
     },
     {
       "lane": "wasmedge",
       "runs": 6,
-      "durationMs": 345
+      "durationMs": 506
     }
   ],
   "cases": [

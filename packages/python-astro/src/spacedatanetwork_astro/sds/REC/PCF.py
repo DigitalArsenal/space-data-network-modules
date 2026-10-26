@@ -7,13 +7,12 @@ from flatbuffers.compat import import_numpy
 np = import_numpy()
 
 # Propagation Configuration ($PCF 1.0): one FlatBuffer message that configures
-# any propagator (SGP4, SGP4-XP, the advanced mean-element propagator, the full
-# force model, Kepler): the theory, the integrator and its settings, the
-# forces, the fit policy, the events to locate, maneuver detection, reentry
-# hand-off, launch priors and the output. A host passes it beside the
-# request; the method it invokes (propagate, fit, detect maneuvers, reentry,
-# launch) selects the tables that method reads. An absent table takes the
-# theory's own defaults; a table or value the selected theory cannot honor is
+# any propagator (SGP4, SGP4-XP, the full force model, Kepler): the theory,
+# the integrator and its settings, the forces, the fit policy, the events to
+# locate, the epoch store and the output. A host passes it beside the
+# request; the method it invokes selects the tables that method reads. An
+# absent table takes the theory's own defaults; a table or value the
+# selected theory cannot honor is
 # refused by name, never silently dropped. $PRW reuses PCFIntegratorSettings,
 # PCFForceModel and their enums, so the runtime wire and the configuration
 # share one definition of each. Units are in the field names and docs; every
@@ -89,34 +88,10 @@ class PCF(object):
             return obj
         return None
 
-    # Truncations and switches of the averaged theories (SGP4XP, SDNAP).
-    # PCF
-    def MEAN_ELEMENT(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
-        if o != 0:
-            x = self._tab.Indirect(o + self._tab.Pos)
-            from spacedatanetwork_astro.sds.REC.PCFMeanElementOptions import PCFMeanElementOptions
-            obj = PCFMeanElementOptions()
-            obj.Init(self._tab.Bytes, x)
-            return obj
-        return None
-
-    # Beyond-Earth segment sets.
-    # PCF
-    def SEGMENTS(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
-        if o != 0:
-            x = self._tab.Indirect(o + self._tab.Pos)
-            from spacedatanetwork_astro.sds.REC.PCFSegmentOptions import PCFSegmentOptions
-            obj = PCFSegmentOptions()
-            obj.Init(self._tab.Bytes, x)
-            return obj
-        return None
-
     # Fit policy.
     # PCF
     def FIT(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
         if o != 0:
             x = self._tab.Indirect(o + self._tab.Pos)
             from spacedatanetwork_astro.sds.REC.PCFFitPolicy import PCFFitPolicy
@@ -128,7 +103,7 @@ class PCF(object):
     # Events located while integrating. Default empty.
     # PCF
     def EVENTS(self, j):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             x = self._tab.Vector(o)
             x += flatbuffers.number_types.UOffsetTFlags.py_type(j) * 4
@@ -141,56 +116,20 @@ class PCF(object):
 
     # PCF
     def EVENTSLength(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
     # PCF
     def EVENTSIsNone(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         return o == 0
-
-    # Maneuver detection.
-    # PCF
-    def MANEUVER_DETECTION(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(22))
-        if o != 0:
-            x = self._tab.Indirect(o + self._tab.Pos)
-            from spacedatanetwork_astro.sds.REC.PCFManeuverDetection import PCFManeuverDetection
-            obj = PCFManeuverDetection()
-            obj.Init(self._tab.Bytes, x)
-            return obj
-        return None
-
-    # Reentry hand-off and window.
-    # PCF
-    def REENTRY(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(24))
-        if o != 0:
-            x = self._tab.Indirect(o + self._tab.Pos)
-            from spacedatanetwork_astro.sds.REC.PCFReentry import PCFReentry
-            obj = PCFReentry()
-            obj.Init(self._tab.Bytes, x)
-            return obj
-        return None
-
-    # Launch initialization priors.
-    # PCF
-    def LAUNCH(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(26))
-        if o != 0:
-            x = self._tab.Indirect(o + self._tab.Pos)
-            from spacedatanetwork_astro.sds.REC.PCFLaunch import PCFLaunch
-            obj = PCFLaunch()
-            obj.Init(self._tab.Bytes, x)
-            return obj
-        return None
 
     # Output states.
     # PCF
     def OUTPUT(self):
-        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(28))
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
         if o != 0:
             x = self._tab.Indirect(o + self._tab.Pos)
             from spacedatanetwork_astro.sds.REC.PCFOutput import PCFOutput
@@ -199,8 +138,20 @@ class PCF(object):
             return obj
         return None
 
+    # The multi-epoch element store and its sync harness. Absent: the defaults of PCFEpochStore.
+    # PCF
+    def EPOCH_STORE(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        if o != 0:
+            x = self._tab.Indirect(o + self._tab.Pos)
+            from spacedatanetwork_astro.sds.REC.PCFEpochStore import PCFEpochStore
+            obj = PCFEpochStore()
+            obj.Init(self._tab.Bytes, x)
+            return obj
+        return None
+
 def PCFStart(builder):
-    builder.StartObject(13)
+    builder.StartObject(9)
 
 def Start(builder):
     PCFStart(builder)
@@ -235,26 +186,14 @@ def PCFAddFORCES(builder, FORCES):
 def AddFORCES(builder, FORCES):
     PCFAddFORCES(builder, FORCES)
 
-def PCFAddMEAN_ELEMENT(builder, MEAN_ELEMENT):
-    builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(MEAN_ELEMENT), 0)
-
-def AddMEAN_ELEMENT(builder, MEAN_ELEMENT):
-    PCFAddMEAN_ELEMENT(builder, MEAN_ELEMENT)
-
-def PCFAddSEGMENTS(builder, SEGMENTS):
-    builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(SEGMENTS), 0)
-
-def AddSEGMENTS(builder, SEGMENTS):
-    PCFAddSEGMENTS(builder, SEGMENTS)
-
 def PCFAddFIT(builder, FIT):
-    builder.PrependUOffsetTRelativeSlot(7, flatbuffers.number_types.UOffsetTFlags.py_type(FIT), 0)
+    builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(FIT), 0)
 
 def AddFIT(builder, FIT):
     PCFAddFIT(builder, FIT)
 
 def PCFAddEVENTS(builder, EVENTS):
-    builder.PrependUOffsetTRelativeSlot(8, flatbuffers.number_types.UOffsetTFlags.py_type(EVENTS), 0)
+    builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(EVENTS), 0)
 
 def AddEVENTS(builder, EVENTS):
     PCFAddEVENTS(builder, EVENTS)
@@ -271,29 +210,17 @@ def PCFCreateEVENTSVector(builder, data):
 def CreateEVENTSVector(builder, data):
     return PCFCreateEVENTSVector(builder, data)
 
-def PCFAddMANEUVER_DETECTION(builder, MANEUVER_DETECTION):
-    builder.PrependUOffsetTRelativeSlot(9, flatbuffers.number_types.UOffsetTFlags.py_type(MANEUVER_DETECTION), 0)
-
-def AddMANEUVER_DETECTION(builder, MANEUVER_DETECTION):
-    PCFAddMANEUVER_DETECTION(builder, MANEUVER_DETECTION)
-
-def PCFAddREENTRY(builder, REENTRY):
-    builder.PrependUOffsetTRelativeSlot(10, flatbuffers.number_types.UOffsetTFlags.py_type(REENTRY), 0)
-
-def AddREENTRY(builder, REENTRY):
-    PCFAddREENTRY(builder, REENTRY)
-
-def PCFAddLAUNCH(builder, LAUNCH):
-    builder.PrependUOffsetTRelativeSlot(11, flatbuffers.number_types.UOffsetTFlags.py_type(LAUNCH), 0)
-
-def AddLAUNCH(builder, LAUNCH):
-    PCFAddLAUNCH(builder, LAUNCH)
-
 def PCFAddOUTPUT(builder, OUTPUT):
-    builder.PrependUOffsetTRelativeSlot(12, flatbuffers.number_types.UOffsetTFlags.py_type(OUTPUT), 0)
+    builder.PrependUOffsetTRelativeSlot(7, flatbuffers.number_types.UOffsetTFlags.py_type(OUTPUT), 0)
 
 def AddOUTPUT(builder, OUTPUT):
     PCFAddOUTPUT(builder, OUTPUT)
+
+def PCFAddEPOCH_STORE(builder, EPOCH_STORE):
+    builder.PrependUOffsetTRelativeSlot(8, flatbuffers.number_types.UOffsetTFlags.py_type(EPOCH_STORE), 0)
+
+def AddEPOCH_STORE(builder, EPOCH_STORE):
+    PCFAddEPOCH_STORE(builder, EPOCH_STORE)
 
 def PCFEnd(builder):
     return builder.EndObject()
@@ -301,16 +228,12 @@ def PCFEnd(builder):
 def End(builder):
     return PCFEnd(builder)
 
+import spacedatanetwork_astro.sds.REC.PCFEpochStore as PCFEpochStore
 import spacedatanetwork_astro.sds.REC.PCFEventDefinition as PCFEventDefinition
 import spacedatanetwork_astro.sds.REC.PCFFitPolicy as PCFFitPolicy
 import spacedatanetwork_astro.sds.REC.PCFForceModel as PCFForceModel
 import spacedatanetwork_astro.sds.REC.PCFIntegratorSettings as PCFIntegratorSettings
-import spacedatanetwork_astro.sds.REC.PCFLaunch as PCFLaunch
-import spacedatanetwork_astro.sds.REC.PCFManeuverDetection as PCFManeuverDetection
-import spacedatanetwork_astro.sds.REC.PCFMeanElementOptions as PCFMeanElementOptions
 import spacedatanetwork_astro.sds.REC.PCFOutput as PCFOutput
-import spacedatanetwork_astro.sds.REC.PCFReentry as PCFReentry
-import spacedatanetwork_astro.sds.REC.PCFSegmentOptions as PCFSegmentOptions
 try:
     from typing import List, Optional
 except:
@@ -326,28 +249,20 @@ class PCFT(object):
         THEORY = 0,
         INTEGRATOR = None,
         FORCES = None,
-        MEAN_ELEMENT = None,
-        SEGMENTS = None,
         FIT = None,
         EVENTS = None,
-        MANEUVER_DETECTION = None,
-        REENTRY = None,
-        LAUNCH = None,
         OUTPUT = None,
+        EPOCH_STORE = None,
     ):
         self.CONFIGURATION_ID = CONFIGURATION_ID  # type: Optional[str]
         self.PROFILE = PROFILE  # type: Optional[str]
         self.THEORY = THEORY  # type: int
         self.INTEGRATOR = INTEGRATOR  # type: Optional[PCFIntegratorSettings.PCFIntegratorSettingsT]
         self.FORCES = FORCES  # type: Optional[PCFForceModel.PCFForceModelT]
-        self.MEAN_ELEMENT = MEAN_ELEMENT  # type: Optional[PCFMeanElementOptions.PCFMeanElementOptionsT]
-        self.SEGMENTS = SEGMENTS  # type: Optional[PCFSegmentOptions.PCFSegmentOptionsT]
         self.FIT = FIT  # type: Optional[PCFFitPolicy.PCFFitPolicyT]
         self.EVENTS = EVENTS  # type: Optional[List[PCFEventDefinition.PCFEventDefinitionT]]
-        self.MANEUVER_DETECTION = MANEUVER_DETECTION  # type: Optional[PCFManeuverDetection.PCFManeuverDetectionT]
-        self.REENTRY = REENTRY  # type: Optional[PCFReentry.PCFReentryT]
-        self.LAUNCH = LAUNCH  # type: Optional[PCFLaunch.PCFLaunchT]
         self.OUTPUT = OUTPUT  # type: Optional[PCFOutput.PCFOutputT]
+        self.EPOCH_STORE = EPOCH_STORE  # type: Optional[PCFEpochStore.PCFEpochStoreT]
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -377,10 +292,6 @@ class PCFT(object):
             self.INTEGRATOR = PCFIntegratorSettings.PCFIntegratorSettingsT.InitFromObj(PCF.INTEGRATOR())
         if PCF.FORCES() is not None:
             self.FORCES = PCFForceModel.PCFForceModelT.InitFromObj(PCF.FORCES())
-        if PCF.MEAN_ELEMENT() is not None:
-            self.MEAN_ELEMENT = PCFMeanElementOptions.PCFMeanElementOptionsT.InitFromObj(PCF.MEAN_ELEMENT())
-        if PCF.SEGMENTS() is not None:
-            self.SEGMENTS = PCFSegmentOptions.PCFSegmentOptionsT.InitFromObj(PCF.SEGMENTS())
         if PCF.FIT() is not None:
             self.FIT = PCFFitPolicy.PCFFitPolicyT.InitFromObj(PCF.FIT())
         if not PCF.EVENTSIsNone():
@@ -391,14 +302,10 @@ class PCFT(object):
                 else:
                     pCFEventDefinition_ = PCFEventDefinition.PCFEventDefinitionT.InitFromObj(PCF.EVENTS(i))
                     self.EVENTS.append(pCFEventDefinition_)
-        if PCF.MANEUVER_DETECTION() is not None:
-            self.MANEUVER_DETECTION = PCFManeuverDetection.PCFManeuverDetectionT.InitFromObj(PCF.MANEUVER_DETECTION())
-        if PCF.REENTRY() is not None:
-            self.REENTRY = PCFReentry.PCFReentryT.InitFromObj(PCF.REENTRY())
-        if PCF.LAUNCH() is not None:
-            self.LAUNCH = PCFLaunch.PCFLaunchT.InitFromObj(PCF.LAUNCH())
         if PCF.OUTPUT() is not None:
             self.OUTPUT = PCFOutput.PCFOutputT.InitFromObj(PCF.OUTPUT())
+        if PCF.EPOCH_STORE() is not None:
+            self.EPOCH_STORE = PCFEpochStore.PCFEpochStoreT.InitFromObj(PCF.EPOCH_STORE())
 
     # PCFT
     def Pack(self, builder):
@@ -410,10 +317,6 @@ class PCFT(object):
             INTEGRATOR = self.INTEGRATOR.Pack(builder)
         if self.FORCES is not None:
             FORCES = self.FORCES.Pack(builder)
-        if self.MEAN_ELEMENT is not None:
-            MEAN_ELEMENT = self.MEAN_ELEMENT.Pack(builder)
-        if self.SEGMENTS is not None:
-            SEGMENTS = self.SEGMENTS.Pack(builder)
         if self.FIT is not None:
             FIT = self.FIT.Pack(builder)
         if self.EVENTS is not None:
@@ -424,14 +327,10 @@ class PCFT(object):
             for i in reversed(range(len(self.EVENTS))):
                 builder.PrependUOffsetTRelative(EVENTSlist[i])
             EVENTS = builder.EndVector()
-        if self.MANEUVER_DETECTION is not None:
-            MANEUVER_DETECTION = self.MANEUVER_DETECTION.Pack(builder)
-        if self.REENTRY is not None:
-            REENTRY = self.REENTRY.Pack(builder)
-        if self.LAUNCH is not None:
-            LAUNCH = self.LAUNCH.Pack(builder)
         if self.OUTPUT is not None:
             OUTPUT = self.OUTPUT.Pack(builder)
+        if self.EPOCH_STORE is not None:
+            EPOCH_STORE = self.EPOCH_STORE.Pack(builder)
         PCFStart(builder)
         if self.CONFIGURATION_ID is not None:
             PCFAddCONFIGURATION_ID(builder, CONFIGURATION_ID)
@@ -442,21 +341,13 @@ class PCFT(object):
             PCFAddINTEGRATOR(builder, INTEGRATOR)
         if self.FORCES is not None:
             PCFAddFORCES(builder, FORCES)
-        if self.MEAN_ELEMENT is not None:
-            PCFAddMEAN_ELEMENT(builder, MEAN_ELEMENT)
-        if self.SEGMENTS is not None:
-            PCFAddSEGMENTS(builder, SEGMENTS)
         if self.FIT is not None:
             PCFAddFIT(builder, FIT)
         if self.EVENTS is not None:
             PCFAddEVENTS(builder, EVENTS)
-        if self.MANEUVER_DETECTION is not None:
-            PCFAddMANEUVER_DETECTION(builder, MANEUVER_DETECTION)
-        if self.REENTRY is not None:
-            PCFAddREENTRY(builder, REENTRY)
-        if self.LAUNCH is not None:
-            PCFAddLAUNCH(builder, LAUNCH)
         if self.OUTPUT is not None:
             PCFAddOUTPUT(builder, OUTPUT)
+        if self.EPOCH_STORE is not None:
+            PCFAddEPOCH_STORE(builder, EPOCH_STORE)
         PCF = PCFEnd(builder)
         return PCF

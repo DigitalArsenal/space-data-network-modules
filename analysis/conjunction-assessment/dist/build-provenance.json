@@ -1,7 +1,7 @@
 {
   "standards": {
     "package": "spacedatastandards.org",
-    "version": "1.265.0",
+    "version": "1.271.0",
     "schemas": {
       "RFM": "064ec7033db427b4d14392e5e4b4eb0ea75b1324d4b94274f7548201b86d7347",
       "FRM": "af51a26da7423a8d005c073a4f8a49a9a0d1672248352a02dec89d28d21cabd7",
@@ -13,20 +13,20 @@
       "LCC": "dee63969725a51c39620a5e06067edc34fed46f82d46c5a93f9bdfa5e5ec3fd9",
       "CAT": "2499d7365706caa317267761f34e294d1f16021c9b4ff4f000e89d3680295ae9",
       "PPE": "4ac97b051ebe4fe7c2746220c0e4dab7ef2784959d8b98b70031fb390d5f1395",
-      "NCD": "36cf81fd748c40f552f86e6ae0698ee4b5c3be496a8eaaafad74a4f3d49f7065",
+      "NCD": "7cb3062f240479cbb5f5d8cf3b3a2736953b5bcfc48661200f9b4fa4469ed6b2",
       "EOP": "c7dedceb5f99fdcf50c4be8a42862aef8558c6729cd459a3f10dcece798d1cfa",
       "SPW": "0614985648f41ee36c25f6593dd0ec1c1be9eb6c267e1a7d28193b6138b8c536",
       "EVL": "0ebf24b7f6fab75fc5e1097c73dfe2ab86f423080479137d7d899c9105d07838",
-      "PCF": "7a777445059bd78004ffdc2f307c69c5cadf34648ed4d8cf8e8c11fdb1cd6f91",
+      "PCF": "030a6b663e393198d4bd4e9ff666d7d13491d5f3a24f944ea623910b5acb1488",
       "PRW": "8b9dd7492275e2063896f53d5545de7ce96b62b633563be2fa94ea64c368f9bf",
-      "MET": "a709b98673cf47f8c2724dff59e86d64b6267fbbd04fd9995a863f7b3aebc938",
+      "MET": "edfb6e208a12c155115f5b420cb63ff46ce3a5eaa746bb210d948e22f8c7b60c",
       "CVR": "32b16d673d1539ca22d1b6d3fb42570b4f5a1e524acb0adaa9f13c9ee583bc9a",
-      "OMM": "f8e8dca248add3a06a59dcf10f74ed99d2a19ec09288fee56dcf8d4e11e99684",
+      "OMM": "f76e9270be33b0d41a720c17102d7e467907a213fb51b39aa9556fc9b7f1700b",
       "OEM": "e9db5c9a268836c215c879355dd9da7d0e6e95e18e2bac60dbb439fc84abf96e",
       "ATM": "5794e411f2c6523dc70c642d2aacabe2e495a88efa08ac4fc7a160e8abffcbe1",
       "OCM": "f76837db8853640e6f58cee9b4e3fef84e22a513dfeb9c626beb2056157d64fb",
       "PNM": "fa07cb319cdd4bf50f0d6ffe0b2de0cb469edb8f735d72574ff19de634125195",
-      "EPM": "e36708cd0e11800d593de68f2edc7432536664ce4317036d573bdbbc1dd02e8c",
+      "EPM": "d4308edbaaf2bcf8b55e365518656c9fedca450c7ae8162ef996c44f50f70df7",
       "CDM": "f70e322e00ef17e0d734739f9c2107057db23730058666a60c3748436576ed55",
       "CSM": "7b2066b3bb817159241b34a3a0892b15f069cbb11490d887de4f28cc108b662a",
       "CQR": "8ec37495fcb988854143443c3cbfec1fc6eb6b3cc3af60fa55c4d64b8d9d8ecf",
@@ -43,8 +43,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "d853d146cb53891edf3f3f65e72483f54506c4e88687958eca19184d0d0e366e",
-  "wasmSha256": "d2bd762cf8a79f10b628f70a60bef0a125a6ac648517da0b466068169a6eb1b0",
+  "sourceSha256": "96f18ba8cc95140a886b502c26d102892ae3b838272f45db6e3a254e5df83491",
+  "wasmSha256": "21b50ee42af70e75b508f84ad96527ad05b601827bdb44890805b0fcc834c718",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -90,7 +90,7 @@
     "isIsomorphicPthreads": true
   },
   "initialization": "Once per resident instance; static destruction deferred to instance teardown",
-  "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
+  "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
   "buildSupportSha256": {
     "build-driver.mjs": "84cfdd391a5eea3fc15f9bc138ad52a41a6fbc234ab28f92190d1666a8f0f317",
     "src/cpp/src/cqr_initialization.cpp": "4a1727981275cd1a4fa539afcb9029c964c7872eb946847ef824a9a449982bf2"

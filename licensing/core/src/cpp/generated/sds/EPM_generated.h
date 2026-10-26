@@ -703,40 +703,35 @@ inline ::flatbuffers::Offset<ChainProof> CreateChainProofDirect(
 
 struct DomainProofT : public ::flatbuffers::NativeTable {
   typedef DomainProof TableType;
-  std::string DNS_DOMAIN{};
   std::string PUBLIC_KEY{};
   std::string KEY_PATH{};
   std::string SIGNATURE{};
   std::string SIGNED_PAYLOAD{};
   std::string ALGORITHM{};
   std::string ENCODING{};
+  std::vector<std::string> DOMAINS{};
 };
 
-/// Proves control of a DNS domain by the same HD wallet as the signing key —
-/// the EPM-record mirror of the DNS TXT wire form (which is deliberately
-/// NON-SDS: a base64 FlatBuffer would not fit a 255-byte TXT record). The
-/// canonical statement is 6 fixed LF-terminated lines prefixed
-/// "sdn-domain-proof/1", and it verifies by BYTE-REPLAY of the verbatim
-/// SIGNED_PAYLOAD (ChainProof precedent) — never by JCS.
+/// Proves control of one or more DNS domains by the same HD wallet as the
+/// signing key — the EPM-record mirror of the DNS TXT wire form (which is
+/// deliberately NON-SDS: a base64 FlatBuffer would not fit a 255-byte TXT
+/// record). The canonical statement is a fixed layout of LF-terminated lines,
+/// versioned by its first line, that names every domain of DOMAINS, and it
+/// verifies by BYTE-REPLAY of the verbatim SIGNED_PAYLOAD (ChainProof
+/// precedent) — never by JCS.
 struct DomainProof FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef DomainProofT NativeTableType;
   typedef DomainProofBuilder Builder;
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_DNS_DOMAIN = 4,
     VT_PUBLIC_KEY = 6,
     VT_KEY_PATH = 8,
     VT_SIGNATURE = 10,
     VT_SIGNED_PAYLOAD = 12,
     VT_ALGORITHM = 14,
-    VT_ENCODING = 16
+    VT_ENCODING = 16,
+    VT_DOMAINS = 18
   };
-  /// Fully-qualified domain name the proof binds (e.g., "node.example.org").
-  /// Named DNS_DOMAIN because libc's <math.h> defines a DOMAIN macro, which
-  /// breaks the generated C++ accessor of a field named DOMAIN.
-  const ::flatbuffers::String *DNS_DOMAIN() const {
-    return GetPointer<const ::flatbuffers::String *>(VT_DNS_DOMAIN);
-  }
   /// Public key for this proof (hex-encoded)
   const ::flatbuffers::String *PUBLIC_KEY() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PUBLIC_KEY);
@@ -763,11 +758,16 @@ struct DomainProof FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *ENCODING() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ENCODING);
   }
+  /// The fully-qualified domain names the proof binds, one or more, each
+  /// lowercase ASCII (internationalized names in punycode), e.g.
+  /// ["node.example.org", "node.example.com"]. An empty vector is invalid.
+  /// SIGNED_PAYLOAD covers every name, in this order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *DOMAINS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_DOMAINS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_DNS_DOMAIN) &&
-           verifier.VerifyString(DNS_DOMAIN()) &&
            VerifyOffset(verifier, VT_PUBLIC_KEY) &&
            verifier.VerifyString(PUBLIC_KEY()) &&
            VerifyOffset(verifier, VT_KEY_PATH) &&
@@ -780,6 +780,9 @@ struct DomainProof FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(ALGORITHM()) &&
            VerifyOffset(verifier, VT_ENCODING) &&
            verifier.VerifyString(ENCODING()) &&
+           VerifyOffset(verifier, VT_DOMAINS) &&
+           verifier.VerifyVector(DOMAINS()) &&
+           verifier.VerifyVectorOfStrings(DOMAINS()) &&
            verifier.EndTable();
   }
   DomainProofT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -791,9 +794,6 @@ struct DomainProofBuilder {
   typedef DomainProof Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_DNS_DOMAIN(::flatbuffers::Offset<::flatbuffers::String> DNS_DOMAIN) {
-    fbb_.AddOffset(DomainProof::VT_DNS_DOMAIN, DNS_DOMAIN);
-  }
   void add_PUBLIC_KEY(::flatbuffers::Offset<::flatbuffers::String> PUBLIC_KEY) {
     fbb_.AddOffset(DomainProof::VT_PUBLIC_KEY, PUBLIC_KEY);
   }
@@ -812,6 +812,9 @@ struct DomainProofBuilder {
   void add_ENCODING(::flatbuffers::Offset<::flatbuffers::String> ENCODING) {
     fbb_.AddOffset(DomainProof::VT_ENCODING, ENCODING);
   }
+  void add_DOMAINS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> DOMAINS) {
+    fbb_.AddOffset(DomainProof::VT_DOMAINS, DOMAINS);
+  }
   explicit DomainProofBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -825,21 +828,21 @@ struct DomainProofBuilder {
 
 inline ::flatbuffers::Offset<DomainProof> CreateDomainProof(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<::flatbuffers::String> DNS_DOMAIN = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PUBLIC_KEY = 0,
     ::flatbuffers::Offset<::flatbuffers::String> KEY_PATH = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SIGNATURE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SIGNED_PAYLOAD = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ALGORITHM = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> ENCODING = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> ENCODING = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> DOMAINS = 0) {
   DomainProofBuilder builder_(_fbb);
+  builder_.add_DOMAINS(DOMAINS);
   builder_.add_ENCODING(ENCODING);
   builder_.add_ALGORITHM(ALGORITHM);
   builder_.add_SIGNED_PAYLOAD(SIGNED_PAYLOAD);
   builder_.add_SIGNATURE(SIGNATURE);
   builder_.add_KEY_PATH(KEY_PATH);
   builder_.add_PUBLIC_KEY(PUBLIC_KEY);
-  builder_.add_DNS_DOMAIN(DNS_DOMAIN);
   return builder_.Finish();
 }
 
@@ -850,29 +853,29 @@ struct DomainProof::Traits {
 
 inline ::flatbuffers::Offset<DomainProof> CreateDomainProofDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    const char *DNS_DOMAIN = nullptr,
     const char *PUBLIC_KEY = nullptr,
     const char *KEY_PATH = nullptr,
     const char *SIGNATURE = nullptr,
     const char *SIGNED_PAYLOAD = nullptr,
     const char *ALGORITHM = nullptr,
-    const char *ENCODING = nullptr) {
-  auto DNS_DOMAIN__ = DNS_DOMAIN ? _fbb.CreateString(DNS_DOMAIN) : 0;
+    const char *ENCODING = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *DOMAINS = nullptr) {
   auto PUBLIC_KEY__ = PUBLIC_KEY ? _fbb.CreateString(PUBLIC_KEY) : 0;
   auto KEY_PATH__ = KEY_PATH ? _fbb.CreateString(KEY_PATH) : 0;
   auto SIGNATURE__ = SIGNATURE ? _fbb.CreateString(SIGNATURE) : 0;
   auto SIGNED_PAYLOAD__ = SIGNED_PAYLOAD ? _fbb.CreateString(SIGNED_PAYLOAD) : 0;
   auto ALGORITHM__ = ALGORITHM ? _fbb.CreateString(ALGORITHM) : 0;
   auto ENCODING__ = ENCODING ? _fbb.CreateString(ENCODING) : 0;
+  auto DOMAINS__ = DOMAINS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*DOMAINS) : 0;
   return CreateDomainProof(
       _fbb,
-      DNS_DOMAIN__,
       PUBLIC_KEY__,
       KEY_PATH__,
       SIGNATURE__,
       SIGNED_PAYLOAD__,
       ALGORITHM__,
-      ENCODING__);
+      ENCODING__,
+      DOMAINS__);
 }
 
 ::flatbuffers::Offset<DomainProof> CreateDomainProof(::flatbuffers::FlatBufferBuilder &_fbb, const DomainProofT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1451,13 +1454,13 @@ inline DomainProofT *DomainProof::UnPack(const ::flatbuffers::resolver_function_
 inline void DomainProof::UnPackTo(DomainProofT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
-  { auto _e = DNS_DOMAIN(); if (_e) _o->DNS_DOMAIN = _e->str(); }
   { auto _e = PUBLIC_KEY(); if (_e) _o->PUBLIC_KEY = _e->str(); }
   { auto _e = KEY_PATH(); if (_e) _o->KEY_PATH = _e->str(); }
   { auto _e = SIGNATURE(); if (_e) _o->SIGNATURE = _e->str(); }
   { auto _e = SIGNED_PAYLOAD(); if (_e) _o->SIGNED_PAYLOAD = _e->str(); }
   { auto _e = ALGORITHM(); if (_e) _o->ALGORITHM = _e->str(); }
   { auto _e = ENCODING(); if (_e) _o->ENCODING = _e->str(); }
+  { auto _e = DOMAINS(); if (_e) { _o->DOMAINS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DOMAINS[_i] = _e->Get(_i)->str(); } } else { _o->DOMAINS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<DomainProof> CreateDomainProof(::flatbuffers::FlatBufferBuilder &_fbb, const DomainProofT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1468,22 +1471,22 @@ inline ::flatbuffers::Offset<DomainProof> DomainProof::Pack(::flatbuffers::FlatB
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const DomainProofT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
-  auto _DNS_DOMAIN = _o->DNS_DOMAIN.empty() ? 0 : _fbb.CreateString(_o->DNS_DOMAIN);
   auto _PUBLIC_KEY = _o->PUBLIC_KEY.empty() ? 0 : _fbb.CreateString(_o->PUBLIC_KEY);
   auto _KEY_PATH = _o->KEY_PATH.empty() ? 0 : _fbb.CreateString(_o->KEY_PATH);
   auto _SIGNATURE = _o->SIGNATURE.empty() ? 0 : _fbb.CreateString(_o->SIGNATURE);
   auto _SIGNED_PAYLOAD = _o->SIGNED_PAYLOAD.empty() ? 0 : _fbb.CreateString(_o->SIGNED_PAYLOAD);
   auto _ALGORITHM = _o->ALGORITHM.empty() ? 0 : _fbb.CreateString(_o->ALGORITHM);
   auto _ENCODING = _o->ENCODING.empty() ? 0 : _fbb.CreateString(_o->ENCODING);
+  auto _DOMAINS = _o->DOMAINS.size() ? _fbb.CreateVectorOfStrings(_o->DOMAINS) : 0;
   return CreateDomainProof(
       _fbb,
-      _DNS_DOMAIN,
       _PUBLIC_KEY,
       _KEY_PATH,
       _SIGNATURE,
       _SIGNED_PAYLOAD,
       _ALGORITHM,
-      _ENCODING);
+      _ENCODING,
+      _DOMAINS);
 }
 
 inline EPMT::EPMT(const EPMT &o)
