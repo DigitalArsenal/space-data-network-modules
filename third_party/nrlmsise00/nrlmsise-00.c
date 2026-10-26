@@ -599,8 +599,9 @@ __inline_double sg0(double ex, double *p, double *ap) {
 }
 
 /* gts7 evaluates globe7 once per temperature and species parameter set for
- * one input, so the trig of the input's latitude, local solar time and
- * longitude is computed once per input value, and each parameter set's
+ * one input, so the trig and Legendre table of the input's latitude, the
+ * trig of its local solar time and longitude and the square of its F10.7
+ * offset are computed once per input value, and each parameter set's
  * day-of-year cosines once per day of year. The values, and every expression
  * that uses them, are unchanged. Keys compare bit patterns, so a signed zero
  * or a NaN input is computed afresh. */
@@ -609,6 +610,8 @@ static int globe7_have_lat, globe7_have_lst, globe7_have_long;
 static double globe7_lat, globe7_c, globe7_s;
 static double globe7_lst, globe7_t[6];
 static double globe7_long, globe7_clong, globe7_slong;
+static int globe7_have_dfa;
+static double globe7_dfa, globe7_dfa2;   /* f107A - 150 and pow(f107A - 150, 2) */
 /* One entry per parameter set (the day it holds; a new day refreshes it). */
 struct globe7_doy { const double *p; int doy; double cd32, cd18, cd14, cd39; };
 static struct globe7_doy globe7_doys[16];
@@ -637,43 +640,44 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 		t[j]=0;
 
 	/* calculate legendre polynomials */
+	/* plg depends on the latitude alone, and only this block writes it. */
 	if (!globe7_have_lat || !globe7_same(input->g_lat, globe7_lat)) {
 		globe7_c = sin(input->g_lat * dgtr);
 		globe7_s = cos(input->g_lat * dgtr);
 		globe7_lat = input->g_lat;
 		globe7_have_lat = 1;
-	}
-	c = globe7_c;
-	s = globe7_s;
-	c2 = c*c;
-	c4 = c2*c2;
-	s2 = s*s;
+		c = globe7_c;
+		s = globe7_s;
+		c2 = c*c;
+		c4 = c2*c2;
+		s2 = s*s;
 
-	plg[0][1] = c;
-	plg[0][2] = 0.5*(3.0*c2 -1.0);
-	plg[0][3] = 0.5*(5.0*c*c2-3.0*c);
-	plg[0][4] = (35.0*c4 - 30.0*c2 + 3.0)/8.0;
-	plg[0][5] = (63.0*c2*c2*c - 70.0*c2*c + 15.0*c)/8.0;
-	plg[0][6] = (11.0*c*plg[0][5] - 5.0*plg[0][4])/6.0;
-/*      plg[0][7] = (13.0*c*plg[0][6] - 6.0*plg[0][5])/7.0; */
-	plg[1][1] = s;
-	plg[1][2] = 3.0*c*s;
-	plg[1][3] = 1.5*(5.0*c2-1.0)*s;
-	plg[1][4] = 2.5*(7.0*c2*c-3.0*c)*s;
-	plg[1][5] = 1.875*(21.0*c4 - 14.0*c2 +1.0)*s;
-	plg[1][6] = (11.0*c*plg[1][5]-6.0*plg[1][4])/5.0;
-/*      plg[1][7] = (13.0*c*plg[1][6]-7.0*plg[1][5])/6.0; */
-/*      plg[1][8] = (15.0*c*plg[1][7]-8.0*plg[1][6])/7.0; */
-	plg[2][2] = 3.0*s2;
-	plg[2][3] = 15.0*s2*c;
-	plg[2][4] = 7.5*(7.0*c2 -1.0)*s2;
-	plg[2][5] = 3.0*c*plg[2][4]-2.0*plg[2][3];
-	plg[2][6] =(11.0*c*plg[2][5]-7.0*plg[2][4])/4.0;
-	plg[2][7] =(13.0*c*plg[2][6]-8.0*plg[2][5])/5.0;
-	plg[3][3] = 15.0*s2*s;
-	plg[3][4] = 105.0*s2*s*c; 
-	plg[3][5] =(9.0*c*plg[3][4]-7.*plg[3][3])/2.0;
-	plg[3][6] =(11.0*c*plg[3][5]-8.*plg[3][4])/3.0;
+		plg[0][1] = c;
+		plg[0][2] = 0.5*(3.0*c2 -1.0);
+		plg[0][3] = 0.5*(5.0*c*c2-3.0*c);
+		plg[0][4] = (35.0*c4 - 30.0*c2 + 3.0)/8.0;
+		plg[0][5] = (63.0*c2*c2*c - 70.0*c2*c + 15.0*c)/8.0;
+		plg[0][6] = (11.0*c*plg[0][5] - 5.0*plg[0][4])/6.0;
+	/*      plg[0][7] = (13.0*c*plg[0][6] - 6.0*plg[0][5])/7.0; */
+		plg[1][1] = s;
+		plg[1][2] = 3.0*c*s;
+		plg[1][3] = 1.5*(5.0*c2-1.0)*s;
+		plg[1][4] = 2.5*(7.0*c2*c-3.0*c)*s;
+		plg[1][5] = 1.875*(21.0*c4 - 14.0*c2 +1.0)*s;
+		plg[1][6] = (11.0*c*plg[1][5]-6.0*plg[1][4])/5.0;
+	/*      plg[1][7] = (13.0*c*plg[1][6]-7.0*plg[1][5])/6.0; */
+	/*      plg[1][8] = (15.0*c*plg[1][7]-8.0*plg[1][6])/7.0; */
+		plg[2][2] = 3.0*s2;
+		plg[2][3] = 15.0*s2*c;
+		plg[2][4] = 7.5*(7.0*c2 -1.0)*s2;
+		plg[2][5] = 3.0*c*plg[2][4]-2.0*plg[2][3];
+		plg[2][6] =(11.0*c*plg[2][5]-7.0*plg[2][4])/4.0;
+		plg[2][7] =(13.0*c*plg[2][6]-8.0*plg[2][5])/5.0;
+		plg[3][3] = 15.0*s2*s;
+		plg[3][4] = 105.0*s2*s*c; 
+		plg[3][5] =(9.0*c*plg[3][4]-7.*plg[3][3])/2.0;
+		plg[3][6] =(11.0*c*plg[3][5]-8.*plg[3][4])/3.0;
+	}
 
 	if (!(((flags->sw[7]==0)&&(flags->sw[8]==0))&&(flags->sw[14]==0))) {
 		if (!globe7_have_lst || !globe7_same(tloc, globe7_lst)) {
@@ -719,7 +723,12 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 	/* F10.7 EFFECT */
 	df = input->f107 - input->f107A;
 	dfa = input->f107A - 150.0;
-	t[0] =  p[19]*df*(1.0+p[59]*dfa) + p[20]*df*df + p[21]*dfa + p[29]*pow(dfa,2.0);
+	if (!globe7_have_dfa || !globe7_same(dfa, globe7_dfa)) {
+		globe7_dfa2 = pow(dfa,2.0);
+		globe7_dfa = dfa;
+		globe7_have_dfa = 1;
+	}
+	t[0] =  p[19]*df*(1.0+p[59]*dfa) + p[20]*df*df + p[21]*dfa + p[29]*globe7_dfa2;
 	f1 = 1.0 + (p[47]*dfa +p[19]*df+p[20]*df*df)*flags->swc[1];
 	f2 = 1.0 + (p[49]*dfa+p[19]*df+p[20]*df*df)*flags->swc[1];
 

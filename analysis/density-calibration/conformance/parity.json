@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "analysis/density-calibration 0.6.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "6c27a77bc2f4e51525436a9ed3a27e0e6bf0a38b6d2b8eef4b42becdeb9d3185",
-  "moduleSha256": "6c27a77bc2f4e51525436a9ed3a27e0e6bf0a38b6d2b8eef4b42becdeb9d3185",
+  "artifactSha256": "0931628b9aaca61778bf0454a966357ba86563f952ed962bd0825bc4188dddd2",
+  "moduleSha256": "0931628b9aaca61778bf0454a966357ba86563f952ed962bd0825bc4188dddd2",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 27,
-      "durationMs": 1498
+      "durationMs": 1491
     },
     {
       "lane": "wasmedge",
       "runs": 27,
-      "durationMs": 58524
+      "durationMs": 55157
     }
   ],
   "cases": [
