@@ -1,9 +1,9 @@
 {
   "format_version": 1,
   "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
-  "version": "0.1.0.dev0+modules.7339a911a9ad.ac3d82b138d66",
-  "source_revision": "7339a911a9adffa42951ef0b1b639220968ebb58",
-  "artifact_set_sha256": "c3d82b138d662e35e66e828b5209a29bac3a5bf893d94c8462413000103e782c",
+  "version": "0.1.0.dev0+modules.88ceb81b936c.ae930816d3410",
+  "source_revision": "88ceb81b936cf12cf5e6bd8715ebcb7ee8531681",
+  "artifact_set_sha256": "e930816d3410b39a70f0d78918670375d40f6db045e3f74aa927187116edbecf",
   "modules": [
     {
       "id": "propagator/sgp4",
@@ -35,8 +35,8 @@
           "name": "module.wasm",
           "source_path": "propagator/ffm/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-ffm/module.wasm",
-          "sha256": "7fd10a6acd28bbae35b28cae2a57b5c1137de9fcc3d4b829445475f2e983c709",
-          "size": 2651444
+          "sha256": "8e6f63d147e5d51cbb55a1e6b557d011c71906a5447598a7c5794ce7dafaad94",
+          "size": 2686893
         },
         {
           "name": "plugin-manifest.json",

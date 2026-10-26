@@ -8,7 +8,7 @@
     },
     {
       "build_provenance": {
-        "bytes": 2651444,
+        "bytes": 2686893,
         "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
         "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
         "debugInfo": "stripped",
@@ -29,7 +29,7 @@
         },
         "sdk": "0.9.12",
         "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and uses explicit error flags and measured linear-memory limits, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation.",
-        "sha256": "7fd10a6acd28bbae35b28cae2a57b5c1137de9fcc3d4b829445475f2e983c709",
+        "sha256": "8e6f63d147e5d51cbb55a1e6b557d011c71906a5447598a7c5794ce7dafaad94",
         "sharedMemory": true,
         "spacedatastandards": "1.271.0",
         "standardWasmExceptions": false,
@@ -70,7 +70,7 @@
       },
       "declared_sds_dependency": "1.271.0",
       "id": "propagator/ffm",
-      "wasm_sha256": "7fd10a6acd28bbae35b28cae2a57b5c1137de9fcc3d4b829445475f2e983c709"
+      "wasm_sha256": "8e6f63d147e5d51cbb55a1e6b557d011c71906a5447598a7c5794ce7dafaad94"
     },
     {
       "build_provenance": {
