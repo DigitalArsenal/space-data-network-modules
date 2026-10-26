@@ -17,6 +17,9 @@ The module compiles, from this repository, pinned by SHA-256 in build.mjs:
   as LICENSES/ERFA.txt and dist/LICENSES/ERFA.txt.
 - The Jacchia 1970 density table, SAO Special Report 313, Table 6, transcribed
   in src/j70_table6.inc.
+- NRLMSISE-00, the C port by Dominik Brodowski of the NRL model (Picone et al.
+  2002), public domain (third_party/nrlmsise00), for the selectable drag
+  atmosphere (SPEC 15).
 
 spec-vectors/vectors.json holds element sets made for the specification and
 the states and intermediate quantities that the unmodified US Space Force

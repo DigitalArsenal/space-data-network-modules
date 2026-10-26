@@ -374,13 +374,50 @@ inline void direction_cosines(const Perifocal& f, Vec3 su, double& A, double& B,
   C = dot(su, f.W);
 }
 
+/// SPEC 3.4: the geodetic height (km) at a node of geocentric latitude (sine sp, non-negative cosine cp) and radius r
+/// (ER), with the terms the geodetic latitude takes.
+struct NodeHeight {
+  double Nn, n0, W1, h;
+};
+inline NodeHeight node_height(double sp, double cp, double r) {
+  const double f = kFlattening, eps2 = f * (2.0 - f);
+  const double Nn = eps2 * sp * cp, n0 = 1.0 - eps2 * cp * cp, W0 = std::sqrt(1.0 - eps2 * sp * sp);
+  const double t1 = Nn / (n0 + W0 * (r - W0));
+  // sin(phic + atan t1) = (sin phic + cos phic t1) / sqrt(1 + t1^2)
+  const double q1 = std::sqrt(1.0 + t1 * t1);
+  const double s1 = (sp + cp * t1) / q1;
+  const double W1 = std::sqrt(1.0 - eps2 * s1 * s1);
+  return {Nn, n0, W1, kRe * (r / q1 - W1)};
+}
+
+/// SPEC 3.4: the geodetic latitude (rad) of that node.
+inline double geodetic_latitude(double sp, const NodeHeight& nh) { return std::asin(sp) + std::atan(nh.Nn / (nh.n0 + nh.W1 * nh.h / kRe)); }
+
+/// The density (kg/m^3) at a node: rho = 1e-20 above 2500 km (SPEC 3.3, amendment 6); below it the theory's own
+/// (SPEC 3.2, 3.3: atmosphere null or Jacchia 1970, date terms dt) or NRLMSISE-00 on `drivers` times `dca` (atmosphere.inc;
+/// below 10 km the 10 km value, as the theory's table). alpha is the node's TEME right ascension, theta_g the Greenwich
+/// angle, H the Sun-relative hour angle.
+inline double node_density(const atm::Atmosphere* atmosphere, const drag::DateTerms& dt, const drag::Flux& drivers, double dca,
+                           double d50, double sp, double cp, double sdsun, double cdsun, double H, double alpha, double theta_g,
+                           const NodeHeight& nh) {
+  if (!(nh.h <= 2500.0)) return 1e-20;
+  if (atmosphere == nullptr || atmosphere->model == atm::kJacchia70) {
+    const double tinf = drag::exospheric_temperature(dt, sp, cp, sdsun, cdsun, H);
+    // the geodetic latitude enters only the seasonal-latitudinal term (90 < h < 300 km)
+    const double phig = (nh.h > 90.0 && nh.h < 300.0) ? geodetic_latitude(sp, nh) : 0.0;
+    return drag::density(dt, tinf, nh.h, phig);
+  }
+  return atm::msis_density(d50, geodetic_latitude(sp, nh), atm::wrap_pi(alpha - theta_g), nh.h < 10.0 ? 10.0 : nh.h, drivers) * dca;
+}
+
 /// SPEC 3.4 (side A at 22570b7): the drag rates as stated there, from 13-point
 /// Gauss-Legendre sums over the perigee arc at the J2-corrected radius:
 /// geodetic height, the diurnal term at the geocentric latitude, the seasonal
 /// term at the geodetic latitude, the co-rotation speed factor V; rho = 0
 /// above 2500 km; the acceleration -(1/2) rho B |v_rel| v_rel, B = C_D A/m.
+/// `atmosphere` (null: the theory's own) selects the density (node_density); theta_g is the Greenwich angle at d50.
 inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag, double bterm,
-                       const Bodies& b, double d50, double* out) {
+                       const Bodies& b, double d50, const atm::Atmosphere* atmosphere, double theta_g, double* out) {
   static const double gx[13] = {-0.98418305471858814, -0.91759839922297803, -0.80157809073330988,
                                 -0.64234933944034023, -0.44849275103644692, -0.23045831595513480, 0.0,
                                 0.23045831595513480, 0.44849275103644692, 0.64234933944034023,
@@ -393,7 +430,7 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
   const double e = k.e, a = fr.a, n = fr.n, eta = fr.eta;
   const double p = a * eta * eta;
   const double th = ag.ci, si = ag.si;
-  const double f = kFlattening, eps2 = f * (2.0 - f);
+  const double f = kFlattening;
   // arc
   const double rp = a * (1.0 - e);
   const double hp = kRe * (rp - 1.0 + f * si * si * ag.sw * ag.sw);
@@ -405,10 +442,13 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
     const double c = (rp * e - band) / (e * (rp + band));
     nuc = std::acos(c < -1.0 ? -1.0 : (c > 1.0 ? 1.0 : c));
   }
-  const drag::Flux fl = drag::flux_at(d50);
+  // the drivers: SPEC 3.1's generic flux model, or the atmosphere's measured rows (atmosphere.inc)
+  const bool generic = atmosphere == nullptr || !atmosphere->measured;
+  const drag::Flux fl = generic ? drag::flux_at(d50) : atm::drivers_at(*atmosphere, d50);
   double D, N;
   drag::day_of_year(d50, D, N);
   const drag::DateTerms dt = drag::date_terms(fl, D, N);
+  const double dca = atmosphere != nullptr && !atmosphere->dca_d50.empty() ? atm::dca_scale(*atmosphere, d50) : 1.0;
   const double sdsun = b.sun_u.z, cdsun = std::sqrt(1.0 - b.sun_u.z * b.sun_u.z);  // the Sun's declination
   const double rasun = std::atan2(b.sun_u.y, b.sun_u.x);
   const double q = kOmegaE * eta * eta * eta / n;
@@ -424,22 +464,11 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
     const double r = p / Dn + cj2 * ((1.0 - th * th) * c2u - (3.0 * th * th - 1.0) * (e * cn / (1.0 + eta) + 2.0 * eta / Dn + 1.0));
     // geocentric latitude phi' = arcsin(sin i sin u), carried as its sine and (non-negative) cosine
     const double sp = si * su, cp = std::sqrt(1.0 - sp * sp);
-    const double Nn = eps2 * sp * cp, n0 = 1.0 - eps2 * cp * cp, W0 = std::sqrt(1.0 - eps2 * sp * sp);
-    const double t1 = Nn / (n0 + W0 * (r - W0));
-    // sin(phic + atan t1) = (sin phic + cos phic t1) / sqrt(1 + t1^2)
-    const double q1 = std::sqrt(1.0 + t1 * t1);
-    const double s1 = (sp + cp * t1) / q1;
-    const double W1 = std::sqrt(1.0 - eps2 * s1 * s1);
-    const double h = kRe * (r / q1 - W1);
-    double H = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th) - rasun;
+    const NodeHeight nh = node_height(sp, cp, r);
+    const double alpha = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
+    double H = alpha - rasun;
     H -= kTwoPi * std::floor(H / kTwoPi);
-    double rho = 1e-20;  // SPEC 3.3 (amendment 6): above 2500 km
-    if (h <= 2500.0) {
-      const double tinf = drag::exospheric_temperature(dt, sp, cp, sdsun, cdsun, H);
-      // the geodetic latitude enters only the seasonal-latitudinal term (90 < h < 300 km)
-      const double phig = (h > 90.0 && h < 300.0) ? std::asin(sp) + std::atan(Nn / (n0 + W1 * h / kRe)) : 0.0;
-      rho = drag::density(dt, tinf, h, phig);
-    }
+    const double rho = node_density(atmosphere, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
     const double V = std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp * cp / (Dn * Dn));
     const double K = gw[j] * rho * V / (Dn * Dn);
     const double iD2 = 1.0 / (Dn * Dn);
@@ -698,6 +727,7 @@ struct RateContext {
   const res::ResCoef* res_epoch;   ///< SGP4XP: the epoch class's terms at e_0, i_0, integrated (owned, xp_release)
   int32_t res_count;
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
+  const atm::Atmosphere* atmosphere;  ///< the drag's atmosphere (null: the theory's own, SPEC 3; atmosphere.inc)
 };
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
@@ -766,7 +796,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     for (int j = 0; j < 6; ++j) out[j] += tb[j];
   }
   if (ctx.agom > 0.0) srp_rates(y, fr, k, pf, ctx.agom, b, out);
-  if (ctx.bterm > 0.0) drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, out);
+  if (ctx.bterm > 0.0)
+    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out);
   return true;
 }
 
@@ -1014,6 +1045,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   const int8_t res = static_cast<int8_t>(res::band_of(n0));  // the epoch class (SPEC 6 bands)
   s.ctx.resonance = res;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
+  s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
   if (res != 0) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
     res::ResCoef* rc = static_cast<res::ResCoef*>(std::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));

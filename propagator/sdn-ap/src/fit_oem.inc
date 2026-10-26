@@ -74,6 +74,19 @@ inline double& tail_minutes() {
   return t;
 }
 
+/// Diagnostics of the fit-design study (sdnap_fit_epoch_diagnostic, sdnap_fit_jacobian_diagnostic); the defaults change
+/// nothing. epoch_placement: where the fitted set's epoch sits in the fit interval, 0 its first state (the module's), 1 the
+/// state nearest its middle, 2 its last state. jacobian_always: 1 takes the finite-difference columns (fit::run's fallback)
+/// in every fit, not only an eccentric orbit's.
+inline int& epoch_placement() {
+  static int p = 0;
+  return p;
+}
+inline int& jacobian_always() {
+  static int j = 0;
+  return j;
+}
+
 }  // namespace fitoem
 }  // namespace sdnap
 
@@ -240,6 +253,7 @@ static int fit_blocks() {
         fit::Result res{};
         int iterations = 0;
         double first_pass_rms = 0.0;
+        double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
       };
       // span_minutes ending at all[end_index]; the states after it held out (the validation tail)
       auto run_pass = [&](double span_minutes, Pass& P, uint32_t end_index) -> int {
@@ -261,7 +275,24 @@ static int fit_blocks() {
         uint32_t first = 0;
         while (first < n && fitoem::minutes_between(us_w, us_f, all[first].whole, all[first].frac) < (start_given ? 0.0 : -1e-6)) ++first;
         std::vector<double> t_fit, r_fit, t_out, r_out;
-        fitoem::Sample e0 = all[first < n ? first : 0];
+        // the epoch: the first state of the fit interval (diagnostic placements: the state nearest its middle, or its last)
+        const int placement = fitoem::epoch_placement();
+        uint32_t epoch_index = first < n ? first : 0;
+        if (placement != 0 && first < n) {
+          uint32_t last = first;
+          for (uint32_t k = first; k < n; ++k)
+            if (!held_out_rule || fitoem::minutes_between(ue_w, ue_f, all[k].whole, all[k].frac) <= 0.0) last = k;
+          epoch_index = last;
+          if (placement == 1) {
+            const double half = 0.5 * fitoem::minutes_between(all[first].whole, all[first].frac, all[last].whole, all[last].frac);
+            double best = 1e300;
+            for (uint32_t k = first; k <= last; ++k) {
+              const double d = std::fabs(fitoem::minutes_between(all[first].whole, all[first].frac, all[k].whole, all[k].frac) - half);
+              if (d < best) { best = d; epoch_index = k; }
+            }
+          }
+        }
+        fitoem::Sample e0 = all[epoch_index];
         e0.frac = std::round(e0.frac * 1e8) / 1e8;  // the two-line text's epoch resolution
         for (uint32_t k = first; k < n; ++k) {
           const double t = fitoem::minutes_between(e0.whole, e0.frac, all[k].whole, all[k].frac);
@@ -272,10 +303,27 @@ static int fit_blocks() {
           rr.insert(rr.end(), all[k].r, all[k].r + 3);
         }
         if (t_fit.size() < 8) return 1;
-        // starting set from the first state (velocity from the neighbors when absent)
+        double fit_begin_min = t_fit.front(), fit_end_min = t_fit.back();
+        if (placement != 0) {
+          // the samples ordered by their distance from the epoch, so that the arc grows about it in both directions
+          fit_begin_min = *std::min_element(t_fit.begin(), t_fit.end());
+          fit_end_min = *std::max_element(t_fit.begin(), t_fit.end());
+          std::vector<size_t> order(t_fit.size());
+          for (size_t k = 0; k < order.size(); ++k) order[k] = k;
+          std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return std::fabs(t_fit[a]) < std::fabs(t_fit[b]); });
+          std::vector<double> t2(t_fit.size()), r2(r_fit.size());
+          for (size_t k = 0; k < order.size(); ++k) {
+            t2[k] = t_fit[order[k]];
+            for (int j = 0; j < 3; ++j) r2[3 * k + j] = r_fit[3 * order[k] + j];
+          }
+          t_fit.swap(t2);
+          r_fit.swap(r2);
+        }
+        auto reach = [&](double t) { return placement != 0 ? std::fabs(t) : t; };
+        // starting set from the epoch state (velocity from the neighbors when absent)
         fitoem::Sample s0 = e0;
-        if (!s0.has_v && first + 1 < n) {
-          const fitoem::Sample& s1 = all[first + 1];
+        if (!s0.has_v && epoch_index + 1 < n) {
+          const fitoem::Sample& s1 = all[epoch_index + 1];
           const double dt = fitoem::minutes_between(s0.whole, s0.frac, s1.whole, s1.frac) * 60.0;
           for (int j = 0; j < 3; ++j) s0.v[j] = (s1.r[j] - s0.r[j]) / dt;
         }
@@ -291,7 +339,7 @@ static int fit_blocks() {
         int iterations = 0;
         const double period = kMinutesPerDay / row.mean_motion_rev_day;
         size_t short_n = 0;
-        while (short_n < t_fit.size() && t_fit[short_n] <= 2.0 * period) ++short_n;
+        while (short_n < t_fit.size() && reach(t_fit[short_n]) <= 2.0 * period) ++short_n;
         if (short_n >= 8 && short_n < t_fit.size()) {
           res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(short_n), opt);
           iterations += res.iterations;
@@ -305,7 +353,7 @@ static int fit_blocks() {
         // 48 h, some 2,000 km along-track), and the single jump stalled on a wrong minimum (fit RMS 7 to 9 km)
         for (double span = 6.0 * period;; span *= 3.0) {
           size_t k = 0;
-          while (k < t_fit.size() && t_fit[k] <= span) ++k;
+          while (k < t_fit.size() && reach(t_fit[k]) <= span) ++k;
           if (k >= t_fit.size()) break;
           if (k < 8) continue;
           ElementRow trial = row;
@@ -333,6 +381,8 @@ static int fit_blocks() {
         P.res = res;
         P.iterations = iterations;
         P.first_pass_rms = first_pass_rms;
+        P.fit_begin_min = fit_begin_min;
+        P.fit_end_min = fit_end_min;
         return 0;
       };
       // the default span: 48 h; 24 h for eccentric orbits (e > 0.5: the lane's THEMIS and Chandra windows lost
@@ -347,7 +397,7 @@ static int fit_blocks() {
         bool prev;
         explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
         ~FallbackScope() { fit::jacobian_fallback() = prev; }
-      } fallback_scope{eccentric};
+      } fallback_scope{eccentric || fitoem::jacobian_always() != 0};
       Pass chosen;
       {
         const int rc = run_pass(default_span, chosen, last_useable);
@@ -428,6 +478,7 @@ static int fit_blocks() {
       fit::Result& res = chosen.res;
       const int iterations = chosen.iterations;
       const double first_pass_rms = chosen.first_pass_rms;
+      const double fit_begin_min = chosen.fit_begin_min, fit_end_min = chosen.fit_end_min;
       // SGP4XP: the set the library reads, at the two-line text's digits searched on their lattice
       double best_pass_rms = std::fmin(first_pass_rms, res.rms_km);
       const fit::Result lat = fit::tle_lattice(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
@@ -437,10 +488,10 @@ static int fit_blocks() {
       // SPEC 12: the fit's covariance at its solution (at the two-line digits), its epoch image the $OMM's COVARIANCE
       cov::Set fit_cov;
       double ng_rate = 0.0;
-      const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), t_fit.back(), fit_cov, ng_rate);
+      const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, fit_cov, ng_rate);
       // held-out score
       double held_rms = 0.0, held_lead_days = 0.0;
-      for (double t : t_out) held_lead_days += (t - t_fit.back()) / kMinutesPerDay;
+      for (double t : t_out) held_lead_days += (t - fit_end_min) / kMinutesPerDay;
       if (!t_out.empty()) held_lead_days /= static_cast<double>(t_out.size());
       if (!t_out.empty()) {
         std::vector<double> rr(r_out.size());
@@ -467,7 +518,7 @@ static int fit_blocks() {
       std::snprintf(comment, sizeof comment,
                     "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s)%s",
                     static_cast<unsigned>(t_fit.size()), static_cast<unsigned>(t_out.size()), res.rms_km, res.max_km, held_rms,
-                    iterations, t_fit.back() / 60.0, start_given ? "USEABLE_START_TIME" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
+                    iterations, (fitoem::epoch_placement() == 0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
                     "");
       const auto s_epoch = fbb.CreateString(epoch_text);
       const auto s_comment = fbb.CreateString(comment);
@@ -560,9 +611,8 @@ static int fit_blocks() {
       {
         flatbuffers::FlatBufferBuilder ob(512);
         char start_text[48], end_text[48];
-        const fitoem::Sample& fs = all[first < n ? first : 0];
+        const fitoem::Sample& fs = all[first < n ? first : 0];  // the fit interval's first state
         oem::iso_text(fs.whole, fs.frac, 0.0, start_text, sizeof start_text);
-        const double fit_end_min = t_fit.back();
         oem::iso_text(e0.whole, e0.frac, fit_end_min, end_text, sizeof end_text);
         const auto o_start = ob.CreateString(start_text);
         const auto o_end = ob.CreateString(end_text);
@@ -580,7 +630,7 @@ static int fit_blocks() {
         d.add_METHOD(odMethod_BATCH_LEAST_SQUARES);
         d.add_METHOD_SOURCE(o_source);
         d.add_TIME_SPAN(fitoem::minutes_between(all[0].whole, all[0].frac, all[n - 1].whole, all[n - 1].frac) / kMinutesPerDay);
-        d.add_FIT_SPAN((t_fit.back() - t_fit.front()) / kMinutesPerDay);
+        d.add_FIT_SPAN((fit_end_min - fit_begin_min) / kMinutesPerDay);
         d.add_EFFECTIVE_FROM(o_from);
         d.add_WRMS(res.rms_km);
         d.add_FIRST_PASS_WRMS(first_pass_rms);
@@ -615,7 +665,29 @@ static int fit_blocks() {
 extern "C" int fit(void) {
   plugin_reset_output_state();
   if (const int rc = sdnap::pcf::read(sdnap::pcf::kFit)) return rc;
-  return fit_blocks();
+  if (const int rc = sdnap::atm::prepare()) return rc;  // SPEC 15: the drag atmosphere the call selects
+  sdnap::atm::Scope scope;
+  if (const int rc = fit_blocks()) return rc;
+  return sdnap::atm::coverage();
+}
+
+// Diagnostic (the fit-design study): where the fitted set's epoch sits in the fit interval, 0 its first state (the
+// module's), 1 the state nearest its middle, 2 its last state; < 0 leaves it. Returns the previous.
+SDNAP_EXPORT("sdnap_fit_epoch_diagnostic")
+int32_t sdnap_fit_epoch_diagnostic(int32_t placement) {
+  const int32_t previous = sdnap::fitoem::epoch_placement();
+  if (placement >= 0 && placement <= 2) sdnap::fitoem::epoch_placement() = placement;
+  return previous;
+}
+
+// Diagnostic (the fit-design study): 1 takes the element and drag Jacobian columns by finite differences of the
+// theory where the analytic ones stop lowering the cost, in every fit (0, the default: eccentric orbits only); < 0
+// leaves it. Returns the previous.
+SDNAP_EXPORT("sdnap_fit_jacobian_diagnostic")
+int32_t sdnap_fit_jacobian_diagnostic(int32_t always) {
+  const int32_t previous = sdnap::fitoem::jacobian_always();
+  if (always == 0 || always == 1) sdnap::fitoem::jacobian_always() = always;
+  return previous;
 }
 
 // Diagnostic: the span rule's validation tail (minutes; <= 0 leaves it); returns the previous.

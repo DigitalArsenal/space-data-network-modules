@@ -184,7 +184,7 @@ const commentOf = (r) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.f
   const refusals = [
     [{ theory: "FFM" }, "THEORY"],
     [{ theory: 3 }, "THEORY"],  // the number of the removed theory
-    [{ theory: "SGP4XP", forces: { EPHEMERIS_SOURCE: "", ENABLE_DRAG: true } }, "FORCES.ENABLE_DRAG"],
+    [{ theory: "SGP4XP", forces: { EPHEMERIS_SOURCE: "", AREA_M2: 3 } }, "FORCES.AREA_M2"],  // FORCES selects only the drag atmosphere (SPEC 15)
   ];
   for (const [options, field] of refusals) {
     const r = await fitCall(options, calm);

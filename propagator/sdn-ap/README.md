@@ -58,8 +58,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   defaults) reads as an absent one; a field set to a value the module cannot apply is refused by name
   (configuration-refused, "TABLE.FIELD: why"; configuration-missing without one). THEORY: propagate and maneuver read
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
-  KEPLER are refused. FORCES carries only an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
-  averaged theories apply their own forces. INTEGRATOR is refused
+  KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
+  averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
+  below), and any other FORCES field is refused by name. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states) apply with their documented ranges.
 - Invoke surface (SDS buffers plain or size-prefixed): `ingest_omm` takes `$OMM` records (MEAN_ELEMENT_THEORY SGP4 or
@@ -88,7 +89,49 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 - Third-party code, read from the open modules repository (this repository vendors nothing) and pinned by SHA-256
   in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.txt` records the path, commits and
   hashes): ERFA (BSD-3-Clause, derived with permission from IAU SOFA; license carried in `LICENSES/ERFA.txt` and
-  `dist/LICENSES/ERFA.txt`).
+  `dist/LICENSES/ERFA.txt`); NRLMSISE-00, the public-domain C port in `third_party/nrlmsise00` (the files at modules
+  fe5e4ca0; propagator/ffm, analysis/density-calibration and analysis/od compile the same files, and a change there
+  is taken here by updating the pin).
+
+## Drag atmosphere (SPEC 15; `fit` and `propagate`)
+
+SGP4XP's drag is section 3's (Jacchia 1970 on the generic flux model) unless the call's `$PCF` FORCES selects another;
+with no FORCES field off its default and no 'space_weather' or 'density_correction' frame the outputs are SGP4XP's bit
+for bit (the conformance E2E reproduces XP 72dcf6005046 and the control 9ecfafcd9027 on this build). The fit estimates
+BTERM and AGOM the same way under every atmosphere.
+
+| FORCES | Inputs | Drag density |
+| --- | --- | --- |
+| (none) | | Jacchia 1970, generic flux model (SPEC 3) |
+| WEATHER_SOURCE RECORDS (or UNSPECIFIED with rows) | 'space_weather' `$SPW` rows | Jacchia 1970 on measured F10.7, F10.7a and Ap |
+| ENABLE_DRAG true, ATMOSPHERE_MODEL NRLMSISE00, WEATHER_SOURCE RECORDS | rows | NRLMSISE-00 |
+| as above, DENSITY_CORRECTION DCA_COMMON_MODE | rows, one 'density_correction' `$DCL` | NRLMSISE-00 x exp(s(t)), the open-DCA common mode |
+
+The drivers on UTC day d: F10.7 of day d - 1, the 81-day centered mean and Ap of day d (propagator/ffm's convention),
+the last row holding past the rows (WEATHER_EXTENSION UNSPECIFIED or HOLD_LAST); the rows must begin by the day before
+the call's earliest day. s(t) is linear between the `$DCL`'s UTC nodes and held outside them (the producer's forecast
+nodes carry its 48 h decay). The ABI exports and the epoch store keep section 3. A set fitted under an atmosphere
+describes the orbit under that atmosphere and carries no mark of it.
+
+`test/atmosphere.e2e.mjs` (2026-10-26, this build):
+- the default inert: no FORCES, FORCES written at every default, the atmosphere fields at their defaults: one set of
+  bytes for propagate and for fit;
+- NRLMSISE-00 at 240 drag-node points (120-980 km, 8 days of rows that move every day): analysis/density-calibration
+  `evaluate` at the node's own geodetic point within 1.2e-9 relative, the drivers of the right days at every point;
+  `drag_work` at the point carried to GCRF (ERFA's Earth-fixed axes) within 7.9e-5 (the two geometries);
+- the open DCA: s = 0 gives the NRLMSISE-00 bytes; s = ln 2 gives the NRLMSISE-00 states with BTERM doubled, the same
+  numbers over 3 days;
+- a GPS-like set: the same bytes under every atmosphere (1e-20 kg/m^3 above 2500 km);
+- 15 refusals by name.
+
+Cost (owner Mac, browser host, 20 sets at 400 km, 7 days on a 1 h grid): 0.17 ms per object-day for section 3 and for
+Jacchia 1970 on rows, 0.91 ms with NRLMSISE-00.
+
+Fit diagnostics (the fit-design study, not configuration): `sdnap_fit_epoch_diagnostic(p)` puts the fitted set's
+epoch at the fit interval's first state (0, the module's), the state nearest its middle (1) or its last state (2);
+`sdnap_fit_jacobian_diagnostic(1)` takes the finite-difference element and drag columns wherever the analytic ones stop
+lowering the cost, in every fit (0: eccentric orbits only). `sdnap_atmosphere_probe` gives a drag node's density,
+geodetic point and drivers at a TEME position.
 
 ## Maneuvers (DESIGN 5.1; method `maneuver`)
 
@@ -227,5 +270,7 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.
-- `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `maneuver` and `propagate_epochs`
-  through the browser host and native WasmEdge 0.16.4: identical bytes.
+- `test/atmosphere.e2e.mjs`: the drag atmosphere of SPEC 15 (above).
+- `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `maneuver`, `propagate_epochs`, and
+  `propagate` and `fit` under NRLMSISE-00 times the open DCA (SPEC 15), through the browser host and native WasmEdge
+  0.16.4: identical bytes.

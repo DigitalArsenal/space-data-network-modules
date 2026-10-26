@@ -240,6 +240,8 @@ inline int push_oem(flatbuffers::FlatBufferBuilder& fbb, std::vector<flatbuffers
 extern "C" int propagate(void) {
   plugin_reset_output_state();
   if (const int rc = sdnap::pcf::read(sdnap::pcf::kPropagate)) return rc;
+  if (const int rc = sdnap::atm::prepare()) return rc;  // SPEC 15: the drag atmosphere the call selects
+  sdnap::atm::Scope scope;
   std::vector<sdnap::oem::Grid> grids;
   if (const int rc = sdnap::oem::read_grids(grids)) return rc;
   if (grids.empty()) grids.push_back(sdnap::oem::default_grid());
@@ -453,5 +455,5 @@ extern "C" int propagate(void) {
     plugin_set_error("missing-omm", "An 'omm' input frame is required.");
     return 3;
   }
-  return 0;
+  return sdnap::atm::coverage();
 }

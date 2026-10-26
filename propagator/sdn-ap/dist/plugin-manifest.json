@@ -49,7 +49,7 @@
     {
       "methodId": "propagate",
       "displayName": "Propagate OMM to OEM",
-      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP or SGP4), plain or size-prefixed, to one $OEM, km and km/s, UTC, on the grid of an optional 'grid' $OEM: per grid block either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day later, 60 s), in the block's axes (TEME by default; GCRF or EME2000), one $OEM block per grid block; the grid's span decides how far a set runs, at most 500,000 states per request. Refused by name: missing-omm, unsupported-center, invalid-omm, invalid-grid, bad-grid, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed.",
+      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP or SGP4), plain or size-prefixed, to one $OEM, km and km/s, UTC, on the grid of an optional 'grid' $OEM: per grid block either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day later, 60 s), in the block's axes (TEME by default; GCRF or EME2000), one $OEM block per grid block; the grid's span decides how far a set runs, at most 500,000 states per request. Refused by name: missing-omm, unsupported-center, invalid-omm, invalid-grid, bad-grid, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed. FORCES selects SGP4XP's drag atmosphere (SPEC 15): ENABLE_DRAG false (the default) keeps the theory's own Jacchia 1970, its drivers the generic flux model or, from 'space_weather' $SPW rows (WEATHER_SOURCE RECORDS, or UNSPECIFIED with rows), measured F10.7, F10.7a and Ap; ENABLE_DRAG true with ATMOSPHERE_MODEL NRLMSISE00 takes NRLMSISE-00 on the rows; DENSITY_CORRECTION DCA_COMMON_MODE multiplies it by exp(s(t)) of a 'density_correction' $DCL; WEATHER_EXTENSION UNSPECIFIED or HOLD_LAST; any other FORCES field is refused by name. Refused by name too: space-weather-missing, invalid-space-weather, space-weather-out-of-range, density-correction-missing, density-correction-unselected, invalid-density-correction.",
       "inputPorts": [
         {
           "portId": "omm",
@@ -107,6 +107,46 @@
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space_weather",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects (WEATHER_SOURCE RECORDS, or UNSPECIFIED with rows; NRLMSISE-00 needs them): on UTC day d F10.7 is the observed flux of day d - 1, F10.7a the 81-day centered mean and Ap the daily Ap of day d; past the last row it holds (HOLD_LAST); the rows begin by the day before the call's earliest day.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw-rows",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density_correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE: NRLMSISE-00 density times exp(s(t)), s linear in UTC between the nodes and held at the end values outside them.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl-open-dca",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
                 }
               ]
             }
@@ -284,7 +324,7 @@
     {
       "methodId": "fit",
       "displayName": "Fit OEM to SGP4XP elements",
-      "description": "Fits an element set to each $OEM ephemeris block; the configuration's THEORY is UNSPECIFIED or SGP4XP: the six mean elements, BTERM and AGOM of an SGP4XP set (Levenberg-Marquardt on TEME position residuals with analytic Jacobians for the elements and BTERM and a theory difference for AGOM, weak priors on BTERM and AGOM about zero), rounded to the two-line text's digits and searched on their lattice. The arc grown from two revolutions by threes to the fit interval; the interval ends at the block's USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS before the data (later states held out and scored) and starts at USEABLE_START_TIME; without it the span rule (DESIGN 2e.3, $PCF FIT): FIT.DEFAULT_SPAN_HOURS (48 h; ECCENTRIC_DEFAULT_SPAN_HOURS 24 h above ECCENTRICITY_THRESHOLD 0.5), each candidate span fitted to the data before the latest TAIL_HOURS and scored on that tail, a longer one kept only when its tail error is within EXTENSION_MARGIN (0.9; eccentric 0.7) of the best shorter one's; a fit RMS beyond FIT.IMPLAUSIBLE_RMS_KM (100 km) is refused (fit-implausible). The $OMM carries MEAN_ELEMENT_THEORY SGP4XP, ORIGINATOR (the $OEM's), the block OBJECT's NORAD_CAT_ID, OBJECT_ID and OBJECT_NAME, the fit and held-out statistics in its COMMENT, its COVARIANCE and USER_DEFINED_SDNAP_COV_x rows (SPEC 12); a $OBD per block carries the determination. The block's frame is read from its REFERENCE_FRAME, never assumed: TEME, GCRF or ICRF, EME2000 or J2000 and Earth-fixed (ITRF, ECEF, WGS84), time system UTC; a block centered elsewhere than the Earth is refused (unsupported-center). Plain or size-prefixed $OEM. Refused by name: configuration-missing, invalid-configuration, configuration-refused, missing-oem, invalid-oem, unsupported-center, reference-frame-undeclared, reference-frame-conflict, unsupported-frame, unsupported-time-system, too-few-states, fit-failed, fit-implausible.",
+      "description": "Fits an element set to each $OEM ephemeris block; the configuration's THEORY is UNSPECIFIED or SGP4XP: the six mean elements, BTERM and AGOM of an SGP4XP set (Levenberg-Marquardt on TEME position residuals with analytic Jacobians for the elements and BTERM and a theory difference for AGOM, weak priors on BTERM and AGOM about zero), rounded to the two-line text's digits and searched on their lattice. The arc grown from two revolutions by threes to the fit interval; the interval ends at the block's USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS before the data (later states held out and scored) and starts at USEABLE_START_TIME; without it the span rule (DESIGN 2e.3, $PCF FIT): FIT.DEFAULT_SPAN_HOURS (48 h; ECCENTRIC_DEFAULT_SPAN_HOURS 24 h above ECCENTRICITY_THRESHOLD 0.5), each candidate span fitted to the data before the latest TAIL_HOURS and scored on that tail, a longer one kept only when its tail error is within EXTENSION_MARGIN (0.9; eccentric 0.7) of the best shorter one's; a fit RMS beyond FIT.IMPLAUSIBLE_RMS_KM (100 km) is refused (fit-implausible). The $OMM carries MEAN_ELEMENT_THEORY SGP4XP, ORIGINATOR (the $OEM's), the block OBJECT's NORAD_CAT_ID, OBJECT_ID and OBJECT_NAME, the fit and held-out statistics in its COMMENT, its COVARIANCE and USER_DEFINED_SDNAP_COV_x rows (SPEC 12); a $OBD per block carries the determination. The block's frame is read from its REFERENCE_FRAME, never assumed: TEME, GCRF or ICRF, EME2000 or J2000 and Earth-fixed (ITRF, ECEF, WGS84), time system UTC; a block centered elsewhere than the Earth is refused (unsupported-center). Plain or size-prefixed $OEM. Refused by name: configuration-missing, invalid-configuration, configuration-refused, missing-oem, invalid-oem, unsupported-center, reference-frame-undeclared, reference-frame-conflict, unsupported-frame, unsupported-time-system, too-few-states, fit-failed, fit-implausible. FORCES selects SGP4XP's drag atmosphere (SPEC 15): ENABLE_DRAG false (the default) keeps the theory's own Jacchia 1970, its drivers the generic flux model or, from 'space_weather' $SPW rows (WEATHER_SOURCE RECORDS, or UNSPECIFIED with rows), measured F10.7, F10.7a and Ap; ENABLE_DRAG true with ATMOSPHERE_MODEL NRLMSISE00 takes NRLMSISE-00 on the rows; DENSITY_CORRECTION DCA_COMMON_MODE multiplies it by exp(s(t)) of a 'density_correction' $DCL; WEATHER_EXTENSION UNSPECIFIED or HOLD_LAST; any other FORCES field is refused by name. Refused by name too: space-weather-missing, invalid-space-weather, space-weather-out-of-range, density-correction-missing, density-correction-unselected, invalid-density-correction.",
       "inputPorts": [
         {
           "portId": "ephemeris",
@@ -324,6 +364,46 @@
                 }
               ],
               "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space_weather",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects (WEATHER_SOURCE RECORDS, or UNSPECIFIED with rows; NRLMSISE-00 needs them): on UTC day d F10.7 is the observed flux of day d - 1, F10.7a the 81-day centered mean and Ap the daily Ap of day d; past the last row it holds (HOLD_LAST); the rows begin by the day before the call's earliest day.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw-rows",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density_correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE: NRLMSISE-00 density times exp(s(t)), s linear in UTC between the nodes and held at the end values outside them.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl-open-dca",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
             }
           ]
         }

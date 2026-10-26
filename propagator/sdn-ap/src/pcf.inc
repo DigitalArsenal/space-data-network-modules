@@ -3,6 +3,10 @@
 // with options. A method reads THEORY and its own tables:
 //   propagate, maneuver   OUTPUT, FORCES, INTEGRATOR, EVENTS
 //   fit                   FIT, FORCES, INTEGRATOR
+// FORCES on fit and propagate selects SGP4XP's drag atmosphere (SPEC 15,
+// atmosphere.inc): ENABLE_DRAG, ATMOSPHERE_MODEL, WEATHER_SOURCE,
+// WEATHER_EXTENSION, DENSITY_CORRECTION and its relaxation; every other FORCES
+// field, and these on the other methods, is refused by name.
 //   load_epochs, propagate_epochs  EPOCH_STORE and propagate's tables
 // and leaves the other tables to the methods that read them. Fields left unset
 // take the defaults schema/PCF/main.fbs documents (each equal to this module's
@@ -19,7 +23,7 @@ inline double& tail_minutes();
 
 namespace pcf {
 
-enum Method : uint32_t { kPropagate, kManeuver, kFit };
+enum Method : uint32_t { kPropagate, kManeuver, kFit, kEpochs };  ///< kEpochs: load_epochs, propagate_epochs (propagate's tables)
 
 /// One call's options, every one at its documented default.
 struct Options {
@@ -35,6 +39,12 @@ struct Options {
   double eccentric_maximum_period_h = 36.0, implausible_rms_km = 100.0;
   bool drag_prior_set = false, srp_prior_set = false;
   double drag_prior_mean = 0.0, drag_prior_sigma = 0.0, srp_prior_mean = 0.0, srp_prior_sigma = 0.05;
+  // FORCES (fit, propagate): SGP4XP's drag atmosphere (SPEC 15). ENABLE_DRAG false keeps the theory's own Jacchia
+  // 1970; true selects ATMOSPHERE_MODEL (NRLMSISE00 only). The drivers: WEATHER_SOURCE UNSPECIFIED infers them ('space_weather'
+  // rows when given, else the theory's generic flux model), RECORDS needs the rows.
+  bool msis = false;
+  int weather_source = pcfWeatherSource_UNSPECIFIED;
+  bool dca = false;  ///< DENSITY_CORRECTION DCA_COMMON_MODE ('density_correction' $DCL)
   // OUTPUT
   int output_frame = pcfOutputFrame_UNSPECIFIED;
   double output_step_s = 60.0;
@@ -108,7 +118,8 @@ enum Table : uint32_t { kTFit = 1, kTOutput = 4, kTForces = 8, kTIntegrator = 16
 inline uint32_t tables_of(Method m) {
   switch (m) {
     case kPropagate:
-    case kManeuver: return kTOutput | kTForces | kTIntegrator | kTEvents;
+    case kManeuver:
+    case kEpochs: return kTOutput | kTForces | kTIntegrator | kTEvents;
     case kFit: return kTFit | kTForces | kTIntegrator;
   }
   return 0;
@@ -194,21 +205,58 @@ inline int read_output(const PCFOutput* p, Options& o) {
   return 0;
 }
 
-/// FORCES for the averaged theories: their forces are the theory's own; a FORCES table carries only the required
-/// EPHEMERIS_SOURCE, empty (the theory's own analytic Sun and Moon series). A field away from its default, the
-/// density-correction relaxation (a theory this module does not carry) included, is refused by name.
-inline int read_forces(const PCFForceModel* f) {
+/// The FORCES fields that select SGP4XP's drag atmosphere on fit and propagate (SPEC 15).
+inline bool atmosphere_field(uint16_t vt) {
+  return vt == PCFForceModel::VT_ENABLE_DRAG || vt == PCFForceModel::VT_ATMOSPHERE_MODEL || vt == PCFForceModel::VT_WEATHER_SOURCE ||
+         vt == PCFForceModel::VT_WEATHER_EXTENSION || vt == PCFForceModel::VT_DENSITY_CORRECTION ||
+         vt == PCFForceModel::VT_DENSITY_CORRECTION_RELAXATION_HOURS || vt == PCFForceModel::VT_HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
+}
+
+/// SPEC 15: the drag atmosphere of a fit or propagate.
+inline int read_atmosphere(const PCFForceModel* f, Options& o) {
+  if (f->ATMOSPHERE_MODEL() != pcfAtmosphereFamily_NRLMSISE00)
+    return refuse("FORCES.ATMOSPHERE_MODEL", "SGP4XP's FORCES atmosphere is NRLMSISE00 with ENABLE_DRAG true; ENABLE_DRAG false keeps the theory's own Jacchia 1970");
+  o.msis = f->ENABLE_DRAG();
+  switch (f->WEATHER_SOURCE()) {
+    case pcfWeatherSource_UNSPECIFIED:
+    case pcfWeatherSource_RECORDS: o.weather_source = f->WEATHER_SOURCE(); break;
+    default: return refuse("FORCES.WEATHER_SOURCE", "this module reads daily $SPW rows ('space_weather': RECORDS, or UNSPECIFIED with the rows)");
+  }
+  switch (f->WEATHER_EXTENSION()) {
+    case pcfWeatherExtension_UNSPECIFIED:
+    case pcfWeatherExtension_HOLD_LAST: break;
+    default: return refuse("FORCES.WEATHER_EXTENSION", "past the last row this module holds it (HOLD_LAST)");
+  }
+  if (f->DENSITY_CORRECTION() == pcfDensityCorrection_DCA_COMMON_MODE) {
+    if (!o.msis) return refuse("FORCES.DENSITY_CORRECTION", "the open-DCA $DCL corrects NRLMSISE-00: select it with ENABLE_DRAG true");
+    o.dca = true;
+  } else if (f->DENSITY_CORRECTION() != pcfDensityCorrection_NONE) {
+    return refuse("FORCES.DENSITY_CORRECTION", "NONE or DCA_COMMON_MODE");
+  }
+  const bool has_relax = f->HAS_DENSITY_CORRECTION_RELAXATION_HOURS();
+  if (!has_relax && has(f, PCFForceModel::VT_DENSITY_CORRECTION_RELAXATION_HOURS) && f->DENSITY_CORRECTION_RELAXATION_HOURS() != 0.0)
+    return refuse("FORCES.DENSITY_CORRECTION_RELAXATION_HOURS", "set with HAS_DENSITY_CORRECTION_RELAXATION_HOURS true");
+  if (has_relax && f->DENSITY_CORRECTION_RELAXATION_HOURS() != 0.0)
+    return refuse("FORCES.DENSITY_CORRECTION_RELAXATION_HOURS", "the $DCL's forecast nodes carry the decay; this module holds the last node (0)");
+  return 0;
+}
+
+/// FORCES for the averaged theories: their forces are the theory's own; a FORCES table carries the required
+/// EPHEMERIS_SOURCE, empty (the theory's own analytic Sun and Moon series), and on fit and propagate (`atmosphere`)
+/// the drag atmosphere's fields (SPEC 15). Any other field away from its default is refused by name.
+inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
   if (f == nullptr) return 0;
   for (size_t k = 0; k < sizeof kForceFields / sizeof kForceFields[0]; ++k) {
     const uint16_t vt = static_cast<uint16_t>(4 + 2 * k);
-    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || !off_default(raw(f), vt, kForceFields[k])) continue;
+    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || (atmosphere && atmosphere_field(vt)) || !off_default(raw(f), vt, kForceFields[k])) continue;
     char name[96];
     std::snprintf(name, sizeof name, "FORCES.%s", kForceFields[k].name);
-    return refuse(name, "the averaged theories (SGP4XP) apply their own forces; FORCES carries no field of its own");
+    return refuse(name, atmosphere ? "SGP4XP applies its own forces; FORCES selects only its drag atmosphere (ENABLE_DRAG, ATMOSPHERE_MODEL, WEATHER_SOURCE, WEATHER_EXTENSION, DENSITY_CORRECTION)"
+                                   : "the averaged theories (SGP4XP) apply their own forces here; fit and propagate select the drag atmosphere");
   }
   if (f->EPHEMERIS_SOURCE() != nullptr && f->EPHEMERIS_SOURCE()->size() != 0)
     return refuse("FORCES.EPHEMERIS_SOURCE", "the averaged theories read their own analytic Sun and Moon series (leave it empty)");
-  return 0;
+  return atmosphere ? read_atmosphere(f, o) : 0;
 }
 
 /// Reads the method's `configuration` ($PCF): 0 and the options() set, or 3 with the error set.
@@ -248,6 +296,7 @@ inline int read(Method method) {
   switch (method) {
     case kPropagate:
     case kManeuver:
+    case kEpochs:
       if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4 && o.theory != pcfTheory_SGP4XP)
         return refuse("THEORY", "this module propagates SGP4 and SGP4XP sets (UNSPECIFIED: each set's own)");
       break;
@@ -264,7 +313,7 @@ inline int read(Method method) {
   if (tables & kTOutput)
     if (const int rc = read_output(c->OUTPUT(), o)) return rc;
   if (tables & kTForces)
-    if (const int rc = read_forces(c->FORCES())) return rc;
+    if (const int rc = read_forces(c->FORCES(), method == kPropagate || method == kFit, o)) return rc;
   return 0;
 }
 

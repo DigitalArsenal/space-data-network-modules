@@ -1624,6 +1624,50 @@ selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixe
 
 ---
 
+## 15. Selectable drag atmosphere (side B's option, outside the SGP4-XP specification)
+
+**15.1 Selection.** `fit` and `propagate` read it from their $PCF FORCES (SDS 1.271.0); every other method, the ABI
+exports and the epoch store keep section 3. With no FORCES field away from its default and no 'space_weather' or
+'density_correction' frame, the drag is section 3 exactly: the default is SGP4XP.
+
+| FORCES | Density at the drag nodes of 3.4 |
+| --- | --- |
+| ENABLE_DRAG false (default), no rows | section 3: Jacchia 1970 on the generic flux model (3.1) |
+| ENABLE_DRAG false, WEATHER_SOURCE RECORDS (or UNSPECIFIED with rows) | 3.2 and 3.3 with F, F-bar and Ap from the rows (15.2) |
+| ENABLE_DRAG true, ATMOSPHERE_MODEL NRLMSISE00, rows | NRLMSISE-00 (15.3) |
+| as above, DENSITY_CORRECTION DCA_COMMON_MODE, a $DCL | NRLMSISE-00 times exp(s(t)) (15.4) |
+
+Refused by name: another ATMOSPHERE_MODEL, WEATHER_SOURCE CONSTANT and a WEATHER table, WEATHER_EXTENSION REFUSE or
+FORECAST_CHAIN (UNSPECIFIED and HOLD_LAST hold the last row), DCA_COMMON_MODE without ENABLE_DRAG, a non-zero
+DENSITY_CORRECTION_RELAXATION_HOURS (the $DCL's forecast nodes carry the decay), any other FORCES field; rows that NRLMSISE-00
+or RECORDS needs and that are absent (space-weather-missing); a $DCL without DCA_COMMON_MODE or the reverse
+(density-correction-unselected, density-correction-missing); malformed rows or $DCL (invalid-space-weather,
+invalid-density-correction); a call that evaluates a day whose previous day precedes the first row
+(space-weather-out-of-range). Every set initialized during the call carries the call's atmosphere.
+
+**15.2 Drivers.** $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain or size-prefixed end to end, one per
+UTC day (a later frame's row of a day replaces an earlier one). At d50 on UTC day d (MJD = floor(d50 + 33281)): F10.7
+is F107_OBS of day d - 1, F10.7a F107_OBS_CENTER81 of day d, Ap AP_AVG of day d, each from the last row at or before
+its day (past the last row that row holds). This is NRLMSISE-00's daily-Ap convention as propagator/ffm and
+analysis/density-calibration read the rows; for Jacchia 1970 the three are 3.2's F, F-bar and Ap.
+
+**15.3 NRLMSISE-00.** gtd7d of the public-domain C port in third_party/nrlmsise00 (Picone, Hedin, Drob and Aikin 2002),
+every switch 1 but the output units (the daily-Ap form), the total mass density with anomalous oxygen, at the node's
+geodetic latitude phi and height h of 3.4 (below 10 km, 10 km, as 3.3), its longitude alpha - theta_g (alpha the
+node's TEME right ascension, theta_g = theta_g0 + omega_E t, 1.2), the UTC day of year and seconds of d50, and the
+local solar time UT + longitude / 15. Above 2500 km, 1e-20 kg/m^3 as 3.3. NRLMSISE-00 holds file-static state:
+it is evaluated on the calling thread only.
+
+**15.4 Open DCA.** A $DCL as FFM reads the open-DCA product: Solved, ATMOSPHERE NRLMSIS00E, CORRECTION LogDensityNodes
+with one finite NODE_LOG_DENSITY_SCALE_DIMENSIONLESS per strictly increasing NODE_TIMES_MS (UTC). s(t) is linear
+between nodes and held at the end values outside them; the density is NRLMSISE-00 times exp(s(t)) at every node.
+
+**15.5 Fit.** `fit` estimates BTERM and AGOM as with section 3 (its Jacobian's drag column is the theory's own n-dot
+per unit BTERM, under the call's atmosphere). A set fitted under an atmosphere describes the orbit under that
+atmosphere; it carries no mark of it.
+
+---
+
 ## References
 
 - Brouwer, D. (1959). Solution of the problem of artificial satellite theory without drag. AJ 64, 378-397.
@@ -1652,6 +1696,8 @@ selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixe
 - Kaula, W. M. (1966). Theory of Satellite Geodesy. Blaisdell.
 - Abramowitz, M., Stegun, I. A. (1964). Handbook of Mathematical Functions, table 25.4 (Gauss-Legendre).
 - Escobal, P. R. (1965). Methods of Orbit Determination. Wiley (shadow function, section 5.3).
+- Picone, J. M., Hedin, A. E., Drob, D. P., Aikin, A. C. (2002). NRLMSISE-00 empirical model of the atmosphere:
+  statistical comparisons and scientific issues. JGR 107(A12), 1468.
 - Montenbruck, O., Gill, E. (2000). Satellite Orbits. Springer.
 - The Astronomical Almanac, section C (Sun) and D (Moon), low-precision formulas.
 - Meeus, J. (1998). Astronomical Algorithms, 2nd ed., chapter 25. Brouwer, D., Clemence, G. M. (1961). Methods of

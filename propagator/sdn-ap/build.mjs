@@ -30,13 +30,13 @@ const standards = await import("space-data-module-sdk/standards");
 const { FlatcRunner } = await import("flatc-wasm");
 const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.json"));
 
-// C++ bindings of $OEM (propagate's output, fit's input), $OMM (fit's output)
-// and the schemas they include, generated from the pinned SDS package in
-// dependency order.
+// C++ bindings of $OEM (propagate's output, fit's input), $OMM (fit's output),
+// $SPW and $DCL (the drag atmosphere's inputs, SPEC 15) and the schemas they
+// include, generated from the pinned SDS package in dependency order.
 async function oemBindings() {
   const files = {};
   const deps = new Map();
-  const pending = ["OEM", "OMM", "PCF", "OBD", "MNV"];
+  const pending = ["OEM", "OMM", "PCF", "OBD", "MNV", "SPW", "DCL"];
   while (pending.length) {
     const code = pending.pop();
     if (deps.has(code)) continue;
@@ -52,7 +52,7 @@ async function oemBindings() {
     for (const dep of deps.get(code)) visit(dep);
     order.push(code);
   };
-  for (const code of ["OEM", "OMM", "PCF", "OBD", "MNV"]) visit(code);
+  for (const code of ["OEM", "OMM", "PCF", "OBD", "MNV", "SPW", "DCL"]) visit(code);
   const flatc = await FlatcRunner.init();
   return order
     .map((code) => {
@@ -101,7 +101,46 @@ async function ommSlots() {
   return lines.join("\n");
 }
 
-const provenance = { erfa: null, table6: null };
+const provenance = { nrlmsise00: null, erfa: null, table6: null };
+// NRLMSISE-00 (the drag atmosphere's NRLMSISE00 option, SPEC 15): the public-domain Brodowski C port the modules
+// repository carries in third_party/nrlmsise00 (propagator/ffm, analysis/density-calibration and analysis/od compile
+// the same files), read in place, never edited here, and PINNED: every file must match the SHA-256 recorded here (the
+// copy at modules commit fe5e4ca0), or the build fails; a change there is taken by updating this pin. Compiled as
+// analysis/density-calibration compiles it: one C++ block in namespace nrlmsise00, the C standard headers included
+// once before it, the malloc in spline() cast and ptm declared with the length it is defined with. The path and the
+// hashes are written to dist/build-provenance.txt.
+const NRLMSISE_PIN = Object.freeze({
+  modulesCommit: "fe5e4ca0eb543da0250c87fb48b689824d66b5cb",
+  files: Object.freeze({
+    "nrlmsise-00.h": "22eb2ced40595717ef0b73044995e5613aabc8755ed6c43642bfd74335b55535",
+    "nrlmsise-00_data.c": "d0b3022f3c3e7ffdf703cc0e0d02339dfee01c0bf1520b29c68d5f4afd8784d5",
+    "nrlmsise-00.c": "c25e4a36a6475f0eee6802939d1425384be23d49b0e945a77fc0316bc9f0a699",
+  }),
+});
+async function nrlmsise() {
+  const modules = process.env.SPACE_DATA_NETWORK_MODULES_ROOT ?? modulesRoot;
+  const dir = process.env.SDNAP_NRLMSISE_DIR ?? path.join(modules, "third_party", "nrlmsise00");
+  const text = {};
+  for (const [name, want] of Object.entries(NRLMSISE_PIN.files)) {
+    const bytes = await fs.readFile(path.join(dir, name));
+    const got = createHash("sha256").update(bytes).digest("hex");
+    if (got !== want) throw new Error(`NRLMSISE-00 pin: ${path.join(dir, name)} has sha256 ${got}, expected ${want} (modules ${NRLMSISE_PIN.modulesCommit})`);
+    text[name] = bytes.toString("latin1");
+  }
+  let checkoutHead = null;
+  try {
+    checkoutHead = execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  } catch {
+    checkoutHead = null;
+  }
+  provenance.nrlmsise00 = { source: shownPath(dir), pinnedModulesCommit: NRLMSISE_PIN.modulesCommit, checkoutHead, sha256: { ...NRLMSISE_PIN.files } };
+  const mallocCast = "u=malloc(sizeof(double)*(unsigned int)n);";
+  const ptmExtern = "extern double ptm[10];";
+  const model = text["nrlmsise-00.c"].replace('#include "nrlmsise-00.h"', "").replace(/#include <(math|stdio|stdlib)\.h>/g, "");
+  if (!model.includes(mallocCast) || !model.includes(ptmExtern)) throw new Error("nrlmsise-00.c no longer has the malloc call and the ptm declaration this build adapts");
+  return ["#include <math.h>", "#include <stdio.h>", "#include <stdlib.h>", "namespace nrlmsise00 {", text["nrlmsise-00.h"], text["nrlmsise-00_data.c"],
+    model.replace(mallocCast, "u=(double*)malloc(sizeof(double)*(unsigned int)n);").replace(ptmExtern, "extern double ptm[50];"), "}"].join("\n");
+}
 
 // ERFA (BSD-3-Clause, derived with permission from IAU SOFA; fit's GCRF input frame, IAU 2006/2000A), read from the
 // open modules repository's vendored copy (higherpop/third_party/erfa, the copy foundation/frames amalgamates) and
@@ -246,6 +285,7 @@ const sourceCode = inlined
   .replace('#include "orbpro/orbpro_propagator_abi.h"', abiHeader)
   .replace('#include "omm_slots.h"', await ommSlots())
   .replace('#include "oem_generated.h"', await oemBindings())
+  .replace('#include "nrlmsise00.h"', await nrlmsise())
   .replace('#include "erfa_pinned.h"', await erfa());
 
 const buildRoot = path.join(packageRoot, ".build");

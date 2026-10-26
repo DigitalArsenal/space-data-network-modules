@@ -15,12 +15,16 @@
 //   model.inc      SGP4 ingest and propagation of one object; checkpoints
 //   fastmath.inc   sincos from one range reduction
 //   drag.inc       SGP4XP drag: flux model, J70 temperature and density table
+//   atmosphere.inc SGP4XP drag's selectable atmosphere: measured drivers,
+//                  NRLMSISE-00, the open-DCA correction (SPEC 15)
 //   xp_theory.inc  SGP4XP: the SPEC.md semi-analytic theory, its node grid
 //   store.inc      the element store, frames
 //   pool.inc       the batch thread pool
 //   fit.inc        fit: ephemeris to element set (Levenberg-Marquardt)
 //   abi.inc        the propagator ABI and the sdnap_* batch entries
 //   omm.inc        the ingest_omm invoke method ($OMM FlatBuffers)
+//   pcf.inc        the $PCF configuration of the invoke methods
+//   atmosphere_inputs.inc  a call's drag atmosphere from FORCES, $SPW, $DCL
 //   oem.inc        the propagate invoke method ($OMM in, $OEM out)
 //   fit_oem.inc    the fit invoke method ($OEM in, $OMM out)
 // =============================================================================
@@ -47,6 +51,7 @@
 #include "model.inc"
 #include "fastmath.inc"
 #include "drag.inc"
+#include "atmosphere.inc"
 #include "xp_theory.inc"
 #include "store.inc"
 #include "gcrf.inc"
@@ -58,6 +63,7 @@
 #include "omm.inc"
 #include "covariance.inc"
 #include "pcf.inc"
+#include "atmosphere_inputs.inc"
 #include "oem.inc"
 #include "epoch_store.inc"
 #include "fit_oem.inc"

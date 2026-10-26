@@ -434,7 +434,7 @@ inline uint64_t bytes_of(const Store& st) {
 extern "C" int load_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
-  if (const int rc = pcf::read(pcf::kPropagate)) return rc;
+  if (const int rc = pcf::read(pcf::kEpochs)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   return epochs::build(epochs::resident(), cfg);
@@ -446,7 +446,7 @@ extern "C" int load_epochs(void) {
 extern "C" int propagate_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
-  if (const int rc = pcf::read(pcf::kPropagate)) return rc;
+  if (const int rc = pcf::read(pcf::kEpochs)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   epochs::Store st;

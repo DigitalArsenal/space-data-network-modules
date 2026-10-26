@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Native WasmEdge parity of the shared artifact: `propagate` of the same SGP4 and SGP4XP sets, the `fit` method ($OEM
 // in; $OMM and $OBD out) on the first set's ephemeris in TEME, GCRF (ERFA) and ITRF, `propagate` on a 4-day GCRF grid
-// template, a maneuver across an impulse and a finite burn, and an epoch store through propagate_epochs, through the
+// template, a maneuver across an impulse and a finite burn, an epoch store through propagate_epochs, and the drag
+// atmosphere of SPEC 15 (NRLMSISE-00 on $SPW rows times an open-DCA $DCL) on propagate and fit, through the
 // browser host and the SDK's wasi-threads WasmEdge runner (WasmEdge 0.16.4); every output's bytes must be
 // identical. Docker lane waived (owner ruling 2026-10-22).
 import { createHash } from "node:crypto";
@@ -15,6 +16,16 @@ import { FRAME_PROBE, oemInFrame, packOem, rfm } from "./lib/frames.mjs";
 import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { MNV, MNVT } from "spacedatastandards.org/lib/js/MNV/MNV.js";
+import { SPW, SPWT } from "spacedatastandards.org/lib/js/SPW/SPW.js";
+import { DCL, DCLT } from "spacedatastandards.org/lib/js/DCL/DCL.js";
+import { ATMT } from "spacedatastandards.org/lib/js/DCL/ATM.js";
+import { AtmosphericModelFamily } from "spacedatastandards.org/lib/js/DCL/AtmosphericModelFamily.js";
+import { dclCorrectionT } from "spacedatastandards.org/lib/js/DCL/dclCorrection.js";
+import { dclCorrectionForm } from "spacedatastandards.org/lib/js/DCL/dclCorrectionForm.js";
+import { dclStatus } from "spacedatastandards.org/lib/js/DCL/dclStatus.js";
+import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
+import { pcfWeatherExtension } from "spacedatastandards.org/lib/js/PCF/pcfWeatherExtension.js";
+import { pcfDensityCorrection } from "spacedatastandards.org/lib/js/PCF/pcfDensityCorrection.js";
 import { ensureBuilt, openModule, wasmPath } from "./lib/module.mjs";
 
 const standards = await import("space-data-module-sdk/standards");
@@ -116,6 +127,23 @@ const epochSnapshot = (() => {
   });
   return { portId: "omm", typeRef: { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" }, payload: new Uint8Array(Buffer.concat(recs)) };
 })();
+// SPEC 15: the drag atmosphere, NRLMSISE-00 on $SPW rows times an open-DCA $DCL, on propagate (the grid) and fit
+const atmosphere = (() => {
+  const rows = [];
+  for (let k = 0; k < 9; k++) {
+    const b = new flatbuffers.Builder(256);
+    const day = new Date(Date.parse("2026-10-18T00:00:00Z") + k * 86400000).toISOString().slice(0, 10);
+    SPW.finishSizePrefixedSPWBuffer(b, Object.assign(new SPWT(), { DATE: day, F107_OBS: 130 + 11 * (k % 3), F107_OBS_CENTER81: 140 + k, AP_AVG: 6 + 7 * (k % 4) }).pack(b));
+    rows.push(Buffer.from(b.asUint8Array()));
+  }
+  const d = Object.assign(new DCLT(), { STATUS: dclStatus.Solved, ATMOSPHERE: Object.assign(new ATMT(), { MODEL: AtmosphericModelFamily.NRLMSIS00E, YEAR: 2000 }),
+    CORRECTION: Object.assign(new dclCorrectionT(), { FORM: dclCorrectionForm.LogDensityNodes, NODE_TIMES_MS: [0, 1, 2, 3, 4].map((k) => BigInt(Date.parse("2026-10-19T00:00:00Z") + k * 86400000)), NODE_LOG_DENSITY_SCALE_DIMENSIONLESS: [0.1, -0.05, 0.2, 0, -0.1] }) });
+  const db = new flatbuffers.Builder(1024);
+  DCL.finishDCLBuffer(db, d.pack(db));
+  const forces = { EPHEMERIS_SOURCE: "", ENABLE_DRAG: true, WEATHER_SOURCE: pcfWeatherSource.RECORDS, WEATHER_EXTENSION: pcfWeatherExtension.HOLD_LAST, DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE };
+  return [configuration({ theory: "SGP4XP", forces }), { portId: "space_weather", typeRef: { schemaName: "SPW.fbs", fileIdentifier: "$SPW", rootTypeName: "SPW" }, payload: new Uint8Array(Buffer.concat(rows)) },
+    { portId: "density_correction", typeRef: { schemaName: "DCL.fbs", fileIdentifier: "$DCL", rootTypeName: "DCL" }, payload: db.asUint8Array() }];
+})();
 const digest = (result) => ({
   statusCode: result.statusCode,
   errorCode: result.errorCode ?? null,
@@ -136,10 +164,14 @@ for (const [lane, options] of [["browser", { surface: "command" }], ["wasmedge",
   lanes[lane].maneuver = digest(await harness.invoke({ methodId: "maneuver", inputs: maneuverInputs }));
   // SPEC 14: an epoch store of three SGP4XP sets of one object 12 h apart on the grid (selection and blend)
   lanes[lane].epochs = digest(await harness.invoke({ methodId: "propagate_epochs", inputs: [configuration({}), epochSnapshot, gridInput] }));
+  // SPEC 15: NRLMSISE-00 on the rows times the open DCA, propagate on the grid and fit
+  lanes[lane].atmosphere = digest(await harness.invoke({ methodId: "propagate", inputs: [inputs[0], gridInput, ...atmosphere] }));
+  lanes[lane].atmosphereFit = digest(await harness.invoke({ methodId: "fit", inputs: [...fitInputs[1], ...atmosphere] }));
   await harness.destroy?.();
 }
 const identical = JSON.stringify(lanes.browser) === JSON.stringify(lanes.wasmedge) && lanes.browser.statusCode === 0 && lanes.browser.outputs.length === sets.length &&
   lanes.browser.fit.every((f) => f.statusCode === 0 && f.outputs.length === 2) && lanes.browser.grid.statusCode === 0 &&
-  lanes.browser.maneuver.statusCode === 0 && lanes.browser.maneuver.outputs.length === 5 && lanes.browser.epochs.statusCode === 0;
+  lanes.browser.maneuver.statusCode === 0 && lanes.browser.maneuver.outputs.length === 5 && lanes.browser.epochs.statusCode === 0 &&
+  lanes.browser.atmosphere.statusCode === 0 && lanes.browser.atmosphereFit.statusCode === 0 && lanes.browser.atmosphereFit.outputs.length === 2;
 console.log(JSON.stringify({ wasmedge: "0.16.4 (SDK wasi-threads runner)", browser: lanes.browser, native: lanes.wasmedge, identical }, null, 1));
 process.exit(identical ? 0 : 1);
