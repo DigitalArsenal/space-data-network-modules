@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "analysis/density-calibration 0.6.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "0931628b9aaca61778bf0454a966357ba86563f952ed962bd0825bc4188dddd2",
-  "moduleSha256": "0931628b9aaca61778bf0454a966357ba86563f952ed962bd0825bc4188dddd2",
+  "artifactSha256": "5d284078821dd80cabd499bce10b174bf635a2456cda261d641a6219b4df3719",
+  "moduleSha256": "5d284078821dd80cabd499bce10b174bf635a2456cda261d641a6219b4df3719",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 27,
-      "durationMs": 1491
+      "durationMs": 1506
     },
     {
       "lane": "wasmedge",
       "runs": 27,
-      "durationMs": 55157
+      "durationMs": 57431
     }
   ],
   "cases": [
@@ -322,7 +322,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "22e3e7d514b920b74ed9dc8b021ed5f4a4611fca6b83977137c100c66f169f23",
+      "stdoutSha256": "43a6a029c380540bd0ddfca4bccd96dbc4f3fdb35bc69b2f9ed5389a28f7c785",
       "stdoutLength": 14848
     },
     {
@@ -646,7 +646,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "22e3e7d514b920b74ed9dc8b021ed5f4a4611fca6b83977137c100c66f169f23",
+      "stdoutSha256": "43a6a029c380540bd0ddfca4bccd96dbc4f3fdb35bc69b2f9ed5389a28f7c785",
       "stdoutLength": 14848
     },
     {

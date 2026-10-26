@@ -1,0 +1,181 @@
+{
+ "baselineCommit": "e9c94a3eb8a641de438781b603bf11bf7412f5fd",
+ "baselineWasmSha256": "0931628b9aaca61778bf0454a966357ba86563f952ed962bd0825bc4188dddd2",
+ "candidateWasmSha256": "5d284078821dd80cabd499bce10b174bf635a2456cda261d641a6219b4df3719",
+ "cases": 27,
+ "boundRelative": 1e-12,
+ "differ": [
+  "drag-work-nrlmsise00"
+ ],
+ "beyond": [],
+ "worst": {
+  "id": "drag-work-nrlmsise00",
+  "identical": false,
+  "maxRelativeDifference": 2.805207516557716e-15,
+  "at": ".0.STATES.DRAG_POWER_W_KG.45"
+ },
+ "rows": [
+  {
+   "id": "evaluate-jb2008",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-jb2008-segment-correction",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-jb2008-point-before-drivers",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-jb2008-node-correction",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-jb2008-derivative",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-jb2008-sun-diagnostics",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-jb2008-raw-drivers",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "evaluate-nrlmsise00",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "calibrate-raw-drivers",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "calibrate-points-weights",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "decay-vallado-samples-5",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "decay-vallado-samples-6251-28057",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "decay-circular",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "decay-eccentric-correction",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "calibrate-decay-anchored",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "calibrate-decay-altitude-nodes-residuals",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "energy-arc",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "energy-gradient",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "energy-inside-earth",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "energy-earth-orientation",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "drag-work-jb2008",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "drag-work-jb2008-correction",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "drag-work-nrlmsise00",
+   "identical": false,
+   "maxRelativeDifference": 2.805207516557716e-15,
+   "at": ".0.STATES.DRAG_POWER_W_KG.45"
+  },
+  {
+   "id": "refused-energy-degree",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "refused-drag-work-without-drivers",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "refused-evaluate-nrlmsise00-derivative",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  },
+  {
+   "id": "refused-calibrate-nrlmsise00",
+   "identical": true,
+   "maxRelativeDifference": 0,
+   "at": ""
+  }
+ ]
+}

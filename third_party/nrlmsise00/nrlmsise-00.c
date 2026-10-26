@@ -602,9 +602,9 @@ __inline_double sg0(double ex, double *p, double *ap) {
  * one input, so the trig and Legendre table of the input's latitude, the
  * trig of its local solar time and longitude and the square of its F10.7
  * offset are computed once per input value, and each parameter set's
- * day-of-year cosines once per day of year. The values, and every expression
- * that uses them, are unchanged. Keys compare bit patterns, so a signed zero
- * or a NaN input is computed afresh. */
+ * day-of-year cosines once per day of year. These values, and every
+ * expression that uses them, are unchanged. Keys compare bit patterns, so a
+ * signed zero or a NaN input is computed afresh. */
 static int globe7_same(double a, double b) { return memcmp(&a, &b, sizeof a) == 0; }
 static int globe7_have_lat, globe7_have_lst, globe7_have_long;
 static double globe7_lat, globe7_c, globe7_s;
@@ -616,6 +616,44 @@ static double globe7_dfa, globe7_dfa2;   /* f107A - 150 and pow(f107A - 150, 2) 
 struct globe7_doy { const double *p; int doy; double cd32, cd18, cd14, cd39; };
 static struct globe7_doy globe7_doys[16];
 static int globe7_ndoy;
+/* The phase terms cos(k (x - p_j)) of an input angle k x (local time, universal
+ * time, longitude) against a parameter set's phase p_j are formed by angle
+ * addition, cos(k x) cos(k p_j) + sin(k x) sin(k p_j): the input's cosine and
+ * sine are kept per input value, each parameter set's per set. This rounds
+ * differently from cos(k (x - p_j)), by a few units in the last place of the
+ * term. The mixed term cos(sr (sec - p79) + 2 dgtr long) adds its phase to the
+ * kept angle sr sec + 2 dgtr long. Slots, in order: hr p124, hr p131, sr p71,
+ * sr p79, dgtr p63, dgtr p118, sr p75, dgtr p97, dgtr p136, sr p58. */
+struct globe7_phase { const double *p; double c[10], s[10]; };
+static struct globe7_phase globe7_phases[16];
+static int globe7_nphase;
+static int globe7_have_sec, globe7_have_mixed;
+static double globe7_sec, globe7_csec, globe7_ssec;
+static double globe7_mixed_sec, globe7_mixed_long, globe7_cmixed, globe7_smixed;
+static void globe7_local_time(double tloc, double hr) {
+	if (!globe7_have_lst || !globe7_same(tloc, globe7_lst)) {
+		globe7_t[0] = sin(hr*tloc);
+		globe7_t[1] = cos(hr*tloc);
+		globe7_t[2] = sin(2.0*hr*tloc);
+		globe7_t[3] = cos(2.0*hr*tloc);
+		globe7_t[4] = sin(3.0*hr*tloc);
+		globe7_t[5] = cos(3.0*hr*tloc);
+		globe7_lst = tloc;
+		globe7_have_lst = 1;
+	}
+}
+static const struct globe7_phase *globe7_phase_of(const double *p, double hr, double sr, double dgtr) {
+	int i;
+	struct globe7_phase *f;
+	const double angle[10] = {hr*p[124], hr*p[131], sr*p[71], sr*p[79], dgtr*p[63],
+		dgtr*p[118], sr*p[75], dgtr*p[97], dgtr*p[136], sr*p[58]};
+	for (i = 0; i < globe7_nphase; i++)
+		if (globe7_phases[i].p == p) return &globe7_phases[i];
+	f = &globe7_phases[globe7_nphase < 16 ? globe7_nphase++ : 15];
+	f->p = p;
+	for (i = 0; i < 10; i++) { f->c[i] = cos(angle[i]); f->s[i] = sin(angle[i]); }
+	return f;
+}
 
 double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *flags) {
 /*       CALCULATE G(L) FUNCTION 
@@ -634,6 +672,7 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 	double f1, f2;
 	double tinf;
 	struct ap_array *ap;
+	const struct globe7_phase *phase;
 
 	tloc=input->lst;
 	for (j=0;j<14;j++)
@@ -679,17 +718,9 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 		plg[3][6] =(11.0*c*plg[3][5]-8.*plg[3][4])/3.0;
 	}
 
+	phase = globe7_phase_of(p, hr, sr, dgtr);
 	if (!(((flags->sw[7]==0)&&(flags->sw[8]==0))&&(flags->sw[14]==0))) {
-		if (!globe7_have_lst || !globe7_same(tloc, globe7_lst)) {
-			globe7_t[0] = sin(hr*tloc);
-			globe7_t[1] = cos(hr*tloc);
-			globe7_t[2] = sin(2.0*hr*tloc);
-			globe7_t[3] = cos(2.0*hr*tloc);
-			globe7_t[4] = sin(3.0*hr*tloc);
-			globe7_t[5] = cos(3.0*hr*tloc);
-			globe7_lst = tloc;
-			globe7_have_lst = 1;
-		}
+		globe7_local_time(tloc, hr);
 		stloc = globe7_t[0];
 		ctloc = globe7_t[1];
 		s2tloc = globe7_t[2];
@@ -772,6 +803,7 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 }
 
 	/* magnetic activity based on daily ap */
+	if ((int) flags->sw[9]) globe7_local_time(tloc, hr);
 	if ((int) flags->sw[9]==-1) {
 		ap = input->ap_a;
 		if (p[51]!=0) {
@@ -790,7 +822,7 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 				t[8] = apt[0]*(p[50]+p[96]*plg[0][2]+p[54]*plg[0][4]+ \
      (p[125]*plg[0][1]+p[126]*plg[0][3]+p[127]*plg[0][5])*cd14*flags->swc[5]+ \
      (p[128]*plg[1][1]+p[129]*plg[1][3]+p[130]*plg[1][5])*flags->swc[7]* \
-					       cos(hr*(tloc-p[131])));
+					       (globe7_t[1]*phase->c[1] + globe7_t[0]*phase->s[1]));
 			}
 		}
 	} else {
@@ -805,7 +837,7 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 			t[8]=apdf*(p[32]+p[45]*plg[0][2]+p[34]*plg[0][4]+ \
      (p[100]*plg[0][1]+p[101]*plg[0][3]+p[102]*plg[0][5])*cd14*flags->swc[5]+
      (p[121]*plg[1][1]+p[122]*plg[1][3]+p[123]*plg[1][5])*flags->swc[7]*
-				    cos(hr*(tloc-p[124])));
+				    (globe7_t[1]*phase->c[0] + globe7_t[0]*phase->s[0]));
 		}
 	}
 
@@ -815,6 +847,19 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 			globe7_slong = sin(dgtr*input->g_long);
 			globe7_long = input->g_long;
 			globe7_have_long = 1;
+		}
+		if (!globe7_have_sec || !globe7_same(input->sec, globe7_sec)) {
+			globe7_csec = cos(sr*input->sec);
+			globe7_ssec = sin(sr*input->sec);
+			globe7_sec = input->sec;
+			globe7_have_sec = 1;
+		}
+		if (!globe7_have_mixed || !globe7_same(input->sec, globe7_mixed_sec) || !globe7_same(input->g_long, globe7_mixed_long)) {
+			globe7_cmixed = cos(sr*input->sec+2.0*dgtr*input->g_long);
+			globe7_smixed = sin(sr*input->sec+2.0*dgtr*input->g_long);
+			globe7_mixed_sec = input->sec;
+			globe7_mixed_long = input->g_long;
+			globe7_have_mixed = 1;
 		}
 
 		/* longitudinal */
@@ -835,10 +880,10 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 			t[11]=(1.0+p[95]*plg[0][1])*(1.0+p[81]*dfa*flags->swc[1])*\
 				(1.0+p[119]*plg[0][1]*flags->swc[5]*cd14)*\
 				((p[68]*plg[0][1]+p[69]*plg[0][3]+p[70]*plg[0][5])*\
-				cos(sr*(input->sec-p[71])));
+				(globe7_csec*phase->c[2] + globe7_ssec*phase->s[2]));
 			t[11]+=flags->swc[11]*\
 				(p[76]*plg[2][3]+p[77]*plg[2][5]+p[78]*plg[2][7])*\
-				cos(sr*(input->sec-p[79])+2.0*dgtr*input->g_long)*(1.0+p[137]*dfa*flags->swc[1]);
+				(globe7_cmixed*phase->c[3] + globe7_smixed*phase->s[3])*(1.0+p[137]*dfa*flags->swc[1]);
 		}
 
 		/* ut, longitude magnetic activity */
@@ -847,24 +892,24 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 				if (p[51] != 0.0) {
 					t[12]=apt[0]*flags->swc[11]*(1.+p[132]*plg[0][1])*\
 						((p[52]*plg[1][2]+p[98]*plg[1][4]+p[67]*plg[1][6])*\
-						 cos(dgtr*(input->g_long-p[97])))\
+						 (globe7_clong*phase->c[7] + globe7_slong*phase->s[7]))\
 						+apt[0]*flags->swc[11]*flags->swc[5]*\
 						(p[133]*plg[1][1]+p[134]*plg[1][3]+p[135]*plg[1][5])*\
-						cd14*cos(dgtr*(input->g_long-p[136])) \
+						cd14*(globe7_clong*phase->c[8] + globe7_slong*phase->s[8]) \
 						+apt[0]*flags->swc[12]* \
 						(p[55]*plg[0][1]+p[56]*plg[0][3]+p[57]*plg[0][5])*\
-						cos(sr*(input->sec-p[58]));
+						(globe7_csec*phase->c[9] + globe7_ssec*phase->s[9]);
 				}
 			} else {
 				t[12] = apdf*flags->swc[11]*(1.0+p[120]*plg[0][1])*\
 					((p[60]*plg[1][2]+p[61]*plg[1][4]+p[62]*plg[1][6])*\
-					cos(dgtr*(input->g_long-p[63])))\
+					(globe7_clong*phase->c[4] + globe7_slong*phase->s[4]))\
 					+apdf*flags->swc[11]*flags->swc[5]* \
 					(p[115]*plg[1][1]+p[116]*plg[1][3]+p[117]*plg[1][5])* \
-					cd14*cos(dgtr*(input->g_long-p[118])) \
+					cd14*(globe7_clong*phase->c[5] + globe7_slong*phase->s[5]) \
 					+ apdf*flags->swc[12]* \
 					(p[83]*plg[0][1]+p[84]*plg[0][3]+p[85]*plg[0][5])* \
-					cos(sr*(input->sec-p[75]));
+					(globe7_csec*phase->c[6] + globe7_ssec*phase->s[6]);
 			}			
 		}
 	}
