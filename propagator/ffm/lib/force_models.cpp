@@ -26,7 +26,9 @@ extern "C" {
 // FFM Fast C1: same-degree, retained triangular gravity kernel.
 #include "ffm_gravity.h"
 #include <array>
+#include <cstdint>
 #include <tuple>
+#include <vector>
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -1160,6 +1162,39 @@ Vec3 SolidTides(const Vec3& satPosition, const timesys::Instant& jd, const Solid
 //   dSnm += (S+ - S-) cos(theta) - (C+ - C-) sin(theta)
 // summed from degree 2. No ocean pole tide.
 // FFM Fast C4 BEGIN.
+namespace {
+// The FES2004 rows inside one degree/order truncation, in the table's order,
+// with the column sums and differences the wave sum forms from them (the same
+// double operations on the stored floats). `start[k]` opens wave k's rows;
+// `at` is a row's coefficient in a flat (n, m) array.
+struct OceanTideRows {
+    int degree = -1, order = -1;
+    std::array<size_t, fes2004::WAVE_COUNT + 1> start{};
+    std::vector<uint32_t> at;
+    std::vector<double> cSum, sSum, sDifference, cDifference;
+};
+const OceanTideRows& oceanTideRows(int degree, int order) {
+    static thread_local OceanTideRows rows;
+    if (rows.degree == degree && rows.order == order) return rows;
+    rows.degree = degree; rows.order = order;
+    rows.at.clear(); rows.cSum.clear(); rows.sSum.clear(); rows.sDifference.clear(); rows.cDifference.clear();
+    for (int k = 0; k < fes2004::WAVE_COUNT; ++k) {
+        rows.start[k] = rows.at.size();
+        const fes2004::Wave& wave = fes2004::WAVES[k];
+        for (int i = 0; i < wave.count; ++i) {
+            const fes2004::Row& row = wave.rows[i];
+            if (row.n > degree || row.m > order) continue;
+            const double cp = row.cPlus, sp = row.sPlus, cm = row.cMinus, sm = row.sMinus;
+            rows.at.push_back(uint32_t(row.n) * uint32_t(row.n + 1) / 2 + uint32_t(row.m));
+            rows.cSum.push_back(cp + cm); rows.sSum.push_back(sp + sm);
+            rows.sDifference.push_back(sp - sm); rows.cDifference.push_back(cp - cm);
+        }
+    }
+    rows.start[fes2004::WAVE_COUNT] = rows.at.size();
+    return rows;
+}
+}
+
 void FillOceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSet, ExtendedGravityField& field) {
     ffm_interp::ExactScope exact; // Ocean nodes stay on the shipped 120 s TT grid.
     const OceanTideConfig& config = forceSet.oceanTides;
@@ -1170,6 +1205,13 @@ void FillOceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSe
     const double gamma = gmst2006(ut1At(jd, forceSet), jdTt) + PI;
     double fundamental[5];  // l, l', F, D, Omega
     delaunayArguments(jdTt, fundamental);
+    // Each coefficient takes its rows' terms in the table's order, from zero,
+    // as when the terms were added into the reset field directly.
+    const OceanTideRows& rows = oceanTideRows(maxDegree, maxOrder);
+    static thread_local std::array<double, (fes2004::MAX_DEGREE + 1) * (fes2004::MAX_DEGREE + 2) / 2> dC, dS;
+    const size_t size = size_t(maxDegree + 1) * size_t(maxDegree + 2) / 2;
+    std::fill_n(dC.data(), size, 0.0);
+    std::fill_n(dS.data(), size, 0.0);
     for (int k = 0; k < fes2004::WAVE_COUNT; ++k) {
         const fes2004::Wave& wave = fes2004::WAVES[k];
         const int d = wave.doodson;
@@ -1179,13 +1221,16 @@ void FillOceanTideField(const timesys::Instant& jd, const ForceModelSet& forceSe
                              (-cTau + cS + cH + cP + cPs) * fundamental[2] + (-cH - cPs) * fundamental[3] +
                              (-cTau + cS + cH + cP - cNPrime + cPs) * fundamental[4];
         const double c = std::cos(theta), s = std::sin(theta);
-        for (int i = 0; i < wave.count; ++i) {
-            const fes2004::Row& row = wave.rows[i];
-            if (row.n > maxDegree || row.m > maxOrder) continue;
-            const double cp = row.cPlus, sp = row.sPlus, cm = row.cMinus, sm = row.sMinus;
-            field.Cnm[row.n][row.m] += ((cp + cm) * c + (sp + sm) * s) * fes2004::UNIT;
-            field.Snm[row.n][row.m] += ((sp - sm) * c - (cp - cm) * s) * fes2004::UNIT;
+        for (size_t i = rows.start[k]; i < rows.start[k + 1]; ++i) {
+            dC[rows.at[i]] += (rows.cSum[i] * c + rows.sSum[i] * s) * fes2004::UNIT;
+            dS[rows.at[i]] += (rows.sDifference[i] * c - rows.cDifference[i] * s) * fes2004::UNIT;
         }
+    }
+    for (int n = 0; n <= maxDegree; ++n) {
+        const size_t base = size_t(n) * size_t(n + 1) / 2;
+        const int count = std::min(n, maxOrder) + 1;
+        std::copy_n(dC.data() + base, count, field.Cnm[n].data());
+        std::copy_n(dS.data() + base, count, field.Snm[n].data());
     }
 }
 
