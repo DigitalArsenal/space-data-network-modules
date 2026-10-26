@@ -1,0 +1,17 @@
+[package]
+name = "ffm-bench-nyx"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Nyx Space on the FFM engine benchmark plan (tests/evidence/engines/run-nyx.mjs); a reference engine, never shipped"
+
+[dependencies]
+nyx-space = "=2.6.0"
+anise = "=0.10.6"
+hifitime = "4"
+serde_json = "1"
+libc = "=0.2.190"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
