@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { composeErfaTranslationUnit } from "../../foundation/frames/erfa-amalgamation.mjs";
+import { resolveLaneToolchain } from "../../scripts/lib/emsdk-toolchain.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const modulesRoot = path.resolve(root, "../..");
@@ -12,6 +13,12 @@ const sdkRoot = process.env.SPACE_DATA_MODULE_SDK_ROOT ??
   await fs.realpath(path.join(root, "node_modules/space-data-module-sdk"));
 const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
 const erfa = await composeErfaTranslationUnit();
+// The compiler is the pinned emsdk's LLVM (scripts/emsdk-pin.json, identity
+// checked), never the wasm32-wasi-clang++ that PATH happens to hold: Homebrew's
+// clang 22 and the pinned clang 23 emit different bytes for the same source.
+const toolchain = resolveLaneToolchain({ moduleDir: "analysis/targeting" });
+process.env.SDN_WASI_CLANGXX = path.join(toolchain.root, "upstream/bin/clang++");
+process.env.SDN_WASI_CLANG = path.join(toolchain.root, "upstream/bin/clang");
 const [abi, target, sqp, coordsTypes, coordsHeader, coordsImplementation, implementation] = await Promise.all([
   fs.readFile(path.join(sdkRoot, "include/orbpro/orbpro_solver_abi.h"), "utf8"),
   fs.readFile(path.join(modulesRoot, "higherpop/include/higherpop/target.hpp"), "utf8"),
@@ -42,8 +49,7 @@ await fs.mkdir(buildRoot, { recursive: true });
 const staging = await fs.mkdtemp(path.join(buildRoot, "targeting-"));
 try {
   const stagedArtifact = path.join(staging, "module.wasm");
-  const clangCommand = process.env.SDN_WASI_CLANGXX ?? "wasm32-wasi-clang++";
-  const clangVersion = execFileSync(clangCommand, ["--version"], {
+  const clangVersion = execFileSync(process.env.SDN_WASI_CLANGXX, ["--version"], {
     cwd: staging, encoding: "utf8",
   }).split(/\r?\n/, 1)[0];
   const compilation = await compileModuleFromSource({
@@ -66,7 +72,7 @@ try {
     version: manifest.version,
     moduleSdk: JSON.parse(await fs.readFile(path.join(sdkRoot, "package.json"), "utf8")).version,
     compiler: compilation.compiler,
-    clangCommand,
+    clangCommand: `${toolchain.identity.rootRelative}/upstream/bin/clang++`,
     clangVersion,
     threadModel: compilation.threadModel,
     erfaSourceFiles: erfa.fileCount,

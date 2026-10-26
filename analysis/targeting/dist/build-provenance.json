@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "moduleSdk": "0.8.25",
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "clangCommand": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/bin/clang++",
+  "clangCommand": "$SDN_TOOL_CACHE/emsdk-6.0.1/upstream/bin/clang++",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)",
   "threadModel": "wasi-sequential",
   "erfaSourceFiles": 248,
