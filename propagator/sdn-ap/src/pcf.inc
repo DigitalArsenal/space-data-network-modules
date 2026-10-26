@@ -25,6 +25,12 @@ namespace pcf {
 
 enum Method : uint32_t { kPropagate, kManeuver, kFit, kEpochs };  ///< kEpochs: load_epochs, propagate_epochs (propagate's tables)
 
+/// A fitted parameter's prior, $PCF FIT.DRAG_PRIOR (B_eff) or FIT.SRP_PRIOR (AGOM), m^2/kg. Unset, or without a sigma: the
+/// documented default, mean 0 and sigma 0.05.
+struct Prior {
+  double mean = 0.0, sigma = 0.05;
+};
+
 /// One call's options, every one at its documented default.
 struct Options {
   int theory = pcfTheory_UNSPECIFIED;
@@ -37,8 +43,7 @@ struct Options {
   double holdout_h = 0.0;
   double eccentricity_threshold = 0.5, eccentric_default_span_h = 24.0, eccentric_extension_margin = 0.7;
   double eccentric_maximum_period_h = 36.0, implausible_rms_km = 100.0;
-  bool drag_prior_set = false, srp_prior_set = false;
-  double drag_prior_mean = 0.0, drag_prior_sigma = 0.0, srp_prior_mean = 0.0, srp_prior_sigma = 0.05;
+  Prior drag_prior, srp_prior;
   // FORCES (fit, propagate): SGP4XP's drag atmosphere (SPEC 15). ENABLE_DRAG false keeps the theory's own Jacchia
   // 1970; true selects ATMOSPHERE_MODEL (NRLMSISE00 only). The drivers: WEATHER_SOURCE UNSPECIFIED infers them ('space_weather'
   // rows when given, else the theory's generic flux model), RECORDS needs the rows.
@@ -125,6 +130,22 @@ inline uint32_t tables_of(Method m) {
   return 0;
 }
 
+/// FIT.<name>: 0 with `out` set (left at its default when the prior is absent or carries no sigma), or 3 refused by name.
+inline int read_prior(const PCFGaussianPrior* p, const char* name, Prior& out) {
+  if (p == nullptr) return 0;
+  char field[48];
+  if (p->HAS_SIGMA()) {
+    std::snprintf(field, sizeof field, "FIT.%s.SIGMA", name);
+    if (!(p->SIGMA() > 0.0)) return refuse(field, "a sigma is positive");
+    out.mean = p->MEAN();
+    out.sigma = p->SIGMA();
+  } else if (p->MEAN() != 0.0) {
+    std::snprintf(field, sizeof field, "FIT.%s.MEAN", name);
+    return refuse(field, "a prior mean comes with its SIGMA (HAS_SIGMA true)");
+  }
+  return 0;
+}
+
 inline int read_fit(const PCFFitPolicy* f, Options& o) {
   if (f == nullptr) return 0;
   o.default_span_h = f->DEFAULT_SPAN_HOURS();
@@ -166,27 +187,8 @@ inline int read_fit(const PCFFitPolicy* f, Options& o) {
   if (!(o.eccentric_maximum_period_h > 0.0)) return refuse("FIT.ECCENTRIC_MAXIMUM_PERIOD_HOURS", "a period is positive");
   o.implausible_rms_km = f->IMPLAUSIBLE_RMS_KM();
   if (!(o.implausible_rms_km > 0.0)) return refuse("FIT.IMPLAUSIBLE_RMS_KM", "a bound is positive");
-  if (const PCFGaussianPrior* p = f->DRAG_PRIOR()) {
-    if (p->HAS_SIGMA()) {
-      if (!(p->SIGMA() > 0.0)) return refuse("FIT.DRAG_PRIOR.SIGMA", "a sigma is positive");
-      o.drag_prior_set = true;
-      o.drag_prior_mean = p->MEAN();
-      o.drag_prior_sigma = p->SIGMA();
-    } else if (p->MEAN() != 0.0) {
-      return refuse("FIT.DRAG_PRIOR.MEAN", "a prior mean comes with its SIGMA (HAS_SIGMA true)");
-    }
-  }
-  if (const PCFGaussianPrior* p = f->SRP_PRIOR()) {
-    if (p->HAS_SIGMA()) {
-      if (!(p->SIGMA() > 0.0)) return refuse("FIT.SRP_PRIOR.SIGMA", "a sigma is positive");
-      o.srp_prior_set = true;
-      o.srp_prior_mean = p->MEAN();
-      o.srp_prior_sigma = p->SIGMA();
-    } else if (p->MEAN() != 0.0) {
-      return refuse("FIT.SRP_PRIOR.MEAN", "a prior mean comes with its SIGMA (HAS_SIGMA true)");
-    }
-  }
-  return 0;
+  if (const int rc = read_prior(f->DRAG_PRIOR(), "DRAG_PRIOR", o.drag_prior)) return rc;
+  return read_prior(f->SRP_PRIOR(), "SRP_PRIOR", o.srp_prior);
 }
 
 inline int read_output(const PCFOutput* p, Options& o) {

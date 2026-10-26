@@ -12,8 +12,6 @@
 namespace sdnap {
 namespace fitoem {
 
-constexpr double kBtermPriorSigma = 0.05;  // m^2/kg: a weak prior about zero
-
 struct Sample {
   double whole, frac;  // split Julian date (UTC)
   double r[3], v[3];
@@ -345,9 +343,9 @@ static int fit_blocks() {
           iterations += res.iterations;
         }
         opt.fit_drag = 1;
-        // SGP4XP: a weak prior on BTERM about zero (or the $PCF FIT.DRAG_PRIOR)
-        opt.drag_prior = po.drag_prior_set ? po.drag_prior_mean : 0.0;
-        opt.drag_sigma = po.drag_prior_set ? po.drag_prior_sigma : fitoem::kBtermPriorSigma;
+        // SGP4XP: the $PCF FIT.DRAG_PRIOR on BTERM (default a weak prior about zero, 0 +- 0.05 m^2/kg)
+        opt.drag_prior = po.drag_prior.mean;
+        opt.drag_sigma = po.drag_prior.sigma;
         // grown by threes in between (2, 6, 18 ... revolutions), each stage from the last: from a drag-free start the
         // whole arc of a fast decay lies far outside the linear range (an e 0.03 orbit at 175 km loses 15 km of a in
         // 48 h, some 2,000 km along-track), and the single jump stalled on a wrong minimum (fit RMS 7 to 9 km)
@@ -365,8 +363,8 @@ static int fit_blocks() {
         iterations += res.iterations;
         const double first_pass_rms = res.rms_km;
         opt.fit_agom = 1;
-        opt.agom_prior = po.srp_prior_mean;  // $PCF FIT.SRP_PRIOR, default 0 +- 0.05 m^2/kg
-        opt.agom_sigma = po.srp_prior_sigma;
+        opt.agom_prior = po.srp_prior.mean;  // $PCF FIT.SRP_PRIOR, default 0 +- 0.05 m^2/kg
+        opt.agom_sigma = po.srp_prior.sigma;
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
         if (res.status < 0) return 2;
