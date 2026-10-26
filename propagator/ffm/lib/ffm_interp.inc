@@ -36,6 +36,7 @@ struct ChannelData {
     std::array<std::array<double, MaxComponents>, Degree + 1> samples{};
     std::array<double, MaxComponents> last{};
     Instant lastJd{NAN, NAN};
+    int lastEvaluated = 0;  // leading components of `last` evaluated at lastJd
 };
 struct Window {
     bool valid = false;
@@ -163,8 +164,12 @@ inline Window::Coordinates& evaluationWeights(Window& w, const Instant& jd, Chan
     return c;
 }
 
+// `evaluate` (default all `count`) is how many leading components the caller
+// needs: a position-only caller of a body channel interpolates three of nine,
+// with the same samples, weights and arithmetic per component.
 template<class Fill>
-bool interpolate(const Instant& jd, const Forces& f, Channel channel, int count, double* out, Fill exact) {
+bool interpolate(const Instant& jd, const Forces& f, Channel channel, int count, double* out, Fill exact, int evaluate = -1) {
+    if (evaluate < 0) evaluate = count;
     if (!active(f)) return false;
     if (count < 1 || count > MaxComponents)
         {
@@ -210,27 +215,47 @@ bool interpolate(const Instant& jd, const Forces& f, Channel channel, int count,
 #endif
         if (astro::propagationStop().active) return false;
         c.fitted = true;
+        c.lastJd = {NAN, NAN};
     }
-    if (!same(c.lastJd, jd)) {
+    if (!same(c.lastJd, jd) || c.lastEvaluated < evaluate) {
         const auto& weights = evaluationWeights(w, jd, channel);
         if (weights.node >= 0) {
             std::copy_n(c.samples[weights.node].data(), count, c.last.data());
+            c.lastEvaluated = count;
         } else {
             // Interpolate deviations from a nearby sample. This preserves
             // large constant offsets (UT1 JD, body positions) accurately.
             const int reference = Degree / 2;
-            for (int j = 0; j < count; ++j) {
+            for (int j = 0; j < evaluate; ++j) {
                 const double offset = c.samples[reference][j];
                 double delta = 0;
                 for (int i = 0; i <= Degree; ++i)
                     delta += weights.terms[i] * (c.samples[i][j] - offset);
                 c.last[j] = offset + delta;
             }
+            c.lastEvaluated = evaluate;
         }
         c.lastJd = jd;
     }
-    std::copy_n(c.last.data(), count, out);
+    std::copy_n(c.last.data(), evaluate, out);
     return true;
+}
+
+// A body channel's position alone (km): the first three components of body(),
+// interpolated identically, without the velocity and the TDB epoch.
+template<class Exact>
+astro::Vec3 bodyPosition(const Instant& jd, const Forces& f, int slot, Exact exact) {
+    if (!active(f)) return exact(jd).position;
+    double out[3];
+    if (!interpolate(jd, f, Channel(Sun + slot), 9, out, [&](const Instant& t, double* v) {
+        const auto state = exact(t);
+        v[0] = state.position.x; v[1] = state.position.y; v[2] = state.position.z;
+        v[3] = state.velocity.x; v[4] = state.velocity.y; v[5] = state.velocity.z;
+        v[6] = state.valid ? 1.0 : 0.0;
+        v[7] = static_cast<double>(state.source);
+        v[8] = static_cast<double>(state.body);
+    }, 3)) return exact(jd).position;
+    return astro::Vec3(out[0], out[1], out[2]);
 }
 
 template<class Exact>

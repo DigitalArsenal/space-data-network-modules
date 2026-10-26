@@ -57,7 +57,7 @@ inline Vec3 calendarCorrection(const Forces& original, const Vec3& r, const Vec3
 // radiation pressure they gate and the SRP this file cancels then see one Sun.
 inline Vec3 sun(const Forces& f, const timesys::Instant& at) {
     if (f.sunPositionProvided) return f.sunPosition;
-    return ffm_interp::body(at, f, 0, [](const timesys::Instant& t) { return astro::getSunPosition(t); }).position;
+    return ffm_interp::bodyPosition(at, f, 0, [](const timesys::Instant& t) { return astro::getSunPosition(t); });
 }
 struct ShadowValues {
     double penumbra = 1, umbra = 1, midpoint = 1;
