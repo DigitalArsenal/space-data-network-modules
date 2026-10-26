@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <utility>
 #include <deque>
 #include <vector>
 
@@ -126,71 +128,77 @@ void computePines(const Vec3& position, double R, PinesTable& t) {
     }
 }
 
-Vec3 fastSum(const ExtendedGravityField& field, PinesTable& t, double muR2) {
+// Two doubles in one register: wasm f64x2 under -msimd128 (NEON natively).
+// Vector operations are element-wise IEEE operations, so each lane computes
+// exactly the scalar expression, in the same order.
+typedef double Lanes __attribute__((vector_size(16)));
+inline Lanes lanes(const double* p) { Lanes v; std::memcpy(&v, p, sizeof v); return v; }
+
+// The harmonic sum over the degrees 2..maxDegree. Four accumulators take the
+// orders round-robin (a0 also the order-0 terms and the tail): a0, a1 are the
+// lanes of `low` and a2, a3 those of `high`, so a pair of orders goes to a
+// pair of accumulators at once, and every accumulator receives the same terms
+// in the same sequence as four scalar ones. `rows(n, base)` gives degree n's
+// C and S rows.
+template <class Rows>
+Vec3 harmonicSum(int maxDegree, int maxOrder, PinesTable& t, double muR2, Rows rows) {
     t.scaleFastConstants(muR2);
-    Vec3 a0, a1, a2, a3;
-    for (int n = 2; n <= field.maxDegree; ++n) {
+    struct Accumulators { Lanes x, y, z; };
+    Accumulators low{{0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}}, high = low;
+    for (int n = 2; n <= maxDegree; ++n) {
         const size_t base = PinesTable::row(n);
         const double* const V = t.V.data() + PinesTable::row(n+1);
         const double* const W = t.W.data() + PinesTable::row(n+1);
-        const double* const C = field.Cnm[n].data();
-        const double* const S = field.Snm[n].data();
+        const auto row = rows(n, base);
+        const double* const C = row.first;
+        const double* const S = row.second;
         const double* const gp = t.fastGp.data() + base;
         const double* const fgm = t.fastFgm.data() + base;
         const double* const nmz = t.fastNmz.data() + base;
-        a0.x += gp[0] * C[0] * V[1];
-        a0.y += gp[0] * C[0] * W[1];
-        a0.z += nmz[0] * C[0] * V[0];
-        auto add = [&](int m, Vec3& a) {
-            const double c = C[m], s = S[m];
-            a.x += -gp[m] * (c * V[m+1] + s * W[m+1])
-                   + fgm[m] * (c * V[m-1] + s * W[m-1]);
-            a.y += gp[m] * (s * V[m+1] - c * W[m+1])
-                   + fgm[m] * (s * V[m-1] - c * W[m-1]);
-            a.z += nmz[m] * (c * V[m] + s * W[m]);
+        low.x[0] += gp[0] * C[0] * V[1];
+        low.y[0] += gp[0] * C[0] * W[1];
+        low.z[0] += nmz[0] * C[0] * V[0];
+        auto pair = [&](int m, Accumulators& a) {
+            const Lanes c = lanes(C + m), s = lanes(S + m);
+            const Lanes vNext = lanes(V + m + 1), wNext = lanes(W + m + 1);
+            const Lanes vPrevious = lanes(V + m - 1), wPrevious = lanes(W + m - 1);
+            const Lanes g = lanes(gp + m), f = lanes(fgm + m);
+            a.x += -g * (c * vNext + s * wNext)
+                   + f * (c * vPrevious + s * wPrevious);
+            a.y += g * (s * vNext - c * wNext)
+                   + f * (s * vPrevious - c * wPrevious);
+            a.z += lanes(nmz + m) * (c * lanes(V + m) + s * lanes(W + m));
         };
-        const int end = std::min(n, static_cast<int>(field.maxOrder));
+        const int end = std::min(n, maxOrder);
         int m = 1;
         for (; m + 3 <= end; m += 4) {
-            add(m, a0); add(m+1, a1); add(m+2, a2); add(m+3, a3);
+            pair(m, low); pair(m+2, high);
         }
-        for (; m <= end; ++m) add(m, a0);
+        for (; m <= end; ++m) {
+            const double c = C[m], s = S[m];
+            low.x[0] += -gp[m] * (c * V[m+1] + s * W[m+1])
+                        + fgm[m] * (c * V[m-1] + s * W[m-1]);
+            low.y[0] += gp[m] * (s * V[m+1] - c * W[m+1])
+                        + fgm[m] * (s * V[m-1] - c * W[m-1]);
+            low.z[0] += nmz[m] * (c * V[m] + s * W[m]);
+        }
     }
+    const Vec3 a0(low.x[0], low.y[0], low.z[0]), a1(low.x[1], low.y[1], low.z[1]);
+    const Vec3 a2(high.x[0], high.y[0], high.z[0]), a3(high.x[1], high.y[1], high.z[1]);
     return (a0 + a1) + (a2 + a3);
+}
+
+Vec3 fastSum(const ExtendedGravityField& field, PinesTable& t, double muR2) {
+    return harmonicSum(field.maxDegree, field.maxOrder, t, muR2, [&](int n, size_t) {
+        return std::pair<const double*, const double*>(field.Cnm[n].data(), field.Snm[n].data());
+    });
 }
 
 Vec3 fastFlatSum(const ExtendedGravityField& field, const double* flatC,
                    const double* flatS, PinesTable& t, double muR2) {
-    t.scaleFastConstants(muR2);
-    Vec3 a0, a1, a2, a3;
-    for (int n = 2; n <= field.maxDegree; ++n) {
-        const size_t base = PinesTable::row(n);
-        const double* const V = t.V.data() + PinesTable::row(n+1);
-        const double* const W = t.W.data() + PinesTable::row(n+1);
-        const double* const C = flatC + base;
-        const double* const S = flatS + base;
-        const double* const gp = t.fastGp.data() + base;
-        const double* const fgm = t.fastFgm.data() + base;
-        const double* const nmz = t.fastNmz.data() + base;
-        a0.x += gp[0] * C[0] * V[1];
-        a0.y += gp[0] * C[0] * W[1];
-        a0.z += nmz[0] * C[0] * V[0];
-        auto add = [&](int m, Vec3& a) {
-            const double c = C[m], s = S[m];
-            a.x += -gp[m] * (c * V[m+1] + s * W[m+1])
-                   + fgm[m] * (c * V[m-1] + s * W[m-1]);
-            a.y += gp[m] * (s * V[m+1] - c * W[m+1])
-                   + fgm[m] * (s * V[m-1] - c * W[m-1]);
-            a.z += nmz[m] * (c * V[m] + s * W[m]);
-        };
-        const int end = std::min(n, static_cast<int>(field.maxOrder));
-        int m = 1;
-        for (; m + 3 <= end; m += 4) {
-            add(m, a0); add(m+1, a1); add(m+2, a2); add(m+3, a3);
-        }
-        for (; m <= end; ++m) add(m, a0);
-    }
-    return (a0 + a1) + (a2 + a3);
+    return harmonicSum(field.maxDegree, field.maxOrder, t, muR2, [&](int, size_t base) {
+        return std::pair<const double*, const double*>(flatC + base, flatS + base);
+    });
 }
 
 } // namespace
