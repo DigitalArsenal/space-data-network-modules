@@ -4,7 +4,7 @@
 independently signed Supplemental OMM OD node. Its SHA-256 is:
 
 ```text
-b12c399ac48d3e8de42f11d1ba9b551fca95f10d2643dd1287098204afdbb29b
+489ca171fefd9c99f0ad534a8ebac247302e3b874e34584ed64214bf6e2c0e23
 ```
 
 `build-fit-core.sh` rebuilds it byte for byte. It takes this repository's

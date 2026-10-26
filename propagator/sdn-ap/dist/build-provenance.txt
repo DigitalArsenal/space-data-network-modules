@@ -1,9 +1,9 @@
 module com.spacedatanetwork.sdn-ap-propagator
 version 0.1.0
-sha256 032eaf90b55bcd88b7804b4909b64eadecf56f5d3212d8e84031ff9f0b9529e4
+sha256 7155bd5247af2dbd81c42ec0b25a867b20dafb6f1defe15a212d4b2d2c55e4d6
 erfa.source higherpop/third_party/erfa
 erfa.pinnedModulesCommit 7d59ae2171b5b57fd3b3587ff012de75b8aabb0c
-erfa.checkoutHead ec18a20be5a0ea74b3337afc80593a277c6676e3
+erfa.checkoutHead e2ed9cf9a68fb8e4150f336d5e8b2fc5fb014186
 erfa.license.spdx BSD-3-Clause
 erfa.license.carried LICENSES/ERFA.txt
 erfa.license.sha256 556abafd66857342b5f760bc42d323d1cfea310569267d3ae316d438b075424d

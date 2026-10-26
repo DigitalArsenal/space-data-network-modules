@@ -35,12 +35,10 @@ struct Elements {
   double bstar;            ///< SGP4: B*, 1/earth radii
   double ndot_rev_day2;    ///< first derivative of the mean motion as carried, rev/day^2 (not used by SGP4)
   double nddot_rev_day3;   ///< second derivative as carried, rev/day^3 (not used by SGP4)
-  double bterm;            ///< SGP4-XP: m^2/kg; SDN-AP: B_eff, signed
-  double agom;             ///< SGP4-XP, SDN-AP: m^2/kg
+  double bterm;            ///< SGP4-XP: m^2/kg
+  double agom;             ///< SGP4-XP: m^2/kg
   uint32_t norad;
   int32_t theory;          ///< sdnap::Theory
-  double kappa, tau0, tauc, taus, arc_end_min;  ///< SDN-AP (DESIGN 2b, 2c)
-  uint32_t flags;          ///< SDN-AP: kFlagLowering, kFlagTauHeld
 };
 
 /// Status of one object at one time.
@@ -49,10 +47,6 @@ constexpr int32_t kPropRefused = 1;      ///< the set describes no orbit the the
 constexpr int32_t kPropMeanMotion = 2;   ///< the mean motion is not positive
 constexpr int32_t kPropEccentricity = 3; ///< the eccentricity leaves its range, or the semi-latus rectum is negative
 constexpr int32_t kPropDecayed = 4;      ///< the radius is below one Earth radius
-
-/// SDN-AP element flags.
-constexpr uint32_t kFlagLowering = 1u;   ///< 2c.2: tau0 selected; the thrust persists after the arc
-constexpr uint32_t kFlagTauHeld = 2u;    ///< above the drag regime: tauc and taus held after the arc
 
 /// Resonance checkpoints per direction: the integrator's state at every
 /// 720-minute node for 32 days each way (4 doubles per node: forward XLI and
