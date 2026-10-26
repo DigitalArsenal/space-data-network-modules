@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cmath>
+#include <type_traits>
 #include <vector>
 
 #include "astrodynamics_types.h"
@@ -109,10 +110,52 @@ V elementPressure(const V& sat, const S& satNorm, const V& center, const V& sun,
     return r * (area * cosAlpha / (rNorm * rNorm * rNorm * PI_K) * albedoAndIr / SPEED_OF_LIGHT_M_S);
 }
 
+// Two elements in one register: wasm f64x2 under -msimd128 (NEON natively).
+// Vector operations are element-wise IEEE operations and wasm has no fused
+// multiply-add, so each lane computes its element's scalar expressions, in the
+// same order, to the same bits.
+typedef double Lanes __attribute__((vector_size(16)));
+typedef long long LaneMask __attribute__((vector_size(16)));
+inline Lanes keep(Lanes v, LaneMask m) { return (Lanes)((LaneMask)v & m); }   // v where m, else +0
+inline Lanes squareRoot(Lanes v) {
+#if defined(__has_builtin) && __has_builtin(__builtin_elementwise_sqrt)
+    return __builtin_elementwise_sqrt(v);
+#else
+    return Lanes{std::sqrt(v[0]), std::sqrt(v[1])};
+#endif
+}
+struct LanePressure { Lanes x, y, z; };
+/// elementPressure<Vec3, double> of two elements: the elements rotate(first,
+/// axis, c, s) of the two lanes' sector angles, where `turn` is cross(axis,
+/// first) and `along` dot(axis, first), the same for every sector of a crown.
+inline LanePressure elementPressures(const Vec3& sat, double satNorm, const Vec3& first, const Vec3& axis,
+                                     const Vec3& turn, double along, Lanes c, Lanes s, const Vec3& sun,
+                                     double sunNorm, double solarFlux, const Zonal& albedo,
+                                     const Zonal& emissivity, double area) {
+    const Lanes m = along * (1.0 - c);
+    const Lanes cx = first.x * c + turn.x * s + axis.x * m;
+    const Lanes cy = first.y * c + turn.y * s + axis.y * m;
+    const Lanes cz = first.z * c + turn.z * s + axis.z * m;
+    const Lanes centerNorm = squareRoot(cx * cx + cy * cy + cz * cz);
+    const Lanes cosAlpha = (cx * sat.x + cy * sat.y + cz * sat.z) / (centerNorm * satNorm);
+    const LaneMask seen = (LaneMask)(cosAlpha > 0.0);
+    const Lanes sinPhi = cz / centerNorm;
+    const Lanes e = sinPhi * emissivity.x1 + (sinPhi * sinPhi * 3.0 - 1.0) * (0.5 * emissivity.x2) + emissivity.x0;
+    const Lanes cosSun = (cx * sun.x + cy * sun.y + cz * sun.z) / (centerNorm * sunNorm);
+    const Lanes a = keep(sinPhi * albedo.x1 + (sinPhi * sinPhi * 3.0 - 1.0) * (0.5 * albedo.x2) + albedo.x0, (LaneMask)(cosSun > 0.0));
+    const Lanes albedoAndIr = a * solarFlux * cosSun + e * (solarFlux * 0.25);
+    const Lanes rx = sat.x - cx, ry = sat.y - cy, rz = sat.z - cz;
+    const Lanes rNorm = squareRoot(rx * rx + ry * ry + rz * rz);
+    const Lanes factor = area * cosAlpha / (rNorm * rNorm * rNorm * PI_K) * albedoAndIr / SPEED_OF_LIGHT_M_S;
+    return {keep(rx * factor, seen), keep(ry * factor, seen), keep(rz * factor, seen)};
+}
+
 /// The Earth radiation pressure vector (N/m^2) at `sat` (m, Earth-centred
 /// inertial axes) with the Sun at `sun` (m, same axes), `deltaT` seconds after
 /// the reference epoch, elements of angular size `resolution` (rad) on a
 /// sphere of radius `radius` (m). Multiply by Cr*A/m for the acceleration.
+/// The double evaluation takes a crown's sectors two at a time and adds their
+/// pressures in sector order, as one at a time.
 template <class V, class S>
 V pressure(const V& sat, const V& sun, double deltaT, double resolution, double radius) {
     const S satNorm = norm(sat);
@@ -132,8 +175,23 @@ V pressure(const V& sat, const V& sun, double deltaT, double resolution, double 
         if (!(crown.offset < horizon)) break;
         const V first = rotate(ground, east, crown.c, crown.s);
         const double sectorArea = radius * radius * 2.0 * resolution * grid.sinHalfResolution * crown.s;
-        for (const Angle& sector : grid.sectors)
+        size_t j = 0;
+        if constexpr (std::is_same<V, Vec3>::value && std::is_same<S, double>::value) {
+            const Vec3 turn = cross(groundAxis, first);
+            const double along = dot(groundAxis, first);
+            for (; j + 1 < grid.sectors.size(); j += 2) {
+                const Angle& u = grid.sectors[j];
+                const Angle& w = grid.sectors[j + 1];
+                const LanePressure p = elementPressures(sat, satNorm, first, groundAxis, turn, along, Lanes{u.c, w.c},
+                                                        Lanes{u.s, w.s}, sun, sunNorm, solarFlux, albedo, emissivity, sectorArea);
+                flux = flux + Vec3(p.x[0], p.y[0], p.z[0]);
+                flux = flux + Vec3(p.x[1], p.y[1], p.z[1]);
+            }
+        }
+        for (; j < grid.sectors.size(); ++j) {
+            const Angle& sector = grid.sectors[j];
             flux = flux + elementPressure<V, S>(sat, satNorm, rotate(first, groundAxis, sector.c, sector.s), sun, sunNorm, solarFlux, albedo, emissivity, sectorArea);
+        }
     }
     return flux;
 }

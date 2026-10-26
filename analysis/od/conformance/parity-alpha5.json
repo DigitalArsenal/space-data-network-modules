@@ -2,8 +2,8 @@
   "ok": true,
   "fixture": "analysis/od fit emitTle, Alpha-5 catalog numbers",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "d8a1fe52719b9ba6ef44002a2c40e06c1aa8de569ba6b30d9e13b98972a16bb7",
-  "moduleSha256": "d8a1fe52719b9ba6ef44002a2c40e06c1aa8de569ba6b30d9e13b98972a16bb7",
+  "artifactSha256": "ad9e5c5f6cd200f0be22f6ae4a0cefb347306eb7c640b361283f3f4af6ff07ef",
+  "moduleSha256": "ad9e5c5f6cd200f0be22f6ae4a0cefb347306eb7c640b361283f3f4af6ff07ef",
   "pin": "0.16.4",
   "lanes": [
     {
