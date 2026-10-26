@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// $PCF 1.0.5 (SDS 1.271.0): the required `configuration` input of every method
+// $PCF 1.0.6 (SDS 1.272.0): the required `configuration` input of every method
 // with options. A method reads THEORY and its own tables:
 //   propagate, maneuver   OUTPUT, FORCES, INTEGRATOR, EVENTS
 //   fit                   FIT, FORCES, INTEGRATOR
@@ -25,10 +25,13 @@ namespace pcf {
 
 enum Method : uint32_t { kPropagate, kManeuver, kFit, kEpochs };  ///< kEpochs: load_epochs, propagate_epochs (propagate's tables)
 
-/// A fitted parameter's prior, $PCF FIT.DRAG_PRIOR (B_eff) or FIT.SRP_PRIOR (AGOM), m^2/kg. Unset, or without a sigma: the
-/// documented default, mean 0 and sigma 0.05.
+/// A fitted parameter's prior, $PCF FIT.DRAG_PRIOR (B_eff) or FIT.SRP_PRIOR (AGOM), m^2/kg, with its form
+/// (FIT.DRAG_PRIOR_FORM, FIT.SRP_PRIOR_FORM). Unset, or without a sigma: the documented default, GAUSSIAN_SIGNED with mean
+/// 0 and sigma 0.05. LOG_NORMAL: the fit estimates the parameter's natural log, `mean` is the median (> 0) and `sigma`
+/// the standard deviation of the log.
 struct Prior {
   double mean = 0.0, sigma = 0.05;
+  int form = pcfPriorForm_GAUSSIAN_SIGNED;
 };
 
 /// One call's options, every one at its documented default.
@@ -94,11 +97,13 @@ constexpr ForceField kForceFields[] = {
     {"OCEAN_TIDE_MAXIMUM_ORDER", Kind::U16, 30}, {"CENTRAL_BODY_NAIF_ID", Kind::I32, 399}, {"EPHEMERIS_KIND", Kind::U8, 0},
     {"SHADOW_MODEL", Kind::U8, 0}, {"WEATHER_SOURCE", Kind::U8, 0}, {"WEATHER_EXTENSION", Kind::U8, 0},
     {"DENSITY_CORRECTION", Kind::U8, 0}, {"DENSITY_CORRECTION_RELAXATION_HOURS", Kind::F64, 0},
-    {"HAS_DENSITY_CORRECTION_RELAXATION_HOURS", Kind::U8, 0}, {"NEUTRAL_WIND", Kind::U8, 0}};
+    {"HAS_DENSITY_CORRECTION_RELAXATION_HOURS", Kind::U8, 0}, {"NEUTRAL_WIND", Kind::U8, 0},
+    {"THIRD_BODY_MAXIMUM_DEGREE", Kind::U16, 0}, {"THIRD_BODY_MAXIMUM_ORDER", Kind::U16, 0}};
 
-static_assert(sizeof kForceFields / sizeof kForceFields[0] == 49 && PCFForceModel::VT_NEUTRAL_WIND == 4 + 2 * 48 &&
-                  PCFForceModel::VT_EPHEMERIS_SOURCE == 4 + 2 * 21 && PCFForceModel::VT_THIRD_BODY_IDS == 4 + 2 * 12,
-              "kForceFields follows PCFForceModel's declaration order");
+static_assert(sizeof kForceFields / sizeof kForceFields[0] == 51 && PCFForceModel::VT_THIRD_BODY_MAXIMUM_ORDER == 4 + 2 * 50 &&
+                  PCFForceModel::VT_NEUTRAL_WIND == 4 + 2 * 48 && PCFForceModel::VT_EPHEMERIS_SOURCE == 4 + 2 * 21 &&
+                  PCFForceModel::VT_THIRD_BODY_IDS == 4 + 2 * 12,
+              "kForceFields follows PCFForceModel's declaration order, every field");
 
 /// A field away from its documented default.
 inline bool off_default(const flatbuffers::Table* t, uint16_t vt, const ForceField& f) {
@@ -130,19 +135,44 @@ inline uint32_t tables_of(Method m) {
   return 0;
 }
 
-/// FIT.<name>: 0 with `out` set (left at its default when the prior is absent or carries no sigma), or 3 refused by name.
-inline int read_prior(const PCFGaussianPrior* p, const char* name, Prior& out) {
-  if (p == nullptr) return 0;
+/// FIT.<name> and its form FIT.<name>_FORM: 0 with `out` set (the prior left at its default when absent or without a
+/// sigma), or 3 refused by name. LOG_NORMAL needs the prior, its sigma (HAS_SIGMA true) and a MEAN, the median, > 0.
+inline int read_prior(const PCFGaussianPrior* p, uint8_t form, const char* name, Prior& out) {
   char field[48];
-  if (p->HAS_SIGMA()) {
-    std::snprintf(field, sizeof field, "FIT.%s.SIGMA", name);
-    if (!(p->SIGMA() > 0.0)) return refuse(field, "a sigma is positive");
-    out.mean = p->MEAN();
-    out.sigma = p->SIGMA();
-  } else if (p->MEAN() != 0.0) {
-    std::snprintf(field, sizeof field, "FIT.%s.MEAN", name);
-    return refuse(field, "a prior mean comes with its SIGMA (HAS_SIGMA true)");
+  bool given = false;
+  if (p != nullptr) {
+    if (p->HAS_SIGMA()) {
+      std::snprintf(field, sizeof field, "FIT.%s.SIGMA", name);
+      if (!(p->SIGMA() > 0.0)) return refuse(field, "a sigma is positive");
+      out.mean = p->MEAN();
+      out.sigma = p->SIGMA();
+      given = true;
+    } else if (p->MEAN() != 0.0) {
+      std::snprintf(field, sizeof field, "FIT.%s.MEAN", name);
+      return refuse(field, "a prior mean comes with its SIGMA (HAS_SIGMA true)");
+    }
   }
+  switch (form) {
+    case pcfPriorForm_GAUSSIAN_SIGNED: break;
+    case pcfPriorForm_LOG_NORMAL:
+      if (p == nullptr) {
+        std::snprintf(field, sizeof field, "FIT.%s", name);
+        return refuse(field, "LOG_NORMAL needs the prior: MEAN the median (> 0, m^2/kg) and SIGMA the standard deviation of its natural log, HAS_SIGMA true");
+      }
+      if (!given) {
+        std::snprintf(field, sizeof field, "FIT.%s.SIGMA", name);
+        return refuse(field, "LOG_NORMAL needs the standard deviation of the natural log (HAS_SIGMA true)");
+      }
+      if (!(out.mean > 0.0)) {
+        std::snprintf(field, sizeof field, "FIT.%s.MEAN", name);
+        return refuse(field, "under LOG_NORMAL the MEAN is the median, > 0");
+      }
+      break;
+    default:
+      std::snprintf(field, sizeof field, "FIT.%s_FORM", name);
+      return refuse(field, "GAUSSIAN_SIGNED or LOG_NORMAL");
+  }
+  out.form = form;
   return 0;
 }
 
@@ -187,8 +217,8 @@ inline int read_fit(const PCFFitPolicy* f, Options& o) {
   if (!(o.eccentric_maximum_period_h > 0.0)) return refuse("FIT.ECCENTRIC_MAXIMUM_PERIOD_HOURS", "a period is positive");
   o.implausible_rms_km = f->IMPLAUSIBLE_RMS_KM();
   if (!(o.implausible_rms_km > 0.0)) return refuse("FIT.IMPLAUSIBLE_RMS_KM", "a bound is positive");
-  if (const int rc = read_prior(f->DRAG_PRIOR(), "DRAG_PRIOR", o.drag_prior)) return rc;
-  return read_prior(f->SRP_PRIOR(), "SRP_PRIOR", o.srp_prior);
+  if (const int rc = read_prior(f->DRAG_PRIOR(), f->DRAG_PRIOR_FORM(), "DRAG_PRIOR", o.drag_prior)) return rc;
+  return read_prior(f->SRP_PRIOR(), f->SRP_PRIOR_FORM(), "SRP_PRIOR", o.srp_prior);
 }
 
 inline int read_output(const PCFOutput* p, Options& o) {

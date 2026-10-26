@@ -53,6 +53,29 @@ inline void start_row(const Sample& s, ElementRow& row) {
   row.mean_anomaly_deg = deg(M);
 }
 
+/// The fit's prior on a term in the space the fit estimates it in: LOG_NORMAL its natural log (the mean the log of the
+/// median, the sigma that of the log), GAUSSIAN_SIGNED the term itself.
+inline void set_prior(const pcf::Prior& p, int32_t& log_flag, double& mean, double& sigma) {
+  log_flag = p.form == pcfPriorForm_LOG_NORMAL ? 1 : 0;
+  mean = log_flag ? std::log(p.mean) : p.mean;
+  sigma = p.sigma;
+}
+
+/// The $OBD model text of a fitted term: its prior's form and the values used; under LOG_NORMAL with the covariance, the
+/// posterior sigma of the log, the covariance marked prior-limited when that passes 0.5 (the term effectively unobserved:
+/// the delta method then stands in poorly for a wide log-normal).
+inline void model_text(const char* term, const pcf::Prior& p, double log_sigma, char* out, size_t n) {
+  if (p.form != pcfPriorForm_LOG_NORMAL) {
+    std::snprintf(out, n, "%s, Gaussian prior %.9g +- %.9g m^2/kg", term, p.mean, p.sigma);
+    return;
+  }
+  const int k = std::snprintf(out, n, "%s, log-normal prior, estimated as its natural log (never <= 0): median %.9g m^2/kg, sigma of the log %.9g",
+                              term, p.mean, p.sigma);
+  if (log_sigma > 0.0 && k > 0 && static_cast<size_t>(k) < n)
+    std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior sigma of the log %.17g%s", log_sigma,
+                  log_sigma > 0.5 ? "; covariance prior-limited (posterior sigma of the log > 0.5)" : "");
+}
+
 inline bool text_epoch(const flatbuffers::String* s, double& whole, double& frac) {
   return s != nullptr && omm::epoch(s->c_str(), s->size(), whole, frac);
 }
@@ -330,6 +353,10 @@ static int fit_blocks() {
         row.epoch_jd_frac = e0.frac;
         row.theory = kTheorySgp4Xp;
         fitoem::start_row(s0, row);
+        // a LOG_NORMAL term starts at its prior's median and stays > 0: the 2-revolution stage holds BTERM there, and
+        // every stage before the last holds AGOM there
+        if (po.drag_prior.form == pcfPriorForm_LOG_NORMAL) row.bterm = po.drag_prior.mean;
+        if (po.srp_prior.form == pcfPriorForm_LOG_NORMAL) row.agom = po.srp_prior.mean;
         // the arc grown from two revolutions to the whole fit interval
         fit::Options opt{};
         opt.max_iterations = 40;
@@ -343,9 +370,8 @@ static int fit_blocks() {
           iterations += res.iterations;
         }
         opt.fit_drag = 1;
-        // SGP4XP: the $PCF FIT.DRAG_PRIOR on BTERM (default a weak prior about zero, 0 +- 0.05 m^2/kg)
-        opt.drag_prior = po.drag_prior.mean;
-        opt.drag_sigma = po.drag_prior.sigma;
+        // SGP4XP: the $PCF FIT.DRAG_PRIOR on BTERM (default a weak prior about zero, 0 +- 0.05 m^2/kg; LOG_NORMAL on ln BTERM)
+        fitoem::set_prior(po.drag_prior, opt.drag_log, opt.drag_prior, opt.drag_sigma);
         // grown by threes in between (2, 6, 18 ... revolutions), each stage from the last: from a drag-free start the
         // whole arc of a fast decay lies far outside the linear range (an e 0.03 orbit at 175 km loses 15 km of a in
         // 48 h, some 2,000 km along-track), and the single jump stalled on a wrong minimum (fit RMS 7 to 9 km)
@@ -363,8 +389,8 @@ static int fit_blocks() {
         iterations += res.iterations;
         const double first_pass_rms = res.rms_km;
         opt.fit_agom = 1;
-        opt.agom_prior = po.srp_prior.mean;  // $PCF FIT.SRP_PRIOR, default 0 +- 0.05 m^2/kg
-        opt.agom_sigma = po.srp_prior.sigma;
+        // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg; LOG_NORMAL on ln AGOM)
+        fitoem::set_prior(po.srp_prior, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
         if (res.status < 0) return 2;
@@ -616,8 +642,11 @@ static int fit_blocks() {
         const auto o_end = ob.CreateString(end_text);
         const auto o_from = ob.CreateString(epoch_text);
         const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
-        const auto o_bmodel = ob.CreateString("BTERM (SGP4XP), prior 0 +- 0.05 m^2/kg");
-        const auto o_amodel = ob.CreateString("AGOM (SGP4XP), prior 0 +- 0.05 m^2/kg");
+        char bmodel[400], amodel[400];
+        fitoem::model_text("BTERM (SGP4XP)", po.drag_prior, have_cov ? fit_cov.log_sigma[0] : 0.0, bmodel, sizeof bmodel);
+        fitoem::model_text("AGOM (SGP4XP)", po.srp_prior, have_cov ? fit_cov.log_sigma[1] : 0.0, amodel, sizeof amodel);
+        const auto o_bmodel = ob.CreateString(bmodel);
+        const auto o_amodel = ob.CreateString(amodel);
         const auto o_object = object != nullptr && object->OBJECT_ID() != nullptr ? ob.CreateString(object->OBJECT_ID()->c_str()) : 0;
         const auto o_types = ob.CreateVectorOfStrings(std::vector<std::string>{"POSITION"});
         OBDBuilder d(ob);

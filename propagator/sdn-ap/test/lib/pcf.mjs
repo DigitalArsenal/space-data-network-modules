@@ -1,4 +1,4 @@
-// $PCF 1.0.5 (SDS 1.271.0) configurations for the tests: every method with options takes one on its
+// $PCF 1.0.6 (SDS 1.272.0) configurations for the tests: every method with options takes one on its
 // required `configuration` port.
 import * as flatbuffers from "flatbuffers";
 import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
@@ -6,9 +6,16 @@ import { PCFFitPolicyT } from "spacedatastandards.org/lib/js/PCF/PCFFitPolicy.js
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { PCFForceModelT } from "spacedatastandards.org/lib/js/PCF/PCFForceModel.js";
 import { PCFEpochStoreT } from "spacedatastandards.org/lib/js/PCF/PCFEpochStore.js";
+import { PCFGaussianPriorT } from "spacedatastandards.org/lib/js/PCF/PCFGaussianPrior.js";
 import { pcfTheory } from "spacedatastandards.org/lib/js/PCF/pcfTheory.js";
+import { pcfPriorForm } from "spacedatastandards.org/lib/js/PCF/pcfPriorForm.js";
 
-export { pcfTheory };
+export { pcfTheory, pcfPriorForm };
+
+/// A FIT.DRAG_PRIOR or FIT.SRP_PRIOR with its sigma (HAS_SIGMA true); under LOG_NORMAL `mean` is the median and `sigma`
+/// the standard deviation of the natural log.
+export const prior = (mean, sigma) => Object.assign(new PCFGaussianPriorT(), { MEAN: mean, SIGMA: sigma, HAS_SIGMA: true });
+
 export const PCF_TYPE = { schemaName: "PCF.fbs", fileIdentifier: "$PCF", rootTypeName: "PCF" };
 
 /// The methods with a `configuration` port.

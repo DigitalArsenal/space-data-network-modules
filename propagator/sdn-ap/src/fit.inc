@@ -87,17 +87,21 @@ inline void model_position(const Dual* y, double t, Dual ndot, Dual out[3]) {
   out[2] = X * fz + Y * gz;
 }
 
-/// Fit options (48 bytes, sdnap_fit).
+/// Fit options (56 bytes, sdnap_fit). A parameter with its `_log` flag set is estimated as its natural log ($PCF
+/// FIT.DRAG_PRIOR_FORM / SRP_PRIOR_FORM LOG_NORMAL): the iteration steps in the log, so the parameter is never <= 0,
+/// and its prior mean and sigma are those of the log (the mean the log of the median).
 struct Options {
   int32_t fit_drag;        ///< fit B (SGP4XP BTERM)
   int32_t max_iterations;  ///< 0: 30
-  double drag_prior;       ///< prior mean of the drag term (DESIGN 2e.3)
+  double drag_prior;       ///< prior mean of the drag term (DESIGN 2e.3); of ln B under drag_log
   double drag_sigma;       ///< its sigma; <= 0: no prior
   int32_t fit_agom;        ///< fit AGOM (its column by a finite difference of the theory)
-  double agom_prior;       ///< prior mean of AGOM
+  double agom_prior;       ///< prior mean of AGOM; of ln AGOM under agom_log
   double agom_sigma;       ///< its sigma; <= 0: no prior
+  int32_t drag_log;        ///< 1: the drag parameter is ln B (B > 0 at the start)
+  int32_t agom_log;        ///< 1: the AGOM parameter is ln AGOM (AGOM > 0 at the start)
 };
-static_assert(sizeof(Options) == 48, "fit Options are 48 bytes");
+static_assert(sizeof(Options) == 56, "fit Options are 56 bytes");
 
 struct Result {
   int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, < 0 refused
@@ -149,7 +153,8 @@ inline bool solve(double* A, double* b, int n) {
   return true;
 }
 
-/// The parameter vector of a row: af, ag, chi, psi, lambda0, n, [drag], [agom].
+/// The parameter vector of a row: af, ag, chi, psi, lambda0, n, [drag], [agom]; the drag and AGOM terms as their
+/// natural logs under drag_log / agom_log.
 inline int params_of(const ElementRow& row, const Options& o, double* x) {
   const double n = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   double y[6];
@@ -157,8 +162,8 @@ inline int params_of(const ElementRow& row, const Options& o, double* x) {
                       row.arg_pericenter_deg * kDeg, row.mean_anomaly_deg * kDeg, y);
   x[0] = y[xpt::kAf]; x[1] = y[xpt::kAg]; x[2] = y[xpt::kChi]; x[3] = y[xpt::kPsi]; x[4] = y[xpt::kLam]; x[5] = y[xpt::kN];
   int np = 6;
-  if (o.fit_drag) x[np++] = row.bterm;
-  if (o.fit_agom) x[np++] = row.agom;
+  if (o.fit_drag) x[np++] = o.drag_log ? std::log(row.bterm) : row.bterm;
+  if (o.fit_agom) x[np++] = o.agom_log ? std::log(row.agom) : row.agom;
   return np;
 }
 
@@ -172,8 +177,14 @@ inline void row_of(const double* x, const Options& o, ElementRow& row) {
   row.arg_pericenter_deg = k.argp / kDeg;
   row.mean_anomaly_deg = k.m / kDeg;
   int np = 6;
-  if (o.fit_drag) row.bterm = x[np++];
-  if (o.fit_agom) row.agom = x[np++];
+  if (o.fit_drag) {
+    const double v = x[np++];
+    row.bterm = o.drag_log ? std::exp(v) : v;
+  }
+  if (o.fit_agom) {
+    const double v = x[np++];
+    row.agom = o.agom_log ? std::exp(v) : v;
+  }
 }
 
 /// The finite-difference fallback of run(): where no step along the analytic Jacobian (two-body motion with the J2
@@ -189,6 +200,11 @@ inline bool& jacobian_fallback() {
 /// fixed terms) and receives the fitted one.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
   Result out{};
+  // a parameter estimated as its log starts positive (its prior's median)
+  if ((o.fit_drag && o.drag_log && !(row.bterm > 0.0)) || (o.fit_agom && o.agom_log && !(row.agom > 0.0))) {
+    out.status = -3;
+    return out;
+  }
   const int nres = 3 * count;
   const int max_it = o.max_iterations > 0 ? o.max_iterations : 30;
   double x[kMaxParams];
@@ -255,8 +271,9 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       for (int j = 0; j < 6; ++j) y[j] = dvar(x[j], j);
       Dual ndot = dconst(0.0);
       if (o.fit_drag) {
-        ndot.v = x[6] * ndot_per_drag;
-        ndot.d[6] = ndot_per_drag;
+        // per unit B; per unit ln B (B times it) when the parameter is ln B
+        ndot.v = work.bterm * ndot_per_drag;
+        ndot.d[6] = o.drag_log ? work.bterm * ndot_per_drag : ndot_per_drag;
       }
       Dual pos[3];
       model_position(y, t[k], ndot, pos);
@@ -268,8 +285,12 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       ElementRow bumped = work;
       const double step = std::fabs(work.agom) * 0.01 > 1e-4 ? std::fabs(work.agom) * 0.01 : 1e-4;
       bumped.agom = work.agom + step;
-      if (residuals(bumped, t, r, count, trial))
-        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / step;
+      if (residuals(bumped, t, r, count, trial)) {
+        if (o.agom_log)  // per unit ln AGOM: AGOM times the column per unit AGOM
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = work.agom * ((trial[i] - res[i]) / step);
+        else
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / step;
+      }
     }
     double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
     auto normal = [&]() {
@@ -394,12 +415,20 @@ inline Result tle_lattice(ElementRow& row, const double* t, const double* r, int
   best.mean_anomaly_deg = round_to(row.mean_anomaly_deg, 1e-4);
   best.bterm = round_to(row.bterm, exp_unit(row.bterm));
   best.agom = round_to(row.agom, exp_unit(row.agom));
+  // a term its prior pins within one unit of its last digit (the prior's sigma in the term's units, sigma of the log
+  // times the term under the log, at most that unit) keeps the fit's value at the text's digits: the search, which
+  // weighs the residuals alone, never steps it against its prior
+  auto pinned = [&](int32_t fitted, int32_t log_form, double sigma, double value) {
+    return fitted && sigma > 0.0 && (log_form ? sigma * std::fabs(value) : sigma) <= exp_unit(value);
+  };
+  const bool hold_drag = pinned(o.fit_drag, o.drag_log, o.drag_sigma, best.bterm);
+  const bool hold_agom = pinned(o.fit_agom, o.agom_log, o.agom_sigma, best.agom);
   double c = cost(best);
   for (int pass = 0; pass < 4; ++pass) {
     bool moved = false;
     for (int k = 0; k < 8; ++k) {
-      if (k == 6 && !o.fit_drag) continue;
-      if (k == 7 && !o.fit_agom) continue;
+      if (k == 6 && (!o.fit_drag || hold_drag)) continue;
+      if (k == 7 && (!o.fit_agom || hold_agom)) continue;
       for (int dir = -1; dir <= 1; dir += 2) {
         ElementRow cand = best;
         switch (k) {
@@ -413,6 +442,7 @@ inline Result tle_lattice(ElementRow& row, const double* t, const double* r, int
           default: cand.agom += dir * exp_unit(best.agom); break;
         }
         if (cand.eccentricity < 0.0) continue;
+        if ((o.drag_log && !(cand.bterm > 0.0)) || (o.agom_log && !(cand.agom > 0.0))) continue;  // a log-estimated term stays > 0
         const double cc = cost(cand);
         if (cc < c) { c = cc; best = cand; moved = true; }
       }

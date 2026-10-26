@@ -329,9 +329,13 @@ int32_t sdnap_init_error(uint32_t index) {
 
 /// fit (DESIGN 2e): `count` TEME positions (km, 3 per sample) at `minutes`
 /// from the epoch of `row` (an ElementRow: epoch, theory, starting elements and
-/// fixed terms), fitted in place. `options` (48 bytes): fit_drag, max
-/// iterations, drag prior mean and sigma. `stats` (4 doubles): status,
-/// iterations, rms km, max km. Returns 0 or a negative code.
+/// fixed terms), fitted in place. `options` (fit::Options, 56 bytes): int32
+/// fit_drag, int32 max iterations (0: 30), double drag prior mean and sigma,
+/// int32 fit_agom (4 bytes of padding follow), double AGOM prior mean and
+/// sigma, int32 drag_log, int32 agom_log (1: the term is estimated as its
+/// natural log, its prior mean and sigma those of the log; the row's term must
+/// then start > 0). `stats` (4 doubles): status, iterations, rms km, max km.
+/// Returns 0 or a negative code.
 SDNAP_EXPORT("sdnap_fit")
 int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* positions, uint32_t count,
                   const sdnap::fit::Options* options, double* stats) {

@@ -14,7 +14,9 @@
 //   NRLMSISE-00 arm with the set's BTERM doubled within 1 um (the drag rates are linear in B rho).
 // - Above 2,500 km every atmosphere is the theory's 1e-20 kg/m^3: a GPS-like set propagates to the same bytes.
 // - Jacchia 1970 on measured drivers (model 1) reads the same rows as NRLMSISE-00.
-// - Every refusal is by name.
+// - Probe model 3 (task modules-sgp4xp-fit-lognormal-drag-20261026): NRLMSISE-00 times exp(s(t)) of a $DCL; a constant
+//   ln 2 doubles model 2 within 1e-15 and a varying s scales it by exp of its linear interpolation within 1e-12.
+// - Every refusal is by name, FORCES.THIRD_BODY_MAXIMUM_DEGREE and _ORDER included.
 // JS only moves bytes and compares numbers the modules produced.
 //   node test/atmosphere.e2e.mjs
 import fs from "node:fs";
@@ -227,7 +229,7 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
     const r = [rad * Math.cos(lat) * Math.cos(lon), rad * Math.cos(lat) * Math.sin(lon), rad * Math.sin(lat)];
     const jd = 2440587.5 + ms / DAY, whole = Math.floor(jd - 0.5) + 0.5, frac = (ms - (whole - 2440587.5) * DAY) / DAY;
     new Float64Array(mem(), rp, 3).set(r);
-    const status = x.sdnap_atmosphere_probe(2, whole, frac, rp, rowsPtr, rows.bytes.length, out);
+    const status = x.sdnap_atmosphere_probe(2, whole, frac, rp, rowsPtr, rows.bytes.length, 0, 0, out);
     const o = Array.from(new Float64Array(mem(), out, 7));
     points.push({ ms, whole, frac, r, status, rho: o[0], lat: o[1], lon: o[2], h: o[3], drivers: o.slice(4) });
   }
@@ -272,11 +274,39 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
   let j70Miss = 0;
   for (const p of points.slice(0, 40)) {
     new Float64Array(mem(), rp, 3).set(p.r);
-    const status = x.sdnap_atmosphere_probe(1, p.whole, p.frac, rp, rowsPtr, rows.bytes.length, out);
+    const status = x.sdnap_atmosphere_probe(1, p.whole, p.frac, rp, rowsPtr, rows.bytes.length, 0, 0, out);
     const o = Array.from(new Float64Array(mem(), out, 7));
     if (status !== 0 || !(o[0] > 0) || o[4] !== p.drivers[0] || o[5] !== p.drivers[1] || o[6] !== p.drivers[2]) j70Miss += 1;
   }
   check(j70Miss === 0, `probe model 1: ${j70Miss} points with other drivers or no density`);
+  // model 3 (task modules-sgp4xp-fit-lognormal-drag-20261026): NRLMSISE-00 on the drivers times exp(s(t)) of the $DCL,
+  // s linear in UTC between its nodes; a constant ln 2 doubles model 2, a varying s scales it by exp of the interpolation
+  {
+    const nodes = [day0, day0 + 4 * DAY, day0 + 8 * DAY, day0 + 11 * DAY], s = [0.1, -0.2, 0.3, 0];
+    const put = (bytes) => { const p = x.sdnap_alloc(bytes.length); new Uint8Array(mem(), p, bytes.length).set(bytes); return p; };
+    const ln2 = dclOf(nodes, nodes.map(() => Math.log(2))), varying = dclOf(nodes, s), pending = dclOf(nodes, s, { status: dclStatus.Pending });
+    const pl = put(ln2), pv = put(varying), pp = put(pending);
+    const sAt = (ms) => { const k = nodes.findIndex((t, i) => ms >= t && ms <= nodes[i + 1]); const w = (ms - nodes[k]) / (nodes[k + 1] - nodes[k]); return s[k] * (1 - w) + s[k + 1] * w; };
+    let worstDouble = 0, worstVarying = 0, bad = 0;
+    for (const p of points.slice(0, 60)) {
+      new Float64Array(mem(), rp, 3).set(p.r);
+      const s2 = x.sdnap_atmosphere_probe(3, p.whole, p.frac, rp, rowsPtr, rows.bytes.length, pl, ln2.length, out);
+      const d2 = new Float64Array(mem(), out, 7)[0];
+      const s3 = x.sdnap_atmosphere_probe(3, p.whole, p.frac, rp, rowsPtr, rows.bytes.length, pv, varying.length, out);
+      const d3 = new Float64Array(mem(), out, 7)[0];
+      if (s2 !== 0 || s3 !== 0) { bad += 1; continue; }
+      worstDouble = Math.max(worstDouble, Math.abs(d2 / (2 * p.rho) - 1));
+      worstVarying = Math.max(worstVarying, Math.abs(d3 / (p.rho * Math.exp(sAt(p.ms))) - 1));
+    }
+    console.log(`probe model 3: a constant ln 2 doubles model 2 within ${worstDouble.toExponential(2)}, a varying s scales it by exp(s(t)) within ${worstVarying.toExponential(2)} (60 points)`);
+    check(bad === 0 && worstDouble <= 1e-15 && worstVarying <= 1e-12, `probe model 3: ${bad} refused, ${worstDouble}, ${worstVarying}`);
+    new Float64Array(mem(), rp, 3).set(points[0].r);
+    const refusedProbe = [x.sdnap_atmosphere_probe(3, points[0].whole, points[0].frac, rp, rowsPtr, rows.bytes.length, 0, 0, out),
+      x.sdnap_atmosphere_probe(2, points[0].whole, points[0].frac, rp, rowsPtr, rows.bytes.length, pv, varying.length, out),
+      x.sdnap_atmosphere_probe(3, points[0].whole, points[0].frac, rp, rowsPtr, rows.bytes.length, pp, pending.length, out)];
+    check(refusedProbe.every((r) => r === -1), `probe: model 3 without a $DCL, model 2 with one, a $DCL not Solved: ${refusedProbe.join(", ")}`);
+    for (const q of [pl, pv, pp]) x.sdnap_free(q);
+  }
   // rows that start on the point's own day do not reach the day before
   {
     const late = rowsOf(day0 + 5 * DAY, 3);
@@ -284,7 +314,7 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
     new Uint8Array(mem(), lp, late.bytes.length).set(late.bytes);
     new Float64Array(mem(), rp, 3).set(points[0].r);
     const jd = 2440587.5 + (day0 + 5 * DAY + 0.5 * DAY) / DAY, whole = Math.floor(jd - 0.5) + 0.5;
-    check(x.sdnap_atmosphere_probe(2, whole, jd - whole, rp, lp, late.bytes.length, out) === 1, "probe: rows starting on the point's day are not flagged");
+    check(x.sdnap_atmosphere_probe(2, whole, jd - whole, rp, lp, late.bytes.length, 0, 0, out) === 1, "probe: rows starting on the point's day are not flagged");
     x.sdnap_free(lp);
   }
   x.sdnap_free(rowsPtr); x.sdnap_free(rp); x.sdnap_free(out);
@@ -332,6 +362,9 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
   await refused("DCA on Jacchia 1970", "propagate", { ...base, ...forces({ DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE }), rows: rows.bytes }, "configuration-refused", "FORCES.DENSITY_CORRECTION");
   await refused("relaxation 12 h", "propagate", { ...base, ...forces({ ...A3.forces, DENSITY_CORRECTION_RELAXATION_HOURS: 12, HAS_DENSITY_CORRECTION_RELAXATION_HOURS: true }), rows: rows.bytes, dcl: dclOf([day0], [0]) }, "configuration-refused", "FORCES.DENSITY_CORRECTION_RELAXATION_HOURS");
   await refused("another FORCES field", "propagate", { ...base, ...forces({ AREA_M2: 3 }) }, "configuration-refused", "FORCES.AREA_M2");
+  // the last two PCFForceModel fields (task modules-sgp4xp-fit-lognormal-drag-20261026): refused by name, not ignored
+  await refused("THIRD_BODY_MAXIMUM_DEGREE 2", "propagate", { ...base, ...forces({ THIRD_BODY_MAXIMUM_DEGREE: 2 }) }, "configuration-refused", "FORCES.THIRD_BODY_MAXIMUM_DEGREE");
+  await refused("THIRD_BODY_MAXIMUM_ORDER 2", "fit", { ephemeris: await propagated("track", base), ...forces({ THIRD_BODY_MAXIMUM_ORDER: 2 }) }, "configuration-refused", "FORCES.THIRD_BODY_MAXIMUM_ORDER");
   await refused("NRLMSISE-00 without rows", "propagate", { ...base, ...forces({ ENABLE_DRAG: true }) }, "space-weather-missing");
   await refused("RECORDS without rows", "fit", { ephemeris: await propagated("track", base), ...forces({ WEATHER_SOURCE: pcfWeatherSource.RECORDS }) }, "space-weather-missing");
   await refused("DCA without a $DCL", "propagate", { ...base, ...A3, rows: rows.bytes }, "density-correction-missing");

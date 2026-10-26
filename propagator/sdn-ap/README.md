@@ -51,7 +51,7 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
   13 frames of at most 4 MiB) load in 0.1 s into 30,931 series and 106,813 sets, 17.0 MiB (577 bytes a series) before
   any series is propagated.
-- Configuration (SDS 1.271.0, `$PCF` 1.0.5): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
+- Configuration (SDS 1.272.0, `$PCF` 1.0.6): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults
   schema/PCF/main.fbs documents, each this module's own, so a table whose fields are all unset (or written at their
@@ -62,7 +62,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
   below), and any other FORCES field is refused by name. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
-  GCRF or EME2000, at most 500,000 states) apply with their documented ranges.
+  GCRF or EME2000, at most 500,000 states) apply with their documented ranges; FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM
+  LOG_NORMAL need their prior (HAS_SIGMA true, the MEAN its median > 0), refused by name without it.
 - Invoke surface (SDS buffers plain or size-prefixed): `ingest_omm` takes `$OMM` records (MEAN_ELEMENT_THEORY SGP4 or
   SGP4XP); `propagate` returns one `$OEM` per `$OMM` on the grid of an optional 'grid' `$OEM` template, as modules
   propagator/sgp4-xp reads it: explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day,
@@ -85,7 +86,14 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
   down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
-  no step along the analytic Jacobian lowers the cost.
+  no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR (default
+  GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg); under LOG_NORMAL the iteration steps in the term's natural log, starting at the
+  prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
+  <= 0. The set is rounded to the two-line digits and searched on their lattice; a term whose prior sigma, in its own
+  units (sigma of the log times the term under LOG_NORMAL), is at most one unit of its last digit is not stepped. The
+  `$OBD` BALLISTIC_COEFF_MODEL and AGOM_MODEL state each prior's form and values as used; under LOG_NORMAL with a
+  covariance, the posterior sigma of the log, and "covariance prior-limited" when it passes 0.5 (the term effectively
+  unobserved). The raw export `sdnap_fit` takes the 56-byte fit options with drag_log and agom_log.
 - Third-party code, read from the open modules repository (this repository vendors nothing) and pinned by SHA-256
   in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.txt` records the path, commits and
   hashes): ERFA (BSD-3-Clause, derived with permission from IAU SOFA; license carried in `LICENSES/ERFA.txt` and
@@ -122,7 +130,8 @@ describes the orbit under that atmosphere and carries no mark of it.
 - the open DCA: s = 0 gives the NRLMSISE-00 bytes; s = ln 2 gives the NRLMSISE-00 states with BTERM doubled, the same
   numbers over 3 days;
 - a GPS-like set: the same bytes under every atmosphere (1e-20 kg/m^3 above 2500 km);
-- 15 refusals by name.
+- 17 refusals by name, FORCES.THIRD_BODY_MAXIMUM_DEGREE and _ORDER among them;
+- probe model 3: a constant s = ln 2 doubles model 2 within 2.2e-16, a varying s scales it by exp(s(t)) within 2.1e-13.
 
 Cost (owner Mac, browser host, 20 sets at 400 km, 7 days on a 1 h grid): 0.17 ms per object-day for section 3 and for
 Jacchia 1970 on rows, 0.91 ms with NRLMSISE-00.
@@ -131,7 +140,8 @@ Fit diagnostics (the fit-design study, not configuration): `sdnap_fit_epoch_diag
 epoch at the fit interval's first state (0, the module's), the state nearest its middle (1) or its last state (2);
 `sdnap_fit_jacobian_diagnostic(1)` takes the finite-difference element and drag columns wherever the analytic ones stop
 lowering the cost, in every fit (0: eccentric orbits only). `sdnap_atmosphere_probe` gives a drag node's density,
-geodetic point and drivers at a TEME position.
+geodetic point and drivers at a TEME position: model 0 the theory's own, 1 Jacchia 1970 and 2 NRLMSISE-00 on `$SPW`
+rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
 
 ## Maneuvers (DESIGN 5.1; method `maneuver`)
 
@@ -257,7 +267,13 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
   GCRF and EME2000 grids; the default 48 h span; a size-prefixed `$OMM`; a Moon-centered `$OMM` refused
-  (unsupported-center); an `$OMM`, a `$PCF` and an `ElementRow` that name the removed SDN-AP theory refused.
+  (unsupported-center); an `$OMM`, a `$PCF` and an `ElementRow` that name the removed SDN-AP theory refused; the prior
+  forms on NASA's ISS file of 2025-01-23, its first 24 h (a window from before plan XM's period, read from the local
+  archive, `SDNAP_ISS_ARCHIVE`, SHA-256 pinned; NOT MEASURED without it): the default ends at BTERM -7.2e-37 with a fit
+  RMS of 880 m, LOG_NORMAL N(ln 0.01, ln 10) at 0.01106 m^2/kg with 481 m; sqrt(C_BB) = B x the posterior sigma of
+  ln B (0.0198) within 2.2e-16; an unobserved AGOM (posterior sigma of its log 2.21) marked prior-limited; AGOM held
+  at 0.01 under SRP_PRIOR 0.01 +- 1e-9 and +- 1e-6 and stepped just above the 1e-6 unit; the default prior's sets
+  byte-identical to main's; the LOG_NORMAL refusals by name; `sdnap_fit` with drag_log.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
@@ -271,6 +287,6 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.
 - `test/atmosphere.e2e.mjs`: the drag atmosphere of SPEC 15 (above).
-- `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `maneuver`, `propagate_epochs`, and
-  `propagate` and `fit` under NRLMSISE-00 times the open DCA (SPEC 15), through the browser host and native WasmEdge
-  0.16.4: identical bytes.
+- `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `maneuver`, `propagate_epochs`,
+  `propagate` and `fit` under NRLMSISE-00 times the open DCA (SPEC 15), and a fit under LOG_NORMAL priors on BTERM
+  and AGOM, through the browser host and native WasmEdge 0.16.4: identical bytes.

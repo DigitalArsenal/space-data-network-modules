@@ -1492,14 +1492,19 @@ SGP4XP. Nothing in it comes from the Space Force library, and no SGP4XP conforma
 
 **12.1 Fit covariance.** The parameter vector p of a fit is the fit's own (`params_of`): the mean equinoctial af, ag,
 chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (BTERM; m^2/kg) and AGOM
-(m^2/kg) the fit solved for. At the solution (an SGP4XP set at its two-line digits), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
+(m^2/kg) the fit solved for, each as its natural log where its prior's form is LOG_NORMAL ($PCF FIT.DRAG_PRIOR_FORM,
+SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set at its two-line digits), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
 
 - J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
-  lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM; AGOM forward where p - h <= 0,
-  the theory reading AGOM <= 0 as no SRP);
+  lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
+  the theory reading AGOM <= 0 as no SRP (its log moves both ways);
 - s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
-- A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR);
-- P_p = A^-1.
+- A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
+  under LOG_NORMAL sigma is that of the log);
+- P_p = A^-1; a term estimated as its log is carried back to m^2/kg by the Jacobian (the delta method): its rows and
+  columns of P_p times the term, so sigma_B = B sigma_lnB. The $OBD gives the posterior sigma of the log and marks the
+  term's covariance prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands
+  in poorly for a wide log-normal).
 
 **12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
 floor (12.4) at the epoch state, the $OMM carries
@@ -1626,7 +1631,7 @@ selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixe
 
 ## 15. Selectable drag atmosphere (side B's option, outside the SGP4-XP specification)
 
-**15.1 Selection.** `fit` and `propagate` read it from their $PCF FORCES (SDS 1.271.0); every other method, the ABI
+**15.1 Selection.** `fit` and `propagate` read it from their $PCF FORCES (SDS 1.272.0); every other method, the ABI
 exports and the epoch store keep section 3. With no FORCES field away from its default and no 'space_weather' or
 'density_correction' frame, the drag is section 3 exactly: the default is SGP4XP.
 
@@ -1639,7 +1644,8 @@ exports and the epoch store keep section 3. With no FORCES field away from its d
 
 Refused by name: another ATMOSPHERE_MODEL, WEATHER_SOURCE CONSTANT and a WEATHER table, WEATHER_EXTENSION REFUSE or
 FORECAST_CHAIN (UNSPECIFIED and HOLD_LAST hold the last row), DCA_COMMON_MODE without ENABLE_DRAG, a non-zero
-DENSITY_CORRECTION_RELAXATION_HOURS (the $DCL's forecast nodes carry the decay), any other FORCES field; rows that NRLMSISE-00
+DENSITY_CORRECTION_RELAXATION_HOURS (the $DCL's forecast nodes carry the decay), any other FORCES field (the last two,
+THIRD_BODY_MAXIMUM_DEGREE and _ORDER, included); rows that NRLMSISE-00
 or RECORDS needs and that are absent (space-weather-missing); a $DCL without DCA_COMMON_MODE or the reverse
 (density-correction-unselected, density-correction-missing); malformed rows or $DCL (invalid-space-weather,
 invalid-density-correction); a call that evaluates a day whose previous day precedes the first row

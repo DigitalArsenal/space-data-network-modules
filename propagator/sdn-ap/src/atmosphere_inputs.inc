@@ -159,24 +159,29 @@ struct Scope {
 // Diagnostic (test/atmosphere.e2e.mjs): the density (kg/m^3) a drag node takes at a TEME position r (km) and UTC time
 // (whole + frac Julian date), through the node formulas of SPEC 3.4 (r's geocentric latitude and radius, the Sun of
 // SPEC 5, the Greenwich angle of SPEC 1.2): model 0 the theory's own (SPEC 3 on the generic flux model), 1 Jacchia 1970
-// and 2 NRLMSISE-00 on the drivers of `rows` (a 'space_weather' frame: $SPW rows, read as fit and propagate read them).
-// out: density, geodetic latitude (rad), longitude (rad, in [-pi, pi)), geodetic height (km), and the drivers (F10.7,
-// F10.7a, Ap). Returns 0, 1 when the rows do not reach the day before the time's day, or -1 for a bad request.
+// and 2 NRLMSISE-00 on the drivers of `rows` (a 'space_weather' frame: $SPW rows, read as fit and propagate read them),
+// 3 NRLMSISE-00 on those drivers times exp(s(t)) of `dcl` (a 'density_correction' $DCL, read as fit and propagate read
+// it; models 0 to 2 take none). out: density, geodetic latitude (rad), longitude (rad, in [-pi, pi)), geodetic height
+// (km), and the drivers (F10.7, F10.7a, Ap). Returns 0, 1 when the rows do not reach the day before the time's day, or
+// -1 for a bad request.
 SDNAP_EXPORT("sdnap_atmosphere_probe")
-int32_t sdnap_atmosphere_probe(int32_t model, double whole, double frac, const double* r_km, const uint8_t* rows, uint32_t rows_length, double* out) {
+int32_t sdnap_atmosphere_probe(int32_t model, double whole, double frac, const double* r_km, const uint8_t* rows, uint32_t rows_length,
+                               const uint8_t* dcl, uint32_t dcl_length, double* out) {
   using namespace sdnap;
-  if (model < 0 || model > 2 || r_km == nullptr || out == nullptr) return -1;
+  if (model < 0 || model > 3 || r_km == nullptr || out == nullptr) return -1;
+  if ((model == 3) != (dcl != nullptr && dcl_length > 0)) return -1;
   const double rn = std::sqrt(r_km[0] * r_km[0] + r_km[1] * r_km[1] + r_km[2] * r_km[2]);
   if (!(rn > 0.0)) return -1;
   const double d50 = (whole - kJd1950) + frac;
   atm::Atmosphere a;
-  a.model = model == 2 ? atm::kNrlmsise00 : atm::kJacchia70;
+  a.model = model >= 2 ? atm::kNrlmsise00 : atm::kJacchia70;
   a.measured = model != 0;
   if (model != 0) {
     std::vector<atm::SpwDay> days;
     if (rows == nullptr || atm::read_spw_frame(rows, rows_length, days) != 0 || days.empty()) return -1;
     atm::set_rows(a, days);
   }
+  if (model == 3 && atm::read_dcl(dcl, dcl_length, a) != nullptr) return -1;
   const double sp = r_km[2] / rn, cp = std::sqrt(1.0 - sp * sp);
   const xpt::NodeHeight nh = xpt::node_height(sp, cp, rn / xpt::kRe);
   const xpt::Bodies b = xpt::bodies_at(d50);
@@ -189,7 +194,8 @@ int32_t sdnap_atmosphere_probe(int32_t model, double whole, double frac, const d
   double D, N;
   drag::day_of_year(d50, D, N);
   const drag::DateTerms dt = drag::date_terms(fl, D, N);
-  out[0] = xpt::node_density(model == 0 ? nullptr : &a, dt, fl, 1.0, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
+  const double dca = !a.dca_d50.empty() ? atm::dca_scale(a, d50) : 1.0;  // as drag_rates takes it (model 3 only)
+  out[0] = xpt::node_density(model == 0 ? nullptr : &a, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
   out[1] = xpt::geodetic_latitude(sp, nh);
   out[2] = atm::wrap_pi(alpha - theta_g);
   out[3] = nh.h;

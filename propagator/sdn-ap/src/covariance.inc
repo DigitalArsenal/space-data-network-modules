@@ -93,7 +93,7 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
   if (!start(b.x, 0)) return false;
   for (int j = 0; j < b.np; ++j) {
     b.h[j] = step_of(b.kind[j], b.x[j]);
-    b.central[j] = !(b.kind[j] == 7 && b.x[j] - b.h[j] <= 0.0);
+    b.central[j] = !(b.kind[j] == 7 && !o.agom_log && b.x[j] - b.h[j] <= 0.0);  // ln AGOM moves both ways
     double xp[fit::kMaxParams], xm[fit::kMaxParams];
     for (int q = 0; q < b.np; ++q) xp[q] = xm[q] = b.x[q];
     xp[j] += b.h[j];
@@ -217,6 +217,7 @@ struct Set {
   fit::Options o{};
   int np = 0;
   double C[kMaxAug * kMaxAug] = {};  ///< augmented epoch covariance (np x np): state block total, then consider
+  double log_sigma[kMaxConsider] = {};  ///< of_fit: the posterior sigma of ln B, ln AGOM where the fit estimated the log (else 0)
   double floor[6] = {};
   double noise[5] = {};              ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2), the noise start t_a (min)
   int regime = 0;                    ///< 0 drag, 1 above (of_fit)
@@ -324,6 +325,20 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
     for (int j = 0; j < 6; ++j) s.C[i * np + j] = 0.5 * (S6[i * 6 + j] + S6[j * 6 + i]);
   for (int a = 6; a < np; ++a)
     for (int c = 6; c < np; ++c) s.C[a * np + c] = Pp[a * np + c];
+  // a term the fit estimated as its log: the posterior of ln B (ln AGOM) carried to B (AGOM) by the Jacobian (the delta
+  // method, sigma_B = B sigma_lnB), its rows and columns times the term; the set's consider rows are in m^2/kg
+  for (int c = 6; c < np; ++c) {
+    const bool log_term = (b.kind[c] == 6 && o.drag_log) || (b.kind[c] == 7 && o.agom_log);
+    if (!log_term) continue;
+    s.log_sigma[b.kind[c] - 6] = std::sqrt(Pp[c * np + c]);
+    const double scale = b.kind[c] == 6 ? row.bterm : row.agom;
+    for (int i = 0; i < np; ++i) {
+      s.C[i * np + c] *= scale;
+      s.C[c * np + i] *= scale;  // the diagonal term twice: scale squared
+    }
+  }
+  s.o.drag_log = 0;
+  s.o.agom_log = 0;
   for (int k = 0; k < 6; ++k) s.floor[k] = floor[k];
   return noise_of(row, arc_end_min, ng_rate, s.regime, s.noise);
 }

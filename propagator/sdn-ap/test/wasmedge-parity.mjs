@@ -2,15 +2,15 @@
 // Native WasmEdge parity of the shared artifact: `propagate` of the same SGP4 and SGP4XP sets, the `fit` method ($OEM
 // in; $OMM and $OBD out) on the first set's ephemeris in TEME, GCRF (ERFA) and ITRF, `propagate` on a 4-day GCRF grid
 // template, a maneuver across an impulse and a finite burn, an epoch store through propagate_epochs, and the drag
-// atmosphere of SPEC 15 (NRLMSISE-00 on $SPW rows times an open-DCA $DCL) on propagate and fit, through the
-// browser host and the SDK's wasi-threads WasmEdge runner (WasmEdge 0.16.4); every output's bytes must be
+// atmosphere of SPEC 15 (NRLMSISE-00 on $SPW rows times an open-DCA $DCL) on propagate and fit, a fit under
+// LOG_NORMAL priors on BTERM and AGOM ($PCF 1.0.6), through the browser host and the SDK's wasi-threads WasmEdge runner (WasmEdge 0.16.4); every output's bytes must be
 // identical. Docker lane waived (owner ruling 2026-10-22).
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
-import { configuration, withConfiguration } from "./lib/pcf.mjs";
+import { configuration, pcfPriorForm, prior, withConfiguration } from "./lib/pcf.mjs";
 // every configured method takes a $PCF (the defaults unless a call names its own)
 import { FRAME_PROBE, oemInFrame, packOem, rfm } from "./lib/frames.mjs";
 import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
@@ -167,11 +167,15 @@ for (const [lane, options] of [["browser", { surface: "command" }], ["wasmedge",
   // SPEC 15: NRLMSISE-00 on the rows times the open DCA, propagate on the grid and fit
   lanes[lane].atmosphere = digest(await harness.invoke({ methodId: "propagate", inputs: [inputs[0], gridInput, ...atmosphere] }));
   lanes[lane].atmosphereFit = digest(await harness.invoke({ methodId: "fit", inputs: [...fitInputs[1], ...atmosphere] }));
+  // $PCF 1.0.6: the fit estimating ln BTERM and ln AGOM under LOG_NORMAL priors N(ln 0.01, ln 10)
+  lanes[lane].logNormalFit = digest(await harness.invoke({ methodId: "fit", inputs: [...fitInputs[0], configuration({ theory: "SGP4XP", fit: {
+    DRAG_PRIOR: prior(0.01, Math.LN10), DRAG_PRIOR_FORM: pcfPriorForm.LOG_NORMAL, SRP_PRIOR: prior(0.01, Math.LN10), SRP_PRIOR_FORM: pcfPriorForm.LOG_NORMAL } })] }));
   await harness.destroy?.();
 }
 const identical = JSON.stringify(lanes.browser) === JSON.stringify(lanes.wasmedge) && lanes.browser.statusCode === 0 && lanes.browser.outputs.length === sets.length &&
   lanes.browser.fit.every((f) => f.statusCode === 0 && f.outputs.length === 2) && lanes.browser.grid.statusCode === 0 &&
   lanes.browser.maneuver.statusCode === 0 && lanes.browser.maneuver.outputs.length === 5 && lanes.browser.epochs.statusCode === 0 &&
-  lanes.browser.atmosphere.statusCode === 0 && lanes.browser.atmosphereFit.statusCode === 0 && lanes.browser.atmosphereFit.outputs.length === 2;
+  lanes.browser.atmosphere.statusCode === 0 && lanes.browser.atmosphereFit.statusCode === 0 && lanes.browser.atmosphereFit.outputs.length === 2 &&
+  lanes.browser.logNormalFit.statusCode === 0 && lanes.browser.logNormalFit.outputs.length === 2;
 console.log(JSON.stringify({ wasmedge: "0.16.4 (SDK wasi-threads runner)", browser: lanes.browser, native: lanes.wasmedge, identical }, null, 1));
 process.exit(identical ? 0 : 1);
