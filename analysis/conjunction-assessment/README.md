@@ -70,6 +70,12 @@ full-state fallbacks, and output-format limits. The historical no-covariance
 spherical value is an approximation, not a bound for arbitrary covariance
 shapes.
 
+Uncertainty availability is independent of probability-method success. Slow
+encounters retain their supplied covariance and valid 3-D Mahalanobis metric;
+an unavailable or unrepresentable CQR probability is omitted, with the actual
+method/result or failure reason carried by the embedded CDM. No surrogate
+plane variances or zero-valued Mahalanobis measurements replace missing math.
+
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 
 - events report the historical spherical small-HBR statistic (`ALFANO_MAXIMUM`,

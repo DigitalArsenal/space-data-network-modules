@@ -116,6 +116,7 @@ struct ConjunctionEvent2 {
   // Mahalanobis distance
   double mahalanobis_2d = 0; // In encounter plane (from B-plane geometry)
   double mahalanobis_3d = 0; // Full 3D (from combined position covariance)
+  bool has_mahalanobis_3d = false; // Independent of Pc convergence/plane validity.
 
   // Collision probability. With has_covariance, the chosen method's result
   // from the covariance the caller supplied (cov1, cov2, inertial). Without,

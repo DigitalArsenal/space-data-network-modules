@@ -103,6 +103,7 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
     event.bplane=build_bplane(event.state1,event.state2,combined,zero,input.combined_radius);
     // Both dr and these covariances are inertial; never use input RTN blocks.
     event.mahalanobis_3d=encounter_mahalanobis_3d(dr,combined,zero);
+    event.has_mahalanobis_3d=std::isfinite(event.mahalanobis_3d);
 
     const auto relative=relative_pc_covariance(input);
     const bool zero_position_covariance=!(relative[0]+relative[7]+relative[14]>0);

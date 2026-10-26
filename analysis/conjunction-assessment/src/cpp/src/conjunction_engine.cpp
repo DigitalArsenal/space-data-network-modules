@@ -145,6 +145,7 @@ ConjunctionEvent2 ConjunctionEngine::assess_at(
     event.bplane = computed.bplane;
     event.mahalanobis_2d = computed.mahalanobis_2d;
     event.mahalanobis_3d = computed.mahalanobis_3d;
+    event.has_mahalanobis_3d = computed.has_mahalanobis_3d;
 
     return event;
 }

@@ -1,6 +1,7 @@
 #include "conjunction/encounter_geometry.h"
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 namespace conjunction {
 // ── Helpers ──
@@ -224,37 +225,34 @@ Covariance3x3 covariance_inertial_to_rtn(
 
 // 3D Mahalanobis distance: Md = sqrt(Δr^T × C_combined⁻¹ × Δr)
 double encounter_mahalanobis_3d(const double dr[3], const Covariance3x3& c1, const Covariance3x3& c2) {
-    // Combined covariance
-    double C[9];
-    for (int i = 0; i < 9; i++) C[i] = c1.data[i] + c2.data[i];
-
-    // Invert 3×3 symmetric matrix
-    double a = C[0], b = C[1], c = C[2];
-    double d = C[3], e = C[4], f = C[5];
-    double g = C[6], h = C[7], k = C[8];
-
-    double det = a*(e*k - f*h) - b*(d*k - f*g) + c*(d*h - e*g);
-    if (std::abs(det) < 1e-30) return 0;
-
-    double inv[9];
-    inv[0] = (e*k - f*h) / det;
-    inv[1] = (c*h - b*k) / det;
-    inv[2] = (b*f - c*e) / det;
-    inv[3] = (f*g - d*k) / det;
-    inv[4] = (a*k - c*g) / det;
-    inv[5] = (c*d - a*f) / det;
-    inv[6] = (d*h - e*g) / det;
-    inv[7] = (b*g - a*h) / det;
-    inv[8] = (a*e - b*d) / det;
-
-    // Md² = Δr^T × C⁻¹ × Δr
-    double Cinv_dr[3];
-    Cinv_dr[0] = inv[0]*dr[0] + inv[1]*dr[1] + inv[2]*dr[2];
-    Cinv_dr[1] = inv[3]*dr[0] + inv[4]*dr[1] + inv[5]*dr[2];
-    Cinv_dr[2] = inv[6]*dr[0] + inv[7]*dr[1] + inv[8]*dr[2];
-
-    double md2 = dr[0]*Cinv_dr[0] + dr[1]*Cinv_dr[1] + dr[2]*Cinv_dr[2];
-    return (md2 > 0) ? std::sqrt(md2) : 0;
+    // Cholesky solve in correlation coordinates. No covariance repair and no
+    // determinant cutoff in physical units: an unavailable inverse is not Md=0.
+    const double unavailable = std::numeric_limits<double>::quiet_NaN();
+    double scale[3], l[3][3] = {}, y[3] = {};
+    for (int i = 0; i < 3; ++i) {
+        const double diagonal = c1.data[4*i] + c2.data[4*i];
+        if (!(diagonal > 0) || !std::isfinite(diagonal) || !std::isfinite(dr[i]))
+            return unavailable;
+        scale[i] = std::sqrt(diagonal);
+    }
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j <= i; ++j) {
+            double value = (c1.data[3*i+j] + c2.data[3*i+j]) / scale[i] / scale[j];
+            const double transpose = (c1.data[3*j+i] + c2.data[3*j+i]) / scale[i] / scale[j];
+            if (!std::isfinite(value) || !std::isfinite(transpose) ||
+                std::abs(value - transpose) > 64 * std::numeric_limits<double>::epsilon() *
+                    std::max({1.0, std::abs(value), std::abs(transpose)})) return unavailable;
+            for (int k = 0; k < j; ++k) value -= l[i][k] * l[j][k];
+            if (i == j) {
+                if (!(value > 0)) return unavailable;
+                l[i][j] = std::sqrt(value);
+            } else l[i][j] = value / l[j][j];
+        }
+        double value = dr[i] / scale[i];
+        for (int j = 0; j < i; ++j) value -= l[i][j] * y[j];
+        y[i] = value / l[i][i];
+    }
+    return std::hypot(y[0], y[1], y[2]);
 }
 
 // ── B-plane Construction ──

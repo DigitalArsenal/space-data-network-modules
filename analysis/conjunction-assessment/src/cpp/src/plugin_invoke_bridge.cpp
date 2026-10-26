@@ -487,6 +487,12 @@ struct SuppliedCovariance {
   cqrCovarianceBasis basis1 = cqrCovarianceBasis::SOURCE_EPHEMERIS;
   cqrCovarianceBasis basis2 = cqrCovarianceBasis::SOURCE_EPHEMERIS;
 };
+cqrCovarianceBasis sourceCovarianceBasis(const CdmObjectMetadata& metadata) {
+  using Origin = CdmObjectMetadata::CovarianceOrigin;
+  return metadata.covariance_origin == Origin::OrbitDetermination ? cqrCovarianceBasis::ORBIT_DETERMINATION :
+      metadata.covariance_origin == Origin::ConjunctionMessage ? cqrCovarianceBasis::CONJUNCTION_MESSAGE :
+      cqrCovarianceBasis::SOURCE_EPHEMERIS;
+}
 // A covariance method's probability from the sources' own covariance, when a
 // covariance method was requested and both sources cover the TCA; the event
 // keeps the Alfano maximum otherwise.
@@ -500,13 +506,7 @@ SuppliedCovariance applySourceCovariance(BridgeEvent &e, const Source &a, const 
   e.cdm_metadata2.calibrated = b.covariance.calibrated;
   e.cdm_metadata1.calibration_reference = a.covariance.calibration_reference;
   e.cdm_metadata2.calibration_reference = b.covariance.calibration_reference;
-  auto basis = [](const CdmObjectMetadata& metadata) {
-    using Origin = CdmObjectMetadata::CovarianceOrigin;
-    return metadata.covariance_origin == Origin::OrbitDetermination ? cqrCovarianceBasis::ORBIT_DETERMINATION :
-        metadata.covariance_origin == Origin::ConjunctionMessage ? cqrCovarianceBasis::CONJUNCTION_MESSAGE :
-        cqrCovarianceBasis::SOURCE_EPHEMERIS;
-  };
-  out.basis1 = basis(e.cdm_metadata1); out.basis2 = basis(e.cdm_metadata2);
+  out.basis1 = sourceCovarianceBasis(e.cdm_metadata1); out.basis2 = sourceCovarianceBasis(e.cdm_metadata2);
   if (has_error()) return out;
   e.has_covariance1 = covariance_rtn_at(a.covariance, e.tca_jd, e.state1, e.cov6_rtn1);
   e.has_covariance2 = covariance_rtn_at(b.covariance, e.tca_jd, e.state2, e.cov6_rtn2);
@@ -523,6 +523,16 @@ SuppliedCovariance applySourceCovariance(BridgeEvent &e, const Source &a, const 
   }
   auto computed = engine.compute_pc(make_pc_encounter(e.state1, e.state2, c1, c2,
                                     e.combined_radius_km));
+  // Uncertainty and valid 3-D geometry survive even when no Pc method can
+  // evaluate the encounter. Method success controls only probability presence.
+  e.pc = computed.pc;
+  e.usage = computed.usage;
+  e.bplane = computed.bplane;
+  e.cov1 = computed.cov1;
+  e.cov2 = computed.cov2;
+  e.mahalanobis_2d = computed.mahalanobis_2d;
+  e.mahalanobis_3d = computed.mahalanobis_3d;
+  e.has_mahalanobis_3d = computed.has_mahalanobis_3d;
   if (has_error() || !computed.pc.converged || !isFinite(computed.pc.probability) ||
       computed.pc.probability < 0 || computed.pc.probability > 1 ||
       computed.pc.method.empty() || computed.pc.method == "ALFANO-SPHERICAL-SMALL-HBR-MAX") {
@@ -531,15 +541,6 @@ SuppliedCovariance applySourceCovariance(BridgeEvent &e, const Source &a, const 
     clear_error();
     return out;
   }
-  e.pc = computed.pc;
-  e.usage = computed.usage;
-  e.bplane = computed.bplane;
-  e.cov1 = computed.cov1;
-  e.cov2 = computed.cov2;
-  e.cov6_rtn1 = c1;
-  e.cov6_rtn2 = c2;
-  e.mahalanobis_2d = computed.mahalanobis_2d;
-  e.mahalanobis_3d = computed.mahalanobis_3d;
   e.has_covariance = true;
   out.used = true;
   out.calibrated = a.covariance.calibrated && b.covariance.calibrated;
@@ -1091,29 +1092,48 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent &e, int axes = 1) {
 }
 ConjunctionEvent legacy(const ConjunctionEvent2 &e);
 ConjunctionEvent legacy(const BridgeEvent &e);
+std::unique_ptr<FRMVector3T> covarianceSigma(const std::array<double, 21>& c) {
+  if (!std::isfinite(c[0]) || !std::isfinite(c[2]) || !std::isfinite(c[5]) ||
+      c[0] < 0 || c[2] < 0 || c[5] < 0) return nullptr;
+  return vec(std::sqrt(c[0]) * 1000., std::sqrt(c[2]) * 1000., std::sqrt(c[5]) * 1000.);
+}
 // Without supplied covariance the engine reports only the Alfano maximum, and
 // the event says so; the requested covariance method is not applied.
 std::unique_ptr<CQREventT> event(const BridgeEvent &e,
                                  cqrProbabilityAlgorithm a, int axes = 1) {
   auto o = event(legacy(e), axes);
-  if (!e.has_covariance)
+  if (e.has_covariance1) {
+    o->PRIMARY_COVARIANCE_BASIS = sourceCovarianceBasis(e.cdm_metadata1);
+    o->PRIMARY_SIGMA_RTN_M = covarianceSigma(e.cov6_rtn1);
+  }
+  if (e.has_covariance2) {
+    o->SECONDARY_COVARIANCE_BASIS = sourceCovarianceBasis(e.cdm_metadata2);
+    o->SECONDARY_SIGMA_RTN_M = covarianceSigma(e.cov6_rtn2);
+  }
+  if (e.has_mahalanobis_3d && std::isfinite(e.mahalanobis_3d * e.mahalanobis_3d)) {
+    o->MAHALANOBIS_3D_SQUARED = e.mahalanobis_3d * e.mahalanobis_3d;
+    o->HAS_MAHALANOBIS_3D_SQUARED = true;
+  }
+  if (!e.has_covariance) {
+    if (!e.probability_failure.empty() && a != cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+      o->PROBABILITY.reset();
+      o->HAS_DILUTION_THRESHOLD_M = false;
+    }
     return o;
+  }
   // The SDS CQR algorithm enum has no value for the 2D-Nc, 3D-Nc or Monte
   // Carlo fallbacks. A violating encounter is never exported under another
-  // method's name: the CQR event keeps the labelled maximum-only result and the
-  // CDM (probability method string and comment) carries the fallback value.
+  // method's name: the embedded CDM carries the actual method and result.
+  // This format limitation does not remove the covariance or 3-D metric.
   if (!e.pc.method.empty() &&
       algorithmEnum(e.pc.method) == cqrProbabilityAlgorithm::UNSPECIFIED) {
-    o->PRIMARY_COVARIANCE_BASIS = o->SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::NONE;
-    o->PRIMARY_SIGMA_RTN_M.reset();
-    o->SECONDARY_SIGMA_RTN_M.reset();
+    o->PROBABILITY.reset();
+    o->HAS_DILUTION_THRESHOLD_M = false;
     return o;
   }
   o->HAS_DILUTION_THRESHOLD_M = false;
   o->PROBABILITY =
       probability(e.pc, a, cqrUncertaintyOrigin::SUPPLIED_COVARIANCE);
-  o->MAHALANOBIS_3D_SQUARED = e.mahalanobis_3d * e.mahalanobis_3d;
-  o->HAS_MAHALANOBIS_3D_SQUARED = true;
   return o;
 }
 // ── Empirical prediction-error covariance ──
@@ -1293,19 +1313,22 @@ void empiricalLabels(CQREventT &o, const EmpiricalUse &u, cqrProbabilityAlgorith
                      const ConjunctionEvent& base, int axes = 1) {
   if (!u.used)
     return;
-  o.PROBABILITY = probability(u.computed.pc, alg, cqrUncertaintyOrigin::SYNTHESIZED_COVARIANCE);
+  if (u.computed.has_covariance && algorithmEnum(u.computed.pc.method) != cqrProbabilityAlgorithm::UNSPECIFIED)
+    o.PROBABILITY = probability(u.computed.pc, alg, cqrUncertaintyOrigin::SYNTHESIZED_COVARIANCE);
+  else o.PROBABILITY.reset();
   o.HAS_DILUTION_THRESHOLD_M = false;
-  o.MAHALANOBIS_3D_SQUARED = u.computed.mahalanobis_3d * u.computed.mahalanobis_3d;
-  o.HAS_MAHALANOBIS_3D_SQUARED = true;
-  auto sigma = [](const std::array<double, 21> &c) {
-    return vec(std::sqrt(c[0]) * 1000., std::sqrt(c[2]) * 1000., std::sqrt(c[5]) * 1000.);
-  };
-  o.PRIMARY_SIGMA_RTN_M = sigma(u.cov1);
-  o.SECONDARY_SIGMA_RTN_M = sigma(u.cov2);
+  o.HAS_MAHALANOBIS_3D_SQUARED = u.computed.has_mahalanobis_3d &&
+      std::isfinite(u.computed.mahalanobis_3d * u.computed.mahalanobis_3d);
+  if (o.HAS_MAHALANOBIS_3D_SQUARED)
+    o.MAHALANOBIS_3D_SQUARED = u.computed.mahalanobis_3d * u.computed.mahalanobis_3d;
+  o.PRIMARY_SIGMA_RTN_M = covarianceSigma(u.cov1);
+  o.SECONDARY_SIGMA_RTN_M = covarianceSigma(u.cov2);
   o.PRIMARY_COVARIANCE_BASIS = o.SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::EMPIRICAL_MODEL;
-  o.PROBABILITY->CALIBRATION = u.calibrated ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
-  o.PROBABILITY->CALIBRATION_REFERENCE = u.calibrated ? u.reference : std::string();
-  o.PROBABILITY->CROSS_CORRELATION = cqrCovarianceCorrelation::INDEPENDENT;
+  if (o.PROBABILITY) {
+    o.PROBABILITY->CALIBRATION = u.calibrated ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
+    o.PROBABILITY->CALIBRATION_REFERENCE = u.calibrated ? u.reference : std::string();
+    o.PROBABILITY->CROSS_CORRELATION = cqrCovarianceCorrelation::INDEPENDENT;
+  }
   auto complete = base;
   applyEmpiricalCovariance(complete, u);
   o.CONJUNCTION_MESSAGE = build_conjunction_cdm(complete, axes == 1 ? "TEME" : axes == 2 ? "GCRF" : "EME2000");

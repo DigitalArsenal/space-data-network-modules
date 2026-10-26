@@ -156,8 +156,17 @@ from density sensitivity as in `Pc_CovXCorr.m`.
 The existing SDS CQR enumeration has no entries for the new maximum,
 Frisbee, Nc, or SDMC method names and no usage-reason/Monte-Carlo confidence
 fields. Native C++ APIs expose these methods. CQR source assessments perform
-the same routing, but fail explicitly if their actual result cannot be
-represented in that enum. They do not report a fallback as `FOSTER`.
+the same routing. When the result cannot be represented by the enum, the
+event omits `PROBABILITY`; its embedded `CONJUNCTION_MESSAGE` carries the
+actual method and result, or an explicit calculation-failure comment. The
+event retains each available source covariance's basis and RTN sigmas,
+and the full interpolated 6x6 covariance remains in that CDM. A valid 3-D
+Mahalanobis distance is retained independently of Pc success. A singular
+or non-positive-definite relative position covariance has no reported
+Mahalanobis distance, rather than a fabricated zero. Empirical-model events
+follow the same output rules and retain their distinct provenance.
+Fallbacks are never labeled as `FOSTER` or replaced by a covariance-free
+statistic. Ordinary encounters still report their covariance-based Pc.
 No local schema or exported invoke function was added. An upstream SDS
 extension is required to expose those new choices and diagnostics in CQR.
 The cross-correlation matrix option is currently a native C++ API option;
@@ -212,6 +221,18 @@ duration exists, the fallback uses plus/minus half the shorter orbital period,
 or plus/minus 3,600 seconds for unbound motion. Explicit bounds are seconds from
 the supplied common epoch. These are finite-window, two-body results;
 perturbation-model uncertainty is outside this implementation.
+
+### Low-velocity output verification
+
+`node --test tests/lowVelocityCovariance.test.mjs` exercises the same built
+artifact through the browser WASI harness and native WasmEdge. It screens
+two synthetic TEME OEM tracks with interpolated full covariance, verifies
+the closed-form 3-D Mahalanobis result through pair and catalog assessment,
+and round-trips all 21 covariance elements through CDM KVN and XML. Singular
+covariance produces neither a probability nor a spurious zero Mahalanobis
+measurement. An ordinary centered encounter is checked against the analytic
+isotropic Gaussian disk integral. This verifies uncertainty preservation;
+it does not establish BFMC capability or validate a new escalation algorithm.
 
 The published CARA Monte Carlo references count first entries and exclude
 objects overlapping at the initial time without renormalizing the probability.
