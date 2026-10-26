@@ -24,6 +24,7 @@
 
 #include "nrlmsise-00.h"   /* header for nrlmsise-00.h */
 #include <math.h>          /* maths functions */
+#include <string.h>        /* memcmp */
 #include <stdio.h>         /* for error messages. TBD: remove this */
 #include <stdlib.h>        /* for malloc/free */
 
@@ -597,6 +598,22 @@ __inline_double sg0(double ex, double *p, double *ap) {
                 g0(ap[6],p)*pow(ex,12.0))*(1.0-pow(ex,8.0))/(1.0-ex)))/sumex(ex);
 }
 
+/* gts7 evaluates globe7 once per temperature and species parameter set for
+ * one input, so the trig of the input's latitude, local solar time and
+ * longitude is computed once per input value, and each parameter set's
+ * day-of-year cosines once per day of year. The values, and every expression
+ * that uses them, are unchanged. Keys compare bit patterns, so a signed zero
+ * or a NaN input is computed afresh. */
+static int globe7_same(double a, double b) { return memcmp(&a, &b, sizeof a) == 0; }
+static int globe7_have_lat, globe7_have_lst, globe7_have_long;
+static double globe7_lat, globe7_c, globe7_s;
+static double globe7_lst, globe7_t[6];
+static double globe7_long, globe7_clong, globe7_slong;
+/* One entry per parameter set (the day it holds; a new day refreshes it). */
+struct globe7_doy { const double *p; int doy; double cd32, cd18, cd14, cd39; };
+static struct globe7_doy globe7_doys[16];
+static int globe7_ndoy;
+
 double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *flags) {
 /*       CALCULATE G(L) FUNCTION 
  *       Upper Thermosphere Parameters */
@@ -620,8 +637,14 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 		t[j]=0;
 
 	/* calculate legendre polynomials */
-	c = sin(input->g_lat * dgtr);
-	s = cos(input->g_lat * dgtr);
+	if (!globe7_have_lat || !globe7_same(input->g_lat, globe7_lat)) {
+		globe7_c = sin(input->g_lat * dgtr);
+		globe7_s = cos(input->g_lat * dgtr);
+		globe7_lat = input->g_lat;
+		globe7_have_lat = 1;
+	}
+	c = globe7_c;
+	s = globe7_s;
 	c2 = c*c;
 	c4 = c2*c2;
 	s2 = s*s;
@@ -653,18 +676,45 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 	plg[3][6] =(11.0*c*plg[3][5]-8.*plg[3][4])/3.0;
 
 	if (!(((flags->sw[7]==0)&&(flags->sw[8]==0))&&(flags->sw[14]==0))) {
-		stloc = sin(hr*tloc);
-		ctloc = cos(hr*tloc);
-		s2tloc = sin(2.0*hr*tloc);
-		c2tloc = cos(2.0*hr*tloc);
-		s3tloc = sin(3.0*hr*tloc);
-		c3tloc = cos(3.0*hr*tloc);
+		if (!globe7_have_lst || !globe7_same(tloc, globe7_lst)) {
+			globe7_t[0] = sin(hr*tloc);
+			globe7_t[1] = cos(hr*tloc);
+			globe7_t[2] = sin(2.0*hr*tloc);
+			globe7_t[3] = cos(2.0*hr*tloc);
+			globe7_t[4] = sin(3.0*hr*tloc);
+			globe7_t[5] = cos(3.0*hr*tloc);
+			globe7_lst = tloc;
+			globe7_have_lst = 1;
+		}
+		stloc = globe7_t[0];
+		ctloc = globe7_t[1];
+		s2tloc = globe7_t[2];
+		c2tloc = globe7_t[3];
+		s3tloc = globe7_t[4];
+		c3tloc = globe7_t[5];
 	}
 
-	cd32 = cos(dr*(input->doy-p[31]));
-	cd18 = cos(2.0*dr*(input->doy-p[17]));
-	cd14 = cos(dr*(input->doy-p[13]));
-	cd39 = cos(2.0*dr*(input->doy-p[38]));
+	{
+		struct globe7_doy *d = 0;
+		for (i = 0; i < globe7_ndoy; i++)
+			if (globe7_doys[i].p == p) { d = &globe7_doys[i]; break; }
+		if (!d) {
+			d = &globe7_doys[globe7_ndoy < 16 ? globe7_ndoy++ : 15];
+			d->p = p;
+			d->doy = input->doy + 1;
+		}
+		if (d->doy != input->doy) {
+			d->doy = input->doy;
+			d->cd32 = cos(dr*(input->doy-p[31]));
+			d->cd18 = cos(2.0*dr*(input->doy-p[17]));
+			d->cd14 = cos(dr*(input->doy-p[13]));
+			d->cd39 = cos(2.0*dr*(input->doy-p[38]));
+		}
+		cd32 = d->cd32;
+		cd18 = d->cd18;
+		cd14 = d->cd14;
+		cd39 = d->cd39;
+	}
 
 	/* F10.7 EFFECT */
 	df = input->f107 - input->f107A;
@@ -751,6 +801,12 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
 	}
 
 	if (((int) flags->sw[10])&&(input->g_long>-1000.0)) {
+		if (!globe7_have_long || !globe7_same(input->g_long, globe7_long)) {
+			globe7_clong = cos(dgtr*input->g_long);
+			globe7_slong = sin(dgtr*input->g_long);
+			globe7_long = input->g_long;
+			globe7_have_long = 1;
+		}
 
 		/* longitudinal */
 		if ((int) flags->sw[11]) {
@@ -758,11 +814,11 @@ double globe7(double *p, struct nrlmsise_input *input, struct nrlmsise_flags *fl
      ((p[64]*plg[1][2]+p[65]*plg[1][4]+p[66]*plg[1][6]\
       +p[103]*plg[1][1]+p[104]*plg[1][3]+p[105]*plg[1][5]\
       +flags->swc[5]*(p[109]*plg[1][1]+p[110]*plg[1][3]+p[111]*plg[1][5])*cd14)* \
-          cos(dgtr*input->g_long) \
+          globe7_clong \
       +(p[90]*plg[1][2]+p[91]*plg[1][4]+p[92]*plg[1][6]\
       +p[106]*plg[1][1]+p[107]*plg[1][3]+p[108]*plg[1][5]\
       +flags->swc[5]*(p[112]*plg[1][1]+p[113]*plg[1][3]+p[114]*plg[1][5])*cd14)* \
-      sin(dgtr*input->g_long));
+      globe7_slong);
 		}
 
 		/* ut and mixed ut, longitude */
