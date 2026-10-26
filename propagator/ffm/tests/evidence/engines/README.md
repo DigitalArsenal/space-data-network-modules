@@ -6,9 +6,10 @@ FFM and five open full-force propagators run the same cases on one machine
 (Mac Studio M3 Ultra, 28 logical CPUs). The cost of each case is CPU seconds
 per object-day, always with the integrator, tolerance and largest step. Its
 accuracy is the largest 3D position difference over 3 days from FFM's
-converged run. Results: `results-2026-10-25.json`. FFM is com.orbpro.ffm
-2.0.0, the shipped `dist/isomorphic/module.wasm`, in the SDK browser harness
-(Node.js 25, V8).
+converged run. Results: `results-2026-10-26.json`. FFM is com.orbpro.ffm
+2.0.0 at modules 9cc55924, the shipped `dist/isomorphic/module.wasm`, in the
+SDK browser harness (Node.js 25, V8). The other engines were measured on
+2026-10-25 with the same plan, inputs and settings.
 
 | Engine | Version | Runtime |
 | --- | --- | --- |
@@ -52,11 +53,11 @@ machine, so no figures are given for them.
 
 | Tier | Engine and integrator | fixed 30 s | rel 1e-12, max 300 s | rel 1e-14, max 120 s |
 | --- | --- | --- | --- | --- |
-| FFM1 | FFM RKDP87 (RK8(7)13M) | 0.53 / 0.30 | 0.43 / 0.051 | 0.82 / 0.094 |
-| FFM1 | FFM RK78 (Fehlberg) | | 0.23 / 0.051 | 0.36 / 0.090 |
+| FFM1 | FFM RKDP87 (RK8(7)13M) | 0.31 / 0.22 | 0.26 / 0.035 | 0.48 / 0.065 |
+| FFM1 | FFM RK78 (Fehlberg) | | 0.14 / 0.033 | 0.21 / 0.062 |
 | FFM1 | Orekit DormandPrince853 | 4.60 / 2.96 | 2.25 / 0.30 | 4.07 / 0.71 |
-| COMMON | FFM RKDP87 | 0.42 / 0.27 | 0.34 / 0.032 | 0.62 / 0.072 |
-| COMMON | FFM RK78 | | 0.18 / 0.032 | 0.28 / 0.072 |
+| COMMON | FFM RKDP87 | 0.29 / 0.19 | 0.24 / 0.023 | 0.42 / 0.052 |
+| COMMON | FFM RK78 | | 0.14 / 0.023 | 0.20 / 0.050 |
 | COMMON | Orekit DormandPrince853 | 1.26 / 0.86 | 0.64 / 0.10 | 1.16 / 0.26 |
 | COMMON | GMAT PrinceDormand78 | 1.31 / 1.12 | 0.92 / 0.12 | 6.05 / 0.29 |
 | COMMON | Tudat rkdp_87 | 2.53 / 2.18 | 2.12 / 0.22 | 4.09 / 0.56 |
@@ -64,7 +65,7 @@ machine, so no figures are given for them.
 | COMMON | Basilisk RKF78, task = step | 0.49 / 0.49 | 0.23 / 0.050 | 0.47 / 0.12 |
 
 Per force evaluation, from the fixed 30 s runs (LEO400):
-- FFM: 14.9 us for FFM1 and 11.9 us for COMMON.
+- FFM: 8.8 us for FFM1 and 8.3 us for COMMON.
 - Orekit: 105 us for FFM1 and 28.8 us for COMMON.
 
 Position differences from FFM over 3 days:
@@ -90,9 +91,9 @@ object-day):
 
 | Engine | Tier | CPU-s per object-day |
 | --- | --- | --- |
-| FFM RK78 | FFM1 | 0.29 |
+| FFM RK78 | FFM1 | 0.18 |
 | Orekit, one JVM per copy | FFM1 | 2.76 |
-| FFM RKDP87 | COMMON | 0.46 |
+| FFM RKDP87 | COMMON | 0.30 |
 | Orekit | COMMON | 0.72 |
 | GMAT | COMMON | 0.99 |
 | Tudat | COMMON | 2.66 |
@@ -103,7 +104,8 @@ Whole catalog: the 32,522 objects of the 2026-10-04 Space-Track snapshot,
 each from its element-set epoch over 2026-10-05 to 2026-10-08, FFM-1 forces,
 26 cores.
 
-- **FFM, measured:** 1,820 s wall, 40,661 CPU-s, 0.42 CPU-s per object-day.
+- **FFM, measured:** 419 s wall, 8,815 CPU-s, 0.090 CPU-s per
+  object-day, 233 object-days per second.
   - The path is the shipped resident one, GJ8 PEC with Sundman RK78 for
     e >= 0.25.
   - The cost includes catch-up from each epoch and the Chebyshev segment
@@ -116,6 +118,11 @@ each from its element-set epoch over 2026-10-05 to 2026-10-08, FFM-1 forces,
     5.8 h.
   - One JVM with 26 threads keeps only about 7 cores busy, because its shared
     frame caches lock.
+- **The 1,300 sampled objects, measured on 26 cores:**
+  - FFM: 22.5 s wall, 0.084 CPU-s per object-day, with catch-up and export.
+  - Orekit DormandPrince853: 356 s wall and 1.72 CPU-s per object-day at
+    1e-12 and 300 s; 656 s and 3.27 CPU-s per object-day at 1e-14 and
+    120 s. These Orekit figures count propagation only.
 
 ## Reproduce
 
