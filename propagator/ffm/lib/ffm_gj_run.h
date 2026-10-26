@@ -23,6 +23,7 @@ class GjRun {
     int64_t calendarDay_ = 0;
     uint32_t steps_ = 0;
     bool ready_ = false, haveDerivative_ = false, sunlit_ = true;
+    bool stepOrdinate_ = false;   // point_.a is the accepted step's own force call
     bool rkBranch_ = false, startupOutOfDomain_ = false;
 
     timesys::Instant instant(double x) const { return clock_.at(x); }
@@ -109,10 +110,24 @@ class GjRun {
         point_=core_.current(); ready_=true;
         return true;
     }
-    void accept(const Point& p,double time) {
+    void accept(const Point& p,double time,bool stepOrdinate=false) {
         point_=p; t_=time;
         for (int j=0;j<3;++j) { y_[j]=p.r[j]; y_[j+3]=p.v[j]; }
-        haveDerivative_=false; ++steps_;
+        haveDerivative_=false; stepOrdinate_=stepOrdinate; ++steps_;
+    }
+    // A PEC step's ordinate is the force on its selected shadow branch at the
+    // predicted state, which the corrector moves by its truncation error
+    // only. Clear of the penumbra on the branch's own side, the selected
+    // branch is the physical force (srpCorrection vanishes), so the ordinate
+    // is the node's physical acceleration to that difference. The margin far
+    // exceeds the switching functions' disagreement with the conical shadow
+    // function's own arithmetic; nodes within it take a fresh force call.
+    bool physicalOrdinate() const {
+        if (!stepOrdinate_) return false;
+        if (!forces_.useSRP) return true;
+        constexpr double margin=1e-9;   // rad
+        const auto s=gjforces::shadowValues(forces_,instant(point_.x),gjshadow::vector(point_.r));
+        return sunlit_ ? s.penumbra>margin : s.umbra< -margin;
     }
 public:
     GjRun(const astro::StateVector& initial,const timesys::Instant& epoch,
@@ -131,9 +146,10 @@ public:
     const State& state() const { return y_; }
     const State& derivative() {
         if (!haveDerivative_) {
-            // PEC's stored ordinate is evaluated at its predictor. Dense
-            // interpolation requires a fresh corrected physical force call.
-            const auto a=acceleration(point_,false);
+            // PEC's stored ordinate is evaluated at its predictor: the
+            // node's physical acceleration where physicalOrdinate() holds,
+            // else a fresh force call at the corrected state.
+            const auto a=physicalOrdinate()?point_.a:acceleration(point_,false);
             for (int j=0;j<3;++j) { derivative_[j]=point_.v[j]; derivative_[j+3]=a[j]; }
             haveDerivative_=true;
         }
@@ -170,7 +186,7 @@ public:
         }
         const auto p=gjshadow::step(core_,forces_,clock_,sunlit_,[&](const Point& q) { return acceleration(q,true); });
         if (astro::propagationStop().active) return false;
-        accept(p,std::abs(next-(spanOffset_+target))<1e-8?target:next-spanOffset_);
+        accept(p,std::abs(next-(spanOffset_+target))<1e-8?target:next-spanOffset_,true);
         return true;
     }
     // Normal UTC-midnight endpoints lie on the lattice. Retain all nine
@@ -185,7 +201,7 @@ public:
         spanOffset_=epoch.secondsSince(clock_.at(0)); t_=0;
         calendarDay_=gjforces::calendarDay(epoch.plusSeconds(1e-3));
         if (ready_) core_.rebase([&](const Point& p) { return acceleration(p,true); });
-        haveDerivative_=false;
+        haveDerivative_=false; stepOrdinate_=false;   // the new span's drivers
     }
 };
 } // namespace ffm_fast
