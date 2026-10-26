@@ -282,10 +282,23 @@ Instant Instant::fromUtc(double jdUtc) {
     return Instant{t1,t2}.plusSeconds(0);
 }
 Instant::Date Instant::utc() const {
+    // A pure function of the two-part TT: ERFA's built-in leap-second table
+    // is never replaced. Driver spans, drag and the calendar branch ask for
+    // the same instants for every object of a cohort, so each thread keeps
+    // its last eight results, keyed by the exact bits of both parts.
+    struct Entry { unsigned long long key1, key2; Date value; bool valid; };
+    static thread_local Entry memo[8] = {};
+    static thread_local unsigned next = 0;
+    unsigned long long key1, key2;
+    std::memcpy(&key1, &jd1, sizeof key1);
+    std::memcpy(&key2, &jd2, sizeof key2);
+    for (const Entry& entry : memo)
+        if (entry.valid && entry.key1 == key1 && entry.key2 == key2) return entry.value;
     double a,b,u1,u2;
-    if (eraTttai(jd1,jd2,&a,&b)<0 || eraTaiutc(a,b,&u1,&u2)<0)
-        return {std::numeric_limits<double>::quiet_NaN(),0};
-    return {u1,u2};
+    Date value{std::numeric_limits<double>::quiet_NaN(), 0};
+    if (eraTttai(jd1,jd2,&a,&b)>=0 && eraTaiutc(a,b,&u1,&u2)>=0) value = {u1,u2};
+    memo[next++ % 8] = {key1, key2, value, true};
+    return value;
 }
 Instant::Date Instant::ut1(double dut1) const {
     const auto value = utc();
