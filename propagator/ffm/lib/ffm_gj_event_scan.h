@@ -101,16 +101,22 @@ std::vector<Root> collect(Eval&& eval, double duration_seconds,
     const int intervals = std::max(16, std::max(options.min_intervals,
         int(std::ceil(duration_seconds/options.max_interval_seconds))));
     const double u_tolerance = options.time_tolerance/duration_seconds;
-    std::map<double,std::array<double,3>> samples;
-    auto sample = [&](double u) -> const std::array<double,3>& {
-        const auto found = samples.find(u);
-        if (found != samples.end()) return found->second;
+    // The memo of evaluated samples, ascending in u with exact-key lookup: the
+    // order and lookup of an ordered map, in one contiguous block.
+    struct Sample { double u; std::array<double,3> g; };
+    std::vector<Sample> samples;
+    samples.reserve(4*(intervals+1));
+    auto sample = [&](double u) -> std::array<double,3> {
+        const auto at = std::lower_bound(samples.begin(), samples.end(), u,
+                                         [](const Sample& s, double x) { return s.u < x; });
+        if (at != samples.end() && !(u < at->u)) return at->g;
         const auto raw = eval(u);
         const std::array<double,3> g{{raw[0],raw[1],raw[2]}};
         if (!std::isfinite(g[0]) || !std::isfinite(g[1]) || !std::isfinite(g[2]))
             astro::flagIntegrationFailure("nonfinite shadow switching function");
         if (evaluations) ++*evaluations;
-        return samples.emplace(u,g).first->second;
+        samples.insert(at, Sample{u, g});
+        return g;
     };
     std::vector<double> grid(intervals+1);
     for (int i=0; i<=intervals; ++i) { grid[i] = double(i)/intervals; sample(grid[i]); }
@@ -150,7 +156,8 @@ std::vector<Root> collect(Eval&& eval, double duration_seconds,
     for (int k=0; k<3; ++k) {
         // Freeze the sample coordinates before bisection adds more samples.
         std::vector<std::pair<double,double>> values;
-        for (const auto& pair : samples) values.emplace_back(pair.first,pair.second[k]);
+        values.reserve(samples.size());
+        for (const auto& s : samples) values.emplace_back(s.u,s.g[k]);
         for (std::size_t i=0; i+1<values.size(); ++i) {
             double lo=values[i].first, hi=values[i+1].first;
             double gl=values[i].second, gh=values[i+1].second;
