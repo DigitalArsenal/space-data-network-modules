@@ -4986,11 +4986,11 @@
       }
     },
     "propagator/ffm/dist/browser/module.wasm": {
-      "sha256": "68e7b37b3c079b2b4b5653c1a07e9e4e52cc3d99e3c6c518d7bdc54d26d2c4cb",
-      "bytes": 2649556,
+      "sha256": "f268e8786fc679c0d69a594c0b186a4226cf9aebe2335ffd7588f60ee423229f",
+      "bytes": 2651251,
       "module": "propagator/ffm",
-      "lastCommit": "69582734ef0107f9210462e335c5574e9ce906cd",
-      "lastCommitDate": "2026-10-25T22:07:49-04:00",
+      "lastCommit": "666f0faf3a3f95e2ceef5ec234595b77595ac7f3",
+      "lastCommitDate": "2026-10-25T22:10:43-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -5009,11 +5009,11 @@
       }
     },
     "propagator/ffm/dist/isomorphic/module.wasm": {
-      "sha256": "68e7b37b3c079b2b4b5653c1a07e9e4e52cc3d99e3c6c518d7bdc54d26d2c4cb",
-      "bytes": 2649556,
+      "sha256": "f268e8786fc679c0d69a594c0b186a4226cf9aebe2335ffd7588f60ee423229f",
+      "bytes": 2651251,
       "module": "propagator/ffm",
-      "lastCommit": "69582734ef0107f9210462e335c5574e9ce906cd",
-      "lastCommitDate": "2026-10-25T22:07:49-04:00",
+      "lastCommit": "666f0faf3a3f95e2ceef5ec234595b77595ac7f3",
+      "lastCommitDate": "2026-10-25T22:10:43-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
