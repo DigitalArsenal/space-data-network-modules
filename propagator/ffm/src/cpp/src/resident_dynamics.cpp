@@ -651,7 +651,7 @@ bool ResidentDynamics::prepare(size_t i, const TTEpoch& start, const TTEpoch& en
 
 bool ResidentDynamics::prepareBatch(const std::vector<size_t>& selected, const TTEpoch& start,
                                     const TTEpoch& end, size_t& failedObject, std::string& error) {
-    struct Pending { size_t slot; long long next, last; double grid; };
+    struct Pending { size_t slot; long long next, last; double grid; timesys::Instant at{}; };
     std::vector<Pending> pending;
     pending.reserve(selected.size());
     for (const auto slot : selected) {
@@ -675,29 +675,34 @@ bool ResidentDynamics::prepareBatch(const std::vector<size_t>& selected, const T
     // Small cohorts bound live dense history. Each group advances the oldest
     // physical node first, making aligned GJ force calls share exact TT keys.
     std::stable_sort(pending.begin(), pending.end(), [](const Pending& a, const Pending& b) { return a.grid < b.grid; });
+    // Fits every segment the object's dense output now covers, then keeps the
+    // instant of its next node. Only the object just stepped changes, so the
+    // others' fits and instants carry over from step to step.
+    auto settle = [&](Pending& p) {
+        Object& o = *objects_[p.slot];
+        while (p.next <= p.last && reaches(o.forward, o.segmentStart(p.next)) &&
+               reaches(o.forward, o.segmentStart(p.next + 1))) {
+            failedObject = p.slot;
+            astro::clearCallStop();
+            Segment segment;
+            if (!fit(o, environment_, p.next, segment, error)) return false;
+            o.segments.push_back(segment);
+            trim(o, ++p.next);
+        }
+        if (p.next <= p.last) p.at = o.forward.run && !o.forward.needsSpan ? o.forward.run->nextInstant() : o.forward.spanStart.instant();
+        return true;
+    };
     constexpr size_t cohort = 32;
     for (size_t begin = 0; begin < pending.size();) {
         size_t finish = begin + 1;
         while (finish < pending.size() && finish - begin < cohort && pending[finish].grid == pending[begin].grid) ++finish;
+        for (size_t j = begin; j < finish; ++j)
+            if (!settle(pending[j])) return false;
         while (true) {
             size_t chosen = finish;
-            timesys::Instant earliest;
             for (size_t j = begin; j < finish; ++j) {
-                auto& p = pending[j];
-                Object& o = *objects_[p.slot];
-                if (p.next > p.last) continue;
-                while (p.next <= p.last && reaches(o.forward, o.segmentStart(p.next)) &&
-                       reaches(o.forward, o.segmentStart(p.next + 1))) {
-                    failedObject = p.slot;
-                    astro::clearCallStop();
-                    Segment segment;
-                    if (!fit(o, environment_, p.next, segment, error)) return false;
-                    o.segments.push_back(segment);
-                    trim(o, ++p.next);
-                }
-                if (p.next > p.last) continue;
-                const auto at = o.forward.run && !o.forward.needsSpan ? o.forward.run->nextInstant() : o.forward.spanStart.instant();
-                if (chosen == finish || at.secondsSince(earliest) < 0) { chosen = j; earliest = at; }
+                const auto& p = pending[j];
+                if (p.next <= p.last && (chosen == finish || p.at.secondsSince(pending[chosen].at) < 0)) chosen = j;
             }
             if (chosen == finish) break;
             auto& p = pending[chosen];
@@ -708,6 +713,7 @@ bool ResidentDynamics::prepareBatch(const std::vector<size_t>& selected, const T
             // Catch-up may span many days before the requested window. Keep
             // its final stencil, never every intervening accepted node.
             trim(o, p.next);
+            if (!settle(p)) return false;
         }
         begin = finish;
     }
