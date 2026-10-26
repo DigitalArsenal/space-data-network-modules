@@ -8,8 +8,8 @@
     "-msimd128",
     "-fno-exceptions"
   ],
-  "sha256": "31357ecca768f5c4b400583d2657c58d03660294b906a3cd04eff0f2cde20e24",
-  "bytes": 2685224,
+  "sha256": "3f3812f89052cde93a0252a979721b6ab13b7c681e90b04b9a8fe1efee33497b",
+  "bytes": 2685915,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
   "memory": {

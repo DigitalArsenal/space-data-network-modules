@@ -693,29 +693,47 @@ bool ResidentDynamics::prepareBatch(const std::vector<size_t>& selected, const T
         return true;
     };
     constexpr size_t cohort = 32;
+    struct Cohort { size_t begin, finish; };
+    std::vector<Cohort> cohorts;
     for (size_t begin = 0; begin < pending.size();) {
         size_t finish = begin + 1;
         while (finish < pending.size() && finish - begin < cohort && pending[finish].grid == pending[begin].grid) ++finish;
+        cohorts.push_back({begin, finish});
         for (size_t j = begin; j < finish; ++j)
             if (!settle(pending[j])) return false;
-        while (true) {
-            size_t chosen = finish;
-            for (size_t j = begin; j < finish; ++j) {
-                const auto& p = pending[j];
-                if (p.next <= p.last && (chosen == finish || p.at.secondsSince(pending[chosen].at) < 0)) chosen = j;
-            }
-            if (chosen == finish) break;
-            auto& p = pending[chosen];
-            Object& o = *objects_[p.slot];
-            failedObject = p.slot;
-            astro::clearCallStop();
-            if (!step(o.execution, o.forward, environment_, error)) return false;
-            // Catch-up may span many days before the requested window. Keep
-            // its final stencil, never every intervening accepted node.
-            trim(o, p.next);
-            if (!settle(p)) return false;
-        }
         begin = finish;
+    }
+    // The cohorts take turns of half an hour of TT from the oldest pending
+    // node, rather than each running to its end in turn, so the tide nodes
+    // and interpolants they all read stay cached across cohorts (catch-up
+    // from element-set epochs spans days). Within a cohort the steps are the
+    // same, in the same order; cohorts share only caches of time alone.
+    constexpr double turn = 1800;
+    while (true) {
+        const Pending* oldest = nullptr;
+        for (const auto& p : pending)
+            if (p.next <= p.last && (!oldest || p.at.secondsSince(oldest->at) < 0)) oldest = &p;
+        if (!oldest) break;
+        const auto until = oldest->at.plusSeconds(turn);
+        for (const auto& c : cohorts) {
+            while (true) {
+                size_t chosen = c.finish;
+                for (size_t j = c.begin; j < c.finish; ++j) {
+                    const auto& p = pending[j];
+                    if (p.next <= p.last && (chosen == c.finish || p.at.secondsSince(pending[chosen].at) < 0)) chosen = j;
+                }
+                if (chosen == c.finish || pending[chosen].at.secondsSince(until) >= 0) break;
+                auto& p = pending[chosen];
+                Object& o = *objects_[p.slot];
+                failedObject = p.slot;
+                astro::clearCallStop();
+                if (!step(o.execution, o.forward, environment_, error)) return false;
+                // Catch-up may span many days before the requested window. Keep
+                // its final stencil, never every intervening accepted node.
+                trim(o, p.next);
+                if (!settle(p)) return false;
+            }
+        }
     }
     return true;
 }
