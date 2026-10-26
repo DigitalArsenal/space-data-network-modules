@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cmath>
+#include <vector>
 
 #include "astrodynamics_types.h"
 
@@ -44,36 +45,64 @@ inline double dot(const Vec3& a, const Vec3& b) { return a.dot(b); }
 inline Vec3 cross(const Vec3& a, const Vec3& b) { return a.cross(b); }
 inline double norm(const Vec3& a) { return a.magnitude(); }
 
-/// Albedo (with `albedo` true) or emissivity at sin(latitude), `deltaT`
-/// seconds after the reference epoch: X0 + X1 P1(s) + X2 P2(s), X1 annual.
-template <class S>
-S zonal(bool albedo, double deltaT, const S& sinPhi) {
+/// The albedo (with `albedo` true) or emissivity coefficients `deltaT`
+/// seconds after the reference epoch: X0, X1 (annual) and X2. They depend on
+/// time only, so one evaluation computes them once for all its elements.
+struct Zonal { double x0, x1, x2; };
+inline Zonal zonalCoefficients(bool albedo, double deltaT) {
     const double w = TWO_PI_K / JULIAN_YEAR_S * deltaT;
     const double x1 = albedo ? C0 + C1 * std::cos(w) + C2 * std::sin(w) : K0 + K1 * std::cos(w) + K2 * std::sin(w);
-    const double x0 = albedo ? A0 : E0, x2 = albedo ? A2 : E2;
-    return sinPhi * x1 + (sinPhi * sinPhi * 3.0 - 1.0) * (0.5 * x2) + x0;
+    return {albedo ? A0 : E0, x1, albedo ? A2 : E2};
+}
+/// X0 + X1 P1(s) + X2 P2(s) at s = sin(latitude).
+template <class S>
+S zonal(const Zonal& z, const S& sinPhi) {
+    return sinPhi * z.x1 + (sinPhi * sinPhi * 3.0 - 1.0) * (0.5 * z.x2) + z.x0;
 }
 
-/// Rotation of v by `angle` (rad) about the unit axis k, right-handed
-/// (Hipparchus Rotation, VECTOR_OPERATOR convention).
+/// Rotation of v about the unit axis k, right-handed (Hipparchus Rotation,
+/// VECTOR_OPERATOR convention), by the angle whose cosine and sine are c, s.
 template <class V>
-V rotate(const V& v, const V& k, double angle) {
-    const double c = std::cos(angle), s = std::sin(angle);
+V rotate(const V& v, const V& k, double c, double s) {
     return v * c + cross(k, v) * s + k * (dot(k, v) * (1.0 - c));
+}
+
+/// The surface elements' angles for one `resolution` (rad): the crowns'
+/// offsets from the sub-satellite point out to a quarter turn and the sectors'
+/// offsets about it, each with its cosine and sine, accumulated exactly as
+/// the element loops step them. They depend on the resolution only.
+struct Angle { double offset, c, s; };
+struct Elements {
+    double resolution = -1, cosResolution = 0, sinHalfResolution = 0;
+    std::vector<Angle> crowns, sectors;
+};
+inline const Elements& elements(double resolution) {
+    static thread_local Elements e;
+    if (e.resolution == resolution) return e;
+    e.resolution = resolution;
+    e.cosResolution = std::cos(resolution);
+    e.sinHalfResolution = std::sin(0.5 * resolution);
+    e.crowns.clear();
+    e.sectors.clear();
+    for (double eastOffset = 1.5 * resolution; eastOffset < 0.5 * PI_K; eastOffset += resolution)
+        e.crowns.push_back({eastOffset, std::cos(eastOffset), std::sin(eastOffset)});
+    for (double radialOffset = 0.5 * resolution; radialOffset < TWO_PI_K; radialOffset += resolution)
+        e.sectors.push_back({radialOffset, std::cos(radialOffset), std::sin(radialOffset)});
+    return e;
 }
 
 /// One element's contribution to the radiation pressure vector (N/m^2) at
 /// `sat` (m): the element at `center` (m) of area `area` (m^2).
 template <class V, class S>
 V elementPressure(const V& sat, const S& satNorm, const V& center, const V& sun, double sunNorm,
-                  double solarFlux, double deltaT, double area) {
+                  double solarFlux, const Zonal& albedo, const Zonal& emissivity, double area) {
     const S centerNorm = norm(center);
     const S cosAlpha = dot(center, sat) / (centerNorm * satNorm);
     if (!(scalarValue(cosAlpha) > 0)) return V();
     const S sinPhi = center.z / centerNorm;
-    const S e = zonal<S>(false, deltaT, sinPhi);
+    const S e = zonal<S>(emissivity, sinPhi);
     const S cosSun = dot(center, sun) / (centerNorm * sunNorm);
-    const S a = scalarValue(cosSun) > 0 ? zonal<S>(true, deltaT, sinPhi) : S(0.0);
+    const S a = scalarValue(cosSun) > 0 ? zonal<S>(albedo, sinPhi) : S(0.0);
     const S albedoAndIr = a * solarFlux * cosSun + e * (solarFlux * 0.25);
     const V r = sat - center;
     const S rNorm = norm(r);
@@ -94,14 +123,17 @@ V pressure(const V& sat, const V& sun, double deltaT, double resolution, double 
     const V groundAxis = sat * (S(1.0) / satNorm);
     const S q = S(1.0) / sqrt(sat.x * sat.x + sat.y * sat.y);
     const V east(-(q * sat.y), q * sat.x, S(0.0));
-    const double centerArea = TWO_PI_K * radius * radius * (1.0 - std::cos(resolution));
-    V flux = elementPressure<V, S>(sat, satNorm, ground, sun, sunNorm, solarFlux, deltaT, centerArea);
+    const Elements& grid = elements(resolution);
+    const Zonal albedo = zonalCoefficients(true, deltaT), emissivity = zonalCoefficients(false, deltaT);
+    const double centerArea = TWO_PI_K * radius * radius * (1.0 - grid.cosResolution);
+    V flux = elementPressure<V, S>(sat, satNorm, ground, sun, sunNorm, solarFlux, albedo, emissivity, centerArea);
     const double horizon = std::asin(radius / scalarValue(satNorm));
-    for (double eastOffset = 1.5 * resolution; eastOffset < horizon; eastOffset += resolution) {
-        const V first = rotate(ground, east, eastOffset);
-        const double sectorArea = radius * radius * 2.0 * resolution * std::sin(0.5 * resolution) * std::sin(eastOffset);
-        for (double radialOffset = 0.5 * resolution; radialOffset < TWO_PI_K; radialOffset += resolution)
-            flux = flux + elementPressure<V, S>(sat, satNorm, rotate(first, groundAxis, radialOffset), sun, sunNorm, solarFlux, deltaT, sectorArea);
+    for (const Angle& crown : grid.crowns) {
+        if (!(crown.offset < horizon)) break;
+        const V first = rotate(ground, east, crown.c, crown.s);
+        const double sectorArea = radius * radius * 2.0 * resolution * grid.sinHalfResolution * crown.s;
+        for (const Angle& sector : grid.sectors)
+            flux = flux + elementPressure<V, S>(sat, satNorm, rotate(first, groundAxis, sector.c, sector.s), sun, sunNorm, solarFlux, albedo, emissivity, sectorArea);
     }
     return flux;
 }
