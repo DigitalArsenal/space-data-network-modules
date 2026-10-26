@@ -43,8 +43,47 @@ inline gjforces::ShadowValues values(const Forces& f, const GjClock& clock, cons
     Vec3 r, v; p.state(u, r, v);
     return gjforces::shadowValues(f, clock.at(p.t0+u*p.h), r);
 }
+// True when no switching function can change sign along the path, so the scan
+// can only find no root. Each function is the Sun-nadir angle less asin terms
+// of |r| and |d| (d the Sun from the spacecraft); along the path none moves by
+// more than L = turn of r + turn of d + change of asin(R_E/|r|) + change of
+// asin(R_sun/|d|), each bounded from the path polynomial's coefficient sums
+// (|r - r0| <= D and |dr/du| <= V on [0, 1]) and the Sun's motion relative to
+// the Earth (under 40 km/s). Both end values must share their sign and exceed
+// 2 L in size, for all three functions.
+inline bool clearOfBoundaries(const Forces& f, const GjClock& clock, const Path& p) {
+    double displacement[3], derivative[3];
+    for (int j = 0; j < 3; ++j) {
+        const double r0 = p.left.r[j], v0 = p.h*p.left.v[j], a0 = p.h*p.h*p.left.a[j];
+        const double dr = p.right.r[j]-r0-v0-a0/2;
+        const double dv = p.h*p.right.v[j]-v0-a0, da = p.h*p.h*p.right.a[j]-a0;
+        const double q[5] = {v0, a0/2, 10*dr-4*dv+da/2, -15*dr+7*dv-da, 6*dr-3*dv+da/2};
+        displacement[j] = derivative[j] = 0;
+        for (int i = 0; i < 5; ++i) {
+            displacement[j] += std::abs(q[i]);
+            derivative[j] += (i+1)*std::abs(q[i]);
+        }
+    }
+    const double D = std::sqrt(displacement[0]*displacement[0]+displacement[1]*displacement[1]+displacement[2]*displacement[2]);
+    const double V = std::sqrt(derivative[0]*derivative[0]+derivative[1]*derivative[1]+derivative[2]*derivative[2]);
+    const Vec3 r0 = vector(p.left.r);
+    const double rMin = r0.magnitude()-D;
+    if (!(rMin > 1.01*astro::RE_EARTH) || !std::isfinite(V)) return false;
+    const double sunMove = 40.0*std::abs(p.h);
+    const double dMin = (gjforces::sun(f, clock.at(p.t0))-r0).magnitude()-D-sunMove;
+    if (!(dMin > 1.01*astro::shadow::SUN_RADIUS_KM)) return false;
+    const double sb = astro::RE_EARTH/rMin, sa = astro::shadow::SUN_RADIUS_KM/dMin;
+    const double bound = V/rMin + (V+sunMove)/dMin
+        + astro::RE_EARTH*V/(rMin*rMin*std::sqrt(1-sb*sb))
+        + astro::shadow::SUN_RADIUS_KM*(V+sunMove)/(dMin*dMin*std::sqrt(1-sa*sa));
+    const auto start = values(f, clock, p, 0), end = values(f, clock, p, 1);
+    for (int k = 0; k < 3; ++k)
+        if (!(start[k]*end[k] > 0 && std::min(std::abs(start[k]), std::abs(end[k])) > 2*bound)) return false;
+    return true;
+}
 inline std::vector<gjscan::Root> scan(const Forces& f, const GjClock& clock, const Path& p) {
     if (!f.useSRP) return {};
+    if (clearOfBoundaries(f, clock, p)) return {};
     return gjscan::collect([&](double u) { return values(f, clock, p, u); }, p.h);
 }
 inline bool finalBranch(const Forces& f, const GjClock& clock, const Path& p,
