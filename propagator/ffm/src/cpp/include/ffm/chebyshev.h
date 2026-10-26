@@ -25,12 +25,22 @@ struct ChebyshevSegment {
 
 
 /// Compute Chebyshev coefficients from values at Gauss-Lobatto nodes via DCT-I.
+/// cos(j k pi / N) for the fit, each computed once, as the fit computed it.
+struct ChebyshevCosines {
+    double value[CHEBY_NPTS][CHEBY_NPTS];
+    ChebyshevCosines() {
+        for (int j = 0; j <= CHEBY_N; j++)
+            for (int k = 0; k <= CHEBY_N; k++) value[j][k] = std::cos(j * k * M_PI / CHEBY_N);
+    }
+};
+inline const ChebyshevCosines& chebyshevCosines() { static const ChebyshevCosines table; return table; }
 inline void chebyshevFit(const double* values, double* coeffs) {
+    const auto& cosine = chebyshevCosines().value;
     for (int j = 0; j <= CHEBY_N; j++) {
         double sum = 0.0;
         for (int k = 0; k <= CHEBY_N; k++) {
             double w = (k == 0 || k == CHEBY_N) ? 0.5 : 1.0;
-            sum += w * values[k] * std::cos(j * k * M_PI / CHEBY_N);
+            sum += w * values[k] * cosine[j][k];
         }
         coeffs[j] = 2.0 * sum / CHEBY_N;
     }
