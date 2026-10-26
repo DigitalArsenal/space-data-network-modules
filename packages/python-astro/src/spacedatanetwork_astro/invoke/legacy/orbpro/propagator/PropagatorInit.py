@@ -131,7 +131,7 @@ def PropagatorInitCreateTleVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateTleVector(builder, data):
-    PropagatorInitCreateTleVector(builder, data)
+    return PropagatorInitCreateTleVector(builder, data)
 
 def PropagatorInitAddElements(builder, elements):
     builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(elements), 0)
@@ -149,7 +149,7 @@ def PropagatorInitCreateElementsVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateElementsVector(builder, data):
-    PropagatorInitCreateElementsVector(builder, data)
+    return PropagatorInitCreateElementsVector(builder, data)
 
 def PropagatorInitAddEntityHandles(builder, entityHandles):
     builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(entityHandles), 0)
@@ -171,7 +171,7 @@ def PropagatorInitCreateEntityHandlesVector(builder, data):
     return builder.EndVector()
 
 def CreateEntityHandlesVector(builder, data):
-    PropagatorInitCreateEntityHandlesVector(builder, data)
+    return PropagatorInitCreateEntityHandlesVector(builder, data)
 
 def PropagatorInitEnd(builder):
     return builder.EndObject()

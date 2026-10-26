@@ -259,7 +259,7 @@ def EstimationResultCreateFilterHistoryVector(builder, data):
     return builder.EndVector()
 
 def CreateFilterHistoryVector(builder, data):
-    EstimationResultCreateFilterHistoryVector(builder, data)
+    return EstimationResultCreateFilterHistoryVector(builder, data)
 
 def EstimationResultAddResiduals(builder, residuals):
     builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(residuals), 0)
@@ -281,7 +281,7 @@ def EstimationResultCreateResidualsVector(builder, data):
     return builder.EndVector()
 
 def CreateResidualsVector(builder, data):
-    EstimationResultCreateResidualsVector(builder, data)
+    return EstimationResultCreateResidualsVector(builder, data)
 
 def EstimationResultAddIterationCovariances(builder, iterationCovariances):
     builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(iterationCovariances), 0)
@@ -303,7 +303,7 @@ def EstimationResultCreateIterationCovariancesVector(builder, data):
     return builder.EndVector()
 
 def CreateIterationCovariancesVector(builder, data):
-    EstimationResultCreateIterationCovariancesVector(builder, data)
+    return EstimationResultCreateIterationCovariancesVector(builder, data)
 
 def EstimationResultAddRejectedObservationIndices(builder, rejectedObservationIndices):
     builder.PrependUOffsetTRelativeSlot(5, flatbuffers.number_types.UOffsetTFlags.py_type(rejectedObservationIndices), 0)
@@ -325,7 +325,7 @@ def EstimationResultCreateRejectedObservationIndicesVector(builder, data):
     return builder.EndVector()
 
 def CreateRejectedObservationIndicesVector(builder, data):
-    EstimationResultCreateRejectedObservationIndicesVector(builder, data)
+    return EstimationResultCreateRejectedObservationIndicesVector(builder, data)
 
 def EstimationResultAddOdrRecord(builder, odrRecord):
     builder.PrependUOffsetTRelativeSlot(6, flatbuffers.number_types.UOffsetTFlags.py_type(odrRecord), 0)
@@ -347,7 +347,7 @@ def EstimationResultCreateOdrRecordVector(builder, data):
     return builder.EndVector()
 
 def CreateOdrRecordVector(builder, data):
-    EstimationResultCreateOdrRecordVector(builder, data)
+    return EstimationResultCreateOdrRecordVector(builder, data)
 
 def EstimationResultAddOcmRecord(builder, ocmRecord):
     builder.PrependUOffsetTRelativeSlot(7, flatbuffers.number_types.UOffsetTFlags.py_type(ocmRecord), 0)
@@ -369,7 +369,7 @@ def EstimationResultCreateOcmRecordVector(builder, data):
     return builder.EndVector()
 
 def CreateOcmRecordVector(builder, data):
-    EstimationResultCreateOcmRecordVector(builder, data)
+    return EstimationResultCreateOcmRecordVector(builder, data)
 
 def EstimationResultAddErrorMessage(builder, errorMessage):
     builder.PrependUOffsetTRelativeSlot(8, flatbuffers.number_types.UOffsetTFlags.py_type(errorMessage), 0)

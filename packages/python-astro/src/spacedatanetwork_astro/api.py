@@ -4,8 +4,8 @@ Units and frames are explicit at each boundary. All physics stays in WASM.
 The generated ``sds`` and ``invoke`` packages expose advanced request fields.
 """
 from dataclasses import dataclass
-import json
 import numpy as np
+from . import _cqr, _prw
 from ._codec import obj, pack, unpack, array, plain
 from .runtime import Module, Frame
 
@@ -110,27 +110,19 @@ def sgp4(omm, julian_dates):
 def ffm(position_km, velocity_km_s, epoch_jd, target_jd, *, integrator=None, forces=None):
     """Propagate an Earth inertial Cartesian state; return km, km/s.
 
-    Epoch and target JD are TDB, as required by the FFM module. Force settings are the
-    module's documented mapping. The current module invoke payload is JSON
-    inside binary PIV/TAB; no Python integrator or force model is used.
+    Epoch and target JD are TDB, as required by the FFM module. ``integrator``
+    (method, initialStep, minStep, maxStep, maxSteps, absTolerance, relTolerance)
+    and ``forces`` (pointMass, j2, j3, j4, thirdBody, drag, srp, mu in km^3/s^2)
+    override the defaults. The request is a generated SDS $PRW execution
+    request; no Python integrator or force model is used.
     """
-    position = array(position_km, (3,), name='position_km')
-    velocity = array(velocity_km_s, (3,), name='velocity_km_s')
-    array([epoch_jd, target_jd], name='epochs')
-    request = {'operation': 'propagate', 'params': {
-        'position': position.tolist(), 'velocity': velocity.tolist(),
-        'epochJD': float(epoch_jd), 'targetJD': float(target_jd),
-        'integrator': integrator or {'method': 'RK4', 'initialStep': 30., 'maxSteps': 100000,
-                                     'absTolerance': 1e-12, 'relTolerance': 1e-12},
-        'forces': forces if forces is not None else {'pointMass': True, 'j2': False, 'j3': False,
-            'j4': False, 'thirdBody': False, 'drag': False, 'srp': False}}}
+    request = _prw.execution_request(position_km, velocity_km_s, epoch_jd, target_jd,
+                                     integrator, forces)
     with Module('propagator/ffm') as module:
-        result = json.loads(output(module.invoke('invoke', [Frame('request', json.dumps(request, allow_nan=False).encode(),
-            'orbpro.ffm.InvokeRequest')]), 'response'))
-    if 'error' in result:
-        raise RuntimeError(result['error'])
-    return State(array(result['position'], (3,)), array(result['velocity'], (3,)),
-                 'Earth inertial (FFM)', 'km', 'km/s', float(target_jd), 'TDB')
+        response = output(module.invoke('invoke', [Frame('request', pack(request, '$PRW', size_prefixed=True),
+                                                         'PRW.fbs', '$PRW', 'PRW')]), 'response')
+    position, velocity, frame_name = _prw.final_state(unpack('PRW.PRW', response, identifier='$PRW'))
+    return State(position, velocity, frame_name, 'km', 'km/s', float(target_jd), 'TDB')
 
 
 def convert_time(epoch, source='UTC', target='TAI', *, dut1_seconds=None):
@@ -232,63 +224,33 @@ def conjunction_assessment(request, *, method='screen_catalog', start_jd=None,
                            duration_days=7., threshold_km=5., threads=1):
     """Screen a sequence of CCSDS OMM mappings, or invoke a generated request.
 
-    Screen request GP angles are degrees and motion rev/day; track positions km,
-    velocities km/s, epochs JD. numThreads is explicit in the request.
+    A catalog of OMM mappings (angles degrees, motion rev/day) is screened for
+    start_jd (UTC JD) over duration_days; the result is a mapping with the
+    conjunctions (ranges km, speeds km/s, TCA UTC JD). Any other request is a
+    generated SDS $CQR object for ``method`` and its result is returned as a
+    mapping of the $CQR arms.
     """
     if isinstance(request, (list, tuple)):
         if method != 'screen_catalog' or start_jd is None:
             raise ValueError('An OMM catalog requires screen_catalog and start_jd')
-        fields = {'OBJECT_NAME':'objectName','OBJECT_ID':'objectId','EPOCH':'epoch',
-            'MEAN_MOTION':'meanMotion','ECCENTRICITY':'eccentricity','INCLINATION':'inclination',
-            'RA_OF_ASC_NODE':'raOfAscNode','ARG_OF_PERICENTER':'argOfPericenter',
-            'MEAN_ANOMALY':'meanAnomaly','EPHEMERIS_TYPE':'ephemerisType',
-            'CLASSIFICATION_TYPE':'classificationType','NORAD_CAT_ID':'noradCatId',
-            'ELEMENT_SET_NO':'elementSetNo','REV_AT_EPOCH':'revAtEpoch','BSTAR':'bstar',
-            'MEAN_MOTION_DOT':'meanMotionDot','MEAN_MOTION_DDOT':'meanMotionDdot'}
-        gps = []
-        for record in request:
-            gp = obj('orbpro.conjunction.GpRecord', local=True)
-            for key, value in record.items():
-                if key in fields:
-                    setattr(gp, fields[key], value)
-            gps.append(gp)
-        request = obj('orbpro.conjunction.ConjunctionScreenCatalogRequest', local=True)
-        request.primaryGps = gps
-        request.startJd = float(start_jd)
-        request.durationDays = float(duration_days)
-        request.thresholdKm = float(threshold_km)
-        if not isinstance(threads, int) or threads < 1:
-            raise ValueError('threads must be a positive integer')
-        request.numThreads = threads
-    types = {'screen_catalog': ('ConjunctionScreenCatalogRequest', 'CASQ', 'ConjunctionScreenCatalogResult'),
-             'compute_pc': ('ConjunctionPcRequest', 'CAPR', 'ConjunctionPcResult'),
-             'alfano_max_probability': ('ConjunctionAlfanoRequest', 'CAAR', 'ConjunctionAlfanoResult'),
-             'find_tca': ('ConjunctionPairRequest', 'CAPQ', 'ConjunctionFindTcaResult'),
-             'assess_conjunction': ('ConjunctionPairRequest', 'CAPQ', 'ConjunctionEvent')}
-    name, identifier, result_name = types[method]
+        request = _cqr.catalog_request(request, start_jd=start_jd, duration_days=duration_days,
+                                       threshold_km=threshold_km, threads=threads)
     with Module('analysis/conjunction-assessment') as module:
-        data = output(module.invoke(method, [Frame('request', pack(request, identifier),
-                            'orbpro.conjunction.' + name, identifier, name)]))
-    return plain(unpack('orbpro.conjunction.' + result_name, data, local=True))
+        data = output(module.invoke(method, [Frame('request', pack(request, '$CQR'),
+                                                   'CQR.fbs', '$CQR', 'CQR')]), 'result')
+    result = unpack('CQR.CQR', data, identifier='$CQR')
+    if result.CATALOG_RESULT is not None:
+        return _cqr.catalog_result(result.CATALOG_RESULT)
+    return plain(result)
 
 
-def conjunction_track(julian_dates, states_km, *, norad_id, reference_frame=3):
-    """Marshal an (N,6) km/km/s array into a caller-propagated track (TEME=3)."""
-    dates = array(julian_dates).reshape(-1)
-    states = array(states_km, (len(dates), 6))
-    if len(dates) < 2 or np.any(np.diff(dates) <= 0):
-        raise ValueError('Track epochs must contain two or more increasing JDs')
-    track = obj('orbpro.conjunction.PropagatedTrack', local=True)
-    track.noradCatId = int(norad_id)
-    track.referenceFrame = int(reference_frame)
-    track.samples = []
-    for jd, state in zip(dates, states):
-        sample = obj('orbpro.conjunction.PropagatedSample', local=True)
-        sample.jd = float(jd)
-        for key, value in zip(('xKm','yKm','zKm','vxKmS','vyKmS','vzKmS'), state):
-            setattr(sample, key, float(value))
-        track.samples.append(sample)
-    return track
+def conjunction_track(julian_dates, states_km, *, norad_id, reference_frame='TEME'):
+    """Marshal an (N,6) km/km/s array into a caller-propagated CQR source.
+
+    Epochs are increasing UTC JD; reference_frame names the frame the states
+    are in (TEME, GCRF or EME2000). Place the source in a generated $CQR request.
+    """
+    return _cqr.track_source(julian_dates, states_km, norad_id=norad_id, reference_frame=reference_frame)
 
 
 def estimation_samples(julian_dates, states_si, state_transition_matrices):

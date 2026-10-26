@@ -158,7 +158,7 @@ def EstimationEnvelopeCreatePropagatorSamplesVector(builder, data):
     return builder.EndVector()
 
 def CreatePropagatorSamplesVector(builder, data):
-    EstimationEnvelopeCreatePropagatorSamplesVector(builder, data)
+    return EstimationEnvelopeCreatePropagatorSamplesVector(builder, data)
 
 def EstimationEnvelopeAddSimulatedObservations(builder, simulatedObservations):
     builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(simulatedObservations), 0)
@@ -180,7 +180,7 @@ def EstimationEnvelopeCreateSimulatedObservationsVector(builder, data):
     return builder.EndVector()
 
 def CreateSimulatedObservationsVector(builder, data):
-    EstimationEnvelopeCreateSimulatedObservationsVector(builder, data)
+    return EstimationEnvelopeCreateSimulatedObservationsVector(builder, data)
 
 def EstimationEnvelopeAddInitialOrbitRequest(builder, initialOrbitRequest):
     builder.PrependStructSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(initialOrbitRequest), 0)

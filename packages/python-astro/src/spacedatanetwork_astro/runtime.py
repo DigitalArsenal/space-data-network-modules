@@ -1,7 +1,8 @@
 """Small WasmEdge 0.16.4 C-API host for the SDK's binary invoke ABI.
 
-No orbital computation runs in this file.  The host mirrors SDK
-src/testing/native/wasmedge_emscripten_pthread_runner.c and src/invoke/codec.js.
+No orbital computation runs in this file.  The host mirrors the SDK's
+src/invoke/codec.js and, for WASI threads, conjunction-assessment's
+tests/native/wasmedge_wasi_threads_runner.c.
 Each instance owns its store and shared memory; concurrent invokes are serialized.
 """
 from __future__ import annotations
@@ -455,101 +456,52 @@ class Module:
             api.check(api.VMRegisterModuleFromImport(self.vm, host), "register " + module)
 
     def _host_callback(self, module, name, typ):
-        api = self._api
-        known_void = {"_emscripten_thread_set_strongref", "emscripten_exit_with_live_runtime",
-                      "_emscripten_init_main_thread_js", "__emscripten_init_main_thread_js",
-                      "_emscripten_thread_mailbox_await", "emscripten_check_blocking_allowed",
-                      "_emscripten_thread_cleanup", "__emscripten_thread_cleanup",
-                      "_emscripten_notify_mailbox_postmessage"}
-        known = known_void | {"_emscripten_receive_on_main_thread_js", "__pthread_create_js",
-                              "emscripten_memcpy_js", "emscripten_resize_heap", "__assert_fail", "__cxa_throw", "abort"}
-        if not ((module == "env" and name in known) or (module == "wasi" and name == "thread-spawn")):
+        if (module, name) != ("wasi", "thread-spawn"):
             raise WasmEdgeError(f"Unsupported host import {module}.{name}")
+        api = self._api
 
         @_CALLBACK
-        def callback(_data, frame, params, outputs):
+        def callback(_data, _frame, params, outputs):
             try:
-                get = lambda i: api.ValueGetI32(params[i]) & 0xffffffff
-                if name in known_void:
-                    return 0
-                if name == "_emscripten_receive_on_main_thread_js":
-                    outputs[0] = api.ValueGenF64(0)
-                elif name in ("__assert_fail", "__cxa_throw", "abort"):
-                    raise WasmEdgeError(f"Guest called env.{name}")
-                elif name == "emscripten_memcpy_js":
-                    memory = api.CallingFrameGetMemoryInstance(frame, 0)
-                    self._write(get(0), self._read(get(1), get(2), memory), memory)
-                    if api.FunctionTypeGetReturnsLength(typ):
-                        outputs[0] = api.ValueGenI32(get(0))
-                elif name == "emscripten_resize_heap":
-                    memory = api.CallingFrameGetMemoryInstance(frame, 0)
-                    pages = (get(0) + 65535) // 65536
-                    old = api.MemoryInstanceGetPageSize(memory)
-                    success = pages <= old or api.ResultOK(api.MemoryInstanceGrowPage(memory, pages - old))
-                    outputs[0] = api.ValueGenI32(int(success))
-                elif name == "thread-spawn":
-                    outputs[0] = api.ValueGenI32(self._spawn("wasi", (get(0),)))
-                elif name == "__pthread_create_js":
-                    outputs[0] = api.ValueGenI32(self._spawn("emscripten", (get(0), get(2), get(3))))
+                outputs[0] = api.ValueGenI32(self._spawn(api.ValueGetI32(params[0]) & 0xffffffff))
                 return 0
             except BaseException as error:
                 self._thread_errors.append(error)
                 return 2
         return callback
 
-    def _spawn(self, model, args):
+    def _spawn(self, start_arg):
+        """WASI thread-spawn: a new instance of the artifact on its own OS thread.
+
+        WasmEdge 0.16.4 keeps the atomic waiter map on the Executor, while the
+        execution stacks are thread-local: every guest thread runs on the
+        resident instance's executor, so an atomic notify wakes a wait on any
+        thread. A private executor per thread deadlocks the first contended wait.
+        """
         api = self._api
-        executor = api.ExecutorCreate(self.conf, None)
         instance = C.c_void_p()
         try:
             with self._store_lock:
-                api.check(api.ExecutorInstantiate(executor, C.byref(instance), self.store, self.ast), "instantiate guest thread")
+                api.check(api.ExecutorInstantiate(self.executor, C.byref(instance), self.store, self.ast), "instantiate guest thread")
                 tid = self._next_tid
                 self._next_tid += 1
+
             def run():
                 try:
-                    if model == "wasi":
-                        self._call("wasi_thread_start", (tid, args[0]), instance, executor)
-                    else:
-                        pthread, routine, arg = args
-                        # This pinned conjunction artifact's browser adapter
-                        # establishStackSpace uses +48/+52. The SDK legacy C
-                        # runner's +52/+56 constants describe an older ABI.
-                        high = struct.unpack("<I", self._read(pthread + 48, 4))[0]
-                        size = struct.unpack("<I", self._read(pthread + 52, 4))[0]
-                        if not size or size > high or high > api.MemoryInstanceGetPageSize(self.memory) * 65536:
-                            raise WasmEdgeError("Unsupported Emscripten pthread stack layout; rebuild through the pinned SDK")
-                        self._call("emscripten_stack_set_limits", (high, high - size), instance, executor)
-                        restore = "_emscripten_stack_restore" if self._find("_emscripten_stack_restore", instance) else "stackRestore"
-                        self._call(restore, (high,), instance, executor)
-                        init = "_emscripten_thread_init" if self._find("_emscripten_thread_init", instance) else "__emscripten_thread_init"
-                        self._call(init, (pthread, 0, 0, 1, 0, 0), instance, executor)
-                        self._call("_emscripten_tls_init", (), instance, executor)
-                        table = api.ModuleInstanceFindTable(instance, _name("__indirect_function_table"))
-                        ref = _Value()
-                        api.check(api.TableInstanceGetData(table, C.byref(ref), routine), "thread entry lookup")
-                        result = self._call_function(api.ValueGetFuncRef(ref), (arg,), executor)
-                        exit_name = "_emscripten_thread_exit" if self._find("_emscripten_thread_exit", instance) else "__emscripten_thread_exit"
-                        self._call(exit_name, (result or 0,), instance, executor)
+                    self._call("wasi_thread_start", (tid, start_arg), instance, self.executor)
                 except BaseException as error:
                     self._thread_errors.append(error)
-                    crashed = self._find("_emscripten_thread_crashed", instance)
-                    if crashed:
-                        self._call_function(crashed, (), executor)
                 finally:
                     with self._store_lock:
                         api.ModuleInstanceDelete(instance)
-                    api.ExecutorDelete(executor)
             thread = threading.Thread(target=run, name=f"wasmedge-guest-{tid}", daemon=True)
             self._threads.append(thread)
             thread.start()
             self.spawned_threads += 1
-            return tid if model == "wasi" else 0
+            return tid
         except BaseException:
             if instance:
                 api.ModuleInstanceDelete(instance)
-            if executor:
-                api.ExecutorDelete(executor)
             raise
 
     def _find(self, name, instance=None):

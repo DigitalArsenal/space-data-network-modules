@@ -124,10 +124,16 @@ def test_conjunction_socrates_three_events():
     refs=V['conjunction']['conjunctions']; start=min(jd(r['EPOCH']) for r in records.values())-.05
     result=astro.conjunction_assessment(list(records.values()),start_jd=start,
         duration_days=max(7.,max(jd(r['tca']) for r in refs)-start+.25),threshold_km=5.,threads=1)
-    events=result['conjunctions'];assert len(events)==len(refs)
+    events=result['conjunctions']
+    # SOCRATES' top three by probability are three of the close approaches below the
+    # threshold; the module reports every one. Each reference is matched to the event
+    # of its pair nearest its TCA, and no pair beyond the reference pairs is reported.
+    pair=lambda a,b:frozenset((a,b))
+    assert {pair(e['obj1Norad'],e['obj2Norad']) for e in events}=={pair(r['obj1_norad'],r['obj2_norad']) for r in refs}
     errors=[]
     for reference in refs:
-        event=next(e for e in events if {e['obj1Norad'],e['obj2Norad']}=={reference['obj1_norad'],reference['obj2_norad']})
+        event=min((e for e in events if pair(e['obj1Norad'],e['obj2Norad'])==pair(reference['obj1_norad'],reference['obj2_norad'])),
+                  key=lambda e:abs(e['tcaJd']-jd(reference['tca'])))
         errors.append((abs(event['tcaJd']-jd(reference['tca']))*86400,
             abs(event['minRangeKm']-reference['min_range_km'])*1000,
             abs(event['relSpeedKms']-reference['rel_speed_kms'])*1000))

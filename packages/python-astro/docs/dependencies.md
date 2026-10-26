@@ -27,14 +27,12 @@ TAB descriptors pointing into its payload arena. `runtime.frame_stream` and
 
 Access's committed artifact imports Emscripten's legalized five-argument
 `fd_seek`; the host mirrors the SDK stdio shim's ESPIPE/BADF behavior. Conjunction
-imports Emscripten pthread functions and shared memory. The pinned artifact's
-`establishStackSpace` reads pthread stack offsets **48/52**, while the installed
-SDK legacy runner's constants are **52/56**. Python follows the artifact ABI;
-its test performs a real two-worker conjunction screen (three guest threads).
-These offsets are artifact-specific and must be revalidated when repinning.
+imports the shared memory `env.memory` and `wasi.thread-spawn`; the host starts
+each guest thread as a new instance on the resident instance's executor, because
+WasmEdge 0.16.4 keeps the atomic waiter map on the executor. Its test performs a
+real two-worker conjunction screen. No other artifact imports a host function.
 
-WASI `thread-spawn` is implemented, but none of these nine artifacts imports it;
-that callback has no execution evidence in this lane. Linux and Windows runtime
+Linux and Windows runtime
 execution remain untested. macOS arm64 with Python 3.14 is verified.
 
 ## Generated bindings
@@ -46,7 +44,7 @@ regenerating files in the canonical checkout. Full source manifest:
 All 7,413 source files are hashed; required families and their import closure
 are vendored under a private namespace. Generated imports are rewritten only by
 `scripts/vendor_sds.py`. Module `.fbs` schemas are compiled with pinned
-`flatc-wasm@26.1.32`; schema/compiler/artifact hashes are in `bindings.lock.json`.
+`flatc-wasm@26.1.38`; schema/compiler/artifact hashes are in `bindings.lock.json`.
 
 All vendored modules import and all audited cross-module symbols resolve.
 **No missing-symbol expected-failure test is needed:** no such generator defect
@@ -54,11 +52,10 @@ was observed. Unknown imports fail vendoring instead of being skipped.
 
 ## Remaining upstream contracts
 
-- FFM's manifest names `orbpro.ffm.InvokeRequest/InvokeResponse`, but no such
-  `.fbs` source exists. Its shipped C++ command path consumes JSON inside PIV/TAB.
-  The Python `ffm` wrapper mirrors that actual contract, with NumPy marshalling;
-  all integration and force evaluation remain C++ WASM. This is an existing
-  payload exception, not a newly invented FlatBuffer schema.
+- FFM's `invoke` method takes the typed `$PRW` record (`PRWExecutionRequest`) and
+  conjunction assessment takes `$CQR`; the Python `ffm` and `conjunction_assessment`
+  wrappers build those generated objects with NumPy marshalling, and all
+  integration, force evaluation and screening remain C++ WASM.
 - FFM trajectory-segment generated C++ lacks its `.fbs` source in this checkout.
   Additional resident trajectory-segment Python wrappers are not implemented.
 - Current SDK and legacy SGP4 schemas both define incompatible `StateVector`

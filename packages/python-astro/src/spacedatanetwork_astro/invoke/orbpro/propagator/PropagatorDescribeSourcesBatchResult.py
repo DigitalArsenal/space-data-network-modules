@@ -84,7 +84,7 @@ def PropagatorDescribeSourcesBatchResultCreateSourcesVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateSourcesVector(builder, data):
-    PropagatorDescribeSourcesBatchResultCreateSourcesVector(builder, data)
+    return PropagatorDescribeSourcesBatchResultCreateSourcesVector(builder, data)
 
 def PropagatorDescribeSourcesBatchResultEnd(builder):
     return builder.EndObject()

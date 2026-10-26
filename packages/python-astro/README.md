@@ -60,12 +60,12 @@ assert np.isfinite(state.position).all()
 | --- | --- |
 | `sgp4(omm, julian_dates)` | CCSDS OMM mapping + UTC-like JD → `(N,6)` ECEF metres and m/s |
 | `SGP4()` | Context-managed resident catalog; `ingest()` upserts by NORAD, `propagate()` returns states with explicit frame metadata |
-| `ffm(r_km, v_km_s, epoch_jd, target_jd, forces=..., integrator=...)` | Earth inertial km/km/s, **JD TDB** → `State` with NumPy arrays |
+| `ffm(r_km, v_km_s, epoch_jd, target_jd, forces=..., integrator=...)` | Earth inertial km/km/s, **JD TDB** → `State` with NumPy arrays; the request is a generated SDS `$PRW` execution request |
 | `initial_orbit(positions_m, method='GIBBS')` | `(3,3)` inertial positions → middle-epoch state in metres and m/s; also Herrick-Gibbs |
 | `estimation(request, propagator_samples=...)` | Advanced generated EstimationEnvelope for WLS/EKF/UKF/RTS or simulation; caller chooses propagator |
 | `estimation_samples(epochs, states, stms)` | Marshal `(N,6)` SI states and `(N,6,6)` STMs supplied by that propagator |
-| `conjunction_assessment(catalog, start_jd=..., threads=...)` | OMM mappings → screen results; also accepts generated requests for TCA/Pc/Alfano methods |
-| `conjunction_track(epochs, states_km, norad_id=...)` | Marshal `(N,6)` caller-propagated tracks; explicitly select reference frame |
+| `conjunction_assessment(catalog, start_jd=..., threads=...)` | OMM mappings → every close approach below `threshold_km` (ranges km, speeds km/s, TCA UTC JD); also accepts a generated SDS `$CQR` request for the TCA/Pc/Alfano methods |
+| `conjunction_track(epochs, states_km, norad_id=..., reference_frame=...)` | Marshal `(N,6)` km, km/s UTC-JD tracks into a `$CQR` source; the frame is named by the caller |
 | `access(julian_dates_tt, positions_ecef_m, stations)` | `(N,3)` ECEF metres + geodetic station mappings → access windows |
 | `events(epochs_utc, states_km, request)` | `(N,6)` OEM states + generated EVL configuration → event report |
 | `lambert_izzo(r1_km, r2_km, tof_seconds, ...)` | LMS parameters → LMO branches with NumPy velocity arrays in km/s |
@@ -76,8 +76,8 @@ Advanced ratified objects live under `spacedatanetwork_astro.sds`, module-local
 objects under `.invoke.orbpro`, and SGP4 legacy batch objects under
 `.invoke.legacy.orbpro`. `Module`/`Frame` expose the typed binary PIV/TAB boundary
 for additional artifact methods. Requests and results are generated FlatBuffers;
-FFM's existing JSON-in-PIV invoke payload is documented in
-[dependencies](docs/dependencies.md). No substitute Python physics is provided.
+FFM and conjunction requests are generated `$PRW` and `$CQR` objects
+(`spacedatanetwork_astro.sds.PRW`, `.sds.CQR`); see [dependencies](docs/dependencies.md). No substitute Python physics is provided.
 
 ## Reproduce and build
 
@@ -118,7 +118,7 @@ loader search path. Linux/Windows wheels and execution were **not** tested here.
 ## Provenance and limitations
 
 The artifacts are exactly the committed bytes from modules
-`e4612363998bd1c732aaab2b242de0015104f096`. SDS generated source is immutable
+`7339a911a9adffa42951ef0b1b639220968ebb58`. SDS generated source is immutable
 `acbce14c8044fa2484e5f50fb51815d4488f05b8` (1.271.0), independent of concurrent
 working-tree edits. `artifacts.lock.json` and `bindings.lock.json` record hashes,
 module-declared dependency versions, schema sources and compiler stamps.

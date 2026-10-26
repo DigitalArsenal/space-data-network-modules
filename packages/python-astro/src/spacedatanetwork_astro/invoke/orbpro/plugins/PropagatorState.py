@@ -195,7 +195,7 @@ def PropagatorStateCreatePositionVector(builder, data):
     return builder.EndVector()
 
 def CreatePositionVector(builder, data):
-    PropagatorStateCreatePositionVector(builder, data)
+    return PropagatorStateCreatePositionVector(builder, data)
 
 def PropagatorStateAddVelocity(builder, velocity):
     builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(velocity), 0)
@@ -217,7 +217,7 @@ def PropagatorStateCreateVelocityVector(builder, data):
     return builder.EndVector()
 
 def CreateVelocityVector(builder, data):
-    PropagatorStateCreateVelocityVector(builder, data)
+    return PropagatorStateCreateVelocityVector(builder, data)
 
 def PropagatorStateAddEpoch(builder, epoch):
     builder.PrependInt64Slot(2, epoch, 0)
@@ -251,7 +251,7 @@ def PropagatorStateCreateCovarianceVector(builder, data):
     return builder.EndVector()
 
 def CreateCovarianceVector(builder, data):
-    PropagatorStateCreateCovarianceVector(builder, data)
+    return PropagatorStateCreateCovarianceVector(builder, data)
 
 def PropagatorStateAddBallisticCoefficient(builder, ballisticCoefficient):
     builder.PrependFloat64Slot(5, ballisticCoefficient, 0.0)

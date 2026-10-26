@@ -34,7 +34,8 @@ def test_numpy_propagator_samples_marshal_without_physics():
     np.testing.assert_array_equal(decoded.propagatorSamples[1].state,states[1])
     np.testing.assert_array_equal(decoded.propagatorSamples[0].stm,stms[0].ravel())
     track=astro.conjunction_track([2451545.,2451546.],states,norad_id=5)
-    assert track.samples[1].vzKmS==states[1,5]
+    lines=track.EPHEMERIS.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES
+    assert lines[1].Z_DOT==states[1,5]
     with pytest.raises(ValueError):astro.estimation_samples([2451545.],states,stms)
 
 

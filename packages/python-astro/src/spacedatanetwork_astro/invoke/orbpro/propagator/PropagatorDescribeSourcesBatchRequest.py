@@ -90,7 +90,7 @@ def PropagatorDescribeSourcesBatchRequestCreateSourceHandlesVector(builder, data
     return builder.EndVector()
 
 def CreateSourceHandlesVector(builder, data):
-    PropagatorDescribeSourcesBatchRequestCreateSourceHandlesVector(builder, data)
+    return PropagatorDescribeSourcesBatchRequestCreateSourceHandlesVector(builder, data)
 
 def PropagatorDescribeSourcesBatchRequestEnd(builder):
     return builder.EndObject()

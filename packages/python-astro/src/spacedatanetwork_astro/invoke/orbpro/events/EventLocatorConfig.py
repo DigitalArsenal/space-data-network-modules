@@ -156,7 +156,7 @@ def EventLocatorConfigCreateComponentsVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateComponentsVector(builder, data):
-    EventLocatorConfigCreateComponentsVector(builder, data)
+    return EventLocatorConfigCreateComponentsVector(builder, data)
 
 def EventLocatorConfigAddParameters(builder, parameters):
     builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(parameters), 0)
@@ -174,7 +174,7 @@ def EventLocatorConfigCreateParametersVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateParametersVector(builder, data):
-    EventLocatorConfigCreateParametersVector(builder, data)
+    return EventLocatorConfigCreateParametersVector(builder, data)
 
 def EventLocatorConfigAddPolicy(builder, policy):
     builder.PrependStructSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(policy), 0)

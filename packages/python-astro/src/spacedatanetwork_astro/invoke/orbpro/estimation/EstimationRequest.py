@@ -163,7 +163,7 @@ def EstimationRequestCreateObservationsVector(builder, data):
     return builder.EndVector()
 
 def CreateObservationsVector(builder, data):
-    EstimationRequestCreateObservationsVector(builder, data)
+    return EstimationRequestCreateObservationsVector(builder, data)
 
 def EstimationRequestAddErrorModels(builder, errorModels):
     builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(errorModels), 0)
@@ -185,7 +185,7 @@ def EstimationRequestCreateErrorModelsVector(builder, data):
     return builder.EndVector()
 
 def CreateErrorModelsVector(builder, data):
-    EstimationRequestCreateErrorModelsVector(builder, data)
+    return EstimationRequestCreateErrorModelsVector(builder, data)
 
 def EstimationRequestAddSourceRecordIds(builder, sourceRecordIds):
     builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(sourceRecordIds), 0)
@@ -203,7 +203,7 @@ def EstimationRequestCreateSourceRecordIdsVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateSourceRecordIdsVector(builder, data):
-    EstimationRequestCreateSourceRecordIdsVector(builder, data)
+    return EstimationRequestCreateSourceRecordIdsVector(builder, data)
 
 def EstimationRequestAddPropagatorPortId(builder, propagatorPortId):
     builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(propagatorPortId), 0)

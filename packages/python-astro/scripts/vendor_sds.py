@@ -21,8 +21,8 @@ PACKAGE = Path(__file__).resolve().parents[1]
 MODULES = PACKAGE.parents[1]
 SDS_REVISION = "acbce14c8044fa2484e5f50fb51815d4488f05b8"
 SDS_VERSION = "1.271.0"
-FLATC_VERSION = "26.1.32"
-FAMILIES = "PIV TAB OMM CAT REC RFM CRD MEM OCM ODR TDM TRH CDM CSM ACW EVL PCE EOP FRM OEM LMO LMS TIM NCD".split()
+FLATC_VERSION = "26.1.38"
+FAMILIES = "PIV TAB OMM CAT REC RFM CRD MEM OCM ODR TDM TRH CDM CSM ACW EVL PCE EOP FRM OEM LMO LMS TIM NCD CQR PRW".split()
 SDS_NAMESPACE = "spacedatanetwork_astro.sds"
 INVOKE_NAMESPACE = "spacedatanetwork_astro.invoke"
 EXTERNAL_IMPORTS = {"flatbuffers", "typing", "numpy", "sys", "struct", "cryptography", "hashlib", "hmac"}
@@ -168,7 +168,6 @@ def generate_invoke(modules: Path):
         ("sdk", sdk_schemas, [p.name for p in sorted(sdk_schemas.glob("*.fbs")) if p.name != "Solver.fbs"]),
         ("sgp4", modules / "propagator/sgp4/schemas", ["PropagatorState.fbs"]),
         ("sgp4-legacy", modules / "propagator/sgp4/schemas", ["BaseTypes.fbs", "StateVector.fbs"]),
-        ("conjunction", modules / "analysis/conjunction-assessment/schemas", None),
     ]
     groups = []
     stamps = []

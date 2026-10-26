@@ -125,7 +125,7 @@ def EventScanResultCreateHitsVector(builder, data):
     return builder.EndVector()
 
 def CreateHitsVector(builder, data):
-    EventScanResultCreateHitsVector(builder, data)
+    return EventScanResultCreateHitsVector(builder, data)
 
 def EventScanResultAddSummaries(builder, summaries):
     builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(summaries), 0)
@@ -147,7 +147,7 @@ def EventScanResultCreateSummariesVector(builder, data):
     return builder.EndVector()
 
 def CreateSummariesVector(builder, data):
-    EventScanResultCreateSummariesVector(builder, data)
+    return EventScanResultCreateSummariesVector(builder, data)
 
 def EventScanResultAddEvaluationCount(builder, evaluationCount):
     builder.PrependUint32Slot(2, evaluationCount, 0)

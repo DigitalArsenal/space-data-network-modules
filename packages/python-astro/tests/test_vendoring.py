@@ -19,13 +19,13 @@ class VendoringTests(unittest.TestCase):
     def test_immutable_sds_source_and_compiler_are_pinned(self):
         self.assertEqual(self.lock["sds"]["revision"], "acbce14c8044fa2484e5f50fb51815d4488f05b8")
         self.assertEqual(self.lock["sds"]["version"].split("+")[0], "1.271.0")
-        self.assertEqual(self.lock["invoke"]["flatc_wasm_version"], "26.1.32")
+        self.assertEqual(self.lock["invoke"]["flatc_wasm_version"], "26.1.38")
         source_manifest = (json.dumps(self.lock["sds"]["lib_py_sha256"], sort_keys=True, indent=2) + "\n").encode()
         self.assertEqual(hashlib.sha256(source_manifest).hexdigest(), self.lock["sds"]["lib_py_manifest_sha256"])
         self.assertGreaterEqual(len(self.lock["sds"]["lib_py_sha256"]), 4505)
         self.assertEqual(self.lock["unresolved_imports"], [])
         self.assertIn("Apache License", self.root.joinpath("sds/LICENSE.txt").read_text())
-        self.assertIn("Copyright 2024 Digital Arsenal, Inc.", self.root.joinpath("invoke/SDK-LICENSE.txt").read_text())
+        self.assertIn("Copyright 2024 Edgesource Corporation", self.root.joinpath("invoke/SDK-LICENSE.txt").read_text())
         self.assertIn("Imports have been rewritten", self.root.joinpath("sds/NOTICE.txt").read_text())
 
     def test_every_generated_file_matches_manifest_and_imports(self):

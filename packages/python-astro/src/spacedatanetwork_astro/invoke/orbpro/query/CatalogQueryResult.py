@@ -167,7 +167,7 @@ def CatalogQueryResultCreateRowsVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateRowsVector(builder, data):
-    CatalogQueryResultCreateRowsVector(builder, data)
+    return CatalogQueryResultCreateRowsVector(builder, data)
 
 def CatalogQueryResultAddEntityIndices(builder, entityIndices):
     builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(entityIndices), 0)
@@ -189,7 +189,7 @@ def CatalogQueryResultCreateEntityIndicesVector(builder, data):
     return builder.EndVector()
 
 def CreateEntityIndicesVector(builder, data):
-    CatalogQueryResultCreateEntityIndicesVector(builder, data)
+    return CatalogQueryResultCreateEntityIndicesVector(builder, data)
 
 def CatalogQueryResultAddMask(builder, mask):
     builder.PrependUOffsetTRelativeSlot(3, flatbuffers.number_types.UOffsetTFlags.py_type(mask), 0)
@@ -211,7 +211,7 @@ def CatalogQueryResultCreateMaskVector(builder, data):
     return builder.EndVector()
 
 def CreateMaskVector(builder, data):
-    CatalogQueryResultCreateMaskVector(builder, data)
+    return CatalogQueryResultCreateMaskVector(builder, data)
 
 def CatalogQueryResultAddVisibleCount(builder, visibleCount):
     builder.PrependUint32Slot(4, visibleCount, 0)

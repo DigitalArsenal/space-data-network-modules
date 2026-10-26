@@ -111,7 +111,7 @@ def PropagatorSampleTrajectoryStatesRequestCreateSourceHandlesVector(builder, da
     return builder.EndVector()
 
 def CreateSourceHandlesVector(builder, data):
-    PropagatorSampleTrajectoryStatesRequestCreateSourceHandlesVector(builder, data)
+    return PropagatorSampleTrajectoryStatesRequestCreateSourceHandlesVector(builder, data)
 
 def PropagatorSampleTrajectoryStatesRequestAddStartJd(builder, startJd):
     builder.PrependFloat64Slot(2, startJd, 0.0)

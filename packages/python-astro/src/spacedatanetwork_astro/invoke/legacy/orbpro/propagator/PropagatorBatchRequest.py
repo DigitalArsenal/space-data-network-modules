@@ -81,8 +81,80 @@ class PropagatorBatchRequest(object):
             return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
         return 0
 
+    # Objects by NORAD catalog number. Each is resolved by its number, so the
+    # answer is never another object's; an unknown number refuses the request.
+    # With entity_handles as well, both must name the same objects in order.
+    # PropagatorBatchRequest
+    def CatalogNumbers(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Uint32Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 4))
+        return 0
+
+    # PropagatorBatchRequest
+    def CatalogNumbersAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Uint32Flags, o)
+        return 0
+
+    # PropagatorBatchRequest
+    def CatalogNumbersLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # PropagatorBatchRequest
+    def CatalogNumbersIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        return o == 0
+
+    # Axes of the output: ECEF (default, Earth-fixed as before), TEME (SGP4's
+    # own axes) or ICRF (Earth-centred ICRF axes, that is GCRF).
+    # PropagatorBatchRequest
+    def OutputFrame(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint8Flags, o + self._tab.Pos)
+        return 3
+
+    # propagate_ephemeris: the span's end as a Julian date (UTC; epoch is its
+    # start) and the sample step in seconds.
+    # PropagatorBatchRequest
+    def StopEpoch(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
+        return 0.0
+
+    # PropagatorBatchRequest
+    def StepSeconds(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Float64Flags, o + self._tab.Pos)
+        return 0.0
+
+    # propagate_ephemeris: one data block per element set of each object's
+    # history, each propagated from its own set alone from the epoch of the
+    # set neighbour_sets earlier to the epoch of the set neighbour_sets later.
+    # PropagatorBatchRequest
+    def ElementSetBlocks(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        if o != 0:
+            return bool(self._tab.Get(flatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
+    # PropagatorBatchRequest
+    def NeighbourSets(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(22))
+        if o != 0:
+            return self._tab.Get(flatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
+        return 2
+
 def PropagatorBatchRequestStart(builder):
-    builder.StartObject(4)
+    builder.StartObject(10)
 
 def Start(builder):
     PropagatorBatchRequestStart(builder)
@@ -113,7 +185,7 @@ def PropagatorBatchRequestCreateEntityHandlesVector(builder, data):
     return builder.EndVector()
 
 def CreateEntityHandlesVector(builder, data):
-    PropagatorBatchRequestCreateEntityHandlesVector(builder, data)
+    return PropagatorBatchRequestCreateEntityHandlesVector(builder, data)
 
 def PropagatorBatchRequestAddOutputOffset(builder, outputOffset):
     builder.PrependUint32Slot(2, outputOffset, 0)
@@ -126,6 +198,58 @@ def PropagatorBatchRequestAddMaxCount(builder, maxCount):
 
 def AddMaxCount(builder, maxCount):
     PropagatorBatchRequestAddMaxCount(builder, maxCount)
+
+def PropagatorBatchRequestAddCatalogNumbers(builder, catalogNumbers):
+    builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(catalogNumbers), 0)
+
+def AddCatalogNumbers(builder, catalogNumbers):
+    PropagatorBatchRequestAddCatalogNumbers(builder, catalogNumbers)
+
+def PropagatorBatchRequestStartCatalogNumbersVector(builder, numElems):
+    return builder.StartVector(4, numElems, 4)
+
+def StartCatalogNumbersVector(builder, numElems):
+    return PropagatorBatchRequestStartCatalogNumbersVector(builder, numElems)
+
+def PropagatorBatchRequestCreateCatalogNumbersVector(builder, data):
+    data = list(data)
+    builder.StartVector(4, len(data), 4)
+    for item in reversed(data):
+        builder.PrependUint32(item)
+    return builder.EndVector()
+
+def CreateCatalogNumbersVector(builder, data):
+    return PropagatorBatchRequestCreateCatalogNumbersVector(builder, data)
+
+def PropagatorBatchRequestAddOutputFrame(builder, outputFrame):
+    builder.PrependUint8Slot(5, outputFrame, 3)
+
+def AddOutputFrame(builder, outputFrame):
+    PropagatorBatchRequestAddOutputFrame(builder, outputFrame)
+
+def PropagatorBatchRequestAddStopEpoch(builder, stopEpoch):
+    builder.PrependFloat64Slot(6, stopEpoch, 0.0)
+
+def AddStopEpoch(builder, stopEpoch):
+    PropagatorBatchRequestAddStopEpoch(builder, stopEpoch)
+
+def PropagatorBatchRequestAddStepSeconds(builder, stepSeconds):
+    builder.PrependFloat64Slot(7, stepSeconds, 0.0)
+
+def AddStepSeconds(builder, stepSeconds):
+    PropagatorBatchRequestAddStepSeconds(builder, stepSeconds)
+
+def PropagatorBatchRequestAddElementSetBlocks(builder, elementSetBlocks):
+    builder.PrependBoolSlot(8, elementSetBlocks, 0)
+
+def AddElementSetBlocks(builder, elementSetBlocks):
+    PropagatorBatchRequestAddElementSetBlocks(builder, elementSetBlocks)
+
+def PropagatorBatchRequestAddNeighbourSets(builder, neighbourSets):
+    builder.PrependUint32Slot(9, neighbourSets, 2)
+
+def AddNeighbourSets(builder, neighbourSets):
+    PropagatorBatchRequestAddNeighbourSets(builder, neighbourSets)
 
 def PropagatorBatchRequestEnd(builder):
     return builder.EndObject()
@@ -147,11 +271,23 @@ class PropagatorBatchRequestT(object):
         entityHandles = None,
         outputOffset = 0,
         maxCount = 0,
+        catalogNumbers = None,
+        outputFrame = 3,
+        stopEpoch = 0.0,
+        stepSeconds = 0.0,
+        elementSetBlocks = False,
+        neighbourSets = 2,
     ):
         self.epoch = epoch  # type: float
         self.entityHandles = entityHandles  # type: Optional[List[int]]
         self.outputOffset = outputOffset  # type: int
         self.maxCount = maxCount  # type: int
+        self.catalogNumbers = catalogNumbers  # type: Optional[List[int]]
+        self.outputFrame = outputFrame  # type: int
+        self.stopEpoch = stopEpoch  # type: float
+        self.stepSeconds = stepSeconds  # type: float
+        self.elementSetBlocks = elementSetBlocks  # type: bool
+        self.neighbourSets = neighbourSets  # type: int
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
@@ -184,6 +320,18 @@ class PropagatorBatchRequestT(object):
                 self.entityHandles = propagatorBatchRequest.EntityHandlesAsNumpy()
         self.outputOffset = propagatorBatchRequest.OutputOffset()
         self.maxCount = propagatorBatchRequest.MaxCount()
+        if not propagatorBatchRequest.CatalogNumbersIsNone():
+            if np is None:
+                self.catalogNumbers = []
+                for i in range(propagatorBatchRequest.CatalogNumbersLength()):
+                    self.catalogNumbers.append(propagatorBatchRequest.CatalogNumbers(i))
+            else:
+                self.catalogNumbers = propagatorBatchRequest.CatalogNumbersAsNumpy()
+        self.outputFrame = propagatorBatchRequest.OutputFrame()
+        self.stopEpoch = propagatorBatchRequest.StopEpoch()
+        self.stepSeconds = propagatorBatchRequest.StepSeconds()
+        self.elementSetBlocks = propagatorBatchRequest.ElementSetBlocks()
+        self.neighbourSets = propagatorBatchRequest.NeighbourSets()
 
     # PropagatorBatchRequestT
     def Pack(self, builder):
@@ -195,11 +343,26 @@ class PropagatorBatchRequestT(object):
                 for i in reversed(range(len(self.entityHandles))):
                     builder.PrependUint32(self.entityHandles[i])
                 entityHandles = builder.EndVector()
+        if self.catalogNumbers is not None:
+            if np is not None and type(self.catalogNumbers) is np.ndarray:
+                catalogNumbers = builder.CreateNumpyVector(self.catalogNumbers)
+            else:
+                PropagatorBatchRequestStartCatalogNumbersVector(builder, len(self.catalogNumbers))
+                for i in reversed(range(len(self.catalogNumbers))):
+                    builder.PrependUint32(self.catalogNumbers[i])
+                catalogNumbers = builder.EndVector()
         PropagatorBatchRequestStart(builder)
         PropagatorBatchRequestAddEpoch(builder, self.epoch)
         if self.entityHandles is not None:
             PropagatorBatchRequestAddEntityHandles(builder, entityHandles)
         PropagatorBatchRequestAddOutputOffset(builder, self.outputOffset)
         PropagatorBatchRequestAddMaxCount(builder, self.maxCount)
+        if self.catalogNumbers is not None:
+            PropagatorBatchRequestAddCatalogNumbers(builder, catalogNumbers)
+        PropagatorBatchRequestAddOutputFrame(builder, self.outputFrame)
+        PropagatorBatchRequestAddStopEpoch(builder, self.stopEpoch)
+        PropagatorBatchRequestAddStepSeconds(builder, self.stepSeconds)
+        PropagatorBatchRequestAddElementSetBlocks(builder, self.elementSetBlocks)
+        PropagatorBatchRequestAddNeighbourSets(builder, self.neighbourSets)
         propagatorBatchRequest = PropagatorBatchRequestEnd(builder)
         return propagatorBatchRequest

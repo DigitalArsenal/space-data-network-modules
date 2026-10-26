@@ -174,7 +174,7 @@ def PropagatorSampleTrajectoryStatesResultCreateSampleJdsVector(builder, data):
     return builder.EndVector()
 
 def CreateSampleJdsVector(builder, data):
-    PropagatorSampleTrajectoryStatesResultCreateSampleJdsVector(builder, data)
+    return PropagatorSampleTrajectoryStatesResultCreateSampleJdsVector(builder, data)
 
 def PropagatorSampleTrajectoryStatesResultAddSourceHandles(builder, sourceHandles):
     builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(sourceHandles), 0)
@@ -196,7 +196,7 @@ def PropagatorSampleTrajectoryStatesResultCreateSourceHandlesVector(builder, dat
     return builder.EndVector()
 
 def CreateSourceHandlesVector(builder, data):
-    PropagatorSampleTrajectoryStatesResultCreateSourceHandlesVector(builder, data)
+    return PropagatorSampleTrajectoryStatesResultCreateSourceHandlesVector(builder, data)
 
 def PropagatorSampleTrajectoryStatesResultAddReferenceFrame(builder, referenceFrame):
     builder.PrependUint8Slot(5, referenceFrame, 0)
@@ -224,7 +224,7 @@ def PropagatorSampleTrajectoryStatesResultCreateStatesVector(builder, data):
     return builder.EndVector()
 
 def CreateStatesVector(builder, data):
-    PropagatorSampleTrajectoryStatesResultCreateStatesVector(builder, data)
+    return PropagatorSampleTrajectoryStatesResultCreateStatesVector(builder, data)
 
 def PropagatorSampleTrajectoryStatesResultEnd(builder):
     return builder.EndObject()

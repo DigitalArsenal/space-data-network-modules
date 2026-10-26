@@ -1,9 +1,9 @@
 {
   "format_version": 1,
   "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
-  "version": "0.1.0.dev0+modules.75fd4d9d29c8.ac3cbcbda94d6",
-  "source_revision": "75fd4d9d29c8332e43c5daa443fd6cd77f9ecd17",
-  "artifact_set_sha256": "c3cbcbda94d6b5230327d69c0084208c2a0f6fc33b0407f47530db0543993bf0",
+  "version": "0.1.0.dev0+modules.7339a911a9ad.ac3d82b138d66",
+  "source_revision": "7339a911a9adffa42951ef0b1b639220968ebb58",
+  "artifact_set_sha256": "c3d82b138d662e35e66e828b5209a29bac3a5bf893d94c8462413000103e782c",
   "modules": [
     {
       "id": "propagator/sgp4",
@@ -14,14 +14,14 @@
           "name": "module.wasm",
           "source_path": "propagator/sgp4/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-sgp4/module.wasm",
-          "sha256": "fe14bc65d1bd8a2827f5e26720af2743ca5132a8b180025a65ed7105b000f347",
-          "size": 1271986
+          "sha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
+          "size": 1295148
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "propagator/sgp4/plugin-manifest.json",
           "package_path": "artifacts/propagator-sgp4/plugin-manifest.json",
-          "sha256": "c238da449c9cabcdbd058c7edd38431267b85ddf3729bce85892a2673304543c",
+          "sha256": "02d118d96db5b3f83b3925ae5586f05f70ffd52ddc0b1cf660a9cb8d86214607",
           "size": 9757
         }
       ]
@@ -35,15 +35,15 @@
           "name": "module.wasm",
           "source_path": "propagator/ffm/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-ffm/module.wasm",
-          "sha256": "b50b338f1011e00ca6ea50af03d5bdac7c03aa0ee73baaa4511604b201792bf3",
-          "size": 2064598
+          "sha256": "7fd10a6acd28bbae35b28cae2a57b5c1137de9fcc3d4b829445475f2e983c709",
+          "size": 2651444
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "propagator/ffm/plugin-manifest.json",
           "package_path": "artifacts/propagator-ffm/plugin-manifest.json",
-          "sha256": "ec85dbca7aed9f5ac63fc08b1d28fcc8964598a1326e11b531493d2f13ab6966",
-          "size": 15466
+          "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba",
+          "size": 18549
         }
       ]
     },
@@ -56,21 +56,21 @@
           "name": "module.wasm",
           "source_path": "analysis/estimation/dist/isomorphic/module.wasm",
           "package_path": "artifacts/analysis-estimation/module.wasm",
-          "sha256": "40aba72864d1aae9345726db3e438bf3cb251cf3089b802a5fd675cc53716ac1",
-          "size": 656732
+          "sha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d",
+          "size": 761898
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "analysis/estimation/plugin-manifest.json",
           "package_path": "artifacts/analysis-estimation/plugin-manifest.json",
-          "sha256": "46edb1eedeca10b2163c7065e2ce8feaf9305b5b12dc4bffc962830ee268546c",
-          "size": 15598
+          "sha256": "9ec97eaf35e4b02ea8695bf23c9725e0d3cb14e90d06fc2b108ec292c5b45e65",
+          "size": 20416
         },
         {
           "name": "build-provenance.json",
           "source_path": "analysis/estimation/dist/build-provenance.json",
           "package_path": "artifacts/analysis-estimation/build-provenance.json",
-          "sha256": "82cdd2f689f6972ce3423902c591556d8112d4445216c7065288461dc57a30eb",
+          "sha256": "7ba9a8e80d770cecf374d5bd0a9df05990cf7aff9bf6dc1c8c0b4e4222b42282",
           "size": 371
         }
       ]
@@ -84,8 +84,8 @@
           "name": "module.wasm",
           "source_path": "analysis/conjunction-assessment/dist/isomorphic/module.wasm",
           "package_path": "artifacts/analysis-conjunction-assessment/module.wasm",
-          "sha256": "efe591c14744d5cce48556371dfd0a0ab0b76ad70eb56fc309b41e5aee41c3dd",
-          "size": 1603382
+          "sha256": "e5824aedfb0300ba091297a2eaa940562da0811c23e85b4071db2c1210e5eec3",
+          "size": 1609502
         },
         {
           "name": "plugin-manifest.json",
@@ -126,8 +126,8 @@
           "name": "module.wasm",
           "source_path": "propagator/events/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-events/module.wasm",
-          "sha256": "5c32c352874e3cea9a876574088fc593a37ad4429a8e167d6c5a7daab6b57499",
-          "size": 570833
+          "sha256": "1a856dc5a4903919197173159c265cbfa11d982dca8f1c590a635dab25cecd32",
+          "size": 583707
         },
         {
           "name": "plugin-manifest.json",
@@ -140,7 +140,7 @@
           "name": "build-provenance.json",
           "source_path": "propagator/events/dist/build-provenance.json",
           "package_path": "artifacts/propagator-events/build-provenance.json",
-          "sha256": "62b091d0b4ae14d4b860707e095deb95a3c1dd91ee1186635091e8ad180814b1",
+          "sha256": "fa2714ac53ac34776f4cde2c171bf497d272f8599a1036df8c34091fbc96a730",
           "size": 130
         }
       ]
@@ -175,15 +175,15 @@
           "name": "module.wasm",
           "source_path": "foundation/time/dist/isomorphic/module.wasm",
           "package_path": "artifacts/foundation-time/module.wasm",
-          "sha256": "647029729c8a1d16d3e272b9167577b414f524e8537c2a45904ca109b763a337",
-          "size": 114652
+          "sha256": "61abbb27a8358b05a1141bb983fcf1f6b5a89ba41793dece0bccf1678a4d02ed",
+          "size": 119264
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "foundation/time/plugin-manifest.json",
           "package_path": "artifacts/foundation-time/plugin-manifest.json",
-          "sha256": "3c6ed8f5c0257383995177547d92d6011d6f358525878a9bbfaa641aebb755c4",
-          "size": 2815
+          "sha256": "f64c5e29f51ed3bf2fdf81b6ee6ce2b7b6e5090eb264465158678e4ee212b2ec",
+          "size": 2994
         }
       ]
     },
@@ -196,22 +196,22 @@
           "name": "module.wasm",
           "source_path": "foundation/frames/dist/isomorphic/module.wasm",
           "package_path": "artifacts/foundation-frames/module.wasm",
-          "sha256": "eb73a4990818a2f9f820f478bae8065007846b8ef550fbd437d8099975582cec",
-          "size": 380078
+          "sha256": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4",
+          "size": 456873
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "foundation/frames/plugin-manifest.json",
           "package_path": "artifacts/foundation-frames/plugin-manifest.json",
-          "sha256": "a631f086d5076d42d197911e4244e3ca3cf6e9b9e6ef8068b61e0d4e2efe7e75",
-          "size": 5626
+          "sha256": "c909a9fa03ced3cf6415f53994d9eb393d661c92d961911206afef7384a56e18",
+          "size": 5876
         },
         {
           "name": "build-provenance.json",
           "source_path": "foundation/frames/dist/build-provenance.json",
           "package_path": "artifacts/foundation-frames/build-provenance.json",
-          "sha256": "334034c87205a5cd63f6265e28c9f871cb79a2c4feb9fa290972cd340e65b311",
-          "size": 148
+          "sha256": "467702d3e588db8e5f02635359291c431973a1968b32a97120eca59ad96924db",
+          "size": 150
         }
       ]
     }

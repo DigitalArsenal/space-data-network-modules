@@ -138,21 +138,21 @@ class NativeRuntimeTests(unittest.TestCase):
         fixture = Path(__file__).parent / 'fixtures/module-vectors.json'
         code = r'''
 import json, sys
+from spacedatanetwork_astro import _cqr
+from spacedatanetwork_astro._codec import pack, unpack
 from spacedatanetwork_astro.runtime import Module, Frame
-from spacedatanetwork_astro._codec import obj, pack, unpack
 records = json.load(open(sys.argv[1]))['conjunctionGp']['gp_61721,67298.json']
-gps = [obj('orbpro.conjunction.GpRecord', local=True, **{
-    k.split('_')[0].lower() + ''.join(w.title() for w in k.split('_')[1:]): v
-    for k, v in record.items()}) for record in records]
-request = obj('orbpro.conjunction.ConjunctionScreenCatalogRequest', local=True,
-    primaryGps=gps, numThreads=2, startJd=2461108., durationDays=1./86400.,
-    coarseStepSec=1., thresholdKm=100000., usePerigeeFilter=False)
+request = _cqr.catalog_request(records, start_jd=2461108., duration_days=1./86400.,
+                               threshold_km=100000., threads=2)
+controls = request.CATALOG_REQUEST.CONTROLS
+controls.COARSE_STEP_SECONDS = 1.
+controls.USE_PERIGEE_FILTER = False
 with Module('conjunction-assessment') as module:
-    frames = module.invoke('screen_catalog', [Frame('request', pack(request, 'CASQ'),
-        'orbpro.conjunction.ConjunctionScreenCatalogRequest', 'CASQ',
-        'ConjunctionScreenCatalogRequest')])
+    frames = module.invoke('screen_catalog', [Frame('request', pack(request, '$CQR'),
+        'CQR.fbs', '$CQR', 'CQR')])
     assert len(frames) == 1
-    result = unpack('orbpro.conjunction.ConjunctionScreenCatalogResult', frames[0].payload, local=True)
+    result = unpack('CQR.CQR', frames[0].payload, identifier='$CQR')
+    assert result.CATALOG_RESULT is not None
     assert module.spawned_threads >= 2, module.spawned_threads
     assert not module._thread_errors, module._thread_errors
     print('Native conjunction guest threads:', module.spawned_threads)

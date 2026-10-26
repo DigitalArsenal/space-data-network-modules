@@ -14,14 +14,26 @@ def obj(path, *args, local=False, **kwargs):
     return binding(path, local=local)(*args, **kwargs)
 
 
-def pack(value, identifier=None):
+def pack(value, identifier=None, *, size_prefixed=False):
     builder = flatbuffers.Builder(1024)
-    builder.Finish(value.Pack(builder), file_identifier=identifier.encode() if identifier else None)
+    finish = builder.FinishSizePrefixed if size_prefixed else builder.Finish
+    finish(value.Pack(builder), file_identifier=identifier.encode() if identifier else None)
     return bytes(builder.Output())
 
 
-def unpack(path, payload, *, local=False):
-    return binding(path, local=local).InitFromPackedBuf(payload)
+def unpack(path, payload, *, local=False, identifier=None):
+    """Decode a root table. With an identifier, the buffer must carry it, with
+    or without a size prefix; the module's port declares which it uses."""
+    position = 0
+    if identifier is not None:
+        wanted = identifier.encode()
+        if payload[4:8] == wanted:
+            position = 0
+        elif payload[8:12] == wanted:
+            position = 4
+        else:
+            raise ValueError(f'Payload is not a {identifier} root')
+    return binding(path, local=local).InitFromPackedBuf(payload, position)
 
 
 def array(value, shape=None, *, name='array'):

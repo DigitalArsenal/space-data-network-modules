@@ -90,7 +90,7 @@ def RawDataPayloadCreateDataVector(builder, data):
     return builder.EndVector()
 
 def CreateDataVector(builder, data):
-    RawDataPayloadCreateDataVector(builder, data)
+    return RawDataPayloadCreateDataVector(builder, data)
 
 def RawDataPayloadEnd(builder):
     return builder.EndObject()
