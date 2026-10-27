@@ -65,7 +65,10 @@ function verify(e) {
 }
 
 for (const runtimeKind of (process.env.CQR_TEST_RUNTIME ? [process.env.CQR_TEST_RUNTIME] : ['browser', 'wasmedge'])) {
-  test(`${runtimeKind}: low-speed pair and catalog retain interpolated uncertainty`, { timeout: 240000 }, async t => {
+  // Unresolved peaks use the full finite observation interval. The WasmEdge
+  // interpreter needs more time for its unchanged 65,536 two-body samples;
+  // retain the window, sample count and assertions in both runtime lanes.
+  test(`${runtimeKind}: low-speed pair and catalog retain interpolated uncertainty`, { timeout: 540000 }, async t => {
     const flatc = await initCqrFlatc();
     const h = await createConjunctionCommandHarness({ runtimeKind });
     t.after(() => h.destroy?.());
