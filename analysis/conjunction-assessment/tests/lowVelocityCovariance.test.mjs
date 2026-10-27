@@ -7,7 +7,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
-import { decodeCqr, earthFrame, encodeCqr, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { decodeCqr, earthFrame, encodeCqr, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { syntheticGp } from './lib/syntheticCatalog.mjs';
+import { uncertaintyModelFrame } from '../scripts/uncertainty-model.mjs';
 
 const jd0 = 2461314.5;
 const iso = jd => new Date((jd - 2440587.5) * 86400000).toISOString();
@@ -106,6 +108,37 @@ for (const runtimeKind of (process.env.CQR_TEST_RUNTIME ? [process.env.CQR_TEST_
     assert.equal(unavailable.HAS_MAHALANOBIS_3D_SQUARED, false);
     assert.equal(unavailable.PROBABILITY, undefined);
     assert.equal(unavailable.PRIMARY_COVARIANCE_BASIS, 'SOURCE_EPHEMERIS');
+
+    // Exercise the distinct empirical-model adapter without private fixtures.
+    // Two synthetic identities with identical elements deliberately force a
+    // zero-relative-speed encounter. Its fallback method is carried by the
+    // CDM; the narrower CQR plane-method enum cannot represent it.
+    const [gp] = syntheticGp({ planes: 1, perPlane: 1, epoch: iso(jd0 - 1) });
+    const modeled = pair();
+    modeled.PRIMARY = gpSource(gp);
+    modeled.SECONDARY = gpSource({ ...gp, NORAD_CAT_ID: gp.NORAD_CAT_ID + 1,
+      OBJECT_ID: 'synthetic-coincident-secondary', OBJECT_NAME: 'synthetic-coincident-secondary' });
+    const modelCovariance = Array(21).fill(0);
+    for (const i of [0, 2, 5]) modelCovariance[i] = .02;
+    for (const i of [9, 14, 20]) modelCovariance[i] = 2e-10;
+    const model = uncertaintyModelFrame({ kind: 'gp-error-model',
+      regimes: [{ id: 'synthetic', altitudeKm: [0, 1e9], eccentricity: [0, 1] }],
+      ageBinsDays: [[0, 7]], strata: [{ regimeIndex: 0, ageIndex: 0, covariance: modelCovariance }] });
+    const modeledResult = await h.invoke({ methodId: 'assess_conjunction', inputs: [
+      { portId: 'request', payload: encodeCqr(flatc, { PAIR_REQUEST: modeled }) },
+      { portId: 'uncertainty_model', payload: model },
+    ] });
+    assert.equal(modeledResult.statusCode, 0, modeledResult.errorMessage);
+    const empirical = decodeCqr(flatc, modeledResult.outputs[0].payload).EVENT_RESULT;
+    assert.equal(empirical.PROBABILITY, undefined);
+    for (const key of ['PRIMARY_COVARIANCE_BASIS', 'SECONDARY_COVARIANCE_BASIS'])
+      assert.equal(empirical[key], 'EMPIRICAL_MODEL');
+    for (const sigma of [empirical.PRIMARY_SIGMA_RTN_M, empirical.SECONDARY_SIGMA_RTN_M])
+      for (const axis of ['X', 'Y', 'Z']) assert.ok(Math.abs(sigma[axis] - Math.sqrt(.02) * 1000) < .001);
+    assert.equal(empirical.HAS_MAHALANOBIS_3D_SQUARED, true);
+    assert.equal(empirical.MAHALANOBIS_3D_SQUARED, 0);
+    for (const object of [empirical.CONJUNCTION_MESSAGE.OBJECT1, empirical.CONJUNCTION_MESSAGE.OBJECT2])
+      assert.deepEqual(object.COVARIANCE, modelCovariance);
 
     // Independent radial integral for a centered Gaussian disk:
     // Pc = 1-exp(-R²/(2 sigma²)), R=.01 km, sigma²=.04 km².
