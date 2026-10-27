@@ -76,10 +76,13 @@ function renderLayers() {
   for (const id of ['import', 'add', 'source-picker']) $(id).disabled = busy;
   $('compose').disabled = busy || !module || !recipe.layers.length;
 }
-function render() {
+let renderGeneration = 0;
+async function render() {
+  const ticket = ++renderGeneration;
   let result;
-  try { result = search?.page($('search').value, page, 100, overlapsOnly) ?? {total:0,page:1,pages:1,indices:[]}; }
-  catch (error) { status(error.message,true); return; }
+  try { result = await search?.page($('search').value, page, 100, overlapsOnly) ?? {total:0,page:1,pages:1,indices:[]}; }
+  catch (error) { if (ticket === renderGeneration) status(error.message,true); return; }
+  if (ticket !== renderGeneration) return;
   const {total,pages,indices} = result; page = result.page;
   $('rows').replaceChildren();
   for (const index of indices) {
@@ -123,10 +126,11 @@ async function compose(refresh = true) {
       ...recipe.layers.map(layer => ({ portId: 'catalogs', typeRef: { schemaName: 'CAT.fbs', fileIdentifier: '$CAT', rootTypeName: 'CAT' }, payload: loaded.get(layer.id).stream })),
     ] });
     if (response.statusCode !== 0) throw new Error(response.errorMessage || 'Catalog composition failed.');
-    const result = composeView(response.outputs.find(f => f.portId === 'report').payload);
+    const reportBytes = response.outputs.find(f => f.portId === 'report').payload;
+    const result = composeView(reportBytes);
     status('Indexing catalogs…',false,true);
     search ??= await catalogSearch();
-    await search.replace(result.objects);
+    await search.replace(reportBytes);
     report = result.objects; catalog = response.outputs.find(f => f.portId === 'catalog')?.payload; page = 1;
     $('download').disabled = !catalog?.length || report.some(row => ['identity-conflict', 'missing-designator'].includes(row.status));
     status(`${result.objectCount.toLocaleString()} objects · ${report.filter(row => row.state?.status === 'overlap').length.toLocaleString()} source overlaps${result.identityConflicts ? ` · ${report.filter(row => ['identity-conflict', 'missing-designator'].includes(row.status)).length} identity conflicts need review` : ''}`);
@@ -189,7 +193,7 @@ $('recipe-file').onchange = async () => { try {
   const file = $('recipe-file').files[0]; if (!file || file.size > 1024 * 1024) throw new Error('Choose a recipe smaller than 1 MiB.');
   const value = validateRecipe(JSON.parse(await file.text()));
   if (value.version !== 2) throw new Error('This recipe uses legacy identifiers. Add its catalogs again and review choices by international designator.');
-  recipe = value; loaded.clear(); report = []; search?.clear(); changed(); renderLayers(); render(); status('Recipe imported. Load its catalog snapshots to continue.');
+  recipe = value; loaded.clear(); report = []; await search?.clear(); changed(); renderLayers(); render(); status('Recipe imported. Load its catalog snapshots to continue.');
 } catch (error) { status(error.message, true); } };
 
 try {

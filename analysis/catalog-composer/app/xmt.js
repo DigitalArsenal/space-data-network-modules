@@ -15,8 +15,22 @@ export function encodeXmt(fields) {
   return new Uint8Array(b.asUint8Array());
 }
 export function decodeXmt(bytes) {
-  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // Generated FlatBuffers strings use TextDecoder, which rejects shared views.
+  // Own the response bytes before decoding an external guest arena.
+  const view = new Uint8Array(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
   return x.XMT.getSizePrefixedRootAsXMT(new ByteBuffer(view)).unpack();
+}
+
+// One binary search document per composed object. No text or JSON record is
+// passed into FlatSQL; nested strings are indexed from the canonical schema.
+export function* compositionSearchRecords(bytes) {
+  const report = decodeXmt(bytes).COMPOSE_REPORT;
+  if (!report) throw new Error('A composition report is required for search');
+  for (let index = 0; index < report.OBJECTS.length; index++) {
+    const object = report.OBJECTS[index];
+    yield { index, source: object.STATE?.STATUS === x.xmtStateChoice.Overlap ? 'overlap' : 'catalog',
+      bytes: encodeXmt({ COMPOSE_REPORT: table(x.XMTComposeReportT, { OBJECT_COUNT: 1, OBJECTS: [object] }) }) };
+  }
 }
 
 // The editor's recipe (version 1: NORAD first; version 2: international designators) and the coverage each state

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection; integrate the composed catalog with every source's products: identity links tested on trajectories, the product chosen by measured error, its covariance and label, merged maneuvers. Recipes, requests and reports are SDS $XMT (Catalog Cross-Match).",
   "pluginFamily": "analysis",
   "capabilities": [],

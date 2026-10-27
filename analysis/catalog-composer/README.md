@@ -1,5 +1,22 @@
 # Catalog Editor module
 
+## Search in 0.5.0
+
+The editor searches the complete composed catalog, including objects beyond the
+current page. Names and international designators support Unicode full-text
+search. The overlap filter, pagination and object review use the same index.
+Repeated composition replaces the index after the new one is ready.
+
+The index uses FlatSQL 3.12 through its unified binary API. Canonical SDS XMT
+reports remain FlatBuffers from the composer through storage; SQL requests and
+results use SDS QRP. Conversion and display are separate from the engine.
+
+Run `node tests/unified-search-e2e.mjs` after building to exercise the actual
+packaged APP and composer WASM in Chromium headless shell, including search,
+review, repeat composition and mobile layout. No unit suite is required for
+this change.
+
+
 FFM (Full Force Model) is defined in [the FFM specification](../../propagator/ffm/FFM.md).
 
 `compose` combines ordered, immutable SDS CAT snapshots. A higher layer wins

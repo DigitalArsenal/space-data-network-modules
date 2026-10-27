@@ -5,6 +5,7 @@ import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
+import { FlatcRunner } from 'flatc-wasm/runner';
 import { computeCanonicalModuleHash, createSingleFileBundle } from 'space-data-module-sdk/bundle';
 import { encodeAppManifest } from 'space-data-module-sdk/app';
 import { encodePluginManifest } from 'space-data-module-sdk/manifest';
@@ -50,13 +51,21 @@ for (const [role, relative] of [['normalizer','files/orbit-products'],['frames',
   const artifact = await computeCanonicalModuleHash(await fs.readFile(path.join(repo,relative,'dist/isomorphic/module.wasm')));
   matchingModules.push({role,pluginId:dependency.pluginId,name:dependency.name,manifest:dependency,hash:artifact.hashHex});
 }
-const searchWasm = await fs.readFile(path.join(root,'node_modules/flatsql/wasm/flatsql.wasm'));
+const searchRoot = process.env.FLATSQL_CANDIDATE ? path.join(process.env.FLATSQL_CANDIDATE,'wasm') : path.join(root,'node_modules/flatsql/wasm');
+const searchWasm = await fs.readFile(path.join(searchRoot,'flatsql.wasm'));
+const searchWorkers = Object.fromEntries(await Promise.all(['browser-guest.mjs','wasiThreadBrowserWorker.mjs','opfsIoWorker.mjs'].map(async name => [name, await fs.readFile(path.join(searchRoot,'runtime',name),'utf8')])));
+const converter = await FlatcRunner.init();
+for (const code of sds.families) converter.mountFile(`/schema/${code}/main.fbs`, await fs.readFile(path.join(process.env.SPACE_DATA_STANDARDS_ROOT,'schema',code,'main.fbs'),'utf8'));
+converter.mountFile('/out/.keep','');
+const compiled = converter.runCommand(['--binary','--schema','-I','/schema','-o','/out','/schema/XMT/main.fbs']);
+if (compiled.code) throw new Error(compiled.stderr);
+const searchBfbs = Buffer.from(converter.readFile('/out/main.bfbs'));
 const editor = await build({
   entryPoints: [path.join(root, 'app/editor.js')], bundle: true, write: false,
   platform: 'browser', format: 'esm', minify: true, target: 'es2022',
-  alias: { 'catalog-search-wasm-factory':path.join(root,'node_modules/flatsql/wasm/flatsql.js') },
-  external:['node:*','fs','path','url','module'],
-  define: { __PLUGIN_MANIFEST__: JSON.stringify(manifest), __MATCHING_MODULES__:JSON.stringify(matchingModules), __SEARCH_WASM__:JSON.stringify(searchWasm.toString('base64')) },
+  external:['node:*','fs','path','url','module','./runtime/node-host.mjs'],
+  alias: { ...(process.env.FLATSQL_CANDIDATE ? { flatsql:path.join(searchRoot,'index.js') } : {}), ...(process.env.SDK_CANDIDATE ? {'space-data-module-sdk/runtime-host':path.join(process.env.SDK_CANDIDATE,'src/runtime-host/index.js')} : {}) },
+  define: { __PLUGIN_MANIFEST__: JSON.stringify(manifest), __MATCHING_MODULES__:JSON.stringify(matchingModules), __SEARCH_WASM__:JSON.stringify(searchWasm.toString('base64')), __SEARCH_BFBS__:JSON.stringify(searchBfbs.toString('base64')), __SEARCH_WORKERS__:JSON.stringify(searchWorkers) },
 });
 const script = editor.outputFiles[0].text.replaceAll('__MODULE_HASH__', canonical.hashHex).replaceAll('</script', '<\\/script');
 const page = (await fs.readFile(path.join(root, 'app/index.html'), 'utf8')).replace('__EDITOR_SCRIPT__', () => script);
