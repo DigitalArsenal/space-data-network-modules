@@ -43,8 +43,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "7ea57d9d5ea627dc56ca55a7a3fbd57b80d5af29ab7b22d03002e69fb1989389",
-  "wasmSha256": "c82c4db3f55f7d96eea3b85e87bc81630b7023c210fe828ffe95f70182452386",
+  "sourceSha256": "e4339e483cff56f00e0d21b8739b7e122b718928e2e7ae4ac782783fe365f353",
+  "wasmSha256": "9f6d79d30629ed86a6c0222018cb4b4303cb50877f098cce2ab2f45ccd4335db",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -70,7 +70,7 @@
       }
     ],
     "usesAtomics": true,
-    "atomicInstructionCount": 602,
+    "atomicInstructionCount": 604,
     "declaredFeatures": [
       "atomics",
       "mutable-globals",

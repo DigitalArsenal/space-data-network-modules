@@ -1,9 +1,11 @@
 #include "pc_fallback_internal.h"
 #include "pc_hall.h"
+#include "conjunction/encounter_geometry.h"
 #include <vector>
 #include <functional>
 #include <map>
 #include <set>
+#include <sstream>
 
 namespace conjunction {
 using namespace pc_detail;
@@ -36,7 +38,7 @@ std::vector<SurfacePoint> sphere(unsigned order,const V3& velocity) {
     return out;
 }
 struct Kernel {
-    V3 r{},v{};M3 inverse{},conditional{},regression{};double logdet=0;
+    V3 r{},v{};M3 covariance{},inverse{},conditional{},regression{};double logdet=0;
     double q(const V3& n,double radius)const {
         V3 d{};for(int i=0;i<3;++i)d[i]=radius*n[i]-r[i];return dot(d,mul(inverse,d))+logdet;
     }
@@ -49,7 +51,7 @@ struct Kernel {
 bool kernel(const PcEncounter& e,double t,bool two_body,Kernel& k,bool& repaired,const HallModel* hall=nullptr) {
     V6 x{};M6 covariance{};double det=0;
     if(!(hall?hall->at(t,x,covariance,repaired):relative_at(e,t,two_body,x,covariance))||!inverse_position(block(covariance),e.combined_radius,k.inverse,det,repaired))return false;
-    k.r=position(x);k.v=velocity(x);k.logdet=std::log(det);
+    k.r=position(x);k.v=velocity(x);k.covariance=block(covariance);k.logdet=std::log(det);
     M3 b=block(covariance,3,0);k.conditional=block(covariance,3,3);
     for(int i=0;i<3;++i)for(int j=0;j<3;++j)for(int h=0;h<3;++h)k.regression[i*3+j]+=b[i*3+h]*k.inverse[h*3+j];
     for(int i=0;i<3;++i)for(int j=0;j<3;++j)for(int h=0;h<3;++h)k.conditional[i*3+j]-=k.regression[i*3+h]*b[j*3+h];
@@ -93,12 +95,49 @@ void mark_count_applicability(PcFallbackResult& result,const PcEncounter& e) {
     }
 }
 bool close(double a,double b,double tolerance) {return std::abs(a-b)<=std::max(1e-15,tolerance*std::max(std::abs(a),std::abs(b)));}
+
+// Pc2D_Hall.m effective-plane calculation: conditional velocity at R=0,
+// retaining the peak-overlap position covariance. Projection removes the
+// along-velocity shift to effective TCA without changing that covariance.
+PcResult effective_plane(const Kernel& k,double radius) {
+    const V3 v=sub(k.v,mul(k.regression,k.r));
+    if(!(norm(v)>=1e-10)) {PcResult r;r.converged=false;return r;}
+    StateVector a{},b{};b.x=k.r[0];b.y=k.r[1];b.z=k.r[2];
+    b.vx=v[0];b.vy=v[1];b.vz=v[2];
+    Covariance3x3 c{},zero{};std::copy(k.covariance.begin(),k.covariance.end(),c.data);
+    return Foster2D().compute(build_bplane(a,b,c,zero,radius));
+}
+void mark_nc2_usage(PcFallbackResult& result,const PcEncounter& e,const Kernel& k) {
+    const double shorter=std::min(period(e.primary,e.gravitational_parameter),period(e.secondary,e.gravitational_parameter));
+    constexpr double extent=8.304785425194112; // gamma=1e-16, CARA PcMultiStep.
+    const double half=extent*result.rate_time_sigma;
+    result.nc_extended=2*half/shorter;
+    result.nc_offset=(std::abs(result.rate_time_center)+half)/shorter;
+    const auto alternate=effective_plane(k,e.combined_radius);
+    const double sum=alternate.probability+result.expected_collisions;
+    result.nc_inaccurate=alternate.converged&&std::isfinite(sum)&&sum>=0
+        ? (sum==0?0:2*std::abs(alternate.probability-result.expected_collisions)/sum) : 2;
+    auto flag=[&](const char* reason){result.requires_3d=true;result.limitation+=" ";result.limitation+=reason;};
+    // These are the 2D-Nc thresholds, distinct from the 2D-Pc checks.
+    if(!std::isfinite(result.nc_extended)||result.nc_extended>0.05)flag("NC2_EXTENDED_REQUIRES_3D");
+    if(!std::isfinite(result.nc_offset)||result.nc_offset>0.1)flag("NC2_OFFSET_REQUIRES_3D");
+    if(!std::isfinite(result.nc_inaccurate)||result.nc_inaccurate>0.1)flag("NC2_EFFECTIVE_PLANE_DISAGREEMENT_REQUIRES_3D");
+    std::ostringstream details;details.precision(12);
+    details<<" NC2_USAGE duration/period="<<result.nc_extended<<" offset/period="<<result.nc_offset
+           <<" effective_plane_relative_difference="<<result.nc_inaccurate;
+    result.limitation+=details.str();
+}
 }
 
 static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall) {
     if(!valid_encounter(e,o)){PcFallbackResult invalid;invalid.pc.method=hall?"3D-NC-HALL":"3D-NC-CARTESIAN";invalid.pc.converged=false;invalid.invalid_inputs=true;return invalid;}
     auto result=initialize(e,o,hall?"3D-NC-HALL":"3D-NC-CARTESIAN");
     if(hall)result.limitation="Hall equinoctial peak-overlap sphere flux; Nc equals Pc for an isolated encounter without recrossings or initial occupancy.";
+    if(o.time_start==0&&o.time_end==0&&!result.usage.fully_evaluated) {
+        result.pc.converged=false;result.requires_monte_carlo=true;
+        result.limitation+=" NC3_UNRESOLVED_DURATION_REQUIRES_MC: no reliable peak bounds were established; sampling uses the documented finite observation window.";
+        return result;
+    }
     if(!(e.combined_radius>0)||!(result.time_end>result.time_start)){result.pc.converged=false;return result;}
     Kernel initial;
     if(!kernel(e,result.usage.time_center,o.two_body,initial,result.covariance_repaired,hall)){result.pc.converged=false;return result;}
@@ -157,6 +196,20 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
         result.requires_monte_carlo=true;
         result.limitation+=" INITIAL_OCCUPANCY_REQUIRES_MC: collision-sphere entry flux cannot represent already-overlapping trajectories at the observation interval start.";
     }
+    // A window estimated from one R=0 peak must not silently truncate an
+    // extended or blended event. Explicit windows retain finite-window meaning.
+    if(o.time_start==0&&o.time_end==0) {
+        if(result.usage.extended>0.05||result.usage.offset>0.75) {
+            result.requires_monte_carlo=true;
+            result.limitation+=" NC3_DURATION_OR_OFFSET_REQUIRES_MC";
+        }
+        Kernel end;
+        if(!kernel(e,result.time_end,o.two_body,end,result.covariance_repaired,hall)||
+           initial_occupancy_upper(end,e.combined_radius)>std::max(1e-12,o.relative_tolerance*current)) {
+            result.requires_monte_carlo=true;
+            result.limitation+=" NC3_ACTIVE_END_BOUNDARY_REQUIRES_MC: the estimated encounter window has non-negligible overlap at its end.";
+        }
+    }
     return result;
 }
 
@@ -165,8 +218,8 @@ static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions
     auto result=initialize(e,o,hall?"2D-NC-HALL":"2D-NC-CARTESIAN");result.pc.converged=false;
     if(hall)result.limitation="Hall equinoctial peak-overlap model with quadratic time integration; requires an isolated Gaussian-shaped collision-rate peak.";
     if(hall&&!result.usage.fully_evaluated){
-        result.requires_monte_carlo=true;
-        result.limitation="CURVATURE_ANALYSIS_UNCONVERGED_REQUIRES_MC: a reliable quadratic collision-rate peak was not established.";
+        result.requires_3d=true;
+        result.limitation="CURVATURE_ANALYSIS_UNCONVERGED_REQUIRES_3D: a reliable quadratic collision-rate peak was not established.";
         return result;
     }
     double center=result.usage.time_center,width=result.usage.time_sigma;
@@ -177,23 +230,30 @@ static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions
        !kernel(e,center+width,o.two_body,kp,result.covariance_repaired,hall))return result;
     unsigned order=std::clamp(o.angular_order,8u,128u);double previous=-1,current=0;
     for(int refinement=0;refinement<5;++refinement) {
-        auto points=sphere(order,k0.v);double sum=0;bool valid=true;
+        auto points=sphere(order,k0.v);double sum=0,mass=0,first=0,second=0;bool valid=true;
         for(const auto& point:points) {
             double q0=k0.q(point.normal,e.combined_radius),qm=km.q(point.normal,e.combined_radius),qp=kp.q(point.normal,e.combined_radius);
             double qdot=(qp-qm)/(2*width),qddot=(qp-2*q0+qm)/(width*width);
-            if(!(qddot>0)){valid=false;break;}
+            if(!(qddot>0)||!std::isfinite(qddot)){valid=false;break;}
             double sigma=std::sqrt(2/qddot),shift=-qdot/qddot,qstar=q0-0.5*qdot*qdot/qddot;
+            if(!std::isfinite(qstar)||qstar<k0.logdet-1e-10){valid=false;break;}
             double lo=(result.time_start-center-shift)/(sigma*std::sqrt(2.0)),hi=(result.time_end-center-shift)/(sigma*std::sqrt(2.0));
             double fraction=0.5*(std::erf(hi)-std::erf(lo));
-            sum+=point.weight*k0.inward(point.normal,e.combined_radius)*sigma*std::exp(-0.5*qstar)*fraction;
+            const double weight=point.weight*k0.inward(point.normal,e.combined_radius)*sigma*std::exp(-0.5*qstar);
+            sum+=weight*fraction;mass+=weight;first+=weight*shift;second+=weight*(shift*shift+sigma*sigma);
         }
-        if(!valid)return result;
+        if(!valid){result.requires_3d=true;result.limitation+=" NC2_SERIES_BREAKDOWN_REQUIRES_3D";return result;}
         current=e.combined_radius*e.combined_radius*sum/(2*pi);result.pc.iterations+=points.size();
+        // Full Gaussian time moments of the sphere-rate mixture, rather than
+        // the R=0 width alone (Pc2D_Hall.m TMeanRate/TSigmaRate).
+        result.rate_time_center=center+(mass>0?first/mass:0);
+        result.rate_time_sigma=mass>0?std::sqrt(std::max(0.0,second/mass-(first/mass)*(first/mass))):width;
         if(previous>=0&&close(current,previous,o.relative_tolerance)){result.pc.converged=true;break;}
         if(order>=512)break;
         previous=current;order=std::min(512u,order*2);
     }
     result.expected_collisions=current;result.pc.probability=std::clamp(current,0.0,1.0);
+    mark_nc2_usage(result,e,k0);
     mark_count_applicability(result,e);
     Kernel start;
     if(!kernel(e,result.time_start,o.two_body,start,result.covariance_repaired,hall)||

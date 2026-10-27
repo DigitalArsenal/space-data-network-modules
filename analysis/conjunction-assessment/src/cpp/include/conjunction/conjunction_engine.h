@@ -196,8 +196,8 @@ public:
   /// cross covariance. This preserves velocity uncertainty for usage checks.
   ConjunctionEvent2 compute_pc(const PcEncounter &encounter) const;
 
-  /// Fallback policy for usage violations. Automatic chooses Hall 3D-Nc (Cartesian when mu=0),
-  /// or deterministic Monte Carlo when relative-velocity uncertainty is large.
+  /// Automatic refines 2D-Nc -> 3D-Nc -> Monte Carlo when numerical or usage
+  /// checks fail; Hall for orbital input, Cartesian when mu=0.
   enum class Fallback { Automatic, TwoDimensionalNc, ThreeDimensionalNc, MonteCarlo };
   void set_pc_fallback(Fallback method, const PcFallbackOptions &options = {}) {
     fallback_ = method; fallback_options_ = options;
@@ -221,10 +221,6 @@ private:
   double radius1_m_ = 5.0;
   double radius2_m_ = 5.0;
 
-  /// Build B-plane geometry from states + covariance
-  BPlaneGeometry build_bplane(const StateVector &s1, const StateVector &s2,
-                              const Covariance3x3 &c1, const Covariance3x3 &c2,
-                              double combined_radius_km) const;
 };
 
 } // namespace conjunction

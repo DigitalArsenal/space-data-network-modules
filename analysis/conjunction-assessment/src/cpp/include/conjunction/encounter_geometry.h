@@ -1,6 +1,9 @@
 #pragma once
 #include "conjunction/conjunction_engine.h"
 namespace conjunction {
+// Project inertial states and position covariances onto their encounter plane.
+BPlaneGeometry build_bplane(const StateVector&, const StateVector&,
+    const Covariance3x3&, const Covariance3x3&, double radius);
 // Inertial position difference and covariance, km and km^2.
 double encounter_mahalanobis_3d(const double dr[3], const Covariance3x3&, const Covariance3x3&);
 // Convert RTN position/velocity covariance blocks at the supplied epoch.

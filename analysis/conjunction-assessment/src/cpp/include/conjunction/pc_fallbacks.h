@@ -35,6 +35,11 @@ struct PcFallbackResult {
     // Numerical Nc convergence is distinct from applicability as a total
     // collision probability (initial occupancy / possible repeated entries).
     bool requires_monte_carlo = false;
+    // 2D-Nc angular convergence does not validate its time-series truncation.
+    // CARA multi-step duration, offset and effective-plane consistency checks.
+    bool requires_3d = false;
+    double rate_time_center = 0, rate_time_sigma = 0;
+    double nc_extended = 0, nc_offset = 0, nc_inaccurate = 0;
     std::string limitation;
 };
 

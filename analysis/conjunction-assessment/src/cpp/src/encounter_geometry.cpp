@@ -257,10 +257,10 @@ double encounter_mahalanobis_3d(const double dr[3], const Covariance3x3& c1, con
 
 // ── B-plane Construction ──
 
-BPlaneGeometry ConjunctionEngine::build_bplane(
+BPlaneGeometry build_bplane(
     const StateVector& s1, const StateVector& s2,
     const Covariance3x3& c1, const Covariance3x3& c2,
-    double combined_radius_km) const
+    double combined_radius_km)
 {
     BPlaneGeometry bp;
     bp.combined_radius = combined_radius_km;

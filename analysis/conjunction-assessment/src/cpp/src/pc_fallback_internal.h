@@ -21,7 +21,7 @@ inline std::pair<double,double> time_bounds(const PcEncounter& e,const PcFallbac
     if(opt.time_end>opt.time_start)return {opt.time_start,opt.time_end};
     double p=std::min(period(e.primary,e.gravitational_parameter),period(e.secondary,e.gravitational_parameter));
     double limit=std::isfinite(p)?p/2:3600;
-    if(std::isfinite(usage.time_sigma)&&usage.time_sigma>0) {
+    if(usage.fully_evaluated&&std::isfinite(usage.time_sigma)&&usage.time_sigma>0) {
         // Include travel through the finite collision sphere, which CARA's
         // small-HBR usage-duration formula intentionally omits.
         double speed=norm(sub(velocity(e.secondary),velocity(e.primary)));

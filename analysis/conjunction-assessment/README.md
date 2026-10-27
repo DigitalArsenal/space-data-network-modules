@@ -76,6 +76,14 @@ an unavailable or unrepresentable CQR probability is omitted, with the actual
 method/result or failure reason carried by the embedded CDM. No surrogate
 plane variances or zero-valued Mahalanobis measurements replace missing math.
 
+Full-state usage violations follow a validated 2D-Nc → 3D-Nc → sampled Pc
+cascade. Numerical convergence and encounter applicability are checked
+separately, and the CDM records rejected stages and the observation interval.
+`node tests/ncCascade.e2e.mjs` runs the published CARA references, analytical
+escalation cases and the same artifact through browser WASI and WasmEdge.
+The current sphere rule is product quadrature; sampling is SDMC-style
+two-body propagation. Lebedev quadrature and BFMC are not implemented.
+
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 
 - events report the historical spherical small-HBR statistic (`ALFANO_MAXIMUM`,

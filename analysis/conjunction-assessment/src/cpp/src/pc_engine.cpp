@@ -1,6 +1,7 @@
 #include "conjunction/encounter_geometry.h"
 #include "conjunction/conjunction_assessment.h"
 #include <cmath>
+#include <sstream>
 
 namespace conjunction {
 namespace pc_engine_detail {
@@ -33,6 +34,43 @@ Covariance3x3 position_covariance(const std::array<double,36>& full) {
     Covariance3x3 out;
     for(int i=0;i<3;++i) for(int j=0;j<3;++j) out.data[3*i+j]=full[6*i+j];
     return out;
+}
+
+PcFallbackResult refine_probability(const PcEncounter& input,
+    ConjunctionEngine::Fallback policy,const PcFallbackOptions& options) {
+    using Fallback=ConjunctionEngine::Fallback;
+    std::string history="PC_CASCADE: ";bool repaired=false;
+    auto record=[&](PcFallbackResult& result,bool accepted) {
+        repaired|=result.covariance_repaired;
+        history+=result.pc.method+(accepted?" accepted":" rejected");
+        if(!accepted)history+=" ["+result.pc.failure_reason+"; "+result.limitation+"]";
+        history+="; ";
+    };
+    auto usable=[](const PcFallbackResult& result) {
+        return result.pc.converged&&!result.requires_3d&&!result.requires_monte_carlo&&
+            std::isfinite(result.expected_collisions)&&result.expected_collisions>=0&&result.expected_collisions<=1&&
+            std::isfinite(result.pc.probability)&&result.pc.probability>=0&&result.pc.probability<=1;
+    };
+    auto finish=[&](PcFallbackResult result) {
+        result.covariance_repaired|=repaired;
+        std::ostringstream window;window.precision(17);
+        window<<" Observation window seconds from input epoch: ["<<result.time_start<<", "<<result.time_end<<"].";
+        result.limitation=history+result.limitation+window.str();return result;
+    };
+    if(policy!=Fallback::MonteCarlo) {
+        // Explicit 3D-Nc starts there; automatic and 2D-Nc both first test
+        // the analytic time integral and its separate usage indicators.
+        if(policy!=Fallback::ThreeDimensionalNc) {
+            auto two=input.gravitational_parameter>0?pc_2d_nc_hall(input,options):pc_2d_nc_cartesian(input,options);
+            const bool accepted=usable(two);record(two,accepted);
+            if(accepted||two.invalid_inputs)return finish(two);
+        }
+        auto three=input.gravitational_parameter>0?pc_3d_nc_hall(input,options):pc_3d_nc_cartesian(input,options);
+        const bool accepted=usable(three);record(three,accepted);
+        if(accepted||three.invalid_inputs)return finish(three);
+    }
+    auto sampled=pc_monte_carlo(input,options);record(sampled,sampled.pc.converged);
+    return finish(sampled);
 }
 } // namespace pc_engine_detail
 
@@ -125,24 +163,7 @@ ConjunctionEvent2 ConjunctionEngine::evaluate_encounter(const PcEncounter& input
             event.pc.converged=false;
             event.pc.failure_reason="Usage violation requires full position/velocity covariance: " + event.usage.reason;
         } else {
-            PcFallbackResult fallback;
-            if(fallback_==Fallback::MonteCarlo ||
-               (fallback_==Fallback::Automatic &&
-                (event.usage.low_relative_speed || event.usage.relative_velocity_uncertainty > 0.1 ||
-                 event.usage.extended > 0.5 || event.usage.offset > 0.75)))
-                fallback=pc_monte_carlo(input,fallback_options_);
-            else if(fallback_==Fallback::TwoDimensionalNc)
-                fallback=input.gravitational_parameter>0 ? pc_2d_nc_hall(input,fallback_options_)
-                                                       : pc_2d_nc_cartesian(input,fallback_options_);
-            else fallback=input.gravitational_parameter>0 ? pc_3d_nc_hall(input,fallback_options_)
-                                                        : pc_3d_nc_cartesian(input,fallback_options_);
-            if ((fallback.requires_monte_carlo ||
-                 (fallback_==Fallback::Automatic && !fallback.pc.converged)) &&
-                !fallback.invalid_inputs && fallback.samples==0) {
-                const std::string reason=fallback.pc.failure_reason + "; " + fallback.limitation;
-                fallback=pc_monte_carlo(input,fallback_options_);
-                fallback.limitation="Nc unavailable (" + reason + "); " + fallback.limitation;
-            }
+            const auto fallback=pc_engine_detail::refine_probability(input,fallback_,fallback_options_);
             event.pc=fallback.pc;
             event.pc.sample_count=fallback.samples;
             event.pc.collision_count=fallback.hits;

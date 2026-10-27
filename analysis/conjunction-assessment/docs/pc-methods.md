@@ -188,13 +188,34 @@ Failure to establish a peak is also reported. An additional conservative
 safeguard flags one-sigma relative-velocity uncertainty above 10% of speed;
 this threshold is explicitly separate from CARA's Q-derived indicators.
 
-Automatic routing uses 3D-Nc Hall for moderate orbital violations. Low relative
-speed, velocity uncertainty above 10%, duration/period above 0.5, or
-offset/period above 0.75 selects Monte Carlo directly. Unconverged Nc or an Nc
-applicability failure also selects Monte Carlo; invalid inputs remain errors.
-Callers can request the 2D-Nc fallback or Monte Carlo explicitly. The 2D Hall
-fallback refuses to claim convergence when its curvature analysis cannot
-establish an overlap peak.
+Automatic routing attempts 2D-Nc, then 3D-Nc, then Monte Carlo. Each stage must
+pass numerical convergence and applicability checks. The 2D-Nc check uses the
+Gaussian sphere-rate mixture's time moments, including finite-HBR shifts, to
+calculate duration and offset. It also compares the sphere integral with a
+Foster disk integral using the peak-overlap covariance and conditional velocity
+at the collision-sphere center. The CARA 2D-Nc cutoffs are 0.05 for
+duration/shorter-period, 0.1 for offset/period and 0.1 for the symmetric relative
+difference between the two estimates. These differ from the 2D-Pc cutoffs.
+See the pinned [CARA PcMultiStep implementation](https://github.com/nasa/CARA_Analysis_Tools/blob/ce0f00722c56808755ee0adbe47a4e3d56439484/DistributedMatlab/ProbabilityOfCollision/PcMultiStep.m)
+and [effective-plane/time-moment calculation](https://github.com/nasa/CARA_Analysis_Tools/blob/ce0f00722c56808755ee0adbe47a4e3d56439484/DistributedMatlab/ProbabilityOfCollision/Pc2D_Hall.m).
+
+An unresolved quadratic peak, nonpositive sphere-point time curvature or
+negative extrapolated squared Mahalanobis distance rejects the 2D series and
+escalates to 3D. Angular convergence alone cannot accept the series. For an
+automatically estimated window, 3D-Nc also rejects unresolved peak bounds,
+duration/period above 0.05, offset/period above 0.75, or non-negligible terminal
+occupancy. The existing initial-occupancy and recrossing checks still apply.
+Invalid inputs remain errors. Explicit 3D or Monte Carlo policies start at the
+requested stage; an explicit 2D-Nc policy still escalates an unusable estimate.
+Native results and CDM comments retain the stage history, 2D-Nc indicator values,
+actual observation bounds, covariance repair and final method.
+
+Sphere integration currently uses independently refined product quadrature.
+It is not Lebedev quadrature. The final sampler is finite-window SDMC with
+two-body dynamics (or explicit rectilinear dynamics), not high-fidelity BFMC.
+An active boundary causes escalation but does not prove that all encounters
+outside the observation window have been captured. This implementation does
+not claim the complete CARA multistep/BFMC pipeline.
 
 The Hall implementations propagate the full state covariance in equinoctial
 coordinates with iterative peak-overlap linearization. The 3D method
@@ -216,11 +237,27 @@ upper confidence bound. The default 65,536 samples cannot establish very small
 Pc precisely; callers must choose a sampling budget appropriate to their
 decision threshold.
 
-Both time bounds zero selects the full CARA duration estimate. When no such
-duration exists, the fallback uses plus/minus half the shorter orbital period,
+Both time bounds zero selects the full CARA duration estimate only when its
+peak/curvature assessment succeeded. A failed refinement cannot reuse a narrow
+rectilinear window and report a falsely converged near-zero integral. When no
+reliable duration exists, the sampler uses plus/minus half the shorter orbital period,
 or plus/minus 3,600 seconds for unbound motion. Explicit bounds are seconds from
 the supplied common epoch. These are finite-window, two-body results;
 perturbation-model uncertainty is outside this implementation.
+
+### Sequential escalation verification
+
+`node tests/ncCascade.e2e.mjs` builds the actual native C++ library and reads the
+public CARA full-state fixtures. It checks eight usage classifications, the
+six converged 2D-Nc references (relative tolerance 1e-4), all 12 published Hall
+3D-Nc references (their original 1e-3 tolerance), and automatic method selection.
+A finite-window velocity-dispersed Gaussian disk verifies 2D-to-3D escalation;
+a static Gaussian sphere verifies initial-occupancy escalation to SDMC against
+the closed-form Maxwell CDF. The two rare-event CARA sampling comparisons use
+a declared binomial acceptance allowance, not the precision of the published
+large-sample runs. A zero sample count of collisions retains a nonzero upper
+confidence bound. The same runner then exercises the built CQR artifact's
+covariance and method output through browser WASI and native WasmEdge.
 
 ### Low-velocity output verification
 
