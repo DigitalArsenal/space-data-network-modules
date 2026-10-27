@@ -14,43 +14,77 @@ namespace ffm {
 
 // A row-major SI covariance (m, m/s; then mass in kg or dynamic parameters in
 // their SI units, unscaled) in km units, verified finite,
-// symmetric and positive semidefinite (LDL^T; a zero pivot requires the
-// residual column to vanish).
+// symmetric and positive semidefinite. Validate a dimensionless correlation
+// matrix, not the mixed km / km/s / dynamic-parameter magnitudes. The original
+// covariance is only unit-converted; validation never regularizes its values.
 inline bool prwCovariance(const PRWStateMatrix* in, unsigned n, double* out, std::string& error) {
     if (!in || in->DIMENSION() != n || !in->VALUES() || in->VALUES()->size() != n * n) {
         error = "invalid-covariance: Covariance dimension and row-major values must agree.";
         return false;
     }
-    double scale = 0;
+    std::vector<double> sigma(n), correlation(n * n, 0.0);
+    for (unsigned i = 0; i < n; ++i) {
+        const double variance = in->VALUES()->Get(i * n + i);
+        if (!std::isfinite(variance) || variance < 0) {
+            error = "invalid-covariance: Variances must be finite and nonnegative.";
+            return false;
+        }
+        sigma[i] = std::sqrt(variance);
+    }
     for (unsigned i = 0; i < n; ++i)
         for (unsigned j = 0; j < n; ++j) {
             const double a = in->VALUES()->Get(i * n + j), b = in->VALUES()->Get(j * n + i);
-            if (!std::isfinite(a) || !std::isfinite(b) || std::abs(a - b) > 1e-12 * std::max({1.0, std::abs(a), std::abs(b)})) {
+            if (!std::isfinite(a) || !std::isfinite(b)) {
                 error = "invalid-covariance: Covariance must be finite and symmetric.";
                 return false;
             }
             out[i * n + j] = a * (i < 6 ? 0.001 : 1) * (j < 6 ? 0.001 : 1);
-            scale = std::max(scale, std::abs(out[i * n + j]));
-        }
-    std::vector<double> l(n * n, 0.0), d(n, 0.0);
-    const double tol = std::max(1e-30, scale * 1e-12);
-    for (unsigned i = 0; i < n; ++i) {
-        double p = out[i * n + i];
-        for (unsigned k = 0; k < i; ++k) p -= l[i * n + k] * l[i * n + k] * d[k];
-        if (p < -tol) {
-            error = "invalid-covariance: Covariance must be positive semidefinite.";
-            return false;
-        }
-        d[i] = p > tol ? p : 0;
-        l[i * n + i] = 1;
-        for (unsigned j = i + 1; j < n; ++j) {
-            double r = out[j * n + i];
-            for (unsigned k = 0; k < i; ++k) r -= l[j * n + k] * l[i * n + k] * d[k];
-            if (d[i] == 0 && std::abs(r) > tol) {
-                error = "invalid-covariance: Singular covariance has an inconsistent cross term.";
+            if (sigma[i] == 0 || sigma[j] == 0) {
+                if (a != 0 || b != 0) {
+                    error = "invalid-covariance: Zero variance has a nonzero cross term.";
+                    return false;
+                }
+                continue;
+            }
+            const double x = a / sigma[i] / sigma[j], y = b / sigma[i] / sigma[j];
+            if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x - y) > 1e-12 * std::max({1.0, std::abs(x), std::abs(y)})) {
+                error = "invalid-covariance: Covariance must be finite and symmetric.";
                 return false;
             }
-            l[j * n + i] = d[i] == 0 ? 0 : r / d[i];
+            correlation[i * n + j] = 0.5 * x + 0.5 * y;
+        }
+    // Complete diagonal pivoting, as in LAPACK DPSTRF. Unlike a rank-only
+    // factorization, validate the whole residual block at a small pivot:
+    // a zero diagonal with a nonzero cross term is indefinite, not low rank.
+    // The fixed 1e-12 tolerance now measures correlation roundoff, independent
+    // of the physical units or dynamic-parameter variance scale.
+    constexpr double tol = 1e-12;
+    for (unsigned i = 0; i < n; ++i) {
+        unsigned pivot = i;
+        for (unsigned j = i; j < n; ++j) {
+            if (correlation[j * n + j] < -tol) {
+                error = "invalid-covariance: Covariance must be positive semidefinite.";
+                return false;
+            }
+            if (correlation[j * n + j] > correlation[pivot * n + pivot]) pivot = j;
+        }
+        const double p = correlation[pivot * n + pivot];
+        if (p <= tol) {
+            for (unsigned j = i; j < n; ++j) for (unsigned k = i; k < n; ++k) {
+                if (std::abs(correlation[j * n + k]) > tol) {
+                    error = "invalid-covariance: Singular covariance has an inconsistent cross term.";
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (pivot != i) {
+            for (unsigned k = 0; k < n; ++k) std::swap(correlation[i * n + k], correlation[pivot * n + k]);
+            for (unsigned k = 0; k < n; ++k) std::swap(correlation[k * n + i], correlation[k * n + pivot]);
+        }
+        for (unsigned j = i + 1; j < n; ++j) for (unsigned k = j; k < n; ++k) {
+            const double value = correlation[j * n + k] - correlation[j * n + i] * correlation[k * n + i] / p;
+            correlation[j * n + k] = correlation[k * n + j] = value;
         }
     }
     return true;

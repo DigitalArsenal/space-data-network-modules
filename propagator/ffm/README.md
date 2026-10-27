@@ -521,6 +521,20 @@ default. Mass, coefficients and per-object gravitational parameters fail with
 A propagated covariance is `P(t) = Phi P0 Phi^T + Q`, and the record states the
 `Q` it includes (`PRWProcessNoise`, SDS 1.232.0).
 
+Input validation scales to a dimensionless correlation matrix and uses complete
+diagonal pivoting ([LAPACK DPSTRF](https://www.netlib.org/lapack/explore-html/dd/dad/dpstrf_8f.html)).
+The `1e-12` residual tolerance measures correlation roundoff, so a large dynamic
+parameter variance cannot erase a small positive velocity pivot. Zero variance
+requires an exactly zero cross row. This validation does not modify, regularize
+or replace the supplied covariance; only the declared SI/internal-unit
+conversion affects the propagated matrix. Numerical acceptance does not assert
+empirical covariance calibration.
+
+`node scripts/e2e-covariance-scaling.mjs` carries an independently verified
+public-fit matrix through both browser and WasmEdge, checks the closed-form
+force-free covariance after 10,800 seconds, and rejects indefinite, asymmetric
+and inconsistent zero-variance inputs across widely different scales.
+
 - **Resident states.** `ingest_state` takes a six-state `COVARIANCE` (SI;
   finite, symmetric, positive semidefinite) and optional `PROCESS_NOISE` per
   object. Noise without a covariance fails with `invalid-process-noise`.

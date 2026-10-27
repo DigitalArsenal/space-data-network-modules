@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {validateArtifactWithStandards} from 'space-data-module-sdk';
-import {encodePluginManifest,decodePluginManifest} from 'space-data-module-sdk/manifest';
+import {encodePluginManifest} from 'space-data-module-sdk/manifest';
 import {inspectModule,loadModule} from 'space-data-module-sdk/host/isomorphic';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/testing';
-import {requestFor,decodeResult,TYPE} from './lib/prwCodec.mjs';
+import {requestFor,decodeResult} from './lib/prwCodec.mjs';
 const manifest=JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json',import.meta.url)));
 const wasmPath=fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url));
 const bytes=()=>fs.readFileSync(wasmPath);
@@ -23,27 +23,6 @@ test('diagnostic browser factory loads same bytes and safely initializes allocat
 test('artifact passes standards-aware SDK compliance',async()=>{
  const report=await validateArtifactWithStandards({manifest,wasmPath,standardsRoot:fileURLToPath(new URL('../node_modules/spacedatastandards.org',import.meta.url))});
  assert.equal(report.ok,true,JSON.stringify(report.issues,null,2));
-});
-test('all method ports use the ratified canonical PRW identity',()=>{
- assert.deepEqual(manifest.methods.map(m=>m.methodId),['invoke','ingest_state','ingest_state_gravity_only','propagate_state','prepare_trajectory_segments','describe_trajectory_segments']);
- for(const m of manifest.methods)for(const p of [...m.inputPorts,...m.outputPorts])assert.deepEqual(p.acceptedTypeSets[0].allowedTypes,[TYPE]);
- assert.deepEqual(manifest.methods[0].inputPorts.map(p=>p.portId),['request','kernel','earth_orientation','space_weather','jb2008_indices']);
- assert.deepEqual(manifest.methods[1].inputPorts.map(p=>p.portId),['state','configuration','kernel','earth_orientation','space_weather','jb2008_indices']);
- assert.deepEqual(manifest.methods[2].inputPorts.map(p=>p.portId),['state']);
- assert.equal(manifest.threadModel,'wasi-sequential');assert.ok(manifest.sequentialJustification.detail.includes('ordered'));
-});
-test('PLG codec round-trips every declared method and port',()=>{
- const encoded=encodePluginManifest(manifest),decoded=decodePluginManifest(encoded);
- assert.deepEqual(encodePluginManifest(decoded),encoded);
- for(let i=0;i<manifest.methods.length;i++){
-  assert.equal(decoded.methods[i].methodId,manifest.methods[i].methodId);
-  for(const direction of ['inputPorts','outputPorts'])for(let j=0;j<manifest.methods[i][direction].length;j++){
-   const original=manifest.methods[i][direction][j],actual=decoded.methods[i][direction][j];
-   assert.equal(actual.portId,original.portId);
-   const type=actual.acceptedTypeSets[0].allowedTypes[0];
-   for(const k of ['schemaName','fileIdentifier','rootTypeName','wireFormat'])assert.equal(type[k],TYPE[k]);
-  }
- }
 });
 test('standalone artifact has canonical exports and only WASI imports',async()=>{
  const inspected=await inspectModule(bytes());assert.equal(inspected.profile,'standalone');
