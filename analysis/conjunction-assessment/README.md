@@ -81,8 +81,9 @@ cascade. Numerical convergence and encounter applicability are checked
 separately, and the CDM records rejected stages and the observation interval.
 `node tests/ncCascade.e2e.mjs` runs the published CARA references, analytical
 escalation cases and the same artifact through browser WASI and WasmEdge.
-The current sphere rule is product quadrature; sampling is SDMC-style
-two-body propagation. Lebedev quadrature and BFMC are not implemented.
+Sphere flux uses published Lebedev/Laikov rules with independent convergence
+checks and product quadrature refinement where required. Sampling remains
+SDMC-style two-body propagation; high-fidelity BFMC is not implemented.
 
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 

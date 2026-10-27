@@ -210,8 +210,28 @@ requested stage; an explicit 2D-Nc policy still escalates an unusable estimate.
 Native results and CDM comments retain the stage history, 2D-Nc indicator values,
 actual observation bounds, covariance repair and final method.
 
-Sphere integration currently uses independently refined product quadrature.
-It is not Lebedev quadrature. The final sampler is finite-window SDMC with
+Sphere integration uses the published Lebedev/Laikov 590, 974, 2030, 3890 and
+5810-point rules (polynomial degrees 41, 53, 77, 107 and 131). Numerical orbit
+coefficients are extracted reproducibly from the hash-pinned CARA source;
+[attribution and reproduction](../src/cpp/third_party/lebedev/NOTICE.md) accompany
+the coefficients. Polynomial exactness does not establish accuracy for a
+concentrated Gaussian or the nonsmooth inward-flux limit.
+
+For 2D-Nc, increasing Lebedev rules must agree on the collision count and the
+rate's first two time moments twice consecutively. CARA's additional safeguards
+request product refinement when fewer than 2.5% of points contribute above
+0.1% of the largest contribution, the estimate is at least 5e-5, or the
+effective-plane estimate differs by more than 10%. A failed quadratic series
+still escalates to 3D; changing the sphere rule cannot repair the series.
+
+For 3D-Nc, adaptive time integration evaluates both 3890- and 5810-point
+Lebedev flux sums. An independently refined hemisphere Gauss/trapezoidal
+product rule must confirm the estimate. Both angular rules have temporal
+error checks. When Lebedev does not meet the requested tolerance, the converged
+product estimate is retained; neither result is accepted when that refinement
+fails. Diagnostics identify the accepted quadrature and refinement size.
+
+The final sampler is finite-window SDMC with
 two-body dynamics (or explicit rectilinear dynamics), not high-fidelity BFMC.
 An active boundary causes escalation but does not prove that all encounters
 outside the observation window have been captured. This implementation does
@@ -248,7 +268,13 @@ perturbation-model uncertainty is outside this implementation.
 ### Sequential escalation verification
 
 `node tests/ncCascade.e2e.mjs` builds the actual native C++ library and reads the
-public CARA full-state fixtures. It checks eight usage classifications, the
+public CARA full-state fixtures. It first checks each Lebedev rule's point count,
+positive weights, unit normals, normalization, selected odd/even moments up to
+its highest even degree, and a rotated exponential integral against analytic
+surface integrals. The fixed double-precision bounds are 3e-13 relative for
+normalization/exponentials, 2e-11 for the high-degree moments, and 3e-14 absolute
+for the zero odd moment; these allow rounding, not physical-model error.
+It then checks eight usage classifications, the
 six converged 2D-Nc references (relative tolerance 1e-4), all 12 published Hall
 3D-Nc references (their original 1e-3 tolerance), and automatic method selection.
 A finite-window velocity-dispersed Gaussian disk verifies 2D-to-3D escalation;

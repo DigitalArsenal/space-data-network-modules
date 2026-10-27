@@ -77,6 +77,7 @@ set(CA_SOURCES
     src/pc_equinoctial.cpp
     src/pc_hall.cpp
     src/pc_fallbacks.cpp
+    src/pc_sphere_quadrature.cpp
     src/pc_monte_carlo.cpp
     src/pc_engine.cpp
     src/ephemeris_source.cpp

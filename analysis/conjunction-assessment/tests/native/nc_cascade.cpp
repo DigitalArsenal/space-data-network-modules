@@ -2,6 +2,7 @@
 // disk/sphere encounters. Units, epochs and original reference tolerances are
 // in src/cpp/tests/fixtures/NOTICE.md and each CSV row. No generated goldens.
 #include "conjunction/conjunction_engine.h"
+#include "../../src/cpp/src/pc_sphere_quadrature.h"
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -34,11 +35,46 @@ void probability(const ConjunctionEvent2& event){
     require(event.pc.probability>=0&&event.pc.probability<=1,"invalid probability");
     if(event.pc.sample_count)require(event.pc.upper_probability>event.pc.lower_probability,"sampling interval missing");
 }
+void sphere_rules(){
+    // Lebedev/Laikov polynomial exactness, checked against analytic surface
+    // integrals (Gaussian radial separation), including each rule's highest
+    // even degree. These are independent identities, not generated goldens.
+    using namespace conjunction::pc_detail;
+    for(const auto specification:std::array<std::pair<unsigned,unsigned>,5>{{{590,41},{974,53},{2030,77},{3890,107},{5810,131}}}){
+        const auto [count,degree]=specification;
+        for(const V3 axis:{V3{0,0,1},V3{1,2,3}}){
+            const auto points=lebedev_sphere(count,axis);
+            require(points.size()==count,"Lebedev orbit point count");
+            long double mass=0,exponential=0,odd=0;
+            for(const auto& point:points){
+                require(std::abs(dot(point.normal,point.normal)-1)<2e-14,"Lebedev unit normal");
+                require(point.weight>0,"Lebedev positive weight");
+                mass+=point.weight;odd+=point.weight*std::pow(point.normal[0],3)*std::pow(point.normal[1],2);
+                exponential+=point.weight*std::exp(2*point.normal[0]-point.normal[1]+3*point.normal[2]);
+            }
+            relative(mass,4*pi,3e-13,"Lebedev normalization");
+            require(std::abs(odd)<3e-14,"Lebedev odd moment");
+            const double length=std::sqrt(14.0);
+            relative(exponential,4*pi*std::sinh(length)/length,3e-13,"Lebedev exponential surface integral");
+            for(unsigned total:{0u,1u,2u,degree/2-1,degree/2}){
+                for(unsigned a:{0u,total/3,total}){
+                    const unsigned b=(total-a)/2,c=total-a-b;
+                    const long double exact=2*std::exp(std::lgamma(a+.5L)+std::lgamma(b+.5L)+std::lgamma(c+.5L)-std::lgamma(total+1.5L));
+                    long double value=0;
+                    for(const auto& point:points)value+=point.weight*std::pow((long double)point.normal[0],2*a)*std::pow((long double)point.normal[1],2*b)*std::pow((long double)point.normal[2],2*c);
+                    relative(value,exact,2e-11,"Lebedev degree "+std::to_string(degree)+" analytic moment");
+                }
+            }
+        }
+        std::cout<<"Lebedev "<<count<<" points, degree "<<degree<<": analytic moments and rotated exponential integral pass"<<std::endl;
+    }
+}
 void public_cases(const std::string& fixture){
-    unsigned accepted2=0;double maximum2=0,maximum3=0;
+    unsigned accepted2=0,lebedev2=0,lebedev3=0,product3=0;double maximum2=0,maximum3=0;
     for(const auto& row:rows(fixture+"/cara_usage.csv")){
         const auto e=encounter(row);const int code=std::stoi(row[86]);
         const auto two=pc_2d_nc_hall(e);
+        if(two.limitation.find("SPHERE_QUADRATURE=LEBEDEV")!=std::string::npos)++lebedev2;
         if(two.pc.converged){double error=std::abs(two.expected_collisions/std::stod(row[87])-1);maximum2=std::max(maximum2,error);require(error<1e-4,row[0]+" published 2D-Nc");}
         else require(two.requires_3d,row[0]+" failed series must escalate");
         require(assess_pc_usage(e).violated==(code!=0),row[0]+" published usage classification");
@@ -66,11 +102,15 @@ void public_cases(const std::string& fixture){
         const auto e=encounter(row);PcFallbackOptions options;
         options.time_start=std::stod(row[88]);options.time_end=std::stod(row[89]);options.angular_order=16;
         const auto three=pc_3d_nc_hall(e,options);
+        if(three.limitation.find("SPHERE_QUADRATURE=LEBEDEV")!=std::string::npos)++lebedev3;
+        if(three.limitation.find("SPHERE_QUADRATURE=PRODUCT_REFINEMENT")!=std::string::npos)++product3;
         require(three.pc.converged,row[0]+" 3D-Nc numerical convergence");
         relative(three.expected_collisions,std::stod(row[86]),std::stod(row[87]),row[0]+" published 3D-Nc");
         maximum3=std::max(maximum3,std::abs(three.expected_collisions/std::stod(row[86])-1));
-        std::cout<<row[0]<<" Nc="<<three.expected_collisions<<std::endl;
+        std::cout<<row[0]<<" Nc="<<three.expected_collisions<<" quadrature="<<three.limitation<<std::endl;
     }
+    require(lebedev3>0&&product3>0,"public encounters must exercise accepted Lebedev and product refinement");
+    std::cout<<"Quadrature routes: Nc2 Lebedev="<<lebedev2<<" Nc3 Lebedev="<<lebedev3<<" Nc3 product="<<product3<<std::endl;
     std::cout<<"Published max relative errors: Nc2="<<maximum2<<" Nc3="<<maximum3<<std::endl;
 }
 void analytic_cascade(){
@@ -104,6 +144,6 @@ void analytic_cascade(){
 }
 }
 int main(int argc,char** argv){
-    try{require(argc==2,"fixture directory required");std::cout<<std::setprecision(13);public_cases(argv[1]);analytic_cascade();std::cout<<"NC CASCADE NATIVE E2E PASS\n";return 0;}
+    try{require(argc==2,"fixture directory required");std::cout<<std::setprecision(13);sphere_rules();public_cases(argv[1]);analytic_cascade();std::cout<<"NC CASCADE NATIVE E2E PASS\n";return 0;}
     catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<std::endl;return 1;}
 }

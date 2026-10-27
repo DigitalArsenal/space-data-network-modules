@@ -56,7 +56,7 @@ const caSources = ['conjunction_assessment.cpp','gp_json.cpp','kdtree.cpp',
   'resident_screening_index.cpp','screening_internal.cpp','screening.cpp','screening_tight.cpp',
   'cdm_builder.cpp','cdm_parse.cpp','cdm_text.cpp','cdm_output.cpp','csm_output.cpp','pc_method.cpp','pc_orekit.cpp','pc_approx.cpp','pc_integral.cpp','pc_foster.cpp','pc_maxpc.cpp','pc_maximum.cpp','pc_usage.cpp','pc_dynamics.cpp','pc_equinoctial.cpp','pc_hall.cpp','pc_fallbacks.cpp','pc_monte_carlo.cpp','pc_engine.cpp','ephemeris_source.cpp',
   'conjunction_engine.cpp','encounter_geometry.cpp','time_scales.cpp','earth_orientation.cpp','ephemeris_upload.cpp','plugin_invoke_bridge.cpp',
-  'possibility_screening.cpp'];
+  'possibility_screening.cpp','pc_sphere_quadrature.cpp'];
 // sgp4_propagator.cpp is the unused alternate implementation: the historical
 // static archive selected conjunction_assessment.cpp for those same symbols.
 const sgp4Root = path.join(cppRoot,'deps/sgp4/libsgp4');

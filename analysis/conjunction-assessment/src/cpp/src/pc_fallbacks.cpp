@@ -1,5 +1,6 @@
 #include "pc_fallback_internal.h"
 #include "pc_hall.h"
+#include "pc_sphere_quadrature.h"
 #include "conjunction/encounter_geometry.h"
 #include <vector>
 #include <functional>
@@ -10,33 +11,6 @@
 namespace conjunction {
 using namespace pc_detail;
 namespace {
-struct SurfacePoint {V3 normal;double weight;};
-std::vector<SurfacePoint> sphere(unsigned order,const V3& velocity) {
-    std::vector<SurfacePoint> out;out.reserve(2*order*order);
-    V3 pole=velocity;double speed=norm(pole);if(speed==0)pole={0,0,1};else for(double& x:pole)x/=speed;
-    V3 axis=std::abs(pole[0])<0.8?V3{1,0,0}:V3{0,1,0};
-    double projection=dot(axis,pole);for(int i=0;i<3;++i)axis[i]-=projection*pole[i];
-    double length=norm(axis);for(double& x:axis)x/=length;
-    V3 third={pole[1]*axis[2]-pole[2]*axis[1],pole[2]*axis[0]-pole[0]*axis[2],pole[0]*axis[1]-pole[1]*axis[0]};
-    unsigned half=order/2;
-    for(unsigned k=0;k<order;++k) {
-        double x=std::cos(pi*((k%half)+0.75)/(half+0.5)),derivative=0;
-        for(int iter=0;iter<30;++iter) {
-            double p=1,q=0;
-            for(unsigned j=1;j<=half;++j){double old=p;p=((2*j-1)*x*p-(j-1)*q)/j;q=old;}
-            derivative=half*(x*p-q)/(x*x-1);double step=p/derivative;x-=step;if(std::abs(step)<1e-15)break;
-        }
-        double weight=1/((1-x*x)*derivative*derivative)*pi/order;
-        x=k<half?(x-1)/2:(x+1)/2;
-        double radial=std::sqrt(std::max(0.0,1-x*x));
-        for(unsigned j=0;j<2*order;++j) {
-            double az=pi*(j+0.5)/order;V3 n{};
-            for(int i=0;i<3;++i)n[i]=x*pole[i]+radial*(std::cos(az)*axis[i]+std::sin(az)*third[i]);
-            out.push_back({n,weight});
-        }
-    }
-    return out;
-}
 struct Kernel {
     V3 r{},v{};M3 covariance{},inverse{},conditional{},regression{};double logdet=0;
     double q(const V3& n,double radius)const {
@@ -152,17 +126,24 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
         for(double width=8*sigma;width<2*(result.time_end-result.time_start);width*=2)
             for(double t:{center-width,center+width})if(t>result.time_start&&t<result.time_end)knots.insert(t);
     }
-    unsigned order=std::clamp(o.angular_order,8u,128u);if(order%2)++order;
-    double current=0;result.pc.converged=false;
-    for(int refinement=0;refinement<6;++refinement) {
-        auto points=sphere(order,initial.v),coarse_points=sphere(order/2,initial.v);
-        struct Rates {double fine=0,coarse=0;};
-        std::map<double,Rates> cache;bool valid=true,temporal_ok=true;
+    struct Rates {double fine=0,coarse=0;};
+    struct TimeSeries {Rates total;bool valid=true,temporal_ok=true;};
+    // Geometry and covariance are independent of the angular rule. Share
+    // them across independent rule checks without changing time refinement.
+    std::map<double,Kernel> kernels;
+    auto integrate_rules=[&](const std::vector<SurfacePoint>& points,const std::vector<SurfacePoint>& coarse_points) {
+        TimeSeries series;std::map<double,Rates> cache;
+        if(points.empty()||coarse_points.empty()){series.valid=false;return series;}
         auto evaluate=[&](double t) {
             auto found=cache.find(t);if(found!=cache.end())return found->second;
-            Kernel k;Rates value;
-            if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall))valid=false;
-            else{value.fine=rate(k,points,e.combined_radius);value.coarse=rate(k,coarse_points,e.combined_radius);}
+            auto geometry=kernels.find(t);Rates value;
+            if(geometry==kernels.end()) {
+                Kernel k;if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall)){series.valid=false;return value;}
+                geometry=kernels.emplace(t,k).first;
+            }
+            value.fine=rate(geometry->second,points,e.combined_radius);
+            value.coarse=rate(geometry->second,coarse_points,e.combined_radius);
+            if(!std::isfinite(value.fine)||!std::isfinite(value.coarse))series.valid=false;
             cache.emplace(t,value);return value;
         };
         auto simpson=[](double a,double b,Rates fa,Rates fm,Rates fb) {
@@ -173,8 +154,9 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
             double mid=(a+b)/2;auto fl=evaluate((a+mid)/2),fr=evaluate((mid+b)/2);
             auto left=simpson(a,mid,fa,fl,fm),right=simpson(mid,b,fm,fr,fb);
             Rates sum{left.fine+right.fine,left.coarse+right.coarse};
-            if(close(sum.fine,whole.fine,15*o.relative_tolerance))return sum;
-            if(depth==0){temporal_ok=false;return sum;}
+            if(close(sum.fine,whole.fine,15*o.relative_tolerance)&&
+               close(sum.coarse,whole.coarse,15*o.relative_tolerance))return sum;
+            if(depth==0){series.temporal_ok=false;return sum;}
             left=integrate(a,mid,fa,fl,fm,left,depth-1);right=integrate(mid,b,fm,fr,fb,right,depth-1);
             return {left.fine+right.fine,left.coarse+right.coarse};
         };
@@ -182,12 +164,33 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
         for(;it!=knots.end();++it){double next=*it;auto fa=evaluate(previous),fm=evaluate((previous+next)/2),fb=evaluate(next);
             auto part=integrate(previous,next,fa,fm,fb,simpson(previous,next,fa,fm,fb),16);
             total.fine+=part.fine;total.coarse+=part.coarse;previous=next;}
-        current=total.fine;result.pc.iterations+=cache.size();
-        if(!valid)return result;
-        if(temporal_ok&&close(total.fine,total.coarse,o.relative_tolerance)){result.pc.converged=true;break;}
-        if(order>=256||!temporal_ok)break;
+        series.total=total;result.pc.iterations+=cache.size();return series;
+    };
+    // Lebedev integrates the time series of sphere fluxes. Because the
+    // inward flux may have a kink or a concentrated angular peak, agreement
+    // between two Lebedev rules is checked against an independently refined
+    // hemisphere product rule before accepting its estimate.
+    const auto lebedev=integrate_rules(lebedev_sphere(5810,initial.v),lebedev_sphere(3890,initial.v));
+    result.pc.converged=false;if(!lebedev.valid)return result;
+    unsigned order=std::clamp(o.angular_order,8u,128u);if(order%2)++order;
+    double current=0;
+    for(int refinement=0;refinement<6;++refinement) {
+        const auto product=integrate_rules(product_sphere(order,initial.v),product_sphere(order/2,initial.v));
+        current=product.total.fine;
+        if(!product.valid)return result;
+        if(product.temporal_ok&&close(product.total.fine,product.total.coarse,o.relative_tolerance)){
+            result.pc.converged=true;
+            if(lebedev.temporal_ok&&close(lebedev.total.fine,lebedev.total.coarse,o.relative_tolerance)&&
+               close(lebedev.total.fine,current,o.relative_tolerance)){
+                current=lebedev.total.fine;
+                result.limitation+=" SPHERE_QUADRATURE=LEBEDEV points=5810 independently_verified_by_product_order="+std::to_string(order);
+            }else result.limitation+=" SPHERE_QUADRATURE=PRODUCT_REFINEMENT after_LEBEDEV=5810 order="+std::to_string(order);
+            break;
+        }
+        if(order>=256||!product.temporal_ok)break;
         order*=2;
     }
+    if(!result.pc.converged)result.limitation+=" SPHERE_QUADRATURE_UNCONVERGED after_LEBEDEV_and_PRODUCT";
     result.expected_collisions=current;result.pc.probability=std::clamp(current,0.0,1.0);
     mark_count_applicability(result,e);
     Kernel start;
@@ -228,36 +231,68 @@ static PcFallbackResult compute_nc2(const PcEncounter& e,const PcFallbackOptions
     if(!kernel(e,center-width,o.two_body,km,result.covariance_repaired,hall)||
        !kernel(e,center,o.two_body,k0,result.covariance_repaired,hall)||
        !kernel(e,center+width,o.two_body,kp,result.covariance_repaired,hall))return result;
-    unsigned order=std::clamp(o.angular_order,8u,128u);double previous=-1,current=0;
-    for(int refinement=0;refinement<5;++refinement) {
-        auto points=sphere(order,k0.v);double sum=0,mass=0,first=0,second=0;bool valid=true;
+    struct TimeIntegral {double value=0,center=0,sigma=0;bool valid=true;unsigned significant=0;};
+    auto integrate=[&](const std::vector<SurfacePoint>& points) {
+        TimeIntegral integral;double sum=0,mass=0,first=0,second=0,maximum=0;
+        if(points.empty()){integral.valid=false;return integral;}
+        std::vector<double> contributions;contributions.reserve(points.size());
         for(const auto& point:points) {
             double q0=k0.q(point.normal,e.combined_radius),qm=km.q(point.normal,e.combined_radius),qp=kp.q(point.normal,e.combined_radius);
             double qdot=(qp-qm)/(2*width),qddot=(qp-2*q0+qm)/(width*width);
-            if(!(qddot>0)||!std::isfinite(qddot)){valid=false;break;}
+            if(!(qddot>0)||!std::isfinite(qddot)){integral.valid=false;break;}
             double sigma=std::sqrt(2/qddot),shift=-qdot/qddot,qstar=q0-0.5*qdot*qdot/qddot;
-            if(!std::isfinite(qstar)||qstar<k0.logdet-1e-10){valid=false;break;}
+            if(!std::isfinite(qstar)||qstar<k0.logdet-1e-10){integral.valid=false;break;}
             double lo=(result.time_start-center-shift)/(sigma*std::sqrt(2.0)),hi=(result.time_end-center-shift)/(sigma*std::sqrt(2.0));
             double fraction=0.5*(std::erf(hi)-std::erf(lo));
             const double weight=point.weight*k0.inward(point.normal,e.combined_radius)*sigma*std::exp(-0.5*qstar);
             sum+=weight*fraction;mass+=weight;first+=weight*shift;second+=weight*(shift*shift+sigma*sigma);
+            contributions.push_back(weight*fraction);maximum=std::max(maximum,contributions.back());
         }
-        if(!valid){result.requires_3d=true;result.limitation+=" NC2_SERIES_BREAKDOWN_REQUIRES_3D";return result;}
-        current=e.combined_radius*e.combined_radius*sum/(2*pi);result.pc.iterations+=points.size();
-        // Full Gaussian time moments of the sphere-rate mixture, rather than
-        // the R=0 width alone (Pc2D_Hall.m TMeanRate/TSigmaRate).
-        result.rate_time_center=center+(mass>0?first/mass:0);
-        result.rate_time_sigma=mass>0?std::sqrt(std::max(0.0,second/mass-(first/mass)*(first/mass))):width;
-        if(previous>=0&&close(current,previous,o.relative_tolerance)){result.pc.converged=true;break;}
-        if(order>=512)break;
-        previous=current;order=std::min(512u,order*2);
+        integral.value=e.combined_radius*e.combined_radius*sum/(2*pi);
+        integral.center=center+(mass>0?first/mass:0);
+        integral.sigma=mass>0?std::sqrt(std::max(0.0,second/mass-(first/mass)*(first/mass))):width;
+        for(double value:contributions)if(value>1e-3*maximum)++integral.significant;
+        integral.valid=integral.valid&&std::isfinite(integral.value)&&integral.value>=0&&
+            std::isfinite(integral.center)&&std::isfinite(integral.sigma);
+        result.pc.iterations+=points.size();return integral;
+    };
+    auto agree=[&](const TimeIntegral& a,const TimeIntegral& b){
+        return close(a.value,b.value,o.relative_tolerance)&&
+            std::abs(a.center-b.center)<=o.relative_tolerance*width&&close(a.sigma,b.sigma,o.relative_tolerance);
+    };
+    TimeIntegral previous,current;bool have_previous=false;unsigned stable=0,used=0;
+    const auto alternate=effective_plane(k0,e.combined_radius);
+    // CARA uses the 5810 point rule and requests full sphere refinement for
+    // concentrated contributions, Pc >= 5e-5, or effective-plane disagreement.
+    // Here independently increasing rules also verify the value AND moments.
+    for(unsigned size:{590u,974u,2030u,3890u,5810u}){
+        current=integrate(lebedev_sphere(size,k0.v));used=size;
+        if(!current.valid){result.requires_3d=true;result.limitation+=" NC2_SERIES_BREAKDOWN_REQUIRES_3D";return result;}
+        stable=have_previous&&agree(current,previous)?stable+1:0;
+        const bool well_sampled=current.significant>0.025*size;
+        const bool plane_agrees=alternate.converged&&std::abs(alternate.probability-current.value)<=0.1*current.value;
+        if(stable>=2&&well_sampled&&current.value>0&&current.value<5e-5&&plane_agrees){result.pc.converged=true;break;}
+        previous=current;have_previous=true;
     }
-    result.expected_collisions=current;result.pc.probability=std::clamp(current,0.0,1.0);
+    if(result.pc.converged)result.limitation+=" SPHERE_QUADRATURE=LEBEDEV points="+std::to_string(used);
+    else{
+        result.limitation+=" SPHERE_QUADRATURE=PRODUCT_REFINEMENT after_LEBEDEV="+std::to_string(used);
+        unsigned order=std::clamp(o.angular_order,8u,128u);have_previous=false;
+        for(int refinement=0;refinement<5;++refinement){
+            current=integrate(product_sphere(order,k0.v));
+            if(!current.valid){result.requires_3d=true;result.limitation+=" NC2_SERIES_BREAKDOWN_REQUIRES_3D";return result;}
+            if(have_previous&&agree(current,previous)){result.pc.converged=true;break;}
+            if(order>=512)break;
+            previous=current;have_previous=true;order=std::min(512u,order*2);
+        }
+    }
+    result.rate_time_center=current.center;result.rate_time_sigma=current.sigma;
+    result.expected_collisions=current.value;result.pc.probability=std::clamp(current.value,0.0,1.0);
     mark_nc2_usage(result,e,k0);
     mark_count_applicability(result,e);
     Kernel start;
     if(!kernel(e,result.time_start,o.two_body,start,result.covariance_repaired,hall)||
-       initial_occupancy_upper(start,e.combined_radius)>std::max(1e-12,o.relative_tolerance*current)) {
+       initial_occupancy_upper(start,e.combined_radius)>std::max(1e-12,o.relative_tolerance*current.value)) {
         result.requires_monte_carlo=true;
         result.limitation+=" INITIAL_OCCUPANCY_REQUIRES_MC: collision-sphere entry flux cannot represent already-overlapping trajectories at the observation interval start.";
     }
