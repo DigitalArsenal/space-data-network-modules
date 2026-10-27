@@ -19,12 +19,19 @@ config; `hostcap/http-request` does the fetching.
   `OBJECT_NAME` and `NORAD_CAT_ID` from the MEME filename, no states), echoed by
   the http connector and read by `emit`. Pairing is by CONTEXT; a response
   without it is refused (`missing-context`).
-- **`$OEM`**: compact row-major states (km, km/s), `CelestialFrame` EME2000 (the
-  MEME `UVW` line names only the covariance frame; analysis/od rotates EME2000 to
-  TEME before the SGP4 fit), UTC, `CENTER_NAME` EARTH, START/STOP_TIME and
-  STEP_SIZE from the MEME header. `OBJECT_ID` stays empty (the filename's 4th
-  field is SpaceX-internal). Covariance rows are skipped. A range's truncated
-  trailing record is dropped.
+- **`$OEM`**: explicit state rows in EME2000, UTC, km and km/s. Each source
+  timestamp is preserved without passing through a floating-point Julian date;
+  gaps stay gaps. START/STOP_TIME are the first and last retained records.
+  All 21 supplied covariance entries remain in the declared UVW or EME2000
+  frame, with their matching epochs. UVW uses the existing RSW_INERTIAL
+  convention of the native Modified ITC and OD consumers, with NAME=UVW retained.
+  No covariance is synthesized, calibrated, scaled or repaired by this reader.
+  All-state-only input emits no covariance. Mixed supplied/missing matrices,
+  malformed values, nonfinite values and unsupported frames produce a named
+  Missing notice. A partial HTTP range drops an incomplete trailing record,
+  including a potentially truncated numeric token, and records that omission
+  in the OEM comment. OBJECT_ID stays empty: the filename's fourth field is an
+  internal identifier, not a COSPAR designation.
 - **Notices**: `select_objects` - Info `object-count` (probe), Missing
   `manifest-unavailable`, Skipped `nothing-to-fetch`; `emit` - Missing
   `objects-unavailable` (not 200/206, empty, or no state vector).
@@ -48,12 +55,19 @@ node build.mjs                 # SDK compiler; inlines RFM TIM IDM PLD LCC CAT P
 node --test tests/*.test.mjs
 ```
 
-The tests run the compiled wasm in the SDK browser harness through
-plan -> select_objects -> emit, with the checked-in MEME fixtures served as the
-http connector would. `tests/fixtures/legacy-oem` holds the `$OEM` bytes the
-last JSON-lane artifact produced on the same inputs; the typed nodes emit the
-same bytes. The EME2000 check fits each emitted `$OEM` with analysis/od and
-scores it against a reference element set (synthetic suite public, SpaceX/
-CelesTrak SupGP suite private).
+`node tests/covarianceE2E.mjs` verifies the built module through typed
+manifest/response frames in browser WASM and WasmEdge. It compares every state
+and covariance value to the decimal tokens in SpaceX's published example,
+checks exact epochs, gaps, absent/malformed covariance and HTTP range edges,
+and passes emitted OEMs to the built CA consumer. The independent native
+Modified ITC parser and the analytic straight-line encounter give the reference
+miss distance and probability. This is input fidelity and computational
+conformance evidence; it does not establish covariance calibration.
 
-`tests/meme_oem_test.cpp` is the native parse test (see its header).
+Authority: [SpaceX Space Safety trajectories](https://docs.space-safety.starlink.com/docs/tutorial-basics/trajectories/),
+Modified ITC section. The retained example's hash, units, frames and exact-value
+criterion are in `tests/fixtures/itc-authority/provenance.json`.
+
+The public census retains its original pinned reader and reports its covariance
+loss explicitly. Reprocessing those raw bytes with this version requires a
+separately registered amendment; completed propagator scores are not rewritten.

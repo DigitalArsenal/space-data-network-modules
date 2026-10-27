@@ -1,6 +1,6 @@
 {
   "name": "space-data-network-module-spacex-starlink-source",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "main": "manifest.js",
@@ -20,7 +20,8 @@
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.9.12"
+    "space-data-module-sdk": "0.9.12",
+    "spacedatastandards.org": "1.261.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

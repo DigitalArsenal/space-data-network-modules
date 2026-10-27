@@ -11,7 +11,7 @@
  *                    leading byte range (rangeBytes, default 128 KiB: the fit window, ~2-3 orbits; 0 = the whole
  *                    file), 16 per invocation, the rest yielded as backlog. probe = true: a FlowNotice Info
  *                    ("object-count", COUNT the objects the pull would cover) and no requests.
- *   emit           : the MEME files' HttpResponses -> one SDS $OEM per object on "oem" (compact row-major states,
+ *   emit           : the MEME files' HttpResponses -> one SDS $OEM per object on "oem" (explicit state epochs and supplied covariance,
  *                    CelestialFrame EME2000, UTC). An object answered other than 200/206, empty, or without a state is
  *                    a FlowNotice Missing; nothing is stored, signed or published (the OD-flow invariant).
  *
@@ -40,6 +40,7 @@
 #define MEME_OEM_TYPES_INLINED 1
 #define MEME_OEM_FRAME CelestialFrame_EME2000
 #define MEME_OEM_TIME_SYSTEM timingStandard_UTC
+#define MEME_OEM_COV_ORBIT_FRAME OrbitFrame_RSW_INERTIAL
 #include "meme_oem.hpp"
 
 namespace {
@@ -281,10 +282,13 @@ int emit(void) {
         meme_oem::MemeMeta m;
         m.norad_cat_id = job->NORAD_CAT_ID();
         m.object_name = job->OBJECT_NAME()->str();
-        std::vector<double> states;
+        meme_oem::Document document;
+        std::string why;
         const std::string content(reinterpret_cast<const char*>(r->BODY()->data()), r->BODY()->size());
-        meme_oem::parse_meme(content, &m, &states);   // drops the truncated trailing record of a range
-        const Bytes oem = states.empty() ? Bytes() : meme_oem::build_oem_fb(m, states);
+        if (!meme_oem::parse_document(content, m, r->STATUS() == 206, &document, &why)) {
+            missing.push_back(label + ": " + why); continue;
+        }
+        const Bytes oem = meme_oem::build_oem_fb(document);
         if (oem.empty()) { missing.push_back(label + ": no state vectors"); continue; }
         if (plugin_push_output_ex("oem", "OEM.fbs", OEMIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0, oem.data(),
                                   static_cast<uint32_t>(oem.size())) < 0)

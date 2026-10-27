@@ -1,7 +1,7 @@
 // meme_oem_test.cpp — native test: real SpaceX MEME fixture -> parse_meme ->
 // build_oem_fb -> assert a valid SDS $OEM with frame token "EME2000" (MEME states are
 // EME2000; the UVW header names the covariance frame only), matching NORAD,
-// START_TIME + STEP_SIZE. Proves the in-memory MEME->$OEM path (no network, no store).
+// exact row epochs and supplied covariance. Proves the in-memory MEME->$OEM path (no network, no store).
 //
 // Compile + run (from repo root main-packages/):
 //   clang++ -std=c++17 -Iflatbuffers/include -Ispace-data-network-modules/common \
@@ -25,10 +25,9 @@ int main(int argc, char** argv) {
     std::string base = path.substr(path.find_last_of('/') + 1);
     meme_oem::MemeMeta m;
     meme_oem::parse_meme_filename(base, &m);
-    std::vector<double> states;
-    meme_oem::parse_meme(content, &m, &states);
-    if (states.empty() || states.size() % 6 != 0) { std::printf("bad states: %zu\n", states.size()); return 1; }
-    auto oem = meme_oem::build_oem_fb(m, states);
+    meme_oem::Document doc; std::string why;
+    if (!meme_oem::parse_document(content, m, false, &doc, &why)) { std::printf("%s\n", why.c_str()); return 1; }
+    auto oem = meme_oem::build_oem_fb(doc);
     ::flatbuffers::Verifier v(oem.data(), oem.size());
     bool ok = VerifyOEMBuffer(v) && OEMBufferHasIdentifier(oem.data());
     const OEM* rec = GetOEM(oem.data());
@@ -42,6 +41,6 @@ int main(int argc, char** argv) {
         if (blk->OBJECT()) nrd = blk->OBJECT()->NORAD_CAT_ID();
     }
     std::printf("NORAD=%ld name=%s states=%zu oem=%zuB valid=%d frame=%s start=%s step=%.0f\n",
-                m.norad_cat_id, m.object_name.c_str(), states.size()/6, oem.size(), ok?1:0, frame, start, step);
-    return (ok && std::strcmp(frame,"EME2000")==0 && nrd==m.norad_cat_id && m.norad_cat_id>0 && states.size()>=6*10) ? 0 : 1;
+                m.norad_cat_id, m.object_name.c_str(), doc.rows.size(), oem.size(), ok?1:0, frame, start, step);
+    return (ok && std::strcmp(frame,"EME2000")==0 && nrd==m.norad_cat_id && m.norad_cat_id>0 && doc.rows.size()>=10) ? 0 : 1;
 }

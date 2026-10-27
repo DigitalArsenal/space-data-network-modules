@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
-import { generateSdsHeader } from "../../scripts/lib/sds-cpp-headers.mjs";
+import { generateSdsHeader, standardsRoot as resolveStandardsRoot } from "../../scripts/lib/sds-cpp-headers.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -13,10 +13,7 @@ const memeOemPath = path.join(packageRoot, "src", "meme_oem.hpp");
 const oemBuilderPath = path.resolve(packageRoot, "../../common/oem_fb_builder.hpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = process.env.SPACE_DATA_STANDARDS_ROOT
-  ? path.resolve(process.env.SPACE_DATA_STANDARDS_ROOT)
-  : fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
-process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
+const standardsRoot = resolveStandardsRoot(import.meta.url);
 
 // flatc emits every SDS header with the same include guard and a self-named include; inlining several standards into
 // one translation unit strips both, and the flatc version static_assert is relaxed as the SDK does for its runtime

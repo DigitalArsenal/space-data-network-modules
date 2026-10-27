@@ -1,9 +1,5 @@
 #pragma once
-// meme_oem.hpp — SpaceX MEME parsing + $OEM FlatBuffer build, factored out of the
-// module so it is unit-testable against the checked-in MEME fixtures (no network).
-// The parse (MemeMeta + parse_meme) is the exact logic the module uses; build_oem_fb
-// maps a parsed object to a compact SDS $OEM (CelestialFrame::EME2000, the frame MEME
-// states are in) via the shared oem_fb builder. Pure C++ (no host ABI), so a native test can include it.
+// SpaceX Modified ITC text and lossless SDS OEM encoding. No host ABI.
 
 // math.h SVID matherr macros (SING/DOMAIN/...) collide with generated enum ids on
 // native builds; undef before the generated header (the em++/WASI sysroot is clean).
@@ -28,6 +24,10 @@
 #endif
 
 #include <cstdint>
+#include <array>
+#include <memory>
+#include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -44,6 +44,9 @@
 #endif
 #ifndef MEME_OEM_TIME_SYSTEM
 #define MEME_OEM_TIME_SYSTEM timingStandard::UTC
+#endif
+#ifndef MEME_OEM_COV_ORBIT_FRAME
+#define MEME_OEM_COV_ORBIT_FRAME OrbitFrame::RSW_INERTIAL
 #endif
 
 namespace meme_oem {
@@ -123,75 +126,138 @@ inline void parse_meme_filename(const std::string& filename, MemeMeta* m) {
     }
 }
 
-// Parse a raw MEME file: fills header meta and the flat row-major state array
-// [x0,y0,z0,vx0,vy0,vz0, x1,...] (km, km/s). Covariance rows are skipped for
-// the compact OEM (see README residuals).
-inline void parse_meme(const std::string& content, MemeMeta* m, std::vector<double>* states) {
-    size_t pos = 0;
-    auto next_line = [&](std::string* out) -> bool {
-        if (pos > content.size()) return false;
-        size_t nl = content.find('\n', pos);
-        *out = content.substr(pos, (nl == std::string::npos ? content.size() : nl) - pos);
-        pos = (nl == std::string::npos) ? content.size() + 1 : nl + 1;
-        return true;
-    };
-    std::string line;
-    // Header lines (created / ephemeris_start+stop+step / ephemeris_source / frame).
-    if (next_line(&line)) {
-        size_t k = line.find("created:");
-        if (k != std::string::npos) m->created_iso = normalize_utc(line.substr(k + 8));
-    }
-    if (next_line(&line)) {
-        size_t s = line.find("ephemeris_start:");
-        size_t e = line.find("ephemeris_stop:");
-        size_t z = line.find("step_size:");
-        if (s != std::string::npos && e != std::string::npos)
-            m->start_iso = normalize_utc(line.substr(s + 16, e - s - 16));
-        if (e != std::string::npos) {
-            size_t end = (z != std::string::npos) ? z : line.size();
-            m->stop_iso = normalize_utc(line.substr(e + 15, end - e - 15));
-        }
-        if (z != std::string::npos) m->step_size = strtol(line.c_str() + z + 10, nullptr, 10);
-    }
-    if (next_line(&line)) {
-        size_t k = line.find("ephemeris_source:");
-        if (k != std::string::npos) {
-            std::string v = line.substr(k + 17);
-            size_t a = v.find_first_not_of(" \t\r");
-            size_t b = v.find_last_not_of(" \t\r");
-            if (a != std::string::npos) m->ephemeris_source = v.substr(a, b - a + 1);
-        }
-    }
-    next_line(&line);  // covariance frame label (UVW) — not the state-vector frame
 
-    // Data blocks: each state line is followed by 3 scientific-notation
-    // covariance rows. A covariance row's first token never satisfies
-    // is_state_epoch_token (its integer part has < 13 digits), so selecting
-    // state lines directly transparently drops the covariance rows and is
-    // robust to covariance-absent (truncated) files.
-    while (next_line(&line)) {
-        std::vector<std::string> toks = split_ws(line);
-        if (toks.size() < 7 || !is_state_epoch_token(toks[0])) continue;
-        for (int c = 1; c <= 6; ++c) states->push_back(strtod(toks[c].c_str(), nullptr));
-    }
+// SpaceX Space Safety, Trajectories / Modified ITC: state epochs are UTC,
+// states are EME2000 km and km/s, followed by 21 lower-triangle covariance
+// entries in three rows. Preserve the declared UVW/EME2000 frame and values.
+// No covariance adjustment, state interpolation, or uniform-time assumption.
+struct Row {
+    std::string epoch, ordering;
+    std::array<double, 6> state{};
+    std::array<double, 21> covariance{};
+    bool has_covariance = false;
+};
+struct Document {
+    MemeMeta meta;
+    std::string covariance_frame;
+    std::vector<Row> rows;
+    bool truncated_tail = false;
+};
+inline std::string trim(const std::string& s) {
+    auto a=s.find_first_not_of(" \t\r\n"), b=s.find_last_not_of(" \t\r\n");
+    return a==std::string::npos ? "" : s.substr(a,b-a+1);
 }
-
-// Build a compact SDS $OEM FlatBuffer for one parsed MEME object. MEME state
-// vectors are EME2000 (the UVW header line names only the covariance frame), so
-// the frame is CelestialFrame::EME2000: it reads back as the token "EME2000",
-// which analysis/od rotates to TEME before the SGP4 fit. Labelled TEME, the
-// states were fitted unrotated and every Starlink GP landed ~30-40 km off
-// CelesTrak SupGP. OBJECT_ID is unset (the MEME COSPAR field is SpaceX-internal,
-// not an intl designator). Ephemeris in-memory only; the caller emits the bytes,
-// never stores them.
-inline std::vector<uint8_t> build_oem_fb(const MemeMeta& m,
-                                         const std::vector<double>& states) {
-    const oem_fb::Identity id{m.object_name.c_str(), "",
-                              static_cast<uint32_t>(m.norad_cat_id)};
-    return oem_fb::build_oem_flatbuffer_compact(
-        id, MEME_OEM_FRAME, "EARTH", MEME_OEM_TIME_SYSTEM, m.start_iso.c_str(),
-        m.stop_iso.c_str(), static_cast<double>(m.step_size), states.data(),
-        static_cast<int>(states.size()));
+inline bool finite_number(const std::string& s, double* x) {
+    char* end=nullptr;
+    *x=std::strtod(s.c_str(), &end);
+    return end!=s.c_str() && !*end && std::isfinite(*x);
 }
-
-}  // namespace meme_oem
+// Calendar formatting uses integers; it never rounds an epoch through JD.
+inline bool epoch_iso(const std::string& s, std::string* iso, std::string* ordering) {
+    if(s.size()<13 || s.size()>23) return false;
+    for(size_t i=0;i<13;i++) if(s[i]<'0'||s[i]>'9') return false;
+    std::string fraction;
+    if(s.size()>13) {
+        if(s[13]!='.' || s.size()==14) return false;
+        fraction=s.substr(14);
+        for(char c:fraction)if(c<'0'||c>'9')return false;
+    }
+    const int y=std::atoi(s.substr(0,4).c_str()), doy=std::atoi(s.substr(4,3).c_str()), h=std::atoi(s.substr(7,2).c_str()),
+              minute=std::atoi(s.substr(9,2).c_str()), second=std::atoi(s.substr(11,2).c_str());
+    const bool leap=y%4==0 && (y%100!=0 || y%400==0);
+    if(y<1||doy<1||doy>365+leap||h>23||minute>59||second>60) return false;
+    int days[]={31,28+leap,31,30,31,30,31,31,30,31,30,31},m=0,d=doy;
+    while(d>days[m])d-=days[m++];
+    if(second==60 && !(h==23 && minute==59 && ((m==5&&d==30)||(m==11&&d==31))))return false;
+    char base[40];std::snprintf(base,sizeof(base),"%04d-%02d-%02dT%02d:%02d:%02d",y,m+1,d,h,minute,second);
+    *iso=std::string(base)+(fraction.empty()?"":"."+fraction)+"Z";
+    *ordering=std::string(base)+"."+fraction+std::string(9-fraction.size(),'0');
+    return true;
+}
+inline bool parse_document(const std::string& content, const MemeMeta& identity,
+                           bool partial_range, Document* out, std::string* why) {
+    *out=Document{};out->meta=identity;
+    std::vector<std::string> lines;
+    size_t begin=0;
+    while(begin<content.size()) {
+        size_t end=content.find('\n',begin);
+        if(end==std::string::npos)end=content.size();
+        lines.push_back(trim(content.substr(begin,end-begin)));begin=end+1;
+    }
+    auto fail=[&](const std::string& message){*why=message;return false;};
+    if(lines.size()<4)return fail("Modified ITC requires three header lines and a covariance frame");
+    out->covariance_frame=lines[3];
+    if(out->covariance_frame!="UVW" && out->covariance_frame!="EME2000")return fail("Unsupported covariance frame: "+out->covariance_frame);
+    std::vector<std::string> data;
+    for(size_t i=4;i<lines.size();i++)if(!lines[i].empty())data.push_back(lines[i]);
+    bool any_cov=false, any_without=false;
+    for(size_t i=0;i<data.size();) {
+        Row row;const auto tokens=split_ws(data[i++]);
+        if(tokens.size()!=7) {
+            if(partial_range && i==data.size() && content.back()!='\n'){out->truncated_tail=true;break;}
+            return fail("State row must have one epoch and six values");
+        }
+        if(!epoch_iso(tokens[0],&row.epoch,&row.ordering))return fail("Invalid UTC state epoch: "+tokens[0]);
+        if(!out->rows.empty() && row.ordering<=out->rows.back().ordering)return fail("State epochs must increase strictly");
+        for(int j=0;j<6;j++)if(!finite_number(tokens[j+1],&row.state[j]))return fail("Nonfinite or malformed state value");
+        if(i<data.size() && !is_state_epoch_token(split_ws(data[i])[0])) {
+            if(data.size()-i<3 || (partial_range && data.size()-i==3 && content.back()!='\n')) {
+                if(partial_range){out->truncated_tail=true;break;}
+                return fail("Incomplete covariance: three rows required");
+            }
+            for(int j=0;j<3;j++) {
+                const auto cov=split_ws(data[i+j]);
+                if(cov.size()!=7) {
+                    if(partial_range && i+j+1==data.size() && content.back()!='\n'){out->truncated_tail=true;break;}
+                    return fail("Covariance row must have seven values");
+                }
+                for(int k=0;k<7;k++)if(!finite_number(cov[k],&row.covariance[j*7+k]))return fail("Nonfinite or malformed covariance value");
+            }
+            if(out->truncated_tail)break;
+            i+=3;row.has_covariance=true;any_cov=true;
+        } else if(partial_range && i==data.size()) {
+            // A range ending immediately after a state cannot prove absence
+            // of its covariance; keep only the preceding complete records.
+            out->truncated_tail=true;break;
+        } else any_without=true;
+        out->rows.push_back(row);
+    }
+    if(out->rows.empty())return fail("No complete state records");
+    if(any_cov && any_without)return fail("Mixed supplied and missing covariance: per-state availability would be lost by interpolation");
+    return true;
+}
+inline std::vector<uint8_t> build_oem_fb(const Document& doc) {
+    OEMT oem;
+    std::unique_ptr<ephemerisDataBlockT> b(new ephemerisDataBlockT());
+    b->OBJECT.reset(new CATT());b->OBJECT->OBJECT_NAME=doc.meta.object_name;
+    b->OBJECT->NORAD_CAT_ID=static_cast<uint32_t>(doc.meta.norad_cat_id);
+    b->CENTER_NAME="EARTH";b->TIME_SYSTEM=MEME_OEM_TIME_SYSTEM;b->STATE_VECTOR_SIZE=6;
+    b->START_TIME=doc.rows.front().epoch;b->STOP_TIME=doc.rows.back().epoch;
+    b->REFERENCE_FRAME.reset(new RFMT());b->REFERENCE_FRAME->NAME="EME2000";
+    CelestialFrameWrapperT inertial;inertial.frame=MEME_OEM_FRAME;b->REFERENCE_FRAME->REFERENCE_FRAME.Set(inertial);
+    b->COMMENT="Source: SpaceX Modified ITC. Exact row epochs and supplied covariance retained; no covariance calibration or repair.";
+    if(doc.truncated_tail)b->COMMENT+=" HTTP range omitted an incomplete trailing record.";
+    if(doc.rows.front().has_covariance) {
+        b->COV_REFERENCE_FRAME.reset(new RFMT());b->COV_REFERENCE_FRAME->NAME=doc.covariance_frame;
+        if(doc.covariance_frame=="UVW") {
+            OrbitFrameWrapperT axes;axes.frame=MEME_OEM_COV_ORBIT_FRAME;b->COV_REFERENCE_FRAME->REFERENCE_FRAME.Set(axes);
+        } else b->COV_REFERENCE_FRAME->REFERENCE_FRAME.Set(inertial);
+    }
+    for(const Row& row:doc.rows) {
+        std::unique_ptr<ephemerisDataLineT> p(new ephemerisDataLineT());
+        p->EPOCH=row.epoch;p->X=row.state[0];p->Y=row.state[1];p->Z=row.state[2];
+        p->X_DOT=row.state[3];p->Y_DOT=row.state[4];p->Z_DOT=row.state[5];
+        b->EPHEMERIS_DATA_LINES.push_back(std::move(p));
+        if(!row.has_covariance)continue;
+        const auto& v=row.covariance;std::unique_ptr<covarianceMatrixLineT> c(new covarianceMatrixLineT());c->EPOCH=row.epoch;
+        c->CX_X=v[0];c->CY_X=v[1];c->CY_Y=v[2];c->CZ_X=v[3];c->CZ_Y=v[4];c->CZ_Z=v[5];
+        c->CX_DOT_X=v[6];c->CX_DOT_Y=v[7];c->CX_DOT_Z=v[8];c->CX_DOT_X_DOT=v[9];
+        c->CY_DOT_X=v[10];c->CY_DOT_Y=v[11];c->CY_DOT_Z=v[12];c->CY_DOT_X_DOT=v[13];c->CY_DOT_Y_DOT=v[14];
+        c->CZ_DOT_X=v[15];c->CZ_DOT_Y=v[16];c->CZ_DOT_Z=v[17];c->CZ_DOT_X_DOT=v[18];c->CZ_DOT_Y_DOT=v[19];c->CZ_DOT_Z_DOT=v[20];
+        b->COVARIANCE_MATRIX_LINES.push_back(std::move(c));
+    }
+    oem.EPHEMERIS_DATA_BLOCK.push_back(std::move(b));
+    flatbuffers::FlatBufferBuilder builder(65536);FinishOEMBuffer(builder,CreateOEM(builder,&oem));
+    return {builder.GetBufferPointer(),builder.GetBufferPointer()+builder.GetSize()};
+}
+} // namespace meme_oem

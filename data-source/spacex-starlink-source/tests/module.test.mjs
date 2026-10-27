@@ -4,9 +4,7 @@
 // played by serve(): it answers each HttpRequest from the checked-in MEME files (a Range request on a MEME file gets the
 // prefix and 206, as api.starlink.com does) and echoes CONTEXT, as hostcap/http-request does.
 //
-// Byte identity: tests/fixtures/legacy-oem holds the $OEM records the last JSON-lane artifact (pull, $OEM stream
-// returned from plugin_invoke_stream) produced on the same inputs - the two fixture objects, and the ten synthetic
-// SupGP-suite objects range-fetched (128 KiB) and whole. The typed nodes must emit the same bytes.
+// The exact source-value and covariance contract is exercised by covarianceE2E.mjs.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -37,7 +35,6 @@ const flatbuffers = createRequire(OEM_LIB)("flatbuffers");
 const oemLib = await import(OEM_LIB.href);
 
 const FIXTURES = path.join(__dirname, "fixtures");
-const LEGACY = path.join(FIXTURES, "legacy-oem");
 const SYNTHETIC_SUITE = path.resolve(__dirname, "../../../analysis/od/tests/data/supgp-reference/starlink-synthetic");
 const MANIFEST_URL = "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt";
 const BASE_URL = "https://api.starlink.com/public-files/ephemerides/";
@@ -115,9 +112,6 @@ function readJob(context) {
   assert.equal(oem.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA.length, 0, "a header: no states");
   return oem.EPHEMERIS_DATA_BLOCK[0].OBJECT;
 }
-const legacy = (dir) => fs.readdirSync(path.join(LEGACY, dir)).sort((a, b) => parseInt(a.slice(4)) - parseInt(b.slice(4)))
-  .map((f) => new Uint8Array(fs.readFileSync(path.join(LEGACY, dir, f))));
-
 // ---- contract -----------------------------------------------------------------------------------------------------
 
 test("spacex-starlink-source artifact passes SDK compliance with typed ports only", async () => {
@@ -206,17 +200,19 @@ test("select_objects: a manifest not answered 200 is a Missing notice; a non-HRS
 
 // ---- emit ---------------------------------------------------------------------------------------------------------
 
-test("emit: byte-identical to the legacy artifact's $OEM on the fixtures", async (t) => {
+test("emit: retains explicit state epochs and supplied covariance on provider fixtures", async (t) => {
   const { oems } = await pull(t, {}, connector(FIXTURES));
-  assert.deepEqual(oems, legacy("fixtures"));
-  for (const oem of oems) assert.equal(identifierOf(oem), "$OEM");
-});
-
-test("emit: byte-identical to the legacy artifact's $OEM on the ten synthetic Starlink ephemerides, ranged and whole", async (t) => {
-  const files = fs.readdirSync(path.join(SYNTHETIC_SUITE, "meme")).filter((n) => /^MEME_\d+_.*\.txt$/.test(n)).sort();
-  const serve = connector(SYNTHETIC_SUITE, `${files.join("\n")}\n`);
-  assert.deepEqual((await pull(t, {}, serve)).oems, legacy("synth-range"));
-  assert.deepEqual((await pull(t, { rangeBytes: 0 }, serve)).oems, legacy("synth-full"));
+  assert.equal(oems.length, 2);
+  for (const bytes of oems) {
+    const b = oemLib.OEM.getRootAsOEM(new flatbuffers.ByteBuffer(bytes)).unpack().EPHEMERIS_DATA_BLOCK[0];
+    const filename = fs.readdirSync(path.join(FIXTURES, "meme")).find(n => n.startsWith(`MEME_${b.OBJECT.NORAD_CAT_ID}_`));
+    const source = fs.readFileSync(path.join(FIXTURES, "meme", filename), "utf8").slice(0, 131072).split(/\r?\n/);
+    const expected = source.slice(4).filter(x => /^\d{13}\./.test(x)).map(x => x.trim().split(/\s+/).slice(1).map(Number));
+    assert.ok(b.EPHEMERIS_DATA_LINES.length > 0);
+    assert.equal(b.COVARIANCE_MATRIX_LINES.length, b.EPHEMERIS_DATA_LINES.length);
+    assert.deepEqual(b.EPHEMERIS_DATA_LINES.map(p => [p.X,p.Y,p.Z,p.X_DOT,p.Y_DOT,p.Z_DOT]), expected.slice(0, b.EPHEMERIS_DATA_LINES.length));
+    assert.equal(b.COV_REFERENCE_FRAME.NAME, "UVW");
+  }
 });
 
 test("emit: a response without its job header is refused; an object without states is Missing", async (t) => {
@@ -226,7 +222,7 @@ test("emit: a response without its job header is refused; an object without stat
   const { requests } = await pull(t, { objectCap: 1 }, connector(FIXTURES));
   const res = await harness.invoke({ methodId: "emit", inputs: [hrsp("ephemerides", { url: requests[0].url, status: 200, body: Buffer.from("created: x\n"), context: requests[0].context })] });
   assert.equal(on(res, "oem").length, 0);
-  assert.deepEqual(noticesOn(res).map((n) => n.items), [["STARLINK-36840 (67850): no state vectors"]]);
+  assert.match(noticesOn(res)[0].items[0], /STARLINK-36840.*three header lines/);
 });
 
 // ---- Frame: MEME state vectors are EME2000 ------------------------------------------------------------------------

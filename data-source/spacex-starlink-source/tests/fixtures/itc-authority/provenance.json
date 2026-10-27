@@ -1,0 +1,12 @@
+{
+  "url": "https://docs.space-safety.starlink.com/docs/tutorial-basics/trajectories/",
+  "retrievedUtc": "2026-10-27",
+  "documentSha256": "2a3de78f3af2849036c0db7e4be6aeb41b0c2a1fff3f8c7c2b442d7fdff54804",
+  "excerptSha256": "77f8171f1dbad485b577f02e0c729e8c85a87d90e31b3fe9dea6076635b6e503",
+  "scope": "SpaceX published Modified ITC numerical example; no generated orbital states",
+  "expectedUnits": "position km, velocity km/s; lower-triangle covariance products of these units",
+  "stateFrame": "EME2000",
+  "covarianceFrame": "UVW",
+  "timeSystem": "UTC",
+  "valueTolerance": "Exact conversion of the published decimal tokens to binary64; epoch strings preserve source fractional digits"
+}
