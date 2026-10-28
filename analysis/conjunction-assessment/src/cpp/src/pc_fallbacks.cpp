@@ -13,6 +13,21 @@ using namespace pc_detail;
 namespace {
 struct Kernel {
     V3 r{},v{};M3 covariance{},inverse{},conditional{},regression{};double logdet=0;
+    bool finite_inward_bound(double radius)const {
+        // Surface normals are unit length; using 2 per component also bounds
+        // rotation roundoff. Prove all inward-speed intermediates finite before
+        // eliding a zero-density product, so 0*NaN/Inf is never hidden.
+        double mean=0,variance=0;
+        for(int i=0;i<3;++i){
+            double component=std::abs(v[i]);
+            for(int j=0;j<3;++j){
+                component+=std::abs(regression[i*3+j])*(2*radius+std::abs(r[j]));
+                variance+=4*std::abs(conditional[i*3+j]);
+            }
+            mean+=2*component;
+        }
+        return std::isfinite(mean+std::sqrt(variance));
+    }
     double q(const V3& n,double radius)const {
         V3 d{};for(int i=0;i<3;++i)d[i]=radius*n[i]-r[i];return dot(d,mul(inverse,d))+logdet;
     }
@@ -48,7 +63,12 @@ PcFallbackResult initialize(const PcEncounter& e,const PcFallbackOptions& o,cons
     return result;
 }
 double rate(const Kernel& k,const std::vector<SurfacePoint>& points,double radius) {
-    double sum=0;for(const auto& point:points)sum+=point.weight*k.inward(point.normal,radius)*std::exp(-0.5*k.q(point.normal,radius));
+    const bool finite_inward=k.finite_inward_bound(radius);
+    double sum=0;for(const auto& point:points){
+        const double density=std::exp(-0.5*k.q(point.normal,radius));
+        if(density==0&&finite_inward)continue;
+        sum+=point.weight*k.inward(point.normal,radius)*density;
+    }
     return radius*radius*sum/std::pow(2*pi,1.5);
 }
 double initial_occupancy_upper(const Kernel& k,double radius) {
