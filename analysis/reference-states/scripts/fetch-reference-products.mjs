@@ -34,7 +34,7 @@
 //              SARAL, Sentinel-3A/B and SWOT: 7- to 9-day arcs, each
 //              overlapping the next by 2.5 to 3 hours.
 //   gfz-rso    GFZ rapid science orbits (ISDC) of GRACE-FO 1 and 2 (codes L64,
-//              L65): 14-hour arcs every 12 hours, 30 s, GPS time. Their
+//              L65) and TerraSAR-X (L13): 14-hour arcs every 12 hours, 30 s, GPS time. Their
 //              coordinate system is written "CTS", the conventional
 //              terrestrial system, and is read as ITRF.
 //   mgex       one IGS analysis centre's multi-GNSS orbits (--mgex-product, default
@@ -566,10 +566,11 @@ async function doris(lo, hi) {
   }
 }
 
-// ── GRACE-FO: GFZ rapid science orbits (ISDC), GFZOP_RSO_<code>_G_<start>_<stop>_v<nn>.sp3.gz ──
+// ── GRACE-FO and TerraSAR-X: GFZ rapid science orbits (ISDC), GFZOP_RSO_<code>_G_<start>_<stop>_v<nn>.sp3.gz ──
 // L64's positions are those of ESA's GRACE-FO 1 density product (DNS1ACC);
-// L65 is the other satellite.
-const GFZ_RSO = { L64: { norad: 43476, objectId: '2018-047A', name: 'GRACE-FO 1' }, L65: { norad: 43477, objectId: '2018-047B', name: 'GRACE-FO 2' } };
+// L65 is the other satellite; L13 is TerraSAR-X.
+const GFZ_RSO = { L64: { norad: 43476, objectId: '2018-047A', name: 'GRACE-FO 1' }, L65: { norad: 43477, objectId: '2018-047B', name: 'GRACE-FO 2' },
+  L13: { norad: 31698, objectId: '2007-026A', name: 'TerraSAR-X' } };
 const stamp = (s) => Date.parse(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:${s.slice(13, 15)}Z`);
 async function gfzRso(lo, hi) {
   for (const [code, identity] of Object.entries(GFZ_RSO)) {
