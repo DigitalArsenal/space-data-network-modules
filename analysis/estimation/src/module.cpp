@@ -989,9 +989,12 @@ extern "C" int run_estimation(void) {
 
 // fit_batch: the state at the configuration epoch plus dynamic parameters,
 // by batch least squares through the inverted propagator port. Each
-// iteration asks for one sample per observation from one seed
+// propagation round asks for one sample per observation from one seed
 // [state, parameters]; the caller replays the unchanged request with every
-// answer so far. Status OK or NOT_CONVERGED is in the result record.
+// answer so far. A propagator that rejects a round's seed answers every
+// query of that round refused, with its error text and no sample: the fit
+// takes it as a rejected trial (a refused initial seed is fit-failed).
+// Status OK (CONVERGED) or NOT_CONVERGED is in the result record.
 extern "C" int fit_batch(void) {
   plugin_reset_output_state();
   const wire::EstimationRequest* request = nullptr;
@@ -1053,15 +1056,12 @@ extern "C" int fit_batch(void) {
   for (int i = 0; i < 6; ++i) config.initial_state[i] = request->config()->initial_state()->Get(i);
   if (options->parameter_values()) config.initial_parameters.assign(options->parameter_values()->begin(), options->parameter_values()->end());
   if (options->apriori_covariance()) config.apriori_covariance.assign(options->apriori_covariance()->begin(), options->apriori_covariance()->end());
-  // Version 2 (extension v4); absent fields keep version 1.
   if (options->parameter_transforms())
     for (const auto transform : *options->parameter_transforms()) config.transforms.push_back(static_cast<core::ParameterTransform>(transform));
   if (options->parameter_lower_bounds()) config.lower_bounds.assign(options->parameter_lower_bounds()->begin(), options->parameter_lower_bounds()->end());
   if (options->parameter_upper_bounds()) config.upper_bounds.assign(options->parameter_upper_bounds()->begin(), options->parameter_upper_bounds()->end());
   if (options->parameter_consider())
     for (const auto consider : *options->parameter_consider()) config.consider.push_back(consider != 0);
-  config.levenberg_marquardt = options->levenberg_marquardt();
-  config.initial_damping = options->initial_damping();
   if (options->measurement_parameters()) {
     for (const auto* source : *options->measurement_parameters()) {
       if (source == nullptr || source->observations() == nullptr) return fail("bad-estimation-request", "a measurement parameter is incomplete");
@@ -1120,7 +1120,8 @@ extern "C" int fit_batch(void) {
   // One query per requested epoch: an observation's epoch, or (time bias)
   // that epoch plus a shift.
   config.propagator = [&](const core::Vector6& seed, const std::vector<double>& parameters,
-                          const std::vector<core::EpochRequest>& requests, std::vector<core::ParameterSample>* samples) {
+                          const std::vector<core::EpochRequest>& requests, std::vector<core::ParameterSample>* samples,
+                          std::string* refusal) {
     const std::size_t first = consumed;
     consumed += requests.size();
     std::vector<wire::EstimationEpoch> targets;
@@ -1143,29 +1144,41 @@ extern "C" int fit_batch(void) {
         query->parameter_values = parameters;
         pending.push_back(std::move(query));
       }
-      return false;
+      return core::PortAnswer::PENDING;
     }
-    if (have < first + requests.size()) { protocol_error = true; return false; }
+    if (have < first + requests.size()) { protocol_error = true; return core::PortAnswer::PENDING; }
+    // A round is answered (every answer has its sample) or refused (every
+    // answer refused, without sample or sensitivity); each echoes its query.
+    const bool refused = answers->Get(static_cast<::flatbuffers::uoffset_t>(first)) &&
+                         answers->Get(static_cast<::flatbuffers::uoffset_t>(first))->refused();
     samples->resize(requests.size());
     for (std::size_t j = 0; j < requests.size(); ++j) {
       const auto* answer = answers->Get(static_cast<::flatbuffers::uoffset_t>(first + j));
       const auto* query = answer ? answer->query() : nullptr;
       const auto* sample = answer ? answer->sample() : nullptr;
-      if (!query || !sample || !query->seed() || !query->target_epoch() || query->sequence() != first + j ||
+      const std::size_t sensitivity = answer && answer->sensitivity() ? answer->sensitivity()->size() : 0;
+      if (!query || answer->refused() != refused || (refused ? sample != nullptr || sensitivity != 0 : !sample || sensitivity != 6 * p) ||
+          !query->seed() || !query->target_epoch() || query->sequence() != first + j ||
           query->seed()->epoch().jd_day() != reference.jd_day() || query->seed()->epoch().seconds() != reference.seconds() ||
           query->seed()->reference_frame() != request->config()->reference_frame() ||
           query->target_epoch()->jd_day() != targets[j].jd_day() || query->target_epoch()->seconds() != targets[j].seconds() ||
-          (query->parameter_values() ? query->parameter_values()->size() : 0) != p ||
-          (answer->sensitivity() ? answer->sensitivity()->size() : 0) != 6 * p) { protocol_error = true; return false; }
-      for (int i = 0; i < 6; ++i) if (query->seed()->state()->Get(i) != seed[i]) { protocol_error = true; return false; }
-      for (std::size_t q = 0; q < p; ++q) if (query->parameter_values()->Get(q) != parameters[q]) { protocol_error = true; return false; }
+          (query->parameter_values() ? query->parameter_values()->size() : 0) != p) { protocol_error = true; return core::PortAnswer::PENDING; }
+      for (int i = 0; i < 6; ++i) if (query->seed()->state()->Get(i) != seed[i]) { protocol_error = true; return core::PortAnswer::PENDING; }
+      for (std::size_t q = 0; q < p; ++q) if (query->parameter_values()->Get(q) != parameters[q]) { protocol_error = true; return core::PortAnswer::PENDING; }
+      if (refused) continue;
       core::ParameterSample& out = (*samples)[j];
       out.state.epoch_seconds = relative_seconds(sample->epoch(), reference);
       for (int i = 0; i < 6; ++i) out.state.value[i] = sample->state()->Get(i);
       for (int i = 0; i < 36; ++i) out.stm[i] = sample->stm()->Get(i);
       if (p) out.sensitivity.assign(answer->sensitivity()->begin(), answer->sensitivity()->end());
     }
-    return true;
+    if (refused) {
+      const auto* text = answers->Get(static_cast<::flatbuffers::uoffset_t>(first))->refusal();
+      *refusal = text && text->size() ? text->str() : "the propagator refused the seed";
+      samples->clear();
+      return core::PortAnswer::REFUSED;
+    }
+    return core::PortAnswer::ANSWERED;
   };
 
   const core::BatchFitResult fit = core::batch_fit(config, observations);
@@ -1212,12 +1225,15 @@ extern "C" int fit_batch(void) {
   out->converged = fit.converged;
   out->whitened_residuals = fit.whitened_residuals;
   out->rejected_observation_indices = reply.result->rejected_observation_indices;
-  // Extension v4 (empty or default when unused, so version-1 bytes).
   out->measurement_parameter_count = static_cast<std::uint32_t>(fit.measurement_parameter_count);
   out->consider_covariance = fit.consider_covariance;
   out->bound_status = fit.bound_status;
   out->covariance_rtn = fit.covariance_rtn;
   out->consider_covariance_rtn = fit.consider_covariance_rtn;
+  out->termination = static_cast<wire::BatchFitTermination>(fit.termination);
+  out->rejected_trials = static_cast<std::uint32_t>(fit.rejected_trials);
+  out->refused_trials = static_cast<std::uint32_t>(fit.refused_trials);
+  out->refusal = fit.refusal;
   for (const core::CovarianceRegularization& r : fit.regularizations) {
     auto diagnostic = std::make_unique<wire::CovarianceRegularizationT>();
     diagnostic->block = r.block;

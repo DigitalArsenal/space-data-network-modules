@@ -108,3 +108,31 @@ export { P as prw };
 
 export const MODULE_ID = 'com.orbpro.ffm';
 export const INTEGRATION_POLICY = 'Forward GJ8 PEC on common TT grids: LEO 10/15/12/24 s by perigee band; near-circular GPS 75 s and GEO 600 s; other low-eccentricity elliptic orbits 24 s. Eccentricity >=0.25: RK78 Sundman alpha=1.5, 200/orbit (GTO-like: 300/orbit). Tight RK alignment <=one GJ step; corrected conical dense acceleration; daily-Ap restart trim; selected-object batches of 32. GJ hands off to two-second-capped RK within 50 km of the sphere enclosing the physical 100 km reentry surface. Fixed diagnostics, backward requests, nonelliptic states, unsupported GJ force families, or insufficient startup coverage retain RK78.';
+
+// The domain of each DYNAMIC_PARAMETERS kind a fit estimates (README, "Fit
+// parameter domains"): [lower, upper] in SI, NaN unbounded, as
+// analysis/estimation fit_batch takes parameter_lower_bounds and
+// parameter_upper_bounds. The module refuses a negative Cd*A/m or Cr*A/m;
+// the other kinds are signed. IN_TRACK_ACCELERATION also needs
+// HAS_IN_TRACK_ACCELERATION_M_S2 in FORCES.
+const signed = Object.freeze([NaN, NaN]);
+const nonnegative = Object.freeze([0, NaN]);
+export const FIT_PARAMETER_DOMAINS = Object.freeze({
+  DRAG_AREA_OVER_MASS: nonnegative,
+  DRAG_AREA_OVER_MASS_RATE: signed,
+  SRP_AREA_OVER_MASS: nonnegative,
+  IN_TRACK_ACCELERATION: signed,
+  ...Object.fromEntries(['D0', 'Y0', 'B0', 'D2_COS', 'D2_SIN', 'D4_COS', 'D4_SIN', 'B1_COS', 'B1_SIN', 'B3_COS', 'B3_SIN']
+    .map((term) => [`ECOM2_${term}`, signed])),
+});
+// parameter_lower_bounds and parameter_upper_bounds for kinds given by PRW
+// name or DYNAMIC_PARAMETERS ordinal.
+export function fitParameterBounds(kinds) {
+  const domains = kinds.map((kind) => {
+    const name = typeof kind === 'number' ? P.prwDynamicParameter[kind] : kind;
+    const domain = FIT_PARAMETER_DOMAINS[name];
+    if (!domain) throw new Error(`no fit domain for DYNAMIC_PARAMETERS ${kind}`);
+    return domain;
+  });
+  return { lower: domains.map((d) => d[0]), upper: domains.map((d) => d[1]) };
+}

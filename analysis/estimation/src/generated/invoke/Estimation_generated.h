@@ -558,6 +558,39 @@ inline const char *EnumNameMeasurementParameterKind(MeasurementParameterKind e) 
   return EnumNamesMeasurementParameterKind()[index];
 }
 
+enum class BatchFitTermination : uint8_t {
+  CONVERGED = 0,
+  MAXIMUM_ITERATIONS = 1,
+  STALLED = 2,
+  MIN = CONVERGED,
+  MAX = STALLED
+};
+
+inline const BatchFitTermination (&EnumValuesBatchFitTermination())[3] {
+  static const BatchFitTermination values[] = {
+    BatchFitTermination::CONVERGED,
+    BatchFitTermination::MAXIMUM_ITERATIONS,
+    BatchFitTermination::STALLED
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesBatchFitTermination() {
+  static const char * const names[4] = {
+    "CONVERGED",
+    "MAXIMUM_ITERATIONS",
+    "STALLED",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameBatchFitTermination(BatchFitTermination e) {
+  if (::flatbuffers::IsOutRange(e, BatchFitTermination::CONVERGED, BatchFitTermination::STALLED)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesBatchFitTermination()[index];
+}
+
 enum class RelativeModel : uint8_t {
   HILL_CLOHESSY_WILTSHIRE = 0,
   SCHWEIGHART_SEDWICK_J2 = 1,
@@ -3143,6 +3176,8 @@ struct PropagationAnswerT : public ::flatbuffers::NativeTable {
   std::unique_ptr<orbpro::estimation::PropagationQueryT> query{};
   std::unique_ptr<orbpro::estimation::EstimationPropagatorSample> sample{};
   std::vector<double> sensitivity{};
+  bool refused = false;
+  std::string refusal{};
   PropagationAnswerT() = default;
   PropagationAnswerT(const PropagationAnswerT &o);
   PropagationAnswerT(PropagationAnswerT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3156,7 +3191,9 @@ struct PropagationAnswer FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_QUERY = 4,
     VT_SAMPLE = 6,
-    VT_SENSITIVITY = 8
+    VT_SENSITIVITY = 8,
+    VT_REFUSED = 10,
+    VT_REFUSAL = 12
   };
   const orbpro::estimation::PropagationQuery *query() const {
     return GetPointer<const orbpro::estimation::PropagationQuery *>(VT_QUERY);
@@ -3167,14 +3204,23 @@ struct PropagationAnswer FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   const ::flatbuffers::Vector<double> *sensitivity() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SENSITIVITY);
   }
+  bool refused() const {
+    return GetField<uint8_t>(VT_REFUSED, 0) != 0;
+  }
+  const ::flatbuffers::String *refusal() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REFUSAL);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_QUERY) &&
            verifier.VerifyTable(query()) &&
-           VerifyFieldRequired<orbpro::estimation::EstimationPropagatorSample>(verifier, VT_SAMPLE, 8) &&
+           VerifyField<orbpro::estimation::EstimationPropagatorSample>(verifier, VT_SAMPLE, 8) &&
            VerifyOffset(verifier, VT_SENSITIVITY) &&
            verifier.VerifyVector(sensitivity()) &&
+           VerifyField<uint8_t>(verifier, VT_REFUSED, 1) &&
+           VerifyOffset(verifier, VT_REFUSAL) &&
+           verifier.VerifyString(refusal()) &&
            verifier.EndTable();
   }
   PropagationAnswerT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3195,6 +3241,12 @@ struct PropagationAnswerBuilder {
   void add_sensitivity(::flatbuffers::Offset<::flatbuffers::Vector<double>> sensitivity) {
     fbb_.AddOffset(PropagationAnswer::VT_SENSITIVITY, sensitivity);
   }
+  void add_refused(bool refused) {
+    fbb_.AddElement<uint8_t>(PropagationAnswer::VT_REFUSED, static_cast<uint8_t>(refused), 0);
+  }
+  void add_refusal(::flatbuffers::Offset<::flatbuffers::String> refusal) {
+    fbb_.AddOffset(PropagationAnswer::VT_REFUSAL, refusal);
+  }
   explicit PropagationAnswerBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3203,7 +3255,6 @@ struct PropagationAnswerBuilder {
     const auto end = fbb_.EndTable(start_);
     auto o = ::flatbuffers::Offset<PropagationAnswer>(end);
     fbb_.Required(o, PropagationAnswer::VT_QUERY);
-    fbb_.Required(o, PropagationAnswer::VT_SAMPLE);
     return o;
   }
 };
@@ -3212,11 +3263,15 @@ inline ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswer(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<orbpro::estimation::PropagationQuery> query = 0,
     const orbpro::estimation::EstimationPropagatorSample *sample = nullptr,
-    ::flatbuffers::Offset<::flatbuffers::Vector<double>> sensitivity = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> sensitivity = 0,
+    bool refused = false,
+    ::flatbuffers::Offset<::flatbuffers::String> refusal = 0) {
   PropagationAnswerBuilder builder_(_fbb);
+  builder_.add_refusal(refusal);
   builder_.add_sensitivity(sensitivity);
   builder_.add_sample(sample);
   builder_.add_query(query);
+  builder_.add_refused(refused);
   return builder_.Finish();
 }
 
@@ -3229,13 +3284,18 @@ inline ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswerDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<orbpro::estimation::PropagationQuery> query = 0,
     const orbpro::estimation::EstimationPropagatorSample *sample = nullptr,
-    const std::vector<double> *sensitivity = nullptr) {
+    const std::vector<double> *sensitivity = nullptr,
+    bool refused = false,
+    const char *refusal = nullptr) {
   auto sensitivity__ = sensitivity ? _fbb.CreateVector<double>(*sensitivity) : 0;
+  auto refusal__ = refusal ? _fbb.CreateString(refusal) : 0;
   return orbpro::estimation::CreatePropagationAnswer(
       _fbb,
       query,
       sample,
-      sensitivity__);
+      sensitivity__,
+      refused,
+      refusal__);
 }
 
 ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswer(::flatbuffers::FlatBufferBuilder &_fbb, const PropagationAnswerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3617,8 +3677,6 @@ struct BatchFitOptionsT : public ::flatbuffers::NativeTable {
   std::vector<double> parameter_lower_bounds{};
   std::vector<double> parameter_upper_bounds{};
   std::vector<bool> parameter_consider{};
-  bool levenberg_marquardt = false;
-  double initial_damping = 1e-3;
   std::vector<std::unique_ptr<orbpro::estimation::MeasurementParameterT>> measurement_parameters{};
   std::vector<std::unique_ptr<orbpro::estimation::CovarianceBlockT>> covariance_blocks{};
   uint8_t covariance_regularization = 0;
@@ -3647,8 +3705,6 @@ struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PARAMETER_LOWER_BOUNDS = 22,
     VT_PARAMETER_UPPER_BOUNDS = 24,
     VT_PARAMETER_CONSIDER = 26,
-    VT_LEVENBERG_MARQUARDT = 28,
-    VT_INITIAL_DAMPING = 30,
     VT_MEASUREMENT_PARAMETERS = 32,
     VT_COVARIANCE_BLOCKS = 34,
     VT_COVARIANCE_REGULARIZATION = 36,
@@ -3691,12 +3747,6 @@ struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<uint8_t> *parameter_consider() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PARAMETER_CONSIDER);
   }
-  bool levenberg_marquardt() const {
-    return GetField<uint8_t>(VT_LEVENBERG_MARQUARDT, 0) != 0;
-  }
-  double initial_damping() const {
-    return GetField<double>(VT_INITIAL_DAMPING, 1e-3);
-  }
   const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::MeasurementParameter>> *measurement_parameters() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::MeasurementParameter>> *>(VT_MEASUREMENT_PARAMETERS);
   }
@@ -3735,8 +3785,6 @@ struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVector(parameter_upper_bounds()) &&
            VerifyOffset(verifier, VT_PARAMETER_CONSIDER) &&
            verifier.VerifyVector(parameter_consider()) &&
-           VerifyField<uint8_t>(verifier, VT_LEVENBERG_MARQUARDT, 1) &&
-           VerifyField<double>(verifier, VT_INITIAL_DAMPING, 8) &&
            VerifyOffset(verifier, VT_MEASUREMENT_PARAMETERS) &&
            verifier.VerifyVector(measurement_parameters()) &&
            verifier.VerifyVectorOfTables(measurement_parameters()) &&
@@ -3793,12 +3841,6 @@ struct BatchFitOptionsBuilder {
   void add_parameter_consider(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> parameter_consider) {
     fbb_.AddOffset(BatchFitOptions::VT_PARAMETER_CONSIDER, parameter_consider);
   }
-  void add_levenberg_marquardt(bool levenberg_marquardt) {
-    fbb_.AddElement<uint8_t>(BatchFitOptions::VT_LEVENBERG_MARQUARDT, static_cast<uint8_t>(levenberg_marquardt), 0);
-  }
-  void add_initial_damping(double initial_damping) {
-    fbb_.AddElement<double>(BatchFitOptions::VT_INITIAL_DAMPING, initial_damping, 1e-3);
-  }
   void add_measurement_parameters(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::MeasurementParameter>>> measurement_parameters) {
     fbb_.AddOffset(BatchFitOptions::VT_MEASUREMENT_PARAMETERS, measurement_parameters);
   }
@@ -3839,8 +3881,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> parameter_lower_bounds = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> parameter_upper_bounds = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> parameter_consider = 0,
-    bool levenberg_marquardt = false,
-    double initial_damping = 1e-3,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::MeasurementParameter>>> measurement_parameters = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::CovarianceBlock>>> covariance_blocks = 0,
     uint8_t covariance_regularization = 0,
@@ -3848,7 +3888,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(
     bool rtn_covariance = false) {
   BatchFitOptionsBuilder builder_(_fbb);
   builder_.add_correlation_floor(correlation_floor);
-  builder_.add_initial_damping(initial_damping);
   builder_.add_sigma_edit_threshold(sigma_edit_threshold);
   builder_.add_correction_tolerance(correction_tolerance);
   builder_.add_covariance_blocks(covariance_blocks);
@@ -3864,7 +3903,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(
   builder_.add_parameter_kinds(parameter_kinds);
   builder_.add_rtn_covariance(rtn_covariance);
   builder_.add_covariance_regularization(covariance_regularization);
-  builder_.add_levenberg_marquardt(levenberg_marquardt);
   builder_.add_covariance_axes(covariance_axes);
   return builder_.Finish();
 }
@@ -3888,8 +3926,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptionsDirect(
     const std::vector<double> *parameter_lower_bounds = nullptr,
     const std::vector<double> *parameter_upper_bounds = nullptr,
     const std::vector<uint8_t> *parameter_consider = nullptr,
-    bool levenberg_marquardt = false,
-    double initial_damping = 1e-3,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::MeasurementParameter>> *measurement_parameters = nullptr,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::CovarianceBlock>> *covariance_blocks = nullptr,
     uint8_t covariance_regularization = 0,
@@ -3919,8 +3955,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptionsDirect(
       parameter_lower_bounds__,
       parameter_upper_bounds__,
       parameter_consider__,
-      levenberg_marquardt,
-      initial_damping,
       measurement_parameters__,
       covariance_blocks__,
       covariance_regularization,
@@ -3952,6 +3986,10 @@ struct BatchFitResultT : public ::flatbuffers::NativeTable {
   std::vector<double> covariance_rtn{};
   std::vector<double> consider_covariance_rtn{};
   std::vector<std::unique_ptr<orbpro::estimation::CovarianceRegularizationT>> regularizations{};
+  orbpro::estimation::BatchFitTermination termination = orbpro::estimation::BatchFitTermination::CONVERGED;
+  uint32_t rejected_trials = 0;
+  uint32_t refused_trials = 0;
+  std::string refusal{};
   BatchFitResultT() = default;
   BatchFitResultT(const BatchFitResultT &o);
   BatchFitResultT(BatchFitResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3982,7 +4020,11 @@ struct BatchFitResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_BOUND_STATUS = 36,
     VT_COVARIANCE_RTN = 38,
     VT_CONSIDER_COVARIANCE_RTN = 40,
-    VT_REGULARIZATIONS = 42
+    VT_REGULARIZATIONS = 42,
+    VT_TERMINATION = 44,
+    VT_REJECTED_TRIALS = 46,
+    VT_REFUSED_TRIALS = 48,
+    VT_REFUSAL = 50
   };
   uint8_t state_dimension() const {
     return GetField<uint8_t>(VT_STATE_DIMENSION, 0);
@@ -4044,6 +4086,18 @@ struct BatchFitResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>> *regularizations() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>> *>(VT_REGULARIZATIONS);
   }
+  orbpro::estimation::BatchFitTermination termination() const {
+    return static_cast<orbpro::estimation::BatchFitTermination>(GetField<uint8_t>(VT_TERMINATION, 0));
+  }
+  uint32_t rejected_trials() const {
+    return GetField<uint32_t>(VT_REJECTED_TRIALS, 0);
+  }
+  uint32_t refused_trials() const {
+    return GetField<uint32_t>(VT_REFUSED_TRIALS, 0);
+  }
+  const ::flatbuffers::String *refusal() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REFUSAL);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -4079,6 +4133,11 @@ struct BatchFitResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_REGULARIZATIONS) &&
            verifier.VerifyVector(regularizations()) &&
            verifier.VerifyVectorOfTables(regularizations()) &&
+           VerifyField<uint8_t>(verifier, VT_TERMINATION, 1) &&
+           VerifyField<uint32_t>(verifier, VT_REJECTED_TRIALS, 4) &&
+           VerifyField<uint32_t>(verifier, VT_REFUSED_TRIALS, 4) &&
+           VerifyOffset(verifier, VT_REFUSAL) &&
+           verifier.VerifyString(refusal()) &&
            verifier.EndTable();
   }
   BatchFitResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -4150,6 +4209,18 @@ struct BatchFitResultBuilder {
   void add_regularizations(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>>> regularizations) {
     fbb_.AddOffset(BatchFitResult::VT_REGULARIZATIONS, regularizations);
   }
+  void add_termination(orbpro::estimation::BatchFitTermination termination) {
+    fbb_.AddElement<uint8_t>(BatchFitResult::VT_TERMINATION, static_cast<uint8_t>(termination), 0);
+  }
+  void add_rejected_trials(uint32_t rejected_trials) {
+    fbb_.AddElement<uint32_t>(BatchFitResult::VT_REJECTED_TRIALS, rejected_trials, 0);
+  }
+  void add_refused_trials(uint32_t refused_trials) {
+    fbb_.AddElement<uint32_t>(BatchFitResult::VT_REFUSED_TRIALS, refused_trials, 0);
+  }
+  void add_refusal(::flatbuffers::Offset<::flatbuffers::String> refusal) {
+    fbb_.AddOffset(BatchFitResult::VT_REFUSAL, refusal);
+  }
   explicit BatchFitResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -4182,11 +4253,18 @@ inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(
     ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> bound_status = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance_rtn = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> consider_covariance_rtn = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>>> regularizations = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>>> regularizations = 0,
+    orbpro::estimation::BatchFitTermination termination = orbpro::estimation::BatchFitTermination::CONVERGED,
+    uint32_t rejected_trials = 0,
+    uint32_t refused_trials = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> refusal = 0) {
   BatchFitResultBuilder builder_(_fbb);
   builder_.add_weighted_rms(weighted_rms);
   builder_.add_reduced_chi_square(reduced_chi_square);
   builder_.add_chi_square(chi_square);
+  builder_.add_refusal(refusal);
+  builder_.add_refused_trials(refused_trials);
+  builder_.add_rejected_trials(rejected_trials);
   builder_.add_regularizations(regularizations);
   builder_.add_consider_covariance_rtn(consider_covariance_rtn);
   builder_.add_covariance_rtn(covariance_rtn);
@@ -4202,6 +4280,7 @@ inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(
   builder_.add_covariance(covariance);
   builder_.add_estimate(estimate);
   builder_.add_parameter_kinds(parameter_kinds);
+  builder_.add_termination(termination);
   builder_.add_converged(converged);
   builder_.add_state_dimension(state_dimension);
   return builder_.Finish();
@@ -4233,7 +4312,11 @@ inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResultDirect(
     const std::vector<uint8_t> *bound_status = nullptr,
     const std::vector<double> *covariance_rtn = nullptr,
     const std::vector<double> *consider_covariance_rtn = nullptr,
-    const std::vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>> *regularizations = nullptr) {
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>> *regularizations = nullptr,
+    orbpro::estimation::BatchFitTermination termination = orbpro::estimation::BatchFitTermination::CONVERGED,
+    uint32_t rejected_trials = 0,
+    uint32_t refused_trials = 0,
+    const char *refusal = nullptr) {
   auto parameter_kinds__ = parameter_kinds ? _fbb.CreateVector<uint8_t>(*parameter_kinds) : 0;
   auto estimate__ = estimate ? _fbb.CreateVector<double>(*estimate) : 0;
   auto covariance__ = covariance ? _fbb.CreateVector<double>(*covariance) : 0;
@@ -4245,6 +4328,7 @@ inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResultDirect(
   auto covariance_rtn__ = covariance_rtn ? _fbb.CreateVector<double>(*covariance_rtn) : 0;
   auto consider_covariance_rtn__ = consider_covariance_rtn ? _fbb.CreateVector<double>(*consider_covariance_rtn) : 0;
   auto regularizations__ = regularizations ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>>(*regularizations) : 0;
+  auto refusal__ = refusal ? _fbb.CreateString(refusal) : 0;
   return orbpro::estimation::CreateBatchFitResult(
       _fbb,
       state_dimension,
@@ -4266,7 +4350,11 @@ inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResultDirect(
       bound_status__,
       covariance_rtn__,
       consider_covariance_rtn__,
-      regularizations__);
+      regularizations__,
+      termination,
+      rejected_trials,
+      refused_trials,
+      refusal__);
 }
 
 ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -8124,13 +8212,17 @@ inline ::flatbuffers::Offset<PropagationQuery> PropagationQuery::Pack(::flatbuff
 inline PropagationAnswerT::PropagationAnswerT(const PropagationAnswerT &o)
       : query((o.query) ? new orbpro::estimation::PropagationQueryT(*o.query) : nullptr),
         sample((o.sample) ? new orbpro::estimation::EstimationPropagatorSample(*o.sample) : nullptr),
-        sensitivity(o.sensitivity) {
+        sensitivity(o.sensitivity),
+        refused(o.refused),
+        refusal(o.refusal) {
 }
 
 inline PropagationAnswerT &PropagationAnswerT::operator=(PropagationAnswerT o) FLATBUFFERS_NOEXCEPT {
   std::swap(query, o.query);
   std::swap(sample, o.sample);
   std::swap(sensitivity, o.sensitivity);
+  std::swap(refused, o.refused);
+  std::swap(refusal, o.refusal);
   return *this;
 }
 
@@ -8146,6 +8238,8 @@ inline void PropagationAnswer::UnPackTo(PropagationAnswerT *_o, const ::flatbuff
   { auto _e = query(); if (_e) { if(_o->query) { _e->UnPackTo(_o->query.get(), _resolver); } else { _o->query = std::unique_ptr<orbpro::estimation::PropagationQueryT>(_e->UnPack(_resolver)); } } else if (_o->query) { _o->query.reset(); } }
   { auto _e = sample(); if (_e) _o->sample = std::unique_ptr<orbpro::estimation::EstimationPropagatorSample>(new orbpro::estimation::EstimationPropagatorSample(*_e)); }
   { auto _e = sensitivity(); if (_e) { _o->sensitivity.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->sensitivity[_i] = _e->Get(_i); } } else { _o->sensitivity.resize(0); } }
+  { auto _e = refused(); _o->refused = _e; }
+  { auto _e = refusal(); if (_e) _o->refusal = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswer(::flatbuffers::FlatBufferBuilder &_fbb, const PropagationAnswerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -8159,11 +8253,15 @@ inline ::flatbuffers::Offset<PropagationAnswer> PropagationAnswer::Pack(::flatbu
   auto _query = _o->query ? CreatePropagationQuery(_fbb, _o->query.get(), _rehasher) : 0;
   auto _sample = _o->sample ? _o->sample.get() : nullptr;
   auto _sensitivity = _o->sensitivity.size() ? _fbb.CreateVector(_o->sensitivity) : 0;
+  auto _refused = _o->refused;
+  auto _refusal = _o->refusal.empty() ? 0 : _fbb.CreateString(_o->refusal);
   return orbpro::estimation::CreatePropagationAnswer(
       _fbb,
       _query,
       _sample,
-      _sensitivity);
+      _sensitivity,
+      _refused,
+      _refusal);
 }
 
 inline MeasurementParameterT::MeasurementParameterT(const MeasurementParameterT &o)
@@ -8317,8 +8415,6 @@ inline BatchFitOptionsT::BatchFitOptionsT(const BatchFitOptionsT &o)
         parameter_lower_bounds(o.parameter_lower_bounds),
         parameter_upper_bounds(o.parameter_upper_bounds),
         parameter_consider(o.parameter_consider),
-        levenberg_marquardt(o.levenberg_marquardt),
-        initial_damping(o.initial_damping),
         covariance_regularization(o.covariance_regularization),
         correlation_floor(o.correlation_floor),
         rtn_covariance(o.rtn_covariance) {
@@ -8341,8 +8437,6 @@ inline BatchFitOptionsT &BatchFitOptionsT::operator=(BatchFitOptionsT o) FLATBUF
   std::swap(parameter_lower_bounds, o.parameter_lower_bounds);
   std::swap(parameter_upper_bounds, o.parameter_upper_bounds);
   std::swap(parameter_consider, o.parameter_consider);
-  std::swap(levenberg_marquardt, o.levenberg_marquardt);
-  std::swap(initial_damping, o.initial_damping);
   std::swap(measurement_parameters, o.measurement_parameters);
   std::swap(covariance_blocks, o.covariance_blocks);
   std::swap(covariance_regularization, o.covariance_regularization);
@@ -8372,8 +8466,6 @@ inline void BatchFitOptions::UnPackTo(BatchFitOptionsT *_o, const ::flatbuffers:
   { auto _e = parameter_lower_bounds(); if (_e) { _o->parameter_lower_bounds.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->parameter_lower_bounds[_i] = _e->Get(_i); } } else { _o->parameter_lower_bounds.resize(0); } }
   { auto _e = parameter_upper_bounds(); if (_e) { _o->parameter_upper_bounds.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->parameter_upper_bounds[_i] = _e->Get(_i); } } else { _o->parameter_upper_bounds.resize(0); } }
   { auto _e = parameter_consider(); if (_e) { _o->parameter_consider.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->parameter_consider[_i] = _e->Get(_i) != 0; } } else { _o->parameter_consider.resize(0); } }
-  { auto _e = levenberg_marquardt(); _o->levenberg_marquardt = _e; }
-  { auto _e = initial_damping(); _o->initial_damping = _e; }
   { auto _e = measurement_parameters(); if (_e) { _o->measurement_parameters.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->measurement_parameters[_i]) { _e->Get(_i)->UnPackTo(_o->measurement_parameters[_i].get(), _resolver); } else { _o->measurement_parameters[_i] = std::unique_ptr<orbpro::estimation::MeasurementParameterT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->measurement_parameters.resize(0); } }
   { auto _e = covariance_blocks(); if (_e) { _o->covariance_blocks.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->covariance_blocks[_i]) { _e->Get(_i)->UnPackTo(_o->covariance_blocks[_i].get(), _resolver); } else { _o->covariance_blocks[_i] = std::unique_ptr<orbpro::estimation::CovarianceBlockT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->covariance_blocks.resize(0); } }
   { auto _e = covariance_regularization(); _o->covariance_regularization = _e; }
@@ -8401,8 +8493,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> BatchFitOptions::Pack(::flatbuffer
   auto _parameter_lower_bounds = _o->parameter_lower_bounds.size() ? _fbb.CreateVector(_o->parameter_lower_bounds) : 0;
   auto _parameter_upper_bounds = _o->parameter_upper_bounds.size() ? _fbb.CreateVector(_o->parameter_upper_bounds) : 0;
   auto _parameter_consider = _o->parameter_consider.size() ? _fbb.CreateVector(_o->parameter_consider) : 0;
-  auto _levenberg_marquardt = _o->levenberg_marquardt;
-  auto _initial_damping = _o->initial_damping;
   auto _measurement_parameters = _o->measurement_parameters.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::MeasurementParameter>> (_o->measurement_parameters.size(), [](size_t i, _VectorArgs *__va) { return CreateMeasurementParameter(*__va->__fbb, __va->__o->measurement_parameters[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _covariance_blocks = _o->covariance_blocks.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::CovarianceBlock>> (_o->covariance_blocks.size(), [](size_t i, _VectorArgs *__va) { return CreateCovarianceBlock(*__va->__fbb, __va->__o->covariance_blocks[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _covariance_regularization = _o->covariance_regularization;
@@ -8422,8 +8512,6 @@ inline ::flatbuffers::Offset<BatchFitOptions> BatchFitOptions::Pack(::flatbuffer
       _parameter_lower_bounds,
       _parameter_upper_bounds,
       _parameter_consider,
-      _levenberg_marquardt,
-      _initial_damping,
       _measurement_parameters,
       _covariance_blocks,
       _covariance_regularization,
@@ -8450,7 +8538,11 @@ inline BatchFitResultT::BatchFitResultT(const BatchFitResultT &o)
         consider_covariance(o.consider_covariance),
         bound_status(o.bound_status),
         covariance_rtn(o.covariance_rtn),
-        consider_covariance_rtn(o.consider_covariance_rtn) {
+        consider_covariance_rtn(o.consider_covariance_rtn),
+        termination(o.termination),
+        rejected_trials(o.rejected_trials),
+        refused_trials(o.refused_trials),
+        refusal(o.refusal) {
   regularizations.reserve(o.regularizations.size());
   for (const auto &regularizations_ : o.regularizations) { regularizations.emplace_back((regularizations_) ? new orbpro::estimation::CovarianceRegularizationT(*regularizations_) : nullptr); }
 }
@@ -8476,6 +8568,10 @@ inline BatchFitResultT &BatchFitResultT::operator=(BatchFitResultT o) FLATBUFFER
   std::swap(covariance_rtn, o.covariance_rtn);
   std::swap(consider_covariance_rtn, o.consider_covariance_rtn);
   std::swap(regularizations, o.regularizations);
+  std::swap(termination, o.termination);
+  std::swap(rejected_trials, o.rejected_trials);
+  std::swap(refused_trials, o.refused_trials);
+  std::swap(refusal, o.refusal);
   return *this;
 }
 
@@ -8508,6 +8604,10 @@ inline void BatchFitResult::UnPackTo(BatchFitResultT *_o, const ::flatbuffers::r
   { auto _e = covariance_rtn(); if (_e) { _o->covariance_rtn.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->covariance_rtn[_i] = _e->Get(_i); } } else { _o->covariance_rtn.resize(0); } }
   { auto _e = consider_covariance_rtn(); if (_e) { _o->consider_covariance_rtn.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->consider_covariance_rtn[_i] = _e->Get(_i); } } else { _o->consider_covariance_rtn.resize(0); } }
   { auto _e = regularizations(); if (_e) { _o->regularizations.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->regularizations[_i]) { _e->Get(_i)->UnPackTo(_o->regularizations[_i].get(), _resolver); } else { _o->regularizations[_i] = std::unique_ptr<orbpro::estimation::CovarianceRegularizationT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->regularizations.resize(0); } }
+  { auto _e = termination(); _o->termination = _e; }
+  { auto _e = rejected_trials(); _o->rejected_trials = _e; }
+  { auto _e = refused_trials(); _o->refused_trials = _e; }
+  { auto _e = refusal(); if (_e) _o->refusal = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -8538,6 +8638,10 @@ inline ::flatbuffers::Offset<BatchFitResult> BatchFitResult::Pack(::flatbuffers:
   auto _covariance_rtn = _o->covariance_rtn.size() ? _fbb.CreateVector(_o->covariance_rtn) : 0;
   auto _consider_covariance_rtn = _o->consider_covariance_rtn.size() ? _fbb.CreateVector(_o->consider_covariance_rtn) : 0;
   auto _regularizations = _o->regularizations.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::CovarianceRegularization>> (_o->regularizations.size(), [](size_t i, _VectorArgs *__va) { return CreateCovarianceRegularization(*__va->__fbb, __va->__o->regularizations[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _termination = _o->termination;
+  auto _rejected_trials = _o->rejected_trials;
+  auto _refused_trials = _o->refused_trials;
+  auto _refusal = _o->refusal.empty() ? 0 : _fbb.CreateString(_o->refusal);
   return orbpro::estimation::CreateBatchFitResult(
       _fbb,
       _state_dimension,
@@ -8559,7 +8663,11 @@ inline ::flatbuffers::Offset<BatchFitResult> BatchFitResult::Pack(::flatbuffers:
       _bound_status,
       _covariance_rtn,
       _consider_covariance_rtn,
-      _regularizations);
+      _regularizations,
+      _termination,
+      _rejected_trials,
+      _refused_trials,
+      _refusal);
 }
 
 inline EspfOptionsT *EspfOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

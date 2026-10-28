@@ -157,21 +157,25 @@ raw navigation-message decoder, transmit-time solver or carrier-phase solver.
 Weighted batch least squares of the state at the configuration epoch plus
 dynamic parameters (for propagator/ffm: B = Cd·A/m, BDOT, AGOM = Cr·A/m, the
 in-track acceleration), Gauss–Newton on whitened residuals (Tapley, Schutz &
-Born 2004, §4.3–4.6). The module holds no force model.
+Born 2004, §4.3–4.6) globalized by Levenberg–Marquardt. The module holds no
+force model. This is version 3 (0.6.0, schema extension v6), which replaces
+versions 1 and 2.
 
 - **Request:** a `BATCH_WEIGHTED_LEAST_SQUARES` configuration (epoch, initial
   state), legacy observations or extended observations (1–6 lanes, e.g.
   `POSITION_VELOCITY` for a catalog element set's state at its epoch), and
   `batch_options`: `parameter_kinds` (the caller's
   vocabulary, e.g. PRW `DYNAMIC_PARAMETERS` ordinals, echoed), initial
-  `parameter_values`, optional `apriori_covariance` ((6+p)², empty = none),
+  `parameter_values`, each parameter's domain (`parameter_lower_bounds` and
+  `parameter_upper_bounds`, required, below), optional `apriori_covariance`
+  ((6+p)², empty = none),
   optional `observation_covariances` (value_count² per observation, whitened
   by its Cholesky factor; `covariance_axes` 1 states them in the radial,
   transverse and normal axes of each observed `POSITION_VELOCITY` state, and
   of a `POSITION_VECTOR`'s observed position with the predicted velocity;
   other kinds keep their own components, so one request may mix them),
-  `maximum_iterations`,
-  `correction_tolerance` (√(dxᵀN dx/n)) and `sigma_edit_threshold` (edit an
+  `maximum_iterations` (propagation rounds, every trial counted; default 20),
+  `correction_tolerance` (below) and `sigma_edit_threshold` (edit an
   observation whose whitened RMS exceeds k × max(1, previous weighted RMS)).
   The request's `error_models` apply as in `run_estimation`: troposphere and
   ionosphere selection, sigmas and the light-time and Sagnac flags by
@@ -182,11 +186,21 @@ Born 2004, §4.3–4.6). The module holds no force model.
   `DYNAMIC_PARAMETERS`, answers each query with the sample state, its 6×6
   STM and the 6×p `sensitivity` (the S block of [[Φ, S], [0, I]]), and
   replays the unchanged request with every answer so far.
+- **Host rule for refusals:** when the propagator returns an error for a
+  round (propagator/ffm refuses, for example, a negative Cd·A/m), answer
+  every query of that round with `refused` true and the error code and
+  message in `refusal`, with no sample or sensitivity. The fit takes the
+  round as a rejected trial; a round that mixes refused and answered
+  queries is `propagator-protocol`. If the propagator refuses the initial
+  seed, the fit fails with `fit-failed: the propagator refuses the initial
+  state and parameters: <refusal>`, which catches a configuration error.
 - **Result:** `batch_fit`: the estimate [state, parameters], the formal
   covariance (JᵀWJ + P₀⁻¹)⁻¹, the same times the reduced χ²
   (`scaled_covariance`), χ², degrees of freedom, weighted RMS, whitened
-  post-fit residuals and edits; status `OK` or `NOT_CONVERGED` in the record
-  (the invocation itself succeeds). `estimate` carries the six-state part.
+  post-fit residuals and edits, `termination` (`CONVERGED`,
+  `MAXIMUM_ITERATIONS` or `STALLED`), `rejected_trials`, `refused_trials`
+  and the first `refusal`; status `OK` (`CONVERGED`) or `NOT_CONVERGED` in
+  the record (the invocation itself succeeds). `estimate` carries the six-state part.
   Process noise is applied when the result is propagated (propagator/ffm
   `PROCESS_NOISE` with the full covariance as `INITIAL_COVARIANCE`).
 
@@ -202,32 +216,57 @@ within 2.2e-6 of √(PᵢᵢPⱼⱼ) and χ² within 1.2e-6. Orekit's batch esti
 weights components by their sigmas alone, so a covariance correlated in the
 request axes has no Orekit reference.
 
-### Version 2 (extension v4)
+### The solver (version 3)
 
-Every option below defaults to version 1, and a version-1 request gives the
-same bytes: [fit-batch-v1-digests.json](tests/fixtures/fit-batch-v1-digests.json)
-holds the version-1 artifact's request and result digests for every round of
-six cases, and the module reproduces them.
+The solver is never what fails: a step the propagator refuses, or one that
+raises the cost, is a rejected trial and the step shrinks.
 
-- **Bounded parameters.** `parameter_lower_bounds` / `parameter_upper_bounds`
-  (physical units, NaN = none): a step that leaves a bound is projected onto
-  it, so the propagator never receives a value outside; a parameter held at
-  a bound is released when its multiplier points back inside, and
-  `bound_status` reports 1 or 2 for a parameter that ends there (the data ask
-  for less than the bound; its covariance is the formal one at the bound).
-  propagator/ffm refuses a negative Cd·A/m or Cr·A/m: give B and AGOM a
-  lower bound of 0.
+- **Domains, required.** With dynamic parameters, `parameter_lower_bounds`
+  and `parameter_upper_bounds` take one entry per parameter (physical units;
+  NaN is explicitly unbounded on that side); a request without them is
+  refused before any propagation. The module cannot know the opaque
+  `parameter_kinds`, so the caller states them: for propagator/ffm, take
+  them from its table (propagator/ffm README, "Fit parameter domains";
+  `FIT_PARAMETER_DOMAINS` in `catalog-configuration.mjs`): B and AGOM in
+  [0, ∞), BDOT, the in-track acceleration and ECOM2 signed. A step that
+  leaves a bound is projected onto it, so the propagator never receives a
+  value outside; a parameter held at a bound is released when its
+  multiplier points back inside, and `bound_status` reports 1 or 2 for a
+  parameter that ends there (the data ask for less than the bound; its
+  covariance is the formal one at the bound).
+- **Gauss–Newton first, then Levenberg–Marquardt.** The damping λ starts at
+  0, so each trial is first the projected Gauss–Newton step (a monotone
+  path is version 1's, step for step). A trial is accepted only when the
+  propagator answers it and its cost (χ² over the current edit set plus the
+  a priori term) is finite and lower than the current point's. On a
+  rejection λ becomes 1e-3, then grows ×10 per further rejection, and the
+  step is (N + λ diag N)⁻¹ g with the held bounds; after a damped
+  acceptance λ falls tenfold, and it is 0 again only after an undamped
+  success. Past λ = 1e12 the fit ends `STALLED`. Each trial is one
+  propagation round; `levenberg_marquardt` and `initial_damping` are
+  deprecated and not read.
+- **Convergence scaled by the misfit.** Converged when the projected
+  Gauss–Newton step under the normal matrix, √(dxᵀN dx / (nₑ max(1, χ²ᵥ)))
+  with nₑ the estimated parameters and χ²ᵥ = χ²/(m − nₑ), is below
+  `correction_tolerance` (default 1e-3), and the edit set is a fixed point:
+  recomputed against the point's own weighted RMS it must not change (if it
+  does, the new set is adopted and the fit goes on). With χ²ᵥ ≤ 1 this is
+  version 1's test; above 1 it is a relative predicted-decrease test, so a
+  fit with a large misfit is not held under the floor of the propagator's
+  Jacobian accuracy (B 5e-6 against Orekit for propagator/ffm in LEO).
+- **Results are evaluated points.** `CONVERGED` reports the evaluated point
+  plus its final, sub-tolerance step, residuals linearized; `MAXIMUM_ITERATIONS`
+  and `STALLED` report the best evaluated point itself, with a valid
+  estimate and covariance (`NOT_CONVERGED`).
 - **Logarithmic parameters.** `parameter_transforms` `LOGARITHM` estimates
   ln p (p must start positive). Each step changes p by at most a factor of ten
   (a box trust region in ln p) and convergence is judged on the undamped
   Gauss–Newton step, so p cannot creep to zero unnoticed. The a priori stays
   Gaussian in p; the covariance is reported in p, J P Jᵀ with J = diag(p).
-  A parameter whose optimum may be zero needs a bound, not a logarithm.
-- **Levenberg–Marquardt.** `levenberg_marquardt` damps the step by
-  (N + λ diag N); a trial that does not lower the cost (χ² plus the a priori
-  term) is refused and retried with 10 λ, an accepted one divides λ by 10.
-  Each trial is one propagation round. Convergence is judged on the
-  undamped step.
+  A parameter whose optimum may be zero needs a bound, not a logarithm. Never
+  pair a LOGARITHM parameter with one it trades off against: in ln B the
+  valley of B against an in-track acceleration T is curved, and ln B with T
+  stalled on 21 of 27 Starlink fit tracks.
 - **More dynamic parameters.** Up to 512 state, dynamic and measurement
   parameters in all; with propagator/ffm, B, BDOT, the in-track
   acceleration and the eleven ECOM2 terms at once.
@@ -272,16 +311,19 @@ Authority ([batch_fit_v2.test.mjs](tests/batch_fit_v2.test.mjs),
 
 | Case | Reference | Result |
 | --- | --- | --- |
-| Version-1 requests | the version-1 artifact's digests | 24 rounds byte-identical |
+| Version-1 paths (six cases) | the version-1 algorithm's estimate, covariance and χ² ([fit-batch-v1-estimates.json](tests/fixtures/fit-batch-v1-estimates.json)) | 1e-12 relative, same rounds (measured: identical) |
 | Equicorrelated non-PD block (ρ = −0.6) | closed form: eigenvalue 1 + 2ρ raised, ρ'' and the mean's variance σ²(1 + 2ρ'')/3 | diagnostics 1e-12, estimate and variance 1e-8 |
 | Correlated two-epoch block in RTN axes | x = (Aᵀ C⁻¹ A)⁻¹ Aᵀ C⁻¹ z | 1e-10 relative |
 | Mixed PV, position and range in RTN axes | stationarity of the GLS cost and (Jᵀ C⁻¹ J)⁻¹; RTN rotation of the covariance | 1e-6 σ, 1e-9 |
 | Consider parameters | closed-form P + S P_c Sᵀ | 1e-12 |
 | Error models | Orekit's Saastamoinen (24.26096 m) and Marini–Murray (13.2611 m), ITU-R P.531 Table 3 | target recovered to 9e-7 m; 61 m off without them |
-| Bounds, logarithm, damping, LEO drag | Orekit 13.1 `BatchLSEstimator` | 1.1e-3 σ, covariance 2.2e-6, χ² 1.2e-6 |
-| Starts where version 1 proposes B = −0.18, −0.13 and −1.6 | Orekit's solution | no negative query; same tolerances |
+| B in its domain and LOGARITHM, LEO drag | Orekit 13.1 `BatchLSEstimator` | 1.1e-3 σ, covariance 2.2e-6, χ² 1.2e-6 |
+| Starts where version 1 proposed B = −0.18, −0.13 and −1.6 | Orekit's solution | no negative query; same tolerances; explicitly unbounded, FFM refuses 2–3 trials and the fit still reaches Orekit's solution |
+| A host refusing every B < 0.005; a refused seed; no domains | the refusal rule | OK with refused trials; `fit-failed` with the text; refused before propagation |
 | Thrust the data read as negative drag | the simulating truth | B held at 0 (status 1); with a signed in-track term both recovered, d² 17 (8) |
-| B, eleven ECOM2 terms and in-track at once | the simulating truth (FFM, full force) | d² 15.9 (19), every term within 0.7 σ |
+| Unmodeled 2e-6 m/s² in-track thrust, B alone | the scaled test | `CONVERGED` in 4 rounds with B held at 0, χ²ᵥ 5.3e4 |
+| B, eleven ECOM2 terms and in-track at once | the simulating truth (FFM, full force) | d² 16.2 (19), every term within 0.7 σ |
+| Tri-runtime parity | Chrome/V8 and native WasmEdge, host widths 1, 2, 4, 8 | identical bytes (Docker waived by the owner 2026-10-22) |
 | Range biases, frequency offsets per pass, a drift, a 0.82 s RF lag and a 50 ms radar time bias | the injected values (FFM truth, observation simulator, association geometry) | every estimate within 2.2 σ, d² 19.9 (20) |
 
 ## Tracking data (`$TDM`) on `tracking_data`
@@ -516,6 +558,12 @@ Additions:
   and envelope `relative_request`/`relative_result`/`relative_state_request`/
   `relative_state_result`; methods `run_relative_navigation` and
   `relative_state`.
+- Extension v6 (`fit_batch` version 3): enum `BatchFitTermination`;
+  `PropagationAnswer.sample` no longer required and suffix fields `refused`,
+  `refusal`; `BatchFitOptions.levenberg_marquardt` and `initial_damping`
+  deprecated (field ids kept); `BatchFitResult` suffix fields `termination`,
+  `rejected_trials`, `refused_trials`, `refusal`. Domains are required for
+  every dynamic parameter.
 
 The OCM publishes the fit's formal covariance with its assumptions and
 `COV_CALIBRATION Uncalibrated` (SDS 1.232.0). The covariance is conditional on

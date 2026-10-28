@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "TMPL lane05 estimation + TEAG/ESPF extension v3 + fit_batch v2 extension v4",
   "wasmPath": "analysis/estimation/dist/isomorphic/module.wasm",
-  "artifactSha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d",
-  "moduleSha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d",
+  "artifactSha256": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac",
+  "moduleSha256": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 196,
-      "durationMs": 2725
+      "runs": 204,
+      "durationMs": 3624
     },
     {
       "lane": "wasmedge",
-      "runs": 196,
-      "durationMs": 265682
+      "runs": 204,
+      "durationMs": 281842
     }
   ],
   "cases": [
@@ -63,12 +63,14 @@
     "fit-batch-v2-consider-complete",
     "fit-batch-v2-logarithm-radial-start-query",
     "fit-batch-v2-logarithm-radial-start-complete",
-    "fit-batch-v2-bound-damped-along-track-start-query",
-    "fit-batch-v2-bound-damped-along-track-start-complete",
+    "fit-batch-v3-bounded-along-track-start-query",
+    "fit-batch-v3-bounded-along-track-start-complete",
+    "fit-batch-v3-refused-trials-query",
+    "fit-batch-v3-refused-trials-complete",
     "fit-batch-v2-measurement-campaign-query",
     "fit-batch-v2-measurement-campaign-complete"
   ],
-  "comparisons": 735,
+  "comparisons": 765,
   "failures": [],
   "runs": [
     {
@@ -798,8 +800,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "browser",
@@ -808,8 +810,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "browser",
@@ -818,8 +820,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "browser",
@@ -828,8 +830,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "browser",
@@ -878,8 +880,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "browser",
@@ -888,8 +890,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "browser",
@@ -898,8 +900,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "browser",
@@ -908,8 +910,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "browser",
@@ -958,8 +960,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "browser",
@@ -968,8 +970,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "browser",
@@ -978,8 +980,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "browser",
@@ -988,8 +990,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "browser",
@@ -1838,7 +1840,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
@@ -1848,7 +1850,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
@@ -1858,7 +1860,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
@@ -1868,12 +1870,12 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
@@ -1883,7 +1885,7 @@
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
@@ -1893,7 +1895,7 @@
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
@@ -1903,7 +1905,7 @@
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
@@ -1913,43 +1915,123 @@
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
     },
     {
       "lane": "browser",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
     },
     {
       "lane": "browser",
@@ -1998,7 +2080,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -2008,7 +2090,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -2018,7 +2100,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -2028,7 +2110,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -2758,8 +2840,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
@@ -2768,8 +2850,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
@@ -2778,8 +2860,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
@@ -2788,8 +2870,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "83f3155ecf0fdf9fa9d2348cd8abc5711469fa016ef619879be72af8128e7f8a",
-      "stdoutLength": 8568
+      "stdoutSha256": "9a9f228c1f8adabf71451f60dbae99d7819570163112a62bdd48626165eb98dd",
+      "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
@@ -2838,8 +2920,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "wasmedge",
@@ -2848,8 +2930,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "wasmedge",
@@ -2858,8 +2940,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "wasmedge",
@@ -2868,8 +2950,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "29c8094f7f98bf3c030744662549f75679a09cdf0cd103774c40f4854cae6b21",
-      "stdoutLength": 3960
+      "stdoutSha256": "f6e56e301b94f8e5658e5066ec2a8feb57ccff4e20cc2d65c674d9637d0b41b0",
+      "stdoutLength": 3984
     },
     {
       "lane": "wasmedge",
@@ -2918,8 +3000,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "wasmedge",
@@ -2928,8 +3010,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "wasmedge",
@@ -2938,8 +3020,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "wasmedge",
@@ -2948,8 +3030,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "9fdf14abb71cbf59116dd2218950c17ef8b3226c5e222e7bf35cd06065d8aa6c",
-      "stdoutLength": 2040
+      "stdoutSha256": "52fdf1bd56d628fbb3810dc0c7135545b404859fe1ea86936da2d1a0654d347b",
+      "stdoutLength": 2064
     },
     {
       "lane": "wasmedge",
@@ -3798,7 +3880,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
@@ -3808,7 +3890,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
@@ -3818,7 +3900,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
@@ -3828,12 +3910,12 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "8c856462408ca488d6278716d0820553a1edf0b4a38b1c2226c9133915460b21",
+      "stdoutSha256": "041070e7f7c9417e78bb5df984458e7dd35579f7393475cbd11ad3877081d8b1",
       "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
@@ -3843,7 +3925,7 @@
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
@@ -3853,7 +3935,7 @@
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
@@ -3863,7 +3945,7 @@
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-query",
+      "caseId": "fit-batch-v3-bounded-along-track-start-query",
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
@@ -3873,43 +3955,123 @@
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 2,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 4,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
     },
     {
       "lane": "wasmedge",
-      "caseId": "fit-batch-v2-bound-damped-along-track-start-complete",
+      "caseId": "fit-batch-v3-bounded-along-track-start-complete",
       "threadCount": 8,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "1e392861e0554845b8bd7b73f52200cd39ac3c3ba870f21e9823823108200b7f",
+      "stdoutSha256": "6c8a06a9ecd824d7bd37e4c48ccdf3bd9ded6c0b50e5289b576d6451d4d21cb4",
       "stdoutLength": 8592
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "bf00d1e19ff5df8976a4fd2689534778a40e2785963660ab9cf372550187fe8f",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-v3-refused-trials-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5ef7a60a42e45ad7c4143a7f14995914aff63e5fc9f7f9a0b0be1c33b7693be3",
+      "stdoutLength": 8680
     },
     {
       "lane": "wasmedge",
@@ -3958,7 +4120,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -3968,7 +4130,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -3978,7 +4140,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     },
     {
@@ -3988,7 +4150,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "0ae777685fb6a594abc584f87d7acc6bfa741f2a7f135d3911d3fff9bb8619eb",
+      "stdoutSha256": "90ee9f7da3ce9a1a7acd8d99b1529990931c7907bff70522fc863d73e9c534dc",
       "stdoutLength": 12840
     }
   ],

@@ -1,10 +1,12 @@
-// fit_batch version 2 test plumbing: requests, the replay loop and two
-// answerers of the inverted port. Representation only: every dynamical state
+// fit_batch test plumbing: requests, the replay loop and two answerers of
+// the inverted port. Representation only: every dynamical state
 // comes from propagator/ffm's WASM; the identity answerer (state = seed,
 // STM = I) is the static model of the closed-form tests and holds no physics.
 import assert from 'node:assert/strict';
 import { requestInputs } from '../../../propagator/ffm/tests/lib/orekitCases.mjs';
 import { decodePrw } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
+import { fitParameterBounds } from '../../../propagator/ffm/catalog-configuration.mjs';
+import { refusedAnswers } from './batch-fit-fixtures.mjs';
 import { FULL_FORCE } from './ffm-port.mjs';
 import { api, encode, pack, typeRef, unpack } from './wire.mjs';
 
@@ -37,7 +39,9 @@ export function observation(seconds, kind, valueCount, extra = {}) {
 
 // A fit_batch envelope. `observations`: [{seconds, kind, values, sigmas,
 // fields}] (extended observations); the rest are BatchFitOptions in object-API
-// names, set after decoding so every double is exact.
+// names, set after decoding so every double is exact. Each dynamic
+// parameter's domain is propagator/ffm's (FIT_PARAMETER_DOMAINS) unless
+// `options` states another.
 export function fitEnvelope({ state, observations, kinds = [], values = [], options = {}, errorModels }) {
   const zero36 = Array(36).fill(0);
   const envelope = unpack(encode({ request: {
@@ -56,6 +60,10 @@ export function fitEnvelope({ state, observations, kinds = [], values = [], opti
     r.extendedObservations[i].values = [...o.values];
     r.extendedObservations[i].sigmas = [...(o.sigmas ?? o.values.map(() => 1))];
   });
+  if (kinds.length) {
+    const { lower, upper } = fitParameterBounds(kinds);
+    Object.assign(r.batchOptions, { parameterLowerBounds: lower, parameterUpperBounds: upper });
+  }
   Object.assign(r.batchOptions, options);
   return envelope;
 }
@@ -118,9 +126,10 @@ export function applyParameters(exec, names, values) {
 }
 
 // One full-force FFM execution from `state` at EPOCH_JD + `fromSeconds`
-// to the given epochs: [{state, stm (n x n), n}] in the order of `epochs`.
+// to the given epochs: [{state, stm (n x n), n}] in the order of `epochs`,
+// or (`refusable`) {refusal} with FFM's error when it refuses the request.
 // Unless estimated, B = 0.01 and AGOM = 0.01 m^2/kg (`coefficients`).
-export async function ffmRun(ffm, { state, from, epochs, names = [], values = [], forces = FULL_FORCE, edit, stm = false, coefficients = { B: 0.01, AGOM: 0.01 } }) {
+export async function ffmRun(ffm, { state, from, epochs, names = [], values = [], forces = FULL_FORCE, edit, stm = false, coefficients = { B: 0.01, AGOM: 0.01 }, refusable = false }) {
   const key = (e) => `${e.jdDay ?? e.jd_day}|${e.seconds}`;
   const distinct = [...new Map(epochs.map((e) => [key(e), e])).values()]
     .sort((a, b) => ((a.jdDay ?? a.jd_day) - (b.jdDay ?? b.jd_day)) * 86400 + a.seconds - b.seconds);
@@ -135,6 +144,7 @@ export async function ffmRun(ffm, { state, from, epochs, names = [], values = []
     if (stm) exec.INCLUDE_STM = true;
   } });
   const response = await ffm.invoke({ methodId: 'invoke', inputs });
+  if (refusable && response.statusCode !== 0) return { refusal: `${response.errorCode}: ${response.errorMessage}` };
   assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   const samples = decodePrw(response.outputs.find((o) => o.portId === 'response').payload).EXECUTION_RESULT.SAMPLES;
   assert.equal(samples.length, distinct.length);
@@ -145,10 +155,12 @@ export async function ffmRun(ffm, { state, from, epochs, names = [], values = []
   return epochs.map((e) => byKey.get(key(e)));
 }
 
+// Answers a round with FFM, or refuses it with FFM's error (the host rule).
 export function ffmAnswerer(ffm, { names = [], forces = FULL_FORCE, edit, coefficients } = {}) {
   return async (queries) => {
     const q0 = queries[0];
-    const runs = await ffmRun(ffm, { state: q0.seed.state, from: q0.seed.epoch, epochs: queries.map((q) => q.targetEpoch), names, values: q0.parameterValues, forces, edit, stm: true, coefficients });
+    const runs = await ffmRun(ffm, { state: q0.seed.state, from: q0.seed.epoch, epochs: queries.map((q) => q.targetEpoch), names, values: q0.parameterValues, forces, edit, stm: true, coefficients, refusable: true });
+    if (runs.refusal) return refusedAnswers(queries, runs.refusal);
     return queries.map((q, k) => {
       const { state, stm: m, n } = runs[k];
       const stm = [], sensitivity = [];

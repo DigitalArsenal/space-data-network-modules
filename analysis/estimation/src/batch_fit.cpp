@@ -12,13 +12,23 @@
 // caller's propagator, the normal matrix N = P0^-1 + sum A' A and the formal
 // covariance N^-1.
 //
-// Version 2. With none of its options this is version 1, operation for
-// operation:
-// - a dynamic parameter estimated as its logarithm, or bounded: a step that
-//   leaves the bounds is projected onto them, and a parameter held at a
-//   bound is released when its multiplier points back inside, so the
-//   propagator never receives a value outside;
-// - Levenberg-Marquardt damping (Marquardt's diagonal), judged on the cost;
+// Version 3. The solver is never what fails:
+// - each dynamic parameter states its domain (NaN: unbounded); a step that
+//   leaves it is projected onto the bound, and a parameter held at a bound
+//   is released when its multiplier points back inside, so the propagator
+//   never receives a value outside; a parameter may be estimated as its
+//   logarithm;
+// - Gauss-Newton first, globalized by Levenberg-Marquardt (Marquardt's
+//   diagonal): a trial is accepted only when the propagator answers it and
+//   its cost (chi-square over the current edit set plus the a priori term)
+//   is finite and lower. A refused, non-finite or costlier trial is rejected
+//   and the damping rises (1e-3, then x10); after a damped acceptance it
+//   falls tenfold, and it is 0 again only after an undamped success. Past
+//   1e12 the fit ends STALLED;
+// - converged when the projected Gauss-Newton step, measured against the
+//   covariance scaled by the misfit, sqrt(dx' N dx / (ne max(1, chi2_nu))),
+//   is below the tolerance and the edit set is a fixed point;
+// - a fit that ends without converging reports its best evaluated point;
 // - bias, drift and time-bias states of observation groups: a time bias by
 //   propagating to the shifted epoch, its partial by a central difference of
 //   the measurement model over two more samples;
@@ -82,6 +92,9 @@ constexpr double kInfinity = std::numeric_limits<double>::infinity();
 // LEO range rate at closest approach.
 constexpr double kTimeBiasStep = 1.0;
 constexpr int kMaximumDimension = 512;
+// Levenberg-Marquardt: the damping of the first trial after a rejection, and
+// the damping past which the fit is STALLED.
+constexpr double kInitialDamping = 1.0e-3;
 constexpr double kMaximumDamping = 1.0e12;
 // A LOGARITHM parameter changes by at most a factor of ten per step (a trust
 // region in ln p): an undamped Gauss-Newton step in ln p that the
@@ -232,9 +245,10 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   if (!config.apriori_covariance.empty() && config.apriori_covariance.size() != static_cast<std::size_t>(s * s))
     return fail("the a priori covariance must be (6 + p)^2");
   auto per_parameter = [&](std::size_t size) { return size == 0 || size == static_cast<std::size_t>(p); };
-  if (!per_parameter(config.transforms.size()) || !per_parameter(config.lower_bounds.size()) ||
-      !per_parameter(config.upper_bounds.size()) || !per_parameter(config.consider.size()))
-    return fail("parameter transforms, bounds and consider flags take one entry per dynamic parameter");
+  if (!per_parameter(config.transforms.size()) || !per_parameter(config.consider.size()))
+    return fail("parameter transforms and consider flags take one entry per dynamic parameter");
+  if (config.lower_bounds.size() != static_cast<std::size_t>(p) || config.upper_bounds.size() != static_cast<std::size_t>(p))
+    return fail("every dynamic parameter states its domain: parameter_lower_bounds and parameter_upper_bounds take one entry per dynamic parameter (NaN: unbounded)");
 
   // Dynamic parameters: transform, bounds (internal coordinates) and role.
   std::vector<bool> logarithm(p, false), consider(n, false);
@@ -243,8 +257,8 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   for (int i = 0; i < p; ++i) {
     const int g = 6 + i;
     const double value = config.initial_parameters[i];
-    const double lo = config.lower_bounds.empty() || !std::isfinite(config.lower_bounds[i]) ? -kInfinity : config.lower_bounds[i];
-    const double hi = config.upper_bounds.empty() || !std::isfinite(config.upper_bounds[i]) ? kInfinity : config.upper_bounds[i];
+    const double lo = std::isfinite(config.lower_bounds[i]) ? config.lower_bounds[i] : -kInfinity;
+    const double hi = std::isfinite(config.upper_bounds[i]) ? config.upper_bounds[i] : kInfinity;
     if (!config.transforms.empty() && config.transforms[i] != ParameterTransform::IDENTITY &&
         config.transforms[i] != ParameterTransform::LOGARITHM) return fail("unknown parameter transform");
     logarithm[i] = !config.transforms.empty() && config.transforms[i] == ParameterTransform::LOGARITHM;
@@ -480,8 +494,10 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     return g >= 6 && g < s && logarithm[g - 6] ? std::exp(xi[g]) : xi[g];
   };
 
-  // 1: evaluated; 0: the propagator has not answered; -1: failed.
-  auto evaluate = [&](const std::vector<double>& xi, Evaluation* ev) -> int {
+  // 1: evaluated; 0: the propagator has not answered; -1: failed;
+  // 2: the propagator refused the point (its text in *refusal); 3: a sample
+  // or a residual is not finite.
+  auto evaluate = [&](const std::vector<double>& xi, Evaluation* ev, std::string* refusal) -> int {
     Vector6 seed{};
     for (int i = 0; i < 6; ++i) seed[i] = xi[i];
     std::vector<double> parameters(p);
@@ -501,10 +517,19 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
       requests.push_back({j, tau + kTimeBiasStep});
     }
     std::vector<ParameterSample> samples;
-    if (!config.propagator(seed, parameters, requests, &samples)) return 0;
+    const PortAnswer answer = config.propagator(seed, parameters, requests, &samples, refusal);
+    if (answer == PortAnswer::PENDING) return 0;
+    if (answer == PortAnswer::REFUSED) return 2;
     if (samples.size() != requests.size()) {
       result.error = "the propagator must return one sample per observation";
       return -1;
+    }
+    for (const ParameterSample& sample : samples) {
+      bool finite = std::isfinite(sample.state.epoch_seconds);
+      for (double v : sample.state.value) finite = finite && std::isfinite(v);
+      for (double v : sample.stm) finite = finite && std::isfinite(v);
+      for (double v : sample.sensitivity) finite = finite && std::isfinite(v);
+      if (!finite) return 3;
     }
     auto shifted = [](const Observation& o, double tau) {
       Observation out = o;
@@ -620,9 +645,20 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         for (int col = 0; col < n; ++col) design[c * n + col] /= (*l)[c * m + c];
       }
     }
+    for (const std::vector<double>& w : ev->residual)
+      for (double v : w)
+        if (!std::isfinite(v)) return 3;
     return 1;
   };
 
+  // The a priori residual of the estimated block of [state, dynamic
+  // parameters] at a point, apriori - physical(x), in prior_index order:
+  // the one definition the normal equations and the cost share.
+  auto prior_difference = [&](const std::vector<double>& xi) {
+    std::vector<double> difference(np);
+    for (int a = 0; a < np; ++a) difference[a] = apriori[prior_index[a]] - physical(xi, prior_index[a]);
+    return difference;
+  };
   // Normal equations at a point over all n columns: the a priori of the
   // estimated parameters, then the accepted units' data.
   auto build = [&](const std::vector<double>& xi, const Evaluation& ev, const std::vector<bool>& rejected,
@@ -630,11 +666,11 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     normal->assign(static_cast<std::size_t>(n) * n, 0.0);
     rhs->assign(n, 0.0);
     if (!information.empty()) {
-      std::vector<double> jacobian(np, 1.0), difference(np);
+      const std::vector<double> difference = prior_difference(xi);
+      std::vector<double> jacobian(np, 1.0);
       for (int a = 0; a < np; ++a) {
         const int g = prior_index[a];
         if (g >= 6 && logarithm[g - 6]) jacobian[a] = physical(xi, g);
-        difference[a] = apriori[g] - physical(xi, g);
       }
       if (np == n && !bounded) {
         *normal = information;
@@ -682,11 +718,11 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   };
   auto prior_cost = [&](const std::vector<double>& xi) {
     double cost = 0.0;
-    if (!information.empty())
+    if (!information.empty()) {
+      const std::vector<double> difference = prior_difference(xi);
       for (int a = 0; a < np; ++a)
-        for (int b = 0; b < np; ++b)
-          cost += (apriori[prior_index[a]] - physical(xi, prior_index[a])) * information[a * np + b] *
-                  (apriori[prior_index[b]] - physical(xi, prior_index[b]));
+        for (int b = 0; b < np; ++b) cost += difference[a] * information[a * np + b] * difference[b];
+    }
     for (int k = 0; k < q; ++k) {
       const MeasurementParameter& mp = config.measurement_parameters[k];
       if (consider[s + k] || !(mp.sigma > 0.0)) continue;
@@ -770,15 +806,18 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     return held;
   };
 
-  // The result: the corrected estimate, its formal covariance and the
-  // residuals linearized at the correction.
+  // The result: the estimate, its formal covariance and the residuals
+  // linearized at it. CONVERGED: the evaluated point plus the final
+  // (sub-tolerance) projected step; otherwise the best evaluated point
+  // itself (`taken` zero).
   auto finish = [&](const std::vector<double>& estimate, const Evaluation& ev, const Matrix& normal_full,
                     const Matrix& normal, const std::vector<double>& taken, const std::vector<bool>& rejected,
-                    std::size_t scalars, bool converged) {
+                    std::size_t scalars, BatchFitTermination termination) {
     Matrix l;
     if (!cholesky(normal, ne, &l)) return fail("the normal matrix is singular: the state and parameters are not observable");
     const Matrix pe = cholesky_inverse(l, ne);
-    result.converged = converged;
+    result.termination = termination;
+    result.converged = termination == BatchFitTermination::CONVERGED;
     result.estimate.resize(n);
     for (int g = 0; g < n; ++g) result.estimate[g] = physical(estimate, g);
     std::vector<double> jacobian(n, 1.0);
@@ -890,28 +929,39 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     return result;
   };
 
+  // The edit set at a point: the units whose whitened residual RMS exceeds
+  // sigma_edit_threshold times max(1, rms).
+  auto edits = [&](const Evaluation& at, double rms) {
+    std::vector<bool> out(unit_count, false);
+    const double limit = config.sigma_edit_threshold * std::max(1.0, rms);
+    for (std::size_t u = 0; u < unit_count; ++u) {
+      double sum = 0.0;
+      for (double w : at.residual[u]) sum += w * w;
+      out[u] = std::sqrt(sum / units[u].dimension) > limit;
+    }
+    return out;
+  };
+
   std::vector<bool> rejected(unit_count, false);
   double previous_rms = 0.0;
-  double damping = config.levenberg_marquardt ? config.initial_damping : 0.0;
-  if (config.levenberg_marquardt && !(damping > 0.0 && std::isfinite(damping))) return fail("initial_damping must be positive");
+  double damping = 0.0;  // Gauss-Newton first
   const int maximum = std::max(1, config.maximum_iterations);
   Evaluation ev;
-  int status = evaluate(x, &ev);
+  std::string refusal;
+  int status = evaluate(x, &ev, &refusal);
   if (status == 0) { result.pending = true; return result; }
   if (status < 0) return result;
+  if (status == 2) {
+    result.error = "the propagator refuses the initial state and parameters: " + refusal;
+    return result;
+  }
+  if (status == 3) return fail("the initial state and parameters give a non-finite sample or residual");
   int evaluations = 1;
   bool fresh = true;  // ev is a newly accepted point
   for (;;) {
     // Editing against the previous accepted point's weighted RMS.
     const std::vector<bool> before = rejected;
-    if (fresh && config.sigma_edit_threshold > 0.0 && evaluations > 1) {
-      const double limit = config.sigma_edit_threshold * std::max(1.0, previous_rms);
-      for (std::size_t u = 0; u < unit_count; ++u) {
-        double sum = 0.0;
-        for (double w : ev.residual[u]) sum += w * w;
-        rejected[u] = std::sqrt(sum / units[u].dimension) > limit;
-      }
-    }
+    if (fresh && config.sigma_edit_threshold > 0.0 && evaluations > 1) rejected = edits(ev, previous_rms);
     fresh = false;
     Matrix normal_full;
     std::vector<double> rhs_full;
@@ -937,50 +987,65 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     if (!solve(normal, rhs, 0.0, held, &dx)) return fail("the normal matrix is singular: the state and parameters are not observable");
     // Convergence is judged on the projected Gauss-Newton step; the step
     // taken is also limited in ln p. (Near p = 0 a LOGARITHM parameter's
-    // column vanishes, so a limited step would look converged.)
+    // column vanishes, so a limited step would look converged.) The step is
+    // measured against the covariance scaled by max(1, chi2_nu): with
+    // chi2_nu <= 1 this is version 1's test, above 1 a relative
+    // predicted-decrease test.
     std::vector<double> projected, taken;
     advance(x, dx, &projected);
     const std::vector<double> next = advance(x, limited(dx), &taken);
     double step = 0.0;
     for (int i = 0; i < ne; ++i)
       for (int k = 0; k < ne; ++k) step += projected[i] * normal[i * ne + k] * projected[k];
-    step = std::sqrt(std::max(step, 0.0) / ne);
+    const std::size_t dof = scalars > static_cast<std::size_t>(ne) ? scalars - ne : 1;
+    step = std::sqrt(std::max(step, 0.0) / (ne * std::max(1.0, chi_square / dof)));
     previous_rms = std::sqrt(chi_square / scalars);
     result.iterations = evaluations;
-    const bool converged = step < config.correction_tolerance && rejected == before;
-    if (converged || evaluations >= maximum) return finish(next, ev, normal_full, normal, taken, rejected, scalars, converged);
-    if (!config.levenberg_marquardt) {
-      x = next;
-      status = evaluate(x, &ev);
-      if (status == 0) { result.pending = true; return result; }
-      if (status < 0) return result;
-      ++evaluations;
-      fresh = true;
-      continue;
+    if (step < config.correction_tolerance && rejected == before) {
+      // The edit set must be a fixed point: edited against this point's own
+      // weighted RMS, it must not change.
+      if (config.sigma_edit_threshold > 0.0) {
+        const std::vector<bool> now = edits(ev, previous_rms);
+        if (now != rejected) {
+          rejected = now;
+          continue;
+        }
+      }
+      return finish(next, ev, normal_full, normal, taken, rejected, scalars, BatchFitTermination::CONVERGED);
     }
-    // Levenberg-Marquardt: damped trial steps from this point until one
-    // lowers the cost.
+    const std::vector<double> zero(ne, 0.0);
+    if (evaluations >= maximum) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::MAXIMUM_ITERATIONS);
+    // Trials from this point until one is answered, finite and lower in
+    // cost: the Gauss-Newton step first while the damping is 0.
     const double cost = chi_square + prior_cost(x);
     for (;;) {
-      std::vector<double> damped, damped_taken;
-      if (!solve(normal, rhs, damping, held, &damped)) return fail("the normal matrix is singular: the state and parameters are not observable");
-      const std::vector<double> trial = advance(x, limited(damped), &damped_taken);
+      std::vector<double> trial_step = dx;
+      if (damping > 0.0 && !solve(normal, rhs, damping, held, &trial_step))
+        return fail("the normal matrix is singular: the state and parameters are not observable");
+      std::vector<double> trial_taken;
+      const std::vector<double> trial = advance(x, limited(trial_step), &trial_taken);
       Evaluation trial_ev;
-      status = evaluate(trial, &trial_ev);
+      std::string trial_refusal;
+      status = evaluate(trial, &trial_ev, &trial_refusal);
       if (status == 0) { result.pending = true; return result; }
       if (status < 0) return result;
       ++evaluations;
       result.iterations = evaluations;
-      if (data_cost(trial_ev, rejected) + prior_cost(trial) < cost) {
+      if (status == 2) {
+        if (result.refused_trials++ == 0) result.refusal = trial_refusal;
+      }
+      const double trial_cost = status == 1 ? data_cost(trial_ev, rejected) + prior_cost(trial) : kInfinity;
+      if (std::isfinite(trial_cost) && trial_cost < cost) {
         x = trial;
         ev = std::move(trial_ev);
-        damping = std::max(damping * 0.1, 1.0e-15);
+        damping *= 0.1;  // stays 0 after an undamped success
         fresh = true;
         break;
       }
-      damping *= 10.0;
-      if (damping > kMaximumDamping || evaluations >= maximum)
-        return finish(x, ev, normal_full, normal, std::vector<double>(ne, 0.0), rejected, scalars, false);
+      ++result.rejected_trials;
+      damping = damping > 0.0 ? damping * 10.0 : kInitialDamping;
+      if (damping > kMaximumDamping) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::STALLED);
+      if (evaluations >= maximum) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::MAXIMUM_ITERATIONS);
     }
   }
 }

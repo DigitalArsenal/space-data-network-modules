@@ -1,23 +1,33 @@
-// fit_batch version 2 (schema extension v4), end to end through the WASM.
+// fit_batch version 3 (schema extension v6; analysis/estimation 0.6.0), end
+// to end through the estimation and propagator/ffm WASM. The declared E2E of
+// the change: node --test analysis/estimation/tests/batch_fit_v2.test.mjs.
 //
 // Closed-form cases use the static model (state = seed, STM = I; no
 // dynamics) so the expected estimate and covariance follow from linear
 // algebra alone; the dynamical cases are answered by propagator/ffm at full
 // force and compared with Orekit or with the truth that simulated the data.
+// Every dynamic parameter's domain is propagator/ffm's
+// (FIT_PARAMETER_DOMAINS: B and AGOM [0, inf), the rest signed). A host
+// answers a round FFM refuses with refused answers carrying FFM's text.
 // Units SI, GCRF, epochs UTC from 2026-08-02T00:00:00.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
 import { harness } from './batch-fit-fixtures.mjs';
-import { BLOCK, CONSIDER, LEO, STATE, blockEnvelope, considerEnvelope, leoEnvelope, orekitAnswerer } from './batch-fit-v2-fixtures.mjs';
-import { replayDigests, v1Cases } from './fit-batch-v1-cases.mjs';
+import {
+  BLOCK, CONSIDER, LEO, REFUSAL_B, REFUSAL_TEXT, STATE, blockEnvelope, considerEnvelope, leoEnvelope, orekitAnswerer, refusingBelow,
+} from './batch-fit-v2-fixtures.mjs';
+import { v1Cases, v1Result } from './fit-batch-v1-cases.mjs';
 import {
   ECOM2_FIELDS, ECOM2_NAMES, covarianceBlock, fitEnvelope, ffmAnswerer, ffmRun, identityAnswerer, inverse, mahalanobis,
-  measurementParameter, normals, runFit,
+  normals, runFit,
 } from './batch-fit-v2-lib.mjs';
 import { makeTable, sds } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
 
-const V1 = JSON.parse(fs.readFileSync(new URL('./fixtures/fit-batch-v1-digests.json', import.meta.url), 'utf8'));
+const V1 = JSON.parse(fs.readFileSync(new URL('./fixtures/fit-batch-v1-estimates.json', import.meta.url), 'utf8'));
+const TERMINATION = { CONVERGED: 0, MAXIMUM_ITERATIONS: 1, STALLED: 2 };
 const close = (a, b, tolerance, what) => assert.ok(Math.abs(a - b) <= tolerance, `${what}: ${a} vs ${b} (tolerance ${tolerance})`);
 
 // Rows R, T, N of the RTN axes of (r, v), request axes.
@@ -28,16 +38,29 @@ function rtnRows(r, v) {
   return [R, T, N];
 }
 
-test('version-1 requests give the version-1 bytes (every query round and the result)', async (t) => {
-  // Reference: tests/fixtures/fit-batch-v1-digests.json, written by the
-  // version-1 artifact (37a0801f, 786d0de9...) with propagator/ffm
-  // answering; the same request bytes in must give the same result bytes out.
+test('on the version-1 paths version 3 gives version 1\'s estimate, covariance and chi-square (1e-12 relative)', async (t) => {
+  // Reference: tests/fixtures/fit-batch-v1-estimates.json, the version-1
+  // algorithm's results for the six cases (estimation 0.5.0, d3aa2c8a...,
+  // requests without domains; propagator/ffm 2.0.1, 343c4145..., answering).
+  // Each is a monotone Gauss-Newton path inside B, AGOM >= 0, so version 3
+  // with the FFM domains takes the same steps. Tolerance: 1e-12 relative per
+  // estimate entry and chi-square, 1e-12 of sqrt(Pii Pjj) per covariance
+  // entry; the same number of propagation rounds.
   const estimator = await harness('../');
   const ffm = await harness('../../../propagator/ffm/');
   t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
   for (const entry of v1Cases()) {
-    const rounds = await replayDigests(estimator, ffm, entry);
-    assert.deepEqual(rounds, V1.cases[entry.id], entry.id);
+    const v1 = V1.cases[entry.id], v3 = await v1Result(estimator, ffm, entry);
+    assert.equal(v3.status, 0, entry.id);
+    assert.equal(v3.rounds, v1.rounds, `${entry.id}: rounds`);
+    const n = Math.sqrt(v1.covariance.length);
+    let worst = 0;
+    v1.estimate.forEach((x, i) => { worst = Math.max(worst, Math.abs(v3.estimate[i] - x) / Math.abs(x)); });
+    for (let i = 0; i < n; ++i) for (let j = 0; j < n; ++j)
+      worst = Math.max(worst, Math.abs(v3.covariance[i * n + j] - v1.covariance[i * n + j]) / Math.sqrt(v1.covariance[i * (n + 1)] * v1.covariance[j * (n + 1)]));
+    worst = Math.max(worst, Math.abs(v3.chiSquare - v1.chiSquare) / v1.chiSquare);
+    t.diagnostic(`${entry.id}: ${v3.rounds} rounds, largest relative difference from version 1 ${worst.toExponential(2)}`);
+    assert.ok(worst <= 1e-12, `${entry.id}: ${worst}`);
   }
 });
 
@@ -284,57 +307,95 @@ function assertOrekit(b, c, label) {
 }
 const orekitFit = (estimator, ffm, envelope) => runFit(estimator, envelope, orekitAnswerer(ffm));
 
-test('bounded, logarithmic and damped B match Orekit on the LEO drag case; LOGARITHM reports its covariance in B', async (t) => {
+test('B within its domain and LOGARITHM B match Orekit on the LEO drag case; LOGARITHM reports its covariance in B', async (t) => {
   const estimator = await harness('../');
   const ffm = await harness('../../../propagator/ffm/');
   t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
-  for (const [label, options] of [
-    ['lower bound 0', { parameterLowerBounds: [0] }],
-    ['LOGARITHM', { parameterTransforms: [1] }],
-    ['Levenberg-Marquardt', { levenbergMarquardt: true }],
-    ['lower bound 0 and Levenberg-Marquardt', { parameterLowerBounds: [0], levenbergMarquardt: true }],
-  ]) {
+  for (const [label, options] of [['domain [0, inf)', {}], ['LOGARITHM', { parameterTransforms: [1] }]]) {
     const { result, error, rounds } = await orekitFit(estimator, ffm, leoEnvelope(undefined, undefined, options));
     assert.equal(error, undefined, `${label}: ${error}`);
     assert.equal(result.status, 0, label);
-    const { gap, cov, chi } = assertOrekit(result.batchFit, LEO, label);
-    if (options.parameterTransforms || options.parameterLowerBounds) assert.deepEqual([...result.batchFit.boundStatus], [0], label);
+    const b = result.batchFit;
+    assert.equal(b.termination, TERMINATION.CONVERGED, label);
+    const { gap, cov, chi } = assertOrekit(b, LEO, label);
+    assert.deepEqual([...b.boundStatus], [0], label);
     t.diagnostic(`${label}: ${rounds} rounds; estimate ${gap.toExponential(2)} sigma, covariance ${cov.toExponential(2)}, chi-square ${chi.toExponential(2)} from Orekit`);
   }
 });
 
-test('where version 1 proposes a negative Cd*A/m (refused by propagator/ffm), the bounded and logarithmic fits never do and reach Orekit\'s solution', async (t) => {
-  // Three first guesses (the Orekit case's a priori state moved by 20 km
-  // along track, -20 m/s, or 50 km radially). Version 1's second query
-  // carries a negative B, which propagator/ffm refuses ("Spacecraft mass,
-  // area, Cd and Cr are invalid"); E4 lost 154/298 Starlink arcs this way.
-  // With a lower bound of 0, or estimated as ln B, every query is >= 0 and
-  // the fit converges to Orekit's estimate from the same data.
+// Three first guesses (the Orekit case's a priori state moved by 20 km
+// along track, -20 m/s, or 50 km radially, with B 0.036, 0.01, 0.02 m^2/kg)
+// where version 1's second query carried B = -0.18, -0.13 and -1.6
+// m^2/kg, which propagator/ffm refuses ("Spacecraft mass, area, Cd and Cr
+// are invalid"); B2 part 1a lost or degraded 6,033 of 11,163 Starlink fits
+// this way.
+const STARTS = [['20 km along track', [0, 20e3, 0, 0, 0, 0], 0.036, -0.18], ['-20 m/s', [0, 0, 0, -20, 0, 0], 0.01, -0.13], ['50 km radial', [50e3, 0, 0, 0, 0, 0], 0.02, -1.6]];
+
+test('where version 1 proposed a negative Cd*A/m, version 3 never does and reaches Orekit\'s solution; explicitly unbounded, FFM\'s refusal is a rejected trial', async (t) => {
+  // With the FFM domain (B >= 0) and as ln B, every query has B >= 0 (> 0)
+  // and the fit converges to Orekit's estimate from the same data
+  // (assertOrekit's tolerances). Explicitly unbounded (NaN, NaN), version
+  // 3's first trial is version 1's Gauss-Newton step: B within 2 % of
+  // version 1's proposal. propagator/ffm refuses it, the host answers the
+  // round refused with FFM's text, and the fit rejects the trial, damps the
+  // step and still ends OK, never fit-failed.
   const estimator = await harness('../');
   const ffm = await harness('../../../propagator/ffm/');
   t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
-  const starts = [['20 km along track', [0, 20e3, 0, 0, 0, 0], 0.036], ['-20 m/s', [0, 0, 0, -20, 0, 0], 0.01], ['50 km radial', [50e3, 0, 0, 0, 0, 0], 0.02]];
-  const start = leoEnvelope;
-  for (const [label, offset, b0] of starts) {
-    // Version 1: the first answered round, then the negative proposal.
-    const v1 = start(offset, b0);
-    let proposal = null;
-    await runFit(estimator, v1, async (queries) => {
-      const b = queries[0].parameterValues[0];
-      if (b < 0) { proposal = b; throw Object.assign(new Error('negative'), { negative: b }); }
-      return orekitAnswerer(ffm)(queries);
-    }).catch((e) => { if (!e.negative) throw e; });
-    assert.ok(proposal !== null && proposal < 0, `${label}: version 1 proposes ${proposal}`);
-    for (const [variant, options] of [['lower bound 0', { parameterLowerBounds: [0] }], ['LOGARITHM', { parameterTransforms: [1] }]]) {
-      const { result, error, queried, rounds } = await orekitFit(estimator, ffm, start(offset, b0, options));
+  for (const [label, offset, b0, v1] of STARTS) {
+    for (const [variant, options] of [['domain [0, inf)', {}], ['LOGARITHM', { parameterTransforms: [1] }]]) {
+      const { result, error, queried, rounds } = await orekitFit(estimator, ffm, leoEnvelope(offset, b0, options));
       assert.equal(error, undefined, `${label}, ${variant}: ${error}`);
       const smallest = Math.min(...queried.map((q) => q.parameterValues[0]));
       assert.ok(variant === 'LOGARITHM' ? smallest > 0 : smallest >= 0, `${label}, ${variant}: proposed ${smallest}`);
       assert.equal(result.status, 0, `${label}, ${variant}`);
+      assert.equal(result.batchFit.refusedTrials, 0, `${label}, ${variant}`);
       const { gap } = assertOrekit(result.batchFit, LEO, `${label}, ${variant}`);
-      t.diagnostic(`${label}: version 1 proposed B = ${proposal.toExponential(3)}; ${variant}: ${rounds} rounds, smallest B ${smallest.toExponential(3)}, ${gap.toExponential(2)} sigma from Orekit`);
+      t.diagnostic(`${label}: ${variant}: ${rounds} rounds, smallest B ${smallest.toExponential(3)}, ${result.batchFit.rejectedTrials} rejected trials, ${gap.toExponential(2)} sigma from Orekit`);
     }
+    const free = await orekitFit(estimator, ffm, leoEnvelope(offset, b0, { parameterLowerBounds: [NaN], parameterUpperBounds: [NaN] }));
+    assert.equal(free.error, undefined, `${label}, unbounded: ${free.error}`);
+    const proposal = free.queried.map((q) => q.parameterValues[0]).find((b) => b < 0);
+    assert.ok(proposal !== undefined && Math.abs(proposal / v1 - 1) <= 0.02, `${label}, unbounded: first negative proposal ${proposal} (version 1: ${v1})`);
+    const b = free.result.batchFit;
+    assert.ok(b.refusedTrials > 0, `${label}, unbounded: refused trials ${b.refusedTrials}`);
+    assert.match(b.refusal, /invalid-forces: Spacecraft mass, area, Cd and Cr are invalid/);
+    assert.ok(b.rejectedTrials >= b.refusedTrials);
+    assert.equal(free.result.status, 0, `${label}, unbounded: status ${free.result.status}, termination ${b.termination}`);
+    assertOrekit(b, LEO, `${label}, unbounded`);
+    t.diagnostic(`${label}: unbounded: proposed B = ${proposal.toExponential(3)} (version 1: ${v1}), FFM refused ${b.refusedTrials} trials ("${b.refusal}"), ${b.rejectedTrials} rejected, ${free.rounds} rounds, B ${b.estimate[6].toExponential(4)}`);
   }
+});
+
+test('a refused trial is rejected and the fit goes on; a refused seed fails with the refusal text; a request without domains is refused', async (t) => {
+  // A host whose propagator refuses every seed with B < 0.005 m^2/kg
+  // (answering the round refused with FFM's text). From the 20 km
+  // along-track start the projected Gauss-Newton step puts B at its bound
+  // of 0: refused, so the fit damps the step and ends OK or NOT_CONVERGED
+  // with refused_trials > 0, never fit-failed. Seeded at B = 0.001 the
+  // first round is refused: fit-failed with the text. Without
+  // parameter_lower_bounds and parameter_upper_bounds a fit with a dynamic
+  // parameter is refused before any propagation.
+  const estimator = await harness('../');
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
+  const refused = await runFit(estimator, leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036), refusingBelow(orekitAnswerer(ffm), REFUSAL_B));
+  assert.equal(refused.error, undefined, refused.error);
+  assert.ok([0, 5].includes(refused.result.status), `status ${refused.result.status}`);
+  const b = refused.result.batchFit;
+  assert.ok(b.refusedTrials > 0, `refused trials ${b.refusedTrials}`);
+  assert.equal(b.refusal, REFUSAL_TEXT);
+  assert.ok(Math.min(...refused.queried.map((q) => q.parameterValues[0])) >= 0);
+  assert.ok(b.estimate[6] >= REFUSAL_B, `B ${b.estimate[6]}`);
+  t.diagnostic(`refused trials: status ${refused.result.status}, termination ${b.termination}, ${refused.rounds} rounds, ${b.refusedTrials} refused of ${b.rejectedTrials} rejected trials, B ${b.estimate[6].toExponential(4)}, weighted RMS ${b.weightedRms.toFixed(3)}`);
+
+  const seed = await runFit(estimator, leoEnvelope(undefined, 0.001), refusingBelow(orekitAnswerer(ffm), REFUSAL_B));
+  assert.equal(seed.error, `fit-failed: the propagator refuses the initial state and parameters: ${REFUSAL_TEXT}`);
+  assert.equal(seed.rounds, 1);
+
+  const undeclared = await runFit(estimator, leoEnvelope(undefined, undefined, { parameterLowerBounds: [], parameterUpperBounds: [] }), orekitAnswerer(ffm));
+  assert.match(undeclared.error, /^fit-failed: every dynamic parameter states its domain/);
+  assert.equal(undeclared.rounds, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -369,24 +430,55 @@ test('a fit that wants negative drag stops at B = 0 and says so; with a signed i
   const observations = await simulatePositions(ffm, { seconds, names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [truth.B, truth.T], sigma: 1, seed: 20261010 });
   const start = LEO.truth.map((x, i) => x + [200, -300, 100, 0.2, 0.1, -0.1][i]);
 
-  const alone = await runFit(estimator, fitEnvelope({ state: start, observations, kinds: [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS], values: [0.01], options: { parameterLowerBounds: [0] } }),
+  const alone = await runFit(estimator, fitEnvelope({ state: start, observations, kinds: [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS], values: [0.01] }),
     ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS'] }));
   assert.equal(alone.error, undefined, alone.error);
   assert.equal(alone.result.status, 0);
+  assert.equal(alone.result.batchFit.termination, TERMINATION.CONVERGED);
   assert.ok(Math.min(...alone.queried.map((q) => q.parameterValues[0])) >= 0, 'no negative B was asked');
   assert.equal(alone.result.batchFit.estimate[6], 0);
   assert.deepEqual([...alone.result.batchFit.boundStatus], [1]);
 
   const kinds = [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS, sds.prwDynamicParameter.IN_TRACK_ACCELERATION];
-  const both = await runFit(estimator, fitEnvelope({ state: start, observations, kinds, values: [0.01, 0], options: { parameterLowerBounds: [0, NaN] } }),
+  const both = await runFit(estimator, fitEnvelope({ state: start, observations, kinds, values: [0.01, 0] }),
     ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'] }));
   assert.equal(both.error, undefined, both.error);
   assert.equal(both.result.status, 0);
+  assert.equal(both.result.batchFit.termination, TERMINATION.CONVERGED);
   const b = both.result.batchFit;
   const truthVector = [...(await ffmRun(ffm, { state: LEO.truth, from: at(0), epochs: [at(0)], names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [truth.B, truth.T] }))[0].state, truth.B, truth.T];
   const d2 = mahalanobis(b.estimate.map((v, i) => v - truthVector[i]), b.covariance, 8);
   t.diagnostic(`alone: ${alone.rounds} rounds, B held at 0, weighted RMS ${alone.result.batchFit.weightedRms.toFixed(1)}; with a_T: ${both.rounds} rounds, B ${b.estimate[6].toExponential(4)} (sigma ${Math.sqrt(b.covariance[54]).toExponential(2)}), a_T ${b.estimate[7].toExponential(4)} (sigma ${Math.sqrt(b.covariance[63]).toExponential(2)}), d2 ${d2.toFixed(2)}, weighted RMS ${b.weightedRms.toFixed(3)}`);
   assert.ok(d2 < chiSquareQuantile(8, 3.719), `d2 ${d2}`);
+});
+
+test('convergence scales with the misfit: B >= 0 alone against a 2e-6 m/s^2 in-track thrust ends OK with B held at 0', async (t) => {
+  // Truth: B = 0.002 m^2/kg and an unmodeled constant in-track thrust of
+  // +2e-6 m/s^2; positions every 10 min over 12 h, sigma 1 m. Fitted with B
+  // alone (domain [0, inf)), the misfit is large (weighted RMS far above 1)
+  // and the data want B < 0: B is held at 0 (bound_status 1), no query is
+  // negative, and the scaled test, sqrt(dx' N dx / (ne max(1, chi2_nu))) <
+  // 1e-3, ends the fit CONVERGED within 20 propagation rounds, where an
+  // absolute test sits under the floor of FFM's Jacobian accuracy (B 5e-6
+  // against Orekit).
+  const estimator = await harness('../');
+  const ffm = await harness('../../../propagator/ffm/');
+  t.after(() => { estimator.destroy?.(); ffm.destroy?.(); });
+  const seconds = Array.from({ length: 72 }, (_, k) => 600 * (k + 1));
+  const observations = await simulatePositions(ffm, { seconds, names: ['DRAG_AREA_OVER_MASS', 'IN_TRACK_ACCELERATION'], values: [0.002, 2e-6], sigma: 1, seed: 20261028 });
+  const start = LEO.truth.map((x, i) => x + [200, -300, 100, 0.2, 0.1, -0.1][i]);
+  const fit = await runFit(estimator, fitEnvelope({ state: start, observations, kinds: [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS], values: [0.01] }),
+    ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS'] }));
+  assert.equal(fit.error, undefined, fit.error);
+  const b = fit.result.batchFit;
+  t.diagnostic(`${fit.rounds} rounds, termination ${b.termination}, B ${b.estimate[6]}, reduced chi-square ${b.reducedChiSquare.toExponential(3)}, ${b.rejectedTrials} rejected trials`);
+  assert.equal(fit.result.status, 0);
+  assert.equal(b.termination, TERMINATION.CONVERGED);
+  assert.ok(fit.rounds <= 20, `${fit.rounds} rounds`);
+  assert.ok(b.reducedChiSquare > 1, `reduced chi-square ${b.reducedChiSquare}`);
+  assert.ok(Math.min(...fit.queried.map((q) => q.parameterValues[0])) >= 0, 'no negative B was asked');
+  assert.equal(b.estimate[6], 0);
+  assert.deepEqual([...b.boundStatus], [1]);
 });
 
 test('thirteen dynamic parameters at once: B, the eleven ECOM2 terms and the in-track acceleration', async (t) => {
@@ -404,8 +496,8 @@ test('thirteen dynamic parameters at once: B, the eleven ECOM2 terms and the in-
   const truth = [0.01, 3e-8, -2e-8, 1e-8, 2e-8, -1e-8, 5e-9, -5e-9, 1.5e-8, -1e-8, 8e-9, -6e-9, 5e-9];
   const start = [0.012, ...Array(12).fill(0)];
   const ecom2 = (exec) => {
-    exec.FORCES.RADIATION_PRESSURE_MODEL = sds.prwRadiationPressureFamily.NONE;
-    exec.FORCES.ECOM2 = makeTable('PRWEcom2', Object.fromEntries(ECOM2_FIELDS.map((k) => [k, 0])));
+    exec.FORCES.RADIATION_PRESSURE_MODEL = sds.pcfRadiationPressureFamily.NONE;
+    exec.FORCES.ECOM2 = makeTable('PCFEcom2', Object.fromEntries(ECOM2_FIELDS.map((k) => [k, 0])));
   };
   const seconds = Array.from({ length: 720 }, (_, k) => 120 * (k + 1));
   const observations = await simulatePositions(ffm, { seconds, names, values: truth, sigma: 0.1, seed: 13, edit: ecom2 });
@@ -424,4 +516,28 @@ test('thirteen dynamic parameters at once: B, the eleven ECOM2 terms and the in-
   const z = b.estimate.slice(6).map((v, i) => ((v - truth[i]) / Math.sqrt(b.covariance[(6 + i) * 20])).toFixed(2));
   t.diagnostic(`${rounds} rounds; d2 ${d2.toFixed(2)}; parameter errors in sigma: ${z.join(' ')}; weighted RMS ${b.weightedRms.toFixed(3)}`);
   assert.ok(d2 < chiSquareQuantile(19, 3.719), `d2 ${d2}`);
+});
+
+test('tri-runtime parity: the version-3 rounds give the same bytes in Chrome/V8 and native WasmEdge at host widths 1, 2, 4 and 8', async (t) => {
+  // The query round and the complete replay of the bounded along-track
+  // start, of the refused-trial host and of a refused seed, through the SDK
+  // parity harness (Docker waived by the owner 2026-10-22).
+  const estimator = await harness('../');
+  const ffm = await harness('../../../propagator/ffm/');
+  const cases = [];
+  try {
+    for (const [id, envelope, answerer] of [
+      ['fit-batch-v3-bounded-along-track-start', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036), orekitAnswerer(ffm)],
+      ['fit-batch-v3-refused-trials', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036), refusingBelow(orekitAnswerer(ffm), REFUSAL_B)],
+      ['fit-batch-v3-refused-seed', leoEnvelope(undefined, 0.001), refusingBelow(orekitAnswerer(ffm), REFUSAL_B)],
+    ]) {
+      const run = await runFit(estimator, envelope, answerer);
+      cases.push({ id: `${id}-query`, request: run.requests[0] }, { id: `${id}-complete`, request: run.requests.at(-1) });
+    }
+  } finally { estimator.destroy?.(); ffm.destroy?.(); }
+  const plan = await normalizeParityFixture({ name: 'fit_batch version 3 (extension v6)', threadEnvVar: 'SDM_WORKER_COUNT', threadCounts: [1, 2, 4, 8],
+    cases: cases.map((c) => ({ ...c, request: { ...c.request, inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });
+  const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, lanes: ['browser', 'wasmedge'], timeoutMs: 300000 });
+  t.diagnostic(`${cases.length} cases, lanes ${report.lanes.map((l) => `${l.lane} ${l.runs} runs`).join(', ')}`);
+  assert.equal(report.ok, true, JSON.stringify(report.failures));
 });

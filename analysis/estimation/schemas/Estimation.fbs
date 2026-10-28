@@ -342,10 +342,18 @@ table PropagationQuery {
 }
 table PropagationAnswer {
   query:PropagationQuery (required);
-  sample:EstimationPropagatorSample (required);
+  // Required unless refused.
+  sample:EstimationPropagatorSample;
   // Extension v2 (fit_batch): row-major 6 x p sensitivity of the sample state
   // to the seed's parameters (the S block of [[Phi, S], [0, I]]), SI.
   sensitivity:[double];
+  // Extension v6 (fit_batch version 3): the propagator rejected this
+  // query's seed (for example a parameter outside its domain). A host whose
+  // propagator returns an error for a round answers every query of that
+  // round refused, with the error code and message in refusal and no sample
+  // or sensitivity; fit_batch takes the round as a rejected trial.
+  refused:bool = false;
+  refusal:string;
 }
 
 // Extension v4 (fit_batch version 2): the types BatchFitOptions and
@@ -418,12 +426,18 @@ table BatchFitOptions {
   // Optional covariance per observation, value_count^2 row-major values
   // each, concatenated in observation order, replacing the sigmas.
   observation_covariances:[double];
+  // Propagation rounds, every trial counted (rejected and refused ones too).
   maximum_iterations:uint = 20;
-  // Converged when the correction's length under the normal matrix,
-  // sqrt(dx' N dx / (6 + p)), is below this (dimensionless).
+  // Converged when the projected Gauss-Newton correction's length under the
+  // normal matrix, scaled by the misfit,
+  // sqrt(dx' N dx / (ne max(1, chi2 / dof))) with ne the estimated
+  // parameters, is below this (dimensionless) and the edit set is a fixed
+  // point.
   correction_tolerance:double = 1e-3;
   // Edit an observation whose whitened residual RMS exceeds this many times
   // the previous iteration's weighted RMS (at least 1); 0 disables editing.
+  // At convergence the edit set must not change when recomputed against the
+  // point's own weighted RMS.
   sigma_edit_threshold:double = 0;
   // Axes of observation_covariances and covariance_blocks: 0 the request
   // axes, 1 the radial, transverse and normal axes of each observed state
@@ -432,25 +446,27 @@ table BatchFitOptions {
   // components, so one request can mix them.
   covariance_axes:ubyte = 0;
 
-  // Extension v4 (fit_batch version 2). Every field defaults to version 1:
-  // a version-1 request gives the same bytes.
+  // Extension v4 (fit_batch version 2).
   //
   // Per dynamic parameter, in the order of parameter_kinds (empty: none).
   // LOGARITHM estimates ln(value), so the parameter stays positive; its
   // covariance is reported in the parameter itself through the Jacobian.
   parameter_transforms:[ParameterTransform];
-  // Physical bounds (NaN: none). A step that leaves them is projected onto
-  // the bound, so the propagator never receives a value outside.
+  // Each dynamic parameter's domain, required (one entry each) when there
+  // are dynamic parameters: NaN is explicitly unbounded on that side. A
+  // step that leaves the domain is projected onto the bound, so the
+  // propagator never receives a value outside. propagator/ffm's README
+  // states the domain of each DYNAMIC_PARAMETERS kind.
   parameter_lower_bounds:[double];
   parameter_upper_bounds:[double];
   // true: a consider parameter, held at its value; its a priori variance
   // (apriori_covariance, required, uncorrelated with the estimated
   // parameters) enters consider_covariance.
   parameter_consider:[bool];
-  // Levenberg-Marquardt damping: a step that does not lower the cost is
-  // refused and retried with ten times the damping.
-  levenberg_marquardt:bool = false;
-  initial_damping:double = 1e-3;
+  // Version 3 always runs Gauss-Newton first with Levenberg-Marquardt
+  // damping; these two are no longer read.
+  levenberg_marquardt:bool = false (deprecated);
+  initial_damping:double = 1e-3 (deprecated);
   // Bias, drift and time-bias states of observation groups.
   measurement_parameters:[MeasurementParameter];
   // Covariance blocks across observations (generalized least squares),
@@ -464,6 +480,19 @@ table BatchFitOptions {
   correlation_floor:double = 1e-3;
   // Also report the covariances in the RTN axes of the estimated state.
   rtn_covariance:bool = false;
+}
+
+// Extension v6 (fit_batch version 3): how the fit ended.
+enum BatchFitTermination : ubyte {
+  // The scaled correction is below correction_tolerance with a stable edit
+  // set (EstimationStatus OK).
+  CONVERGED = 0,
+  // maximum_iterations propagation rounds were used; the best evaluated
+  // point is reported (NOT_CONVERGED).
+  MAXIMUM_ITERATIONS = 1,
+  // The damping passed 1e12 without a lower-cost trial; the best evaluated
+  // point is reported (NOT_CONVERGED).
+  STALLED = 2
 }
 
 table BatchFitResult {
@@ -505,6 +534,14 @@ table BatchFitResult {
   consider_covariance_rtn:[double];
   // covariance_regularization: each covariance it changed.
   regularizations:[CovarianceRegularization];
+
+  // Extension v6 (fit_batch version 3).
+  termination:BatchFitTermination = CONVERGED;
+  // Trials not accepted (refused, non-finite or not lower in cost), and of
+  // them those the propagator refused, with the first refusal's text.
+  rejected_trials:uint;
+  refused_trials:uint;
+  refusal:string;
 }
 
 // Module-local append-only extension v3: the Epistemic Support-Point Filter

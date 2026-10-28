@@ -1,9 +1,9 @@
-// fit_batch version 2 scenarios shared by the tests and the tri-runtime
-// parity plan, so parity replays exactly the requests the tests check.
+// fit_batch scenarios shared by the tests and the tri-runtime parity plan,
+// so parity replays exactly the requests the tests check.
 // Authorities and tolerances are stated in batch_fit_v2.test.mjs and
 // measurement_parameters.test.mjs.
 import assert from 'node:assert/strict';
-import { REFERENCE, answer, fitRequest, harness } from './batch-fit-fixtures.mjs';
+import { REFERENCE, answer, fitRequest, harness, refusedAnswers } from './batch-fit-fixtures.mjs';
 import { covarianceBlock, fitEnvelope, ffmAnswerer, identityAnswerer, isoOf, measurementParameter, runFit } from './batch-fit-v2-lib.mjs';
 import { campaign } from './tracking-pipeline.mjs';
 import { sds } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
@@ -40,7 +40,7 @@ export function considerEnvelope() {
   p0.forEach((v, i) => { apriori[i * 8] = v * v; });
   apriori[48] = 0.25;
   return fitEnvelope({ state: STATE, observations, kinds: [1], values: [0.01], options: {
-    aprioriCovariance: apriori, parameterConsider: [true],
+    aprioriCovariance: apriori, parameterConsider: [true], parameterLowerBounds: [NaN], parameterUpperBounds: [NaN],
     measurementParameters: [measurementParameter({ kind: 0, component: 0, observations: [0, 1, 2, 3], value: 2, sigma: 3, consider: true })],
   } });
 }
@@ -54,6 +54,13 @@ export function leoEnvelope(offset = [0, 0, 0, 0, 0, 0], b0 = LEO.aprioriParamet
   return envelope;
 }
 export const orekitAnswerer = (ffm) => (queries) => answer(ffm, LEO, queries);
+
+// A host whose propagator refuses every seed with B below `limit` (m^2/kg),
+// answering the round refused with its text, and otherwise `answerer`.
+export const REFUSAL_B = 0.005;
+export const REFUSAL_TEXT = 'invalid-forces: Spacecraft mass, area, Cd and Cr are invalid.';
+export const refusingBelow = (answerer, limit) => async (queries) =>
+  (queries[0].parameterValues[0] < limit ? refusedAnswers(queries, REFUSAL_TEXT) : answerer(queries));
 
 // ---------------------------------------------------------------------------
 // The tracking campaign (measurement_parameters.test.mjs states it).
@@ -119,7 +126,7 @@ export async function campaignFit(ffm) {
   add({ kind: 2, observations: ids(radarPass) }, RADAR_LAG);
   const start = LEO.truth.map((x, i) => x + [400, -300, 200, 0.3, -0.2, 0.1][i]);
   const envelope = fitEnvelope({ state: start, observations, kinds: [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS], values: [0.02],
-    options: { parameterLowerBounds: [0], measurementParameters: parameters, maximumIterations: 30 } });
+    options: { measurementParameters: parameters, maximumIterations: 30 } });
   return { data, envelope, parameters, expected, rfPasses, truthVector: [...LEO.truth, 0.01, ...expected],
     answer: ffmAnswerer(ffm, { names: ['DRAG_AREA_OVER_MASS'] }) };
 }
@@ -138,7 +145,8 @@ export async function batchFitV2Cases() {
     await record('fit-batch-v2-regularized-block', blockEnvelope(true), identityAnswerer());
     await record('fit-batch-v2-consider', considerEnvelope(), identityAnswerer(CONSIDER.g));
     await record('fit-batch-v2-logarithm-radial-start', leoEnvelope([50e3, 0, 0, 0, 0, 0], 0.02, { parameterTransforms: [1] }), orekitAnswerer(ffm));
-    await record('fit-batch-v2-bound-damped-along-track-start', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036, { parameterLowerBounds: [0], levenbergMarquardt: true }), orekitAnswerer(ffm));
+    await record('fit-batch-v3-bounded-along-track-start', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036), orekitAnswerer(ffm));
+    await record('fit-batch-v3-refused-trials', leoEnvelope([0, 20e3, 0, 0, 0, 0], 0.036), refusingBelow(orekitAnswerer(ffm), REFUSAL_B));
     const c = await campaignFit(ffm);
     await record('fit-batch-v2-measurement-campaign', c.envelope, c.answer);
   } finally { estimator.destroy?.(); ffm.destroy?.(); }

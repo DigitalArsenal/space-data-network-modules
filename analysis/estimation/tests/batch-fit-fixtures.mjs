@@ -7,6 +7,7 @@ import { createBrowserModuleHarness } from 'space-data-module-sdk/testing/browse
 import { api, encode, pack, typeRef, unpack } from './wire.mjs';
 import { requestInputs } from '../../../propagator/ffm/tests/lib/orekitCases.mjs';
 import { decodePrw, sds } from '../../../propagator/ffm/tests/lib/prwCodec.mjs';
+import { fitParameterBounds } from '../../../propagator/ffm/catalog-configuration.mjs';
 
 export const REFERENCE = JSON.parse(fs.readFileSync(new URL('./fixtures/orekit-batch-reference.json', import.meta.url), 'utf8'));
 const EPOCH_JD = 2461254.5;  // 2026-08-02T00:00:00 UTC, the label of the configuration epoch
@@ -18,8 +19,11 @@ export const harness = async (url) => {
 };
 
 // variant 'rtn' (POSITION_VELOCITY cases): the measurement covariances in
-// the RTN axes of each measured state, as Orekit rotated them.
-export function fitRequest(c, variant = 'sigmas') {
+// the RTN axes of each measured state, as Orekit rotated them. The
+// parameter's domain comes from propagator/ffm's table; `domains: false`
+// leaves it out (the version-1 request, for the recorder of version-1
+// results).
+export function fitRequest(c, variant = 'sigmas', { domains = true } = {}) {
   const kind = sds.prwDynamicParameter[c.parameter];
   const pv = c.measurement === 'POSITION_VELOCITY';
   const full = c.name === 'GPS-srp';
@@ -49,10 +53,20 @@ export function fitRequest(c, variant = 'sigmas') {
   else c.observations.forEach(([, , x, y, z], i) => { r.observations[i].value = [x, y, z, 0]; });
   if (full) r.batchOptions.observationCovariances = c.observations.flatMap(() => c.measurementCovariance);
   if (variant === 'rtn') Object.assign(r.batchOptions, { observationCovariances: c.rtnCovariances.flat(), covarianceAxes: 1 });
+  if (domains) {
+    const { lower, upper } = fitParameterBounds([c.parameter]);
+    Object.assign(r.batchOptions, { parameterLowerBounds: lower, parameterUpperBounds: upper });
+  }
   return envelope;
 }
 
-// Routes one round of queries (one seed, every observation epoch) to FFM.
+// A round the propagator refuses: every query echoed, refused, with its
+// error text and no sample (the host rule of fit_batch version 3).
+export const refusedAnswers = (queries, refusal) => queries.map((query) =>
+  Object.assign(new (api().PropagationAnswerT)(), { query, refused: true, refusal }));
+
+// Routes one round of queries (one seed, every observation epoch) to FFM;
+// an FFM error refuses the round.
 export async function answer(ffm, c, queries) {
   const A = api();
   const seed = queries[0].seed.state, parameter = queries[0].parameterValues[0];
@@ -64,7 +78,7 @@ export async function answer(ffm, c, queries) {
     else exec.FORCES.REFLECTIVITY_COEFFICIENT = parameter * K.massKg / K.areaM2;
   } });
   const response = await ffm.invoke({ methodId: 'invoke', inputs });
-  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+  if (response.statusCode !== 0) return refusedAnswers(queries, `${response.errorCode}: ${response.errorMessage}`);
   const samples = decodePrw(response.outputs.find((o) => o.portId === 'response').payload).EXECUTION_RESULT.SAMPLES;
   assert.equal(samples.length, queries.length);
   return queries.map((query, k) => {

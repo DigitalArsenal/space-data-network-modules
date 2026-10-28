@@ -19,7 +19,9 @@ namespace sdn::estimation {
 // epochs (an observation's epoch plus a shift: the time bias), the
 // propagator returns each sample's state, its 6x6 STM and its 6 x p
 // parameter sensitivity (row-major), all relative to the seed epoch.
-// Returning false means the samples are not available yet (inverted port).
+// PENDING: the samples are not available yet (inverted port); REFUSED: the
+// propagator rejects the seed (for example a parameter outside its domain),
+// with its error text in *refusal.
 struct ParameterSample {
   CartesianState state{};
   Matrix6 stm{};
@@ -29,12 +31,12 @@ struct EpochRequest {
   std::size_t observation{0};
   double shift_seconds{0.0};
 };
-using ParameterPropagatorPort = std::function<bool(
+enum class PortAnswer : std::uint8_t { ANSWERED = 0, PENDING = 1, REFUSED = 2 };
+using ParameterPropagatorPort = std::function<PortAnswer(
     const Vector6 &seed, const std::vector<double> &parameters,
     const std::vector<EpochRequest> &epochs,
-    std::vector<ParameterSample> *samples)>;
+    std::vector<ParameterSample> *samples, std::string *refusal)>;
 
-// fit_batch version 2 (schema extension v4).
 enum class ParameterTransform : std::uint8_t { IDENTITY = 0, LOGARITHM = 1 };
 enum class MeasurementParameterKind : std::uint8_t { BIAS = 0, DRIFT = 1, TIME_BIAS = 2 };
 
@@ -79,19 +81,20 @@ struct BatchFitConfig {
   double correction_tolerance{1.0e-3};
   double sigma_edit_threshold{0.0};
   ParameterPropagatorPort propagator;
-  // Version 2; the defaults are version 1.
   std::vector<ParameterTransform> transforms;  // p or empty
-  std::vector<double> lower_bounds;            // p or empty; NaN: none
+  // Each dynamic parameter's domain: p entries each, required when p > 0;
+  // NaN: unbounded on that side.
+  std::vector<double> lower_bounds;
   std::vector<double> upper_bounds;
   std::vector<bool> consider;                  // p or empty
-  bool levenberg_marquardt{false};
-  double initial_damping{1.0e-3};
   std::vector<MeasurementParameter> measurement_parameters;
   std::vector<CovarianceBlock> covariance_blocks;
   bool regularize{false};
   double correlation_floor{1.0e-3};
   bool rtn_output{false};
 };
+
+enum class BatchFitTermination : std::uint8_t { CONVERGED = 0, MAXIMUM_ITERATIONS = 1, STALLED = 2 };
 
 struct BatchFitResult {
   bool valid{false};
@@ -115,6 +118,10 @@ struct BatchFitResult {
   std::vector<double> covariance_rtn;
   std::vector<double> consider_covariance_rtn;
   std::vector<CovarianceRegularization> regularizations;
+  BatchFitTermination termination{BatchFitTermination::CONVERGED};
+  std::size_t rejected_trials{0};  // trials not accepted, refused ones included
+  std::size_t refused_trials{0};
+  std::string refusal;             // the first refusal's text
 };
 
 BatchFitResult batch_fit(const BatchFitConfig &config,

@@ -413,6 +413,23 @@ field and an implementation checked against Orekit 13.1 or GMAT
   central differences of the force set (FINITE_DIFFERENCE). Against Orekit's
   Jacobians: STM 1e-5 (LEO) to 4e-11 (GPS), B/BDOT/T 5e-6, AGOM 1.4e-4 in
   LEO and 5e-10 at GPS.
+- **Fit parameter domains.** A fit that estimates `DYNAMIC_PARAMETERS`
+  (analysis/estimation `fit_batch`) states each parameter's domain; the
+  module refuses a value outside it ("invalid-forces: Spacecraft mass, area,
+  Cd and Cr are invalid."). `FIT_PARAMETER_DOMAINS` in
+  `catalog-configuration.mjs` is this table as data ([lower, upper], NaN
+  unbounded), and every caller takes its bounds from it:
+
+  | Kind | Domain | Also requires |
+  | --- | --- | --- |
+  | `DRAG_AREA_OVER_MASS` (B = Cd*A/m) | [0, inf) | drag, area and mass > 0 |
+  | `SRP_AREA_OVER_MASS` (AGOM = Cr*A/m) | [0, inf) | cannonball radiation pressure, area and mass > 0 |
+  | `DRAG_AREA_OVER_MASS_RATE` (BDOT) | signed | drag, area and mass > 0 |
+  | `IN_TRACK_ACCELERATION` (T) | signed | `HAS_IN_TRACK_ACCELERATION_M_S2` in `FORCES` |
+  | `ECOM2_*` (the eleven terms) | signed | radiation pressure with ECOM2 enabled |
+
+  Cd = 0 and Cr = 0 are valid with a positive area and mass, so a fit may
+  hold B or AGOM at its lower bound of 0.
 - **Samples** are visited in time order, forward and backward of the initial
   epoch separately, and each span between consecutive epochs is integrated
   once; the state, the STM (with parameter columns) and the covariance carry

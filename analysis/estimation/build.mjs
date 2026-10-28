@@ -125,7 +125,7 @@ fsSync.writeFileSync(path.join(packageRoot, "dist", "build-provenance.json"), `$
   spacedatastandards: sdsVersion,
   moduleSdk: JSON.parse(await fs.readFile(path.join(sdkRoot, "package.json"), "utf8")).version,
   family: "estimation",
-  invokeContract: {path: "schemas/Estimation.fbs", extension: 5, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
+  invokeContract: {path: "schemas/Estimation.fbs", extension: 6, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
   propagatorContract: ["plugin_propagate", "plugin_compute_stm"],
   threadModel: manifest.threadModel,
 }, null, 2)}\n`);
