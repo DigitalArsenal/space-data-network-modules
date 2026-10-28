@@ -650,4 +650,3 @@ if (products.has('doris')) await doris(from, to + DAY);
 if (products.has('gfz-rso')) await gfzRso(from, to + DAY);
 if (products.has('cosmic2')) await cosmic2(from, to + DAY);
 await reader?.destroy();
-await reference?.destroy();
