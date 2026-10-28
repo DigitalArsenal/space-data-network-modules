@@ -8,7 +8,7 @@
     },
     {
       "build_provenance": {
-        "bytes": 2686893,
+        "bytes": 2687153,
         "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
         "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
         "debugInfo": "stripped",
@@ -29,7 +29,7 @@
         },
         "sdk": "0.9.12",
         "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and uses explicit error flags and measured linear-memory limits, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation.",
-        "sha256": "8e6f63d147e5d51cbb55a1e6b557d011c71906a5447598a7c5794ce7dafaad94",
+        "sha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3",
         "sharedMemory": true,
         "spacedatastandards": "1.271.0",
         "standardWasmExceptions": false,
@@ -70,15 +70,15 @@
       },
       "declared_sds_dependency": "1.271.0",
       "id": "propagator/ffm",
-      "wasm_sha256": "8e6f63d147e5d51cbb55a1e6b557d011c71906a5447598a7c5794ce7dafaad94"
+      "wasm_sha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3"
     },
     {
       "build_provenance": {
         "family": "estimation",
         "invokeContract": {
-          "extension": 5,
+          "extension": 6,
           "path": "schemas/Estimation.fbs",
-          "sha256": "306147979fcc727b49c067b54652108d035a115c986042b32ca25e1af7b78edc"
+          "sha256": "38c771916ffe63b1c404bc4d1826d7a85ddf50979d16a5f986f06b002b273aba"
         },
         "moduleSdk": "0.8.25",
         "propagatorContract": [
@@ -90,7 +90,7 @@
       },
       "declared_sds_dependency": "1.261.0",
       "id": "analysis/estimation",
-      "wasm_sha256": "d3aa2c8a29654da64eb43370413883b501a985c653181e5b672f722f3acdda3d"
+      "wasm_sha256": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac"
     },
     {
       "build_provenance": {
@@ -106,7 +106,7 @@
           "wasmedge"
         ],
         "sdk": "0.9.12",
-        "sourceSha256": "96f18ba8cc95140a886b502c26d102892ae3b838272f45db6e3a254e5df83491",
+        "sourceSha256": "d8d3867d34e6e2e22cbc8b61d4918b3fbef40b354fec8a0281fce767b4285ab8",
         "standards": {
           "package": "spacedatastandards.org",
           "schemas": {
@@ -145,7 +145,7 @@
           "version": "1.271.0"
         },
         "threadFeatures": {
-          "atomicInstructionCount": 602,
+          "atomicInstructionCount": 605,
           "declaredFeatures": [
             "atomics",
             "mutable-globals",
@@ -189,11 +189,11 @@
           "usesAtomics": true
         },
         "threadModel": "emscripten-pthreads",
-        "wasmSha256": "21b50ee42af70e75b508f84ad96527ad05b601827bdb44890805b0fcc834c718"
+        "wasmSha256": "4d9ddbda08c4067891bd421381b76c06a789ed685ef4a4107b64a45d0bc2df7f"
       },
       "declared_sds_dependency": "1.271.0",
       "id": "analysis/conjunction-assessment",
-      "wasm_sha256": "e5824aedfb0300ba091297a2eaa940562da0811c23e85b4071db2c1210e5eec3"
+      "wasm_sha256": "15e7e8df0225ebf0fa5d6cbe22fdebe612b022bfcae1631594924e3239b090bd"
     },
     {
       "build_provenance": null,
