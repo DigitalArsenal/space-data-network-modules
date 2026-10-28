@@ -1,4 +1,4 @@
-#include "estimation.hpp"
+#include "batch_fit.hpp"
 #include "teag.hpp"
 
 #include <algorithm>

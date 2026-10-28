@@ -1,5 +1,6 @@
 #include "space_data_module_invoke.h"
 #include "estimation.hpp"
+#include "batch_fit.hpp"
 #include "relative_nav.hpp"
 #include "teag.hpp"
 #include "tdm_decode.hpp"

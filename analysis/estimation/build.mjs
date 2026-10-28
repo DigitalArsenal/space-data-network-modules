@@ -51,6 +51,7 @@ async function generateSdkHeaders() {
 const stripGeneratedIncludes = (source) => source
   .replace(/^#include "[A-Za-z0-9_]+_generated\.h"\n/gm, "")
   .replace(/^#include "estimation\.hpp"\n/gm, "")
+  .replace(/^#include "batch_fit\.hpp"\n/gm, "")
   .replace(/^#include "teag\.hpp"\n/gm, "")
   .replace(/^#include "tdm_decode\.hpp"\n/gm, "")
   .replace(/^#include "recovery\.hpp"\n/gm, "")
@@ -63,6 +64,7 @@ const relativeHeader = await fs.readFile(path.join(packageRoot, "src", "relative
 const relativeSource = await fs.readFile(path.join(packageRoot, "src", "relative_nav.cpp"), "utf8");
 const estimationHeader = await fs.readFile(path.join(packageRoot, "src", "estimation.hpp"), "utf8");
 const estimationSource = await fs.readFile(path.join(packageRoot, "src", "estimation.cpp"), "utf8");
+const batchFitHeader = await fs.readFile(path.join(packageRoot, "src", "batch_fit.hpp"), "utf8");
 const batchFitSource = await fs.readFile(path.join(packageRoot, "src", "batch_fit.cpp"), "utf8");
 const teagHeader = await fs.readFile(path.join(packageRoot, "src", "teag.hpp"), "utf8");
 const tdmDecodeHeader = await fs.readFile(path.join(packageRoot, "src", "tdm_decode.hpp"), "utf8");
@@ -76,6 +78,7 @@ const sourceCode = [
   ...sdkHeaders.map((header, index) => index === 0 ? header : stripGeneratedIncludes(header)),
   stripGeneratedIncludes(recoveryHeader),
   stripGeneratedIncludes(estimationHeader),
+  stripGeneratedIncludes(batchFitHeader),
   stripGeneratedIncludes(relativeHeader),
   teagHeader,
   stripGeneratedIncludes(tdmDecodeHeader),
