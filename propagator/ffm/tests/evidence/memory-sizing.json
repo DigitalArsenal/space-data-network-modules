@@ -1,14 +1,14 @@
 {
-  "artifactSha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3",
+  "artifactSha256": "f52b43492f35f26ef1cc07a8e53e7f50a365edaadf06517d02c9976df173eb8d",
   "previousArtifactSha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3",
   "memory": {
     "staticMinimumBytes": 24179840,
-    "initialBytes": 28377088,
+    "initialBytes": 28704768,
     "maximumBytes": 754974720,
     "wasmSection": {
       "source": "declared",
       "flags": 3,
-      "min": 433,
+      "min": 438,
       "max": 11520,
       "shared": true,
       "growable": true
@@ -43,10 +43,10 @@
       "runtime": "browser",
       "role": "resident-focus",
       "entities": 1,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "highWaterBytes": 28770304,
       "samples": [
-        28442624,
+        28704768,
         28770304,
         28770304
       ],
@@ -63,7 +63,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 1,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "highWaterBytes": 28770304,
       "role": "resident-focus",
       "outputs": [
@@ -76,7 +76,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 1000,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "configuredBytes": 32309248,
       "highWaterBytes": 43450368,
       "samples": [
@@ -112,7 +112,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 1000,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "highWaterBytes": 43450368,
       "configuredBytes": 32309248,
       "samples": [
@@ -146,7 +146,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 4000,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "configuredBytes": 44040192,
       "highWaterBytes": 87752704,
       "samples": [
@@ -181,7 +181,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 4000,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "highWaterBytes": 87752704,
       "configuredBytes": 44040192,
       "samples": [
@@ -215,7 +215,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 10000,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "configuredBytes": 67436544,
       "highWaterBytes": 176422912,
       "samples": [
@@ -250,7 +250,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 10000,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "highWaterBytes": 176422912,
       "configuredBytes": 67436544,
       "samples": [
@@ -284,7 +284,7 @@
       "runtime": "browser",
       "role": "catalog",
       "entities": 31814,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "configuredBytes": 152502272,
       "highWaterBytes": 498728960,
       "samples": [
@@ -323,7 +323,7 @@
       "runtime": "wasmedge",
       "version": "0.16.4",
       "entities": 31814,
-      "baseBytes": 28377088,
+      "baseBytes": 28704768,
       "highWaterBytes": 498728960,
       "configuredBytes": 152502272,
       "samples": [
@@ -362,8 +362,8 @@
   "aot": {
     "status": "PASS",
     "command": "spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm",
-    "artifactSha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3",
-    "log": "prewarming FlatSQL AOT artifacts into /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot\n  flatsql engine: /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/flatsql-48dbf9473b5a4a50-we0.16.4-arm64.aot.wasm (compiled)\n[2026-10-29 11:13:55.926] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:55.927] [error] calling stack:1\n[2026-10-29 11:13:56.227] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.227] [error] calling stack:1\n[2026-10-29 11:13:56.248] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.248] [error] calling stack:1\n[2026-10-29 11:13:56.268] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.268] [error] calling stack:1\n[2026-10-29 11:13:56.446] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.446] [error] calling stack:5, 5, 5\n[2026-10-29 11:13:56.746] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.746] [error] calling stack:5, 5, 5\n[2026-10-29 11:13:56.767] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.767] [error] calling stack:5, 5, 5\n[2026-10-29 11:13:56.788] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:13:56.788] [error] calling stack:5, 5, 5\n  flatsql-link shim: /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/flatsqllink-up-8d83e69b087c5b8c-we0.16.4-arm64.aot.wasm (compiled)\n  partition-store engine (flatsql@3.7.1): /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/fsqlps-intr-up-aa1ed58de773347c-we0.16.4-arm64.aot.wasm (compiled)\n  format-4 engine (flatsql@3.12.1): /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/fsqlp4-intr-up-75f33a69d462a07a-we0.16.4-arm64.aot.wasm (compiled)\n  flow /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/dist/isomorphic/module.wasm: /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/flowmount-_Users_tj_software_worktrees_space_data_network__e34817d1_up-343c4145a6fa2154-we0.16.4-arm64.aot.wasm (compiled)"
+    "artifactSha256": "f52b43492f35f26ef1cc07a8e53e7f50a365edaadf06517d02c9976df173eb8d",
+    "log": "prewarming FlatSQL AOT artifacts into /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot\n  flatsql engine: /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/flatsql-48dbf9473b5a4a50-we0.16.4-arm64.aot.wasm (already present)\n[2026-10-29 11:31:29.403] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:29.409] [error] calling stack:1\n[2026-10-29 11:31:29.703] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:29.704] [error] calling stack:1\n[2026-10-29 11:31:29.724] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:29.724] [error] calling stack:1\n[2026-10-29 11:31:29.746] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:29.746] [error] calling stack:1\n[2026-10-29 11:31:29.890] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:29.890] [error] calling stack:5, 5, 5\n[2026-10-29 11:31:30.191] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:30.191] [error] calling stack:5, 5, 5\n[2026-10-29 11:31:30.211] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:30.211] [error] calling stack:5, 5, 5\n[2026-10-29 11:31:30.233] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:30.233] [error] calling stack:5, 5, 5\n[2026-10-29 11:31:30.739] [error] wasmedge runtime failed: execution interrupted, Code: 0x007\n[2026-10-29 11:31:30.739] [error] calling stack:5, 5, 5\n  flatsql-link shim: /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/flatsqllink-up-8d83e69b087c5b8c-we0.16.4-arm64.aot.wasm (already present)\n  partition-store engine (flatsql@3.7.1): /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/fsqlps-intr-up-aa1ed58de773347c-we0.16.4-arm64.aot.wasm (already present)\n  format-4 engine (flatsql@3.12.1): /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/fsqlp4-intr-up-75f33a69d462a07a-we0.16.4-arm64.aot.wasm (already present)\n  flow /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/dist/isomorphic/module.wasm: /Users/tj/software/worktrees/space-data-network-modules--modules-ffm-memory-sizing-current-artifact-20261028/propagator/ffm/.sdk-build/memory-sizing/aot/flowmount-_Users_tj_software_worktrees_space_data_network__e34817d1_up-f52b43492f35f26e-we0.16.4-arm64.aot.wasm (compiled)"
   },
   "model": {
     "calibratedEntityRange": [
