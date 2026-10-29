@@ -112,34 +112,57 @@ for (const runtimeKind of (process.env.CQR_TEST_RUNTIME ? [process.env.CQR_TEST_
     assert.equal(unavailable.PROBABILITY, undefined);
     assert.equal(unavailable.PRIMARY_COVARIANCE_BASIS, 'SOURCE_EPHEMERIS');
 
-    // Exercise the distinct empirical-model adapter without private fixtures.
-    // Two synthetic identities with identical elements deliberately force a
-    // zero-relative-speed encounter. Its fallback method is carried by the
-    // CDM; the narrower CQR plane-method enum cannot represent it.
+    // Two synthetic identities with identical elements are co-located: their
+    // range is 0 at every instant, so no time is the closest approach. The
+    // pair methods say so apart from "no close approach", with the range.
     const [gp] = syntheticGp({ planes: 1, perPlane: 1, epoch: iso(jd0 - 1) });
-    const modeled = pair();
-    modeled.PRIMARY = gpSource(gp);
-    modeled.SECONDARY = gpSource({ ...gp, NORAD_CAT_ID: gp.NORAD_CAT_ID + 1,
-      OBJECT_ID: 'synthetic-coincident-secondary', OBJECT_NAME: 'synthetic-coincident-secondary' });
     const modelCovariance = Array(21).fill(0);
     for (const i of [0, 2, 5]) modelCovariance[i] = .02;
     for (const i of [9, 14, 20]) modelCovariance[i] = 2e-10;
     const model = uncertaintyModelFrame({ kind: 'gp-error-model',
       regimes: [{ id: 'synthetic', altitudeKm: [0, 1e9], eccentricity: [0, 1] }],
       ageBinsDays: [[0, 7]], strata: [{ regimeIndex: 0, ageIndex: 0, covariance: modelCovariance }] });
-    const modeledResult = await h.invoke({ methodId: 'assess_conjunction', inputs: [
-      { portId: 'request', payload: encodeCqr(flatc, { PAIR_REQUEST: modeled }) },
-      { portId: 'uncertainty_model', payload: model },
-    ] });
+    const withModel = (request) => [{ portId: 'request', payload: encodeCqr(flatc, { PAIR_REQUEST: request }) }, { portId: 'uncertainty_model', payload: model }];
+    const colocated = pair();
+    colocated.PRIMARY = gpSource(gp);
+    colocated.SECONDARY = gpSource({ ...gp, NORAD_CAT_ID: gp.NORAD_CAT_ID + 1,
+      OBJECT_ID: 'synthetic-coincident-secondary', OBJECT_NAME: 'synthetic-coincident-secondary' });
+    const refused = await h.invoke({ methodId: 'assess_conjunction', inputs: withModel(colocated) });
+    assert.equal(refused.statusCode, 422, refused.errorMessage);
+    assert.equal(refused.errorCode, 'constant-range');
+    assert.match(refused.errorMessage, /constant over the window at 0\.000 m/);
+
+    // Exercise the distinct empirical-model adapter without private fixtures,
+    // on a slow real encounter: two invented element sets, epoch 0.01 day
+    // before jd0 (inside the model's first age bin), alike but for inclination
+    // (53 and 53.0038 deg), both at the node about jd0, so they pass 1.8 m
+    // apart at 0.50 m/s, inside the window. At that speed the short-term
+    // encounter assumptions fail and the fallback method is carried by the
+    // CDM; the narrower CQR plane-method enum cannot represent it.
+    const element = (name, norad, inclination) => ({ OBJECT_NAME: name, OBJECT_ID: name, NORAD_CAT_ID: norad,
+      EPOCH: iso(jd0 - .01).slice(0, 23), ELEMENT_SET_NO: 999, REV_AT_EPOCH: 1, CLASSIFICATION_TYPE: 'U', BSTAR: 0,
+      MEAN_MOTION_DOT: 0, MEAN_MOTION_DDOT: 0, MEAN_MOTION: 15.05, ECCENTRICITY: .0001, INCLINATION: inclination,
+      RA_OF_ASC_NODE: 40, ARG_OF_PERICENTER: 0, MEAN_ANOMALY: 360 - 15.05 * .01 * 360 });
+    const modeled = pair();
+    modeled.PRIMARY = gpSource(element('synthetic-slow-primary', 900031, 53));
+    modeled.SECONDARY = gpSource(element('synthetic-slow-secondary', 900032, 53.0038));
+    const modeledResult = await h.invoke({ methodId: 'assess_conjunction', inputs: withModel(modeled) });
     assert.equal(modeledResult.statusCode, 0, modeledResult.errorMessage);
     const empirical = decodeCqr(flatc, modeledResult.outputs[0].payload).EVENT_RESULT;
+    const intoWindow = (empirical.TCA.JULIAN_DATE - jd0) * 86400 + 60;
+    assert.ok(intoWindow > 1 && intoWindow < 119, `TCA ${intoWindow} s into the window`);
+    assert.ok(empirical.MISS_DISTANCE_M < 100, `miss ${empirical.MISS_DISTANCE_M} m`);
+    assert.ok(Math.abs(empirical.RELATIVE_SPEED_M_S - .5) < .05, `relative speed ${empirical.RELATIVE_SPEED_M_S} m/s`);
     assert.equal(empirical.PROBABILITY, undefined);
     for (const key of ['PRIMARY_COVARIANCE_BASIS', 'SECONDARY_COVARIANCE_BASIS'])
       assert.equal(empirical[key], 'EMPIRICAL_MODEL');
     for (const sigma of [empirical.PRIMARY_SIGMA_RTN_M, empirical.SECONDARY_SIGMA_RTN_M])
       for (const axis of ['X', 'Y', 'Z']) assert.ok(Math.abs(sigma[axis] - Math.sqrt(.02) * 1000) < .001);
     assert.equal(empirical.HAS_MAHALANOBIS_3D_SQUARED, true);
-    assert.equal(empirical.MAHALANOBIS_3D_SQUARED, 0);
+    // Isotropic 0.02 km² per object: Md² = miss² / 0.04 km² (the decoded
+    // record carries 11 significant digits).
+    const md2 = (empirical.MISS_DISTANCE_M / 1000) ** 2 / .04;
+    assert.ok(Math.abs(empirical.MAHALANOBIS_3D_SQUARED - md2) <= 1e-6 * md2, `Md² ${empirical.MAHALANOBIS_3D_SQUARED} vs ${md2}`);
     for (const object of [empirical.CONJUNCTION_MESSAGE.OBJECT1, empirical.CONJUNCTION_MESSAGE.OBJECT2])
       assert.deepEqual(object.COVARIANCE, modelCovariance);
 

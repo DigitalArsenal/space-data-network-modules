@@ -136,16 +136,26 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     close(a.PROBABILITY.PROBABILITY,b.PROBABILITY.PROBABILITY,a.PROBABILITY.PROBABILITY*1e-5,'catalog Pc');
     const missing=await assess(parsed['oem-itrf.kvn'],secondary,{eops:[{MJD:53737}]});assert.equal(missing.r.errorCode,'invalid-eop');
   });
+  // The known answers are the stationary ITRF primary's GCRF states at every
+  // representable Julian date within 2.6 ms of the start. The pair methods
+  // report a TCA only at a local minimum of the range, never at a window or
+  // ephemeris edge, so the secondary passes 100 m beyond the primary at
+  // 10 km/s, 2 ms after the start (literal ITRF inputs, linear motion, which
+  // cubic Hermite reproduces exactly): the TCA falls 2 ms in, inside the
+  // known-answer span, and a sharp minimum (1.25 mm of range 50 us either
+  // side) pins it to the representable date of least range.
+  const passing=(start,stop)=>{
+    const span=(Date.parse(stop)-Date.parse(start))/1000;
+    return [{EPOCH:start,X:7000.1,Y:-.02,Z:0,X_DOT:0,Y_DOT:10,Z_DOT:0},{EPOCH:stop,X:7000.1,Y:10*(span-.002),Z:0,X_DOT:0,Y_DOT:10,Z_DOT:0}];
+  };
   for (const c of reference.precision_cases) await t.test(`${c.name}: ERFA epoch precision preserves 1 mm`,async()=>{
     const a=structuredClone(parsed['oem-itrf.kvn']), b=structuredClone(a);
     for(const oem of [a,b]) for(const block of oem.EPHEMERIS_DATA_BLOCK) {delete block.COVARIANCE_MATRIX_LINES;delete block.COV_REFERENCE_FRAME;}
     a.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=[
       {EPOCH:c.start,X:7000,Y:0,Z:0,X_DOT:0,Y_DOT:0,Z_DOT:0},
       {EPOCH:c.stop,X:7000,Y:0,Z:0,X_DOT:0,Y_DOT:0,Z_DOT:0}];
-    b.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=[
-      {EPOCH:c.start,X:7100,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0},
-      {EPOCH:c.stop,X:7130,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0}];
-    const {r,event}=await assess(a,b,{frame:'GCRF',startJd:c.start_jd,durationSeconds:.00005,eops:[c.eop]});assert.equal(r.statusCode,0,r.errorMessage);
+    b.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=passing(c.start,c.stop);
+    const {r,event}=await assess(a,b,{frame:'GCRF',startJd:c.start_jd,durationSeconds:.005,eops:[c.eop]});assert.equal(r.statusCode,0,r.errorMessage);
     const expected=c.grid.find(x=>x.jd===event.TCA.JULIAN_DATE);assert.ok(expected);
     for(let i=0;i<3;++i)close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.0005,`${c.name} GCRF position[${i}]`);
   });
@@ -153,15 +163,14 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     const a=structuredClone(parsed['oem-itrf.kvn']),b=structuredClone(a);
     for(const oem of [a,b]) for(const block of oem.EPHEMERIS_DATA_BLOCK) {delete block.COVARIANCE_MATRIX_LINES;delete block.COV_REFERENCE_FRAME;}
     // The positions/velocities are literal synthetic inputs. The secondary
-    // begins 100 km farther out, receding at 1 km/s, so TCA is the left endpoint.
+    // passes 100 m beyond the primary at 10 km/s, 2 ms after the start (see
+    // passing above), so the TCA is 2 ms in, inside the known-answer span.
     a.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=[
       {EPOCH:'2006-01-02T00:00:00Z',X:7000,Y:0,Z:0,X_DOT:0,Y_DOT:0,Z_DOT:0},
       {EPOCH:'2006-01-02T00:00:30Z',X:7000,Y:0,Z:0,X_DOT:0,Y_DOT:0,Z_DOT:0}];
-    b.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=[
-      {EPOCH:'2006-01-02T00:00:00Z',X:7100,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0},
-      {EPOCH:'2006-01-02T00:00:30Z',X:7130,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0}];
-    const {r,event}=await assess(a,b,{frame:'GCRF',startJd:reference.start_jd,durationSeconds:.00005});assert.equal(r.statusCode,0,r.errorMessage);
-    close(event.TCA.JULIAN_DATE,reference.start_jd,2e-3/86400,"endpoint TCA");
+    b.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=passing('2006-01-02T00:00:00Z','2006-01-02T00:00:30Z');
+    const {r,event}=await assess(a,b,{frame:'GCRF',startJd:reference.start_jd,durationSeconds:.005});assert.equal(r.statusCode,0,r.errorMessage);
+    close(event.TCA.JULIAN_DATE,reference.start_jd+.002/86400,1e-4/86400,"TCA 2 ms after the start");
     const expected=reference.gcrf_grid.find(x=>x.jd===event.TCA.JULIAN_DATE);assert.ok(expected);
     for(let i=0;i<3;++i) {
       close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.0005,`ERFA GCRF position[${i}]`);

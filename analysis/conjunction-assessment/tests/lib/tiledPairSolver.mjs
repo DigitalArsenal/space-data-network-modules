@@ -1,9 +1,10 @@
-// Close approaches of one pair found by the pair method (ConjunctionEngine's
-// TCA search, selected by LAAS_2015) on overlapping tiles of a window, apart
-// from the screener's coarse pass and refinement. A tile yields its closest
-// approach; one within the threshold and strictly inside the tile (1 s from
-// either edge) is a conjunction. Run as a child process, one per pair, so the
-// pairs solve in parallel.
+// Close approaches of one pair found by the pair method (assess_conjunction,
+// LAAS_2015 on the engine path) on overlapping tiles of a window, apart from
+// the screener's coarse pass and refinement. A tile yields its least-miss
+// local minimum of the range, or none (no-close-approach); one within the
+// threshold and strictly inside the tile (1 s from either edge) is a
+// conjunction. Run as a child process, one per pair, so the pairs solve in
+// parallel.
 //
 // argv[2]: JSON { primary, secondary (GP records), startJd, durationSeconds,
 // tileSeconds, strideSeconds, thresholdKm, fineTolSec }. Prints a JSON array
@@ -24,6 +25,7 @@ try {
       CONTROLS: { ...screeningControls({ startJd: tileStart, durationSeconds: tileSeconds, coarseStepSec: 5, thresholdKm: o.thresholdKm, fineTolSec: o.fineTolSec }), ALGORITHM: 'LAAS_2015' },
       PRIMARY_RADIUS_M: 5, SECONDARY_RADIUS_M: 5, EVALUATION_FRAME: earthFrame('TEME'),
     } }) }] });
+    if (response.errorCode === 'no-close-approach') continue;
     if (response.statusCode !== 0) throw new Error(`${response.errorCode}: ${response.errorMessage}`);
     const e = decodeCqr(flatc, response.outputs[0].payload).EVENT_RESULT;
     const intoTile = (e.TCA.JULIAN_DATE - tileStart) * 86400;

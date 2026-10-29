@@ -100,9 +100,11 @@ struct ConjunctionSolution {
     double min_range_km = 0.0;
 };
 
-/// Find Time of Closest Approach between two TLEs
-/// Searches within [start_jd, start_jd + duration_days]
-/// Uses bisection refinement after coarse step search
+/// The catalog screener's local refinement (screening.cpp): the least range
+/// on the closed window [start_jd, start_jd + duration_days], which is at an
+/// edge when the range is monotonic there (the screener then widens its
+/// window). It is not a time of closest approach in general; the pair
+/// methods report closest_approach_in_window.
 double find_tca(const TLE& tle1, const TLE& tle2,
                 double start_jd, double duration_days = 7.0,
                 double coarse_step_sec = 60.0, double fine_tol_sec = 0.001);
@@ -183,6 +185,34 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days, double threshold_km,
     double fine_tol_sec = 0.001);
+/// The conjunctions a window reports: the minima above whose TCA lies in
+/// [start_jd, start_jd + duration_days), so a minimum belongs to the one
+/// window holding its TCA. These are screen_catalog's events on the generic
+/// engine path, in TCA order.
+std::vector<ConjunctionSolution> window_conjunctions(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double threshold_km,
+    double fine_tol_sec);
+/// The pair methods' time of closest approach (find_tca, assess_conjunction,
+/// emit_cdm, emit_csm): the window's conjunction of least miss, whatever its
+/// range, so its TCA and miss are those of the event screen_catalog reports
+/// for that minimum. A window edge is never a TCA: nullopt when the range
+/// has no local minimum in the window, and when a state fails (has_error()).
+std::optional<ConjunctionSolution> closest_approach_in_window(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double fine_tol_sec);
+/// A range that varies by no more than this over a window is constant: 1 mm,
+/// far above the binary64 noise of a range between Earth-orbit states and far
+/// below any separation two moving objects keep across a window.
+constexpr double CONSTANT_RANGE_TOLERANCE_KM = 1e-6;
+/// The pair's range at the window start when it varies by no more than
+/// tolerance_km across [start_jd, start_jd + duration_days], sampled at both
+/// edges, at eight evenly spaced times and on the 5 s grid between them:
+/// co-located objects or zero relative motion, which have no time of closest
+/// approach. nullopt otherwise, and when a state fails (has_error()).
+std::optional<double> constant_range_km(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double tolerance_km);
 ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double search_start_jd, double search_end_jd, double tca_hint_jd);

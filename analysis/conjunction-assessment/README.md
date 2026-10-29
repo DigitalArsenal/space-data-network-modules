@@ -281,13 +281,24 @@ The generic engine path (sampled or non-mean polynomial sources, primaries on
 `screen_catalog`, other probability algorithms) reports every local minimum of
 each pair's range within the threshold whose TCA lies in `[start, start +
 duration)`. The range is sampled on an absolute 5 s grid (`k * 5 s`) reaching
-one sample past each window edge, and each sample below both neighbours is
-refined as `assess_conjunction` refines (the range-rate root where the range
-provably has one minimum, golden section otherwise), then settled on the
-representable Julian date of least range. A window edge is never itself
-reported, and a minimum refines to the same TCA in every window that sees it,
-the TCA `assess_conjunction` and `emit_cdm` give it as a pair's closest
-approach.
+one sample past each window edge. Where that sample would lie outside a
+tabulated or polynomial source's coverage, the coverage edge is the sample and
+the interval beside it is refined too, so a minimum just inside the start or
+end of an ephemeris is found. Each sample below both neighbours is refined (the
+range-rate root where the range provably has one minimum, golden section
+otherwise), then settled on the representable Julian date of least range. A
+window edge or coverage edge is never itself reported, and a minimum refines to
+the same TCA in every window that sees it.
+
+The pair methods (`find_tca`, `assess_conjunction`, `emit_cdm`, `emit_csm`) run
+this same search for every source kind, with no range bound, and report the
+window's minimum of least miss: its TCA, miss distance and probability are
+those of the event `screen_catalog` reports for it. A window whose range has
+no local minimum (monotonic across it, or with its minima outside it) has no
+time of closest approach, and the pair methods refuse it: status 422,
+`no-close-approach`. A range constant across the window to within 1 mm
+(co-located objects, a formation, zero relative motion) has none either and is
+refused apart, with its value: status 422, `constant-range`.
 Windows that abut report each minimum exactly once; windows that overlap report
 a minimum inside the overlap in each of them, with the same TCA and miss
 distance, so a consumer that keeps overlapping windows removes the repeat by

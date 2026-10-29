@@ -730,6 +730,9 @@ double find_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
     return best_jd;
 }
 
+// The absolute grid the minimum search samples the range on, k * 5 s.
+static constexpr double RANGE_SAMPLE_DAYS = 5.0 / 86400.0;
+
 std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days, double threshold_km,
@@ -739,7 +742,7 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     // The range sampled every 5 s. 5 s is what find_tca samples at: at 12+
     // km/s a sub-km minimum lasts < 0.1 s, but the sample below both its
     // neighbours still brackets it.
-    constexpr double SAMPLE_DAYS = 5.0 / 86400.0;
+    constexpr double SAMPLE_DAYS = RANGE_SAMPLE_DAYS;
     // The sample nearest a minimum is at most 2.5 s from it, so no farther
     // than the minimum plus 2.5 s of relative motion (40 km at 16 km/s): a
     // sample beyond threshold + 50 km has no minimum within the threshold.
@@ -748,19 +751,30 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     // past each window edge: a minimum near an edge is bracketed by samples
     // on both sides of it, and windows that share an edge bracket and refine
     // it identically, so the TCA a window reports does not depend on where
-    // the window starts. A window edge is never itself a minimum.
+    // the window starts. A window edge is never itself a minimum. Where the
+    // sample past an edge lies outside the sources' joint coverage (a
+    // tabulated or polynomial track ending there), the coverage edge takes
+    // its place.
     const Coverage covered = joint_coverage(obj1, obj2);
     const double first_k = std::floor(start_jd / SAMPLE_DAYS) - 1.0;
     const double last_k = std::ceil(end_jd / SAMPLE_DAYS) + 1.0;
+    const bool coverage_starts = first_k * SAMPLE_DAYS < covered.start;
+    const bool coverage_ends = last_k * SAMPLE_DAYS > covered.end;
     std::vector<double> jds;
     std::vector<double> ranges;
+    const auto sample = [&](double jd) {
+        jds.push_back(jd);
+        ranges.push_back(distance_at_jd(obj1, obj2, jd));
+        return !has_error();
+    };
+    if (coverage_starts && !sample(covered.start)) return {};
     for (double k = first_k; k <= last_k; k += 1.0) {
         const double jd = k * SAMPLE_DAYS;
         if (jd < covered.start || jd > covered.end) continue;
-        jds.push_back(jd);
-        ranges.push_back(distance_at_jd(obj1, obj2, jd));
-        if (has_error()) return {};
+        if (!jds.empty() && jd <= jds.back()) continue;   // the coverage start itself
+        if (!sample(jd)) return {};
     }
+    if (coverage_ends && (jds.empty() || covered.end > jds.back()) && !sample(covered.end)) return {};
 
     // Each sample below its predecessor and not above its successor brackets
     // a minimum between those two neighbours.
@@ -771,6 +785,17 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
             brackets.push_back({jds[i - 1], jds[i + 1]});
         }
     }
+    // A coverage edge has no sample beyond it, so the interval next to it is
+    // a bracket too when the edge's range is not above the next sample's: a
+    // minimum may lie between them. One that refines onto the edge is the
+    // edge, which is never a minimum.
+    const size_t n = jds.size();
+    const bool start_bracket = coverage_starts && n >= 2 && ranges[0] <= ranges[1] &&
+                               ranges[0] < threshold_km + CANDIDATE_MARGIN_KM;
+    const bool end_bracket = coverage_ends && n >= 2 && ranges[n - 1] <= ranges[n - 2] &&
+                             ranges[n - 1] < threshold_km + CANDIDATE_MARGIN_KM;
+    if (start_bracket) brackets.push_back({jds[0], jds[1]});
+    if (end_bracket) brackets.push_back({jds[n - 2], jds[n - 1]});
 
     // Each bracket refines as find_tca refines a window, so an encounter has
     // one TCA whichever path found it: the range-rate root when the range
@@ -789,6 +814,10 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
             : refine_minimum(obj1, obj2, 0.5 * (low + high), 0.5 * (high - low), fine_tol_sec);
         if (has_error()) return {};
         if (!(tca_jd >= start_jd - tolerance_days && tca_jd <= end_jd + tolerance_days)) {
+            continue;
+        }
+        if ((coverage_starts && tca_jd <= covered.start + tolerance_days) ||
+            (coverage_ends && tca_jd >= covered.end - tolerance_days)) {
             continue;
         }
         const double d = distance_at_jd(obj1, obj2, tca_jd);
@@ -810,6 +839,67 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
                   return a.tca_jd < b.tca_jd;
               });
     return solutions;
+}
+
+std::vector<ConjunctionSolution> window_conjunctions(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double threshold_km,
+    double fine_tol_sec)
+{
+    auto solutions = assess_conjunction_solutions_within_threshold(
+        obj1, obj2, start_jd, duration_days, threshold_km, fine_tol_sec);
+    const double end_jd = start_jd + duration_days;
+    solutions.erase(std::remove_if(solutions.begin(), solutions.end(),
+                                   [&](const ConjunctionSolution& s) {
+                                       return !(s.tca_jd >= start_jd && s.tca_jd < end_jd);
+                                   }),
+                    solutions.end());
+    return solutions;
+}
+
+std::optional<ConjunctionSolution> closest_approach_in_window(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double fine_tol_sec)
+{
+    // No range bound: every local minimum in the window is a candidate, at
+    // any distance (the earliest of equal misses).
+    const auto solutions = window_conjunctions(
+        obj1, obj2, start_jd, duration_days,
+        std::numeric_limits<double>::infinity(), fine_tol_sec);
+    if (has_error() || solutions.empty()) return std::nullopt;
+    return *std::min_element(solutions.begin(), solutions.end(),
+                             [](const ConjunctionSolution& a, const ConjunctionSolution& b) {
+                                 return a.min_range_km < b.min_range_km;
+                             });
+}
+
+std::optional<double> constant_range_km(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double tolerance_km)
+{
+    const double end_jd = start_jd + duration_days;
+    const double first = distance_at_jd(obj1, obj2, start_jd);
+    if (has_error()) return std::nullopt;
+    double low = first, high = first;
+    const auto within = [&](double jd) {
+        const double d = distance_at_jd(obj1, obj2, jd);
+        if (has_error()) return false;
+        low = std::min(low, d);
+        high = std::max(high, d);
+        return high - low <= tolerance_km;
+    };
+    // Eight evenly spaced samples too, so a window shorter than the grid step
+    // (whose edges can be equally far from a minimum between them) is seen
+    // to vary.
+    constexpr int INTERIOR_SAMPLES = 8;
+    for (int i = 1; i <= INTERIOR_SAMPLES; ++i) {
+        if (!within(start_jd + duration_days * i / (INTERIOR_SAMPLES + 1))) return std::nullopt;
+    }
+    for (double k = std::floor(start_jd / RANGE_SAMPLE_DAYS) + 1.0; k * RANGE_SAMPLE_DAYS < end_jd; k += 1.0) {
+        if (!within(k * RANGE_SAMPLE_DAYS)) return std::nullopt;
+    }
+    if (!within(end_jd)) return std::nullopt;
+    return first;
 }
 
 // ============================================================================

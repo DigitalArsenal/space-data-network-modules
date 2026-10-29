@@ -18,6 +18,7 @@
 #include "conjunction/pc_fallbacks.h"
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -154,22 +155,24 @@ public:
   /// Set default hard-body radii (meters)
   void set_combined_radius_m(double radius1, double radius2);
 
-  /// Find TCA between two ephemeris sources
-  /// Searches [start_jd, start_jd + duration_days]
-  double find_tca(const EphemerisSource &obj1, const EphemerisSource &obj2,
-                  double start_jd, double duration_days = 7.0,
-                  double coarse_step_sec = 5.0,
-                  double fine_tol_sec = 0.001) const;
+  /// The TCA in [start_jd, start_jd + duration_days): the window's least-miss
+  /// local minimum of the range (closest_approach_in_window). nullopt when
+  /// the range has none there (a window edge is never a TCA) or a state
+  /// fails (has_error()).
+  std::optional<double> find_tca(const EphemerisSource &obj1,
+                                 const EphemerisSource &obj2, double start_jd,
+                                 double duration_days = 7.0,
+                                 double fine_tol_sec = 0.001) const;
 
-  /// Full conjunction assessment. The Pc method applies only when both RTN
-  /// covariances are supplied; otherwise the event carries the Alfano maximum.
-  ConjunctionEvent2 assess(const EphemerisSource &obj1,
-                           const EphemerisSource &obj2, double start_jd,
-                           double duration_days = 7.0,
-                           const Covariance3x3 *cov1 = nullptr,
-                           const Covariance3x3 *cov2 = nullptr,
-                           double coarse_step_sec = 5.0,
-                           double fine_tol_sec = 0.001) const;
+  /// Full conjunction assessment at find_tca's TCA; nullopt as find_tca. The
+  /// Pc method applies only when both RTN covariances are supplied; otherwise
+  /// the event carries the Alfano maximum.
+  std::optional<ConjunctionEvent2> assess(const EphemerisSource &obj1,
+                                          const EphemerisSource &obj2, double start_jd,
+                                          double duration_days = 7.0,
+                                          const Covariance3x3 *cov1 = nullptr,
+                                          const Covariance3x3 *cov2 = nullptr,
+                                          double fine_tol_sec = 0.001) const;
 
   /// The assessment at a TCA already found (states, geometry, probability).
   ConjunctionEvent2 assess_at(const EphemerisSource &obj1,
@@ -177,12 +180,12 @@ public:
                               const Covariance3x3 *cov1 = nullptr,
                               const Covariance3x3 *cov2 = nullptr) const;
 
-  /// Assess near a known TCA
-  ConjunctionEvent2 assess_near(const EphemerisSource &obj1,
-                                const EphemerisSource &obj2, double tca_hint_jd,
-                                double window_hours = 2.0,
-                                const Covariance3x3 *cov1 = nullptr,
-                                const Covariance3x3 *cov2 = nullptr) const;
+  /// assess over tca_hint_jd +/- window_hours; nullopt as find_tca.
+  std::optional<ConjunctionEvent2> assess_near(const EphemerisSource &obj1,
+                                               const EphemerisSource &obj2, double tca_hint_jd,
+                                               double window_hours = 2.0,
+                                               const Covariance3x3 *cov1 = nullptr,
+                                               const Covariance3x3 *cov2 = nullptr) const;
 
   /// Compute Pc from pre-computed states and their RTN covariances (no
   /// propagation)
@@ -203,7 +206,8 @@ public:
     fallback_ = method; fallback_options_ = options;
   }
 
-  /// Screen multiple objects
+  /// Screen multiple objects: each pair's assess within threshold_km (a pair
+  /// whose range has no local minimum in the window has no event).
   std::vector<ConjunctionEvent2>
   screen(const std::vector<std::shared_ptr<EphemerisSource>> &primaries,
          const std::vector<std::shared_ptr<EphemerisSource>> &secondaries,

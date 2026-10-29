@@ -337,9 +337,10 @@ test('internal CDMs remain available while text refuses missing covariance or ca
   const h = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const [primary, secondary] = syntheticGp();
+    // 6000 s, more than an orbit, so the window holds a close approach of the pair.
     const noCovariance = { PAIR_REQUEST: {
       PRIMARY: gpSource(primary), SECONDARY: gpSource(secondary),
-      CONTROLS: { ...screeningControls({ startJd: JD0, durationSeconds: 600, coarseStepSec: 60 }), ALGORITHM: 'ALFANO_MAXIMUM' },
+      CONTROLS: { ...screeningControls({ startJd: JD0, durationSeconds: 6000, coarseStepSec: 60 }), ALGORITHM: 'ALFANO_MAXIMUM' },
       PRIMARY_RADIUS_M: 5, SECONDARY_RADIUS_M: 5, EVALUATION_FRAME: earthFrame('TEME'),
     } };
     const uncatalogued = oemRequest();

@@ -3,15 +3,15 @@
 /**
  * Conjunction Assessment Engine (v2) — Propagator-agnostic implementation
  *
- * TCA finding uses the same golden-section refinement as v1, but
- * through the EphemerisSource interface instead of TLE+SGP4 directly.
+ * TCA finding is screen_catalog's minimum search through the
+ * EphemerisSource interface (closest_approach_in_window).
  *
  * B-plane projection follows Montenbruck & Gill Section 6.5.
  */
 
 #include "conjunction/conjunction_engine.h"
 #include "conjunction/encounter_geometry.h"
-#include "conjunction/conjunction_assessment.h"  // for inertial_to_rtn
+#include "conjunction/conjunction_assessment.h"  // closest_approach_in_window, inertial_to_rtn
 
 #include <cmath>
 #include <algorithm>
@@ -52,26 +52,30 @@ static bool state_is_finite(const StateVector& state) {
 
 // ── TCA Finding ──
 
-double ConjunctionEngine::find_tca(
+std::optional<double> ConjunctionEngine::find_tca(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
-    double start_jd, double duration_days, double coarse_step_sec, double fine_tol_sec) const
+    double start_jd, double duration_days, double fine_tol_sec) const
 {
-    // One TCA search for every caller: 5 s range sampling brackets minima
-    // that coarse-step sampling steps over at 10+ km/s (conjunction_assessment).
-    return conjunction::find_tca(obj1, obj2, start_jd, duration_days, coarse_step_sec, fine_tol_sec);
+    // The minimum search screen_catalog runs (conjunction_assessment), so a
+    // pair's TCA here is that of its catalog event.
+    const auto found = closest_approach_in_window(obj1, obj2, start_jd, duration_days, fine_tol_sec);
+    if (!found) return std::nullopt;
+    return found->tca_jd;
 }
 
 // ── Full Assessment ──
 
-ConjunctionEvent2 ConjunctionEngine::assess(
+std::optional<ConjunctionEvent2> ConjunctionEngine::assess(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days,
     const Covariance3x3* cov1, const Covariance3x3* cov2,
-    double coarse_step_sec, double fine_tol_sec) const
+    double fine_tol_sec) const
 {
-    const double tca_jd = find_tca(obj1, obj2, start_jd, duration_days, coarse_step_sec, fine_tol_sec);
-    if (has_error()) return {};
-    return assess_at(obj1, obj2, tca_jd, cov1, cov2);
+    const auto tca_jd = find_tca(obj1, obj2, start_jd, duration_days, fine_tol_sec);
+    if (!tca_jd) return std::nullopt;
+    auto event = assess_at(obj1, obj2, *tca_jd, cov1, cov2);
+    if (has_error()) return std::nullopt;
+    return event;
 }
 
 ConjunctionEvent2 ConjunctionEngine::assess_at(
@@ -150,7 +154,7 @@ ConjunctionEvent2 ConjunctionEngine::assess_at(
     return event;
 }
 
-ConjunctionEvent2 ConjunctionEngine::assess_near(
+std::optional<ConjunctionEvent2> ConjunctionEngine::assess_near(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double tca_hint_jd, double window_hours,
     const Covariance3x3* cov1, const Covariance3x3* cov2) const
@@ -175,8 +179,8 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::screen(
             {
                 auto event = assess(*primary, *secondary, start_jd, duration_days);
                 if (has_error()) return {};
-                if (event.miss_distance_km <= threshold_km) {
-                    events.push_back(event);
+                if (event && event->miss_distance_km <= threshold_km) {
+                    events.push_back(*event);
                 }
             }
         }

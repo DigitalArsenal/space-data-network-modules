@@ -1605,6 +1605,34 @@ bool pair(const CQRPairRequest *p, Source &a, Source &b, ScreeningConfig &c) {
   return f && source(p->PRIMARY(), a) && source(p->SECONDARY(), b) &&
          window(a, c, f) && window(b, c, f);
 }
+// The pair methods' TCA: the window's least-miss local minimum of the range,
+// found as screen_catalog finds its events. A range constant across the
+// window (co-located objects, zero relative motion) has no TCA, whatever
+// ripple of interpolation or rounding it carries, and is refused with its
+// value: that is not "no close approach". A window whose range has no local
+// minimum has no time of closest approach; that is a refusal, never a window
+// edge.
+bool closestApproach(const EphemerisSource &a, const EphemerisSource &b,
+                     const ScreeningConfig &c, double &tca_jd) {
+  const auto constant = constant_range_km(a, b, c.start_jd, c.duration_days, CONSTANT_RANGE_TOLERANCE_KM);
+  if (has_error())
+    return error("pair-evaluation-failed", error_message());
+  if (constant) {
+    char text[200];
+    std::snprintf(text, sizeof text,
+                  "The pair's range is constant over the window at %.3f m (co-located or zero "
+                  "relative motion); TCA is undefined.", *constant * 1000.0);
+    return error("constant-range", text);
+  }
+  const auto found = closest_approach_in_window(a, b, c.start_jd, c.duration_days, c.fine_tol_sec);
+  if (has_error())
+    return error("pair-evaluation-failed", error_message());
+  if (!found)
+    return error("no-close-approach",
+                 "The pair's range has no local minimum in the window.");
+  tca_jd = found->tca_jd;
+  return true;
+}
 } // namespace ca_cqr
 
 extern "C" int compute_pc() {
@@ -1709,19 +1737,11 @@ extern "C" int find_tca() {
   ScreeningConfig c;
   if (!q || !pair(q->PAIR_REQUEST(), a, b, c))
     return 400;
+  // Element sets are evaluated as parsed (their own SGP4 initialization).
   double t = 0;
-  if (a.mean && b.mean)
-    t = conjunction::find_tca(a.tle, b.tle, c.start_jd, c.duration_days,
-                              c.coarse_step_sec, c.fine_tol_sec);
-  else {
-    ConjunctionEngine e;
-    t = e.find_tca(*a.provider, *b.provider, c.start_jd, c.duration_days,
-                   c.coarse_step_sec, c.fine_tol_sec);
-  }
-  if (!isFinite(t))
-    return error("pair-evaluation-failed",
-                 "TCA solver did not produce a finite result."),
-           422;
+  if (!(a.mean && b.mean ? closestApproach(*a.sgp4, *b.sgp4, c, t)
+                         : closestApproach(*a.provider, *b.provider, c, t)))
+    return 422;
   CQRT out;
   out.TCA_RESULT = instant(t);
   return push(out) ? 0 : 500;
@@ -1736,20 +1756,22 @@ extern "C" int assess_conjunction() {
   CQRT out;
   auto alg = q->PAIR_REQUEST()->CONTROLS()->ALGORITHM();
   if (a.mean && b.mean && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
-    double t = conjunction::find_tca(a.tle, b.tle, c.start_jd, c.duration_days,
-                                     c.coarse_step_sec, c.fine_tol_sec);
+    double t = 0;
+    if (!closestApproach(*a.sgp4, *b.sgp4, c, t))
+      return 422;
     out.EVENT_RESULT = event(assess_conjunction_at_tca(
         a.tle, b.tle, t, q->PAIR_REQUEST()->PRIMARY_RADIUS_M(),
         q->PAIR_REQUEST()->SECONDARY_RADIUS_M()));
   } else {
+    double t = 0;
+    if (!closestApproach(*a.provider, *b.provider, c, t))
+      return 422;
     ConjunctionEngine e;
     e.set_pc_method(algorithm(alg));
     e.set_combined_radius_m(q->PAIR_REQUEST()->PRIMARY_RADIUS_M(),
                             q->PAIR_REQUEST()->SECONDARY_RADIUS_M());
     BridgeEvent assessed;
-    static_cast<ConjunctionEvent2&>(assessed) = e.assess(
-        *a.provider, *b.provider, c.start_jd, c.duration_days,
-        nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
+    static_cast<ConjunctionEvent2&>(assessed) = e.assess_at(*a.provider, *b.provider, t);
     const auto supplied = applySourceCovariance(assessed, a, b, e, alg);
     out.EVENT_RESULT = event(assessed, alg, a.axes);
     covarianceLabels(*out.EVENT_RESULT, supplied);
@@ -1921,39 +1943,43 @@ ConjunctionEvent legacy(const BridgeEvent &e) {
   l.cdm_metadata2 = e.cdm_metadata2;
   return l;
 }
-bool emit(bool csm) {
+// Status 0; 400 for a request, evaluation or serialization failure; 422 when
+// the window has no time of closest approach.
+int emit(bool csm) {
   auto q = request();
   Source a, b;
   ScreeningConfig c;
   if (!q || !pair(q->PAIR_REQUEST(), a, b, c))
-    return false;
+    return 400;
   auto p = q->PAIR_REQUEST();
   auto alg = p->CONTROLS()->ALGORITHM();
   ConjunctionEvent e;
   if (a.mean && b.mean && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
-    double t = conjunction::find_tca(a.tle, b.tle, c.start_jd, c.duration_days,
-                                     c.coarse_step_sec, c.fine_tol_sec);
+    double t = 0;
+    if (!closestApproach(*a.sgp4, *b.sgp4, c, t))
+      return has_error() ? 400 : 422;
     e = assess_conjunction_at_tca(a.tle, b.tle, t, p->PRIMARY_RADIUS_M(),
                                   p->SECONDARY_RADIUS_M());
   } else {
+    double t = 0;
+    if (!closestApproach(*a.provider, *b.provider, c, t))
+      return has_error() ? 400 : 422;
     ConjunctionEngine engine;
     engine.set_pc_method(algorithm(alg));
     engine.set_combined_radius_m(p->PRIMARY_RADIUS_M(),
                                  p->SECONDARY_RADIUS_M());
     BridgeEvent assessed;
-    static_cast<ConjunctionEvent2&>(assessed) = engine.assess(
-        *a.provider, *b.provider, c.start_jd, c.duration_days,
-        nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
+    static_cast<ConjunctionEvent2&>(assessed) = engine.assess_at(*a.provider, *b.provider, t);
     applySourceCovariance(assessed, a, b, engine, alg);
     e = legacy(assessed);
   }
   if (has_error())
-    return error("pair-evaluation-failed", error_message());
+    return error("pair-evaluation-failed", error_message()), 400;
   if (e.cdm_metadata1.ephemeris_name.empty()) e.cdm_metadata1 = a.cdm_metadata;
   if (e.cdm_metadata2.ephemeris_name.empty()) e.cdm_metadata2 = b.cdm_metadata;
   if (!csm) {
     EmpiricalModel model;
-    if (!empiricalModel(model)) return false;
+    if (!empiricalModel(model)) return 400;
     if (!e.has_covariance)
       applyEmpiricalCovariance(e, empiricalPc(model, a.mean ? &a.gp : nullptr, b.mean ? &b.gp : nullptr,
           e.dse1, e.dse2, e.state1, e.state2, p->PRIMARY_RADIUS_M(), p->SECONDARY_RADIUS_M(), alg));
@@ -1971,9 +1997,9 @@ bool emit(bool csm) {
   }
   if (n < 0)
     return error("serialization-failed",
-                 "Unable to serialize conjunction message.");
+                 "Unable to serialize conjunction message."), 400;
   return pushBytes(csm ? "csm" : "cdm", csm ? "CSM.fbs" : "CDM.fbs",
-                   csm ? "$CSM" : "$CDM", csm ? "CSM" : "CDM", data.data(), n);
+                   csm ? "$CSM" : "$CDM", csm ? "CSM" : "CDM", data.data(), n) ? 0 : 400;
 }
 // Providers execute physics in C++; each worker writes private results. Merge
 // order and statistics are independent of worker scheduling.
@@ -2053,8 +2079,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         // end): windows that share an edge refine a minimum there to the same
         // TCA, so exactly one of them reports it. A window edge is never
         // itself a minimum.
-        const double end_jd = c.start_jd + c.duration_days;
-        auto solutions = assess_conjunction_solutions_within_threshold(
+        auto solutions = window_conjunctions(
             *p[i].provider, *b.provider, c.start_jd, c.duration_days,
             c.threshold_km, c.fine_tol_sec);
         if (has_error()) {
@@ -2063,8 +2088,6 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           continue;
         }
         for (const auto &solution : solutions) {
-          if (!(solution.tca_jd >= c.start_jd && solution.tca_jd < end_jd))
-            continue;
           BridgeEvent result;
           static_cast<ConjunctionEvent2&>(result) = e.assess_at(
               *p[i].provider, *b.provider, solution.tca_jd);
@@ -2126,8 +2149,8 @@ extern "C" int write_cdm_kvn() {
 extern "C" int write_cdm_xml() {
   return ca_cqr::document(true, true) ? 0 : 400;
 }
-extern "C" int emit_cdm() { return ca_cqr::emit(false) ? 0 : 400; }
-extern "C" int emit_csm() { return ca_cqr::emit(true) ? 0 : 400; }
+extern "C" int emit_cdm() { return ca_cqr::emit(false); }
+extern "C" int emit_csm() { return ca_cqr::emit(true); }
 extern "C" int version() {
   using namespace ca_cqr;
   auto q = request();
