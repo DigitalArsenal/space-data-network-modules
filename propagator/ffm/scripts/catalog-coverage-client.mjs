@@ -31,6 +31,7 @@ export function catalogClient(h, frames, seeds, epochJD) {
     profile: () => text(x.plugin_get_profile()),
     ensure: (jd) => check(x.plugin_ensure_coverage(jd, 0, seeds.length), seeds.length),
     states: (jd) => { check(x.plugin_eval_catalog_states_gcrf(jd, out, seeds.length), seeds.length); return new Float64Array(memory.buffer, out, seeds.length * 6).slice(); },
+    statesEcef: (jd) => { check(x.plugin_eval_states(jd, out, seeds.length), seeds.length); return new Float64Array(memory.buffer, out, seeds.length * 6).slice(); },
     positions: (jd) => { check(x.plugin_eval_positions(jd, out, seeds.length), seeds.length); return new Float64Array(memory.buffer, out, seeds.length * 3).slice(); },
     memoryBytes: () => memory.buffer.byteLength,
     dispose: () => { for (const p of allocated) x.plugin_free(p); x.plugin_destroy(); },

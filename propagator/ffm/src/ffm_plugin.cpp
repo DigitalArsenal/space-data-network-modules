@@ -1433,6 +1433,13 @@ void plugin_set_visibility_mask(const uint8_t* mask, int count) {
 int plugin_eval_states(double jd, double* outPtr, int maxCount) {
     if (!propagationReady() || !outPtr || maxCount <= 0 || !std::isfinite(jd)) return 0;
     const int n = std::min(g_entityCount, maxCount);
+    // The catalog epoch and the Earth orientation depend on `jd` alone: one
+    // UTC->TT conversion per call (a failed one leaves every row zero), and
+    // one frame, evaluated at the first covered object.
+    ffm::TTEpoch at;
+    const bool catalogAt = g_catalogDynamics && catalogEpoch(jd, at);
+    ffm::ResidentDynamics::EarthFrame frame;
+    bool framed = false;
     for (int i = 0; i < n; ++i) {
         double* out = outPtr + i * 6;
         std::fill(out, out + 6, 0.0);
@@ -1440,9 +1447,9 @@ int plugin_eval_states(double jd, double* outPtr, int maxCount) {
         if (!entity.valid || !entityVisible(i) || entity.arcCount > 0) continue;
         if (g_catalogDynamics) {
             StateVector state, fixed;
-            ffm::TTEpoch at;
-            if (!catalogState(i, jd, state) || !catalogEpoch(jd, at)) continue;
-            if (!g_catalogDynamics->earthFixed(at, state, fixed, false, g_catalogError)) return -1;
+            if (!catalogAt || !g_catalogDynamics->evaluatePrepared(i, at, state, false)) continue;
+            if (!framed && !(framed = g_catalogDynamics->earthFrame(at, frame, g_catalogError))) return -1;
+            ffm::ResidentDynamics::applyEarthFrame(frame, state, fixed, false);
             out[0] = fixed.position.x * 1000; out[1] = fixed.position.y * 1000; out[2] = fixed.position.z * 1000;
             out[3] = fixed.velocity.x * 1000; out[4] = fixed.velocity.y * 1000; out[5] = fixed.velocity.z * 1000;
             continue;

@@ -3,10 +3,14 @@
 // resident profile, qualified independently by scripts/e2e-ffm.mjs. GCRF SI,
 // UTC inputs, 1 day; 1 cm / 1 mm/s are dense-to-polynomial fitting tolerances,
 // not orbit-truth accuracy. All dynamics and polynomial evaluation are WASM.
+// The ECEF rows of plugin_eval_states are also compared byte for byte with the
+// previous artifact's, on one catalog instance holding every regime's seed.
 import fs from 'node:fs';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { browserMemory } from './catalog-memory-evidence.mjs';
 import { residentHarness } from '../tests/lib/residentRuntime.mjs';
@@ -26,7 +30,12 @@ const environment = environmentInputs();
 const request = catalog.fullForceRequest({ epoch: standard.fixtureEpochUtc, state: [...seeds[0].position, ...seeds[0].velocity].map(x => x * 1000) });
 const configuration = encodePrw('EXECUTION_REQUEST', request);
 const frames = [configuration, ...environment.map(x => x.payload)];
-const makeHost = () => createBrowserModuleHarness({ wasmSource: compiled, manifest, surface: 'direct' });
+// The previous artifact: 15cad928 built f52b4349 (2.0.2).
+const previousCommit = '15cad92874ba4ff89716bf62c8ded7b907534edc';
+const previous = execFileSync('git', ['show', `${previousCommit}:propagator/ffm/dist/isomorphic/module.wasm`],
+  { cwd: fileURLToPath(new URL('..', import.meta.url)), maxBuffer: 8 * 1024 * 1024 });
+const makeHost = (wasmSource = compiled) => createBrowserModuleHarness({ wasmSource, manifest, surface: 'direct' });
+const offsets = [0, 17.125, 149.75, 281.5, 300];
 const frame = (portId, arm, value) => ({ portId, typeRef: TYPE, payload: encodePrw(arm, value) });
 const report = { artifactSha256: createHash('sha256').update(wasm).digest('hex'), epochUtc: standard.fixtureEpochUtc,
   threads: 1, logicalCpus: os.cpus().length, loadStart: os.loadavg(), kernelBytes: KERNEL.length,
@@ -54,7 +63,7 @@ try {
         const start = segment * 300;
         const before = process.threadCpuUsage(); client.ensure(epoch + (start + 300) / 86400);
         const cpu = process.threadCpuUsage(before); row.coverageCpuSecondsPerObjectDay += (cpu.user + cpu.system) / 1e6;
-        for (const offset of [0, 17.125, 149.75, 281.5, 300]) {
+        for (const offset of offsets) {
           const jd = epoch + (start + offset) / 86400;
           const actual = client.states(jd);
           const response = await resident.invoke({ methodId: 'propagate_state', inputs: [frame('request', 'RESIDENT_REQUEST', makeTable('PRWResidentRequest', {
@@ -76,6 +85,30 @@ try {
   }
   report.loadEnd = os.loadavg();
   report.numerics = 'PASS';
+  // plugin_eval_states parity: all regime seeds in one catalog instance per
+  // artifact, the same ensure sequence to 900 s, the rows at the offsets above.
+  const ecefRows = async (wasmSource) => {
+    const host = await makeHost(wasmSource);
+    let client;
+    try {
+      client = catalogClient(host, frames, seeds, epoch);
+      const rows = [];
+      for (let start = 0; start < 900; start += 300) {
+        client.ensure(epoch + (start + 300) / 86400);
+        for (const offset of offsets) rows.push(client.statesEcef(epoch + (start + offset) / 86400));
+      }
+      return rows;
+    } finally { client?.dispose(); await host.destroy(); }
+  };
+  const currentRows = await ecefRows(compiled), previousRows = await ecefRows(await WebAssembly.compile(previous));
+  currentRows.forEach((rows, sample) => {
+    for (let i = 0; i < seeds.length; ++i)
+      assert(rows.subarray(i * 6, i * 6 + 6).every(x => Number.isFinite(x)) && rows.subarray(i * 6, i * 6 + 3).some(x => x !== 0), `${seeds[i].label}: no ECEF state at sample ${sample}`);
+    assert(Buffer.from(rows.buffer).equals(Buffer.from(previousRows[sample].buffer)), `plugin_eval_states rows differ from ${previousCommit.slice(0, 8)} at sample ${sample}`);
+  });
+  report.evalStatesParity = { previousCommit, previousArtifactSha256: createHash('sha256').update(previous).digest('hex'),
+    objects: seeds.length, samples: currentRows.length, horizonSeconds: 900, offsetsSeconds: offsets, result: 'byte-identical' };
+  save();
   const parityInstance = makeTable('PRWInstance', { MODULE_ID: 'com.orbpro.ffm', INSTANCE_ID: 'coverage-runtime-parity', GENERATION: 1n });
   const parityRequests = [
     encodePluginInvokeRequest({ methodId: 'ingest_state', inputs: [

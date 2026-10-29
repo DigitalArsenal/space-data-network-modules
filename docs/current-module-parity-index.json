@@ -6159,7 +6159,7 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "2.0.1",
+      "version": "2.0.3",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
