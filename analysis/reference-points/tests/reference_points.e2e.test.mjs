@@ -238,3 +238,37 @@ test('invalid arguments return -1',()=>{
     ()=>x.rp_region(-1,output),()=>x.rp_region(6,output),()=>x.rp_region(0,0),()=>x.rp_geomagnetic_axis(0)];
   for (const call of calls) assert.equal(call(),-1,call.toString());
 });
+
+// Source: the Sun's disk seen from a point is fully covered by the Moon's disk in the umbra (value 0), and
+// fully open far from the Moon's shadow (value 1). Grid axes are orthonormal and X points from the Sun to the Earth.
+test('occultation grid: umbra, lit, layout and rejection inside a body',()=>{
+  const sunR=1e8,moonR=2e8;
+  const sun=alloc([1e11,0,0]),moon=alloc([0,0,0]),earth=alloc([0,0,0]);
+  const behind=alloc([-1e10,0,0]),far=alloc([-1e10,5e9,0]);
+  assert.equal(x.rp_occultation_grid(sun,earth,moon,behind,identity,sunR,moonR,1e8,1,1,1,output,12000),0);
+  assert.equal(read(output,13)[12],0);
+  assert.equal(x.rp_occultation_grid(sun,earth,moon,far,identity,sunR,moonR,1e8,1,1,1,output,12000),0);
+  assert.equal(read(output,13)[12],1);
+  assert.equal(x.rp_occultation_grid(sun,earth,moon,behind,identity,sunR,moonR,1e8,3,2,1,output,12000),0);
+  const out=read(output,18),axes=out.slice(0,9);
+  close(axes[0],-1,1e-12,'X points from the Sun to the Earth');
+  close(axes[0]*axes[1]+axes[3]*axes[4]+axes[6]*axes[7],0,1e-12,'X.Y');
+  close(axes[0]*axes[2]+axes[3]*axes[5]+axes[6]*axes[8],0,1e-12,'X.Z');
+  close(axes[2]*axes[2]+axes[5]*axes[5]+axes[8]*axes[8],1,1e-12,'|Z|');
+  out.slice(12).forEach((v,i)=>assert.ok(v>=0&&v<=1,`value ${i} in [0,1]: ${v}`));
+  assert.equal(x.rp_occultation_grid(sun,earth,moon,moon,identity,sunR,moonR,1e8,1,1,1,output,12000),-3);
+});
+
+// Source: McIlwain L-shells of the dipole. On the equator a point at L = r/Earth radius is at the inner belt's peak
+// (L = 1.5, value 1), in the slot (L = 3, below 0.2), and at the outer belt's peak (L = 4.3, about 0.55); the Earth's
+// interior is empty.
+test('radiation grid: inner and outer belt peaks, slot, and the Earth interior',()=>{
+  const earth=6378137;
+  const axis=alloc([0,0,1]);
+  // A row of three cells on the equator (the x axis, 90 degrees from the dipole): the last cell sits at the probe distance.
+  const probe=(radii)=>{ assert.equal(x.rp_radiation_grid(axis,radii*earth,3,1,1,output,12000),0); return read(output,3)[2]; };
+  close(probe(1.5),1,0.02,'inner belt peak');
+  assert.ok(probe(3.0)<0.2,'slot between the belts');
+  close(probe(4.3),0.55,0.03,'outer belt peak');
+  assert.equal(probe(0.5),0,'Earth interior');
+});
