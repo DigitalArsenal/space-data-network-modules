@@ -12,7 +12,7 @@ import {encodeTimerTick,decodeHttpRequest,encodeHttpResponse,decodeIngestRequest
 import {createSingleFileBundle,verifyModuleArtifact} from 'space-data-module-sdk/bundle';
 import {appendPublicationRecordCollection,encodePublicationRecordCollection} from 'space-data-module-sdk/transport';
 import {localNode} from './local-node.mjs';
-import {verifySources} from './source-oracle.mjs';
+import {verifySources,SOURCE_URLS} from './source-oracle.mjs';
 import {runtimeParity} from './runtime-parity.mjs';
 const require=createRequire(import.meta.url),root=fileURLToPath(new URL('../',import.meta.url)),modules=path.resolve(root,'../..');
 const sds=path.dirname(require.resolve('spacedatastandards.org/package.json'));
@@ -32,7 +32,7 @@ try {
  await save();harness=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});
  const planned=await harness.invoke({methodId:'plan_weather',inputs:[input('tick',encodeTimerTick({triggerId:'hourly',firedMs:Date.now()}),'TimerTick.fbs','TICK','TimerTick')]});
  assert.equal(planned.statusCode,0,planned.errorMessage);
- const requests=planned.outputs.filter(o=>o.portId==='request').map(o=>decodeHttpRequest(o.payload));assert.equal(requests.length,4);assert(requests.every(r=>r.headers['if-modified-since']));
+ const requests=planned.outputs.filter(o=>o.portId==='request').map(o=>decodeHttpRequest(o.payload));assert.deepEqual(requests.map(r=>r.url),SOURCE_URLS,'the five sources, in canonical order');assert(requests.every(r=>r.headers['if-modified-since']));
  const bodies=[];const inputs=[];
  for(const [i,r] of requests.entries()) {const response=await fetch(r.url,{headers:r.headers,signal:AbortSignal.timeout(90000)});assert.equal(response.status,200,r.url);const body=Buffer.from(await response.arrayBuffer());bodies.push(body);await fs.writeFile(path.join(evidence,`source-${i}.txt`),body);inputs.push(input('response',encodeHttpResponse({url:r.url,status:200,body,retrievedMs:Date.now()}),'HttpResponse.fbs','HRSP','HttpResponse'));}
  const result=await harness.invoke({methodId:'parse_weather',inputs});assert.equal(result.statusCode,0,result.errorMessage);

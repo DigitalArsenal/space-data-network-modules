@@ -1,13 +1,13 @@
 {
   "pluginId": "com.digitalarsenal.flows.space-weather",
   "name": "Licensed space weather",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
     "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
   },
-  "description": "Hourly GFZ/NOAA licensed space weather for NRLMSISE-00, parsed in WASM and published as attributed SPW. No SET/CSSI or sunspot numbers.",
+  "description": "Hourly GFZ/NOAA licensed space weather for NRLMSISE-00 from 40 days before today to 400 days after it (observed, NOAA 45-day forecast, NOAA predicted solar cycle), parsed in WASM and published as attributed SPW. No SET/CSSI or sunspot numbers.",
   "capabilities": [
     "http",
     "storage_ingest"
@@ -15,8 +15,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.space-weather",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",

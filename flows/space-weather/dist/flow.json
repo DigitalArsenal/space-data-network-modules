@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.space-weather",
   "name": "Licensed space weather",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Hourly GFZ/NOAA licensed space weather for NRLMSISE-00, parsed in WASM and published as attributed SPW. No SET/CSSI or sunspot numbers.",
+  "description": "Hourly GFZ/NOAA licensed space weather for NRLMSISE-00 from 40 days before today to 400 days after it (observed, NOAA 45-day forecast, NOAA predicted solar cycle), parsed in WASM and published as attributed SPW. No SET/CSSI or sunspot numbers.",
   "nodes": [
     {
       "nodeId": "plan",

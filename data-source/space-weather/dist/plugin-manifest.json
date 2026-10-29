@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.space-weather",
   "name": "Licensed space weather",
-  "version": "0.2.0",
-  "description": "GFZ CC BY 4.0 and NOAA public-domain space weather for NRLMSISE-00. Source parsing, forecast selection and 81-day averages in WASM; typed generic HTTP and storage connectors. No SET, CSSI or sunspot-number publication.",
+  "version": "0.3.0",
+  "description": "GFZ CC BY 4.0 and NOAA public-domain space weather for NRLMSISE-00, from 40 days before today to 400 days after it: observed, NOAA 45-day forecast (PRD), then NOAA predicted solar cycle (PRM). Source parsing, forecast selection and 81-day averages in WASM; typed generic HTTP and storage connectors. No SET, CSSI or sunspot-number publication.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Four bounded source requests and deterministic parsing of daily indices; no workers or shared state."
+    "detail": "Five bounded source requests and deterministic parsing of daily indices; no workers or shared state."
   },
   "schemasUsed": [
     {
@@ -67,7 +67,7 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 4,
+          "maxStreams": 5,
           "required": true
         }
       ],
@@ -94,7 +94,7 @@
             }
           ],
           "minStreams": 1,
-          "maxStreams": 4,
+          "maxStreams": 5,
           "required": true
         }
       ],
