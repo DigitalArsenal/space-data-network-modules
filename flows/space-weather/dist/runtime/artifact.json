@@ -55,7 +55,7 @@
       "dependencyId": "com.digitalarsenal.data-source.space-weather",
       "pluginId": "com.digitalarsenal.data-source.space-weather",
       "version": "0.3.0",
-      "sha256": "74517789dd72666c150ff50a92e74f4ee3e48a49d010757f9ca5a5a1bf397d9f",
+      "sha256": "7abd9f36f0044a9dc3a26a4d57ef7f426834d661a261e25522bfac314b16ff42",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

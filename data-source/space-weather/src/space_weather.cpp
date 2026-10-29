@@ -36,7 +36,10 @@ constexpr int kBefore = 40, kAhead = 400;
 // Past the 45-day forecast, Ap is the mean of GFZ's daily Ap over this many days before today.
 constexpr int kClimatologyDays = 365;
 const char* producerId = "space-weather/0.3.0";
-const char* credit = "GFZ Helmholtz Centre for Geosciences; Matzka et al. (2021), doi:10.1029/2020SW002641; F10.7: DRAO/Natural Resources Canada. NOAA SWPC (45-day forecast, Kp forecast, predicted solar cycle). Center81 includes forecasts; GFZ preferred, NOAA fills gaps; SN excluded.";
+// The citation travels in the batch's ingest metadata, and the node's storage.ingest operation refuses a batch whose
+// citation is longer than 255 bytes (hostops StorageIngestParams); nothing lands and no error reaches the flow.
+constexpr char credit[] = "GFZ Helmholtz Centre for Geosciences; Matzka et al. (2021), doi:10.1029/2020SW002641; F10.7: DRAO/Natural Resources Canada. NOAA SWPC forecasts and predicted solar cycle. Center81 includes forecasts; GFZ preferred, NOAA fills gaps; SN excluded.";
+static_assert(sizeof(credit) - 1 <= 255, "The citation must fit the node's 255-byte ingest field.");
 int fail(const char* m) { plugin_set_error("space-weather-source", m); return 1; }
 #define CHECK(c,m) do { if (!(c)) return fail(m); } while (0)
 int push(const char* p,const char* s,const char* id,const char* root,const flatbuffers::FlatBufferBuilder& b) {

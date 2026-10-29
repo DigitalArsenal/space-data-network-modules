@@ -73,6 +73,10 @@ try {
   for(let k=1;k<=8;k++)assert(r['KP'+k]>=0&&r['KP'+k]<=90,`${r.DATE} Kp${k}`);
  });
  const meta=decodeIngestRequest(result.outputs.find(o=>o.portId==='meta').payload);
+ // The node's storage.ingest operation bounds these metadata fields (sdn-server hostops StorageIngestParams) and
+ // refuses a batch with a longer one: nothing lands and no error reaches the flow.
+ const INGEST_MAX_BYTES={schema:64,providerId:128,sourceName:128,batchId:128,sourceUrl:255,contentKeyId:128,sourcePeer:128,license:128,licenseUrl:255,citation:255};
+ for(const [field,max] of Object.entries(INGEST_MAX_BYTES)){const value=field==='schema'?meta.schema:meta.tags[field];assert(Buffer.byteLength(String(value??''))<=max,`ingest ${field} fits the node's ${max}-byte field`);}
  assert.match(meta.tags.license,/CC-BY-4.0/);assert.match(meta.tags.citation,/Matzka/);assert.match(meta.tags.citation,/DRAO/);assert.match(meta.tags.citation,/predicted solar cycle/);
  assert.equal(meta.tags.batchId,summary.hash);assert.equal(meta.provenance.parserVersion,PRODUCER);assert.equal(Number(meta.provenance.normalizedCount),rows.length);
  const notice=decodeFlowNotice(result.outputs.find(o=>o.portId==='report').payload);

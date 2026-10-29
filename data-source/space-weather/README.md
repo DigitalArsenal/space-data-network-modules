@@ -35,7 +35,9 @@ NOAA's 45-day forecast and the predicted cycle are separate products and meet wi
 
 ## Provenance and publication
 
-Publication: SPW.fbs / provider `space-weather` / source `gfz-noaa`; source URLs, source-content hashes, license and attribution carried in the signed lane manifest. Every record carries a PVN: SOURCE_ID `gfz-noaa`, SOURCE_KIND Observation (SDS has no forecast kind; F107_DATA_TYPE and the lineage say what is forecast), PRODUCER `space-weather/0.3.0`, and LINEAGE `gfz-kp-ap;drao-f107;noaa-swpc`, then `noaa-swpc-predicted-cycle`, `ap-climatology-gfz-365d` and `kp-derived-from-ap` where they apply, then `canonical-source-batch-sha256=<hash of the five source bodies>`. The batch is about 830 bytes a day, one shard under the lane's 1 MiB limit.
+Publication: SPW.fbs / provider `space-weather` / source `gfz-noaa`; source URLs, source-content hashes, license and attribution carried in the signed lane manifest. Every record carries a PVN: SOURCE_ID `gfz-noaa`, SOURCE_KIND Observation (SDS has no forecast kind; F107_DATA_TYPE and the lineage say what is forecast), PRODUCER `space-weather/0.3.0`, and LINEAGE `gfz-kp-ap;drao-f107;noaa-swpc`, then `noaa-swpc-predicted-cycle`, `ap-climatology-gfz-365d` and `kp-derived-from-ap` where they apply, then `canonical-source-batch-sha256=<hash of the five source bodies>`. The batch is about 815 bytes a day (359 KB for 441 days), one shard under the lane's 1 MiB limit.
+
+The batch's ingest metadata is bounded by the node's `storage.ingest` operation: citation 255 bytes, license 128, source and license URLs 255, provider, source name and batch id 128, schema 64. A longer value makes the node refuse the batch with nothing landed and no error in the flow. The citation is 244 bytes and a compile-time check holds it to 255; the horizon E2E checks every field.
 
 FFM never reads F107_DATA_TYPE. It needs a row for every day of an arc and the day before it, F10.7 and CENTER81 positive, Ap not negative and eight Kp in 0 to 9 on every row.
 
