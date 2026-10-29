@@ -16,12 +16,20 @@ namespace {
 namespace R = sdn::runtime;
 using Json = nlohmann::json;
 constexpr size_t budget = 8 * 1024 * 1024;
+// The sources, in the canonical order a batch is hashed in; the constants below index them.
 const char* urls[] = {
  "https://kp.gfz.de/fileadmin/files_for_gfz_cms/Kp_ap_Ap_SN_F107_since_1932.txt",
  "https://kp.gfz.de/fileadmin/files_for_gfz_cms/Kp_ap_Ap_SN_F107_nowcast.txt",
  "https://services.swpc.noaa.gov/text/45-day-forecast.txt",
  "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"
 };
+constexpr uint32_t kSources = sizeof(urls) / sizeof(urls[0]);
+constexpr uint32_t GfzHistory = 0, GfzNowcast = 1, NoaaForecast = 2, NoaaKp = 3;
+static_assert(kSources == NoaaKp + 1, "One URL per source.");
+// A day's 81-day averages: centered (40 days each side) and trailing (the 80 days before it, and the day).
+constexpr int kCenterHalf = 40, kTrailingBack = 80, kSpan = 81;
+// A batch publishes the days from 40 before today through 4 after it.
+constexpr int kBefore = 40, kAhead = 4;
 const char* credit = "GFZ Helmholtz Centre for Geosciences; Matzka et al. (2021), doi:10.1029/2020SW002641; F10.7: DRAO/Natural Resources Canada. NOAA SWPC. Center81 includes forecasts; GFZ preferred, NOAA fills gaps; SN excluded.";
 int fail(const char* m) { plugin_set_error("space-weather-source", m); return 1; }
 #define CHECK(c,m) do { if (!(c)) return fail(m); } while (0)
@@ -111,6 +119,61 @@ void encode(const Row& r,int64_t at,double center,double trailing,double adjCent
  s.add_F107_OBS_CENTER81(center);s.add_F107_OBS_LAST81(trailing);s.add_F107_ADJ_CENTER81(adjCenter);s.add_F107_ADJ_LAST81(adjTrailing);
  FinishSizePrefixedSPWBuffer(b,s.Finish());stream.insert(stream.end(),b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
 }
+// One batch: the source bodies as retrieved (canonical order), the retrieval instant, and the hash that names the batch.
+struct Batch {
+ std::array<std::string,kSources> body;uint64_t retrieved=0;ephem::Sha256 hash;
+ int64_t today() const {return int64_t(retrieved/86400000);}
+};
+// The response frames into the batch. Null, or why the batch cannot be built.
+const char* readSources(Batch& b) {
+ if(plugin_get_input_count()!=kSources)return "Exactly four source responses required.";
+ std::array<bool,kSources> seen{};
+ for(uint32_t i=0;i<kSources;++i) {
+  const auto* f=plugin_get_input_frame(i);if(!(f&&f->payload&&f->payload_length<=budget+65536))return "Response exceeds budget.";
+  flatbuffers::Verifier v(f->payload,f->payload_length);if(!R::VerifyHttpResponseBuffer(v))return "Expected HRSP.";const auto* h=R::GetHttpResponse(f->payload);
+  int index=-1;for(uint32_t k=0;k<kSources;++k)if(h->URL()&&h->URL()->str()==urls[k])index=int(k);
+  if(!(index>=0&&!seen[index]))return "Unknown or duplicate source URL.";seen[index]=true;
+  if(!(h->STATUS()==200&&h->BODY()&&h->BODY()->size()>0))return "Source did not return a complete 200 body; keep previous batch.";
+  if(!(h->RETRIEVED_MS()>0))return "Missing authenticated retrieval epoch.";
+  if(!b.retrieved)b.retrieved=h->RETRIEVED_MS();if(h->RETRIEVED_MS()/86400000!=b.retrieved/86400000)return "Sources straddle UTC day; retry.";
+  b.body[index]=std::string(reinterpret_cast<const char*>(h->BODY()->data()),h->BODY()->size());
+ }
+ // Hash canonical source order (independent of fan-in ordering), with URL separators.
+ for(uint32_t k=0;k<kSources;++k){b.hash.update(reinterpret_cast<const uint8_t*>(urls[k]),std::strlen(urls[k])+1);b.hash.update(reinterpret_cast<const uint8_t*>(b.body[k].data()),b.body[k].size());}
+ return nullptr;
+}
+// The day rows the sources describe: GFZ observations first, NOAA filling what GFZ lacks. Null, or why they cannot be built.
+const char* assemble(const Batch& b,Rows& rows) {
+ if(!(gfz(b.body[GfzHistory],rows)&&gfz(b.body[GfzNowcast],rows)))return "Invalid GFZ columns or license header.";
+ if(!forecast(b.body[NoaaForecast],rows,b.today()))return "Invalid or stale NOAA 45-day forecast.";
+ if(!kpForecast(b.body[NoaaKp],rows))return "Invalid NOAA Kp forecast.";
+ return nullptr;
+}
+// The days a batch publishes, encoded: each has daily Ap, flux, all eight Kp and both full 81-day averages.
+struct Published {std::vector<uint8_t> stream;uint64_t count=0;bool current=false;};
+Published publishable(const Rows& rows,int64_t today,const std::string& hash) {
+ Published out;
+ for(const auto& [at,r]:rows) {
+  if(at<today-kBefore||at>today+kAhead||r.ap<0||r.flux<=0)continue;
+  bool complete=true;for(int k:r.kp)if(k<0)complete=false;if(!complete)continue;
+  double center=0,trailing=0,ac=-1,al=-1;if(!mean(rows,at-kCenterHalf,kSpan,false,center)||!mean(rows,at-kTrailingBack,kSpan,false,trailing))continue;
+  mean(rows,at-kCenterHalf,kSpan,true,ac);mean(rows,at-kTrailingBack,kSpan,true,al);encode(r,at,center,trailing,ac,al,hash,out.stream);++out.count;out.current|=at==today;
+ }
+ return out;
+}
+// The ingest metadata and the flow notice of the batch, then its records.
+int publish(const Batch& b,const Published& days,const std::string& hash) {
+ R::IngestRequestT meta;meta.SCHEMA="SPW.fbs";meta.RECONCILE=R::reconcileMode_Current;meta.TAGS=std::make_unique<R::SourceTagsT>();
+ auto& tags=*meta.TAGS;tags.PROVIDER_ID="space-weather";tags.SOURCE_NAME="gfz-noaa";tags.BATCH_ID=hash;tags.SOURCE_URL=urls[0];
+ tags.LICENSE="CC-BY-4.0 (GFZ); public domain (NOAA SWPC)";tags.LICENSE_URL="https://creativecommons.org/licenses/by/4.0/";tags.CITATION=credit;
+ meta.PROVENANCE=std::make_unique<R::ProvenanceT>();auto& p=*meta.PROVENANCE;p.SOURCE_URL=urls[0];p.HTTP_STATUS=200;p.RETRIEVED_MS=b.retrieved;p.PARSER="space-weather";p.PARSER_VERSION="space-weather/0.2.0";p.SOURCE_SHA256=hash;p.NORMALIZED_COUNT=days.count;p.SCHEMAS={"SPW.fbs"};p.SCHEMA_COUNTS={days.count};
+ flatbuffers::FlatBufferBuilder mb(2048);R::FinishIngestRequestBuffer(mb,R::IngestRequest::Pack(mb,&meta));
+ R::FlowNoticeT report;report.KIND=R::flowNoticeKind_Info;report.SCHEMA="SPW.fbs";report.PROVIDER_ID=tags.PROVIDER_ID;report.SOURCE_NAME=tags.SOURCE_NAME;report.BATCH_ID=tags.BATCH_ID;report.COUNT=days.count;report.AT_MS=b.retrieved;report.REASON="licensed-mixed-observed-forecast";
+ for(uint32_t k=0;k<kSources;++k)report.ITEMS.push_back(std::string(urls[k])+" sha256="+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(b.body[k].data()),b.body[k].size()));
+ flatbuffers::FlatBufferBuilder rb(2048);R::FinishFlowNoticeBuffer(rb,R::FlowNotice::Pack(rb,&report));
+ CHECK(push("meta","IngestRequest.fbs","INGQ","IngestRequest",mb)>=0&&push("report","FlowNotice.fbs","FNTC","FlowNotice",rb)>=0,"Metadata emission failed.");
+ return plugin_push_output_ex("records","SPW.fbs","$SPW",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"SPW",0,0,days.stream.data(),days.stream.size())<0?1:0;
+}
 }
 extern "C" int plan_weather() {
  CHECK(plugin_get_input_count()==1,"Exactly one TimerTick required.");auto f=plugin_get_input_frame(0);
@@ -124,37 +187,9 @@ extern "C" int plan_weather() {
  return 0;
 }
 extern "C" int parse_weather() {
-  CHECK(plugin_get_input_count()==4,"Exactly four source responses required.");std::array<std::string,4> bodies;std::array<bool,4> seen{};uint64_t retrieved=0;ephem::Sha256 batch;
-  for(uint32_t i=0;i<4;++i) {
-   const auto* f=plugin_get_input_frame(i);CHECK(f&&f->payload&&f->payload_length<=budget+65536,"Response exceeds budget.");
-   flatbuffers::Verifier v(f->payload,f->payload_length);CHECK(R::VerifyHttpResponseBuffer(v),"Expected HRSP.");const auto* h=R::GetHttpResponse(f->payload);
-   int index=-1;for(int k=0;k<4;++k)if(h->URL()&&h->URL()->str()==urls[k])index=k;
-   CHECK(index>=0&&!seen[index],"Unknown or duplicate source URL.");seen[index]=true;
-   CHECK(h->STATUS()==200&&h->BODY()&&h->BODY()->size()>0,"Source did not return a complete 200 body; keep previous batch.");
-   CHECK(h->RETRIEVED_MS()>0,"Missing authenticated retrieval epoch.");
-   if(!retrieved)retrieved=h->RETRIEVED_MS();CHECK(h->RETRIEVED_MS()/86400000==retrieved/86400000,"Sources straddle UTC day; retry.");
-   bodies[index]=std::string(reinterpret_cast<const char*>(h->BODY()->data()),h->BODY()->size());
-  }
-  // Hash canonical source order (independent of fan-in ordering), with URL separators.
-  for(int k=0;k<4;++k){batch.update(reinterpret_cast<const uint8_t*>(urls[k]),std::strlen(urls[k])+1);batch.update(reinterpret_cast<const uint8_t*>(bodies[k].data()),bodies[k].size());}
-  const int64_t today=retrieved/86400000;Rows rows;CHECK(gfz(bodies[0],rows)&&gfz(bodies[1],rows),"Invalid GFZ columns or license header.");
-  CHECK(forecast(bodies[2],rows,today),"Invalid or stale NOAA 45-day forecast.");CHECK(kpForecast(bodies[3],rows),"Invalid NOAA Kp forecast.");
-  std::vector<uint8_t> stream;uint64_t count=0;bool current=false;
-  for(const auto& [at,r]:rows) {
-   if(at<today-40||at>today+4||r.ap<0||r.flux<=0)continue;
-   bool complete=true;for(int k:r.kp)if(k<0)complete=false;if(!complete)continue;
-   double center=0,trailing=0,ac=-1,al=-1;if(!mean(rows,at-40,81,false,center)||!mean(rows,at-80,81,false,trailing))continue;
-   mean(rows,at-40,81,true,ac);mean(rows,at-80,81,true,al);encode(r,at,center,trailing,ac,al,batch.hex(),stream);++count;current|=at==today;
-  }
-  CHECK(current&&count>=40,"Today's complete drivers and history unavailable; keep previous batch.");
-  R::IngestRequestT meta;meta.SCHEMA="SPW.fbs";meta.RECONCILE=R::reconcileMode_Current;meta.TAGS=std::make_unique<R::SourceTagsT>();
-  auto& tags=*meta.TAGS;tags.PROVIDER_ID="space-weather";tags.SOURCE_NAME="gfz-noaa";tags.BATCH_ID=batch.hex();tags.SOURCE_URL=urls[0];
-  tags.LICENSE="CC-BY-4.0 (GFZ); public domain (NOAA SWPC)";tags.LICENSE_URL="https://creativecommons.org/licenses/by/4.0/";tags.CITATION=credit;
-  meta.PROVENANCE=std::make_unique<R::ProvenanceT>();auto& p=*meta.PROVENANCE;p.SOURCE_URL=urls[0];p.HTTP_STATUS=200;p.RETRIEVED_MS=retrieved;p.PARSER="space-weather";p.PARSER_VERSION="space-weather/0.2.0";p.SOURCE_SHA256=batch.hex();p.NORMALIZED_COUNT=count;p.SCHEMAS={"SPW.fbs"};p.SCHEMA_COUNTS={count};
-  flatbuffers::FlatBufferBuilder mb(2048);R::FinishIngestRequestBuffer(mb,R::IngestRequest::Pack(mb,&meta));
-  R::FlowNoticeT report;report.KIND=R::flowNoticeKind_Info;report.SCHEMA="SPW.fbs";report.PROVIDER_ID=tags.PROVIDER_ID;report.SOURCE_NAME=tags.SOURCE_NAME;report.BATCH_ID=tags.BATCH_ID;report.COUNT=count;report.AT_MS=retrieved;report.REASON="licensed-mixed-observed-forecast";
-  for(int k=0;k<4;++k)report.ITEMS.push_back(std::string(urls[k])+" sha256="+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(bodies[k].data()),bodies[k].size()));
-  flatbuffers::FlatBufferBuilder rb(2048);R::FinishFlowNoticeBuffer(rb,R::FlowNotice::Pack(rb,&report));
-  CHECK(push("meta","IngestRequest.fbs","INGQ","IngestRequest",mb)>=0&&push("report","FlowNotice.fbs","FNTC","FlowNotice",rb)>=0,"Metadata emission failed.");
-  return plugin_push_output_ex("records","SPW.fbs","$SPW",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"SPW",0,0,stream.data(),stream.size())<0?1:0;
+ Batch batch;if(const char* why=readSources(batch))return fail(why);
+ Rows rows;if(const char* why=assemble(batch,rows))return fail(why);
+ const std::string hash=batch.hash.hex();const Published days=publishable(rows,batch.today(),hash);
+ CHECK(days.current&&days.count>=40,"Today's complete drivers and history unavailable; keep previous batch.");
+ return publish(batch,days,hash);
 }
