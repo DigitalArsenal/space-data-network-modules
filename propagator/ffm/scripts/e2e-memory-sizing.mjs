@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Memory/accounting orchestration only: all dynamics, frames and polynomial
 // evaluation execute in the exact same FFM artifact in both runtimes.
+// Gate (default): measure and compare with tests/evidence/memory-sizing.json. --measure: measure only (the evidence
+// is the run's .sdk-build/memory-sizing/<artifact sha256>/result.json). --full: the gate plus e2e-ffm and e2e-catalog-coverage.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -39,7 +41,8 @@ const focusRequests = [encodePluginInvokeRequest({ methodId: 'ingest_state', inp
   ...[1800, 3600].map(seconds => encodePluginInvokeRequest({ methodId: 'propagate_state', inputs: [port('request', 'RESIDENT_REQUEST',
     makeTable('PRWResidentRequest', { INSTANCE: instance, ENTITY_HANDLES: [seeds[0].handle], TARGET_COORDINATE_SYSTEM: catalog.gcrf(),
       TARGET_EPOCH: makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.JULIAN_DATE, JULIAN_DATE: epoch + seconds / 86400 }) }))] }))];
-const predecessor = execFileSync('git', ['show', '560d835d3173fb5f7a1560f4f53e1eb37d7e177c:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+// The predecessor is the last accepted artifact (5746b0f5 built 343c4145, FFM 2.0.1); a change is checked against it.
+const predecessor = execFileSync('git', ['show', '5746b0f53504d4d8a83c4ec7921f4a34b85901a6:propagator/ffm/dist/isomorphic/module.wasm'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
 fs.writeFileSync(path.join(cache, '../previous.wasm'), predecessor);
 // The browser pool's own coverage window: the defaults of OrbPro
 // packages/orbpro-integration/propagator.ffm at main 7ad42e4e1c
@@ -93,7 +96,8 @@ async function runRoles(run) {
   const worker=async()=>{while(queue.length)await run(queue.shift());};
   await Promise.all([worker(),worker()]);
 }
-const regressionWork=process.argv.includes('--measure')?null:Promise.all(
+// e2e-ffm and e2e-catalog-coverage are E2Es of their own; they run here only under --full.
+const regressionWork=process.argv.includes('--full')&&!process.argv.includes('--measure')?Promise.all(
   ['e2e-ffm.mjs','e2e-catalog-coverage.mjs'].map(async script=>{
     try {
       const {stdout,stderr}=await execFileAsync(process.execPath,[path.join(root,'scripts',script)],{cwd:root,maxBuffer:32*1024*1024});
@@ -103,7 +107,7 @@ const regressionWork=process.argv.includes('--measure')?null:Promise.all(
       fs.writeFileSync(path.join(cache,script+'.log'),(error.stdout||'')+(error.stderr||''));
       throw error;
     }
-  })).then(scripts=>({scripts}),error=>({error}));
+  })).then(scripts=>({scripts}),error=>({error})):null;
 const nativeSource = String.raw`
 #include <wasmedge/wasmedge.h>
 #include <stdint.h>
@@ -356,9 +360,11 @@ if (!process.argv.includes('--measure')) {
   assert.equal(report.memory.initialBytes,Math.max(16*1024*1024,Math.ceil(Math.max(report.memory.staticMinimumBytes,baseBytes)/65536)*65536),'rebuild with measured base');
   assert.equal(report.memory.maximumBytes,report.requiredMaximumBytes,'rebuild with measured maximum');
   for(const row of report.rows)assert(row.highWaterBytes*1.5<=report.memory.maximumBytes);
-  const regressions=await regressionWork;
-  if(regressions.error)throw regressions.error;
-  for(const script of regressions.scripts)report[script]='PASS';
+  if(regressionWork){
+    const regressions=await regressionWork;
+    if(regressions.error)throw regressions.error;
+    for(const script of regressions.scripts)report[script]='PASS';
+  }
   save();
   report.status='PASS';save();
 }

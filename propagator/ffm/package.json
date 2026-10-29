@@ -1,6 +1,6 @@
 {
   "name": "@orbpro/plugin-ffm",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "OrbPro FFM (Full Force Model) propagator",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
