@@ -503,16 +503,22 @@ bool ResidentDynamics::addCatalogState(const StateVector& state, double cdAm, do
     return add(flatbuffers::GetRoot<PRWResidentState>(b.GetBufferPointer()), error);
 }
 
-bool ResidentDynamics::earthFixed(const TTEpoch& at, const StateVector& in, StateVector& out,
-                                 bool inverse, std::string& error) {
+bool ResidentDynamics::earthFrame(const TTEpoch& at, EarthFrame& frame, std::string& error) {
     if (!environment_.earth) return prwError(error, "eop-data-required: Catalog rendering requires Earth orientation.");
     auto& earth = *environment_.earth;
     if (!earth.covers(at.instant()) || !earth.covers(plus(at, -.5).instant()) || !earth.covers(plus(at, .5).instant()))
         return prwError(error, earth.error.c_str());
-    double m[3][3], before[3][3], after[3][3];
-    earth.matrix(at.instant(), m);
-    earth.matrix(plus(at, -.5).instant(), before);
-    earth.matrix(plus(at, .5).instant(), after);
+    earth.matrix(at.instant(), frame.m);
+    earth.matrix(plus(at, -.5).instant(), frame.before);
+    earth.matrix(plus(at, .5).instant(), frame.after);
+    return true;
+}
+
+void ResidentDynamics::applyEarthFrame(const EarthFrame& frame, const StateVector& in, StateVector& out, bool inverse) {
+    const auto& m = frame.m;
+    const auto& before = frame.before;
+    const auto& after = frame.after;
+    out = in;
     const double r[3] = {in.position.x, in.position.y, in.position.z};
     const double v[3] = {in.velocity.x, in.velocity.y, in.velocity.z};
     double p[3] = {}, w[3] = {};
@@ -523,7 +529,14 @@ bool ResidentDynamics::earthFixed(const TTEpoch& at, const StateVector& in, Stat
         if (!inverse) w[i] += (after[i][j] - before[i][j]) * r[j];
         else for (int k = 0; k < 3; ++k) w[i] -= m[j][i] * (after[j][k] - before[j][k]) * p[k];
     }
-    out = in; out.position = Vec3(p[0], p[1], p[2]); out.velocity = Vec3(w[0], w[1], w[2]);
+    out.position = Vec3(p[0], p[1], p[2]); out.velocity = Vec3(w[0], w[1], w[2]);
+}
+
+bool ResidentDynamics::earthFixed(const TTEpoch& at, const StateVector& in, StateVector& out,
+                                 bool inverse, std::string& error) {
+    EarthFrame frame;
+    if (!earthFrame(at, frame, error)) return false;
+    applyEarthFrame(frame, in, out, inverse);
     return true;
 }
 

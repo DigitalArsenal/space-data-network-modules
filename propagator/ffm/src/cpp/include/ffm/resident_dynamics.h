@@ -38,6 +38,13 @@ public:
     void clearObjects();
     // UTC-Julian-date host bridge; state vectors remain GCRF km and km/s.
     bool addCatalogState(const astro::StateVector& state, double cdAm, double crAm, bool valid, std::string& error);
+    // GCRF -> ITRF at `at` (TT) and half a second either side, for the
+    // velocity transport. A function of time alone: one frame serves every
+    // object at that instant.
+    struct EarthFrame { double m[3][3], before[3][3], after[3][3]; };
+    bool earthFrame(const TTEpoch& at, EarthFrame& frame, std::string& error);
+    static void applyEarthFrame(const EarthFrame& frame, const astro::StateVector& in, astro::StateVector& out,
+                                bool inverse);
     bool earthFixed(const TTEpoch& at, const astro::StateVector& in, astro::StateVector& out,
                     bool inverse, std::string& error);
     size_t size() const { return objects_.size(); }
