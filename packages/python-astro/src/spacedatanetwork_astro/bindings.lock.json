@@ -106,7 +106,7 @@
           "wasmedge"
         ],
         "sdk": "0.9.12",
-        "sourceSha256": "413fb2f3e14b23d5d37523a4fcbe446efe359d38d866c172065e54a854496457",
+        "sourceSha256": "4d5247a31099b164e21c7abbbce3c0abb780d19ed021925b0c2e6b80e820d699",
         "standards": {
           "package": "spacedatastandards.org",
           "schemas": {
@@ -145,7 +145,7 @@
           "version": "1.271.0"
         },
         "threadFeatures": {
-          "atomicInstructionCount": 614,
+          "atomicInstructionCount": 615,
           "declaredFeatures": [
             "atomics",
             "mutable-globals",
@@ -189,11 +189,11 @@
           "usesAtomics": true
         },
         "threadModel": "emscripten-pthreads",
-        "wasmSha256": "04a1fe4b4e1c3ac3691b56dc55ce1d7f528e4e899987fe9e743fcf75b059fbc8"
+        "wasmSha256": "74841abe389e7a4cec7629f5a7fe1678537d18b684bba2399150715c539a3831"
       },
       "declared_sds_dependency": "1.271.0",
       "id": "analysis/conjunction-assessment",
-      "wasm_sha256": "4de60c7a0b2c7fb1a177b21151aa90edfafcd03b534fbbc44eed30772832da81"
+      "wasm_sha256": "6c4ac01d979c943d6e62ea73d1ce582736718a86938fc24fa8ec684772ef48b5"
     },
     {
       "build_provenance": null,
