@@ -270,7 +270,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.16.0",
+      "version": "0.17.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -312,7 +312,7 @@
       ],
       "cxxSourceFileCount": 58,
       "cSourceFileCount": 1,
-      "testFileCount": 206,
+      "testFileCount": 208,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -416,6 +416,7 @@
         "tests/cqrStreaming.test.mjs",
         "tests/data/README.md",
         "tests/direct-entry.test.mjs",
+        "tests/emitCsmCovariance.e2e.mjs",
         "tests/empiricalCovariance.test.mjs",
         "tests/ephemerisUpload.test.mjs",
         "tests/fixtures/aerospace-real-window/README.md",
@@ -545,6 +546,7 @@
         "tests/lib/conjunctionCommandHarness.mjs",
         "tests/lib/cqr.mjs",
         "tests/lib/privateFixtures.mjs",
+        "tests/lib/requestReplay.mjs",
         "tests/lib/screenCatalogParityHarness.mjs",
         "tests/lib/sgp4TrackHarness.mjs",
         "tests/lib/syntheticCatalog.mjs",
