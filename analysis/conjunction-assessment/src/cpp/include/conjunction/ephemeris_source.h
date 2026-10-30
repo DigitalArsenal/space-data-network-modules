@@ -242,6 +242,43 @@ private:
     std::vector<double> velocity_jump_km_s_;
 };
 
+// ── A source whose span ends early ──
+
+/// Another source, valid only up to end_jd: an element set SGP4 refuses after
+/// that instant (decay, eccentricity out of range) screens like a tabulated
+/// track that ends there, so searches stay inside its span. Every other answer
+/// is the wrapped source's.
+class SpanLimitedSource final : public EphemerisSource {
+public:
+    SpanLimitedSource(const EphemerisSource& source, double end_jd)
+        : source_(source), end_jd_(end_jd) {}
+
+    StateVector state_at(double jd) const override { return source_.state_at(jd); }
+    double epoch_jd() const override { return source_.epoch_jd(); }
+    std::string object_id() const override { return source_.object_id(); }
+    std::string object_name() const override { return source_.object_name(); }
+    int norad_id() const override { return source_.norad_id(); }
+    ObjectIdentity identity() const override { return source_.identity(); }
+    double valid_start_jd() const override { return source_.valid_start_jd(); }
+    double valid_end_jd() const override {
+        const double end = source_.valid_end_jd();
+        return end != 0.0 && end < end_jd_ ? end : end_jd_;
+    }
+    bool bounds_path_deviation() const override { return source_.bounds_path_deviation(); }
+    bool path_deviation_bound_km(double jd, const StateVector& state, double half_step_sec,
+                                 double& bound_km) const override {
+        return source_.path_deviation_bound_km(jd, state, half_step_sec, bound_km);
+    }
+    bool acceleration_bound_km_s2(double jd, const StateVector& state, double half_window_sec,
+                                  double& bound) const override {
+        return source_.acceleration_bound_km_s2(jd, state, half_window_sec, bound);
+    }
+
+private:
+    const EphemerisSource& source_;
+    double end_jd_;
+};
+
 // ── Callback-based (user-supplied function) ──
 
 using EphemerisCallback = std::function<StateVector(double jd)>;

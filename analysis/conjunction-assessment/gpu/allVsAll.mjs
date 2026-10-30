@@ -96,10 +96,13 @@ export async function screenAllVsAllOnGpu(o) {
   const { events, excludedRecords, statistics, totals, refineCalls, refineMs } = await refineCandidates({
     ...o, sorted, excluded, onProgress: (done) => progress('refine', done, candidateCount) });
   timings.refineMs += refineMs;
+  // TOTAL_OBJECTS is refine_candidates' own: it resolves every coarse refusal
+  // into a span and leaves out only the objects refused from the window start
+  // (an object refused part-way is screened up to its last valid instant).
   return {
     events,
     excludedRecords,
-    statistics: { ...statistics, ...totals, TOTAL_OBJECTS: objects - excluded.size, PAIRS_SCREENED: objects * (objects - 1) / 2 },
+    statistics: { ...statistics, ...totals, PAIRS_SCREENED: objects * (objects - 1) / 2 },
     excluded: [...excluded],
     objects, lastStep, candidates: candidateCount, refineCalls, timings,
   };
@@ -184,7 +187,8 @@ export async function refineCandidates(o) {
  *
  * Merging follows a single screen of the whole span: a conjunction belongs to
  * the window holding its TCA (one at a shared edge is kept once), and an
- * object excluded in any window has no conjunctions anywhere.
+ * object refused in any window keeps its conjunctions before its earliest
+ * refusal and has none from then on (mergeWindowEvents).
  *
  * @param {object} o  As screenAllVsAllOnGpu, without `request`, plus:
  * @param {{startJd: number, durationDays: number}[]} o.windows  Consecutive.
@@ -215,8 +219,22 @@ export async function screenWindowsOnGpu(o) {
     events.push(...run.events);
     windows.push({ ...o.windows[k], conjunctions: run.events.length, candidates: run.candidates });
   }
-  return { events: mergeWindowEvents(events, new Set(excludedKeys.keys()), o.fineTolSec), excluded: [...excludedKeys.values()],
+  const cutoffs = new Map([...excludedKeys].map(([key, [, , jd]]) => [key, jd]));
+  return { events: mergeWindowEvents(events, cutoffs, o.fineTolSec), excluded: [...excludedKeys.values()],
     windows, candidates, timings };
+}
+
+/**
+ * Records in cutoffs that the object `key` is refused from `jd` (UTC JD) on:
+ * a window's coarse refusal (the earliest failing epoch), or the start of a
+ * window its propagator could not cover. The earliest instant is kept.
+ * @param {Map<string, number>} cutoffs
+ * @param {string} key  objectKey
+ * @param {number} jd
+ */
+export function refuseAt(cutoffs, key, jd) {
+  if (!(cutoffs.get(key) <= jd)) cutoffs.set(key, jd);
+  return cutoffs;
 }
 
 /**
@@ -229,17 +247,22 @@ const eventKeys = (e) => [objectKey(e.PRIMARY_ID, e.PRIMARY_NORAD_ID), objectKey
 /**
  * Windows' events as one screen of the whole span: a TCA within the
  * refinement tolerance of a shared edge is in both windows and is kept once,
- * and an object excluded in any window has no conjunctions anywhere.
+ * and an object's conjunctions from its earliest refusal on are dropped, as
+ * one screen screens a refused object up to its last valid instant (one
+ * refused from the start has the span's start as cutoff, so none remain).
  * @param {object[]} events  CQR events of consecutive windows.
- * @param {Set<string>} excludedKeys  objectKey of each object excluded anywhere.
+ * @param {Map<string, number>} cutoffs  objectKey -> the earliest instant (UTC
+ *   JD) the module or the propagator refused the object at, in any window
+ *   (see refuseAt).
  * @param {number} [fineTolSec=0.001]
  */
-export function mergeWindowEvents(events, excludedKeys, fineTolSec) {
+export function mergeWindowEvents(events, cutoffs, fineTolSec) {
   const toleranceDays = 2 * Math.max(0.001, fineTolSec ?? 0.001) / 86400;
   const key = (e) => eventKeys(e).sort().join('\u0001');
+  const refused = (e) => eventKeys(e).some((k) => cutoffs.has(k) && e.TCA.JULIAN_DATE >= cutoffs.get(k));
   const kept = [];
   for (const e of [...events].sort((a, b) => a.TCA.JULIAN_DATE - b.TCA.JULIAN_DATE)) {
-    if (eventKeys(e).some((k) => excludedKeys.has(k))) continue;
+    if (refused(e)) continue;
     let same = false;
     for (let i = kept.length - 1; i >= 0 && e.TCA.JULIAN_DATE - kept[i].TCA.JULIAN_DATE <= toleranceDays; i--) {
       if (key(kept[i]) === key(e)) { same = true; break; }

@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createConjunctionCommandHarness } from '../tests/lib/conjunctionCommandHarness.mjs';
 import { screenCatalog, screenWindows, sgp4Sources, splitCatalog } from '../gpu/catalogScreen.mjs';
-import { mergeWindowEvents, objectKey } from '../gpu/allVsAll.mjs';
+import { mergeWindowEvents, objectKey, refuseAt } from '../gpu/allVsAll.mjs';
 import { cutBlocks, rolesFrame, unitRoles } from '../gpu/continuousScreen.mjs';
 import { assembleWindowGrid, exclusionsBytes, unitEvents, unitId } from '../gpu/workUnits.mjs';
 import { aotModule } from './lib/aot.mjs';
@@ -208,7 +208,7 @@ const windowGrids = [];
 for (const [w] of windows.entries()) {
   const grid = assembleWindowGrid(await Promise.all(gridUnits.filter((x) => x.window === w)
     .map(async (u) => ({ output: await store.get(gridState.get(u.id).accepted.hash), rows: u.rows }))));
-  windowGrids.push({ blocks: grid.blocks.map((b) => store.put(b)), excluded: store.put(exclusionsBytes(grid.excluded)), excludedRows: [...grid.excluded.keys()],
+  windowGrids.push({ blocks: grid.blocks.map((b) => store.put(b)), excluded: store.put(exclusionsBytes(grid.excluded)), refusals: [...grid.excluded],
     megabytes: grid.blocks.reduce((s, b) => s + b.length, 0) / 1e6 });
 }
 const gridS = (performance.now() - t0) / 1000;
@@ -231,8 +231,9 @@ log(`screen units: ${screenUnits.length}`);
 const screenState = await runAll(screenUnits);
 const events = [];
 for (const u of screenUnits) events.push(...unitEvents(await store.get(screenState.get(u.id).accepted.hash)));
-const excludedKeys = new Set(windowGrids.flatMap((g) => g.excludedRows.map((r) => identity[r])));
-const merged = mergeWindowEvents(events, excludedKeys);
+const cutoffs = new Map();
+for (const g of windowGrids) for (const [row, jd] of g.refusals) refuseAt(cutoffs, identity[row], jd);
+const merged = mergeWindowEvents(events, cutoffs);
 const screenS = (performance.now() - t1) / 1000;
 for (const w of workers) stopWorker(w);
 

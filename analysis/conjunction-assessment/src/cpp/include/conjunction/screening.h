@@ -95,20 +95,43 @@ inline uint8_t object_radius_basis(const ScreeningConfig& config, uint32_t index
 /// Screening progress callback
 using ProgressCallback = std::function<void(double fraction, const std::string& status)>;
 
-/// An object the coarse pass could not propagate at one of its coarse epochs
-/// (for SGP4, a decayed or out-of-bounds element set: "Satellite has decayed",
-/// "Error: (e <= -0.001)", ...). It is excluded from every pair of the
-/// screening instead of failing the request; every other pair is screened
-/// exactly as it would be without it. Deterministic: the reported epoch is the
-/// earliest failing coarse epoch, whatever the worker count.
+/// An object the propagator refuses during the window (for SGP4, an element
+/// set that decays or whose eccentricity leaves its range: "SGP4: decayed
+/// (the radius is below one Earth radius)", ...). The coarse pass records the
+/// earliest coarse epoch it refused, whatever the worker count. An object
+/// refused at the window's first epoch is excluded from every pair; one valid
+/// for part of the window is screened up to its last valid instant, and its
+/// conjunctions before that are kept. Every other pair is screened exactly as
+/// it would be without it.
 struct ExcludedObject {
     uint32_t index = 0;             // position in the screened TLE vector
     double first_failure_jd = 0.0;  // earliest coarse epoch that failed (UTC JD)
     std::string reason;             // propagator error at that epoch
+    // The object's span: the propagator gives its state up to last_valid_jd
+    // and refuses it from refused_jd (bisected to the millisecond), the
+    // refusal being reason. last_valid_jd 0: refused from the window start,
+    // so the object is excluded.
+    double last_valid_jd = 0.0;
+    double refused_jd = 0.0;
+    bool excluded() const { return last_valid_jd == 0.0; }
     // Filled by callers that know where the object came from.
     int input_list = -1;            // ConjunctionScreener: 0 primaries, 1 secondaries
     uint32_t input_index = 0;       // position in that input vector
     uint32_t source_handle = 0;     // resident index source handle, 0 = none
+};
+
+/// The span of a source the propagator gives a state at valid_jd and refuses
+/// at refused_jd (with refusal): bisected until the two instants are a
+/// millisecond apart, into object's last_valid_jd, refused_jd and reason.
+void bisect_source_span(const EphemerisSource& source, double valid_jd, double refused_jd,
+                        std::string refusal, ExcludedObject& object);
+
+/// A pair whose evaluation failed for a reason no span explains (a numerical
+/// failure, or a refusal inside an object's span): it is not screened, and the
+/// result names it.
+struct FailedPair {
+    ObjectIdentity obj1, obj2;
+    std::string reason;
 };
 
 /// Screening statistics
@@ -122,9 +145,12 @@ struct ScreeningStats {
     uint64_t propagations = 0;       // Total SGP4 propagations
     uint64_t failed_pairs = 0;       // Failed refinement/assessment evaluations
     double elapsed_ms = 0.0;         // Wall clock time
-    /// Objects excluded because they cannot be propagated over the window,
-    /// ordered by index. total_objects still counts them.
+    /// Objects the propagator refuses inside the window, ordered by index:
+    /// excluded ones (refused from the start) and ones screened up to their
+    /// last valid instant. total_objects still counts them.
     std::vector<ExcludedObject> excluded_objects;
+    /// The failed pairs (failed_pairs of them when the path names its pairs).
+    std::vector<FailedPair> failed_pair_list;
 };
 
 struct ScreeningThreadWork {

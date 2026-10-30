@@ -25,7 +25,7 @@ import { parseArgs } from 'node:util';
 import { PRWInstanceT } from 'spacedatastandards.org/lib/js/CQR/main.js';
 import { createConjunctionCommandHarness } from '../tests/lib/conjunctionCommandHarness.mjs';
 import { decodeCatalogResult, prepareIndex, releaseIndex, screenCatalog, screenWindows, sgp4Sources, windowRequest } from '../gpu/catalogScreen.mjs';
-import { mergeWindowEvents, objectKey } from '../gpu/allVsAll.mjs';
+import { mergeWindowEvents, objectKey, refuseAt } from '../gpu/allVsAll.mjs';
 import { ROLE, sampleWindowGrid, screenStoredWindow, spliceGridRows } from '../gpu/continuousScreen.mjs';
 import { createOmmEncoder } from './lib/ommCatalog.mjs';
 import { elementKey, recordsCreated, utcMs } from './lib/gpHistory.mjs';
@@ -171,9 +171,9 @@ try {
           }
         });
         stages.screen = { ...s, searchS: timings.searchMs / 1000, refineS: timings.refineMs / 1000 };
-        const excluded = new Set();
-        for (const g of grids) for (const row of g.excluded.keys()) excluded.add(identity[row]);
-        return { events: mergeWindowEvents(events, excluded), candidates };
+        const cutoffs = new Map();
+        for (const g of grids) for (const [row, jd] of g.excluded) refuseAt(cutoffs, identity[row], jd);
+        return { events: mergeWindowEvents(events, cutoffs), candidates };
       });
       const updatedKeys = new Set(state.updated.map((r) => identity[r]));
       const touches = (e) => keysOf(e).some((k) => updatedKeys.has(k));

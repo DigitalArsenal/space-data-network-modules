@@ -732,11 +732,12 @@ static ConjunctionSolution build_conjunction_solution(
 // Newton steps of -f / |dv|^2 approach by a factor q or better each step. A
 // root outside the span leaves the TCA at the span's edge, as the scan's
 // bracket does.
+static constexpr double EDGE_BRACKET_DAYS = 1.0 / 86400.0;
+
 std::optional<ConjunctionSolution> solve_unimodal_conjunction(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double end_jd, double tol_sec) {
     constexpr double VELOCITY_SLACK_KM_S = 1e-3;
-    constexpr double EDGE_BRACKET_DAYS = 1.0 / 86400.0;
     const Coverage covered = joint_coverage(obj1, obj2);
     const double a = std::max(start_jd, covered.start);
     const double b = std::min(end_jd, covered.end);
@@ -880,6 +881,11 @@ double find_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
 
 // The absolute grid the minimum search samples the range on, k * 5 s.
 static constexpr double RANGE_SAMPLE_DAYS = 5.0 / 86400.0;
+
+double search_evaluation_end_jd(double end_jd) {
+    // The range sample past the edge, and the bracket beyond a minimum next to it.
+    return (std::ceil(end_jd / RANGE_SAMPLE_DAYS) + 1.0) * RANGE_SAMPLE_DAYS + EDGE_BRACKET_DAYS;
+}
 
 std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     const EphemerisSource& obj1, const EphemerisSource& obj2,

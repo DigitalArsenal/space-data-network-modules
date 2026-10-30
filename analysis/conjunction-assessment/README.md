@@ -18,13 +18,13 @@ source provenance, probability algorithms and units.
 | `parse_ephemeris` | CQR text, TIM reference epoch, optional CAT identity / CQR format | SDS OEM and CQR validation text |
 | `parse_cdm_kvn`, `parse_cdm_xml` | CQR native document | SDS CDM |
 | `write_cdm_kvn`, `write_cdm_xml` | SDS CDM | CQR native document |
-| `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results, plus one OMM per excluded object |
+| `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results, plus one OMM per object the propagator refuses |
 | Three `prepare_*_screening_index` methods | CQR index request | CQR index result |
-| `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per excluded object |
+| `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per object the propagator refuses |
 | `coarse_grid` | CQR window request on a resident index, and a `$SCR` BLOCK of coarse steps | `$SCR` GRID: sampled states and motion bounds for the GPU pair search, plus a `$SCR` SEARCH_REPORT with the exclusions |
 | `search_candidates` | CQR window request on a resident index, and a `$SCR` BLOCK of coarse steps | `$SCR` CANDIDATES found on the CPU (what `refine_candidates` takes), plus a `$SCR` SEARCH_REPORT with the exclusions |
 | `search_grid` | CQR window request (its controls), a `$SCR` GRID `coarse_grid` returned, optional `$SCR` ROLES (primary, secondary, skip per object) | `$SCR` CANDIDATES in grid rows, plus a `$SCR` SEARCH_REPORT of the roles |
-| `refine_candidates` | CQR window request on a resident index, optional `$SCR` CANDIDATES and EXCLUSIONS, optional `$ERM` uncertainty model | Chunked CQR catalog results, plus one OMM per excluded object |
+| `refine_candidates` | CQR window request on a resident index, optional `$SCR` CANDIDATES and EXCLUSIONS, optional `$ERM` uncertainty model | Chunked CQR catalog results, plus one OMM per object the propagator refuses |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
 | `possibility_of_collision` | `$SCR` POSSIBILITY_REQUEST: two admissible sets (finite supports with possibilities, or ellipsoidal kernels) and the combined radius | `$SCR` POSSIBILITY_RESULT: possibility and necessity of collision, miss-distance and closest-approach-time ranges |
@@ -260,17 +260,39 @@ Catalog results emit at most 128 events per frame (`refine_candidates`: 1024). C
 until `FINAL_CHUNK` is true, preserving its input `FRAME_ID`. Concurrent drains
 must use distinct input frame IDs because SDK 0.8.18 does not expose the PIV
 trace ID to guest continuation state. Failed pairs are counted, and the final
-response reports `incomplete-screening` when any evaluation failed.
+response reports `incomplete-screening` when any evaluation failed; its message
+names the failed pairs (by catalog number, else OBJECT_ID) and each one's
+error, at most eight of them.
 
-An object that SGP4 cannot propagate at one of the coarse epochs of the window
-(a reentering or already decayed element set: "SGP4: decayed (the radius is
-below one Earth radius)", "SGP4: the eccentricity leaves its range ...") is excluded from the screening instead of failing
-the request. Every other pair is screened exactly as if the object were absent.
-The final chunk carries one `$OMM` per excluded object on the `excluded` port:
-its mean elements, Earth/TEME, with `COMMENT` naming the earliest failing
-coarse epoch and the propagator error there. `OBJECTS_PARSED` counts every
-object; `STATISTICS.TOTAL_OBJECTS` leaves the excluded ones out, so the
-difference is the number of excluded records. `PAIRS_SCREENED` and
+### Objects the propagator refuses
+
+SGP4 refuses an element set once it decays ("SGP4: decayed (the radius is
+below one Earth radius)", "Non-finite or decayed SGP4 state") or its
+eccentricity leaves its range ("SGP4: the eccentricity leaves its range
+..."). An object refused at the window's first coarse epoch is excluded from
+the screening. An object refused part-way through the window is screened up
+to its last valid instant: its pairs' searches end there, its conjunctions
+before then are reported, and none of its pairs fails. The coarse pass finds
+the refusal at a coarse epoch; a search past the last coarse epoch can meet a
+refusal no coarse epoch saw, and gives its object a span the same way. The
+span ends where bisection between the last valid coarse epoch (or search
+instant) and the refused one, a millisecond apart, puts it. Every other pair
+is screened exactly as if the object were absent.
+
+The final chunk carries one `$OMM` per object refused inside the window on the
+`excluded` port: its mean elements, Earth/TEME, with `COMMENT` in a fixed
+format, a sentence then three fields, instants UTC to the millisecond:
+
+    Excluded from conjunction screening; SGP4 refuses it from the window start. LAST_VALID=NONE; FIRST_REFUSAL=<ISO>; REFUSAL=<error>
+    Screened until LAST_VALID; SGP4 refuses it from FIRST_REFUSAL. LAST_VALID=<ISO>; FIRST_REFUSAL=<ISO>; REFUSAL=<error>
+
+LAST_VALID is rounded down and FIRST_REFUSAL up; REFUSAL is the propagator's
+error at the first refused instant. An object refused only after the window
+end is screened through the window and not reported. These fields will become
+a typed CQR record; the COMMENT form is the contract until then.
+`OBJECTS_PARSED` counts every object; `STATISTICS.TOTAL_OBJECTS` leaves the
+excluded ones (LAST_VALID=NONE) out, so the difference is the number of
+excluded records. `PAIRS_SCREENED` and
 `PAIRS_PREFILTERED` still describe the planned pair set; a pair is prefiltered
 when the altitude prefilter below kept it out at every coarse step.
 
@@ -484,7 +506,8 @@ context is retained in `docs/a2.8a-ca-parity-ground-truth.md`.
 manual trigger to `screen_catalog` on the typed `request` port. Hosts submit CQR
 catalog requests and drain yielded responses without changing the request or
 its trace/stream identity. The final chunk reports failure counts/status when
-pair evaluation is incomplete, and lists excluded objects on `excluded`.
+pair evaluation is incomplete, and lists the objects the propagator refuses on
+`excluded`.
 
 ## License
 

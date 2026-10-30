@@ -31,7 +31,7 @@ import { PRW } from 'spacedatastandards.org/lib/js/PRW/main.js';
 import { CQRObjectSourceT, PRWInstanceT } from 'spacedatastandards.org/lib/js/CQR/main.js';
 import { createConjunctionCommandHarness } from '../tests/lib/conjunctionCommandHarness.mjs';
 import { decodeCatalogResult, prepareIndex, releaseIndex, screenWindows, windowRequest } from '../gpu/catalogScreen.mjs';
-import { mergeWindowEvents, objectKey, screenWindowsOnGpu } from '../gpu/allVsAll.mjs';
+import { mergeWindowEvents, objectKey, refuseAt, screenWindowsOnGpu } from '../gpu/allVsAll.mjs';
 import { ROLE, emptyGrid, sampleWindowGrid, screenStoredWindow, spliceGridRows } from '../gpu/continuousScreen.mjs';
 import { createFfmFarm } from './lib/ffmFarm.mjs';
 import { createOmmEncoder } from './lib/ommCatalog.mjs';
@@ -122,7 +122,12 @@ async function indexOf(records, perWindow, w, rows) {
   for (const r of kept) frames.push(perWindow[w].frames.get(r));
   return { kept, handle: await prepareIndex(invoke, kept.map((r) => sources[r]), frames, INST) };
 }
-const dropKeys = (records, perWindow) => new Set(perWindow.flatMap((x) => x.dropped.map((d) => keyOf(records[d.handle - 1]))));
+// Each dropped object's earliest refusal: the start of the first window the farm dropped it from.
+const dropCutoffs = (records, perWindow) => {
+  const cutoffs = new Map();
+  perWindow.forEach((x, k) => { for (const d of x.dropped) refuseAt(cutoffs, keyOf(records[d.handle - 1]), windows[k].startJd); });
+  return cutoffs;
+};
 // A grid of n non-finite rows with the blocks of `like` (a window's coarse_grid output).
 // A trajectory record's polynomial ephemeris, canonical (its instance id names the farm instance, not the orbit).
 const trajectoryOf = (frame) => JSON.stringify(PRW.getSizePrefixedRootAsPRW(new flatbuffers.ByteBuffer(frame)).DESCRIBE_RESULT().SOURCES(0).unpack().EPHEMERIS,
@@ -207,9 +212,9 @@ try {
         } });
       events.push(...run.events);
     }
-    const excludedKeys = dropKeys(next, nextTraj.windows);
-    for (const g of grids) for (const row of g.excluded.keys()) excludedKeys.add(keyOf(next[row]));
-    const inc = mergeWindowEvents(events, excludedKeys);
+    const cutoffs = dropCutoffs(next, nextTraj.windows);
+    for (const g of grids) for (const [row, jd] of g.excluded) refuseAt(cutoffs, keyOf(next[row]), jd);
+    const inc = mergeWindowEvents(events, cutoffs);
     const u = process.cpuUsage(c), incWall = (performance.now() - t) / 1000;
     // The full re-screen of the updated catalog (unchanged objects' trajectories kept: see determinism).
     const fullNext = await fullScreen(next, nextTraj);

@@ -1393,13 +1393,16 @@ std::unique_ptr<CQREventT> screenedEvent(const ConjunctionEvent& e, const Empiri
   return out;
 }
 // TOTAL_OBJECTS counts the objects the screening covered: the catalog less
-// the objects excluded because they cannot be propagated over the window
-// (listed on the `excluded` port). OBJECTS_PARSED keeps the full count.
+// the objects excluded because the propagator refuses them from the window
+// start (listed on the `excluded` port with LAST_VALID=NONE). An object
+// screened up to its last valid instant is covered. OBJECTS_PARSED keeps the
+// full count.
 std::unique_ptr<CQRScreeningStatisticsT> statistics(const ScreeningStats &s) {
   auto o = std::make_unique<CQRScreeningStatisticsT>();
-  o->TOTAL_OBJECTS = s.total_objects >= s.excluded_objects.size()
-                         ? s.total_objects - s.excluded_objects.size()
-                         : 0;
+  const uint64_t excluded = static_cast<uint64_t>(std::count_if(
+      s.excluded_objects.begin(), s.excluded_objects.end(),
+      [](const ExcludedObject &x) { return x.excluded(); }));
+  o->TOTAL_OBJECTS = s.total_objects >= excluded ? s.total_objects - excluded : 0;
   o->PAIRS_SCREENED = s.pairs_screened;
   o->PAIRS_PREFILTERED = s.pairs_prefiltered;
   o->KD_TREE_CANDIDATES = s.kdtree_candidates;
@@ -1419,10 +1422,26 @@ struct PendingCatalog {
   // chunk on the `excluded` port.
   std::vector<std::vector<uint8_t>> excluded;
 };
-// One $OMM per excluded object: the mean elements the screening was given
-// (already verified as SGP4 mean elements, UTC, Earth TEME), with COMMENT
-// stating that the object was excluded, the earliest coarse epoch whose
-// propagation failed and the propagator's error there.
+// A UTC instant as ISO 8601 text to the millisecond, rounded down (up when
+// up is true): a span's last valid instant is never printed later than it is,
+// nor its first refusal earlier. An instant within 0.05 ms of a millisecond
+// (a Julian date near 2.46e6 resolves about 0.04 ms) is that millisecond.
+std::string isoMillisecond(double jd, bool up) {
+  constexpr double UNIX_EPOCH_JD = 2440587.5, MS_PER_DAY = 86400000.0, RESOLUTION_MS = 0.05;
+  const double ms = (jd - UNIX_EPOCH_JD) * MS_PER_DAY;
+  const double nearest = std::round(ms);
+  const double whole = std::abs(ms - nearest) < RESOLUTION_MS ? nearest
+                       : up                                    ? std::ceil(ms)
+                                                               : std::floor(ms);
+  return jd_to_iso(whole / MS_PER_DAY + UNIX_EPOCH_JD);
+}
+// One $OMM per object the propagator refuses inside the window: the mean
+// elements the screening was given (already verified as SGP4 mean elements,
+// UTC, Earth TEME), with COMMENT in a fixed format (README, "Objects the
+// propagator refuses"): a sentence, then
+//   LAST_VALID=<ISO ms|NONE>; FIRST_REFUSAL=<ISO ms>; REFUSAL=<error>
+// LAST_VALID=NONE: refused from the window start, so excluded. Otherwise the
+// object is screened up to LAST_VALID and refused from FIRST_REFUSAL.
 std::vector<uint8_t> excludedRecord(const Source &source, const ExcludedObject &x) {
   const GPElement &g = source.gp;
   OMMT o;
@@ -1437,9 +1456,13 @@ std::vector<uint8_t> excludedRecord(const Source &source, const ExcludedObject &
   o.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(teme));
   o.TIME_SYSTEM = timingStandard::UTC;
   o.MEAN_ELEMENT_THEORY = meanElementSource::SGP4;
-  o.COMMENT = "Excluded from conjunction screening: SGP4 cannot propagate this "
-              "object over the screening window. First failure at " +
-              jd_to_iso(x.first_failure_jd) + ": " + x.reason;
+  o.COMMENT = x.excluded()
+      ? "Excluded from conjunction screening; SGP4 refuses it from the window start. "
+        "LAST_VALID=NONE; FIRST_REFUSAL=" + isoMillisecond(x.refused_jd, true) +
+        "; REFUSAL=" + x.reason
+      : "Screened until LAST_VALID; SGP4 refuses it from FIRST_REFUSAL. LAST_VALID=" +
+        isoMillisecond(x.last_valid_jd, false) + "; FIRST_REFUSAL=" +
+        isoMillisecond(x.refused_jd, true) + "; REFUSAL=" + x.reason;
   o.EPOCH = g.epoch_iso;
   o.MEAN_MOTION = g.mean_motion;
   o.ECCENTRICITY = g.eccentricity;
@@ -1498,6 +1521,26 @@ std::string requestKey() {
   }
   return key;
 }
+// The failed pairs a screening names, for its incomplete-screening message:
+// " Failed pairs: A x B (reason); ..." (an object by catalog number, else its
+// OBJECT_ID), at most kNamedFailedPairs of them.
+constexpr size_t kNamedFailedPairs = 8;
+std::string failedPairNames(const ScreeningStats &s) {
+  if (s.failed_pair_list.empty())
+    return {};
+  const auto name = [](const ObjectIdentity &o) {
+    return o.norad_cat_id > 0 ? std::to_string(o.norad_cat_id) : o.object_id;
+  };
+  std::string out = " Failed pairs: ";
+  const size_t named = std::min(kNamedFailedPairs, s.failed_pair_list.size());
+  for (size_t i = 0; i < named; ++i) {
+    const auto &f = s.failed_pair_list[i];
+    out += (i ? "; " : "") + name(f.obj1) + " x " + name(f.obj2) + " (" + f.reason + ")";
+  }
+  if (s.failed_pair_list.size() > named)
+    out += "; and " + std::to_string(s.failed_pair_list.size() - named) + " more";
+  return out + ".";
+}
 bool emitPending(const std::string &method) {
   auto it = pending.find(pendingKey(method));
   if (it == pending.end())
@@ -1533,7 +1576,7 @@ bool emitPending(const std::string &method) {
   if (final && failed)
     return error("incomplete-screening",
                  "One or more pair evaluations failed; FAILED_PAIRS reports "
-                 "the incomplete result.");
+                 "the incomplete result." + failedPairNames(p.stats));
   return true;
 }
 bool hasPending(const std::string &method) {
@@ -2043,9 +2086,58 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     }
     return true;
   }
+  // A mean-element source the propagator refuses inside the window is
+  // excluded when refused at the window start, else screened up to its last
+  // valid instant (ExcludedObject): its states at the start and at the last
+  // instant a search evaluates (search_evaluation_end_jd) tell which, and
+  // bisection between the two finds where its span ends.
+  const double end_jd = c.start_jd + c.duration_days;
+  const double probe_jd = search_evaluation_end_jd(end_jd);
+  std::vector<std::unique_ptr<SpanLimitedSource>> limited;
+  std::vector<const EphemerisSource *> pr(p.size()), sr(s.size());
+  std::vector<uint8_t> p_out(p.size(), 0), s_out(s.size(), 0);
+  const auto spans = [&](const std::vector<Source> &list, int which,
+                         std::vector<const EphemerisSource *> &refs, std::vector<uint8_t> &out) {
+    for (size_t k = 0; k < list.size(); ++k) {
+      const auto &x = list[k];
+      refs[k] = x.provider.get();
+      if (!x.mean)
+        continue;
+      ExcludedObject object;
+      object.index = static_cast<uint32_t>(k);
+      object.input_list = which;
+      object.input_index = static_cast<uint32_t>(k);
+      object.source_handle = x.handle;
+      clear_error();
+      x.provider->state_at(c.start_jd);
+      if (has_error()) {
+        object.first_failure_jd = object.refused_jd = c.start_jd;
+        object.reason = error_message();
+        clear_error();
+        out[k] = 1;
+      } else {
+        x.provider->state_at(probe_jd);
+        if (!has_error())
+          continue;
+        const std::string refusal = error_message();
+        clear_error();
+        object.first_failure_jd = probe_jd;
+        bisect_source_span(*x.provider, c.start_jd, probe_jd, refusal, object);
+        limited.push_back(std::make_unique<SpanLimitedSource>(*x.provider, object.last_valid_jd));
+        refs[k] = limited.back().get();
+        if (!(object.last_valid_jd < end_jd))
+          continue;   // refused only past the window: nothing to report
+      }
+      stats.excluded_objects.push_back(object);
+      excluded.push_back(excludedRecord(x, object));
+    }
+  };
+  spans(p, 0, pr, p_out);
+  spans(s, 1, sr, s_out);
   struct Worker {
     std::vector<std::unique_ptr<CQREventT>> events;
-    uint64_t pairs = 0, failed = 0;
+    std::vector<FailedPair> failures;
+    uint64_t pairs = 0, failed = 0, skipped = 0;
   };
   unsigned workers = std::min<size_t>(c.num_threads, p.size());
   std::vector<bool> primary(p.size(), true);
@@ -2071,6 +2163,18 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         if (p[i].provider->object_id() == b.provider->object_id())
           continue;
         ++w.pairs;
+        if (p_out[i] || (s.empty() ? p_out[j] : s_out[j])) {
+          ++w.skipped;   // an excluded object's pair: never evaluated
+          continue;
+        }
+        const EphemerisSource &a_source = *pr[i];
+        const EphemerisSource &b_source = s.empty() ? *pr[j] : *sr[j];
+        const auto fail = [&]() {
+          ++w.failed;
+          w.failures.push_back({a_source.identity(), b_source.identity(),
+                                has_error() ? error_message() : "non-finite conjunction"});
+          clear_error();
+        };
         clear_error();
         const auto radius1 = radiusOf(p[i], c), radius2 = radiusOf(b, c);
         e.set_combined_radius_m(radius1.first, radius2.first);
@@ -2080,22 +2184,20 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         // TCA, so exactly one of them reports it. A window edge is never
         // itself a minimum.
         auto solutions = window_conjunctions(
-            *p[i].provider, *b.provider, c.start_jd, c.duration_days,
+            a_source, b_source, c.start_jd, c.duration_days,
             c.threshold_km, c.fine_tol_sec);
         if (has_error()) {
-          ++w.failed;
-          clear_error();
+          fail();
           continue;
         }
         for (const auto &solution : solutions) {
           BridgeEvent result;
           static_cast<ConjunctionEvent2&>(result) = e.assess_at(
-              *p[i].provider, *b.provider, solution.tca_jd);
+              a_source, b_source, solution.tca_jd);
           const auto supplied = has_error() ? SuppliedCovariance{} : applySourceCovariance(result, p[i], b, e, alg);
           if (has_error() || !isFinite(result.miss_distance_km) ||
               !isFinite(result.tca_jd)) {
-            ++w.failed;
-            clear_error();
+            fail();
             break;
           }
           auto output = event(result, alg, p[i].axes);
@@ -2111,8 +2213,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           // Serialization also validates probability metadata. A worker-local
           // failure must not disappear when the next pair clears its status.
           if (has_error()) {
-            ++w.failed;
-            clear_error();
+            fail();
             break;
           }
           w.events.push_back(std::move(output));
@@ -2125,13 +2226,23 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
   run(0);
   for (auto &t : threads)
     t.join();
+  uint64_t skipped = 0;
   for (auto &w : work) {
     stats.pairs_screened += w.pairs;
     stats.failed_pairs += w.failed;
+    skipped += w.skipped;
+    for (auto &f : w.failures)
+      stats.failed_pair_list.push_back(std::move(f));
     for (auto &e : w.events)
       events.push_back(std::move(e));
   }
-  stats.tca_refined = stats.pairs_screened - stats.failed_pairs;
+  // Named in one order whatever the worker count.
+  const auto key = [](const FailedPair &f) {
+    return std::tie(f.obj1.norad_cat_id, f.obj1.object_id, f.obj2.norad_cat_id, f.obj2.object_id, f.reason);
+  };
+  std::sort(stats.failed_pair_list.begin(), stats.failed_pair_list.end(),
+            [&](const FailedPair &a, const FailedPair &b) { return key(a) < key(b); });
+  stats.tca_refined = stats.pairs_screened - stats.failed_pairs - skipped;
   stats.conjunctions_found = events.size();
   return true;
 }

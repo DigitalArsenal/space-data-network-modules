@@ -203,8 +203,10 @@ The merged result is a single screen of the whole span:
 - A conjunction belongs to the window that holds its TCA.
 - A TCA within the refinement tolerance of a shared edge is reported in both
   windows and kept once.
-- An object excluded in any window, by the module or by the propagator, has
-  no conjunctions anywhere.
+- An object refused in any window, by the module or by the propagator, keeps
+  its conjunctions before its earliest refusal and has none from then on, as
+  one screen screens it up to its last valid instant; one refused from the
+  start has none (`mergeWindowEvents` takes each object's earliest refusal).
 
 `tests/windowedScreenParity.test.mjs` checks four windows against one screen
 for both propagators.

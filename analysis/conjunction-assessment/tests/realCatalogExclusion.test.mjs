@@ -13,11 +13,11 @@
 //
 // The request has OrbPro's Live-catalog shape: a few primaries (EXPLORER 7 and
 // other LEO objects) against the whole catalog as secondaries, two days from
-// 2026-07-06T00:00Z, 60 s coarse steps, 5 km threshold. Before objects that
-// SGP4 cannot propagate were excluded, this request failed with 422
-// "screening-failed: Satellite has decayed" (NORAD 8301, THORAD DELTA 1 DEB).
-// It must now complete, list 8301 among the excluded objects and report no
-// failed pairs. Exact assertions only; no numerical tolerance.
+// 2026-07-06T00:00Z, 60 s coarse steps, 5 km threshold. It must complete,
+// report every object SGP4 refuses inside the window (README, "Objects the
+// propagator refuses"), among them 8301 (THORAD DELTA 1 DEB), screened until
+// it reenters on 2026-07-07, and fail no pair. Exact assertions only; no
+// numerical tolerance.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -55,7 +55,7 @@ function withSourceFrame(record) {
   return { norad: omm.NORAD_CAT_ID, bytes: builder.asUint8Array().slice() };
 }
 
-test('a real catalog with reentering objects screens to completion and lists the excluded objects',
+test('a real catalog with reentering objects screens to completion and reports each refused object',
   { skip: CATALOG ? false : 'no local catalog (CQR_REAL_CATALOG_OMM_FB or tests/data/omm-cache.fb)', timeout: 900000 },
   async (t) => {
     const flatc = await initCqrFlatc();
@@ -86,16 +86,18 @@ test('a real catalog with reentering objects screens to completion and lists the
       }
       if (result.FINAL_CHUNK) break;
     }
-    console.log(`${n} objects, ${excluded.length} excluded: ${excluded.map((o) => `${o.NORAD_CAT_ID} ${o.OBJECT_NAME} [${o.COMMENT.split('First failure at ')[1]}]`).join('; ')}`);
+    console.log(`${n} objects, ${excluded.length} refused: ${excluded.map((o) => `${o.NORAD_CAT_ID} ${o.OBJECT_NAME} [${o.COMMENT.split('. ')[1]}]`).join('; ')}`);
     console.log(`statistics ${JSON.stringify(result.STATISTICS)}`);
     assert.equal(result.STATISTICS.FAILED_PAIRS, 0);
-    assert.equal(result.OBJECTS_PARSED - result.STATISTICS.TOTAL_OBJECTS, excluded.length);
+    const SPAN = /^Screened until LAST_VALID; SGP4 refuses it from FIRST_REFUSAL\. LAST_VALID=\S+Z; FIRST_REFUSAL=\S+Z; REFUSAL=.*SGP4.*$/;
+    const EXCLUDED = /^Excluded from conjunction screening; SGP4 refuses it from the window start\. LAST_VALID=NONE; FIRST_REFUSAL=\S+Z; REFUSAL=.*SGP4.*$/;
+    assert.equal(result.OBJECTS_PARSED - result.STATISTICS.TOTAL_OBJECTS, excluded.filter((o) => EXCLUDED.test(o.COMMENT)).length);
     const thorad = excluded.find((o) => o.NORAD_CAT_ID === 8301);
-    assert.ok(thorad, 'THORAD DELTA 1 DEB is listed as excluded');
-    assert.match(thorad.COMMENT, /First failure at 2026-07-0[67]T\d\d:\d\d:\d\d\.\d{3}Z: Satellite has decayed$/);
+    assert.ok(thorad, 'THORAD DELTA 1 DEB is reported');
+    assert.match(thorad.COMMENT, /^Screened until LAST_VALID; .* LAST_VALID=2026-07-07T/);
     for (const omm of excluded) {
       assert.equal(omm.CENTER_NAME, 'EARTH');
       assert.equal(omm.REFERENCE_FRAME.REFERENCE_FRAME.frame, CelestialFrame.TEMEOFDATE);
-      assert.match(omm.COMMENT, /^Excluded from conjunction screening: SGP4 cannot propagate this object over the screening window\. First failure at /);
+      assert.ok(SPAN.test(omm.COMMENT) || EXCLUDED.test(omm.COMMENT), omm.COMMENT);
     }
   });

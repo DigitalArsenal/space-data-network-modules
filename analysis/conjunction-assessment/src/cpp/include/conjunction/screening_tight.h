@@ -84,7 +84,7 @@ struct CoarseGridBlock {
     std::vector<float> states;
     std::vector<float> bands;
     /// Objects that cannot be evaluated at a coarse epoch of this block, with
-    /// the earliest such epoch (the screen_catalog exclusion rule).
+    /// the earliest such epoch (the coarse refusals screen_catalog records).
     std::map<uint32_t, ExcludedObject> excluded;
 };
 
@@ -147,9 +147,10 @@ TightSearch tight_grid_search_block(const StoredCoarseGrid& grid, const Screenin
 
 /// Re-tests candidates in f64 (or, when candidates is null, searches every
 /// coarse step of the window itself with tight_box_pairs: no GPU needed), joins the passing steps of each pair
-/// into encounters, drops pairs with an excluded object, and refines them as
-/// screen_catalog does. excluded is completed with the scan's own exclusions
-/// (CPU scan) and copied into stats.excluded_objects.
+/// into encounters, and refines them within their objects' spans as
+/// screen_catalog does (see ExcludedObject). excluded, the coarse refusals, is
+/// completed with the scan's own (CPU scan); the refused objects are reported
+/// in stats.excluded_objects.
 std::vector<ConjunctionEvent> screen_tight_candidates(
     const SourceRefs& sources,
     const ScreeningConfig& config,

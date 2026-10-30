@@ -270,7 +270,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -310,9 +310,9 @@
         "c",
         "c++"
       ],
-      "cxxSourceFileCount": 55,
+      "cxxSourceFileCount": 56,
       "cSourceFileCount": 1,
-      "testFileCount": 199,
+      "testFileCount": 201,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -371,6 +371,7 @@
         "tests/native/nc_cascade.cpp",
         "tests/native/radial_gate_bound.cpp",
         "tests/native/sgp4_omm_states.cpp",
+        "tests/native/span_brute_force.cpp",
         "tests/native/wasmedge_wasi_threads_runner.c"
       ],
       "testFiles": [
@@ -552,6 +553,7 @@
         "tests/native/nc_cascade.cpp",
         "tests/native/radial_gate_bound.cpp",
         "tests/native/sgp4_omm_states.cpp",
+        "tests/native/span_brute_force.cpp",
         "tests/native/wasmedge_wasi_threads_runner.c",
         "tests/ncCascade.e2e.mjs",
         "tests/ocmOemTrackAdapter.test.mjs",
@@ -571,6 +573,7 @@
         "tests/socratesReplayHarness.test.mjs",
         "tests/socratesScreenCatalogParity.test.mjs",
         "tests/sourceSelectionContract.test.mjs",
+        "tests/spanScreening.e2e.mjs",
         "tests/wasmedgeStandaloneHarness.test.mjs",
         "tests/windowedScreenParity.test.mjs"
       ]

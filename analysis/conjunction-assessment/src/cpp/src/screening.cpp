@@ -48,8 +48,8 @@ constexpr size_t MIN_EXPLICIT_PAIRS_FOR_KDTREE = 8192;
 constexpr uint64_t MIN_IMPLICIT_ALL_VS_ALL_PAIR_ESTIMATE = 250000;
 constexpr double MAX_RESIDENT_SPEED_BOUND_KM_S = 16.0;
 
-// A coarse-pass propagation failure excludes that object from the screening
-// (see ExcludedObject). Keeps the earliest failing epoch, so the record is the
+// A coarse-pass propagation failure records the object's refusal (see
+// ExcludedObject). Keeps the earliest failing epoch, so the record is the
 // same whichever worker saw the failure first.
 void record_exclusion(std::map<uint32_t, ExcludedObject>& excluded,
                       uint32_t object_index, double jd, const std::string& reason) {
@@ -68,18 +68,12 @@ void merge_exclusions(std::map<uint32_t, ExcludedObject>& into,
     }
 }
 
-bool involves_excluded(uint32_t obj1_index, uint32_t obj2_index,
-                       const std::map<uint32_t, ExcludedObject>& excluded) {
-    return !excluded.empty() &&
-           (excluded.count(obj1_index) != 0 || excluded.count(obj2_index) != 0);
-}
-
-std::vector<ExcludedObject> excluded_list(
-    const std::map<uint32_t, ExcludedObject>& excluded) {
-    std::vector<ExcludedObject> out;
-    out.reserve(excluded.size());
-    for (const auto& [object_index, record] : excluded) out.push_back(record);
-    return out;
+// Coarse steps of the window: step k is at start_jd + k * coarse_step_sec,
+// k = 0..count.
+int32_t window_coarse_steps(const ScreeningConfig& config) {
+    const double step_days = config.coarse_step_sec / 86400.0;
+    const double end_jd = config.start_jd + config.duration_days;
+    return static_cast<int32_t>((end_jd - config.start_jd) / step_days);
 }
 
 // Coarse hits are kept per encounter, not per pair. An encounter is a maximal
@@ -147,19 +141,6 @@ std::vector<CoarseHitRecord> coalesce_encounters(std::vector<CoarseHitRecord> ru
     }
     runs.resize(encounters);
     return runs;
-}
-
-std::vector<CoarseHitRecord> drop_excluded_encounters(
-    std::vector<CoarseHitRecord> encounters,
-    const std::map<uint32_t, ExcludedObject>& excluded) {
-    if (excluded.empty()) return encounters;
-    encounters.erase(
-        std::remove_if(encounters.begin(), encounters.end(),
-                       [&](const CoarseHitRecord& hit) {
-                           return involves_excluded(hit.obj1_index, hit.obj2_index, excluded);
-                       }),
-        encounters.end());
-    return encounters;
 }
 
 uint64_t distinct_encounter_pairs(const std::vector<CoarseHitRecord>& encounters) {
@@ -717,29 +698,289 @@ std::vector<ExactSolvedHit> solve_encounter_exact(
     double slice_end_jd,
     const ScreeningConfig& config);
 
+// An encounter whose refinement failed: the pair, the error, and the span
+// ends its objects were refined within (0: the whole window).
+struct FailedEncounter {
+    CoarseHitRecord hit;
+    std::string reason;
+    double span_end1 = 0.0;
+    double span_end2 = 0.0;
+};
+
 // Conjunctions of refined encounters, unsorted, with the object indices of
-// each event and of each encounter whose refinement failed (so a caller can
-// drop those of objects excluded afterwards).
+// each event, and the encounters whose refinement failed.
 struct RefinedEncounters {
     std::vector<ConjunctionEvent> events;
     std::vector<std::pair<uint32_t, uint32_t>> event_objects;
-    std::vector<std::pair<uint32_t, uint32_t>> failed_objects;
+    std::vector<FailedEncounter> failed;
 };
 
+// span_end: the last valid instant of each object the propagator refuses
+// part-way through the window (Spans below); its pairs are refined up to it.
 RefinedEncounters refine_encounters(
     const SourceRefs& sources,
     const std::vector<CoarseHitRecord>& encounters,
     const ScreeningConfig& config,
     ProgressCallback progress,
-    const ResidentScreeningIndex* resident_index);
+    const ResidentScreeningIndex* resident_index,
+    const std::map<uint32_t, double>& span_end);
 
+void bisect_source_span(const EphemerisSource& source, double valid_jd, double refused_jd,
+                        std::string refusal, ExcludedObject& object) {
+    constexpr double MILLISECOND_DAYS = 1e-3 / 86400.0;
+    double lo = valid_jd, hi = refused_jd;
+    while (hi - lo > MILLISECOND_DAYS) {
+        const double mid = 0.5 * (lo + hi);
+        if (!(mid > lo && mid < hi)) break;
+        clear_error();
+        source.state_at(mid);
+        if (has_error()) {
+            hi = mid;
+            refusal = error_message();
+            clear_error();
+        } else {
+            lo = mid;
+        }
+    }
+    object.last_valid_jd = lo;
+    object.refused_jd = hi;
+    object.reason = std::move(refusal);
+}
+
+namespace {
+
+// ── Spans: objects the propagator refuses part-way through the window ──
+//
+// SGP4 refuses an element set once it decays or its eccentricity leaves its
+// range. The coarse pass records the earliest coarse epoch it refused each
+// object at. Refused at the window's first epoch, the object has no span and
+// is excluded. Refused later, it is screened up to its last valid instant:
+// its pairs' searches end there (SpanLimitedSource), and its conjunctions
+// before then are kept. A search past the last coarse epoch (the range sample
+// past the window edge) can meet a refusal no coarse epoch saw; the failed
+// encounter then gives its object a span the same way, and is refined again
+// within it. A failure no span explains is a failed pair, named.
+
+struct Spans {
+    // Refused objects by index: excluded ones and span-limited ones.
+    std::map<uint32_t, ExcludedObject> objects;
+    // The last valid instant of each span-limited object.
+    std::map<uint32_t, double> end_jd;
+    // The sources with each span applied, index for index.
+    SourceRefs refs;
+    std::vector<std::unique_ptr<SpanLimitedSource>> limited;
+};
+
+// Whether the source gives a state at jd (the error, if any, is consumed).
+bool propagates(const EphemerisSource& source, double jd, std::string* refusal = nullptr) {
+    clear_error();
+    source.state_at(jd);
+    if (!has_error()) return true;
+    if (refusal) *refusal = error_message();
+    clear_error();
+    return false;
+}
+
+// Records the object's span: excluded without one, else span-limited.
+void record_span(Spans& spans, const SourceRefs& sources, uint32_t index, ExcludedObject object) {
+    if (!object.excluded()) {
+        spans.end_jd[index] = object.last_valid_jd;
+        spans.limited.push_back(std::make_unique<SpanLimitedSource>(*sources[index], object.last_valid_jd));
+        spans.refs[index] = spans.limited.back().get();
+    }
+    spans.objects[index] = std::move(object);
+}
+
+// The span of an object refused first at coarse step `step`: the latest
+// earlier coarse epoch it propagates at (the previous one, as the coarse pass
+// propagated it there) to the refused epoch; none before the first epoch.
+void span_from_refused_step(Spans& spans, const SourceRefs& sources, const ScreeningConfig& config,
+                            uint32_t index, int64_t step, double refused_jd, std::string refusal,
+                            ExcludedObject object) {
+    const double step_days = config.coarse_step_sec / 86400.0;
+    int64_t valid_step = step - 1;
+    while (valid_step >= 0 &&
+           !propagates(*sources[index], config.start_jd + valid_step * step_days)) {
+        --valid_step;
+    }
+    if (valid_step < 0) {
+        object.last_valid_jd = 0.0;
+        object.refused_jd = config.start_jd;
+    } else {
+        bisect_source_span(*sources[index], config.start_jd + valid_step * step_days, refused_jd,
+                           std::move(refusal), object);
+    }
+    record_span(spans, sources, index, std::move(object));
+}
+
+// Spans of the objects the coarse pass refused (earliest refused epochs).
+void add_coarse_spans(Spans& spans, const SourceRefs& sources,
+                      const std::map<uint32_t, ExcludedObject>& refused,
+                      const ScreeningConfig& config) {
+    const double step_days = config.coarse_step_sec / 86400.0;
+    for (const auto& [index, record] : refused) {
+        if (spans.objects.count(index) != 0) continue;
+        const int64_t step = std::llround((record.first_failure_jd - config.start_jd) / step_days);
+        span_from_refused_step(spans, sources, config, index, step, record.first_failure_jd,
+                               record.reason, record);
+    }
+}
+
+Spans coarse_spans(const SourceRefs& sources, const std::map<uint32_t, ExcludedObject>& refused,
+                   const ScreeningConfig& config) {
+    Spans spans;
+    spans.refs = sources;
+    add_coarse_spans(spans, sources, refused, config);
+    return spans;
+}
+
+// The encounters within the objects' spans: an excluded object's are dropped,
+// and a span-limited object's end at the last coarse step of its span.
+std::vector<CoarseHitRecord> encounters_within_spans(std::vector<CoarseHitRecord> encounters,
+                                                     const Spans& spans,
+                                                     const ScreeningConfig& config) {
+    if (spans.objects.empty()) return encounters;
+    const double step_days = config.coarse_step_sec / 86400.0;
+    size_t kept = 0;
+    for (auto& hit : encounters) {
+        int32_t last = std::numeric_limits<int32_t>::max();
+        bool drop = false;
+        for (const uint32_t index : {hit.obj1_index, hit.obj2_index}) {
+            const auto it = spans.objects.find(index);
+            if (it == spans.objects.end()) continue;
+            if (it->second.excluded()) { drop = true; break; }
+            last = std::min<int32_t>(last, static_cast<int32_t>(std::floor(
+                (it->second.last_valid_jd - config.start_jd) / step_days)));
+        }
+        if (drop || hit.earliest_step > last) continue;
+        if (hit.latest_step > last) hit.latest_step = last;
+        if (hit.best_step > last) hit.best_step = last;
+        encounters[kept++] = hit;
+    }
+    encounters.resize(kept);
+    return encounters;
+}
+
+// A failed encounter's object that no coarse epoch refused, refused at the
+// last instant the encounter's search evaluates, gets the span from the last
+// coarse epoch before that instant to it. True when it gets one.
+bool span_from_failed_search(Spans& spans, const SourceRefs& sources, const ScreeningConfig& config,
+                             const CoarseHitRecord& hit, uint32_t index) {
+    if (spans.objects.count(index) != 0) return false;
+    const double end_jd = config.start_jd + config.duration_days;
+    const double step_days = config.coarse_step_sec / 86400.0;
+    const auto window = build_refinement_window(hit, config.start_jd, end_jd, config.coarse_step_sec);
+    const double probe_jd = search_evaluation_end_jd(window.end_jd);
+    std::string refusal;
+    if (propagates(*sources[index], probe_jd, &refusal)) return false;
+    const int64_t step = std::min<int64_t>(
+        window_coarse_steps(config),
+        static_cast<int64_t>(std::floor((probe_jd - config.start_jd) / step_days))) + 1;
+    ExcludedObject object;
+    object.index = index;
+    object.first_failure_jd = probe_jd;
+    object.reason = refusal;
+    span_from_refused_step(spans, sources, config, index, step, probe_jd, refusal, object);
+    return true;
+}
+
+// Second refinement of the failed encounters: those whose objects' spans have
+// changed since (a span found by span_from_failed_search, or, on the chunked
+// path, one a later chunk's coarse pass found) are refined again within the
+// spans; the rest stay failed.
+void refine_failed_within_spans(Spans& spans, const SourceRefs& sources, RefinedEncounters& refined,
+                                const ScreeningConfig& config,
+                                const ResidentScreeningIndex* resident_index) {
+    if (refined.failed.empty()) return;
+    std::sort(refined.failed.begin(), refined.failed.end(),
+              [](const FailedEncounter& a, const FailedEncounter& b) {
+                  if (a.hit.obj1_index != b.hit.obj1_index) return a.hit.obj1_index < b.hit.obj1_index;
+                  if (a.hit.obj2_index != b.hit.obj2_index) return a.hit.obj2_index < b.hit.obj2_index;
+                  return a.hit.earliest_step < b.hit.earliest_step;
+              });
+    for (const auto& failure : refined.failed) {
+        for (const uint32_t index : {failure.hit.obj1_index, failure.hit.obj2_index}) {
+            span_from_failed_search(spans, sources, config, failure.hit, index);
+        }
+    }
+    const auto end_of = [&](uint32_t index) {
+        const auto it = spans.end_jd.find(index);
+        return it == spans.end_jd.end() ? 0.0 : it->second;
+    };
+    std::vector<CoarseHitRecord> again;
+    std::vector<FailedEncounter> still;
+    for (auto& failure : refined.failed) {
+        if (failure.span_end1 == end_of(failure.hit.obj1_index) &&
+            failure.span_end2 == end_of(failure.hit.obj2_index)) {
+            still.push_back(std::move(failure));
+        } else {
+            again.push_back(failure.hit);
+        }
+    }
+    refined.failed = std::move(still);
+    if (again.empty()) return;
+    auto redo = refine_encounters(spans.refs, encounters_within_spans(std::move(again), spans, config),
+                                  config, nullptr, resident_index, spans.end_jd);
+    refined.events.insert(refined.events.end(), std::make_move_iterator(redo.events.begin()),
+                          std::make_move_iterator(redo.events.end()));
+    refined.event_objects.insert(refined.event_objects.end(), redo.event_objects.begin(),
+                                 redo.event_objects.end());
+    refined.failed.insert(refined.failed.end(), std::make_move_iterator(redo.failed.begin()),
+                          std::make_move_iterator(redo.failed.end()));
+}
+
+// What a window reports of its refinement: events in the canonical order;
+// failed pairs, named; the refused objects (excluded ones, and span-limited
+// ones whose span ends inside the window), by index. tca_refined is the
+// caller's.
+std::vector<ConjunctionEvent> finish_window(Spans& spans, const SourceRefs& sources,
+                                            RefinedEncounters refined, const ScreeningConfig& config,
+                                            ScreeningStats& stats,
+                                            const ResidentScreeningIndex* resident_index) {
+    refine_failed_within_spans(spans, sources, refined, config, resident_index);
+    auto events = std::move(refined.events);
+    stats.conjunctions_found = events.size();
+    sort_conjunction_events(events);
+    std::sort(refined.failed.begin(), refined.failed.end(),
+              [](const FailedEncounter& a, const FailedEncounter& b) {
+                  if (a.hit.obj1_index != b.hit.obj1_index) return a.hit.obj1_index < b.hit.obj1_index;
+                  if (a.hit.obj2_index != b.hit.obj2_index) return a.hit.obj2_index < b.hit.obj2_index;
+                  return a.hit.earliest_step < b.hit.earliest_step;
+              });
+    stats.failed_pairs = refined.failed.size();
+    stats.failed_pair_list.clear();
+    for (const auto& failure : refined.failed) {
+        stats.failed_pair_list.push_back({sources[failure.hit.obj1_index]->identity(),
+                                          sources[failure.hit.obj2_index]->identity(),
+                                          failure.reason});
+    }
+    const double end_jd = config.start_jd + config.duration_days;
+    stats.excluded_objects.clear();
+    for (const auto& [index, object] : spans.objects) {
+        if (object.excluded() || object.last_valid_jd < end_jd) stats.excluded_objects.push_back(object);
+    }
+    return events;
+}
+
+// Refines one window's encounters (coalesced, every object's) within the
+// objects' spans, and records what every window path reports: failed pairs,
+// encounters refined, conjunctions found, refused objects.
 std::vector<ConjunctionEvent> refine_window_encounters(
+    Spans& spans,
     const SourceRefs& sources,
     const std::vector<CoarseHitRecord>& encounters,
     const ScreeningConfig& config,
     ScreeningStats& stats,
     ProgressCallback progress,
-    const ResidentScreeningIndex* resident_index);
+    const ResidentScreeningIndex* resident_index)
+{
+    auto refined = refine_encounters(spans.refs, encounters, config, progress, resident_index,
+                                     spans.end_jd);
+    stats.tca_refined = encounters.size();
+    return finish_window(spans, sources, std::move(refined), config, stats, resident_index);
+}
+
+} // namespace
 
 ConjunctionSolution refine_exact_window_locally(
     const EphemerisSource& obj1,
@@ -875,13 +1116,6 @@ namespace {
 // encounters are joined across chunks and refined once, as in one window.
 constexpr int MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK = 10000;
 
-// Coarse steps of the window: step k is at start_jd + k * coarse_step_sec,
-// k = 0..count.
-int32_t window_coarse_steps(const ScreeningConfig& config) {
-    const double step_days = config.coarse_step_sec / 86400.0;
-    const double end_jd = config.start_jd + config.duration_days;
-    return static_cast<int32_t>((end_jd - config.start_jd) / step_days);
-}
 
 // A pair the epoch bands separate (counted prefiltered by the caller) that the
 // radial gate admitted at some coarse step was screened.
@@ -1117,8 +1351,9 @@ ScreeningThreadWork process_time_steps(
 
     double step_days = step_sec / 86400.0;
     int total_steps = static_cast<int>((end_jd - start_jd) / step_days);
-    // Objects this worker has already excluded; their pairs are dropped after
-    // the merge, so they are not propagated again here.
+    // Objects this worker's coarse pass has refused: they are not propagated
+    // again here, and their pairs are screened within their spans after the
+    // merge (see ExcludedObject).
     std::vector<uint8_t> excluded_here(tles.size(), 0);
     const auto [block_begin, block_end] =
         worker_step_block(0, total_steps, thread_id, total_threads);
@@ -1386,14 +1621,15 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     }
 #endif
 
-    // Merge exclusions first (worker order is fixed), then the encounters of
-    // every pair whose objects both propagated over the window.
+    // Merge refusals first (worker order is fixed), then the encounters of
+    // every pair within its objects' spans.
     std::map<uint32_t, ExcludedObject> excluded;
     for (const auto& tw : thread_results) {
         if (!tw.error.empty()) { set_error(tw.error); return {}; }
         merge_exclusions(excluded, tw.excluded);
     }
-    stats.excluded_objects = excluded_list(excluded);
+    const Sgp4Sources sources(tles);
+    auto spans = coarse_spans(sources.refs, excluded, config);
     std::vector<CoarseHitRecord> runs;
     std::unordered_set<uint64_t> radial_admissions;
     for (auto& tw : thread_results) {
@@ -1403,15 +1639,14 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
         radial_admissions.insert(tw.radial_admissions.begin(), tw.radial_admissions.end());
     }
     count_radial_admissions(stats, radial_admissions.size());
-    const auto encounters = drop_excluded_encounters(
-        coalesce_encounters(std::move(runs)), excluded);
+    const auto encounters = encounters_within_spans(
+        coalesce_encounters(std::move(runs)), spans, config);
 
     if (progress) progress(0.7, "Deduplicating candidates...");
 
     stats.kdtree_candidates = distinct_encounter_pairs(encounters);
 
-    const Sgp4Sources sources(tles);
-    auto events = refine_window_encounters(sources.refs, encounters, config, stats, progress, nullptr);
+    auto events = refine_window_encounters(spans, sources.refs, encounters, config, stats, progress, nullptr);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -1642,7 +1877,7 @@ ScreeningThreadWork process_time_steps_implicit(
     std::vector<KDPoint> cached_points(n);
     std::vector<uint8_t> has_state(n, 0);
     std::vector<size_t> segment_cursors(n, 0);
-    // Objects this worker has already excluded (see ExcludedObject).
+    // Objects this worker's coarse pass has refused (see ExcludedObject).
     std::vector<uint8_t> excluded_here(n, 0);
 
     const auto [block_begin, block_end] =
@@ -2070,10 +2305,15 @@ RefinedEncounters refine_encounters(
     const std::vector<CoarseHitRecord>& encounters,
     const ScreeningConfig& config,
     ProgressCallback progress,
-    const ResidentScreeningIndex* resident_index)
+    const ResidentScreeningIndex* resident_index,
+    const std::map<uint32_t, double>& span_end)
 {
     const double start_jd = config.start_jd;
-    const double end_jd = start_jd + config.duration_days;
+    const double window_end_jd = start_jd + config.duration_days;
+    const auto end_of = [&](uint32_t index) {
+        const auto it = span_end.find(index);
+        return it == span_end.end() ? 0.0 : it->second;
+    };
 
     if (progress) progress(0.75, "Refining TCA...");
 
@@ -2087,19 +2327,28 @@ RefinedEncounters refine_encounters(
         ConjunctionEvent event;
         std::pair<uint32_t, uint32_t> objects;
     };
-    using FailedObjects = std::vector<std::pair<uint32_t, uint32_t>>;
+    using FailedObjects = std::vector<FailedEncounter>;
     const auto refine_one =
         [&](const CoarseHitRecord& hit,
             std::vector<RefinedEvent>& events_out,
             FailedObjects& failed_out) {
+            // A pair is refined up to the earlier of its objects' span ends.
+            const double span_end1 = end_of(hit.obj1_index);
+            const double span_end2 = end_of(hit.obj2_index);
+            double end_jd = window_end_jd;
+            if (span_end1 != 0.0) end_jd = std::min(end_jd, span_end1);
+            if (span_end2 != 0.0) end_jd = std::min(end_jd, span_end2);
+            const auto fail = [&]() {
+                failed_out.push_back({hit, error_message(), span_end1, span_end2});
+                clear_error();
+            };
             if (use_exact_solution_path) {
                 auto solved = solve_encounter_exact(
                     *sources[hit.obj1_index], *sources[hit.obj2_index],
                     hit.obj1_index, hit.obj2_index,
                     hit, start_jd, end_jd, config);
                 if (has_error()) {
-                    failed_out.emplace_back(hit.obj1_index, hit.obj2_index);
-                    clear_error();
+                    fail();
                     return;
                 }
                 for (const auto& at : solved) {
@@ -2108,8 +2357,7 @@ RefinedEncounters refine_encounters(
                         at.tca_jd, object_radius_m(config, at.obj1_index),
                         object_radius_m(config, at.obj2_index));
                     if (has_error()) {
-                        failed_out.emplace_back(at.obj1_index, at.obj2_index);
-                        clear_error();
+                        fail();
                         continue;
                     }
                     if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
@@ -2123,8 +2371,7 @@ RefinedEncounters refine_encounters(
                     *sources[hit.obj1_index], *sources[hit.obj2_index],
                     hit, start_jd, end_jd, config, resident_index);
                 if (has_error()) {
-                    failed_out.emplace_back(hit.obj1_index, hit.obj2_index);
-                    clear_error();
+                    fail();
                     return;
                 }
                 if (event.has_value()) {
@@ -2179,30 +2426,11 @@ RefinedEncounters refine_encounters(
             result.events.push_back(std::move(refined_event.event));
             result.event_objects.push_back(refined_event.objects);
         }
-        result.failed_objects.insert(result.failed_objects.end(),
-                                     thread_failed[t].begin(), thread_failed[t].end());
+        result.failed.insert(result.failed.end(),
+                             std::make_move_iterator(thread_failed[t].begin()),
+                             std::make_move_iterator(thread_failed[t].end()));
     }
     return result;
-}
-
-// Refines one window's encounters and records the counts every window path
-// reports: failed pairs, encounters refined, conjunctions found. Events are
-// returned in the canonical order.
-std::vector<ConjunctionEvent> refine_window_encounters(
-    const SourceRefs& sources,
-    const std::vector<CoarseHitRecord>& encounters,
-    const ScreeningConfig& config,
-    ScreeningStats& stats,
-    ProgressCallback progress,
-    const ResidentScreeningIndex* resident_index)
-{
-    auto refined = refine_encounters(sources, encounters, config, progress, resident_index);
-    auto events = std::move(refined.events);
-    stats.failed_pairs = refined.failed_objects.size();
-    stats.tca_refined = encounters.size();
-    stats.conjunctions_found = events.size();
-    sort_conjunction_events(events);
-    return events;
 }
 
 ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
@@ -2350,13 +2578,9 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
 #endif
 
     if (progress) progress(0.7, "Deduplicating candidates...");
-    // Runs of neighbouring workers and batches join into encounters. An object
-    // excluded in any batch is excluded from the whole window, including the
-    // encounters it had in earlier batches.
-    result.encounters = drop_excluded_encounters(
-        coalesce_encounters(std::move(runs)), result.excluded);
-    stats.excluded_objects = excluded_list(result.excluded);
-    stats.kdtree_candidates = distinct_encounter_pairs(result.encounters);
+    // Runs of neighbouring workers and batches join into encounters; the
+    // caller keeps those within the objects' spans (refusals in result.excluded).
+    result.encounters = coalesce_encounters(std::move(runs));
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -2421,8 +2645,11 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     count_radial_admissions(stats, window_result.radial_admissions.size());
 
     const Sgp4Sources sources(tles);
+    auto spans = coarse_spans(sources.refs, window_result.excluded, config);
+    const auto encounters = encounters_within_spans(std::move(window_result.encounters), spans, config);
+    stats.kdtree_candidates = distinct_encounter_pairs(encounters);
     auto events = refine_window_encounters(
-        sources.refs, window_result.encounters, config, stats, progress, resident_index);
+        spans, sources.refs, encounters, config, stats, progress, resident_index);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -2488,14 +2715,17 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     // that end inside a chunk are refined when it finishes; one still open at
     // the chunk's last step is carried and joined with its continuation, so
     // every encounter is refined once, on the bracket a single window would
-    // give it, and only the open encounters outlive a chunk. An object
-    // excluded in a later chunk is excluded from the whole window: its
-    // earlier events and failed refinements are dropped at the end.
+    // give it, and only the open encounters outlive a chunk. An object a
+    // chunk's coarse pass refuses gets its span then; its encounters in
+    // earlier chunks were refined inside it, and one whose refinement failed
+    // is refined again within it at the end.
     std::vector<CoarseHitRecord> carry;
     std::map<uint32_t, ExcludedObject> excluded;
     std::unordered_set<uint64_t> radial_admissions;
     RefinedEncounters refined;
     const Sgp4Sources sgp4_sources(tles);
+    Spans spans;
+    spans.refs = sgp4_sources.refs;
     const int32_t chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
     for (int32_t chunk_first = 0; chunk_first <= total_steps;
          chunk_first += chunk_steps) {
@@ -2516,17 +2746,19 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
 
         if (has_error()) return {};
         merge_exclusions(excluded, chunk_result.excluded);
+        add_coarse_spans(spans, sgp4_sources.refs, excluded, config);
         stats.propagations += chunk_result.stats.propagations;
-        stats.kdtree_candidates += chunk_result.stats.kdtree_candidates;
         radial_admissions.insert(chunk_result.radial_admissions.begin(),
                                  chunk_result.radial_admissions.end());
 
-        std::vector<CoarseHitRecord> runs = std::move(chunk_result.encounters);
+        std::vector<CoarseHitRecord> runs =
+            encounters_within_spans(std::move(chunk_result.encounters), spans, config);
+        stats.kdtree_candidates += distinct_encounter_pairs(runs);
         runs.insert(runs.end(), carry.begin(), carry.end());
         carry.clear();
         std::vector<CoarseHitRecord> closed;
-        for (const auto& encounter : drop_excluded_encounters(
-                 coalesce_encounters(std::move(runs)), excluded)) {
+        for (const auto& encounter : encounters_within_spans(
+                 coalesce_encounters(std::move(runs)), spans, config)) {
             if (is_final_chunk || encounter.latest_step < chunk_last) {
                 closed.push_back(encounter);
             } else {
@@ -2534,14 +2766,15 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
             }
         }
         stats.tca_refined += closed.size();
-        auto batch = refine_encounters(sgp4_sources.refs, closed, config, nullptr, resident_index);
+        auto batch = refine_encounters(spans.refs, closed, config, nullptr, resident_index, spans.end_jd);
         refined.events.insert(refined.events.end(),
                               std::make_move_iterator(batch.events.begin()),
                               std::make_move_iterator(batch.events.end()));
         refined.event_objects.insert(refined.event_objects.end(),
                                      batch.event_objects.begin(), batch.event_objects.end());
-        refined.failed_objects.insert(refined.failed_objects.end(),
-                                      batch.failed_objects.begin(), batch.failed_objects.end());
+        refined.failed.insert(refined.failed.end(),
+                              std::make_move_iterator(batch.failed.begin()),
+                              std::make_move_iterator(batch.failed.end()));
 
         if (progress) {
             progress(static_cast<double>(chunk_last + 1) /
@@ -2550,21 +2783,9 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
         }
     }
 
-    stats.excluded_objects = excluded_list(excluded);
     count_radial_admissions(stats, radial_admissions.size());
-    std::vector<ConjunctionEvent> events;
-    events.reserve(refined.events.size());
-    for (size_t i = 0; i < refined.events.size(); ++i) {
-        if (!involves_excluded(refined.event_objects[i].first,
-                               refined.event_objects[i].second, excluded)) {
-            events.push_back(std::move(refined.events[i]));
-        }
-    }
-    for (const auto& [obj1_index, obj2_index] : refined.failed_objects) {
-        if (!involves_excluded(obj1_index, obj2_index, excluded)) ++stats.failed_pairs;
-    }
-    stats.conjunctions_found = events.size();
-    sort_conjunction_events(events);
+    auto events = finish_window(spans, sgp4_sources.refs, std::move(refined), config, stats,
+                                resident_index);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -2824,12 +3045,20 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
         candidates = &searched.candidates;
         propagations[0] += searched.samples;
     }
+    // A candidate at or after the coarse step that refused one of its objects
+    // is not re-tested; the encounters before it are refined within the span.
+    const auto refused_from = [&](uint32_t index) {
+        const auto it = excluded.find(index);
+        return it == excluded.end()
+            ? std::numeric_limits<int64_t>::max()
+            : std::llround((it->second.first_failure_jd - config.start_jd) / step_days);
+    };
     {
         run([&](int w, int64_t lo, int64_t hi) {
             for (int64_t c = lo; c < hi; ++c) {
                 const auto& k = (*candidates)[c];
                 if (k.obj1 >= n || k.obj2 >= n || k.obj1 == k.obj2 || k.step < 0 || k.step > last_step) continue;
-                if (excluded.count(k.obj1) || excluded.count(k.obj2)) continue;
+                if (k.step >= refused_from(k.obj1) || k.step >= refused_from(k.obj2)) continue;
                 const double jd = config.start_jd + k.step * step_days;
                 StateVector a, b;
                 double deviation_a = 0, deviation_b = 0;
@@ -2858,15 +3087,15 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
     });
     CoarseRunCollector runs;
     for (const auto& x : all) runs.hit(x.lo, x.hi, x.step, x.closest_km);
-    auto encounters = drop_excluded_encounters(coalesce_encounters(runs.finish()), excluded);
+    auto spans = coarse_spans(sources, excluded, config);
+    auto encounters = encounters_within_spans(coalesce_encounters(runs.finish()), spans, config);
 
     stats = {};
     stats.total_objects = n;
     stats.pairs_screened = n < 2 ? 0 : static_cast<uint64_t>(n) * (n - 1) / 2;
     stats.kdtree_candidates = all.size();
     for (auto p : propagations) stats.propagations += p;
-    auto events = refine_window_encounters(sources, encounters, config, stats, nullptr, nullptr);
-    stats.excluded_objects = excluded_list(excluded);
+    auto events = refine_window_encounters(spans, sources, encounters, config, stats, nullptr, nullptr);
     for (auto& x : stats.excluded_objects) { x.input_list = 0; x.input_index = x.index; }
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(
         std::chrono::high_resolution_clock::now() - t_start).count();

@@ -12,7 +12,7 @@ import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness
 import { syntheticGp, updatedGp } from './lib/syntheticCatalog.mjs';
 import { createOmmEncoder } from '../scripts/lib/ommCatalog.mjs';
 import { decodeCatalogResult, prepareIndex, releaseIndex, screenCatalog, screenWindows, sgp4Sources, windowRequest } from '../gpu/catalogScreen.mjs';
-import { mergeWindowEvents, objectKey } from '../gpu/allVsAll.mjs';
+import { mergeWindowEvents, objectKey, refuseAt } from '../gpu/allVsAll.mjs';
 import { ROLE, cutBlocks, sampleWindowGrid, screenStoredWindow, spliceGridRows, unitRoles } from '../gpu/continuousScreen.mjs';
 
 const windows = screenWindows(2461314.5, 2 / 24, 1);
@@ -47,10 +47,11 @@ async function session(workers = controls.workers) {
     },
   };
 }
-const excludedKeys = (frames, grids) => {
-  const sources = sgp4Sources(frames), out = new Set();
-  for (const g of grids) for (const row of g.excluded.keys()) out.add(objectKey(sources[row].OBJECT_ID, sources[row].NORAD_CATALOG_ID));
-  return out;
+// Each refused object's earliest refusal over the windows' grids.
+const refusalCutoffs = (frames, grids) => {
+  const sources = sgp4Sources(frames), cutoffs = new Map();
+  for (const g of grids) for (const [row, jd] of g.excluded) refuseAt(cutoffs, objectKey(sources[row].OBJECT_ID, sources[row].NORAD_CATALOG_ID), jd);
+  return cutoffs;
 };
 
 test('Incremental: re-screening only the updated objects equals the full re-screen for every pair with an updated member', async () => {
@@ -66,7 +67,7 @@ test('Incremental: re-screening only the updated objects equals the full re-scre
     for (const r of after.rows) roles[r] = ROLE.PRIMARY;
     const events = [];
     for (let w = 0; w < windows.length; w++) events.push(...(await s.window(framesAfter, grids[w], w, roles)).events);
-    const incremental = mergeWindowEvents(events, excludedKeys(framesAfter, grids)).map(canonical);
+    const incremental = mergeWindowEvents(events, refusalCutoffs(framesAfter, grids)).map(canonical);
     const sources = sgp4Sources(framesAfter);
     const updated = new Set(after.rows.map((r) => objectKey(sources[r].OBJECT_ID, sources[r].NORAD_CATALOG_ID)));
     const touches = (e) => keysOf(e).some((k) => updated.has(k));
@@ -91,7 +92,7 @@ test('Work units: object blocks x windows cover every pair once and reproduce th
       for (let w = 0; w < windows.length; w++) events.push(...(await s.window(frames, grids[w], w, unitRoles(frames.length, blocks, u))).events);
     }
     assert.equal(new Set(events.map(canonical)).size, events.length, 'no pair is screened by two units');
-    assert.ok(sameSet(mergeWindowEvents(events, excludedKeys(frames, grids)).map(canonical), full));
+    assert.ok(sameSet(mergeWindowEvents(events, refusalCutoffs(frames, grids)).map(canonical), full));
   } finally { await s.destroy(); }
 });
 

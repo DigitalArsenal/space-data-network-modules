@@ -185,6 +185,10 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days, double threshold_km,
     double fine_tol_sec = 0.001);
+/// The latest instant a search over a window ending at end_jd evaluates a
+/// state: the range sample past the edge on the absolute 5 s grid, and the
+/// one-second bracket about a minimum next to it.
+double search_evaluation_end_jd(double end_jd);
 /// The conjunctions a window reports: the minima above whose TCA lies in
 /// [start_jd, start_jd + duration_days), so a minimum belongs to the one
 /// window holding its TCA. These are screen_catalog's events on the generic
