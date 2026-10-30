@@ -954,18 +954,33 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
   return true;
 }
 #include "ephemeris_invoke.inc"
-bool window(Source &s, const ScreeningConfig &c, int f) {
+// Whether the source's coverage starts after the window start, or ends
+// before the window end (to the epoch's rounding).
+bool startsInside(const Source &s, const ScreeningConfig &c) {
+  const double a = s.provider->valid_start_jd();
+  return a && c.start_jd < a - epochRounding(a);
+}
+bool endsInside(const Source &s, const ScreeningConfig &c) {
+  const double b = s.provider->valid_end_jd();
+  return b && c.start_jd + c.duration_days > b + epochRounding(b);
+}
+// A source in the evaluation frame. The pair methods and the tight path need
+// its coverage to hold the whole window and refuse it by name otherwise;
+// screen_catalog and screen_window (partial) screen each pair over its joint
+// coverage inside the window (screenSources).
+bool window(Source &s, const ScreeningConfig &c, int f, bool partial = false) {
   if (s.uploaded_oem && !normalizeOem(s, f)) return false;
   if (s.axes != f)
     return error("frame-mismatch",
                  "Scientific sources must already use the declared evaluation "
                  "frame; use FRM/EOP before invoking.");
-  double a = s.provider->valid_start_jd(), b = s.provider->valid_end_jd();
-  if ((a && c.start_jd < a - epochRounding(a)) ||
-      (b && c.start_jd + c.duration_days > b + epochRounding(b)))
+  if (!partial && (startsInside(s, c) || endsInside(s, c)))
     return error(
         "invalid-coverage",
-        "Source does not cover the complete requested UTC screening window.");
+        "Source " + s.provider->object_id() + " covers " +
+            jd_to_iso(s.provider->valid_start_jd()) + " to " +
+            jd_to_iso(s.provider->valid_end_jd()) +
+            ", not the complete requested UTC screening window.");
   return true;
 }
 std::unique_ptr<CQRProbabilityResultT>
@@ -1481,6 +1496,40 @@ std::vector<uint8_t> excludedRecord(const Source &source, const ExcludedObject &
   FinishOMMBuffer(b, OMM::Pack(b, &o));
   return std::vector<uint8_t>(b.GetBufferPointer(),
                               b.GetBufferPointer() + b.GetSize());
+}
+// One $OMM per sampled or polynomial source covering only part of the window
+// or none of it: the source's identity, Earth, its frame and UTC, with COMMENT
+// in the fixed form (README, "Objects screened in part or excluded"); no mean
+// elements.
+//   Excluded from conjunction screening; its trajectory does not cover the window. COVERAGE_START=<ISO>; COVERAGE_END=<ISO>
+//   Screened until COVERAGE_END; its trajectory ends inside the window. COVERAGE_START=<ISO>; COVERAGE_END=<ISO>
+//   Screened from COVERAGE_START; its trajectory starts inside the window. ...
+//   Screened from COVERAGE_START until COVERAGE_END; its trajectory covers part of the window. ...
+std::vector<uint8_t> coverageRecord(const Source &source, const ExcludedObject &x, bool from, bool until) {
+  const auto &e = *source.provider;
+  OMMT o;
+  o.OBJECT_NAME = e.object_name();
+  o.OBJECT_ID = e.object_id();
+  o.NORAD_CAT_ID = e.norad_id() > 0 ? static_cast<uint32_t>(e.norad_id()) : 0;
+  o.CENTER_NAME = "EARTH";
+  o.REFERENCE_FRAME = std::make_unique<RFMT>();
+  CelestialFrameWrapperT axes;
+  axes.frame = source.axes == 1   ? CelestialFrame::TEMEOFDATE
+               : source.axes == 2 ? CelestialFrame::GCRF
+                                  : CelestialFrame::EME2000;
+  o.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(axes));
+  o.TIME_SYSTEM = timingStandard::UTC;
+  const std::string sentence =
+      x.excluded()  ? "Excluded from conjunction screening; its trajectory does not cover the window."
+      : from && until ? "Screened from COVERAGE_START until COVERAGE_END; its trajectory covers part of the window."
+      : from          ? "Screened from COVERAGE_START; its trajectory starts inside the window."
+                      : "Screened until COVERAGE_END; its trajectory ends inside the window.";
+  // The printed coverage lies inside the real one: its start rounded up, its end down.
+  o.COMMENT = sentence + " COVERAGE_START=" + isoMillisecond(x.coverage_start_jd, true) +
+              "; COVERAGE_END=" + isoMillisecond(x.coverage_end_jd, false);
+  flatbuffers::FlatBufferBuilder b(256);
+  FinishOMMBuffer(b, OMM::Pack(b, &o));
+  return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 bool pushExcluded(const std::vector<std::vector<uint8_t>> &records) {
   for (size_t k = 0; k < records.size(); ++k) {
@@ -2134,6 +2183,43 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
   };
   spans(p, 0, pr, p_out);
   spans(s, 1, sr, s_out);
+  // A sampled or polynomial source covering only part of the window is
+  // screened over that part, and one covering none of it takes part in no
+  // pair; either is reported once (coverageRecord). A pair is screened over
+  // its joint coverage inside the window: the search stays inside it, a
+  // coverage edge is never a minimum, and an empty joint coverage holds no
+  // conjunction.
+  std::vector<double> p_lo(p.size(), c.start_jd), p_hi(p.size(), end_jd);
+  std::vector<double> s_lo(s.size(), c.start_jd), s_hi(s.size(), end_jd);
+  const auto coverage = [&](const std::vector<Source> &list, int which, std::vector<double> &lo,
+                            std::vector<double> &hi, std::vector<uint8_t> &out) {
+    for (size_t k = 0; k < list.size(); ++k) {
+      const auto &x = list[k];
+      const bool from = startsInside(x, c), until = endsInside(x, c);
+      if (x.mean || (!from && !until))
+        continue;
+      const double a = x.provider->valid_start_jd(), b = x.provider->valid_end_jd();
+      if (from) lo[k] = a;
+      if (until) hi[k] = b;
+      ExcludedObject object;
+      object.index = static_cast<uint32_t>(k);
+      object.input_list = which;
+      object.input_index = static_cast<uint32_t>(k);
+      object.source_handle = x.handle;
+      object.coverage = true;
+      object.coverage_start_jd = a;
+      object.coverage_end_jd = b;
+      if (hi[k] > lo[k]) {
+        object.last_valid_jd = hi[k];
+      } else {
+        out[k] = 1;   // no coverage in the window
+      }
+      stats.excluded_objects.push_back(object);
+      excluded.push_back(coverageRecord(x, object, from, until));
+    }
+  };
+  coverage(p, 0, p_lo, p_hi, p_out);
+  coverage(s, 1, s_lo, s_hi, s_out);
   struct Worker {
     std::vector<std::unique_ptr<CQREventT>> events;
     std::vector<FailedPair> failures;
@@ -2163,8 +2249,10 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         if (p[i].provider->object_id() == b.provider->object_id())
           continue;
         ++w.pairs;
-        if (p_out[i] || (s.empty() ? p_out[j] : s_out[j])) {
-          ++w.skipped;   // an excluded object's pair: never evaluated
+        if (p_out[i] || (s.empty() ? p_out[j] : s_out[j]) ||
+            !(std::min(p_hi[i], s.empty() ? p_hi[j] : s_hi[j]) >
+              std::max(p_lo[i], s.empty() ? p_lo[j] : s_lo[j]))) {
+          ++w.skipped;   // an excluded object, or no joint coverage: never evaluated
           continue;
         }
         const EphemerisSource &a_source = *pr[i];
@@ -2325,7 +2413,7 @@ extern "C" int screen_catalog() {
     if (values)
       for (auto x : *values) {
         Source v;
-        if (!source(x, v) || !window(v, c, f))
+        if (!source(x, v) || !window(v, c, f, true))
           return false;
         target.push_back(std::move(v));
       }
@@ -2684,7 +2772,7 @@ bool screenWindow(const char *method) {
     return error("frame-mismatch",
                  "Window evaluation frame differs from the resident index.");
   for (auto &s : i->sources)
-    if (!window(s, c, f))
+    if (!window(s, c, f, true))
       return false;
   EmpiricalModel model;
   if (!empiricalModel(model))

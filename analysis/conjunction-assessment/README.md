@@ -264,7 +264,29 @@ response reports `incomplete-screening` when any evaluation failed; its message
 names the failed pairs (by catalog number, else OBJECT_ID) and each one's
 error, at most eight of them.
 
-### Objects the propagator refuses
+### Objects screened in part or excluded
+
+The final chunk carries one `$OMM` per object the screening covered in part or
+not at all, on the `excluded` port: an element set the propagator refuses
+inside the window (below), or a sampled or polynomial source whose trajectory
+covers only part of the window or none of it (after). `COMMENT` says which in a
+fixed form, a sentence then its fields, instants UTC to the millisecond; these
+fields will become a typed CQR record, and the COMMENT form is the contract
+until then:
+
+| Form | COMMENT |
+| --- | --- |
+| Refused from the window start (excluded) | `Excluded from conjunction screening; SGP4 refuses it from the window start. LAST_VALID=NONE; FIRST_REFUSAL=<ISO>; REFUSAL=<error>` |
+| Refused part-way | `Screened until LAST_VALID; SGP4 refuses it from FIRST_REFUSAL. LAST_VALID=<ISO>; FIRST_REFUSAL=<ISO>; REFUSAL=<error>` |
+| No coverage in the window (excluded) | `Excluded from conjunction screening; its trajectory does not cover the window. COVERAGE_START=<ISO>; COVERAGE_END=<ISO>` |
+| Coverage ends inside the window | `Screened until COVERAGE_END; its trajectory ends inside the window. COVERAGE_START=<ISO>; COVERAGE_END=<ISO>` |
+| Coverage starts inside the window | `Screened from COVERAGE_START; its trajectory starts inside the window. COVERAGE_START=<ISO>; COVERAGE_END=<ISO>` |
+| Coverage starts and ends inside it | `Screened from COVERAGE_START until COVERAGE_END; its trajectory covers part of the window. COVERAGE_START=<ISO>; COVERAGE_END=<ISO>` |
+
+An excluded object takes part in no pair, and `STATISTICS.TOTAL_OBJECTS` leaves
+it out; an object screened in part is counted. Each is reported once per call.
+
+#### Objects the propagator refuses
 
 SGP4 refuses an element set once it decays ("SGP4: decayed (the radius is
 below one Earth radius)", "Non-finite or decayed SGP4 state") or its
@@ -279,20 +301,33 @@ span ends where bisection between the last valid coarse epoch (or search
 instant) and the refused one, a millisecond apart, puts it. Every other pair
 is screened exactly as if the object were absent.
 
-The final chunk carries one `$OMM` per object refused inside the window on the
-`excluded` port: its mean elements, Earth/TEME, with `COMMENT` in a fixed
-format, a sentence then three fields, instants UTC to the millisecond:
+Its record is the element set's own `$OMM`: its mean elements, Earth/TEME,
+with the first two forms above. LAST_VALID is rounded down and FIRST_REFUSAL
+up; REFUSAL is the propagator's error at the first refused instant. An object
+refused only after the window end is screened through the window and not
+reported.
 
-    Excluded from conjunction screening; SGP4 refuses it from the window start. LAST_VALID=NONE; FIRST_REFUSAL=<ISO>; REFUSAL=<error>
-    Screened until LAST_VALID; SGP4 refuses it from FIRST_REFUSAL. LAST_VALID=<ISO>; FIRST_REFUSAL=<ISO>; REFUSAL=<error>
+#### Sampled sources covering part of the window
 
-LAST_VALID is rounded down and FIRST_REFUSAL up; REFUSAL is the propagator's
-error at the first refused instant. An object refused only after the window
-end is screened through the window and not reported. These fields will become
-a typed CQR record; the COMMENT form is the contract until then.
+screen_catalog and screen_window screen each pair of sampled, OCM or
+polynomial sources over its joint coverage inside the window: the search stays
+inside it, a minimum within a step of a coverage edge is found, and a bracket
+that refines onto the edge is not a minimum (an edge is never one). A source
+whose coverage holds none of the window takes part in no pair; a pair whose
+joint coverage inside the window is empty has no conjunction and no failure.
+Such a source's record is an `$OMM` of its identity (OBJECT_NAME, OBJECT_ID,
+NORAD_CAT_ID), Earth, its frame and UTC, with no mean elements (their fields
+are zero, and MEAN_ELEMENT_THEORY is the schema's default, not a theory), and
+one of the coverage forms above: COVERAGE_START rounded up, COVERAGE_END
+down. A non-finite state, or samples out of order or overlapping, still refuse
+the source by name when it is read. The pair methods and the tight path
+(`coarse_grid`, `search_grid`, `search_candidates`, `refine_candidates`) still
+refuse a source that does not cover their whole window, naming it and its
+coverage.
+
 `OBJECTS_PARSED` counts every object; `STATISTICS.TOTAL_OBJECTS` leaves the
-excluded ones (LAST_VALID=NONE) out, so the difference is the number of
-excluded records. `PAIRS_SCREENED` and
+excluded ones out, so the difference is the number of excluded records.
+`PAIRS_SCREENED` and
 `PAIRS_PREFILTERED` still describe the planned pair set; a pair is prefiltered
 when the altitude prefilter below kept it out at every coarse step.
 

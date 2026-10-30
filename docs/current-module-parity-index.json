@@ -270,7 +270,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.13.0",
+      "version": "0.14.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -310,9 +310,9 @@
         "c",
         "c++"
       ],
-      "cxxSourceFileCount": 56,
+      "cxxSourceFileCount": 57,
       "cSourceFileCount": 1,
-      "testFileCount": 201,
+      "testFileCount": 203,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -370,6 +370,7 @@
         "src/cpp/tests/test_trajectory_bounds.cpp",
         "tests/native/nc_cascade.cpp",
         "tests/native/radial_gate_bound.cpp",
+        "tests/native/sampled_brute_force.cpp",
         "tests/native/sgp4_omm_states.cpp",
         "tests/native/span_brute_force.cpp",
         "tests/native/wasmedge_wasi_threads_runner.c"
@@ -552,6 +553,7 @@
         "tests/lowVelocityCovariance.test.mjs",
         "tests/native/nc_cascade.cpp",
         "tests/native/radial_gate_bound.cpp",
+        "tests/native/sampled_brute_force.cpp",
         "tests/native/sgp4_omm_states.cpp",
         "tests/native/span_brute_force.cpp",
         "tests/native/wasmedge_wasi_threads_runner.c",
@@ -563,6 +565,7 @@
         "tests/possibilityScreening.test.mjs",
         "tests/radialGateBound.e2e.mjs",
         "tests/realCatalogExclusion.test.mjs",
+        "tests/sampledCoverage.e2e.mjs",
         "tests/screeningWindowUnion.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/sdnDataApiStream.test.mjs",

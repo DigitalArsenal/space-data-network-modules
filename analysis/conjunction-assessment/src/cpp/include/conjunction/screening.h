@@ -114,6 +114,12 @@ struct ExcludedObject {
     double last_valid_jd = 0.0;
     double refused_jd = 0.0;
     bool excluded() const { return last_valid_jd == 0.0; }
+    // A sampled or polynomial source whose coverage [coverage_start_jd,
+    // coverage_end_jd] holds only part of the window (last_valid_jd: the end
+    // of its part) or none of it (excluded), not a propagator's refusal.
+    bool coverage = false;
+    double coverage_start_jd = 0.0;
+    double coverage_end_jd = 0.0;
     // Filled by callers that know where the object came from.
     int input_list = -1;            // ConjunctionScreener: 0 primaries, 1 secondaries
     uint32_t input_index = 0;       // position in that input vector

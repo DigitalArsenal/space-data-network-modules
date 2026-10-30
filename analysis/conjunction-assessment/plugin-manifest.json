@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -780,7 +780,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
+          "description": "One OMM per object the screening covered in part or not at all, sent with the final result chunk: an element set the propagator refuses inside the window (its mean elements), or a sampled or polynomial source whose trajectory covers only part of the window or none of it (its identity, frame and time system; no mean elements). COMMENT says which in a fixed form (README, \"Objects screened in part or excluded\"): LAST_VALID, FIRST_REFUSAL and REFUSAL for a refusal, COVERAGE_START and COVERAGE_END for a coverage. An object refused from the window start, or with no coverage in it, is excluded: the statistics' TOTAL_OBJECTS leaves it out and OBJECTS_PARSED keeps it. An object screened in part is counted in both."
         }
       ],
       "maxBatch": 1,
@@ -1108,7 +1108,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
+          "description": "One OMM per object the screening covered in part or not at all, sent with the final result chunk: an element set the propagator refuses inside the window (its mean elements), or a sampled or polynomial source whose trajectory covers only part of the window or none of it (its identity, frame and time system; no mean elements). COMMENT says which in a fixed form (README, \"Objects screened in part or excluded\"): LAST_VALID, FIRST_REFUSAL and REFUSAL for a refusal, COVERAGE_START and COVERAGE_END for a coverage. An object refused from the window start, or with no coverage in it, is excluded: the statistics' TOTAL_OBJECTS leaves it out and OBJECTS_PARSED keeps it. An object screened in part is counted in both."
         }
       ],
       "maxBatch": 1,
@@ -1215,7 +1215,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
+          "description": "One OMM per object the screening covered in part or not at all, sent with the final result chunk: an element set the propagator refuses inside the window (its mean elements), or a sampled or polynomial source whose trajectory covers only part of the window or none of it (its identity, frame and time system; no mean elements). COMMENT says which in a fixed form (README, \"Objects screened in part or excluded\"): LAST_VALID, FIRST_REFUSAL and REFUSAL for a refusal, COVERAGE_START and COVERAGE_END for a coverage. An object refused from the window start, or with no coverage in it, is excluded: the statistics' TOTAL_OBJECTS leaves it out and OBJECTS_PARSED keeps it. An object screened in part is counted in both."
         }
       ],
       "maxBatch": 1,
@@ -1712,7 +1712,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
+          "description": "One OMM per object the screening covered in part or not at all, sent with the final result chunk: an element set the propagator refuses inside the window (its mean elements), or a sampled or polynomial source whose trajectory covers only part of the window or none of it (its identity, frame and time system; no mean elements). COMMENT says which in a fixed form (README, \"Objects screened in part or excluded\"): LAST_VALID, FIRST_REFUSAL and REFUSAL for a refusal, COVERAGE_START and COVERAGE_END for a coverage. An object refused from the window start, or with no coverage in it, is excluded: the statistics' TOTAL_OBJECTS leaves it out and OBJECTS_PARSED keeps it. An object screened in part is counted in both."
         }
       ],
       "maxBatch": 1,
