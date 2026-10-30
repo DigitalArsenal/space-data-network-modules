@@ -62,6 +62,14 @@ bool error(const char *code, const std::string &detail) {
   plugin_set_error(code, detail.c_str());
   return false;
 }
+// A screen that cannot keep its coarse encounters within the module's memory
+// (SCREEN_MEMORY_LIMIT, screening.h) is its own error; any other screening
+// error is screening-failed.
+bool screeningError() {
+  const std::string detail = conjunction::error_message();
+  return error(detail.rfind(conjunction::SCREEN_MEMORY_LIMIT, 0) == 0 ? "screen-memory-limit" : "screening-failed",
+               detail);
+}
 bool isFinite(double x) { return std::isfinite(x); }
 bool positive(double x) { return isFinite(x) && x > 0; }
 // Midpoint +/- duration and directly parsed endpoint may differ by up to two
@@ -2120,7 +2128,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     auto results = b.empty() ? screener.screen(a) : screener.screen(a, b);
     stats = screener.stats();
     if (has_error())
-      return error("screening-failed", error_message());
+      return screeningError();
     ScreenSourceLookup sources;
     addScreenSources(sources, p);
     addScreenSources(sources, s);
@@ -2789,7 +2797,7 @@ bool screenWindow(const char *method) {
     ScreeningStats stats;
     auto events = screen_resident_index_window(*native, c, stats);
     if (has_error())
-      return error("screening-failed", error_message());
+      return screeningError();
     std::vector<std::vector<uint8_t>> excluded;
     for (const auto &x : stats.excluded_objects) {
       auto found = std::find_if(i->sources.begin(), i->sources.end(),

@@ -428,25 +428,34 @@ WasmEdge, and WasmEdge ahead-of-time compiled with SDN's patches):
 ## Catalog size and partitioned runs
 
 One `screen_catalog` call screens its whole pair set inside the guest's linear
-memory, which is at most 2 GiB. The coarse pass keeps a record per encounter,
-so an all-vs-all call grows with the square of the object count and with the
-window: about 0.63 encounters per pair per day over a full catalog. Measured
-all-vs-all, one call, over a stride sample of a full CelesTrak GP catalog
-(31,807 objects, OrbPro's gallery `omm-cache.fb`), 2026-07-06 + 1 day, 5 km
-threshold, 60 s coarse step, 8 workers, Node V8 host:
+memory, which is at most 2 GiB. Its coarse pass keeps a record per encounter
+run (a pair's consecutive coarse steps inside the coarse radius, 200 times the
+threshold without a resident index) and an entry per pair it has hit, and
+refines them after the pass, so what it holds grows with the square of the
+object count, with the window and with the threshold: about 0.63 encounters
+per pair per day over a full catalog at 5 km. A pass may hold 768 MiB of
+them, counted for all its workers at every coarse step. An all-vs-all call
+(over 250,000 pairs) or a `screen_window` whose pass would hold more screens
+its window in chunks, as many coarse steps each as half that holds, and
+reports what one pass would. A call with explicit pairs (inline primaries and
+secondaries, or a catalog under 250,000 pairs) whose pass would hold more,
+or one with a single coarse step that does, is refused: error
+`screen-memory-limit`, message `SCREEN_MEMORY_LIMIT: ...` naming the limit, a
+window that fits at the request's threshold and a threshold that fits over
+its window.
 
-| Objects | Pairs | Encounters | Peak guest memory | Result |
-| ---: | ---: | ---: | ---: | --- |
-| 2,000 | 2.0 M | 1.3 M | 211 MiB | 181 conjunctions |
-| 4,000 | 8.0 M | 5.1 M | 596 MiB | 837 conjunctions |
-| 6,000 | 18.0 M | 11.3 M | 1,905 MiB | 1,890 conjunctions |
-| 7,000 | 24.5 M | 15.6 M | 1,503 MiB | 2,571 conjunctions |
-| 8,000 | 32.0 M | | | traps out of memory (`RuntimeError: unreachable`), also with 4 workers |
+Measured on the 2,000 invented LEO objects of
+`tests/screenMemoryLimit.e2e.mjs` (perigee 300–1,500 km, apogee at most
+2,000 km), 15 km threshold, 60 s coarse step, 1 ms refinement tolerance,
+8 workers, Node V8 host:
 
-So one call screens about 7,000 objects against each other per day of window,
-fewer for longer windows; past that the guest traps and its instance is lost.
-Peak memory is not monotone in the object count because the encounter tables
-grow by doubling.
+| Window | Encounter runs | Peak guest memory | Pass | Result |
+| ---: | ---: | ---: | --- | --- |
+| 24 h | 4.07 M | 407 MiB | one | 1,350 conjunctions |
+| 54 h | 9.12 M | 916 MiB | one | 2,938 conjunctions |
+| 72 h | 12.16 M | 1,204 MiB | chunks | 3,873 conjunctions in 151 s, every one those of three 24 h calls |
+
+Time still grows with the encounter runs a call refines.
 
 A whole catalog screens in one pass with the pair search on a GPU
 ([GPU all-vs-all](docs/gpu-all-vs-all.md)). It takes any propagator's
@@ -460,8 +469,8 @@ Without a GPU, screen larger catalogs with the partitioned runner,
 `scripts/run-sdn-omm-partitioned-screen-catalog.mjs`, and
 `--catalog-block-size B` ([partition runs](docs/celestrak-full-catalog-partitions.md)):
 each invocation carries one block pair, at most `2B` objects and `B * B` pairs,
-and the run screens every pair of the catalog exactly once. Keep `2B` well
-inside the single-call figure for the window (`B = 1000` for one day). The
+and the run screens every pair of the catalog exactly once. Size `B` so a
+block pair's pass fits in one piece (`B = 1000` for one day at 5 km). The
 runner's default ordered-primary mode (`--partition-size`) also screens every
 pair once, but every invocation carries the whole catalog.
 

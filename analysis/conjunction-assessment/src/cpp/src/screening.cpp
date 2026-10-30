@@ -37,6 +37,7 @@
 #include <optional>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 
 namespace conjunction {
 
@@ -76,6 +77,15 @@ int32_t window_coarse_steps(const ScreeningConfig& config) {
     return static_cast<int32_t>((end_jd - config.start_jd) / step_days);
 }
 
+// A closed run is a 32-byte record in a vector that grows by doubling; a pair's
+// open run is an unordered_map node (next, hash, 8-byte key and the record: 48
+// bytes on wasm32, 56 with malloc's header) and its bucket; an admitted pair
+// (radial gate) is an unordered_set node (24 bytes with the header) and its
+// bucket. These are what CoarseStorage counts.
+constexpr uint64_t CLOSED_RUN_BYTES = 2 * sizeof(CoarseHitRecord);
+constexpr uint64_t OPEN_RUN_BYTES = 64;
+constexpr uint64_t ADMISSION_BYTES = 32;
+
 // Coarse hits are kept per encounter, not per pair. An encounter is a maximal
 // run of consecutive coarse steps at which the pair is inside its coarse
 // radius; the orbits bring a pair together again and again over a window,
@@ -89,11 +99,16 @@ int32_t window_coarse_steps(const ScreeningConfig& config) {
 struct CoarseRunCollector {
     std::unordered_map<uint64_t, CoarseHitRecord> open;
     std::vector<CoarseHitRecord> closed;
+    // Bytes added since take_bytes() last ran (CoarseStorage).
+    uint64_t added_bytes = 0;
 
     void hit(uint32_t lo, uint32_t hi, int32_t step, double distance_km) {
-        auto& run = open[coarse_hit_key(lo, hi)];
+        auto [entry, inserted] = open.try_emplace(coarse_hit_key(lo, hi));
+        auto& run = entry->second;
+        if (inserted) added_bytes += OPEN_RUN_BYTES;
         if (run.best_step >= 0 && run.latest_step + 1 < step) {
             closed.push_back(run);
+            added_bytes += CLOSED_RUN_BYTES;
             run = CoarseHitRecord{};
         }
         if (run.best_step < 0) {
@@ -109,7 +124,120 @@ struct CoarseRunCollector {
         open.clear();
         return std::move(closed);
     }
+
+    uint64_t take_bytes() { return std::exchange(added_bytes, 0); }
 };
+
+// ── Coarse storage: what one coarse pass may hold ──
+//
+// A coarse pass keeps every encounter run of the window and an entry for every
+// pair it has hit (CoarseRunCollector, one per worker), and the pairs its
+// radial gate admitted, until it ends; only then are the runs merged into one
+// list and refined. Without a resident index the coarse radius is 200 times
+// the threshold, so what a pass holds grows with the window, the threshold and
+// the catalog (2,000 LEO objects at 15 km: about 4 million runs a day). The
+// module's memory is 2 GiB (the SDK's threaded link, -Wl,--max-memory=
+// 2147483648), and an allocation past it aborts the instance. A pass's workers
+// add what each step added to one shared count; once it passes the limit
+// every worker stops at its next step and the pass reports itself full, so
+// the merge (one more copy of the runs) and the refinement always have room.
+// The single-window implicit pass falls back to the chunked one; a pass that
+// cannot be cut is refused by name (SCREEN_MEMORY_LIMIT).
+constexpr uint64_t COARSE_STORAGE_BUDGET_BYTES = uint64_t{768} << 20;
+constexpr uint64_t MODULE_MEMORY_BYTES = uint64_t{2} << 30;
+
+struct CoarseStorage {
+    explicit CoarseStorage(uint64_t limit_bytes) : limit(limit_bytes) {}
+    const uint64_t limit;
+    std::atomic<uint64_t> bytes{0};
+    std::atomic<uint64_t> steps{0};
+    std::atomic<bool> full{false};
+
+    // A worker's step added `added` bytes: false once the pass is full.
+    bool step_fits(uint64_t added) {
+        const uint64_t held = bytes.fetch_add(added, std::memory_order_relaxed) + added;
+        steps.fetch_add(1, std::memory_order_relaxed);
+        if (held > limit) full.store(true, std::memory_order_relaxed);
+        return !full.load(std::memory_order_relaxed);
+    }
+};
+
+// What a coarse pass held: whether it filled its storage, and the bytes and
+// worker steps counted until it stopped.
+struct CoarseStorageUse {
+    bool full = false;
+    uint64_t bytes = 0;
+    uint64_t steps = 0;
+
+    static CoarseStorageUse of(const CoarseStorage& storage) {
+        return {storage.full.load(), storage.bytes.load(), storage.steps.load()};
+    }
+    double bytes_per_step() const {
+        return static_cast<double>(bytes) / static_cast<double>(std::max<uint64_t>(1, steps));
+    }
+};
+
+std::string mebibytes(double bytes) {
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.0f MiB", bytes / static_cast<double>(1u << 20));
+    return text;
+}
+
+std::string decimal(double value, const char* format) {
+    char text[32];
+    std::snprintf(text, sizeof(text), format, value);
+    return text;
+}
+
+// The refusal names the limit, what the screen would hold, and what fits: the
+// window, from what a step holds (measured), and the threshold, scaled down
+// in proportion to what the screen would hold. The coarse radius is 200 times
+// the threshold and the runs grow at least in proportion to it, so that
+// threshold errs low.
+std::string memory_refusal(const ScreeningConfig& config, const std::string& scope,
+                           double would_hold, double step_bytes) {
+    const double budget = static_cast<double>(COARSE_STORAGE_BUDGET_BYTES);
+    const double fit_steps = std::floor(budget / std::max(1.0, step_bytes));
+    std::string text = std::string(SCREEN_MEMORY_LIMIT) + ": " + scope + " would hold about " +
+        mebibytes(would_hold) + " of encounter runs, past the " + mebibytes(budget) +
+        " a coarse pass may keep of the module's " + mebibytes(MODULE_MEMORY_BYTES) + ".";
+    if (fit_steps >= 2) {
+        text += " At " + decimal(config.threshold_km, "%.3g") + " km a window of at most " +
+            decimal((fit_steps - 1) * config.coarse_step_sec / 3600.0, "%.1f") + " h fits;";
+    } else {
+        text += " No window fits at " + decimal(config.threshold_km, "%.3g") + " km;";
+    }
+    text += " over " + decimal(config.duration_days * 24.0, "%.1f") + " h, a threshold of at most " +
+        decimal(config.threshold_km * budget / would_hold, "%.3g") + " km.";
+    return text;
+}
+
+// A pass with no chunked form (explicit pairs) that filled its storage.
+std::string explicit_memory_refusal(const ScreeningConfig& config, const CoarseStorageUse& use,
+                                    uint64_t pairs) {
+    const double steps = static_cast<double>(window_coarse_steps(config)) + 1.0;
+    return memory_refusal(config, "the coarse pass of this screen (" + std::to_string(pairs) + " pairs, " +
+                              decimal(config.duration_days * 24.0, "%.1f") + " h at " +
+                              decimal(config.threshold_km, "%.3g") + " km)",
+                          use.bytes_per_step() * steps, use.bytes_per_step());
+}
+
+// A chunk of one coarse step that filled its storage, beside what the screen
+// already carried between chunks (held): no window fits at this threshold.
+std::string step_memory_refusal(const ScreeningConfig& config, const CoarseStorageUse& use,
+                                uint64_t held, size_t objects) {
+    const double step_bytes = static_cast<double>(use.bytes + held);
+    return memory_refusal(config, "a single coarse step of this screen (" + std::to_string(objects) +
+                              " objects at " + decimal(config.threshold_km, "%.3g") + " km)",
+                          step_bytes, step_bytes);
+}
+
+// Every worker's runs, so a merge reserves exactly once.
+size_t total_coarse_hits(const std::vector<ScreeningThreadWork>& work) {
+    size_t total = 0;
+    for (const auto& w : work) total += w.coarse_hits.size();
+    return total;
+}
 
 uint64_t encounter_key(const CoarseHitRecord& hit) {
     return coarse_hit_key(hit.obj1_index, hit.obj2_index);
@@ -1116,6 +1244,13 @@ namespace {
 // encounters are joined across chunks and refined once, as in one window.
 constexpr int MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK = 10000;
 
+// How many steps hold `bytes` at what a step of a full pass held: a chunk
+// length, at least one step.
+int32_t steps_within(const CoarseStorageUse& use, uint64_t bytes) {
+    const double steps = std::floor(static_cast<double>(bytes) / std::max(1.0, use.bytes_per_step()));
+    return static_cast<int32_t>(std::clamp(steps, 1.0, static_cast<double>(MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK)));
+}
+
 
 // A pair the epoch bands separate (counted prefiltered by the caller) that the
 // radial gate admitted at some coarse step was screened.
@@ -1278,7 +1413,7 @@ ScreeningThreadWork process_time_steps(
     const std::vector<uint8_t>& primary_side,
     const std::vector<uint8_t>& secondary_side,
     double start_jd, double end_jd, double step_sec,
-    int thread_id, int total_threads)
+    int thread_id, int total_threads, CoarseStorage* storage)
 {
     ScreeningThreadWork work;
     clear_error();
@@ -1357,8 +1492,19 @@ ScreeningThreadWork process_time_steps(
     std::vector<uint8_t> excluded_here(tles.size(), 0);
     const auto [block_begin, block_end] =
         worker_step_block(0, total_steps, thread_id, total_threads);
+    // What each step added goes to the pass's count (CoarseStorage).
+    size_t admissions_counted = 0;
+    const auto step_fits = [&]() {
+        if (!storage) return true;
+        const uint64_t added = runs.take_bytes() + (admitted.size() - admissions_counted) * ADMISSION_BYTES;
+        admissions_counted = admitted.size();
+        if (storage->step_fits(added)) return true;
+        work.storage_full = true;
+        return false;
+    };
 
     for (int step = block_begin; step < block_end; ++step) {
+        if (step > block_begin && !step_fits()) break;
         double jd = start_jd + step * step_days;
         const double gate_half_window_sec = radial_gate_half_window_sec(
             step, total_steps, step_sec, (end_jd - start_jd) * 86400.0);
@@ -1557,6 +1703,8 @@ ScreeningThreadWork process_time_steps(
         }
     }
 
+    if (!work.storage_full) step_fits();
+    if (work.storage_full) return work;   // a full pass is discarded
     work.coarse_hits = runs.finish();
     work.radial_admissions.assign(admitted.begin(), admitted.end());
     return work;
@@ -1591,20 +1739,21 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     // Step 3: Propagation + KD-tree screening
     int num_threads = std::max(1, config.num_threads);
     std::vector<ScreeningThreadWork> thread_results(num_threads);
+    CoarseStorage storage(COARSE_STORAGE_BUDGET_BYTES);
 #ifdef CONJUNCTION_SINGLE_THREAD
     num_threads = 1;
     thread_results[0] = process_time_steps(
         config,
         tles, valid_pairs, primary_side, secondary_side,
         start_jd, end_jd, config.coarse_step_sec,
-        0, 1);
+        0, 1, &storage);
 #else
     if (num_threads <= 1) {
         thread_results[0] = process_time_steps(
             config,
             tles, valid_pairs, primary_side, secondary_side,
             start_jd, end_jd, config.coarse_step_sec,
-            0, 1);
+            0, 1, &storage);
     } else {
         std::vector<std::thread> threads;
         for (int t = 0; t < num_threads; t++) {
@@ -1613,7 +1762,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
                     config,
                     tles, valid_pairs, primary_side, secondary_side,
                     start_jd, end_jd, config.coarse_step_sec,
-                    t, num_threads);
+                    t, num_threads, &storage);
             });
         }
 
@@ -1628,9 +1777,16 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
         if (!tw.error.empty()) { set_error(tw.error); return {}; }
         merge_exclusions(excluded, tw.excluded);
     }
+    // This pass has no chunked form: one that cannot keep its runs is refused.
+    const auto use = CoarseStorageUse::of(storage);
+    if (use.full) {
+        set_error(explicit_memory_refusal(config, use, valid_pairs.size()));
+        return {};
+    }
     const Sgp4Sources sources(tles);
     auto spans = coarse_spans(sources.refs, excluded, config);
     std::vector<CoarseHitRecord> runs;
+    runs.reserve(total_coarse_hits(thread_results));
     std::unordered_set<uint64_t> radial_admissions;
     for (auto& tw : thread_results) {
         stats.propagations += tw.propagations;
@@ -1672,7 +1828,7 @@ ScreeningThreadWork process_time_steps_implicit(
     const std::vector<uint8_t>& participates,
     double start_jd, int32_t first_step, int32_t last_step, double step_sec,
     int thread_id, int total_threads,
-    const ResidentScreeningIndex* resident_index)
+    const ResidentScreeningIndex* resident_index, CoarseStorage* storage)
 {
     ScreeningThreadWork work;
     clear_error();
@@ -1882,7 +2038,18 @@ ScreeningThreadWork process_time_steps_implicit(
 
     const auto [block_begin, block_end] =
         worker_step_block(first_step, last_step, thread_id, total_threads);
+    // What each step added goes to the pass's count (CoarseStorage).
+    size_t admissions_counted = 0;
+    const auto step_fits = [&]() {
+        if (!storage) return true;
+        const uint64_t added = runs.take_bytes() + (admitted.size() - admissions_counted) * ADMISSION_BYTES;
+        admissions_counted = admitted.size();
+        if (storage->step_fits(added)) return true;
+        work.storage_full = true;
+        return false;
+    };
     for (int step = block_begin; step < block_end; ++step) {
+        if (step > block_begin && !step_fits()) break;
         const double jd = start_jd + step * step_days;
         const double gate_half_window_sec = radial_gate_half_window_sec(
             step, window_last_step, step_sec, window_sec);
@@ -2115,6 +2282,8 @@ ScreeningThreadWork process_time_steps_implicit(
         }
     }
 
+    if (!work.storage_full) step_fits();
+    if (work.storage_full) return work;   // a full pass is discarded
     work.coarse_hits = runs.finish();
     work.radial_admissions.assign(admitted.begin(), admitted.end());
     return work;
@@ -2127,6 +2296,8 @@ struct ImplicitCoarseHitWindowResult {
     std::map<uint32_t, ExcludedObject> excluded;
     // Pairs the epoch bands separate that the radial gate admitted at a step.
     std::unordered_set<uint64_t> radial_admissions;
+    // What the pass held; a full pass returns no encounters (CoarseStorage).
+    CoarseStorageUse storage;
 };
 
 ConjunctionSolution refine_exact_window_locally(
@@ -2443,10 +2614,12 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     int32_t first_step,
     int32_t last_step,
     ProgressCallback progress,
-    const ResidentScreeningIndex* resident_index)
+    const ResidentScreeningIndex* resident_index,
+    uint64_t storage_limit)
 {
     ImplicitCoarseHitWindowResult result;
     auto& stats = result.stats;
+    CoarseStorage storage(storage_limit);
     auto t_start = std::chrono::high_resolution_clock::now();
     reset_implicit_stats(stats);
 
@@ -2480,6 +2653,13 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
 
     std::vector<CoarseHitRecord> runs;
     auto merge_thread_results = [&]() {
+        if (storage.full.load()) {
+            for (auto& tw : thread_results) tw = ScreeningThreadWork{};
+            return;
+        }
+        // One batch (the invoke surface's) reserves exactly; batches grow by doubling.
+        const size_t needed = runs.size() + total_coarse_hits(thread_results);
+        if (needed > runs.capacity()) runs.reserve(runs.empty() ? needed : std::max(needed, 2 * runs.capacity()));
         for (auto& tw : thread_results) {
             if (!tw.error.empty()) { set_error(tw.error); return; }
             merge_exclusions(result.excluded, tw.excluded);
@@ -2497,7 +2677,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         thread_results[0] = process_time_steps_implicit(
             config, tles, perigee_km, apogee_km, is_primary, participates,
             start_jd, batch_first(b), batch_last(b), config.coarse_step_sec, 0, 1,
-            resident_index);
+            resident_index, &storage);
         merge_thread_results();
         if (progress) {
             const double frac = 0.05 + 0.65 * static_cast<double>(b + 1)
@@ -2511,7 +2691,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
             thread_results[0] = process_time_steps_implicit(
                 config, tles, perigee_km, apogee_km, is_primary, participates,
                 start_jd, batch_first(b), batch_last(b), config.coarse_step_sec, 0, 1,
-                resident_index);
+                resident_index, &storage);
             merge_thread_results();
             if (progress) {
                 const double frac = 0.05 + 0.65 * static_cast<double>(b + 1)
@@ -2528,7 +2708,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
                     thread_results[t] = process_time_steps_implicit(
                         config, tles, perigee_km, apogee_km, is_primary, participates,
                         start_jd, first_step, last_step, config.coarse_step_sec,
-                        t, num_threads, resident_index);
+                        t, num_threads, resident_index, &storage);
                 }
             });
         }
@@ -2552,7 +2732,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
                         config, tles, perigee_km, apogee_km,
                         is_primary, participates,
                         start_jd, batch_first(b), batch_last(b), config.coarse_step_sec,
-                        t, num_threads, resident_index);
+                        t, num_threads, resident_index, &storage);
                     barrier.wait(); // signal batch done
                 }
             });
@@ -2577,6 +2757,8 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     }
 #endif
 
+    result.storage = CoarseStorageUse::of(storage);
+    if (result.storage.full) return result;
     if (progress) progress(0.7, "Deduplicating candidates...");
     // Runs of neighbouring workers and batches join into encounters; the
     // caller keeps those within the objects' spans (refusals in result.excluded).
@@ -2596,7 +2778,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     const ScreeningConfig& config,
     ScreeningStats& stats,
     ProgressCallback progress,
-    const ResidentScreeningIndex* resident_index)
+    const ResidentScreeningIndex* resident_index,
+    CoarseStorageUse& storage)
 {
     const auto require_full_size =
         [expected_size = tles.size()](const auto& values, const char* name) {
@@ -2632,8 +2815,12 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         0,
         window_coarse_steps(config),
         progress,
-        resident_index);
+        resident_index,
+        COARSE_STORAGE_BUDGET_BYTES);
     if (has_error()) return {};
+    // A pass that filled its storage leaves stats as they were.
+    storage = window_result.storage;
+    if (storage.full) return {};
     // The coarse pass fills propagations, candidates and exclusions; the pair
     // counts are the caller's (a resident index counts its candidate pairs).
     const uint64_t pairs_screened = stats.pairs_screened;
@@ -2695,8 +2882,13 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     if (has_error()) return {};
     const int32_t total_steps = window_coarse_steps(config);
 
-    if (total_steps <= MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK) {
-        return screen_precomputed_tles_implicit_window(
+    // A window runs in one pass when its runs fit the pass's storage
+    // (CoarseStorage); one that would not is screened in chunks of as many
+    // steps as half the storage holds, at what a step held.
+    int32_t chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
+    if (total_steps <= chunk_steps) {
+        CoarseStorageUse storage;
+        auto events = screen_precomputed_tles_implicit_window(
             tles,
             perigee_km,
             apogee_km,
@@ -2705,7 +2897,10 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
             config,
             stats,
             progress,
-            resident_index);
+            resident_index,
+            storage);
+        if (!storage.full) return events;
+        chunk_steps = steps_within(storage, COARSE_STORAGE_BUDGET_BYTES / 2);
     }
 
     auto t_start = std::chrono::high_resolution_clock::now();
@@ -2718,7 +2913,9 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     // give it, and only the open encounters outlive a chunk. An object a
     // chunk's coarse pass refuses gets its span then; its encounters in
     // earlier chunks were refined inside it, and one whose refinement failed
-    // is refined again within it at the end.
+    // is refined again within it at the end. A chunk whose pass fills its
+    // storage (what the screen carries between chunks is taken out of it) runs
+    // again, shorter; a single step that does not fit is refused.
     std::vector<CoarseHitRecord> carry;
     std::map<uint32_t, ExcludedObject> excluded;
     std::unordered_set<uint64_t> radial_admissions;
@@ -2726,12 +2923,15 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     const Sgp4Sources sgp4_sources(tles);
     Spans spans;
     spans.refs = sgp4_sources.refs;
-    const int32_t chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
-    for (int32_t chunk_first = 0; chunk_first <= total_steps;
-         chunk_first += chunk_steps) {
+    for (int32_t chunk_first = 0; chunk_first <= total_steps;) {
         const int32_t chunk_last =
             std::min(total_steps, chunk_first + chunk_steps - 1);
         const bool is_final_chunk = chunk_last >= total_steps;
+        const uint64_t held = carry.size() * sizeof(CoarseHitRecord) +
+                              radial_admissions.size() * ADMISSION_BYTES +
+                              refined.events.size() * sizeof(ConjunctionEvent);
+        const uint64_t room =
+            held < COARSE_STORAGE_BUDGET_BYTES ? COARSE_STORAGE_BUDGET_BYTES - held : 0;
         auto chunk_result = collect_precomputed_tles_implicit_window(
             tles,
             perigee_km,
@@ -2742,9 +2942,18 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
             chunk_first,
             chunk_last,
             nullptr,
-            resident_index);
+            resident_index,
+            room);
 
         if (has_error()) return {};
+        if (chunk_result.storage.full) {
+            if (chunk_last == chunk_first) {
+                set_error(step_memory_refusal(config, chunk_result.storage, held, tles.size()));
+                return {};
+            }
+            chunk_steps = std::min(chunk_last - chunk_first, steps_within(chunk_result.storage, room / 2));
+            continue;
+        }
         merge_exclusions(excluded, chunk_result.excluded);
         add_coarse_spans(spans, sgp4_sources.refs, excluded, config);
         stats.propagations += chunk_result.stats.propagations;
@@ -2781,6 +2990,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
                          static_cast<double>(total_steps + 1),
                      "Streaming resident screening...");
         }
+        chunk_first = chunk_last + 1;
     }
 
     count_radial_admissions(stats, radial_admissions.size());

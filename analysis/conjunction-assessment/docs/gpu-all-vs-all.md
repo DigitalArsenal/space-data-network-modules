@@ -365,7 +365,7 @@ Every row reports the same conjunctions.
 | 2,000, 0.1 day | 1.1 s | 0.08 s | 23 of 23 | TCA 0.16 ms, miss 0.6 mm |
 | 4,000, 1 day | 32.9 s | 0.44 s | 1,068 of 1,068 | TCA 0.64 ms, miss 5 mm |
 
-`screen_catalog` traps out of memory above about 7,000 objects per call.
+`screen_catalog` keeps its coarse pass within 768 MiB of guest memory: past that an all-vs-all call screens in chunks and a call with explicit pairs is refused by name (README, "Catalog size and partitioned runs"); its time grows with its encounter runs either way.
 
 FFM's own cost at full force, RK78 at tolerance 1e-12 with steps of at most
 300 s, is about 0.65 s per object-day on one thread

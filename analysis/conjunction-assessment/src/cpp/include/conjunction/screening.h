@@ -92,6 +92,11 @@ inline uint8_t object_radius_basis(const ScreeningConfig& config, uint32_t index
     return index < config.radius_basis.size() ? config.radius_basis[index] : 0;
 }
 
+/// What a screen's error message starts with when the screen cannot keep its
+/// coarse encounters within the module's memory, even in chunks (a single
+/// coarse step holds too much), or on a path that has no chunked form.
+inline constexpr char SCREEN_MEMORY_LIMIT[] = "SCREEN_MEMORY_LIMIT";
+
 /// Screening progress callback
 using ProgressCallback = std::function<void(double fraction, const std::string& status)>;
 
@@ -161,6 +166,9 @@ struct ScreeningStats {
 
 struct ScreeningThreadWork {
     std::string error;
+    /// The pass's coarse storage filled while this worker scanned: its runs
+    /// were dropped (screening.cpp, CoarseStorage).
+    bool storage_full = false;
     std::vector<CoarseHitRecord> coarse_hits;
     std::vector<CandidatePair> candidates;
     uint64_t propagations = 0;
