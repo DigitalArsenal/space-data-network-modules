@@ -13,7 +13,7 @@
   },
   "model": {
     "file": "../../analysis/gp-error-model/data/e14-s3-kc.json",
-    "about": "The model of rule 3 for the sources marked `ownModel` (E14 measured it on their element sets); every other source gets it pooled (rule 4). A row's CVR is Calibrated only where the numbers of the model's cell pass the realism rule on the held-out window and the source's lineage is one the model was measured on."
+    "about": "The model of rule 3 for the sources marked `ownModel` (E14 measured it on their element sets); every other source gets it pooled (rule 4). Rule 3 and 4 rows are Uncalibrated: E14 tested its cells by time only, on payload truth."
   },
   "lanes": {
     "element-set": {

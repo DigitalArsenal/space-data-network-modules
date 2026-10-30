@@ -312,11 +312,11 @@ extern "C" int object_covariance() {
           factor = 1;
         } else {
           label.evidence = model.evidence;
-          // No source lineage is supplied by this method: this verdict is
-          // explicitly the population cell's own test, not an object claim.
-          if (sp::population_verdict(model, regime, bin, true, &label)) {
+          // The population cell's own test, never an object claim: Uncalibrated, and the NOTES say why.
+          if (sp::population_verdict(model, regime, bin, &label)) {
             label.window = sp::interval_of(model.window);
             label.measured_lineage = model.lineages.empty() ? "" : model.lineages.front();
+            note(sp::kPopulationCellNote, label.rule);
           }
         }
         for (int a = 0, k = 0; a < 6; ++a)

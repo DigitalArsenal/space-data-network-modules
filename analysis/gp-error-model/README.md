@@ -388,12 +388,18 @@ prediction epoch fail the invocation explicitly.
 EMPIRICAL carries rule EmpiricalHistoryShrunk (SDS 1.261.0 `covarianceRule` 5; 0.9.0 and
 earlier wrote 2, ScaledFit, which is an orbit fit's rule), method `empirical-history-shrunk`, and is always
 **Uncalibrated**. POPULATION uses SourceModel/PooledModel and the corresponding
-`attach_covariance` method name (`e14-s3-kc` / `e14-s3-kc-pooled`). Its calibration
-flag is computed from the population cell's own numbers: mean d²/3 in
-[0.8, 1.25], coverage95 in [0.93, 0.97], at least 30 samples from 3 objects.
-The model's decision string does not control the verdict. There is no source
-lineage in this request, so this describes the population cell's test only;
-it does not assert that the current object's source lineage was tested.
+`attach_covariance` method name (`e14-s3-kc` / `e14-s3-kc-pooled`), and is also
+always **Uncalibrated**: a population model's cells give no Calibrated verdict
+(the same verdict as `attach_covariance` rules 3 and 4, below). E14 tested its
+cells by time only (a held-out window, not held-out objects), and only on the
+precise orbits of payloads, so its two passing cells (LEO-H at 0 and 0.5 days)
+say nothing of the object at hand, rocket bodies and debris included. The CVR
+keeps the cell's mean d²/3 and coverage95, the test window and the lineage it
+was measured on (the `$OCM` record's CVR also the cell's samples and objects;
+the report's counts the history, below), and NOTES carry `population
+cell tested by time only, on payload truth` (rule 3, or 4 for a pooled model)
+for a cell that has a held-out test. 0.10.0 and earlier called a cell
+Calibrated when its numbers passed.
 
 The report's CVR keeps what the console reads from it: SAMPLES (retained history
 pairs in the containing bin), OBJECTS (their distinct older sets) and
@@ -413,7 +419,8 @@ rejected; w = n/(n+shrinkage) once n >= minimumBinSets; alpha = 1 - sum(share*w)
 for POPULATION it is the model's own evidence. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
 TEST_WINDOW. NOTES explains
 each failed empirical condition, including insufficient sets, insufficient bin
-support, age outside history, and missing model (their rule is 5 now, 2 before). The empirical residuals compare
+support, age outside history, and missing model (their rule is 5 now, 2 before),
+and why a POPULATION row is Uncalibrated (above). The empirical residuals compare
 against later element sets, **not truth**. They can share errors and understate
 true uncertainty; no empirical coverage or calibration claim is made (the
 paper's section 6 caveat).
@@ -531,16 +538,22 @@ in age between bin centres and held at the first and last. Each cell also
 carries its held-out verdict on E14's test window (2026-05-01 to 2026-09-30):
 mean d²/3, 95 % coverage, samples, objects, and REALISTIC or not.
 
-**Verdicts.** A row's CVR is `Calibrated` only where the numbers of its cell pass
-the rule on the held-out window: mean d²/3 in [0.8, 1.25] and 95 % coverage in
-[0.93, 0.97], from at least 30 samples of at least 3 objects, **and** the model
-was measured on the lineage the source belongs to (`source.lineage` is in the
-model's `measuredOn.lineages`). The module computes the verdict from the numbers;
-a verdict written in the model file does not decide. Otherwise the CVR is
-`Uncalibrated`, with the cell's numbers: the cell failed, or the model was never
-measured on this source's lineage (the pooled model of a new source; the CVR's
-`MEASURED_LINEAGE` is then the lineage the cell was measured on). E14 found two of
-the 35 cells realistic: LEO-H at 0 and 0.5 days. An operator's covariance is
+**Verdicts.** A rule 3 or 4 row's CVR is `Uncalibrated`, with its cell's
+numbers: a population model's cells give no Calibrated verdict. E14 found two of
+the 35 cells realistic, LEO-H at 0 and 0.5 days, but it tested its cells by time
+only (a held-out window, not held-out objects) and only on the precise orbits of
+payloads, so a passing cell says nothing of other objects, rocket bodies and
+debris included. The report's NOTES say so once per product: `population cell
+tested by time only, on payload truth` (rule 3 or 4), for a product with a row
+whose cell has a held-out test. The row's BASIS still states the cell's test:
+its numbers pass the rule on the held-out window (mean d²/3 in [0.8, 1.25] and
+95 % coverage in [0.93, 0.97], from at least 30 samples of at least 3 objects)
+for the lineage the source belongs to (`source.lineage` is in the model's
+`measuredOn.lineages`), or they do not, or the model was never measured on this
+source's lineage (the pooled model of a new source; the CVR's
+`MEASURED_LINEAGE` is then the lineage the cell was measured on). The module
+computes this from the numbers; a verdict written in the model file does not
+decide. 0.10.0 and earlier called a passing cell Calibrated. An operator's covariance is
 `Uncalibrated` (E14 S1 has not reported), and so is a rule 2 covariance: the
 numbers of its realism entry are the test of the formal covariance, before
 scaling, and the scaled covariance has not itself been tested.
@@ -731,13 +744,16 @@ Each test has an expected value that does not come from this module:
 
 Tri-runtime parity of these methods (E14's four, `fit_elements` and
 `element_residuals` included): `PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs`
-(browser, WasmEdge, Docker WasmEdge; report in `conformance/parity.json`).
-Since 0.7.0 the artifact imports the sync hostcall bridge (`plugin.getConfig`
-for the recipes), which the SDK parity harness does not provide, so the run
-cannot instantiate it; `conformance/parity.json` is the 0.6.0 report.
+(browser and WasmEdge, the browser lane through headless-run; the owner waived
+the Docker leg on 2026-10-22; report in `conformance/parity.json`).
+`attach_covariance`, `attribute_maneuvers` and `object_covariance` read their
+recipes from the node config (`plugin.getConfig`), which the SDK parity harness
+does not answer, so the run leaves them out.
 
 `tests/source_products.test.mjs` checks `attach_covariance` against numbers
-that do not come from the module: the model file's strata and the held-out
-verdict of each cell, interpolation in age between bin centres, supplied
-covariances returned exactly, their rotation to RTN done independently, and
-the formal covariance times the recipe's factor.
+that do not come from the module: the model file's strata and cell numbers,
+supplied covariances returned exactly, their rotation to RTN done
+independently, and the formal covariance times the recipe's factor.
+`tests/e14VerdictUncalibrated.e2e.mjs` checks that a LEO-H set in E14's
+passing cell at 0.25 days is Uncalibrated on `object_covariance`'s POPULATION
+path and on `attach_covariance` rule 3, with 0.10.0's matrices bit for bit.

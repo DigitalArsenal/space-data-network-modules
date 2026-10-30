@@ -26,8 +26,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "minVersion": "0.10.0",
-      "maxVersion": "0.10.0"
+      "minVersion": "0.11.0",
+      "maxVersion": "0.11.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",

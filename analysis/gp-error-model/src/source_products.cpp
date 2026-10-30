@@ -21,10 +21,11 @@
 //   3  the source's own model of its element sets' error by regime and age (E14 S3-KC)
 //   4  the model pooled over all sources, for a source with no model of its own
 // Rules 3 and 4 cover every object that has an SGP4 element set in a regime the model covers.
-// A covariance's CVR is Calibrated only where the numbers of its cell pass the rule on the held-out window, measured on
-// the lineage the source belongs to (mean d^2/3 in [0.8, 1.25], 95 % coverage in [0.93, 0.97], from at least 30 samples
-// of at least 3 objects); everywhere else it is Uncalibrated with the cell's numbers, or without them for a source never
-// measured. The verdict is computed from the numbers, never read from the model file.
+// A population model's cell (rules 3 and 4) gives no Calibrated verdict: E14 tested its cells by time only, on payload
+// truth. Their CVR is Uncalibrated with the cell's held-out numbers (none for a cell never tested), and the report's
+// NOTES say why. Elsewhere a CVR is Calibrated only where the numbers of its test pass the rule, measured for the
+// source (mean d^2/3 in [0.8, 1.25], 95 % coverage in [0.93, 0.97], from at least 30 samples of at least 3 objects);
+// the verdict is computed from the numbers, never read from a file.
 //
 // attribute_maneuvers
 //   maneuvers $MNV, config (keys under "attribute.", else the root) -> maneuvers $MNV, report $ERM ATTACH_REPORT: every record names its source in PROVENANCE (a PRODUCER the record
@@ -235,11 +236,13 @@ bool passes_realism(const Label& l, bool measured_here) {
 }
 std::string verdict_of(const Label& l, bool measured_here) { return passes_realism(l, measured_here) ? "CALIBRATED" : "UNCALIBRATED"; }
 
-// The verdict of a population model's cell, for attach_covariance rules 3 and 4 and object_covariance's POPULATION: the
-// numbers of the cell's held-out test go on the label, and its calibration follows from them. measured_here: the model
-// was measured on the lineage of the covariance's source. Returns the cell; null for a cell with no held-out test,
-// whose label is Uncalibrated without numbers.
-const Verdict* population_verdict(const Model& m, int regime, int age_index, bool measured_here, Label* l) {
+// The verdict of a population model's cell, for attach_covariance rules 3 and 4 and object_covariance's POPULATION. It
+// is never Calibrated: E14 tested its cells by time only (a held-out window, not held-out objects), and only on the
+// precise orbits of payloads, so a pass says nothing of other objects or of rocket bodies and debris. The numbers of the
+// cell's held-out test go on the label, and the report's NOTES carry kPopulationCellNote. Returns the cell; null for a
+// cell with no held-out test, whose label has no numbers.
+constexpr const char* kPopulationCellNote = "population cell tested by time only, on payload truth";
+const Verdict* population_verdict(const Model& m, int regime, int age_index, Label* l) {
   l->calibration = "UNCALIBRATED";
   const auto it = m.cells.find({regime, age_index});
   if (it == m.cells.end()) return nullptr;
@@ -248,7 +251,6 @@ const Verdict* population_verdict(const Model& m, int regime, int age_index, boo
   l->coverage = v.coverage;
   l->samples = v.samples;
   l->objects = v.objects;
-  l->calibration = verdict_of(*l, measured_here);
   return &v;
 }
 
@@ -627,7 +629,8 @@ const Model* model_for(const Recipe& r, bool* own) {
   return nullptr;
 }
 
-Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk, double age_days) {
+// *tested: the row's cell has a held-out test.
+Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk, double age_days, bool* tested) {
   Label l;
   l.rule = own ? 3 : 4;
   l.method = own ? "e14-s3-kc" : "e14-s3-kc-pooled";
@@ -640,7 +643,9 @@ Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk,
   l.evidence = m.evidence;
   const bool measured_here = contains(m.lineages, r.a.lineage);
   l.measured_lineage = measured_here ? r.a.lineage : (m.lineages.empty() ? std::string() : m.lineages.front());
-  if (const Verdict* v = population_verdict(m, lk.regime, lk.age_index, measured_here, &l)) {
+  const Verdict* v = population_verdict(m, lk.regime, lk.age_index, &l);
+  *tested = v != nullptr;
+  if (v) {
     l.horizon = v->horizon;
     l.verdict = v->decision;
     if (passes_realism(l, measured_here)) {
@@ -831,6 +836,7 @@ bool modeled_rule(const Recipe& r, const SetRec& s, const Block& b, Product* p) 
   const Model* m = model_for(r, &own);
   if (!m) { p->notes.push_back({{"rule", 3}, {"reason", "no model for source " + r.a.id + " and no pooled model"}}); return false; }
   if (!std::isfinite(s.alt_km)) { p->notes.push_back({{"rule", own ? 3 : 4}, {"reason", "the element set cannot be placed in a regime: " + s.unusable}}); return false; }
+  bool tested = false;
   for (const Row& row : b.rows) {
     const double age = seconds_between(s.epoch, row.t) / kDay;
     if (age < -1e-6) { p->notes.push_back({{"rule", own ? 3 : 4}, {"reason", "a state row before the element set's epoch"}}); continue; }
@@ -845,10 +851,14 @@ bool modeled_rule(const Recipe& r, const SetRec& s, const Block& b, Product* p) 
     std::copy(row.x, row.x + 6, o.x);
     o.has_cov = true;
     o.cov = lk.cov;
-    o.label = modeled_label(r, *m, own, lk, age);
+    bool row_tested = false;
+    o.label = modeled_label(r, *m, own, lk, age, &row_tested);
+    tested = tested || row_tested;
     p->rows.push_back(o);
   }
   if (p->rows.empty()) return false;
+  // Why the rows are Uncalibrated, once per product (population_verdict).
+  if (tested) p->notes.push_back({{"rule", own ? 3 : 4}, {"reason", kPopulationCellNote}});
   p->rule = own ? 3 : 4;
   p->method = own ? "e14-s3-kc" : "e14-s3-kc-pooled";
   p->kind = "sgp4-epoch-state";

@@ -32,11 +32,11 @@ The first rule that applies, by `analysis/gp-error-model` `attach_covariance`
 
 Rules 3 and 4 cover every object that has an SGP4 element set in a regime the
 model covers (LEO-L, LEO-M, LEO-H, MEO, GEO). Each row carries its CVR
-(`COV_REALISM`): the rule, the model, the regime and age cell, and the numbers and
-verdict of that cell's held-out test. A row is `Calibrated` where its numbers pass
-E14's realism rule on the test window for the lineage the source belongs to (E14:
-LEO-H at 0 and 0.5 days); otherwise `Uncalibrated`, with the cell's measured
-mean d²/3 and coverage.
+(`COV_REALISM`): the rule, the model, the regime and age cell, and the numbers of
+that cell's held-out test. Rule 3 and 4 rows are `Uncalibrated`, with the cell's
+measured mean d²/3 and coverage: E14 tested its cells by time only, on payload
+truth, so even its two passing cells (LEO-H at 0 and 0.5 days) give no Calibrated
+verdict. The report's NOTES say so for each such product.
 
 ## Ingress and egress
 

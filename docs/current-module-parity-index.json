@@ -839,7 +839,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "methodIds": [
         "accumulate",
         "attach_covariance",
@@ -875,7 +875,7 @@
       ],
       "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 14,
+      "testFileCount": 15,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -893,6 +893,7 @@
       "testFiles": [
         "tests/covariance_mapping.test.mjs",
         "tests/covariance_realism.test.mjs",
+        "tests/e14VerdictUncalibrated.e2e.mjs",
         "tests/erm-harness.mjs",
         "tests/fit-reference.json",
         "tests/fit-reference.py",

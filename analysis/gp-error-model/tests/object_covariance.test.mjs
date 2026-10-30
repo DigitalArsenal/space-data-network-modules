@@ -293,16 +293,6 @@ test('model selection, missing cells, unsupported regimes/ages and absent sets',
   assert.deepEqual(missing.covariance.objects[0].covarianceRtn, (await populationOracle(anchor, 2, sparse)).covarianceRtn);
 });
 
-test('population verdict computed from numbers, and ignored request fields', async () => {
-  const model = { ...kc, cells: kc.cells.map((s) => ({ ...s, meanD2Over3: 1, coverage95: 0.95, samples: 30, objects: 3, decision: 'FAILED' })) };
-  const result = await run(history.slice(-4), [2], { model }); assert.equal(result.report.objects[0].calibrated, true);
-  const failed = await run(history.slice(-4), [2], { model: { ...model, cells: model.cells.map((s) => ({ ...s, coverage95: 0.8, decision: 'REALISTIC' })) } });
-  assert.equal(failed.report.objects[0].calibrated, false);
-  const ignored = await run(history, [], { requests: [{ ...request(2), regime: 'GEO', objectFactor: 99, horizonDays: 50,
-    state: { position: [1,2,3], velocity: [4,5,6] }, covariance: [9,0,9,0,0,9] }] });
-  assert.deepEqual(ignored.covariance, (await run(history, [2])).covariance);
-});
-
 test('config window and pair limit; 200 epoch cap', async () => {
   const limited = await run(history, [2], { config: { historyDays: 1 } }); assert.equal(limited.covariance.objects[0].status, 'POPULATION');
   const ageLimit = await run(history, [2], { config: { maxAgeDays: 1 } }); assert.equal(ageLimit.covariance.objects[0].status, 'POPULATION');
