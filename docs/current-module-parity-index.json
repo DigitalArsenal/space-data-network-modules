@@ -270,7 +270,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.15.0",
+      "version": "0.16.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -312,7 +312,7 @@
       ],
       "cxxSourceFileCount": 58,
       "cSourceFileCount": 1,
-      "testFileCount": 205,
+      "testFileCount": 206,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -569,6 +569,7 @@
         "tests/radialGateBound.e2e.mjs",
         "tests/realCatalogExclusion.test.mjs",
         "tests/sampledCoverage.e2e.mjs",
+        "tests/screenMemoryLimit.e2e.mjs",
         "tests/screeningWindowUnion.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/sdnDataApiStream.test.mjs",
