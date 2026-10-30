@@ -58,8 +58,9 @@ std::vector<GPElement> parse_gp_json(const std::string& json);
 /// Input: "OBJECT_NAME,OBJECT_ID,...\nISS,1998-067A,..."
 std::vector<GPElement> parse_gp_csv(const std::string& csv);
 
-/// Convert GPElement to TLE struct (for SGP4 propagation via dnwrnr/sgp4)
-/// Reconstructs TLE line1 + line2 text from structured GP fields
+/// The SGP4 element set of a GP record: its values as published, the epoch
+/// split exactly from its text (no TLE text in between). Sets the error status
+/// where the epoch is not a UTC ISO 8601 timestamp.
 TLE gp_to_tle(const GPElement& gp);
 
 /// Compute derived orbital parameters from GP elements

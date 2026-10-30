@@ -24,7 +24,7 @@ async function run(command,args){
 await run('cmake',['-S','src/cpp','-B',build,'-DCMAKE_BUILD_TYPE=Release',`-DFLATBUFFERS_INCLUDE_DIR=${include}`,`-DCMAKE_CXX_FLAGS=-include "${prefix}"`]);
 await run('cmake',['--build',build,'--target','conjunction_assessment','-j','6']);
 const executable=path.join(build,'nc-cascade');
-await run(process.env.CXX||'c++',['-std=c++17','-O2','-Isrc/cpp/include','tests/native/nc_cascade.cpp',path.join(build,'libconjunction_assessment.a'),path.join(build,'libsgp4_lib.a'),path.join(build,'liberfa_lib.a'),'-pthread','-o',executable]);
+await run(process.env.CXX||'c++',['-std=c++17','-O2','-Isrc/cpp/include','tests/native/nc_cascade.cpp',path.join(build,'libconjunction_assessment.a'),path.join(build,'liberfa_lib.a'),'-pthread','-o',executable]);
 await run(executable,[path.join(root,'src/cpp/tests/fixtures')]);
 if(!values['native-only'])await run(process.execPath,['--test','tests/lowVelocityCovariance.test.mjs']);
 console.log(`NC CASCADE E2E PASS${values['native-only']?' (native reference leg only)':''}; build ${build}`);

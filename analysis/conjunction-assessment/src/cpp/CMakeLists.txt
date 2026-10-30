@@ -29,13 +29,9 @@ if(NOT FLATBUFFERS_INCLUDE_DIR)
 endif()
 
 # ============================================================================
-# SGP4 library (dnwrnr/sgp4)
+# SGP4/SDP4: the clean-room base foundation/sgp4-str3 (header-only)
 # ============================================================================
-set(SGP4_DIR "${CMAKE_SOURCE_DIR}/deps/sgp4/libsgp4")
-
-file(GLOB SGP4_SOURCES "${SGP4_DIR}/*.cc")
-add_library(sgp4_lib STATIC ${SGP4_SOURCES})
-target_include_directories(sgp4_lib PUBLIC "${SGP4_DIR}" "${CMAKE_SOURCE_DIR}/include")
+set(SGP4_STR3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../foundation/sgp4-str3/include")
 
 # ============================================================================
 # ERFA (vendored in higherpop): leap seconds and TDB for time_scales.cpp
@@ -92,10 +88,9 @@ target_include_directories(conjunction_assessment PUBLIC
     generated
     generated/sds
     "${FLATBUFFERS_INCLUDE_DIR}"
-    "${CMAKE_SOURCE_DIR}/deps/sgp4"
-    "${SGP4_DIR}"
+    "${SGP4_STR3_INCLUDE_DIR}"
 )
-target_link_libraries(conjunction_assessment PUBLIC sgp4_lib erfa_lib)
+target_link_libraries(conjunction_assessment PUBLIC erfa_lib)
 
 # ============================================================================
 # Native test executables
@@ -104,37 +99,31 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_socrates.cpp")
         add_executable(test_socrates tests/test_socrates.cpp)
         target_link_libraries(test_socrates conjunction_assessment)
-        target_include_directories(test_socrates PRIVATE include "${SGP4_DIR}")
-    endif()
-
-    if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_gp_json.cpp")
-        add_executable(test_gp_json tests/test_gp_json.cpp)
-        target_link_libraries(test_gp_json conjunction_assessment)
-        target_include_directories(test_gp_json PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_socrates PRIVATE include)
     endif()
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_screening.cpp")
         add_executable(test_screening tests/test_screening.cpp)
         target_link_libraries(test_screening conjunction_assessment)
-        target_include_directories(test_screening PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_screening PRIVATE include)
     endif()
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_screening_internal.cpp")
         add_executable(test_screening_internal tests/test_screening_internal.cpp)
         target_link_libraries(test_screening_internal conjunction_assessment)
-        target_include_directories(test_screening_internal PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_screening_internal PRIVATE include)
     endif()
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_time_format.cpp")
         add_executable(test_time_format tests/test_time_format.cpp)
         target_link_libraries(test_time_format conjunction_assessment)
-        target_include_directories(test_time_format PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_time_format PRIVATE include)
     endif()
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_pc_methods.cpp")
         add_executable(test_pc_methods tests/test_pc_methods.cpp)
         target_link_libraries(test_pc_methods conjunction_assessment)
-        target_include_directories(test_pc_methods PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_pc_methods PRIVATE include)
         target_compile_definitions(test_pc_methods PRIVATE
             CONJUNCTION_TEST_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
     endif()
@@ -142,7 +131,7 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_engine.cpp")
         add_executable(test_engine tests/test_engine.cpp)
         target_link_libraries(test_engine conjunction_assessment)
-        target_include_directories(test_engine PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_engine PRIVATE include)
     endif()
 
     add_executable(test_trajectory_bounds tests/test_trajectory_bounds.cpp)
@@ -151,13 +140,13 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_cdm_output.cpp")
         add_executable(test_cdm_output tests/test_cdm_output.cpp)
         target_link_libraries(test_cdm_output conjunction_assessment)
-        target_include_directories(test_cdm_output PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_cdm_output PRIVATE include)
     endif()
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_csm_output.cpp")
         add_executable(test_csm_output tests/test_csm_output.cpp)
         target_link_libraries(test_csm_output conjunction_assessment)
-        target_include_directories(test_csm_output PRIVATE include "${SGP4_DIR}")
+        target_include_directories(test_csm_output PRIVATE include)
     endif()
 
     foreach(pc_test pc_maximum pc_cara pc_engine pc_fallbacks pc_monte_carlo pc_hall_extra)

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-28T18:10:39.248Z",
+  "generatedAt": "2026-10-30T02:59:42.225Z",
   "moduleCount": 150,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 145,
@@ -270,7 +270,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -310,9 +310,9 @@
         "c",
         "c++"
       ],
-      "cxxSourceFileCount": 55,
+      "cxxSourceFileCount": 54,
       "cSourceFileCount": 1,
-      "testFileCount": 192,
+      "testFileCount": 196,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -353,10 +353,8 @@
         "src/cpp/src/screening.cpp",
         "src/cpp/src/screening_internal.cpp",
         "src/cpp/src/screening_tight.cpp",
-        "src/cpp/src/sgp4_propagator.cpp",
         "src/cpp/src/time_scales.cpp",
         "src/cpp/tests/test_csm_output.cpp",
-        "src/cpp/tests/test_gp_json.cpp",
         "src/cpp/tests/test_pc_cara.cpp",
         "src/cpp/tests/test_pc_engine.cpp",
         "src/cpp/tests/test_pc_fallbacks.cpp",
@@ -371,6 +369,7 @@
         "src/cpp/tests/test_time_format.cpp",
         "src/cpp/tests/test_trajectory_bounds.cpp",
         "tests/native/nc_cascade.cpp",
+        "tests/native/sgp4_omm_states.cpp",
         "tests/native/wasmedge_wasi_threads_runner.c"
       ],
       "testFiles": [
@@ -385,7 +384,6 @@
         "src/cpp/tests/fixtures/pc_dblquad.csv",
         "src/cpp/tests/fixtures/pc_scaled_maximum_reference.csv",
         "src/cpp/tests/test_csm_output.cpp",
-        "src/cpp/tests/test_gp_json.cpp",
         "src/cpp/tests/test_pc_cara.cpp",
         "src/cpp/tests/test_pc_engine.cpp",
         "src/cpp/tests/test_pc_fallbacks.cpp",
@@ -530,6 +528,8 @@
         "tests/fixtures/ffm-ppe/crossing-orbits.json",
         "tests/fixtures/hosted-runtime/conjunction.single-plugin.flow.json",
         "tests/fixtures/request.assess.json",
+        "tests/fixtures/spacetrack-gp/README.md",
+        "tests/fixtures/spacetrack-gp/gp-2026-10-29.json",
         "tests/gpuScreenParity.test.mjs",
         "tests/lib/aerospaceDataset.mjs",
         "tests/lib/aerospaceOcm.mjs",
@@ -548,6 +548,7 @@
         "tests/lib/wasmedgeWasiThreadsRunner.mjs",
         "tests/lowVelocityCovariance.test.mjs",
         "tests/native/nc_cascade.cpp",
+        "tests/native/sgp4_omm_states.cpp",
         "tests/native/wasmedge_wasi_threads_runner.c",
         "tests/ncCascade.e2e.mjs",
         "tests/ocmOemTrackAdapter.test.mjs",
@@ -560,6 +561,8 @@
         "tests/sdk_compat.test.mjs",
         "tests/sdnDataApiStream.test.mjs",
         "tests/sdnOmmPartitionedRunner.test.mjs",
+        "tests/sgp4ByteIdentity.e2e.mjs",
+        "tests/sgp4OmmInput.e2e.mjs",
         "tests/signedCdmOutput.test.mjs",
         "tests/socratesReplayHarness.test.mjs",
         "tests/socratesScreenCatalogParity.test.mjs",
@@ -4021,7 +4024,7 @@
       "pluginId": "com.digitalarsenal.data-source.space-weather",
       "name": "Licensed space weather",
       "pluginFamily": "data_source",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "parse_weather",
         "plan_weather"
@@ -4039,7 +4042,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -4047,6 +4050,7 @@
       ],
       "testFiles": [
         "tests/VERIFICATION.md",
+        "tests/forecast-horizon.e2e.mjs",
         "tests/local-node.mjs",
         "tests/runtime-parity.mjs",
         "tests/source-oracle.mjs",
@@ -6183,7 +6187,7 @@
       ],
       "cxxSourceFileCount": 57,
       "cSourceFileCount": 1,
-      "testFileCount": 601,
+      "testFileCount": 602,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -6452,6 +6456,7 @@
         "tests/fixtures/atmosphere/jacchia-roberts-gmat.json",
         "tests/fixtures/atmosphere/jb2008-orekit.json",
         "tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs",
+        "tests/fixtures/covariance-roundtrip.json",
         "tests/fixtures/covariance-scaling.json",
         "tests/fixtures/ffm-e2e-requests/ffm-config-GEO.prw",
         "tests/fixtures/ffm-e2e-requests/ffm-config-GPS.prw",

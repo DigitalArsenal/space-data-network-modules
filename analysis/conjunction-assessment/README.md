@@ -40,7 +40,13 @@ Covariance-bearing events from pair assessment and catalog/window/refinement
 screens carry the same builder's CDM in `CQREvent.CONJUNCTION_MESSAGE`.
 Events without covariance leave that field empty.
 
-OMM/TLE sources select the built-in SGP4 provider explicitly. OEM compact arrays,
+OMM/TLE sources select the built-in SGP4 provider explicitly: the clean-room base
+[`foundation/sgp4-str3`](../../foundation/sgp4-str3/README.md) (Spacetrack Report No. 3 with the corrections AIAA
+2006-6753 documents), WGS-72, AFSPC mode. An OMM's elements are propagated as published, with no TLE text in
+between: B* and the eccentricity keep the digits a TLE would round away, as SOCRATES propagates them
+([docs/sgp4-omm-precision-2026-10-29.md](docs/sgp4-omm-precision-2026-10-29.md)). TLE text is read by the
+module's own field parser (Alpha-5 numbers; checksums are not checked) and propagates exactly as the same set
+given as an OMM at TLE precision. OEM compact arrays,
 OEM explicit samples and Cartesian Chebyshev PPE use native track evaluation.
 They do not require an external SGP4 module. JavaScript adapters preserve the
 native standard records; the guest performs interpolation and physics.
@@ -223,6 +229,8 @@ against the checked-in SOCRATES snapshot.
 
 ```bash
 node --test tests/sdk_compat.test.mjs
+node --test tests/sgp4OmmInput.e2e.mjs      # OMM values reach SGP4 as published; TLE text = OMM at TLE precision
+node --test tests/sgp4ByteIdentity.e2e.mjs   # everything without GP input answers as 0.10.0 does
 npm test
 npm run check:compliance
 npm run test:runtime-parity
@@ -255,8 +263,8 @@ trace ID to guest continuation state. Failed pairs are counted, and the final
 response reports `incomplete-screening` when any evaluation failed.
 
 An object that SGP4 cannot propagate at one of the coarse epochs of the window
-(a reentering or already decayed element set: "Satellite has decayed",
-"Error: (e <= -0.001)", ...) is excluded from the screening instead of failing
+(a reentering or already decayed element set: "SGP4: decayed (the radius is
+below one Earth radius)", "SGP4: the eccentricity leaves its range ...") is excluded from the screening instead of failing
 the request. Every other pair is screened exactly as if the object were absent.
 The final chunk carries one `$OMM` per excluded object on the `excluded` port:
 its mean elements, Earth/TEME, with `COMMENT` naming the earliest failing

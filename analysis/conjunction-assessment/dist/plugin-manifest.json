@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],

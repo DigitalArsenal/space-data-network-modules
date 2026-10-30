@@ -10,6 +10,7 @@ The repository's one SGP4. It is compiled by:
 | consumer | how | mode |
 | --- | --- | --- |
 | `propagator/sdn-ap` | `build.mjs` inlines `src/sgp4_core.inc` and `src/model.inc` after the module's `constants.inc` | AFSPC |
+| `analysis/conjunction-assessment` | `#include "sgp4_str3.h"` (`include/`; `build.mjs` composes it into the module's unit) | AFSPC |
 | `analysis/od` (and `analysis/od/fit-pipeline`) | `#include "sgp4_str3.h"` (`include/`) | improved |
 
 ## Parts

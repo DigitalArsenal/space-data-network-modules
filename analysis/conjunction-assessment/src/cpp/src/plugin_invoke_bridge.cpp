@@ -368,7 +368,7 @@ GPElement tleGp(const TLE &t) {
   g.object_name = t.name;
   g.object_id = t.object_id;
   g.epoch_jd = t.epoch_jd;
-  g.epoch_iso = jd_to_iso(t.epoch_jd);
+  g.epoch_iso = t.epoch_iso;  // the TLE's epoch exactly (parse_tle keeps it to the microsecond)
   g.mean_motion = t.mean_motion;
   g.eccentricity = t.eccentricity;
   g.inclination = t.inclination;

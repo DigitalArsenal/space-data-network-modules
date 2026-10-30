@@ -2,7 +2,8 @@
 /**
  * Conjunction Assessment Engine Implementation
  *
- * Uses dnwrnr/sgp4 (Apache 2.0) for TLE parsing + SGP4 propagation.
+ * SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (Spacetrack Report
+ * No. 3 with the corrections AIAA 2006-6753 documents), WGS-72, AFSPC mode.
  * Implements Alfano maximum probability method (AAS 03-548).
  * Validates against CelesTrak SOCRATES Plus.
  */
@@ -11,16 +12,11 @@
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/gp_json.h"
 
-// dnwrnr/sgp4 headers
-#include "Tle.h"
-#include "SGP4.h"
-#include "OrbitalElements.h"
-#include "DateTime.h"
-#include "TimeSpan.h"
-#include "Eci.h"
+#include "sgp4_str3.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 #include <optional>
 #include <stdexcept>
@@ -34,13 +30,37 @@ namespace conjunction {
 
 static constexpr double EARTH_RADIUS_KM = 6378.137;
 
+/// An element set's SGP4/SDP4 state (STR#3's initialization section), set up
+/// once and only read after: sat_propagate changes nothing, so every thread
+/// evaluates it at any time in any order.
 struct Sgp4PropagationCache {
-    libsgp4::Tle tle;
-    libsgp4::SGP4 sgp4;
+    sdnap::Sat sat{};
+    std::vector<double> nodes;  // a resonant SDP4 set's integrator checkpoints; empty otherwise
 
-    explicit Sgp4PropagationCache(const conjunction::TLE& source)
-        : tle(source.name, source.line1, source.line2),
-          sgp4(tle) {}
+    explicit Sgp4PropagationCache(const conjunction::TLE& source) {
+        constexpr double kDeg = sdnap::kPi / 180.0;
+        sdnap::Elements el{};
+        el.epoch_jd_whole = source.epoch_jd_whole;
+        el.epoch_jd_frac = source.epoch_jd_frac;
+        el.xno = source.mean_motion * sdnap::kTwoPi / 1440.0;  // rev/day to rad/min
+        el.eo = source.eccentricity;
+        el.xincl = source.inclination * kDeg;
+        el.xnodeo = source.raan * kDeg;
+        el.omegao = source.arg_perigee * kDeg;
+        el.xmo = source.mean_anomaly * kDeg;
+        el.bstar = source.bstar;
+        if (sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kAfspc) != sdnap::kPropOk) {
+            set_error("SGP4 refuses the element set");
+            return;
+        }
+        // The resonance integrator's state every 720 minutes, 32 days each way: the same
+        // bits as integrating from the epoch at every call, without the steps.
+        if (sat.ideep && sat.deep.iresfl) {
+            nodes.resize(4u * sdnap::kCheckpointNodes);
+            sat.checkpoint_count = sdnap::kCheckpointNodes;
+            sdnap::fill_checkpoints(sat, nodes.data(), sdnap::kCheckpointNodes);
+        }
+    }
 };
 
 namespace {
@@ -48,6 +68,16 @@ namespace {
 #ifndef CONJUNCTION_SINGLE_THREAD
 std::mutex g_sgp4_cache_mutex;
 #endif
+
+/// Why SGP4 gives no state at a time (sdnap's kProp* status).
+const char* sgp4_refusal(int32_t status) {
+    switch (status) {
+    case sdnap::kPropMeanMotion: return "SGP4: the mean motion is not positive";
+    case sdnap::kPropEccentricity: return "SGP4: the eccentricity leaves its range (e >= 1, e < -0.001, or a negative semi-latus rectum)";
+    case sdnap::kPropDecayed: return "SGP4: decayed (the radius is below one Earth radius)";
+    default: return "SGP4 refuses the element set";
+    }
+}
 
 } // namespace
 
@@ -128,16 +158,23 @@ std::string jd_to_iso(double jd) {
     return text;
 }
 
-double iso_to_jd(const std::string& iso) {
-    // CCSDS calendar timestamps use an explicit UTC field in the enclosing
-    // record, so the terminal Z may be absent. Do not accept another timezone,
-    // trailing text, or scanf's permissive numeric forms as if they were UTC.
-    auto invalid = []() {
-        set_error("Invalid UTC epoch"); return std::numeric_limits<double>::quiet_NaN();
-    };
+namespace {
+
+/// A UTC calendar timestamp as iso_to_jd reads it: YYYY-MM-DDTHH:MM:SS, an
+/// optional fraction of the second, an optional terminal Z.
+struct UtcStamp {
+    int year = 0, month = 0, day = 0, hour = 0, minute = 0, seconds = 0;
+    double second = 0.0;   // the second with its fraction, accumulated digit by digit (iso_to_jd's value)
+    std::string fraction;  // the fraction's digits as written
+};
+
+// CCSDS calendar timestamps use an explicit UTC field in the enclosing
+// record, so the terminal Z may be absent. Do not accept another timezone,
+// trailing text, or scanf's permissive numeric forms as if they were UTC.
+bool read_utc_stamp(const std::string& iso, UtcStamp& s) {
     if (iso.size() < 19 || iso[4] != '-' || iso[7] != '-' ||
         iso[10] != 'T' || iso[13] != ':' || iso[16] != ':')
-        return invalid();
+        return false;
     auto digits = [&](size_t start, size_t count) {
         int value = 0;
         for (size_t i = start; i < start + count; ++i) {
@@ -146,39 +183,66 @@ double iso_to_jd(const std::string& iso) {
         }
         return value;
     };
-    const int year = digits(0, 4), month = digits(5, 2), day = digits(8, 2);
-    const int hour = digits(11, 2), minute = digits(14, 2), seconds = digits(17, 2);
+    s.year = digits(0, 4); s.month = digits(5, 2); s.day = digits(8, 2);
+    s.hour = digits(11, 2); s.minute = digits(14, 2); s.seconds = digits(17, 2);
     static constexpr int month_days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    if (year < 1 || month < 1 || month > 12 || day < 1 ||
-        day > month_days[month - 1] + (month == 2 && leap ? 1 : 0) ||
-        hour < 0 || hour > 23 || minute < 0 || minute > 59 ||
-        seconds < 0 || seconds >= 60)
-        return invalid();
-    double second = seconds;
+    const bool leap = s.year % 4 == 0 && (s.year % 100 != 0 || s.year % 400 == 0);
+    if (s.year < 1 || s.month < 1 || s.month > 12 || s.day < 1 ||
+        s.day > month_days[s.month - 1] + (s.month == 2 && leap ? 1 : 0) ||
+        s.hour < 0 || s.hour > 23 || s.minute < 0 || s.minute > 59 ||
+        s.seconds < 0 || s.seconds >= 60)
+        return false;
+    s.second = s.seconds;
     size_t cursor = 19;
     if (cursor < iso.size() && iso[cursor] == '.') {
         ++cursor;
         const size_t fraction_start = cursor;
         double place = 0.1;
         while (cursor < iso.size() && iso[cursor] >= '0' && iso[cursor] <= '9') {
-            second += (iso[cursor++] - '0') * place;
+            s.second += (iso[cursor++] - '0') * place;
             place *= 0.1;
         }
-        if (cursor == fraction_start) return invalid();
+        if (cursor == fraction_start) return false;
+        s.fraction = iso.substr(fraction_start, cursor - fraction_start);
     }
     if (cursor < iso.size() && iso[cursor] == 'Z') ++cursor;
-    if (cursor != iso.size() || second >= 60) return invalid();
+    return cursor == iso.size() && s.second < 60;
+}
 
+/// The Julian day number (the day's noon) of a Gregorian calendar date.
+double julian_day_number(int year, int month, int day) {
     int a = (14 - month) / 12;
     int y = year + 4800 - a;
     int m = month + 12 * a - 3;
-    double jd = day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
-    return jd - 0.5 + (hour + minute / 60.0 + second / 3600.0) / 24.0;
+    return day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
+}
+
+} // namespace
+
+double iso_to_jd(const std::string& iso) {
+    UtcStamp s;
+    if (!read_utc_stamp(iso, s)) {
+        set_error("Invalid UTC epoch");
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    double jd = julian_day_number(s.year, s.month, s.day);
+    return jd - 0.5 + (s.hour + s.minute / 60.0 + s.second / 3600.0) / 24.0;
+}
+
+bool split_utc_epoch(const std::string& iso, double& jd_whole, double& jd_frac) {
+    UtcStamp s;
+    if (!read_utc_stamp(iso, s)) {
+        set_error("Invalid UTC epoch");
+        return false;
+    }
+    jd_whole = julian_day_number(s.year, s.month, s.day) - 0.5;
+    const double fraction = s.fraction.empty() ? 0.0 : std::strtod(("0." + s.fraction).c_str(), nullptr);
+    jd_frac = ((s.hour * 3600 + s.minute * 60 + s.seconds) + fraction) / 86400.0;
+    return true;
 }
 
 // ============================================================================
-// TLE Parsing (wraps dnwrnr/sgp4)
+// TLE Parsing: the two-line element set's fixed columns
 // ============================================================================
 
 /// Strip record-delimiter whitespace without altering TLE field values.
@@ -195,30 +259,120 @@ static std::string normalize_tle_line(const std::string& line) {
     return l;
 }
 
+namespace {
+
+bool all_digits(const std::string& s) {
+    return !s.empty() && std::all_of(s.begin(), s.end(), [](char c) { return c >= '0' && c <= '9'; });
+}
+
+/// Columns 3-7: a number of up to five digits (spaces before it, as Space-Track
+/// prints four-digit numbers), or Alpha-5 (a letter for the leading two digits,
+/// A-H 10-17, J-N 18-22, P-Z 23-35; I and O are not used), then four digits.
+bool tle_catalog_number(const std::string& field, int& out) {
+    if (field.size() != 5) return false;
+    const size_t first = field.find_first_not_of(' ');
+    if (first != std::string::npos && all_digits(field.substr(first))) { out = std::atoi(field.c_str() + first); return true; }
+    const char c = field[0];
+    int lead;
+    if (c >= 'A' && c <= 'H') lead = 10 + (c - 'A');
+    else if (c >= 'J' && c <= 'N') lead = 18 + (c - 'J');
+    else if (c >= 'P' && c <= 'Z') lead = 23 + (c - 'P');
+    else return false;
+    if (!all_digits(field.substr(1))) return false;
+    out = lead * 10000 + std::atoi(field.c_str() + 1);
+    return true;
+}
+
+/// A fixed-width decimal field: spaces around, an optional sign, digits and at
+/// most one decimal point.
+bool tle_decimal(const std::string& field, double& out) {
+    const size_t a = field.find_first_not_of(' ');
+    if (a == std::string::npos) return false;
+    const std::string s = field.substr(a, field.find_last_not_of(' ') - a + 1);
+    size_t i = (s[0] == '+' || s[0] == '-') ? 1 : 0, digits = 0, points = 0;
+    for (; i < s.size(); ++i) {
+        if (s[i] >= '0' && s[i] <= '9') ++digits;
+        else if (s[i] == '.' && ++points == 1) continue;
+        else return false;
+    }
+    if (digits == 0) return false;
+    out = std::strtod(s.c_str(), nullptr);
+    return std::isfinite(out);
+}
+
+} // namespace
+
 TLE parse_tle(const std::string& name, const std::string& line1, const std::string& line2) {
+    const auto refuse = [](const char* why) {
+        set_error(std::string("Invalid TLE: ") + why);
+        return TLE{};
+    };
+    const std::string l1 = normalize_tle_line(line1), l2 = normalize_tle_line(line2);
+    if (l1.size() < 69) return refuse("line 1 is shorter than 69 columns");
+    if (l2.size() < 69) return refuse("line 2 is shorter than 69 columns");
+    if (l1[0] != '1') return refuse("line 1 does not begin with 1");
+    if (l2[0] != '2') return refuse("line 2 does not begin with 2");
+    int catalog1 = 0, catalog2 = 0;
+    if (!tle_catalog_number(l1.substr(2, 5), catalog1) || !tle_catalog_number(l2.substr(2, 5), catalog2))
+        return refuse("a catalog number (columns 3-7) is not five digits or Alpha-5");
+    if (catalog1 != catalog2) return refuse("the two lines name different catalog numbers");
+
     TLE tle;
     tle.name = name;
-    tle.line1 = normalize_tle_line(line1);
-    tle.line2 = normalize_tle_line(line2);
+    tle.norad_cat_id = catalog1;
 
-    // Use dnwrnr Tle parser for the heavy lifting
-    {
-        libsgp4::Tle sgp4_tle(name, tle.line1, tle.line2);
-        if (has_error()) return {};
-        tle.norad_cat_id = sgp4_tle.NoradNumber();
-        tle.inclination = sgp4_tle.Inclination(true);   // degrees
-        tle.raan = sgp4_tle.RightAscendingNode(true);
-        tle.eccentricity = sgp4_tle.Eccentricity();
-        tle.arg_perigee = sgp4_tle.ArgumentPerigee(true);
-        tle.mean_anomaly = sgp4_tle.MeanAnomaly(true);
-        tle.mean_motion = sgp4_tle.MeanMotion();         // rev/day
-        tle.bstar = sgp4_tle.BStar();
-
-        // Compute epoch JD
-        auto epoch = sgp4_tle.Epoch();
-        tle.epoch_jd = epoch.ToJulian();
+    // Epoch, columns 19-32: the year's last two digits (57-99: 1957-1999, 00-56:
+    // 2000-2056) and the day of the year, ddd.dddddddd. A day fraction digit is
+    // 864 microseconds, so the epoch is kept exactly as text to the microsecond.
+    const std::string year_text = l1.substr(18, 2), day_text = l1.substr(20, 12);
+    const size_t point = day_text.find('.');
+    const std::string day_digits = point == std::string::npos ? day_text : day_text.substr(0, point);
+    std::string fraction_digits = point == std::string::npos ? std::string() : day_text.substr(point + 1);
+    if (!all_digits(year_text) || !all_digits(day_digits) || fraction_digits.size() > 8 ||
+        (!fraction_digits.empty() && !all_digits(fraction_digits)))
+        return refuse("the epoch (columns 19-32) is not yyddd.dddddddd");
+    const int yy = std::atoi(year_text.c_str());
+    const int year = yy < 57 ? 2000 + yy : 1900 + yy;
+    const int day_of_year = std::atoi(day_digits.c_str());
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    if (day_of_year < 1 || day_of_year > (leap ? 366 : 365)) {
+        set_error("Invalid TLE epoch day: " + day_digits + " is not a day of " + std::to_string(year));
+        return TLE{};
     }
+    fraction_digits.resize(8, '0');
+    const long long micros = std::atoll(fraction_digits.c_str()) * 864LL;  // 1e-8 day = 864 us
+    static constexpr int month_days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int month = 1, day = day_of_year;
+    while (day > month_days[month - 1] + (month == 2 && leap ? 1 : 0)) {
+        day -= month_days[month - 1] + (month == 2 && leap ? 1 : 0);
+        ++month;
+    }
+    char epoch[40];
+    std::snprintf(epoch, sizeof epoch, "%04d-%02d-%02dT%02lld:%02lld:%02lld.%06lld", year, month, day,
+                  micros / 3600000000LL, micros / 60000000LL % 60LL, micros / 1000000LL % 60LL, micros % 1000000LL);
+    tle.epoch_iso = epoch;
+    tle.epoch_jd = iso_to_jd(tle.epoch_iso);
+    if (!split_utc_epoch(tle.epoch_iso, tle.epoch_jd_whole, tle.epoch_jd_frac)) return TLE{};
 
+    // B*, columns 54-61: a sign, five mantissa digits after an implied decimal
+    // point, the exponent's sign and digit (" 66816-4" is 0.66816e-4).
+    const std::string b = l1.substr(53, 8);
+    if (!(b[0] == ' ' || b[0] == '+' || b[0] == '-') || !all_digits(b.substr(1, 5)) ||
+        !(b[6] == '+' || b[6] == '-' || b[6] == ' ') || !all_digits(b.substr(7, 1)))
+        return refuse("B* (columns 54-61) is not a sign, five digits and an exponent");
+    tle.bstar = std::strtod((std::string(b[0] == '-' ? "-" : "") + "0." + b.substr(1, 5) + "e" +
+                             (b[6] == '-' ? "-" : "+") + b.substr(7, 1)).c_str(), nullptr);
+
+    // Line 2: inclination 9-16, node 18-25, eccentricity 27-33 (an implied
+    // leading decimal point), argument of perigee 35-42, mean anomaly 44-51
+    // (degrees), mean motion 53-63 (rev/day).
+    const std::string e = l2.substr(26, 7);
+    if (!all_digits(e)) return refuse("the eccentricity (columns 27-33) is not seven digits");
+    tle.eccentricity = std::strtod(("0." + e).c_str(), nullptr);
+    if (!tle_decimal(l2.substr(8, 8), tle.inclination) || !tle_decimal(l2.substr(17, 8), tle.raan) ||
+        !tle_decimal(l2.substr(34, 8), tle.arg_perigee) || !tle_decimal(l2.substr(43, 8), tle.mean_anomaly) ||
+        !tle_decimal(l2.substr(52, 11), tle.mean_motion))
+        return refuse("an angle or the mean motion on line 2 is not a number");
     return tle;
 }
 
@@ -277,46 +431,40 @@ StateVector propagate_sgp4(const TLE& tle, double target_jd) {
     if (!std::isfinite(target_jd)) { set_error("Non-finite propagation epoch"); return sv; }
     if (has_error()) return sv;
 
-    {
-        const Sgp4PropagationCache* cache = tle.cache.get_or_create(tle);
-        if (has_error() || !cache) return sv;
+    const Sgp4PropagationCache* cache = tle.cache.get_or_create(tle);
+    if (has_error() || !cache) return sv;
 
-        // Propagate using elapsed minutes from the TLE epoch. This avoids
-        // reconstructing a DateTime from fractional-day pieces, which can
-        // trip libsgp4 validity assertions for finely refined TCA sample times.
-        const double minutes_since_epoch = (target_jd - tle.epoch_jd) * 1440.0;
-        // SDP4 has mutable resonance integrator state. A per-evaluation copy
-        // starts from the same initialized state regardless of worker ordering.
-        const auto position = [&]() {
-            if (tle.mean_motion <= 1440.0 / 225.0) {
-                auto deep_space = cache->sgp4;
-                return deep_space.FindPosition(minutes_since_epoch);
-            }
-            return cache->sgp4.FindPosition(minutes_since_epoch);
-        };
-        libsgp4::Eci eci = position();
-        if (has_error()) return sv;
+    // Minutes since the epoch, both split exactly: the target's day and
+    // fraction of day less the epoch's, then one rounding.
+    double day = 0.0, fraction = 0.0;
+    sdnap::split_jd(target_jd, day, fraction);
+    const double minutes_since_epoch = ((day - tle.epoch_jd_whole) + (fraction - tle.epoch_jd_frac)) * 1440.0;
+    double r[3], v[3];
+    const int32_t status = sdnap::sat_propagate(cache->sat, cache->nodes.empty() ? nullptr : cache->nodes.data(),
+                                                minutes_since_epoch, r, v);
+    if (status != sdnap::kPropOk) {
+        set_error(sgp4_refusal(status));
+        return sv;
+    }
+    sv.x = r[0];
+    sv.y = r[1];
+    sv.z = r[2];
+    sv.vx = v[0];
+    sv.vy = v[1];
+    sv.vz = v[2];
 
-        sv.x = eci.Position().x;
-        sv.y = eci.Position().y;
-        sv.z = eci.Position().z;
-        sv.vx = eci.Velocity().x;
-        sv.vy = eci.Velocity().y;
-        sv.vz = eci.Velocity().z;
-
-        const double radius_km =
-            std::sqrt(sv.x * sv.x + sv.y * sv.y + sv.z * sv.z);
-        if (!std::isfinite(radius_km) || radius_km < EARTH_RADIUS_KM) {
-            set_error("Non-finite or decayed SGP4 state");
-            sv.x = sv.y = sv.z = nan;
-            sv.vx = sv.vy = sv.vz = nan;
-        }
+    const double radius_km =
+        std::sqrt(sv.x * sv.x + sv.y * sv.y + sv.z * sv.z);
+    if (!std::isfinite(radius_km) || radius_km < EARTH_RADIUS_KM) {
+        set_error("Non-finite or decayed SGP4 state");
+        sv.x = sv.y = sv.z = nan;
+        sv.vx = sv.vy = sv.vz = nan;
     }
     return sv;
 }
 
 StateVector propagate_sgp4_gp(const GPElement& gp, double target_jd) {
-    // Convert GP to TLE, then propagate via standard SGP4 path
+    // The GP record's element set (its values as published), then the SGP4 path
     TLE tle = gp_to_tle(gp);
     return propagate_sgp4(tle, target_jd);
 }

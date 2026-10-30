@@ -43,8 +43,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "101549ac94d61e1266868eba4987141cddb6067656538fd852a62395b9f5bfe6",
-  "wasmSha256": "1aa870424b8f720c383d23e77dacf91dc977c7418302490a200a0907ecc29525",
+  "sourceSha256": "733948b5247956e1a36f3d9bef7b74a6e23db8dd1edb86065967da668f1f924d",
+  "wasmSha256": "1360eacdad7328d9958af4a6880652a37d080b517f357eac49e3c2ea23882629",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -70,7 +70,7 @@
       }
     ],
     "usesAtomics": true,
-    "atomicInstructionCount": 599,
+    "atomicInstructionCount": 614,
     "declaredFeatures": [
       "atomics",
       "mutable-globals",
@@ -90,7 +90,7 @@
     "isIsomorphicPthreads": true
   },
   "initialization": "Once per resident instance; static destruction deferred to instance teardown",
-  "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
+  "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/bin",
   "buildSupportSha256": {
     "build-driver.mjs": "84cfdd391a5eea3fc15f9bc138ad52a41a6fbc234ab28f92190d1666a8f0f317",
     "src/cpp/src/cqr_initialization.cpp": "4a1727981275cd1a4fa539afcb9029c964c7872eb946847ef824a9a449982bf2"

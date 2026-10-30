@@ -2,16 +2,14 @@
 #define CONJUNCTION_SGP4_PROPAGATOR_H
 
 /**
- * SGP4 Propagator — Lightweight wrapper around Tudat's TLE/SGP4 implementation.
+ * SGP4 mean element sets and their propagation.
  *
- * Source: DigitalArsenal/tudat (fork of tudat-team/tudat)
- * Files:
- *   - include/tudat/astro/ephemerides/tleEphemeris.h
- *   - src/astro/ephemerides/tleEphemeris.cpp
- *   - include/tudat/astro/basic_astro/tleElementsConversions.h
- *
- * For WASM build, we extract only the SGP4 propagation code from Tudat
- * to avoid pulling in the full Tudat dependency tree.
+ * SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (Spacetrack Report No. 3
+ * with the corrections AIAA 2006-6753 documents), WGS-72, in AFSPC mode, the
+ * operational code's. An OMM's elements are propagated as published, with no
+ * text in between; a TLE's are its fields as printed, read by parse_tle. Time
+ * since epoch is formed from the epoch split exactly (its day at 0h UTC and the
+ * fraction of that day) and the target split the same way.
  */
 
 #include <string>
@@ -48,17 +46,16 @@ struct StateVector {
     double vx, vy, vz; // Velocity (km/s)
 };
 
-/// Two-Line Element set
+/// One SGP4 mean element set: an OMM's values as published, or a TLE's fields.
 struct TLE {
     std::string name;
-    std::string line1;
-    std::string line2;
     std::string object_id;
-    std::string epoch_iso;
+    std::string epoch_iso;      // the epoch as UTC ISO 8601 text (a TLE's, exact to the microsecond)
 
-    // Parsed fields
     int norad_cat_id = 0;
-    double epoch_jd = 0.0;      // Julian Date of epoch
+    double epoch_jd = 0.0;        // Julian Date of epoch (UTC), one double
+    double epoch_jd_whole = 0.0;  // the epoch's day: the Julian Date of its 0h UTC (integer + 0.5)
+    double epoch_jd_frac = 0.0;   // the epoch's fraction of that day
     double bstar = 0.0;
     double inclination = 0.0;   // degrees
     double raan = 0.0;          // degrees
@@ -78,13 +75,15 @@ struct TLE {
 // Forward declaration
 struct GPElement;
 
-/// Parse a TLE from 3 lines (name + line1 + line2)
+/// Read a TLE's fields from its two lines (the fixed columns of the two-line
+/// element set; Alpha-5 catalog numbers). The epoch is kept exactly, as UTC
+/// text to the microsecond. Sets the error status where the lines are not a TLE.
 TLE parse_tle(const std::string& name, const std::string& line1, const std::string& line2);
 
 /// Parse all TLEs from a multi-line string
 std::vector<TLE> parse_tle_file(const std::string& data);
 
-/// Propagate a TLE to a given Julian Date using SGP4
+/// Propagate an element set to a given Julian Date (UTC) with SGP4/SDP4.
 /// Returns state in TEME frame (km, km/s)
 StateVector propagate_sgp4(const TLE& tle, double target_jd);
 
@@ -97,6 +96,11 @@ std::string jd_to_iso(double jd);
 
 /// Convert ISO 8601 string to Julian Date
 double iso_to_jd(const std::string& iso);
+
+/// A UTC ISO 8601 calendar timestamp (iso_to_jd's grammar) split exactly: the
+/// Julian Date of its day's 0h (integer + 0.5) and the fraction of that day.
+/// False, with the error status set, where the text is not such a timestamp.
+bool split_utc_epoch(const std::string& iso, double& jd_whole, double& jd_frac);
 
 /// Get Julian Date for a year + fractional day of year
 double epoch_to_jd(int year, double day_of_year);

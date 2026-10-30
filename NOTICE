@@ -18,7 +18,6 @@ the files that carry the terms.
 
 | Path | Component | License | License text |
 | --- | --- | --- | --- |
-| analysis/conjunction-assessment/src/cpp/deps/sgp4/ | libsgp4, Copyright 2013 Daniel Warner | Apache-2.0 | analysis/conjunction-assessment/src/cpp/deps/sgp4/LICENSE |
 | analysis/od/src/cpp/deps/sgp4/ | libsgp4, Copyright 2013 Daniel Warner (a second copy, not compiled: analysis/od builds on foundation/sgp4-str3) | Apache-2.0 | analysis/od/src/cpp/deps/sgp4/LICENSE |
 | analysis/od/deps/emsdk/ | Emscripten SDK, Copyright 2018 Emscripten authors | MIT | analysis/od/deps/emsdk/LICENSE |
 | propagator/sgp4/src/cpp/deps/sqlite3/ | SQLite 3.45.2 amalgamation | LicenseRef-Public-Domain | propagator/sgp4/src/cpp/deps/sqlite3/sqlite3.h |

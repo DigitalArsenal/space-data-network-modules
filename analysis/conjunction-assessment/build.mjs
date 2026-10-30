@@ -31,8 +31,9 @@ await fs.chmod(process.env.SDN_WASI_CLANGXX, 0o755);
 // The canonical SDK owns compilation, link, command/PIV bridge and manifest
 // exports. Its source API accepts one translation unit, so resolve local
 // includes into that unit; all numerical implementation remains C++.
+// SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (header-only, AFSPC mode).
 const includeRoots = [path.join(cppRoot,'include'), path.join(cppRoot,'generated/sds'),
-  path.join(cppRoot,'generated'), path.join(cppRoot,'deps/sgp4/libsgp4')];
+  path.join(cppRoot,'generated'), path.resolve(packageRoot,'../../foundation/sgp4-str3/include')];
 const emitted = new Set();
 async function sourceWithIncludes(file) {
   file = path.resolve(file);
@@ -57,14 +58,10 @@ const caSources = ['conjunction_assessment.cpp','gp_json.cpp','kdtree.cpp',
   'cdm_builder.cpp','cdm_parse.cpp','cdm_text.cpp','cdm_output.cpp','csm_output.cpp','pc_method.cpp','pc_orekit.cpp','pc_approx.cpp','pc_integral.cpp','pc_foster.cpp','pc_maxpc.cpp','pc_maximum.cpp','pc_usage.cpp','pc_dynamics.cpp','pc_equinoctial.cpp','pc_hall.cpp','pc_fallbacks.cpp','pc_monte_carlo.cpp','pc_engine.cpp','ephemeris_source.cpp',
   'conjunction_engine.cpp','encounter_geometry.cpp','time_scales.cpp','earth_orientation.cpp','ephemeris_upload.cpp','plugin_invoke_bridge.cpp',
   'possibility_screening.cpp','pc_sphere_quadrature.cpp'];
-// sgp4_propagator.cpp is the unused alternate implementation: the historical
-// static archive selected conjunction_assessment.cpp for those same symbols.
-const sgp4Root = path.join(cppRoot,'deps/sgp4/libsgp4');
-const sgp4Sources = (await fs.readdir(sgp4Root)).filter(p=>p.endsWith('.cc')).sort();
 // Leap seconds and TDB come from the vendored ERFA every frames/time module
 // compiles (foundation/frames/erfa-amalgamation.mjs), not a second table.
 const pieces = [(await composeErfaTranslationUnit()).source];
-for(const file of [...sgp4Sources.map(p=>path.join(sgp4Root,p)), ...caSources.map(p=>path.join(cppRoot,'src',p))]) {
+for(const file of caSources.map(p=>path.join(cppRoot,'src',p))) {
   pieces.push(await sourceWithIncludes(file));
 }
 const sourceCode = pieces.join('\n');
