@@ -11,6 +11,7 @@ The repository's one SGP4. It is compiled by:
 | --- | --- | --- |
 | `propagator/sdn-ap` | `build.mjs` inlines `src/sgp4_core.inc` and `src/model.inc` after the module's `constants.inc` | AFSPC |
 | `analysis/conjunction-assessment` | `#include "sgp4_str3.h"` (`include/`; `build.mjs` composes it into the module's unit) | AFSPC |
+| `propagator/sgp4` | `#include "sgp4_str3.h"` (`include/`, through `src/cpp/src/sgp4_base.hpp`) | AFSPC |
 | `analysis/od` (and `analysis/od/fit-pipeline`) | `#include "sgp4_str3.h"` (`include/`) | improved |
 
 ## Parts

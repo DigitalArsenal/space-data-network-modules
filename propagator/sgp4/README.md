@@ -7,7 +7,7 @@ SGP4/SDP4 orbital propagation operations packaged as a canonical `space-data-mod
 ## What it does
 
 SGP4/SDP4 (the clean-room base `foundation/sgp4-str3`: Spacetrack Report No. 3 with the corrections AIAA 2006-6753
-documents; WGS 72, improved mode) over OMM element sets, through the
+documents; WGS 72, AFSPC mode, the operational code's) over OMM element sets, through the
 SDS PIV invoke surface (`plugin_invoke_stream`). Methods:
 
 | Method | In | Out |
@@ -123,6 +123,7 @@ Artifacts:
 
 ```bash
 npm test
+node --test tests/afspcMode.e2e.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 ```
 
@@ -142,6 +143,11 @@ the PIV contract, the Tudat-derived SGP4 cases (below), and:
 - `legacyPropagateState`: 1.1.0-layout requests return this release's
   responses byte for byte (`tests/fixtures/propagate-state-digests.json`).
 
+`tests/afspcMode.e2e.mjs`: SGP4/SDP4 runs in AFSPC mode, the operational code's and the conjunction screen's.
+Space-Track's 2026-10-29 element sets (`tests/fixtures/spacetrack-gp`) equal the AFSPC base within 0.1 mm over 7
+days; on the five low-inclination deep-space sets whose node crosses 0, the improved mode is 2.7 m to 4.2 km away.
+Spacetrack Report No. 3's SGP4 case 88888 is within 15 m of the report's published states over its day.
+
 `tests/parity.mjs` runs one-invocation cases (each carrying its element sets)
 in Chrome and native WasmEdge (the owner waived the Docker leg on 2026-10-22) and writes
 [`conformance/parity.json`](conformance/parity.json).
@@ -151,14 +157,14 @@ in Chrome and native WasmEdge (the owner waived the Docker leg on 2026-10-22) an
 `node tests/evidence/str3/run-str3.mjs` propagates 13 element sets (the seven SGP4-VER sets, the module's test sets and
 four regimes more: GPS, 24-hour resonant GEO, 12-hour resonant Molniya, a decaying LEO) through the built module
 (`ingest_omm`, `propagate_state` in TEME) from a day before epoch to ten days after, and holds every state to
-`foundation/sgp4-str3` built natively without `-ffast-math` at the minutes from epoch the module computes
+`foundation/sgp4-str3` built natively without `-ffast-math`, in the module's AFSPC mode, at the minutes from epoch the module computes
 (`library_states.cpp`). It writes [`summary-str3.json`](tests/evidence/str3/summary-str3.json):
 
 | Regime | Sets | States | Largest position difference | Largest velocity difference |
 | --- | ---: | ---: | ---: | ---: |
 | Near-Earth | 6 | 72 | 3.67 µm | 4.5e-09 m/s |
 | Deep space, 12-hour and other | 5 | 60 | 6.29 µm | 5.5e-09 m/s |
-| 24-hour (GEO) | 2 | 24 | 0.90 µm | 6.6e-11 m/s |
+| 24-hour (GEO) | 2 | 24 | 0.60 µm | 4.4e-11 m/s |
 
 The differences are the module's `-ffast-math` build of the same code.
 

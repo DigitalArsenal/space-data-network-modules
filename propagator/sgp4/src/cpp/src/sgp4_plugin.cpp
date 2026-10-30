@@ -1,6 +1,6 @@
 // sgp4_plugin.cpp - SGP4/SDP4 Propagator Plugin for OrbPro
 // =============================================================================
-// SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (WGS-72, improved mode),
+// SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (WGS-72, AFSPC mode),
 // with the time and element helpers of sgp4_base.hpp.
 //
 // Exports:

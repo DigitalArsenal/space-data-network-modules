@@ -1,7 +1,7 @@
 // The plugin's SGP4/SDP4 and the time and element helpers it needs.
 //
 // SGP4/SDP4 is the clean-room base foundation/sgp4-str3 (Spacetrack Report No. 3 with the corrections AIAA 2006-6753
-// documents), WGS-72, improved mode. A set keeps, beside the base's state, the epoch as the plugin splits it (day and
+// documents), WGS-72, AFSPC mode, as the operational code and the conjunction screen run it. A set keeps, beside the base's state, the epoch as the plugin splits it (day and
 // fraction), the status of its last evaluation and the readouts the plugin reports.
 //
 // The helpers are their textbook definitions: the Julian date of a Gregorian calendar date (the 367-day rule, valid
@@ -49,7 +49,7 @@ inline bool sgp4Init(double ds50, double bstar, double ndot, double nddot, doubl
     el.bstar = bstar;
     s.ecco = ecco;
     s.bstar = bstar;
-    s.error = sdnap::sat_init(el, sdnap::gravity_wgs72(), s.sat, sdnap::Sgp4Mode::kImproved);
+    s.error = sdnap::sat_init(el, sdnap::gravity_wgs72(), s.sat, sdnap::Sgp4Mode::kAfspc);
     if (s.error != sdnap::kPropOk) return false;
     s.no_unkozai = s.sat.xnodp;
     double r[3], v[3];
