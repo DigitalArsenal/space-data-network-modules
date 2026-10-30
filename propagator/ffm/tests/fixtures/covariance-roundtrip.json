@@ -1,0 +1,346 @@
+{
+ "authority": "A relay property, not a numerical truth: the covariance an FFM execution call emits is accepted, unmodified, as the INITIAL_COVARIANCE of the next call, and every emitted covariance is exactly symmetric. The seeds are fitted covariances (state, dynamic parameters and covariance at the fit epoch, SI, GCRF) from C2, whose relays FFM 2.0.0 to 2.0.3 refused; the fits are analysis/estimation products on public data, cited per seed.",
+ "epochUtc": "2026-08-01T12:00:00.000000",
+ "epochNote": "Each seed is carried from this epoch, not its own fit epoch: the module's environment fixtures (tests/fixtures/resident: EOP 2026-08, synthetic space weather 2026-07-31 to 08-09) cover it, and the windows' own environment is not in the module. The GCRF state and covariance are unchanged, so the covariance stays consistent with the orbit it was fitted on.",
+ "arcSeconds": 86400,
+ "arcNote": "C2's fit track (fit epoch t0 to the handoff E) and its leads: call 1 runs t0 to t0 + 24 h, call 2 the next 24 h.",
+ "processNoiseDiscretizationSeconds": 600,
+ "forces": "catalog.mjs fullForceRequest (FFM-1: EGM2008 70x70, Sun, Moon, Venus, Mars, Jupiter, cannonball SRP, Knocke Earth radiation, NRLMSISE-00 drag, IERS 2010 solid tides and relativity, FES2004 30x30), CATALOG_INTEGRATOR (RK78, 1e-14 relative, initial step 30 s, maximum 120 s); analytic STM with the density gradient by finite difference",
+ "predecessor": {
+  "version": "2.0.3",
+  "commit": "9119c99c6a3e0d98e87821a045d2e859aaa891e2",
+  "artifactSha256": "6fdc530917d59c30542fef88cf281f04bf473c702ea715590ae72f3ee32282e0"
+ },
+ "seeds": [
+  {
+   "label": "ISS",
+   "object": {
+    "name": "ISS (ZARYA)",
+    "norad": 25544
+   },
+   "regime": "LEO 420 km, 51.6 deg; drag and SRP area-to-mass estimated",
+   "source": {
+    "experiment": "orbit-accuracy-experiments experiments/ffm-covariance-calibration (C2), calibration fit",
+    "row": "C2's local store (experiments/ffm-covariance-calibration config.json store), rows/iss-fit.s0.jsonl line 8",
+    "rowSha256": "9752661ad9bc18dbdb5afb41caff9c8ba3abd96f77eb60f50c94faed418f9ab6",
+    "handoffE": "2021-03-30T12:00:00.000Z",
+    "fitEpoch": "2021-03-29T12:00:00.000Z",
+    "reducedChiSquare": 0.2479483479400596,
+    "data": "NASA ISS trajectory (ISS.OEM_J2K_EPH), U.S. Government work, public domain",
+    "credit": "ISS trajectory: NASA JSC Flight Operations Directorate (TOPO), https://www.nasa.gov/spot-the-station/ (U.S. Government work)."
+   },
+   "covarianceScale": {
+    "value": 33815.04311442945,
+    "rule": "k_e x max(1, reduced chi-square): C2 frozen constants, class I, k_e 33815.04311442945"
+   },
+   "state": [
+    -6570785.199482262,
+    -641793.892067842,
+    1607561.476016254,
+    -921.8208659788887,
+    -5002.6017800886675,
+    -5732.184321045129
+   ],
+   "parameters": [
+    {
+     "kind": "DRAG_AREA_OVER_MASS",
+     "value": 0.005408503250491078
+    },
+    {
+     "kind": "SRP_AREA_OVER_MASS",
+     "value": 0.017829904916739914
+    }
+   ],
+   "covariance": [
+    0.20506585280343675,
+    0.21131138925229082,
+    0.37843301411356894,
+    -0.0004792677712316458,
+    -0.0001390805043668786,
+    1.3970847027676914e-05,
+    -8.982489251621861e-06,
+    -5.16208565673347e-05,
+    0.21131138925229082,
+    2.0056676890371485,
+    1.7089977623187584,
+    -0.0023001200323932466,
+    -0.00017851541540767752,
+    0.0005676774028079569,
+    -3.205928799794333e-05,
+    0.002183615011679325,
+    0.37843301411356894,
+    1.7089977623187584,
+    2.4837497665244137,
+    -0.0026151522704551096,
+    -0.00019368488377596253,
+    0.0007094130818740166,
+    -3.5666911365427116e-05,
+    0.002694745070518401,
+    -0.0004792677712316458,
+    -0.0023001200323932466,
+    -0.0026151522704551096,
+    3.4291452881257906e-06,
+    2.1946353655899076e-07,
+    -7.009912406926388e-07,
+    5.323540426871159e-08,
+    -1.7027291066442085e-06,
+    -0.0001390805043668786,
+    -0.00017851541540767752,
+    -0.00019368488377596253,
+    2.1946353655899076e-07,
+    5.154454960948762e-07,
+    -3.3343064742838035e-07,
+    6.857737056344937e-09,
+    2.247571947560936e-07,
+    1.3970847027676914e-05,
+    0.0005676774028079569,
+    0.0007094130818740166,
+    -7.009912406926388e-07,
+    -3.3343064742838035e-07,
+    5.645569369196668e-07,
+    -1.112655494181652e-08,
+    7.581256534918898e-07,
+    -8.982489251621861e-06,
+    -3.205928799794333e-05,
+    -3.5666911365427116e-05,
+    5.323540426871159e-08,
+    6.857737056344937e-09,
+    -1.112655494181652e-08,
+    1.6961448006840068e-09,
+    1.8997730029204688e-09,
+    -5.16208565673347e-05,
+    0.002183615011679325,
+    0.002694745070518401,
+    -1.7027291066442085e-06,
+    2.247571947560936e-07,
+    7.581256534918898e-07,
+    1.8997730029204688e-09,
+    1.1282809403993095e-05
+   ],
+   "processNoise": {
+    "spectralDensityM2S3": [
+     2.883495985334589e-15,
+     6.840587227450634e-11,
+     2.883495985334589e-15
+    ],
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "source": "C2 frozen constants, class R1 (drag LEO): q_RN, q_T, q_RN; class I's frozen model has no noise term"
+   }
+  },
+  {
+   "label": "LASER",
+   "object": {
+    "name": "LARES",
+    "norad": 38077
+   },
+   "regime": "geodetic laser-ranging sphere, 1450 km, 69.5 deg; drag area-to-mass estimated",
+   "source": {
+    "experiment": "orbit-accuracy-experiments experiments/ffm-covariance-calibration (C2), calibration fit",
+    "row": "C2's local store (experiments/ffm-covariance-calibration config.json store), rows/lp-terms.calibration.s0.jsonl line 4",
+    "rowSha256": "76aca5a4f95618b35de8450e7eed90a82267629b0f4c8a11849dd2f3335bbca1",
+    "handoffE": "2026-06-09T00:00:00.000Z",
+    "fitEpoch": "2026-06-08T00:00:00.000000Z",
+    "reducedChiSquare": 4.8353303903311434e-05,
+    "data": "NERC Space Geodesy Facility (NSGF) orbits, an ILRS analysis center (C2 class L-P truth)",
+    "credit": "NERC Space Geodesy Facility (ILRS analysis center) orbits; contains British Geological Survey materials (c) UKRI 2026, Open Government License v3.0; ILRS data and products (Pearlman et al. 2019, J Geod 93:2181-2194, doi:10.1007/s00190-019-01241-1)."
+   },
+   "covarianceScale": {
+    "value": 1,
+    "rule": "k_e x max(1, reduced chi-square): C2 frozen constants, class LP, k_e 1"
+   },
+   "state": [
+    -3204080.908829904,
+    6264363.502656495,
+    3418861.4529683664,
+    -3800.855084393831,
+    1292.7869671760552,
+    -5903.054610724616
+   ],
+   "parameters": [
+    {
+     "kind": "DRAG_AREA_OVER_MASS",
+     "value": 0.0005999886247312727
+    }
+   ],
+   "covariance": [
+    1.862738123459066,
+    0.08256396243212225,
+    1.2663912082585624,
+    -0.000699310453325932,
+    0.001304641232187336,
+    0.0005889834022791645,
+    -4.615998847561936e-07,
+    0.08256396243212225,
+    0.7497212784565214,
+    -0.7624027139901524,
+    0.0003560695611251112,
+    -0.00048631919871265487,
+    -8.29338269545707e-05,
+    1.945887707831757e-07,
+    1.2663912082585624,
+    -0.7624027139901524,
+    2.7568664646534673,
+    -0.000952395876375638,
+    0.0019159016709729654,
+    0.0011345928889624829,
+    -6.557327326894053e-07,
+    -0.000699310453325932,
+    0.0003560695611251112,
+    -0.000952395876375638,
+    1.1483688935838048e-06,
+    -3.4279526177276223e-07,
+    -6.507921750261198e-07,
+    3.2923477446888116e-10,
+    0.001304641232187336,
+    -0.00048631919871265487,
+    0.0019159016709729654,
+    -3.4279526177276223e-07,
+    1.9924734440478796e-06,
+    5.778260668429803e-07,
+    -6.142553975635441e-10,
+    0.0005889834022791645,
+    -8.29338269545707e-05,
+    0.0011345928889624829,
+    -6.507921750261198e-07,
+    5.778260668429803e-07,
+    7.616336482826963e-07,
+    -3.066297114740536e-10,
+    -4.615998847561936e-07,
+    1.945887707831757e-07,
+    -6.557327326894053e-07,
+    3.2923477446888116e-10,
+    -6.142553975635441e-10,
+    -3.066297114740536e-10,
+    3.239978586480686e-08
+   ],
+   "processNoise": {
+    "spectralDensityM2S3": [
+     1.1327773785338313e-15,
+     4.139573739847988e-20,
+     1.1327773785338313e-15
+    ],
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "source": "C2 frozen constants, class L (laser spheres): q_RN, q_T, q_RN"
+   },
+   "fixed": {
+    "SRP_AREA_OVER_MASS": 0.000269,
+    "note": "Cr*A/m with Cr = 1 and LARES's published area-to-mass: 386.8 kg, 0.364 m diameter"
+   }
+  },
+  {
+   "label": "STARLINK-LIKE",
+   "object": {
+    "name": "COSMIC-2 (FORMOSAT-7 FM)",
+    "norad": 44351
+   },
+   "regime": "drag LEO near 540 km, the altitude of Starlink shells; C2 transferred its R1 (drag LEO) model to Starlink",
+   "source": {
+    "experiment": "orbit-accuracy-experiments experiments/ffm-covariance-calibration (C2), calibration fit",
+    "row": "C2's local store (experiments/ffm-covariance-calibration config.json store), rows/R1.calibration.s0.jsonl line 152",
+    "rowSha256": "1e4f9237a6d49c5a6b8e1a01b7dfaefddd265f7fa54107352233e422d628fd37",
+    "handoffE": "2025-10-09T00:00:00.000Z",
+    "fitEpoch": "2025-10-08T00:00:42.000000Z",
+    "reducedChiSquare": 0.028835853213162843,
+    "data": "UCAR COSMIC-2 near-real-time LEO orbits (leoOrb) in the archive's reference-leo-pod-2 (C2 class R1 truth)",
+    "credit": "COSMIC-2 near-real-time orbits (leoOrb): UCAR COSMIC Program, 2019: COSMIC-2 Data Products [Data set]. UCAR/NCAR - COSMIC, https://doi.org/10.5065/T353-C093 (CC BY 4.0)."
+   },
+   "covarianceScale": {
+    "value": 5.305292516976156,
+    "rule": "k_e x max(1, reduced chi-square): C2 frozen constants, class R1, k_e 5.305292516976156"
+   },
+   "state": [
+    6133539.3838581,
+    3025296.4232111666,
+    -1243238.1158756798,
+    -2657.2092040274456,
+    6525.975827793044,
+    2783.6006058040957
+   ],
+   "parameters": [
+    {
+     "kind": "DRAG_AREA_OVER_MASS",
+     "value": 0.02385925252965933
+    },
+    {
+     "kind": "SRP_AREA_OVER_MASS",
+     "value": 0.008431467396560106
+    }
+   ],
+   "covariance": [
+    1.1914275934623917,
+    -2.2313357955527264,
+    -0.5328456089927579,
+    0.0022367245811754487,
+    0.0008792236117837439,
+    -0.0005210737555407967,
+    -6.90513377672601e-05,
+    0.00042123347272653833,
+    -2.2313357955527264,
+    6.293183966096032,
+    2.141260142384092,
+    -0.005871490775254529,
+    -0.0032477520409483155,
+    0.0010760369801324273,
+    0.00020172383074413804,
+    -0.0012868791978468577,
+    -0.5328456089927579,
+    2.141260142384092,
+    2.29607527378544,
+    -0.0024624439851775853,
+    -0.001225933874479352,
+    0.00046293959543692074,
+    8.164975895299655e-05,
+    -0.0005044839030463274,
+    0.0022367245811754487,
+    -0.005871490775254529,
+    -0.0024624439851775853,
+    6.232784509587616e-06,
+    2.9069427320502067e-06,
+    -6.847625365127258e-07,
+    -2.16852730168213e-07,
+    6.79965895839341e-07,
+    0.0008792236117837439,
+    -0.0032477520409483155,
+    -0.001225933874479352,
+    2.9069427320502067e-06,
+    2.052890761910761e-06,
+    -9.210744938224212e-07,
+    -1.153314143737506e-07,
+    4.27854297531157e-07,
+    -0.0005210737555407967,
+    0.0010760369801324273,
+    0.00046293959543692074,
+    -6.847625365127258e-07,
+    -9.210744938224212e-07,
+    1.77013918662715e-06,
+    4.1878256314644154e-08,
+    -2.9743386411762734e-08,
+    -6.90513377672601e-05,
+    0.00020172383074413804,
+    8.164975895299655e-05,
+    -2.16852730168213e-07,
+    -1.153314143737506e-07,
+    4.1878256314644154e-08,
+    1.629265116621548e-08,
+    1.321672070955531e-09,
+    0.00042123347272653833,
+    -0.0012868791978468577,
+    -0.0005044839030463274,
+    6.79965895839341e-07,
+    4.27854297531157e-07,
+    -2.9743386411762734e-08,
+    1.321672070955531e-09,
+    4.100139506031495e-06
+   ],
+   "processNoise": {
+    "spectralDensityM2S3": [
+     2.883495985334589e-15,
+     6.840587227450634e-11,
+     2.883495985334589e-15
+    ],
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "source": "C2 frozen constants, class R1 (drag LEO): q_RN, q_T, q_RN"
+   }
+  }
+ ]
+}

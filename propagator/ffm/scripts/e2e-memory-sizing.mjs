@@ -84,7 +84,8 @@ const aotDir = path.join(root, '.sdk-build/memory-sizing/aot');
 const aotReady = execFileAsync(nodeBinary, ['prewarm-aot', '--cache-dir', aotDir, '--flow', wasmPath], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }).then(({ stdout: aotLog }) => {
   fs.writeFileSync(path.join(cache, 'prewarm-aot.log'), aotLog);
   assert(!/FAILED|Not implemented instructions/.test(aotLog));
-  report.aot = { status: 'PASS', command: 'spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm', artifactSha256: report.artifactSha256, log: aotLog.trim() }; save();
+  report.aot = { status: 'PASS', command: 'spacedatanetwork prewarm-aot --cache-dir <private> --flow dist/isomorphic/module.wasm', artifactSha256: report.artifactSha256,
+    nodeBinarySha256: sha(fs.readFileSync(path.isAbsolute(nodeBinary) ? nodeBinary : execFileSync('/usr/bin/which', [nodeBinary], { encoding: 'utf8' }).trim())), log: aotLog.trim() }; save();
   const aotPath = aotLog.split('\n').find(line => line.startsWith(`  flow ${wasmPath}: `))?.slice(`  flow ${wasmPath}: `.length).replace(/ \((?:compiled|already present)\)$/, '');
   assert(aotPath && fs.existsSync(aotPath), 'prewarm produced no flow AOT artifact');
   return aotPath;

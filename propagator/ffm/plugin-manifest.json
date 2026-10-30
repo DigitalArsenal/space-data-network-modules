@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Full Force Model profile FFM-1 with automatic GJ8 PEC and eccentric-orbit Sundman integration, selected-object batching, and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],

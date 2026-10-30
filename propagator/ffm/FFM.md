@@ -10,7 +10,7 @@ FFM means the full force model, never a reduced model. FFM-1 specifies the catal
 | --- | --- | --- |
 | profile | FFM-1 | Code contract (profile sources) |
 | module | com.orbpro.ffm | Code contract (profile sources) |
-| moduleVersion | 2.0.3 | Code contract (profile sources) |
+| moduleVersion | 2.0.4 | Code contract (profile sources) |
 | gravity | field: EGM2008; degree: 70; order: 70; gm_m3_s2: 398600441500000; tideSystem: tide-free; frame: ITRF (Earth-fixed), IERS EOP; pointMass: true; legacyZonalFlags: (j2: false; j3: false; j4: false; higherZonals: false); degreeSpecified: true; orderSpecified: true; maximumTesseralDegree: 0; maximumTesseralDegreeSpecified: false; centralBodyNaifId: 399; centralBody: Earth | EGM2008 (Pavlis et al. 2012); IERS Conventions 2010 ch. 6 |
 | thirdBodies | enabled: true; bodies: naifId: 10; name: Sun, naifId: 301; name: Moon, naifId: 2; name: Venus barycenter, naifId: 4; name: Mars barycenter, naifId: 5; name: Jupiter barycenter; ephemeris: JPL DE440 (SPK); ephemerisSource: JPL_SPK; ephemerisKind: UNSPECIFIED; ephemerisBinding: DE440 is supplied by the full-force fixtures; the request selects JPL_SPK and does not enforce a DE release.; fieldMaximumDegree: 0; fieldMaximumOrder: 0; fieldNote: THIRD_BODY_MAXIMUM_DEGREE and _ORDER: 0 keeps every third body a point mass; two and up adds the harmonics of the Moon's GRGM660PRIM (to degree 150), listed as a third body, about the Earth. | Park et al. 2021, DE440 |
 | srp | enabled: true; model: cannonball; shadow: conical (umbra, penumbra, antumbra; Montenbruck &amp; Gill); shadowModel: UNSPECIFIED; crAreaOverMass_m2_kg: 0.02; initialMass_kg: 1; area_m2: 1; gnss: Supported with ENABLE_SRP=true, RADIATION_PRESSURE_MODEL=GNSS_BOX_WING and GNSS_BLOCK=GPS_IIR, GPS_IIR_M or GPS_IIF; an ECOM2 record enables its 11 coefficients independently. FFM-1 selects cannonball for every object, with no GNSS block or ECOM2 record.; gnssBlock: UNSPECIFIED; ecom2: null | Montenbruck &amp; Gill 2000 §3.4 |
@@ -33,7 +33,7 @@ Cite “FFM-1” and the `FFM-1 sha256=<hex>` printed by the check. The SHA-256 
 
 ## Conforming implementations
 
-FFM-1 is the force model: the force, frame and time rows above. The sole implementation is `propagator/ffm`, module `com.orbpro.ffm` version 2.0.3. Forward resident propagation automatically selects GJ8 PEC or eccentric-orbit Sundman RK78; RK also supplies startup, backward propagation and physical reentry handoff. The integrator rows encode its PRW configuration. Numerical reports cite this policy together with the profile. Test-only reference artifacts are never product modes.
+FFM-1 is the force model: the force, frame and time rows above. The sole implementation is `propagator/ffm`, module `com.orbpro.ffm` version 2.0.4. Forward resident propagation automatically selects GJ8 PEC or eccentric-orbit Sundman RK78; RK also supplies startup, backward propagation and physical reentry handoff. The integrator rows encode its PRW configuration. Numerical reports cite this policy together with the profile. Test-only reference artifacts are never product modes.
 
 ## Where it is enforced
 

@@ -57,3 +57,12 @@ the stated truth floors (`1e-4 m`,
 `standard.json` pins the unchanged standard artifact and force source.
 The source hash must also match the fork header; a mismatch requires
 merging the standard changes into the fork before proceeding.
+
+`covariance-roundtrip.json` holds three fitted covariances for
+`scripts/e2e-covariance-roundtrip.mjs`: state, dynamic parameters and covariance
+at the fit epoch (SI, GCRF) of C2 calibration fits (orbit-accuracy-experiments
+`experiments/ffm-covariance-calibration`) of the ISS (NASA trajectory), LARES
+(NSGF orbits) and COSMIC-2 (UCAR leoOrb, the Starlink-like drag LEO), each with
+its store row's SHA-256, data source and credit line, C2's covariance scale and
+its frozen process noise. Like `seeds.json`, each seed is carried from
+`2026-08-01T12:00:00.000000` UTC, inside the environment fixtures.

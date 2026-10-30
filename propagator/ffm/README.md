@@ -540,17 +540,42 @@ A propagated covariance is `P(t) = Phi P0 Phi^T + Q`, and the record states the
 
 Input validation scales to a dimensionless correlation matrix and uses complete
 diagonal pivoting ([LAPACK DPSTRF](https://www.netlib.org/lapack/explore-html/dd/dad/dpstrf_8f.html)).
-The `1e-12` residual tolerance measures correlation roundoff, so a large dynamic
-parameter variance cannot erase a small positive velocity pivot. Zero variance
-requires an exactly zero cross row. This validation does not modify, regularize
-or replace the supplied covariance; only the declared SI/internal-unit
-conversion affects the propagated matrix. Numerical acceptance does not assert
-empirical covariance calibration.
+One tolerance, `1e-7` relative to the unit diagonal, bounds each correlation's
+asymmetry, the most negative pivot and, at a pivot that small, every remaining
+entry, so a large dynamic parameter variance cannot erase a small positive
+velocity pivot. FFM's own output is exactly symmetric and passed the
+positive-semidefinite test at `1e-16` in every relay measured (to 4 d + 4 d), so
+the tolerance gates only foreign or unsymmetrized producers. Their transport roundoff, measured as the asymmetry of
+FFM 2.0.3's unsymmetrized transport, grows about as t^2.6 (`5.8e-12` at
+1 d + 1 d, `1.6e-11` at 3 d + 3 d and `2.1e-10` at 4 d + 4 d relays, about
+`1e-9` extrapolated to two weeks); `1e-7` clears it about 100 times, while a
+genuine error (a sign error, a correlation above 1) sits at 0.01 to 1. Zero
+variance requires an exactly zero cross row. The covariance carried is the
+input's symmetric part `(P + P^T)/2`, the input itself when it is symmetric;
+validation does not otherwise modify, regularize or replace it, and only the
+declared SI/internal-unit conversion affects the propagated matrix. A negative
+pivot inside the tolerance is kept, not clipped (clipping would make a valid
+near-singular covariance overconfident): an indefinite input stays indefinite
+through transport, a congruence keeping the inertia, and only `PROCESS_NOISE`
+can lift it. Every transport (the
+STM, a start-epoch impulse's Jacobian, a frame rotation) ends with
+`(P + P^T)/2`, so every emitted covariance is exactly symmetric and is accepted
+as the next call's input. Numerical acceptance does not assert empirical
+covariance calibration.
 
 `node scripts/e2e-covariance-scaling.mjs` carries an independently verified
 public-fit matrix through both browser and WasmEdge, checks the closed-form
 force-free covariance after 10,800 seconds, and rejects indefinite, asymmetric
 and inconsistent zero-variance inputs across widely different scales.
+
+`node scripts/e2e-covariance-roundtrip.mjs` relays fitted ISS, LARES and
+COSMIC-2 covariances with dynamic parameters across two consecutive execution
+calls (24 h each, with and without `PROCESS_NOISE`; GCRF, and EME2000 axes for
+the ISS): the second call accepts the first call's output unmodified, every
+emitted covariance is symmetric bit for bit, and the state, STM and step counts
+are byte-identical to FFM 2.0.3's, which refuses the same relays. 2.0.3's
+unsymmetrized output is accepted as well, as any input within the tolerance is:
+a consequence of the tolerance, not a compatibility path.
 
 - **Resident states.** `ingest_state` takes a six-state `COVARIANCE` (SI;
   finite, symmetric, positive semidefinite) and optional `PROCESS_NOISE` per

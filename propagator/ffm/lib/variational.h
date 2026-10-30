@@ -38,7 +38,8 @@ VariationalResult PropagateWithSTM(const StateVector&, double dt,
 // order; out may alias m.
 void Congruence(const double* a, const double* m, unsigned n, double* out);
 // The covariance transport every carried covariance goes through:
-// P <- A P A^T. out may alias p.
+// P <- A P A^T, then its symmetric part (P + P^T)/2, so each carried
+// covariance is exactly symmetric. out may alias p.
 void TransportCovariance(const double* a, const double* p, unsigned n, double* out);
 Mat6 TransportCovariance(const Mat6& phi, const Mat6& covariance);
 // White acceleration process noise (state noise compensation): spectral

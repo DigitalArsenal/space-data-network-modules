@@ -321,6 +321,8 @@ void Congruence(const double* a,const double* m,unsigned n,double* out) {
 }
 void TransportCovariance(const double* a,const double* p,unsigned n,double* out) {
     Congruence(a,p,n,out);
+    // The two rounded products of each off-diagonal pair differ by roundoff.
+    for(unsigned i=0;i<n;++i)for(unsigned j=i+1;j<n;++j)out[i*n+j]=out[j*n+i]=0.5*(out[i*n+j]+out[j*n+i]);
 }
 Mat6 TransportCovariance(const Mat6& phi,const Mat6& covariance) {
     Mat6 out;TransportCovariance(&phi.m[0][0],&covariance.m[0][0],6,&out.m[0][0]);

@@ -12,11 +12,30 @@
 
 namespace ffm {
 
+// The covariance check's one tolerance, on the correlation matrix (unit
+// diagonal), so it does not depend on units or variance scale. FFM's own output
+// is exactly symmetric and passed the positive-semidefinite test at 1e-16 in
+// every relay measured (to 4 d + 4 d), so the tolerance gates only foreign or
+// unsymmetrized producers (other modules'
+// transports, the od and calibration hand-offs). Their transport roundoff,
+// measured as the asymmetry of FFM 2.0.3's unsymmetrized transport over relays
+// of fitted ISS, LARES and COSMIC-2 covariances, grows about as t^2.6: 5.8e-12
+// at 1 d + 1 d, 1.6e-11 at 3 d + 3 d and 2.1e-10 at 4 d + 4 d, about 1e-9
+// extrapolated to two-week relays, which 1e-7 clears about 100 times. A genuine
+// error (a sign error, a correlation above 1) sits at 0.01 to 1, five orders
+// above it.
+constexpr double kCovarianceTolerance = 1e-7;
+
 // A row-major SI covariance (m, m/s; then mass in kg or dynamic parameters in
-// their SI units, unscaled) in km units, verified finite,
-// symmetric and positive semidefinite. Validate a dimensionless correlation
-// matrix, not the mixed km / km/s / dynamic-parameter magnitudes. The original
-// covariance is only unit-converted; validation never regularizes its values.
+// their SI units, unscaled) in km units, verified finite, symmetric and
+// positive semidefinite to kCovarianceTolerance on its dimensionless
+// correlation matrix, not on the mixed km / km/s / dynamic-parameter
+// magnitudes. The covariance carried is the symmetric part (P + P^T)/2, the
+// matrix the check validates (the input itself when it is symmetric), and is
+// otherwise kept as is: a negative pivot inside the tolerance is not clipped
+// (clipping would make a valid near-singular covariance overconfident). An
+// indefinite input inside the tolerance stays indefinite through transport (a
+// congruence keeps the inertia); only PROCESS_NOISE can lift it.
 inline bool prwCovariance(const PRWStateMatrix* in, unsigned n, double* out, std::string& error) {
     if (!in || in->DIMENSION() != n || !in->VALUES() || in->VALUES()->size() != n * n) {
         error = "invalid-covariance: Covariance dimension and row-major values must agree.";
@@ -38,7 +57,7 @@ inline bool prwCovariance(const PRWStateMatrix* in, unsigned n, double* out, std
                 error = "invalid-covariance: Covariance must be finite and symmetric.";
                 return false;
             }
-            out[i * n + j] = a * (i < 6 ? 0.001 : 1) * (j < 6 ? 0.001 : 1);
+            out[i * n + j] = 0.5 * (a + b) * (i < 6 ? 0.001 : 1) * (j < 6 ? 0.001 : 1);
             if (sigma[i] == 0 || sigma[j] == 0) {
                 if (a != 0 || b != 0) {
                     error = "invalid-covariance: Zero variance has a nonzero cross term.";
@@ -47,18 +66,17 @@ inline bool prwCovariance(const PRWStateMatrix* in, unsigned n, double* out, std
                 continue;
             }
             const double x = a / sigma[i] / sigma[j], y = b / sigma[i] / sigma[j];
-            if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x - y) > 1e-12 * std::max({1.0, std::abs(x), std::abs(y)})) {
+            if (!std::isfinite(x) || !std::isfinite(y) || std::abs(x - y) > kCovarianceTolerance) {
                 error = "invalid-covariance: Covariance must be finite and symmetric.";
                 return false;
             }
             correlation[i * n + j] = 0.5 * x + 0.5 * y;
         }
-    // Complete diagonal pivoting, as in LAPACK DPSTRF. Unlike a rank-only
-    // factorization, validate the whole residual block at a small pivot:
-    // a zero diagonal with a nonzero cross term is indefinite, not low rank.
-    // The fixed 1e-12 tolerance now measures correlation roundoff, independent
-    // of the physical units or dynamic-parameter variance scale.
-    constexpr double tol = 1e-12;
+    // Complete diagonal pivoting, as in LAPACK DPSTRF, with the tolerance
+    // relative to the unit diagonal. Unlike a rank-only factorization,
+    // validate the whole residual block at a small pivot: a zero diagonal
+    // with a nonzero cross term is indefinite, not low rank.
+    constexpr double tol = kCovarianceTolerance;
     for (unsigned i = 0; i < n; ++i) {
         unsigned pivot = i;
         for (unsigned j = i; j < n; ++j) {
