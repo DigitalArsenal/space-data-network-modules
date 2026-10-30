@@ -4,11 +4,11 @@
       "build_provenance": null,
       "declared_sds_dependency": "1.261.0",
       "id": "propagator/sgp4",
-      "wasm_sha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97"
+      "wasm_sha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643"
     },
     {
       "build_provenance": {
-        "bytes": 2687153,
+        "bytes": 2685349,
         "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
         "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
         "debugInfo": "stripped",
@@ -23,13 +23,13 @@
         ],
         "legacyRuntimeCompiled": false,
         "memory": {
-          "initialBytes": 28377088,
+          "initialBytes": 28704768,
           "maximumBytes": 754974720,
           "staticMinimumBytes": 24179840
         },
         "sdk": "0.9.12",
         "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and uses explicit error flags and measured linear-memory limits, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation.",
-        "sha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3",
+        "sha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2",
         "sharedMemory": true,
         "spacedatastandards": "1.271.0",
         "standardWasmExceptions": false,
@@ -70,7 +70,7 @@
       },
       "declared_sds_dependency": "1.271.0",
       "id": "propagator/ffm",
-      "wasm_sha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3"
+      "wasm_sha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
     },
     {
       "build_provenance": {
@@ -99,14 +99,14 @@
           "src/cpp/src/cqr_initialization.cpp": "4a1727981275cd1a4fa539afcb9029c964c7872eb946847ef824a9a449982bf2"
         },
         "compiler": "wasm32-wasi-clang++ (wasi-threads)",
-        "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
+        "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/bin",
         "initialization": "Once per resident instance; static destruction deferred to instance teardown",
         "runtimeTargets": [
           "browser",
           "wasmedge"
         ],
         "sdk": "0.9.12",
-        "sourceSha256": "d8d3867d34e6e2e22cbc8b61d4918b3fbef40b354fec8a0281fce767b4285ab8",
+        "sourceSha256": "413fb2f3e14b23d5d37523a4fcbe446efe359d38d866c172065e54a854496457",
         "standards": {
           "package": "spacedatastandards.org",
           "schemas": {
@@ -145,7 +145,7 @@
           "version": "1.271.0"
         },
         "threadFeatures": {
-          "atomicInstructionCount": 605,
+          "atomicInstructionCount": 614,
           "declaredFeatures": [
             "atomics",
             "mutable-globals",
@@ -189,11 +189,11 @@
           "usesAtomics": true
         },
         "threadModel": "emscripten-pthreads",
-        "wasmSha256": "4d9ddbda08c4067891bd421381b76c06a789ed685ef4a4107b64a45d0bc2df7f"
+        "wasmSha256": "04a1fe4b4e1c3ac3691b56dc55ce1d7f528e4e899987fe9e743fcf75b059fbc8"
       },
       "declared_sds_dependency": "1.271.0",
       "id": "analysis/conjunction-assessment",
-      "wasm_sha256": "15e7e8df0225ebf0fa5d6cbe22fdebe612b022bfcae1631594924e3239b090bd"
+      "wasm_sha256": "4de60c7a0b2c7fb1a177b21151aa90edfafcd03b534fbbc44eed30772832da81"
     },
     {
       "build_provenance": null,

@@ -1,9 +1,9 @@
 {
   "format_version": 1,
   "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
-  "version": "0.1.0.dev0+modules.796626094778.a148b0cacdf33",
-  "source_revision": "7966260947780da7a8ccff1bfed3328994002eae",
-  "artifact_set_sha256": "148b0cacdf33b1c03783a8e5ae320a422c21ba207545a5ea9c970708a9af931a",
+  "version": "0.1.0.dev0+modules.dd57a4298dcf.a526895bbf471",
+  "source_revision": "dd57a4298dcf27b5f3adec2686b258542edbe9a6",
+  "artifact_set_sha256": "526895bbf471537c71aae90c3e46942fa7c4f6595863281cfccae1f49ac4103e",
   "modules": [
     {
       "id": "propagator/sgp4",
@@ -14,14 +14,14 @@
           "name": "module.wasm",
           "source_path": "propagator/sgp4/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-sgp4/module.wasm",
-          "sha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
-          "size": 1295148
+          "sha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+          "size": 1295483
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "propagator/sgp4/plugin-manifest.json",
           "package_path": "artifacts/propagator-sgp4/plugin-manifest.json",
-          "sha256": "02d118d96db5b3f83b3925ae5586f05f70ffd52ddc0b1cf660a9cb8d86214607",
+          "sha256": "8dd8399bfb20e4ac1246508c86a07a50055f74e9ad2516a6d8c049f8a1a098de",
           "size": 9757
         }
       ]
@@ -35,14 +35,14 @@
           "name": "module.wasm",
           "source_path": "propagator/ffm/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-ffm/module.wasm",
-          "sha256": "343c4145a6fa2154b987658dd510f8d1fd1f378ee39c3fc30f3f1d594c7546e3",
-          "size": 2687153
+          "sha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2",
+          "size": 2685349
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "propagator/ffm/plugin-manifest.json",
           "package_path": "artifacts/propagator-ffm/plugin-manifest.json",
-          "sha256": "167f355101d1ae1d84430c781eb299fa6283a3d48958baa67db0fc8a368062fb",
+          "sha256": "165fd160fdd9ec2f398bea2cd0554de5c9c083698616c460ecf8a268598844b7",
           "size": 18549
         }
       ]
@@ -84,15 +84,15 @@
           "name": "module.wasm",
           "source_path": "analysis/conjunction-assessment/dist/isomorphic/module.wasm",
           "package_path": "artifacts/analysis-conjunction-assessment/module.wasm",
-          "sha256": "15e7e8df0225ebf0fa5d6cbe22fdebe612b022bfcae1631594924e3239b090bd",
-          "size": 1637569
+          "sha256": "4de60c7a0b2c7fb1a177b21151aa90edfafcd03b534fbbc44eed30772832da81",
+          "size": 1707697
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "analysis/conjunction-assessment/plugin-manifest.json",
           "package_path": "artifacts/analysis-conjunction-assessment/plugin-manifest.json",
-          "sha256": "6f6853331e38bb712f883e4199a85fa49235a17541408718257f448e6be3d957",
-          "size": 58061
+          "sha256": "741926e096e301c560db226d51603f55ce73d6529ccdd11bf76f0341fcdc81a9",
+          "size": 59630
         }
       ]
     },
