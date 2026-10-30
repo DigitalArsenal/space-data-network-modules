@@ -148,4 +148,42 @@ double conservative_primary_query_radius_km(
         coarse_step_sec);
 }
 
+RadialSample radial_sample(double x, double y, double z,
+                           double vx, double vy, double vz,
+                           double half_window_sec) {
+    // Taylor about t_k: | |r(t)| - |r_k| | <= |rdot_k| h + M h^2 / 2 for
+    // |t - t_k| <= h, with M >= |d^2|r|/dt^2| on that span, and
+    // d^2|r|/dt^2 = (|v|^2 - rdot^2) / |r| + rhat . a <= |v|^2 / |r| + |a|.
+    // The lower bound on |r| is the Earth's equatorial radius R_E, not one
+    // derived from the sample: every state the screen uses is at least R_E from
+    // the centre (propagate_sgp4 refuses a state below it as decayed, as the
+    // pair methods do), and R_E needs no bound on the motion it would serve, so
+    // the bound is not circular. It costs a little reach against a bound from
+    // |r_k|. |a| <= A = 1.05 mu / R_E^2, the natural-motion bound
+    // (ephemeris_source.cpp: 5 % over two-body covers J2 and drag) at that
+    // radius, and so |v(t)| <= |v_k| + A h.
+    constexpr double MU_KM3_S2 = 398600.8;         // SGP4 (WGS 72), as natural motion
+    constexpr double NATURAL_MOTION_MARGIN = 1.05;
+    constexpr double EARTH_EQUATORIAL_RADIUS_KM = 6378.137;
+    const double h = std::max(0.0, half_window_sec);
+    const double r = std::sqrt(x * x + y * y + z * z);
+    const double v = std::sqrt(vx * vx + vy * vy + vz * vz);
+    const double rdot = r > 0.0 ? (x * vx + y * vy + z * vz) / r : v;
+    const double a_max = NATURAL_MOTION_MARGIN * MU_KM3_S2 /
+                         (EARTH_EQUATORIAL_RADIUS_KM * EARTH_EQUATORIAL_RADIUS_KM);
+    const double v_max = v + a_max * h;
+    const double m = v_max * v_max / EARTH_EQUATORIAL_RADIUS_KM + a_max;
+    return {r, std::abs(rdot) * h + 0.5 * m * h * h};
+}
+
+double radial_gate_half_window_sec(int32_t step, int32_t last_step,
+                                   double step_sec, double window_sec) {
+    const double half_step = 0.5 * step_sec;
+    const double before = step > 0 ? half_step : 0.0;
+    const double after = step < last_step
+        ? half_step
+        : std::max(0.0, window_sec - static_cast<double>(step) * step_sec);
+    return std::max(before, after);
+}
+
 } // namespace conjunction

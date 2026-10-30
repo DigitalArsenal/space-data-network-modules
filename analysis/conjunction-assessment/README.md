@@ -271,9 +271,24 @@ its mean elements, Earth/TEME, with `COMMENT` naming the earliest failing
 coarse epoch and the propagator error there. `OBJECTS_PARSED` counts every
 object; `STATISTICS.TOTAL_OBJECTS` leaves the excluded ones out, so the
 difference is the number of excluded records. `PAIRS_SCREENED` and
-`PAIRS_PREFILTERED` still describe the planned pair set. Objects the coarse
-pass never propagates (for example, secondaries whose altitude band misses
-every primary) are neither screened nor reported.
+`PAIRS_PREFILTERED` still describe the planned pair set; a pair is prefiltered
+when the altitude prefilter below kept it out at every coarse step.
+
+The altitude prefilter compares each pair's epoch perigee-apogee bands, each
+widened by 50 km. Epoch bands do not bound an orbit that decays or rises across
+the window, so they never drop a pair alone: every object of the request is
+propagated at every coarse step, and a pair whose bands are apart is still
+screened at each step where its two distances from the Earth's centre can come
+within the threshold of each other inside the step's half window (the radial
+gate, `|r_i - r_j| <= threshold + reach_i + reach_j`, where a reach bounds how
+far a distance from the centre can move in that half window from the state's
+radial rate and the natural-motion acceleration bound at the Earth's radius).
+The half window is half a coarse step on either side of the step, nothing
+before the window's first step, and after its last step the rest of the
+window, so every time of the window lies inside the half window of the step
+nearest it. Two positions within the threshold have distances from the centre
+within the threshold, so a pair whose minimum is within the threshold passes
+the gate at the coarse step nearest that minimum and is screened.
 
 Each close approach within the threshold is its own event: a pair that meets
 several times in a window is reported at each TCA, and an event belongs to the

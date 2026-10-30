@@ -875,6 +875,22 @@ namespace {
 // encounters are joined across chunks and refined once, as in one window.
 constexpr int MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK = 10000;
 
+// Coarse steps of the window: step k is at start_jd + k * coarse_step_sec,
+// k = 0..count.
+int32_t window_coarse_steps(const ScreeningConfig& config) {
+    const double step_days = config.coarse_step_sec / 86400.0;
+    const double end_jd = config.start_jd + config.duration_days;
+    return static_cast<int32_t>((end_jd - config.start_jd) / step_days);
+}
+
+// A pair the epoch bands separate (counted prefiltered by the caller) that the
+// radial gate admitted at some coarse step was screened.
+void count_radial_admissions(ScreeningStats& stats, uint64_t admitted) {
+    const uint64_t moved = std::min(admitted, stats.pairs_prefiltered);
+    stats.pairs_prefiltered -= moved;
+    stats.pairs_screened += moved;
+}
+
 void reset_implicit_stats(ScreeningStats& stats) {
     const uint64_t total_objects = stats.total_objects;
     const uint64_t pairs_screened = stats.pairs_screened;
@@ -1025,12 +1041,15 @@ ScreeningThreadWork process_time_steps(
     const ScreeningConfig& config,
     const std::vector<TLE>& tles,
     const std::vector<std::pair<uint32_t, uint32_t>>& valid_pairs,
+    const std::vector<uint8_t>& primary_side,
+    const std::vector<uint8_t>& secondary_side,
     double start_jd, double end_jd, double step_sec,
     int thread_id, int total_threads)
 {
     ScreeningThreadWork work;
     clear_error();
-    if (valid_pairs.empty()) {
+    const bool gated = !primary_side.empty() && !secondary_side.empty();
+    if (valid_pairs.empty() && !gated) {
         return work;
     }
 
@@ -1061,6 +1080,41 @@ ScreeningThreadWork process_time_steps(
         std::sort(secondaries.begin(), secondaries.end());
     }
 
+    // With the request's roles every primary-secondary pair is screened: the
+    // pairs above are those the epoch altitude bands admit, and any other is
+    // tested through the radial gate (screening_internal.h) at each step, so
+    // every object of the request is propagated. A minimum is never farther
+    // from the step nearest it than the gate's half window there
+    // (radial_gate_half_window_sec).
+    const auto cross_pair = [&](uint32_t a, uint32_t b) {
+        return (primary_side[a] && secondary_side[b]) || (primary_side[b] && secondary_side[a]);
+    };
+    std::vector<uint32_t> request_primary_ids, request_secondary_ids;
+    if (gated) {
+        for (uint32_t i = 0; i < tles.size(); ++i) {
+            if (primary_side[i]) request_primary_ids.push_back(i);
+            if (secondary_side[i]) request_secondary_ids.push_back(i);
+            if (!primary_side[i] && !secondary_side[i]) continue;
+            if (!seen_secondary[i]) {
+                seen_secondary[i] = 1;
+                secondary_ids.push_back(i);
+            }
+        }
+    }
+    const uint64_t screened_pair_bound =
+        gated ? static_cast<uint64_t>(request_primary_ids.size()) * request_secondary_ids.size()
+              : valid_pairs.size();
+    std::vector<RadialSample> radial(gated ? tles.size() : 0);
+    std::unordered_set<uint64_t> admitted;
+    const auto admit_radially = [&](uint32_t a, uint32_t b) {
+        if (!gated || !cross_pair(a, b) ||
+            !radially_reachable(radial[a], radial[b], config.threshold_km)) {
+            return false;
+        }
+        admitted.insert(coarse_hit_key(std::min(a, b), std::max(a, b)));
+        return true;
+    };
+
     double step_days = step_sec / 86400.0;
     int total_steps = static_cast<int>((end_jd - start_jd) / step_days);
     // Objects this worker has already excluded; their pairs are dropped after
@@ -1071,6 +1125,8 @@ ScreeningThreadWork process_time_steps(
 
     for (int step = block_begin; step < block_end; ++step) {
         double jd = start_jd + step * step_days;
+        const double gate_half_window_sec = radial_gate_half_window_sec(
+            step, total_steps, step_sec, (end_jd - start_jd) * 86400.0);
         std::vector<KDPoint> cached_points(tles.size());
         std::vector<uint8_t> has_state(tles.size(), 0);
         std::vector<KDPoint> secondary_points;
@@ -1089,6 +1145,11 @@ ScreeningThreadWork process_time_steps(
                 const KDPoint point{state.x, state.y, state.z, secondary_id, static_cast<uint32_t>(step)};
                 cached_points[secondary_id] = point;
                 has_state[secondary_id] = 1;
+                if (gated) {
+                    radial[secondary_id] = radial_sample(state.x, state.y, state.z,
+                                                         state.vx, state.vy, state.vz,
+                                                         gate_half_window_sec);
+                }
                 secondary_points.push_back(point);
                 work.propagations++;
             }
@@ -1099,7 +1160,7 @@ ScreeningThreadWork process_time_steps(
         const bool use_kdtree_for_explicit_pairs =
             config.use_kdtree &&
             secondary_points.size() > 50 &&
-            valid_pairs.size() > MIN_EXPLICIT_PAIRS_FOR_KDTREE;
+            screened_pair_bound > MIN_EXPLICIT_PAIRS_FOR_KDTREE;
 
         if (use_kdtree_for_explicit_pairs) {
             KDTree tree;
@@ -1155,6 +1216,32 @@ ScreeningThreadWork process_time_steps(
                     runs.hit(obj1, obj2, step, dist);
                 }
             }
+            if (gated) {
+                // The cross pairs the bands separate: every one has a primary,
+                // whose query meets the other; two objects that are each a
+                // primary and a secondary form one pair, taken once.
+                for (uint32_t p : request_primary_ids) {
+                    if (!has_state[p]) continue;
+                    const auto& p_point = cached_points[p];
+                    neighbor_indexes.clear();
+                    tree.range_query(p_point, coarse_threshold, neighbor_indexes);
+                    for (uint32_t neighbor_index : neighbor_indexes) {
+                        const auto& q_point = secondary_points[neighbor_index];
+                        const uint32_t q = q_point.obj_index;
+                        if (q == p || !secondary_side[q] || (primary_side[q] && secondary_side[p] && q < p)) {
+                            continue;
+                        }
+                        const uint32_t lo = std::min(p, q), hi = std::max(p, q);
+                        const auto& allowed = allowed_secondaries[lo];
+                        if (std::binary_search(allowed.begin(), allowed.end(), hi) ||
+                            !admit_radially(lo, hi)) {
+                            continue;
+                        }
+                        const double dx = p_point.x - q_point.x, dy = p_point.y - q_point.y, dz = p_point.z - q_point.z;
+                        runs.hit(lo, hi, step, std::sqrt(dx * dx + dy * dy + dz * dz));
+                    }
+                }
+            }
         } else {
             for (uint32_t primary_id : primary_ids) {
                 if (!has_state[primary_id]) {
@@ -1204,10 +1291,39 @@ ScreeningThreadWork process_time_steps(
                     }
                 }
             }
+            if (gated) {
+                // The cross pairs the bands separate (those they admit were
+                // tested above); two objects that are each a primary and a
+                // secondary form one pair, taken once.
+                for (uint32_t p : request_primary_ids) {
+                    if (!has_state[p]) continue;
+                    for (uint32_t q : request_secondary_ids) {
+                        if (q == p || !has_state[q] || (primary_side[q] && secondary_side[p] && q < p)) {
+                            continue;
+                        }
+                        const uint32_t lo = std::min(p, q), hi = std::max(p, q);
+                        const auto& allowed = allowed_secondaries[lo];
+                        if (std::binary_search(allowed.begin(), allowed.end(), hi) ||
+                            !admit_radially(lo, hi)) {
+                            continue;
+                        }
+                        const auto& p1 = cached_points[lo];
+                        const auto& p2 = cached_points[hi];
+                        const double dx = p1.x - p2.x, dy = p1.y - p2.y, dz = p1.z - p2.z;
+                        if (std::abs(dx) > coarse_threshold || std::abs(dy) > coarse_threshold ||
+                            std::abs(dz) > coarse_threshold) {
+                            continue;
+                        }
+                        const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+                        if (dist <= coarse_threshold) runs.hit(lo, hi, step, dist);
+                    }
+                }
+            }
         }
     }
 
     work.coarse_hits = runs.finish();
+    work.radial_admissions.assign(admitted.begin(), admitted.end());
     return work;
 }
 
@@ -1220,7 +1336,9 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     const std::vector<std::pair<uint32_t, uint32_t>>& valid_pairs,
     const ScreeningConfig& config,
     ScreeningStats& stats,
-    ProgressCallback progress)
+    ProgressCallback progress,
+    const std::vector<uint8_t>& primary_side,
+    const std::vector<uint8_t>& secondary_side)
 {
     auto t_start = std::chrono::high_resolution_clock::now();
     stats.kdtree_candidates = 0;
@@ -1242,14 +1360,14 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     num_threads = 1;
     thread_results[0] = process_time_steps(
         config,
-        tles, valid_pairs,
+        tles, valid_pairs, primary_side, secondary_side,
         start_jd, end_jd, config.coarse_step_sec,
         0, 1);
 #else
     if (num_threads <= 1) {
         thread_results[0] = process_time_steps(
             config,
-            tles, valid_pairs,
+            tles, valid_pairs, primary_side, secondary_side,
             start_jd, end_jd, config.coarse_step_sec,
             0, 1);
     } else {
@@ -1258,7 +1376,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
             threads.emplace_back([&, t]() {
                 thread_results[t] = process_time_steps(
                     config,
-                    tles, valid_pairs,
+                    tles, valid_pairs, primary_side, secondary_side,
                     start_jd, end_jd, config.coarse_step_sec,
                     t, num_threads);
             });
@@ -1277,11 +1395,14 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     }
     stats.excluded_objects = excluded_list(excluded);
     std::vector<CoarseHitRecord> runs;
+    std::unordered_set<uint64_t> radial_admissions;
     for (auto& tw : thread_results) {
         stats.propagations += tw.propagations;
         runs.insert(runs.end(), tw.coarse_hits.begin(), tw.coarse_hits.end());
         tw.coarse_hits = {};
+        radial_admissions.insert(tw.radial_admissions.begin(), tw.radial_admissions.end());
     }
+    count_radial_admissions(stats, radial_admissions.size());
     const auto encounters = drop_excluded_encounters(
         coalesce_encounters(std::move(runs)), excluded);
 
@@ -1326,8 +1447,25 @@ ScreeningThreadWork process_time_steps_implicit(
     }
 
     const bool all_primary = is_primary.empty();
-    const bool all_participate = participates.empty();
     const float altitude_margin = 50.0f;
+    // The bands are the elements' epoch values: they do not bound an orbit that
+    // decays (or rises) across the window, so they never drop a pair alone. A
+    // pair they separate is still screened at every step where the radial gate
+    // (screening_internal.h) finds its two radii can come within the threshold
+    // inside the step's half window. A minimum is never farther from the step
+    // nearest it than the gate's half window there (radial_gate_half_window_sec,
+    // on the window's own steps, whatever range this call scans). The
+    // participation flags count pairs whose bands meet and exclude no object.
+    (void)participates;
+    const int32_t window_last_step = window_coarse_steps(config);
+    const double window_sec = config.duration_days * 86400.0;
+    std::vector<RadialSample> radial(n);
+    std::unordered_set<uint64_t> admitted;
+    const auto admit_radially = [&](uint32_t a, uint32_t b) {
+        if (!radially_reachable(radial[a], radial[b], config.threshold_km)) return false;
+        admitted.insert(coarse_hit_key(std::min(a, b), std::max(a, b)));
+        return true;
+    };
     const double fallback_coarse_threshold = config.threshold_km * 200.0;
     const bool has_resident_speed_bounds =
         resident_index != nullptr &&
@@ -1388,9 +1526,6 @@ ScreeningThreadWork process_time_steps_implicit(
             if (included[candidate_id]) {
                 continue;
             }
-            if (!all_participate && !participates[candidate_id]) {
-                continue;
-            }
             bool overlaps_primary = false;
             for (uint32_t primary_id : primary_ids) {
                 const double sampled_bounds_threshold_km =
@@ -1417,9 +1552,7 @@ ScreeningThreadWork process_time_steps_implicit(
         }
     } else {
         for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
-            if (all_participate || participates[i]) {
-                active_ids.push_back(i);
-            }
+            active_ids.push_back(i);
         }
     }
     if (active_ids.size() < 2) {
@@ -1484,6 +1617,18 @@ ScreeningThreadWork process_time_steps_implicit(
             use_pairwise_primary_scan = false;
         }
     }
+    // Each scanned primary's band partners, so the scan can test the rest
+    // through the radial gate.
+    std::vector<std::vector<uint8_t>> band_partner;
+    if (use_pairwise_primary_scan) {
+        band_partner.resize(n);
+        for (uint32_t primary_id : primary_ids) {
+            band_partner[primary_id].assign(n, 0);
+            for (uint32_t secondary_id : allowed_secondaries[primary_id]) {
+                band_partner[primary_id][secondary_id] = 1;
+            }
+        }
+    }
 
     const double step_days = step_sec / 86400.0;
 
@@ -1504,6 +1649,8 @@ ScreeningThreadWork process_time_steps_implicit(
         worker_step_block(first_step, last_step, thread_id, total_threads);
     for (int step = block_begin; step < block_end; ++step) {
         const double jd = start_jd + step * step_days;
+        const double gate_half_window_sec = radial_gate_half_window_sec(
+            step, window_last_step, step_sec, window_sec);
 
         // Propagate all active objects.
         points.clear();
@@ -1550,6 +1697,9 @@ ScreeningThreadWork process_time_steps_implicit(
                 };
                 cached_points[obj_id] = point;
                 has_state[obj_id] = 1;
+                radial[obj_id] = radial_sample(state.x, state.y, state.z,
+                                               state.vx, state.vy, state.vz,
+                                               gate_half_window_sec);
                 points.push_back(point);
             }
         }
@@ -1559,39 +1709,51 @@ ScreeningThreadWork process_time_steps_implicit(
         }
 
         if (use_pairwise_primary_scan) {
+            const auto coarse_test = [&](uint32_t primary_id, uint32_t secondary_id) {
+                const auto& primary_point = cached_points[primary_id];
+                const auto& secondary_point = cached_points[secondary_id];
+                const double pair_radius_km = has_resident_speed_bounds
+                    ? conservative_pair_coarse_radius_km(
+                          config,
+                          resident_index,
+                          primary_id,
+                          secondary_id)
+                    : fallback_coarse_threshold;
+                const double dx = primary_point.x - secondary_point.x;
+                const double dy = primary_point.y - secondary_point.y;
+                const double dz = primary_point.z - secondary_point.z;
+                if (std::abs(dx) > pair_radius_km ||
+                    std::abs(dy) > pair_radius_km ||
+                    std::abs(dz) > pair_radius_km) {
+                    return;
+                }
+                const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (dist > pair_radius_km) {
+                    return;
+                }
+
+                const uint32_t lo = std::min(primary_id, secondary_id);
+                const uint32_t hi = std::max(primary_id, secondary_id);
+                runs.hit(lo, hi, step, dist);
+            };
             for (uint32_t primary_id : primary_ids) {
                 if (!has_state[primary_id]) {
                     continue;
                 }
-                const auto& primary_point = cached_points[primary_id];
                 for (uint32_t secondary_id : allowed_secondaries[primary_id]) {
                     if (!has_state[secondary_id]) {
                         continue;
                     }
-                    const auto& secondary_point = cached_points[secondary_id];
-                    const double pair_radius_km = has_resident_speed_bounds
-                        ? conservative_pair_coarse_radius_km(
-                              config,
-                              resident_index,
-                              primary_id,
-                              secondary_id)
-                        : fallback_coarse_threshold;
-                    const double dx = primary_point.x - secondary_point.x;
-                    const double dy = primary_point.y - secondary_point.y;
-                    const double dz = primary_point.z - secondary_point.z;
-                    if (std::abs(dx) > pair_radius_km ||
-                        std::abs(dy) > pair_radius_km ||
-                        std::abs(dz) > pair_radius_km) {
+                    coarse_test(primary_id, secondary_id);
+                }
+                for (uint32_t secondary_id : active_ids) {
+                    if (secondary_id == primary_id || !has_state[secondary_id] ||
+                        band_partner[primary_id][secondary_id] ||
+                        (active_is_primary[secondary_id] && secondary_id < primary_id) ||
+                        !admit_radially(primary_id, secondary_id)) {
                         continue;
                     }
-                    const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-                    if (dist > pair_radius_km) {
-                        continue;
-                    }
-
-                    const uint32_t lo = std::min(primary_id, secondary_id);
-                    const uint32_t hi = std::max(primary_id, secondary_id);
-                    runs.hit(lo, hi, step, dist);
+                    coarse_test(primary_id, secondary_id);
                 }
             }
         } else if (config.use_kdtree && points.size() > 50) {
@@ -1635,10 +1797,11 @@ ScreeningThreadWork process_time_steps_implicit(
                         }
                     }
 
-                    // Altitude overlap gate.
+                    // Altitude gate: the epoch bands, else the radii at this step.
                     const float sec_lo = perigee_km[sec_id] - altitude_margin;
                     const float sec_hi = apogee_km[sec_id] + altitude_margin;
-                    if (pri_lo > sec_hi || sec_lo > pri_hi) {
+                    if ((pri_lo > sec_hi || sec_lo > pri_hi) &&
+                        !admit_radially(primary_id, sec_id)) {
                         continue;
                     }
 
@@ -1689,7 +1852,7 @@ ScreeningThreadWork process_time_steps_implicit(
 
                     const float lo2 = perigee_km[id2] - altitude_margin;
                     const float hi2 = apogee_km[id2] + altitude_margin;
-                    if (lo1 > hi2 || lo2 > hi1) continue;
+                    if ((lo1 > hi2 || lo2 > hi1) && !admit_radially(id1, id2)) continue;
 
                     const double dx = p1.x - p2.x;
                     const double dy = p1.y - p2.y;
@@ -1718,6 +1881,7 @@ ScreeningThreadWork process_time_steps_implicit(
     }
 
     work.coarse_hits = runs.finish();
+    work.radial_admissions.assign(admitted.begin(), admitted.end());
     return work;
 }
 
@@ -1726,6 +1890,8 @@ struct ImplicitCoarseHitWindowResult {
     std::vector<CoarseHitRecord> encounters;
     ScreeningStats stats;
     std::map<uint32_t, ExcludedObject> excluded;
+    // Pairs the epoch bands separate that the radial gate admitted at a step.
+    std::unordered_set<uint64_t> radial_admissions;
 };
 
 ConjunctionSolution refine_exact_window_locally(
@@ -2091,6 +2257,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
             merge_exclusions(result.excluded, tw.excluded);
             stats.propagations += tw.propagations;
             runs.insert(runs.end(), tw.coarse_hits.begin(), tw.coarse_hits.end());
+            result.radial_admissions.insert(tw.radial_admissions.begin(), tw.radial_admissions.end());
             tw = ScreeningThreadWork{};
         }
     };
@@ -2196,18 +2363,6 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     return result;
 }
 
-namespace {
-
-// Coarse steps of the window: step k is at start_jd + k * coarse_step_sec,
-// k = 0..count.
-int32_t window_coarse_steps(const ScreeningConfig& config) {
-    const double step_days = config.coarse_step_sec / 86400.0;
-    const double end_jd = config.start_jd + config.duration_days;
-    return static_cast<int32_t>((end_jd - config.start_jd) / step_days);
-}
-
-} // namespace
-
 std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     const std::vector<TLE>& tles,
     const std::vector<float>& perigee_km,
@@ -2263,6 +2418,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     stats.total_objects = tles.size();
     stats.pairs_screened = pairs_screened;
     stats.pairs_prefiltered = pairs_prefiltered;
+    count_radial_admissions(stats, window_result.radial_admissions.size());
 
     const Sgp4Sources sources(tles);
     auto events = refine_window_encounters(
@@ -2337,6 +2493,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     // earlier events and failed refinements are dropped at the end.
     std::vector<CoarseHitRecord> carry;
     std::map<uint32_t, ExcludedObject> excluded;
+    std::unordered_set<uint64_t> radial_admissions;
     RefinedEncounters refined;
     const Sgp4Sources sgp4_sources(tles);
     const int32_t chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
@@ -2361,6 +2518,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
         merge_exclusions(excluded, chunk_result.excluded);
         stats.propagations += chunk_result.stats.propagations;
         stats.kdtree_candidates += chunk_result.stats.kdtree_candidates;
+        radial_admissions.insert(chunk_result.radial_admissions.begin(),
+                                 chunk_result.radial_admissions.end());
 
         std::vector<CoarseHitRecord> runs = std::move(chunk_result.encounters);
         runs.insert(runs.end(), carry.begin(), carry.end());
@@ -2392,6 +2551,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     }
 
     stats.excluded_objects = excluded_list(excluded);
+    count_radial_admissions(stats, radial_admissions.size());
     std::vector<ConjunctionEvent> events;
     events.reserve(refined.events.size());
     for (size_t i = 0; i < refined.events.size(); ++i) {
@@ -2604,7 +2764,15 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
             : 0;
     stats_.pairs_screened = valid_pairs.size();
 
-    auto events = screen_precomputed_tles(tles, valid_pairs, config_, stats_, progress);
+    std::vector<uint8_t> primary_side, secondary_side;
+    if (config_.use_perigee_filter) {
+        primary_side.assign(catalog.size(), 0);
+        secondary_side.assign(catalog.size(), 0);
+        for (uint32_t index : primary_indices) primary_side[index] = 1;
+        for (uint32_t index : secondary_indices) secondary_side[index] = 1;
+    }
+    auto events = screen_precomputed_tles(tles, valid_pairs, config_, stats_, progress,
+                                          primary_side, secondary_side);
     for (auto& excluded : stats_.excluded_objects) {
         excluded.input_list = origin[excluded.index].first;
         excluded.input_index = origin[excluded.index].second;

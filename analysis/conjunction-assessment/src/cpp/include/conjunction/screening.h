@@ -132,6 +132,9 @@ struct ScreeningThreadWork {
     std::vector<CoarseHitRecord> coarse_hits;
     std::vector<CandidatePair> candidates;
     uint64_t propagations = 0;
+    /// Pairs (coarse_hit_key) the epoch altitude bands separate that the
+    /// radial gate admitted at some coarse step (screening_internal.h).
+    std::vector<uint64_t> radial_admissions;
     /// Per-worker exclusions keyed by object index (earliest failure kept).
     std::map<uint32_t, ExcludedObject> excluded;
 };
@@ -141,12 +144,18 @@ struct ScreeningThreadWork {
 bool altitude_overlap(const GPElement& gp1, const GPElement& gp2,
                       double margin_km = 50.0);
 
+/// Screens valid_pairs. With primary_side and secondary_side (one flag per
+/// TLE), valid_pairs are the pairs the epoch altitude bands admit and every
+/// other primary-secondary pair is screened too, at each coarse step where the
+/// radial gate admits it (screening_internal.h).
 std::vector<ConjunctionEvent> screen_precomputed_tles(
     const std::vector<TLE>& tles,
     const std::vector<std::pair<uint32_t, uint32_t>>& valid_pairs,
     const ScreeningConfig& config,
     ScreeningStats& stats,
-    ProgressCallback progress = nullptr);
+    ProgressCallback progress = nullptr,
+    const std::vector<uint8_t>& primary_side = {},
+    const std::vector<uint8_t>& secondary_side = {});
 
 /// Implicit-pair variant: generates pairs on-the-fly from KD-tree spatial
 /// proximity gated by per-object altitude overlap, avoiding the need to
