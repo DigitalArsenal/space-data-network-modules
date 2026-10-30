@@ -314,10 +314,17 @@ VariationalResult PropagateWithSTM(const StateVector& initial,double dt,const In
     }
     return out;
 }
+void Congruence(const double* a,const double* m,unsigned n,double* out) {
+    std::vector<double> am(n*n);
+    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=a[i*n+k]*m[k*n+j];am[i*n+j]=v;}
+    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=am[i*n+k]*a[j*n+k];out[i*n+j]=v;}
+}
+void TransportCovariance(const double* a,const double* p,unsigned n,double* out) {
+    Congruence(a,p,n,out);
+}
 Mat6 TransportCovariance(const Mat6& phi,const Mat6& covariance) {
-    auto tmp=multiply(phi,covariance);Mat6 transpose;
-    for(int i=0;i<6;++i)for(int j=0;j<6;++j)transpose.m[i][j]=phi.m[j][i];
-    return multiply(tmp,transpose);
+    Mat6 out;TransportCovariance(&phi.m[0][0],&covariance.m[0][0],6,&out.m[0][0]);
+    return out;
 }
 // White acceleration noise over one interval h at state s: per axis k with
 // spectral density q_k, q_k [[h^3/3, h^2/2], [h^2/2, h]] on that axis's
@@ -394,16 +401,11 @@ ParameterCovarianceResult PropagateParameterCovariance(const StateVector& initia
         for(unsigned i=0;i<n;++i)for(unsigned k=0;k<n;++k){const double x=a[i*n+k];if(x==0)continue;for(unsigned j=0;j<n;++j)c[i*n+j]+=x*b[k*n+j];}
         return c;
     };
-    const auto transport=[&](const std::vector<double>& phi,const std::vector<double>& p) {
-        auto tmp=product(phi,p);std::vector<double> t(n*n);
-        for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j)t[i*n+j]=phi[j*n+i];
-        return product(tmp,t);
-    };
     if(!noise.enabled||dt==0) {
         static_cast<VariationalResult&>(out)=PropagateWithSTM(initial,dt,config,forces,method,density,burns,parameters);
         if(!out.success)return out;
         out.phi=augmented(out);
-        if(!p0.empty())out.covariance=transport(out.phi,p0);
+        if(!p0.empty()){out.covariance.resize(n*n);TransportCovariance(out.phi.data(),p0.data(),n,out.covariance.data());}
         return out;
     }
     if(!(noise.interval>0)||!std::isfinite(noise.interval)) {
@@ -424,7 +426,7 @@ ParameterCovarianceResult PropagateParameterCovariance(const StateVector& initia
         if(!v.success){out.success=false;out.errorMessage=v.errorMessage;return out;}
         const auto span=augmented(v);
         if(!p.empty()) {
-            p=transport(span,p);
+            TransportCovariance(span.data(),p.data(),n,p.data());
             const Mat6 q=WhiteAccelerationNoise(noise,std::abs(step),v.finalState);
             for(unsigned i=0;i<6;++i)for(unsigned j=0;j<6;++j)p[i*n+j]+=q.m[i][j];
         }

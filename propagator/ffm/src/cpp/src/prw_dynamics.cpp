@@ -19,16 +19,16 @@ Vec3 toGcrf(const Execution& e,const Vec3& v) {
     if(!e.meanJ2000)return v;const auto& b=e.bias;
     return Vec3(b[0][0]*v.x+b[1][0]*v.y+b[2][0]*v.z,b[0][1]*v.x+b[1][1]*v.y+b[2][1]*v.z,b[0][2]*v.x+b[1][2]*v.y+b[2][2]*v.z);
 }
-// M <- R M R^T for an n x n row-major covariance or STM on [r, v, rest],
-// R = diag(B, B, I) with B the bias (toRequest) or its transpose.
-void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest) {
+// M <- R M R^T for an n x n row-major covariance (the covariance transport) or
+// STM on [r, v, rest], R = diag(B, B, I) with B the bias (toRequest) or its transpose.
+void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest,bool covariance) {
     if(!e.meanJ2000)return;
     double r[3][3];for(int i=0;i<3;++i)for(int j=0;j<3;++j)r[i][j]=toRequest?e.bias[i][j]:e.bias[j][i];
-    std::vector<double> big(n*n,0.0),tmp(n*n,0.0);
+    std::vector<double> big(n*n,0.0);
     for(unsigned i=0;i<n;++i)big[i*n+i]=1;
     for(int k=0;k<2;++k)for(int i=0;i<3;++i)for(int j=0;j<3;++j)big[(3*k+i)*n+3*k+j]=r[i][j];
-    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=big[i*n+k]*m[k*n+j];tmp[i*n+j]=v;}
-    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=tmp[i*n+k]*big[j*n+k];m[i*n+j]=v;}
+    if(covariance)Integrator::TransportCovariance(big.data(),m,n,m);
+    else Integrator::Congruence(big.data(),m,n,m);
 }
 // The one place the SDS solver enumeration becomes an IntegrationMethod. A solver the build
 // does not run is refused by name.
@@ -756,7 +756,7 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
         if(covariance->DIMENSION()!=n)return prwError(error,"invalid-covariance: With DYNAMIC_PARAMETERS the covariance is six plus their number square.");
         out.covariance=true;out.pParameters.assign(n*n,0.0);
         if(!prwCovariance(covariance,n,out.pParameters.data(),error))return false;
-        rotateMatrix(out,out.pParameters.data(),n,false);
+        rotateMatrix(out,out.pParameters.data(),n,false,true);
     } else if(covariance) {
         if(covariance->DIMENSION()==7) {
             if(in->INITIAL_MASS_COVARIANCE())return prwError(error,"duplicate-covariance: Multiple seven-state initial covariances.");
@@ -765,8 +765,8 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
     }
     if(in->INITIAL_MASS_COVARIANCE()){out.massCovariance=true;if(!prwCovariance(in->INITIAL_MASS_COVARIANCE(),7,out.p7.data(),error))return false;}
     // Covariances arrive in the request's axes.
-    if(out.covariance&&out.parameters.empty())rotateMatrix(out,&out.p.m[0][0],6,false);
-    if(out.massCovariance)rotateMatrix(out,out.p7.data(),7,false);
+    if(out.covariance&&out.parameters.empty())rotateMatrix(out,&out.p.m[0][0],6,false,true);
+    if(out.massCovariance)rotateMatrix(out,out.p7.data(),7,false,true);
     if(out.massCovariance&&!out.massDynamics)return prwError(error,"invalid-covariance: Seven-state covariance requires INCLUDE_MASS_DYNAMICS.");
     if(!prwProcessNoise(in->PROCESS_NOISE(),out.noise,error))return false;
     if(out.noise.enabled&&(!out.covariance||out.massDynamics))

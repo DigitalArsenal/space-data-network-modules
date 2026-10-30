@@ -34,6 +34,12 @@ VariationalResult PropagateWithSTM(const StateVector&, double dt,
     ForceModel::DensityGradient = ForceModel::DensityGradient::Neglected,
     const std::vector<ForceModel::ImpulsiveManeuverDef>& maneuvers = {},
     const std::vector<DynamicParameter>& parameters = {});
+// M <- A M A^T for n x n row-major A and M, each product summed in index
+// order; out may alias m.
+void Congruence(const double* a, const double* m, unsigned n, double* out);
+// The covariance transport every carried covariance goes through:
+// P <- A P A^T. out may alias p.
+void TransportCovariance(const double* a, const double* p, unsigned n, double* out);
 Mat6 TransportCovariance(const Mat6& phi, const Mat6& covariance);
 // White acceleration process noise (state noise compensation): spectral
 // density q per axis (km^2/s^3), inertial or RTN axes, entering every

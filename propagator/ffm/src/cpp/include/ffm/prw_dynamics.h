@@ -96,8 +96,8 @@ struct Cursor {
 // GCRF <-> request axes.
 Vec3 toRequestAxes(const Execution& e,const Vec3& v);
 Vec3 toGcrf(const Execution& e,const Vec3& v);
-// M <- R M R^T for an n x n row-major covariance or STM on [r, v, rest].
-void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest);
+// M <- R M R^T for an n x n row-major covariance (the covariance transport) or STM on [r, v, rest].
+void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest,bool covariance);
 bool parseIntegrator(const PCFIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error);
 bool parseForces(const PCFForceModel* in,const timesys::Instant& epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error);
 bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error);

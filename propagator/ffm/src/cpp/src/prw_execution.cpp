@@ -42,7 +42,7 @@ std::unique_ptr<PRWResidentStateT> sampleState(const Execution& execution,const 
     return makeState(state,*frame,request->INITIAL());
 }
 std::unique_ptr<PRWStateMatrixT> sampleMatrix(const Execution& execution,const double* values,unsigned n,bool covariance) {
-    std::vector<double> m(values,values+n*n);rotateMatrix(execution,m.data(),n,true);return matrix(m.data(),n,covariance);
+    std::vector<double> m(values,values+n*n);rotateMatrix(execution,m.data(),n,true,covariance);return matrix(m.data(),n,covariance);
 }
 bool finish(const Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error);
 // One epoch integrated from the initial state: finite burns (whose burn state
@@ -110,11 +110,12 @@ bool applyStartImpulses(const Execution& execution,Cursor& c,std::string& error)
             for(unsigned i=0;i<dim;++i)for(unsigned k=0;k<dim;++k){const double x=jacobian(i,k);if(x==0)continue;for(unsigned j=0;j<dim;++j)out[i*dim+j]+=x*m[k*dim+j];}
             m.swap(out);
         };
-        const auto transpose=[](std::vector<double>& m,unsigned dim){for(unsigned i=0;i<dim;++i)for(unsigned j=i+1;j<dim;++j)std::swap(m[i*dim+j],m[j*dim+i]);};
         left(c.phi,n);
         if(!c.p.empty()) {
             const unsigned dim=c.p.size()==36?6u:n;
-            left(c.p,dim);transpose(c.p,dim);left(c.p,dim);transpose(c.p,dim);   // J P J^T
+            std::vector<double> j(dim*dim);
+            for(unsigned i=0;i<dim;++i)for(unsigned k=0;k<dim;++k)j[i*dim+k]=jacobian(i,k);
+            Integrator::TransportCovariance(j.data(),c.p.data(),dim,c.p.data());   // J P J^T
         }
     }
     return true;

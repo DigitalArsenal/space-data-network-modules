@@ -342,7 +342,6 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
     return out;
 }
 Matrix7 TransportFiniteCovariance(const Matrix7& phi,const Matrix7& covariance) {
-    Matrix7 tmp{},out{};for(int i=0;i<7;++i)for(int j=0;j<7;++j)for(int k=0;k<7;++k)tmp[i*7+j]+=phi[i*7+k]*covariance[k*7+j];
-    for(int i=0;i<7;++i)for(int j=0;j<7;++j)for(int k=0;k<7;++k)out[i*7+j]+=tmp[i*7+k]*phi[j*7+k];return out;
+    Matrix7 out{};TransportCovariance(phi.data(),covariance.data(),7,out.data());return out;
 }
 }}

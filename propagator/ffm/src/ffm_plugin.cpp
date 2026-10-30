@@ -2404,28 +2404,7 @@ int plugin_propagate_covariance(double* covInPtr, double dt, double* covOutPtr) 
 
     Mat6 phi;
     if(!covInPtr||!covOutPtr||!computeSelectedSTM(dt,phi))return -2;
-
-    double P[6][6];
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < 6; j++)
-            P[i][j] = covInPtr[i * 6 + j];
-
-    double PhiP[6][6] = {};
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < 6; j++)
-            for (int k = 0; k < 6; k++)
-                PhiP[i][j] += phi.m[i][k] * P[k][j];
-
-    double result[6][6] = {};
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < 6; j++)
-            for (int k = 0; k < 6; k++)
-                result[i][j] += PhiP[i][k] * phi.m[j][k];
-
-    for (int i = 0; i < 6; i++)
-        for (int j = 0; j < 6; j++)
-            covOutPtr[i * 6 + j] = result[i][j];
-
+    Integrator::TransportCovariance(&phi.m[0][0], covInPtr, 6, covOutPtr);
     return 0;
 }
 
