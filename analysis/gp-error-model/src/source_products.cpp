@@ -229,10 +229,27 @@ struct Label {
 // The CVR's own rule for its verdict: Calibrated when mean d^2/3 lies in [0.8, 1.25] and the 95 % coverage in
 // [0.93, 0.97], from at least 30 samples of at least 3 objects of the lineage the covariance's source has; Uncalibrated
 // otherwise, a cell never measured included. The verdict follows from the numbers beside it.
-std::string verdict_of(const Label& l, bool measured_here) {
-  const bool passed = measured_here && std::isfinite(l.mean_d2) && std::isfinite(l.coverage) && l.mean_d2 >= 0.8 && l.mean_d2 <= 1.25 &&
-                      l.coverage >= 0.93 && l.coverage <= 0.97 && l.samples >= 30 && l.objects >= 3;
-  return passed ? "CALIBRATED" : "UNCALIBRATED";
+bool passes_realism(const Label& l, bool measured_here) {
+  return measured_here && std::isfinite(l.mean_d2) && std::isfinite(l.coverage) && l.mean_d2 >= 0.8 && l.mean_d2 <= 1.25 &&
+         l.coverage >= 0.93 && l.coverage <= 0.97 && l.samples >= 30 && l.objects >= 3;
+}
+std::string verdict_of(const Label& l, bool measured_here) { return passes_realism(l, measured_here) ? "CALIBRATED" : "UNCALIBRATED"; }
+
+// The verdict of a population model's cell, for attach_covariance rules 3 and 4 and object_covariance's POPULATION: the
+// numbers of the cell's held-out test go on the label, and its calibration follows from them. measured_here: the model
+// was measured on the lineage of the covariance's source. Returns the cell; null for a cell with no held-out test,
+// whose label is Uncalibrated without numbers.
+const Verdict* population_verdict(const Model& m, int regime, int age_index, bool measured_here, Label* l) {
+  l->calibration = "UNCALIBRATED";
+  const auto it = m.cells.find({regime, age_index});
+  if (it == m.cells.end()) return nullptr;
+  const Verdict& v = it->second;
+  l->mean_d2 = v.mean_d2;
+  l->coverage = v.coverage;
+  l->samples = v.samples;
+  l->objects = v.objects;
+  l->calibration = verdict_of(*l, measured_here);
+  return &v;
 }
 
 Json label_json(const Label& l) {
@@ -621,19 +638,12 @@ Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk,
   l.scale = lk.scale;
   l.window = m.window;
   l.evidence = m.evidence;
-  const auto it = m.cells.find({lk.regime, lk.age_index});
   const bool measured_here = contains(m.lineages, r.a.lineage);
   l.measured_lineage = measured_here ? r.a.lineage : (m.lineages.empty() ? std::string() : m.lineages.front());
-  if (it != m.cells.end()) {
-    const Verdict& v = it->second;
-    l.horizon = v.horizon;
-    l.verdict = v.decision;
-    l.mean_d2 = v.mean_d2;
-    l.coverage = v.coverage;
-    l.samples = v.samples;
-    l.objects = v.objects;
-    l.calibration = verdict_of(l, measured_here);
-    if (l.calibrated()) {
+  if (const Verdict* v = population_verdict(m, lk.regime, lk.age_index, measured_here, &l)) {
+    l.horizon = v->horizon;
+    l.verdict = v->decision;
+    if (passes_realism(l, measured_here)) {
       l.basis = "the cell passed the realism rule on the held-out window for " + r.a.lineage;
     } else if (measured_here) {
       l.basis = "the cell did not pass the realism rule on the held-out window for " + r.a.lineage;
@@ -642,7 +652,6 @@ Label modeled_label(const Recipe& r, const Model& m, bool own, const Lookup& lk,
                 (m.lineages.empty() ? std::string("unstated") : m.lineages.front()) + ")";
     }
   } else {
-    l.calibration = "UNCALIBRATED";
     l.basis = "the model has no held-out verdict for this cell";
   }
   return l;

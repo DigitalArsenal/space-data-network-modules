@@ -312,14 +312,9 @@ extern "C" int object_covariance() {
           factor = 1;
         } else {
           label.evidence = model.evidence;
-          const auto verdict = model.cells.find({regime, bin});
-          if (verdict != model.cells.end()) {
-            const auto& v = verdict->second;
-            label.mean_d2 = v.mean_d2; label.coverage = v.coverage;
-            label.samples = v.samples; label.objects = v.objects;
-            // No source lineage is supplied by this method: this verdict is
-            // explicitly the population cell's own test, not an object claim.
-            label.calibration = sp::verdict_of(label, true);
+          // No source lineage is supplied by this method: this verdict is
+          // explicitly the population cell's own test, not an object claim.
+          if (sp::population_verdict(model, regime, bin, true, &label)) {
             label.window = sp::interval_of(model.window);
             label.measured_lineage = model.lineages.empty() ? "" : model.lineages.front();
           }
