@@ -2233,11 +2233,16 @@ uint8_t* buildPivInvokeResponse(
     flatbuffers::FlatBufferBuilder builder(1024);
     std::vector<uint8_t> payloadArena;
     std::vector<flatbuffers::Offset<TAB>> outputs;
+    // The arena starts on its largest frame alignment, at least 8 (the module SDK's invoke arena alignment), in the
+    // finished answer, as the SDK's own response glue lays it: each frame's OFFSET is aligned inside the arena, so
+    // every payload lies on its ALIGNMENT in the answer.
+    uint32_t arenaAlignment = 8u;
 
     if (outputFrames != nullptr && !outputFrames->empty()) {
         outputs.reserve(outputFrames->size());
         for (const PivOutputFrame& output : *outputFrames) {
             const uint32_t alignment = output.alignment > 0u ? output.alignment : 8u;
+            arenaAlignment = std::max(arenaAlignment, alignment);
             const uint32_t offset = alignArenaOffset(
                 static_cast<uint32_t>(payloadArena.size()),
                 alignment
@@ -2273,16 +2278,24 @@ uint8_t* buildPivInvokeResponse(
         }
     }
 
-    const auto response = CreatePIVResponseDirect(
+    const auto outputVector = outputs.empty() ? 0 : builder.CreateVector(outputs);
+    flatbuffers::Offset<flatbuffers::Vector<uint8_t>> arenaVector = 0;
+    if (!payloadArena.empty()) {
+        builder.ForceVectorAlignment(payloadArena.size(), sizeof(uint8_t), arenaAlignment);
+        arenaVector = builder.CreateVector(payloadArena);
+    }
+    const auto errorCodeOffset = errorCode != nullptr ? builder.CreateString(errorCode) : 0;
+    const auto errorMessageOffset = errorMessage != nullptr ? builder.CreateString(errorMessage) : 0;
+    const auto response = CreatePIVResponse(
         builder,
         statusCode,
         status,
         false,
         0,
-        outputs.empty() ? nullptr : &outputs,
-        payloadArena.empty() ? nullptr : &payloadArena,
-        errorCode,
-        errorMessage,
+        outputVector,
+        arenaVector,
+        errorCodeOffset,
+        errorMessageOffset,
         traceId
     );
     const auto envelope = CreatePIV(builder, 0, response);

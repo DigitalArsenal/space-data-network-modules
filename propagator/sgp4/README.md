@@ -124,6 +124,7 @@ Artifacts:
 ```bash
 npm test
 node --test tests/afspcMode.e2e.mjs
+node --test tests/arenaAlignment.e2e.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 ```
 
@@ -147,6 +148,11 @@ the PIV contract, the Tudat-derived SGP4 cases (below), and:
 Space-Track's 2026-10-29 element sets (`tests/fixtures/spacetrack-gp`) equal the AFSPC base within 0.1 mm over 7
 days; on the five low-inclination deep-space sets whose node crosses 0, the improved mode is 2.7 m to 4.2 km away.
 Spacetrack Report No. 3's SGP4 case 88888 is within 15 m of the report's published states over its day.
+
+`tests/arenaAlignment.e2e.mjs`: an answer's payload arena starts on 8 bytes in the answer, as the module SDK lays it, so
+every payload lies on its declared alignment. Each artifact (browser, browser-shared, isomorphic), through the SDK host,
+answers `propagate_state` and `propagate_ephemeris` for one to ten objects in bytes the SDK decoder takes as they are,
+and every payload is byte for byte 1.4.0's.
 
 `tests/parity.mjs` runs one-invocation cases (each carrying its element sets)
 in Chrome and native WasmEdge (the owner waived the Docker leg on 2026-10-22) and writes

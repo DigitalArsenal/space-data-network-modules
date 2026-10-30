@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "propagator/sgp4",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
-  "moduleSha256": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
+  "artifactSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+  "moduleSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 12,
-      "durationMs": 716
+      "durationMs": 805
     },
     {
       "lane": "wasmedge",
       "runs": 12,
-      "durationMs": 9978
+      "durationMs": 8822
     }
   ],
   "cases": [
@@ -55,7 +55,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "5d8423b71f416ffc7f99713181a6e66910a31a81f1c08d1bc881922e71fd8093",
+      "stdoutSha256": "e817e740791cbaeb6b53fd556d0aa97734b5634a33892a09c3531e25cbfee1a5",
       "stdoutLength": 624
     },
     {
@@ -67,7 +67,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "718ed15c071eb3d05e82732930261d0b364ae02c77bbd2b0ea26bff5e54c1aa5",
+      "stdoutSha256": "8ec98cb33e5e28073042698872111c7f9d1793c156b86a98a008387ba8f8792a",
       "stdoutLength": 880
     },
     {
@@ -79,7 +79,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c119bb44dcae1ff35792f8234ba9041c95de0bbb14df1e0ec905b0bb5778165c",
+      "stdoutSha256": "4fbb97f8f69ac9e6f4005e00607283ea35ed071f856ceaa5db32a6f1cdd198d5",
       "stdoutLength": 1144
     },
     {
@@ -199,7 +199,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "5d8423b71f416ffc7f99713181a6e66910a31a81f1c08d1bc881922e71fd8093",
+      "stdoutSha256": "e817e740791cbaeb6b53fd556d0aa97734b5634a33892a09c3531e25cbfee1a5",
       "stdoutLength": 624
     },
     {
@@ -211,7 +211,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "718ed15c071eb3d05e82732930261d0b364ae02c77bbd2b0ea26bff5e54c1aa5",
+      "stdoutSha256": "8ec98cb33e5e28073042698872111c7f9d1793c156b86a98a008387ba8f8792a",
       "stdoutLength": 880
     },
     {
@@ -223,7 +223,7 @@
       "exitCode": 0,
       "commandError": null,
       "spawnCount": null,
-      "stdoutSha256": "c119bb44dcae1ff35792f8234ba9041c95de0bbb14df1e0ec905b0bb5778165c",
+      "stdoutSha256": "4fbb97f8f69ac9e6f4005e00607283ea35ed071f856ceaa5db32a6f1cdd198d5",
       "stdoutLength": 1144
     },
     {

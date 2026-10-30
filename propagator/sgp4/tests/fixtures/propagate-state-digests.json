@@ -1,6 +1,6 @@
 {
- "source": "propagator/sgp4 1.3.1, dist/browser",
- "module": "d9fdd0575d8dc84fa418d1ec4a5e0f14c9a02683eaeec0904b53a0a18b239a97",
+ "source": "propagator/sgp4 1.4.1, dist/browser",
+ "module": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
  "rounds": [
   {
    "label": "ingest ISS",
@@ -24,11 +24,11 @@
   },
   {
    "label": "all objects",
-   "sha256": "818e1e1ccd0ed607d879c7d630ecbd5bfb1ec2a8e96353a098049a9563e5748a"
+   "sha256": "2a8886c07641e35f04d0bd0d95e7426055a9223c5afd743bb7794fb2bb3a8417"
   },
   {
    "label": "handles [1, 0]",
-   "sha256": "4103b93073412f42d91a2a58c2c1a639f1b0dcd7f9ec92afe59d42019817687d"
+   "sha256": "71f8b7a38cf944491d55c09ea8e5f72b3628fbd4124bb5803d998b9ea5674fd7"
   },
   {
    "label": "max_count 1",

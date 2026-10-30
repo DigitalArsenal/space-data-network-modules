@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-30T04:06:30.721Z",
+  "generatedAt": "2026-10-30T07:23:27.752Z",
   "moduleCount": 150,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 145,
@@ -7127,7 +7127,7 @@
       "pluginId": "com.orbpro.sgp4",
       "name": "SGP4/SDP4 Propagator",
       "pluginFamily": "propagator",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "methodIds": [
         "catalog_query",
         "ingest_omm",
@@ -7150,7 +7150,7 @@
       ],
       "cxxSourceFileCount": 3,
       "cSourceFileCount": 1,
-      "testFileCount": 84,
+      "testFileCount": 85,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -7161,6 +7161,7 @@
       ],
       "testFiles": [
         "tests/afspcMode.e2e.mjs",
+        "tests/arenaAlignment.e2e.mjs",
         "tests/catFlatBufferContract.test.mjs",
         "tests/catalogNumberSelection.test.mjs",
         "tests/ephemerisOutput.test.mjs",
