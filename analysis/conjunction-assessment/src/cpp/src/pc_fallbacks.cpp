@@ -103,6 +103,13 @@ void mark_nc2_usage(PcFallbackResult& result,const PcEncounter& e,const Kernel& 
 }
 }
 
+// Fixed work bound of one 3D-Nc evaluation, all rules and refinements: at most
+// NC3_POINT_BUDGET sphere-point flux evaluations at NC3_EPOCH_BUDGET distinct
+// epochs, each epoch one bounded Hall peak-overlap solve. Reaching either stops
+// the integral by name, as does the first epoch whose kernel is unavailable or
+// whose flux is not finite: a stopped series is never a probability.
+constexpr unsigned long long NC3_POINT_BUDGET=1ull<<30;
+constexpr std::size_t NC3_EPOCH_BUDGET=std::size_t{1}<<16;
 static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions& o,const HallModel* hall) {
     if(!valid_encounter(e,o)){PcFallbackResult invalid;invalid.pc.method=hall?"3D-NC-HALL":"3D-NC-CARTESIAN";invalid.pc.converged=false;invalid.invalid_inputs=true;return invalid;}
     auto result=initialize(e,o,hall?"3D-NC-HALL":"3D-NC-CARTESIAN");
@@ -131,19 +138,42 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
     // Geometry and covariance are independent of the angular rule. Share
     // them across independent rule checks without changing time refinement.
     std::map<double,Kernel> kernels;
+    std::string stopped;unsigned long long points_used=0;
+    auto stop=[&](std::string reason,double t) {
+        std::ostringstream text;text.precision(17);text<<reason<<t<<" s from the input epoch.";stopped=text.str();
+    };
     auto integrate_rules=[&](const std::vector<SurfacePoint>& points,const std::vector<SurfacePoint>& coarse_points) {
         TimeSeries series;std::map<double,Rates> cache;
         if(points.empty()||coarse_points.empty()){series.valid=false;return series;}
         auto evaluate=[&](double t) {
             auto found=cache.find(t);if(found!=cache.end())return found->second;
             auto geometry=kernels.find(t);Rates value;
+            if(!stopped.empty()){series.valid=false;return value;}
             if(geometry==kernels.end()) {
-                Kernel k;if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall)){series.valid=false;return value;}
+                if(kernels.size()>=NC3_EPOCH_BUDGET) {
+                    stop(" NC3_WORK_BUDGET_REQUIRES_MC: the sphere-flux time integral reached its fixed budget of "+
+                         std::to_string(NC3_EPOCH_BUDGET)+" epochs at ",t);
+                    series.valid=false;return value;
+                }
+                Kernel k;if(!kernel(e,t,o.two_body,k,result.covariance_repaired,hall)) {
+                    stop(" NC3_KERNEL_UNAVAILABLE_REQUIRES_MC: the relative state and covariance could not be evaluated at ",t);
+                    series.valid=false;return value;
+                }
                 geometry=kernels.emplace(t,k).first;
             }
+            const unsigned long long cost=points.size()+coarse_points.size();
+            if(points_used+cost>NC3_POINT_BUDGET) {
+                stop(" NC3_WORK_BUDGET_REQUIRES_MC: the sphere-flux time integral reached its fixed budget of "+
+                     std::to_string(NC3_POINT_BUDGET)+" sphere-point flux evaluations at ",t);
+                series.valid=false;return value;
+            }
+            points_used+=cost;
             value.fine=rate(geometry->second,points,e.combined_radius);
             value.coarse=rate(geometry->second,coarse_points,e.combined_radius);
-            if(!std::isfinite(value.fine)||!std::isfinite(value.coarse))series.valid=false;
+            if(!std::isfinite(value.fine)||!std::isfinite(value.coarse)) {
+                stop(" NC3_NONFINITE_FLUX_REQUIRES_MC: the sphere flux is not finite at ",t);
+                series.valid=false;
+            }
             cache.emplace(t,value);return value;
         };
         auto simpson=[](double a,double b,Rates fa,Rates fm,Rates fb) {
@@ -151,6 +181,7 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
         };
         std::function<Rates(double,double,Rates,Rates,Rates,Rates,int)> integrate;
         integrate=[&](double a,double b,Rates fa,Rates fm,Rates fb,Rates whole,int depth)->Rates {
+            if(!stopped.empty())return Rates{};
             double mid=(a+b)/2;auto fl=evaluate((a+mid)/2),fr=evaluate((mid+b)/2);
             auto left=simpson(a,mid,fa,fl,fm),right=simpson(mid,b,fm,fr,fb);
             Rates sum{left.fine+right.fine,left.coarse+right.coarse};
@@ -161,7 +192,7 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
             return {left.fine+right.fine,left.coarse+right.coarse};
         };
         Rates total;auto it=knots.begin();double previous=*it++;
-        for(;it!=knots.end();++it){double next=*it;auto fa=evaluate(previous),fm=evaluate((previous+next)/2),fb=evaluate(next);
+        for(;it!=knots.end()&&stopped.empty();++it){double next=*it;auto fa=evaluate(previous),fm=evaluate((previous+next)/2),fb=evaluate(next);
             auto part=integrate(previous,next,fa,fm,fb,simpson(previous,next,fa,fm,fb),16);
             total.fine+=part.fine;total.coarse+=part.coarse;previous=next;}
         series.total=total;result.pc.iterations+=cache.size();return series;
@@ -171,12 +202,16 @@ static PcFallbackResult compute_nc3(const PcEncounter& e,const PcFallbackOptions
     // between two Lebedev rules is checked against an independently refined
     // hemisphere product rule before accepting its estimate.
     const auto lebedev=integrate_rules(lebedev_sphere(5810,initial.v),lebedev_sphere(3890,initial.v));
-    result.pc.converged=false;if(!lebedev.valid)return result;
+    result.pc.converged=false;
+    auto refuse=[&]{result.requires_monte_carlo=true;result.limitation+=stopped;return result;};
+    if(!stopped.empty())return refuse();
+    if(!lebedev.valid)return result;
     unsigned order=std::clamp(o.angular_order,8u,128u);if(order%2)++order;
     double current=0;
     for(int refinement=0;refinement<6;++refinement) {
         const auto product=integrate_rules(product_sphere(order,initial.v),product_sphere(order/2,initial.v));
         current=product.total.fine;
+        if(!stopped.empty())return refuse();
         if(!product.valid)return result;
         if(product.temporal_ok&&close(product.total.fine,product.total.coarse,o.relative_tolerance)){
             result.pc.converged=true;

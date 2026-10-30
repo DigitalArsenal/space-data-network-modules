@@ -88,8 +88,14 @@ separately, and the CDM records rejected stages and the observation interval.
 `node tests/ncCascade.e2e.mjs` runs the published CARA references, analytical
 escalation cases and the same artifact through browser WASI and WasmEdge.
 Sphere flux uses published Lebedev/Laikov rules with independent convergence
-checks and product quadrature refinement where required. Sampling remains
-SDMC-style two-body propagation; high-fidelity BFMC is not implemented.
+checks and product quadrature refinement where required. A 3D-Nc evaluation is
+bounded (2^30 sphere-point flux evaluations at 2^16 epochs) and stops, by name,
+at an epoch whose Hall peak-overlap solve does not converge, as it can for a
+needle covariance (along-track sigma hundreds of km); the cascade then samples
+(docs/pc-methods.md). `node --test tests/pcElongatedCovariance.e2e.mjs` checks
+the bound, the named refusals and byte identity with the previous integral.
+Sampling remains SDMC-style two-body propagation; high-fidelity BFMC is not
+implemented.
 
 No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 

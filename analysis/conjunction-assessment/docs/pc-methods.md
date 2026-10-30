@@ -231,6 +231,21 @@ error checks. When Lebedev does not meet the requested tolerance, the converged
 product estimate is retained; neither result is accepted when that refinement
 fails. Diagnostics identify the accepted quadrature and refinement size.
 
+One 3D-Nc evaluation does a fixed amount of work at most: 2^30 sphere-point
+flux evaluations over all rules and refinements, at 2^16 distinct epochs, each
+epoch one bounded evaluation of the relative state and covariance (the Hall
+peak-overlap solve iterates at most 100 times). The time integral
+stops at the first epoch whose relative state and covariance cannot be
+evaluated (the peak-overlap solve did not converge), at the first non-finite
+flux, and when either budget is reached. It returns no Nc and names the reason
+and the epoch in seconds from the input epoch: `NC3_KERNEL_UNAVAILABLE_REQUIRES_MC`,
+`NC3_NONFINITE_FLUX_REQUIRES_MC` or `NC3_WORK_BUDGET_REQUIRES_MC`. Automatic
+routing then samples. Needle covariances, whose along-track sigma is hundreds of
+kilometers against a few kilometers radial and normal, are where the solve
+fails inside the window. The budgets are 3.3 and 2.5 times the largest work of
+any converged 3D-Nc among 35,000 synthetic encounters with aspect ratio 1 to
+1e4.
+
 The final sampler is finite-window SDMC with
 two-body dynamics (or explicit rectilinear dynamics), not high-fidelity BFMC.
 An active boundary causes escalation but does not prove that all encounters
