@@ -326,10 +326,11 @@ retain their existing positive-semidefinite input gates.
 
 CDM's method string and object COMMENT fields can preserve actual methods,
 usage reasons, covariance repair, cross-correlation effects, and Monte Carlo
-sample counts and 95% Wilson intervals. CSM has only its historical unlabeled
-`MAX_PROB` field: covariance events or events needing diagnostics are rejected
-rather than losing their meaning. No-covariance CSM output retains its legacy
-spherical statistic.
+sample counts and 95% Wilson intervals. CSM has only its unlabeled `MAX_PROB`
+and `DILUTION` fields: a CSM's MAX_PROB is the covariance-free Alfano maximum,
+and DILUTION its dilution threshold, from the miss distance and the combined
+hard-body radius, whatever the sources carry; the covariance Pc, its method
+and its diagnostics are on the CDM (`emit_cdm`).
 
 CDM export uses SANA names where the algorithms match: `ALFANO-MAX-PROBABILITY`,
 `CHAN-1997`, `ALFANO-2005`, `FOSTER-1992`, and `ALFRIEND-1999`.

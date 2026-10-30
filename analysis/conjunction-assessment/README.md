@@ -390,6 +390,15 @@ a minimum inside the overlap in each of them, with the same TCA and miss
 distance, so a consumer that keeps overlapping windows removes the repeat by
 pair and TCA.
 
+`emit_csm` writes the SDS CSM, a summary of the closest approach: the objects,
+days since epoch, TCA, range and relative speed, and MAX_PROB and DILUTION. A
+CSM's MAX_PROB is the covariance-free Alfano maximum, and DILUTION its
+dilution threshold, from the miss distance and the combined hard-body radius,
+whatever the sources carry; the covariance Pc is on the CDM (`emit_cdm`). A
+message the module cannot write is refused with its reason: status 400,
+`cdm-build-failed` with the CDM builder's message (a TEME state that cannot
+be rotated to EME2000 at the TCA), or `message-too-large` past 16 MiB.
+
 ## Continuous and distributed screening
 
 A window's coarse grid (`coarse_grid`, f32 rows) is the catalog's index for

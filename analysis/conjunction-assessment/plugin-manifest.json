@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -193,6 +193,7 @@
     {
       "methodId": "emit_csm",
       "displayName": "Emit CSM",
+      "description": "The SDS CSM of the pair's closest approach: the objects, days since epoch, TCA, range and relative speed. A CSM's MAX_PROB is the covariance-free Alfano maximum, and DILUTION its dilution threshold, from the miss distance and the combined hard-body radius; the covariance Pc is on the CDM (emit_cdm).",
       "inputPorts": [
         {
           "portId": "request",

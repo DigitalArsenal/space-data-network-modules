@@ -46,7 +46,7 @@
 // Run: node --test tests/screenMemoryLimit.e2e.mjs (needs dist/ built and the
 // repository's git history)
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -54,6 +54,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ByteBuffer } from 'flatbuffers';
 import { CQR } from 'spacedatastandards.org/lib/js/CQR/CQR.js';
+import { artifactAt, assertAllAlike, replaySuites } from './lib/requestReplay.mjs';
 
 const here = fileURLToPath(import.meta.url);
 const packageRoot = path.resolve(path.dirname(here), '..');
@@ -122,33 +123,8 @@ const run = (name, options) => new Promise((resolve, reject) => {
 const pairOf = (e) => [parseInt(e.PRIMARY_NORAD_ID, 10), parseInt(e.SECONDARY_NORAD_ID, 10)].sort((x, y) => x - y).join('-');
 const byPairThenTca = (a, b) => pairOf(a).localeCompare(pairOf(b)) || a.TCA.JULIAN_DATE - b.TCA.JULIAN_DATE;
 
-// The module's own suites that drive it through tests/lib/conjunctionCommandHarness.mjs, run with
-// CA_REPLAY_BASE_WASM naming 0.15.0 (BASE): every invoke runs on both builds and the replay report
-// compares the answers. Each method must be compared at least this often.
-const SUITES = ['altitudePrefilterDecay.e2e.mjs', 'cdmCcsdsConformance.e2e.mjs', 'continuousScreening.test.mjs',
-  'cqrAuthoritative.test.mjs', 'cqrStreaming.test.mjs', 'ephemerisUpload.test.mjs', 'gpuScreenParity.test.mjs',
-  'lowVelocityCovariance.test.mjs', 'pairWindowTca.e2e.mjs', 'possibilityScreening.test.mjs', 'sampledCoverage.e2e.mjs',
-  'sdnDataApiStream.test.mjs', 'sgp4OmmInput.e2e.mjs', 'spanScreening.e2e.mjs', 'windowedScreenParity.test.mjs'].map((f) => path.join('tests', f));
-const FLOOR = { screen_catalog: 50, screen_window: 50, prepare_screening_index: 15, assess_conjunction: 40, emit_cdm: 25,
-  find_tca: 20, refine_candidates: 10, search_candidates: 40, possibility_of_collision: 5, parse_ephemeris: 40 };
-function replay(base) {
-  const report = path.join(work, 'replay.jsonl');
-  const env = { ...process.env, CA_REPLAY_BASE_WASM: base, CA_REPLAY_REPORT: report, CQR_TEST_RUNTIME: 'browser' };
-  delete env.NODE_TEST_CONTEXT;
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--test', '--test-concurrency=1', ...SUITES], { cwd: packageRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    let said = '';
-    child.stdout.on('data', (chunk) => { said = (said + chunk).slice(-4000); });
-    child.stderr.on('data', (chunk) => { said = (said + chunk).slice(-4000); });
-    child.once('error', reject);
-    child.once('exit', () => resolve({ rows: fs.existsSync(report)
-      ? fs.readFileSync(report, 'utf8').trim().split('\n').map((line) => JSON.parse(line)) : [], said }));
-  });
-}
-
 test('screen_catalog never traps on its coarse storage, and nothing else moves', { concurrency: true }, async (t) => {
-  const base = path.join(work, 'module-0.15.0.wasm');
-  fs.writeFileSync(base, execFileSync('git', ['-C', packageRoot, 'show', `${BASE}:analysis/conjunction-assessment/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 }));
+  const base = artifactAt(packageRoot, BASE, work);
   try {
     await Promise.all([
       t.test('72 h at 15 km over 2,000 LEO objects: one call completes with the conjunctions of three 24 h calls; 0.15.0 traps; explicit pairs past the budget are refused by name', async () => {
@@ -187,16 +163,7 @@ test('screen_catalog never traps on its coarse storage, and nothing else moves',
         assert.ok(explicit.seconds < 60, `explicit refusal after ${explicit.seconds} s`);
       }),
       t.test('captured-request replay: every request of the module suites answers byte for byte as 0.15.0 does', async () => {
-        const { rows, said } = await replay(base);
-        assert.ok(rows.length > 0, `no replay report; the suites said:\n${said}`);
-        const differing = rows.filter((r) => !r.identical);
-        assert.deepEqual(differing, [], 'every request, with GP input or without, answers as 0.15.0 does');
-        const counts = {};
-        for (const r of rows) counts[r.methodId] = (counts[r.methodId] ?? 0) + 1;
-        for (const [methodId, floor] of Object.entries(FLOOR))
-          assert.ok((counts[methodId] ?? 0) >= floor, `${methodId}: ${counts[methodId] ?? 0} requests compared, floor ${floor}`);
-        console.log(`${rows.length} requests replayed against 0.15.0 (${BASE.slice(0, 9)}), all alike ` +
-          `(${rows.filter((r) => r.creationOnly).length} differ only in a CDM's creation instant; ${rows.filter((r) => r.gp).length} take GP input)`);
+        console.log(assertAllAlike(await replaySuites({ packageRoot, base, dir: work }), `0.15.0 (${BASE.slice(0, 9)})`));
       }),
     ]);
   } finally {

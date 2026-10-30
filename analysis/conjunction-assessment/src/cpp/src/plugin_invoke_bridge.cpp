@@ -2043,8 +2043,8 @@ ConjunctionEvent legacy(const BridgeEvent &e) {
   l.cdm_metadata2 = e.cdm_metadata2;
   return l;
 }
-// Status 0; 400 for a request, evaluation or serialization failure; 422 when
-// the window has no time of closest approach.
+// Status 0; 400 for a refused request, evaluation or message, each with its
+// reason; 422 when the window has no time of closest approach.
 int emit(bool csm) {
   auto q = request();
   Source a, b;
@@ -2095,9 +2095,12 @@ int emit(bool csm) {
     if (n == -2)
       data.resize(data.size() * 2);
   }
+  // A refusal names its reason: the builder's own, or the size limit.
+  if (n == -2)
+    return error("message-too-large", "The conjunction message would pass the " +
+                 std::to_string(kMaximumDocumentBytes >> 20) + " MiB a document may take."), 400;
   if (n < 0)
-    return error("serialization-failed",
-                 "Unable to serialize conjunction message."), 400;
+    return error(csm ? "csm-build-failed" : "cdm-build-failed", error_message()), 400;
   return pushBytes(csm ? "csm" : "cdm", csm ? "CSM.fbs" : "CDM.fbs",
                    csm ? "$CSM" : "$CDM", csm ? "CSM" : "CDM", data.data(), n) ? 0 : 400;
 }
