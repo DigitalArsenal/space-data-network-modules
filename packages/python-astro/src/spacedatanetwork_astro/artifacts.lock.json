@@ -1,9 +1,9 @@
 {
   "format_version": 1,
   "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
-  "version": "0.1.0.dev0+modules.4d0a6b5d696e.a3f9ff810502c",
-  "source_revision": "4d0a6b5d696ecf9188cdf6844ffe8c54db0f0e1f",
-  "artifact_set_sha256": "3f9ff810502c41cee53c080a621b6f1464c8e9753bbeb8ca26a18aa511dc5daf",
+  "version": "0.1.0.dev0+modules.1629b121048b.aa6e71e812125",
+  "source_revision": "1629b121048bdd7442c1c629abfa69ac2105e3a6",
+  "artifact_set_sha256": "a6e71e8121251cbba544605fd30c37426ecfd7d139bce9fb548b7b3b5bb42051",
   "modules": [
     {
       "id": "propagator/sgp4",
@@ -84,14 +84,14 @@
           "name": "module.wasm",
           "source_path": "analysis/conjunction-assessment/dist/isomorphic/module.wasm",
           "package_path": "artifacts/analysis-conjunction-assessment/module.wasm",
-          "sha256": "6c4ac01d979c943d6e62ea73d1ce582736718a86938fc24fa8ec684772ef48b5",
-          "size": 1711491
+          "sha256": "a018e4dea9f1e87ab60fc7c3470b48520da6b090cc7743fdf3c6eb86d4ae6ea9",
+          "size": 1718056
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "analysis/conjunction-assessment/plugin-manifest.json",
           "package_path": "artifacts/analysis-conjunction-assessment/plugin-manifest.json",
-          "sha256": "a9fdf4e3f9d11c437ad1941a15ea78028076f15e6d654fc20be0c597091a552e",
+          "sha256": "b830a4657396ee9cc9e11a11c282f9b6753c88afd0978893874397da60bc4528",
           "size": 59630
         }
       ]
