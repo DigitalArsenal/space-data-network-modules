@@ -35,8 +35,11 @@ issue to its cutoff. `PROVENANCE.LINEAGE` states the values a record used.
 
 The module and composed flow are built without WASM exception instructions.
 Errors are returned or recorded as propagation failures. Verification uses the
-frozen E13 reference, headless-browser/native WasmEdge parity, and a signed,
-AOT-prewarmed scratch node whose aggregate is read back through SDN by CID.
+frozen E13 reference, headless-browser/native WasmEdge parity, the composed flow
+drained in-process from one tick to the record, and a signed, AOT-prewarmed
+scratch node whose aggregate is read back through SDN by CID. The flow's final
+link takes this module's 2 MiB stack from `build-driver.mjs`; FFM's integration
+does not fit in the 64 KiB a link gets by default.
 Docker is waived by the owner's 2026-10-22 ruling. Planet inputs remain local;
 the aggregate retains conservative CC BY-NC 4.0 attribution.
 

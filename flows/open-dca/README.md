@@ -72,3 +72,14 @@ a day not yet published included, and produce a correction during this
 scheduled run. The independent reference cache is bound to the
 module bytes and every typed input; captures and private derived fits stay
 outside the repository. No IERS/USNO fetch is needed for this local replay.
+
+## Local verification, 2026-10-31
+
+The flow at `runtime.wasm` SHA-256 `b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69`
+ran on a signed, prewarmed scratch node that could reach loopback only: real
+sources through a local archive, the issue's own day answering 403,
+`open_dca_lag_hours` 9 and `open_dca_forecast_tau_hours` 168 in the flow's
+config. Its timer fired, it published one aggregate, and a separate client read
+that record by CID, with `LINEAGE` stating `public-at-issue; history30d;
+hold-to-issue-then-tau168h; lag9h; shrink-off`. The E2E's in-process drain traps
+on any flow linked with the default 64 KiB stack.
