@@ -16,7 +16,7 @@ constexpr double kMuWgs72 = 398600.8, kReWgs72 = 6378.135;  // SGP4's WGS-72
 // altitude analysis/gp-error-model places a set in a regime by; NaN when SGP4
 // refuses the set.
 double meanAltitudeOf(const OMM* omm, double epoch) {
-  // SGP4: the SGP4/SDP4 base foundation/sgp4-str3 (WGS-72, improved mode), the epoch one Julian date; a set SGP4
+  // SGP4: the SGP4/SDP4 base foundation/sgp4-str3 (WGS-72, AFSPC mode), the epoch one Julian date; a set SGP4
   // refuses at its epoch has no altitude.
   const double days1950 = epoch / 86400.0 + 2440587.5 - 2433281.5;
   sdnap::Elements el{};
@@ -30,7 +30,7 @@ double meanAltitudeOf(const OMM* omm, double epoch) {
   el.bstar = omm->BSTAR();
   sdnap::Sat sat;
   double r[3], v[3];
-  if (sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) != sdnap::kPropOk ||
+  if (sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kAfspc) != sdnap::kPropOk ||
       sdnap::sat_propagate(sat, nullptr, 0.0, r, v) != sdnap::kPropOk)
     return kNaN;
   const double n = sat.xnodp / 60.0;

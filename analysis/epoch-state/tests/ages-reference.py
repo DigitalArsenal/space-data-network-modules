@@ -2,12 +2,14 @@
 """Independent GCRF states of Vallado's verification element sets at the epoch plus 0.5, 1 and 3 days.
 
 Writes tests/ages-reference.json. Nothing here calls the module:
-  - SGP4: python-sgp4's pure-Python implementation (sgp4.model.Satrec, WGS-72, opsmode 'i') on the TLE lines of
-    tests/vallado-verification.json, evaluated at the elapsed time in minutes;
+  - SGP4: python-sgp4's pure-Python implementation (sgp4.model.Satrec, WGS-72, opsmode 'a': the AFSPC mode the module runs,
+    set by sgp4init on the elements of the TLE lines of tests/vallado-verification.json), evaluated at the elapsed time in
+    minutes. The improved mode (opsmode 'i') differs on 23599, a low-inclination deep-space set whose node passes 0: by 0.9 to 1.2 km
+    at 0.5 to 3 days;
   - TEME -> GCRF: pyerfa, GCRF->TEME = Rz(ee06a)*pnm06a at TT from UTC at the row's instant, velocity with the
     central-difference frame rate (+/-600 s), as tests/vallado-verification.json's source states.
 
-Run: python3 tests/ages-reference.py (python-sgp4 2.27, pyerfa 2.0.1.5, numpy).
+Run: python3 tests/ages-reference.py (python-sgp4 2.26, pyerfa 2.0.1.5, numpy).
 """
 import json
 import math
@@ -49,12 +51,20 @@ TRAJECTORY_STOP_DAYS = 0.5
 TRAJECTORY_STEP_S = 3600.0
 
 
+def satrec(tle):
+    """The set of two TLE lines, initialised in the AFSPC operation mode."""
+    sat = Satrec.twoline2rv(tle[0], tle[1], WGS72)
+    sat.sgp4init(WGS72, 'a', sat.satnum, sat.jdsatepoch + sat.jdsatepochF - 2433281.5, sat.bstar, sat.ndot, sat.nddot, sat.ecco, sat.argpo, sat.inclo,
+                 sat.mo, sat.no_kozai, sat.nodeo)
+    return sat
+
+
 def main():
     fixture = json.load(open(os.path.join(HERE, 'vallado-verification.json')))
     out = {'source': __doc__.strip().splitlines()[0], 'versions': {'python-sgp4': sgp4.__version__, 'pyerfa': erfa.__version__},
            'agesDays': AGES_DAYS, 'cases': []}
     for case in fixture['cases']:
-        sat = Satrec.twoline2rv(case['tle'][0], case['tle'][1], WGS72)
+        sat = satrec(case['tle'])
         epoch = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=case['epochUnix'])
         rows = []
         for age in AGES_DAYS:
@@ -68,7 +78,7 @@ def main():
                          'gcrfR': [float(x) for x in rg], 'gcrfV': [float(x) for x in vg]})
         out['cases'].append({'satnum': case['satnum'], 'entityId': case['entityId'], 'rows': rows})
     case = next(c for c in fixture['cases'] if c['satnum'] == TRAJECTORY_SATNUM)
-    sat = Satrec.twoline2rv(case['tle'][0], case['tle'][1], WGS72)
+    sat = satrec(case['tle'])
     epoch = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=case['epochUnix'])
     steps = int(round(TRAJECTORY_STOP_DAYS * 86400.0 / TRAJECTORY_STEP_S))
     samples = []

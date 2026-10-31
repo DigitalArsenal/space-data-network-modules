@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.epoch-state",
   "name": "SDN Epoch State",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TLE-to-numerical handoff (Evidence-Supported ASO Catalog, section 5): evaluates each $MPE (derive) or $OMM (derive_omm) element set with SGP4 at zero elapsed time, or at the epoch plus the ages of the node config (ModuleConfig NumberList \"derive.ages\", else \"ages\", read through plugin.getConfig), transforms the TEME state to GCRF at the same instant (IAU 2006/2000A via ERFA, velocity including the frame rotation rate), verifies the round trip, and emits one $OEM per element set with its lineage and initial-condition uncertainty marked unknown, plus a FlowNotice report. omm_from_mpe converts the GP history archive's $MPE to $OMM. answer_propagation_requests plugs SGP4 into the propagator query port of analysis/maneuver-detection ($PRW WINDOW_REQUEST in, one $OEM per query and a $PRW WINDOW_REPORT out). Pure compute; output bytes depend only on input bytes and the configured ages.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -344,13 +344,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         }
       ],
       "maxBatch": 1,

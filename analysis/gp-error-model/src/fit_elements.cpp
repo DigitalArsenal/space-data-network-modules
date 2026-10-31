@@ -27,7 +27,7 @@
 // ag = e sin(w + O), chi = tan(i/2) sin O, psi = tan(i/2) cos O,
 // lambda = M + w + O), with n the Kozai mean motion (rad/min) that SGP4 takes,
 // and optionally B*. The model is SGP4 (the SGP4/SDP4 base foundation/sgp4-str3,
-// WGS-72, improved mode). The Jacobian is central differences: steps 1e-7 n
+// WGS-72, AFSPC mode). The Jacobian is central differences: steps 1e-7 n
 // for n, 1e-7 for the five dimensionless elements and 1e-7 + 1e-5 |B*| for
 // B*. Steps are Levenberg-Marquardt on the Jacobi-scaled normal equations,
 // starting as Gauss-Newton (damping 0, then 1e-8, multiplied by 10 on every
@@ -1458,7 +1458,7 @@ extern "C" int fit_elements() {
   nlohmann::json frames = nlohmann::json::object();
   for (const auto& [k, v] : lc.frames) frames[k] = v;
   return emit("report", {{"kind", "element-fit"}, {"version", 1},
-                         {"model", "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, improved mode; TEME"},
+                         {"model", "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME"},
                          {"residualSign", "model minus ephemeris"},
                          {"units", "km, km/s; rmsPerCoordinateKm = rms3dKm / sqrt(3)"},
                          {"counts", {{"streams", lc.streams}, {"blocks", lc.blocks}, {"states", lc.states}, {"duplicateEpochs", lc.duplicates},
@@ -1539,7 +1539,7 @@ extern "C" int element_residuals() {
     results.push_back(row);
   }
   return emit("residuals", {{"kind", "element-residuals"}, {"version", 1},
-                            {"model", "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, improved mode; TEME"},
+                            {"model", "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME"},
                             {"residualSign", "prediction minus ephemeris"},
                             {"units", "km, km/s; rmsPerCoordinateKm = rms3dKm / sqrt(3)"},
                             {"counts", {{"elementSets", counts.records}, {"refused", counts.refused}, {"states", lc.states},

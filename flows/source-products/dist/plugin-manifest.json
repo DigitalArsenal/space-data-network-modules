@@ -12,18 +12,18 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.4.0",
+      "maxVersion": "0.4.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "minVersion": "0.11.0",
-      "maxVersion": "0.11.0"
+      "minVersion": "0.12.0",
+      "maxVersion": "0.12.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
-      "minVersion": "0.8.0",
-      "maxVersion": "0.8.0"
+      "minVersion": "0.9.0",
+      "maxVersion": "0.9.0"
     }
   ],
   "externalInterfaces": [],
@@ -275,13 +275,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -513,13 +513,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -750,13 +750,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -1029,13 +1029,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -1267,13 +1267,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -1504,13 +1504,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -1741,13 +1741,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",
@@ -1979,13 +1979,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+              "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, Vallado, WGS-72, opsmode i; TEME, UTC, km and km/s)."
+          "description": "One size-prefixed $PRW whose WINDOW_REPORT arm counts the queries, answered and refused, the element-set records received, the refusals (SEQUENCE, SET_INDEX, REASON) and the provider (SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s)."
         },
         {
           "portId": "compare_report",

@@ -142,7 +142,7 @@ test("each OEM is one GCRF row with the parent identity and lineage", async (t) 
     assert.equal(block.EPHEMERIS_DATA_LINES.length, 1);
     assert.equal(block.EPHEMERIS_DATA_LINES[0].EPOCH, expected.epochIso);
     assert.match(block.COMMENT, new RegExp(`ENTITY_ID=${expected.entityId} EPOCH=${expected.epochIso}`));
-    assert.match(block.COMMENT, /foundation\/sgp4-str3 \(Spacetrack Report No\. 3\), WGS-72 constants, improved mode, zero elapsed time/);
+    assert.match(block.COMMENT, /foundation\/sgp4-str3 \(Spacetrack Report No\. 3\), WGS-72 constants, AFSPC mode, zero elapsed time/);
     assert.match(block.COMMENT, /Initial-condition uncertainty: unknown/);
   });
 });
@@ -192,7 +192,7 @@ test("an epoch before UTC existed is derived and counted", async (t) => {
 });
 
 // ── derive_omm, ages, and the propagator query port ──────────────────────────
-// Expected values come from tests/ages-reference.json (python-sgp4 2.27 and pyerfa 2.0.1.5, written by
+// Expected values come from tests/ages-reference.json (python-sgp4 2.26 in AFSPC mode and pyerfa 2.0.1.5, written by
 // tests/ages-reference.py): they do not come from this module.
 const AGES = JSON.parse(fs.readFileSync(new URL("./ages-reference.json", import.meta.url), "utf8"));
 
@@ -321,7 +321,7 @@ test("answer_propagation_requests: a $PRW WINDOW_REQUEST is answered with the se
     [1, 1 - index, "mean-element-theory-not-sgp4:SGP4XP"],
     [2, 9, "set-out-of-range"],
   ]);
-  assert.match(report.PROVIDER, /^SGP4, foundation\/sgp4-str3 \(Spacetrack Report No\. 3\), WGS-72, improved mode; TEME, UTC, km and km\/s$/);
+  assert.match(report.PROVIDER, /^SGP4, foundation\/sgp4-str3 \(Spacetrack Report No\. 3\), WGS-72, AFSPC mode; TEME, UTC, km and km\/s$/);
 });
 
 test("answer_propagation_requests refuses what is not a $PRW WINDOW_REQUEST", async (t) => {

@@ -12,7 +12,7 @@
 // Empirical SGP4 prediction error, by orbit regime and prediction age.
 //
 // accumulate: each $OMM element set is propagated by SGP4 (the SGP4/SDP4 base
-// foundation/sgp4-str3, WGS-72, improved mode) to comparison epochs, and
+// foundation/sgp4-str3, WGS-72, AFSPC mode) to comparison epochs, and
 // the difference "prediction minus comparison state" is taken in the
 // comparison state's RTN axes (R radial, N orbit normal, T = N x R):
 //   gp-differences  the comparison state is a later element set of the same
@@ -63,7 +63,7 @@ constexpr double kMuWgs72 = 398600.8;    // km^3/s^2, SGP4's constant
 constexpr double kReWgs72 = 6378.135;    // km
 constexpr double kSgp4EpochFromUnixDays = 7306.0;  // days from 1949-12-31 00:00 to 1970-01-01
 
-// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, improved mode). sgp4_init: a set from its mean elements
+// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, AFSPC mode). sgp4_init: a set from its mean elements
 // (radians; the Kozai mean motion in rad/min, as element sets carry it), the epoch in days from 1949 December 31 0h UT
 // taken as one Julian date; initialization also evaluates the set at its epoch and refuses what SGP4 refuses there.
 // sgp4_eval: the TEME state (km, km/s) at `minutes` from the epoch, false where SGP4 refuses the point.
@@ -79,7 +79,7 @@ bool sgp4_init(double ds50, double bstar, double e, double argp, double inc, dou
   el.xmo = ma;
   el.bstar = bstar;
   double r[3], v[3];
-  return sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) == sdnap::kPropOk &&
+  return sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kAfspc) == sdnap::kPropOk &&
          sdnap::sat_propagate(sat, nullptr, 0.0, r, v) == sdnap::kPropOk;
 }
 bool sgp4_eval(const sdnap::Sat& sat, double minutes, double r[3], double v[3]) {
@@ -904,7 +904,7 @@ extern "C" int finalize() {
                      ? "SGP4 predictions minus independent reference states, in the reference state's RTN axes."
                      : "SGP4 predictions minus later element sets of the same object at their epochs, in the later "
                        "set's RTN axes. A later set is an estimate, not truth.";
-  out["propagator"] = "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, improved mode";
+  out["propagator"] = "SGP4 (foundation/sgp4-str3, Spacetrack Report No. 3), WGS-72, AFSPC mode";
   out["units"] = {{"position", "km"}, {"velocity", "km/s"},
                   {"components", {"R", "T", "N", "dR", "dT", "dN"}},
                   {"covariance", "lower triangle, row-major: RR, TR, TT, NR, NT, NN, dR R, ..."}};

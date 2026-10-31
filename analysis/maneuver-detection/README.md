@@ -175,7 +175,7 @@ D3's excepted, is one impulse at an unknown time tb in [tA, tB]:
 ### `PROVENANCE`
 
 Every `$MNV` this module writes carries a `$PVN`:
-- `PRODUCER` is this module and its version (`com.digitalarsenal.analysis.maneuver-detection 0.8.0`);
+- `PRODUCER` is this module and its version (`com.digitalarsenal.analysis.maneuver-detection 0.9.0`);
 - `SOURCE_ID`, `SOURCE_KIND`, `ORIGINATOR`, `PROVIDER_ID`, `LICENSE_CLASS`, `LICENSE_ID` and `LINEAGE` are the input's `PROVENANCE`: the `$OMM` element sets for `detect_maneuvers`, the planned `$MNV` for `compare_ephemerides`;
 - an input without a `PROVENANCE` (an `$OEM`) gives a record that names only its producer, with `LICENSE_CLASS` Unspecified, which is never a grant;
 - an object whose element sets name different sources gets the fields they agree on. A field they differ in is empty, and licence classes that differ give CiteOnly.

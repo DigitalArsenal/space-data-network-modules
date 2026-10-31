@@ -5,8 +5,8 @@
 // stream, one single-row OEM per element set, plus a FlowNotice (FNTC) report.
 //
 // Per element set:
-//   1. SGP4 (the SGP4/SDP4 base foundation/sgp4-str3, WGS-72, improved mode,
-//      as analysis/od compiles it) evaluated at zero
+//   1. SGP4 (the SGP4/SDP4 base foundation/sgp4-str3, WGS-72, AFSPC mode,
+//      the mode of propagator/sgp4 and the conjunction screen) evaluated at zero
 //      elapsed time, near-Earth or deep-space as the elements require. Its
 //      TEME position and velocity are used; the mean elements are never read
 //      as osculating elements.
@@ -241,7 +241,7 @@ struct ElementInput {
 
 // Returns an empty string on success, or the refusal reason. `at` is the
 // row's instant and `tsince_minutes` its elapsed time from the set's epoch.
-// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, improved mode) from mean elements in degrees and rev/day,
+// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, AFSPC mode) from mean elements in degrees and rev/day,
 // the epoch one Julian date. Initialization also evaluates the set at its epoch. Returns sdnap::kPropOk or why the set
 // was refused.
 int32_t sgp4_set(double epoch_jd, double n_rev_day, double e, double inc_deg, double raan_deg, double argp_deg,
@@ -255,7 +255,7 @@ int32_t sgp4_set(double epoch_jd, double n_rev_day, double e, double inc_deg, do
     el.omegao = argp_deg * kDegToRad;
     el.xmo = ma_deg * kDegToRad;
     el.bstar = bstar;
-    const int32_t init = sdnap::sat_init(el, sdnap::gravity_wgs72(), *sat, sdnap::Sgp4Mode::kImproved);
+    const int32_t init = sdnap::sat_init(el, sdnap::gravity_wgs72(), *sat, sdnap::Sgp4Mode::kAfspc);
     if (init != sdnap::kPropOk) return init;
     double r[3], v[3];
     return sdnap::sat_propagate(*sat, nullptr, 0.0, r, v);
@@ -352,7 +352,7 @@ std::string lineage_comment(const ElementInput& in, const std::vector<Row>& rows
     comment += " EPOCH=";
     comment += in.instant.iso;
     comment += " (UTC), MEAN_ELEMENT_THEORY=SGP4. ";
-    comment += "SGP4: foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72 constants, improved mode, ";
+    comment += "SGP4: foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72 constants, AFSPC mode, ";
     if (epoch_only) {
         comment += "zero elapsed time; ";
     } else {
@@ -695,7 +695,7 @@ std::string answer_query(const OMM& omm, int64_t start_us, int64_t stop_us, doub
         CreateRFM(builder, RFMUnion::CelestialFrameWrapper, celestial.Union(), 0, frame_name);
     const std::string comment = "SGP4 trajectory of " + in.parent + " EPOCH=" + in.instant.iso +
                                 " in TEME, UTC, km and km/s: foundation/sgp4-str3 (Spacetrack Report No. 3)"
-                                ", WGS-72 constants, improved mode, every " + format_double(span_s / static_cast<double>(steps)) +
+                                ", WGS-72 constants, AFSPC mode, every " + format_double(span_s / static_cast<double>(steps)) +
                                 " s from " + first.iso + " to " + last.iso + ".";
     const auto block = CreateephemerisDataBlockDirect(
         builder, comment.c_str(), object, "EARTH", reference_frame, nullptr, 0, timingStandard::UTC, first.iso.c_str(),
@@ -1048,7 +1048,7 @@ int answer_propagation_requests(void) {
     const auto summary = CreatePRWWindowReportDirect(
         report, static_cast<uint32_t>(query_count), static_cast<uint32_t>(query_count) - refused, refused,
         static_cast<uint32_t>(records.size()), &refusal_offsets,
-        "SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, improved mode; TEME, UTC, km and km/s");
+        "SGP4, foundation/sgp4-str3 (Spacetrack Report No. 3), WGS-72, AFSPC mode; TEME, UTC, km and km/s");
     PRWBuilder envelope(report);
     envelope.add_WINDOW_REPORT(summary);
     FinishSizePrefixedPRWBuffer(report, envelope.Finish());

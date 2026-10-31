@@ -73,7 +73,7 @@ constexpr double kRe = 6378.1363;        // km
 constexpr double kJ2 = 1.08262668e-3;
 constexpr double kSgp4EpochFromUnixDays = 7306.0;  // days from 1949-12-31 00:00 to 1970-01-01
 
-// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, improved mode). sgp4_init: a set from its mean elements
+// SGP4 (the SGP4/SDP4 base foundation/sgp4-str3: WGS-72, AFSPC mode). sgp4_init: a set from its mean elements
 // (radians; the Kozai mean motion in rad/min, as element sets carry it), the epoch in days from 1949 December 31 0h UT
 // taken as one Julian date; initialization also evaluates the set at its epoch and refuses what SGP4 refuses there.
 // sgp4_eval: the TEME state (km, km/s) at `minutes` from the epoch, false where SGP4 refuses the point.
@@ -89,7 +89,7 @@ bool sgp4_init(double ds50, double bstar, double e, double argp, double inc, dou
   el.xmo = ma;
   el.bstar = bstar;
   double r[3], v[3];
-  return sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kImproved) == sdnap::kPropOk &&
+  return sdnap::sat_init(el, sdnap::gravity_wgs72(), sat, sdnap::Sgp4Mode::kAfspc) == sdnap::kPropOk &&
          sdnap::sat_propagate(sat, nullptr, 0.0, r, v) == sdnap::kPropOk;
 }
 bool sgp4_eval(const sdnap::Sat& sat, double minutes, double r[3], double v[3]) {
@@ -367,7 +367,7 @@ flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<LFVRow>>> write_hist
   return fbb.CreateVector(rows);
 }
 
-// ── SGP4 (sgp4_init above: foundation/sgp4-str3, WGS-72, improved mode) ──
+// ── SGP4 (sgp4_init above: foundation/sgp4-str3, WGS-72, AFSPC mode) ──
 bool init_set(const Set& s, sdnap::Sat* rec) {
   return sgp4_init(s.t / kDay + kSgp4EpochFromUnixDays, s.bstar, s.e,
                    s.argp * kDeg, s.i * kDeg, s.ma * kDeg, s.n * 2.0 * kPi / 1440.0, s.raan * kDeg, *rec);

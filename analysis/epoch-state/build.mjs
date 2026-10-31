@@ -8,6 +8,17 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { generateSdsHeaders } from "./generate-sds-headers.mjs";
 import { composeErfaTranslationUnit } from "../../foundation/frames/erfa-amalgamation.mjs";
 
+// The artifact is signed with the module owner's key (SDM_MODULE_SIGNING_KEYPAIR_PATH names the keypair file) or left
+// unsigned (SDN_EPOCH_STATE_UNSIGNED_BUILD=1), the committed state until the owner signs it. Neither is a refusal, before
+// dist/ is touched: scripts/sign-module-artifact.mjs signs with the SDK's revoked dev key when no keypair is named, and
+// this build never takes that path.
+const unsigned = process.env.SDN_EPOCH_STATE_UNSIGNED_BUILD === "1";
+if (!unsigned && !process.env.SDM_MODULE_SIGNING_KEYPAIR_PATH) {
+  throw new Error(
+    "Name the signing key (SDM_MODULE_SIGNING_KEYPAIR_PATH=<module owner keypair.json>) or build unsigned (SDN_EPOCH_STATE_UNSIGNED_BUILD=1).",
+  );
+}
+
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const framesSrc = path.join(packageRoot, "..", "..", "foundation", "frames", "src");
 const sgp4Dir = path.join(packageRoot, "..", "..", "foundation", "sgp4-str3");
@@ -133,13 +144,15 @@ if (!compilation.report?.ok) {
   throw new Error(`Compiled artifact failed SDK validation:\n${issues}`);
 }
 
-// Signed in the build, always: consumers verify before they instantiate.
-execFileSync(
-  process.execPath,
-  [path.join(packageRoot, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath],
-  { stdio: "inherit" },
-);
+// Consumers verify a signed artifact before they instantiate it; the owner's key signs it here (guarded above).
+if (!unsigned) {
+  execFileSync(
+    process.execPath,
+    [path.join(packageRoot, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath],
+    { stdio: "inherit" },
+  );
+}
 
 console.log(
-  `Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion} with ${erfa.fileCount} vendored ERFA sources`,
+  `Built ${path.relative(packageRoot, outputPath)} (${unsigned ? "unsigned" : "signed"}) against spacedatastandards.org@${sdsVersion} with ${erfa.fileCount} vendored ERFA sources`,
 );

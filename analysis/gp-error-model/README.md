@@ -65,7 +65,7 @@ Output: `accumulator` (`ACCUMULATOR`).
 What it does:
 
 - **Propagation:** each element set is propagated with SGP4 (the clean-room
-  SGP4/SDP4 base `foundation/sgp4-str3`, WGS-72, improved mode) to its comparison
+  SGP4/SDP4 base `foundation/sgp4-str3`, WGS-72, AFSPC mode) to its comparison
   epochs. Prediction age is the comparison epoch minus the set's epoch, in UTC
   seconds, forward only.
 - **Comparison state, without `reference`:** a later element set of the same
@@ -488,7 +488,7 @@ Outputs: `elements`, one size-prefixed `$OMM` per converged fit; `report` (`ELEM
 
 Method:
 
-- **Least squares.** Weighted least squares on model minus ephemeris (positions, and velocities when asked) in TEME. The model is SGP4 (`foundation/sgp4-str3`, WGS-72, improved mode).
+- **Least squares.** Weighted least squares on model minus ephemeris (positions, and velocities when asked) in TEME. The model is SGP4 (`foundation/sgp4-str3`, WGS-72, AFSPC mode).
 - **Parameters.** Equinoctial mean elements: n (Kozai, rad/min), af = e cos(ω+Ω), ag = e sin(ω+Ω), χ = tan(i/2) sin Ω, ψ = tan(i/2) cos Ω, λ = M+ω+Ω. B* is optional.
 - **Solver.** Levenberg-Marquardt on the Jacobi-scaled normal equations, with a central-difference Jacobian.
 - **Convergence.** Either an undamped step lowers the weighted cost by a relative `tolerance` or less, or no step lowers it at a stationary point. Stationary means the Gauss-Newton predicted decrease is at most 1e-6 of the cost, or the position RMS is at most `floorKm`.

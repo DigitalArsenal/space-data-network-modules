@@ -708,7 +708,7 @@
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
       "name": "SDN Epoch State",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "answer_propagation_requests",
         "derive",
@@ -852,7 +852,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "methodIds": [
         "accumulate",
         "attach_covariance",
@@ -1084,7 +1084,7 @@
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
       "name": "Maneuver detection",
       "pluginFamily": "analysis",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "methodIds": [
         "compare_ephemerides",
         "detect_maneuvers",
@@ -1573,7 +1573,7 @@
       "pluginId": "com.digitalarsenal.analysis.private-screening",
       "name": "Private screening decoys",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "decoys",
         "distinguish",

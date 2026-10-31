@@ -7,7 +7,7 @@ handoff.
 For each `$MPE` on the `elements` stream:
 
 1. SGP4 at zero elapsed time: the clean-room SGP4/SDP4 base
-   `foundation/sgp4-str3`, WGS-72, improved mode, as `analysis/od` compiles it.
+   `foundation/sgp4-str3`, WGS-72, AFSPC mode, as `propagator/sgp4` and the conjunction screen compile it.
 2. TEME to GCRF at the same instant, using the `foundation/frames` axis engine:
    IAU 2006/2000A precession-nutation and the equation of the equinoxes from
    the vendored ERFA. TT comes from UTC through the ERFA leap-second table. The
@@ -92,9 +92,15 @@ detector reads its own options from its node config, so none are forwarded.
 ```sh
 mkdir -p node_modules && ln -sfn <space-data-module-sdk 0.9.3> node_modules/space-data-module-sdk
 export SPACE_DATA_STANDARDS_ROOT=<SDS tree with the $PRW window arms>
-SDM_MODULE_SIGNING_KEYPAIR_PATH=<keypair.json> npm run build
+SDN_EPOCH_STATE_UNSIGNED_BUILD=1 npm run build
 npm test
 ```
+
+The committed `dist/isomorphic/module.wasm` is unsigned (0.4.0 dropped the revoked
+dev-key signature of 0.3.0, pending the owner's). `SDM_MODULE_SIGNING_KEYPAIR_PATH=<module
+owner keypair.json> npm run build` signs it instead. The build refuses to run with neither
+named: `scripts/sign-module-artifact.mjs` signs with the SDK's revoked dev key when no keypair
+is named, and this build never takes that path.
 
 The C++ headers of every SDS family the module reads are generated from
 `$SPACE_DATA_STANDARDS_ROOT/schema` (`generate-sds-headers.mjs`), and the tests
@@ -107,7 +113,7 @@ to GCRS agrees within 0.7 m for the 2000 and 2006 epochs and 2.5 m for 1980.
 
 The rows at later ages, and the TEME trajectory the query port answers, are
 checked against `tests/ages-reference.json`, written by
-`tests/ages-reference.py` from python-sgp4 2.27 and pyerfa 2.0.1.5 (positions
+`tests/ages-reference.py` from python-sgp4 2.26 (AFSPC mode) and pyerfa 2.0.1.5 (positions
 within 1 mm, velocities within 1e-9 km/s). Parity (browser and
 native WasmEdge; the owner waived the Docker leg on 2026-10-22) of the methods:
 `PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs`.
