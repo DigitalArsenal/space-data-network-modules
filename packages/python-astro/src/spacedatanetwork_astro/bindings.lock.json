@@ -90,7 +90,7 @@
       },
       "declared_sds_dependency": "1.261.0",
       "id": "analysis/estimation",
-      "wasm_sha256": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac"
+      "wasm_sha256": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd"
     },
     {
       "build_provenance": {
