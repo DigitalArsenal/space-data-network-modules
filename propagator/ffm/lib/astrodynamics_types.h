@@ -887,6 +887,9 @@ struct SpaceWeatherData {
     double dTc{0};              ///< Temperature correction (for JB2008)
     bool isStorm{false};        ///< True during geomagnetic storm
     int stormPhase{0};          ///< Storm phase (0=quiet, 1=main, 2=recovery)
+    /// XM7 TEST BUILD, never for main: NRLMSISE-00's ap_array when the space-weather rows carry the 3-hourly ap.
+    bool hasApHistory{false};
+    double apHistory[7] = {};
 };
 
 /// Space weather forecast level

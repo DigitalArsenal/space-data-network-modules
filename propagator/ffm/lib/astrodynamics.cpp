@@ -4753,6 +4753,13 @@ AtmosphericDensity computeNRLMSISE00(
     msisInput.f107 = weather.F107;
     msisInput.ap = weather.Ap;
     msisInput.ap_a = nullptr;
+    // XM7 TEST BUILD, never for main: the model's 3-hourly branch (switch 9 = -1) when the rows carry the history.
+    ap_array apHistory;
+    if (weather.hasApHistory && config.geomagneticEffects) {
+        for (int i = 0; i < 7; ++i) apHistory.a[i] = weather.apHistory[i];
+        msisInput.ap_a = &apHistory;
+        msisFlags.switches[9] = -1;
+    }
 
     gtd7d(&msisInput, &msisFlags, &msisOutput);
 

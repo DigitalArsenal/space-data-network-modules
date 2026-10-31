@@ -112,7 +112,7 @@ inline bool nonnegative(double x) {return std::isfinite(x)&&x>=0;}
 // row is used as published (monthly predictions are not interpolated).
 class SpaceWeatherTable {
 public:
-    struct Day {double f107Obs=0,f107ObsCentred81=0,apDaily=0,kp[8]{};};
+    struct Day {double f107Obs=0,f107ObsCentred81=0,apDaily=0,kp[8]{},ap3h[8]{};bool hasAp3h=false;};
     std::map<long,Day> days;  // by MJD (UTC)
     std::string error;
     // Empty string = success.
@@ -130,6 +130,12 @@ public:
             for(int i=0;i<8;++i)v.kp[i]=kp[i]/10.0;
             if(!positive(v.f107Obs)||!positive(v.f107ObsCentred81)||!nonnegative(v.apDaily))return "SPW F10.7 must be positive and Ap nonnegative.";
             for(const double k:v.kp)if(!nonnegative(k)||k>9)return "SPW Kp must be within 0 to 9.";
+            // XM7 TEST BUILD, never for main: a row carries the 3-hourly ap when its eight AP1..AP8 are non-negative, not all zero,
+            // and their mean agrees with AP_AVG to 1. A row without them reads as before.
+            const int ap[8]={row->AP1(),row->AP2(),row->AP3(),row->AP4(),row->AP5(),row->AP6(),row->AP7(),row->AP8()};
+            double apSum=0;bool apValid=true,apAny=false;
+            for(int i=0;i<8;++i){v.ap3h[i]=ap[i];apSum+=ap[i];apValid=apValid&&ap[i]>=0;apAny=apAny||ap[i]>0;}
+            v.hasAp3h=apValid&&apAny&&std::fabs(apSum/8.0-v.apDaily)<=1.0;
             days[day]=v;
         }
         return "";
@@ -142,6 +148,21 @@ public:
         out.F107=yesterday->second.f107Obs;out.F107a=today->second.f107ObsCentred81;out.Ap=today->second.apDaily;
         const int slot=std::min(7,std::max(0,int((mjd-double(day))*8)));
         out.Kp=out.kp3h=today->second.kp[slot];out.epoch=jdUtc;
+        // XM7 TEST BUILD, never for main: NRLMSISE-00's ap_array (nrlmsise-00.h) when the rows of d, d-1, d-2 and d-3 all carry the
+        // 3-hourly ap: the daily Ap; the 3-hour ap now and 3, 6 and 9 h before; the means of the eight 3-hour ap 12 to 33 h and 36 to 57 h before.
+        out.hasApHistory=false;
+        const auto before2=days.find(day-2),before3=days.find(day-3);
+        if(today->second.hasAp3h&&yesterday->second.hasAp3h&&before2!=days.end()&&before2->second.hasAp3h&&before3!=days.end()&&before3->second.hasAp3h) {
+            const Day* byAge[4]={&today->second,&yesterday->second,&before2->second,&before3->second};
+            const auto apBack=[&](int back){int s=slot-back,age=0;while(s<0){s+=8;++age;}return byAge[age]->ap3h[s];};
+            out.apHistory[0]=today->second.apDaily;
+            for(int i=0;i<4;++i)out.apHistory[1+i]=apBack(i);
+            double recent=0,older=0;
+            for(int i=4;i<12;++i)recent+=apBack(i);
+            for(int i=12;i<20;++i)older+=apBack(i);
+            out.apHistory[5]=recent/8.0;out.apHistory[6]=older/8.0;
+            out.hasApHistory=true;
+        }
         // Jacchia-Roberts: Kp 6.7 h earlier, and the previous day's centered F10.7.
         out.f107aPreviousDay=yesterday->second.f107ObsCentred81;
         const double lagged=mjd-6.7/24.0;const long lagDay=long(std::floor(lagged));

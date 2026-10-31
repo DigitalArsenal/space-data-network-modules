@@ -1,0 +1,20 @@
+--- /private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/ccb46d52-d201-41c2-95e9-8200325eb018/scratchpad/xm7/modules/propagator/ffm/tests/fixtures/orekit/OrekitReference.java	2026-10-30 20:56:23
++++ /private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/ccb46d52-d201-41c2-95e9-8200325eb018/scratchpad/xm7/orekit/OrekitReference.java	2026-10-31 11:23:19
+@@ -246,7 +246,7 @@
+                 }
+             };
+             // Switch 9 = 1: the daily Ap only, as FFM evaluates NRLMSISE-00.
+-            model = new NRLMSISE00(weather, meanSun, earth, utc).withSwitch(9, 1);
++            model = new NRLMSISE00(weather, meanSun, earth, utc).withSwitch(9, Integer.getInteger("ffm.switch9", 1));  // XM7: 1 the daily Ap, -1 the 3-hourly history
+         }
+         public Frame getFrame() { return itrf; }
+         public double getDensity(AbsoluteDate date, Vector3D position, Frame frame) {
+@@ -272,7 +272,7 @@
+         GravityFieldFactory.addPotentialCoefficientsReader(new ICGEMFormatReader("EGM2008-ffm.gfc", false));
+ 
+         TimeScale utc = TimeScalesFactory.getUTC();
+-        AbsoluteDate epoch = new AbsoluteDate(2026, 8, 2, 0, 0, 0.0, utc);
++        AbsoluteDate epoch = new AbsoluteDate(System.getProperty("ffm.epoch", "2026-08-02T00:00:00"), utc);  // XM7: the epoch of the case
+         Frame gcrf = FramesFactory.getGCRF();
+         // The Earth-fixed frame carries IERS 2010's sub-daily corrections to polar motion and UT1
+         // (ocean tides and libration, up to about 0.3 mas) on top of the interpolated daily EOP rows.
