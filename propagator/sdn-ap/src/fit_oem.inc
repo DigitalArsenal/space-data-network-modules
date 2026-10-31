@@ -276,8 +276,11 @@ static int fit_blocks() {
         double first_pass_rms = 0.0;
         double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
       };
+      const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
+      pcf::Prior used_drag = po.drag_prior;
       // span_minutes ending at all[end_index]; the states after it held out (the validation tail)
-      auto run_pass = [&](double span_minutes, Pass& P, uint32_t end_index) -> int {
+      auto run_pass = [&](double span_minutes, Pass& P, uint32_t end_index, int placement_override = -1,
+                          const pcf::Prior* drag_override = nullptr, const pcf::Prior* srp_override = nullptr) -> int {
         const double saved_w = ue_w, saved_f = ue_f;
         const bool saved_rule = held_out_rule;
         if (end_index < last_useable) {
@@ -295,9 +298,16 @@ static int fit_blocks() {
         }
         uint32_t first = 0;
         while (first < n && fitoem::minutes_between(us_w, us_f, all[first].whole, all[first].frac) < (start_given ? 0.0 : -1e-6)) ++first;
+        if (atm::active() != nullptr && first < n) {
+          atm::active()->min_driver_mjd =
+              static_cast<int32_t>(std::floor((all[first].whole - kJd1950) + all[first].frac + 33281.0)) - 1;
+        }
         std::vector<double> t_fit, r_fit, t_out, r_out;
-        // the epoch: the first state of the fit interval (diagnostic placements: the state nearest its middle, or its last)
-        const int placement = fitoem::epoch_placement();
+        // the epoch: the first state of the fit interval (diagnostic placements: the state nearest its middle, or its last;
+        // short-span < 24 h fits anchor at last_useable when fitoem::epoch_placement() is at its default 0)
+        const int placement = placement_override >= 0 ? placement_override
+                              : (po.default_span_h < 24.0 && !eccentric && fitoem::epoch_placement() == 0 ? 2
+                                                                                                           : fitoem::epoch_placement());
         uint32_t epoch_index = first < n ? first : 0;
         if (placement != 0 && first < n) {
           uint32_t last = first;
@@ -353,11 +363,32 @@ static int fit_blocks() {
         row.epoch_jd_frac = e0.frac;
         row.theory = kTheorySgp4Xp;
         fitoem::start_row(s0, row);
+        pcf::Prior eff_drag = drag_override != nullptr ? *drag_override : po.drag_prior;
+        const pcf::Prior eff_srp = srp_override != nullptr ? *srp_override : po.srp_prior;
+        if (drag_override == nullptr && (po.msis || po.minimum_span_h < 24.0) &&
+            eff_drag.form == pcfPriorForm_LOG_NORMAL &&
+            eff_drag.mean == pcf::kDragPriorDefault.mean &&
+            eff_drag.sigma == pcf::kDragPriorDefault.sigma &&
+            row.mean_motion_rev_day > 0.0) {
+          const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+          const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
+          const double h_km = a_km - xpt::kRe;
+          if (h_km >= 800.0) eff_drag.mean = 0.0005;
+          else if (h_km >= 600.0) eff_drag.mean = 0.002;
+        }
+        if (drag_override == nullptr) used_drag = eff_drag;
         // a LOG_NORMAL term starts at its prior's median and stays > 0: the 2-revolution stage holds BTERM there, and
         // every stage before the last holds AGOM there
-        if (po.drag_prior.form == pcfPriorForm_LOG_NORMAL) row.bterm = po.drag_prior.mean;
-        if (po.srp_prior.form == pcfPriorForm_LOG_NORMAL) row.agom = po.srp_prior.mean;
+        if (eff_drag.form == pcfPriorForm_LOG_NORMAL) row.bterm = eff_drag.mean;
+        else if (drag_override != nullptr) row.bterm = eff_drag.mean;
+        if (eff_srp.form == pcfPriorForm_LOG_NORMAL) row.agom = eff_srp.mean;
+        else if (srp_override != nullptr) row.agom = eff_srp.mean;
         // the arc grown from two revolutions to the whole fit interval
+        struct FallbackScope {
+          bool prev;
+          explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
+          ~FallbackScope() { fit::jacobian_fallback() = prev; }
+        } fallback_scope{eccentric || placement != 0 || span_minutes < 1440.0 || fitoem::jacobian_always() != 0};
         fit::Options opt{};
         opt.max_iterations = 40;
         fit::Result res{};
@@ -371,7 +402,7 @@ static int fit_blocks() {
         }
         opt.fit_drag = 1;
         // SGP4XP: the $PCF FIT.DRAG_PRIOR on BTERM (default LOG_NORMAL on ln BTERM, median 0.01 m^2/kg, sigma of the log ln 10)
-        fitoem::set_prior(po.drag_prior, opt.drag_log, opt.drag_prior, opt.drag_sigma);
+        fitoem::set_prior(eff_drag, opt.drag_log, opt.drag_prior, opt.drag_sigma);
         // grown by threes in between (2, 6, 18 ... revolutions), each stage from the last: from a drag-free start the
         // whole arc of a fast decay lies far outside the linear range (an e 0.03 orbit at 175 km loses 15 km of a in
         // 48 h, some 2,000 km along-track), and the single jump stalled on a wrong minimum (fit RMS 7 to 9 km)
@@ -390,7 +421,7 @@ static int fit_blocks() {
         const double first_pass_rms = res.rms_km;
         opt.fit_agom = 1;
         // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg; LOG_NORMAL on ln AGOM)
-        fitoem::set_prior(po.srp_prior, opt.agom_log, opt.agom_prior, opt.agom_sigma);
+        fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
         if (res.status < 0) return 2;
@@ -414,14 +445,7 @@ static int fit_blocks() {
       // at least 30 % better (10 % for the others)
       // ($PCF FIT: DEFAULT_SPAN_HOURS, ECCENTRICITY_THRESHOLD, ECCENTRIC_DEFAULT_SPAN_HOURS, CANDIDATE_SPANS_HOURS,
       // EXTENSION_MARGIN, ECCENTRIC_EXTENSION_MARGIN, ECCENTRIC_MAXIMUM_PERIOD_HOURS, TAIL_HOURS)
-      const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       const double default_span = (eccentric ? po.eccentric_default_span_h : po.default_span_h) * 60.0;
-      // an eccentric orbit's fits take the finite-difference columns where the analytic ones stall (fit::run)
-      struct FallbackScope {
-        bool prev;
-        explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
-        ~FallbackScope() { fit::jacobian_fallback() = prev; }
-      } fallback_scope{eccentric || fitoem::jacobian_always() != 0};
       Pass chosen;
       {
         const int rc = run_pass(default_span, chosen, last_useable);
@@ -449,7 +473,7 @@ static int fit_blocks() {
         int nspans = 0;
         if (po.candidate_count > 0) {
           for (int k = 0; k < po.candidate_count; ++k) spans[nspans++] = po.candidate_spans_h[k] * 60.0;
-        } else {
+        } else if (eccentric || po.default_span_h >= 24.0) {
           if (eccentric) spans[nspans++] = 24.0 * 60.0;
           for (const double h : {48.0, 72.0, 120.0}) spans[nspans++] = h * 60.0;
         }
@@ -460,8 +484,13 @@ static int fit_blocks() {
         for (int si = 0; si < nspans; ++si) {
           const double span = spans[si];
           if (data_minutes < span + fitoem::tail_minutes() - 1e-6) break;
+          const bool saved_before = atm::active() != nullptr && atm::active()->before_rows;
           Pass v;
-          if (run_pass(span, v, tail_start) != 0 || v.t_out.empty()) break;
+          if (run_pass(span, v, tail_start) != 0 || v.t_out.empty() ||
+              (atm::active() != nullptr && atm::active()->before_rows && !saved_before)) {
+            if (atm::active() != nullptr) atm::active()->before_rows = saved_before;
+            break;
+          }
           std::vector<double> rr(v.r_out.size());
           if (!fit::residuals(v.row, v.t_out.data(), v.r_out.data(), static_cast<int>(v.t_out.size()), rr.data())) break;
           double ss = 0.0;
@@ -473,10 +502,14 @@ static int fit_blocks() {
           }
         }
         if (best_span > default_span) {
+          const bool saved_before = atm::active() != nullptr && atm::active()->before_rows;
           Pass f;
-          if (run_pass(best_span, f, last_useable) == 0) {
+          if (run_pass(best_span, f, last_useable) == 0 &&
+              !(atm::active() != nullptr && atm::active()->before_rows && !saved_before)) {
             chosen = std::move(f);
             span_used = best_span;
+          } else if (atm::active() != nullptr) {
+            atm::active()->before_rows = saved_before;
           }
         }
       }
@@ -489,6 +522,30 @@ static int fit_blocks() {
             chosen = std::move(f);
             span_used = span;
           }
+        }
+      }
+      // Two-stage decoupled fit (R17): when FIT.MINIMUM_SPAN_HOURS < 24 h (e.g. 17.1 h, the 12 h order-2 tesseral
+      // resonance null) and FIT.DEFAULT_SPAN_HOURS >= 24 h on a non-eccentric orbit, Stage 1 above solved BTERM and AGOM
+      // over the long drag span; Stage 2 pins BTERM and AGOM to Stage 1's solution and fits the 6 Brouwer mean elements
+      // over the trailing MINIMUM_SPAN_HOURS window with the epoch placed at the cutoff (last_useable).
+      if (!start_given && !eccentric && po.minimum_span_h < 24.0 && po.default_span_h >= 24.0 &&
+          chosen.res.rms_km <= po.implausible_rms_km) {
+        const double bterm_s1 = chosen.row.bterm;
+        const double agom_s1 = chosen.row.agom;
+        const pcf::Prior pinned_drag = {bterm_s1, std::fmax(std::fabs(bterm_s1) * 1e-6, 1e-10), pcfPriorForm_GAUSSIAN_SIGNED};
+        const pcf::Prior pinned_srp = {agom_s1, std::fmax(std::fabs(agom_s1) * 1e-6, 1e-10), pcfPriorForm_GAUSSIAN_SIGNED};
+        Pass stage2;
+        if (run_pass(po.minimum_span_h * 60.0, stage2, last_useable, 2, &pinned_drag, &pinned_srp) == 0 &&
+            stage2.res.rms_km <= po.implausible_rms_km) {
+          stage2.iterations += chosen.iterations;
+          stage2.first_pass_rms = std::fmin(chosen.first_pass_rms, stage2.first_pass_rms);
+          stage2.opt.drag_log = chosen.opt.drag_log;
+          stage2.opt.drag_prior = chosen.opt.drag_prior;
+          stage2.opt.drag_sigma = chosen.opt.drag_sigma;
+          stage2.opt.agom_log = chosen.opt.agom_log;
+          stage2.opt.agom_prior = chosen.opt.agom_prior;
+          stage2.opt.agom_sigma = chosen.opt.agom_sigma;
+          chosen = std::move(stage2);
         }
       }
       std::vector<double>& t_fit = chosen.t_fit;
@@ -542,7 +599,7 @@ static int fit_blocks() {
       std::snprintf(comment, sizeof comment,
                     "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s)%s",
                     static_cast<unsigned>(t_fit.size()), static_cast<unsigned>(t_out.size()), res.rms_km, res.max_km, held_rms,
-                    iterations, (fitoem::epoch_placement() == 0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
+                    iterations, (fitoem::epoch_placement() == 0 && fit_begin_min >= 0.0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
                     "");
       const auto s_epoch = fbb.CreateString(epoch_text);
       const auto s_comment = fbb.CreateString(comment);
@@ -558,7 +615,7 @@ static int fit_blocks() {
       const double whole_seconds = std::floor(unix_seconds);
       // the covariance rows (SPEC 12) as USER_DEFINED_x
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OMMUserDefinedParameter>>> s_user = 0;
-      if (have_cov) {
+      if (have_cov || po.msis) {
         std::vector<flatbuffers::Offset<OMMUserDefinedParameter>> ps;
         char v[64];
         auto put = [&](const char* name, double value) {
@@ -586,6 +643,9 @@ static int fit_blocks() {
           put_list("SDNAP_COV_NOISE", fit_cov.noise, 5);
           put("SDNAP_COV_NG_RATE", ng_rate);
           ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_COV_REGIME", fit_cov.regime == 0 ? "DRAG" : "ABOVE"));
+        }
+        if (po.msis) {
+          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_ATMOSPHERE_MODEL", po.dca ? "NRLMSISE00_DCA" : "NRLMSISE00"));
         }
         s_user = fbb.CreateVector(ps);
       }
@@ -643,7 +703,7 @@ static int fit_blocks() {
         const auto o_from = ob.CreateString(epoch_text);
         const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
         char bmodel[400], amodel[400];
-        fitoem::model_text("BTERM (SGP4XP)", po.drag_prior, have_cov ? fit_cov.log_sigma[0] : 0.0, bmodel, sizeof bmodel);
+        fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, bmodel, sizeof bmodel);
         fitoem::model_text("AGOM (SGP4XP)", po.srp_prior, have_cov ? fit_cov.log_sigma[1] : 0.0, amodel, sizeof amodel);
         const auto o_bmodel = ob.CreateString(bmodel);
         const auto o_amodel = ob.CreateString(amodel);

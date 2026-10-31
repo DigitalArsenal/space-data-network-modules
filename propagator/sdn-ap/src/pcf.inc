@@ -360,7 +360,7 @@ inline int read(Method method) {
   if (tables & kTOutput)
     if (const int rc = read_output(c->OUTPUT(), o)) return rc;
   if (tables & kTForces)
-    if (const int rc = read_forces(c->FORCES(), method == kPropagate || method == kFit, o)) return rc;
+    if (const int rc = read_forces(c->FORCES(), method == kPropagate || method == kFit || method == kEpochs, o)) return rc;
   return 0;
 }
 
@@ -370,6 +370,23 @@ inline int check_set_theory(int set_theory) {
   if (o.theory != pcfTheory_UNSPECIFIED) {
     const int want = o.theory == pcfTheory_SGP4 ? kTheorySgp4 : kTheorySgp4Xp;
     if (set_theory != want) return refuse("THEORY", "an input set's own theory differs (UNSPECIFIED reads each set's)");
+  }
+  return 0;
+}
+
+/// propagate, load_epochs, propagate_epochs: FORCES drag atmosphere against a set's SDNAP_ATMOSPHERE_MODEL mark.
+inline int check_set_atmosphere(int mark) {
+  if (mark == 0) return 0;
+  if (mark < 0) {
+    plugin_set_error("atmosphere-mismatch", "An 'omm' record carries an unknown SDNAP_ATMOSPHERE_MODEL mark.");
+    return 3;
+  }
+  const Options& o = options();
+  const int call_mark = !o.msis ? 1 : (o.dca ? 3 : 2);
+  if (mark != call_mark) {
+    plugin_set_error("atmosphere-mismatch",
+                     "An 'omm' set's SDNAP_ATMOSPHERE_MODEL mark disagrees with the call's FORCES drag atmosphere (Jacchia 1970 vs NRLMSISE-00 vs NRLMSISE-00 + DCA).");
+    return 3;
   }
   return 0;
 }

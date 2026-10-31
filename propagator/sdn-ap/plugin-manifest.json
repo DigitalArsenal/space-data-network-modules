@@ -223,6 +223,46 @@
           "maxStreams": 65535,
           "required": true,
           "description": "The snapshot: size-prefixed $OMM records end to end (the element-sync module's 'omm' output, at most 4 MiB a frame, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH), or one $OMM record a frame; SGP4 and SGP4XP Earth sets."
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space_weather",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw-rows",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density_correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl-open-dca",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
+                }
+              ]
+            }
+          ]
         }
       ],
       "outputPorts": [],
@@ -290,6 +330,46 @@
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "space_weather",
+          "displayName": "space_weather",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw-rows",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "density_correction",
+          "displayName": "density_correction",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-dcl-open-dca",
+              "allowedTypes": [
+                {
+                  "schemaName": "DCL.fbs",
+                  "fileIdentifier": "$DCL",
+                  "rootTypeName": "DCL"
                 }
               ]
             }

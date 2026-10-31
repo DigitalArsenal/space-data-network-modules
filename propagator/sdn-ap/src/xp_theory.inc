@@ -1172,7 +1172,10 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   e.xmo = k.m;
   XpSat* x = static_cast<XpSat*>(std::calloc(1, sizeof(XpSat)));
   if (x == nullptr) return false;
+  const atm::Atmosphere* prev_atm = atm::active();
+  atm::active() = s.ctx.atmosphere;
   const bool ok = xp_init(e, *x) == kPropOk;
+  atm::active() = prev_atm;
   if (ok)
     for (int j = 0; j < 6; ++j) f[j] = x->epoch.f[j];
   xp_release(*x);

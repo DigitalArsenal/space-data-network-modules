@@ -67,6 +67,8 @@ struct Store {
   std::vector<Entry> entries;
   std::vector<Series> series;
   Stats stats;
+  atm::Atmosphere atm;
+  bool has_atm = false;
 };
 
 inline void release(Slot& s) {
@@ -85,6 +87,8 @@ inline void clear(Store& st) {
   st.entries.clear();
   st.series.clear();
   st.stats = Stats{};
+  st.atm = atm::Atmosphere{};
+  st.has_atm = false;
 }
 
 inline Store& resident() {
@@ -182,8 +186,12 @@ inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
 inline int build(Store& st, const Config& cfg) {
   clear(st);
   st.cfg = cfg;
+  if (atm::active() != nullptr) {
+    st.atm = *atm::active();
+    st.has_atm = true;
+  }
   std::vector<Record> recs;
-  bool bad = false;
+  bool bad = false, atm_err = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "omm") != 0) continue;
@@ -194,9 +202,18 @@ inline int build(Store& st, const Config& cfg) {
       if (d < 0) { bad = true; return false; }
       if (d == 0) { ++st.stats.other_center; return true; }
       if (cfg.theories != 0 && (cfg.theories & theory_bit(r.row.theory)) == 0) { ++st.stats.theory; delete r.cov; return true; }
+      if (r.row.theory == kTheorySgp4Xp && pcf::check_set_atmosphere(omm::atmosphere_mark(p, n)) != 0) {
+        delete r.cov;
+        atm_err = true;
+        return false;
+      }
       recs.push_back(std::move(r));
       return true;
     });
+    if (atm_err) {
+      for (Record& r : recs) delete r.cov;
+      return 3;
+    }
     if (!ok || bad) {
       for (Record& r : recs) delete r.cov;
       plugin_set_error("invalid-omm", "An 'omm' frame is neither size-prefixed $OMM records end to end nor one $OMM record of an SGP4 or SGP4XP set.");
@@ -270,6 +287,11 @@ inline int build(Store& st, const Config& cfg) {
 
 /// The slot holding set `k` of series `s`, initialized on first use (the older of the two slots replaced).
 inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
+  struct BindAtm {
+    const atm::Atmosphere* prev;
+    explicit BindAtm(const Store& st) : prev(atm::active()) { atm::active() = st.has_atm ? &st.atm : nullptr; }
+    ~BindAtm() { atm::active() = prev; }
+  } bind_atm{st};
   for (Slot& q : s.slots)
     if (q.index == static_cast<int32_t>(k)) {
       if (with_cov && q.cp == nullptr && st.entries[s.first + k].cov != nullptr && q.error == 0) {
@@ -435,6 +457,8 @@ extern "C" int load_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   if (const int rc = pcf::read(pcf::kEpochs)) return rc;
+  if (const int rc = atm::prepare()) return rc;
+  atm::Scope atm_scope;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   return epochs::build(epochs::resident(), cfg);
@@ -447,6 +471,8 @@ extern "C" int propagate_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   if (const int rc = pcf::read(pcf::kEpochs)) return rc;
+  if (const int rc = atm::prepare()) return rc;
+  atm::Scope atm_scope;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   epochs::Store st;
@@ -547,6 +573,10 @@ extern "C" int propagate_epochs(void) {
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);
+    if (st.has_atm && st.atm.before_rows) {
+      return atm::fail("space-weather-out-of-range",
+                       "The 'space_weather' rows start after a day the call evaluates: they must begin by the day before its earliest state's day.");
+    }
     if (plugin_push_output("ephemeris", "OEM.fbs", "$OEM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
       plugin_set_error("output-failed", "The $OEM could not be emitted.");
       return 3;

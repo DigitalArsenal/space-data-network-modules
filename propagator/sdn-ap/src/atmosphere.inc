@@ -36,6 +36,7 @@ struct Atmosphere {
   bool measured = false;               ///< drivers from `days` (else SPEC 3.1's generic flux model; Jacchia 1970 only)
   std::vector<SpwDay> days;            ///< ascending MJD, one row per day
   std::vector<double> dca_d50, dca_s;  ///< open-DCA nodes (days from 1950 January 0.0 UTC) and s = ln(rho / rho_NRLMSISE-00)
+  mutable int32_t min_driver_mjd = std::numeric_limits<int32_t>::min();  ///< earliest required driver MJD (earliest state's MJD - 1)
   mutable bool before_rows = false;    ///< an evaluation asked for a day before the first row (the call is refused)
 };
 
@@ -46,7 +47,7 @@ inline const Atmosphere*& active() {
 }
 
 /// The row in force on UTC day `mjd`: the last row at or before it, so past the last row that row holds (HOLD_LAST);
-/// before the first row the first, and the call is refused (before_rows).
+/// before the first row the first, and the call is refused (before_rows) when `mjd >= a.min_driver_mjd`.
 inline const SpwDay& row_at(const Atmosphere& a, int32_t mjd) {
   const std::vector<SpwDay>& d = a.days;
   size_t lo = 0, hi = d.size();
@@ -56,7 +57,7 @@ inline const SpwDay& row_at(const Atmosphere& a, int32_t mjd) {
     else hi = mid;
   }
   if (lo == 0) {
-    a.before_rows = true;
+    if (mjd >= a.min_driver_mjd) a.before_rows = true;
     return d[0];
   }
   return d[lo - 1];

@@ -171,6 +171,32 @@ inline bool decode(const uint8_t* buf, uint32_t len, ElementRow& row) {
   return row.mean_motion_rev_day > 0.0;
 }
 
+/// Atmosphere provenance mark on an $OMM record (USER_DEFINED_PARAMETERS naming SDNAP_ATMOSPHERE_MODEL):
+/// 0 unmarked, 1 JACCHIA_70, 2 NRLMSISE00, 3 NRLMSISE00_DCA, -1 unknown value.
+inline int atmosphere_mark(const uint8_t* buf, uint32_t len) {
+  if (!plain_view(buf, len, "$OMM")) return 0;
+  flatbuffers::Verifier::Options vopt;
+  vopt.check_alignment = false;
+  flatbuffers::Verifier v0(buf, len, vopt);
+  if (!VerifyOMMBuffer(v0)) return 0;
+  const auto* params = GetOMM(buf)->USER_DEFINED_PARAMETERS();
+  if (params == nullptr) return 0;
+  for (const OMMUserDefinedParameter* p : *params) {
+    if (p == nullptr || p->PARAM_NAME() == nullptr || p->PARAM_VALUE() == nullptr) continue;
+    const char* name = p->PARAM_NAME()->c_str();
+    if (std::strcmp(name, "SDNAP_ATMOSPHERE_MODEL") != 0 &&
+        std::strcmp(name, "USER_DEFINED_SDNAP_ATMOSPHERE_MODEL") != 0 &&
+        std::strcmp(name, "ATMOSPHERE_MODEL") != 0)
+      continue;
+    const char* val = p->PARAM_VALUE()->c_str();
+    if (std::strcmp(val, "JACCHIA_70") == 0) return 1;
+    if (std::strcmp(val, "NRLMSISE00") == 0 || std::strcmp(val, "NRLMSISE-00") == 0) return 2;
+    if (std::strcmp(val, "NRLMSISE00_DCA") == 0 || std::strcmp(val, "NRLMSISE-00+DCA") == 0) return 3;
+    return -1;
+  }
+  return 0;
+}
+
 }  // namespace omm
 }  // namespace sdnap
 
@@ -203,6 +229,13 @@ extern "C" int ingest_omm(void) {
         return 3;
       }
       plugin_set_error("invalid-omm", "An 'omm' payload is not a decodable SGP4 or SGP4XP $OMM record (MEAN_ELEMENT_THEORY SGP4 or SGP4XP).");
+      return 3;
+    }
+    const int mark = sdnap::omm::atmosphere_mark(f->payload, f->payload_length);
+    if (mark != 0 && mark != 1) {
+      std::free(rows);
+      plugin_set_error("atmosphere-mismatch",
+                       "An 'omm' set carries SDNAP_ATMOSPHERE_MODEL NRLMSISE00, which ingest_omm's Jacchia 1970 batch store cannot fly; use propagate or load_epochs with FORCES.ENABLE_DRAG true.");
       return 3;
     }
     rows[k++] = row;

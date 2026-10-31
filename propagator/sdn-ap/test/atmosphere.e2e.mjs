@@ -25,6 +25,7 @@ import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
+import { OBD } from "spacedatastandards.org/lib/js/OBD/OBD.js";
 import { OEM, OEMT } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import { ephemerisDataBlockT as OemBlockT } from "spacedatastandards.org/lib/js/OEM/ephemerisDataBlock.js";
 import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
@@ -114,10 +115,10 @@ const A2 = forces({ ENABLE_DRAG: true, ATMOSPHERE_MODEL: pcfAtmosphereFamily.NRL
 const A3 = forces({ ...A2.forces, DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE });
 
 const invoke = async (methodId, inputs) => h.invoke({ methodId, inputs });
-const frames = ({ omm, ephemeris, config, forces: f, rows, dcl, grid }) => [
+const frames = ({ omm, ephemeris, config, forces: f, fit: fitOpts, rows, dcl, grid }) => [
   ...(omm ? [{ portId: "omm", typeRef: T("OMM"), payload: omm }] : []),
   ...(ephemeris ? [{ portId: "ephemeris", typeRef: T("OEM"), payload: ephemeris }] : []),
-  config instanceof Uint8Array ? { portId: "configuration", typeRef: PCF_TYPE, payload: config } : configuration({ theory: "SGP4XP", ...(f ? { forces: f } : {}) }),
+  config instanceof Uint8Array ? { portId: "configuration", typeRef: PCF_TYPE, payload: config } : configuration({ theory: "SGP4XP", ...(f ? { forces: f } : {}), ...(fitOpts ? { fit: fitOpts } : {}) }),
   ...(rows ? [{ portId: "space_weather", typeRef: T("SPW"), payload: rows }] : []),
   ...(dcl ? [{ portId: "density_correction", typeRef: T("DCL"), payload: dcl }] : []),
   ...(grid ? [{ portId: "grid", typeRef: T("OEM"), payload: grid }] : []),
@@ -390,6 +391,93 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
   // rows that begin the day before the epoch's day are enough
   const enough = await propagated("rows from the day before the epoch", { ...base, ...A2, rows: rowsOf(day0 + DAY, 6).bytes });
   check(enough !== null, "rows from the day before the epoch's day are refused");
+}
+
+// 6. XP2 + Open DCA two-stage decoupled 17.1h tesseral-null fit, altitude-adaptive prior, atmosphere marking & epoch store
+{
+  // A 5-day ephemeris starting at 00:00:00 UTC on day0 + 1*DAY .. day0 + 6*DAY (cutoff D0 = day0 + 6*DAY).
+  // The 48h Stage 1 fit span starts at day0 + 4*DAY (00:00:00 UTC).
+  // Providing $SPW rows starting at day0 + 3*DAY (1 day before the 48h fit start, but after the 5-day OEM start)
+  // verifies both:
+  //   (a) speculative 72h/120h candidate spans do not poison before_rows when choose_span keeps 48h, and
+  //   (b) backward RK3 bracketing at 00:00:00 UTC on day0 + 4*DAY does not trigger a false space-weather-out-of-range.
+  const d0Ms = day0 + 6 * DAY;
+  const ommMid = ommOf({ epoch: iso(day0 + 4 * DAY), n: 15.5, bterm: 0.012, agom: 0.004, norad: 90300 });
+  const dclNodes = [day0, day0 + 3 * DAY, day0 + 6 * DAY, day0 + 9 * DAY];
+  const dclBytes = dclOf(dclNodes, [0.05, -0.08, 0.04, 0.0]);
+  const longGrid = gridOf(day0 + DAY, d0Ms, 600);
+  const trackA3 = await propagated("trackA3 5d", { omm: ommMid, grid: longGrid, ...A3, rows: rows.bytes, dcl: dclBytes });
+  check(trackA3 !== null, "trackA3 5d failed to propagate");
+
+  const tightRows = rowsOf(day0 + 3 * DAY, 6);
+  const fitR17 = { MINIMUM_SPAN_HOURS: 17.1, DEFAULT_SPAN_HOURS: 48.0 };
+  const rFitA2 = await invoke("fit", frames({ ephemeris: trackA3, ...A2, fit: fitR17, rows: tightRows.bytes }));
+  const rFitA3 = await invoke("fit", frames({ ephemeris: trackA3, ...A3, fit: fitR17, rows: tightRows.bytes, dcl: dclBytes }));
+  check(rFitA2.statusCode === 0, `two-stage R17 fit under A2: ${rFitA2.errorCode} ${rFitA2.errorMessage}`);
+  check(rFitA3.statusCode === 0, `two-stage R17 fit under A3: ${rFitA3.errorCode} ${rFitA3.errorMessage}`);
+
+  if (rFitA2.statusCode === 0 && rFitA3.statusCode === 0) {
+    const ommA2Bytes = new Uint8Array(rFitA2.outputs[0].payload);
+    const ommA3Bytes = new Uint8Array(rFitA3.outputs[0].payload);
+    const ommA2 = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(ommA2Bytes)).unpack();
+    const ommA3 = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(ommA3Bytes)).unpack();
+    const obdA3 = OBD.getRootAsOBD(new flatbuffers.ByteBuffer(new Uint8Array(rFitA3.outputs[1].payload))).unpack();
+    const markA2 = ommA2.USER_DEFINED_PARAMETERS?.find((p) => p.PARAM_NAME === "SDNAP_ATMOSPHERE_MODEL")?.PARAM_VALUE;
+    const markA3 = ommA3.USER_DEFINED_PARAMETERS?.find((p) => p.PARAM_NAME === "SDNAP_ATMOSPHERE_MODEL")?.PARAM_VALUE;
+    console.log(`two-stage R17 fit: A2 mark=${markA2} epoch=${ommA2.EPOCH}, A3 mark=${markA3} epoch=${ommA3.EPOCH} BTERM=${ommA3.BSTAR.toExponential(4)} comment="${ommA3.COMMENT}"`);
+    check(markA2 === "NRLMSISE00", `A2 $OMM SDNAP_ATMOSPHERE_MODEL expected NRLMSISE00, got ${markA2}`);
+    check(markA3 === "NRLMSISE00_DCA", `A3 $OMM SDNAP_ATMOSPHERE_MODEL expected NRLMSISE00_DCA, got ${markA3}`);
+    check(ommA3.EPOCH.startsWith(iso(d0Ms).slice(0, 19)), `two-stage R17 epoch expected cutoff ${iso(d0Ms)}, got ${ommA3.EPOCH}`);
+    check(ommA3.COMMENT.includes("span 17.000 h"), `two-stage R17 comment expected span 17.000 h (103 10-min states), got ${ommA3.COMMENT}`);
+    check(obdA3.START_TIME.startsWith(iso(d0Ms - 17.0 * 3600000).slice(0, 16)), `two-stage R17 $OBD start: ${obdA3.START_TIME}`);
+
+    // Atmosphere mismatch enforcement across propagate, ingest_omm, load_epochs, and propagate_epochs
+    const predGrid = gridOf(d0Ms, d0Ms + DAY, 600);
+    await refused("A2 OMM propagated under A0", "propagate", { omm: ommA2Bytes, grid: predGrid }, "atmosphere-mismatch");
+    await refused("A2 OMM propagated under A3", "propagate", { omm: ommA2Bytes, grid: predGrid, ...A3, rows: rows.bytes, dcl: dclBytes }, "atmosphere-mismatch");
+    await refused("A3 OMM propagated under A2", "propagate", { omm: ommA3Bytes, grid: predGrid, ...A2, rows: rows.bytes }, "atmosphere-mismatch");
+    const rIngest = await invoke("ingest_omm", [{ portId: "omm", typeRef: T("OMM"), payload: ommA2Bytes }]);
+    check(rIngest.statusCode !== 0 && rIngest.errorCode === "atmosphere-mismatch", `ingest_omm on A2 OMM: ${rIngest.statusCode} ${rIngest.errorCode}`);
+
+    // Epoch store (load_epochs & propagate_epochs) under A2 and A3 matches propagate bit-for-bit
+    const propA2 = await propagated("A2 OMM forward", { omm: ommA2Bytes, grid: predGrid, ...A2, rows: rows.bytes });
+    const propA3 = await propagated("A3 OMM forward", { omm: ommA3Bytes, grid: predGrid, ...A3, rows: rows.bytes, dcl: dclBytes });
+    const rLoadA2 = await invoke("load_epochs", [
+      { portId: "omm", typeRef: T("OMM"), payload: ommA2Bytes },
+      configuration({ theory: "SGP4XP", forces: A2.forces }),
+      { portId: "space_weather", typeRef: T("SPW"), payload: rows.bytes },
+    ]);
+    const rPropEpA3 = await invoke("propagate_epochs", [
+      { portId: "omm", typeRef: T("OMM"), payload: ommA3Bytes },
+      { portId: "grid", typeRef: T("OEM"), payload: predGrid },
+      configuration({ theory: "SGP4XP", forces: A3.forces }),
+      { portId: "space_weather", typeRef: T("SPW"), payload: rows.bytes },
+      { portId: "density_correction", typeRef: T("DCL"), payload: dclBytes },
+    ]);
+    check(rLoadA2.statusCode === 0, `load_epochs A2: ${rLoadA2.errorCode} ${rLoadA2.errorMessage}`);
+    check(rPropEpA3.statusCode === 0, `propagate_epochs A3: ${rPropEpA3.errorCode} ${rPropEpA3.errorMessage}`);
+    if (propA3 && rPropEpA3.statusCode === 0) {
+      const p1 = linesOf(propA3), p2 = linesOf(new Uint8Array(rPropEpA3.outputs[0].payload));
+      const maxDiff = Math.max(...p1.map((l, k) => Math.hypot(l.X - p2[k].X, l.Y - p2[k].Y, l.Z - p2[k].Z)));
+      console.log(`propagate_epochs A3 vs propagate A3 over 24h: max |dr| ${(maxDiff * 1e6).toFixed(3)} mm`);
+      check(maxDiff <= 1e-5, `propagate_epochs A3 vs propagate A3: ${maxDiff} km`);
+    }
+    await refused("load_epochs A3 OMM under A2", "load_epochs", { omm: ommA3Bytes, ...A2, rows: rows.bytes }, "atmosphere-mismatch");
+  }
+
+  // Altitude-adaptive log-normal BTERM prior median under NRLMSISE-00: 0.002 at 600-800 km, 0.0005 at >= 800 km
+  for (const [label, nRevDay, expectedMedian] of [["700 km", 14.58, "median 0.002 m^2/kg"], ["900 km", 13.97, "median 0.0005 m^2/kg"]]) {
+    const hiOmm = ommOf({ epoch: iso(epochMs), n: nRevDay, bterm: 0.001, agom: 0.002, norad: 90400 });
+    const hiTrack = await propagated(`track ${label}`, { omm: hiOmm, grid: gridOf(epochMs, epochMs + DAY, 600), ...A2, rows: rows.bytes });
+    const rHi = await invoke("fit", frames({ ephemeris: hiTrack, ...A2, rows: rows.bytes }));
+    check(rHi.statusCode === 0, `altitude-adaptive fit ${label}: ${rHi.errorCode} ${rHi.errorMessage}`);
+    if (rHi.statusCode === 0) {
+      const obd = OBD.getRootAsOBD(new flatbuffers.ByteBuffer(new Uint8Array(rHi.outputs[1].payload))).unpack();
+      const hasExpected = String(obd.BALLISTIC_COEFF_MODEL ?? "").includes(expectedMedian);
+      console.log(`altitude-adaptive prior (${label}): ${obd.BALLISTIC_COEFF_MODEL}`);
+      check(hasExpected, `altitude-adaptive prior (${label}): expected "${expectedMedian}" in ${obd.BALLISTIC_COEFF_MODEL}`);
+    }
+  }
 }
 
 await h.destroy?.();

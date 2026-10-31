@@ -114,12 +114,17 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   fe5e4ca0; propagator/ffm, analysis/density-calibration and analysis/od compile the same files, and a change there
   is taken here by updating the pin).
 
-## Drag atmosphere (SPEC 15; `fit` and `propagate`)
+## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 SGP4XP's drag is section 3's (Jacchia 1970 on the generic flux model) unless the call's `$PCF` FORCES selects another;
 with no FORCES field off its default and no 'space_weather' or 'density_correction' frame the outputs are SGP4XP's bit
-for bit (the conformance E2E reproduces XP 72dcf6005046 and the control 9ecfafcd9027 on this build). The fit estimates
-BTERM and AGOM the same way under every atmosphere.
+for bit (the conformance E2E reproduces XP 72dcf6005046 and the control 9ecfafcd9027 on this build). Under NRLMSISE-00
+or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and scales an unset LOG_NORMAL BTERM prior
+median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`). When
+`FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a non-eccentric orbit, `fit` runs a two-stage
+decoupled solve: Stage 1 solves `BTERM` and `AGOM` over `48-72 h`; Stage 2 solves the 6 mean elements over the trailing
+`MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2 tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 and the
+epoch placed at the cutoff (`last_useable`).
 
 | FORCES | Inputs | Drag density |
 | --- | --- | --- |
@@ -131,8 +136,9 @@ BTERM and AGOM the same way under every atmosphere.
 The drivers on UTC day d: F10.7 of day d - 1, the 81-day centered mean and Ap of day d (propagator/ffm's convention),
 the last row holding past the rows (WEATHER_EXTENSION UNSPECIFIED or HOLD_LAST); the rows must begin by the day before
 the call's earliest day. s(t) is linear between the `$DCL`'s UTC nodes and held outside them (the producer's forecast
-nodes carry its 48 h decay). The ABI exports and the epoch store keep section 3. A set fitted under an atmosphere
-describes the orbit under that atmosphere and carries no mark of it.
+nodes carry its 48 h decay). A set fitted under NRLMSISE-00 carries `SDNAP_ATMOSPHERE_MODEL` (`"NRLMSISE00"` or
+`"NRLMSISE00_DCA"`) in `$OMM.USER_DEFINED_PARAMETERS`; `propagate`, `ingest_omm`, `load_epochs` and `propagate_epochs`
+refuse a set whose mark disagrees with the call's atmosphere (`atmosphere-mismatch`).
 
 `test/atmosphere.e2e.mjs` (2026-10-26, this build):
 - the default inert: no FORCES, FORCES written at every default, the atmosphere fields at their defaults: one set of

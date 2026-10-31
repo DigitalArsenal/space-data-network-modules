@@ -264,6 +264,9 @@ extern "C" int propagate(void) {
     }
     const sdnap::Elements e = sdnap::elements_of(row);
     if (const int tc = sdnap::pcf::check_set_theory(e.theory)) return tc;
+    if (e.theory == sdnap::kTheorySgp4Xp) {
+      if (const int ac = sdnap::pcf::check_set_atmosphere(sdnap::omm::atmosphere_mark(f->payload, f->payload_length))) return ac;
+    }
     sdnap::xpt::XpSat* xs = nullptr;
     sdnap::Sat sat{};
     double* nodes = nullptr;
@@ -355,6 +358,11 @@ extern "C" int propagate(void) {
       if (tw.empty()) { rc = sdnap::oem::refuse("bad-grid", "The grid holds no epochs."); break; }
       if (tw.size() > budget) { rc = sdnap::oem::refuse("too-many-states", "The request asks for more than 500,000 states."); break; }
       budget -= tw.size();
+      if (sdnap::atm::active() != nullptr) {
+        const int32_t mjd_epoch = static_cast<int32_t>(std::floor((e.epoch_jd_whole - sdnap::kJd1950) + e.epoch_jd_frac + 33281.0));
+        const int32_t mjd_first = static_cast<int32_t>(std::floor((tw.front() - sdnap::kJd1950) + tf.front() + 33281.0));
+        sdnap::atm::active()->min_driver_mjd = std::min(mjd_epoch, mjd_first) - 1;
+      }
       std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
       std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_lines;
       lines.reserve(tw.size());

@@ -1648,8 +1648,8 @@ selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixe
 
 ## 15. Selectable drag atmosphere (side B's option, outside the SGP4-XP specification)
 
-**15.1 Selection.** `fit` and `propagate` read it from their $PCF FORCES (SDS 1.272.0); every other method, the ABI
-exports and the epoch store keep section 3. With no FORCES field away from its default and no 'space_weather' or
+**15.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read it from their $PCF FORCES (SDS 1.272.0);
+`maneuver` and `ingest_omm` keep section 3. With no FORCES field away from its default and no 'space_weather' or
 'density_correction' frame, the drag is section 3 exactly: the default is SGP4XP.
 
 | FORCES | Density at the drag nodes of 3.4 |
@@ -1685,9 +1685,17 @@ it is evaluated on the calling thread only.
 with one finite NODE_LOG_DENSITY_SCALE_DIMENSIONLESS per strictly increasing NODE_TIMES_MS (UTC). s(t) is linear
 between nodes and held at the end values outside them; the density is NRLMSISE-00 times exp(s(t)) at every node.
 
-**15.5 Fit.** `fit` estimates BTERM and AGOM as with section 3 (its Jacobian's drag column is the theory's own n-dot
-per unit BTERM, under the call's atmosphere). A set fitted under an atmosphere describes the orbit under that
-atmosphere; it carries no mark of it.
+**15.5 Fit, two-stage decoupled tesseral-null pass, and atmosphere mark.** `fit` estimates BTERM and AGOM under the
+call's atmosphere, with finite-difference Jacobian fallback (`fit::jacobian_fallback`) enabled under NRLMSISE-00 and
+short-span (`< 24 h`) passes. When BTERM's prior is at its default LOG_NORMAL (`median 0.01`, `sigma ln 10`) under
+NRLMSISE-00 or `< 24 h` minimum span, the starting median scales with mean altitude (`0.01` below `600 km`, `0.002` at
+`600-800 km`, `0.0005` at `>= 800 km`). When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a
+non-eccentric orbit without `USEABLE_START_TIME`, `fit` runs a two-stage decoupled solve: Stage 1 fits the `48-72 h`
+span to determine `BTERM` and `AGOM`; Stage 2 fits the trailing `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2
+tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 (`sigma = 1e-9`) and the epoch placed at cutoff (`last_useable`).
+A set fitted under NRLMSISE-00 records `SDNAP_ATMOSPHERE_MODEL` (`"NRLMSISE00"` or `"NRLMSISE00_DCA"`) in
+`$OMM.USER_DEFINED_PARAMETERS`; `propagate`, `ingest_omm`, `load_epochs` and `propagate_epochs` refuse a set whose mark
+disagrees with the call's atmosphere (`atmosphere-mismatch`).
 
 ---
 

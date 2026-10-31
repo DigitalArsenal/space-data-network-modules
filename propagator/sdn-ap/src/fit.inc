@@ -245,6 +245,7 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   double mu = 1e-3;
   bool converged = false;
   int it = 0;
+  int fd_used = 0;
   for (; it < max_it && !converged; ++it) {
     // n-dot per unit drag term from the theory's own rate function at epoch
     double ndot_per_drag = 0.0;
@@ -346,7 +347,8 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
     }
     };
     attempt();
-    if (!improved && jacobian_fallback()) {
+    if (!improved && jacobian_fallback() && fd_used < 2) {
+      ++fd_used;
       // the element and drag columns by one-sided differences of the theory, then the same trial
       const int analytic = o.fit_drag ? 7 : 6;
       bool fd_ok = true;
