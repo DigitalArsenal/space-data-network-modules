@@ -370,7 +370,7 @@ static int fit_blocks() {
           iterations += res.iterations;
         }
         opt.fit_drag = 1;
-        // SGP4XP: the $PCF FIT.DRAG_PRIOR on BTERM (default a weak prior about zero, 0 +- 0.05 m^2/kg; LOG_NORMAL on ln BTERM)
+        // SGP4XP: the $PCF FIT.DRAG_PRIOR on BTERM (default LOG_NORMAL on ln BTERM, median 0.01 m^2/kg, sigma of the log ln 10)
         fitoem::set_prior(po.drag_prior, opt.drag_log, opt.drag_prior, opt.drag_sigma);
         // grown by threes in between (2, 6, 18 ... revolutions), each stage from the last: from a drag-free start the
         // whole arc of a fast decay lies far outside the linear range (an e 0.03 orbit at 175 km loses 15 km of a in

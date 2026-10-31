@@ -10,7 +10,10 @@
 //   load_epochs, propagate_epochs  EPOCH_STORE and propagate's tables
 // and leaves the other tables to the methods that read them. Fields left unset
 // take the defaults schema/PCF/main.fbs documents (each equal to this module's
-// own, so a table whose fields are all unset reads as an absent one); a field
+// own, so a table whose fields are all unset reads as an absent one), but one:
+// a BTERM prior left unset (FIT.DRAG_PRIOR absent or without a sigma, its form
+// unset) is LOG_NORMAL, median 0.01 m^2/kg, sigma of the log ln 10
+// (kDragPriorDefault), where the schema's text says 0 +- 0.05; a field
 // set to a value this module cannot apply is refused by name
 // (configuration-refused). Each command invocation is a fresh instance: the
 // values below live for one call.
@@ -26,13 +29,22 @@ namespace pcf {
 enum Method : uint32_t { kPropagate, kManeuver, kFit, kEpochs };  ///< kEpochs: load_epochs, propagate_epochs (propagate's tables)
 
 /// A fitted parameter's prior, $PCF FIT.DRAG_PRIOR (B_eff) or FIT.SRP_PRIOR (AGOM), m^2/kg, with its form
-/// (FIT.DRAG_PRIOR_FORM, FIT.SRP_PRIOR_FORM). Unset, or without a sigma: the documented default, GAUSSIAN_SIGNED with mean
-/// 0 and sigma 0.05. LOG_NORMAL: the fit estimates the parameter's natural log, `mean` is the median (> 0) and `sigma`
-/// the standard deviation of the log.
+/// (FIT.DRAG_PRIOR_FORM, FIT.SRP_PRIOR_FORM). GAUSSIAN_SIGNED: on the parameter itself, `mean` and `sigma` in its unit.
+/// LOG_NORMAL: the fit estimates the parameter's natural log, `mean` is the median (> 0) and `sigma` the standard
+/// deviation of the log.
 struct Prior {
-  double mean = 0.0, sigma = 0.05;
-  int form = pcfPriorForm_GAUSSIAN_SIGNED;
+  double mean, sigma;
+  int form;
 };
+
+/// The prior of a term whose FIT prior is unset or without a sigma and whose form is unset (GAUSSIAN_SIGNED is the form's
+/// value on the wire when unset, so an unset form and a written GAUSSIAN_SIGNED cannot be told apart): one constant per
+/// term. BTERM: LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10 (2.302585092994046), the prior of the free
+/// fits of experiments xp2-fit-design (1,214 windows, every one converged). The GAUSSIAN_SIGNED 0 +- 0.05 it replaces ended
+/// at BTERM <= 0, no drag at all, on the real ISS window of test/fit.e2e.mjs; a Gaussian on BTERM is asked for by its
+/// mean and sigma (FIT.DRAG_PRIOR, HAS_SIGMA true). AGOM: GAUSSIAN_SIGNED 0 +- 0.05.
+constexpr Prior kDragPriorDefault = {0.01, 2.302585092994045684, pcfPriorForm_LOG_NORMAL};
+constexpr Prior kSrpPriorDefault = {0.0, 0.05, pcfPriorForm_GAUSSIAN_SIGNED};
 
 /// One call's options, every one at its documented default.
 struct Options {
@@ -46,7 +58,7 @@ struct Options {
   double holdout_h = 0.0;
   double eccentricity_threshold = 0.5, eccentric_default_span_h = 24.0, eccentric_extension_margin = 0.7;
   double eccentric_maximum_period_h = 36.0, implausible_rms_km = 100.0;
-  Prior drag_prior, srp_prior;
+  Prior drag_prior = kDragPriorDefault, srp_prior = kSrpPriorDefault;
   // FORCES (fit, propagate): SGP4XP's drag atmosphere (SPEC 15). ENABLE_DRAG false keeps the theory's own Jacchia
   // 1970; true selects ATMOSPHERE_MODEL (NRLMSISE00 only). The drivers: WEATHER_SOURCE UNSPECIFIED infers them ('space_weather'
   // rows when given, else the theory's generic flux model), RECORDS needs the rows.
@@ -135,8 +147,9 @@ inline uint32_t tables_of(Method m) {
   return 0;
 }
 
-/// FIT.<name> and its form FIT.<name>_FORM: 0 with `out` set (the prior left at its default when absent or without a
-/// sigma), or 3 refused by name. LOG_NORMAL needs the prior, its sigma (HAS_SIGMA true) and a MEAN, the median, > 0.
+/// FIT.<name> and its form FIT.<name>_FORM: 0 with `out`, which arrives at the term's default, set, or 3 refused by
+/// name. A prior absent or without a sigma under GAUSSIAN_SIGNED (the form's value when unset) leaves `out` at its
+/// default. LOG_NORMAL needs the prior, its sigma (HAS_SIGMA true) and a MEAN, the median, > 0.
 inline int read_prior(const PCFGaussianPrior* p, uint8_t form, const char* name, Prior& out) {
   char field[48];
   bool given = false;
@@ -153,7 +166,9 @@ inline int read_prior(const PCFGaussianPrior* p, uint8_t form, const char* name,
     }
   }
   switch (form) {
-    case pcfPriorForm_GAUSSIAN_SIGNED: break;
+    case pcfPriorForm_GAUSSIAN_SIGNED:
+      if (!given) return 0;
+      break;
     case pcfPriorForm_LOG_NORMAL:
       if (p == nullptr) {
         std::snprintf(field, sizeof field, "FIT.%s", name);

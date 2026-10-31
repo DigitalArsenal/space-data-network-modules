@@ -1500,11 +1500,24 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   the theory reading AGOM <= 0 as no SRP (its log moves both ways);
 - s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
 - A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
-  under LOG_NORMAL sigma is that of the log);
+  under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
+  FIT.DRAG_PRIOR_FORM is unset, is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free
+  fits of experiments xp2-fit-design (1,214 windows, every one converged); AGOM's is GAUSSIAN_SIGNED with mean 0 and
+  sigma 0.05 m^2/kg. A Gaussian on BTERM is stated by its mean and sigma (FIT.DRAG_PRIOR with HAS_SIGMA true): 0 +- 0.05
+  ended at BTERM <= 0, no drag at all, on the real ISS window of test/fit.e2e.mjs;
 - P_p = A^-1; a term estimated as its log is carried back to m^2/kg by the Jacobian (the delta method): its rows and
   columns of P_p times the term, so sigma_B = B sigma_lnB. The $OBD gives the posterior sigma of the log and marks the
   term's covariance prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands
   in poorly for a wide log-normal).
+
+Known limit of BTERM's default start *[study 2026-10-31, noise-free synthetic tracks]*. The fit starts at the prior's
+median, 0.01 m^2/kg, and an object whose B lies far below it can stop in a local minimum. A day of an SGP4XP set's own
+states at 60 s (e 0.0003, i 51.6 deg, AGOM 0.01 m^2/kg; n 15.5, 15.2 and 14.9 rev/day for 400, 500 and 600 km), fitted
+back: B of 0.0005 to 0.002 m^2/kg at 400 km and 0.0005 to 0.004 at 500 and 600 km end at a fit RMS of 4.0 to 14.7 m,
+against 0.96 to 1.19 m from the former default's start at no drag; B of 0.01 and above recovers to about 1 m at 400 and
+500 km. A caller that knows its object's B states a LOG_NORMAL median near it. On 94 real ISS windows (NASA's daily
+files, every eighth from 2020-09-10 to 2026-10-13, the first 24 h of each) the former default ended at BTERM <= 0 on 42
+(median fit RMS 472 m) and this one on none (457 m; lower on 65, never more than 5 % higher).
 
 **12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
 floor (12.4) at the epoch state, the $OMM carries
@@ -1554,6 +1567,10 @@ scored every 30 min over the next 3 days (`test/covariance-realism.mjs --set cal
 | --- | --- | --: | --: | --: | --: | --: |
 | SGP4XP | DRAG | 136 | 2.813e-6 | 7.432e-6 | 8.505e-7 | 1.3e-6 |
 | SGP4XP | ABOVE | 62 | 2.308e-7 | 3.752e-7 | 2.666e-7 | 0 |
+
+These sizes, and the cells of 12.7, were measured on 2026-10-25 (module SHA-256 1f66e6fdf443 and f20f5a059b76) with
+`fit`'s former default prior on BTERM, GAUSSIAN_SIGNED 0 +- 0.05, and were not re-measured under the LOG_NORMAL default
+of 0.2.0.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P

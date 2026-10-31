@@ -55,7 +55,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults
   schema/PCF/main.fbs documents, each this module's own, so a table whose fields are all unset (or written at their
-  defaults) reads as an absent one; a field set to a value the module cannot apply is refused by name
+  defaults) reads as an absent one, but one: a BTERM prior left unset (FIT.DRAG_PRIOR absent or without a sigma, its
+  form unset) is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, where the schema's text says 0 +- 0.05;
+  a field set to a value the module cannot apply is refused by name
   (configuration-refused, "TABLE.FIELD: why"; configuration-missing without one). THEORY: propagate and maneuver read
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
   KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
@@ -86,14 +88,25 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
   down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
-  no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR (default
-  GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg); under LOG_NORMAL the iteration steps in the term's natural log, starting at the
+  no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
+  default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
+  xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
+  no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
+  GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg. Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
   <= 0. The set is rounded to the two-line digits and searched on their lattice; a term whose prior sigma, in its own
   units (sigma of the log times the term under LOG_NORMAL), is at most one unit of its last digit is not stepped. The
   `$OBD` BALLISTIC_COEFF_MODEL and AGOM_MODEL state each prior's form and values as used; under LOG_NORMAL with a
   covariance, the posterior sigma of the log, and "covariance prior-limited" when it passes 0.5 (the term effectively
   unobserved). The raw export `sdnap_fit` takes the 56-byte fit options with drag_log and agom_log.
+- Known limit of BTERM's default start (study 2026-10-31): the fit starts at the prior's median, 0.01 m^2/kg, and an
+  object whose B lies far below it can stop in a local minimum. On noise-free synthetic tracks (a day of an SGP4XP set's
+  own states at 60 s, e 0.0003, i 51.6 deg, AGOM 0.01 m^2/kg, n 15.5, 15.2 and 14.9 rev/day for 400, 500 and 600 km,
+  fitted back) B of 0.0005 to 0.002 m^2/kg at 400 km and 0.0005 to 0.004 at 500 and 600 km end at a fit RMS of 4.0 to
+  14.7 m, against 0.96 to 1.19 m from the former default's start at no drag; B of 0.01 and above recovers to about 1 m
+  at 400 and 500 km. A caller that knows its object's B states a LOG_NORMAL median near it. On 94 real ISS windows
+  (NASA's daily files, every eighth from 2020-09-10 to 2026-10-13, the first 24 h of each) the former default ended at
+  BTERM <= 0 on 42 (median fit RMS 472 m) and this one on none (457 m; lower on 65, never more than 5 % higher).
 - Third-party code, read from the open modules repository (this repository vendors nothing) and pinned by SHA-256
   in `build.mjs` (the build fails on any other bytes; `dist/build-provenance.txt` records the path, commits and
   hashes): ERFA (BSD-3-Clause, derived with permission from IAU SOFA; license carried in `LICENSES/ERFA.txt` and
@@ -166,7 +179,9 @@ of the next 3 days every 30 min, states and covariance lines from the module. d^
 against chi-square(3): mean d^2 / 3 (1), share inside the 95 % ellipsoid (0.95), median d^2 (2.366). The process
 noise was fitted (SPEC 12.5) on 2026-02-01 .. 05-31 arcs of the other satellites; LAGEOS-1 never entered it, and
 nothing was tuned after that fit. The experiment's windows are those its rows score (rows/slr-high.jsonl,
-rows/slr-low.jsonl; one LAGEOS-1 2026 window lacks reference states).
+rows/slr-low.jsonl; one LAGEOS-1 2026 window lacks reference states). These cells were measured with `fit`'s former
+default prior on BTERM (GAUSSIAN_SIGNED 0 +- 0.05) at the build named above, and were not re-measured under 0.2.0's
+LOG_NORMAL default.
 
 
 | Theory | Set | Day | Windows | Samples | Mean d^2/3 | Inside 95 % | Median d^2 | Position RMS (km) |
@@ -269,11 +284,14 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
   GCRF and EME2000 grids; the default 48 h span; a size-prefixed `$OMM`; a Moon-centered `$OMM` refused
   (unsupported-center); an `$OMM`, a `$PCF` and an `ElementRow` that name the removed SDN-AP theory refused; the prior
   forms on NASA's ISS file of 2025-01-23, its first 24 h (a window from before plan XM's period, read from the local
-  archive, `SDNAP_ISS_ARCHIVE`, SHA-256 pinned; NOT MEASURED without it): the default ends at BTERM -7.2e-37 with a fit
-  RMS of 880 m, LOG_NORMAL N(ln 0.01, ln 10) at 0.01106 m^2/kg with 481 m; sqrt(C_BB) = B x the posterior sigma of
-  ln B (0.0198) within 2.2e-16; an unobserved AGOM (posterior sigma of its log 2.21) marked prior-limited; AGOM held
-  at 0.01 under SRP_PRIOR 0.01 +- 1e-9 and +- 1e-6 and stepped just above the 1e-6 unit; the default prior's sets
-  byte-identical to main's; the LOG_NORMAL refusals by name; `sdnap_fit` with drag_log.
+  archive, `SDNAP_ISS_ARCHIVE`, SHA-256 pinned; NOT MEASURED without it): the stated GAUSSIAN_SIGNED 0 +- 0.05 ends at
+  BTERM -7.2e-37 with a fit RMS of 880 m and gives the sets of 0.1.0's default byte for byte, LOG_NORMAL N(ln 0.01,
+  ln 10) at 0.01106 m^2/kg with 481 m; sqrt(C_BB) = B x the posterior sigma of ln B (0.0198) within 2.2e-16; an
+  unobserved AGOM (posterior sigma of its log 2.21) marked prior-limited; AGOM held at 0.01 under SRP_PRIOR 0.01 +- 1e-9
+  and +- 1e-6 and stepped just above the 1e-6 unit; a BTERM prior left unset (no FIT table, a FIT table without a drag
+  prior, a drag prior without its sigma, the forms written GAUSSIAN_SIGNED) giving the bytes of the fit that states
+  that LOG_NORMAL, on the TEME example and on the ISS window, where it ends at BTERM > 0; the LOG_NORMAL refusals by
+  name; `sdnap_fit` with drag_log.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).

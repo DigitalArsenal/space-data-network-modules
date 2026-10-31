@@ -7013,7 +7013,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "fit",
         "ingest_omm",

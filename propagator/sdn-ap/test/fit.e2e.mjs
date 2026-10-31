@@ -21,14 +21,18 @@
 //   held refused.
 // - The prior forms ($PCF 1.0.6 FIT.DRAG_PRIOR_FORM, SRP_PRIOR_FORM; task modules-sgp4xp-fit-lognormal-drag-20261026), on
 //   a real window from before plan XM's period: NASA's ISS file of 2025-01-23, its first 24 h (the local archive,
-//   SDNAP_ISS_ARCHIVE; operator data, never committed; SHA-256 pinned). The default GAUSSIAN_SIGNED prior ends at
-//   BTERM <= 0 there; LOG_NORMAL N(ln 0.01, ln 10) estimates ln BTERM, ends > 0 and fits better. The $OBD states each
-//   prior as used; the covariance is the ln-space posterior carried to B by the Jacobian (sqrt(C_BB) = B x the posterior
-//   sigma of ln B within 1e-12), and an unobserved AGOM's is marked prior-limited (posterior sigma of the log > 0.5).
-//   The two-line lattice never steps a term its prior pins within one unit of its last digit (AGOM 0.01 under
-//   0.01 +- 1e-9 and +- 1e-6), and the default prior keeps main's sets byte for byte. LOG_NORMAL without its prior, its
-//   sigma or a positive median, and a form outside the enumeration, are refused by name; the raw export sdnap_fit takes
-//   drag_log.
+//   SDNAP_ISS_ARCHIVE; operator data, never committed; SHA-256 pinned). The GAUSSIAN_SIGNED prior 0 +- 0.05, stated,
+//   ends at BTERM <= 0 there and gives, byte for byte, the sets this module gave before 0.2.0 when no prior was set;
+//   LOG_NORMAL N(ln 0.01, ln 10) estimates ln BTERM, ends > 0 and fits better. The $OBD states each prior as used; the
+//   covariance is the ln-space posterior carried to B by the Jacobian (sqrt(C_BB) = B x the posterior sigma of ln B within
+//   1e-12), and an unobserved AGOM's is marked prior-limited (posterior sigma of the log > 0.5). The two-line lattice
+//   never steps a term its prior pins within one unit of its last digit (AGOM 0.01 under 0.01 +- 1e-9 and +- 1e-6).
+//   LOG_NORMAL without its prior, its sigma or a positive median, and a form outside the enumeration, are refused by name;
+//   the raw export sdnap_fit takes drag_log.
+// - A BTERM prior left unset is that LOG_NORMAL N(ln 0.01, ln 10) (task modules-sdn-ap-log-normal-default-20261031): on the
+//   TEME example and on the ISS window the fits that leave it unset (no FIT table, a FIT table that sets no drag prior, a
+//   drag prior without its sigma, the form written GAUSSIAN_SIGNED without a prior) give the bytes, $OMM and $OBD, of the
+//   fit that states it, and the ISS window ends at BTERM > 0.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import fs from "node:fs";
@@ -44,6 +48,7 @@ import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OBD } from "spacedatastandards.org/lib/js/OBD/OBD.js";
 import { odMethod } from "spacedatastandards.org/lib/js/OBD/odMethod.js";
+import { PCFFitPolicy, PCFFitPolicyT } from "spacedatastandards.org/lib/js/PCF/PCFFitPolicy.js";
 import { PCFGaussianPriorT } from "spacedatastandards.org/lib/js/PCF/PCFGaussianPrior.js";
 import { FRAME_PROBE, jdOf, oemInFrame, packOem, rfm, rotate } from "./lib/frames.mjs";
 import { THEORY, elementRows, openModule, wasmPath } from "./lib/module.mjs";
@@ -260,14 +265,47 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   check(held === 1 && err !== 0, `a theory 16 row: held ${held}, init error ${err}`);
 }
 
-// --- the prior forms ($PCF 1.0.6 FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM; task modules-sgp4xp-fit-lognormal-drag-20261026)
+// --- the prior forms ($PCF 1.0.6 FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM; task modules-sgp4xp-fit-lognormal-drag-20261026) and the
+// BTERM prior left unset (task modules-sdn-ap-log-normal-default-20261031)
 {
-  // the default prior keeps main's sets byte for byte (the $OMM of main 348636447's build; the $OBD now states the prior)
+  const outputsOf = (r) => Buffer.concat(r.outputs.map((o) => Buffer.from(o.payload)));  // the $OMM and the $OBD
   const shaOf = (r) => createHash("sha256").update(Buffer.from(r.outputs.find((o) => o.portId === "elements").payload)).digest("hex");
-  const MAIN = { teme: "81a81b54c2a49c235830d1beb4ce1388baeca5a507e43119c813812fc5ae89c9", iss: "cc06072aed2f050172f476d81952898bdf0d365df717a1330adf1d03eb552d30" };
-  const temeDefault = shaOf(await command.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: oemType, payload: oemInFrame(m, source, "TEME", null) }] }));
-  console.log(`default prior: the TEME set's $OMM ${temeDefault.slice(0, 12)} (main ${MAIN.teme.slice(0, 12)})`);
-  check(temeDefault === MAIN.teme, `the default fit of the TEME set differs from main: ${temeDefault}`);
+  const modelOf = (r) => OBD.getRootAsOBD(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "determination").payload)).BALLISTIC_COEFF_MODEL();
+  // the $OMM of main 348636447's build, which took GAUSSIAN_SIGNED 0 +- 0.05 on BTERM when no prior was set: stated, that prior gives
+  // its sets back byte for byte (the $OBD now states the prior)
+  const BEFORE_0_2_0 = { teme: "81a81b54c2a49c235830d1beb4ce1388baeca5a507e43119c813812fc5ae89c9", iss: "cc06072aed2f050172f476d81952898bdf0d365df717a1330adf1d03eb552d30" };
+  const LN = { DRAG_PRIOR: prior(0.01, Math.LN10), DRAG_PRIOR_FORM: pcfPriorForm.LOG_NORMAL };
+  const GAUSSIAN = { DRAG_PRIOR: prior(0, 0.05), DRAG_PRIOR_FORM: pcfPriorForm.GAUSSIAN_SIGNED };
+  // a FIT table with both forms on the wire at their default value, as a builder forcing defaults writes them: no prior
+  const formsWritten = Object.assign(new PCFFitPolicyT(), { pack: (b) => {
+    PCFFitPolicy.startPCFFitPolicy(b);
+    b.forceDefaults(true);
+    PCFFitPolicy.addDragPriorForm(b, pcfPriorForm.GAUSSIAN_SIGNED);
+    PCFFitPolicy.addSrpPriorForm(b, pcfPriorForm.GAUSSIAN_SIGNED);
+    b.forceDefaults(false);
+    return PCFFitPolicy.endPCFFitPolicy(b);
+  } });
+  check(!Buffer.from(configuration({ fit: formsWritten }).payload).equals(Buffer.from(configuration({ fit: {} }).payload)), "the FIT table with its forms written reads as the empty one on the wire");
+  const fitOn = (oem, fitTable) => command.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: oemType, payload: oem }, configuration(fitTable ? { fit: fitTable } : {})] });
+  // a BTERM prior left unset is LOG_NORMAL N(ln 0.01, ln 10): the fits that leave it unset give the bytes, $OMM and $OBD, of the fit
+  // that states it
+  const temeOem = oemInFrame(m, source, "TEME", null);
+  for (const [label, unset, stated] of [
+    ["no FIT table", null, LN],
+    ["a FIT table that sets no drag prior", { SRP_PRIOR: prior(0.01, 1e-9) }, { ...LN, SRP_PRIOR: prior(0.01, 1e-9) }],
+    ["a drag prior without its sigma", { DRAG_PRIOR: new PCFGaussianPriorT() }, LN],
+    ["the forms written GAUSSIAN_SIGNED, no prior", formsWritten, LN],
+  ]) {
+    const a = await fitOn(temeOem, unset), b = await fitOn(temeOem, stated);
+    const same = a.statusCode === 0 && b.statusCode === 0 && outputsOf(a).equals(outputsOf(b));
+    console.log(`TEME set, ${label}: ${same ? "the bytes of the fit that states LOG_NORMAL N(ln 0.01, ln 10)" : "DIFFERENT bytes"}`);
+    check(same, `TEME set, ${label}: not the bytes of the fit that states LOG_NORMAL N(ln 0.01, ln 10) (${a.statusCode}/${b.statusCode})`);
+  }
+  const unsetModel = modelOf(await fitOn(temeOem, null));
+  check(/^BTERM \(SGP4XP\), log-normal prior, estimated as its natural log \(never <= 0\): median 0\.01 m\^2\/kg, sigma of the log 2\.30258509; /.test(unsetModel), `TEME set, no prior set: $OBD BALLISTIC_COEFF_MODEL ${unsetModel}`);
+  const temeGaussian = shaOf(await fitOn(temeOem, GAUSSIAN));
+  console.log(`GAUSSIAN_SIGNED 0 +- 0.05 stated: the TEME set's $OMM ${temeGaussian.slice(0, 12)} (before 0.2.0 ${BEFORE_0_2_0.teme.slice(0, 12)})`);
+  check(temeGaussian === BEFORE_0_2_0.teme, `GAUSSIAN_SIGNED 0 +- 0.05 stated: the fit of the TEME set differs from the build before 0.2.0: ${temeGaussian}`);
   // a real window from before plan XM's period (2026-01-01 to 07-31): NASA's ISS trajectory file of 2025-01-23, its first
   // 24 h at 240 s (EME2000), read from the local archive (operator data, never committed) and pinned by its SHA-256
   const file = path.join(process.env.SDNAP_ISS_ARCHIVE ?? "/opt/data/sdn-archive/hac/nasa-iss-oem-archive", "2025-01-23", "ISS.OEM_J2K_EPH.txt");
@@ -293,26 +331,30 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
       TIME_SYSTEM: timingStandard.UTC, START_TIME: day[0].EPOCH, STOP_TIME: day.at(-1).EPOCH, USEABLE_START_TIME: day[0].EPOCH, USEABLE_STOP_TIME: day.at(-1).EPOCH,
       EPHEMERIS_DATA_LINES: day.map((l) => Object.assign(new ephemerisDataLineT(), l)) })] }));
     const issFit = async (label, fitTable) => {
-      const r = await command.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: oemType, payload: issOem }, configuration(fitTable ? { fit: fitTable } : {})] });
+      const r = await fitOn(issOem, fitTable);
       if (r.statusCode !== 0) { failures.push(`ISS ${label}: ${r.errorCode} ${r.errorMessage}`); return null; }
       const omm = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload)).unpack();
       const obd = OBD.getRootAsOBD(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "determination").payload)).unpack();
       const user = Object.fromEntries((omm.USER_DEFINED_PARAMETERS ?? []).map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
       console.log(`ISS 2025-01-22/23, ${day.length} states, ${label}: BTERM ${omm.BSTAR}, AGOM ${omm.MEAN_MOTION_DDOT}, fit RMS ${(obd.WRMS * 1e3).toFixed(1)} m\n  ${obd.BALLISTIC_COEFF_MODEL}\n  ${obd.AGOM_MODEL}`);
-      return { omm, obd, user };
+      return { omm, obd, user, sha: shaOf(r), bytes: outputsOf(r) };
     };
     const posteriorOf = (model) => Number((/posterior sigma of the log ([0-9.eE+-]+)/.exec(model) ?? [])[1]);
     const diagonalOf = (row) => Number(String(row ?? "").trim().split(/\s+/).at(-1));
-    const LN = { DRAG_PRIOR: prior(0.01, Math.LN10), DRAG_PRIOR_FORM: pcfPriorForm.LOG_NORMAL };
-    const gauss = await issFit("GAUSSIAN_SIGNED (the default prior 0 +- 0.05)", null);
+    const gauss = await issFit("GAUSSIAN_SIGNED 0 +- 0.05, stated", GAUSSIAN);
     const ln = await issFit("LOG_NORMAL drag N(ln 0.01, ln 10)", LN);
-    if (gauss && ln) {
-      // the trap the default falls in on this window, and the log that cannot fall in it
-      check(gauss.omm.BSTAR <= 0, `ISS: the default prior ends at BTERM ${gauss.omm.BSTAR} > 0 (the window no longer shows the trap)`);
+    const unset = await issFit("no prior set", null);
+    if (gauss && ln && unset) {
+      // the trap the stated Gaussian falls in on this window, and the log that cannot fall in it: what a caller that sets no prior gets
+      check(gauss.omm.BSTAR <= 0, `ISS: GAUSSIAN_SIGNED 0 +- 0.05 ends at BTERM ${gauss.omm.BSTAR} > 0 (the window no longer shows the trap)`);
+      check(unset.omm.BSTAR > 0 && unset.obd.WRMS < gauss.obd.WRMS, `ISS, no prior set: BTERM ${unset.omm.BSTAR}, RMS ${unset.obd.WRMS} against GAUSSIAN_SIGNED ${gauss.obd.WRMS}`);
+      check(unset.bytes.equals(ln.bytes), "ISS, no prior set: not the bytes of the fit that states LOG_NORMAL N(ln 0.01, ln 10)");
       check(ln.omm.BSTAR > 0 && ln.obd.WRMS < gauss.obd.WRMS, `ISS LOG_NORMAL: BTERM ${ln.omm.BSTAR}, RMS ${ln.obd.WRMS} against ${gauss.obd.WRMS}`);
       check(/^BTERM \(SGP4XP\), log-normal prior, estimated as its natural log \(never <= 0\): median 0\.01 m\^2\/kg, sigma of the log 2\.30258509; posterior sigma of the log /.test(ln.obd.BALLISTIC_COEFF_MODEL),
         `ISS LOG_NORMAL $OBD BALLISTIC_COEFF_MODEL: ${ln.obd.BALLISTIC_COEFF_MODEL}`);
-      check(gauss.obd.BALLISTIC_COEFF_MODEL === "BTERM (SGP4XP), Gaussian prior 0 +- 0.05 m^2/kg", `ISS default $OBD BALLISTIC_COEFF_MODEL: ${gauss.obd.BALLISTIC_COEFF_MODEL}`);
+      check(gauss.obd.BALLISTIC_COEFF_MODEL === "BTERM (SGP4XP), Gaussian prior 0 +- 0.05 m^2/kg", `ISS stated GAUSSIAN_SIGNED $OBD BALLISTIC_COEFF_MODEL: ${gauss.obd.BALLISTIC_COEFF_MODEL}`);
+      console.log(`GAUSSIAN_SIGNED 0 +- 0.05 stated: the ISS window's $OMM ${gauss.sha.slice(0, 12)} (before 0.2.0 ${BEFORE_0_2_0.iss.slice(0, 12)})`);
+      check(gauss.sha === BEFORE_0_2_0.iss, `GAUSSIAN_SIGNED 0 +- 0.05 stated: the fit of the ISS window differs from the build before 0.2.0: ${gauss.sha}`);
       // SPEC 12: the ln-space posterior carried to B by the Jacobian, sigma_B = B sigma_lnB; the drag is observed here
       const sB = posteriorOf(ln.obd.BALLISTIC_COEFF_MODEL), cBB = diagonalOf(ln.user.SDNAP_COV_DRAG);
       const identity = Math.abs(Math.sqrt(cBB) / (ln.omm.BSTAR * sB) - 1);
@@ -335,9 +377,6 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
       const r = await issFit(`LOG_NORMAL drag, SRP_PRIOR 0.01 +- ${sigma}`, { ...LN, SRP_PRIOR: prior(0.01, sigma) });
       if (r) check((r.omm.MEAN_MOTION_DDOT === 0.01) === held, `ISS SRP_PRIOR 0.01 +- ${sigma}: AGOM ${r.omm.MEAN_MOTION_DDOT}, expected ${held ? "0.01 exactly" : "a stepped value"}`);
     }
-    const issDefault = shaOf(await command.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: oemType, payload: issOem }] }));
-    console.log(`default prior: the ISS window's $OMM ${issDefault.slice(0, 12)} (main ${MAIN.iss.slice(0, 12)})`);
-    check(issDefault === MAIN.iss, `the default fit of the ISS window differs from main: ${issDefault}`);
   }
   // refused by name: a LOG_NORMAL prior needs its prior, its sigma and a median > 0; a form outside the enumeration
   const refusal = async (label, fitTable, field) => {
