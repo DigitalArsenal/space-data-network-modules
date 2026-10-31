@@ -368,7 +368,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Private E13 NRLMSISE-00 energy-arc fits in OBJECTS (ID, FIRST_MS, LAST_MS, LN_B, LN_B_SIGMA, BALLISTIC_COEFFICIENT_M2_KG, OK), ATMOSPHERE NRLMSIS00E, CREATED_AT_MS issue time. OBJECTS holds only arcs whose states were public at the issue; the solve reads the 30 days before it. Flow config: open_dca_lag_hours, open_dca_noise_sigma with open_dca_shrink_window_hours, all off by default."
+              "description": "Private E13 NRLMSISE-00 energy-arc fits in OBJECTS (ID, FIRST_MS, LAST_MS, LN_B, LN_B_SIGMA, BALLISTIC_COEFFICIENT_M2_KG, OK), ATMOSPHERE NRLMSIS00E, CREATED_AT_MS issue time. OBJECTS holds only arcs whose states were public at the issue; the solve reads the 30 days before it. Flow config: open_dca_lag_hours, open_dca_noise_sigma with open_dca_shrink_window_hours, open_dca_forecast_tau_hours, all off by default."
             }
           ],
           "minStreams": 1,

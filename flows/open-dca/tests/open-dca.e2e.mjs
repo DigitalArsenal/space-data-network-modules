@@ -54,7 +54,7 @@ try{
  await command(python,[deploy,node.configPath,'apply'],{stdio:'inherit'});
  const merged=JSON.parse(execFileSync(python,['-c','import json,sys,yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))',node.configPath],{encoding:'utf8'}));
  assert.deepEqual(merged.publishing.allowed_schemas,[]);assert.deepEqual(merged.admin,node.config.admin);assert.deepEqual(merged.network,node.config.network);
- Object.assign(node.config,merged);
+ Object.assign(node.config,merged);node.config.flows.services=node.config.flows.services.filter(service=>service.flow!=='com.digitalarsenal.flows.eop');
  node.config.flows.services.find(s=>s.flow==='com.digitalarsenal.flows.open-dca').config={open_dca_archive_url:`http://127.0.0.1:${server.address().port}`};
  receipt.deploymentConfig='PASS: actual owner merger, both signed flows, capabilities before boot';
  await fs.mkdir(path.join(node.dir,'data/modules'),{recursive:true});await fs.writeFile(path.join(node.dir,'data/modules/capability_policy.json'),JSON.stringify({version:1,approvals}));

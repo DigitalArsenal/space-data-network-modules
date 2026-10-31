@@ -2138,16 +2138,18 @@ namespace {
 bool publication_of(open_dca::Publication& p,std::string& error){
   const sdm_piv::Config config=sdm_piv::get_config();
   if(!config.ok()){error="the flow config could not be read: "+std::string(config.error_message());return false;}
-  p.lagHours=config.number("open_dca_lag_hours",0);p.noiseSigma=config.number("open_dca_noise_sigma",0);p.shrinkWindowHours=config.number("open_dca_shrink_window_hours",0);
+  p.lagHours=config.number("open_dca_lag_hours",0);p.noiseSigma=config.number("open_dca_noise_sigma",0);p.shrinkWindowHours=config.number("open_dca_shrink_window_hours",0);p.forecastTauHours=config.number("open_dca_forecast_tau_hours",0);
   if(!(p.lagHours>=0&&p.lagHours<=48)){error="open_dca_lag_hours must lie in 0..48.";return false;}
   if(!(p.noiseSigma>=0&&p.noiseSigma<=1&&p.shrinkWindowHours>=0&&p.shrinkWindowHours<=720)||(p.noiseSigma>0)!=(p.shrinkWindowHours>0)){error="open_dca_noise_sigma (0..1) and open_dca_shrink_window_hours (0..720) are set together or not at all.";return false;}
+  if(!(p.forecastTauHours>=0&&p.forecastTauHours<=8760)){error="open_dca_forecast_tau_hours must lie in 0..8760.";return false;}
   return true;
 }
 // The method a record says it used, by value.
 std::string lineage_of(const open_dca::Publication& p){
-  char lag[32],shrink[64]="shrink-off";std::snprintf(lag,sizeof(lag),"lag%gh",p.lagHours);
+  char tail[48]="hold48h",lag[32],shrink[64]="shrink-off";std::snprintf(lag,sizeof(lag),"lag%gh",p.lagHours);
+  if(p.forecastTauHours>0)std::snprintf(tail,sizeof(tail),"hold-to-issue-then-tau%gh",p.forecastTauHours);
   if(p.noiseSigma>0)std::snprintf(shrink,sizeof(shrink),"shrink-sigma%g-window%gh",p.noiseSigma,p.shrinkWindowHours);
-  return std::string("E13/OAE-3e0ff003; daily24h; rw0.005; smooth0.05; public-at-issue; history30d; hold48h; ")+lag+"; "+shrink+"; mean-zero-supported";
+  return std::string("E13/OAE-3e0ff003; daily24h; rw0.005; smooth0.05; public-at-issue; history30d; ")+tail+"; "+lag+"; "+shrink+"; mean-zero-supported";
 }
 }
 // E13's exploratory NRLMSISE-00 form (PLAN S3), frozen R1/R2 solver. This
@@ -2185,8 +2187,9 @@ extern "C" int calibrate_log_density() {
   out.SETTINGS=std::make_unique<dclSettingsT>();out.SETTINGS->FROM_MS=int64_t(result.times[first]-lag);out.SETTINGS->TO_MS=int64_t(result.times[last]-lag);
   out.CORRECTION=std::make_unique<dclCorrectionT>();out.CORRECTION->FORM=dclCorrectionForm::LogDensityNodes;
   for(size_t i=first;i<=last;++i){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[i]-lag));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(values[i]);}
-  // Held past the last solve epoch: no fit, whatever its cutoff, meets a ramp the producer wrote.
-  out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[last]-lag+48*open_dca::hour));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(values[last]);
+  std::vector<double> tailTimes,tailValues;
+  open_dca::appendTail(result.times[last]-lag,values[last],double(request->CREATED_AT_MS()),publication,tailTimes,tailValues);
+  for(size_t i=0;i<tailTimes.size();++i){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(tailTimes[i]));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(tailValues[i]);}
   out.FIT=std::make_unique<dclFitStatisticsT>();out.FIT->ITERATIONS=result.iterations;out.FIT->CONVERGED=true;out.FIT->OBSERVATIONS=arcs.size();out.FIT->USED=result.arcs;out.FIT->PARAMETERS=last-first;
   double sum=0;for(double r:result.residuals)sum+=r*r;out.FIT->POSTFIT_RMS=std::sqrt(sum/result.residuals.size());
   out.PROVENANCE=std::make_unique<PVNT>();out.PROVENANCE->SOURCE_ID="open-dca-planet";out.PROVENANCE->SOURCE_KIND=pvnSourceKind::Ephemeris;

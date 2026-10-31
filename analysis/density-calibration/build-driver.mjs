@@ -28,4 +28,6 @@ else if(args.includes('-c')&&path.basename(args[args.indexOf('-c')+1])==='module
  }
  run(linker,['-r',...objects,'-o',output]);
 }else if(args.includes('-c'))run(clang,[...args,...flags]);
-else run(clang,[...args.map(a=>a.startsWith('-Wl,--initial-memory=')?'-Wl,--initial-memory=268435456':a.startsWith('-Wl,--max-memory=')?'-Wl,--max-memory=402653184':a),...flags,...(args.includes('-mexec-model=reactor')?[]:['-Wl,--wrap=__wasm_call_ctors']),'-Wl,--strip-debug']);
+else run(clang,[...args.map(a=>a.startsWith('-Wl,--initial-memory=')?'-Wl,--initial-memory=268435456':a.startsWith('-Wl,--max-memory=')?'-Wl,--max-memory=402653184':a),...flags,...(args.includes('-mexec-model=reactor')?[]:['-Wl,--wrap=__wasm_call_ctors']),
+ // The flow's final link names no stack: FFM's integration needs what this module's own build gives it.
+ ...(args.some(a=>a.startsWith('-Wl,-z,stack-size='))?[]:['-Wl,-z,stack-size=2097152']),'-Wl,--strip-debug']);

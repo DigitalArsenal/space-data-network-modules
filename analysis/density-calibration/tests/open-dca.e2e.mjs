@@ -1,9 +1,11 @@
-// Method E2E of the open DCA producer, on real inputs read in place and never copied into this repository.
+// E2E of the open DCA producer, on real inputs read in place and never copied into this repository.
 //   1. The publication rule: real operator files with their own Last-Modified through plan_operator and parse_operator.
 //   2. The record: real energy arcs through calibrate_log_density against an independent oracle (the frozen E13 solver at
-//      the supplied checkout, and this file's own arithmetic for the hold, the lag and the shrink), with the flow's typed
-//      config off and on, then the same bytes on the headless browser and native WasmEdge.
-// Inputs: OPEN_DCA_ORACLE (default: the stack's experiments checkout), OPEN_DCA_ARCS, OPEN_DCA_PUBLISHED, OPEN_DCA_PLANET_DIRS.
+//      the supplied checkout, and this file's own arithmetic for the hold, the lag, the shrink and the decay), with the flow's
+//      typed config off and on, then the same bytes on the headless browser and native WasmEdge.
+//   3. The composed flow: the artifact the node runs, drained from one tick to the record on a reduced set of real sources.
+// Inputs: OPEN_DCA_ORACLE (default: the stack's experiments checkout), OPEN_DCA_ARCS, OPEN_DCA_PUBLISHED, OPEN_DCA_PLANET_DIRS,
+// OPEN_DCA_FLOW_FIXTURE.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -14,6 +16,7 @@ import * as S from 'spacedatastandards.org/lib/js/DCL/main.js';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/host/browser-module';
 import {runtimeParity} from '../../../data-source/space-weather/tests/runtime-parity.mjs';
 import {load,input,encodeTimerTick,decodeHttpRequest,encodeHttpResponse} from '../../../flows/open-dca/tests/inputs.mjs';
+import {composedRun} from '../../../flows/open-dca/tests/composed.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const reference=process.env.OPEN_DCA_ORACLE||path.resolve(root,'../../../../ancillary-packages/orbit-accuracy-experiments');
@@ -147,8 +150,8 @@ try{
  for(const test of cases){const refused=await off.invoke(test);assert.notEqual(refused.statusCode,0);assert.equal(refused.outputs.length,0);}
  assert.match((await off.invoke(cases[0])).errorMessage,/ends after the issue/);assert.match((await off.invoke(cases[1])).errorMessage,/more than 48 hours/);
 }finally{await off.destroy();}
-// Config on: the same solve, moved and shrunk by the values the lineage states.
-const config={open_dca_lag_hours:9,open_dca_noise_sigma:0.065,open_dca_shrink_window_hours:168};
+// Config on: the same solve, moved, shrunk and decayed from the issue by the values the lineage states.
+const config={open_dca_lag_hours:9,open_dca_noise_sigma:0.065,open_dca_shrink_window_hours:168,open_dca_forecast_tau_hours:168};
 const on=await harness(config);
 let maxShrinkError=0;
 try{
@@ -157,17 +160,34 @@ try{
  for(let i=0;i<=sol.last-sol.first;i++){assert.equal(Number(c.NODE_TIMES_MS[i]),sol.nodeMs[sol.first+i]-9*H);maxShrinkError=Math.max(maxShrinkError,Math.abs(c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[i]-want[sol.first+i]));}
  assert(maxShrinkError<2e-9,`Shrink maximum log-density error ${maxShrinkError}`);
  assert(c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.some((v,i)=>i<=sol.last-sol.first&&Math.abs(v-sol.s[sol.first+i])>1e-3),'the shrink changed the record');
- const n=c.NODE_TIMES_MS.length;assert.equal(Number(c.NODE_TIMES_MS[n-1]),sol.nodeMs[sol.last]-9*H+48*H);assert.equal(c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[n-1],c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[n-2]);
- assert.match(actual.PROVENANCE.LINEAGE,/hold48h; lag9h; shrink-sigma0\.065-window168h;/);
+ // Held from the last solve epoch to the issue, then the decay from the issue, every 6 hours through issue + 10 days.
+ const m=sol.last-sol.first+1,held=c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[m-1];
+ assert.equal(c.NODE_TIMES_MS.length,m+41);assert.equal(Number(c.NODE_TIMES_MS[m]),issue);assert.equal(c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[m],held,'no ramp before the issue');
+ for(let k=1;k<=40;k++){assert.equal(Number(c.NODE_TIMES_MS[m+k]),issue+k*6*H);assert(Math.abs(c.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[m+k]-held*Math.exp(-k*6/168))<2e-12,`decay node ${k}`);}
+ assert.match(actual.PROVENANCE.LINEAGE,/hold-to-issue-then-tau168h; lag9h; shrink-sigma0\.065-window168h;/);
 }finally{await on.destroy();}
 // A config that does not say what it means is refused.
-for(const bad of [{open_dca_lag_hours:-1},{open_dca_lag_hours:49},{open_dca_noise_sigma:0.065},{open_dca_shrink_window_hours:168}]){
+for(const bad of [{open_dca_lag_hours:-1},{open_dca_lag_hours:49},{open_dca_noise_sigma:0.065},{open_dca_shrink_window_hours:168},{open_dca_forecast_tau_hours:-1}]){
  const h=await harness(bad);
  try{const r=await h.invoke({methodId:'calibrate_log_density',inputs:[frame(value)]});assert.notEqual(r.statusCode,0,JSON.stringify(bad));assert.equal(r.outputs.length,0);}finally{await h.destroy();}
 }
 // The same bytes on the headless browser and native WasmEdge, config on.
 process.env.PATH=`${path.join(os.homedir(),'.wasmedge/bin')}:${process.env.PATH}`;
 const parity=await runtimeParity({wasmPath,manifest,cases:[{methodId:'calibrate_log_density',inputs:[frame(value)]},{methodId:'calibrate_log_density',inputs:[frame(request(issue+20*D,chosen))]}],evidence,config});
+
+// ---- 3. The composed flow ----------------------------------------------------------------------------------------------
+const started=performance.now(),composed=await composedRun({runtimeDir:path.join(root,'../../flows/open-dca/dist/runtime'),fixture:process.env.OPEN_DCA_FLOW_FIXTURE||'/opt/data/sdn-archive/open-dca-fix/flow-fixture',planet:planetFile,published,kernelFile,config:{open_dca_lag_hours:9,open_dca_forecast_tau_hours:168}});
+for(const n of composed.nodes)assert.equal(n.status,0,`composed flow: node ${n.nodeId} answered ${n.status}`);
+for(const id of ['operator-parse','fit','solve','publish','ingest'])assert(composed.nodes.find(n=>n.nodeId===id)?.invocations>0,`composed flow: node ${id} did not run`);
+assert(composed.records,'composed flow: nothing reached the ingest');
+const flowRecord=S.DCL.getSizePrefixedRootAsDCL(new ByteBuffer(new Uint8Array(composed.records))).unpack(),fc=flowRecord.CORRECTION;
+assert.equal(Number(flowRecord.CREATED_AT_MS),composed.issue);assert.equal(flowRecord.OBJECTS.length,0);assert.equal(flowRecord.STATES,null);
+assert.match(flowRecord.PROVENANCE.LINEAGE,/public-at-issue; history30d; hold-to-issue-then-tau168h; lag9h; shrink-off;/);
+const heldAt=fc.NODE_TIMES_MS.findIndex(t=>Number(t)===composed.issue);
+assert(heldAt>0,'composed flow: a node at the issue');assert.equal(fc.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[heldAt],fc.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS[heldAt-1],'composed flow: no ramp before the issue');
+assert(!flowRecord.PROVENANCE.LINEAGE.includes(dayName(composed.issue)),'composed flow: the day answering 403 contributes nothing');
+receipt.composed={seconds:(performance.now()-started)/1000,sources:composed.asked.length,nodes:fc.NODE_TIMES_MS.length};
+console.log(`Composed flow: PASS in ${receipt.composed.seconds.toFixed(0)} s`);
 Object.assign(receipt,{status:'PASS',arcs:chosen.length,fleet:new Set(chosen.map(a=>a.dove)).size,maxError,maxShrinkError,iterations:sol.sweeps,parity});
 await fs.writeFile(path.join(evidence,'receipt.json'),JSON.stringify(receipt,null,1));
 console.log(`PASS open DCA producer: ${chosen.length} real energy arcs, ${sol.sweeps} iterations, max |delta ln rho| ${maxError} (shrink ${maxShrinkError}); browser/native byte parity; ${evidence}`);

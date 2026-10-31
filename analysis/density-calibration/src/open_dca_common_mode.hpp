@@ -156,7 +156,8 @@ inline bool solve(const std::vector<Arc>& input,double issue,Result& out,std::st
 // lagHours moves every node earlier. noiseSigma and shrinkWindowHours shrink each
 // supported node toward the mean of the supported nodes in its trailing window, by
 // the share of that window's variance the noise does not explain (empirical Bayes).
-struct Publication { double lagHours=0,noiseSigma=0,shrinkWindowHours=0; };
+// forecastTauHours decays the held value from the issue on; 0 holds it.
+struct Publication { double lagHours=0,noiseSigma=0,shrinkWindowHours=0,forecastTauHours=0; };
 inline std::vector<double> shrunk(const Result& r,const Publication& p) {
   std::vector<double> out=r.s;
   if(!(p.noiseSigma>0&&p.shrinkWindowHours>0))return out;
@@ -170,5 +171,12 @@ inline std::vector<double> shrunk(const Result& r,const Publication& p) {
     out[i]=mean+(variance>noise?1-noise/variance:0)*(r.s[i]-mean);
   }
   return out;
+}
+// The nodes after the last solve epoch `from`, whose value is `held`. Held through the
+// issue, so no fit to a cutoff at or before the issue meets a ramp of the producer's making.
+inline void appendTail(double from,double held,double issue,const Publication& p,std::vector<double>& times,std::vector<double>& values) {
+  if(!(p.forecastTauHours>0)){times.push_back(from+48*hour);values.push_back(held);return;}
+  if(issue>from){times.push_back(issue);values.push_back(held);}
+  for(int k=1;k<=40;++k){const double t=k*6*hour;times.push_back(issue+t);values.push_back(held*std::exp(-t/(p.forecastTauHours*hour)));}
 }
 } // namespace open_dca

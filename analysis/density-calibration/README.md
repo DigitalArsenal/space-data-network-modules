@@ -19,16 +19,19 @@ whose states were public at its issue time, and one that ends later is refused.
 Its common-mode level is mean-zero over supported nodes: it estimates fleet-wide
 variation, not an independently identified absolute atmospheric density.
 
-The last solved value is held: the record ends with one node 48 hours after the
-last solve epoch at that value, so a fit to any cutoff meets no ramp of the
-producer's making. Consumers multiply NRLMSISE-00 density by `exp(s(t))`,
+The last solved value is held: by default the record ends with one node 48 hours
+after the last solve epoch at that value, so a fit to any cutoff meets no ramp of
+the producer's making. Consumers multiply NRLMSISE-00 density by `exp(s(t))`,
 interpolate s linearly in UTC and hold the endpoints outside; they apply no
-decay. Two method parameters come from the flow's typed config and are off by
-default: `open_dca_lag_hours` moves every node earlier, and
+decay. Three method parameters come from the flow's typed config and are off by
+default: `open_dca_lag_hours` moves every node earlier;
 `open_dca_noise_sigma` with `open_dca_shrink_window_hours` shrinks each supported
 node toward the mean of the supported nodes in its trailing window by the share
-of that window's variance the noise does not explain. `PROVENANCE.LINEAGE` states
-the values a record used.
+of that window's variance the noise does not explain; and
+`open_dca_forecast_tau_hours` holds the value through the issue, then decays it
+from the issue, with nodes every 6 hours through issue + 10 days. Under that
+decay, a consumer whose cutoff falls after the issue meets a slow ramp from the
+issue to its cutoff. `PROVENANCE.LINEAGE` states the values a record used.
 
 The module and composed flow are built without WASM exception instructions.
 Errors are returned or recorded as propagation failures. Verification uses the

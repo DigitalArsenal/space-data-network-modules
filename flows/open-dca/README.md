@@ -12,8 +12,8 @@ SDS 1.259.0 carries the result in `$DCL`:
 `CORRECTION.FORM = LogDensityNodes`, `NODE_TIMES_MS` in UTC milliseconds,
 `NODE_LOG_DENSITY_SCALE_DIMENSIONLESS`, and `PROVENANCE`. Drag density is
 NRLMSISE-00 multiplied by `exp(s(t))`; interpolate s linearly between nodes,
-hold the endpoints outside, and apply no decay. The producer holds the last
-solved value through a final node 48 hours after the last solve epoch.
+hold the endpoints outside, and apply no decay. By default the producer holds the
+last solved value through a final node 48 hours after the last solve epoch.
 
 A run reads what was public at its issue time: the file of the issue's own UTC
 day and the 31 before it, each by its own `Last-Modified`, with a 403 or 404
@@ -24,9 +24,11 @@ inert live until the phase is set. The phase comes from the node's retrieval
 ledger, and setting it is the owner's rollout step
 (`deployment/space-weather-provider-node`).
 
-`open_dca_lag_hours`, `open_dca_noise_sigma` and `open_dca_shrink_window_hours`
-in the flow's config set the method parameters, off by default, and
-`PROVENANCE.LINEAGE` states them by value.
+`open_dca_lag_hours`, `open_dca_noise_sigma` with `open_dca_shrink_window_hours`,
+and `open_dca_forecast_tau_hours` in the flow's config set the method parameters,
+off by default, and `PROVENANCE.LINEAGE` states them by value. A forecast time
+constant holds the value through the issue and decays it from the issue, so a
+consumer whose cutoff falls after the issue meets a slow ramp up to its cutoff.
 
 Reference: orbit-accuracy-experiments `experiments/e13-open-dca`, including
 PLAN amendments S3/R1/R2, `steps/74-planet-live-arcs.mjs`, and
