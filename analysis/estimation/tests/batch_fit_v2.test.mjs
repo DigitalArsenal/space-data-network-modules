@@ -1,4 +1,4 @@
-// fit_batch version 3 (schema extension v6; analysis/estimation 0.6.0), end
+// fit_batch version 3 (schema extension v6; analysis/estimation 0.7.0), end
 // to end through the estimation and propagator/ffm WASM. The declared E2E of
 // the change: node --test analysis/estimation/tests/batch_fit_v2.test.mjs.
 //

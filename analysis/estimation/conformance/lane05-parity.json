@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "TMPL lane05 estimation + TEAG/ESPF extension v3 + fit_batch v2 extension v4",
   "wasmPath": "analysis/estimation/dist/isomorphic/module.wasm",
-  "artifactSha256": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac",
-  "moduleSha256": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac",
+  "artifactSha256": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
+  "moduleSha256": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 204,
-      "durationMs": 3624
+      "durationMs": 2984
     },
     {
       "lane": "wasmedge",
       "runs": 204,
-      "durationMs": 281842
+      "durationMs": 252423
     }
   ],
   "cases": [

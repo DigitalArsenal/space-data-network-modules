@@ -158,7 +158,7 @@ Weighted batch least squares of the state at the configuration epoch plus
 dynamic parameters (for propagator/ffm: B = Cd·A/m, BDOT, AGOM = Cr·A/m, the
 in-track acceleration), Gauss–Newton on whitened residuals (Tapley, Schutz &
 Born 2004, §4.3–4.6) globalized by Levenberg–Marquardt. The module holds no
-force model. This is version 3 (0.6.0, schema extension v6), which replaces
+force model. This is version 3 (0.7.0, schema extension v6), which replaces
 versions 1 and 2.
 
 - **Request:** a `BATCH_WEIGHTED_LEAST_SQUARES` configuration (epoch, initial
@@ -254,8 +254,22 @@ raises the cost, is a rejected trial and the step shrinks.
   version 1's test; above 1 it is a relative predicted-decrease test, so a
   fit with a large misfit is not held under the floor of the propagator's
   Jacobian accuracy (B 5e-6 against Orekit for propagator/ffm in LEO).
+- **Convergence at the cost's resolution.** A propagator with adaptive steps
+  evaluates the cost with a numerical noise floor: seeds one ulp apart can
+  take different step decisions, and their trajectories part by tenths of a
+  millimeter that grow along-track. For propagator/ffm (RK78, 1e-10
+  relative) on 72 h drag-LEO arcs at a 10 m sigma, χ² moves by 0.001 to 0.7
+  between such seeds, far above the 8e-4 that a tolerance of 0.01 asks of
+  dxᵀN dx at χ²ᵥ ≤ 1. A rejected trial whose own model decrease
+  2gᵀd − dᵀN d is below the tolerance's (`correction_tolerance`² nₑ
+  max(1, χ²ᵥ)) measures that noise: its cost change minus the model's. The
+  fit is also converged when the Gauss–Newton step's predicted decrease
+  dxᵀN dx is at most the largest such misprediction at the point and at most
+  nₑ max(1, χ²ᵥ) (within one scaled standard deviation), and the edit set is
+  a fixed point.
 - **Results are evaluated points.** `CONVERGED` reports the evaluated point
-  plus its final, sub-tolerance step, residuals linearized; `MAXIMUM_ITERATIONS`
+  plus its final Gauss–Newton step (below the tolerance, or below the
+  cost's resolution), residuals linearized; `MAXIMUM_ITERATIONS`
   and `STALLED` report the best evaluated point itself, with a valid
   estimate and covariance (`NOT_CONVERGED`).
 - **Logarithmic parameters.** `parameter_transforms` `LOGARITHM` estimates

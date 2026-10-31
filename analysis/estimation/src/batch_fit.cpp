@@ -27,7 +27,13 @@
 //   1e12 the fit ends STALLED;
 // - converged when the projected Gauss-Newton step, measured against the
 //   covariance scaled by the misfit, sqrt(dx' N dx / (ne max(1, chi2_nu))),
-//   is below the tolerance and the edit set is a fixed point;
+//   is below the tolerance and the edit set is a fixed point; or converged
+//   at the cost's resolution: a rejected trial whose own model decrease is
+//   below that tolerance measures the cost's evaluation noise (its cost
+//   change minus the model's), and the fit is converged when the
+//   Gauss-Newton step's predicted decrease dx' N dx is at most that noise
+//   and at most ne max(1, chi2_nu) (one scaled standard deviation), the
+//   edit set a fixed point;
 // - a fit that ends without converging reports its best evaluated point;
 // - bias, drift and time-bias states of observation groups: a time bias by
 //   propagating to the shifted epoch, its partial by a central difference of
@@ -994,11 +1000,13 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     std::vector<double> projected, taken;
     advance(x, dx, &projected);
     const std::vector<double> next = advance(x, limited(dx), &taken);
-    double step = 0.0;
+    double predicted = 0.0;  // dx' N dx: the Gauss-Newton step's predicted decrease
     for (int i = 0; i < ne; ++i)
-      for (int k = 0; k < ne; ++k) step += projected[i] * normal[i * ne + k] * projected[k];
+      for (int k = 0; k < ne; ++k) predicted += projected[i] * normal[i * ne + k] * projected[k];
+    predicted = std::max(predicted, 0.0);
     const std::size_t dof = scalars > static_cast<std::size_t>(ne) ? scalars - ne : 1;
-    step = std::sqrt(std::max(step, 0.0) / (ne * std::max(1.0, chi_square / dof)));
+    const double scale = ne * std::max(1.0, chi_square / dof);
+    const double step = std::sqrt(predicted / scale);
     previous_rms = std::sqrt(chi_square / scalars);
     result.iterations = evaluations;
     if (step < config.correction_tolerance && rejected == before) {
@@ -1018,6 +1026,9 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     // Trials from this point until one is answered, finite and lower in
     // cost: the Gauss-Newton step first while the damping is 0.
     const double cost = chi_square + prior_cost(x);
+    // The cost's resolution at x, measured by rejected sub-tolerance trials.
+    const double negligible = config.correction_tolerance * config.correction_tolerance * scale;
+    double noise = 0.0;
     for (;;) {
       std::vector<double> trial_step = dx;
       if (damping > 0.0 && !solve(normal, rhs, damping, held, &trial_step))
@@ -1043,6 +1054,22 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         break;
       }
       ++result.rejected_trials;
+      if (status == 1 && std::isfinite(trial_cost)) {
+        // The trial's model decrease 2 g'd - d'N d over the step taken: below
+        // the tolerance, a cost change that misses it is evaluation noise.
+        double model = 0.0;
+        for (int i = 0; i < ne; ++i) {
+          double nd = 0.0;
+          for (int k = 0; k < ne; ++k) nd += normal[i * ne + k] * trial_taken[k];
+          model += trial_taken[i] * (2.0 * rhs[i] - nd);
+        }
+        if (model < negligible) {
+          noise = std::max(noise, model - (cost - trial_cost));
+          if (predicted <= noise && predicted <= scale && rejected == before &&
+              (config.sigma_edit_threshold <= 0.0 || edits(ev, previous_rms) == rejected))
+            return finish(next, ev, normal_full, normal, taken, rejected, scalars, BatchFitTermination::CONVERGED);
+        }
+      }
       damping = damping > 0.0 ? damping * 10.0 : kInitialDamping;
       if (damping > kMaximumDamping) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::STALLED);
       if (evaluations >= maximum) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::MAXIMUM_ITERATIONS);
