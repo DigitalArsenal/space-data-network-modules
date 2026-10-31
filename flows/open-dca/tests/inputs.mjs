@@ -29,14 +29,14 @@ export async function capture(dir){
    for(const [i,q]of requests.entries()){
     const file=path.join(dir,`${name}-${i}.fb`);let exists=false;try{await fs.access(file);exists=true;}catch{}
     if(exists)continue;
-    let body,headers={},retrievedMs=issue;
-    if(reused.has(q.url)){const r=reused.get(q.url);body=r.body;headers=r.headers;retrievedMs=r.retrievedMs;}
+    let body,headers={},retrievedMs=issue,status=200;
+    if(reused.has(q.url)){const r=reused.get(q.url);body=r.body;headers=r.headers;retrievedMs=r.retrievedMs;status=r.status;}
     else if(name==='eop'){
      assert(process.env.OPEN_DCA_EOP_ARCHIVE,'OPEN_DCA_EOP_ARCHIVE must name the local IERS finals archive; never fetch IERS from this Mac');
      body=await fs.readFile(process.env.OPEN_DCA_EOP_ARCHIVE);
-    }else{const response=await fetch(q.url,{headers:q.headers,signal:AbortSignal.timeout(90000)});assert.equal(response.status,200,q.url);body=Buffer.from(await response.arrayBuffer());headers=Object.fromEntries(response.headers);}
+    }else{const response=await fetch(q.url,{headers:q.headers,signal:AbortSignal.timeout(90000)});status=response.status;assert(status===200||(status===403&&q.url.includes('ephemerides.planet-labs.com')),`${q.url}: ${status}`);body=Buffer.from(await response.arrayBuffer());headers=Object.fromEntries(response.headers);}
     assert(body.length<=Number(q.maxBytes||100e6));
-    const payload=encodeHttpResponse({url:q.url,status:200,headers,body,context:q.context,retrievedMs});
+    const payload=encodeHttpResponse({url:q.url,status,headers,body,context:q.context,retrievedMs});
     await fs.writeFile(file,payload);await fs.writeFile(path.join(dir,`${name}-${i}.raw`),body);
     console.log(`Captured ${name} ${i+1}/${requests.length}: ${body.length} bytes`);
     if(q.url.includes('ephemerides.planet-labs.com'))await new Promise(r=>setTimeout(r,3000));
@@ -53,7 +53,7 @@ export async function prepare(dir){
   const converted=await density.call('prepare_operator_states',[{...parsed.outputs.find(o=>o.portId==='operator_states')}]);
   const eopParsed=await eop.call('parse_finals2000a',await responses(dir,'eop',1));
   const earth=await operator.call('wrap_eop',[eopParsed.outputs.find(o=>o.portId==='records'),input('tick',encodeTimerTick({triggerId:'daily',firedMs:info.issue}),'TimerTick.fbs','TICK','TimerTick')]);
-  const weatherParsed=await weather.call('parse_weather',await responses(dir,'weather',4));
+  const weatherParsed=await weather.call('parse_weather',await responses(dir,'weather',5));
   const spw=await operator.call('wrap_weather',[weatherParsed.outputs.find(o=>o.portId==='records')]);
   const inputs=[...converted.outputs,...earth.outputs,...spw.outputs,parsed.outputs.find(o=>o.portId==='kernel')];
   for(const [i,f]of inputs.entries())await fs.writeFile(path.join(dir,`fit-${i}.fb`),f.payload);

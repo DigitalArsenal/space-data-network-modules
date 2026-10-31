@@ -6,14 +6,27 @@ requires the owner's rollout and independent SDN live check.
 The node retrieves Planet's public daily orbit-determination states for local
 processing. The states and per-satellite arc fits are never published. The
 published product is the fleet's aggregate common-mode log-density correction
-against NRLMSISE-00, using E13's frozen method and settings.
+against NRLMSISE-00, using E13's frozen solver.
 
 SDS 1.259.0 carries the result in `$DCL`:
 `CORRECTION.FORM = LogDensityNodes`, `NODE_TIMES_MS` in UTC milliseconds,
 `NODE_LOG_DENSITY_SCALE_DIMENSIONLESS`, and `PROVENANCE`. Drag density is
 NRLMSISE-00 multiplied by `exp(s(t))`; interpolate s linearly between nodes,
-hold the endpoints outside, and do not apply another forecast decay. The
-producer includes forecast nodes using E13's 48-hour time constant.
+hold the endpoints outside, and apply no decay. The producer holds the last
+solved value through a final node 48 hours after the last solve epoch.
+
+A run reads what was public at its issue time: the file of the issue's own UTC
+day and the 31 before it, each by its own `Last-Modified`, with a 403 or 404
+meaning not published yet. No hour of day is assumed. The timer's phase decides
+what this gains: a run shortly after the day's last file gains that file, and at
+other hours the rule selects what the flat rule it replaced selected, so it is
+inert live until the phase is set. The phase comes from the node's retrieval
+ledger, and setting it is the owner's rollout step
+(`deployment/space-weather-provider-node`).
+
+`open_dca_lag_hours`, `open_dca_noise_sigma` and `open_dca_shrink_window_hours`
+in the flow's config set the method parameters, off by default, and
+`PROVENANCE.LINEAGE` states them by value.
 
 Reference: orbit-accuracy-experiments `experiments/e13-open-dca`, including
 PLAN amendments S3/R1/R2, `steps/74-planet-live-arcs.mjs`, and
@@ -52,7 +65,8 @@ Raw operator states and per-object estimates are absent from the publication.
 Run `node flows/open-dca/tests/open-dca.e2e.mjs` with the private capture,
 rebuilt local SDN binary/client, frozen E13 checkout and foundation artifacts
 named by its environment variables. The replay must be under 24 hours old,
-cover every URL in the current request window, and produce a correction
-during this scheduled run. The independent reference cache is bound to the
+answer every URL in the current request window as the source did, a 403 for
+a day not yet published included, and produce a correction during this
+scheduled run. The independent reference cache is bound to the
 module bytes and every typed input; captures and private derived fits stay
 outside the repository. No IERS/USNO fetch is needed for this local replay.

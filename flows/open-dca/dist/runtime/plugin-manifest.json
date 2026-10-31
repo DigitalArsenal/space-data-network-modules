@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.flows.open-dca",
   "name": "Open DCA NRLMSISE-00",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
@@ -15,8 +15,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.operator-states-public",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
@@ -25,8 +25,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
-      "minVersion": "0.6.0",
-      "maxVersion": "0.6.0"
+      "minVersion": "0.7.0",
+      "maxVersion": "0.7.0"
     },
     {
       "pluginId": "com.digitalarsenal.data-source.eop-request",
@@ -40,8 +40,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.data-source.space-weather",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",

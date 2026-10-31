@@ -628,7 +628,7 @@
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
       "name": "Thermospheric density calibration",
       "pluginFamily": "analysis",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "methodIds": [
         "calibrate",
         "calibrate_decay",
@@ -3766,7 +3766,7 @@
       "pluginId": "com.digitalarsenal.data-source.operator-states-public",
       "name": "Private public-operator input for open DCA",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "parse_operator",
         "plan_operator",

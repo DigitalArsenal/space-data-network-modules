@@ -66,6 +66,7 @@
 #include <vector>
 
 #include "open_dca_common_mode.hpp"
+#include "typedHostcall.hpp"
 #include "DCL_generated.h"  // spacedatastandards.org lib/cpp/DCL/main_generated.h and the headers it includes, inlined by build.mjs
 
 namespace {
@@ -2132,6 +2133,23 @@ extern "C" int drag_work() {
   return emit("result", b, d.Finish());
 }
 
+namespace {
+// The method parameters of this run: the flow's typed config, all off by default.
+bool publication_of(open_dca::Publication& p,std::string& error){
+  const sdm_piv::Config config=sdm_piv::get_config();
+  if(!config.ok()){error="the flow config could not be read: "+std::string(config.error_message());return false;}
+  p.lagHours=config.number("open_dca_lag_hours",0);p.noiseSigma=config.number("open_dca_noise_sigma",0);p.shrinkWindowHours=config.number("open_dca_shrink_window_hours",0);
+  if(!(p.lagHours>=0&&p.lagHours<=48)){error="open_dca_lag_hours must lie in 0..48.";return false;}
+  if(!(p.noiseSigma>=0&&p.noiseSigma<=1&&p.shrinkWindowHours>=0&&p.shrinkWindowHours<=720)||(p.noiseSigma>0)!=(p.shrinkWindowHours>0)){error="open_dca_noise_sigma (0..1) and open_dca_shrink_window_hours (0..720) are set together or not at all.";return false;}
+  return true;
+}
+// The method a record says it used, by value.
+std::string lineage_of(const open_dca::Publication& p){
+  char lag[32],shrink[64]="shrink-off";std::snprintf(lag,sizeof(lag),"lag%gh",p.lagHours);
+  if(p.noiseSigma>0)std::snprintf(shrink,sizeof(shrink),"shrink-sigma%g-window%gh",p.noiseSigma,p.shrinkWindowHours);
+  return std::string("E13/OAE-3e0ff003; daily24h; rw0.005; smooth0.05; public-at-issue; history30d; hold48h; ")+lag+"; "+shrink+"; mean-zero-supported";
+}
+}
 // E13's exploratory NRLMSISE-00 form (PLAN S3), frozen R1/R2 solver. This
 // method deliberately emits no OBJECTS, STATES, drivers or private arc fits.
 extern "C" int calibrate_log_density() {
@@ -2140,6 +2158,8 @@ extern "C" int calibrate_log_density() {
   if(!request)return fail("invalid-request",error);
   if(!request->ATMOSPHERE()||request->ATMOSPHERE()->MODEL()!=AtmosphericModelFamily::NRLMSIS00E || request->CREATED_AT_MS()<=0)
     return fail("invalid-request","NRLMSISE-00 and an explicit UTC issue time are required.");
+  open_dca::Publication publication;
+  if(!publication_of(publication,error))return fail("invalid-config",error);
   std::vector<open_dca::Arc> arcs;
   if(request->OBJECTS())for(const auto* o:*request->OBJECTS()){
     if(!o->OK())continue;
@@ -2156,21 +2176,24 @@ extern "C" int calibrate_log_density() {
   while(!result.supported[last])--last;
   if(double(request->CREATED_AT_MS())-result.times[last]>48*open_dca::hour)
     return fail("stale-fleet","Last supported solve is more than 48 hours before issue; publication refused.");
+  const auto values=open_dca::shrunk(result,publication);
+  const double lag=publication.lagHours*open_dca::hour;
   DCLT out;
   out.ID="open-dca-nrlmsise00-"+std::to_string(request->CREATED_AT_MS());
   out.CREATED_AT_MS=request->CREATED_AT_MS();out.PRODUCT=dclProduct::DensityCalibration;out.STATUS=dclStatus::Solved;
   out.ATMOSPHERE=std::make_unique<ATMT>();out.ATMOSPHERE->MODEL=AtmosphericModelFamily::NRLMSIS00E;out.ATMOSPHERE->YEAR=2000;
-  out.SETTINGS=std::make_unique<dclSettingsT>();out.SETTINGS->FROM_MS=int64_t(result.times[first]);out.SETTINGS->TO_MS=int64_t(result.times[last]);
+  out.SETTINGS=std::make_unique<dclSettingsT>();out.SETTINGS->FROM_MS=int64_t(result.times[first]-lag);out.SETTINGS->TO_MS=int64_t(result.times[last]-lag);
   out.CORRECTION=std::make_unique<dclCorrectionT>();out.CORRECTION->FORM=dclCorrectionForm::LogDensityNodes;
-  for(size_t i=first;i<=last;++i){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[i]));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(result.s[i]);}
-  for(int h=1;h<=48;++h){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[last]+h*open_dca::hour));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(result.s[last]*std::exp(-double(h)/48));}
+  for(size_t i=first;i<=last;++i){out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[i]-lag));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(values[i]);}
+  // Held past the last solve epoch: no fit, whatever its cutoff, meets a ramp the producer wrote.
+  out.CORRECTION->NODE_TIMES_MS.push_back(int64_t(result.times[last]-lag+48*open_dca::hour));out.CORRECTION->NODE_LOG_DENSITY_SCALE_DIMENSIONLESS.push_back(values[last]);
   out.FIT=std::make_unique<dclFitStatisticsT>();out.FIT->ITERATIONS=result.iterations;out.FIT->CONVERGED=true;out.FIT->OBSERVATIONS=arcs.size();out.FIT->USED=result.arcs;out.FIT->PARAMETERS=last-first;
   double sum=0;for(double r:result.residuals)sum+=r*r;out.FIT->POSTFIT_RMS=std::sqrt(sum/result.residuals.size());
   out.PROVENANCE=std::make_unique<PVNT>();out.PROVENANCE->SOURCE_ID="open-dca-planet";out.PROVENANCE->SOURCE_KIND=pvnSourceKind::Ephemeris;
   out.PROVENANCE->ORIGINATOR="Derived aggregate from Planet Labs PBC orbital ephemerides, https://ephemerides.planet-labs.com/, copyright Planet Labs PBC, CC BY-NC 4.0. GFZ Kp/ap/F10.7: CC BY 4.0, Matzka et al. (2021), doi:10.1029/2020SW002641; NOAA SWPC: public domain.";
-  out.PROVENANCE->PROVIDER_ID="open-dca";out.PROVENANCE->PRODUCER="density-calibration/0.6.0; E13 R1/R2/S3 NRLMSISE-00 exploratory method";
+  out.PROVENANCE->PROVIDER_ID="open-dca";out.PROVENANCE->PRODUCER="density-calibration/0.7.0; E13 R1/R2/S3 NRLMSISE-00 exploratory method";
   out.PROVENANCE->LICENSE_CLASS=pvnLicenseClass::NonCommercial;out.PROVENANCE->LICENSE_ID="CC-BY-NC-4.0 (Planet inputs); CC-BY-4.0 (GFZ); public domain (NOAA SWPC)";
-  out.PROVENANCE->LINEAGE="E13/OAE-3e0ff003; daily24h; rw0.005; smooth0.05; latency6h; history30d; tau48h; mean-zero-supported";
+  out.PROVENANCE->LINEAGE=lineage_of(publication);
   if(request->PROVENANCE()&&request->PROVENANCE()->LINEAGE())out.PROVENANCE->LINEAGE+="; "+request->PROVENANCE()->LINEAGE()->str();
   fb::FlatBufferBuilder b;return emit("calibration",b,DCL::Pack(b,&out));
 }

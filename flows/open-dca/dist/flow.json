@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.open-dca",
   "name": "Open DCA NRLMSISE-00",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
   "description": "Scheduled private Planet energy fits and aggregate E13 log-density correction publication. Raw operator states never enter SDN storage.",
   "nodes": [
@@ -391,7 +391,7 @@
       "kind": "timer",
       "source": "host-cron",
       "defaultIntervalMs": 86400000,
-      "description": "Causal 30-day fleet solve on final daily operator states."
+      "description": "Causal 30-day fleet solve on the daily operator states public at the issue."
     }
   ],
   "triggerBindings": [

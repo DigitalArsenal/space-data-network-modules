@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.operator-states-public",
   "name": "Private public-operator input for open DCA",
-  "version": "0.1.0",
-  "description": "Planet CC BY-NC 4.0 states remain private. Retrieves 32 final daily files plus JPL kernel, emits a private TT/EME2000 OEM and typed environment, and publishes only aggregate E13 DCL with provenance. Never publishes raw or per-object data.",
+  "version": "0.2.0",
+  "description": "Planet CC BY-NC 4.0 states remain private. Retrieves the issue day's and the 31 previous daily files plus the JPL kernel, keeps those public at the issue by their own Last-Modified, emits a private TT/EME2000 OEM and typed environment, and publishes only aggregate E13 DCL with provenance. Never publishes raw or per-object data.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],

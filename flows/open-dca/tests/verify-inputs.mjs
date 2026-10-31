@@ -1,4 +1,4 @@
-// E2E input contract: real public daily files, finality rejection, and the
+// E2E input contract: real public daily files, the publication rule, and the
 // independent E13 time/frame modules before the energy-arc comparison.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -16,9 +16,9 @@ export async function verifyInputs(dir){
  try{
   const batch=await responses(dir,'operator',33),parsed=await operator.call('parse_operator',batch);
   const invalid=batch.map(f=>({...f})),r=decodeHttpResponse(invalid[0].payload);
-  invalid[0].payload=encodeHttpResponse({...r,headers:{...r.headers,'last-modified':'Thu, 01 Jan 1970 00:00:00 GMT'}});
+  const {'last-modified':_,...unstated}=r.headers;invalid[0].payload=encodeHttpResponse({...r,headers:unstated});
   const refused=await operator.harness.invoke({methodId:'parse_operator',inputs:invalid});
-  assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/not final/);assert.equal(refused.outputs.length,0);
+  assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/no publication time/);assert.equal(refused.outputs.length,0);
   const oem=S.OEM.getSizePrefixedRootAsOEM(new ByteBuffer(parsed.outputs.find(f=>f.portId==='operator_states').payload)).unpack();
   const prepared=(await readInputs(dir)).filter(f=>f.portId==='request').map(f=>S.DCL.getRootAsDCL(new ByteBuffer(f.payload)).unpack());
   let checked=0,maxPositionErrorM=0,maxVelocityErrorMs=0;
@@ -36,6 +36,6 @@ export async function verifyInputs(dir){
    }
   }
   assert(maxPositionErrorM<1e-7&&maxVelocityErrorMs<1e-10,'Independent ERFA bias conversion');
-  return {checked,maxPositionErrorM,maxVelocityErrorMs,unfinalizedSource:'REJECTED'};
+  return {checked,maxPositionErrorM,maxVelocityErrorMs,unstatedPublicationTime:'REJECTED'};
  }finally{for(const m of [operator,time,frames])await m.destroy();}
 }

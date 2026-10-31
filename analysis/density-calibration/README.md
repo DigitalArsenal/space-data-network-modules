@@ -13,13 +13,22 @@ additional WASM methods with SDS 1.259.0 contracts:
 | `fit_energy_arcs` | Private `$DCL` series and typed `$PRW` kernel, EOP and licensed weather | Private energy-arc estimates against NRLMSISE-00; only 20–28-hour pairs, inclusive in UTC milliseconds |
 | `calibrate_log_density` | Accepted fleet energy-arc estimates | Aggregate `$DCL` `LogDensityNodes`, with dimensionless `NODE_LOG_DENSITY_SCALE_DIMENSIONLESS` and `$PVN`; no states or per-object estimates |
 
-The method follows E13's exploratory NRLMSISE-00 rescale (S3), frozen
-random-walk fit (R1/R2), six-hour latency, causal 30-day history and 48-hour
-forecast time constant. Its common-mode level is mean-zero over supported
-nodes: it estimates fleet-wide variation, not an independently identified
-absolute atmospheric density. The producer emits the forecast as hourly nodes.
-Consumers multiply NRLMSISE-00 density by `exp(s(t))`, interpolate s linearly
-in UTC and hold the endpoints outside; they apply no second decay.
+The method follows E13's exploratory NRLMSISE-00 rescale (S3) and frozen
+random-walk fit (R1/R2) on a causal 30-day history. A request holds only arcs
+whose states were public at its issue time, and one that ends later is refused.
+Its common-mode level is mean-zero over supported nodes: it estimates fleet-wide
+variation, not an independently identified absolute atmospheric density.
+
+The last solved value is held: the record ends with one node 48 hours after the
+last solve epoch at that value, so a fit to any cutoff meets no ramp of the
+producer's making. Consumers multiply NRLMSISE-00 density by `exp(s(t))`,
+interpolate s linearly in UTC and hold the endpoints outside; they apply no
+decay. Two method parameters come from the flow's typed config and are off by
+default: `open_dca_lag_hours` moves every node earlier, and
+`open_dca_noise_sigma` with `open_dca_shrink_window_hours` shrinks each supported
+node toward the mean of the supported nodes in its trailing window by the share
+of that window's variance the noise does not explain. `PROVENANCE.LINEAGE` states
+the values a record used.
 
 The module and composed flow are built without WASM exception instructions.
 Errors are returned or recorded as propagation failures. Verification uses the

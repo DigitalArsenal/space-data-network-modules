@@ -2,7 +2,8 @@
 // E13 PLAN R1/R2, selection.json, and common-mode.mjs at OAE 3e0ff003.
 // The single-fleet random-walk solve, re-expressed in C++ for the WASM module.
 // Units: UTC milliseconds and dimensionless ln(B). The level is unidentifiable;
-// the mean over supported nodes is zero, exactly as in E13.
+// the mean over supported nodes is zero, exactly as in E13. The caller hands the
+// solve only arcs whose states were public at the issue time.
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -63,21 +64,21 @@ inline bool cholesky(std::vector<double> a,const std::vector<double>& b,std::vec
 inline bool solve(const std::vector<Arc>& input,double issue,Result& out,std::string& error) {
   constexpr double step=day,stepSigma=0.005,smoothSigma=0.05,huber=1.5,tolerance=1e-5;
   constexpr int maxIterations=60,scaleSweeps=8,minDoves=6;
-  const double cutoff=issue-6*hour;
   std::vector<Arc> arcs;
   for(const auto& a:input){
     if(a.id.empty()||!std::isfinite(a.start)||!std::isfinite(a.end)||!std::isfinite(a.y)||!(a.end>a.start)){
       error="invalid fleet arc";return false;
     }
-    if(a.end<=cutoff&&a.start>=cutoff-30*day)arcs.push_back(a);
+    if(a.end>issue){error="an arc ends after the issue time";return false;}
+    if(a.start>=issue-30*day)arcs.push_back(a);
   }
-  if(arcs.empty()||arcs.size()>4096){error="no causal arcs, or arc budget exceeded";return false;}
+  if(arcs.empty()||arcs.size()>4096){error="no arcs in the history window, or arc budget exceeded";return false;}
   double csum=0,ssum=0,lo=arcs[0].start,hi=arcs[0].end;
   for(const auto& a:arcs){double phase=std::fmod((a.start+a.end)/2,day)/day*2*3.14159265358979323846;csum+=std::cos(phase);ssum+=std::sin(phase);lo=std::min(lo,a.start);hi=std::max(hi,a.end);}
   // SDS timestamps are int64 milliseconds. Round the E13 circular-mean anchor
   // once; the offline oracle receives this same quantized anchor.
   const double offset=std::fmod(std::atan2(ssum,csum)/(2*3.14159265358979323846)+1,1)*day;
-  const double anchor=std::round(std::floor(cutoff/day)*day+offset);
+  const double anchor=std::round(std::floor(issue/day)*day+offset);
   const int nMin=int(std::floor((lo-anchor)/step)),nMax=int(std::ceil((hi-anchor)/step)),n=nMax-nMin+1;
   if(n<2||n>40){error="invalid nowcast node span";return false;}
   struct Row { Arc arc; size_t index; std::vector<Weight> weights; };
@@ -150,5 +151,24 @@ inline bool solve(const std::vector<Arc>& input,double issue,Result& out,std::st
   }
   out.s=std::move(s);out.sigma=sigma;
   return true;
+}
+// What a record does with a solve, by the flow's typed config; all off by default.
+// lagHours moves every node earlier. noiseSigma and shrinkWindowHours shrink each
+// supported node toward the mean of the supported nodes in its trailing window, by
+// the share of that window's variance the noise does not explain (empirical Bayes).
+struct Publication { double lagHours=0,noiseSigma=0,shrinkWindowHours=0; };
+inline std::vector<double> shrunk(const Result& r,const Publication& p) {
+  std::vector<double> out=r.s;
+  if(!(p.noiseSigma>0&&p.shrinkWindowHours>0))return out;
+  const double noise=p.noiseSigma*p.noiseSigma,window=p.shrinkWindowHours*hour;
+  for(size_t i=0;i<r.s.size();++i){
+    if(!r.supported[i])continue;
+    double sum=0,squares=0;int n=0;
+    for(size_t j=0;j<=i;++j)if(r.supported[j]&&r.times[i]-r.times[j]<=window){sum+=r.s[j];squares+=r.s[j]*r.s[j];++n;}
+    if(n<3)continue;
+    const double mean=sum/n,variance=(squares-n*mean*mean)/(n-1);
+    out[i]=mean+(variance>noise?1-noise/variance:0)*(r.s[i]-mean);
+  }
+  return out;
 }
 } // namespace open_dca

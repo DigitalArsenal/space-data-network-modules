@@ -22,40 +22,44 @@ const char* kernelUrl="https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/pl
 int fail(const std::string& text){plugin_set_error("operator-states-public",text.c_str());return 1;}
 #define NEED(c,m) do{if(!(c))return fail(m);}while(0)
 int push(const char* port,const char* schema,const char* id,const char* root,const fb::FlatBufferBuilder& b){return plugin_push_output_ex(port,schema,id,PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,root,0,0,b.GetBufferPointer(),b.GetSize())<0?1:0;}
-// Calendar formatting only; no time-scale or orbit computation here.
+// Calendar arithmetic only; no time-scale or orbit computation here.
+int64_t day_number(int y,unsigned m,unsigned d){y-=m<=2;const int64_t era=(y>=0?y:y-399)/400;const unsigned yoe=unsigned(y-era*400),doy=(153*(m+(m>2?-3:9))+2)/5+d-1,doe=yoe*365+yoe/4-yoe/100+doy;return era*146097+int64_t(doe)-719468;}
 std::string date(int64_t z){z+=719468;const int64_t era=(z>=0?z:z-146096)/146097;const unsigned doe=z-era*146097,yo=(doe-doe/1460+doe/36524-doe/146096)/365;int y=int(yo+era*400);const unsigned doy=doe-(365*yo+yo/4-yo/100),mp=(5*doy+2)/153,d=doy-(153*mp+2)/5+1,m=mp+(mp<10?3:-9);y+=m<=2;char b[16];std::snprintf(b,sizeof(b),"%04d-%02u-%02u",y,m,d);return b;}
 std::string iso(int64_t ms){auto day=ms/DAY,rem=ms%DAY;char b[24];std::snprintf(b,sizeof(b),"T%02lld:%02lld:%02lld.%03lldZ",(long long)(rem/3600000),(long long)(rem/60000%60),(long long)(rem/1000%60),(long long)(rem%1000));return date(day)+b;}
 const plugin_input_frame_t* input(const char* port){int i=plugin_find_input_index(port,0);return i<0?nullptr:plugin_get_input_frame(i);}
 uint64_t issue_of(const R::HttpResponse* r){if(!r->CONTEXT())return 0;fb::Verifier v(r->CONTEXT()->data(),r->CONTEXT()->size());return R::VerifySizePrefixedTimerTickBuffer(v)?R::GetSizePrefixedTimerTick(r->CONTEXT()->data())->FIRED_MS():0;}
 template<class Object,class Verify,class Get> bool stream(const plugin_input_frame_t* f,std::vector<std::unique_ptr<Object>>& out,Verify verify,Get get,bool transportPrefix=false){if(!f)return false;size_t at=0;while(at<f->payload_length){if(f->payload_length-at<12)return false;auto n=fb::ReadScalar<uint32_t>(f->payload+at);if(n<8||n+4>f->payload_length-at)return false;const size_t offset=transportPrefix?4:0;fb::Verifier v(f->payload+at+offset,n+4-offset);if(!verify(v))return false;out.emplace_back(get(f->payload+at+offset)->UnPack());at+=n+4;}return !out.empty();}
 }
-// E13 collect-planet: a daily file is final only after 22:00 UTC on
-// its named day. Parsing requires a complete, exact requested date window.
+// A run asks for the issue's own UTC day and the 31 before it. What enters is what was public at
+// the issue, by the source's own word: its Last-Modified, or its 403 or 404 for a day not published
+// yet. No hour of day is assumed, and a day's file may change during its day.
 namespace {
 std::vector<std::string> operator_urls(uint64_t issue){
- const int64_t last=int64_t(issue)/DAY-(issue%DAY<82500000?1:0);std::vector<std::string> out;
+ const int64_t last=int64_t(issue)/DAY;std::vector<std::string> out;
  for(int d=31;d>=0;--d){auto day=date(last-d);day.erase(std::remove(day.begin(),day.end(),'-'),day.end());out.push_back(std::string(planet)+day+".states");}out.push_back(kernelUrl);return out;
 }
-bool final_daily(const R::HttpResponse* r,const std::string& url){
+// When the response says its source was last written, UTC milliseconds; 0 when it does not say.
+int64_t last_modified_ms(const R::HttpResponse* r){
  std::string modified;
  if(r->HEADERS())for(const auto* h:*r->HEADERS()){if(!h->NAME()||!h->VALUE())continue;auto key=h->NAME()->str();std::transform(key.begin(),key.end(),key.begin(),[](unsigned char c){return char(std::tolower(c));});if(key=="last-modified")modified=h->VALUE()->str();}
  int d=0,y=0,h=0,m=0,sec=0;char month[4]={},zone[4]={};
- if(std::sscanf(modified.c_str(),"%*3s, %d %3s %d %d:%d:%d %3s",&d,month,&y,&h,&m,&sec,zone)!=7||std::strcmp(zone,"GMT"))return false;
- const std::string months="JanFebMarAprMayJunJulAugSepOctNovDec";auto at=months.find(month);if(at==std::string::npos||at%3)return false;
- const int sourceDay=y*10000+int(at/3+1)*100+d,fileDay=std::stoi(url.substr(std::strlen(planet),8));
- return sourceDay>fileDay||(sourceDay==fileDay&&h>=22);
+ if(std::sscanf(modified.c_str(),"%*3s, %d %3s %d %d:%d:%d %3s",&d,month,&y,&h,&m,&sec,zone)!=7||std::strcmp(zone,"GMT"))return 0;
+ const std::string months="JanFebMarAprMayJunJulAugSepOctNovDec";auto at=months.find(month);if(at==std::string::npos||at%3)return 0;
+ return day_number(y,unsigned(at/3+1),unsigned(d))*DAY+(int64_t(h)*3600+int64_t(m)*60+sec)*1000;
 }
 }
 extern "C" int plan_operator(){
   const auto* f=input("tick");NEED(f,"TimerTick required");fb::Verifier v(f->payload,f->payload_length);NEED(R::VerifyTimerTickBuffer(v),"Invalid TimerTick");auto tick=R::GetTimerTick(f->payload);const auto issue=tick->FIRED_MS();NEED(issue>0,"Explicit issue time required");auto native=std::unique_ptr<R::TimerTickT>(tick->UnPack());fb::FlatBufferBuilder context;R::FinishSizePrefixedTimerTickBuffer(context,R::TimerTick::Pack(context,native.get()));
-  // Today is eligible after 22:55 UTC, following Planet's final daily file.
   const auto urls=operator_urls(issue);
   for(const auto& url:urls){R::HttpRequestT r;r.METHOD="GET";r.URL=url;r.TIMEOUT_MS=90000;r.MAX_BYTES=url==kernelUrl?40*1024*1024:8*1024*1024;r.CONTEXT.assign(context.GetBufferPointer(),context.GetBufferPointer()+context.GetSize());auto h=std::make_unique<R::HeaderT>();h->NAME="if-modified-since";h->VALUE="Thu, 01 Jan 1970 00:00:00 GMT";r.HEADERS.push_back(std::move(h));fb::FlatBufferBuilder b;R::FinishHttpRequestBuffer(b,R::HttpRequest::Pack(b,&r));if(push("request","HttpRequest.fbs","HREQ","HttpRequest",b))return 1;}return 0;
 }
 extern "C" int parse_operator(){
-  NEED(plugin_get_input_count()==33,"A complete 32-day operator batch and kernel is required");std::map<std::string,std::map<int64_t,std::array<double,6>>> series;std::set<std::string> urls;uint64_t issue=0;std::string lineage;const R::HttpResponse* kernel=nullptr;
-  for(uint32_t i=0;i<plugin_get_input_count();++i){auto f=plugin_get_input_frame(i);fb::Verifier v(f->payload,f->payload_length);NEED(R::VerifyHttpResponseBuffer(v),"Invalid HttpResponse");auto r=R::GetHttpResponse(f->payload);NEED(r->URL()&&r->STATUS()==200&&r->BODY(),"All operator/environment requests must succeed");auto url=r->URL()->str();NEED(urls.insert(url).second,"Duplicate source URL");auto at=issue_of(r);NEED(at>0&&(!issue||at==issue),"Mixed or missing issue time");issue=at;const auto expected=operator_urls(issue);NEED(std::find(expected.begin(),expected.end(),url)!=expected.end(),"Source is outside the causal 32-day request window");if(url==kernelUrl){kernel=r;continue;}
-    NEED(url.rfind(planet,0)==0&&url.size()==std::strlen(planet)+15,"Unexpected operator source");NEED(final_daily(r,url),"Operator file is not final (Last-Modified must be at or after 22:00 UTC of its day)");NEED(r->BODY()->size()<1024*1024,"Operator source exceeds budget");lineage+=url.substr(std::strlen(planet))+"="+ephem::sha256_hex(r->BODY()->data(),r->BODY()->size())+";";
+  NEED(plugin_get_input_count()==33,"One response per requested day file and the kernel is required");std::map<std::string,std::map<int64_t,std::array<double,6>>> series;std::set<std::string> urls;uint64_t issue=0;std::string lineage;const R::HttpResponse* kernel=nullptr;
+  for(uint32_t i=0;i<plugin_get_input_count();++i){auto f=plugin_get_input_frame(i);fb::Verifier v(f->payload,f->payload_length);NEED(R::VerifyHttpResponseBuffer(v),"Invalid HttpResponse");auto r=R::GetHttpResponse(f->payload);NEED(r->URL(),"Response names no source");auto url=r->URL()->str();NEED(urls.insert(url).second,"Duplicate source URL");auto at=issue_of(r);NEED(at>0&&(!issue||at==issue),"Mixed or missing issue time");issue=at;const auto expected=operator_urls(issue);NEED(std::find(expected.begin(),expected.end(),url)!=expected.end(),"Source is outside the request window");if(url==kernelUrl){NEED(r->STATUS()==200&&r->BODY(),"The kernel request must succeed");kernel=r;continue;}
+    NEED(url.rfind(planet,0)==0&&url.size()==std::strlen(planet)+15,"Unexpected operator source");
+    if(r->STATUS()==403||r->STATUS()==404)continue;
+    NEED(r->STATUS()==200&&r->BODY(),"Operator request failed");const auto published=last_modified_ms(r);NEED(published>0,"Operator file states no publication time (Last-Modified)");if(published>int64_t(issue))continue;
+    NEED(r->BODY()->size()<1024*1024,"Operator source exceeds budget");lineage+=url.substr(std::strlen(planet))+"="+ephem::sha256_hex(r->BODY()->data(),r->BODY()->size())+";";
     std::istringstream lines(std::string(reinterpret_cast<const char*>(r->BODY()->data()),r->BODY()->size()));std::string line;size_t count=0;while(std::getline(lines,line)){std::istringstream row(line);std::string id;double tt,bc;std::string srp;std::array<double,6> x;if(!(row>>id))continue;if(!fleet.count(id))continue;NEED(bool(row>>tt>>x[0]>>x[1]>>x[2]>>x[3]>>x[4]>>x[5]>>bc>>srp),"Malformed calibration Dove state");NEED(std::isfinite(tt)&&bc>0,"Invalid operator epoch/coefficient");for(double value:x)NEED(std::isfinite(value),"Non-finite operator state");series[id][946728000000LL+int64_t(std::llround(tt*1000))]=x;++count;}NEED(count>=6,"Operator day lacks six calibration Doves");}
   NEED(kernel&&series.size()>=6,"Incomplete operator/environment batch");OEMT o;o.CCSDS_OEM_VERS=3;o.CREATION_DATE=iso(issue);o.ORIGINATOR="Planet Labs PBC; private local calibration input; CC BY-NC 4.0";o.COMMENT=lineage;o.MESSAGE_ID="open-dca-input-"+std::to_string(issue);
   for(const auto& [id,states]:series){auto block=std::make_unique<ephemerisDataBlockT>();block->OBJECT=std::make_unique<CATT>();block->OBJECT->OBJECT_ID=id;block->CENTER_NAME="EARTH";block->TIME_SYSTEM=timingStandard::TT;block->REFERENCE_FRAME=std::make_unique<RFMT>();block->REFERENCE_FRAME->NAME="EME2000";CelestialFrameWrapperT frame;frame.frame=CelestialFrame::EME2000;block->REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(frame));for(const auto& [t,x]:states){auto line=std::make_unique<ephemerisDataLineT>();line->EPOCH=iso(t);line->X=x[0]/1000;line->Y=x[1]/1000;line->Z=x[2]/1000;line->X_DOT=x[3]/1000;line->Y_DOT=x[4]/1000;line->Z_DOT=x[5]/1000;block->EPHEMERIS_DATA_LINES.push_back(std::move(line));}o.EPHEMERIS_DATA_BLOCK.push_back(std::move(block));}
@@ -73,7 +77,7 @@ extern "C" int wrap_eop(){PRWT p;p.EARTH_ORIENTATION=std::make_unique<PRWEarthOr
 extern "C" int publish_correction(){
   auto f=input("calibration");NEED(f,"Correction required");fb::Verifier v(f->payload,f->payload_length);NEED(VerifyDCLBuffer(v),"Invalid DCL");auto r=GetDCL(f->payload);NEED(r->STATUS()==dclStatus::Solved&&r->PROVENANCE()&&r->CORRECTION()&&r->CORRECTION()->FORM()==dclCorrectionForm::LogDensityNodes&&(!r->OBJECTS()||r->OBJECTS()->size()==0)&&!r->STATES(),"Only aggregate solved log-density corrections may be published");
   auto native=std::unique_ptr<DCLT>(r->UnPack());fb::FlatBufferBuilder b;FinishSizePrefixedDCLBuffer(b,DCL::Pack(b,native.get()));R::IngestRequestT meta;meta.SCHEMA="DCL.fbs";meta.RECONCILE=R::reconcileMode_Current;meta.TAGS=std::make_unique<R::SourceTagsT>();auto& tags=*meta.TAGS;tags.PROVIDER_ID="open-dca";tags.SOURCE_NAME="planet-nrlmsise00";tags.BATCH_ID=ephem::sha256_hex(b.GetBufferPointer(),b.GetSize());tags.SOURCE_URL="https://ephemerides.planet-labs.com/";tags.LICENSE="CC-BY-NC-4.0";tags.LICENSE_URL="https://creativecommons.org/licenses/by-nc/4.0/";tags.CITATION="E13 aggregate; Planet Labs PBC CC BY-NC 4.0; GFZ CC BY 4.0; NOAA public domain; full attribution in DCL.PVN.";
-  meta.PROVENANCE=std::make_unique<R::ProvenanceT>();meta.PROVENANCE->PARSER="open-dca";meta.PROVENANCE->PARSER_VERSION="0.1.0";meta.PROVENANCE->RETRIEVED_MS=r->CREATED_AT_MS();meta.PROVENANCE->NORMALIZED_COUNT=1;meta.PROVENANCE->SCHEMAS={"DCL.fbs"};meta.PROVENANCE->SCHEMA_COUNTS={1};meta.PROVENANCE->NORMALIZED_SHA256=tags.BATCH_ID;fb::FlatBufferBuilder mb;R::FinishIngestRequestBuffer(mb,R::IngestRequest::Pack(mb,&meta));if(push("meta","IngestRequest.fbs","INGQ","IngestRequest",mb))return 1;return push("records","DCL.fbs","$DCL","DCL",b);
+  meta.PROVENANCE=std::make_unique<R::ProvenanceT>();meta.PROVENANCE->PARSER="open-dca";meta.PROVENANCE->PARSER_VERSION="0.2.0";meta.PROVENANCE->RETRIEVED_MS=r->CREATED_AT_MS();meta.PROVENANCE->NORMALIZED_COUNT=1;meta.PROVENANCE->SCHEMAS={"DCL.fbs"};meta.PROVENANCE->SCHEMA_COUNTS={1};meta.PROVENANCE->NORMALIZED_SHA256=tags.BATCH_ID;fb::FlatBufferBuilder mb;R::FinishIngestRequestBuffer(mb,R::IngestRequest::Pack(mb,&meta));if(push("meta","IngestRequest.fbs","INGQ","IngestRequest",mb))return 1;return push("records","DCL.fbs","$DCL","DCL",b);
 }
 
 // Optional node-owned archive mirror, following retrieval modules' typed CONFIG
