@@ -748,7 +748,7 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "methodIds": [
         "evaluate_teag",
         "fit_batch",
@@ -771,7 +771,7 @@
       ],
       "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 57,
+      "testFileCount": 58,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -801,6 +801,7 @@
         "tests/espf-fixtures.mjs",
         "tests/espf.test.mjs",
         "tests/ffm-port.mjs",
+        "tests/fit-batch-noise-floor.e2e.mjs",
         "tests/fit-batch-v1-cases.mjs",
         "tests/fixtures.mjs",
         "tests/fixtures/DEPTH.md",
