@@ -526,11 +526,11 @@
       }
     },
     "analysis/density-calibration/dist/isomorphic/module.wasm": {
-      "sha256": "55eb9a35fccd2f162b99cff0f519e0d22d7f614199f5af46c4adfc87e4ce4642",
-      "bytes": 2808830,
+      "sha256": "5f1f6a24505314a9d54347342061d93cba12f478d1beb64251e9b1b12a6d2938",
+      "bytes": 2810763,
       "module": "analysis/density-calibration",
-      "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
-      "lastCommitDate": "2026-10-31T10:43:22-04:00",
+      "lastCommit": "4b123d9f088deec48498bb4e19130a0e6f2cba4b",
+      "lastCommitDate": "2026-10-31T11:37:01-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -3734,11 +3734,11 @@
       }
     },
     "flows/open-dca/dist/runtime/isomorphic/module.wasm": {
-      "sha256": "c56e87719108848501f2c38b115eca349d7b81b07c6f1087283095d46482db5d",
-      "bytes": 3149047,
+      "sha256": "b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69",
+      "bytes": 3153417,
       "module": "flows/open-dca",
-      "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
-      "lastCommitDate": "2026-10-31T10:43:22-04:00",
+      "lastCommit": "4b123d9f088deec48498bb4e19130a0e6f2cba4b",
+      "lastCommitDate": "2026-10-31T11:37:01-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -3754,11 +3754,11 @@
       }
     },
     "flows/open-dca/dist/runtime/runtime.wasm": {
-      "sha256": "c56e87719108848501f2c38b115eca349d7b81b07c6f1087283095d46482db5d",
-      "bytes": 3149047,
+      "sha256": "b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69",
+      "bytes": 3153417,
       "module": "flows/open-dca",
-      "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
-      "lastCommitDate": "2026-10-31T10:43:22-04:00",
+      "lastCommit": "4b123d9f088deec48498bb4e19130a0e6f2cba4b",
+      "lastCommitDate": "2026-10-31T11:37:01-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
