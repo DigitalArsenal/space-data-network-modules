@@ -21,9 +21,10 @@ namespace tess {
 #include "gravity_egm.h"
 
 /// What the call selects (0: none of it). `tesseral` is the highest degree of the terms of order >= 1, `zonal` of the
-/// zonal tail. Capped per family at the degree that was measured to pay (FFM Starlink truth, day 3): m-daily 8 -> 12
-/// 4.26 -> 2.03 km and 16 no better; q = +-1, j = 0 to l = 7 1.54 -> 0.97 km; shallow 21 / 31 / 41 / 70 2.15 / 1.89 /
-/// 2.02 / 2.03 km; zonal tail J2-J5 0.35 km, to J10 0.14, to J20 0.047, to J40 0.042.
+/// zonal tail. Capped per family at the degree that was measured to pay. On FFM Starlink truth, day 3: m-daily 8 -> 12
+/// 4.26 -> 2.03 km and 16 no better; shallow 21 / 31 / 41 / 70 2.15 / 1.89 / 2.02 / 2.03 km; zonal tail J2-J5 0.35 km,
+/// to J10 0.14, to J20 0.047, to J40 0.042. On FFM's own 96 h, fit RMS of the first-order families below: without them
+/// 48 to 68 m, to degree 7 24 to 42 m, to degree 12 21 to 37 m, with the near-resonant terms 15 to 20 m.
 struct Terms {
   int tesseral = 0, zonal = 0;
 };
@@ -31,9 +32,11 @@ inline Terms& active() {
   static Terms t;
   return t;
 }
-constexpr int kMdailyCap = 12, kSpCap = 7, kShallowCap = 31;
-constexpr int kSpMask = 2;  // q = +-1, j = 0; the other families pay little for their bytes (0.97 -> 0.85 km, 31 KB)
+constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
 constexpr double kShallowBand = 0.045;
+constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
+constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
+                                    // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {
@@ -192,89 +195,156 @@ inline void mdaily_six(const float* F, int degree, double t, const Kepler& k, do
   six[5] += dlam;
 }
 
-/// The remaining first-order tesseral terms at output time, Kaula's (l, m, p, q) with
-/// q in {-1, 0, 1}, 2 <= l <= the degree, 1 <= m <= l, except the m-daily set (q = 0, l = 2p) and the
-/// shallow band: psi = w omega + j M + m (Omega - theta_G), w = l - 2p, j = w + q. The rates of
-/// res::resonance_six integrated over psi with the slow elements frozen (int dS dt = S / psi-dot, int S dt
-/// = -dS / psi-dot), plus the mean longitude's second integral of the n oscillation, 3 j A F G dS /
-/// (a^2 psi-dot^2). The q = +-1 terms are O(e) in G but O(1) in the eccentricity vector (Lagrange's 1/e):
-/// for odd l with j = 0 they oscillate at the m-daily frequency, amplified by n / psi-dot. the mask picks
-/// the families: 1 q = 0 with j != 0, 2 q = +-1 with j = 0, 4 q = +-1 with j != 0. Per term at the epoch
-/// (float): Fbar, dFbar/di and G(e) = g0 + g1 e linearized there (g0 = 0 for q = +-1 at small e).
-/// Visits the (l, m, p, q) of the set in its fixed order.
-template <class Fn>
-inline void sp_visit(int degree, int mask, Fn&& fn) {
-  for (int l = 2; l <= degree; ++l)
-    for (int m = 1; m <= l; ++m)
-      for (int p = 0; p <= l; ++p)
-        for (int q = -1; q <= 1; ++q) {
-          const int w = l - 2 * p, j = w + q;
-          if (q == 0 && w == 0) continue;  // the m-daily set
-          const int family = q == 0 ? 1 : (j == 0 ? 2 : 4);
-          if (!(mask & family)) continue;
-          if (j < -(l + 1) || j > l + 1) continue;
-          fn(l, m, p, q);
-        }
+/// The remaining first-order tesseral terms at output time, Kaula's (l, m, p, q) with q in {-1, 0, 1}: every term of
+/// degree 2 to the general degree except the m-daily set (q = 0, l = 2p), and the near-resonant terms above that degree
+/// (below). psi = w omega + j M + m (Omega - theta_G), w = l - 2p, j = w + q. The rates of res::resonance_six integrated
+/// over psi with the slow elements frozen (int dS dt = S / psi-dot, int S dt = -dS / psi-dot), plus the mean longitude's
+/// second integral of the n oscillation, 3 j A F G dS / (a^2 psi-dot^2). The q = +-1 terms are O(e) in G but O(1) in the
+/// eccentricity vector (Lagrange's 1/e). Per term at the epoch: Fbar, dFbar/di and G(e) = g0 + g1 e linearized there
+/// (g0 = 0 for q = +-1 at small e). A term the rates carry (the shallow set, by the same taper) or whose position
+/// amplitude is below kSpKeepM is not kept.
+struct SpCoef {
+  int8_t l, m, w, j;
+  float f, df, g0, g1;
+};
+
+/// G about e0 for one term: g0 + g1 e.
+inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
+  const int w = l - 2 * p;
+  if (q == 0) {
+    // X^{-(l+1), w}_w to O(e^2): 1 + c2 e^2, c2 = l (l + 1) / 4 - w^2; linearized at e0
+    const double c2 = 0.25 * l * (l + 1) - static_cast<double>(w) * w;
+    double G, dG;
+    if (e0 < 0.03) { G = 1.0 + c2 * e0 * e0; dG = 2.0 * c2 * e0; }
+    else res::exact_G(l, p, 0, e0, G, dG);
+    g1 = dG;
+    g0 = G - dG * e0;
+  } else if (e0 < 0.03) {
+    // O(e): G = e ((l + 1) / 2 + q w), from (a/r)^(l+1) ~ 1 + (l + 1) e cos M and f ~ M + 2 e sin M averaged over M.
+    g1 = 0.5 * (l + 1) + q * w;
+    g0 = 0.0;
+  } else {
+    double G, dG;
+    res::exact_G(l, p, q, e0, G, dG);
+    g1 = dG;
+    g0 = G - dG * e0;
+  }
 }
 
-inline int sp_count(int degree, int mask) {
-  int c = 0;
-  sp_visit(degree, mask, [&](int, int, int, int) { ++c; });
+/// The upper bound of the table: the general set of `degree` and kNearMax near-resonant terms.
+constexpr int kNearMax = 500;
+inline int sp_bound(int degree) {
+  int c = kNearMax;
+  for (int l = 2; l <= degree; ++l) c += l * (l + 1) * 3;
   return c;
 }
 
-/// Fills F (4 floats a term) at the epoch mean motion n0, inclination i0 and eccentricity e0.
-inline int sp_terms(int degree, int mask, double n0, double i0, double e0, float* F) {
+/// Fills out at the epoch mean motion n0, inclination i0 and eccentricity e0; returns the count. `cls`: the resonance class,
+/// whose terms the rates carry and this table must not. `low`: no class and the shallow set active, so a term near
+/// commensurability other than the shallow set's is kept here.
+inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, double i0, double e0, SpCoef* out) {
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
   const double c0 = std::cos(i0), j2 = 1.5 * kJ2 / (p0 * p0);
   const double mdot = n0 + 0.5 * j2 * n0 * eta * (3.0 * c0 * c0 - 1.0), wdot = 0.5 * j2 * n0 * (5.0 * c0 * c0 - 1.0);
   const double node_rate = -j2 * n0 * c0;
-  int idx = 0;
-  int cached_m = -1, cached_w = 99, cached_l = -1;
-  double f[72], fp[72], fm[72];
   const double h = 1e-5;
-  sp_visit(degree, mask, [&](int l, int m, int p, int q) {
+  const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe;
+  int count = 0;
+  const auto add = [&](int l, int m, int p, int q, double fv, double dfv) {
     const int w = l - 2 * p, j = w + q;
-    if (m != cached_m || w != cached_w || l != cached_l) {
-      normalized_Fk(m, w, l, i0, f);
-      normalized_Fk(m, w, l, i0 + h, fp);
-      normalized_Fk(m, w, l, i0 - h, fm);
-      cached_m = m;
-      cached_w = w;
-      cached_l = l;
+    const res::TermSet carried = res::class_terms(cls);
+    for (int c = 0; c < carried.count; ++c)
+      if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return;
+    const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
+    double weight = 1.0;
+    const double x = std::fabs(psidot) / (kShallowBand * n0);
+    if (low) {
+      if (q == 0 && w == 1 && j == 1) {
+        if (x <= 0.9) weight = 0.0;
+        else if (x < 1.1) { const double c = std::cos(0.5 * kPi * (x - 0.9) / 0.2); weight = 1.0 - c * c; }
+      } else if (std::fabs(psidot) < 1e-3 * n0) {
+        weight = 0.0;
+      }
+    } else if (x < 1.0) {
+      weight = 0.0;
     }
+    if (weight == 0.0) return;
     double g0, g1;
-    if (q == 0) {
-      // X^{-(l+1), w}_w to O(e^2): 1 + c2 e^2, c2 = l (l + 1) / 4 - w^2; linearized at e0
-      const double c2 = 0.25 * l * (l + 1) - static_cast<double>(w) * w;
-      double G, dG;
-      if (e0 < 0.005) { G = 1.0 + c2 * e0 * e0; dG = 2.0 * c2 * e0; }
-      else res::exact_G(l, p, 0, e0, G, dG);
-      g1 = dG;
-      g0 = G - dG * e0;
-    } else if (e0 < 0.01) {
-      // O(e): G = c e, the slope from the Hansen coefficient at e = 1e-3
-      g1 = res::hansen_G(l, p, q, 1e-3) / 1e-3;
-      g0 = 0.0;
-    } else {
-      double G, dG;
-      res::exact_G(l, p, q, e0, G, dG);
-      g1 = dG;
-      g0 = G - dG * e0;
-    }
-    const bool shallow = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)) < kShallowBand * n0;
-    float* t = F + 4 * idx++;
-    t[0] = shallow ? 0.0f : static_cast<float>(f[l]);
-    t[1] = static_cast<float>((fp[l] - fm[l]) / (2.0 * h));
-    t[2] = static_cast<float>(g0);
-    t[3] = static_cast<float>(g1);
-  });
-  return idx;
+    sp_g(l, p, q, e0, g0, g1);
+    const double G = g0 + g1 * e0;
+    const double sv = std::hypot(kEgmC[l][m], kEgmS[l][m]);
+    const double A = kMu * std::pow(1.0 / a0, l + 1) * sv * weight;
+    const double ap = std::fabs(psidot);
+    const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * (l + 1) / (na2 * ap)) +
+                                 std::fabs(fv * g1) / (na2 * ap) + std::fabs(dfv * G) / (na2 * ap));
+    if (mag < keep) return;
+    out[count++] = SpCoef{static_cast<int8_t>(l), static_cast<int8_t>(m), static_cast<int8_t>(w), static_cast<int8_t>(j),
+                          static_cast<float>(fv * weight), static_cast<float>(dfv * weight), static_cast<float>(g0), static_cast<float>(g1)};
+  };
+  double f[72], fp[72], fm[72];
+  // A term cannot pass `keep` if this bound on its amplitude does not: Fbar <= sqrt(2 (2 l + 1)), dFbar/di <= l Fbar,
+  // G <= 1 + (l e0)^2 for q = 0 and (l + 1) e0 otherwise, dG/de <= (l + 1)^2. Saves the inclination functions and Hansen
+  // coefficients of the terms that would be dropped.
+  const auto can_pass = [&](int l, int m, int w, int q) {
+    const int j = w + q;
+    const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE));
+    if (ap < 1e-3 * n0) return false;
+    const double ll = l + 1.0, Fb = std::sqrt(2.0 * (2.0 * l + 1.0));
+    const double Gb = q == 0 ? 1.0 + l * l * e0 * e0 : ll * (e0 > 1e-3 ? e0 : 1e-3);
+    const double A = kMu * std::pow(1.0 / a0, l + 1) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+    const double bound = a0 * A * Fb * (Gb * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * ll / (na2 * ap)) + ll * ll / (na2 * ap) + l * Gb / (na2 * ap));
+    return bound >= keep;
+  };
+  for (int l = 2; l <= degree; ++l)
+    for (int m = 1; m <= l; ++m)
+      for (int p = 0; p <= l; ++p) {
+        const int w = l - 2 * p;
+        if (!can_pass(l, m, w, -1) && !can_pass(l, m, w, 0) && !can_pass(l, m, w, 1)) continue;
+        normalized_Fk(m, w, l, i0, f);
+        // dFbar/di only for a term that passes the bound at this q.
+        double dfv = 0.0;
+        bool have_df = false;
+        for (int q = -1; q <= 1; ++q) {
+          const int j = w + q;
+          if (q == 0 && w == 0) continue;  // the m-daily set
+          if (j < -(l + 1) || j > l + 1) continue;
+          if (!can_pass(l, m, w, q)) continue;
+          if (!have_df) {
+            normalized_Fk(m, w, l, i0 + h, fp);
+            normalized_Fk(m, w, l, i0 - h, fm);
+            dfv = (fp[l] - fm[l]) / (2.0 * h);
+            have_df = true;
+          }
+          add(l, m, p, q, f[l], dfv);
+        }
+      }
+  if (low) {
+    // Above that degree, j = 1 near commensurability: q = 0 with w = 1 (odd l) outside the shallow band, and q = +-1 with
+    // w = 0 or 2 (even l), O(e) in G, O(1) in the eccentricity vector, amplified by n / psi-dot.
+    static constexpr int kW[3] = {1, 0, 2}, kQ[3] = {0, 1, -1};
+    for (int m = 2; m <= near_degree; ++m)
+      for (int fam = 0; fam < 3; ++fam) {
+        const int w = kW[fam], q = kQ[fam];
+        const double psidot = w * wdot + mdot + m * (node_rate - kOmegaE);
+        if (!(std::fabs(psidot) < kNearBand * n0)) continue;
+        normalized_Fk(m, w, near_degree, i0, f);
+        normalized_Fk(m, w, near_degree, i0 + h, fp);
+        normalized_Fk(m, w, near_degree, i0 - h, fm);
+        int l0 = m > w ? m : w;
+        if ((l0 - w) & 1) ++l0;
+        for (int l = l0; l <= near_degree; l += 2) {
+          if (l <= degree || !can_pass(l, m, w, q)) continue;
+          if (count >= sp_bound(degree)) break;
+          add(l, m, (l - w) / 2, q, f[l], (fp[l] - fm[l]) / (2.0 * h));
+        }
+      }
+  }
+  return count;
 }
 
 /// The displacements in the six-component set (n, e, i, e varpi, sin i Omega, lambda), first order.
-inline void sp_six(const float* F, int degree, int mask, double t, const Kepler& kp, double n, double eta, double si,
-                   double ci, double theta_g0, double* six) {
+inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, double n, double eta, double si, double ci,
+                   double theta_g0, double* six) {
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
   const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
@@ -287,7 +357,7 @@ inline void sp_six(const float* F, int degree, int mask, double t, const Kepler&
   double cm[72], sm[72], cw[72], swv[72], cj[72], sj[72];
   cm[0] = cw[0] = cj[0] = 1.0;
   sm[0] = swv[0] = sj[0] = 0.0;
-  for (int q = 1; q <= degree + 1; ++q) {
+  for (int q = 1; q <= 33; ++q) {
     cm[q] = cm[q - 1] * cb - sm[q - 1] * sb;
     sm[q] = sm[q - 1] * cb + cm[q - 1] * sb;
     cw[q] = cw[q - 1] * cw1 - swv[q - 1] * sw1;
@@ -298,13 +368,11 @@ inline void sp_six(const float* F, int degree, int mask, double t, const Kepler&
   const double ia = 1.0 / a;
   double amp[72];
   amp[0] = kMu * ia;
-  for (int l = 1; l <= degree; ++l) amp[l] = amp[l - 1] * ia;
+  for (int l = 1; l <= 33; ++l) amp[l] = amp[l - 1] * ia;
   double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sA = 0, sL = 0;
-  int idx = 0;
-  sp_visit(degree, mask, [&](int l, int m, int p, int q) {
-    const float* f = F + 4 * idx++;
-    if (f[0] == 0.0f) return;
-    const int w = l - 2 * p, j = w + q;
+  for (int idx = 0; idx < count; ++idx) {
+    const SpCoef& f = F[idx];
+    const int l = f.l, m = f.m, w = f.w, j = f.j;
     const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
     const int aw = w < 0 ? -w : w, aj = j < 0 ? -j : j;
     const double cww = cw[aw], sww = w < 0 ? -swv[aw] : swv[aw];
@@ -317,17 +385,17 @@ inline void sp_six(const float* F, int degree, int mask, double t, const Kepler&
     const double Sv = odd ? -S0 * cp + C * sp : C * cp + S0 * sp;
     const double dS = odd ? S0 * sp + C * cp : -C * sp + S0 * cp;
     const double iS = -dS / psidot, idS = Sv / psidot;
-    const double G = f[2] + f[3] * e, dG = f[3];
+    const double G = f.g0 + f.g1 * e, dG = f.g1;
     const double A = amp[l];
-    const double AfgidS = A * f[0] * G * idS;
+    const double AfgidS = A * f.f * G * idS;
     sM += j * AfgidS;
     sW += w * AfgidS;
     sO += m * AfgidS;
-    sE += A * f[0] * dG * iS;
-    sI += A * f[1] * G * iS;
-    sA += -(l + 1) * A * f[0] * G * iS * ia;
-    sL += j * A * f[0] * G * dS / (psidot * psidot);
-  });
+    sE += A * f.f * dG * iS;
+    sI += A * f.df * G * iS;
+    sA += -(l + 1) * A * f.f * G * iS * ia;
+    sL += j * A * f.f * G * dS / (psidot * psidot);
+  }
   const double na2 = n * a * a;
   const double tanhalf = sin_i / (1.0 + ci);
   six[0] += -3.0 * ia * ia * sM;

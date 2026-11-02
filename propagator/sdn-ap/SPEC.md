@@ -1720,8 +1720,14 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | Family | Terms | Cap | Where |
 | --- | --- | --- | --- |
 | m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 | at output time, first order at the mean elements |
-| odd-l | q = +-1, j = w + q = 0 (O(e) in G, O(1) in the eccentricity vector, at the m-daily frequency) | 7 | at output time |
+| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
+| near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
+
+A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
+by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
+its position amplitude is below 0.5 m. G is g0 + g1 e about the epoch e: below e = 0.03, q = 0 takes 1 + (l (l + 1) / 4 - w^2) e^2 and
+q = +-1 takes ((l + 1) / 2 + q w) e, above it the Hansen coefficient.
 
 Section 6's classes keep their terms, and with d above 0 take the correct functions at the current elements where the library
 departs from them, in place of 6.3 and 6.4's epoch values: the current class by the current n, F and G at the current e and i, the exact dF_632/di,
@@ -1731,7 +1737,11 @@ Hansen coefficient expanded to third order about the epoch e of the epoch class,
 **16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
 (w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
 
-**16.4 Mark.** A set fitted with either degree set records `SDNAP_GRAVITY_TERMS` (`"<d>,<z>"`) in
+**16.4 Frame.** With d or z above 0 a set's mean elements hold the axes of its epoch, and each state is carried to TEME of its own
+date by M(t) M(t0)^T, M the GCRF to TEME matrix of `gcrf.inc`, linear between 12 h nodes. SGP4XP has neither precession nor nutation, so
+read as TEME of date the plane of a fixed orbit seems to turn by about 3 microradians in 4 days. `fit` and every flight take the same path.
+
+**16.5 Mark.** A set fitted with either degree set records `SDNAP_GRAVITY_TERMS` (`"<d>,<z>"`) in
 `$OMM.USER_DEFINED_PARAMETERS`. `propagate`, `load_epochs` and `propagate_epochs` refuse a set whose mark differs from the call's
 degrees, and `ingest_omm` any marked set (`gravity-terms-mismatch`).
 

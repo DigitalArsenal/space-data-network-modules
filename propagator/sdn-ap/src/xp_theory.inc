@@ -45,6 +45,9 @@
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
+namespace frames {
+inline void teme_drift(double epoch_whole, double epoch_frac, double t_minutes, double r[3], double v[3]);  // gcrf.inc
+}  // namespace frames
 namespace xpt {
 
 constexpr double kKe = 0.074366859954178854;     // SPEC 1.3
@@ -731,6 +734,7 @@ struct RateContext {
   const atm::Atmosphere* atmosphere;  ///< the drag's atmosphere (null: the theory's own, SPEC 3; atmosphere.inc)
   double e0, i0;                      ///< AP: epoch e and i (rad), the shallow terms to first order about them
   uint8_t ap_resonance;               ///< AP: section 6's classes at the current elements, by the correct functions
+  uint8_t ap_frame;                   ///< AP: mean elements in the epoch's axes, states carried to TEME of date (SPEC 16.4)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
@@ -738,8 +742,8 @@ struct RateContext {
   int32_t zt_degree;
   const float* mdaily;                ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
   int32_t mdaily_degree;
-  const float* sp;                    ///< AP: q = +-1 terms, at output time: Fbar, dFbar, g0, g1 (owned, xp_release)
-  int32_t sp_degree;
+  const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
+  int32_t sp_count;
 };
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
@@ -975,8 +979,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
         tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
                          ctx.theta_g0, six);
       if (ctx.sp != nullptr)
-        tess::sp_six(ctx.sp, ctx.sp_degree, tess::kSpMask, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
-                     ctx.theta_g0, six);
+        tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci, ctx.theta_g0, six);
       double d[6];
       six_to_equinoctial(agm, six, d);
       for (int j = 0; j < 6; ++j) y[j] += d[j];
@@ -1084,6 +1087,7 @@ struct XpSat {
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const tess::Terms& t = tess::active();
+  s.ctx.ap_frame = t.tesseral > 0 || t.zonal > 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
@@ -1106,12 +1110,14 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   }
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
-    const int count = tess::sp_count(spd, tess::kSpMask);
-    float* kept = static_cast<float*>(std::malloc(4 * (count > 0 ? count : 1) * sizeof(float)));
-    if (kept == nullptr) return false;
-    tess::sp_terms(spd, tess::kSpMask, n0, e.xincl, e.eo, kept);
+    const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
+    tess::SpCoef* table = static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd) * sizeof(tess::SpCoef)));
+    if (table == nullptr) return false;
+    const int count = tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, table);
+    tess::SpCoef* kept = static_cast<tess::SpCoef*>(std::realloc(table, (count > 0 ? count : 1) * sizeof(tess::SpCoef)));
+    if (kept == nullptr) { std::free(table); return false; }
     s.ctx.sp = kept;
-    s.ctx.sp_degree = spd;
+    s.ctx.sp_count = count;
   }
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
@@ -1209,8 +1215,9 @@ inline void xp_release(XpSat& s) {
   s.ctx.zt = nullptr;
   std::free(const_cast<float*>(s.ctx.mdaily));
   s.ctx.mdaily = nullptr;
-  std::free(const_cast<float*>(s.ctx.sp));
+  std::free(const_cast<tess::SpCoef*>(s.ctx.sp));
   s.ctx.sp = nullptr;
+  s.ctx.sp_count = 0;
 }
 
 inline void lock(int32_t* word) {
@@ -1320,7 +1327,9 @@ inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const 
   if (s.init_error != 0) return kPropRefused;
   double y[6];
   if (!mean_at(s, t, y)) return kPropMeanMotion;
-  return output(s.ctx, t, y, r, v, shared);
+  const int32_t status = output(s.ctx, t, y, r, v, shared);
+  if (status == kPropOk && s.ctx.ap_frame) frames::teme_drift(s.epoch_jd_whole, s.epoch_jd_frac, t, r, v);
+  return status;
 }
 
 }  // namespace xpt

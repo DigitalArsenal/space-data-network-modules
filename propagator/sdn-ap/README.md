@@ -116,9 +116,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
-`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the odd-l
-q = +-1 terms to 7, shallow resonances to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE` and `MAXIMUM_DEGREE` add
-the zonal tail from J6. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
+`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
+first-order terms to 12, near-resonant terms and shallow resonances to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE`
+and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
+carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
 

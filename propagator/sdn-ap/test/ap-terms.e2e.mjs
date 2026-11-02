@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// E2E (task modules-ap-tesseral-terms-20261102): AP's gravity terms (SPEC 16), through the module's invoke surface.
+// E2E: AP's gravity terms and frame (SPEC 16), through the module's invoke surface.
 // - Inert at degree 0: FORCES with both degrees at 0 gives the bytes of no FORCES at all (the conformance E2E holds
 //   that default to the oracle bit for bit).
 // - On propagator/ffm's trajectory (test/fixtures, 550 km, 53 deg, 70x70 field, no drag or SRP; so BTERM is held at 0):
-//   against XP, the 24 h fit's error falls below a third, and so does the error two to three days past the arc.
+//   against XP, the 24 h fit's error falls below a tenth, and the error two to three days past the arc below a third.
+// - On propagator/ffm's trajectory at 19,100 km (a half-day resonance class whose terms the rates carry, so a term counted
+//   twice shows here): AP's 72 h fit stays under 25 m.
 // - The set is marked; a call with other terms refuses it by name, and so does ingest_omm's batch store.
 // - load_epochs and propagate_epochs fly it as propagate does.
 // - FORCES refusals by name.
@@ -37,8 +39,8 @@ const t0 = Date.parse(truth.epoch), step = truth.stepSeconds * 1000;
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
 const object = () => Object.assign(new CATT(), { NORAD_CAT_ID: 90400, OBJECT_ID: "2026-904A", OBJECT_NAME: "AP E2E" });
 const lineOf = (s, k) => Object.assign(new LineT(), { EPOCH: iso(t0 + k * step), X: s[0], Y: s[1], Z: s[2], X_DOT: s[3], Y_DOT: s[4], Z_DOT: s[5] });
-function arcOem(hours) {
-  const n = (hours * 3600000) / step + 1, lines = truth.states.slice(0, n).map(lineOf);
+function arcOem(hours, from = truth) {
+  const n = (hours * 3600000) / step + 1, lines = from.states.slice(0, n).map(lineOf);
   const block = Object.assign(new BlockT(), { OBJECT: object(), CENTER_NAME: "EARTH", REFERENCE_FRAME: rfm("GCRF"), TIME_SYSTEM: timingStandard.UTC,
     START_TIME: lines[0].EPOCH, STOP_TIME: lines.at(-1).EPOCH, USEABLE_START_TIME: lines[0].EPOCH, USEABLE_STOP_TIME: lines.at(-1).EPOCH, EPHEMERIS_DATA_LINES: lines });
   return packOem(Object.assign(new OEMT(), { EPHEMERIS_DATA_BLOCK: [block] })).slice();
@@ -51,8 +53,8 @@ function gridOem(firstK, lastK) {
 const FORCES = (tesseral, zonal) => ({ forces: { EPHEMERIS_SOURCE: "", HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: tesseral, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: zonal } });
 const NO_DRAG = { fit: { DRAG_PRIOR: prior(0, 1e-7), DRAG_PRIOR_FORM: pcfPriorForm.GAUSSIAN_SIGNED } };
 const config = (f) => configuration({ theory: "SGP4XP", ...NO_DRAG, ...(f ?? {}), output: { OUTPUT_FRAME: pcfOutputFrame.GCRF } });
-const fit = async (f) => {
-  const r = await invoke("fit", [{ portId: "ephemeris", typeRef: T("OEM"), payload: arcOem(24) }, config(f)]);
+const fit = async (f, oem = arcOem(24)) => {
+  const r = await invoke("fit", [{ portId: "ephemeris", typeRef: T("OEM"), payload: oem }, config(f)]);
   check(r.statusCode === 0, `fit: ${r.errorCode} ${r.errorMessage}`);
   return r.statusCode === 0 ? new Uint8Array(r.outputs[0].payload) : null;
 };
@@ -62,10 +64,10 @@ const flown = async (omm, f, firstK, lastK) => {
   return r.statusCode === 0 ? new Uint8Array(r.outputs[0].payload) : null;
 };
 const linesOf = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(bytes)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-function rmsAgainstTruth(bytes, firstK) {
+function rmsAgainstTruth(bytes, firstK, from = truth) {
   const lines = linesOf(bytes);
   let sum = 0;
-  lines.forEach((l, i) => { const s = truth.states[firstK + i]; sum += (l.X - s[0]) ** 2 + (l.Y - s[1]) ** 2 + (l.Z - s[2]) ** 2; });
+  lines.forEach((l, i) => { const s = from.states[firstK + i]; sum += (l.X - s[0]) ** 2 + (l.Y - s[1]) ** 2 + (l.Z - s[2]) ** 2; });
   return Math.sqrt(sum / lines.length);
 }
 const K24 = (24 * 3600000) / step, K72 = (72 * 3600000) / step, K96 = (96 * 3600000) / step;
@@ -84,8 +86,16 @@ const xpFit = rmsAgainstTruth(await flown(xp, null, 0, K24), 0), apFit = rmsAgai
 const xpDay3 = rmsAgainstTruth(await flown(xp, null, K72, K96), K72), apDay3 = rmsAgainstTruth(await flown(ap, AP, K72, K96), K72);
 console.log(`24 h arc, RMS km: XP ${xpFit.toFixed(4)}, AP ${apFit.toFixed(4)}; 48 to 72 h past the arc: XP ${xpDay3.toFixed(3)}, AP ${apDay3.toFixed(3)}`);
 check(xpFit > 0.2, `XP's fit no longer shows the floor: ${xpFit} km`);
-check(apFit < xpFit / 3, `AP's fit ${apFit} km is not below a third of XP's ${xpFit} km`);
+check(apFit < xpFit / 10, `AP's fit ${apFit} km is not below a tenth of XP's ${xpFit} km`);
 check(apDay3 < xpDay3 / 3, `AP past the arc ${apDay3} km is not below a third of XP's ${xpDay3} km`);
+
+// --- a half-day class: its terms are in the rates, and must not also be in the output-time table
+const meo = JSON.parse(zlib.gunzipSync(fs.readFileSync(fileURLToPath(new URL("fixtures/ffm-meo-19100km-65deg.json.gz", import.meta.url)))));
+const K72M = (72 * 3600000) / step;
+const apMeo = await fit(AP, arcOem(72, meo)), xpMeo = await fit(null, arcOem(72, meo));
+const apMeoFit = rmsAgainstTruth(await flown(apMeo, AP, 0, K72M), 0, meo), xpMeoFit = rmsAgainstTruth(await flown(xpMeo, null, 0, K72M), 0, meo);
+console.log(`19,100 km, 72 h arc, RMS km: XP ${xpMeoFit.toFixed(4)}, AP ${apMeoFit.toFixed(4)}`);
+check(apMeoFit < 0.025, `AP's fit at 19,100 km is ${apMeoFit} km, not under 25 m: a term counted twice?`);
 
 // --- the mark
 const mark = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(ap)).unpack().USER_DEFINED_PARAMETERS?.find((p) => p.PARAM_NAME === "SDNAP_GRAVITY_TERMS")?.PARAM_VALUE;
