@@ -647,6 +647,11 @@ static int fit_blocks() {
         if (po.msis) {
           ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_ATMOSPHERE_MODEL", po.dca ? "NRLMSISE00_DCA" : "NRLMSISE00"));
         }
+        if (po.tesseral_degree != 0 || po.zonal_degree != 0) {
+          char terms[32];
+          std::snprintf(terms, sizeof terms, "%d,%d", po.tesseral_degree, po.zonal_degree);
+          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_GRAVITY_TERMS", terms));
+        }
         s_user = fbb.CreateVector(ps);
       }
       flatbuffers::Offset<flatbuffers::Vector<double>> s_cov = 0;

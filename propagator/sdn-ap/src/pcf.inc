@@ -65,6 +65,9 @@ struct Options {
   bool msis = false;
   int weather_source = pcfWeatherSource_UNSPECIFIED;
   bool dca = false;  ///< DENSITY_CORRECTION DCA_COMMON_MODE ('density_correction' $DCL)
+  // FORCES (fit, propagate): AP's gravity terms (SPEC 16). 0: none of them.
+  int tesseral_degree = 0;  ///< MAXIMUM_TESSERAL_DEGREE
+  int zonal_degree = 0;     ///< MAXIMUM_DEGREE: the zonal tail, J6 up
   // OUTPUT
   int output_frame = pcfOutputFrame_UNSPECIFIED;
   double output_step_s = 60.0;
@@ -252,11 +255,30 @@ inline int read_output(const PCFOutput* p, Options& o) {
   return 0;
 }
 
-/// The FORCES fields that select SGP4XP's drag atmosphere on fit and propagate (SPEC 15).
+/// The FORCES fields that select SGP4XP's drag atmosphere (SPEC 15) and AP's gravity terms (SPEC 16) on fit and propagate.
 inline bool atmosphere_field(uint16_t vt) {
   return vt == PCFForceModel::VT_ENABLE_DRAG || vt == PCFForceModel::VT_ATMOSPHERE_MODEL || vt == PCFForceModel::VT_WEATHER_SOURCE ||
          vt == PCFForceModel::VT_WEATHER_EXTENSION || vt == PCFForceModel::VT_DENSITY_CORRECTION ||
-         vt == PCFForceModel::VT_DENSITY_CORRECTION_RELAXATION_HOURS || vt == PCFForceModel::VT_HAS_DENSITY_CORRECTION_RELAXATION_HOURS;
+         vt == PCFForceModel::VT_DENSITY_CORRECTION_RELAXATION_HOURS || vt == PCFForceModel::VT_HAS_DENSITY_CORRECTION_RELAXATION_HOURS ||
+         vt == PCFForceModel::VT_MAXIMUM_TESSERAL_DEGREE || vt == PCFForceModel::VT_HAS_MAXIMUM_TESSERAL_DEGREE ||
+         vt == PCFForceModel::VT_MAXIMUM_DEGREE || vt == PCFForceModel::VT_HAS_MAXIMUM_DEGREE;
+}
+
+/// SPEC 16: AP's gravity terms of a fit or propagate.
+inline int read_gravity_terms(const PCFForceModel* f, Options& o) {
+  if (f->HAS_MAXIMUM_TESSERAL_DEGREE()) {
+    if (f->MAXIMUM_TESSERAL_DEGREE() > 70) return refuse("FORCES.MAXIMUM_TESSERAL_DEGREE", "0 to 70");
+    o.tesseral_degree = f->MAXIMUM_TESSERAL_DEGREE();
+  } else if (f->MAXIMUM_TESSERAL_DEGREE() != 0) {
+    return refuse("FORCES.MAXIMUM_TESSERAL_DEGREE", "set with HAS_MAXIMUM_TESSERAL_DEGREE true");
+  }
+  if (f->HAS_MAXIMUM_DEGREE()) {
+    if (f->MAXIMUM_DEGREE() > 70) return refuse("FORCES.MAXIMUM_DEGREE", "0 to 70");
+    o.zonal_degree = f->MAXIMUM_DEGREE();
+  } else if (f->MAXIMUM_DEGREE() != 0) {
+    return refuse("FORCES.MAXIMUM_DEGREE", "set with HAS_MAXIMUM_DEGREE true");
+  }
+  return 0;
 }
 
 /// SPEC 15: the drag atmosphere of a fit or propagate.
@@ -303,7 +325,9 @@ inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
   }
   if (f->EPHEMERIS_SOURCE() != nullptr && f->EPHEMERIS_SOURCE()->size() != 0)
     return refuse("FORCES.EPHEMERIS_SOURCE", "the averaged theories read their own analytic Sun and Moon series (leave it empty)");
-  return atmosphere ? read_atmosphere(f, o) : 0;
+  if (!atmosphere) return 0;
+  if (const int rc = read_gravity_terms(f, o)) return rc;
+  return read_atmosphere(f, o);
 }
 
 /// Reads the method's `configuration` ($PCF): 0 and the options() set, or 3 with the error set.
@@ -386,6 +410,20 @@ inline int check_set_atmosphere(int mark) {
   if (mark != call_mark) {
     plugin_set_error("atmosphere-mismatch",
                      "An 'omm' set's SDNAP_ATMOSPHERE_MODEL mark disagrees with the call's FORCES drag atmosphere (Jacchia 1970 vs NRLMSISE-00 vs NRLMSISE-00 + DCA).");
+    return 3;
+  }
+  return 0;
+}
+
+/// propagate, load_epochs, propagate_epochs: FORCES gravity terms against a set's SDNAP_GRAVITY_TERMS mark (SPEC 16).
+inline int check_set_gravity_terms(const omm::GravityTerms& mark) {
+  if (mark.unknown) {
+    plugin_set_error("gravity-terms-mismatch", "An 'omm' record carries an unknown SDNAP_GRAVITY_TERMS mark.");
+    return 3;
+  }
+  const Options& o = options();
+  if (mark.tesseral != o.tesseral_degree || mark.zonal != o.zonal_degree) {
+    plugin_set_error("gravity-terms-mismatch", "An 'omm' set's SDNAP_GRAVITY_TERMS mark disagrees with the call's FORCES MAXIMUM_TESSERAL_DEGREE and MAXIMUM_DEGREE.");
     return 3;
   }
   return 0;

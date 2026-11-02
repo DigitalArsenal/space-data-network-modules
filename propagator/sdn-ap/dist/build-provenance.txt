@@ -1,15 +1,15 @@
 module com.spacedatanetwork.sdn-ap-propagator
-version 0.2.0
-sha256 d4237d343402b1a5b4dafd07cbebe9c3df60f33df3db5e13e8434f0f00280e4a
+version 0.3.0
+sha256 0b021c575466642cd661cd39dcb911de89b63c8430ae9ac2d94c84c7539f8c6a
 nrlmsise00.source third_party/nrlmsise00
 nrlmsise00.pinnedModulesCommit fe5e4ca0eb543da0250c87fb48b689824d66b5cb
-nrlmsise00.checkoutHead b98886c9fee9b56c803f43c8bc701ce66e5566fc
+nrlmsise00.checkoutHead 43109a63c1f8458affdeb4e555ce0a78d65174ed
 nrlmsise00.sha256.nrlmsise-00.h 22eb2ced40595717ef0b73044995e5613aabc8755ed6c43642bfd74335b55535
 nrlmsise00.sha256.nrlmsise-00_data.c d0b3022f3c3e7ffdf703cc0e0d02339dfee01c0bf1520b29c68d5f4afd8784d5
 nrlmsise00.sha256.nrlmsise-00.c c25e4a36a6475f0eee6802939d1425384be23d49b0e945a77fc0316bc9f0a699
 erfa.source higherpop/third_party/erfa
 erfa.pinnedModulesCommit 7d59ae2171b5b57fd3b3587ff012de75b8aabb0c
-erfa.checkoutHead b98886c9fee9b56c803f43c8bc701ce66e5566fc
+erfa.checkoutHead 43109a63c1f8458affdeb4e555ce0a78d65174ed
 erfa.license.spdx BSD-3-Clause
 erfa.license.carried LICENSES/ERFA.txt
 erfa.license.sha256 556abafd66857342b5f760bc42d323d1cfea310569267d3ae316d438b075424d
@@ -54,3 +54,7 @@ erfa.sha256.utctai.c 6c35d07f2db4ca305270205087d41c454a211fbb2c954bf8bf10c0e99f5
 table6.source SAO Special Report 313 (Jacchia 1970), Table 6, pp. 82-87
 table6.sha256 e79af1942bde529df8fcaa7f786ae073193659b7c15bda341956ffab46d46496
 table6.sgp4xpLibraryOverrides 17
+gravity.model egm96
+gravity.source propagator/ffm/lib/egm96_data.h
+gravity.sha256 4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4
+gravity.records 2553

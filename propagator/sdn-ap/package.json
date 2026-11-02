@@ -1,10 +1,10 @@
 {
   "name": "@spacedatanetwork/sdn-ap-propagator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "description": "SDN-AP propagator bundle: SGP4 and SGP4XP (the US Space Force SGP4-XP theory, clean-room) as one isomorphic WASM module behind the OrbPro propagator ABI.",
+  "description": "SDN-AP propagator bundle: SGP4, SGP4XP (the US Space Force SGP4-XP theory, clean-room) and AP (SGP4XP with parts replaced) as one isomorphic WASM module behind the OrbPro propagator ABI.",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "files": [
     "dist/",

@@ -717,6 +717,7 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 }
 
 #include "resonance.inc"
+#include "tesseral.inc"
 
 /// Per-object constants of the rate function.
 struct RateContext {
@@ -728,6 +729,17 @@ struct RateContext {
   int32_t res_count;
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
   const atm::Atmosphere* atmosphere;  ///< the drag's atmosphere (null: the theory's own, SPEC 3; atmosphere.inc)
+  double e0, i0;                      ///< AP: epoch e and i (rad), the shallow terms to first order about them
+  uint8_t ap_resonance;               ///< AP: section 6's classes at the current elements, by the correct functions
+  const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
+  const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
+  int32_t shallow_count;
+  const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
+  int32_t zt_degree;
+  const float* mdaily;                ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
+  int32_t mdaily_degree;
+  const float* sp;                    ///< AP: q = +-1 terms, at output time: Fbar, dFbar, g0, g1 (owned, xp_release)
+  int32_t sp_degree;
 };
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
@@ -769,6 +781,36 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   // SGP4XP integrates the epoch class with its functions at e_0, i_0 (SPEC 6.3; a native report is a fresh
   // initialization at its time, abi.inc)
   if (ctx.res_epoch != nullptr) res::resonance_six(ctx.res_epoch, ctx.res_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
+  if (ctx.ap_resonance) {
+    const int cls = res::band_of(fr.n);
+    if (cls != 0) {
+      res::ResCoef terms[29];
+      const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
+      res::resonance_six(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
+    }
+  }
+  if (ctx.shallow != nullptr) {
+    // AP, following the current elements: F G to first order about the epoch e and i, and each (k, m) weighted by the
+    // current distance from commensurability, so the term set does not depend on the epoch it was taken at
+    res::ResCoef terms[tess::kShallowMax];
+    const double de = k.e - ctx.e0, di = k.i - ctx.i0;
+    const tess::SecularRates sr = tess::secular_rates(fr.n, k.e, k.i);
+    int last_k = 0, last_m = 0;
+    double wgt = 1.0;
+    for (int j = 0; j < ctx.shallow_count; ++j) {
+      terms[j] = tess::expand(ctx.shallow[j]);
+      if (terms[j].k != last_k || terms[j].m != last_m) {
+        last_k = terms[j].k;
+        last_m = terms[j].m;
+        wgt = tess::shallow_weight(sr, last_k, last_m, fr.n);
+      }
+      terms[j].fg = (terms[j].fg + terms[j].fdg * de + terms[j].dfg * di) * wgt;
+      terms[j].fdg *= wgt;
+      terms[j].dfg *= wgt;
+    }
+    res::resonance_six(terms, ctx.shallow_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
+  }
+  if (ctx.zt != nullptr) tess::zonal_six(ctx.zt, ctx.zt_degree, k, fr.n, fr.eta, ag.si, ag.ci, six);
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
   if (ctx.long_period) {
@@ -923,6 +965,23 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     if (!(y[kN] > 0.0)) return kPropMeanMotion;
     Ewarm = Em;
   }
+  if (ctx.mdaily != nullptr || ctx.sp != nullptr) {
+    // AP: the tesseral m-daily short-periodics, first order at the mean elements
+    const Kepler km = kepler_of(ym);
+    if (km.e < 1.0) {
+      const AngleTrig agm = angle_trig(km);
+      double six[6] = {0, 0, 0, 0, 0, 0};
+      if (ctx.mdaily != nullptr)
+        tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
+                         ctx.theta_g0, six);
+      if (ctx.sp != nullptr)
+        tess::sp_six(ctx.sp, ctx.sp_degree, tess::kSpMask, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
+                     ctx.theta_g0, six);
+      double d[6];
+      six_to_equinoctial(agm, six, d);
+      for (int j = 0; j < 6; ++j) y[j] += d[j];
+    }
+  }
   const Kepler k = kepler_of(y);
   if (!(k.e < 1.0)) return kPropEccentricity;
   if (!std::isfinite(y[kLam]) || std::fabs(y[kLam]) > 1e10) return kPropEccentricity;
@@ -1022,6 +1081,63 @@ struct XpSat {
   Node sparse[2][kSparse];
 };
 
+/// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
+inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
+  const tess::Terms& t = tess::active();
+  if (t.tesseral > 0) {
+    s.ctx.ap_resonance = 1;
+    if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
+      const res::TermSet ts = res::class_terms(res);
+      res::GTaylor* g = static_cast<res::GTaylor*>(std::malloc(ts.count * sizeof(res::GTaylor)));
+      if (g == nullptr) return false;
+      for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
+      s.ctx.res_taylor = g;
+    }
+  }
+  const int md = (t.tesseral > tess::kMdailyCap ? tess::kMdailyCap : t.tesseral) & ~1;
+  if (md >= 2) {
+    double scratch[2 * 72];
+    const int count = tess::mdaily_terms(md, e.xincl, scratch);
+    float* kept = static_cast<float*>(std::malloc(2 * count * sizeof(float)));
+    if (kept == nullptr) return false;
+    for (int q = 0; q < 2 * count; ++q) kept[q] = static_cast<float>(scratch[q]);
+    s.ctx.mdaily = kept;
+    s.ctx.mdaily_degree = md;
+  }
+  const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
+  if (spd >= 2) {
+    const int count = tess::sp_count(spd, tess::kSpMask);
+    float* kept = static_cast<float*>(std::malloc(4 * (count > 0 ? count : 1) * sizeof(float)));
+    if (kept == nullptr) return false;
+    tess::sp_terms(spd, tess::kSpMask, n0, e.xincl, e.eo, kept);
+    s.ctx.sp = kept;
+    s.ctx.sp_degree = spd;
+  }
+  const int zd = t.zonal > 70 ? 70 : t.zonal;
+  if (zd >= 6) {
+    float* kept = static_cast<float*>(std::malloc(4 * tess::zonal_count(zd) * sizeof(float)));
+    if (kept == nullptr) return false;
+    tess::zonal_visit_terms(zd, e.xincl, e.eo, kept);
+    s.ctx.zt = kept;
+    s.ctx.zt_degree = zd;
+  }
+  const int sd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
+  if (sd >= 2 && res == 0 && !s.ctx.long_period) {
+    tess::ShallowTerms scratch;
+    const int count = tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
+    if (count > 0) {
+      tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(count * sizeof(tess::ShallowCoef)));
+      if (kept == nullptr) return false;
+      for (int j = 0; j < count; ++j)
+        kept[j] = tess::ShallowCoef{scratch.c[j].l, scratch.c[j].m, scratch.c[j].p, scratch.c[j].k, static_cast<float>(scratch.c[j].fg),
+                                    static_cast<float>(scratch.c[j].fdg), static_cast<float>(scratch.c[j].dfg)};
+      s.ctx.shallow = kept;
+      s.ctx.shallow_count = count;
+    }
+  }
+  return true;
+}
+
 inline int32_t xp_init(const Elements& e, XpSat& s) {
   s = XpSat{};
   s.norad = e.norad;
@@ -1046,7 +1162,13 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.resonance = res;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
   s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
-  if (res != 0) {
+  s.ctx.e0 = e.eo;
+  s.ctx.i0 = e.xincl;
+  if (!ap_init(e, n0, res, s)) {
+    s.init_error = kPropRefused;
+    return kPropRefused;
+  }
+  if (res != 0 && !s.ctx.ap_resonance) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
     res::ResCoef* rc = static_cast<res::ResCoef*>(std::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
     if (rc == nullptr) {
@@ -1078,6 +1200,17 @@ inline void xp_release(XpSat& s) {
   std::free(const_cast<res::ResCoef*>(s.ctx.res_epoch));
   s.ctx.res_epoch = nullptr;
   s.ctx.res_count = 0;
+  std::free(const_cast<res::GTaylor*>(s.ctx.res_taylor));
+  s.ctx.res_taylor = nullptr;
+  std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
+  s.ctx.shallow = nullptr;
+  s.ctx.shallow_count = 0;
+  std::free(const_cast<float*>(s.ctx.zt));
+  s.ctx.zt = nullptr;
+  std::free(const_cast<float*>(s.ctx.mdaily));
+  s.ctx.mdaily = nullptr;
+  std::free(const_cast<float*>(s.ctx.sp));
+  s.ctx.sp = nullptr;
 }
 
 inline void lock(int32_t* word) {

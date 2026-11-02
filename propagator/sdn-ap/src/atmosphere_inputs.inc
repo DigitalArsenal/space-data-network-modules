@@ -112,6 +112,7 @@ inline int prepare() {
   Atmosphere& a = call_atmosphere();
   a = Atmosphere{};
   active() = nullptr;
+  xpt::tess::active() = xpt::tess::Terms{o.tesseral_degree, o.zonal_degree};  // AP's gravity terms (SPEC 16)
   std::vector<SpwDay> days;
   bool have_rows = false, have_dcl = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
@@ -150,7 +151,10 @@ inline int coverage() {
 
 /// The call's atmosphere ends with the call.
 struct Scope {
-  ~Scope() { active() = nullptr; }
+  ~Scope() {
+    active() = nullptr;
+    xpt::tess::active() = xpt::tess::Terms{};
+  }
 };
 
 }  // namespace atm

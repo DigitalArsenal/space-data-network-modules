@@ -266,6 +266,7 @@ extern "C" int propagate(void) {
     if (const int tc = sdnap::pcf::check_set_theory(e.theory)) return tc;
     if (e.theory == sdnap::kTheorySgp4Xp) {
       if (const int ac = sdnap::pcf::check_set_atmosphere(sdnap::omm::atmosphere_mark(f->payload, f->payload_length))) return ac;
+      if (const int gc = sdnap::pcf::check_set_gravity_terms(sdnap::omm::gravity_terms_mark(f->payload, f->payload_length))) return gc;
     }
     sdnap::xpt::XpSat* xs = nullptr;
     sdnap::Sat sat{};

@@ -1,8 +1,8 @@
 # sdn-ap-propagator
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
-theories. The bundle keeps its name; the SDN-AP theory it once carried was removed (owner 2026-10-25), and an `$OMM` whose
-MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
+theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
+An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 
 | Theory | Sets | Source |
@@ -62,7 +62,7 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
   KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
-  below), and any other FORCES field is refused by name. INTEGRATOR is refused
+  below) and AP's gravity terms (SPEC 16, below), and any other FORCES field is refused by name. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states) apply with their documented ranges; FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM
   LOG_NORMAL need their prior (HAS_SIGMA true, the MEAN its median > 0), refused by name without it.
@@ -113,6 +113,14 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   `dist/LICENSES/ERFA.txt`); NRLMSISE-00, the public-domain C port in `third_party/nrlmsise00` (the files at modules
   fe5e4ca0; propagator/ffm, analysis/density-calibration and analysis/od compile the same files, and a change there
   is taken here by updating the pin).
+
+## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
+
+`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the odd-l
+q = +-1 terms to 7, shallow resonances to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE` and `MAXIMUM_DEGREE` add
+the zonal tail from J6. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
+SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
+(`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 

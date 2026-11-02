@@ -270,6 +270,22 @@ inline double hansen_G(int l, int p, int q, double e) {
 }
 
 /// One term's parts (SPEC 6.3): the integers, the tesserals and F G, F dG/de, dF/di G at the elements evaluated.
+/// AP (tesseral.inc): G_lpq(e) and dG_lpq/de from the Hansen coefficient, the derivative by a fourth-order central
+/// difference; near e = 0 the Maclaurin polynomial, exact to rounding there.
+inline void exact_G(int l, int p, int q, double e, double& G, double& dG) {
+  G = hansen_G(l, p, q, e);
+  const double h = 1e-4;
+  if (e >= 2.0 * h && e + 2.0 * h < 1.0) {
+    dG = (hansen_G(l, p, q, e - 2.0 * h) - 8.0 * hansen_G(l, p, q, e - h) + 8.0 * hansen_G(l, p, q, e + h) -
+          hansen_G(l, p, q, e + 2.0 * h)) / (12.0 * h);
+  } else {
+    double Gs;
+    const HansenSeries* hs = hansen_series(l, p, q);
+    if (hs != nullptr) series_G(*hs, e, Gs, dG);
+    else dG = 0.0;
+  }
+}
+
 struct ResCoef {
   int8_t l, m, p, k;
   int8_t odd;  ///< l - m odd
@@ -280,11 +296,7 @@ struct ResCoef {
 /// The terms of class `cls` at the current e and i (SPEC 6.3, amendment 5): the integers, the tesserals and F G,
 /// F dG/de, dF/di G, as the SGP4XP library computes them (SPEC 6.4). si, ci: sin i and cos i. Returns the count written
 /// (at most 29).
-inline int current_terms(int cls, double e, double si, double ci, ResCoef* out) {
-  const TermSet ts = class_terms(cls);
-  const KaulaPoly* polys = class_polys_of(cls);
-  if (polys == nullptr) return 0;
-  double sp[8], cp[8];
+inline void trig_powers(double si, double ci, double* sp, double* cp) {
   sp[0] = 1.0;
   cp[0] = 1.0;
   sp[1] = si;
@@ -293,6 +305,26 @@ inline int current_terms(int cls, double e, double si, double ci, ResCoef* out) 
     sp[j] = sp[j - 1] * si;
     cp[j] = cp[j - 1] * ci;
   }
+}
+inline void set_coef(ResCoef& c, const ResonantTerm& t, const Harmonic& hm, double F, double dF, double G, double dG) {
+  c.l = t.l;
+  c.m = t.m;
+  c.p = t.p;
+  c.k = t.k;
+  c.odd = static_cast<int8_t>((t.l - t.m) & 1);
+  c.C = hm.C;
+  c.S = hm.S;
+  c.fg = F * G;
+  c.fdg = F * dG;
+  c.dfg = dF * G;
+}
+
+inline int current_terms(int cls, double e, double si, double ci, ResCoef* out) {
+  const TermSet ts = class_terms(cls);
+  const KaulaPoly* polys = class_polys_of(cls);
+  if (polys == nullptr) return 0;
+  double sp[8], cp[8];
+  trig_powers(si, ci, sp, cp);
   for (int j = 0; j < ts.count; ++j) {
     const ResonantTerm& t = ts.t[j];
     const Harmonic& hm = harmonic(t.l, t.m);
@@ -308,17 +340,52 @@ inline int current_terms(int cls, double e, double si, double ci, ResCoef* out) 
       series_G(hs, e, G, dG, false, -1, -1, true);
       if (cls == 4 && t.l == 4 && t.p == 1 && t.q == 0) G += e * e;  // G_410 with 2 e^2
     }
-    ResCoef& c = out[j];
-    c.l = t.l;
-    c.m = t.m;
-    c.p = t.p;
-    c.k = t.k;
-    c.odd = static_cast<int8_t>((t.l - t.m) & 1);
-    c.C = hm.C;
-    c.S = hm.S;
-    c.fg = F * G;
-    c.fdg = F * dG;
-    c.dfg = dF * G;
+    set_coef(out[j], t, hm, F, dF, G, dG);
+  }
+  return ts.count;
+}
+
+/// AP's G_lpq about the epoch e_0, above kSeriesE: G, dG/de, d2G/de2, d3G/de3 there, from the Hansen coefficient at e_0
+/// and e_0 +- h, +- 2h. Valid past the Laplace limit e = 0.6627, where the Maclaurin polynomial diverges.
+struct GTaylor {
+  double g0, g1, g2, g3;
+};
+constexpr double kSeriesE = 0.3;  ///< below it AP takes G from the Maclaurin polynomial (exact to rounding)
+inline GTaylor g_taylor(int l, int p, int q, double e0) {
+  const double h = 5e-4;
+  const double gm2 = hansen_G(l, p, q, e0 - 2.0 * h), gm1 = hansen_G(l, p, q, e0 - h), g0 = hansen_G(l, p, q, e0);
+  const double gp1 = hansen_G(l, p, q, e0 + h), gp2 = hansen_G(l, p, q, e0 + 2.0 * h);
+  GTaylor out;
+  out.g0 = g0;
+  out.g1 = (gm2 - 8.0 * gm1 + 8.0 * gp1 - gp2) / (12.0 * h);
+  out.g2 = (-gp2 + 16.0 * gp1 - 30.0 * g0 + 16.0 * gm1 - gm2) / (12.0 * h * h);
+  out.g3 = (gp2 - 2.0 * gp1 + 2.0 * gm1 - gm2) / (2.0 * h * h * h);
+  return out;
+}
+
+/// AP's terms of class `cls` at the current e and i, by the correct functions where the library departs from them
+/// (SPEC 16.2): the exact dF/di, and G from the Maclaurin polynomial below kSeriesE, above it from `taylor` (the terms
+/// of class `taylor_cls` about e_0) when the class is that one.
+inline int ap_terms(int cls, double e, double si, double ci, const GTaylor* taylor, int taylor_cls, double e0, ResCoef* out) {
+  const TermSet ts = class_terms(cls);
+  const KaulaPoly* polys = class_polys_of(cls);
+  if (polys == nullptr) return 0;
+  double sp[8], cp[8];
+  trig_powers(si, ci, sp, cp);
+  const bool expand = taylor != nullptr && cls == taylor_cls && e >= kSeriesE;
+  for (int j = 0; j < ts.count; ++j) {
+    const ResonantTerm& t = ts.t[j];
+    double F, dF, G, dG;
+    kaula_eval(polys[j], sp, cp, F, dF);
+    if (expand) {
+      const GTaylor& g = taylor[j];
+      const double d = e - e0;
+      G = g.g0 + d * (g.g1 + d * (0.5 * g.g2 + d * (g.g3 / 6.0)));
+      dG = g.g1 + d * (g.g2 + d * (0.5 * g.g3));
+    } else {
+      series_G(kHansen[t.hansen], e, G, dG);
+    }
+    set_coef(out[j], t, harmonic(t.l, t.m), F, dF, G, dG);
   }
   return ts.count;
 }

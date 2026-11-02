@@ -281,11 +281,37 @@ for (let depth = 0; partPattern.test(inlined); ++depth) {
   }
   inlined = inlined.replace(partPattern, (_, name) => parts.get(name));
 }
+// Gravity (AP's terms, SPEC 16): the fully normalized EGM-96 coefficients to degree and order 70 that this repository's
+// FFM carries (propagator/ffm/lib), PINNED by SHA-256. Recorded in dist/build-provenance.txt.
+const GRAVITY_PIN = Object.freeze({ file: "egm96_data.h", sha256: "4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4" });
+async function gravity() {
+  const dir = path.join(process.env.SPACE_DATA_NETWORK_MODULES_ROOT ?? modulesRoot, "propagator", "ffm", "lib");
+  const bytes = await fs.readFile(path.join(dir, GRAVITY_PIN.file));
+  const got = createHash("sha256").update(bytes).digest("hex");
+  if (got !== GRAVITY_PIN.sha256) throw new Error(`gravity pin: ${path.join(dir, GRAVITY_PIN.file)} has sha256 ${got}, expected ${GRAVITY_PIN.sha256}`);
+  const C = Array.from({ length: 71 }, () => new Array(71).fill("0.0"));
+  const S = Array.from({ length: 71 }, () => new Array(71).fill("0.0"));
+  let count = 0;
+  for (const m of bytes.toString("utf8").matchAll(/\{\s*(\d+),\s*(\d+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\s*\}/g)) {
+    const n = Number(m[1]), k = Number(m[2]);
+    if (n > 70 || k > n) continue;
+    C[n][k] = m[3];
+    S[n][k] = m[4];
+    count += 1;
+  }
+  if (count < 2550) throw new Error(`gravity: ${count} coefficient records in ${GRAVITY_PIN.file}`);
+  provenance.gravity = { model: "egm96", source: shownPath(path.join(dir, GRAVITY_PIN.file)), sha256: got, records: count };
+  const rows = (A) => A.map((r) => `    {${r.join(", ")}},`).join("\n");
+  return `// EGM96 fully normalized Stokes coefficients, degree and order <= 70 (pinned; build.mjs)\n` +
+    `inline constexpr double kEgmC[71][71] = {\n${rows(C)}\n};\ninline constexpr double kEgmS[71][71] = {\n${rows(S)}\n};\n`;
+}
+
 const sourceCode = inlined
   .replace('#include "orbpro/orbpro_propagator_abi.h"', abiHeader)
   .replace('#include "omm_slots.h"', await ommSlots())
   .replace('#include "oem_generated.h"', await oemBindings())
   .replace('#include "nrlmsise00.h"', await nrlmsise())
+  .replace('#include "gravity_egm.h"', await gravity())
   .replace('#include "erfa_pinned.h"', await erfa());
 
 const buildRoot = path.join(packageRoot, ".build");

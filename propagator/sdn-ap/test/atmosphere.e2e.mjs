@@ -393,7 +393,7 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
   check(enough !== null, "rows from the day before the epoch's day are refused");
 }
 
-// 6. XP2 + Open DCA two-stage decoupled 17.1h tesseral-null fit, altitude-adaptive prior, atmosphere marking & epoch store
+// 6. NRLMSISE-00 + open DCA, two-stage decoupled 17.1h tesseral-null fit, altitude-adaptive prior, atmosphere marking & epoch store
 {
   // A 5-day ephemeris starting at 00:00:00 UTC on day0 + 1*DAY .. day0 + 6*DAY (cutoff D0 = day0 + 6*DAY).
   // The 48h Stage 1 fit span starts at day0 + 4*DAY (00:00:00 UTC).

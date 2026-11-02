@@ -68,6 +68,7 @@ struct Store {
   std::vector<Series> series;
   Stats stats;
   atm::Atmosphere atm;
+  xpt::tess::Terms terms;  ///< AP's gravity terms of the load (SPEC 16)
   bool has_atm = false;
 };
 
@@ -190,6 +191,7 @@ inline int build(Store& st, const Config& cfg) {
     st.atm = *atm::active();
     st.has_atm = true;
   }
+  st.terms = xpt::tess::active();
   std::vector<Record> recs;
   bool bad = false, atm_err = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
@@ -202,7 +204,7 @@ inline int build(Store& st, const Config& cfg) {
       if (d < 0) { bad = true; return false; }
       if (d == 0) { ++st.stats.other_center; return true; }
       if (cfg.theories != 0 && (cfg.theories & theory_bit(r.row.theory)) == 0) { ++st.stats.theory; delete r.cov; return true; }
-      if (r.row.theory == kTheorySgp4Xp && pcf::check_set_atmosphere(omm::atmosphere_mark(p, n)) != 0) {
+      if (r.row.theory == kTheorySgp4Xp && (pcf::check_set_atmosphere(omm::atmosphere_mark(p, n)) != 0 || pcf::check_set_gravity_terms(omm::gravity_terms_mark(p, n)) != 0)) {
         delete r.cov;
         atm_err = true;
         return false;
@@ -289,8 +291,15 @@ inline int build(Store& st, const Config& cfg) {
 inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   struct BindAtm {
     const atm::Atmosphere* prev;
-    explicit BindAtm(const Store& st) : prev(atm::active()) { atm::active() = st.has_atm ? &st.atm : nullptr; }
-    ~BindAtm() { atm::active() = prev; }
+    const xpt::tess::Terms prev_terms;
+    explicit BindAtm(const Store& st) : prev(atm::active()), prev_terms(xpt::tess::active()) {
+      atm::active() = st.has_atm ? &st.atm : nullptr;
+      xpt::tess::active() = st.terms;
+    }
+    ~BindAtm() {
+      atm::active() = prev;
+      xpt::tess::active() = prev_terms;
+    }
   } bind_atm{st};
   for (Slot& q : s.slots)
     if (q.index == static_cast<int32_t>(k)) {

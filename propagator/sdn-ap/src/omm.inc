@@ -171,6 +171,29 @@ inline bool decode(const uint8_t* buf, uint32_t len, ElementRow& row) {
   return row.mean_motion_rev_day > 0.0;
 }
 
+/// AP's gravity terms on an $OMM record (USER_DEFINED_PARAMETERS naming SDNAP_GRAVITY_TERMS, "<tesseral>,<zonal>", SPEC 16).
+struct GravityTerms {
+  int tesseral = 0, zonal = 0;
+  bool unknown = false;
+};
+inline GravityTerms gravity_terms_mark(const uint8_t* buf, uint32_t len) {
+  GravityTerms t;
+  if (!plain_view(buf, len, "$OMM")) return t;
+  flatbuffers::Verifier::Options vopt;
+  vopt.check_alignment = false;
+  flatbuffers::Verifier v0(buf, len, vopt);
+  if (!VerifyOMMBuffer(v0)) return t;
+  const auto* params = GetOMM(buf)->USER_DEFINED_PARAMETERS();
+  if (params == nullptr) return t;
+  for (const OMMUserDefinedParameter* p : *params) {
+    if (p == nullptr || p->PARAM_NAME() == nullptr || p->PARAM_VALUE() == nullptr) continue;
+    if (std::strcmp(p->PARAM_NAME()->c_str(), "SDNAP_GRAVITY_TERMS") != 0) continue;
+    if (std::sscanf(p->PARAM_VALUE()->c_str(), "%d,%d", &t.tesseral, &t.zonal) != 2) t.unknown = true;
+    return t;
+  }
+  return t;
+}
+
 /// Atmosphere provenance mark on an $OMM record (USER_DEFINED_PARAMETERS naming SDNAP_ATMOSPHERE_MODEL):
 /// 0 unmarked, 1 JACCHIA_70, 2 NRLMSISE00, 3 NRLMSISE00_DCA, -1 unknown value.
 inline int atmosphere_mark(const uint8_t* buf, uint32_t len) {
@@ -236,6 +259,12 @@ extern "C" int ingest_omm(void) {
       std::free(rows);
       plugin_set_error("atmosphere-mismatch",
                        "An 'omm' set carries SDNAP_ATMOSPHERE_MODEL NRLMSISE00, which ingest_omm's Jacchia 1970 batch store cannot fly; use propagate or load_epochs with FORCES.ENABLE_DRAG true.");
+      return 3;
+    }
+    const sdnap::omm::GravityTerms terms = sdnap::omm::gravity_terms_mark(f->payload, f->payload_length);
+    if (terms.unknown || terms.tesseral != 0 || terms.zonal != 0) {
+      std::free(rows);
+      plugin_set_error("gravity-terms-mismatch", "An 'omm' set carries SDNAP_GRAVITY_TERMS, which ingest_omm's batch store cannot fly; use propagate or load_epochs.");
       return 3;
     }
     rows[k++] = row;

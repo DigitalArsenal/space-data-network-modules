@@ -1661,8 +1661,8 @@ selection) and `_at` (a batch of series at one time, TEME km, km/s or Earth-fixe
 
 Refused by name: another ATMOSPHERE_MODEL, WEATHER_SOURCE CONSTANT and a WEATHER table, WEATHER_EXTENSION REFUSE or
 FORECAST_CHAIN (UNSPECIFIED and HOLD_LAST hold the last row), DCA_COMMON_MODE without ENABLE_DRAG, a non-zero
-DENSITY_CORRECTION_RELAXATION_HOURS (the $DCL's forecast nodes carry the decay), any other FORCES field (the last two,
-THIRD_BODY_MAXIMUM_DEGREE and _ORDER, included); rows that NRLMSISE-00
+DENSITY_CORRECTION_RELAXATION_HOURS (the $DCL's forecast nodes carry the decay), any other FORCES field but section 16's
+(the last two, THIRD_BODY_MAXIMUM_DEGREE and _ORDER, included); rows that NRLMSISE-00
 or RECORDS needs and that are absent (space-weather-missing); a $DCL without DCA_COMMON_MODE or the reverse
 (density-correction-unselected, density-correction-missing); malformed rows or $DCL (invalid-space-weather,
 invalid-density-correction); a call that evaluates a day whose previous day precedes the first row
@@ -1696,6 +1696,44 @@ tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 (`sigma = 1e-9`) and th
 A set fitted under NRLMSISE-00 records `SDNAP_ATMOSPHERE_MODEL` (`"NRLMSISE00"` or `"NRLMSISE00_DCA"`) in
 `$OMM.USER_DEFINED_PARAMETERS`; `propagate`, `ingest_omm`, `load_epochs` and `propagate_epochs` refuse a set whose mark
 disagrees with the call's atmosphere (`atmosphere-mismatch`).
+
+---
+
+## 16. AP: SGP4XP with parts replaced (side B's option, outside the SGP4-XP specification)
+
+AP is SGP4XP with parts of the theory replaced where a part is what limits the answer: the drag atmosphere (section 15) and
+the gravity field below. Its sets are SGP4XP sets (BTERM, AGOM) that carry a mark, and it flies on the theory's own grid.
+
+**16.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
+
+| FORCES | Terms |
+| --- | --- |
+| HAS_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE d, 0 to 70 | the tesseral terms of 16.2, each family to its cap or d, whichever is lower |
+| HAS_MAXIMUM_DEGREE, MAXIMUM_DEGREE z, 0 to 70 | the zonal tail J6 to Jz of 16.3 (z below 6: none) |
+
+With both at 0 or unset the theory is SGP4XP bit for bit. A degree set without its HAS field, or above 70, is refused by name.
+`maneuver` and `ingest_omm` keep SGP4XP.
+
+**16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
+from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination.
+
+| Family | Terms | Cap | Where |
+| --- | --- | --- | --- |
+| m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 | at output time, first order at the mean elements |
+| odd-l | q = +-1, j = w + q = 0 (O(e) in G, O(1) in the eccentricity vector, at the m-daily frequency) | 7 | at output time |
+| shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
+
+Section 6's classes keep their terms, and with d above 0 take the correct functions at the current elements where the library
+departs from them, in place of 6.3 and 6.4's epoch values: the current class by the current n, F and G at the current e and i, the exact dF_632/di,
+G_410 with e^2 coefficient 1, dG_40,-2/de with its e^13 and e^15 terms, G_30,-1 with its e^27 term, and above e = 0.3 G from the
+Hansen coefficient expanded to third order about the epoch e of the epoch class, valid past the Laplace limit e = 0.6627.
+
+**16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
+(w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
+
+**16.4 Mark.** A set fitted with either degree set records `SDNAP_GRAVITY_TERMS` (`"<d>,<z>"`) in
+`$OMM.USER_DEFINED_PARAMETERS`. `propagate`, `load_epochs` and `propagate_epochs` refuse a set whose mark differs from the call's
+degrees, and `ingest_omm` any marked set (`gravity-terms-mismatch`).
 
 ---
 
