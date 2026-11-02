@@ -39,6 +39,74 @@ SSB_EXPORT("rp_shadow") int32_t rp_shadow(const double* sun,const double* body,d
     if (!valid(result,8)) return -1;
     std::copy(result,result+8,out);return 0;
 }
+// Area where two disks of angular radii a and b, centres c apart, overlap.
+static double disk_overlap(double a,double b,double c) {
+    if (c>=a+b) return 0.0;
+    if (c<=std::fabs(a-b)) return pi*std::min(a,b)*std::min(a,b);
+    double ca=std::clamp((c*c+a*a-b*b)/(2*c*a),-1.0,1.0),cb=std::clamp((c*c+b*b-a*a)/(2*c*b),-1.0,1.0);
+    double kite=0.5*std::sqrt((-c+a+b)*(c+a-b)*(c-a+b)*(c+a+b));
+    return a*a*std::acos(ca)+b*b*std::acos(cb)-kite;
+}
+// Grid of points around an origin, axes from the Sun-Earth line and the ecliptic pole. Each value is the
+// fraction of the Sun's disc a point sees unblocked by the Moon: 1 lit, 0 in the Moon's umbra, between in its penumbra.
+// Output: out[0..8] row-major 3x3 whose columns are the grid axes in the output frame, out[9..11] the origin in
+// the output frame, then nx*ny*nz values with index (k*ny+j)*nx+i. Inputs are ICRF metres relative to one origin.
+SSB_EXPORT("rp_occultation_grid") int32_t rp_occultation_grid(const double* sun,const double* earth,const double* moon,const double* origin,const double* R,double sunRadius,double moonRadius,double spacing,uint32_t nx,uint32_t ny,uint32_t nz,double* out,uint32_t cap) {
+    if (!valid(sun,3)||!valid(earth,3)||!valid(moon,3)||!valid(origin,3)||!matrix(R)||!out) return -1;
+    if (!positive(sunRadius)||!positive(moonRadius)||!positive(spacing)||!nx||!ny||!nz) return -1;
+    uint64_t count=uint64_t(nx)*ny*nz;
+    if (count+12>cap) return -2;
+    Vec x,z,y;
+    if (!unit(vec(earth)-vec(sun),x)) return -1;
+    const double obliquity=0.40909280422232897;
+    Vec pole={0,-std::sin(obliquity),std::cos(obliquity)};
+    double along=pole.x*x.x+pole.y*x.y+pole.z*x.z;
+    if (!unit(pole-x*along,z)) return -1;
+    y=cross(z,x);
+    Vec xo=rotate(R,x),yo=rotate(R,y),zo=rotate(R,z),oo=rotate(R,vec(origin));
+    out[0]=xo.x;out[1]=yo.x;out[2]=zo.x;out[3]=xo.y;out[4]=yo.y;out[5]=zo.y;out[6]=xo.z;out[7]=yo.z;out[8]=zo.z;
+    out[9]=oo.x;out[10]=oo.y;out[11]=oo.z;
+    const double hx=(nx-1)/2.0,hy=(ny-1)/2.0,hz=(nz-1)/2.0;
+    for (uint32_t k=0;k<nz;++k) for (uint32_t j=0;j<ny;++j) for (uint32_t i=0;i<nx;++i) {
+        Vec p=vec(origin)+x*((i-hx)*spacing)+y*((j-hy)*spacing)+z*((k-hz)*spacing);
+        Vec toSun=vec(sun)-p,toMoon=vec(moon)-p;
+        double ds=norm(toSun),dm=norm(toMoon);
+        if (!(ds>sunRadius)||!(dm>moonRadius)) return -3;
+        double a=std::asin(sunRadius/ds),b=std::asin(moonRadius/dm);
+        double c=std::atan2(norm(cross(toSun,toMoon)),toSun.x*toMoon.x+toSun.y*toMoon.y+toSun.z*toMoon.z);
+        double visible=1.0-disk_overlap(a,b,c)/(pi*a*a);
+        out[12+(uint64_t(k)*ny+j)*nx+i]=std::clamp(visible,0.0,1.0);
+    }
+    if (!valid(out,unsigned(12+count))) return -1;
+    return 0;
+}
+// Van Allen radiation belts as a volume about the Earth (owner 2026-10-28: the belts as a volume with NASA's
+// colours). Each value is the normalized belt intensity at a grid point (1 at the inner belt's peak), from the
+// McIlwain L-shell about the geomagnetic dipole: L = r / cos^2(magnetic latitude). The inner (proton) belt peaks
+// near L = 1.5; the outer (electron) belt near L = 4.3 at about half that. Approximate model shapes, not
+// calibrated flux. Output: nx*ny*nz values, index (k*ny+j)*nx+i, grid centred on the Earth's centre.
+SSB_EXPORT("rp_radiation_grid") int32_t rp_radiation_grid(const double* axis,double spacing,uint32_t nx,uint32_t ny,uint32_t nz,double* out,uint32_t cap) {
+    const double earthRadius=6378137.0;
+    Vec m;
+    if (!valid(axis,3)||!unit(vec(axis),m)||!positive(spacing)||!nx||!ny||!nz||!out) return -1;
+    uint64_t count=uint64_t(nx)*ny*nz;
+    if (count>cap) return -2;
+    const double hx=(nx-1)/2.0,hy=(ny-1)/2.0,hz=(nz-1)/2.0;
+    for (uint32_t k=0;k<nz;++k) for (uint32_t j=0;j<ny;++j) for (uint32_t i=0;i<nx;++i) {
+        Vec p={(i-hx)*spacing,(j-hy)*spacing,(k-hz)*spacing};
+        double distance=norm(p),r=distance/earthRadius,value=0.0;
+        if (r>=1.0) {
+            double sinLatitude=(p.x*m.x+p.y*m.y+p.z*m.z)/distance;
+            double shell=r/(1.0-sinLatitude*sinLatitude);
+            double inner=std::exp(-std::pow((shell-1.5)/0.22,2));
+            double outer=0.55*std::exp(-std::pow((shell-4.3)/1.1,2));
+            value=std::clamp(std::max(inner,outer),0.0,1.0);
+        }
+        out[(uint64_t(k)*ny+j)*nx+i]=value;
+    }
+    if (!valid(out,unsigned(count))) return -1;
+    return 0;
+}
 SSB_EXPORT("rp_wire_circle") int32_t rp_wire_circle(const double* c,const double* pole,const double* R,double radius,uint32_t samples,double* out,uint32_t cap) {
     Wire w;if (!w.init(c,pole,R,out)||!positive(radius)||samples<3) return -1;
     if (capacity(uint64_t(samples)+1,cap)) return -2;

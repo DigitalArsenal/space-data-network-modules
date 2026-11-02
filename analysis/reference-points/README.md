@@ -77,6 +77,8 @@ The authoritative C signatures are in `src/reference_points_module.cpp`.
 | `rp_sub_point(target3, rot_icrf_to_body9, radii3, center3, R, out6)` | Ray intercept with the ellipsoid; output position (0–2), body-fixed east longitude in (-180,180] degrees (3), planetodetic latitude of the surface normal in degrees (4), target distance in meters (5). Target is a vector from the body's center, not an absolute position. Longitude uses the intercept's x/y coordinates. |
 | `rp_region(kind, out2)` | Approximate boundaries below. Other kinds return -1. |
 | `rp_geomagnetic_axis(out3)` | Unit north centered-dipole axis in Earth-fixed axes: +z geographic north, +x longitude zero, +y longitude 90 degrees east. |
+| `rp_occultation_grid(sun3, earth3, moon3, origin3, rot_icrf_to_output9, sunRadius, moonRadius, spacing, nx, ny, nz, out, capacity)` | The fraction of the Sun's disc each grid point sees unblocked by the Moon: 1 lit, 0 in the umbra. `out[0..8]` row-major axes (X Sun to Earth, Z toward the ecliptic pole), `out[9..11]` the origin, then `nx*ny*nz` values at `(k*ny+j)*nx+i`. Returns -3 for a point inside the Sun or the Moon. |
+| `rp_radiation_grid(axis3, spacing, nx, ny, nz, out, capacity)` | Normalized Van Allen belt intensity on a grid centered on the Earth, from the McIlwain L-shell about the dipole `axis3`: inner belt 1 at L = 1.5, outer belt 0.55 at L = 4.3. Approximate shapes, not calibrated flux. |
 
 Lagrange positions describe the **instantaneous pulsating frame**, not a
 propagated invariant orbit or an ephemeris of a spacecraft. The x axis follows
