@@ -1,6 +1,6 @@
 {
   "task": "modules-sdn-ap-class-hold-20261103",
-  "measuredUtc": "2026-11-03T05:08:28.954249+00:00",
+  "measuredUtc": "2026-11-03T05:17:06.109764+00:00",
   "registrationCommit": "80dd6025b",
   "units": "signed forecast-minus-FFM RTN errors in meters; mean motion rev/day",
   "selection": "first registered B in [.04,.06,.08,.1] that crosses in the primary and not in the companion; no accuracy-based selection",
@@ -13,7 +13,9 @@
     "companionMeanMotion": 2.4038744539920356,
     "oldTermsInOutputAfterCrossing": 2,
     "smallerThanEpochHold": true,
-    "boundAuthority": "Coordinator resume note 7, 2026-11-03"
+    "boundAuthority": "Coordinator resume note 7, 2026-11-03",
+    "epochHoldAlongTrackMeters": -32325.03215135335,
+    "endToEndPass": true
   },
   "probeColumns": [
     "meanMotion",
@@ -98,7 +100,7 @@
                 ]
               }
             ],
-            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "classProbeSha256": "a6698a6e3047e3eb15175dad21481689939692f72d7b82a8a8b02642684403e3",
             "fixture": {
               "name": "crossing",
               "n": 2.4,
@@ -190,7 +192,7 @@
                 "burnSummary": []
               }
             ],
-            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "apSha256": "ba3919a8b73b29d18e2c6f8a1704756f1afca6942a46fd62ff9f450cb808bf61",
             "epoch": "2026-10-29T00:00:00.000",
             "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
             "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -286,7 +288,7 @@
                 ]
               }
             ],
-            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "classProbeSha256": "a6698a6e3047e3eb15175dad21481689939692f72d7b82a8a8b02642684403e3",
             "fixture": {
               "name": "companion",
               "n": 2.3966852459,
@@ -378,7 +380,7 @@
                 "burnSummary": []
               }
             ],
-            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "apSha256": "ba3919a8b73b29d18e2c6f8a1704756f1afca6942a46fd62ff9f450cb808bf61",
             "epoch": "2026-10-29T00:00:00.000",
             "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
             "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -479,7 +481,7 @@
                 ]
               }
             ],
-            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "classProbeSha256": "a6698a6e3047e3eb15175dad21481689939692f72d7b82a8a8b02642684403e3",
             "fixture": {
               "name": "crossing",
               "n": 2.4,
@@ -571,7 +573,7 @@
                 "burnSummary": []
               }
             ],
-            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "apSha256": "ba3919a8b73b29d18e2c6f8a1704756f1afca6942a46fd62ff9f450cb808bf61",
             "epoch": "2026-10-29T00:00:00.000",
             "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
             "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -667,7 +669,7 @@
                 ]
               }
             ],
-            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "classProbeSha256": "a6698a6e3047e3eb15175dad21481689939692f72d7b82a8a8b02642684403e3",
             "fixture": {
               "name": "companion",
               "n": 2.3966852459,
@@ -759,7 +761,7 @@
                 "burnSummary": []
               }
             ],
-            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "apSha256": "ba3919a8b73b29d18e2c6f8a1704756f1afca6942a46fd62ff9f450cb808bf61",
             "epoch": "2026-10-29T00:00:00.000",
             "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
             "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -861,7 +863,7 @@
               ]
             }
           ],
-          "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+          "classProbeSha256": "a6698a6e3047e3eb15175dad21481689939692f72d7b82a8a8b02642684403e3",
           "fixture": {
             "name": "crossing",
             "n": 2.4,
@@ -953,7 +955,7 @@
               "burnSummary": []
             }
           ],
-          "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+          "apSha256": "ba3919a8b73b29d18e2c6f8a1704756f1afca6942a46fd62ff9f450cb808bf61",
           "epoch": "2026-10-29T00:00:00.000",
           "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
           "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1049,7 +1051,7 @@
               ]
             }
           ],
-          "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+          "classProbeSha256": "a6698a6e3047e3eb15175dad21481689939692f72d7b82a8a8b02642684403e3",
           "fixture": {
             "name": "companion",
             "n": 2.3966852459,
@@ -1141,7 +1143,7 @@
               "burnSummary": []
             }
           ],
-          "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+          "apSha256": "ba3919a8b73b29d18e2c6f8a1704756f1afca6942a46fd62ff9f450cb808bf61",
           "epoch": "2026-10-29T00:00:00.000",
           "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
           "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1172,6 +1174,195 @@
           "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
         }
       ]
+    },
+    "epochHold": {
+      "name": "epoch-hold",
+      "fitted": {
+        "epoch": "2026-10-29T00:00:00.000",
+        "n": 2.4,
+        "e": 0.72,
+        "bterm": 0.06
+      },
+      "classDiagnostics": [
+        {
+          "day": 0,
+          "values": [
+            2.4,
+            2,
+            2,
+            2,
+            0,
+            206.88598664193302,
+            147.09336490486467,
+            552.6846142992792,
+            592.7700141652853
+          ]
+        },
+        {
+          "day": 1,
+          "values": [
+            2.40111883897242,
+            2,
+            2,
+            2,
+            0,
+            206.88598664193302,
+            147.09336490486467,
+            552.6846142992792,
+            592.7700141652853
+          ]
+        },
+        {
+          "day": 3,
+          "values": [
+            2.403495780547024,
+            2,
+            2,
+            2,
+            0,
+            206.88598664193302,
+            147.09336490486467,
+            552.6846142992792,
+            592.7700141652853
+          ]
+        },
+        {
+          "day": 7,
+          "values": [
+            2.4083242707814274,
+            2,
+            2,
+            2,
+            0,
+            206.88598664193302,
+            147.09336490486467,
+            552.6846142992792,
+            592.7700141652853
+          ]
+        }
+      ],
+      "classProbeSha256": "02f68251eee5761ffe16b1a36fb9b61ceaddf986452ffd8a5713c43e56b3b2cd",
+      "fixture": {
+        "name": "epoch-hold",
+        "n": 2.4,
+        "e": 0.72,
+        "i": 27,
+        "raan": 40,
+        "argp": 270,
+        "ma": 0,
+        "drag": true,
+        "bterm": 0.06,
+        "dragSigma": 1e-10,
+        "mode": "seed",
+        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-hold-reference/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "initialization": "AP mean-element epoch state",
+        "initialGcrfKm": [
+          3743.0421141759753,
+          -4524.155603838794,
+          -3002.553664572608,
+          7.850453099519121,
+          6.508101125867974,
+          -0.020507798245868902
+        ],
+        "fitEnd": "2026-10-29T00:00:00.000",
+        "referenceIntegrator": {
+          "tolerance": 1e-12,
+          "minStep": 0.01,
+          "maxStep": 300
+        },
+        "modulePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-hold-reference/propagator/sdn-ap/dist/isomorphic/module.wasm"
+      },
+      "referenceStates": [
+        {
+          "epochJD": 2461343.500800723,
+          "position": [
+            -17804.303327149148,
+            30323.605641670114,
+            17766.244255368445
+          ],
+          "velocity": [
+            -1.7253138697791308,
+            -0.42393638973292336,
+            0.3938354827912947
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 371,
+          "integrationRejections": 22,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461345.500800723,
+          "position": [
+            -3570.3063509216545,
+            27288.993049238383,
+            12042.248433244795
+          ],
+          "velocity": [
+            -2.3835253983050575,
+            1.455023791247501,
+            1.3431155787596771
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 1114,
+          "integrationRejections": 68,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461349.500800724,
+          "position": [
+            -24756.90330551751,
+            3525.7354386120096,
+            9084.36085844966
+          ],
+          "velocity": [
+            1.7829143039494308,
+            -2.6717015361903766,
+            -1.640349067382587
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 2562,
+          "integrationRejections": 152,
+          "burnSummary": []
+        }
+      ],
+      "apSha256": "02f68251eee5761ffe16b1a36fb9b61ceaddf986452ffd8a5713c43e56b3b2cd",
+      "epoch": "2026-10-29T00:00:00.000",
+      "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+      "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+      "n": 2.4,
+      "e": 0.72,
+      "perigeeKm": 219.96729979299926,
+      "fitHours": 0,
+      "days": {
+        "1": {
+          "e": 1877.385823898929,
+          "r": 173.93977115620936,
+          "t": -1868.3239656763997,
+          "n": 60.72929331052727
+        },
+        "3": {
+          "e": 6745.132258506734,
+          "r": -3797.196262634147,
+          "t": -5574.633632229828,
+          "n": -39.61810441549307
+        },
+        "7": {
+          "e": 46120.85109062928,
+          "r": 32897.19014832332,
+          "t": -32325.03215135335,
+          "n": -9.059968583731148
+        }
+      },
+      "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
     }
   },
   "before": {
