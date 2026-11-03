@@ -21,8 +21,10 @@
 //   held refused.
 // - The prior forms ($PCF 1.0.6 FIT.DRAG_PRIOR_FORM, SRP_PRIOR_FORM; task modules-sgp4xp-fit-lognormal-drag-20261026), on
 //   a real window from before plan XM's period: NASA's ISS file of 2025-01-23, its first 24 h (the local archive,
-//   SDNAP_ISS_ARCHIVE; operator data, never committed; SHA-256 pinned). The GAUSSIAN_SIGNED prior 0 +- 0.05, stated,
-//   ends at BTERM <= 0 there and gives, byte for byte, the sets this module gave before 0.2.0 when no prior was set;
+//   SDNAP_ISS_ARCHIVE; operator data, never committed; SHA-256 pinned). The GAUSSIAN_SIGNED prior 0 +- 0.05, stated on
+//   BTERM and on AGOM, ends at BTERM <= 0 there and gives, byte for byte, the sets this module gave before 0.2.0 when no
+//   prior was set (both priors were 0 +- 0.05 then; from 0.4.7 an unset AGOM prior on an arc under 36 h is 0 +- 0.1,
+//   SPEC 12.1, so the check states AGOM's);
 //   LOG_NORMAL N(ln 0.01, ln 10) estimates ln BTERM, ends > 0 and fits better. The $OBD states each prior as used; the
 //   covariance is the ln-space posterior carried to B by the Jacobian (sqrt(C_BB) = B x the posterior sigma of ln B within
 //   1e-12), and an unobserved AGOM's is marked prior-limited (posterior sigma of the log > 0.5). The two-line lattice
@@ -271,11 +273,12 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
   const outputsOf = (r) => Buffer.concat(r.outputs.map((o) => Buffer.from(o.payload)));  // the $OMM and the $OBD
   const shaOf = (r) => createHash("sha256").update(Buffer.from(r.outputs.find((o) => o.portId === "elements").payload)).digest("hex");
   const modelOf = (r) => OBD.getRootAsOBD(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "determination").payload)).BALLISTIC_COEFF_MODEL();
-  // the $OMM of main 348636447's build, which took GAUSSIAN_SIGNED 0 +- 0.05 on BTERM when no prior was set: stated, that prior gives
-  // its sets back byte for byte (the $OBD now states the prior)
+  // the $OMM of main 348636447's build, which took GAUSSIAN_SIGNED 0 +- 0.05 on BTERM and on AGOM when no prior was set: stated, those
+  // priors give its sets back byte for byte (the $OBD now states the prior). AGOM's is stated because from 0.4.7 an unset AGOM prior
+  // on an arc under 36 h is 0 +- 0.1 (SPEC 12.1), and both windows here are 24 h
   const BEFORE_0_2_0 = { teme: "81a81b54c2a49c235830d1beb4ce1388baeca5a507e43119c813812fc5ae89c9", iss: "cc06072aed2f050172f476d81952898bdf0d365df717a1330adf1d03eb552d30" };
   const LN = { DRAG_PRIOR: prior(0.01, Math.LN10), DRAG_PRIOR_FORM: pcfPriorForm.LOG_NORMAL };
-  const GAUSSIAN = { DRAG_PRIOR: prior(0, 0.05), DRAG_PRIOR_FORM: pcfPriorForm.GAUSSIAN_SIGNED };
+  const GAUSSIAN = { DRAG_PRIOR: prior(0, 0.05), DRAG_PRIOR_FORM: pcfPriorForm.GAUSSIAN_SIGNED, SRP_PRIOR: prior(0, 0.05) };
   // a FIT table with both forms on the wire at their default value, as a builder forcing defaults writes them: no prior
   const formsWritten = Object.assign(new PCFFitPolicyT(), { pack: (b) => {
     PCFFitPolicy.startPCFFitPolicy(b);
