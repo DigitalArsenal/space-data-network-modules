@@ -1743,9 +1743,9 @@ Measured on the model truth of the table below, one call with the SWOT-like orbi
 Sentinel-3-like orbit (true B 0.001): each object's set is the bytes of its single-object fit; on the band defaults the
 day-3 errors are 82.0 and 24.1 m (B 0.0463 and 0.00115), carried 83.0 and 24.1 m, and with each object's true B
 (sigma of the log 0.3) 21.3 and 20.4 m. With SWOT-like's carried prior shared by both, as the call's one $PCF had to
-before 0.4.13, the Sentinel-3-like object is at 3,176.9 m. A carried prior returns the arc's own estimate: it does not
-supply what the arc mis-estimates (SWOT-like's 0.0463 against 0.044). `test/fit-per-object-prior-multi.e2e.mjs`
-measures these numbers. Unset, the prior is LOG_NORMAL with median 0.01
+before 0.4.13, the Sentinel-3-like object is at 3,176.9 m. A posterior carried from the same arc returns that arc's
+estimate (SWOT-like's 0.0463 against 0.044), so the carried prior gains only as the running estimate converges over
+successive arcs, which is the catalog's work. `test/fit-per-object-prior-multi.e2e.mjs` measures these numbers. Unset, the prior is LOG_NORMAL with median 0.01
 m^2/kg and sigma of the log ln 10; under NRLMSISE-00 (or a minimum span below 24 h) the median follows the mean altitude
 (0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above), and under NRLMSISE-00 at 800-1400 km the sigma of the log is
 10 ln 10.
