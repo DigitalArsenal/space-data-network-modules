@@ -59,7 +59,10 @@ async function replay(list){
    let s;
    if(['LS','DO','GD'].includes(w.group)){
     const clean=s=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
-    const o=STATIC.find(o=>o.group===w.group&&clean(o.name)===clean(w.name));
+    const o=STATIC.find(o=>o.group===w.group&&clean(o.name)===clean(w.name))??STATIC.find(o=>{
+     if(o.group!==w.group)return false;
+     const file=o.files()[0];return file&&SRC.readReference(file).norad===w.norad;
+    });
     if(!o)throw Error('static object mapping: '+w.name);
     s=SRC.chain(o.files()).lines;
    }else if(['IG','GE'].includes(w.group)){
