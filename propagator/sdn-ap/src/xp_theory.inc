@@ -1390,6 +1390,8 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
 /// latest bracket of each direction. 96 + 2 * 2 * 112 + 2 * kSparse * 112 bytes.
 constexpr int kSparse = 12;
 
+constexpr int kDragStepNodes = 9;
+constexpr double kDragStepSpan = 0.999;  ///< the nodes' reach toward the two passages, inside them
 struct XpSat {
   uint32_t norad;
   int32_t init_error;
@@ -1402,10 +1404,10 @@ struct XpSat {
   int32_t window_valid[2];
   int32_t sparse_count[2];    ///< checkpoints held per direction (index stride * (k + 1))
   Node sparse[2][kSparse];
-  // AP above e 0.3 (SPEC 16.12): the drag's rates of one perigee passage pair (t0, t1), at the mean states of t0 and t1;
-  // an output between them takes the linear interpolant (drag_step_at)
+  // AP above e 0.3 (SPEC 16.12): the drag's rates between two perigee passages t0 and t1 at kDragStepNodes Chebyshev
+  // times; an output between them takes their interpolant (drag_step_at)
   int32_t dc_valid;
-  double dc_t0, dc_t1, dc_f0[6], dc_f1[6];
+  double dc_t0, dc_t1, dc_f[kDragStepNodes][6];
 };
 
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
@@ -1666,21 +1668,23 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
 }
 
 /// AP above e 0.3 (SPEC 16.12): the drag's rates that place the short-period steps at t, mean state y, evaluated once per
-/// perigee passage: at the passage t0 (M = 0 of the mean elements, to 1e-6 min) and the next, t1 = t0 + 2 pi / n(t0), each
-/// at its mean state with the pair (t0, t1), the output between them taking the linear interpolant. False when a mean state
-/// is refused.
+/// perigee passage: between the passage t0 (M = 0 of the mean elements, to 1e-6 min) and t1 = t0 + 2 pi / n(t0), the rates
+/// of each sample's own passages at kDragStepNodes Chebyshev times, the output taking their polynomial interpolant. False
+/// when a mean state is refused.
 inline bool drag_step_at(XpSat& s, double t, const double* y, double* out) {
+  constexpr int K = kDragStepNodes;
   const Frame fr = frame_of(y);
   const Kepler k = kepler_of(y, fr.a);
   const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
-  double t0 = 0.0, t1 = 0.0, f0[6], f1[6];
+  double t0 = 0.0, t1 = 0.0, f[K][6];
   bool hit = false;
   lock(&s.lock);
   if (s.dc_valid && std::fabs(tp - s.dc_t0) < 0.25 * period) {
     hit = true;
     t0 = s.dc_t0;
     t1 = s.dc_t1;
-    for (int j = 0; j < 6; ++j) { f0[j] = s.dc_f0[j]; f1[j] = s.dc_f1[j]; }
+    for (int q = 0; q < K; ++q)
+      for (int j = 0; j < 6; ++j) f[q][j] = s.dc_f[q][j];
   }
   unlock(&s.lock);
   if (!hit) {
@@ -1693,28 +1697,35 @@ inline bool drag_step_at(XpSat& s, double t, const double* y, double* out) {
       if (std::fabs(dt) < 1e-8) break;
     }
     t0 = std::round(tc * 1e6) / 1e6;
-    double y0[6], y1[6];
-    if (!mean_at(s, t0, y0) || !(y0[kN] > 0.0)) return false;
-    t1 = t0 + kTwoPi / y0[kN];
-    if (!mean_at(s, t1, y1)) return false;
-    for (int w = 0; w < 2; ++w) {
-      const double* ys = w == 0 ? y0 : y1;
-      double* f = w == 0 ? f0 : f1;
-      for (int j = 0; j < 6; ++j) f[j] = 0.0;
-      if (state_test(s.ctx, ys) != 0) return false;
-      const Frame fs = frame_of(ys);
-      const Kepler ks = kepler_of(ys, fs.a);
-      drag_pair(s.ctx, t0, t1, ys, fs, ks, angle_trig(ks), bodies_at(s.ctx.d50_epoch + (w == 0 ? t0 : t1) / kMinutesPerDay), f);
+    if (!mean_at(s, t0, yy) || !(yy[kN] > 0.0)) return false;
+    t1 = t0 + kTwoPi / yy[kN];
+    for (int q = 0; q < K; ++q) {
+      const double tq = t0 + 0.5 * (t1 - t0) * (1.0 + kDragStepSpan * std::cos(q * kPi / (K - 1)));
+      if (!mean_at(s, tq, yy) || state_test(s.ctx, yy) != 0) return false;
+      const Frame fq = frame_of(yy);
+      const Kepler kq = kepler_of(yy, fq.a);
+      for (int j = 0; j < 6; ++j) f[q][j] = 0.0;
+      drag_part(s.ctx, tq, yy, fq, kq, angle_trig(kq), bodies_at(s.ctx.d50_epoch + tq / kMinutesPerDay), f[q]);
     }
     lock(&s.lock);
     s.dc_valid = 1;
     s.dc_t0 = t0;
     s.dc_t1 = t1;
-    for (int j = 0; j < 6; ++j) { s.dc_f0[j] = f0[j]; s.dc_f1[j] = f1[j]; }
+    for (int q = 0; q < K; ++q)
+      for (int j = 0; j < 6; ++j) s.dc_f[q][j] = f[q][j];
     unlock(&s.lock);
   }
-  const double w = (t - t0) / (t1 - t0);
-  for (int j = 0; j < 6; ++j) out[j] = f0[j] + w * (f1[j] - f0[j]);
+  // Lagrange on the Chebyshev times
+  const double x = 2.0 * (t - t0) / (t1 - t0) - 1.0;
+  double xs[K];
+  for (int q = 0; q < K; ++q) xs[q] = kDragStepSpan * std::cos(q * kPi / (K - 1));
+  for (int j = 0; j < 6; ++j) out[j] = 0.0;
+  for (int q = 0; q < K; ++q) {
+    double L = 1.0;
+    for (int m = 0; m < K; ++m)
+      if (m != q) L *= (x - xs[m]) / (xs[q] - xs[m]);
+    for (int j = 0; j < 6; ++j) out[j] += L * f[q][j];
+  }
   return true;
 }
 
