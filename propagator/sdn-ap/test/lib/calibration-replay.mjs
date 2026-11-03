@@ -193,7 +193,7 @@ export function calibrate(results){
   }
   console.log(JSON.stringify({regime,...report.tables[regime]}));
  }
- report.pass=report.cells.every(c=>!c.required||c.pass);
+ report.pass=report.cells.some(c=>c.required)&&report.cells.every(c=>!c.required||c.pass);
  fs.writeFileSync(path.join(scratch,'calibration.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }
@@ -212,7 +212,7 @@ export function evaluate(results){
   const cell={regime,day,windows,samples:d2.length,meanD2Over3,coverage95,required:windows>=30,pass:meanD2Over3>=.8&&meanD2Over3<=1.25&&coverage95>=.93&&coverage95<=.97};
   report.cells.push(cell);console.log(JSON.stringify(cell));
  }
- report.pass=report.cells.every(c=>!c.required||c.pass);
+ report.pass=report.cells.some(c=>c.required)&&report.cells.every(c=>!c.required||c.pass);
  fs.writeFileSync(path.join(scratch,'shipped.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }

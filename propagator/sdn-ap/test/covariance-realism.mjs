@@ -75,6 +75,7 @@ if (THEORY === "SDNAP") {
   const results = await runReplay();
   const report = process.argv.includes("--calibrate") ? calibrate(results) : evaluate(results);
   if (OUT) fs.writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
+  assert.ok(!Number(process.env.SDN_AP_CALIBRATION_LIMIT ?? 0), "A diagnostic subset cannot satisfy the full calibration acceptance");
   assert.ok(report.pass, "SPEC 12.7: every supported regime/lead cell must meet both unchanged bands");
   process.exit(0);
 }
