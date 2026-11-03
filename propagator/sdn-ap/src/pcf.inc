@@ -90,6 +90,17 @@ inline Options& options() {
   return o;
 }
 
+/// SPEC 12.8: one object's BTERM and AGOM priors, from a $PCF after the call's own on the fit's 'configuration' port
+/// (the k-th such $PCF for the k-th 'ephemeris' frame); a prior it does not state stays the call's (band default).
+struct ObjectPriors {
+  Prior drag = kDragPriorDefault, srp = kSrpPriorDefault;
+  bool drag_given = false, srp_given = false;
+};
+inline std::vector<ObjectPriors>& object_priors() {
+  static std::vector<ObjectPriors> v;
+  return v;
+}
+
 inline int refuse(const char* field, const char* why) {
   char text[400];
   std::snprintf(text, sizeof text, "%s: %s", field, why);
@@ -345,37 +356,74 @@ inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
 }
 
 /// Reads the method's `configuration` ($PCF): 0 and the options() set, or 3 with the error set.
+/// A 'configuration' frame's $PCF (plain or size-prefixed), or nullptr with the error set.
+inline const PCF* pcf_of(const plugin_input_frame_t* cf) {
+  const uint8_t* p = cf->payload;
+  size_t len = cf->payload_length;
+  flatbuffers::Verifier v(p, len);
+  if (!VerifyPCFBuffer(v)) {
+    flatbuffers::Verifier vs(p, len);
+    if (len < 8 || !VerifySizePrefixedPCFBuffer(vs)) {
+      plugin_set_error("invalid-configuration", "The 'configuration' payload is not a verifiable $PCF 1.0 record.");
+      return nullptr;
+    }
+    p += 4;
+  }
+  return GetPCF(p);
+}
+
+/// SPEC 12.8: an object's $PCF on fit (every 'configuration' frame after the first) states only FIT.DRAG_PRIOR,
+/// FIT.SRP_PRIOR and their forms (CONFIGURATION_ID and PROFILE, informational, may stand); anything else is refused.
+inline int read_object_priors(const PCF* c, ObjectPriors& out) {
+  constexpr const char* kWhat = "an object's $PCF (after the call's own) states only FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms";
+  if (c->THEORY() != pcfTheory_UNSPECIFIED || c->INTEGRATOR() != nullptr || c->FORCES() != nullptr ||
+      (c->EVENTS() != nullptr && c->EVENTS()->size() != 0) || c->OUTPUT() != nullptr || c->EPOCH_STORE() != nullptr)
+    return refuse("configuration", kWhat);
+  const PCFFitPolicy* f = c->FIT();
+  if (f == nullptr) return 0;
+  for (const uint16_t vt : {PCFFitPolicy::VT_DEFAULT_SPAN_HOURS, PCFFitPolicy::VT_MINIMUM_SPAN_HOURS,
+                            PCFFitPolicy::VT_MAXIMUM_SPAN_HOURS, PCFFitPolicy::VT_CANDIDATE_SPANS_HOURS,
+                            PCFFitPolicy::VT_TAIL_HOURS, PCFFitPolicy::VT_EXTENSION_MARGIN, PCFFitPolicy::VT_HOLDOUT_HOURS,
+                            PCFFitPolicy::VT_HAS_HOLDOUT_HOURS, PCFFitPolicy::VT_ECCENTRICITY_THRESHOLD,
+                            PCFFitPolicy::VT_ECCENTRIC_DEFAULT_SPAN_HOURS, PCFFitPolicy::VT_ECCENTRIC_EXTENSION_MARGIN,
+                            PCFFitPolicy::VT_ECCENTRIC_MAXIMUM_PERIOD_HOURS, PCFFitPolicy::VT_IMPLAUSIBLE_RMS_KM})
+    if (has(f, vt)) return refuse("configuration", kWhat);
+  if (const int rc = read_prior(f->DRAG_PRIOR(), f->DRAG_PRIOR_FORM(), "DRAG_PRIOR", out.drag)) return rc;
+  out.drag_given = f->DRAG_PRIOR() != nullptr && f->DRAG_PRIOR()->HAS_SIGMA();
+  if (const int rc = read_prior(f->SRP_PRIOR(), f->SRP_PRIOR_FORM(), "SRP_PRIOR", out.srp)) return rc;
+  out.srp_given = f->SRP_PRIOR() != nullptr && f->SRP_PRIOR()->HAS_SIGMA();
+  return 0;
+}
+
 inline int read(Method method) {
   Options& o = options();
   o = Options{};
+  object_priors().clear();
   fitoem::tail_minutes() = 24.0 * 60.0;
   const plugin_input_frame_t* cf = nullptr;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (f != nullptr && f->port_id != nullptr && std::strcmp(f->port_id, "configuration") == 0) {
-      if (cf != nullptr) { plugin_set_error("configuration-refused", "configuration: one $PCF per call"); return 3; }
-      cf = f;
+      if (cf == nullptr) {
+        cf = f;
+        continue;
+      }
+      // SPEC 12.8: fit takes, after the call's own, one $PCF per 'ephemeris' frame with that object's priors
+      if (method != kFit) { plugin_set_error("configuration-refused", "configuration: one $PCF per call"); return 3; }
+      if (f->payload == nullptr) { plugin_set_error("invalid-configuration", "An object's $PCF is empty."); return 3; }
+      const PCF* oc = pcf_of(f);
+      if (oc == nullptr) return 3;
+      ObjectPriors op;
+      if (const int rc = read_object_priors(oc, op)) return rc;
+      object_priors().push_back(op);
     }
   }
   if (cf == nullptr || cf->payload == nullptr) {
     plugin_set_error("configuration-missing", "The 'configuration' input ($PCF 1.0) is required.");
     return 3;
   }
-  const uint8_t* p = cf->payload;
-  size_t len = cf->payload_length;
-  {
-    flatbuffers::Verifier v(p, len);
-    if (!VerifyPCFBuffer(v)) {
-      flatbuffers::Verifier vs(p, len);
-      if (len < 8 || !VerifySizePrefixedPCFBuffer(vs)) {
-        plugin_set_error("invalid-configuration", "The 'configuration' payload is not a verifiable $PCF 1.0 record.");
-        return 3;
-      }
-      p += 4;
-      len -= 4;
-    }
-  }
-  const PCF* c = GetPCF(p);
+  const PCF* c = pcf_of(cf);
+  if (c == nullptr) return 3;
   const uint32_t tables = tables_of(method);
   o.theory = c->THEORY();
   switch (method) {

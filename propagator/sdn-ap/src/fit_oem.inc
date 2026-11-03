@@ -61,19 +61,27 @@ inline void set_prior(const pcf::Prior& p, int32_t& log_flag, double& mean, doub
   sigma = p.sigma;
 }
 
-/// The $OBD model text of a fitted term: its prior's form and the values used; under LOG_NORMAL with the covariance, the
-/// posterior sigma of the log, the covariance marked prior-limited when that passes 0.5 (the term effectively unobserved:
-/// the delta method then stands in poorly for a wide log-normal).
-inline void model_text(const char* term, const pcf::Prior& p, double log_sigma, char* out, size_t n) {
+/// The $OBD model text of a fitted term: its prior's form and the values used; with the covariance, the posterior (SPEC
+/// 12.8: what the object's next fit takes as its prior): under LOG_NORMAL the posterior sigma of the log, the covariance
+/// marked prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands in poorly
+/// for a wide log-normal), and the posterior median; under GAUSSIAN_SIGNED the posterior value and sigma.
+inline void model_text(const char* term, const pcf::Prior& p, double log_sigma, bool have_cov, double value,
+                       double value_sigma, char* out, size_t n) {
+  int k;
   if (p.form != pcfPriorForm_LOG_NORMAL) {
-    std::snprintf(out, n, "%s, Gaussian prior %.9g +- %.9g m^2/kg", term, p.mean, p.sigma);
+    k = std::snprintf(out, n, "%s, Gaussian prior %.9g +- %.9g m^2/kg", term, p.mean, p.sigma);
+    if (have_cov && k > 0 && static_cast<size_t>(k) < n)
+      std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior %.9g +- %.9g m^2/kg", value, value_sigma);
     return;
   }
-  const int k = std::snprintf(out, n, "%s, log-normal prior, estimated as its natural log (never <= 0): median %.9g m^2/kg, sigma of the log %.9g",
-                              term, p.mean, p.sigma);
+  k = std::snprintf(out, n, "%s, log-normal prior, estimated as its natural log (never <= 0): median %.9g m^2/kg, sigma of the log %.9g",
+                    term, p.mean, p.sigma);
   if (log_sigma > 0.0 && k > 0 && static_cast<size_t>(k) < n)
-    std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior sigma of the log %.17g%s", log_sigma,
-                  log_sigma > 0.5 ? "; covariance prior-limited (posterior sigma of the log > 0.5)" : "");
+    k += std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior sigma of the log %.17g", log_sigma);
+  if (have_cov && k > 0 && static_cast<size_t>(k) < n)
+    k += std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior median %.9g m^2/kg", value);
+  if (log_sigma > 0.5 && k > 0 && static_cast<size_t>(k) < n)
+    std::snprintf(out + k, n - static_cast<size_t>(k), "; covariance prior-limited (posterior sigma of the log > 0.5)");
 }
 
 inline bool text_epoch(const flatbuffers::String* s, double& whole, double& frac) {
@@ -146,12 +154,38 @@ inline double period_minutes(const ephemerisDataBlock* blk) {
 static int fit_blocks() {
   using namespace sdnap;
   plugin_reset_output_state();
-  const pcf::Options& po = pcf::options();
   const uint32_t frames = plugin_get_input_count();
+  // SPEC 12.8: after the call's $PCF, either no further $PCF or one per 'ephemeris' frame, in the frames' order
+  const std::vector<pcf::ObjectPriors>& objects = pcf::object_priors();
+  if (!objects.empty()) {
+    size_t ephemeris_frames = 0;
+    for (uint32_t fi = 0; fi < frames; ++fi) {
+      const plugin_input_frame_t* f = plugin_get_input_frame(fi);
+      if (f != nullptr && f->port_id != nullptr && std::strcmp(f->port_id, "ephemeris") == 0) ++ephemeris_frames;
+    }
+    if (objects.size() != ephemeris_frames)
+      return pcf::refuse("configuration", "after the call's $PCF, either none or one $PCF per 'ephemeris' frame (its object's priors)");
+  }
   uint32_t blocks_done = 0;
+  size_t ephemeris_index = 0;
   for (uint32_t fi = 0; fi < frames; ++fi) {
     const plugin_input_frame_t* f = plugin_get_input_frame(fi);
     if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "ephemeris") != 0) continue;
+    // the call's options with this frame's object priors where its $PCF states them
+    pcf::Options frame_options = pcf::options();
+    if (!objects.empty()) {
+      const pcf::ObjectPriors& op = objects[ephemeris_index];
+      if (op.drag_given) {
+        frame_options.drag_prior = op.drag;
+        frame_options.drag_prior_given = true;
+      }
+      if (op.srp_given) {
+        frame_options.srp_prior = op.srp;
+        frame_options.srp_prior_given = true;
+      }
+    }
+    ++ephemeris_index;
+    const pcf::Options& po = frame_options;
     const uint8_t* payload = f->payload;
     uint32_t payload_length = f->payload_length;
     if (!plain_view(payload, payload_length, "$OEM")) {
@@ -719,8 +753,21 @@ static int fit_blocks() {
         const auto o_from = ob.CreateString(epoch_text);
         const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
         char bmodel[400], amodel[400];
-        fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, bmodel, sizeof bmodel);
-        fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, amodel, sizeof amodel);
+        // the posterior sigma of BTERM and AGOM themselves: their rows of the epoch covariance
+        double sigma_b = 0.0, sigma_a = 0.0;
+        if (have_cov) {
+          int kind[fit::kMaxParams];
+          const int np = cov::kinds_of(fit_cov.o, kind);
+          for (int a = 6; a < np; ++a) {
+            const double var = fit_cov.C[a * np + a];
+            if (kind[a] == 6) sigma_b = var > 0.0 ? std::sqrt(var) : 0.0;
+            if (kind[a] == 7) sigma_a = var > 0.0 ? std::sqrt(var) : 0.0;
+          }
+        }
+        fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, have_cov, row.bterm, sigma_b,
+                           bmodel, sizeof bmodel);
+        fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, have_cov, row.agom, sigma_a,
+                           amodel, sizeof amodel);
         const auto o_bmodel = ob.CreateString(bmodel);
         const auto o_amodel = ob.CreateString(amodel);
         const auto o_object = object != nullptr && object->OBJECT_ID() != nullptr ? ob.CreateString(object->OBJECT_ID()->c_str()) : 0;

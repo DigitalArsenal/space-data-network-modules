@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, SGP4XP with its atmosphere and gravity replaced ($PCF FORCES). Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. Work grows with the uncached time gap; results do not depend on request order.",
   "pluginFamily": "propagator",
   "capabilities": [],
@@ -430,9 +430,9 @@
           "portId": "configuration",
           "displayName": "configuration",
           "minStreams": 1,
-          "maxStreams": 1,
+          "maxStreams": 65535,
           "required": true,
-          "description": "$PCF 1.0.5 (SDS 1.271.0): THEORY and FIT (the span rule, hold-out, implausibility bound, BTERM and AGOM priors), FORCES (refused when off its defaults) and INTEGRATOR (refused); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set; fields left unset take the documented defaults, but a BTERM prior left unset (FIT.DRAG_PRIOR absent or without a sigma, its form unset) is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, where a prior with a sigma and the form GAUSSIAN_SIGNED stays Gaussian on BTERM itself; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.5 (SDS 1.271.0): THEORY and FIT (the span rule, hold-out, implausibility bound, BTERM and AGOM priors), FORCES (refused when off its defaults) and INTEGRATOR (refused); after it, either no further $PCF or one per 'ephemeris' frame in their order, each stating only FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms: that object's priors (SPEC 12.8); THEORY UNSPECIFIED or SGP4XP fits an SGP4XP set; fields left unset take the documented defaults, but a BTERM prior left unset (FIT.DRAG_PRIOR absent or without a sigma, its form unset) is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, where a prior with a sigma and the form GAUSSIAN_SIGNED stays Gaussian on BTERM itself; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
