@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.10.
+Version 0.4.11.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -369,7 +369,7 @@ synthetic HEO fixtures retain their day-1/3/7 errors exactly (0.000 m change, <1
 its digest. `test/heo-frame.e2e.mjs` prints every window and fixture; unread-window confirmation is separate.
 
 AP adds each third body's tidal terms of degree 4 to 10 to the averaged rates of orbits with periods below 1100 min
-and eccentricities below 0.1 (SPEC 16.8; XP's stop at degree 3). On the eleven already-read AP6 windows of each (exploratory), the median paired
+(SPEC 16.8; XP's stop at degree 3). On the eleven already-read AP6 windows of each (exploratory), the median paired
 day-3 AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on
 Etalon-2; LAGEOS-1, LAGEOS-2 and LARES-2 move from 15.44, 11.89 and 15.04 m to 14.10, 12.24 and 11.00 m, and IG and
 GE are unchanged (`test/etalon-resonance.e2e.mjs`).
@@ -382,6 +382,13 @@ RMS falls from 22-23 m to under 0.8 m and the along-track RMS to under 7 m. On t
 and the medians to 7.81 m (LAGEOS-1), 6.78 m (LAGEOS-2), 9.73 m (LARES-2), 17.10 m (IG) and 45.86 m (GE)
 (`test/twelve-hour-class-terms.e2e.mjs`).
 
-The degree 4 to 10 tidal terms apply below e 0.1. Swept against the numerical reference on 12-hour orbits in three
-orientations, they help at every e up to 0.085 and first turn near e 0.09; the turn comes from SPEC 5.4's closed-form
-degree 2 and 3 short-period terms, whose error grows with e (SPEC 16.8, `test/tidal-degree4-eccentric.e2e.mjs`).
+AP takes the third bodies' short-period terms of degree 2 to 10 by quadrature instead of SPEC 5.4's closed form, which
+averages over the eccentric anomaly where the rates average over the mean longitude: against a numerical integration
+over one orbit the closed form is off by up to 298 m at e 0.72 and the quadrature by under 0.1 m (SPEC 5.4). With it
+the degree 4 to 10 terms apply at every eccentricity. On the e 0.72-0.74 model-truth fixtures the day-7 whole-day RMS
+(along-track/radial) falls from 228/85 to 84/75 m (half-day), 687/391 to 150/176 m (Molniya) and 232/60 to 158/105 m
+(12 hours at 55 deg); GTO moves from 885/860 to 961/935 m, within 3 % of its error with no Sun or Moon on either side.
+On the already-read AP6 windows (exploratory) Etalon-1 and -2 fall to 6.64 and 7.58 m paired against the numerical
+reference, and LAGEOS-1/2, LARES-2, IG and GE stay within 0.03 m (SPEC 16.6, 16.8,
+`test/third-body-short-period-eccentric.e2e.mjs`). A propagation costs 1.6-12.0 ms per object-day on a 1 h grid and
+52-86 ms on a 1 min grid (1.4-12.3 and 51-66 ms before; SPEC 16.8).

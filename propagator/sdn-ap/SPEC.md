@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.10.
+Version 0.4.11.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -868,7 +868,7 @@ lambda-dot - n; rad/min) are, per body, C2 Q2 + C3 Q3 with *[study; probe 2.2]*:
 rates at epoch (13-15.2 rev/day, drag and SRP off) to 1e-8 to 1e-10 relative in a_f, a_g, chi, psi and 6e-13 in
 lambda-dot.
 
-These rates stop at the octupole; AP adds each body's terms of degree 4 to 10 in this regime below e 0.1 (16.8).
+These rates stop at the octupole; AP adds each body's terms of degree 4 to 10 in this regime (16.8).
 
 **At the output time, averaged regime.** The third-body short-period terms (periodic in the satellite's eccentric
 anomaly E, the body held fixed at the output time) are added to the interpolated mean elements, once for the Sun
@@ -1069,6 +1069,21 @@ C2 Q2 + C3 Q3 with Q2 quadratic and Q3 cubic in (A, B, C); brackets hold the coe
   e^3 cos(2E + omega) - 72 e^2 eta cos(E) cos(omega) - 24 e^2 eta cos(3E) cos(omega) + 264 e^2 sin(E) sin(omega) +
   24 e^2 sin(3E) sin(omega) - 144 e eta sin(E)^2 cos(omega) + 72 e eta cos(omega) - 36 e cos(2E - omega) + 36 e
   cos(2E + omega) - 96 eta cos(E) cos(omega) + 96 sin(E) sin(omega)) sin(i)/(64 eta n (cos(i) + 1))]
+
+**AP: the quadrature form.** AP (16.1) replaces these corrections with the first-order short-period terms of each
+body's tidal terms of degree 2 to 10 (16.8's acceleration), computed by quadrature: for each equinoctial element, the
+Gauss rate on the mean orbit at the 32 eccentric longitudes F_j = 2 pi j / 32, less its average over the mean
+longitude, times r/a (d lambda = (r/a) dF), is integrated in F through its trigonometric interpolant (a table of the
+nodes' cosines and sines) and divided by n, the constant chosen so that the term averages to zero over the mean
+longitude; lambda also takes 1/n times the integral of the mean motion's own term. Each body is held at its
+output-time position. Against a numerical integration over one orbit (two-body plus the same tidal terms, the bodies
+fixed, RK4 in 128,000 steps) at n 2.0059 rev/day, e 0.05, 0.3 and 0.72, in 16.8's three orientations, every element
+agrees within 0.10 m RMS for degrees 2 and 3 and for 2 to 10. The closed form above is off by up to 298.2 m in the
+mean longitude (G1, e 0.72), 110.6 m in a_f (G2, e 0.72) and 12 m at e 0.05. Most of the mean-longitude error is a
+constant over the orbit: the closed form averages to zero over the eccentric anomaly, while the rates of 5 average
+over the mean longitude; less its own mean, it is still off by up to 103 m in a_f and 26 m in lambda. The averaged
+rates of 5 agree with the quadrature average within 0.001 m per day and are unchanged.
+`test/third-body-short-period-eccentric.e2e.mjs` checks these numbers.
 
 **Long-period regime (epoch period 1100 min or more).** The output-time third-body periodic terms are not added;
 instead the rates are evaluated from the instantaneous geometry: at each stage the satellite position is computed
@@ -1890,7 +1905,7 @@ Their day-1/3/7 3D errors change by 0.000 m (acceptance: less than 1 m); the hal
 `test/results/heo-frame.json` records the per-window errors, fixture checks and kernel hashes.
 From 0.4.9 an AP set keeps its full precision while an XP set keeps the two-line lattice (16.9): on the same seven
 windows AP then leads XP by a median 137.5 m at day 3 (per window -298.4 to +101.0 m). The E2E requires AP no more than
-50 m behind XP, and the fixtures it checks carry their 0.4.9 values.
+50 m behind XP, and the fixtures it checks carry their 0.4.11 values.
 
 **16.5 Mark.** A set fitted with either degree set records `SDNAP_GRAVITY_TERMS` (`"<d>,<z>"`) in
 `$OMM.USER_DEFINED_PARAMETERS`. `propagate`, `load_epochs` and `propagate_epochs` refuse a set whose mark differs from the call's
@@ -1921,8 +1936,13 @@ fit rounds its elements to the two-line lattice.
 | 12-hour (2, .72, 55) | 3 | 2.212, -19.735, -77.195 | 79.709 |
 | 12-hour (2, .72, 55) | 7 | -176.410, 22.747, -62.891 | 188.661 |
 
-The half-day case measured 3,116.083 m at day 7 before the degree-31 tail and 104.725 m with it;
-the E2E bound is 120 m. The force contributions responsible for the Molniya and GTO gaps are not isolated.
+The half-day case measured 3,116.083 m at day 7 before the degree-31 tail and 104.725 m with it. At 0.4.11 (5.4's
+quadrature, 16.8 at every eccentricity) the 3D errors at days 1, 3 and 7 are 123.8, 121.4 and 202.0 m (half-day),
+208.3, 253.4 and 338.0 m (Molniya), 253.7, 112.3 and 2444.4 m (GTO) and 139.7, 177.2 and 303.2 m (12-hour 55 deg); the
+half-day day-7 sample falls 1 h after a perigee, and `test/heo-model-truth.e2e.mjs` pins it within 0.5 m. Flown
+hourly, the day-7 whole-day RMS along-track/radial is 84.2/75.3, 149.8/175.9, 960.8/935.3 and 158.0/105.5 m (0.4.10:
+228/85, 687/391, 885/860 and 232/60 m); `test/third-body-short-period-eccentric.e2e.mjs` checks them. The force
+contributions responsible for the Molniya and GTO gaps are not isolated; 16.8 separates the third bodies' share.
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
 
@@ -1957,8 +1977,8 @@ output map and sampling 256 node phases at perigee gives peak absolute along-tra
 `test/results/class-crossing.json` preserves every evaluated pair and both alternatives.
 
 **16.8 Third-body terms beyond the octupole.** With d or z above 0, the epoch period below 1100 min (the regime whose
-third-body rates 5 averages; the long-period regime takes the full point-mass acceleration) and the epoch eccentricity
-below 0.1, AP adds to the rates each body's tidal acceleration of Legendre degree 4 to 10,
+third-body rates 5 averages; the long-period regime takes the full point-mass acceleration), AP adds to the rates each
+body's tidal acceleration of Legendre degree 4 to 10,
 
 a_l = (mu_b / r_b^2) (r / r_b)^(l-1) [(l P_l(u) - u P_l'(u)) r_hat + P_l'(u) s_hat], u = r_hat . s_hat,
 
@@ -1966,7 +1986,8 @@ averaged over the mean longitude as 5 averages degrees 2 and 3, each body held a
 Gauss equations on the mean orbit at 32 equally spaced eccentric longitudes F, weighted by r/a (d lambda = (r/a) dF).
 P_l and P_l' follow the Legendre recurrences. Over all degrees from 2, the same quadrature reproduces 5's closed form
 for degrees 2 and 3 within 0.1 m of day-3 error on the Etalon model-truth cases; degree 10 leaves under 1e-7 of the
-quadrupole at r / r_b = 0.12. Default FORCES keeps SGP4XP bit for bit (XP digest 72dcf6005046).
+quadrupole at r / r_b = 0.12. The output takes the short-period terms of degrees 2 to 10 by 5.4's quadrature. Default
+FORCES keeps SGP4XP bit for bit (XP digest 72dcf6005046).
 
 Exploratory (the 2026-11-03 AP6 windows, already read; 72 h fits, day 3, leads from the fit end): the median paired
 AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on Etalon-2
@@ -1977,33 +1998,48 @@ and +39 m with the Moon, and removing the Moon from AP and the reference leaves 
 Etalon's gap was the two-line lattice of the fitted set (16.9). `test/etalon-resonance.e2e.mjs` prints every window
 and median.
 
-**The bound.** On orbits of n 2.0059 rev/day in three orientations (G1: i 63.4, node 300, perigee 270 deg; G2: 63.4,
-60, 90; G3: 55, 180, 0), against FFM EGM96 70x70 with Sun and Moon (72 h fits, 7 days flown hourly), the day-7 3D RMS
-with the terms, the bound lifted, and without them:
+**The sweep, rerun with 5.4's quadrature; no bound.** On orbits of n 2.0059 rev/day in three orientations (G1: i 63.4,
+node 300, perigee 270 deg; G2: 63.4, 60, 90; G3: 55, 180, 0), against FFM EGM96 70x70 with Sun and Moon from an
+AP-consistent state (72 h fits, 7 days flown hourly), the day-7 3D RMS with the degree 4 to 10 terms and without them:
 
 | e | G1 on / off (m) | G2 on / off (m) | G3 on / off (m) |
 | --: | --: | --: | --: |
-| 0.05 | 58.9 / 133.3 | 18.0 / 56.7 | 37.5 / 95.3 |
-| 0.07 | 75.3 / 149.4 | 27.9 / 47.9 | 39.4 / 94.9 |
-| 0.085 | 87.5 / 161.3 | 36.1 / 41.8 | 42.0 / 93.9 |
-| 0.1 | 100.1 / 173.8 | 44.2 / 36.3 | 44.5 / 93.3 |
-| 0.2 | 182.3 / 255.2 | 100.5 / 28.8 | 72.8 / 85.9 |
-| 0.3 | 261.9 / 328.8 | 155.2 / 62.3 | 114.1 / 81.8 |
-| 0.5 | 2079.5 / 2242.5 | 255.5 / 172.3 | 223.9 / 213.3 |
-| 0.72 | 503.0 / 254.9 | 377.5 / 427.4 | 402.6 / 194.4 |
-| 0.74 | 518.9 / 254.2 | 371.8 / 417.0 | 506.5 / 248.3 |
+| 0.05 | 21 / 99 | 15 / 78 | 35 / 97 |
+| 0.07 | 22 / 100 | 15 / 78 | 36 / 98 |
+| 0.085 | 22 / 101 | 15 / 78 | 38 / 98 |
+| 0.1 | 23 / 102 | 16 / 79 | 39 / 98 |
+| 0.2 | 28 / 111 | 21 / 87 | 55 / 102 |
+| 0.3 | 35 / 115 | 27 / 101 | 75 / 112 |
+| 0.5 | 33 / 73 | 39 / 157 | 123 / 320 |
+| 0.65 | 61 / 161 | 78 / 148 | 164 / 166 |
+| 0.72 | 121 / 335 | 145 / 217 | 241 / 102 |
+| 0.74 | 187 / 504 | 168 / 208 | 355 / 120 |
 
-The terms help at every e up to 0.085 in all three. The first turn is G2's, between e 0.085 (-5.7 m) and 0.1
-(+7.8 m); G3 turns between 0.2 and 0.3 and G1 between 0.5 and 0.72. The terms are not the cause: the
-quadrature over all degrees from 2 reproduces 5's closed-form averages within 0.1 m at e 0.72, and short-period
-terms of degree 4 to 10 computed by the same quadrature leave every sign of the sweep unchanged. With 5.4's closed-form
-degree 2 and 3 short-period terms replaced by their numerical first-order form, the terms help at every e in G1 and G2
-and up to e 0.5 in G3. The turn is therefore the closed-form degree 2 and 3 short-period error, which grows with e
-(on the e 0.72 half-day fixture the day-1 along-track RMS is 184 m with the closed form and 91 m with the numerical
-form, 61 m with no Moon on either side) and which the fit absorbs differently with and without the terms. The terms
-apply below e 0.1; G2's first turn lies just below the bound (at e 0.1 the terms cost it 7.8 m at day 7). The
-fixtures of 16.6 keep their values at day 7 (half-day 91.4 m, Molniya 700.4 m; with the bound lifted
-421.4 and 1517.6 m). `test/tidal-degree4-eccentric.e2e.mjs` prints the sweep and pins the turn.
+The terms help at every e in G1 and G2 and up to e 0.65 in G3. At G3 e 0.72 and 0.74 the day-7 values turn while the
+terms still help at days 1 and 3 (at e 0.72: 66 and 118 m with them, 143 and 330 m without; without them the error
+swings through a minimum near day 7). 0.4.10 applied the terms below e 0.1 only: with 5.4's closed form the first turn
+was G2's, between e 0.085 and 0.1, and came from that closed form. AP now applies them at every eccentricity; without
+them the e 0.72-0.74 fixtures of 16.6 carry 594.8 m (half-day) and 1177.5 m (Molniya) at day 7, and the day-1
+along-track RMS is 91.2 and 78.6 m.
+
+**Perigee radius and GTO.** On the fixtures of 16.6 flown on 2-minute samples, the radial error at each of the
+reference's perigees, fitted with a constant, a slope and a term alternating between consecutive perigees, drifts
++1.6 +/- 0.5 m/day (half-day), +3.0 +/- 1.5 (Molniya) and +2.0 +/- 5.8 (GTO) at 0.4.11; +6.9 +/- 1.7, +7.2 +/- 4.1
+and -14.2 +/- 5.8 at 0.4.10; +0.8 +/- 0.6, +2.6 +/- 1.1 and +2.5 +/- 6.1 with no Sun or Moon on either side. No
+third-body drift remains. On the same samples GTO's day-7 whole-day RMS (along-track/radial) is 958/933 m at 0.4.11,
+882/858 m at 0.4.10 and 931/912 m with no Sun or Moon on either side (929/914 and 936/918 m with the Moon removed from
+both). 0.4.11 sits within 3 % of the error the Sun and Moon do not cause; 0.4.10's third-body errors partly cancel it.
+With the geopotential cut to J2-J4 on both sides (GTO's period is not resonant), the day-7 RMS is 387/392 m at 0.4.11,
+381/396 m without Sun or Moon and 480/445 m at 0.4.10. Evaluating the short-period terms with the bodies at the
+orbit's middle instead of the output time moves the day-7 RMS by tens of meters either way (half-day 78/101 m, Molniya
+161/47 m, GTO 924/905 m); a 24 h fit gives half-day 71/82 m (0.4.10: 182/133 m), GTO 2447/2024 m (1632/1333 m) and
+Molniya, whose drag one day does not resolve, 3077/2307 m (3833/2898 m).
+
+**Cost.** Owner Mac under load, browser host, `propagate` over 7 days, median of 7 runs, milliseconds per object-day
+from 0.4.10 to 0.4.11: on a 1 h grid LEO 1.73 to 2.10, Etalon-like 4.44 to 5.33, GPS-like 4.36 to 5.66, half-day
+12.3 to 11.9, Molniya 11.5 to 12.0 and GEO-like 1.43 to 1.58; on a 1 min grid 58.2 to 73.5, 51.3 to 80.8, 51.5 to
+72.5, 65.8 to 80.0, 62.2 to 86.1 and 51.0 to 51.6. Evaluating the nodes' cosines and sines for every term instead of
+the table cost about 250 ms per object-day on the 1 min grid.
 
 **16.9 AP sets at full precision.** `fit` rounds an SGP4XP set to the two-line text's digits and searches their
 lattice (mean motion 1e-8 rev/day, eccentricity 1e-7, angles 1e-4 deg), the set the Space Force library reads. An AP
