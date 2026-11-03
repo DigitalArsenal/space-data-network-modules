@@ -13,9 +13,10 @@
 // 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
-//    radial RMS within 0.5 m of half-day 84.22/75.28, Molniya 149.82/175.90 and 12 h at 55 deg 158.02/105.47 m, GTO no
-//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 202.04, 338.22, 303.15
-//    and 929.45 m (GTO re-recorded at 0.4.14, SPEC 16.10; 2449.15 m before);
+//    radial RMS within 0.5 m of half-day 34.33/23.12, Molniya 291.41/219.72 and 12 h at 55 deg 67.25/25.32 m, GTO no
+//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 60.02, 419.70, 56.38
+//    and 249.02 m (re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04,
+//    338.22, 303.15 before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
 // 4. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -262,14 +263,15 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   assert.ok(Math.abs(g1 - 298.2) <= 1, `G1 e 0.72: the closed form's mean-longitude error ${g1} m RMS`);
   assert.ok(report.offDay1AlongTrack['half-day'] <= 95, 'half-day day-1 along-track, degree 4 up off');
   assert.ok(report.offDay1AlongTrack.Molniya <= 85, 'Molniya day-1 along-track, degree 4 up off');
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [84.22, 75.28, 202.04], Molniya: [149.82, 175.90, 338.22], '12-hour-55deg': [158.02, 105.47, 303.15]})) {
+  // re-recorded at 0.4.15 (SPEC 16.11; Molniya through its fitted drag coefficient, modules-sdn-ap-drag-high-eccentricity-20261103)
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [34.33, 23.12, 60.02], Molniya: [291.41, 219.72, 419.70], '12-hour-55deg': [67.25, 25.32, 56.38]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
   }
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
-  // re-recorded at 0.4.14 (the half-day class's step, SPEC 16.10): 2449.15 m at 0.4.11-0.4.13
-  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 929.45) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
+  // re-recorded at 0.4.15 (SPEC 16.11): 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13
+  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 249.02) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
   execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
     {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
   console.log('third-body short-period eccentric E2E: PASS');
