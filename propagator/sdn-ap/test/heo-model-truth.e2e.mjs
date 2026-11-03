@@ -18,6 +18,8 @@ const cases=[
 // no fit, same forces and the same 1/3/7-day forward thresholds. This checks
 // whether the review's "synthetic set" comparison used a shared epoch state.
 if(process.argv.includes('--seed-diagnostic')){cases.splice(1);cases[0].mode='seed';}
+// Registered reference diagnostic: the same windows with the pinned DE440 kernel.
+if(process.argv.includes('--kernel-diagnostic'))for(const c of cases)c.kernel=true;
 const results=[];
 for(const c of cases){const result=await runModelTruth(c);results.push(result);console.log(JSON.stringify(result));}
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');

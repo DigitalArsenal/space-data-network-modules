@@ -56,21 +56,24 @@ export async function runModelTruth(c){
  const times=c.mode==='seed'?[0,1,3,7]:[...Array(145)].map((_,k)=>k/48).concat([4,6,10]);
  const first=c.mode==='seed'?1:145;
  const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM96',maxDegree:70,maxOrder:70,thirdBody:true,srp:false,drag:c.drag,massKg:1000,areaM2:20,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:1e-12,minStep:.01,maxStep:300}};
+ if(c.kernel)params.ephemerisSource='JPL_SPK';
+ const kernel=c.kernel?fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url)):undefined;
  const key=createHash('sha256').update(fs.readFileSync(ffmPath)).update(JSON.stringify(params)).digest('hex');
  const file=path.join(scratch,key+'.json');let truth;
  if(fs.existsSync(file))truth=JSON.parse(fs.readFileSync(file));else{
   const h=await createStandaloneHarness('browser',ffmPath,{surface:'command'});
-  const req=requestFor('propagate',params);
+  const req=requestFor('propagate',params,kernel);
   req.inputs.push({portId:'earth_orientation',typeRef:TYPE,payload:encodePrw('EARTH_ORIENTATION',makeTable('PRWEarthOrientation',{ROWS:Array.from({length:14},(_,k)=>makeTable('EOP',{DATE:iso(t0+(k-1)*DAY)+'Z',MJD:jd.whole-2400000.5+k-1,TAI_MINUS_UTC_SECONDS:37}))}))});
   const r=await h.invoke(req);assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);
   truth=decodeResult(r).samples;assert.equal(truth.length,times.length);fs.writeFileSync(file,JSON.stringify(truth));await h.close?.();
  }
+ assert.ok(Math.hypot(...truth[0].position.map((v,k)=>v-initial.out[k]))<1e-9,'FFM shares the module initial position');
  const lines=truth.map((s,k)=>Object.assign(new Line(),{EPOCH:iso(t0+times[k]*DAY),X:s.position[0],Y:s.position[1],Z:s.position[2],X_DOT:s.velocity[0],Y_DOT:s.velocity[1],Z_DOT:s.velocity[2]}));
  const fit=seed?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(0,145),true)}]);
  const omm=seed??fit.find(v=>v.portId==='elements').payload;
  const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:omm},{portId:'grid',typeRef:type('OEM'),payload:oem(lines.slice(first))}]);
  const flown=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
- const result={name:c.name,n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
+ const result={name:c.name,apSha256:createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),epoch,reference:`FFM EGM96 70x70, Sun/Moon ${c.kernel?'DE440':'analytical'}, zero EOP, constant F10.7 150/Ap 15`,n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
  for(let k=0;k<3;k++){
   const ref=truth[first+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];
   a(0,3).set(ref.position);a(24,3).set(ref.velocity);a(48,3).set(err);x.sdnap_frame_to_uvw(p,p+24,p+48,p+72);
