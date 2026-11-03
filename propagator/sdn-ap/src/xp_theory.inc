@@ -891,10 +891,16 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
 }
 
 /// The node after `a` in direction dir (+1, -1), with the SPEC 9 fallbacks.
+// AP's epoch one-day class needs a finer grid for the lunar-solar rates.
+// Keep the XP grid bit-exact; the cache span uses the same selected step.
+inline double long_period_step(const RateContext& ctx) {
+  return ctx.ap_frame && ctx.resonance == 1 ? 38.0 : kLongPeriodStep;
+}
+
 inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out) {
   double h;
   if (ctx.long_period)
-    h = kLongPeriodStep;
+    h = long_period_step(ctx);
   else
     h = 2.0 * kTwoPi / a.y[kN];
   out.index = a.index + dir;
@@ -1218,7 +1224,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
-  const double step = s.ctx.long_period ? kLongPeriodStep : 2.0 * kTwoPi / n0;
+  const double step = s.ctx.long_period ? long_period_step(s.ctx) : 2.0 * kTwoPi / n0;
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
   s.stride = stride < 1 ? 1 : stride;
