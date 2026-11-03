@@ -3,8 +3,9 @@
 // the 2026-11-03 gap diagnosis, already read: GD (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP
 // FORCES; baseline the 0.4.7 release (git dcae63613), the module under test this build's dist. Acceptance, the measured
 // values with margin (re-measured at 0.4.9, whose AP sets keep full precision, SPEC 16.9): Etalon-1 paired day-3 AP
-// minus FFM (archived resume-ffm F72) 26.64 m at the baseline and 10.12 m here, Etalon-2 36.39 and 9.74 m, each within
-// 1 m; medians here LAGEOS-1 7.81, LAGEOS-2 6.78, LARES-2 9.73, IG 17.10 and GE 45.86 m, each within 0.5 m; every number
+// minus FFM (archived resume-ffm F72) 26.64 m at the baseline and 6.64 m here (0.4.11: the third bodies' short-period
+// terms by quadrature, SPEC 5.4; 10.12 m at 0.4.9), Etalon-2 36.39 and 7.58 m (9.74 m at 0.4.9), each within 1 m;
+// medians here LAGEOS-1 7.81, LAGEOS-2 6.78, LARES-2 9.73, IG 17.10 and GE 45.86 m, each within 0.5 m; every number
 // printed; default-FORCES digest bit-exact. Unread-window confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,7 +57,7 @@ for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) 
 console.log(JSON.stringify({exploratory: true, etalon, nonregression}));
 if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression}, null, 2) + '\n');
 const EXPECTED = {
-  etalon: {'ETALON 1': {baseline: 26.64, value: 10.12}, 'ETALON 2': {baseline: 36.39, value: 9.74}},
+  etalon: {'ETALON 1': {baseline: 26.64, value: 6.64}, 'ETALON 2': {baseline: 36.39, value: 7.58}},
   nonregression: {'LAGEOS 1': 7.806, 'LAGEOS 2': 6.777, 'LARES-2': 9.731, IG: 17.095, GE: 45.863},
 };
 if (!process.argv.includes('--measure')) {
