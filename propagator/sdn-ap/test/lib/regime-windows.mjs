@@ -1,5 +1,5 @@
 // The AP6 windows of the 2026-11-03 gap diagnosis (experiments ap-gap, method ap): GD (ILRS and NSGF laser geodetic),
-// IG and GE (GFZ MGEX), 72 h arcs, replayed on one or more modules with AP's FORCES (X2 atmosphere, tesseral 31, zonal
+// DO (the altimetry group, provider E), IG and GE (GFZ MGEX), 72 h arcs, replayed on one or more modules with AP's FORCES (X2 atmosphere, tesseral 31, zonal
 // 20) and as-issued $SPW rows: the truth's 300 s scoring grid, lead-day bins of at least 90 % of a day's grid epochs,
 // arcs [cutoff - 72 h, cutoff] at 90 % coverage thinned to 300 s. Exploratory: these windows were read by the diagnosis.
 // Held objects (ap-gap config.json EXCLUDE_NORADS) are rejected by file name before any byte is read.
@@ -13,7 +13,7 @@ export {experiments};
 export const archive = '/opt/data/sdn-archive/operator-theory/ap-gap';
 const modules = fileURLToPath(new URL('../../../../', import.meta.url));
 const HELD = new Set([43567, 37847, 41862, 41174, 43055, 41175, 39451, 39452, 39453, 43476, 43477]);
-export const GROUPS = {GD: 5, IG: null, GE: null};
+export const GROUPS = {GD: 5, DO: 10, IG: null, GE: null};
 
 async function libs() {
   delete process.env.XP2F_CONTROL;  // the diagnosis's store: its as-issued RSGA for late 2025
@@ -31,7 +31,7 @@ async function libs() {
 
 /** The group's objects as ap-gap's objects() gives them: {name, norad, objectId, lines, cutoffs}. */
 function objects(L, group) {
-  if (group === 'GD') return L.R.STATIC.filter((x) => x.group === 'GD').map((o) => {
+  if (group === 'GD' || group === 'DO') return L.R.STATIC.filter((x) => x.group === group).map((o) => {
     const s = L.SRC.chain(o.files());
     return {name: s.name || o.name, norad: s.norad, objectId: s.objectId ?? '', lines: s.lines, cutoffs: o.cutoffs};
   });
