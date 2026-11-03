@@ -1,4 +1,14 @@
 #!/usr/bin/env node
+// Registered acceptance: modules-sdn-ap-covariance-noise-ap-20261103.
+// --theory SDNAP --forces 31,20 uses only b040/compare-truth2/rows-*.jsonl
+// and b040/regimes/rows-*.jsonl calibration forecasts (AP24/AP72); no hold-out
+// sources. Score forward RTN errors at leads 1,2,3,7 counted from cutoff.
+// Print sample counts, mean d^2/3 and coverage for every regime/lead cell.
+// SPEC 12.7 is fixed: [0.8,1.25] and [0.93,0.97], jointly. A cell outside
+// either interval must be reported as unsupported, never claimed realistic.
+// Calibration requires the forecast covariance or the fitted set and module
+// covariance basis at each lead; fit RMS is not a forecast covariance.
+// Verify theory selection through fit/propagate and retain default XP digest.
 // Covariance realism of the SGP4XP fit (SPEC 12) on laser-ranged precise orbits, and the fit of its process noise.
 //
 // Each window: the module's `fit` (THEORY SGP4XP) on 24 h of a GCRF reference ephemeris (USEABLE_START_TIME to
