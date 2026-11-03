@@ -10,7 +10,7 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 // the identities come through plugin.getConfig (typedHostcall.hpp, staged by the SDK compiler).
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
-const { header, version, families } = await generateSdsHeaders(['OEM', 'NCD', 'EOP', 'CVR'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OEM', 'NCD', 'EOP', 'CVR', 'FIL'], import.meta.url);
 if (!header.includes('SP3_HEADER')) throw new Error(`spacedatastandards.org@${version} has no NCD SP3_HEADER.`);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
@@ -23,6 +23,8 @@ if (!parser) throw new Error('foundation/frames/src/frames_module.cpp no longer 
 // eop_table.hpp includes eop_series.hpp (since propagator/ffm 1.2.0); one translation unit inlines it.
 const eopTable = (await fs.readFile(path.join(framesSrc, 'eop_series.hpp'), 'utf8')) + '\n' +
   (await fs.readFile(path.join(framesSrc, 'eop_table.hpp'), 'utf8')).replace('#include "eop_series.hpp"', '');
+const json = await fs.readFile(path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
+const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 const source = await fs.readFile(path.join(root, 'src/reference_states.cpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
@@ -31,7 +33,11 @@ const result = await compileModuleFromSource({
   manifest,
   sourceCode: [
     '#include "space_data_module_invoke.h"',
+    '#include "FlowNotice_generated.h"',
+    '#define JSON_NOEXCEPTION 1',
+    json,
     header,
+    sha256,
     erfa.source,
     bodyModels,
     axisEngine,

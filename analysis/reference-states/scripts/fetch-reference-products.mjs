@@ -76,7 +76,7 @@ import { pathToFileURL } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import {
   DAY, DORIS, EOP_URLS, GFZ_RSO, S1, SLR, SLR_DAILY, SWARM, SINEX_URL, PRODUCTS, S1_NAME_PATTERN, cosmic2Dir, cosmic2Tarball, dorisArcs, dorisDir,
-  gfzRsoArcs, gfzRsoDir, gpsFiles, mgexFile, plan, sentinel1Base, slrArcBase, slrDailyFile, slrNamePattern, slrYearListing, swarmDay, swarmDirs,
+  gfzRsoArcs, gfzRsoDir, gpsFiles, mgexFile, plan, sbasFile, sentinel1Base, slrArcBase, slrDailyFile, slrNamePattern, slrYearListing, swarmDay, swarmDirs,
   swarmDownloadUrl, swarmKinPattern, swarmListUrl, swarmRdPattern, yymmdd,
 } from './product-sources.mjs';
 
@@ -232,10 +232,14 @@ async function referenceStates(key, sp3, identities, provenance) {
   const r = await reference.invoke({ methodId: 'reference_states', inputs: [port('ephemeris', 'OEM'), port('descriptor', 'NCD'), eop] });
   reference.destroy();
   if (r.statusCode !== 0) return console.warn(`${key}: reference_states: ${r.errorMessage}`);
+  store(key, r.outputs, { ...provenance, eop: EOP_URL });
+}
+// The $OEM per object under DIR/reference/<key>/ with index.json (what each came from).
+function store(key, outputs, provenance) {
   const dir = path.join(out, 'reference', key);
   fs.mkdirSync(dir, { recursive: true });
   const index = [];
-  for (const o of r.outputs.filter((x) => x.portId === 'reference')) {
+  for (const o of outputs.filter((x) => x.portId === 'reference')) {
     const bytes = Buffer.from(o.payload);
     const block = OEM.OEM.getSizePrefixedRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).EPHEMERIS_DATA_BLOCK(0);
     const norad = block.OBJECT().NORAD_CAT_ID();
@@ -243,7 +247,7 @@ async function referenceStates(key, sp3, identities, provenance) {
     index.push({ norad, objectId: block.OBJECT().OBJECT_ID(), start: block.START_TIME(), stop: block.STOP_TIME(),
       epochs: block.ephemerisDataLinesLength(), file: `${norad}.oem`, comment: block.COMMENT() });
   }
-  fs.writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ ...provenance, eop: EOP_URL, objects: index }, null, 1)}\n`);
+  fs.writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ ...provenance, objects: index }, null, 1)}\n`);
   console.log(`${key}: ${index.length} objects`);
 }
 
@@ -617,12 +621,30 @@ async function cosmic2(lo, hi) {
   }
 }
 
+// ── WAAS MT9: archived CDDIS SBAS records of one day (PRN 131, 133, 135), read by sbas_reference_states ──
+async function sbas(day) {
+  const file = sbasFile(day, values['local-archive']);
+  if (!fs.existsSync(file)) return console.warn(`sbas: ${path.basename(file)} is not in the local archive`);
+  const bytes = fs.readFileSync(file);
+  const eop = await earthOrientation(day - DAY, day + 2 * DAY);
+  if (!eop) return console.warn(`sbas: no Earth orientation rows bracket ${new Date(day).toISOString().slice(0, 10)}`);
+  const reference = await harness('analysis/reference-states');
+  const r = await reference.invoke({ methodId: 'sbas_reference_states', inputs: [eopBody(bytes), eop] });
+  reference.destroy();
+  if (r.statusCode !== 0) return console.warn(`sbas: ${r.errorMessage}`);
+  for (const n of r.outputs.filter((x) => x.portId === 'notice')) console.warn(`sbas: ${new Date(day).toISOString().slice(0, 10)}: notice ${Buffer.from(n.payload).toString('latin1').replace(/[^\x20-\x7e]+/g, ' ').trim()}`);
+  const upstream = JSON.parse(bytes);
+  store(`WAAS_MT9_${new Date(day).toISOString().slice(0, 10)}`, r.outputs,
+    { product: path.basename(file), url: upstream.url, sha256: sha256(bytes), upstreamSha256: upstream.sha256, eop: EOP_URL });
+}
+
 let arcs = null;
 for (let day = from; day <= to; day += DAY) {
   if (products.has('swarm')) await swarm(day);
   if (products.has('slr-daily') && (day - from) % (4 * DAY) === 0) await slrDaily(day);
   if (products.has('gps')) await gps(day);
   if (products.has('mgex')) await mgex(day);
+  if (products.has('sbas')) await sbas(day);
   if (products.has('sentinel1')) await sentinel1(day);
   // ILRS arcs are named by their last day, one each week.
   if (products.has('slr')) {

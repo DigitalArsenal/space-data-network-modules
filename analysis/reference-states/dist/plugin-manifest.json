@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.reference-states",
   "name": "Reference states",
-  "version": "0.3.0",
-  "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance; compare_to_reference scores an ephemeris and its covariance against them ($OEM residuals, $CVR realism). Typed contracts 1.0: FlatBuffers only. The SP3 satellite identities (product, source, satellites.<SP3 id>.{norad, objectId, name}, optional statedSigmaM with statedSigmaBasis) are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig). No credentials: capabilities none.",
+  "version": "0.4.0",
+  "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance; compare_to_reference scores an ephemeris and its covariance against them ($OEM residuals, $CVR realism). Typed contracts 1.0: FlatBuffers only. The SP3 satellite identities (product, source, satellites.<SP3 id>.{norad, objectId, name}, optional statedSigmaM with statedSigmaBasis) are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig). No credentials: capabilities none; sbas_reference_states turns an archived WAAS (SBAS message type 9) navigation file into GCRF reference states for the geostationary PRNs 131, 133 and 135, the user range accuracy as a protection bound.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -38,6 +38,16 @@
       "schemaName": "CVR.fbs",
       "fileIdentifier": "$CVR",
       "rootTypeName": "CVR"
+    },
+    {
+      "schemaName": "FIL.fbs",
+      "fileIdentifier": "$FIL",
+      "rootTypeName": "FIL"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice"
     }
   ],
   "methods": [
@@ -126,6 +136,96 @@
           "maxStreams": 999,
           "required": false,
           "description": "One $OEM per identified satellite: GCRF states in UTC, velocity from the degree-9 Lagrange interpolant of the positions, covariance from the stated accuracy, provenance in COMMENT."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "sbas_reference_states",
+      "displayName": "WAAS MT9 reference states",
+      "inputPorts": [
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-fil",
+              "allowedTypes": [
+                {
+                  "schemaName": "FIL.fbs",
+                  "fileIdentifier": "$FIL",
+                  "rootTypeName": "FIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One $FIL: an archived CDDIS SBAS file ({url, sha256, retrieved, terms, records}; a record is {prn, gpsMs (the epoch's calendar fields in GPS time, as Unix milliseconds), r (km, Earth-fixed), v (km/s), ura (m), health}) from the RINEX navigation records of the WAAS geostationary satellites (SBAS message type 9)."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 366,
+          "required": true,
+          "description": "$EOP rows bracketing the file's span (one row, several frames, or a size-prefixed stream), as foundation/frames reads them."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 999,
+          "required": false,
+          "description": "One $OEM per PRN of the module's data table (131, 133, 135) present in the file and on its slot: GCRF states in UTC at each record's time of applicability, the broadcast velocity, the user range accuracy as a protection bound on every position axis, provenance (the file's SHA-256 and URL) in COMMENT."
+        },
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 3,
+          "required": false,
+          "description": "FlowNotice (FNTC) KIND Missing for a table PRN that gives no state: REASON prn-absent (no records in the file), slot-mismatch (its records sit more than 2 degrees from its nominal longitude) or too-few-records (fewer than 10); ITEMS the PRNs."
         }
       ],
       "maxBatch": 1,

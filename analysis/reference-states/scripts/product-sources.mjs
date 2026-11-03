@@ -96,10 +96,13 @@ export function gfzRsoArcs(localArchive, code) {  // the latest version of each 
 export const cosmic2Tarball = (day) => `leoOrb_nrt_${new Date(day).getUTCFullYear()}_${String(dayOfYear(day)).padStart(3, '0')}.tar.gz`;
 export const cosmic2Dir = (localArchive) => path.join(localArchive, 'ucar-cosmic2', 'nrt-leoOrb');
 
+// ── WAAS (SBAS) message type 9, archived CDDIS records: <local archive>/cddis-sbas/<yyyy>/<doy>.json ──
+export const sbasFile = (day, localArchive) => path.join(localArchive, 'cddis-sbas', String(new Date(day).getUTCFullYear()), `${dayOfYear(day)}.json`);
+
 // ── GFZ Kp: the nowcast file the space-weather collector fetches daily (data-source/space-weather); not converted here ──
 export const KP = { series: 'Kp_ap_Ap_SN_F107_nowcast.txt', url: 'https://kp.gfz.de/fileadmin/files_for_gfz_cms/Kp_ap_Ap_SN_F107_nowcast.txt' };
 
-export const PRODUCTS = ['gps', 'mgex', 'slr', 'slr-daily', 'sentinel1', 'swarm', 'doris', 'gfz-rso', 'cosmic2', 'kp'];
+export const PRODUCTS = ['gps', 'mgex', 'slr', 'slr-daily', 'sentinel1', 'swarm', 'doris', 'gfz-rso', 'cosmic2', 'sbas', 'kp'];
 
 // The plan of a run: what it would request or read, in the order it would, without touching the network. Entries:
 //   role 'download'  a file fetched by name (cached under <out>/products by its URL's basename; `cached` says whether it is there);
@@ -113,7 +116,7 @@ export function plan({ from, to, products, out, localArchive, eop = 'c04', mgexP
   const add = (e) => entries.push(e);
   const download = (product, day, name, url, role = 'download') => add({ product, day: day === null ? null : iso(day), role, name, url, cached: cachedIn(name) });
   const wants = new Set(products);
-  if (wants.has('gps') || wants.has('mgex') || wants.has('slr') || wants.has('slr-daily') || wants.has('sentinel1') || wants.has('swarm') || wants.has('doris') || wants.has('gfz-rso') || wants.has('cosmic2'))
+  if (wants.has('gps') || wants.has('mgex') || wants.has('slr') || wants.has('slr-daily') || wants.has('sentinel1') || wants.has('swarm') || wants.has('doris') || wants.has('gfz-rso') || wants.has('cosmic2') || wants.has('sbas'))
     download('eop', null, basename(EOP_URLS[eop]), EOP_URLS[eop]);
   if (wants.has('gps') || wants.has('mgex')) download('igs-metadata', null, basename(SINEX_URL), SINEX_URL);
   const years = [...new Set([new Date(from).getUTCFullYear(), new Date(to).getUTCFullYear()])];
@@ -153,6 +156,10 @@ export function plan({ from, to, products, out, localArchive, eop = 'c04', mgexP
   if (wants.has('cosmic2')) for (let day = from - DAY; day <= to + DAY; day += DAY) {
     const name = cosmic2Tarball(day), file = path.join(cosmic2Dir(localArchive), name);
     add({ product: 'cosmic2', day: iso(day), role: 'local', name, path: file, present: fs.existsSync(file) });
+  }
+  if (wants.has('sbas')) for (let day = from; day <= to; day += DAY) {
+    const file = sbasFile(day, localArchive);
+    add({ product: 'sbas', day: iso(day), role: 'local', name: path.basename(file), path: file, present: fs.existsSync(file) });
   }
   if (wants.has('kp')) add({ product: 'kp', day: null, role: 'collector', name: KP.series, url: KP.url, fetchedBy: 'data-source/space-weather (gfz-kp collector, daily snapshots)' });
   return entries;

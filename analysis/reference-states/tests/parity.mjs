@@ -1,4 +1,4 @@
-// Tri-runtime parity (browser, native WasmEdge, Docker WasmEdge) of analysis/reference-states compare_to_reference:
+// Parity (browser and native WasmEdge; the owner waived the Docker leg on 2026-10-22, it is never started) of analysis/reference-states compare_to_reference:
 // the same request bytes must give byte-identical reports in every lane.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
 import assert from 'node:assert/strict';
@@ -46,8 +46,8 @@ const cases = [
   { id: 'refused-itrf-ephemeris', expect: null, request: request(oem({ frame: 'ITRF2000', start: iso(0), step: 60, states: arc }), oem({ frame: 'GCRF', lines: refs })) },
 ];
 const plan = await normalizeParityFixture({ name: 'analysis/reference-states compare_to_reference', cases: cases.map((c) => ({ ...c, expect: c.expect === null ? undefined : 'ok' })) });
-const report = await runParityHarness({ wasmPath, plan, timeoutMs: 600000, log: console.log });
+const report = await runParityHarness({ wasmPath, plan, lanes: ['browser', 'wasmedge'], timeoutMs: 600000, log: console.log });
 console.log(formatParityReport(report));
 fs.mkdirSync(path.join(root, 'conformance'), { recursive: true });
-fs.writeFileSync(path.join(root, 'conformance/parity.json'), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm' }, null, 2)}\n`);
+fs.writeFileSync(path.join(root, 'conformance/parity.json'), `${JSON.stringify({ ...report, wasmPath: 'dist/isomorphic/module.wasm', dockerLane: 'waived by the owner 2026-10-22 (no Docker)' }, null, 2)}\n`);
 assert.equal(report.ok, true, JSON.stringify(report.failures));

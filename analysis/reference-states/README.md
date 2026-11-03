@@ -47,6 +47,46 @@ ModuleConfig, `sdm_piv::get_config`): `product`, `source`, optional
 - **Provenance:** each block's `COMMENT` names the product, its URL, the
   file's SHA-256, the agency and orbit type, and the uncertainty basis.
 
+## Method `sbas_reference_states` (0.4.0)
+
+GEO truth from the WAAS (SBAS) broadcast: the geostationary navigation message
+(type 9) of PRN 131, 133 and 135, as archived from CDDIS RINEX navigation files
+(`/opt/data/sdn-archive/hac/cddis-sbas/<yyyy>/<doy>.json`, no fetch).
+
+| Port | Type | Content |
+| --- | --- | --- |
+| `body` | `$FIL` | the archived file: `{url, sha256, retrieved, terms, records}`, a record `{prn, gpsMs, r, v, ura, health}`: position km and velocity km/s Earth-fixed (WGS 84, aligned with ITRF to about a centimetre), `ura` the broadcast user range accuracy in metres, `gpsMs` the epoch's calendar fields in GPS time as Unix milliseconds |
+| `earth_orientation` | `$EOP` | rows bracketing the day, as `reference_states` |
+| `reference` (out) | `$OEM` | one per table PRN present and on its slot: GCRF, UTC |
+| `notice` (out) | `FNTC` | KIND Missing, one per reason a table PRN gives no state |
+
+- **Satellites** (the module's data table, by the longitude the records sit at):
+  PRN 131 is EUTE 117W B (NORAD 41589, 2016-038B, 116.8 W), PRN 133 SES 15
+  (42709, 2017-026A, 129 W), PRN 135 GALAXY 30 (46114, 2020-056C, 125 W). The
+  records' own Earth-fixed longitudes on 2026-10-01 are -117.0, -129.1 and
+  -125.0 degrees. A PRN whose mean record longitude is more than 2 degrees from its
+  slot gives no state (`slot-mismatch`); a table PRN with no records gives none
+  (`prn-absent`); fewer than 10 records, none (`too-few-records`). Nothing is
+  taken for a PRN outside the table.
+- **Time:** the records' times of applicability, GPS time to UTC by the leap-second
+  table; one state per record.
+- **Frame:** the Earth-fixed position to GCRF by the same IAU 2006/2000A (CIO)
+  chain and EOP rows as `reference_states`; `emit_block` is the one conversion
+  both methods use (SP3 conversions are byte-identical to before).
+- **Velocity:** the derivative of the degree-9 Lagrange interpolant of the
+  positions, as for an SP3 file without velocities. The message velocity (a
+  0.625 mm/s grid) is not used: against the same derivative of the records' own
+  positions it differs by up to 10 mm/s on 2026-10-01 (median 2 to 3 mm/s), more
+  than two derivative stencils differ from each other (median 0.5, 95th
+  percentile 1.0, maximum 1.5 mm/s).
+- **Uncertainty:** each record's URA, in metres, on every position axis. It is a
+  protection bound on the user range error, not a realized orbit error, and the
+  block's `COMMENT` says so; a bound that broadcasts 2 m is not a measurement
+  of 2 m. Velocity variance as for `reference_states`. The message's acceleration
+  is not in the archived records.
+- **Provenance:** `COMMENT` names the archive file's SHA-256, the upstream URL and
+  SHA-256 and the retrieval time.
+
 ## Method `compare_to_reference` (0.2.0)
 
 An ephemeris, with its covariance when it carries one, against reference
@@ -68,15 +108,15 @@ SynCoPate files, read by `files/orbit-products` 0.1.4) is scored for realism.
   → GCRF by the IAU 2006 frame bias.
 - **Check:** the TEME state of Vallado, Crawford, Hujsak and Kelso (2006,
   AIAA 2006-6753) at 2004-04-06 07:51:28.386009 UTC maps to their GCRF state within
-  0.11 m. Browser, WasmEdge and Docker WasmEdge agree byte for byte
-  (`tests/parity.mjs`).
+  0.11 m. Browser and WasmEdge agree byte for byte
+  (`tests/parity.mjs`; the Docker leg is waived by the owner, 2026-10-22).
 
 ## Products
 
 `scripts/fetch-reference-products.mjs --from YYYY-MM-DD --to YYYY-MM-DD
-[--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2]
+[--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2,sbas]
 [--local-archive DIR] [--out DIR]` downloads and converts these products.
-`doris`, `gfz-rso` and `cosmic2` read copies already downloaded under
+`doris`, `gfz-rso`, `cosmic2` and `sbas` (WAAS MT9, with `--eop finals` for recent days) read copies already downloaded under
 `--local-archive` (default `/opt/data/sdn-archive/hac`). Each copy is checked
 against the SHA-256 in its `.provenance.json`, whose URL is recorded as the
 source, and every arc that meets the days `--from` to `--to` is converted.

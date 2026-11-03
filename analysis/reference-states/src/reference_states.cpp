@@ -469,6 +469,166 @@ extern "C" int reference_states() {
   return 0;
 }
 
+// sbas_reference_states: GEO truth from the WAAS (SBAS) broadcast.
+//
+// Input `body`: one $FIL, an archived CDDIS SBAS file {url, sha256, retrieved, terms, records}, a record
+// {prn, gpsMs, r, v, ura, health}: the RINEX navigation record of a geostationary satellite's message type 9 (position
+// km and velocity km/s Earth-fixed in WGS 84, aligned with ITRF to about a centimetre; the user range accuracy in
+// metres; gpsMs the epoch's calendar fields in GPS time as Unix milliseconds). Input `earth_orientation`: $EOP rows.
+// Outputs: `reference`, one $OEM per table PRN present and on its slot (the conversion of reference_states: GCRF, UTC,
+// the broadcast velocity, covariance); `notice`, a FlowNotice per reason a table PRN gives no state.
+//
+// The velocity is the derivative of the degree-9 Lagrange interpolant of the positions (as for an SP3 file without
+// velocities): the message velocity (a 0.625 mm/s grid) disagrees with the position sequence by 2 to 10 mm/s in the
+// 2026-10-01 file, more than the interpolant's error, so it is not used.
+// The URA is a protection bound on the user range error, not a realized orbit error: it is each position axis's sigma,
+// and the block's COMMENT says so. The time-of-applicability stamps stay the records' own (GPS time to UTC by the leap-second
+// table). The acceleration of the message is not in the archived records and is not used.
+namespace {
+
+namespace R = sdn::runtime;
+
+// PRN -> the satellite broadcasting it, and its nominal longitude (degrees east): the operators' slots, which the records'
+// own positions are checked against.
+struct SbasSatellite {
+  int prn;
+  uint32_t norad;
+  const char* object_id;
+  const char* name;
+  double slot_deg;
+};
+constexpr SbasSatellite kSbas[] = {
+    {131, 41589, "2016-038B", "EUTE 117W B", -116.8},
+    {133, 42709, "2017-026A", "SES 15", -129.0},
+    {135, 46114, "2020-056C", "GALAXY 30", -125.0},
+};
+constexpr double kSlotToleranceDeg = 2.0;
+
+struct SbasRecord {
+  int64_t ms;
+  double r[3], v[3], ura;
+};
+
+// Calendar fields of Unix milliseconds (proleptic Gregorian, whole days from the civil-date algorithm).
+std::string calendar_iso(int64_t ms) {
+  int64_t days = ms / 86400000, rest = ms % 86400000;
+  if (rest < 0) { rest += 86400000; --days; }
+  const int64_t z = days + 719468, era = (z >= 0 ? z : z - 146096) / 146097, doe = z - era * 146097;
+  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365, doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const int64_t mp = (5 * doy + 2) / 153, d = doy - (153 * mp + 2) / 5 + 1, m = mp < 10 ? mp + 3 : mp - 9;
+  const int64_t y = yoe + era * 400 + (m <= 2);
+  char out[40];
+  std::snprintf(out, sizeof(out), "%04d-%02d-%02dT%02d:%02d:%02d.%03d000", static_cast<int>(y), static_cast<int>(m), static_cast<int>(d),
+                static_cast<int>(rest / 3600000), static_cast<int>(rest / 60000 % 60), static_cast<int>(rest / 1000 % 60),
+                static_cast<int>(rest % 1000));
+  return out;
+}
+
+int push_notice(const char* reason, const std::vector<std::string>& items) {
+  flatbuffers::FlatBufferBuilder b(256);
+  R::FlowNoticeT n;
+  n.KIND = R::flowNoticeKind_Missing;
+  n.SCHEMA = "OEM.fbs";
+  n.SOURCE_NAME = "cddis-sbas-mt9";
+  n.REASON = reason;
+  n.COUNT = items.size();
+  n.ITEMS = items;
+  R::FinishFlowNoticeBuffer(b, R::FlowNotice::Pack(b, &n));
+  return plugin_push_output_ex("notice", "FlowNotice.fbs", R::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                               "FlowNotice", 0, 0, b.GetBufferPointer(), b.GetSize()) < 0;
+}
+
+}  // namespace
+
+extern "C" int sbas_reference_states() {
+  const plugin_input_frame_t* frame = input("body");
+  if (!frame || !frame->payload) return fail("invalid-sbas-file", "body must be one $FIL.");
+  {
+    flatbuffers::Verifier v(frame->payload, frame->payload_length);
+    if (!VerifyFILBuffer(v)) return fail("invalid-sbas-file", "body must be one $FIL.");
+  }
+  const FIL* fil = GetFIL(frame->payload);
+  if (!fil->CONTENT() || !fil->CONTENT()->size()) return fail("invalid-sbas-file", "the $FIL has no content.");
+  const std::string content(reinterpret_cast<const char*>(fil->CONTENT()->data()), fil->CONTENT()->size());
+  const nlohmann::json file = nlohmann::json::parse(content, nullptr, false);
+  if (file.is_discarded() || !file.is_object() || !file.contains("records") || !file["records"].is_array())
+    return fail("invalid-sbas-file", "the file must be a JSON object with a records array.");
+
+  std::map<int, std::vector<SbasRecord>> by_prn;
+  for (const auto& rec : file["records"]) {
+    if (!rec.is_object() || !rec.contains("prn") || !rec.contains("gpsMs") || !rec.contains("r") || !rec.contains("v") ||
+        !rec.contains("ura") || !rec["prn"].is_number_integer() || !rec["gpsMs"].is_number() || !rec["r"].is_array() ||
+        rec["r"].size() != 3 || !rec["v"].is_array() || rec["v"].size() != 3 || !rec["ura"].is_number())
+      return fail("invalid-sbas-file", "each record needs prn, gpsMs, r[3], v[3] and ura.");
+    SbasRecord s{};
+    s.ms = static_cast<int64_t>(rec["gpsMs"].get<double>());
+    for (int k = 0; k < 3; ++k) {
+      if (!rec["r"][k].is_number() || !rec["v"][k].is_number()) return fail("invalid-sbas-file", "r and v must be numbers.");
+      s.r[k] = rec["r"][k].get<double>();
+      s.v[k] = rec["v"][k].get<double>();
+    }
+    s.ura = rec["ura"].get<double>();
+    if (!(s.ura > 0) || !std::isfinite(s.ura)) return fail("invalid-sbas-file", "ura must be a positive number of metres.");
+    by_prn[rec["prn"].get<int>()].push_back(s);
+  }
+
+  const std::string url = file.value("url", std::string());
+  const std::string retrieved = file.value("retrieved", std::string());
+  const std::string upstream_sha = file.value("sha256", std::string());
+  const std::string file_sha = ephem::sha256_hex(fil->CONTENT()->data(), fil->CONTENT()->size());
+  const std::string record_basis =
+      "the broadcast user range accuracy (URA, metres) of each record on every position axis: a protection bound on the user "
+      "range error, not a realized orbit error";
+  std::map<std::string, EarthRotation> rotations;
+  std::vector<std::string> absent, mismatched, short_prns;
+  int emitted = 0;
+  for (const SbasSatellite& sat : kSbas) {
+    const std::string prn = std::to_string(sat.prn);
+    auto found = by_prn.find(sat.prn);
+    if (found == by_prn.end() || found->second.empty()) { absent.push_back(prn); continue; }
+    std::vector<SbasRecord>& records = found->second;
+    std::stable_sort(records.begin(), records.end(), [](const SbasRecord& a, const SbasRecord& b) { return a.ms < b.ms; });
+    for (size_t i = 1; i < records.size(); ++i)
+      if (records[i].ms == records[i - 1].ms) return fail("invalid-sbas-file", "PRN " + prn + " has two records at one time.");
+    // The slot: the mean Earth-fixed longitude of the records, against the satellite's nominal one.
+    double sx = 0, sy = 0;
+    for (const SbasRecord& s : records) { sx += s.r[0]; sy += s.r[1]; }
+    double lon = std::atan2(sy, sx) * 180.0 / M_PI;
+    double off = std::fabs(lon - sat.slot_deg);
+    if (off > 180.0) off = 360.0 - off;
+    if (off > kSlotToleranceDeg) { mismatched.push_back(prn); continue; }
+    if (records.size() < kPoints) { short_prns.push_back(prn); continue; }
+
+    std::vector<Sample> samples;
+    for (const SbasRecord& s : records) {
+      Sample out{};
+      if (!instant_of(calendar_iso(s.ms), timingStandard::GPS, &out.at))
+        return fail("time-conversion-failed", "PRN " + prn + ": epoch outside the leap-second table.");
+      out.t = samples.empty() ? 0.0 : seconds_between(samples.front().at, out.at);
+      for (int k = 0; k < 3; ++k) {
+        out.r[k] = s.r[k];
+        out.sigma_mm[k] = s.ura * 1000.0;  // out.v stays 0: the velocity is the derivative of the positions (below)
+      }
+      samples.push_back(out);
+    }
+    const Identity who{sat.name, sat.object_id, sat.norad};
+    const auto comment_of = [&](const std::string& sigma_basis, const std::string& tail) {
+      return "Reference states from the WAAS (SBAS) geostationary navigation message type 9 broadcast by PRN " + prn + " (" + sat.name +
+             "), RINEX navigation records of " + (url.empty() ? std::string("a CDDIS file") : url) + " (archive file SHA-256 " + file_sha +
+             (upstream_sha.empty() ? std::string() : ", upstream file SHA-256 " + upstream_sha) +
+             (retrieved.empty() ? std::string() : ", retrieved " + retrieved) +
+             "). WGS 84 Earth-fixed (aligned with ITRF to about a centimetre) to GCRF by IAU 2006/2000A (CIO) with the supplied EOP; " +
+             "epochs are the records' times of applicability, GPS time converted to UTC. Velocity: the derivative of the degree-9 Lagrange interpolant of the positions; the message velocity is not used. Covariance: " +
+             sigma_basis + "; velocity variance from the position variance and the degree-9 minus degree-7 difference" + tail;
+    };
+    if (emit_block("PRN " + prn, who, samples, false, 0.0, 0.0, 0.0, std::string(), record_basis, rotations, comment_of, &emitted)) return 1;
+  }
+  if (!absent.empty() && push_notice("prn-absent", absent)) return 1;
+  if (!mismatched.empty() && push_notice("slot-mismatch", mismatched)) return 1;
+  if (!short_prns.empty() && push_notice("too-few-records", short_prns)) return 1;
+  return 0;
+}
+
 // compare_to_reference: an ephemeris with its covariance (COMSPOC's SynCoPate
 // files through files/orbit-products, for example) against reference states,
 // at the reference's epochs.

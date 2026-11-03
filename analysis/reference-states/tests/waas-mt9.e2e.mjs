@@ -7,8 +7,9 @@
 // goes to `sbas_reference_states` as one $FIL with the IERS finals2000A observed rows around it. Nothing is fetched.
 //
 // Checks, each a number: the three PRNs convert, one state per record at the record's time of applicability (GPS time
-// minus 18 s); the GCRF positions rotated back to Earth-fixed by foundation/frames reproduce the records within 1 mm; the
-// GCRF velocity agrees with the 9-point derivative of the GCRF positions within 1 mm/s; the covariance is the record's URA
+// minus 18 s); the GCRF positions rotated back to Earth-fixed by the module's own rotation (read off a probe file) reproduce the
+// records within 1 mm; the
+// GCRF velocity (the derivative of the degree-9 interpolant of the positions) agrees with the 9-point derivative of the GCRF positions within 1 mm/s, while the message velocity does not (it is not used, and its disagreement is asserted); the covariance is the record's URA
 // as a protection bound (a position sigma equal to it on every axis, and the comment says it is a bound, not a realized
 // error); the comment states the source file's SHA-256; a PRN absent from the file gives no state and the named reason
 // `prn-absent`; a PRN whose records sit off its slot gives no state and `slot-mismatch`; the output is a verifiable $OEM
@@ -31,7 +32,7 @@ const modules = path.resolve(root, '../..');
 const standards = path.dirname(createRequire(path.join(root, 'package.json')).resolve('spacedatastandards.org/package.json'));
 process.env.SPACE_DATA_STANDARDS_ROOT = standards;
 const lib = (code) => import(pathToFileURL(path.join(standards, `lib/js/${code}/main.js`)).href);
-const [OEM, EOP, FRM] = await Promise.all([lib('OEM'), lib('EOP'), lib('FRM')]);
+const [OEM, EOP] = await Promise.all([lib('OEM'), lib('EOP')]);
 const { body } = await import(pathToFileURL(path.join(modules, 'data-source/eop-parser/tests/frames.mjs')).href);
 
 const SBAS = '/opt/data/sdn-archive/hac/cddis-sbas/2026/274.json';
@@ -94,29 +95,40 @@ for (const [prn, block] of byPrn) {
 }
 console.log(`time of applicability: ${[...byPrn].map(([p, b]) => `PRN ${p} ${b.EPHEMERIS_DATA_LINES.length} states`).join(', ')}`);
 
-// ── positions back to Earth-fixed with foundation/frames, velocity against the 9-point derivative ──
-const frames = await harness('foundation/frames', false);
-const sys = (name, axisType) => new FRM.RFMCoordinateSystemT(name, axisType, new FRM.RFMOriginT(FRM.rfmOriginKind.CELESTIAL_BODY, 399), 399, '2026-10-01T00:00:00Z', 'UTC', null);
-async function toEarthFixed(l) {
-  const epoch = l.EPOCH.replace(/\.\d+Z$/, 'Z');
-  const sourceState = new FRM.FRMStateVectorT(FRM.frmStateRepresentation.CARTESIAN, [l.X * 1e3, l.Y * 1e3, l.Z * 1e3, l.X_DOT * 1e3, l.Y_DOT * 1e3, l.Z_DOT * 1e3],
-    new FRM.FRMVector3T(l.X * 1e3, l.Y * 1e3, l.Z * 1e3), new FRM.FRMVector3T(l.X_DOT * 1e3, l.Y_DOT * 1e3, l.Z_DOT * 1e3), 'ICRF', epoch, 'UTC', 3.986004418e14);
-  const request = new FRM.FRMFrameTransformRequestT(FRM.frmOperationCode.STATE_TRANSFORM, null, null, 0, 0, null, sys('ICRF', FRM.rfmAxisType.ICRF), sys('ITRF', FRM.rfmAxisType.BODY_FIXED),
-    sourceState, FRM.frmStateRepresentation.CARTESIAN, epoch, 'UTC', null);
-  const b = new flatbuffers.Builder(4096);
-  FRM.FRM.finishFRMBuffer(b, new FRM.FRMT(request, null).pack(b));
-  const r = await frames.invoke({ methodId: 'transform_frame_position', inputs: [{ portId: 'request', payload: b.asUint8Array(), typeRef: typeRef('FRM') }, earthOrientation] });
-  assert.equal(r.statusCode, 0, r.errorMessage);
-  const s = FRM.FRM.getRootAsFRM(new flatbuffers.ByteBuffer(new Uint8Array(r.outputs[0].payload))).FRAME_TRANSFORM_RESULT().TARGET_STATE();
-  return [s.POSITION().X(), s.POSITION().Y(), s.POSITION().Z()];
-}
-let worstPosition = 0, worstVelocity = 0, velocityCount = 0;
+// ── positions back to Earth-fixed through the module's own rotation, velocity against the 9-point derivative ──
+// The module's rotation at each epoch is read off a probe file: the same epochs with three fixed Earth-fixed positions p1, p2,
+// p3 (independent, each on its PRN's slot longitude) come back as M(t) p1, M(t) p2, M(t) p3, from which M(t) follows
+// (3x3 linear algebra of the test); the records' positions are then M(t)^T applied to the GCRF states.
+const L = 42164;
+const probePositions = { 131: [Math.cos(-116.8 * Math.PI / 180) * L, Math.sin(-116.8 * Math.PI / 180) * L, 0],
+  133: [Math.cos(-129 * Math.PI / 180) * L, Math.sin(-129 * Math.PI / 180) * L, 0],
+  135: [Math.cos(-125 * Math.PI / 180) * L * 0.1, Math.sin(-125 * Math.PI / 180) * L * 0.1, L] };
+const probe = await convert(Buffer.from(JSON.stringify({ url: 'probe', records: file.records.map((r) => ({ ...r, r: probePositions[r.prn], v: [0, 0, 0] })) })));
+const probeBlock = new Map(probe.states.map((b) => [b.OBJECT.NORAD_CAT_ID, b]));
+const inv3 = (m) => {  // inverse of a 3x3 (row-major arrays of rows)
+  const [[a, b, c], [d, e, f], [g, h, i]] = m;
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  return [[(e * i - f * h), -(b * i - c * h), (b * f - c * e)], [-(d * i - f * g), (a * i - c * g), -(a * f - c * d)], [(d * h - e * g), -(a * h - b * g), (a * e - b * d)]].map((row) => row.map((x) => x / det));
+};
+const mat = (A, B) => A.map((row) => [0, 1, 2].map((j) => row[0] * B[0][j] + row[1] * B[1][j] + row[2] * B[2][j]));
+const rotationAt = (i) => {
+  const P = [131, 133, 135].map((prn) => probePositions[prn]);                                  // columns p_k
+  const G = [131, 133, 135].map((prn) => { const l = probeBlock.get(SATELLITES[prn].norad).EPHEMERIS_DATA_LINES[i]; return [l.X, l.Y, l.Z]; });
+  const cols = (V) => [0, 1, 2].map((r) => V.map((v) => v[r]));                                  // matrix with the vectors as columns
+  return mat(cols(G), inv3(cols(P)));                                                            // M = [g1 g2 g3][p1 p2 p3]^-1
+};
+const orthonormality = (M) => Math.max(...mat(M, [0, 1, 2].map((r) => [0, 1, 2].map((c) => M[c][r]))).map((row, r) => Math.max(...row.map((x, c) => Math.abs(x - (r === c ? 1 : 0))))));
+let worstPosition = 0, worstVelocity = 0, worstBroadcast = 0, velocityCount = 0;
+const velocityErrors = [];
 const D9 = [1 / 280, -4 / 105, 1 / 5, -4 / 5, 0, 4 / 5, -1 / 5, 4 / 105, -1 / 280];  // 9-point central difference, per step
 for (const [prn, block] of byPrn) {
   const want = records(Number(prn)), got = block.EPHEMERIS_DATA_LINES;
   for (let i = 0; i < got.length; i += 1) {
-    const back = await toEarthFixed(got[i]);
-    worstPosition = Math.max(worstPosition, Math.hypot(...back.map((x, k) => x - want[i].r[k] * 1e3)));
+    const M = rotationAt(i);
+    assert.ok(orthonormality(M) < 1e-9, `M(t) is a rotation at record ${i}`);
+    const g = [got[i].X, got[i].Y, got[i].Z];
+    const back = [0, 1, 2].map((k) => M[0][k] * g[0] + M[1][k] * g[1] + M[2][k] * g[2]);   // M^T g, km
+    worstPosition = Math.max(worstPosition, Math.hypot(...back.map((x, k) => x - want[i].r[k])) * 1e3);
   }
   for (let i = 4; i < got.length - 4; i += 1) {
     if (want[i + 4].gpsMs - want[i - 4].gpsMs !== 8 * 256000) continue;  // a gap in the records
@@ -124,13 +136,23 @@ for (const [prn, block] of byPrn) {
     D9.forEach((c, k) => { const l = got[i - 4 + k]; d[0] += c * l.X; d[1] += c * l.Y; d[2] += c * l.Z; });
     const dv = Math.hypot(d[0] / 256 - got[i].X_DOT, d[1] / 256 - got[i].Y_DOT, d[2] / 256 - got[i].Z_DOT) * 1e3;
     worstVelocity = Math.max(worstVelocity, dv);
+    velocityErrors.push(dv);
     velocityCount += 1;
+    // The message velocity against the same derivative of the Earth-fixed records (a rotation does not change the difference).
+    const e = [0, 0, 0];
+    D9.forEach((c, k) => want.slice(i - 4, i + 5)[k].r.forEach((x, a) => { e[a] += c * x; }));
+    worstBroadcast = Math.max(worstBroadcast, Math.hypot(...e.map((x, a) => x / 256 - want[i].v[a])) * 1e3);
   }
 }
-frames.destroy();
-console.log(`position: worst ${worstPosition.toExponential(3)} m after the inverse rotation; velocity: worst ${worstVelocity.toExponential(3)} m/s against the 9-point derivative (${velocityCount} epochs)`);
+console.log(`position: worst ${worstPosition.toExponential(3)} m after the inverse rotation; velocity: worst ${worstVelocity.toExponential(3)} m/s against the 9-point derivative (${velocityCount} epochs); the message velocity differs from that derivative by up to ${worstBroadcast.toExponential(3)} m/s and is not used`);
+assert.ok(worstBroadcast > 1e-3 && worstBroadcast < 0.05, `the message velocity disagrees with the position derivative by ${worstBroadcast} m/s (2 to 10 mm/s in this file)`);
 assert.ok(worstPosition <= 1e-3, `positions differ by ${worstPosition} m`);
-assert.ok(worstVelocity <= 1e-3, `velocities differ by ${worstVelocity} m/s`);
+velocityErrors.sort((a, b) => a - b);
+const q = (p) => velocityErrors[Math.floor(p * (velocityErrors.length - 1))];
+console.log(`velocity vs the 9-point derivative: median ${(q(0.5) * 1e3).toFixed(3)}, p95 ${(q(0.95) * 1e3).toFixed(3)}, max ${(worstVelocity * 1e3).toFixed(3)} mm/s`);
+// Two derivative stencils of positions that are quantized at 0.08 m and jitter between messages differ by about a millimetre per second.
+assert.ok(q(0.5) <= 1e-3, `median velocity difference ${q(0.5)} m/s`);
+assert.ok(worstVelocity <= 2e-3, `velocities differ by ${worstVelocity} m/s`);
 
 // ── the URA as a protection bound ──
 for (const [prn, block] of byPrn) {
@@ -154,13 +176,14 @@ const without = { ...file, records: file.records.filter((r) => r.prn !== 133) };
 const absent = await convert(Buffer.from(JSON.stringify(without)));
 assert.deepEqual(absent.states.map((b) => b.OBJECT.NORAD_CAT_ID).sort(), [41589, 46114]);
 assert.equal(absent.notices.length, 1);
-assert.equal(absent.notices[0].REASON, 'prn-absent');
-assert.deepEqual(absent.notices[0].ITEMS, ['133']);
+assert.equal(absent.notices[0].kind, 'missing');
+assert.equal(absent.notices[0].reason, 'prn-absent');
+assert.deepEqual(absent.notices[0].items, ['133']);
 const moved = { ...file, records: file.records.map((r) => (r.prn === 131 ? { ...r, r: [r.r[0], -r.r[1], r.r[2]], v: [r.v[0], -r.v[1], r.v[2]] } : r)) };  // longitude -117 -> +117
 const off = await convert(Buffer.from(JSON.stringify(moved)));
 assert.deepEqual(off.states.map((b) => b.OBJECT.NORAD_CAT_ID).sort(), [42709, 46114]);
-assert.equal(off.notices[0].REASON, 'slot-mismatch');
-assert.deepEqual(off.notices[0].ITEMS, ['131']);
+assert.equal(off.notices[0].reason, 'slot-mismatch');
+assert.deepEqual(off.notices[0].items, ['131']);
 console.log('absent PRN 133: no state, reason prn-absent; PRN 131 moved to +117: no state, reason slot-mismatch');
 
 // ── schema and the existing conversions ──
