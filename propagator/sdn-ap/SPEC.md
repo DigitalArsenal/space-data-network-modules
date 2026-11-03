@@ -1417,6 +1417,26 @@ what order *[probe 9.1: direct, 1-minute stepped and backward-approach requests 
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
+**AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
+n = 1.0027 rev/day, e = 0.0002, i = 0.1 or 15 degrees, node = 40 degrees, argument of perigee = 30 degrees,
+M = 20 degrees, B = AGOM = 0 and FORCES (31,20). Against the same module with a 95/16-minute RK3 step,
+the measured 3D differences on 2026-11-03 are:
+
+| Inclination | Step (min) | Day 1 (m) | Day 3 (m) | Day 7 (m) |
+|---|---:|---:|---:|---:|
+| 0.1 degrees | 95 | 12.562 | 35.539 | 72.534 |
+| 0.1 degrees | 38 | 0.852 | 2.205 | 4.591 |
+| 15 degrees | 95 | 11.121 | 32.048 | 65.087 |
+| 15 degrees | 38 | 0.780 | 1.970 | 4.140 |
+
+The 47.5-minute candidate leaves 8.991 and 8.101 m at day 7; 38 minutes is the longest passing step in the
+registered set {47.5, 38, 95/3}. A five-day flight of 241 states at 30-minute cadence, including public
+`propagate` initialization and output, takes median 11.910 ms versus 10.514 ms at 95 minutes (1.133x),
+over nine alternating calls after two warm-ups. These are same-machine synthetic timings, not the
+archive fitting workload. Default-FORCES SGP4XP retains its bit-exact conformance digest.
+`test/geo-step-convergence.e2e.mjs` asserts day-7 differences below 5 m for both sets and cost below 2x;
+`test/results/geo-step-convergence.json` records the measurements.
+
 **Step method.** One explicit Runge-Kutta step per node interval, of third order, with the rates at the start node
 as the first stage (they are the node's stored rates). With y0 the start node, f the averaged-rate function, h the
 step:
@@ -1857,6 +1877,27 @@ output map and sampling 256 node phases at perigee gives peak absolute along-tra
 `test/results/class-crossing.json` preserves every evaluated pair and both alternatives.
 
 ---
+
+**One-day archive windows.** On 2026-11-03 the selected 38-minute step was confirmed on new 72-hour
+fit cutoffs 2025-10-05, 10-09 and 10-13 for every AP6 GE/IG object, absent from AP6's original cutoff
+list. These windows share AP6's GFZ truth span; they are not independent-truth validation. The AP6
+300-second thinning, 90% fit coverage, 260-sample daily minimum and as-issued weather are retained.
+Leads are daily bins after the fit ends. Eighteen GE and 36 IG windows pass coverage; nine GE windows
+are excluded for missing fit or lead coverage. Both step arms are fitted independently.
+
+| Group | Day | 95-min median 3D (m) | 38-min median 3D (m) | Median paired change (m) |
+|---|---:|---:|---:|---:|
+| GE | 1 | 18.988 | 18.512 | -0.740 |
+| GE | 3 | 46.658 | 41.876 | 0.193 |
+| GE | 7 | 217.657 | 235.913 | 5.860 |
+| IG | 1 | 25.405 | 24.723 | -0.306 |
+| IG | 3 | 34.989 | 33.328 | -0.361 |
+| IG | 7 | 70.488 | 68.410 | 0.189 |
+
+The shorter step reduces numerical integration error; these mixed archive changes do not establish a
+uniform forecast-accuracy improvement. All windows and coverage exclusions are printed by the E2E and
+stored in `test/results/geo-step-convergence.json`.
+
 
 ## References
 

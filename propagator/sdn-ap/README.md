@@ -339,3 +339,10 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 - `test/wasmedge-parity.mjs`: `propagate`, `fit`, `propagate` on a GCRF grid, `maneuver`, `propagate_epochs`,
   `propagate` and `fit` under NRLMSISE-00 times the open DCA (SPEC 15), and a fit under LOG_NORMAL priors on BTERM
   and AGOM, through the browser host and native WasmEdge 0.16.4: identical bytes.
+
+AP one-day integration uses a 38-minute step: the registered GEO/IG day-7 differences to a 95/16-minute
+reference are 4.591/4.140 m, down from 72.534/65.087 m at 95 minutes, at 1.133x flight cost. On new AP6
+cutoffs (18 GE, 36 IG windows), day-3 median forward errors change from 46.658/34.989 to 41.876/33.328 m;
+day-7 GE worsens from 217.657 to 235.913 m. Numerical convergence does not establish uniform forecast
+improvement. SPEC 9 and 16 give the fixtures, shared-truth limitation and all leads;
+`test/geo-step-convergence.e2e.mjs` enforces <5 m, <2x cost and the unchanged XP digest.
