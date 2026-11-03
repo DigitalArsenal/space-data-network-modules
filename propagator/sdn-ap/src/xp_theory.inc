@@ -738,6 +738,7 @@ struct RateContext {
   int32_t half_day_count;
   uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
+  uint8_t ap_third_body;              ///< AP: the third bodies' tidal terms of degree 4 up in the averaged rates (SPEC 16.6)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
@@ -763,6 +764,49 @@ inline int state_test(const RateContext& ctx, const double* y) {
   if (y[kN] <= 0.0) return 9;
   if (ctx.bterm > 0.0 && 1.0 - e2 <= 1e-12) return 10;
   return 0;
+}
+
+/// AP (SPEC 16.6): a body's tidal acceleration at r beyond the octupole, Legendre degrees 4 to kThirdBodyTailDegree
+/// (ER/min^2): mu_b r^(l-1) / r_b^(l+1) [(l P_l - u P_l') r_hat + P_l' s_hat], u = r_hat . s_hat.
+constexpr int kThirdBodyTailDegree = 10;
+constexpr int kThirdBodyTailNodes = 32;
+inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio) {
+  const double rn = norm(r);
+  const Vec3 ru = (1.0 / rn) * r;
+  const double u = dot(ru, su), x = rn / sr;
+  double pm = 1.0, p = u, dm = 0.0, dp = 1.0, xp = 1.0, ar = 0.0, as = 0.0;
+  for (int l = 1; l < kThirdBodyTailDegree; ++l) {
+    const double pn = ((2 * l + 1) * u * p - l * pm) / (l + 1);
+    const double dn = dm + (2 * l + 1) * p;  // P'_{l+1} = P'_{l-1} + (2l + 1) P_l
+    pm = p;
+    p = pn;
+    dm = dp;
+    dp = dn;
+    xp *= x;  // (r / r_b)^(L - 1), L = l + 1
+    const int L = l + 1;
+    if (L >= 4) {
+      ar += xp * (L * p - u * dp);
+      as += xp * dp;
+    }
+  }
+  const double k = mass_ratio * kMu / (sr * sr);
+  return (k * ar) * ru + (k * as) * su;
+}
+
+/// AP (SPEC 16.6): the Sun's and the Moon's tidal terms of degree 4 to kThirdBodyTailDegree, averaged over the mean
+/// longitude as SPEC 5 averages degrees 2 and 3 (each body held at its position at the stage time): the Gauss rates on
+/// the mean orbit at kThirdBodyTailNodes eccentric longitudes weighted by r/a (d lambda = (r/a) dF), added to `out`.
+inline void third_body_tail(const double* y, const Frame& fr, const Bodies& b, double* out) {
+  for (int j = 0; j < kThirdBodyTailNodes; ++j) {
+    const double F = kTwoPi * j / kThirdBodyTailNodes;
+    Vec3 r, v;
+    double roa;
+    state_at_F(y, fr, F, r, v, roa);
+    const Vec3 d = tidal_tail(r, b.sun_u, b.sun_r, kSunMass) + tidal_tail(r, b.moon_u, b.moon_r, kMoonMass);
+    double g[6];
+    gauss(y, fr, r, v, d, g);
+    for (int m = 0; m < 6; ++m) out[m] += roa * g[m] / kThirdBodyTailNodes;
+  }
 }
 
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
@@ -832,6 +876,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   if (ctx.zt != nullptr) tess::zonal_six(ctx.zt, ctx.zt_degree, k, fr.n, fr.eta, ag.si, ag.ci, six);
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
+  if (ctx.ap_third_body && !ctx.long_period) third_body_tail(y, fr, b, out);
   if (ctx.long_period) {
     // Instantaneous geometry: the satellite from the equinoctial Kepler
     // equation lambda = F + ag cos F - af sin F (Halley iteration, at most 25 steps).
@@ -1114,6 +1159,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // convention. A second epoch-axis rotation is not part of that branch.
   // This one ingest-time policy is shared by fit residuals and every flight.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
+  s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
