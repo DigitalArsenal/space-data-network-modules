@@ -1772,7 +1772,7 @@ its position amplitude is below 0.5 m. G is g0 + g1 e about the epoch e: below e
 q = +-1 takes ((l + 1) / 2 + q w) e, above it the Hansen coefficient.
 
 Section 6's classes keep their terms, and with d above 0 take the correct functions at the current elements where the library
-departs from them, in place of 6.3 and 6.4's epoch values: the epoch class held throughout the flight, F and G at the current e and i, the exact dF_632/di,
+departs from them, in place of 6.3 and 6.4's epoch values: the current class with every AP table rebuilt together when it differs from the epoch class, F and G at the current e and i, the exact dF_632/di,
 G_410 with e^2 coefficient 1, dG_40,-2/de with its e^13 and e^15 terms, G_30,-1 with its e^27 term, and above e = 0.3 G from the
 Hansen coefficient expanded to third order about the epoch e of the epoch class, valid past the Laplace limit e = 0.6627.
 

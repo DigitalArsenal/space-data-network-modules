@@ -725,6 +725,7 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 /// Per-object constants of the rate function.
 struct RateContext {
   double d50_epoch;
+  tess::Terms selected_terms;  ///< AP force selection, also used when a class changes
   double bterm, agom;
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour)
@@ -735,7 +736,7 @@ struct RateContext {
   double e0, i0;                      ///< AP: epoch e and i (rad), the shallow terms to first order about them
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
-  uint8_t ap_resonance;               ///< AP: epoch class held; functions at the current eccentricity and inclination
+  uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
   uint8_t ap_frame;                   ///< AP: mean elements in the epoch's axes, states carried to TEME of date (SPEC 16.4)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
@@ -749,8 +750,8 @@ struct RateContext {
 };
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
-  (void)n;
-  return ctx.resonance;
+  (void)ctx;
+  return res::band_of(n);
 }
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
@@ -765,9 +766,13 @@ inline int state_test(const RateContext& ctx, const double* y) {
 }
 
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
+inline bool reclass_rates(const RateContext&, double, const double*, double*);
+inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*);
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out) {
-  const Frame fr = frame_of(y);
   if (state_test(ctx, y) != 0) return false;
+  if (ctx.ap_resonance && ap_resonance_class(ctx, y[kN]) != ctx.resonance)
+    return reclass_rates(ctx, t, y, out);
+  const Frame fr = frame_of(y);
   const Kepler k = kepler_of(y, fr.a);
   const double s = std::sin(k.i), c = std::cos(k.i);
   const double p = fr.a * (1.0 - k.e * k.e);
@@ -930,6 +935,8 @@ inline void hermite(const Node& a, const Node& b, double t, double* y) {
 inline int32_t output(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
                       const Bodies* shared) {
   if (!(ym[kN] > 0.0)) return kPropMeanMotion;
+  if (ctx.ap_resonance && ap_resonance_class(ctx, ym[kN]) != ctx.resonance)
+    return reclass_output(ctx, t, ym, r_out, v_out, shared);
   double y[6] = {ym[0], ym[1], ym[2], ym[3], ym[4], ym[5]};
   double Ewarm = std::numeric_limits<double>::quiet_NaN();
   if (!ctx.long_period || ctx.agom > 0.0) {
@@ -1096,7 +1103,7 @@ struct XpSat {
 
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
-  const tess::Terms& t = tess::active();
+  const tess::Terms& t = s.ctx.selected_terms;
   s.ctx.ap_frame = t.tesseral > 0 || t.zonal > 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
@@ -1185,6 +1192,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.resonance = res;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
   s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
+  s.ctx.selected_terms = tess::active();
   s.ctx.e0 = e.eo;
   s.ctx.i0 = e.xincl;
   if (!ap_init(e, n0, res, s)) {
@@ -1350,6 +1358,38 @@ inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const 
   const int32_t status = output(s.ctx, t, y, r, v, shared);
   if (status == kPropOk && s.ctx.ap_frame) frames::teme_drift(s.epoch_jd_whole, s.epoch_jd_frac, t, r, v);
   return status;
+}
+
+/// A class change gets one consistent set of AP tables for both rates and
+/// output. The temporary owns its coefficients; atmosphere and frame epoch
+/// remain those of the original set. No global force selection is modified.
+inline bool reclass_make(const RateContext& ctx, const double* y, XpSat& tmp) {
+  if (state_test(ctx, y) != 0) return false;
+  const Kepler k = kepler_of(y);
+  tmp = XpSat{};
+  tmp.ctx = ctx;
+  tmp.ctx.res_epoch = nullptr; tmp.ctx.res_count = 0; tmp.ctx.res_taylor = nullptr;
+  tmp.ctx.half_day = nullptr; tmp.ctx.half_day_count = 0;
+  tmp.ctx.shallow = nullptr; tmp.ctx.shallow_count = 0;
+  tmp.ctx.zt = nullptr; tmp.ctx.mdaily = nullptr; tmp.ctx.sp = nullptr; tmp.ctx.sp_count = 0;
+  tmp.ctx.resonance = static_cast<int8_t>(ap_resonance_class(ctx, y[kN]));
+  tmp.ctx.e0 = k.e; tmp.ctx.i0 = k.i;
+  Elements e{}; e.eo = k.e; e.xincl = k.i;
+  return ap_init(e, y[kN], tmp.ctx.resonance, tmp);
+}
+inline bool reclass_rates(const RateContext& ctx, double t, const double* y, double* out) {
+  XpSat tmp{};
+  const bool made = reclass_make(ctx, y, tmp);
+  const bool ok = made && rates(tmp.ctx, t, y, out);
+  xp_release(tmp);
+  return ok;
+}
+inline int32_t reclass_output(const RateContext& ctx, double t, const double* y, double* r, double* v, const Bodies* shared) {
+  XpSat tmp{};
+  const bool made = reclass_make(ctx, y, tmp);
+  const int32_t rc = made ? output(tmp.ctx, t, y, r, v, shared) : kPropRefused;
+  xp_release(tmp);
+  return rc;
 }
 
 }  // namespace xpt

@@ -26,10 +26,10 @@ for(const bterm of [.04,.06,.08,.1]){
 if(process.env.SDN_AP_CLASS_REPORT)fs.writeFileSync(process.env.SDN_AP_CLASS_REPORT,JSON.stringify({edge,results,selected},null,2)+'\n');
 assert.ok(selected,'registered B grid contains a crossing primary and noncrossing companion');
 const [a,b]=selected.pair,ratio=a.days[7].t/b.days[7].t;
-console.log(JSON.stringify({bterm:selected.bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.9,1.1],termLongitudeAmplitudesMeters:a.classDiagnostics[0].values.slice(5)}));
+console.log(JSON.stringify({bterm:selected.bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.9,1.1],termLongitudeAmplitudesMeters:a.classDiagnostics[0].values.slice(5,7),termPerigeeAlongTrackAmplitudesMeters:a.classDiagnostics[0].values.slice(7,9)}));
 if(!process.argv.includes('--baseline')){
- assert.ok(Math.abs(ratio-1)<=.1,'crossing signed along-track error within 10% of companion');
- for(const r of selected.pair)for(const d of r.classDiagnostics){assert.equal(d.values[2],2,'epoch half-day class retained');assert.equal(d.values[3],2,'both (2,2) terms remain in integrated output');assert.equal(d.values[4],0,'no duplicate short-period terms');}
+ for(const r of selected.pair)for(const d of r.classDiagnostics){const crossed=d.values[0]>edge;assert.equal(d.values[2],crossed?3:2,'current class has matching tables');assert.equal(d.values[3],crossed?0:2,'rates contain only the current class');assert.equal(d.values[4],crossed?2:0,'both old terms move to output without duplication');}
  execFileSync(process.execPath,[new URL('./conformance.e2e.mjs',import.meta.url).pathname,'--reproduce',new URL('./results/conformance.json',import.meta.url).pathname],{stdio:'inherit',env:{...process.env,SDN_AP_ORACLE_ROOT:process.env.SDN_AP_ORACLE_ROOT??'/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+ assert.ok(Math.abs(ratio-1)<=.1,'crossing signed along-track error within 10% of companion');
  console.log('Class crossing E2E: PASS');
 }
