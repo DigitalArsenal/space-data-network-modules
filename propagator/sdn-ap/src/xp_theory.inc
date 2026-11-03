@@ -484,7 +484,10 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
       thn = theta_g + kOmegaE * tau;
     }
     const double rho = node_density(atmosphere, dt, fl, dca, d50n, sp, cp, sdsun, cdsun, H, alpha, thn, nh);
-    const double V = std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp * cp / (Dn * Dn));
+    // above e 0.3 (`pass`) the co-rotating air at the node's radius r rather than the mean orbit's p / D
+    const double rr = pass ? r * Dn / p : 1.0;
+    const double V = pass ? std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th * rr + q * q * cp * cp * rr * rr / (Dn * Dn))
+                          : std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp * cp / (Dn * Dn));
     const double K = w * rho * V / (Dn * Dn);
     const double iD2 = 1.0 / (Dn * Dn);
     G += K;
@@ -939,6 +942,90 @@ inline double eccentric_longitude(const double* y) {
   return F;
 }
 
+/// The drag's part of the averaged rates (SPEC 3.4), added to `out`. AP above e 0.3 (SPEC 16.12): the mean of the
+/// perigee passages before and after t, each at its own time.
+constexpr bool kDragPassShortPeriod = true;
+inline void drag_part(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag,
+                      const Bodies& b, double* out) {
+  if (ctx.drag_pass) {
+    const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
+    for (int s = 0; s < 2; ++s) {
+      const double tq = tp + s * period;
+      drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
+                 out, true, 0.5);
+    }
+  } else {
+    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out);
+  }
+}
+
+/// Diagnostics (SPEC 16.12): the drag's averaged rates at mean state y and time t (`theory`, state order) against an
+/// independent integral over the same passes: the Gauss equations of -(1/2) rho B |v_rel| v_rel along the mean orbit, the
+/// density (node_density) and the co-rotating air at the radius of SPEC 3.4 (mean orbit plus the J2 short-period radius),
+/// each sample at its own time, `samples` points of composite Simpson in the mean anomaly over each pass (`check`).
+inline bool drag_orbit_check(const RateContext& ctx, double t, const double* y, int samples, double* theory, double* check) {
+  for (int j = 0; j < 6; ++j) theory[j] = check[j] = 0.0;
+  if (!(ctx.bterm > 0.0) || state_test(ctx, y) != 0) return false;
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  const AngleTrig ag = angle_trig(k);
+  const Bodies b = bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+  drag_part(ctx, t, y, fr, k, ag, b, theory);
+  const int N = samples < 2 ? 2 : samples & ~1;
+  const double e = k.e, n = fr.n, eta = fr.eta, p = fr.a * eta * eta, th = ag.ci, cj2 = kJ2 / (4.0 * p);
+  const double sdsun = b.sun_u.z, cdsun = std::sqrt(1.0 - b.sun_u.z * b.sun_u.z), rasun = std::atan2(b.sun_u.y, b.sun_u.x);
+  const int passes = ctx.drag_pass ? 2 : 1;
+  const double tp = ctx.drag_pass ? t - k.m / n : t, period = kTwoPi / n;
+  const double varpi = k.argp + k.node;
+  for (int s = 0; s < passes; ++s) {
+    const double t0 = tp + s * period;
+    for (int q = 0; q <= N; ++q) {
+      const double M = -kPi + kTwoPi * q / N;
+      // eccentric anomaly, then the eccentric longitude F = E + varpi of state_at_F
+      double E = M + e * std::sin(M);
+      for (int it = 0; it < 50; ++it) {
+        const double dE = (E - e * std::sin(E) - M) / (1.0 - e * std::cos(E));
+        E -= dE;
+        if (std::fabs(dE) < 1e-15) break;
+      }
+      Vec3 r, v;
+      double roa;
+      state_at_F(y, fr, E + varpi, r, v, roa);
+      const double nu = 2.0 * std::atan2(std::sqrt(1.0 + e) * std::sin(0.5 * E), std::sqrt(1.0 - e) * std::cos(0.5 * E));
+      double sn, cn;
+      fm::sincos(nu, sn, cn);
+      const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;
+      const double Dn = 1.0 + e * cn;
+      const double rj = p / Dn + cj2 * ((1.0 - th * th) * (cu * cu - su * su) - (3.0 * th * th - 1.0) * (e * cn / (1.0 + eta) + 2.0 * eta / Dn + 1.0));
+      const Vec3 rs = (rj / norm(r)) * r;  // the density's and the co-rotating air's radius; the lever arms keep the mean orbit's
+      // the time ctx's rates use: drag_pass, the sample's own time on the pass; otherwise the rate's time t
+      const double ts = ctx.drag_pass ? t0 + M / n : t;
+      const double d50 = ctx.d50_epoch + ts / kMinutesPerDay, theta_g = ctx.theta_g0 + kOmegaE * ts;
+      const bool generic = ctx.atmosphere == nullptr || !ctx.atmosphere->measured;
+      const drag::Flux fl = generic ? drag::flux_at(ctx.drag_pass ? ctx.d50_epoch + t0 / kMinutesPerDay : d50)
+                                    : atm::drivers_at(*ctx.atmosphere, ctx.drag_pass ? ctx.d50_epoch + t0 / kMinutesPerDay : d50);
+      double D, Nd;
+      drag::day_of_year(ctx.drag_pass ? ctx.d50_epoch + t0 / kMinutesPerDay : d50, D, Nd);
+      const drag::DateTerms dt = drag::date_terms(fl, D, Nd);
+      const double dca = ctx.atmosphere != nullptr && !ctx.atmosphere->dca_d50.empty()
+                             ? atm::dca_scale(*ctx.atmosphere, ctx.drag_pass ? ctx.d50_epoch + t0 / kMinutesPerDay : d50) : 1.0;
+      const double sp = rs.z / rj, cp = std::sqrt(1.0 - sp * sp);
+      const NodeHeight nh = node_height(sp, cp, rj);
+      const double alpha = std::atan2(rs.y, rs.x);
+      double H = alpha - rasun;
+      H -= kTwoPi * std::floor(H / kTwoPi);
+      const double rho = node_density(ctx.atmosphere, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
+      const Vec3 vrel = {v.x + kOmegaE * rs.y, v.y - kOmegaE * rs.x, v.z};
+      const double c = -0.5 * rho * ctx.bterm * kRe * 1000.0 * norm(vrel);
+      double g[6];
+      gauss(y, fr, r, v, c * vrel, g);
+      const double wq = (q == 0 || q == N) ? 1.0 : (q % 2 ? 4.0 : 2.0);
+      for (int j = 0; j < 6; ++j) check[j] += wq * g[j] / (3.0 * N) / passes;
+    }
+  }
+  return true;
+}
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
 inline bool reclass_rates(const RateContext&, double, const double*, double*);
 inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*);
@@ -1032,17 +1119,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     for (int j = 0; j < 6; ++j) out[j] += tb[j];
   }
   if (ctx.agom > 0.0) srp_rates(y, fr, k, pf, ctx.agom, b, out);
-  if (ctx.bterm > 0.0 && ctx.drag_pass) {
-    // AP above e 0.3 (SPEC 16.12): the mean of the perigee passages before and after t, each at its own time
-    const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
-    for (int s = 0; s < 2; ++s) {
-      const double tq = tp + s * period;
-      drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
-                 out, true, 0.5);
-    }
-  } else if (ctx.bterm > 0.0) {
-    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out);
-  }
+  if (ctx.bterm > 0.0) drag_part(ctx, t, y, fr, k, ag, b, out);
   return true;
 }
 
@@ -1207,6 +1284,19 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
       six_to_equinoctial(agm, six, d);
       for (int j = 0; j < 6; ++j) y[j] += d[j];
     }
+  }
+  if (ctx.drag_pass && ctx.bterm > 0.0 && kDragPassShortPeriod) {
+    // AP above e 0.3 (SPEC 16.12): the drag's short-period terms of a pass narrow against the orbit, so the osculating
+    // elements step at perigee where the mean elements ramp: each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi), and
+    // lambda also + (ndot / n^2)(pi M - M^2 / 2 - pi^2 / 3), the integral of the mean motion's own sawtooth
+    const Frame frm = frame_of(ym);
+    const Kepler km = kepler_of(ym, frm.a);
+    const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+    double fd[6] = {0, 0, 0, 0, 0, 0};
+    drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
+    const double M = km.m, n = ym[kN], saw = (kPi - M) / n;
+    for (int j = 0; j < 6; ++j) y[j] += fd[j] * saw;
+    y[kLam] += fd[kN] / (n * n) * (kPi * M - 0.5 * M * M - kPi * kPi / 3.0);
   }
   const Kepler k = kepler_of(y);
   if (!(k.e < 1.0)) return kPropEccentricity;

@@ -596,6 +596,36 @@ extern "C" int propagate_epochs(void) {
 
 // ---- The resident store's exports ------------------------------------------------------------------------------------
 
+/// SPEC 16.12 diagnostics: the drag's averaged rates of the resident store's series `index` (load_epochs), its first set, at its mean state at `minutes` against an
+/// independent integral (xpt::drag_orbit_check, `samples` Simpson points per pass), each as its change over one period
+/// in meters: out[0..5] the rates', out[6..11] the integral's, in the order a (from n), a e_f, a e_g, 2 a chi, 2 a psi,
+/// a lambda. ORBPRO_PROP_UNPHYSICAL without drag or a mean state.
+SDNAP_EXPORT("sdnap_drag_orbit_check")
+int32_t sdnap_drag_orbit_check(uint32_t index, double minutes, int32_t samples, double* out) {
+  auto& st = sdnap::epochs::resident();
+  if (index >= st.series.size() || out == nullptr) return ORBPRO_PROP_BAD_INPUT;
+  auto& slot = sdnap::epochs::slot_of(st, st.series[index], 0, false);
+  if (slot.xp == nullptr || slot.error != 0) return ORBPRO_PROP_UNPHYSICAL;
+  sdnap::xpt::XpSat& s = *slot.xp;
+  using namespace sdnap::xpt;
+  double y[6], th[6], ck[6];
+  if (!mean_at(s, minutes, y) || !drag_orbit_check(s.ctx, minutes, y, samples, th, ck)) return ORBPRO_PROP_UNPHYSICAL;
+  const Frame fr = frame_of(y);
+  const double P = sdnap::kTwoPi / fr.n, m = kRe * 1000.0 * fr.a;
+  const double* src[2] = {th, ck};
+  for (int w = 0; w < 2; ++w) {
+    const double* f = src[w];
+    double* o = out + 6 * w;
+    o[0] = -(2.0 / 3.0) * f[kN] / fr.n * P * m;
+    o[1] = f[kAf] * P * m;
+    o[2] = f[kAg] * P * m;
+    o[3] = 2.0 * f[kChi] * P * m;
+    o[4] = 2.0 * f[kPsi] * P * m;
+    o[5] = f[kLam] * P * m;
+  }
+  return ORBPRO_PROP_OK;
+}
+
 /// Series in the resident store (load_epochs).
 SDNAP_EXPORT("sdnap_epochs_count")
 uint32_t sdnap_epochs_count(void) { return static_cast<uint32_t>(sdnap::epochs::resident().series.size()); }
