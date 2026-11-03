@@ -2153,6 +2153,11 @@ along-track/radial against 0.4.13): GTO 960.82/935.27 to 419.32/455.90 m (day-7 
 perigee GTO 605.15/576.31 to 295.44/304.96 m; on the read AP6 windows Etalon-1 and -2 move by +0.07 and +0.14 m (paired
 day 3), LAGEOS, LARES-2, IG and GE not at all.
 
+Cost (owner Mac under load, browser host, `propagate` over 7 days, the two releases interleaved, median of 9 runs,
+milliseconds per object-day from 0.4.13 to 0.4.14): on a 1 h grid GTO 12.0 to 16.2, Galileo-like 5.8 to 10.5 and
+Etalon-like 5.1 to 6.1; on a 1 min grid 121.3 to 124.3, 86.6 to 89.7 and 74.9 to 76.4; LEO, GPS-like, half-day,
+Molniya and GEO-like unchanged (2.1, 5.2, 11.7, 11.6 and 1.4 ms on the 1 h grid).
+
 ---
 
 **One-day archive windows.** On 2026-11-03 the selected 38-minute step was confirmed on new 72-hour
