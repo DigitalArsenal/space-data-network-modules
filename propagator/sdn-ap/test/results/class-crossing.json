@@ -5358,5 +5358,15 @@
       "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
     }
   ],
-  "rounding": "unchanged"
+  "rounding": "unchanged",
+  "conformance": {
+    "pass": true,
+    "xpDigestPrefix": "72dcf6005046",
+    "controlDigestPrefix": "9ecfafcd9027",
+    "reproduces": "test/results/conformance.json"
+  },
+  "artifactValidation": {
+    "pass": true,
+    "errors": []
+  }
 }
