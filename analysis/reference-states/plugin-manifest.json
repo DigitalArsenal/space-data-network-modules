@@ -48,6 +48,11 @@
       "schemaName": "FlowNotice.fbs",
       "fileIdentifier": "FNTC",
       "rootTypeName": "FlowNotice"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig"
     }
   ],
   "methods": [
@@ -184,6 +189,27 @@
           "maxStreams": 366,
           "required": true,
           "description": "$EOP rows bracketing the file's span (one row, several frames, or a size-prefixed stream), as foundation/frames reads them."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig through plugin.getConfig: slotToleranceDeg (default 2), the largest distance in degrees between a PRN's mean record longitude and its slot."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig through plugin.getConfig: slotToleranceDeg (default 2), the largest distance in degrees between a PRN's mean record longitude and its slot."
         }
       ],
       "outputPorts": [

@@ -554,6 +554,13 @@ extern "C" int sbas_reference_states() {
   if (file.is_discarded() || !file.is_object() || !file.contains("records") || !file["records"].is_array())
     return fail("invalid-sbas-file", "the file must be a JSON object with a records array.");
 
+  // Node config (ModuleConfig, optional): slotToleranceDeg, how far a PRN's mean record longitude may sit from its slot.
+  double slot_tolerance = kSlotToleranceDeg;
+  if (const sdm_piv::Config config = sdm_piv::get_config(); config.ok()) {
+    const double configured = config_number(config, "slotToleranceDeg");
+    if (configured > 0) slot_tolerance = configured;
+  }
+
   std::map<int, std::vector<SbasRecord>> by_prn;
   for (const auto& rec : file["records"]) {
     if (!rec.is_object() || !rec.contains("prn") || !rec.contains("gpsMs") || !rec.contains("r") || !rec.contains("v") ||
@@ -596,7 +603,7 @@ extern "C" int sbas_reference_states() {
     double lon = std::atan2(sy, sx) * 180.0 / M_PI;
     double off = std::fabs(lon - sat.slot_deg);
     if (off > 180.0) off = 360.0 - off;
-    if (off > kSlotToleranceDeg) { mismatched.push_back(prn); continue; }
+    if (off > slot_tolerance) { mismatched.push_back(prn); continue; }
     if (records.size() < kPoints) { short_prns.push_back(prn); continue; }
 
     std::vector<Sample> samples;

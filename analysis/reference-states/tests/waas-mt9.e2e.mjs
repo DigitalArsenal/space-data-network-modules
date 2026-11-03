@@ -184,7 +184,15 @@ const off = await convert(Buffer.from(JSON.stringify(moved)));
 assert.deepEqual(off.states.map((b) => b.OBJECT.NORAD_CAT_ID).sort(), [42709, 46114]);
 assert.equal(off.notices[0].reason, 'slot-mismatch');
 assert.deepEqual(off.notices[0].items, ['131']);
-console.log('absent PRN 133: no state, reason prn-absent; PRN 131 moved to +117: no state, reason slot-mismatch');
+// The slot tolerance is node config: at 0.1 degrees PRN 131 (0.2 off) and 133 (0.15 off) give no state, 135 (0.02 off) does.
+const strict = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(path.join(root, 'dist/isomorphic/module.wasm')), surface: 'direct',
+  manifest: JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json'))), hostOptions: { config: { slotToleranceDeg: 0.1 } } });
+const tight = await strict.invoke({ methodId: 'sbas_reference_states', inputs: [body(fileBytes), earthOrientation] });
+assert.equal(tight.statusCode, 0, tight.errorMessage);
+assert.equal(tight.outputs.filter((o) => o.portId === 'reference').length, 1);
+assert.deepEqual(decodeFlowNotice(tight.outputs.find((o) => o.portId === 'notice').payload).items, ['131', '133']);
+strict.destroy();
+console.log('absent PRN 133: no state, reason prn-absent; PRN 131 moved to +117: no state, reason slot-mismatch; slotToleranceDeg 0.1: PRNs 131 and 133 off slot');
 
 // ── schema and the existing conversions ──
 const compliance = await validateArtifactWithStandards({ manifest: JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json'))), wasmPath: path.join(root, 'dist/isomorphic/module.wasm'), standardsRoot: standards });

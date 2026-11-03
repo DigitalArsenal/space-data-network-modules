@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "analysis/reference-states compare_to_reference",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "a110c9947cb40926cd63355459c2c792c34297f84d83aa37762005d95dbc80ad",
-  "moduleSha256": "a110c9947cb40926cd63355459c2c792c34297f84d83aa37762005d95dbc80ad",
+  "artifactSha256": "51477903cb13d877d30342ac5a10a12c5e6fec8a8622ddfe203a73e7dc790c65",
+  "moduleSha256": "51477903cb13d877d30342ac5a10a12c5e6fec8a8622ddfe203a73e7dc790c65",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 4,
-      "durationMs": 919
+      "durationMs": 649
     },
     {
       "lane": "wasmedge",
       "runs": 4,
-      "durationMs": 173
+      "durationMs": 129
     }
   ],
   "cases": [

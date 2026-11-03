@@ -57,6 +57,7 @@ GEO truth from the WAAS (SBAS) broadcast: the geostationary navigation message
 | --- | --- | --- |
 | `body` | `$FIL` | the archived file: `{url, sha256, retrieved, terms, records}`, a record `{prn, gpsMs, r, v, ura, health}`: position km and velocity km/s Earth-fixed (WGS 84, aligned with ITRF to about a centimetre), `ura` the broadcast user range accuracy in metres, `gpsMs` the epoch's calendar fields in GPS time as Unix milliseconds |
 | `earth_orientation` | `$EOP` | rows bracketing the day, as `reference_states` |
+| `config` | `MCFG` | optional node config (`plugin.getConfig`): `slotToleranceDeg`, default 2 |
 | `reference` (out) | `$OEM` | one per table PRN present and on its slot: GCRF, UTC |
 | `notice` (out) | `FNTC` | KIND Missing, one per reason a table PRN gives no state |
 
