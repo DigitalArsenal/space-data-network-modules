@@ -25,7 +25,8 @@ if(process.argv.includes('--exact-12h-diagnostic')){const c={...cases[0],name:'1
 // Registered reference-convergence check: same initial state, tenfold tighter
 // RK78 tolerance and half the maximum step; report the change at each lead.
 if(process.argv.includes('--reference-convergence')){
- const a=await runModelTruth(cases[0]),b=await runModelTruth({...cases[0],referenceTolerance:1e-13,referenceMaxStep:150});
+ const refined=process.argv.includes('--refined');
+ const a=await runModelTruth({...cases[0],...(refined?{referenceTolerance:1e-13,referenceMaxStep:150}:{})}),b=await runModelTruth({...cases[0],referenceTolerance:refined?1e-14:1e-13,referenceMaxStep:refined?75:150});
  const differences=a.referenceStates.map((v,k)=>({day:[1,3,7][k],meters:1000*Math.hypot(...v.position.map((x,j)=>x-b.referenceStates[k].position[j]))}));
  console.log(JSON.stringify({referenceConvergence:differences,standard:a,tight:b}));
  assert.ok(differences.every(v=>v.meters<.1),'FFM reference convergence below 0.1 m');
