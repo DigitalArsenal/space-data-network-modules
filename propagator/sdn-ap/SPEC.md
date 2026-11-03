@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.4.
+Version 0.4.5.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -15,7 +15,10 @@ builds from this document and the oracle alone.
 oracle (the harness's leg `9.9`). Section 11 states where 9.1.1.0 (the vendored WebAssembly build) differs.
 
 **Implementation.** Side B builds the bundle `propagator/sdn-ap/` of the public modules repository (Apache-2.0) from this
-document; it keeps the name SDN-AP and carries SGP4 and SGP4XP.
+document; it keeps the name SDN-AP and carries SGP4 and SGP4XP. The public description of SGP4-XP is
+[Payne et al. (2022), Improvements to the SGP4 Propagator (SGP4-XP)](https://amostech.com/TechnicalPapers/2022/Astrodynamics/Payne_2.pdf).
+Agreement with the USSF library measures implementation conformance, not orbit accuracy. Orbit accuracy
+requires forward errors against independent truth, with lead time counted from the end of the fit.
 
 **Status (2026-10-24, side A).** Sections 1-11 are complete, the refusal rules of 8 and 9 included. Not fixed by any
 specification: shadow decisions that are rounding-limited (4), for which both outcomes conform. Explicit and
@@ -1239,8 +1242,9 @@ G_lpq = G_l,l-p,-q):
 
 The library uses its Maclaurin polynomial in e, the terms e^|q|, e^(|q|+2), ... up to e^26 for even q and e^27 for
 odd q, and for dG_lpq/de the derivative of that polynomial *[study; probe 6.3]*. The polynomial, not the function, is
-the model: the series converges only below the Laplace limit e = 0.6627 (Brouwer and Clemence 1961), and above it
-the two differ widely. The library evaluates the polynomial at every e, with no closed form and no other expansion
+the model. The Laplace limit e = 0.6627 concerns a Maclaurin expansion about e = 0 (Brouwer and Clemence 1961),
+not an eccentricity cutoff for the Hansen integral or a bound on a finite polynomial's truncation error.
+The library evaluates the finite polynomial at every e, with no closed form and no other expansion
 *[probe 6.3: at e = 0.7 the library's n-dot matches the polynomials to 4e-14 and the closed-form functions only to
 7.5e-4]*. Each term of 6.1 takes the G_lpq of its own (l, p, q): the 0.5-day class has no k = 0 term (no G_20,-2,
 for example), and the 16 h term (4,3,1,0) uses G_410. The library's coefficients agree with the exact Maclaurin coefficients to 2e-8 relative, with these
@@ -1260,6 +1264,17 @@ exceptions *[study; probe 6.3, 6.5, 6.6]*:
 - 1 day class, G_30,-1: the polynomial ends at e^25, while its derivative series also has the e^26 term
   27 (c_27 + 2 b_27) e^26 = 0.5751355376693 e^26 (c_27 the exact e^27 coefficient of G_30,-1, whose c_1 is -1): the
   derivative of the polynomial through e^27 of the previous item, as the 16 h class uses it.
+
+**AP eccentricity approximation.** Section 16.2 uses the corrected Maclaurin coefficients below
+`kSeriesE = 0.3`. When the expansion center satisfies e0 >= 0.3 and e0 + 0.001 < 1, the original
+resonance terms use the Hansen integral at e0 and a third-order Taylor expansion in de = e - e0 for
+current e >= 0.3; otherwise they use the corrected Maclaurin polynomial. They are exact at the
+epoch eccentricity to the numerical integral's precision, third order within |de| <= 0.02. The measured
+per-term relative truncation errors reported on 2026-11-02 are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02,
+and 4-15% at 0.05. These are measured errors, not uniform bounds over all terms or eccentricities.
+The stated approximation range is |de| <= 0.02; it is not an enforced propagation-refusal condition.
+The epoch class expands about epoch e0; a rebuilt class (16.2) expands about its current eccentricity.
+The added high-degree half-day tail has its own quadrature and cubic tables described in 16.2.
 
 ### 6.5 Checks against the oracle
 
@@ -1416,6 +1431,15 @@ The grid depends only on the epoch state, so a state does not depend on which ti
 what order *[probe 9.1: direct, 1-minute stepped and backward-approach requests agree to 0 mm]*. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
+
+**Side B cache and query work.** XP/AP retains 12 sparse checkpoints and the latest pair of bracketing
+nodes per direction. The ingest-time stride targets roughly eight days each way; checkpoints fill lazily.
+A query inside an already cached bracketing interval interpolates without integration. The first distant
+query integrates from the epoch through its bracket, creating checkpoints on the way. Once the intervening
+checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond the stored
+span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
+The node cache has bounded storage, not a time-independent bound on query work. AP class crossings can
+allocate temporary replacement coefficient tables (16.2). Request order does not change the epoch-anchored grid.
 
 **AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
 n = 1.0027 rev/day, e = 0.0002, i = 0.1 or 15 degrees, node = 40 degrees, argument of perigee = 30 degrees,
@@ -1796,10 +1820,13 @@ by the same taper, so a term crossing its band moves from one to the other), whe
 its position amplitude is below 0.5 m. G is g0 + g1 e about the epoch e: below e = 0.03, q = 0 takes 1 + (l (l + 1) / 4 - w^2) e^2 and
 q = +-1 takes ((l + 1) / 2 + q w) e, above it the Hansen coefficient.
 
-Section 6's classes keep their terms, and with d above 0 take the correct functions at the current elements where the library
-departs from them, in place of 6.3 and 6.4's epoch values: the current class with every AP table rebuilt together when it differs from the epoch class, F and G at the current e and i, the exact dF_632/di,
-G_410 with e^2 coefficient 1, dG_40,-2/de with its e^13 and e^15 terms, G_30,-1 with its e^27 term, and above e = 0.3 G from the
-Hansen coefficient expanded to third order about the epoch e of the epoch class, valid past the Laplace limit e = 0.6627.
+Section 6's classes keep their terms. With d above 0, every AP table is rebuilt together when the current
+class differs from the epoch class. F is evaluated at the current inclination with the exact dF_632/di;
+G_410 has e^2 coefficient 1, dG_40,-2/de includes its e^13 and e^15 terms, and G_30,-1 includes its e^27 term.
+When the local Hansen expansion of 6.4 is selected, G for the original resonance terms is exact at the epoch eccentricity to numerical-integral
+precision and third order within |de| <= 0.02, as specified in 6.4. The measured per-term relative errors
+are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05. A rebuilt class centers its expansion at the
+current eccentricity. The Laplace limit does not supply a validity bound for this local expansion.
 
 The half-day tail uses cubic expansions of F about the epoch inclination and G about the epoch eccentricity,
 with their consistent derivatives. F comes from the normalized Legendre recurrence; G comes from shared
@@ -1900,6 +1927,10 @@ stored in `test/results/geo-step-convergence.json`.
 
 
 ## References
+
+- Payne, T., Hoots, F., Butkus, A., Slatton, Z., and Nguyen, D. (2022).
+  [Improvements to the SGP4 Propagator (SGP4-XP)](https://amostech.com/TechnicalPapers/2022/Astrodynamics/Payne_2.pdf).
+  Advanced Maui Optical and Space Surveillance Technologies Conference (AMOS).
 
 - Brouwer, D. (1959). Solution of the problem of artificial satellite theory without drag. AJ 64, 378-397.
 - Lyddane, R. H. (1963). Small eccentricities or inclinations in the Brouwer theory of the artificial satellite.

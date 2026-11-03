@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.4.
+Version 0.4.5.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -10,7 +10,7 @@ An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose T
 | Theory | Sets | Source |
 |---|---|---|
 | SGP4 | type 0 | SPACETRACK REPORT No. 3; Vallado et al. 2006 (AFSPC mode) |
-| SGP4XP | type 4: BTERM, AGOM (m^2/kg) | the US Space Force SGP4-XP theory, clean room (side B): the public change list, then SPEC.md section by section |
+| SGP4XP | type 4: BTERM, AGOM (m^2/kg) | [Payne et al. (2022)](https://amostech.com/TechnicalPapers/2022/Astrodynamics/Payne_2.pdf); clean-room implementation from the public change list and SPEC.md |
 
 License: Apache-2.0 ([LICENSE](LICENSE)), the SGP4/SDP4 base included (written clean room from Spacetrack Report No. 3
 and the corrections AIAA 2006-6753 documents); [NOTICE](NOTICE) names what the build compiles and reads.
@@ -240,10 +240,13 @@ Reproduce (needs /opt/data/sdn-archive/reference-states and the experiment's row
 
 ## Memory and time
 
-One allocation per ingest: a propagation record per object plus, for resonant objects, checkpoints of the
-integrated resonance state at every 720-minute node for 32 days each way. Nothing allocates while
-propagating. A time within the checkpoint span costs no integration; beyond it, integration from the last
-checkpoint. Results do not depend on the order times are requested in.
+XP/AP keeps 12 sparse checkpoints and the latest bracketing pair per direction, with the stride chosen
+at ingest to span roughly eight days each way. Checkpoints are filled lazily. A query in an already cached
+bracket only interpolates; the first distant query integrates from the epoch. Once the intervening
+checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond that span,
+work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
+query work is not bounded independently of lead time. AP class crossings can allocate temporary coefficient
+tables. Results do not depend on request order. SPEC 9 describes the cache and grid.
 
 
 ## SGP4XP status
@@ -270,6 +273,9 @@ third-order Runge-Kutta step with its fallbacks, cubic Hermite between nodes, Br
 
 
 ## Measured (2026-10-23, owner Mac, Node, browser host)
+
+Conformance measures agreement with the USSF library, not orbit accuracy. Orbit accuracy requires forward
+errors against independent truth, with leads counted from the fit's end.
 
 Conformance (`test/results/conformance.json`; the oracle, USSF Sgp4Prop 9.9, black box; 8 times per set over
 7 days): SGP4 type-0 control, 1,200 sets: max 0.09 mm. SGP4XP, 10,200 sets: median 0.37 µm (LEO 49 µm, SSO
@@ -346,3 +352,8 @@ cutoffs (18 GE, 36 IG windows), day-3 median forward errors change from 46.658/3
 day-7 GE worsens from 217.657 to 235.913 m. Numerical convergence does not establish uniform forecast
 improvement. SPEC 9 and 16 give the fixtures, shared-truth limitation and all leads;
 `test/geo-step-convergence.e2e.mjs` enforces <5 m, <2x cost and the unchanged XP digest.
+
+When the local Hansen expansion is selected (SPEC 6.4), the original AP resonance coefficients are exact at the epoch eccentricity
+to numerical-integral precision and third order within |de| <= 0.02. Measured per-term relative truncation
+errors are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05; these are not uniform error bounds.
+SPEC 6.4 and 16.2 distinguish this approximation from the added high-degree half-day tail.
