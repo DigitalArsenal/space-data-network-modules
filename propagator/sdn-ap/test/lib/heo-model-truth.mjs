@@ -47,7 +47,7 @@ export async function runModelTruth(c){
  let initial=rotate(m,jd.whole,jd.frac,Array.from(a(48,6)),FRAME_PROBE.TEME_TO_GCRF);assert.equal(initial.status,0);
  let seed;
  if(c.mode==='seed'){
-  const obj=Object.assign(new OMMT(),{EPOCH:epoch,MEAN_ELEMENT_THEORY:1,MEAN_MOTION:c.n,ECCENTRICITY:c.e,INCLINATION:c.i,RA_OF_ASC_NODE:c.raan,ARG_OF_PERICENTER:c.argp,MEAN_ANOMALY:c.ma,BSTAR:0,MEAN_MOTION_DDOT:0,NORAD_CAT_ID:99001,USER_DEFINED_PARAMETERS:[Object.assign(new OMMUserDefinedParameterT(),{PARAM_NAME:'SDNAP_GRAVITY_TERMS',PARAM_VALUE:'31,20'})]});
+  const obj=Object.assign(new OMMT(),{EPOCH:epoch,MEAN_ELEMENT_THEORY:1,MEAN_MOTION:c.n,ECCENTRICITY:c.e,INCLINATION:c.i,RA_OF_ASC_NODE:c.raan,ARG_OF_PERICENTER:c.argp,MEAN_ANOMALY:c.ma,BSTAR:c.drag?(c.bterm??.044):0,MEAN_MOTION_DDOT:0,NORAD_CAT_ID:99001,USER_DEFINED_PARAMETERS:[Object.assign(new OMMUserDefinedParameterT(),{PARAM_NAME:'SDNAP_GRAVITY_TERMS',PARAM_VALUE:'31,20'}),...(c.drag?[Object.assign(new OMMUserDefinedParameterT(),{PARAM_NAME:'SDNAP_ATMOSPHERE_MODEL',PARAM_VALUE:'NRLMSISE00'})]:[])]});
   const b=new fb.Builder(1024);OMM.finishOMMBuffer(b,obj.pack(b));seed=b.asUint8Array().slice();
   const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:oem([Object.assign(new Line(),{EPOCH:epoch})])}]);
   const v=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
@@ -80,7 +80,7 @@ export async function runModelTruth(c){
   const loaded=await ph.invoke({methodId:'load_epochs',inputs:[cfg,{portId:'space_weather',typeRef:type('SPW'),payload:weather},{portId:'omm',typeRef:type('OMM'),payload:omm}]});
   assert.equal(loaded.statusCode,0,loaded.errorMessage);
   const px=ph.instance.exports,pp=px.sdnap_alloc(56),fitEpoch=Date.parse(parsed.EPOCH+'Z');
-  for(const day of [0,1,3,7]){const minutes=(t0+(FIT+day)*DAY-fitEpoch)/60000;assert.equal(px.sdnap_test_class_probe(minutes,pp),0);classDiagnostics.push({day,values:Array.from(new Float64Array(ph.memory.buffer,pp,7))});}
+  for(const day of [0,1,3,7]){const minutes=(t0+((c.mode==='seed'?0:FIT)+day)*DAY-fitEpoch)/60000;assert.equal(px.sdnap_test_class_probe(minutes,pp),0);classDiagnostics.push({day,values:Array.from(new Float64Array(ph.memory.buffer,pp,7))});}
   px.sdnap_free(pp);await ph.close?.();
  }
  const result={name:c.name,fitted:{epoch:parsed.EPOCH,n:parsed.MEAN_MOTION,e:parsed.ECCENTRICITY,bterm:parsed.BSTAR},classDiagnostics,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
