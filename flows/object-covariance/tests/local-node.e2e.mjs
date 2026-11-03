@@ -77,7 +77,7 @@ try {
  const ages=[0,0.5,1,2,3,5,7],stored=of(after,900001).find(r=>same(r.METADATA.START_TIME,epoch(96)));
  assert.equal(stored.STATE_EPOCHS.length,ages.length);assert.equal(stored.COVARIANCE_DATA.length,21*ages.length);assert.equal(stored.COV_REALISM.length,ages.length);assert(stored.PROVENANCE);
  assert(same(stored.STATE_EPOCHS[0],epoch(96)),'the first row is at the new OMM epoch');
- assert(stored.COV_REALISM.some(c=>c.RULE===5),'EmpiricalHistoryShrunk rows (SDS 1.261.0 covarianceRule 5)');assert(stored.COV_REALISM.every(c=>c.RULE!==2),'ScaledFit never stands in for the empirical rule');
+ assert(stored.COV_REALISM.every(c=>c.RULE===3||c.RULE===4),'every row is the population model (SDS 1.261.0 covarianceRule 3 or 4): the covariance is the stratum prior, the history is not applied');
  const history=(await scan(api,node.base,'OMM.fbs','celestrak-gp')).filter(b=>unpack(api,'OMM',b).NORAD_CAT_ID===900001);
  const newest=history.map(b=>unpack(api,'OMM',b)).find(o=>same(o.EPOCH+(/[zZ]$/.test(o.EPOCH)?'':'Z'),epoch(96)));assert(newest,'the new OMM is stored');
  // The request id is the position the record carries in its message id (object-covariance|<key>|<epoch>|<method>|<request id>).

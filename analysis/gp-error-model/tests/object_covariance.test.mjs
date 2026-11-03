@@ -106,54 +106,22 @@ function interpolate(values, age, model = kc) {
   }
 }
 // The rule's oracle, in test arithmetic: the population covariance at the age (interpolated moment times interpolated
-// factor, the module's population fallback), the history's variance ratios per bin (at least 1, and 1 where the bin has
-// fewer than `threshold` older sets) interpolated at the age, and P_o = P + [D P D - P]_+ by a Jacobi eigendecomposition.
-function psdPartOfInflation(P, d2) {
-  const s = Array.from({ length: 6 }, (_, i) => Math.sqrt(P[6 * i + i]));
-  const d = d2.map(Math.sqrt);
-  const A = Array.from({ length: 36 }, (_, k) => { const i = Math.floor(k / 6), j = k % 6; return (d[i] * d[j] - 1) * P[k] / (s[i] * s[j]); });
-  const V = Array.from({ length: 36 }, (_, k) => (k % 7 === 0 ? 1 : 0));
-  for (let sweep = 0; sweep < 100; sweep++) {
-    for (let p = 0; p < 6; p++) for (let q = p + 1; q < 6; q++) {
-      if (Math.abs(A[6 * p + q]) < 1e-300) continue;
-      const theta = (A[7 * q] - A[7 * p]) / (2 * A[6 * p + q]);
-      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1)), c = 1 / Math.sqrt(t * t + 1), sn = t * c;
-      for (let k = 0; k < 6; k++) {
-        const x = A[6 * k + p], y = A[6 * k + q]; A[6 * k + p] = c * x - sn * y; A[6 * k + q] = sn * x + c * y;
-      }
-      for (let k = 0; k < 6; k++) {
-        const x = A[6 * p + k], y = A[6 * q + k]; A[6 * p + k] = c * x - sn * y; A[6 * q + k] = sn * x + c * y;
-      }
-      for (let k = 0; k < 6; k++) {
-        const x = V[6 * k + p], y = V[6 * k + q]; V[6 * k + p] = c * x - sn * y; V[6 * k + q] = sn * x + c * y;
-      }
-    }
-  }
-  const out = Array(36).fill(0);
-  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
-    let e = 0;
-    for (let k = 0; k < 6; k++) if (A[7 * k] > 0) e += A[7 * k] * V[6 * i + k] * V[6 * j + k];
-    out[6 * i + j] = P[6 * i + j] + e * s[i] * s[j];
-  }
-  // The rounding guard of the rule: 1e-12 times the largest ratio, of each variance.
-  const largest = Math.max(1, ...d2);
-  for (let k = 0; k < 6; k++) out[7 * k] += 1e-12 * largest * s[k] * s[k];
-  return out;
-}
+// factor, the module's population fallback), and the history ratio the report carries beside it (the containing bin's second
+// moment over the bin prior's variance per axis, where the bin has at least `threshold` older sets).
 function expected(stats, age, model = kc, threshold = 12) {
-  const cells = [], factors = [], ratios = [], population = [];
-  const diag = (k) => k * (k + 1) / 2 + k;
+  const cells = [], factors = [], population = [];
   for (let i = 0; i < stats.length; i++) {
     const cell = model.strata.find((s) => s.regimeIndex === regimeIndex && s.ageIndex === i && s.n >= (model.minimumBinSamples ?? 0));
     if (!cell) continue;
     const f = model.factors?.find((s) => s.regimeIndex === regimeIndex && s.ageIndex === i)?.factor ?? 1;
     cells[i] = cell.covariance; factors[i] = [f]; population[i] = cell.covariance.map((x) => x * f);
-    ratios[i] = Array.from({ length: 6 }, (_, k) => stats[i].sets >= threshold ? Math.max(1, stats[i].moment[diag(k)] / population[i][diag(k)]) : 1);
   }
-  const P = full(interpolate(cells, age, model).map((x) => x * interpolate(factors, age, model)[0] * 1e6));
-  const d2 = interpolate(ratios, age, model);
-  return { covariance: lower(psdPartOfInflation(P, d2)), population: P, d2 };
+  const b = binOf(age, model), diag = (k) => k * (k + 1) / 2 + k;
+  const ratio = stats[b].sets >= threshold && population[b]
+    ? Array.from({ length: 6 }, (_, k) => stats[b].moment[diag(k)] / population[b][diag(k)]) : null;
+  return { covariance: interpolate(cells, age, model).map((x) => x * interpolate(factors, age, model)[0] * 1e6), ratio };
 }
+const evidenceRatio = (evidence) => { const m = /ratio=(.*)$/.exec(evidence)[1]; return m === 'none' ? null : m.split(' ').map(Number); };
 async function stateAt(s, age) {
   const epoch = new Date(Date.parse(s.epoch) + age * 86400000).toISOString();
   const out = await call('common_epoch', [elements([s]), json('options', { targets: [{ norad: s.norad, epoch, origin: 'set', originSet: s.epoch, sets: [s.epoch] }] })]);
@@ -179,7 +147,7 @@ function eigenvalues(m) {
   return Array.from({ length:6 }, (_,i)=>a[7*i]);
 }
 
-test('history covariance: common_epoch residual oracle, finalize clipping, the inflate-only rule and GCRF rotation', async () => {
+test('history covariance: common_epoch residual oracle, finalize clipping, the stratum prior and GCRF rotation', async () => {
   const { stats } = await oracle();
   // finalize independently reads the oracle's sufficient statistics and signed
   // histograms; its quantiles must agree, including the designed outlier removal.
@@ -199,20 +167,25 @@ test('history covariance: common_epoch residual oracle, finalize clipping, the i
   assert.ok(stats.some((s) => s.clipped.n < s.n), 'the outlier exercises clipping');
   const ages = [0.25, 0.5, 0.8, 1.125, 2, 3, 5, 7];
   const got = await run(history, ages);
-  assert.equal(got.covariance.rule, 'empirical-history-inflated');
+  assert.equal(got.covariance.rule, 'population-prior');
   assert.equal(got.covariance.calibrationVersion, '0.8.0:' + kc.id);
   for (let i = 0; i < ages.length; i++) {
     const age = ages[i], row = got.covariance.objects[i], label = got.report.objects[i].rows[0], bin = binOf(age);
-    assert.equal(row.status, 'EMPIRICAL');
-    const want = expected(stats, age); close(row.covarianceRtn, want.covariance, 1e-8);
-    assert.equal(label.scaleFactor, 0); // the prior is never given up: the history only raises it
+    assert.equal(row.status, 'POPULATION');
+    const want = expected(stats, age); close(row.covarianceRtn, want.covariance);
+    assert.equal(label.scaleFactor, 0); // the history is carried, not applied
+    assert.equal(got.rawReport.OBJECTS[i].ROWS[0].REALISM.SHRINKAGE_WEIGHT, 1);
     const pop = await populationOracle(anchor, age);
-    assertAbovePrior(row.covarianceRtn, pop.covarianceRtn);
+    assert.deepEqual(row.covarianceRtn, pop.covarianceRtn);
+    // The history statistics beside it: this bin's pairs and sets, and the per-axis ratio the oracle's moments give.
+    assert.match(label.evidence, /history\/1 not applied: olderSets=72 /);
+    if (want.ratio) close(evidenceRatio(label.evidence), want.ratio, 1e-5); else assert.equal(evidenceRatio(label.evidence), null);
     assert.equal(label.samples, stats[bin].clipped.n); assert.equal(label.objects, stats[bin].sets);
-    assert.equal(label.rule, 5); assert.equal(label.calibration, 'UNCALIBRATED');
+    assert.equal(label.rule, 3); assert.equal(label.calibration, 'UNCALIBRATED');
     assert.equal(got.report.objects[i].calibrated, false);
     const cvr = got.rawReport.OBJECTS[i].ROWS[0].REALISM;
-    assert.ok(Number.isNaN(cvr.MEAN_D2_OVER_3) && Number.isNaN(cvr.COVERAGE_95)); assert.ok(!cvr.TEST_WINDOW);
+    assert.equal(cvr.RULE, E.covarianceRule.SourceModel); assert.equal(cvr.CALIBRATION, E.covarianceCalibration.Uncalibrated);
+    assert.equal(cvr.HISTORY_SETS, stats[bin].sets);
     // Independent rotation path: factor-one calibrate_covariance, on the same
     // SGP4 GCRF state, with the TEST's empirical matrix in SI as native covariance.
     const rotation = await call('calibrate_covariance', [json('model', { kind: 'e14-factors', version: 'rotation', regimes: kc.regimes,
@@ -224,7 +197,7 @@ test('history covariance: common_epoch residual oracle, finalize clipping, the i
   }
 });
 
-test('three older sets: bit-identical population fallback, zero weight and reasons', async () => {
+test('three older sets: the population answer, bit for bit, and a history of three older sets in the report', async () => {
   const short = history.slice(-4), ages = [0, 0.8, 7.9, 8];
   const got = await run(short, ages);
   for (let i = 0; i < ages.length; i++) {
@@ -233,37 +206,27 @@ test('three older sets: bit-identical population fallback, zero weight and reaso
     assert.equal(row.status, 'POPULATION'); assert.deepEqual(row.covarianceRtn, want.covarianceRtn);
     close(row.covarianceInertial, want.covarianceInertial, 1e-12);
     assert.equal(got.report.objects[i].rows[0].scaleFactor, 0);
-    assert.ok(got.report.objects[i].notes.some((n) => /too few older sets/.test(n.reason)));
+    assert.match(got.report.objects[i].rows[0].evidence, /history\/1 not applied: olderSets=3 .* ratio=none$/);
   }
 });
 
-// O - P is positive semidefinite (checked on the diagonally normalized difference, so position and velocity units mix safely).
-function assertAbovePrior(o, p) {
-  const O = full(o), P = full(p), s = Array.from({ length: 6 }, (_, i) => Math.sqrt(P[7 * i]));
-  assert.ok(eigenvalues(O.map((x, k) => (x - P[k]) / s[Math.floor(k / 6)] / s[k % 6])).every((v) => v >= -1e-10), 'the covariance is below the prior in some direction');
-}
-
-test('bin threshold and the raise: below the threshold the prior, at it the prior plus a positive semidefinite part', async () => {
+test('bin threshold: it decides only whether the report carries the per-axis ratio; the covariance is the prior either way', async () => {
   const { stats } = await oracle(), age = 2, b = binOf(age), n = stats[b].sets;
   const pop = await populationOracle(anchor, age);
   const below = await run(history, [age], { config: { minimumBinSets: n + 1 } });
-  assert.equal(below.covariance.objects[0].status, 'POPULATION');
-  assert.deepEqual(below.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
-  assert.equal(below.report.objects[0].rows[0].scaleFactor, 0);
   const at = await run(history, [age], { config: { minimumBinSets: n } });
-  assert.equal(at.covariance.objects[0].status, 'EMPIRICAL');
-  assert.equal(at.report.objects[0].rows[0].scaleFactor, 0);
-  assertAbovePrior(at.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
-  // The history of this designed set exceeds the prior on some axis at 2 days, so the raise is real; and the raise is
-  // not the diagonal scaling alone: D P D is also below the result (P_o >= D P D as well as P_o >= P).
-  const want = expected(stats, age);
-  assert.ok(want.d2.some((x) => x > 1), 'the designed history exceeds the prior');
-  assert.notDeepEqual(at.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
-  const d = want.d2.map(Math.sqrt), P = full(pop.covarianceRtn);
-  assertAbovePrior(at.covariance.objects[0].covarianceRtn, lower(P.map((x, k) => x * d[Math.floor(k / 6)] * d[k % 6])));
-  // No shrinkage knob: the object config has no prior weight any more.
-  const ignored = await run(history, [age], { config: { shrinkage: 0 } });
-  assert.deepEqual(ignored.covariance, (await run(history, [age])).covariance);
+  for (const got of [below, at]) {
+    assert.equal(got.covariance.objects[0].status, 'POPULATION');
+    assert.deepEqual(got.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
+    assert.equal(got.report.objects[0].rows[0].scaleFactor, 0);
+  }
+  assert.equal(evidenceRatio(below.report.objects[0].rows[0].evidence), null);
+  close(evidenceRatio(at.report.objects[0].rows[0].evidence), expected(stats, age, kc, n).ratio, 1e-5);
+  // The designed history exceeds the prior on some axis at 2 days, and the covariance still is the prior: no raise, no shrink.
+  assert.ok(evidenceRatio(at.report.objects[0].rows[0].evidence).some((x) => x > 1));
+  // Gone knobs: shrinkage and minimumSets change nothing.
+  const base = await run(history, [age]);
+  for (const config of [{ shrinkage: 0 }, { minimumSets: 1000 }]) assert.deepEqual((await run(history, [age], { config })).covariance, base.covariance);
 });
 
 test('causality, duplicate stream order, object isolation and request order', async () => {
@@ -274,50 +237,49 @@ test('causality, duplicate stream order, object isolation and request order', as
   assert.deepEqual(appended.covariance, base.covariance); assert.deepEqual(appended.report, base.report);
   const shuffled = await run([...history].reverse(), [2]); assert.deepEqual(shuffled.covariance, base.covariance);
   const changed = await run(history.filter((_, i) => i !== 5), [2]);
-  assert.notDeepEqual(changed.covariance.objects[0].covarianceRtn, base.covariance.objects[0].covarianceRtn);
+  assert.deepEqual(changed.covariance, base.covariance, 'the history never moves the covariance');
+  assert.notDeepEqual(changed.report, base.report, 'it moves the statistics beside it');
   const duplicate = { ...history[5], m: history[5].m + 60 };
   const lastWins = await run([duplicate, ...history], [2]); assert.deepEqual(lastWins.covariance, base.covariance);
-  const replaced = await run([...history, duplicate], [2]); assert.notDeepEqual(replaced.covariance, base.covariance);
+  const replaced = await run([...history, duplicate], [2]); assert.notDeepEqual(replaced.report, base.report);
   const ordered = await run([...history, ...unrelated], [], { requests: [request(2, unrelated.at(-1), 'second'), request(2, anchor, 'first')] });
   assert.deepEqual(ordered.covariance.objects.map((o) => o.id), ['second', 'first']);
   assert.deepEqual(ordered.report.objects.map((o) => o.object), ['second', 'first']);
   assert.deepEqual(ordered.covariance.objects[1].covarianceRtn, base.covariance.objects[0].covarianceRtn);
 });
 
-for (const [status, sets] of [['EMPIRICAL', history], ['POPULATION', history.slice(-4)]]) {
-  test(`embedded default matches the frozen $ERM bytes for ${status}`, async () => {
+for (const [status, sets] of [['72 older sets', history], ['3 older sets', history.slice(-4)]]) {
+  test(`embedded default matches the frozen $ERM bytes with ${status}`, async () => {
     // Same independently verified history/oracle, UTC and SI RTN/GCRF units as
     // above. Zero tolerance: changing only model delivery must preserve every
     // covariance/report byte, including NaNs and the frozen model's own CVR ID.
     const explicit = await run(sets, [2], { model: frozenModel });
     const embedded = await run(sets, [2], { model: null });
-    assert.equal(explicit.covariance.objects[0].status, status);
+    assert.equal(explicit.covariance.objects[0].status, 'POPULATION');
     assert.deepEqual(embedded.frames.map((f) => f.portId), ['covariance', 'report']);
     assert.deepEqual(embedded.frames, explicit.frames);
     assert.equal(embedded.rawReport.OBJECTS[0].ROWS[0].REALISM.MODEL_ID, raw(frozenModel).MODEL.ID);
-    const want = status === 'EMPIRICAL' ? expected((await oracle()).stats, 2).covariance
-      : (await populationOracle(anchor, 2)).covarianceRtn;
+    const want = (await populationOracle(anchor, 2)).covarianceRtn;
     close(embedded.covariance.objects[0].covarianceRtn, want);
   });
 }
 
-test('supplied scaled model overrides the embedded prior for empirical and population requests', async () => {
+test('supplied scaled model overrides the embedded prior', async () => {
   // Designed factor of two, independent of this method's output. The oracle,
   // UTC epochs, SI RTN/GCRF units and 1e-9 relative rationale are stated above.
   // Stream selection equivalence requires zero tolerance on both output frames.
   const alternate = { ...kc, id: 'scaled-prior', pooled: false,
     strata: kc.strata.map((s) => ({ ...s, covariance: s.covariance.map((x) => 2 * x) })) };
-  for (const [status, sets] of [['EMPIRICAL', history], ['POPULATION', history.slice(-4)]]) {
+  for (const [status, sets] of [['72 older sets', history], ['3 older sets', history.slice(-4)]]) {
     const embedded = await run(sets, [2], { model: null });
     const explicit = await run(sets, [2], { model: alternate });
     const selected = await run(sets, [2], { model: [alternate, { ...kc, pooled: false }] });
-    assert.equal(explicit.covariance.objects[0].status, status);
+    assert.equal(explicit.covariance.objects[0].status, 'POPULATION');
     assert.notDeepEqual(explicit.covariance.objects[0].covarianceRtn, embedded.covariance.objects[0].covarianceRtn);
     assert.notDeepEqual(explicit.frames, embedded.frames);
     assert.deepEqual(selected.frames, explicit.frames);
     assert.equal(explicit.rawReport.OBJECTS[0].ROWS[0].REALISM.MODEL_ID, alternate.id);
-    const want = status === 'EMPIRICAL' ? expected((await oracle()).stats, 2, alternate).covariance
-      : (await populationOracle(anchor, 2, alternate)).covarianceRtn;
+    const want = (await populationOracle(anchor, 2, alternate)).covarianceRtn;
     close(explicit.covariance.objects[0].covarianceRtn, want);
   }
 });
@@ -353,7 +315,7 @@ test('config window and pair limit; 200 epoch cap', async () => {
 test('typed contract: raw CVR, wrong arms, unknown ports, bad ages and config', async () => {
   const r = await run(history, [2]);
   assert.equal(r.rawReport.OBJECTS[0].ROWS[0].REALISM.CALIBRATION, E.covarianceCalibration.Uncalibrated);
-  assert.equal(r.rawReport.OBJECTS[0].ROWS[0].REALISM.RULE, E.covarianceRule.EmpiricalHistoryShrunk);
+  assert.equal(r.rawReport.OBJECTS[0].ROWS[0].REALISM.RULE, E.covarianceRule.SourceModel);
   const valid = [elements(history), modelsFrame([kc]), json('request', { objects: [request(2)] })];
   const unknown = await invoke('object_covariance', [...valid, frame('unknown', 'objects', { objects: [] })]); assert.notEqual(unknown.statusCode, 0);
   const wrong = await invoke('object_covariance', [elements(history), modelsFrame([kc]), frame('request', 'model', kc)]); assert.notEqual(wrong.statusCode, 0);
@@ -388,13 +350,13 @@ test('request/model streams preserve order; history window excludes old sets; em
   const response = await invoke('object_covariance', [elements(history), modelsFrame([kc]), { ...frame('request', 'objects', {}), payload: records }]);
   assert.equal(response.statusCode, 0, response.errorMessage);
   const got = outputs(response);
-  assert.deepEqual(got.covariance.objects.map((o) => [o.id, o.status]), [['zero', 'POPULATION'], ['two', 'EMPIRICAL']]);
+  assert.deepEqual(got.covariance.objects.map((o) => [o.id, o.status]), [['zero', 'POPULATION'], ['two', 'POPULATION']]);
   assert.deepEqual(got.covariance.objects[0].covarianceRtn, (await populationOracle(anchor, 0)).covarianceRtn);
   const old = { ...history[0], epoch: new Date(Date.parse(history[0].epoch) - 3600000).toISOString(), m: 75 };
   assert.deepEqual((await run([old, ...history], [2])).covariance, (await run(history, [2])).covariance);
   const shortened = await run(history.slice(-10), [7]);
   assert.equal(shortened.covariance.objects[0].status, 'POPULATION');
-  assert.ok(shortened.report.objects[0].notes.some((n) => /outside the history/.test(n.reason)));
+  assert.match(shortened.report.objects[0].rows[0].evidence, /history\/1 not applied: olderSets=9 /);
 });
 
 test('millisecond republications preserve covariance and distinct older-set counts for either requested epoch', async () => {
@@ -425,21 +387,11 @@ test('millisecond republications preserve covariance and distinct older-set coun
         assert.equal(label.objects ?? 0, baseLabel.objects ?? 0);
         assert.equal(label.scaleFactor, baseLabel.scaleFactor);
         assert.equal(got.report.objects[i].epoch, namedAnchor.epoch, 'report echoes the requested epoch');
-        if (ages[i] < 0.25) {
-          assert.equal(row.status, 'POPULATION', 'republications must not make bin zero empirical');
-          assert.deepEqual(row.covarianceRtn, (await populationOracle(retainedAnchor, ages[i])).covarianceRtn);
-        } else {
-          assert.equal(row.status, 'EMPIRICAL');
-          close(row.covarianceRtn, expected(stats, ages[i]).covariance);
-        }
+        assert.equal(row.status, 'POPULATION');
+        close(row.covarianceRtn, expected(stats, ages[i]).covariance);
       }
-      // The overall count is not a wire field. Pin it via its gate: 73 retained
-      // sets mean exactly 72 older sets, including when the stream has 146 rows.
-      for (const minimumSets of [retained.length - 1, retained.length]) {
-        const gated = await run(stream, [], { config: { minimumSets }, requests: [request(2, namedAnchor)] });
-        assert.equal(gated.covariance.objects[0].status, minimumSets === retained.length - 1 ? 'EMPIRICAL' : 'POPULATION');
-        assert.equal(gated.report.objects[0].notes.some((n) => /too few older sets/.test(n.reason)), minimumSets === retained.length);
-      }
+      // The retained history is 73 sets, 72 older, whatever the stream holds (146 rows with the republications).
+      assert.match(got.report.objects[0].rows[0].evidence, /history\/1 not applied: olderSets=72 /);
     }
   }
 });
@@ -457,7 +409,7 @@ test('half-second request offsets resolve the retained set; two-second offsets a
   for (let i = 0; i < offsetsMs.length; i++) {
     const row = got.covariance.objects[i];
     if (Math.abs(offsetsMs[i]) < 1000) {
-      assert.equal(row.status, 'EMPIRICAL');
+      assert.equal(row.status, 'POPULATION');
       assert.deepEqual(row.covarianceRtn, exact.covarianceRtn);
       assert.deepEqual(row.covarianceInertial, exact.covarianceInertial);
       close(row.covarianceRtn, expected(stats, 2).covariance);

@@ -17,8 +17,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "minVersion": "0.12.0",
-      "maxVersion": "0.12.0"
+      "minVersion": "0.14.0",
+      "maxVersion": "0.14.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",

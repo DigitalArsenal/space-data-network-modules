@@ -852,7 +852,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.12.0",
+      "version": "0.14.0",
       "methodIds": [
         "accumulate",
         "attach_covariance",
