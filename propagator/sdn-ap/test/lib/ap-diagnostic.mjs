@@ -9,6 +9,7 @@ const modulesRoot=path.resolve(moduleRoot,'../..');
 export function buildDiagnostic(name,extra,transform=s=>s){
  const root=path.join('/Users/tj/software/terrain-work/body-look/codex-apfix-d9',name);
  const dir=path.join(root,'propagator/sdn-ap');fs.mkdirSync(dir,{recursive:true});
+ const foundation=path.join(root,'foundation');if(!fs.existsSync(foundation))fs.symlinkSync(path.join(modulesRoot,'foundation'),foundation,'dir');
  for(const f of ['build.mjs','package.json','plugin-manifest.json','LICENSE','NOTICE'])fs.copyFileSync(path.join(moduleRoot,f),path.join(dir,f));
  for(const d of ['src','LICENSES'])fs.cpSync(path.join(moduleRoot,d),path.join(dir,d),{recursive:true});
  const nm=path.join(dir,'node_modules');if(!fs.existsSync(nm))fs.symlinkSync(path.join(moduleRoot,'node_modules'),nm,'dir');
