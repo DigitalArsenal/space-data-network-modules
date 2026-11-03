@@ -944,18 +944,15 @@ inline double eccentric_longitude(const double* y) {
 
 /// The drag's part of the averaged rates (SPEC 3.4), added to `out`. AP above e 0.3 (SPEC 16.12): the mean of the
 /// perigee passages before and after t, each at its own time.
-/// The mean of the drag's rates at the passages t0 and t1 (SPEC 16.12), at mean state y.
-inline void drag_pair(const RateContext& ctx, double t0, double t1, const double* y, const Frame& fr, const Kepler& k,
-                      const AngleTrig& ag, const Bodies& b, double* out) {
-  for (const double tq : {t0, t1})
-    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
-               out, true, 0.5);
-}
 inline void drag_part(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag,
                       const Bodies& b, double* out) {
   if (ctx.drag_pass) {
     const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
-    drag_pair(ctx, tp, tp + period, y, fr, k, ag, b, out);
+    for (int s = 0; s < 2; ++s) {
+      const double tq = tp + s * period;
+      drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
+                 out, true, 0.5);
+    }
   } else {
     drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out);
   }
@@ -1030,7 +1027,7 @@ inline bool drag_orbit_check(const RateContext& ctx, double t, const double* y, 
 
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
 inline bool reclass_rates(const RateContext&, double, const double*, double*);
-inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*, const double* = nullptr);
+inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*);
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out) {
   if (state_test(ctx, y) != 0) return false;
   if (ctx.ap_resonance && ap_resonance_class(ctx, y[kN]) != ctx.resonance)
@@ -1211,13 +1208,11 @@ inline void hermite(const Node& a, const Node& b, double t, double* y) {
 /// TEME position (km) and velocity (km/s) of the mean equinoctial state y.
 /// `shared`, when given, holds the Sun and Moon at the output time (a batch at
 /// one time evaluates them once for every object).
-/// `drag_step` (AP above e 0.3, SPEC 16.12): the drag's rates that place the pass's short-period steps at t, from the
-/// set's per-passage cache (drag_step_at); null evaluates them here.
 inline int32_t output(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
-                      const Bodies* shared, const double* drag_step = nullptr) {
+                      const Bodies* shared) {
   if (!(ym[kN] > 0.0)) return kPropMeanMotion;
   if (ctx.ap_resonance && ap_resonance_class(ctx, ym[kN]) != ctx.resonance)
-    return reclass_output(ctx, t, ym, r_out, v_out, shared, drag_step);
+    return reclass_output(ctx, t, ym, r_out, v_out, shared);
   double y[6] = {ym[0], ym[1], ym[2], ym[3], ym[4], ym[5]};
   double Ewarm = std::numeric_limits<double>::quiet_NaN();
   if (!ctx.long_period || ctx.agom > 0.0) {
@@ -1297,10 +1292,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     const Kepler km = kepler_of(ym, frm.a);
     const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
     double fd[6] = {0, 0, 0, 0, 0, 0};
-    if (drag_step != nullptr)
-      for (int j = 0; j < 6; ++j) fd[j] = drag_step[j];
-    else
-      drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
+    drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
     const double M = km.m, n = ym[kN], saw = (kPi - M) / n;
     for (int j = 0; j < 6; ++j) y[j] += fd[j] * saw;
     y[kLam] += fd[kN] / (n * n) * (kPi * M - 0.5 * M * M - kPi * kPi / 3.0);
@@ -1390,8 +1382,6 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
 /// latest bracket of each direction. 96 + 2 * 2 * 112 + 2 * kSparse * 112 bytes.
 constexpr int kSparse = 12;
 
-constexpr int kDragStepNodes = 9;
-constexpr double kDragStepSpan = 0.999;  ///< the nodes' reach toward the two passages, inside them
 struct XpSat {
   uint32_t norad;
   int32_t init_error;
@@ -1404,10 +1394,6 @@ struct XpSat {
   int32_t window_valid[2];
   int32_t sparse_count[2];    ///< checkpoints held per direction (index stride * (k + 1))
   Node sparse[2][kSparse];
-  // AP above e 0.3 (SPEC 16.12): the drag's rates between two perigee passages t0 and t1 at kDragStepNodes Chebyshev
-  // times; an output between them takes their interpolant (drag_step_at)
-  int32_t dc_valid;
-  double dc_t0, dc_t1, dc_f[kDragStepNodes][6];
 };
 
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
@@ -1667,75 +1653,11 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   return ok;
 }
 
-/// AP above e 0.3 (SPEC 16.12): the drag's rates that place the short-period steps at t, mean state y, evaluated once per
-/// perigee passage: between the passage t0 (M = 0 of the mean elements, to 1e-6 min) and t1 = t0 + 2 pi / n(t0), the rates
-/// of each sample's own passages at kDragStepNodes Chebyshev times, the output taking their polynomial interpolant. False
-/// when a mean state is refused.
-inline bool drag_step_at(XpSat& s, double t, const double* y, double* out) {
-  constexpr int K = kDragStepNodes;
-  const Frame fr = frame_of(y);
-  const Kepler k = kepler_of(y, fr.a);
-  const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
-  double t0 = 0.0, t1 = 0.0, f[K][6];
-  bool hit = false;
-  lock(&s.lock);
-  if (s.dc_valid && std::fabs(tp - s.dc_t0) < 0.25 * period) {
-    hit = true;
-    t0 = s.dc_t0;
-    t1 = s.dc_t1;
-    for (int q = 0; q < K; ++q)
-      for (int j = 0; j < 6; ++j) f[q][j] = s.dc_f[q][j];
-  }
-  unlock(&s.lock);
-  if (!hit) {
-    double tc = tp, yy[6];
-    for (int it = 0; it < 12; ++it) {
-      if (!mean_at(s, tc, yy)) return false;
-      const Kepler kk = kepler_of(yy);
-      const double dt = (kk.m > kPi ? kk.m - kTwoPi : kk.m) / yy[kN];
-      tc -= dt;
-      if (std::fabs(dt) < 1e-8) break;
-    }
-    t0 = std::round(tc * 1e6) / 1e6;
-    if (!mean_at(s, t0, yy) || !(yy[kN] > 0.0)) return false;
-    t1 = t0 + kTwoPi / yy[kN];
-    for (int q = 0; q < K; ++q) {
-      const double tq = t0 + 0.5 * (t1 - t0) * (1.0 + kDragStepSpan * std::cos(q * kPi / (K - 1)));
-      if (!mean_at(s, tq, yy) || state_test(s.ctx, yy) != 0) return false;
-      const Frame fq = frame_of(yy);
-      const Kepler kq = kepler_of(yy, fq.a);
-      for (int j = 0; j < 6; ++j) f[q][j] = 0.0;
-      drag_part(s.ctx, tq, yy, fq, kq, angle_trig(kq), bodies_at(s.ctx.d50_epoch + tq / kMinutesPerDay), f[q]);
-    }
-    lock(&s.lock);
-    s.dc_valid = 1;
-    s.dc_t0 = t0;
-    s.dc_t1 = t1;
-    for (int q = 0; q < K; ++q)
-      for (int j = 0; j < 6; ++j) s.dc_f[q][j] = f[q][j];
-    unlock(&s.lock);
-  }
-  // Lagrange on the Chebyshev times
-  const double x = 2.0 * (t - t0) / (t1 - t0) - 1.0;
-  double xs[K];
-  for (int q = 0; q < K; ++q) xs[q] = kDragStepSpan * std::cos(q * kPi / (K - 1));
-  for (int j = 0; j < 6; ++j) out[j] = 0.0;
-  for (int q = 0; q < K; ++q) {
-    double L = 1.0;
-    for (int m = 0; m < K; ++m)
-      if (m != q) L *= (x - xs[m]) / (xs[q] - xs[m]);
-    for (int j = 0; j < 6; ++j) out[j] += L * f[q][j];
-  }
-  return true;
-}
-
 inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const Bodies* shared = nullptr) {
   if (s.init_error != 0) return kPropRefused;
   double y[6];
   if (!mean_at(s, t, y)) return kPropMeanMotion;
-  double fd[6];
-  const bool cached = s.ctx.drag_pass && s.ctx.bterm > 0.0 && drag_step_at(s, t, y, fd);
-  const int32_t status = output(s.ctx, t, y, r, v, shared, cached ? fd : nullptr);
+  const int32_t status = output(s.ctx, t, y, r, v, shared);
   if (status == kPropOk && s.ctx.ap_frame) frames::teme_drift(s.epoch_jd_whole, s.epoch_jd_frac, t, r, v);
   return status;
 }
@@ -1764,11 +1686,10 @@ inline bool reclass_rates(const RateContext& ctx, double t, const double* y, dou
   xp_release(tmp);
   return ok;
 }
-inline int32_t reclass_output(const RateContext& ctx, double t, const double* y, double* r, double* v, const Bodies* shared,
-                              const double* drag_step) {
+inline int32_t reclass_output(const RateContext& ctx, double t, const double* y, double* r, double* v, const Bodies* shared) {
   XpSat tmp{};
   const bool made = reclass_make(ctx, y, tmp);
-  const int32_t rc = made ? output(tmp.ctx, t, y, r, v, shared, drag_step) : kPropRefused;
+  const int32_t rc = made ? output(tmp.ctx, t, y, r, v, shared) : kPropRefused;
   xp_release(tmp);
   return rc;
 }

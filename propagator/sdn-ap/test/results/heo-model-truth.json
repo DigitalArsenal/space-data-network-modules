@@ -22,7 +22,8 @@
         "e": 0.7211141738995464,
         "bterm": 7.158083095739183e-22,
         "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 7.1580831e-22 +- 1e-10 m^2/kg",
-        "wrms": 0.03711081615238842
+        "wrms": 0.03711081615238842,
+        "accepted": 145
       },
       "classDiagnostics": [],
       "fixture": {
@@ -112,7 +113,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
+      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -149,8 +150,9 @@
         "n": 1.985161476415658,
         "e": 0.7412896556851021,
         "bterm": 0.04478178960773632,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0.044 +- 0.1 m^2/kg; posterior 0.0447817896 +- 0.000483775122 m^2/kg",
-        "wrms": 0.042677330968808234
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0.044 +- 0.1 m^2/kg; posterior 0.0447817896 +- 0.0100390742 m^2/kg; drag coefficient not separable on this arc (e above 0.3, 72.0 h of 168 h): posterior width from the RMS floor, formal sigma 0.000483775122 m^2/kg",
+        "wrms": 0.042677330968808234,
+        "accepted": 145
       },
       "classDiagnostics": [],
       "fixture": {
@@ -240,7 +242,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
+      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -278,7 +280,8 @@
         "e": 0.719528633783678,
         "bterm": 3.929180412118312e-17,
         "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 3.92918041e-17 +- 1e-10 m^2/kg",
-        "wrms": 0.08046247877132404
+        "wrms": 0.08046247877132404,
+        "accepted": 145
       },
       "classDiagnostics": [],
       "fixture": {
@@ -368,7 +371,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
+      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -406,7 +409,8 @@
         "e": 0.7207876082347004,
         "bterm": 5.088161170615002e-22,
         "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 5.08816117e-22 +- 1e-10 m^2/kg",
-        "wrms": 0.037654742314389776
+        "wrms": 0.037654742314389776,
+        "accepted": 145
       },
       "classDiagnostics": [],
       "fixture": {
@@ -496,7 +500,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
+      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1339,6 +1343,6 @@
     "GTO": "not isolated"
   },
   "version": "0.4.2",
-  "currentVersion": "0.4.16",
-  "currentNote": "0.4.16 fixtures: above e 0.3 the drag is evaluated per perigee passage, over the whole orbit, with the pass short-period steps (SPEC 16.12); Molniya with drag moves through its fitted drag coefficient (SPEC 12.8); half-day, GTO and 12 h at 55 deg unchanged; measured on the 0.4.16 release"
+  "currentVersion": "0.4.17",
+  "currentNote": "0.4.17 fixtures: the positions are 0.4.16's (SPEC 16.12); above e 0.3 an arc shorter than 7 days states BTERM's width from the RMS floor (SPEC 12.8), which Molniya's determination text carries; measured on the 0.4.17 release"
 }

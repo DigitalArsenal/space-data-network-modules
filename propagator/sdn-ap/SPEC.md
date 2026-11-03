@@ -1810,6 +1810,40 @@ rather than 0.3: the 72 h arc's own pull (+4.1 % at a sigma of 1.1 %) moves a pr
 4.1 / (1 + (1.1 / 0.5)^2) = 0.7 %, and the 7-day arcs' errors (0.46 % and less) fit inside it. `test/drag-high-eccentricity.e2e.mjs`
 measures the carried and Gaussian rows.
 
+**The arc above e 0.3 (0.4.17).** For a block whose first state is above e 0.3 with its perigee below 2,500 km and no
+stated FIT.DRAG_PRIOR, the fit takes the longest arc the ephemeris holds up to 7 days, ending at the latest useable state
+(a USEABLE_START_TIME keeps the caller's arc). On an arc shorter than 7 days the determination says so ("drag coefficient
+not separable on this arc", with the arc's hours and the formal sigma) and BTERM's posterior width comes from the RMS
+floor: the residual there is the theory's, not noise, so the arc's information on BTERM is the formal information over
+the residual components (the offset whose signature over the arc equals the RMS floor), combined with the prior's; the
+$OMM covariance's BTERM row and column take the ratio of the widths, so a covariance flown from the set carries it. A
+prior that pins BTERM (drag off, a pinned coefficient) and every orbit at e 0.3 and below fit as before, byte for byte.
+One independent sample per revolution, tried first, left GTO-500's truth outside one sigma on the 72 h Gaussian arc
+(1.83 % against 2.42 %).
+
+FFM model truth of 16.12 (Sun and Moon on, AGOM pinned at 0, 10-minute grid): B against 0.044, the posterior's sigma
+(the formal one in brackets where the floor sets it), day-7 whole-day along-track/radial after the arc (m):
+
+| Arc, prior | Molniya | GTO-500 |
+| --- | --- | --- |
+| 72 h, none (band default) | -3.81 %, 25.0 % (1.21 %); 396.1 / 285.7 | +0.29 %, 14.1 % (0.68 %); 62.8 / 50.3 |
+| 72 h, Gaussian 0.044 +- 0.1 | +1.78 %, 22.4 % (1.08 %); 279.5 / 190.3 | +2.42 %, 13.7 % (0.66 %); 736.2 / 473.7 |
+| 5 days, none | +0.08 %, 9.5 % (0.35 %); 166.3 / 112.3 | +0.26 %, 5.3 % (0.20 %); 70.1 / 61.3 |
+| 5 days, Gaussian 0.044 +- 0.1 | +0.70 %, 9.4 % (0.35 %); 257.8 / 175.4 | +0.34 %, 5.3 % (0.20 %); 98.8 / 73.5 |
+| 7 days, none (the policy's arc) | -0.46 %, 0.16 %; 135.5 / 89.7 | -0.28 %, 0.09 %; 291.3 / 179.3 |
+| 72 h, the 7-day posterior carried (0.005), days 7 to 10 | -0.46 %, 0.50 % (0.46 %); 103.5 / 75.2 | -0.29 %, 0.50 % (0.39 %); 87.7 / 48.4 |
+| 7 days, BTERM pinned at 0.044 | 218.9 | 158.8 |
+
+Seven days determine B to 0.5 %; what remains of the forecast after them is the theory's own (the pinned row), and
+GTO-500's -0.28 % costs it 130 m against the truth's 158.8. The 7-day formal sigma (0.16 % and 0.09 %) does not cover
+those errors either (2.9 and 3.1 sigma); a catalog carries it with the 0.005 floor above. A 5-day fit with its 7-day
+flight took 24 to 39 s per run on the owner Mac under load; the 7-day arc's fit time was not timed apart. The 220 km
+GTO's 72 h fit did not finish in 16 minutes on this build and was stopped (the 0.4.15 isolation's 7-day GTO fits ran
+past 30): its truth is cached (0.04 s), so the time is the fit's own, the Levenberg-Marquardt stages and their
+finite-difference Jacobians each propagating the arc, which costs about 0.1 s on GTO (16.12's 1 h grid cost); its
+table rows are not measured.
+`test/high-e-fit-arc.e2e.mjs` measures every row but the pinned one.
+
 ---
 
 ## 13. (removed)

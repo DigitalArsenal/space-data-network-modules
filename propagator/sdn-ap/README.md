@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.16.
+Version 0.4.17.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -446,3 +446,10 @@ least 0.005 they give 103.5 and 87.7 m with the coefficient within 0.5 %. Above 
 the perigee's altitude (`test/drag-high-eccentricity.e2e.mjs`). With drag a propagation on a 1 h grid costs 22.5, 34.9 and 31.5 ms
 per object-day on Molniya, GTO and GTO-500 (20.5, 27.1 and 25.8 before) and on a 1 min grid about twice 0.4.15's, the
 output's short-period steps evaluating the drag's rates at every sample.
+
+Above e 0.3 with the perigee below 2,500 km and no stated drag prior, `fit` takes the longest arc the ephemeris holds up
+to 7 days (SPEC 12.8): Molniya's day-7 along-track goes from 279.5 m on a 72 h arc to 135.5 m with the coefficient
+within 0.46 %, the 500 km perigee GTO's from 736.2 to 291.3 m within 0.28 % (158.8 m with the coefficient pinned at the
+truth). On a shorter arc the determination names the coefficient not separable and widens its posterior from the RMS
+floor (Molniya 72 h: 22.4 % against the formal 1.08 %), the set's covariance with it; the truth lies within one sigma on
+both fixtures. At e 0.3 and below fits are 0.4.16's byte for byte (`test/high-e-fit-arc.e2e.mjs`).

@@ -671,7 +671,7 @@ static int fit_blocks() {
           floor_scale = std::sqrt(var_h / var_f);
           for (int j = 0; j < np; ++j) {
             fit_cov.C[a * np + j] *= floor_scale;
-            if (j != a) fit_cov.C[j * np + a] *= floor_scale;
+            fit_cov.C[j * np + a] *= floor_scale;  // the diagonal takes the square
           }
           if (lg) fit_cov.log_sigma[0] *= floor_scale;
           break;

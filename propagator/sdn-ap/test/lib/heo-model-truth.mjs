@@ -62,11 +62,8 @@ export async function runModelTruth(c){
  if(c.costGridMinutes){
   const grid=oem([...Array(Math.round(7*1440/c.costGridMinutes))].map((_,k)=>Object.assign(new Line(),{EPOCH:iso(t0+(k+1)*c.costGridMinutes*60000)})));
   const start=performance.now();
-  const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:grid}]);
-  const ms=performance.now()-start;
-  // c.costFlown: the flown positions (km) as well
-  const flown=c.costFlown?OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map(f=>[f.X,f.Y,f.Z]):undefined;
-  x.sdnap_free(p);m.destroy();await h.close?.();return{costMs:ms,flown};
+  await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:grid}]);
+  const ms=performance.now()-start;x.sdnap_free(p);m.destroy();await h.close?.();return{costMs:ms};
  }
  // c.hourly: every c.gridMinutes (60) of the 7 days after the fit (whole-day RMS), days 1, 3 and 7 among them
  const gm=c.hourly?(c.gridMinutes??60):0;
@@ -92,7 +89,7 @@ export async function runModelTruth(c){
  const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(lead,lead+NF),c.fitUseable!==false)}]);
  const omm=c.omm??seed??fit.find(v=>v.portId==='elements').payload;
  const obd=fit?.find(v=>v.portId==='determination');
- const obdT=obd?OBD.getRootAsOBD(new fb.ByteBuffer(obd.payload)).unpack():null,bModel=obdT?obdT.BALLISTIC_COEFF_MODEL:null,wrms=obdT?obdT.WRMS:null;
+ const obdT=obd?OBD.getRootAsOBD(new fb.ByteBuffer(obd.payload)).unpack():null,bModel=obdT?obdT.BALLISTIC_COEFF_MODEL:null,wrms=obdT?obdT.WRMS:null,accepted=obdT?obdT.NUM_ACCEPTED_OBS:null;
  const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:omm},{portId:'grid',typeRef:type('OEM'),payload:oem(lines.slice(first))}]);
  const flown=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
  const parsed=OMM.getRootAsOMM(new fb.ByteBuffer(omm)).unpack();
@@ -116,7 +113,7 @@ export async function runModelTruth(c){
   for(const day of [0,1,3,7]){const minutes=(t0+((c.mode==='seed'?0:S+FIT)+day)*DAY-fitEpoch)/60000;assert.equal(px.sdnap_drag_orbit_check(0,minutes,c.dragCheck,pp),0);const v=Array.from(new Float64Array(ph.memory.buffer,pp,12));dragCheck.push({day,theory:v.slice(0,6),check:v.slice(6)});}
   px.sdnap_free(pp);await ph.close?.();
  }
- const result={dragCheck,name:c.name,fitted:{epoch:parsed.EPOCH,n:parsed.MEAN_MOTION,e:parsed.ECCENTRICITY,bterm:parsed.BSTAR,bModel,wrms},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:S+FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:FIT*24,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
+ const result={dragCheck,name:c.name,fitted:{epoch:parsed.EPOCH,n:parsed.MEAN_MOTION,e:parsed.ECCENTRICITY,bterm:parsed.BSTAR,bModel,wrms,accepted},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:S+FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:FIT*24,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
  const hours=c.seedGridMin?flown.map((_,k)=>(k+1)*c.seedGridMin/60):c.hourly?flown.map((_,k)=>(k+1)*gm/60):[24,72,168],profile=[];
  for(let k=0;k<flown.length;k++){
   const ref=truth[first+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];
