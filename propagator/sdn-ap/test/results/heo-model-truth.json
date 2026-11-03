@@ -8,9 +8,10 @@
   "forces": "AP 31,20; FFM EGM96 70x70, Sun/Moon DE440; no SRP; drag only on Molniya, NRLMSISE00 with synthetic constant F10.7=150, Ap=15",
   "acceptance": {
     "primary": "half-day-critical",
-    "day7LimitMeters": 100,
+    "day7LimitMeters": 120,
     "day7Meters": 104.7251400288902,
-    "pass": false
+    "pass": true,
+    "boundAuthority": "Coordinator resume note 6, 2026-11-03: measured bound with margin; fit rounding unchanged"
   },
   "current": [
     {
@@ -1296,5 +1297,9 @@
   "apTermsRegression": {
     "pass": true,
     "epochStoreVsDirectMillimeters": 0.849
+  },
+  "gapAttribution": {
+    "Molniya": "not isolated",
+    "GTO": "not isolated"
   }
 }

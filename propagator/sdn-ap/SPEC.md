@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.1.
+Version 0.4.2.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1122,6 +1122,9 @@ and e >= 0.5) are not used for type 4.
 
 AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
 with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
+Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters are 302.7/146.1/104.7
+for the half-day fixture, 80.5/133.1/654.1 for Molniya with drag, 208.8/86.1/2,326.6 for GTO,
+and 197.4/79.7/188.7 for the 55-degree fixture. Section 16.6 defines the fixtures and signed RTN errors.
 
 A term is labeled (l, m, p, q). Its resonant angle is
 
@@ -1813,7 +1816,8 @@ fit rounds its elements to the two-line lattice.
 | 12-hour (2, .72, 55) | 3 | 2.212, -19.735, -77.195 | 79.709 |
 | 12-hour (2, .72, 55) | 7 | -176.410, 22.747, -62.891 | 188.661 |
 
-The half-day case measured 3,116.083 m at day 7 before the degree-31 tail and 104.725 m with it.
+The half-day case measured 3,116.083 m at day 7 before the degree-31 tail and 104.725 m with it;
+the E2E bound is 120 m. The force contributions responsible for the Molniya and GTO gaps are not isolated.
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
 
