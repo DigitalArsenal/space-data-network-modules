@@ -477,5 +477,98 @@
     ],
     "pass": false
   },
-  "realism": "Neither theory is inside the band at every lead; neither earns a realism label."
+  "realism": "Neither theory is inside the band at every lead; neither earns a realism label.",
+  "verification": {
+    "moduleSha256": "2c0999d0062cd334f2cdb234299151cecd7f3f89924bba1c98d60ebe90b4f580",
+    "measured": "2026-11-03T03:54:36.412Z",
+    "windows": 4150,
+    "samples": 777150,
+    "shippedTableMatches": true,
+    "maximumMeanDifference": 7.349676423018536e-13,
+    "maximumCoverageDifference": 0.0,
+    "tolerance": 1e-06,
+    "artifactStandardsValidation": true,
+    "cells": [
+      {
+        "regime": "DRAG",
+        "day": 1,
+        "windows": 1246,
+        "samples": 116573,
+        "meanD2Over3": 0.5777044351769626,
+        "coverage95": 0.9685004246266288,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 2,
+        "windows": 1237,
+        "samples": 115824,
+        "meanD2Over3": 0.6380493176935967,
+        "coverage95": 0.9822920983561265,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 3,
+        "windows": 1219,
+        "samples": 114246,
+        "meanD2Over3": 0.9490243588637234,
+        "coverage95": 0.9927787406123628,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 7,
+        "windows": 1208,
+        "samples": 113035,
+        "meanD2Over3": 1.4722955652334428,
+        "coverage95": 0.9980802406334321,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 1,
+        "windows": 908,
+        "samples": 79392,
+        "meanD2Over3": 0.7061378663772593,
+        "coverage95": 0.958144397420395,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 2,
+        "windows": 909,
+        "samples": 79440,
+        "meanD2Over3": 1.3438621336233225,
+        "coverage95": 0.9970040281973817,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 3,
+        "windows": 906,
+        "samples": 79296,
+        "meanD2Over3": 0.7061378663774218,
+        "coverage95": 0.9975282485875706,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 7,
+        "windows": 907,
+        "samples": 79344,
+        "meanD2Over3": 1.3438621336230732,
+        "coverage95": 0.9903206291591047,
+        "required": true,
+        "pass": false
+      }
+    ]
+  }
 }
