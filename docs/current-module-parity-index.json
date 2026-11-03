@@ -1673,10 +1673,11 @@
       "pluginId": "com.digitalarsenal.analysis.reference-states",
       "name": "Reference states",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "compare_to_reference",
-        "reference_states"
+        "reference_states",
+        "sbas_reference_states"
       ],
       "runtimeTargets": [
         "browser",
