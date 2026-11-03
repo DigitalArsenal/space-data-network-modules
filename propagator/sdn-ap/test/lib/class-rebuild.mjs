@@ -3,7 +3,11 @@
 // Test-only build; no production ABI or fit behavior is changed.
 import {buildDiagnostic,CLASS_PROBE} from './ap-diagnostic.mjs';
 export function buildReclassification(){
- return buildDiagnostic('class-rebuild',CLASS_PROBE.replace('ap_resonance_class(s.ctx,y[kN])','res::band_of(y[kN])'),s=>{
+ const probe=CLASS_PROBE.replace('ap_resonance_class(s.ctx,y[kN])','res::band_of(y[kN])')
+  .replace('const auto ts=res::class_terms', 'XpSat rebuilt{};const bool changed=res::band_of(y[kN])!=s.ctx.resonance;if(changed&&!reclass_make(s.ctx,y,rebuilt))return -4;const auto& table=changed?rebuilt.ctx:s.ctx;\n const auto ts=res::class_terms')
+  .replaceAll('s.ctx.sp_count','table.sp_count').replaceAll('s.ctx.sp[j]','table.sp[j]')
+  .replace('return 0;','if(changed)xp_release(rebuilt);return 0;');
+ return buildDiagnostic('class-rebuild',probe,s=>{
   s=s.replace('inline bool rates(const RateContext& ctx, double t, const double* y, double* out) {',`inline bool reclass_rates(const RateContext&,double,const double*,double*);
 inline int32_t reclass_output(const RateContext&,double,const double*,double*,double*,const Bodies*);
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out) {
