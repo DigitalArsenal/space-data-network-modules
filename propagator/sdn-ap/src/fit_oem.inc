@@ -718,12 +718,10 @@ static int fit_blocks() {
           }
         }
       }
-      // SPEC 12.8: the drag prior's fall-back (fitoem::kFallback*), judged on the band default's fit
-      char drag_path[480];
-      std::snprintf(drag_path, sizeof drag_path, "%s",
-                    po.drag_prior_given ? "stated (FIT.DRAG_PRIOR), fitted as given"
-                    : chosen.wide_band  ? "band default at 800-1400 km, no fall-back"
-                                        : "band default");
+      // SPEC 12.8: the drag prior's fall-back (fitoem::kFallback*), judged on the band default's fit; the drag path is
+      // stated (in the $OMM COMMENT and the $OBD) only where the rule is judged
+      char drag_path[480] = "";
+      if (chosen.wide_band) std::snprintf(drag_path, sizeof drag_path, "%s", "band default at 800-1400 km, no fall-back");
       if (chosen.wide_band && chosen.res.rms_km <= po.implausible_rms_km &&
           (chosen.fit_end_min - chosen.fit_begin_min) / 60.0 >= fitoem::kFallbackArcHours) {
         cov::Set first_cov;
@@ -876,10 +874,10 @@ static int fit_blocks() {
       oem::iso_text(row.epoch_jd_whole, row.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
       char comment[1200];
       std::snprintf(comment, sizeof comment,
-                    "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s); drag prior: %s; %s%s",
+                    "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s)%s%s%s%s",
                     static_cast<unsigned>(t_fit.size()), static_cast<unsigned>(t_out.size()), res.rms_km, res.max_km, held_rms,
                     iterations, (fitoem::epoch_placement() == 0 && fit_begin_min >= 0.0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : long_arc && span_used > default_span ? "above e 0.3 with drag: the longest arc up to 7 days (SPEC 12.8)" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
-                    drag_path, arc_text, "");
+                    drag_path[0] ? "; drag prior: " : "", drag_path, drag_path[0] ? "; " : "", drag_path[0] ? arc_text : "");
       const auto s_epoch = fbb.CreateString(epoch_text);
       const auto s_comment = fbb.CreateString(comment);
       const auto s_center = fbb.CreateString("EARTH");
@@ -1009,7 +1007,7 @@ static int fit_blocks() {
         }
         {
           const size_t used = std::strlen(bmodel);
-          std::snprintf(bmodel + used, sizeof bmodel - used, "; drag prior: %s; %s", drag_path, arc_text);
+          std::snprintf(bmodel + used, sizeof bmodel - used, "%s%s; %s", drag_path[0] ? "; drag prior: " : "", drag_path, arc_text);
         }
         fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, have_cov, row.agom, sigma_a,
                            amodel, sizeof amodel);

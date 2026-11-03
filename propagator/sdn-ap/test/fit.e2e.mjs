@@ -355,8 +355,8 @@ for (const [label, mode] of [["GCRF", FRAME_PROBE.TEME_TO_GCRF], ["ITRF", FRAME_
       check(ln.omm.BSTAR > 0 && ln.obd.WRMS < gauss.obd.WRMS, `ISS LOG_NORMAL: BTERM ${ln.omm.BSTAR}, RMS ${ln.obd.WRMS} against ${gauss.obd.WRMS}`);
       check(/^BTERM \(SGP4XP\), log-normal prior, estimated as its natural log \(never <= 0\): median 0\.01 m\^2\/kg, sigma of the log 2\.30258509; posterior sigma of the log /.test(ln.obd.BALLISTIC_COEFF_MODEL),
         `ISS LOG_NORMAL $OBD BALLISTIC_COEFF_MODEL: ${ln.obd.BALLISTIC_COEFF_MODEL}`);
-      // from 0.4.13 the $OBD states the posterior after the prior (SPEC 12.8)
-      check(/^BTERM \(SGP4XP\), Gaussian prior 0 \+- 0\.05 m\^2\/kg; posterior [-+0-9.eE]+ \+- [-+0-9.eE]+ m\^2\/kg$/.test(gauss.obd.BALLISTIC_COEFF_MODEL), `ISS stated GAUSSIAN_SIGNED $OBD BALLISTIC_COEFF_MODEL: ${gauss.obd.BALLISTIC_COEFF_MODEL}`);
+      // from 0.4.13 the $OBD states the posterior after the prior, and from 0.4.18 the arc check after it (SPEC 12.8)
+      check(/^BTERM \(SGP4XP\), Gaussian prior 0 \+- 0\.05 m\^2\/kg; posterior [-+0-9.eE]+ \+- [-+0-9.eE]+ m\^2\/kg; arc [0-9.]+ h; largest gap .+; along-track step test .+$/.test(gauss.obd.BALLISTIC_COEFF_MODEL), `ISS stated GAUSSIAN_SIGNED $OBD BALLISTIC_COEFF_MODEL: ${gauss.obd.BALLISTIC_COEFF_MODEL}`);
       console.log(`GAUSSIAN_SIGNED 0 +- 0.05 stated: the ISS window's $OMM ${gauss.sha.slice(0, 12)} (before 0.2.0 ${BEFORE_0_2_0.iss.slice(0, 12)})`);
       check(gauss.sha === BEFORE_0_2_0.iss, `GAUSSIAN_SIGNED 0 +- 0.05 stated: the fit of the ISS window differs from the build before 0.2.0: ${gauss.sha}`);
       // SPEC 12: the ln-space posterior carried to B by the Jacobian, sigma_B = B sigma_lnB; the drag is observed here

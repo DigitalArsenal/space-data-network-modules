@@ -1785,13 +1785,14 @@ windows are its commissioning: FFM misses four of five by 1.9 to 2,626 km, and o
 the paired value goes from 191.7 to 3.9 m.
 `test/fit-bterm-700-1400-km.e2e.mjs` measures every number of the default and per-object paths and of the windows.
 
-**Diagnostics and the fall-back (0.4.18).** Every fit's $OMM COMMENT and its $OBD BALLISTIC_COEFF_MODEL carry, after
-the prior and the posterior above (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT and AGOM_MODEL, the arc in FIT_SPAN), the
-drag path and the arc check: `drag prior: band default`, `band default at 800-1400 km, no fall-back`, `stated
-(FIT.DRAG_PRIOR), fitted as given`, or `fall-back to the band median's prior (...) on <reasons>; the band default's
-fit: BTERM, posterior sigma of the log, sigmas from the band median, fit RMS`; then the arc's hours, its largest gap
-and where it starts, and the step test's revolutions, velocity step, time, F and verdict. $OBD 0.0.3 has no numeric
-field for a width, a prior or a flag, so they are its model text; nothing goes in USER_DEFINED_PARAMETERS.
+**Diagnostics and the fall-back (0.4.18).** Every fit's $OBD BALLISTIC_COEFF_MODEL carries, after the prior and the
+posterior above (BTERM in the $OMM's BSTAR, AGOM in its MEAN_MOTION_DDOT and in AGOM_MODEL, the arc in FIT_SPAN), the arc
+check: the arc's hours, its largest gap and where it starts, and the step test's revolutions, velocity step, time, F and
+verdict. Where the rule below is judged, BALLISTIC_COEFF_MODEL and the $OMM COMMENT also carry the drag path, `drag
+prior: band default at 800-1400 km, no fall-back` or `drag prior: fall-back to the band median's prior (...) on
+<reasons>; the band default's fit: BTERM, posterior sigma of the log, sigmas from the band median, fit RMS`, and the
+COMMENT the arc check; every other $OMM is 0.4.17's byte for byte. $OBD 0.0.3 has no numeric field for a width, a prior
+or a flag, so they are its model text; nothing goes in USER_DEFINED_PARAMETERS.
 
 The arc check. A data gap: two consecutive fitted states more than two revolutions apart. An along-track step (a
 maneuver indicator): the fit residuals' along-track component (model minus data along the model's velocity), averaged

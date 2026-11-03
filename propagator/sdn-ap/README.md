@@ -156,7 +156,7 @@ One fit call carries each object's priors (SPEC 12.8). The two-fit sequence of a
 
 1. `fit` with `configuration` = the call's $PCF and one `ephemeris` $OEM per object; each object gives an $OMM and an
    $OBD whose BALLISTIC_COEFF_MODEL and AGOM_MODEL carry its posterior (`posterior sigma of the log s; posterior
-   median B m^2/kg`, `posterior A +- sA m^2/kg`), BALLISTIC_COEFF_MODEL then the drag path and the arc check.
+   median B m^2/kg`, `posterior A +- sA m^2/kg`), BALLISTIC_COEFF_MODEL then the arc check (and the drag path where SPEC 12.8's fall-back is judged).
 2. The next day, `fit` with `configuration` = the call's $PCF followed by one $PCF per `ephemeris` frame, in their
    order, whose FIT states only `DRAG_PRIOR` {MEAN B, SIGMA max(s, 0.3)} with `DRAG_PRIOR_FORM` LOG_NORMAL and
    `SRP_PRIOR` {MEAN A, SIGMA max(sA, 0.01)} with `SRP_PRIOR_FORM` GAUSSIAN_SIGNED; an object whose $PCF states none
@@ -456,9 +456,10 @@ truth). On a shorter arc the determination names the coefficient not separable a
 floor (Molniya 72 h: 22.4 % against the formal 1.08 %), the set's covariance with it; the truth lies within one sigma on
 both fixtures. At e 0.3 and below fits are 0.4.16's byte for byte (`test/high-e-fit-arc.e2e.mjs`).
 
-Every fit states, in its $OMM COMMENT and its $OBD BALLISTIC_COEFF_MODEL, the drag path it took and an arc check: the
-arc's hours, its largest gap, and an along-track step test on the fit residuals (per-revolution means against a
-quadratic and a hinge: the velocity step, its time and F; flagged at 0.002 m/s and F 100) (SPEC 12.8). After a 72 h fit
+Every fit's $OBD BALLISTIC_COEFF_MODEL states an arc check: the arc's hours, its largest gap, and an along-track step
+test on the fit residuals (per-revolution means against a quadratic and a hinge: the velocity step, its time and F;
+flagged at 0.002 m/s and F 100); where the fall-back is judged it and the $OMM COMMENT also state the drag path taken
+(SPEC 12.8). After a 72 h fit
 under NRLMSISE-00 at 800-1400 km on the band default the fit is redone under 0.4.11's band-median prior when BTERM's
 posterior sigma of the log exceeds 0.5, or BTERM is more than 3 sigmas from the median while the fit RMS exceeds the
 band's model-truth median (15.16 m) by 25 %, or the arc is flagged; B, k and the median come from the model-truth
