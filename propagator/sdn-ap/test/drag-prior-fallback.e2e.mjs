@@ -1,0 +1,144 @@
+#!/usr/bin/env node
+// Registration (2026-11-03, modules-sdn-ap-drag-prior-fallback-20261103): the fit's per-window drag diagnostics and the
+// drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), the module under test
+// this build's dist.
+// Model truth (test/lib/heo-model-truth.mjs): FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
+// weather on both sides (no SRP); AP FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee, 7 days flown on
+// a 2-minute grid, day-3 whole-day 3D RMS. Read windows (test/lib/regime-windows.mjs): AP6's altimetry group DO, 72 h
+// arcs, as AP8 flew them (AP72); the windows were read by AP8 and its diagnosis.
+// Acceptance:
+// 1. DO: Sentinel-3A 2025-10-15 at or below 0.130 km at day 3 and Sentinel-3B 2025-10-25 at or below 0.150 km at day 7
+//    (0.4.11 0.087 and 0.113 km, 0.4.17 0.312 and 1.335 km);
+// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
+//    within 5 points of 0.4.17's;
+// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) bit-identical to 0.4.17 on every window (errors per lead and
+//    axis, BTERM, AGOM);
+// 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
+//    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
+//    step 36 h into the arc raises the step flag and takes the fall-back, on SWOT-like and Sentinel-3-like;
+// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 within 2 m of 0.4.17 at
+//    day 3 (82.0 and 63.6 m);
+// 6. default-FORCES XP digest bit-exact.
+// Printed: every fixture's fitted BTERM, posterior sigma of the log, fit RMS and drag path (the derivation of B, k and the
+// band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
+// the mean fit time per arm on the DO arcs.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+
+if (!isMainThread) {
+  const {runModelTruth} = await import('./lib/heo-model-truth.mjs');
+  const r = await runModelTruth(workerData.c);
+  const sigma = /posterior sigma of the log ([0-9.eE+-]+)/.exec(r.fitted.bModel ?? '');
+  parentPort.postMessage({day3: r.wholeDay[3].e, bterm: r.fitted.bterm, sigmaLog: sigma ? Number(sigma[1]) : null, wrmsKm: r.fitted.wrms,
+    path: /drag prior: (.*?); arc /.exec(r.fitted.bModel ?? '')?.[1] ?? null, step: /along-track step test.*$/.exec(r.fitted.bModel ?? '')?.[0] ?? null,
+    comment: r.fitted.comment});
+} else {
+  const {wasmPath} = await import('./lib/module.mjs');
+  const scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/drag-prior-fallback';
+  const modules = fileURLToPath(new URL('../../../', import.meta.url));
+  fs.mkdirSync(scratch, {recursive: true});
+  const release = (sha) => {
+    const file = path.join(scratch, `release-${sha}.wasm`);
+    fs.writeFileSync(file, execFileSync('git', ['-C', modules, 'show', `${sha}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26}));
+    return file;
+  };
+  const W0411 = release('a0f33bc54'), W0417 = release('3c8fcb5c');
+  const workers = Math.min(12, Number(process.env.SDN_AP_E2E_WORKERS ?? 12), os.availableParallelism());
+
+  const ORBITS = {
+    'SWOT-like': {n: 13.905, e: 0.0001, i: 77.6, raan: 200, argp: 90, ma: 0},
+    'Sentinel-3-like': {n: 14.26, e: 0.0011, i: 98.65, raan: 40, argp: 90, ma: 0},
+    'Jason-like': {n: 12.8096, e: 0.0008, i: 66.04, raan: 100, argp: 90, ma: 0},
+  };
+  const fixture = (name, bterm, modulePath, extra = {}) => ({name, ...ORBITS[name], drag: true, bterm, hourly: true, gridMinutes: 2, fitPolicy: 'default', modulePath, ...extra});
+  const STEP = [{days: 1.5, deltaV: [0, 0.0005, 0], frame: 'RTN'}], AFTER = [{days: 3.5, deltaV: [0, 0.0005, 0], frame: 'RTN'}];
+  const jobs = [];
+  for (const [arm, w] of [['0.4.17', W0417], ['release', wasmPath]])
+    for (const name of Object.keys(ORBITS)) for (const b of [0.044, 0.01, 0.001]) jobs.push({key: `${arm} ${name} ${b}`, kind: 'fixture', c: fixture(name, b, w)});
+  for (const name of ['SWOT-like', 'Sentinel-3-like']) jobs.push({key: `release ${name} 0.044 step in the arc`, kind: 'fixture', c: fixture(name, 0.044, wasmPath, {maneuvers: STEP})});
+  jobs.push({key: 'release SWOT-like 0.044 tail', kind: 'fixture', c: fixture('SWOT-like', 0.044, wasmPath, {fitTailStates: 720})});
+  jobs.push({key: 'release SWOT-like 0.044 tail stepped', kind: 'fixture', c: fixture('SWOT-like', 0.044, wasmPath, {fitTailStates: 720, tailManeuvers: AFTER})});
+  for (let index = 0; index < 10; ++index) jobs.push({key: `DO ${index}`, kind: 'windows', index});
+
+  const results = {}, rows = [];
+  let next = 0;
+  await Promise.all(Array.from({length: workers}, async () => {
+    while (next < jobs.length) {
+      const job = jobs[next++];
+      await new Promise((resolve, reject) => {
+        const w = job.kind === 'fixture'
+          ? new Worker(new URL(import.meta.url), {workerData: {c: job.c}})
+          : new Worker(new URL('./lib/regime-windows.mjs', import.meta.url), {workerData: {regimeWindows: true, group: 'DO', index: job.index, modulePaths: [W0411, W0417, wasmPath]}});
+        w.on('message', (m) => {
+          if (job.kind === 'fixture') { results[job.key] = m; w.terminate().then(resolve); }
+          else if (m.row) rows.push(m.row);
+          else if (m.error) { w.terminate(); reject(new Error(m.error)); }
+          else if (m.done) w.terminate().then(resolve);
+        });
+        w.on('error', reject);
+      });
+    }
+  }));
+
+  for (const key of Object.keys(results).sort()) console.log(JSON.stringify({fixture: key, ...results[key], comment: undefined}));
+  const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
+  const day = (a, k) => (a?.ok && a.days?.[k] ? a.days[k].e : null);
+  const name = (r) => r.key.split('|')[1], cutoff = (r) => r.key.split('|')[2];
+  const objects = {};
+  for (const o of [...new Set(rows.map(name))].sort()) {
+    const v = rows.filter((r) => name(r) === o && !r.error);
+    const out = {n: v.length};
+    for (const k of ['1', '2', '3', '7']) {
+      const p = v.filter((r) => day(r.arms[0], k) !== null && day(r.arms[1], k) !== null && day(r.arms[2], k) !== null);
+      out[`day${k}`] = p.length ? {n: p.length, at0411: median(p.map((r) => day(r.arms[0], k))), at0417: median(p.map((r) => day(r.arms[1], k))),
+        here: median(p.map((r) => day(r.arms[2], k))), change0417: median(p.map((r) => day(r.arms[1], k) / day(r.arms[0], k) - 1)),
+        changeHere: median(p.map((r) => day(r.arms[2], k) / day(r.arms[0], k) - 1))} : null;
+    }
+    out.fallBack = v.filter((r) => /fall-back/.test(r.arms[2]?.comment ?? '')).length;
+    objects[o] = out;
+    console.log(JSON.stringify({object: o, ...out}));
+  }
+  for (const r of rows.filter((r) => /fall-back/.test(r.arms[2]?.comment ?? '')).sort((a, b) => a.key.localeCompare(b.key)))
+    console.log(JSON.stringify({fallBack: r.key, why: /drag prior: (.*?); arc /.exec(r.arms[2].comment)[1], day3: [0, 1, 2].map((a) => day(r.arms[a], '3'))}));
+  const fitMs = [0, 1, 2].map((a) => { const t = rows.filter((r) => r.arms[a]?.ok).map((r) => r.arms[a].fitMs); return t.reduce((s, x) => s + x, 0) / t.length; });
+  console.log(JSON.stringify({meanFitMsPer72hArc: {'0.4.11': fitMs[0], '0.4.17': fitMs[1], release: fitMs[2]}, windows: rows.filter((r) => r.arms[2]?.ok).length}));
+  if (process.env.SDN_AP_DRAG_FALLBACK_REPORT) fs.writeFileSync(process.env.SDN_AP_DRAG_FALLBACK_REPORT, JSON.stringify({results, objects, rows}, null, 1) + '\n');
+
+  // 1
+  const at = (o, c) => rows.find((r) => name(r) === o && cutoff(r).startsWith(c));
+  const s3a = day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3'), s3b = day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7');
+  console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b}));
+  assert.ok(s3a !== null && s3a <= 0.130, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
+  assert.ok(s3b !== null && s3b <= 0.150, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
+  // 2
+  for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
+  for (const o of ['SWOT', 'JASON 3'])
+    assert.ok(Math.abs(objects[o].day3.changeHere - objects[o].day3.change0417) <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.17's ${objects[o].day3.change0417}`);
+  // 3
+  for (const o of ['SARAL', 'CRYOSAT 2']) {
+    const v = rows.filter((r) => name(r) === o && !r.error);
+    assert.equal(v.length, 15, `${o}: 15 windows`);
+    for (const r of v) {
+      const [a, b] = [r.arms[1], r.arms[2]];
+      assert.ok(a.ok && b.ok && a.bterm === b.bterm && a.agom === b.agom && JSON.stringify(a.days) === JSON.stringify(b.days), `${r.key}: identical to 0.4.17`);
+    }
+  }
+  // 4
+  assert.equal(results['release SWOT-like 0.044 tail stepped'].bterm, results['release SWOT-like 0.044 tail'].bterm, 'a step after the arc leaves BTERM');
+  for (const o of ['SWOT-like', 'Sentinel-3-like']) {
+    const r = results[`release ${o} 0.044 step in the arc`];
+    assert.ok(/\(a step\)$/.test(r.step) && /^fall-back/.test(r.path), `${o}: a step in the arc is flagged and falls back (${r.path}; ${r.step})`);
+  }
+  // 5
+  for (const o of ['SWOT-like', 'Sentinel-3-like'])
+    assert.ok(Math.abs(results[`release ${o} 0.044`].day3 - results[`0.4.17 ${o} 0.044`].day3) <= 2, `${o} 0.044: day 3 within 2 m of 0.4.17`);
+  // 6
+  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
+    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  console.log('drag prior fall-back E2E: PASS');
+}
