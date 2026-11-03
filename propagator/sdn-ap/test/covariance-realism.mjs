@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Registered acceptance: modules-sdn-ap-covariance-noise-ap-20261103.
-// --theory SDNAP --forces 31,20 uses only b040/compare-truth2/rows-*.jsonl
-// and b040/regimes/rows-*.jsonl calibration forecasts (AP24/AP72); no hold-out
-// sources. Score forward RTN errors at leads 1,2,3,7 counted from cutoff.
+// --theory SDNAP --forces 31,20 joins b040/compare-truth2 window keys to
+// b040/truth2 AP24/AP72 arms, plus b040/regimes calibration windows.
+// Refit the registered arcs and score signed GCRF errors at matching covariance
+// epochs in lead bins 1,2,3,7 counted from cutoff; no held-out sources.
 // Print sample counts, mean d^2/3 and coverage for every regime/lead cell.
 // SPEC 12.7 is fixed: [0.8,1.25] and [0.93,0.97], jointly. A cell outside
 // either interval must be reported as unsupported, never claimed realistic.
-// Calibration requires the forecast covariance or the fitted set and module
-// covariance basis at each lead; fit RMS is not a forecast covariance.
+// Calibration replays the module fit and five covariance propagations (zero
+// noise and four unit bases); neither fit RMS nor daily RTN RMS is covariance.
 // Verify theory selection through fit/propagate and retain default XP digest.
 // Covariance realism of the SGP4XP fit (SPEC 12) on laser-ranged precise orbits, and the fit of its process noise.
 //
@@ -67,6 +68,8 @@ const CHI2_3_95 = 7.814727903251178, CHI2_3_MEDIAN = 2.365973884375338;
 // Validate the explicitly supplied calibration inventory before creating a host or
 // entering the legacy laser-reference path. Never substitute another population.
 if (THEORY === "SDNAP") {
+  if (SET !== "calibration" || forceText !== "31,20")
+    throw new Error("AP replay is registered for calibration at FORCES 31,20");
   const { runReplay, calibrate } = await import("./lib/calibration-replay.mjs");
   const report = calibrate(await runReplay());
   if (OUT) fs.writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
