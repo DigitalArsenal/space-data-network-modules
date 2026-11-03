@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {parentPort, workerData} from 'node:worker_threads';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {createRequire} from 'node:module';
 
 import {experiments} from './experiments.mjs';
 export {experiments};
@@ -51,7 +52,20 @@ async function replay({group, index, modulePaths, fit = null, moduleFrames = fal
   const TL = modules + 'propagator/sdn-ap/test/lib/';
   const probe = moduleFrames ? {mod: await (await import(TL + 'module.mjs')).openModule(), F: await import(TL + 'frames.mjs')} : null;
   const toGcrf = async (st, epochs) => probe ? st.map((s, k) => { const {whole, frac} = probe.F.jdOf(epochs[k]); const o = probe.F.rotate(probe.mod, whole, frac, [...s.r, ...s.v], probe.F.FRAME_PROBE.TEME_TO_GCRF).out; return {r: o.slice(0, 3), v: o.slice(3, 6)}; }) : m.toAxes(st, epochs, 'GCRF');
-  for (const p of modulePaths) hosts.push(await L.AP.openAp(p));
+  // each module through the SDK's isomorphic harness as ap.mjs's openAp does, the fit's $OBD kept (SPEC 12.8's diagnostics)
+  const SDK = pathToFileURL(createRequire(modules + 'propagator/sdn-ap/package.json').resolve('space-data-module-sdk/testing/isomorphic')).href;
+  for (const p of modulePaths) {
+    const A = await L.AP.openAp(p), h = await (await import(SDK)).createStandaloneHarness('browser', p, {surface: 'direct'});
+    const weather = (extra) => (extra?.rows ? [{portId: 'space_weather', typeRef: S.TYPE('SPW'), payload: extra.rows}] : []);
+    A.fit = async (oem, pcf, extra) => {
+      const inputs = [{portId: 'ephemeris', typeRef: S.TYPE('OEM'), payload: oem}, {portId: 'configuration', typeRef: S.TYPE('PCF'), payload: pcf}, ...weather(extra)];
+      const r = await h.invoke({methodId: 'fit', inputs});
+      if (r.statusCode !== 0) return {ok: false, error: `${r.errorCode}: ${String(r.errorMessage).slice(0, 200)}`};
+      const d = r.outputs.find((o) => o.portId === 'determination');
+      return {ok: true, omm: new Uint8Array(r.outputs.find((o) => o.portId === 'elements').payload), obd: d ? new Uint8Array(d.payload) : null};
+    };
+    hosts.push(A);
+  }
   const LEADS = XM.config.scoring.leadDays, GRID = XM.config.scoring.gridSeconds * 1000;
   const MIN_BIN = XM.config.scoring.binMinimumEpochs, MIN_COV = XM.config.fit.minimumCoverage;
   const pcf = S.pcfBytes({forces: L.AP.apForces(XM.config.arms.X2.forces, {tesseral: 31, zonal: 20}), fit});
@@ -85,10 +99,12 @@ async function replay({group, index, modulePaths, fit = null, moduleFrames = fal
       const oem = S.oemBytes({frame: 'GCRF', object: {name: o.name, id: o.objectId, norad: o.norad}, lines: thin, useableStart: thin[0].epoch, useableStop: iso(D0)});
       for (const A of hosts) {
         try {
-          const f = await A.fit(oem, pcf, ex);
+          const t0 = performance.now(), f = await A.fit(oem, pcf, ex), fitMs = performance.now() - t0;
           if (!f.ok) throw new Error(f.error);
           const st = await A.propagate(f.omm, gridB, pcf, ex, epochs.length);
-          row.arms.push({ok: true, agom: S.readFitOmm(f.omm).agom, days: score(await m.rtn(await toGcrf(st, epochs), truth))});
+          const fo = S.readFitOmm(f.omm), ob = f.obd ? S.readObd(f.obd) : {};
+          row.arms.push({ok: true, bterm: fo.bterm, agom: fo.agom, rmsKm: fo.fitRmsKm, comment: fo.u.COMMENT, sigmaLnB: ob.sigmaLnB ?? null,
+            bModel: ob.bModel ?? null, fitMs, arcStates: thin.length, days: score(await m.rtn(await toGcrf(st, epochs), truth))});
         } catch (error) {
           row.arms.push({ok: false, error: String(error?.message ?? error).slice(0, 180)});
         }

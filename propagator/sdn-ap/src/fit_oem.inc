@@ -161,15 +161,15 @@ inline double period_minutes(const ephemerisDataBlock* blk) {
   return kTwoPi * std::sqrt(el[0] * el[0] * el[0] / twobody::kMuEarth) / 60.0;
 }
 
-/// SPEC 12.8, the arc check of a fit. A data gap: two consecutive fitted states more than kArcGapMinutes apart. An
+/// SPEC 12.8, the arc check of a fit. A data gap: two consecutive fitted states more than kArcGapRevolutions apart. An
 /// along-track step (a maneuver indicator): the fit residuals' along-track component (model minus data on the model's
 /// velocity direction), averaged per revolution over bins of at least 3 states, is regressed on a quadratic in time and
 /// on the quadratic plus a hinge, max(0, t - t_h), at each boundary between bins with at least 3 bins on either side;
 /// the hinge that lowers the residual sum the most is the candidate, its F ratio (the drop over the hinged fit's
 /// residual variance) and the velocity step its rate change c implies, |c| / 3 (a tangential step dv changes the
 /// along-track drift rate by 3 dv). A step is flagged when both pass kStepMinimumF and kStepMinimumMs.
-constexpr double kArcGapMinutes = 180.0;
-constexpr double kStepMinimumMs = 0.05;
+constexpr double kArcGapRevolutions = 2.0;
+constexpr double kStepMinimumMs = 0.002;
 constexpr double kStepMinimumF = 100.0;
 struct ArcCheck {
   double gap_minutes = 0.0;  ///< the largest interval between consecutive fitted states
@@ -190,12 +190,12 @@ inline ArcCheck arc_check(const ElementRow& row, const double* t, const double* 
     const double d = t[order[static_cast<size_t>(k)]] - t[order[static_cast<size_t>(k - 1)]];
     if (d > c.gap_minutes) { c.gap_minutes = d; c.gap_at = t[order[static_cast<size_t>(k - 1)]]; }
   }
-  c.gap = c.gap_minutes > kArcGapMinutes;
+  const double period = kMinutesPerDay / row.mean_motion_rev_day, t0 = t[order[0]];
+  c.gap = c.gap_minutes > kArcGapRevolutions * period;
   const Elements e = elements_of(row);
   xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
   if (s == nullptr) return c;
   bool ok = xpt::xp_init(e, *s) == kPropOk;
-  const double period = kMinutesPerDay / row.mean_motion_rev_day, t0 = t[order[0]];
   std::vector<double> sum_t, sum_a;
   std::vector<int> num;
   for (int q = 0; ok && q < count; ++q) {
@@ -719,7 +719,7 @@ static int fit_blocks() {
         }
       }
       // SPEC 12.8: the drag prior's fall-back (fitoem::kFallback*), judged on the band default's fit
-      char drag_path[360];
+      char drag_path[480];
       std::snprintf(drag_path, sizeof drag_path, "%s",
                     po.drag_prior_given ? "stated (FIT.DRAG_PRIOR), fitted as given"
                     : chosen.wide_band  ? "band default at 800-1400 km, no fall-back"
@@ -740,12 +740,13 @@ static int fit_blocks() {
           const pcf::Prior band = {fitoem::kBandMedianBterm, pcf::kDragPriorDefault.sigma, pcfPriorForm_LOG_NORMAL};
           Pass f;
           if (run_pass(span_used > 0.0 ? span_used : default_span, f, last_useable, -1, &band) == 0 && f.res.rms_km <= po.implausible_rms_km) {
-            const char* why = wide ? "posterior sigma of the log above 0.5"
-                              : rough ? "BTERM more than 3 posterior sigmas from the band median with the fit RMS more than 25 % above the band's"
-                              : first_arc.gap ? "a data gap in the arc" : "an along-track step in the arc";
+            char why[200];
+            std::snprintf(why, sizeof why, "%s%s%s%s", wide ? ", posterior sigma of the log above 0.5" : "",
+                          rough ? ", BTERM more than 3 posterior sigmas from the band median with the fit RMS more than 25 % above the band's" : "",
+                          first_arc.gap ? ", a data gap" : "", first_arc.step ? ", an along-track step" : "");
             std::snprintf(drag_path, sizeof drag_path,
-                          "fall-back to the band median's prior (0.0005 m^2/kg, sigma of the log ln 10): %s; the band default's fit: BTERM %.9g m^2/kg, posterior sigma of the log %.6g, fit RMS %.6f km",
-                          why, chosen.row.bterm, sl, chosen.res.rms_km);
+                          "fall-back to the band median's prior (0.0005 m^2/kg, sigma of the log ln 10) on%s; the band default's fit: BTERM %.9g m^2/kg, posterior sigma of the log %.6g, %.1f sigmas from the band median, fit RMS %.6f km",
+                          why + 1, chosen.row.bterm, sl, moved, chosen.res.rms_km);
             used_drag = band;
             chosen = std::move(f);
           }
