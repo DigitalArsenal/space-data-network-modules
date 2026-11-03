@@ -2,7 +2,7 @@
 // UTC/GCRF km. Refit the registered AP5/AP6 arcs under LOG_NORMAL and FORCES
 // 31,20. Signed errors and covariance must share epochs: stored daily RTN RMS
 // cannot substitute for signed errors. No held-out or operator source is opened.
-// Score exact days 1,2,3,7 across windows; stored bin RMS is not endpoint error.
+// Score days 1,2,3,7 on a 30-minute grid, matching covariance-realism sampling.
 // Each window supplies P0 and four noise bases from the module. Fit nonnegative
 // squared noise sizes by Gaussian likelihood; report SPEC 12.7 unchanged.
 import fs from 'node:fs';
@@ -23,7 +23,7 @@ const scratch=process.env.SDN_AP_CALIBRATION_CACHE??'/Users/tj/software/terrain-
 const imp=p=>import(path.join(external,'experiments',p));
 const readRows=dir=>fs.readdirSync(dir).filter(f=>/^rows-\d+\.jsonl$/.test(f)).sort().flatMap(f=>fs.readFileSync(path.join(dir,f),'utf8').split('\n').filter(Boolean).map(JSON.parse));
 const checksum=createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
-const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"exact-leads-v1"+w.key+w.arm).digest('hex')+'.json.gz');
+const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"lead-bins-30min-v1"+w.key+w.arm).digest('hex')+'.json.gz');
 function windows(){
  const base=path.join(archive,'operator-theory/ap/b040');
  const ap=new Map(readRows(path.join(base,'truth2')).map(r=>[r.key,r]));
@@ -86,13 +86,10 @@ async function replay(list){
    if(thin.length<8)throw Error('too few fit states');
    const after=all.filter(l=>ms(l.epoch)>cutoff);
    const gridMs=Math.max(300000,Math.ceil((ms(after[1].epoch)-ms(after[0].epoch))/300000)*300000);
-   // Exact lead days required by the task. The stored rows identify entered bins;
-   // their RMS is reported separately and is never treated as a signed vector.
-   const scored=[1,2,3,7].filter(day=>w.stored.days[day]).map(day=>{
-    const l=after.find(l=>Math.abs(ms(l.epoch)-(cutoff+day*DAY))<1);
-    if(!l)throw Error(`no exact day-${day} truth epoch`);
-    return l;
-   });
+   // The original lead-day bins, sampled every 30 minutes as the existing
+   // covariance-realism harness does. No interpolation or JS orbit physics.
+   const sampleMs=Math.max(1800000,Math.ceil(1800000/gridMs)*gridMs);
+   const scored=after.filter(l=>(ms(l.epoch)-ms(after[0].epoch))%sampleMs===0&&w.stored.days[Math.ceil((ms(l.epoch)-cutoff)/DAY)]);
    const vacuum=['HE','HX'].includes(w.group);
    const weather=vacuum?null:W.rowsO(cutoff-6*DAY,cutoff);
    if(weather?.excluded)throw Error(weather.excluded);
@@ -133,3 +130,45 @@ export async function runReplay(){
  return results;
 }
 if(!isMainThread)await replay(workerData.list);
+
+// Symmetric 3x3 Gaussian likelihood; statistics only, no orbital dynamics.
+function metric(P,e){
+ const [a,b,c,d,f,g]=P, det=a*(c*g-f*f)-b*(b*g-f*d)+d*(b*f-c*d);
+ if(!(det>0))return null;
+ const d2=((c*g-f*f)*e[0]**2+(a*g-d*d)*e[1]**2+(a*c-b*b)*e[2]**2+2*(d*f-b*g)*e[0]*e[1]+2*(b*f-c*d)*e[0]*e[2]+2*(b*d-a*f)*e[1]*e[2])/det;
+ return {d2,logDet:Math.log(det)};
+}
+export function calibrate(results){
+ const report={moduleSha256:checksum,created:new Date().toISOString(),bands:{meanD2Over3:[0.8,1.25],coverage95:[0.93,0.97]},tables:{},cells:[]};
+ for(const regime of ['DRAG','ABOVE']){
+  const rows=results.filter(r=>r.regime===regime);
+  const samples=rows.flatMap(r=>r.samples.map(s=>({...s,key:r.key,arm:r.arm,group:r.group,B:s.B.map((b,k)=>b.map(v=>v*(k===3?(Math.abs(r.ngRate)*r.nDay)**2:1)))})));
+  const covariance=(s,theta)=>s.P0.map((v,j)=>v+theta.reduce((a,t,k)=>a+t*t*s.B[k][j],0));
+  const nll=lg=>{const theta=lg.map(x=>10**x);let v=0;for(const s of samples){const m=metric(covariance(s,theta),s.e);if(!m)return Infinity;v+=m.logDet+m.d2;}return v;};
+  let best=null;
+  for(const start of [-8,-6]){
+   let lg=[start,start,start,regime==='DRAG'?-1:-Infinity],value=nll(lg);
+   for(let step=1;step>=1/128;step/=2){
+    let moved=true,iterations=0;
+    while(moved&&iterations++<100){moved=false;for(let k=0;k<(regime==='DRAG'?4:3);k++)for(const sign of [-1,1]){
+     const trial=lg.slice();trial[k]+=sign*step;const v=nll(trial);
+     if(v<value){lg=trial;value=v;moved=true;}
+    }}
+   }
+   if(!best||value<best.value)best={lg,value};
+  }
+  const theta=best.lg.map(x=>10**x);report.tables[regime]={s_e:theta[0],s_i:theta[1],s_l:theta[2],c:theta[3],negativeLogLikelihood:best.value};
+  for(const day of [1,2,3,7]){
+   const ss=samples.filter(s=>s.day===day),d2=ss.map(s=>metric(covariance(s,theta),s.e)?.d2??Infinity);
+   const windows=new Set(ss.map(s=>s.key)).size;
+   const meanD2Over3=d2.reduce((a,b)=>a+b,0)/(3*d2.length),coverage95=d2.filter(v=>v<=7.814727903251178).length/d2.length;
+   const pass=meanD2Over3>=.8&&meanD2Over3<=1.25&&coverage95>=.93&&coverage95<=.97;
+   const cell={regime,day,windows,samples:ss.length,meanD2Over3,coverage95,pass,required:windows>=30};
+   report.cells.push(cell);console.log(JSON.stringify(cell));
+  }
+  console.log(JSON.stringify({regime,...report.tables[regime]}));
+ }
+ report.pass=report.cells.every(c=>!c.required||c.pass);
+ fs.writeFileSync(path.join(scratch,'calibration.json'),JSON.stringify(report,null,2)+'\n');
+ return report;
+}

@@ -67,9 +67,10 @@ const CHI2_3_95 = 7.814727903251178, CHI2_3_MEDIAN = 2.365973884375338;
 // Validate the explicitly supplied calibration inventory before creating a host or
 // entering the legacy laser-reference path. Never substitute another population.
 if (THEORY === "SDNAP") {
-  const { runReplay } = await import("./lib/calibration-replay.mjs");
-  await runReplay();
-  console.error("FAIL: replay complete; noise optimization and band verification pending");
+  const { runReplay, calibrate } = await import("./lib/calibration-replay.mjs");
+  const report = calibrate(await runReplay());
+  if (OUT) fs.writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
+  console.error("FAIL: candidate calibration only; shipped-table verification pending");
   process.exit(1);
 }
 
