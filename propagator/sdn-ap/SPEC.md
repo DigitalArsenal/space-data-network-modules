@@ -1788,6 +1788,35 @@ read as TEME of date the plane of a fixed orbit seems to turn by about 3 microra
 `$OMM.USER_DEFINED_PARAMETERS`. `propagate`, `load_epochs` and `propagate_epochs` refuse a set whose mark differs from the call's
 degrees, and `ingest_omm` any marked set (`gravity-terms-mismatch`).
 
+**16.6 HEO model truth.** Synthetic GCRF states at 2026-10-29 00:00 UTC, fitted over 72 h through `fit`,
+then propagated 1, 3 and 7 days after the fit ends. FFM uses EGM96 70x70, Sun and Moon from DE440, zero EOP,
+no SRP, and NRLMSISE-00 only for Molniya (Cd A/m = 0.044 m^2/kg; constant F10.7 = 150, Ap = 15).
+AP uses FORCES 31,20. Initial states, kernel and module hashes, signed errors and numerical-reference checks
+are in `test/results/heo-model-truth.json` (2026-11-03); `test/heo-model-truth.e2e.mjs` reproduces the comparison.
+
+All cases start at perigee, with argument of perigee 270 degrees. The half-day and Molniya cases have RAAN
+300 degrees; GTO has RAAN 40 degrees. These are measured cases, not bounds for all HEO objects. The published
+fit rounds its elements to the two-line lattice.
+
+| Case (n rev/day, e, i degrees) | Lead days | R, T, N error (m) | 3D error (m) |
+| --- | ---: | --- | ---: |
+| Half-day (2.0059, .72, 63.4) | 1 | 185.012, -239.084, -16.201 | 302.743 |
+| Half-day (2.0059, .72, 63.4) | 3 | 89.080, -111.146, -32.278 | 146.050 |
+| Half-day (2.0059, .72, 63.4) | 7 | -73.019, -37.280, -65.160 | 104.725 |
+| Molniya (2, .74, 63.4; drag on) | 1 | 73.173, 29.515, -16.047 | 80.516 |
+| Molniya (2, .74, 63.4; drag on) | 3 | 39.674, -125.204, -21.271 | 133.051 |
+| Molniya (2, .74, 63.4; drag on) | 7 | 366.657, -540.558, -34.603 | 654.092 |
+| GTO (2.40, .72, 27) | 1 | 92.703, -148.066, -114.320 | 208.773 |
+| GTO (2.40, .72, 27) | 3 | 75.410, -19.887, 36.370 | 86.052 |
+| GTO (2.40, .72, 27) | 7 | -1556.157, -1727.365, -88.427 | 2326.636 |
+| 12-hour (2, .72, 55) | 1 | 157.566, -109.427, -46.725 | 197.445 |
+| 12-hour (2, .72, 55) | 3 | 2.212, -19.735, -77.195 | 79.709 |
+| 12-hour (2, .72, 55) | 7 | -176.410, 22.747, -62.891 | 188.661 |
+
+The half-day case measured 3,116.083 m at day 7 before the degree-31 tail and 104.725 m with it.
+The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
+and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
+
 ---
 
 ## References

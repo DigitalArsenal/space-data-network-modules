@@ -119,11 +119,15 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
-first-order terms to 12, near-resonant terms and shallow resonances to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE`
+first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
+
+The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit,
+measured day-7 errors are 104.7 m for the half-day case, 654.1 m for Molniya with drag and 2,326.6 m for GTO.
+SPEC 16.6 and `test/results/heo-model-truth.json` give the fixtures and day-1, 3 and 7 RTN errors.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
