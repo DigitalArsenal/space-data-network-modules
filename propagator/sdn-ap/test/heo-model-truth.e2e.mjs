@@ -14,6 +14,10 @@ const cases=[
  {name:'Molniya',n:2,e:.74,i:63.4,raan:300,argp:270,ma:10,drag:true},
  {name:'GTO',n:2.40,e:.72,i:27,raan:40,argp:270,ma:10,drag:false},
 ];
+// Diagnostic registration: a mean-element AP set seeds FFM at its epoch;
+// no fit, same forces and the same 1/3/7-day forward thresholds. This checks
+// whether the review's "synthetic set" comparison used a shared epoch state.
+if(process.argv.includes('--seed-diagnostic')){cases.splice(1);cases[0].mode='seed';}
 const results=[];
 for(const c of cases){const result=await runModelTruth(c);results.push(result);console.log(JSON.stringify(result));}
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');

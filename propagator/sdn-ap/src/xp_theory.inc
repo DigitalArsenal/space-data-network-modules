@@ -1137,6 +1137,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd) * sizeof(tess::HalfDayCoef)));
     if (table == nullptr) return false;
     s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table);
+    if (s.ctx.half_day_count < 0) { std::free(table); return false; }
     s.ctx.half_day = table;
   }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {

@@ -435,10 +435,51 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out) {
       for (int l = first; l <= degree; l += 2) {
         const int p = (l - w) / 2, k = m / 2;
         out[count++] = HalfDayCoef{static_cast<int8_t>(l), static_cast<int8_t>(m),
-          static_cast<int8_t>(p), static_cast<int8_t>(k), f[l], (fp[l]-fm[l])/(2*h), res::g_taylor(l,p,k-w,e0)};
+          static_cast<int8_t>(p), static_cast<int8_t>(k), f[l], (fp[l]-fm[l])/(2*h), res::GTaylor{}};
       }
     }
   }
+  // Share the eccentric-anomaly quadrature across every coefficient. Each
+  // sample's anomaly, radial powers and Fourier factors are evaluated once.
+  const int N = e0 < 0.1 ? 128 : e0 < 0.8 ? 512 : e0 < 0.95 ? 2048 : 4096;
+  const int width = 3 * (degree + 1) + 2 * (degree / 2 + 1);
+  double* grid = static_cast<double*>(std::malloc(N * width * sizeof(double)));
+  double* values = static_cast<double*>(std::malloc(5 * count * sizeof(double)));
+  if (grid == nullptr || values == nullptr) { std::free(grid); std::free(values); return -1; }
+  const double dh = std::min(5e-4, (1.0-e0)/4.0);
+  for (int off = -2; off <= 2; ++off) {
+    const double e = e0 + off * dh, eta = std::sqrt(1.0-e*e);
+    for (int j = 0; j < N; ++j) {
+      const double E = kTwoPi*(j+0.5)/N;
+      double se, ce; fm::sincos(E,se,ce);
+      const double ir = 1.0/(1.0-e*ce), nu = std::atan2(eta*se,ce-e), M = E-e*se;
+      double sn, cn, sm, cm; fm::sincos(nu,sn,cn); fm::sincos(M,sm,cm);
+      double* r = grid+j*width;
+      double* cw = r+degree+1; double* sw = cw+degree+1;
+      double* ck = sw+degree+1; double* sk = ck+degree/2+1;
+      r[0]=cw[0]=ck[0]=1.0; sw[0]=sk[0]=0.0;
+      for (int l=1;l<=degree;++l) {
+        r[l]=r[l-1]*ir; cw[l]=cw[l-1]*cn-sw[l-1]*sn; sw[l]=sw[l-1]*cn+cw[l-1]*sn;
+      }
+      for (int k=1;k<=degree/2;++k) { ck[k]=ck[k-1]*cm-sk[k-1]*sm; sk[k]=sk[k-1]*cm+ck[k-1]*sm; }
+    }
+    for (int q=0;q<count;++q) {
+      const HalfDayCoef& c=out[q]; const int w=c.l-2*c.p, aw=std::abs(w);
+      double sum=0.0;
+      for (int j=0;j<N;++j) {
+        const double* r=grid+j*width; const double* cw=r+degree+1; const double* sw=cw+degree+1;
+        const double* ck=sw+degree+1; const double* sk=ck+degree/2+1;
+        sum+=r[c.l]*(cw[aw]*ck[c.k]+(w<0?-sw[aw]:sw[aw])*sk[c.k]);
+      }
+      values[(off+2)*count+q]=sum/N;
+    }
+  }
+  for(int j=0;j<count;++j) {
+    const double gm2=values[j],gm1=values[count+j],g0=values[2*count+j],gp1=values[3*count+j],gp2=values[4*count+j];
+    out[j].g=res::GTaylor{g0,(gm2-8*gm1+8*gp1-gp2)/(12*dh),
+      (-gp2+16*gp1-30*g0+16*gm1-gm2)/(12*dh*dh),(gp2-2*gp1+2*gm1-gm2)/(2*dh*dh*dh)};
+  }
+  std::free(grid); std::free(values);
   return count;
 }
 inline void half_day_six(const HalfDayCoef* table, int count, double e0, double i0,
