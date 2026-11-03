@@ -1709,19 +1709,20 @@ too large from day 2 (coverage 0.98 to 1.0). These are a measured limit of the p
 band; the band is not widened.
 
 
-SDNAP calibration cells measured 2026-11-03 on the rows named in 12.5 with the full-precision AP sets of 0.4.9
-(16.9; noise constants unchanged), from `test/results/covariance-ap-calibration.json` (1 of 8 inside):
+SDNAP calibration cells measured 2026-11-03 on the rows named in 12.5 with the 0.4.11 release (5.4's quadrature,
+16.8 at every eccentricity; noise constants unchanged), from `test/results/covariance-ap-calibration.json` (1 of 8
+inside):
 
 | Theory | Regime | Day | Mean d^2/3 | Inside 95 % | Band |
 | --- | --- | --: | --: | --: | --- |
-| SDNAP | DRAG | 1 | 0.601767030 | 0.964837484 | outside |
-| SDNAP | DRAG | 2 | 0.651373607 | 0.981540959 | outside |
-| SDNAP | DRAG | 3 | 0.961576311 | 0.992866271 | outside |
-| SDNAP | DRAG | 7 | 1.476930466 | 0.998071394 | outside |
-| SDNAP | ABOVE | 1 | 0.814963278 | 0.943482971 | inside |
-| SDNAP | ABOVE | 2 | 1.101331141 | 0.997029204 | outside |
-| SDNAP | ABOVE | 3 | 0.519707793 | 0.997515638 | outside |
-| SDNAP | ABOVE | 7 | 1.199193799 | 0.989929925 | outside |
+| SDNAP | DRAG | 1 | 0.602178001 | 0.964768857 | outside |
+| SDNAP | DRAG | 2 | 0.652238081 | 0.981394184 | outside |
+| SDNAP | DRAG | 3 | 0.962426646 | 0.992796247 | outside |
+| SDNAP | DRAG | 7 | 1.477353015 | 0.998071394 | outside |
+| SDNAP | ABOVE | 1 | 0.835627755 | 0.942412334 | inside |
+| SDNAP | ABOVE | 2 | 1.099153324 | 0.997029204 | outside |
+| SDNAP | ABOVE | 3 | 0.518532608 | 0.997515638 | outside |
+| SDNAP | ABOVE | 7 | 1.198587478 | 0.989929925 | outside |
 
 Neither theory's table is inside the band at every lead, so neither earns a realism label.
 The AP E2E asserts the shipped minimax table, reproduction of every cell mean and coverage
