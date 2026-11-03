@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.7.
+Version 0.4.8.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -366,3 +366,9 @@ an additional epoch-axis rotation (SPEC 16.4). On the seven already-read AP6 TES
 median paired day-3 AP-minus-XP error falls from +420.105792 to -0.000784 m, within the 50 m bound. All four
 synthetic HEO fixtures retain their day-1/3/7 errors exactly (0.000 m change, <1 m allowed), and XP retains
 its digest. `test/heo-frame.e2e.mjs` prints every window and fixture; unread-window confirmation is separate.
+
+AP adds each third body's tidal terms of degree 4 to 10 to the averaged rates of orbits with periods below 1100 min
+and eccentricities below 0.1 (SPEC 16.8; XP's stop at degree 3). On the eleven already-read AP6 windows of each (exploratory), the median paired
+day-3 AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on
+Etalon-2; LAGEOS-1, LAGEOS-2 and LARES-2 move from 15.44, 11.89 and 15.04 m to 14.10, 12.24 and 11.00 m, and IG and
+GE are unchanged (`test/etalon-resonance.e2e.mjs`).

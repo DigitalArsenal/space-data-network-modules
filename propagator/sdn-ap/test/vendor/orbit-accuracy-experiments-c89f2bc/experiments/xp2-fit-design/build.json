@@ -1,0 +1,28 @@
+{
+  "modulesCommit": "9a05d899b95242b358939ab1d68a776170a6b167",
+  "modulesCommitNote": "space-data-network-modules main on 2026-10-31, XM3's build: analysis/estimation 0.7.0, propagator/ffm 2.0.4; XM's modules byte-identical to its fbda89450 build",
+  "wasmFrom": "git show <modulesCommit>:<module>/dist/isomorphic/module.wasm and plugin-manifest.json, SHA-256 checked; never a working tree",
+  "wasmSha256": {
+    "propagator/sdn-ap": "49fa4b0f65887a7b69232e19fe2c8de5d790e7e91818539d9f1cbdd3c2ffca77",
+    "propagator/sgp4": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+    "analysis/gp-error-model": "8e13eddbd5ccc3e0ee121f3b851e8314e426715cf5517823aa8d925566ef0e19",
+    "foundation/frames": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4",
+    "analysis/density-calibration": "5d284078821dd80cabd499bce10b174bf635a2456cda261d641a6219b4df3719",
+    "propagator/ffm": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2",
+    "analysis/estimation": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
+    "analysis/reference-states": "77e16becd0167651219e11f1caaceacf352be535b8de56640ebe108cd7c3492f",
+    "files/orbit-products": "688f22ee2dba278d19e4029e8aedf1aa46fffd9910428f7d7ed40c9eeb583ad3",
+    "data-source/eop-parser": "03afedc590707a1d592edd0841f367b835498c97e5508526553e01b0d89997c1"
+  },
+  "code": {
+    "xm": { "commit": "2c7b326d4fd1a4a79a325ce03ea053a81599c0fa", "dir": "experiments/xp-atmosphere-merit", "use": "imported unchanged (git diff --quiet at every run); its build.modulesCommit, public.creationDays and spaceWeather.rsgaDirs are set in process to this experiment's" },
+    "xm3": { "commit": "ee2a513611eabf9de49972e8fe3e086125f10bfe", "dir": "experiments/ffm-atmosphere-xm3", "use": "lib/ffm.mjs imported unchanged: fit_batch version 3 through harness/ffm-fit-v3.mjs, XM3's settings but for the arc" }
+  },
+  "hosts": {
+    "propagator/sdn-ap, propagator/sgp4, foundation/frames": "XM's lib/modules.mjs, unchanged",
+    "analysis/gp-error-model": "its own space-data-module-sdk 0.9.12 host/browser-module harness, a fresh harness per call, as XM hosts it",
+    "propagator/ffm, analysis/estimation": "XM3's lib/ffm.mjs, unchanged",
+    "analysis/reference-states, files/orbit-products, data-source/eop-parser": "space-data-module-sdk 0.9.12, analysis/gp-error-model's install: the declared version of analysis/reference-states (its own install in the canonical checkout is 0.8.26, which answers plugin.getConfig without a $PIV response)"
+  },
+  "conversionCheck": "fetch-swarm.mjs and prepare.mjs --rso reproduce the archive's conversion of spent days and arcs byte for byte (every .oem and index.json of Swarm start day 2026-03-09; the .oem of GRACE-FO arcs of 2026-03-09)"
+}

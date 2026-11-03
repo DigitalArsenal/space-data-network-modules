@@ -1,0 +1,69 @@
+{
+  "experiment": "xp2-fit-design",
+  "id": "XP2F",
+  "frozen": true,
+  "task": "experiments-xp2-fit-design-fresh-20261031",
+  "wipRefPrefix": "origin/wip/experiments-xp2-fit-design-fresh-20261031",
+  "store": "/opt/data/sdn-archive/xp2-fit-design",
+  "build": { "file": "experiments/xp2-fit-design/build.json" },
+  "xm": { "commit": "2c7b326d4fd1a4a79a325ce03ea053a81599c0fa", "dir": "experiments/xp-atmosphere-merit", "rows": "/opt/data/sdn-archive/xp-atmosphere-merit/rows" },
+  "xm3": { "commit": "ee2a513611eabf9de49972e8fe3e086125f10bfe", "dir": "experiments/ffm-atmosphere-xm3", "rows": "/opt/data/sdn-archive/ffm-atmosphere-xm3/rows" },
+  "spans": {
+    "primary": { "from": "2025-10-04", "to": "2025-12-21", "objects": [39452, 39451, 39453, 43476, 43477] },
+    "extension": { "from": "2025-01-01", "to": "2025-09-30", "objects": [39452, 39451, 39453] }
+  },
+  "expectedWindows": { "primary": 395, "extension": 819 },
+  "objects": [
+    { "norad": 39452, "name": "Swarm A", "truth": "swarm", "product": "SW_OPER_SP3ACOM_2__", "cluster": "Swarm A+C" },
+    { "norad": 39451, "name": "Swarm B", "truth": "swarm", "product": "SW_OPER_SP3BCOM_2__", "cluster": "Swarm B" },
+    { "norad": 39453, "name": "Swarm C", "truth": "swarm", "product": "SW_OPER_SP3CCOM_2__", "cluster": "Swarm A+C" },
+    { "norad": 43476, "name": "GRACE-FO 1", "truth": "gfz-rso", "code": "L64", "objectId": "2018-047A", "cluster": "GRACE-FO" },
+    { "norad": 43477, "name": "GRACE-FO 2", "truth": "gfz-rso", "code": "L65", "objectId": "2018-047B", "cluster": "GRACE-FO" }
+  ],
+  "arcs": { "free": 72, "elements": 17, "ffmShort": [12, 24], "ffmLong": 72, "sgp4Long": 72 },
+  "arms": {
+    "cutoff": ["P", "X2", "R17", "RF17", "RFa24", "RFa12", "S72L", "S17LF", "S17LP"],
+    "parity": ["S17LPc", "R17c", "RFa12c"],
+    "parityPrimaryOnly": ["RFa24c", "RF17c"]
+  },
+  "pinnedBterm": { "form": "LOG_NORMAL", "sigma": 1e-6, "note": "FIT.DRAG_PRIOR: MEAN the held BTERM, SIGMA 1e-6; the SRP prior and every other FIT field XM's" },
+  "public": { "creationDays": ["2024-12-01", "2025-12-21"], "rule": "XM's lib/public.mjs: the newest set by EPOCH with EPOCH and CREATION_DATE at or before the cutoff" },
+  "spaceWeather": {
+    "bundles": {
+      "2024": { "file": "/opt/data/sdn-archive/hac/noaa-swpc/warehouse/2024_RSGA.tar.gz", "sha256": "6ef07a2ebd3d96dca8d7972ef2406d863438e1a4157aa12acbbf6c797b7ff4cb" },
+      "2025": { "file": "/opt/data/sdn-archive/hac/noaa-swpc/warehouse/2025_RSGA.tar.gz", "sha256": "15e1507537918391e247a3daa2aa97d6d398556dfd50d2556d3dbb9e08c66897" }
+    },
+    "normalized": "<store>/rsga/normalized, every bulletin of 2024-11-01 to 2025-12-31; a bulletin XM's parser reads is copied unchanged",
+    "condition": "XM's O: lib/weather.mjs rowsO on the normalized bulletins, rows from cutoff - 75 d; FFM reads them through XM3's driverRows"
+  },
+  "term": {
+    "note": "report only, a statistic at output: the fixed 12 h along-track line, one amplitude and phase for all objects, medians over XM's 750 windows of the diagnosis's per-window coefficients, node rates from XM's dates; never fed to a fit",
+    "a": 0.01000820004538388,
+    "b": -0.8028152157598107,
+    "W_E": 6.300388098979895,
+    "T0": "2026-01-01T00:00:00Z",
+    "Od": { "GRACE-FO 1": -0.0024020520421401893, "Swarm B": -0.005289410999123903, "Swarm A": -0.0064661207697994305, "GRACE-FO 2": -0.0024020717365613505, "Swarm C": -0.006466508066867279 },
+    "form": "L(t) = a cos(ph) + b sin(ph), ph = 2 (node0 + Od (d - dset) - W_E d), d days from T0, node0 and dset the public set's RA_OF_ASC_NODE (rad) and epoch; eL is e with L taken off the along-track error"
+  },
+  "statistics": {
+    "clusters": { "primary": "ISO week of the cutoff", "beside": "orbit group x ISO week" },
+    "levels": { "verdict": 0.975, "beside": 0.95 },
+    "bootstrap": { "draws": 10000, "interval": "percentile", "generator": "xorshift128+ seeded by SHA-256 (XM's)", "seed": "XP2F|<cell>|<arm>/<ref>|<lead>|<clusters>" },
+    "families": {
+      "M": [ { "id": "M1", "arm": "RF17", "ref": "X2", "form": "rule1" }, { "id": "M2", "arm": "X2", "ref": "S72L", "form": "xm" } ],
+      "F": [ { "id": "F1", "arm": "RFa12", "ref": "P", "form": "xm" }, { "id": "F2", "arm": "RFa12", "ref": "S17LP", "form": "rule1" }, { "id": "F3", "arm": "RFa12c", "ref": "P", "form": "xm" }, { "id": "F4", "arm": "RFa24", "ref": "P", "form": "xm" }, { "id": "F5", "arm": "RF17", "ref": "P", "form": "xm" }, { "id": "F6", "arm": "R17", "ref": "P", "form": "xm" } ]
+    },
+    "falsePositive": { "spans": 1000, "draws": 500, "seed": "XP2F-FP|<statement>|<clusters>", "rule": "PLAN.md, False-positive rate" }
+  },
+  "scoring": "XM's, config.scoring of experiments/xp-atmosphere-merit/config.json",
+  "disk": { "stopClaimingBelowGiB": 8 },
+  "workers": { "maximum": 8, "nice": 10, "heapMb": 3072 },
+  "check": { "windows": ["P|39452|2025-11-20", "P|43476|2025-10-20", "P|39451|2025-03-10"], "rule": "each pinned window re-run and every stored number compared exactly, times aside; the table rebuilt from the stored rows equal to the committed table.json byte for byte" },
+  "outOfScope": {
+    "XM's and XM3's windows": "spent; read only in the spent-window control, before any score",
+    "C2 hold-out": "no cutoff on or after 2026-06-01",
+    "E13b bar": "no Swarm or GRACE-FO truth for 2026-10-31 to 11-28",
+    "C2 held-out objects, ISS": "out",
+    "never read": "B2 part 1a and part 5 files, census results, operator-capture content, C3-small's rows"
+  }
+}

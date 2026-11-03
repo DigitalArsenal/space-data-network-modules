@@ -1,0 +1,40 @@
+{
+  "modulesCommit": "fbda894501f32210b77c74b53bcad036ce7a1b07",
+  "modulesCommitNote": "space-data-network-modules main on 2026-10-30, as built: propagator/sdn-ap at f0a57c11a ($PCF 1.0.6 prior forms, SDS 1.272.0; XM's module task modules-sgp4xp-fit-lognormal-drag-20261026), propagator/sgp4 1.4.1 (AFSPC mode since 1.4.0)",
+  "wasmFrom": "git show <modulesCommit>:<module>/dist/isomorphic/module.wasm and plugin-manifest.json, SHA-256 checked, copied to <store>/build/<modulesCommit>/; never a working tree",
+  "wasmSha256": {
+    "propagator/sdn-ap": "49fa4b0f65887a7b69232e19fe2c8de5d790e7e91818539d9f1cbdd3c2ffca77",
+    "propagator/sgp4": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+    "analysis/gp-error-model": "8e13eddbd5ccc3e0ee121f3b851e8314e426715cf5517823aa8d925566ef0e19",
+    "foundation/frames": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4",
+    "analysis/density-calibration": "5d284078821dd80cabd499bce10b174bf635a2456cda261d641a6219b4df3719",
+    "analysis/reference-states": "77e16becd0167651219e11f1caaceacf352be535b8de56640ebe108cd7c3492f",
+    "files/orbit-products": "688f22ee2dba278d19e4029e8aedf1aa46fffd9910428f7d7ed40c9eeb583ad3",
+    "data-source/eop-parser": "03afedc590707a1d592edd0841f367b835498c97e5508526553e01b0d89997c1"
+  },
+  "versions": {
+    "propagator/sdn-ap": "com.spacedatanetwork.sdn-ap-propagator 0.1.0",
+    "propagator/sgp4": "com.orbpro.sgp4 1.4.1",
+    "analysis/gp-error-model": "com.digitalarsenal.analysis.gp-error-model 0.11.0",
+    "foundation/frames": "com.digitalarsenal.foundation.frames 0.2.0",
+    "analysis/density-calibration": "com.digitalarsenal.analysis.density-calibration 0.6.0"
+  },
+  "convertedTruth": "the store's GRACE-FO reference states were made on 2026-10-26 by convert.mjs at modules cb22348f2 with analysis/reference-states, files/orbit-products and data-source/eop-parser at the SHA-256 above (unchanged at modulesCommit)",
+  "hostFiles": {
+    "paths": ["propagator/sgp4/tests/lib", "analysis/gp-error-model/scripts/erm-codec.mjs"],
+    "rule": "the modules checkout's copy equals modulesCommit (git diff --quiet modulesCommit -- paths)"
+  },
+  "packages": {
+    "propagator/sdn-ap": { "space-data-module-sdk": "0.9.14", "spacedatastandards.org": "1.272.0", "flatbuffers": "25.9.23" },
+    "propagator/sgp4": { "space-data-module-sdk": "0.10.1", "spacedatastandards.org": "1.140.0", "flatbuffers": "25.9.23" },
+    "analysis/gp-error-model": { "space-data-module-sdk": "0.9.12", "spacedatastandards.org": "1.261.0" },
+    "foundation/frames": { "space-data-module-sdk": "0.8.18" }
+  },
+  "hosts": {
+    "propagator/sdn-ap": "its own space-data-module-sdk testing/isomorphic standalone harness (direct surface)",
+    "propagator/sgp4": "its own space-data-module-sdk host/browser-module harness, a fresh harness per call",
+    "analysis/gp-error-model": "its own space-data-module-sdk host/browser-module harness",
+    "foundation/frames": "its own space-data-module-sdk host/browser-module harness",
+    "analysis/density-calibration": "space-data-module-sdk 0.9.12 (its declared version; the checkout has no install of its own) host/browser-module harness, resolved from analysis/gp-error-model's install"
+  }
+}

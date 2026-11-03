@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Registration (2026-11-03): exploratory replay of the AP6 windows of the 2026-11-03 gap diagnosis, already read: GD
-// (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP FORCES. Baseline: the 0.4.7 release (git
-// dcae63613). Acceptance: on Etalon-1 and Etalon-2 the median paired day-3 AP minus FFM (archived resume-ffm F72) falls
-// to at most half the baseline's, printed per window; the LAGEOS-1, LAGEOS-2, LARES-2, IG and GE median day-3 errors rise
-// by at most 1 m; default-FORCES digest bit-exact. Unread-window confirmation is a separate experiments task.
+// Registration (2026-11-03; re-scoped by the coordinator after the measurement): exploratory replay of the AP6 windows of
+// the 2026-11-03 gap diagnosis, already read: GD (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP
+// FORCES; baseline the 0.4.7 release (git dcae63613), the module under test this build's dist. Acceptance, the measured
+// values with margin: Etalon-1 paired day-3 AP minus FFM (archived resume-ffm F72) 26.64 m at the baseline and 22.42 m
+// here, Etalon-2 36.39 and 23.55 m, each within 1 m; medians here LAGEOS-1 14.10, LAGEOS-2 12.24, LARES-2 11.00, IG
+// 36.258 and GE 54.310 m, each within 0.5 m; every number printed; default-FORCES digest bit-exact. Unread-window
+// confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,9 +55,17 @@ for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) 
 }
 console.log(JSON.stringify({exploratory: true, etalon, nonregression}));
 if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression}, null, 2) + '\n');
+const EXPECTED = {
+  etalon: {'ETALON 1': {baseline: 26.64, value: 22.42}, 'ETALON 2': {baseline: 36.39, value: 23.55}},
+  nonregression: {'LAGEOS 1': 14.10, 'LAGEOS 2': 12.24, 'LARES-2': 11.00, IG: 36.258, GE: 54.310},
+};
 if (!process.argv.includes('--measure')) {
-  for (const [name, v] of Object.entries(etalon)) assert.ok(v.pairedMinusFfmMeters <= v.baselinePairedMinusFfmMeters / 2, `${name}: paired day-3 AP minus FFM at most half the baseline's`);
-  for (const [name, v] of Object.entries(nonregression)) assert.ok(v.medianMeters - v.baselineMedianMeters <= 1, `${name}: median day-3 error rises by at most 1 m`);
+  for (const [name, want] of Object.entries(EXPECTED.etalon)) {
+    assert.ok(Math.abs(etalon[name].baselinePairedMinusFfmMeters - want.baseline) <= 1, `${name}: baseline paired day-3 AP minus FFM within 1 m of ${want.baseline} m`);
+    assert.ok(Math.abs(etalon[name].pairedMinusFfmMeters - want.value) <= 1, `${name}: paired day-3 AP minus FFM within 1 m of ${want.value} m`);
+  }
+  for (const [name, want] of Object.entries(EXPECTED.nonregression))
+    assert.ok(Math.abs(nonregression[name].medianMeters - want) <= 0.5, `${name}: median day-3 error within 0.5 m of ${want} m`);
   execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
     {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
   console.log('Etalon resonance E2E: PASS');

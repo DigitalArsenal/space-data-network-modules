@@ -1,0 +1,50 @@
+{
+  "modulesCommit": "9a05d899b95242b358939ab1d68a776170a6b167",
+  "modulesCommitNote": "space-data-network-modules main (origin/main) on 2026-10-31: analysis/estimation 0.7.0 (af6f94398, fit_batch converges at the cost's resolution; task modules-estimation-fit-v3-converge-at-noise-floor-20261031, stack receipt 616737f276); propagator/ffm 2.0.4 and XM's modules byte-identical to XM2's build fbda89450, an ancestor (three commits between, all estimation 0.7.0)",
+  "wasmFrom": "git show <modulesCommit>:<module>/dist/isomorphic/module.wasm and plugin-manifest.json, SHA-256 checked, copied to <store>/build/<modulesCommit>/; never a working tree",
+  "wasmSha256": {
+    "propagator/ffm": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2",
+    "analysis/estimation": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd"
+  },
+  "changedFromXm2": {
+    "analysis/estimation": { "versions": "0.6.0 -> 0.7.0", "wasm": "0e7b4f6ad359f7be07a1d1e88685d65642ba0e8cadbf18777e3aee7ee1bfceac -> 7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd", "manifest": "b9020228780ce48f8ab1b71ebe2dfe096444e32eb0a61ca2ac70525e1c4a176e -> f3c63ac7c9d32aa6f85bc71ba79d11beffa26d9567a537330b24ac6e0056d05b" },
+    "unchanged": "every other wasm and manifest (propagator/ffm 165fd160...), the host files and the harness files are byte-identical to XM2's build (modules fbda89450)"
+  },
+  "xmWasmSha256": {
+    "note": "XM's build.json (experiments/xp-atmosphere-merit/build.json at 2c7b326, modules fbda89450); XM's lib/modules.mjs loads them at that commit, SHA-256 checked; byte-identical at 9a05d899b",
+    "propagator/sdn-ap": "49fa4b0f65887a7b69232e19fe2c8de5d790e7e91818539d9f1cbdd3c2ffca77",
+    "propagator/sgp4": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+    "analysis/gp-error-model": "8e13eddbd5ccc3e0ee121f3b851e8314e426715cf5517823aa8d925566ef0e19",
+    "foundation/frames": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4",
+    "analysis/density-calibration": "5d284078821dd80cabd499bce10b174bf635a2456cda261d641a6219b4df3719"
+  },
+  "versions": {
+    "propagator/ffm": "com.orbpro.ffm 2.0.4",
+    "analysis/estimation": "com.digitalarsenal.analysis.estimation 0.7.0"
+  },
+  "hostFiles": {
+    "paths": ["propagator/ffm/catalog-configuration.mjs", "analysis/estimation/schemas/Estimation.fbs"],
+    "sha256": {
+      "propagator/ffm/catalog-configuration.mjs": "7d7bc1d4ccc9d8247962478af229a29948251d12fab9094f7d97ff8f39f478f6",
+      "analysis/estimation/schemas/Estimation.fbs": "38c771916ffe63b1c404bc4d1826d7a85ddf50979d16a5f986f06b002b273aba"
+    },
+    "rule": "the modules checkout's copy equals modulesCommit (git diff --quiet) and the SHA-256 above: FIT_PARAMETER_DOMAINS and the $EST schema the codec reads (unchanged since XM2: 0.7.0 has no schema change)"
+  },
+  "harness": {
+    "files": ["harness/ffm-fit-v3.mjs", "harness/ffm-execution.mjs", "harness/prw.mjs"],
+    "sha256": {
+      "harness/ffm-fit-v3.mjs": "42aa040a6944971e6c314551d7350aad0887bd51025228c1486c50b3a1b8ee9c",
+      "harness/ffm-execution.mjs": "b9308822efa8dea4ac05526a05eb8008314f6e0ae74bb0a0e1069d7ac7b71b1e",
+      "harness/prw.mjs": "f7c1ca85bdad35bce35c9a4808c3456f794293505bc6b9bea21f078d88f84985"
+    },
+    "rule": "the experiments' committed copies, SHA-256 checked at every run (XM2's)"
+  },
+  "hosts": {
+    "propagator/ffm": "the experiments' space-data-module-sdk 0.9.7 host/browser-module harness, one instance per worker (as C2, B2 A12 and XM2 host it)",
+    "analysis/estimation": "the experiments' space-data-module-sdk 0.9.7 host/browser-module harness (the modules checkout installs nothing for it); $EST encoded by flatc-wasm 26.1.38 with the module's Estimation.fbs (harness/ffm-fit-v3.mjs estimationCodecV3)",
+    "encoding": "PRW requests and environment tables with the experiments' spacedatastandards.org 1.243.0 bindings (propagator/ffm 2.0.4 is built on 1.271.0; XM2's smoke test checked the pairing, XM3's repeats it)"
+  },
+  "packages": {
+    "experiments": { "space-data-module-sdk": "0.9.7", "spacedatastandards.org": "1.243.0", "flatbuffers": "25.9.23", "flatc-wasm": "26.1.38" }
+  }
+}

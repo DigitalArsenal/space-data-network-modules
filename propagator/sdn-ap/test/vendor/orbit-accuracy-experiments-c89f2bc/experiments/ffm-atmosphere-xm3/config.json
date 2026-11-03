@@ -1,0 +1,171 @@
+{
+  "experiment": "ffm-atmosphere-xm3",
+  "id": "XM3",
+  "frozen": true,
+  "task": "experiments-ffm-atmosphere-xm3-20261031",
+  "follows": {
+    "task": "experiments-ffm-atmosphere-vs-sgp4-20261030",
+    "commit": "2f75aba0ed7addb7f64f66665d0afde13c4e5730",
+    "registration": "7bc9314392d08ba097fb7fdb6bed92f6a360d2d2",
+    "amendmentA1": "c3391772be4892d79da226456e3ce7c2c133d56a",
+    "note": "XM2: its windows, cuts, clusters, leads, conditions, arms, fit, environment (with A1), rule, statistics, public-set extraction and scorer, unchanged; only analysis/estimation changes (0.6.0 to 0.7.0)"
+  },
+  "store": "/opt/data/sdn-archive/ffm-atmosphere-xm3",
+  "build": { "file": "experiments/ffm-atmosphere-xm3/build.json", "note": "the modules commit (modules main) and each module's wasm SHA-256; every wasm is read with git show at that commit, never from a working tree" },
+  "xm": {
+    "commit": "2c7b326d4fd1a4a79a325ce03ea053a81599c0fa",
+    "dir": "experiments/xp-atmosphere-merit",
+    "store": "/opt/data/sdn-archive/xp-atmosphere-merit",
+    "rowsDigest": "5ebcddc4f423",
+    "code": "XM's lib/truth.mjs, lib/weather.mjs, lib/public.mjs, lib/sds.mjs and lib/modules.mjs are imported unchanged; experiments/xp-atmosphere-merit must equal the commit (git diff --quiet) for every run",
+    "rows": "XM's stored rows (<xm store>/rows/*.jsonl), read only: their digest is checked; XM2's rows equal them in P and X2",
+    "dcl": "XM's cached $DCL answers (<xm store>/dcl/<issue ms>.json), read only; a missing one is an error, never computed here"
+  },
+  "xm2": {
+    "commit": "2f75aba0ed7addb7f64f66665d0afde13c4e5730",
+    "dir": "experiments/ffm-atmosphere-vs-sgp4",
+    "store": "/opt/data/sdn-archive/ffm-atmosphere-vs-sgp4",
+    "rowsDigest": "e3ff825c2888",
+    "rows": "XM2's stored rows, primary (A1): <xm2 store>/rows/O.s*.jsonl with each window of O.A1.jsonl in place of its registered row, read only; their digest is checked; every rerun P and X2 must equal them",
+    "table": { "path": "results/ffm-atmosphere-vs-sgp4/table.json", "sha256": "67e9b886f2a4910bd5d48d6424fd6406d679e829c876eca8e782e4e49463992c", "read": "git show <commit>:<path>, SHA-256 checked; each XM3 cell carries XM2's primary cell beside it" }
+  },
+  "period": { "from": "2026-01-01", "to": "2026-05-31", "cutoff": "00:00 UTC of every day of the period", "why": "XM's period: C2 holds out every calibration object from cutoff 2026-06-01 on (integrity cut 2)" },
+  "arms": {
+    "F2": { "label": "propagator/ffm fitted by analysis/estimation 0.7.0 fit_batch version 3 to the 72 h precise arc, NRLMSISE-00 on the condition's $SPW rows", "inputs": ["kernel", "earth_orientation", "space_weather"] },
+    "F3": { "label": "F2 times the open-DCA $DCL: the same fit and forecast with the density multiplied by exp(s(t))", "inputs": ["kernel", "earth_orientation", "space_weather", "density_correction"] },
+    "X2": { "label": "XM's X2 (SGP4XP, NRLMSISE-00 on the same rows), rerun with XM's code and required equal to XM2's stored row", "reference": true },
+    "P": { "label": "XM's P (the public Space-Track set under the console's SGP4), rerun with XM's code and required equal to XM2's stored row", "reference": true }
+  },
+  "fit": {
+    "module": "analysis/estimation 0.7.0 fit_batch version 3 answered by propagator/ffm invoke, driven by harness/ffm-fit-v3.mjs fitV3 (one round at the stated sigma; domains from propagator/ffm's FIT_PARAMETER_DOMAINS; ok only when CONVERGED)",
+    "profile": "P0: C2 classes R1 and R2 (experiments/ffm-covariance-calibration run.mjs settingsOf(o, true)), B2 A12's selected profile",
+    "estimated": ["the GCRF position and velocity at the arc's first state", "DRAG_AREA_OVER_MASS (B = Cd A/m, m2/kg, domain [0, inf))", "SRP_AREA_OVER_MASS (AGOM = Cr A/m, m2/kg, domain [0, inf))"],
+    "seeds": { "file": "results/ffm-covariance-calibration/seeds-R1R2.json", "sha256": "a5bb7d5f871ff0e214b733658aeb78adf776b17f9ea61850ea5058737af3adb4", "rule": "the object's bSeed and agomSeed (published area and mass: B = A/m x 2.2, AGOM = A/m x 1.3); they are the parameters' first values and a priori means" },
+    "apriori": { "positionSigmaM": 100000, "velocitySigmaMS": 10, "parameterFraction": 0.3, "form": "diagonal (6 + 2)^2: position 100 km, velocity 10 m/s, each parameter 30 % of its seed" },
+    "measurement": { "kind": "POSITION_VECTOR", "frame": "GCRF", "sigmaM": 10 },
+    "rounds": 1,
+    "maximumIterations": 40,
+    "correctionTolerance": 0.01,
+    "sigmaEditThreshold": 5,
+    "forces": { "degree": 70, "order": 70, "thirdBodies": [10, 301], "srp": true, "drag": true, "atmosphere": "NRLMSISE00", "solidTides": true, "relativity": "IERS_2010" },
+    "forcesNote": "EGM2008 70 x 70 in Earth-fixed axes, the Sun and the Moon from DE440s, cannonball radiation pressure with the conical shadow, NRLMSISE-00 drag, IERS 2010 solid tides and relativity; no ocean tides, Earth radiation or winds (B2 part1.starlink.ffm.forces, C2's)",
+    "integrator": { "tolerance": 1e-10, "maxStep": 120, "minStep": 0.0001 },
+    "integratorNote": "RK78 (harness/ffm-execution.mjs): relative tolerance 1e-10, absolute 1e-7 (m, m/s), initial step 60 s, minimum 1e-4 s, maximum 120 s, at most 1,000,000 steps; analytic STM, the density gradient by finite difference",
+    "arcHours": 72,
+    "arc": "XM's 72 h arc: the truth's states in [cutoff - 72 h, cutoff], every round(300 / step)-th state of the product's own grid (XM lib/truth.mjs thinned); the reference epoch is the arc's first state",
+    "minimumCoverage": 0.9,
+    "coverage": "XM's rule: an arc holding less than 90 % of its states is not fitted and the window leaves the F and X2 cells, counted",
+    "loss": "a fit that does not end CONVERGED (MAXIMUM_ITERATIONS, STALLED, a fit-failed request), a refused forecast, a missing $DCL (F3) or a non-finite state fails its F arm in every bin of the window (rule 3), never dropped"
+  },
+  "forecast": "propagator/ffm invoke from the fitted state and parameters (harness/ffm-fit-v3.mjs propagateV3, the fit's forces, integrator and inputs, no STM) to the scored epochs, GCRF, meters to kilometers",
+  "environment": {
+    "kernel": { "path": "/opt/data/sdn-archive/hac/naif-kernels/spk/planets/de440s.bsp", "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2", "frame": "harness/prw.mjs kernelFrame (PRW NATIVE_INPUT, SPK_DAF)" },
+    "earthOrientation": {
+      "file": "/opt/data/sdn-archive/sdn-ap-baselines/environment/environment.json",
+      "sha256": "520b825d61e64418d1904a482da49c647cb2f92765c9df736d14d90a6e61dcf6",
+      "rows": "its earth_orientation_finals rows (IERS finals.all.iau2000.txt retrieved 2026-10-09, parsed by data-source/eop-parser; B1 amendments A1 and A2); B1's rule takes them for every arc before 2026-07-15 (its saved rows begin at MJD 61236), as C2's fits of these objects took them",
+      "slice": "B1's forArc: the rows with MJD in [MJD(arc start - 2 d) - 1, MJD(last scored epoch + 2 d) + 1], one PRW EARTH_ORIENTATION",
+      "disclosure": "final values over the forecast horizon, not the predictions issued at the cutoff; the effect at 7 days is meters against errors of kilometers; P and the X arms use no Earth orientation"
+    },
+    "spaceWeather": {
+      "rows": "XM's rows of the condition (XM lib/weather.mjs rowsO and rowsM, from cutoff - 72 h - 3 d), the same rows X2 reads, as SDS SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG) in one PRW SPACE_WEATHER table",
+      "drivers": "XM2's hold-last and amendment A1, registered here: every day from the rows' first day through D0 + 8 that has no row takes the last row at or before it, every value (sdn-ap's rule for X2, SPEC 15.2); past the last row (D0 + 2 under O) this is the hold-last, inside the rows it fills 2026-05-09 (no F10.7 in the GFZ file) for the O cutoffs 2026-05-11 to 2026-05-13; propagator/ffm reads only the rows it is given and needs every day of the arc and the day before (prw_dynamics.cpp:1188-1191); data preparation only",
+      "rowsM": "condition M: rowsM through the last scored epoch + 1 d, as XM",
+      "reading": "propagator/ffm (prw_environment.h:106-152) and propagator/sdn-ap read the rows alike: on UTC day d, F10.7 of day d - 1, F10.7a and Ap of day d; Kp is read only by the HWM14 winds, which are off"
+    },
+    "densityCorrection": "F3 only: XM's $DCL of the condition (O: the open-DCA nowcast issued at the cutoff; M: the hindcast issued at cutoff + 174 h), the bytes XM's X3 read, from XM's cache; a window whose $DCL was refused fails F3 (a loss), as X3"
+  },
+  "conditions": {
+    "O": { "primary": true, "rows": "XM rowsO with the drivers above (held through D0 + 8)", "dclIssueOffsetHours": 0, "excluded": "a cutoff with no RSGA in force (2026-01-01) leaves O, counted" },
+    "M": { "primary": false, "rows": "XM rowsM", "dclIssueOffsetHours": 174, "run": "a sensitivity: run only after every O window is stored and only if time remains; its absence changes no verdict" },
+    "rowsMarginDays": 3
+  },
+  "groups": {
+    "P": {
+      "name": "drag-strong precise LEO (primary)",
+      "objects": [
+        { "norad": 39452, "name": "Swarm A", "truth": "swarm", "product": "SW_OPER_SP3ACOM_2__", "cluster": "Swarm A+C" },
+        { "norad": 39451, "name": "Swarm B", "truth": "swarm", "product": "SW_OPER_SP3BCOM_2__", "cluster": "Swarm B" },
+        { "norad": 39453, "name": "Swarm C", "truth": "swarm", "product": "SW_OPER_SP3CCOM_2__", "cluster": "Swarm A+C" },
+        { "norad": 43476, "name": "GRACE-FO 1", "truth": "gfz-rso", "code": "L64", "objectId": "2018-047A", "cluster": "GRACE-FO" },
+        { "norad": 43477, "name": "GRACE-FO 2", "truth": "gfz-rso", "code": "L65", "objectId": "2018-047B", "cluster": "GRACE-FO" }
+      ],
+      "expectedWindows": 755
+    },
+    "S1": {
+      "name": "Sentinel-1 (secondary LEO)",
+      "objects": [
+        { "norad": 39634, "name": "Sentinel-1A", "truth": "sentinel1", "product": "S1A_OPER_AUX_POEORB_OPOD_", "cluster": "Sentinel-1" },
+        { "norad": 62261, "name": "Sentinel-1C", "truth": "sentinel1", "product": "S1C_OPER_AUX_POEORB_OPOD_", "cluster": "Sentinel-1" }
+      ],
+      "expectedWindows": 302
+    }
+  },
+  "notRun": {
+    "GN": "XM's GNSS control tested SGP4XP's atmosphere switch above the drag-free altitude; it does not bear on this question",
+    "24 h arc": "XM showed a 24 h arc does not determine the drag term (X2 against X0 within 0.3 % of 1)",
+    "X0, X3": "not needed: the contrasts are against P and X2"
+  },
+  "outOfScope": {
+    "TerraSAR-X 31698": "C2 holds it out by object (cut 1)",
+    "Sentinel-1D 66315": "C2 holds it out by object (cut 1)",
+    "ISS 25544": "C2 holds the ISS out for 2025-01-01..2026-10-31 (cut 3)",
+    "laser-ranged spheres": "C2's type-L hold-out and after 2026-06-01 (cuts 2 and 4)"
+  },
+  "integrity": [
+    { "cut": 1, "rule": "C2's held-out objects are out entirely", "applied": "XM's groups P and S1 only: no C2 held-out object" },
+    { "cut": 2, "rule": "C2's calibration objects: no cutoff on or after 2026-06-01", "applied": "every cutoff is in 2026-01-01..2026-05-31" },
+    { "cut": 3, "rule": "the ISS is out", "applied": "no ISS window" },
+    { "cut": 4, "rule": "no laser-sphere group", "applied": "none" },
+    { "cut": 5, "rule": "GPCV P0: Swarm and GRACE-FO truth read only in 2025-12-28..2026-06-08", "applied": "as XM; the smoke test's arc (Swarm A, cutoff 2025-12-31) lies inside it" },
+    { "cut": 6, "rule": "never read: C2 held-out row files, B2 part 1a and part 5 files, propagator-catalog-census results, operator-capture cycle content", "applied": "no step reads them; C2's seeds-R1R2.json is a calibration-time seed file from published area and mass" }
+  ],
+  "scoring": {
+    "leadDays": [1, 2, 3, 7],
+    "gridSeconds": 300,
+    "grid": "XM's: the truth's epochs in (cutoff, cutoff + 7 d] whose offset from the first of them is a whole multiple of 300 s",
+    "bin": "lead day k: (cutoff + (k - 1) d, cutoff + k d]",
+    "binMinimumEpochs": 260,
+    "binRule": "a bin enters when the truth holds at least 260 of its 288 grid epochs (90 %), decided by the truth alone",
+    "metric": "e: the 3D RMS position error of the bin (km) in the truth's RTN axes (analysis/gp-error-model pair_statistics, XM's scorer); the along-track RMS beside it",
+    "frames": "F arms are GCRF as propagator/ffm returns them; P and X2 go TEME to GCRF by foundation/frames as in XM; every arm is scored against the same GCRF truth at the same epochs",
+    "nonFinite": "an arm with a non-finite state at a scored epoch fails"
+  },
+  "statistics": {
+    "pairs": "per group, condition, contrast and lead: the windows whose bin entered and whose reference arm was attempted",
+    "d": "ln(e_arm / e_ref); arm failed: +Infinity (its loss, never dropped); else reference failed: -Infinity",
+    "p95": "ln(p95 of e_arm / p95 of e_ref), a failed arm's e = +Infinity",
+    "bootstrap": { "unit": "orbit group x ISO week of the cutoff", "draws": 10000, "level": 0.95, "interval": "percentile (2.5 %, 97.5 %)", "generator": "xorshift128+ seeded by SHA-256 (XM's)", "seed": "XM2|<group>|72|<condition>|<arm>/<ref>|<lead>|<clusters>", "seedNote": "XM2's label, unchanged: a cell whose pairs are unchanged reproduces XM2's cell exactly, and every difference in an F cell comes from the F rows" },
+    "clusters": { "primary": "orbit group (groups.*.objects.cluster) x ISO week", "sensitivity": "satellite x ISO week" },
+    "nan": "a NaN statistic counts as +Infinity (against the arm)",
+    "converged": "the CONVERGED share of the F fits, per group, condition and arm, reported beside the cells"
+  },
+  "verdict": {
+    "primary": [
+      { "question": "does F3 beat P", "contrast": "F3/P" },
+      { "question": "does F2 beat P", "contrast": "F2/P" }
+    ],
+    "cells": "condition O, orbit-group clusters, leads 1, 2, 3 and 7, per group (P primary, S1 secondary); no pooling across groups",
+    "rule": "an arm beats its reference in a group only if every lead cell meets all three: (1) the 95 % interval of the median d lies wholly below 0; (2) the upper bound of the 95 % interval of ln(p95_arm / p95_ref) is below ln 1.10; (3) the arm fails on at most 1 % of the pairs",
+    "inputAvailability": "known before any score, from the inputs: the open DCA refused its nowcast for the cutoffs 2026-04-09 and 2026-04-10 (stale-fleet), so F3 fails 10 of group P's 750 pairs and 4 of S1's 257 to 259 at every lead whatever the fit does; rule 3 allows 7.5 and 2.6, so by construction F3 cannot pass against P, F2 or X2; F2 against P is the comparison that can deliver a pass",
+    "secondary": ["F3 against F2 (the open DCA's own effect), condition O, the same rule", "F2 against X2 and F3 against X2 (the full-force fit against XM's AP XP on the same rows), condition O, the same rule"],
+    "reproduction": "X2 against P from the rerun rows equals XM2's registered cell exactly (the same rows and seeds)",
+    "sensitivities": ["condition M (if run)", "satellite x ISO week clusters"]
+  },
+  "comparison": {
+    "cells": "beside every XM3 cell, XM2's primary (A1) cell from xm2.table",
+    "terminations": "XM2's fit termination against XM3's, per group and arm; the rounds, rejected trials and B of the fits XM2 lost",
+    "invariance": { "rule": "an F arm whose XM2 fit ended CONVERGED with zero rejected trials takes the same trials under 0.7.0 (the module's statement); its arm (fit record, GCRF digest, days) is compared with XM2's and counted equal or differing", "expected": 1623, "role": "report-only; decides nothing" }
+  },
+  "check": {
+    "windows": ["P|39452|2026-03-10", "S1|39634|2026-03-10", "P|43476|2026-02-13"],
+    "condition": "O",
+    "rule": "each pinned window re-run under O and every stored number compared exactly (===); the table rebuilt from the stored rows equal to the committed table.json byte for byte",
+    "why": "XM2's two windows, and GRACE-FO 1 2026-02-13, whose F2 fit XM2 lost STALLED after 37 rounds: it replays 0.7.0's new branch"
+  },
+  "smoke": {
+    "window": "Swarm A 39452, cutoff 2025-12-31 (outside the period; no score): the 72 h arc fitted and forecast to a synthetic grid of the four lead bins at 300 s under condition M's rows, and under the same rows with the $DCL XM cached for issue 2026-01-01T00:00Z",
+    "when": "before the first scored window",
+    "purpose": "analysis/estimation 0.7.0 in the experiments' host (space-data-module-sdk 0.9.7, SDS 1.243.0 against propagator/ffm 2.0.4 on 1.271.0) and its cost; no truth after the cutoff is read"
+  }
+}

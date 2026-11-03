@@ -1,0 +1,158 @@
+{
+  "experiment": "xp-atmosphere-merit",
+  "id": "XM-fast",
+  "frozen": true,
+  "task": "experiments-xp-atmosphere-merit-20261030",
+  "revives": { "task": "experiments-xp-atmosphere-merit-20261026", "commit": "8f2926174b68e5bc1559cfce6f9ed6256680fbe8", "note": "XM's design, never frozen; its fit settings are kept unchanged" },
+  "store": "/opt/data/sdn-archive/xp-atmosphere-merit",
+  "build": { "file": "experiments/xp-atmosphere-merit/build.json", "note": "the modules commit (modules main) and each module's wasm SHA-256; every wasm is read with git show at that commit, never from a working tree" },
+  "period": { "from": "2026-01-01", "to": "2026-05-31", "cutoff": "00:00 UTC of every day of the period", "why": "C2 holds out every calibration object from cutoff 2026-06-01 on (integrity cut 2); one period for every group" },
+  "arms": {
+    "X0": { "label": "SGP4XP native: Jacchia 1970 on the generic flux model", "forces": null, "inputs": [] },
+    "X2": { "label": "SGP4XP with NRLMSISE-00 on as-issued $SPW rows (the candidate)", "forces": { "ENABLE_DRAG": true, "ATMOSPHERE_MODEL": "NRLMSISE00", "WEATHER_SOURCE": "RECORDS", "WEATHER_EXTENSION": "HOLD_LAST" }, "inputs": ["space_weather"] },
+    "X3": { "label": "X2 times the open-DCA common mode (secondary candidate)", "forces": { "ENABLE_DRAG": true, "ATMOSPHERE_MODEL": "NRLMSISE00", "WEATHER_SOURCE": "RECORDS", "WEATHER_EXTENSION": "HOLD_LAST", "DENSITY_CORRECTION": "DCA_COMMON_MODE" }, "inputs": ["space_weather", "density_correction"] },
+    "P": { "label": "the public Space-Track set under the console's SGP4", "propagator": "propagator/sgp4 propagate_ephemeris (foundation/sgp4-str3, AFSPC mode), TEME, 300 s", "selection": "experiments/e4-operator-ephemeris-parity products.mjs setAt: the newest set by EPOCH with EPOCH and CREATION_DATE at or before the cutoff" }
+  },
+  "fit": {
+    "module": "propagator/sdn-ap fit",
+    "theory": "SGP4XP",
+    "dragPrior": { "form": "LOG_NORMAL", "mean": 0.01, "sigma": 2.302585092994046, "note": "$PCF FIT.DRAG_PRIOR: MEAN the median of BTERM (m2/kg), SIGMA the standard deviation of ln BTERM (ln 10)" },
+    "srpPrior": { "form": "GAUSSIAN_SIGNED", "mean": 0.01, "sigma": 1e-9, "note": "AGOM held at 0.01 m2/kg: a prior sigma under one unit of the lattice digit is not stepped" },
+    "otherFit": "every other FIT field at its $PCF default",
+    "arcsHours": { "primary": 72, "secondary": 24 },
+    "arc": "the truth's states in [cutoff - arc, cutoff], USEABLE_START_TIME the first, USEABLE_STOP_TIME the cutoff, REFERENCE_FRAME GCRF",
+    "epoch": "the arc's first state (the module's placement)",
+    "thinSeconds": 300,
+    "thinRule": "every round(300 / step)-th state of the arc on the product's own grid (G1 lib/baselines.mjs)",
+    "minimumCoverage": 0.9,
+    "coverage": "the arc's states over (arc hours x 3600 / the product's step); below 0.9 the arc is not fitted and the window leaves that arc's cells, counted"
+  },
+  "conditions": {
+    "O": {
+      "primary": true,
+      "rows": "experiments/xp-atmosphere-merit/lib/weather.mjs rowsO: the most recent RSGA issued at or before the cutoff (at most 72 h old) with GFZ observed F10.7 and definitive Ap before it, the trailing 81-day mean, the last row held (HOLD_LAST); no RSGA in force: the window is excluded from O and counted",
+      "dclIssueOffsetHours": 0,
+      "dcl": "the open-DCA nowcast issued at the cutoff"
+    },
+    "M": {
+      "primary": false,
+      "rows": "lib/weather.mjs rowsM: observed F10.7 (DRAO, GFZ file) and GFZ definitive Ap through the horizon, the true centered 81-day mean",
+      "dclIssueOffsetHours": 174,
+      "dcl": "the hindcast: the same solver issued at cutoff + 174 h (7 d + the 6 h latency), every arc through the day-7 horizon"
+    },
+    "rowsMarginDays": 3
+  },
+  "spaceWeather": {
+    "gfzHistory": "/opt/data/sdn-archive/hac/gfz-kp/20261009/Kp_ap_Ap_SN_F107_since_1932.txt",
+    "rsgaDirs": ["/opt/data/sdn-archive/hac/noaa-swpc/warehouse/2026/RSGA", "/opt/data/sdn-archive/hac/noaa-swpc/2026"],
+    "rsgaMaximumAgeHours": 72,
+    "center81Days": 40,
+    "license": "GFZ Kp/ap/Ap/F10.7: CC BY 4.0, Matzka et al. (2021), doi:10.5880/Kp.0001; NOAA SWPC RSGA: US Government work"
+  },
+  "dca": {
+    "arcs": [
+      "/opt/data/sdn-archive/e13-open-dca/planet-arcs/dev-g24lean.msis.jsonl",
+      "/opt/data/sdn-archive/e13-open-dca/planet-arcs/testA-g24lean.msis.jsonl",
+      "/opt/data/sdn-archive/e13-open-dca/planet-arcs/testB-g24lean.msis.jsonl"
+    ],
+    "sample": "experiments/e13-open-dca/planet-sample.json",
+    "latencyHours": 6,
+    "historyDays": 30,
+    "arcHours": [20, 28],
+    "maximumRelativeSigma": 0.5,
+    "license": "derived aggregate of Planet Labs PBC ephemerides, CC BY-NC 4.0; Planet states and arcs stay local"
+  },
+  "groups": {
+    "P": {
+      "name": "drag-strong precise LEO (primary)",
+      "drag": true,
+      "objects": [
+        { "norad": 39452, "name": "Swarm A", "truth": "swarm", "product": "SW_OPER_SP3ACOM_2__", "cluster": "Swarm A+C" },
+        { "norad": 39451, "name": "Swarm B", "truth": "swarm", "product": "SW_OPER_SP3BCOM_2__", "cluster": "Swarm B" },
+        { "norad": 39453, "name": "Swarm C", "truth": "swarm", "product": "SW_OPER_SP3CCOM_2__", "cluster": "Swarm A+C" },
+        { "norad": 43476, "name": "GRACE-FO 1", "truth": "gfz-rso", "code": "L64", "objectId": "2018-047A", "cluster": "GRACE-FO" },
+        { "norad": 43477, "name": "GRACE-FO 2", "truth": "gfz-rso", "code": "L65", "objectId": "2018-047B", "cluster": "GRACE-FO" }
+      ],
+      "expectedWindows": 755
+    },
+    "S1": {
+      "name": "Sentinel-1 (secondary LEO)",
+      "drag": true,
+      "objects": [
+        { "norad": 39634, "name": "Sentinel-1A", "truth": "sentinel1", "product": "S1A_OPER_AUX_POEORB_OPOD_", "cluster": "Sentinel-1" },
+        { "norad": 62261, "name": "Sentinel-1C", "truth": "sentinel1", "product": "S1C_OPER_AUX_POEORB_OPOD_", "cluster": "Sentinel-1" }
+      ],
+      "expectedWindows": 272
+    },
+    "GN": {
+      "name": "GNSS MEO (control)",
+      "drag": false,
+      "control": "above the drag-free altitude X2 and X3 equal X0 bit for bit: every propagated coordinate of every scored epoch; a difference is a software defect and stops the run",
+      "objects": [
+        { "norad": 28874, "name": "G053 GPS-IIR-M", "truth": "gnss", "cluster": "G053" },
+        { "norad": 41019, "name": "G073 GPS-IIF", "truth": "gnss", "cluster": "G073" },
+        { "norad": 43058, "name": "E218 GAL-2", "truth": "gnss", "cluster": "E218" },
+        { "norad": 37869, "name": "R743 GLO-M", "truth": "gnss", "cluster": "R743" },
+        { "norad": 44850, "name": "R859 GLO-M+", "truth": "gnss", "cluster": "R859" }
+      ],
+      "expectedWindows": 752
+    }
+  },
+  "outOfScope": {
+    "TerraSAR-X 31698": "C2 holds it out by object (cut 1)",
+    "Sentinel-1D 66315": "C2 holds it out by object (cut 1)",
+    "E205 GAL-2 40889": "no ESA final orbit after 2025-10-26",
+    "ISS 25544": "C2 holds the ISS out for 2025-01-01..2026-10-31 (cut 3)",
+    "laser-ranged spheres": "XM's window 2026-07-16..08-30 is C2's type-L hold-out and after 2026-06-01 (cuts 2 and 4)"
+  },
+  "integrity": [
+    { "cut": 1, "rule": "C2's held-out objects are out entirely", "source": "experiments/ffm-covariance-calibration/config.json split.heldOutObject; PLAN.md:143; Galileo x6 by P9 (results/ffm-covariance-calibration/precheck-P9.json sample: 43567 37847 41862 41174 43055 41175)", "applied": "TerraSAR-X, Sentinel-1D and Stella out; no XM object among C2's COSMIC-2, LAGEOS-1 or Galileo" },
+    { "cut": 2, "rule": "C2's calibration objects: no cutoff on or after 2026-06-01", "source": "experiments/ffm-covariance-calibration/PLAN.md:144 (held out by time: calibration objects, cutoff dates E from 2026-06-01); config split.heldOutTime", "applied": "Swarm A/B/C, GRACE-FO 1/2, Sentinel-1A/1C, R743 37869 and R859 44850 (P9 GLONASS) are C2 calibration objects; every group's cutoffs end 2026-05-31" },
+    { "cut": 3, "rule": "the ISS is out if C2 holds it out for 2025-01-01..2026-10-31", "source": "experiments/ffm-covariance-calibration/config.json split.I.heldOut", "applied": "it does: no ISS group" },
+    { "cut": 4, "rule": "C2's type-L hold-out 2026-07-16..08-30", "source": "experiments/ffm-covariance-calibration/config.json split.L.heldOut", "applied": "no laser-sphere group" },
+    { "cut": 5, "rule": "GPCV P0: no Swarm or GRACE-FO truth for 10-31..11-28", "applied": "Swarm and GRACE-FO truth is read only in 2025-12-28..2026-06-08" },
+    { "cut": 6, "rule": "never read: C2 held-out row files, B2 part 1a and part 5 files, propagator-catalog-census results, operator-capture cycle content", "applied": "no step reads them" }
+  ],
+  "public": {
+    "gpHistory": "/opt/data/sdn-archive/spacetrack/gp_history/by-creation",
+    "creationDays": ["2025-12-01", "2026-05-31"],
+    "fields": "MEAN_ELEMENT_THEORY SGP4 and EPHEMERIS_TYPE 0 only; the values as published",
+    "license": "Space-Track.org GP data (USSPACECOM / 18 SDS): local only, results are aggregates"
+  },
+  "scoring": {
+    "leadDays": [1, 2, 3, 7],
+    "gridSeconds": 300,
+    "grid": "the truth's epochs in (cutoff, cutoff + 7 d] whose offset from the first of them is a whole multiple of 300 s",
+    "bin": "lead day k: (cutoff + (k - 1) d, cutoff + k d]",
+    "binMinimumEpochs": 260,
+    "binRule": "a bin enters when the truth holds at least 260 of its 288 grid epochs (90 %), decided by the truth alone",
+    "metric": "e: the 3D RMS position error of the bin (km) in the truth's RTN axes; the along-track RMS beside it",
+    "scorer": "G1 lib/baselines.mjs rtnSeries (analysis/gp-error-model pair_statistics); predictions in TEME to GCRF by foundation/frames, every arm alike",
+    "nonFinite": "an arm with a non-finite state at a scored epoch fails"
+  },
+  "statistics": {
+    "pairs": "per group, arc, condition, contrast and lead: the windows whose bin entered and whose reference arm was attempted (P: a set at or before the cutoff)",
+    "d": "ln(e_arm / e_ref); arm failed: +Infinity (its loss, never dropped); else reference failed: -Infinity",
+    "p95": "ln(p95 of e_arm / p95 of e_ref), a failed arm's e = +Infinity",
+    "bootstrap": { "unit": "orbit group x ISO week of the cutoff", "draws": 10000, "level": 0.95, "interval": "percentile (2.5 %, 97.5 %)", "generator": "xorshift128+ seeded by SHA-256 (XA run.mjs generator)", "seed": "XM-fast|<group>|<arc>|<condition>|<arm>/<ref>|<lead>|<clusters>" },
+    "clusters": { "primary": "orbit group (config groups.*.objects.cluster) x ISO week", "sensitivity": "satellite x ISO week" },
+    "nan": "a NaN statistic counts as +Infinity (against the arm)"
+  },
+  "verdict": {
+    "primary": {
+      "question": "does X2 beat P",
+      "cells": "arc 72 h, condition O, orbit-group clusters, leads 1, 2, 3 and 7",
+      "rule": "X2 beats P in a group only if every lead cell meets all three: (1) the 95 % interval of the median d lies wholly below 0; (2) the upper bound of the 95 % interval of ln(p95_X2 / p95_P) is below ln 1.10; (3) X2 fails on at most 1 % of the pairs"
+    },
+    "secondary": [
+      "X2 against X0 by the same rule, drag groups (P, S1) only: the atmosphere's own effect",
+      "X3 against P and X3 against X0 by the same rule (X0: drag groups only)"
+    ],
+    "sensitivities": ["condition M", "the 24 h arc", "satellite x ISO week clusters"],
+    "control": "GN: X2 and X3 equal X0 bit for bit in every GN window"
+  },
+  "check": {
+    "windows": ["P|39452|2026-03-10", "P|43476|2026-03-10", "S1|39634|2026-03-10", "GN|28874|2026-03-10"],
+    "rule": "each pinned window re-run and every stored number compared exactly (===); the table rebuilt from the stored rows equal to the committed table.json byte for byte"
+  }
+}

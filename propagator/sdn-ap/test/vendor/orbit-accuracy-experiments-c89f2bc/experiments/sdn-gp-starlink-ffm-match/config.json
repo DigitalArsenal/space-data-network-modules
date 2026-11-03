@@ -1,0 +1,46 @@
+{
+  "experiment": "sdn-gp-starlink-ffm-match",
+  "frozen": true,
+  "registeredUtc": "2026-10-23T20:10:00Z",
+  "store": "/opt/data/sdn-archive/sdn-gp-starlink-ffm-match",
+  "archive": "/opt/data/sdn-archive",
+  "cycle": "2026-10-23T13-01-35-253Z",
+  "salt": "g1-20261023",
+  "population": {
+    "sampleSize": 200,
+    "altitudeBandsKm": [420, 475, 520],
+    "inclinationGroupsDeg": [48, 60, 85],
+    "dragTerciles": 3,
+    "minimumSamples": 40,
+    "minimumAltitudeKm": 250
+  },
+  "fit": {
+    "windowSeconds": 172800,
+    "sampleSeconds": 600,
+    "maxIterations": 12,
+    "ballisticSeed": 0.03,
+    "ballisticPrior": 0,
+    "srpAreaOverMass": {"before56000": 0.11, "from56000": 0.19},
+    "minimumSegmentHours": 24,
+    "requestSpacingSeconds": 3.2
+  },
+  "truth": {
+    "hours": 96,
+    "cadenceSeconds": 60,
+    "integrator": {"tolerance": 1e-13, "maxStep": 120},
+    "densityCorrection": {"source": "none-published", "s": 0}
+  },
+  "windows": {
+    "fitHours": 24,
+    "leadDays": [1, 2, 3],
+    "minimumCoverage": 0.9,
+    "spacexInSpanLeadDays": [1]
+  },
+  "sgp4": {"fitBstar": true, "epoch": "first", "closure": false},
+  "precise": {
+    "iss": {"stride_s": 86400},
+    "gnss": {"perConstellation": 2, "firstDay": 268, "days": 20, "strideSeconds": 172800},
+    "slrHigh": {"targets": ["lageos1", "lageos2", "etalon1", "etalon2"], "weeks": 4, "strideSeconds": 259200},
+    "slrLow": {"targets": ["ajisai", "starlette", "stella", "larets", "westpac", "lares", "lares2"], "arcs": 8, "strideSeconds": 86400}
+  }
+}

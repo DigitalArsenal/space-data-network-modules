@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.7.
+Version 0.4.8.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -868,6 +868,8 @@ lambda-dot - n; rad/min) are, per body, C2 Q2 + C3 Q3 with *[study; probe 2.2]*:
 rates at epoch (13-15.2 rev/day, drag and SRP off) to 1e-8 to 1e-10 relative in a_f, a_g, chi, psi and 6e-13 in
 lambda-dot.
 
+These rates stop at the octupole; AP adds each body's terms of degree 4 to 10 in this regime below e 0.1 (16.8).
+
 **At the output time, averaged regime.** The third-body short-period terms (periodic in the satellite's eccentric
 anomaly E, the body held fixed at the output time) are added to the interpolated mean elements, once for the Sun
 and once for the Moon, from one formula with the body's parameters *[study]*:
@@ -1324,6 +1326,11 @@ the epoch class; their rates take the class and F, G of the elements at each tim
 crosses 2.4066852459 and 3.6100278459 rev/day near day 2; the first 9 integrator nodes with their reports, reports
 every hour and states every 6 hours for 7 days. They separate the integrator's epoch class from the class of the
 reports (Bands): after the crossing the reported rates switch class, the node-to-node steps do not.
+
+**AP and the 12-hour class.** XP's averaged lunisolar rates (5) stop at Legendre degree 3; AP adds degrees 4 to 10
+for epoch periods below 1100 min and epoch eccentricities below 0.1 (16.8). On Etalon-1 and Etalon-2 (2.13 rev/day, this class) the rest of the gap to
+the numerical reference lies in the class's degree-2 m-daily and short-period tesseral terms (16.2), filed as
+modules-sdn-ap-12h-class-terms-20261103.
 
 ## 7. Very deep space (VDS) / cislunar region
 
@@ -1813,7 +1820,8 @@ the gravity field below. Its sets are SGP4XP sets (BTERM, AGOM) that carry a mar
 | HAS_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE d, 0 to 70 | the tesseral terms of 16.2, each family to its cap or d, whichever is lower |
 | HAS_MAXIMUM_DEGREE, MAXIMUM_DEGREE z, 0 to 70 | the zonal tail J6 to Jz of 16.3 (z below 6: none) |
 
-With both at 0 or unset the theory is SGP4XP bit for bit. A degree set without its HAS field, or above 70, is refused by name.
+With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
+third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
 `maneuver` and `ingest_omm` keep SGP4XP.
 
 **16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
@@ -1942,6 +1950,29 @@ output map and sampling 256 node phases at perigee gives peak absolute along-tra
 552.685 and 592.770 m. These are amplitudes for this fixture, not universal constants.
 `test/class-crossing.e2e.mjs` prints the crossings, term counts and errors;
 `test/results/class-crossing.json` preserves every evaluated pair and both alternatives.
+
+**16.8 Third-body terms beyond the octupole.** With d or z above 0, the epoch period below 1100 min (the regime whose
+third-body rates 5 averages; the long-period regime takes the full point-mass acceleration) and the epoch eccentricity
+below 0.1, AP adds to the rates each body's tidal acceleration of Legendre degree 4 to 10,
+
+a_l = (mu_b / r_b^2) (r / r_b)^(l-1) [(l P_l(u) - u P_l'(u)) r_hat + P_l'(u) s_hat], u = r_hat . s_hat,
+
+averaged over the mean longitude as 5 averages degrees 2 and 3, each body held at its position at the stage time: the
+Gauss equations on the mean orbit at 32 equally spaced eccentric longitudes F, weighted by r/a (d lambda = (r/a) dF).
+P_l and P_l' follow the Legendre recurrences. Over all degrees from 2, the same quadrature reproduces 5's closed form
+for degrees 2 and 3 within 0.1 m of day-3 error on the Etalon model-truth cases; degree 10 leaves under 1e-7 of the
+quadrupole at r / r_b = 0.12. Default FORCES keeps SGP4XP bit for bit (XP digest 72dcf6005046).
+
+Exploratory (the 2026-11-03 AP6 windows, already read; 72 h fits, day 3, leads from the fit end): the median paired
+AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on Etalon-2
+(11 windows each). The medians of LAGEOS-1 (15.44 to 14.10 m), LAGEOS-2 (11.89 to 12.24 m) and LARES-2 (15.04 to
+11.00 m) change as shown; IG (36.258 m) and GE (54.310 m) are unchanged. On an Etalon-like orbit with
+the epoch moved by whole sidereal days (the Earth's geometry fixed) the mean along-track offset swings between -47
+and +39 m with the Moon, and removing the Moon from AP and the reference leaves about 2 m. The rest of Etalon's gap is
+in the 12-hour class's degree-2 m-daily and short-period tesseral terms (6). `test/etalon-resonance.e2e.mjs` prints
+every window and median. On the e 0.72-0.74 fixtures of 16.6 the same terms raised the day-7 errors (half-day
+104.7 to 479.7 m, Molniya 654.1 to 1555.8 m; computed over all degrees from 2 the averages equal 5's closed form there
+too), hence the eccentricity bound: those fixtures keep their 16.6 values.
 
 ---
 
