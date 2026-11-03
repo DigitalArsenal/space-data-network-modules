@@ -20,6 +20,7 @@ const ms=s=>Date.parse(s.endsWith('Z')?s:s+'Z');
 const archive=process.env.SDN_ARCHIVE??'/opt/data/sdn-archive';
 const external=process.env.SDN_AP_EXPERIMENTS_ROOT??'/Users/tj/software/private/coordinator-d9/orbit-accuracy-experiments-ap';
 const scratch=process.env.SDN_AP_CALIBRATION_CACHE??'/Users/tj/software/terrain-work/body-look/codex-apfix-d9/replay';
+process.env.SDN_MODULES_ROOT ??= path.resolve(new URL('../../../../', import.meta.url).pathname);
 const imp=p=>import(path.join(external,'experiments',p));
 const readRows=dir=>fs.readdirSync(dir).filter(f=>/^rows-\d+\.jsonl$/.test(f)).sort().flatMap(f=>fs.readFileSync(path.join(dir,f),'utf8').split('\n').filter(Boolean).map(JSON.parse));
 const checksum=createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
