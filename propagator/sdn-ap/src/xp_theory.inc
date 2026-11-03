@@ -735,7 +735,7 @@ struct RateContext {
   double e0, i0;                      ///< AP: epoch e and i (rad), the shallow terms to first order about them
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
-  uint8_t ap_resonance;               ///< AP: section 6's classes at the current elements, by the correct functions
+  uint8_t ap_resonance;               ///< AP: epoch class held; functions at the current eccentricity and inclination
   uint8_t ap_frame;                   ///< AP: mean elements in the epoch's axes, states carried to TEME of date (SPEC 16.4)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
@@ -749,8 +749,8 @@ struct RateContext {
 };
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
-  (void)ctx;
-  return res::band_of(n);
+  (void)n;
+  return ctx.resonance;
 }
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
