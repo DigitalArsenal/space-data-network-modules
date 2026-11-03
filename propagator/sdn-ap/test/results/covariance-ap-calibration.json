@@ -1,6 +1,6 @@
 {
   "task": "modules-sdn-ap-covariance-noise-ap-20261103",
-  "status": "calibration-in-progress",
+  "status": "band-failed-search-pending",
   "protocol": {
     "theory": "SDNAP",
     "forces": [
@@ -135,5 +135,119 @@
     "xpDigestPrefix": "72dcf6005046",
     "controlDigestPrefix": "9ecfafcd9027",
     "reproduces": "test/results/conformance.json"
+  },
+  "calibration": {
+    "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
+    "created": "2026-11-03T03:17:53.828Z",
+    "bands": {
+      "meanD2Over3": [
+        0.8,
+        1.25
+      ],
+      "coverage95": [
+        0.93,
+        0.97
+      ]
+    },
+    "tables": {
+      "DRAG": {
+        "s_e": 0.0012409377607517195,
+        "s_i": 2.838735964758755e-06,
+        "s_l": 2.4582440689201974e-05,
+        "c": 8.058421877614819e-09,
+        "negativeLogLikelihood": 4385903.859537203
+      },
+      "ABOVE": {
+        "s_e": 7.233941627366747e-06,
+        "s_i": 1.7782794100389227e-07,
+        "s_l": 2.4582440689201974e-14,
+        "c": 0,
+        "negativeLogLikelihood": -2350927.5973235243
+      }
+    },
+    "cells": [
+      {
+        "regime": "DRAG",
+        "day": 1,
+        "windows": 1246,
+        "samples": 116573,
+        "meanD2Over3": 0.49482240494163465,
+        "coverage95": 0.9862832731421513,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "DRAG",
+        "day": 2,
+        "windows": 1237,
+        "samples": 115824,
+        "meanD2Over3": 0.6322450897704092,
+        "coverage95": 0.9972717226136206,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "DRAG",
+        "day": 3,
+        "windows": 1219,
+        "samples": 114246,
+        "meanD2Over3": 0.9432165411522179,
+        "coverage95": 0.9975491483290443,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "DRAG",
+        "day": 7,
+        "windows": 1208,
+        "samples": 113035,
+        "meanD2Over3": 2.0330584141168875,
+        "coverage95": 0.9973901888795506,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "ABOVE",
+        "day": 1,
+        "windows": 908,
+        "samples": 79392,
+        "meanD2Over3": 0.4952535193083068,
+        "coverage95": 0.9888779725916969,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "ABOVE",
+        "day": 2,
+        "windows": 909,
+        "samples": 79440,
+        "meanD2Over3": 0.6748099743278702,
+        "coverage95": 0.996576032225579,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "ABOVE",
+        "day": 3,
+        "windows": 906,
+        "samples": 79296,
+        "meanD2Over3": 0.6751163801516757,
+        "coverage95": 0.9961032082324455,
+        "pass": false,
+        "required": true
+      },
+      {
+        "regime": "ABOVE",
+        "day": 7,
+        "windows": 907,
+        "samples": 79344,
+        "meanD2Over3": 2.204842726706206,
+        "coverage95": 0.9897408751764468,
+        "pass": false,
+        "required": true
+      }
+    ],
+    "pass": false,
+    "method": "Gaussian likelihood, two log-coordinate starts, resolution 1/128 decade"
   }
 }
