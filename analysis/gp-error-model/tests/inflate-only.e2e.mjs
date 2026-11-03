@@ -12,16 +12,20 @@
 // is printed or written.
 //
 // The prior P_pop of an object-day is the module's own answer to the same request with only the set in force as history
-// (no older set, so the population fallback). For every object-day with a covariance:
-//   1. the minimum eigenvalue of P_pop^(-1/2) P_o P_pop^(-1/2) on the RTN 6x6 is at least 1 - 1e-12;
-//   2. so is the 2-D encounter-plane projection of the position block at crossing angles 10, 45, 90, 135 and 170
-//      degrees (the other object's velocity direction cos(a) T + sin(a) (cos(f) N + sin(f) R), f = 0, 45, 90, 135);
-//   3. an object with fewer than 8 older sets in its history returns P_pop exactly (RTN and inertial, bit for bit),
-//      status POPULATION; the sample includes every object cut to the set in force and its 4 predecessors;
-//   4. every label is Uncalibrated (the covariance port's report rows and the raw CVR);
-//   5. at least 200 objects, each of the five regimes at least 15, and at least one object-day above the prior;
+// (no older set). Coordinator ruling 2026-11-03: until the covariance study validates a per-object signal against truth,
+// the module ships the stratum prior only, so for EVERY object-day with a covariance:
+//   1. the RTN and inertial matrices equal P_pop bit for bit, status POPULATION (D = I);
+//   2. the floor holds: the minimum eigenvalue of P_pop^(-1/2) P_o P_pop^(-1/2) is at least 1 - 1e-12, and so is that of the
+//      2-D encounter-plane projections of the position block at crossing angles 10, 45, 90, 135 and 170 degrees (the other
+//      object's velocity direction cos(a) T + sin(a) (cos(f) N + sin(f) R), f = 0, 45, 90, 135);
+//   3. every label is Uncalibrated (the covariance port's report rows); the sample includes every object cut to the set in
+//      force and its 4 predecessors (fewer than 8 older sets);
+//   4. the report carries the object's history statistics without applying them: its evidence names the set count and, where
+//      the age bin holds enough sets, the per-axis variance ratio, and says "not applied";
+//   5. at least 200 objects, each of the five regimes at least 15;
 //   6. the 2026-08 gate model's cells and the E14 S3-KC prior are byte-identical to the frozen files.
-// --measure prints the numbers and asserts nothing (it measures a module built before the change).
+// --measure prints the numbers and asserts nothing; run on a module built before the change it gives the share of
+// object-days where that module shipped a covariance below P_pop in some direction (0.12.0: 77.2 %).
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -195,7 +199,7 @@ for (const [rel, want] of Object.entries(FROZEN)) check(hash(rel) === want, `${r
 const objects = sample(readArchive());
 const stats = { objects: objects.length, objectDays: 0, noCovariance: 0, belowPrior: 0, aboveShare: 0, shortHistory: 0, shortExact: 0,
   byRegime: Object.fromEntries(REGIMES.map((r) => [r, { objects: 0, days: 0, below: 0, empirical: 0, inflated: 0, lambdas: [] }])), minEigen: Infinity, minEigenPlane: Infinity,
-  lambdaMax: [], lambdaMaxInflated: [], uncalibrated: 0, empirical: 0, belowEmpirical: 0, lambdaEmpirical: [] };
+  lambdaMax: [], lambdaMaxInflated: [], uncalibrated: 0, empirical: 0, belowEmpirical: 0, lambdaEmpirical: [], exact: 0, carried: 0 };
 const request = (id, anchor, ages) => ages.map((a) => ({ id: `${id}:${a}`, set: { norad: anchor.norad, epoch: anchor.epoch }, ageDays: a }));
 const seenRegime = new Map();
 
@@ -219,13 +223,13 @@ for (const o of objects) {
         const reg = stats.byRegime[o.regime]; reg.days++;
         check(label.calibration === 'UNCALIBRATED' && got.report.objects[i].calibrated === false, `${where}: label ${label.calibration}`);
         if (label.calibration === 'UNCALIBRATED') stats.uncalibrated++;
-        if (older < 8) {
-          stats.shortHistory++;
-          const same = c.status === 'POPULATION' && c.covarianceRtn.every((x, j) => Object.is(x, p.covarianceRtn[j])) && c.covarianceInertial.every((x, j) => Object.is(x, p.covarianceInertial[j]));
-          if (same) stats.shortExact++;
-          check(same, `${where}: ${older} older sets, not P_pop exactly (${c.status})`);
-          return;
-        }
+        const exact = c.status === 'POPULATION' && c.covarianceRtn.every((x, j) => Object.is(x, p.covarianceRtn[j])) && c.covarianceInertial.every((x, j) => Object.is(x, p.covarianceInertial[j]));
+        if (exact) stats.exact++;
+        check(exact, `${where}: not P_pop exactly (${c.status})`);
+        if (older < 8) { stats.shortHistory++; if (exact) stats.shortExact++; }
+        const evidence = label.evidence ?? '';
+        if (/^.*history\/1 /.test(evidence) && /not applied/.test(evidence)) stats.carried++;
+        check(/history\/1 /.test(evidence) && /not applied/.test(evidence), `${where}: history statistics not carried in the report`);
         const P = fromLower(p.covarianceRtn), O = fromLower(c.covarianceRtn);
         const eig = relativeEigenvalues(P, O, 6);
         stats.minEigen = Math.min(stats.minEigen, eig[0]);
@@ -252,6 +256,7 @@ const summary = {
   module: path.relative(process.cwd(), wasmPath), objects: seenRegime.size, objectDays: stats.objectDays, noCovariance: stats.noCovariance,
   shortHistory: stats.shortHistory, shortHistoryExact: stats.shortExact, examined,
   belowPrior: stats.belowPrior, belowPriorShare: examined ? stats.belowPrior / examined : NaN,
+  exact: stats.exact, carried: stats.carried,
   empirical: stats.empirical, belowPriorEmpirical: stats.belowEmpirical, belowPriorShareEmpirical: stats.empirical ? stats.belowEmpirical / stats.empirical : NaN,
   medianLambdaMaxEmpirical: median(stats.lambdaEmpirical),
   inflated: stats.aboveShare, inflatedShare: examined ? stats.aboveShare / examined : NaN,
@@ -263,7 +268,8 @@ console.log(JSON.stringify(summary, null, 1));
 if (measure) process.exit(0);
 check(seenRegime.size >= 200, `only ${seenRegime.size} objects`);
 for (const r of REGIMES) check(stats.byRegime[r].objects >= 15, `${r}: ${stats.byRegime[r].objects} objects`);
-check(stats.aboveShare > 0, 'no object-day above the prior');
+check(stats.exact === stats.objectDays, 'an object-day is not exactly P_pop');
+check(stats.carried === stats.objectDays, 'history statistics missing from a report row');
 check(stats.shortHistory > 0 && stats.shortExact === stats.shortHistory, 'short histories are not exactly P_pop');
 check(stats.uncalibrated === stats.objectDays, 'a label is not Uncalibrated');
 if (failures.length) {
@@ -271,4 +277,4 @@ if (failures.length) {
   for (const f of failures.slice(0, 20)) console.log(' ', f);
   process.exit(1);
 }
-console.log(`PASS: ${seenRegime.size} objects, ${examined} object-days at or above the prior (min eigenvalue ${stats.minEigen}, plane ${stats.minEigenPlane}), ${stats.shortHistory} short-history object-days exactly P_pop`);
+console.log(`PASS: ${seenRegime.size} objects, ${stats.objectDays} object-days exactly P_pop (${stats.shortHistory} with fewer than 8 older sets; min eigenvalue ${stats.minEigen}, plane ${stats.minEigenPlane}), history statistics carried in every report row`);
