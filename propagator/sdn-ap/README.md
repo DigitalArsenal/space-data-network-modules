@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.5.
+Version 0.4.6.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).

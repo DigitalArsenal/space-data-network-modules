@@ -737,7 +737,7 @@ struct RateContext {
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
   uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
-  uint8_t ap_frame;                   ///< AP: mean elements in the epoch's axes, states carried to TEME of date (SPEC 16.4)
+  uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
@@ -1110,7 +1110,10 @@ struct XpSat {
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const tess::Terms& t = s.ctx.selected_terms;
-  s.ctx.ap_frame = t.tesseral > 0 || t.zonal > 0;
+  // The nonresonant long-period branch retains its native TEME-of-date
+  // convention. A second epoch-axis rotation is not part of that branch.
+  // This one ingest-time policy is shared by fit residuals and every flight.
+  s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
