@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 export async function fixtureHttpSource(packageDir,encodeHttpResponse){
  const fixture=path.join(packageDir,'tests/fixtures');
- const sources=JSON.parse(await fs.readFile(path.join(fixture,'provenance.json'))).slice(0,10);
+ const sources=JSON.parse(await fs.readFile(path.join(fixture,'provenance.json')));
  let declarations='',cases='';
  for(const [i,s]of sources.entries()){
   const bytes=encodeHttpResponse({url:s.url,status:200,body:await fs.readFile(path.join(fixture,s.file)),retrievedMs:Date.parse(s.retrieved_at)});

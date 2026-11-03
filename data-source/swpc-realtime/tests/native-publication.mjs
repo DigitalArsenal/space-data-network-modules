@@ -15,8 +15,8 @@ const {DPM}=await import(pathToFileURL(path.join(sds,'lib/js/DPM/DPM.js')));
 const {publicationAssetKind}=await import(pathToFileURL(path.join(sds,'lib/js/DPM/publicationAssetKind.js')));
 export async function nativePublication(root,binary){
  const node=await localNode(binary),program='com.digitalarsenal.flows.swpc-realtime';
- node.config.publishing.allowed_schemas=['SWS','SWS.fbs','SWA','SWA.fbs'];
- node.config.publishing.auto_publish=['SWS','SWA'].map(c=>({schema:c+'.fbs',provider_id:'space-weather',source_name:'noaa-swpc-rt',min_interval:'1s',settle:'1s',max_shard_bytes:1048576}));
+ node.config.publishing.allowed_schemas=['SWS','SWS.fbs','SWA','SWA.fbs','SFE','SFE.fbs'];
+ node.config.publishing.auto_publish=['SWS','SWA','SFE'].map(c=>({schema:c+'.fbs',provider_id:'space-weather',source_name:'noaa-swpc-rt',min_interval:'1s',settle:'1s',max_shard_bytes:1048576}));
  const flowDir=path.join(root,'tests/fixture-flow/runtime');
  try{
   await node.start();
@@ -33,8 +33,8 @@ export async function nativePublication(root,binary){
   const log=await fs.open(path.join(node.dir,'prewarm.log'),'w');try{await new Promise((resolve,reject)=>{const p=spawn(binary,['prewarm-aot','--config',node.configPath],{cwd:node.dir,env:node.env,stdio:['ignore',log.fd,log.fd]});p.once('error',reject);p.once('exit',code=>code===0?resolve():reject(Error('prewarm '+code+'; '+node.dir)));});}finally{await log.close();}
   await node.start();console.log('Native fixture flow running: '+node.dir);
   const cids={};const deadline=Date.now()+180000;
-  while(Date.now()<deadline&&Object.keys(cids).length<2){const log=await fs.readFile(path.join(node.dir,'sdn.log'),'utf8');for(const m of log.matchAll(/auto-published (SWS|SWA)\.fbs space-weather\/noaa-swpc-rt batch [^\s]+: \d+ records, manifest ([^\s]+)/g))cids[m[1]]=m[2];if(Object.keys(cids).length<2)await new Promise(r=>setTimeout(r,1000));}
-  assert.equal(Object.keys(cids).length,2,'No SWS/SWA lane publication: '+node.dir+'/sdn.log');
+  while(Date.now()<deadline&&Object.keys(cids).length<3){const log=await fs.readFile(path.join(node.dir,'sdn.log'),'utf8');for(const m of log.matchAll(/auto-published (SWS|SWA|SFE)\.fbs space-weather\/noaa-swpc-rt batch [^\s]+: \d+ records, manifest ([^\s]+)/g))cids[m[1]]=m[2];if(Object.keys(cids).length<3)await new Promise(r=>setTimeout(r,1000));}
+  assert.equal(Object.keys(cids).length,3,'No SWS/SWA/SFE lane publication: '+node.dir+'/sdn.log');
   const cat=async cid=>{const r=await fetch(node.rpc+'/api/v0/cat?arg='+encodeURIComponent(cid),{method:'POST',signal:AbortSignal.timeout(30000)});assert.equal(r.status,200);return Buffer.from(await r.arrayBuffer());};
   const records={};
   for(const [code,cid]of Object.entries(cids)){

@@ -12,6 +12,6 @@ const dir=path.join(root,'tests/fixture-flow/runtime');const flow=await createFl
 flow.enqueueTriggerFrame(0,{bytes:encodeTimerTick({triggerId:'minute',firedMs:1}),portId:'tick',alignment:8,wireFormat:'flatbuffer'});
 await flow.drain({'sdn.flow.egress:emit':async()=>({statusCode:0})},{maxIterations:1000});
 for(let i=0;i<flow.nodeCount;i++){const state=flow.getNodeState(i);assert.equal(state.lastStatus,0,flow.getNodeDispatchDescriptor(i).nodeId);assert.equal(Number(state.invocationCount),1);}
-assert.deepEqual(calls.map(c=>c.schema).sort(),['SWA.fbs','SWS.fbs']);
+assert.deepEqual(calls.map(c=>c.schema).sort(),['SFE.fbs','SWA.fbs','SWS.fbs']);
 
-console.log('PASS composed replay flow: 10 nodes, 9 SWS responses, 1 SWA response, 2 storage ingests');
+console.log('PASS composed replay flow: 15 nodes, 9 SWS responses, 1 SWA response, 1 SFE response, 3 storage ingests');

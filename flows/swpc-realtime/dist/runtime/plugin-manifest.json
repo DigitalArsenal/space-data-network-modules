@@ -1,13 +1,13 @@
 {
   "pluginId": "com.digitalarsenal.flows.swpc-realtime",
   "name": "NOAA SWPC real-time",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pluginFamily": "flow",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
     "detail": "Every linked guest is wasi-sequential; the flow dispatches them serially and delegates external concurrency to its host."
   },
-  "description": "NOAA public-domain SWS and SWA; flares disabled pending SDS 1.274.0.",
+  "description": "NOAA public-domain SWS, SWA and lossless SFE flares (SDS 1.274.0).",
   "capabilities": [
     "http",
     "storage_ingest"
@@ -15,8 +15,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
-      "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
     },
     {
       "pluginId": "com.digitalarsenal.hostcap.http-request",
@@ -84,6 +84,27 @@
         }
       ],
       "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestResult.fbs",
+                  "fileIdentifier": "INGR",
+                  "rootTypeName": "IngestResult",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "IngestResult (module-sdk runtime type INGR): SCHEMA, PROVIDER_ID, SOURCE_NAME, BATCH_ID, INSERTED, RECONCILED_DUPLICATES, RECONCILED_OLD_BATCHES, ARCHIVED; or REFUSED saying why the batch was not stored (a value over its aligned bound, or a host refusal)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "EXACTLY ONE IngestResult per invocation."
+        },
         {
           "portId": "result",
           "acceptedTypeSets": [
@@ -244,6 +265,51 @@
     },
     {
       "nodeId": "egress-swa",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "plan-sfe",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "plan_sfe",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "fetch-sfe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse-sfe",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "parse_sfe",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest-sfe",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress-sfe",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
       "kind": "sink",
@@ -512,6 +578,136 @@
         "opaque": false,
         "routePolicy": "canonical-only"
       }
+    },
+    {
+      "edgeId": "plan-sfe-request-fetch-sfe-request",
+      "fromNodeId": "plan-sfe",
+      "fromPortId": "request",
+      "toNodeId": "fetch-sfe",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpRequest.fbs",
+          "fileIdentifier": "HREQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "fetch-sfe-response-parse-sfe-response",
+      "fromNodeId": "fetch-sfe",
+      "fromPortId": "response",
+      "toNodeId": "parse-sfe",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponse.fbs",
+          "fileIdentifier": "HRSP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-sfe-records-ingest-sfe-sfe_records",
+      "fromNodeId": "parse-sfe",
+      "fromPortId": "records",
+      "toNodeId": "ingest-sfe",
+      "toPortId": "sfe_records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "SFE.fbs",
+          "fileIdentifier": "$SFE",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "SFE",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-sfe-meta-ingest-sfe-meta",
+      "fromNodeId": "parse-sfe",
+      "fromPortId": "meta",
+      "toNodeId": "ingest-sfe",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestRequest.fbs",
+          "fileIdentifier": "INGQ",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestRequest",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-sfe-result-egress-sfe-result",
+      "fromNodeId": "ingest-sfe",
+      "fromPortId": "result",
+      "toNodeId": "egress-sfe",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "IngestResult.fbs",
+          "fileIdentifier": "INGR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "IngestResult",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
     }
   ],
   "flowTriggers": [
@@ -532,6 +728,11 @@
     {
       "triggerId": "minute",
       "targetNodeId": "plan-swa",
+      "targetPortId": "tick"
+    },
+    {
+      "triggerId": "minute",
+      "targetNodeId": "plan-sfe",
       "targetPortId": "tick"
     }
   ],

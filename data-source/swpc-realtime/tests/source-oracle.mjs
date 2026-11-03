@@ -43,7 +43,29 @@ export function verifySwa(records,source){const expected=rows(source.bytes);asse
  for(const [dst,label]of Object.entries({BEGIN_TIME:'Begin Time',END_TIME:'End Time',VALID_FROM:'Valid From',VALID_TO:'Valid To'}))assert.equal(r[dst]??'',time(label));
  const scale=x.message.match(/(?:NOAA|Noaa) Scale: ([GSR])([1-5])/);assert.equal(r.SCALE_FAMILY,scale?{G:1,S:2,R:3}[scale[1]]:0);assert.equal(r.SCALE_LEVEL,scale?+scale[2]:0);
 assert.equal(r.MESSAGE_CODE,x.message.match(/Space Weather Message Code: ([^\r\n]+)/)?.[1]??'');assert.equal(r.SERIAL_NUMBER,x.message.match(/Serial Number: ([^\r\n]+)/)?.[1]??'');}return {records:records.length,sourceRows:expected.length,fields};}
-export function verifyPendingFlares(records,source){const expected=rows(source.bytes);assert.equal(records.length,expected.length);for(let i=0;i<expected.length;i++){const x=expected[i],r=records[i];for(const [dst,src]of Object.entries({BEGIN_TIME:'begin_time',PEAK_TIME:'max_time',END_TIME:'end_time',XRAY_CLASS:'max_class'}))assert.equal(r[dst],x[src]??'');same(r.PEAK_FLUX_W_M2,numeric(x.max_xrlong),'flare peak');same(r.INTEGRATED_FLUX_J_M2,numeric(x.current_int_xrlong),'flare fluence');}}
+export function verifyFlares(records,source){
+ const expected=rows(source.bytes);assert.equal(records.length,expected.length);
+ const byId=new Map(records.map(r=>[r.EVENT_ID,r]));assert.equal(byId.size,records.length,'Unique flare identities');
+ const strings={begin_time:'BEGIN_TIME',max_time:'PEAK_TIME',end_time:'END_TIME',max_class:'XRAY_CLASS',begin_class:'BEGIN_XRAY_CLASS',end_class:'END_XRAY_CLASS',max_ratio_time:'PEAK_RATIO_TIME'};
+ const numbers={max_xrlong:'PEAK_FLUX_W_M2',current_int_xrlong:'INTEGRATED_FLUX_J_M2',max_ratio:'PEAK_RATIO'};
+ const keys=['time_tag','satellite',...Object.keys(strings),...Object.keys(numbers)].sort();let fields=0,nullRatios=0;
+ for(const x of expected){
+  assert.deepEqual(Object.keys(x).sort(),keys,'Every source field has an independent comparison');
+  const r=byId.get(String(x.satellite)+'/'+x.time_tag);assert(r,'Flare time_tag identity');
+  assert.equal(r.PLATFORM,String(x.satellite));fields+=2;
+  for(const [src,dst] of Object.entries(strings)){assert.equal(r[dst]??null,x[src],src);fields++;}
+  for(const [src,dst] of Object.entries(numbers)){same(r[dst],numeric(x[src]),src);fields++;}
+  if(x.max_ratio===null){assert(Number.isNaN(r.PEAK_RATIO));nullRatios++;}
+  assert.equal(r.PRODUCT,'xray-flares-7-day');assert.equal(r.EVENT_KIND,1);
+  assert.equal(r.PASSBAND_MIN_NM,.1);assert.equal(r.PASSBAND_MAX_NM,.8);
+  assert.equal(r.SOURCE_DIGEST,hash(source.bytes));assert.equal(r.SOURCE_CID,'f01551220'+hash(source.bytes));
+  assert.equal(Date.parse(r.RETRIEVED_AT),Date.parse(source.retrieved_at));
+  assert.equal(r.PROVENANCE.LINEAGE,source.url);assert.equal(r.PROVENANCE.LICENSE_ID,'public-domain');
+  assert.equal(r.PROVENANCE.PROVIDER_ID,'space-weather');assert.equal(r.PROVENANCE.SOURCE_ID,'noaa-swpc-rt');
+ }
+ return {records:records.length,sourceRows:expected.length,fields,nullRatios};
+}
+
 
 // Independent metadata contract, kept separate from C++ field dispatch.
 export function verifyQuantities(records){

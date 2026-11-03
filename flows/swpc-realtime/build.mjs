@@ -15,10 +15,10 @@ const {compilation}=await import('../../data-source/swpc-realtime/build.mjs');
 const source='com.digitalarsenal.data-source.swpc-realtime',http='com.digitalarsenal.hostcap.http-request',storage='com.digitalarsenal.hostcap.storage-ingest';
 const node=(nodeId,pluginId,methodId,kind='transform')=>({nodeId,pluginId,methodId,kind,drainPolicy:'single-shot'});
 const edge=(fromNodeId,fromPortId,toNodeId,toPortId)=>({edgeId:[fromNodeId,fromPortId,toNodeId,toPortId].join('-'),fromNodeId,fromPortId,toNodeId,toPortId,backpressurePolicy:'queue',queueDepth:1});
-const flow={programId:'com.digitalarsenal.flows.swpc-realtime',name:'NOAA SWPC real-time',version:'0.1.0',engineLinkage:'bridge',
- description:'NOAA public-domain SWS and SWA; flares disabled pending SDS 1.274.0.',nodes:[],edges:[],
+const flow={programId:'com.digitalarsenal.flows.swpc-realtime',name:'NOAA SWPC real-time',version:'0.2.0',engineLinkage:'bridge',
+ description:'NOAA public-domain SWS, SWA and lossless SFE flares (SDS 1.274.0).',nodes:[],edges:[],
  triggers:[{triggerId:'minute',kind:'timer',source:'host-cron',defaultIntervalMs:60000}],triggerBindings:[],requiredPlugins:[source,http,storage]};
-for(const code of ['sws','swa']) {
+for(const code of ['sws','swa','sfe']) {
  flow.nodes.push(node('plan-'+code,source,'plan_'+code),node('fetch-'+code,http,'request'),node('parse-'+code,source,'parse_'+code),node('ingest-'+code,storage,'ingest'),node('egress-'+code,'sdn.flow.egress','emit','sink'));
  flow.edges.push(edge('plan-'+code,'request','fetch-'+code,'request'),edge('fetch-'+code,'response','parse-'+code,'response'),edge('parse-'+code,'records','ingest-'+code,code+'_records'),edge('parse-'+code,'meta','ingest-'+code,'meta'),edge('ingest-'+code,'result','egress-'+code,'result'));
  flow.triggerBindings.push({triggerId:'minute',targetNodeId:'plan-'+code,targetPortId:'tick',backpressurePolicy:'queue',queueDepth:1});
@@ -28,7 +28,7 @@ await fs.mkdir(out,{recursive:true});
 async function transport(folder,sourceFile) {
  const original=path.join(modules,'hostcap',folder),target=path.join(out,'transport',folder);
  const manifest=JSON.parse(await fs.readFile(path.join(original,'plugin-manifest.json'),'utf8'));
- if(folder==='storage-ingest')for(const code of ['SWS','SWA']) {
+ if(folder==='storage-ingest')for(const code of ['SWS','SWA','SFE']) {
   const port=structuredClone(manifest.methods[0].inputPorts.find(p=>p.portId==='spw_records'));
   port.portId=code.toLowerCase()+'_records';port.description='Size-prefixed '+code+' record stream';
   port.acceptedTypeSets[0].setId='sdn-record-stream-'+code.toLowerCase();

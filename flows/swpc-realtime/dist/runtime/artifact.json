@@ -1,11 +1,11 @@
 {
   "programId": "com.digitalarsenal.flows.swpc-realtime",
   "name": "NOAA SWPC real-time",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
   "threadModel": "wasi-sequential",
-  "nodes": 10,
-  "edges": 10,
+  "nodes": 15,
+  "edges": 15,
   "triggers": 1,
   "capabilities": [
     "http",
@@ -82,6 +82,41 @@
       "methodId": "emit",
       "dispatchModel": "host",
       "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "plan-sfe",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "plan_sfe",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fetch-sfe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse-sfe",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "parse_sfe",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest-sfe",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress-sfe",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -89,8 +124,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.data-source.swpc-realtime",
       "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
-      "version": "0.1.0",
-      "sha256": "cc43653c71608e3f378bc5e60fd4fcf07302231522e796e03b6c254cc3bd28a4",
+      "version": "0.2.0",
+      "sha256": "44bf0d65e32fd14ca8c068abc467019ab6699313fdc8768bf7426567a08ffc2e",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -100,7 +135,8 @@
         "plan_swa": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_plan_swa",
         "parse_sws": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_sws",
         "parse_swa": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_swa",
-        "parse_flares_pending": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_flares_pending"
+        "parse_sfe": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_sfe",
+        "plan_sfe": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_plan_sfe"
       }
     },
     {
@@ -122,7 +158,7 @@
       "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "version": "0.6.0",
-      "sha256": "7638bef079ea7664c544b853b1a16ab18ffe88e0c54f182ad694f30c4d2d4fbd",
+      "sha256": "0a6f3bc22d728c10ac430c9b0fc2261c2d2055e38dfc34dd9ab29bfae3a4897a",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

@@ -118,7 +118,7 @@ std::unique_ptr<PVNT> provenance(const Source &s) {
   p->SOURCE_KIND = pvnSourceKind::Observation;
   p->ORIGINATOR = "NOAA Space Weather Prediction Center";
   p->PROVIDER_ID = "space-weather";
-  p->PRODUCER = "swpc-realtime/0.1.0";
+  p->PRODUCER = "swpc-realtime/0.2.0";
   p->LICENSE_CLASS = pvnLicenseClass::Reproducible;
   p->LICENSE_ID = "public-domain";
   p->LINEAGE = url(s.id);
@@ -456,13 +456,17 @@ bool alerts(const Source &s, Stream &out, uint64_t &count) {
   }
   return true;
 }
-// Preparation only. Not requested by the production planner or connected to a
-// published lane.
+// Preserve every source field in SDS 1.274.0; time_tag is retained in EVENT_ID.
 bool flares(const Source &s, Stream &out, uint64_t &count) {
   for (const auto &r : s.rows) {
-    require(r.is_object() && r.contains("max_xrlong") &&
-                r.contains("current_int_xrlong"),
-            "Invalid flare row");
+    require(r.is_object(), "Invalid flare row");
+    const std::set<std::string> fields = {
+        "time_tag",           "begin_time", "begin_class", "max_time",
+        "max_class",          "max_xrlong", "max_ratio",   "max_ratio_time",
+        "current_int_xrlong", "end_time",   "end_class",   "satellite"};
+    require(r.size() == fields.size(), "Unexpected flare source fields");
+    for (const auto &field : fields)
+      require(r.contains(field), "Missing flare source field: " + field);
     SFET v;
     lineage(v, s);
     v.EVENT_ID = str(r, "satellite") + "/" + str(r, "time_tag");
@@ -477,8 +481,10 @@ bool flares(const Source &s, Stream &out, uint64_t &count) {
     v.INTEGRATED_FLUX_J_M2 = number(r.at("current_int_xrlong"));
     v.PASSBAND_MIN_NM = .1;
     v.PASSBAND_MAX_NM = .8;
-    // SDS 1.274 follow-up: BEGIN_XRAY_CLASS, END_XRAY_CLASS, PEAK_RATIO,
-    // PEAK_RATIO_TIME.
+    v.BEGIN_XRAY_CLASS = str(r, "begin_class");
+    v.END_XRAY_CLASS = str(r, "end_class");
+    v.PEAK_RATIO = number(r.at("max_ratio"));
+    v.PEAK_RATIO_TIME = str(r, "max_ratio_time");
     flatbuffers::FlatBufferBuilder b;
     FinishSizePrefixedSFEBuffer(b, SFE::Pack(b, &v));
     append(out, b);
@@ -563,7 +569,7 @@ int parse(int begin, int end, const char *code) {
   t.CITATION = "NOAA Space Weather Prediction Center";
   m.PROVENANCE = std::make_unique<R::ProvenanceT>();
   m.PROVENANCE->PARSER = "swpc-realtime";
-  m.PROVENANCE->PARSER_VERSION = "0.1.0";
+  m.PROVENANCE->PARSER_VERSION = "0.2.0";
   m.PROVENANCE->NORMALIZED_COUNT = count;
   m.PROVENANCE->SCHEMAS = {m.SCHEMA};
   m.PROVENANCE->SCHEMA_COUNTS = {count};
@@ -593,6 +599,9 @@ template <class F> int guard(F f) {
 extern "C" int plan_sws() {
   return guard([] { return plan(0, 9); });
 }
+extern "C" int plan_sfe() {
+  return guard([] { return plan(10, 11); });
+}
 extern "C" int plan_swa() {
   return guard([] { return plan(9, 10); });
 }
@@ -602,6 +611,6 @@ extern "C" int parse_sws() {
 extern "C" int parse_swa() {
   return guard([] { return parse(9, 10, "SWA"); });
 }
-extern "C" int parse_flares_pending() {
+extern "C" int parse_sfe() {
   return guard([] { return parse(10, 11, "SFE"); });
 }

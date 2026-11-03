@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.swpc-realtime",
   "name": "NOAA SWPC real-time",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "NOAA public-domain SWS and SWA; flares disabled pending SDS 1.274.0.",
+  "description": "NOAA public-domain SWS, SWA and lossless SFE flares (SDS 1.274.0).",
   "nodes": [
     {
       "nodeId": "plan-sws",
@@ -70,6 +70,41 @@
     },
     {
       "nodeId": "egress-swa",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "plan-sfe",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "plan_sfe",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fetch-sfe",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse-sfe",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "parse_sfe",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest-sfe",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress-sfe",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
       "kind": "sink",
@@ -166,6 +201,51 @@
       "toPortId": "result",
       "backpressurePolicy": "queue",
       "queueDepth": 1
+    },
+    {
+      "edgeId": "plan-sfe-request-fetch-sfe-request",
+      "fromNodeId": "plan-sfe",
+      "fromPortId": "request",
+      "toNodeId": "fetch-sfe",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fetch-sfe-response-parse-sfe-response",
+      "fromNodeId": "fetch-sfe",
+      "fromPortId": "response",
+      "toNodeId": "parse-sfe",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-sfe-records-ingest-sfe-sfe_records",
+      "fromNodeId": "parse-sfe",
+      "fromPortId": "records",
+      "toNodeId": "ingest-sfe",
+      "toPortId": "sfe_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-sfe-meta-ingest-sfe-meta",
+      "fromNodeId": "parse-sfe",
+      "fromPortId": "meta",
+      "toNodeId": "ingest-sfe",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "ingest-sfe-result-egress-sfe-result",
+      "fromNodeId": "ingest-sfe",
+      "fromPortId": "result",
+      "toNodeId": "egress-sfe",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
     }
   ],
   "triggers": [
@@ -187,6 +267,13 @@
     {
       "triggerId": "minute",
       "targetNodeId": "plan-swa",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "triggerId": "minute",
+      "targetNodeId": "plan-sfe",
       "targetPortId": "tick",
       "backpressurePolicy": "queue",
       "queueDepth": 1
