@@ -1,6 +1,6 @@
 {
   "task": "modules-sdn-ap-covariance-noise-ap-20261103",
-  "status": "reproducibility-acceptance",
+  "status": "reproduced-no-realism-label",
   "protocol": {
     "theory": "SDNAP",
     "forces": [
@@ -156,7 +156,7 @@
     "xpDigestPrefix": "72dcf6005046",
     "controlDigestPrefix": "9ecfafcd9027",
     "reproduces": "test/results/conformance.json",
-    "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0"
+    "moduleSha256": "2c0999d0062cd334f2cdb234299151cecd7f3f89924bba1c98d60ebe90b4f580"
   },
   "calibration": {
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
@@ -569,6 +569,8 @@
         "required": true,
         "pass": false
       }
-    ]
+    ],
+    "endToEndPassed": true,
+    "defaultForcesConformanceBitExact": true
   }
 }
