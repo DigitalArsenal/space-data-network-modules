@@ -1145,9 +1145,9 @@ and e >= 0.5) are not used for type 4.
 
 AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
 with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
-Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters are 302.7/146.1/104.7
-for the half-day fixture, 80.5/133.1/654.1 for Molniya with drag, 208.8/86.1/2,326.6 for GTO,
-and 197.4/79.7/188.7 for the 55-degree fixture. Section 16.6 defines the fixtures and signed RTN errors.
+Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.11 are 123.8/121.4/202.0
+for the half-day fixture, 208.3/253.4/338.0 for Molniya with drag, 253.7/112.3/2,444.4 for GTO,
+and 139.7/177.2/303.2 for the 55-degree fixture. Section 16.6 defines the fixtures and signed RTN errors.
 
 A term is labeled (l, m, p, q). Its resonant angle is
 
@@ -1965,6 +1965,8 @@ reaches 2.403874454 and stays inside the band.
 | Epoch class held | -32,325.032 | -26,506.785 | 21.950% |
 | All AP tables rebuilt | -31,291.823 | -26,506.785 | 18.052% |
 
+At 0.4.11 (5.4's quadrature, 16.8 at every eccentricity) the rebuilt and held arms carry -26,674.861 and
+-27,708.115 m and the companion -22,815.885 m (16.914%).
 Rebuilding is retained because it has the smaller FFM along-track error and consistent rate/output tables.
 The E2E allows a 25% difference from the companion and requires rebuilding to improve on epoch hold.
 The fixture's remaining absolute error is attributed to perigee-drag and third-body force detail absent from
