@@ -568,12 +568,15 @@ static int fit_blocks() {
       const int iterations = chosen.iterations;
       const double first_pass_rms = chosen.first_pass_rms;
       const double fit_begin_min = chosen.fit_begin_min, fit_end_min = chosen.fit_end_min;
-      // SGP4XP: the set the library reads, at the two-line text's digits searched on their lattice
+      // SGP4XP: the set the library reads, at the two-line text's digits searched on their lattice. An AP set (SPEC 16.1,
+      // marked as 16.5 states) flies on AP only and keeps the solution's full precision (16.9).
       double best_pass_rms = std::fmin(first_pass_rms, res.rms_km);
-      const fit::Result lat = fit::tle_lattice(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
-      best_pass_rms = std::fmin(best_pass_rms, lat.rms_km);
-      res.rms_km = lat.rms_km;
-      res.max_km = lat.max_km;
+      if (po.tesseral_degree == 0 && po.zonal_degree == 0) {
+        const fit::Result lat = fit::tle_lattice(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
+        best_pass_rms = std::fmin(best_pass_rms, lat.rms_km);
+        res.rms_km = lat.rms_km;
+        res.max_km = lat.max_km;
+      }
       // SPEC 12: the fit's covariance at its solution (at the two-line digits), its epoch image the $OMM's COVARIANCE
       cov::Set fit_cov;
       double ng_rate = 0.0;
