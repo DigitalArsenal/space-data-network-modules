@@ -53,7 +53,8 @@ export async function runModelTruth(c){
   const v=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
   initial={status:0,out:[v.X,v.Y,v.Z,v.X_DOT,v.Y_DOT,v.Z_DOT]};
  }
- const times=c.mode==='seed'?[0,1,3,7]:[...Array(145)].map((_,k)=>k/48).concat([4,6,10]);
+ // c.hourly: every hour of the 7 days after the fit (whole-day RMS), days 1, 3 and 7 among them
+ const times=c.mode==='seed'?[0,1,3,7]:[...Array(145)].map((_,k)=>k/48).concat(c.hourly?[...Array(168)].map((_,k)=>3+(k+1)/24):[4,6,10]);
  const first=c.mode==='seed'?1:145;
  const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM96',maxDegree:70,maxOrder:70,thirdBody:true,srp:false,drag:c.drag,massKg:1000,areaM2:(c.bterm??.044)*1000/2.2,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:c.referenceTolerance??1e-12,minStep:.01,maxStep:c.referenceMaxStep??300}};
  params.ephemerisSource='JPL_SPK';
@@ -84,10 +85,13 @@ export async function runModelTruth(c){
   px.sdnap_free(pp);await ph.close?.();
  }
  const result={name:c.name,fitted:{epoch:parsed.EPOCH,n:parsed.MEAN_MOTION,e:parsed.ECCENTRICITY,bterm:parsed.BSTAR},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
- for(let k=0;k<3;k++){
+ const hours=c.hourly?flown.map((_,k)=>k+1):[24,72,168],profile=[];
+ for(let k=0;k<flown.length;k++){
   const ref=truth[first+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];
   a(0,3).set(ref.position);a(24,3).set(ref.velocity);a(48,3).set(err);x.sdnap_frame_to_uvw(p,p+24,p+48,p+72);
-  const rtn=Array.from(a(72,3),v=>v*1000);result.days[[1,3,7][k]]={e:Math.hypot(...err)*1000,r:rtn[0],t:rtn[1],n:rtn[2]};
+  const rtn=Array.from(a(72,3),v=>v*1000);profile.push({h:hours[k],e:Math.hypot(...err)*1000,r:rtn[0],t:rtn[1],n:rtn[2]});
  }
+ for(const q of profile)if(q.h===24||q.h===72||q.h===168)result.days[q.h/24]={e:q.e,r:q.r,t:q.t,n:q.n};
+ if(c.hourly)result.wholeDay=Object.fromEntries([1,2,3,4,5,6,7].map(d=>{const pr=profile.filter(q=>q.h>(d-1)*24&&q.h<=d*24);return[d,Object.fromEntries(['e','r','t','n'].map(k=>[k,Math.sqrt(pr.reduce((s,q)=>s+q[k]**2,0)/pr.length)]))];}));
  x.sdnap_free(p);m.destroy();await h.close?.();return result;
 }
