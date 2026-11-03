@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.8.
+Version 0.4.9.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1328,9 +1328,11 @@ every hour and states every 6 hours for 7 days. They separate the integrator's e
 reports (Bands): after the crossing the reported rates switch class, the node-to-node steps do not.
 
 **AP and the 12-hour class.** XP's averaged lunisolar rates (5) stop at Legendre degree 3; AP adds degrees 4 to 10
-for epoch periods below 1100 min and epoch eccentricities below 0.1 (16.8). On Etalon-1 and Etalon-2 (2.13 rev/day, this class) the rest of the gap to
-the numerical reference lies in the class's degree-2 m-daily and short-period tesseral terms (16.2), filed as
-modules-sdn-ap-12h-class-terms-20261103.
+for epoch periods below 1100 min and epoch eccentricities below 0.1 (16.8). This class's degree-2 terms (the resonant
+table of 6.1, the m-daily and the short-period terms of 16.2) reproduce a numerical reference (EGM96 J2 and J22, no
+third bodies, an Etalon-like orbit at 2.13 rev/day) within 0.3 m cross-track and 0.9 m along-track at day 7 once the
+fitted set keeps its full precision (16.9): the cross-track floor and the node-dependent errors first attributed to
+them were the two-line lattice of the fitted set.
 
 ## 7. Very deep space (VDS) / cislunar region
 
@@ -1557,7 +1559,7 @@ SGP4XP. Nothing in it comes from the Space Force library, and no SGP4XP conforma
 **12.1 Fit covariance.** The parameter vector p of a fit is the fit's own (`params_of`): the mean equinoctial af, ag,
 chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (BTERM; m^2/kg) and AGOM
 (m^2/kg) the fit solved for, each as its natural log where its prior's form is LOG_NORMAL ($PCF FIT.DRAG_PRIOR_FORM,
-SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set at its two-line digits), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
+SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set at its two-line digits, an AP set at full precision: 16.9), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
 
 - J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
   lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
@@ -1968,11 +1970,27 @@ AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and f
 (11 windows each). The medians of LAGEOS-1 (15.44 to 14.10 m), LAGEOS-2 (11.89 to 12.24 m) and LARES-2 (15.04 to
 11.00 m) change as shown; IG (36.258 m) and GE (54.310 m) are unchanged. On an Etalon-like orbit with
 the epoch moved by whole sidereal days (the Earth's geometry fixed) the mean along-track offset swings between -47
-and +39 m with the Moon, and removing the Moon from AP and the reference leaves about 2 m. The rest of Etalon's gap is
-in the 12-hour class's degree-2 m-daily and short-period tesseral terms (6). `test/etalon-resonance.e2e.mjs` prints
-every window and median. On the e 0.72-0.74 fixtures of 16.6 the same terms raised the day-7 errors (half-day
+and +39 m with the Moon, and removing the Moon from AP and the reference leaves about 2 m. Most of the rest of
+Etalon's gap was the two-line lattice of the fitted set (16.9). `test/etalon-resonance.e2e.mjs` prints every window
+and median. On the e 0.72-0.74 fixtures of 16.6 the same terms raised the day-7 errors (half-day
 104.7 to 479.7 m, Molniya 654.1 to 1555.8 m; computed over all degrees from 2 the averages equal 5's closed form there
 too), hence the eccentricity bound: those fixtures keep their 16.6 values.
+
+**16.9 AP sets at full precision.** `fit` rounds an SGP4XP set to the two-line text's digits and searches their
+lattice (mean motion 1e-8 rev/day, eccentricity 1e-7, angles 1e-4 deg), the set the Space Force library reads. An AP
+set (16.1, marked as 16.5 states, so it flies on AP only) keeps the solution's full precision. One unit of an angle's
+last digit is 1.7e-6 rad: 44 m at 25,500 km and 74 m at the geostationary radius, so the lattice bounded AP's error
+from below on medium and high orbits.
+
+On an Etalon-like orbit (2.13 rev/day, e 0.0007, i 64.9 deg; nodes 0, 90, 180 and 270 deg) against FFM EGM96 70x70
+without third bodies (a test build with both mass ratios 0; 72 h fits, 7 days flown hourly), the day-7 cross-track RMS
+falls from 22-23 m to 0.75-0.78 m and the along-track RMS from up to 52 m to 1.8-6.8 m. With J2 alone, or J2 and J22
+alone with every piece of the class's degree-2 terms in, both are under 1 m. Exploratory (the AP6 windows, already
+read; day 3, leads from the fit end; 0.4.8 to 0.4.9): Etalon-1 paired AP-minus-numerical-reference 22.42 to 10.12 m,
+Etalon-2 23.55 to 9.74 m; medians LAGEOS-1 14.10 to 7.81 m, LAGEOS-2 12.24 to 6.78 m, LARES-2 11.00 to 9.73 m, IG
+36.26 to 17.10 m, GE 54.31 to 45.86 m. The e 0.72-0.74 fixtures of 16.6 at day 7: half-day 104.7 to 91.4 m, Molniya
+654.1 to 700.4 m, GTO 2326.6 to 2356.1 m, 12-hour 55 deg 188.7 to 175.5 m. `test/twelve-hour-class-terms.e2e.mjs`
+prints every number.
 
 ---
 

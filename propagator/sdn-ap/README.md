@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.8.
+Version 0.4.9.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -99,7 +99,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
   windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
-  <= 0. The set is rounded to the two-line digits and searched on their lattice; a term whose prior sigma, in its own
+  <= 0. An SGP4XP set is rounded to the two-line digits and searched on their lattice (an AP set keeps full precision,
+  SPEC 16.9); a term whose prior sigma, in its own
   units (sigma of the log times the term under LOG_NORMAL), is at most one unit of its last digit is not stepped. The
   `$OBD` BALLISTIC_COEFF_MODEL and AGOM_MODEL state each prior's form and values as used; under LOG_NORMAL with a
   covariance, the posterior sigma of the log, and "covariance prior-limited" when it passes 0.5 (the term effectively
@@ -372,3 +373,11 @@ and eccentricities below 0.1 (SPEC 16.8; XP's stop at degree 3). On the eleven a
 day-3 AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on
 Etalon-2; LAGEOS-1, LAGEOS-2 and LARES-2 move from 15.44, 11.89 and 15.04 m to 14.10, 12.24 and 11.00 m, and IG and
 GE are unchanged (`test/etalon-resonance.e2e.mjs`).
+
+AP sets keep the fit's full precision; SGP4XP sets keep the two-line lattice the Space Force library reads (SPEC
+16.9). One unit of an angle's last digit is 44 m at 25,500 km, and that rounding, not the 12-hour class's tesseral
+terms, was the cross-track floor of medium orbits: on an Etalon-like orbit without Sun or Moon the day-7 cross-track
+RMS falls from 22-23 m to under 0.8 m and the along-track RMS to under 7 m. On the already-read AP6 windows
+(exploratory) the day-3 errors fall to 10.12 and 9.74 m paired against the numerical reference on Etalon-1 and -2,
+and the medians to 7.81 m (LAGEOS-1), 6.78 m (LAGEOS-2), 9.73 m (LARES-2), 17.10 m (IG) and 45.86 m (GE)
+(`test/twelve-hour-class-terms.e2e.mjs`).

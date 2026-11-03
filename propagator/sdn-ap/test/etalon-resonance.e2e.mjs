@@ -2,10 +2,10 @@
 // Registration (2026-11-03; re-scoped by the coordinator after the measurement): exploratory replay of the AP6 windows of
 // the 2026-11-03 gap diagnosis, already read: GD (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP
 // FORCES; baseline the 0.4.7 release (git dcae63613), the module under test this build's dist. Acceptance, the measured
-// values with margin: Etalon-1 paired day-3 AP minus FFM (archived resume-ffm F72) 26.64 m at the baseline and 22.42 m
-// here, Etalon-2 36.39 and 23.55 m, each within 1 m; medians here LAGEOS-1 14.10, LAGEOS-2 12.24, LARES-2 11.00, IG
-// 36.258 and GE 54.310 m, each within 0.5 m; every number printed; default-FORCES digest bit-exact. Unread-window
-// confirmation is a separate experiments task.
+// values with margin (re-measured at 0.4.9, whose AP sets keep full precision, SPEC 16.9): Etalon-1 paired day-3 AP
+// minus FFM (archived resume-ffm F72) 26.64 m at the baseline and 10.12 m here, Etalon-2 36.39 and 9.74 m, each within
+// 1 m; medians here LAGEOS-1 7.81, LAGEOS-2 6.78, LARES-2 9.73, IG 17.10 and GE 45.86 m, each within 0.5 m; every number
+// printed; default-FORCES digest bit-exact. Unread-window confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -56,8 +56,8 @@ for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) 
 console.log(JSON.stringify({exploratory: true, etalon, nonregression}));
 if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression}, null, 2) + '\n');
 const EXPECTED = {
-  etalon: {'ETALON 1': {baseline: 26.64, value: 22.42}, 'ETALON 2': {baseline: 36.39, value: 23.55}},
-  nonregression: {'LAGEOS 1': 14.10, 'LAGEOS 2': 12.24, 'LARES-2': 11.00, IG: 36.258, GE: 54.310},
+  etalon: {'ETALON 1': {baseline: 26.64, value: 10.12}, 'ETALON 2': {baseline: 36.39, value: 9.74}},
+  nonregression: {'LAGEOS 1': 7.806, 'LAGEOS 2': 6.777, 'LARES-2': 9.731, IG: 17.095, GE: 45.863},
 };
 if (!process.argv.includes('--measure')) {
   for (const [name, want] of Object.entries(EXPECTED.etalon)) {
