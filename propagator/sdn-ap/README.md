@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.2.
+Version 0.4.3.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -128,6 +128,12 @@ SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a 
 The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit,
 measured day-7 errors are 104.7 m for the half-day case, 654.1 m for Molniya with drag and 2,326.6 m for GTO.
 SPEC 16.6 and `test/results/heo-model-truth.json` give the fixtures and day-1, 3 and 7 RTN errors.
+
+At a resonance-class crossing, AP rebuilds its rate and output tables together. On the decaying-GTO fixture,
+day-7 along-track errors are -31,291.823 m with rebuilding, -32,325.032 m with epoch hold, and -26,506.785 m
+for the noncrossing companion (18.052% difference; E2E bound 25%). Both half-day terms remain in the output,
+with sampled perigee along-track amplitudes 552.685 and 592.770 m. The remaining absolute error is attributed
+to unresolved perigee-drag and third-body force detail, not isolated here. SPEC 16.7 defines the fixture.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
