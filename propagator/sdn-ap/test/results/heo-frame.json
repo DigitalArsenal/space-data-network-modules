@@ -84,7 +84,7 @@
         "sha256": "4eeb727e4aa2587cb2472f5828d860cf99d93278d3352ccc7b67b0c9e16ffa11"
       }
     ],
-    "moduleSha256": "18e738b8aa1692d6ee1a9bdc4c2d61c2f2abbeae09424b1e656e6ee7b56f47a4",
+    "moduleSha256": "b881f337d95718aafeaf78dbd60a4926eb199935eae7467da1345d5ee456e3f7",
     "rows": [
       {
         "cutoff": "2026-07-27",
@@ -1202,5 +1202,7 @@
   "registrationCommit": "0024631d4",
   "measuredDate": "2026-11-03",
   "task": "modules-sdn-ap-heo-frame-20261103",
-  "frameAudit": "fit residuals and public propagation both call xp_propagate; AP6 scoring uses its pinned foundation/frames TEME-to-GCRF conversion"
+  "frameAudit": "fit residuals and public propagation both call xp_propagate; AP6 scoring uses its pinned foundation/frames TEME-to-GCRF conversion",
+  "version": "0.4.6",
+  "moduleSha256": "b881f337d95718aafeaf78dbd60a4926eb199935eae7467da1345d5ee456e3f7"
 }
