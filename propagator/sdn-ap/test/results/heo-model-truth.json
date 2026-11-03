@@ -20,7 +20,8 @@
         "epoch": "2026-10-29T00:00:00.000000",
         "n": 1.9939591572519846,
         "e": 0.7211141782134485,
-        "bterm": -3.585424694962239e-22
+        "bterm": -3.585424694962239e-22,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior -3.58542469e-22 +- 1e-10 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -110,7 +111,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "e4edacb03daff4eaba47263010c27009a6d888259c0d8f028605cebf4d655610",
+      "apSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -146,7 +147,8 @@
         "epoch": "2026-10-29T00:00:00.000000",
         "n": 1.9851615214751435,
         "e": 0.7412896133239105,
-        "bterm": 0.045127085000944686
+        "bterm": 0.045127085000944686,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0.044 +- 0.1 m^2/kg; posterior 0.045127085 +- 0.00149438619 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -236,7 +238,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "e4edacb03daff4eaba47263010c27009a6d888259c0d8f028605cebf4d655610",
+      "apSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -270,9 +272,10 @@
       "name": "GTO",
       "fitted": {
         "epoch": "2026-10-29T00:00:00.000000",
-        "n": 2.4043686599058516,
-        "e": 0.719528783254951,
-        "bterm": 1.4949212672870631e-16
+        "n": 2.4043683926904444,
+        "e": 0.7195286469055365,
+        "bterm": 1.2464455104549272e-16,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 1.24644551e-16 +- 1e-10 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -362,7 +365,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "e4edacb03daff4eaba47263010c27009a6d888259c0d8f028605cebf4d655610",
+      "apSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -372,22 +375,22 @@
       "fitHours": 72,
       "days": {
         "1": {
-          "e": 253.73008703975404,
-          "r": 126.36311127595535,
-          "t": -192.37747100664058,
-          "n": -106.78122413116859
+          "e": 237.767745746815,
+          "r": 113.03031146281761,
+          "t": -185.45494376378312,
+          "n": -96.76834937991111
         },
         "3": {
-          "e": 112.30533904646641,
-          "r": 1.213331025130597,
-          "t": 63.971362213639566,
-          "n": 92.2967053729252
+          "e": 175.7628308289572,
+          "r": 0.2896291139218507,
+          "t": 142.45018174145147,
+          "n": 102.9584116904124
         },
         "7": {
-          "e": 2444.3980672388643,
-          "r": -1582.7105616128283,
-          "t": -1862.7120469978954,
-          "n": -20.322875023209065
+          "e": 924.7311212291294,
+          "r": -658.0295696675682,
+          "t": -649.3507410154648,
+          "n": -21.641329798900433
         }
       },
       "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
@@ -398,7 +401,8 @@
         "epoch": "2026-10-29T00:00:00.000000",
         "n": 1.991325251118386,
         "e": 0.720787557766943,
-        "bterm": 7.00459408901854e-30
+        "bterm": 7.00459408901854e-30,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 7.00459409e-30 +- 1e-10 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -488,7 +492,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "e4edacb03daff4eaba47263010c27009a6d888259c0d8f028605cebf4d655610",
+      "apSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1331,6 +1335,6 @@
     "GTO": "not isolated"
   },
   "version": "0.4.2",
-  "currentVersion": "0.4.11",
-  "currentNote": "0.4.11 fixtures: the third bodies' short-period terms of degree 2 to 10 by quadrature and their degree 4 to 10 averaged rates at every eccentricity (SPEC 5.4, 16.8); measured on the 0.4.11 release"
+  "currentVersion": "0.4.14",
+  "currentNote": "0.4.14 fixtures: AP's half-day class steps at most a 32nd of its resonant angle's period (SPEC 16.10), which moves GTO only; measured on the 0.4.14 release"
 }
