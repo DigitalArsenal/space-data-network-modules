@@ -41,11 +41,11 @@
       "operator-theory/ap/b040/compare-truth2",
       "operator-theory/ap/b040/truth2",
       "operator-theory/ap/b040/regimes"
-    ]
+    ],
+    "acceptanceKind": "Reproduce frozen minimax table and cell means/coverage within 1e-6; bit-exact default-FORCES SGP4XP digest. The band remains a reported finding."
   },
   "shipped": {
     "kind": "shipped",
-    "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
     "created": "2026-11-03T03:39:34.137Z",
     "forces": [
       31,
@@ -138,23 +138,25 @@
     "tables": {
       "DRAG": {
         "s_e": 0.0030020720101006817,
-        "s_i": 0.0000013729304605949328,
+        "s_i": 1.3729304605949328e-06,
         "s_l": 0.00022005794330391744,
         "c": 0.5245440617486178
       },
       "ABOVE": {
-        "s_e": 9.696153866117182e-7,
-        "s_i": 8.153112791954473e-7,
-        "s_l": 0.000004753573962018311,
+        "s_e": 9.696153866117182e-07,
+        "s_i": 8.153112791954473e-07,
+        "s_l": 4.753573962018311e-06,
         "c": 0
       }
-    }
+    },
+    "basisModuleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0"
   },
   "conformance": {
     "passed": true,
     "xpDigestPrefix": "72dcf6005046",
     "controlDigestPrefix": "9ecfafcd9027",
-    "reproduces": "test/results/conformance.json"
+    "reproduces": "test/results/conformance.json",
+    "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0"
   },
   "calibration": {
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
@@ -172,14 +174,14 @@
     "tables": {
       "DRAG": {
         "s_e": 0.0012409377607517195,
-        "s_i": 0.000002838735964758755,
-        "s_l": 0.000024582440689201974,
-        "c": 8.058421877614819e-9,
+        "s_i": 2.838735964758755e-06,
+        "s_l": 2.4582440689201974e-05,
+        "c": 8.058421877614819e-09,
         "negativeLogLikelihood": 4385903.859537203
       },
       "ABOVE": {
-        "s_e": 0.000007233941627366747,
-        "s_i": 1.7782794100389227e-7,
+        "s_e": 7.233941627366747e-06,
+        "s_i": 1.7782794100389227e-07,
         "s_l": 2.4582440689201974e-14,
         "c": 0,
         "negativeLogLikelihood": -2350927.5973235243
@@ -300,7 +302,7 @@
         "DRAG": {
           "theta": [
             0.0034334565692197045,
-            0.0000013777009478753921,
+            1.3777009478753921e-06,
             0.0008335467191340119,
             0.31312021837691184
           ],
@@ -318,9 +320,9 @@
         },
         "ABOVE": {
           "theta": [
-            0.0000010324953584014068,
-            3.1848644709753274e-7,
-            0.000005585383785636336
+            1.0324953584014068e-06,
+            3.1848644709753274e-07,
+            5.585383785636336e-06
           ],
           "loss": 0.018145942547129743,
           "margins": [
@@ -352,7 +354,7 @@
           ],
           "theta": [
             0.0030020720101006817,
-            0.0000013729304605949328,
+            1.3729304605949328e-06,
             0.00022005794330391744,
             0.5245440617486178
           ],
@@ -367,9 +369,9 @@
             1.3438621336229248
           ],
           "theta": [
-            9.696153866117182e-7,
-            8.153112791954473e-7,
-            0.000004753573962018311
+            9.696153866117182e-07,
+            8.153112791954473e-07,
+            4.753573962018311e-06
           ],
           "seed": 1
         }
@@ -383,7 +385,7 @@
     "day7ForecastRmsKm": 7654.697717439888
   },
   "baseline": {
-    "kind": "shipped",
+    "kind": "historical-XP-table-on-AP",
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
     "created": "2026-11-03T03:16:04.644Z",
     "forces": [

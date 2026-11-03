@@ -1567,7 +1567,7 @@ scored every 30 min over the next 3 days (`test/covariance-realism.mjs --set cal
 
 | Theory | Regime | Windows | s_e (1/day) | s_i (1/day) | s_l | c |
 | --- | --- | --: | --: | --: | --: | --: |
-| SGP4XP | DRAG | 136 | 2.813e-6 | 7.432e-6 | 8.505e-7 | 1.3e-6 |
+| SGP4XP | DRAG | 136 | 2.813e-6 | 7.432e-6 | 8.505e-7 | 1.275e-6 |
 | SGP4XP | ABOVE | 62 | 2.308e-7 | 3.752e-7 | 2.666e-7 | 0 |
 
 These sizes, and the cells of 12.7, were measured on 2026-10-25 (module SHA-256 1f66e6fdf443 and f20f5a059b76) with
