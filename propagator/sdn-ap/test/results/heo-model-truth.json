@@ -1,6 +1,6 @@
 {
   "task": "modules-sdn-ap-heo-half-day-20261103",
-  "measuredUtc": "2026-11-03T04:46:28.672143+00:00",
+  "measuredUtc": "2026-11-03T04:54:05.087291+00:00",
   "registrationCommit": "58b3f8694",
   "additional55DegreeRegistrationCommit": "92181e273",
   "units": "meters; signed RTN is forecast minus FFM truth",
@@ -25,6 +25,7 @@
         "argp": 270,
         "ma": 10,
         "drag": false,
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           -2910.9138791968076,
           -1647.6903545765833,
@@ -38,8 +39,7 @@
           "tolerance": 1e-12,
           "minStep": 0.01,
           "maxStep": 300
-        },
-        "initialization": "osculating perigee (argument of latitude equals argument of perigee)"
+        }
       },
       "referenceStates": [
         {
@@ -103,7 +103,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "3e092d367dc2a9a27ba09a82aaa8e69215522e3bb4e338acbc6f7754e8d7b865",
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -144,6 +144,7 @@
         "argp": 270,
         "ma": 10,
         "drag": true,
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           -2708.3047322356933,
           -1533.0057053388903,
@@ -157,8 +158,7 @@
           "tolerance": 1e-12,
           "minStep": 0.01,
           "maxStep": 300
-        },
-        "initialization": "osculating perigee (argument of latitude equals argument of perigee)"
+        }
       },
       "referenceStates": [
         {
@@ -222,7 +222,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "3e092d367dc2a9a27ba09a82aaa8e69215522e3bb4e338acbc6f7754e8d7b865",
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -263,6 +263,7 @@
         "argp": 270,
         "ma": 10,
         "drag": false,
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           3743.968740905301,
           -4526.214383375025,
@@ -276,8 +277,7 @@
           "tolerance": 1e-12,
           "minStep": 0.01,
           "maxStep": 300
-        },
-        "initialization": "osculating perigee (argument of latitude equals argument of perigee)"
+        }
       },
       "referenceStates": [
         {
@@ -341,7 +341,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "3e092d367dc2a9a27ba09a82aaa8e69215522e3bb4e338acbc6f7754e8d7b865",
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -382,6 +382,7 @@
         "argp": 270,
         "ma": 10,
         "drag": false,
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           -3729.818790612432,
           -2114.758139834047,
@@ -395,8 +396,7 @@
           "tolerance": 1e-12,
           "minStep": 0.01,
           "maxStep": 300
-        },
-        "initialization": "osculating perigee (argument of latitude equals argument of perigee)"
+        }
       },
       "referenceStates": [
         {
@@ -460,7 +460,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "3e092d367dc2a9a27ba09a82aaa8e69215522e3bb4e338acbc6f7754e8d7b865",
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1301,5 +1301,6 @@
   "gapAttribution": {
     "Molniya": "not isolated",
     "GTO": "not isolated"
-  }
+  },
+  "version": "0.4.2"
 }
