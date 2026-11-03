@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.11.
+Version 0.4.12.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -146,7 +146,9 @@ SGP4XP's drag is section 3's (Jacchia 1970 on the generic flux model) unless the
 with no FORCES field off its default and no 'space_weather' or 'density_correction' frame the outputs are SGP4XP's bit
 for bit (the conformance E2E reproduces XP 72dcf6005046 and the control 9ecfafcd9027 on this build). Under NRLMSISE-00
 or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and scales an unset LOG_NORMAL BTERM prior
-median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`). When
+median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`), with the sigma of
+the log `10 ln 10` under NRLMSISE-00 at `800-1400 km` so that the arc, not the median, sets BTERM there (SPEC 12.8); a
+stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an object's prior from its previous fit. When
 `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a non-eccentric orbit, `fit` runs a two-stage
 decoupled solve: Stage 1 solves `BTERM` and `AGOM` over `48-72 h`; Stage 2 solves the 6 mean elements over the trailing
 `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2 tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 and the

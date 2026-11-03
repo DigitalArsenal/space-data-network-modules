@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.11.
+Version 0.4.12.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1728,6 +1728,47 @@ Neither theory's table is inside the band at every lead, so neither earns a real
 The AP E2E asserts the shipped minimax table, reproduction of every cell mean and coverage
 within 1e-6, and bit-exact default-FORCES SGP4XP conformance; it does not assert band acceptance.
 
+**12.8 The drag prior of a fit.** `fit` estimates BTERM under its $PCF FIT.DRAG_PRIOR (MEAN, SIGMA, FORM); a stated
+prior is fitted as given on every fit. A caller fitting one object per call states that object's prior, which is how a
+catalog that refits daily carries it: LOG_NORMAL, the previous fit's BTERM as the median and, as the sigma of the log,
+the larger of the previous $OBD's posterior sigma of the log and 0.3. Unset, the prior is LOG_NORMAL with median 0.01
+m^2/kg and sigma of the log ln 10; under NRLMSISE-00 (or a minimum span below 24 h) the median follows the mean altitude
+(0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above), and under NRLMSISE-00 at 800-1400 km the sigma of the log is
+10 ln 10.
+
+The fit estimates ln B by Gauss-Newton from the median. At B = 0.0005 the arc's sensitivity to ln B is B times its
+sensitivity to B, so under sigma ln 10 the prior's curvature dominates and the estimate stays at the median whatever
+the arc holds; under 10 ln 10 it reaches the value the arc determines (posterior sigma of the log 0.005 to 0.02 at
+814-891 km over 72 h). A GAUSSIAN_SIGNED prior starts at its mean, and at B = 0 the theory carries no drag and the
+fit does not move B: a flat 0 +- 10 ends at 0. FFM's estimator (analysis/estimation) bounds each step in ln p to a
+factor of ten and judges convergence on the undamped step, its a priori Gaussian in p.
+
+Model truth: FFM EGM96 70x70, Sun and Moon from DE440 and NRLMSISE-00 drag at constant weather on both sides; AP
+FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee; day-3 3D RMS over 2-minute samples (m), the fitted
+B in brackets (m^2/kg):
+
+| Orbit, true B | 0.4.11 default | sigma 3 ln 10 | 0.4.12 default | median 0.01, ln 10 | flat Gaussian | 7-day arc, 0.4.11 default | per-object prior |
+| --- | --: | --: | --: | --: | --: | --: | --: |
+| SWOT-like, 891 km, 0.044 | 1,314 (0.0005) | 1,306 (0.0008) | 82 (0.046) | 677 (0.021) | 1,330 (0) | 80 (0.043) | 21 (0.044) |
+| Sentinel-3-like, 814 km, 0.044 | 3,957 (0.0008) | 26 (0.044) | 64 (0.045) | 184 (0.042) | 4,027 (0) | 39 (0.044) | 28 (0.044) |
+| Sentinel-3-like, 0.01 | 867 (0.0005) | 227 (0.0075) | 49 (0.0105) | 43 (0.0104) | 916 (0) | 84 (0.0096) | 20 (0.0100) |
+| Sentinel-3-like, 0.001 | 51 (0.0005) | | 24 (0.0012) | 516 (0.0067) | | | |
+| Jason-like, 1,336 km, 0.044 | 256 (0.0005) | | 256 (0.0006) | 202 (0.010) | | | |
+| Jason-like, 0.005 | 37 (0.0005) | | 37 (0.0005) | 22 (0.010) | | | |
+
+The per-object prior is the true B with sigma of the log 0.3. The sigma columns keep the median 0.0005, and the 7-day
+arc is a 168 h span (FIT.DEFAULT_SPAN_HOURS and MAXIMUM_SPAN_HOURS); the other columns fit 72 h. At 717 km (median
+0.002) the arc determines B under ln 10 already (true 0.044, 0.01 and 0.001: 492, 756 and 91 m at day 3); under 10 ln
+10 it gives 310, 316 and 324 m, so the 600-800 km band keeps ln 10. At 1,336 km the 0.4.12 default leaves B at the
+median as before; that is the per-object path's case.
+
+The read AP6 altimetry windows (descriptive; paired day-3 AP minus FFM's archived F72 arm, median per object, 0.4.11 to
+0.4.12): HY-2C 575.7 to 34.2 m, HY-2D 523.2 to 19.0, SWOT 463.7 to 208.2, Jason-3 180.2 to 34.5, Sentinel-6
+82.6 to 53.3, Sentinel-3A 43.9 to -1.8, Sentinel-3B 25.9 to 6.6, CryoSat-2 55.7 and SARAL 47.7 (600-800 km)
+unchanged; all 121 windows 167.2 to 34.2 m. Sentinel-6B's windows are its commissioning: FFM misses four of five by
+1.9 to 2,626 km, and on the two that FFM keeps under 10 km the paired value goes from 191.7 to 3.9 m.
+`test/fit-bterm-700-1400-km.e2e.mjs` measures every number of the default and per-object paths and of the windows.
+
 ---
 
 ## 13. (removed)
@@ -1814,9 +1855,10 @@ between nodes and held at the end values outside them; the density is NRLMSISE-0
 
 **15.5 Fit, two-stage decoupled tesseral-null pass, and atmosphere mark.** `fit` estimates BTERM and AGOM under the
 call's atmosphere, with finite-difference Jacobian fallback (`fit::jacobian_fallback`) enabled under NRLMSISE-00 and
-short-span (`< 24 h`) passes. When BTERM's prior is at its default LOG_NORMAL (`median 0.01`, `sigma ln 10`) under
-NRLMSISE-00 or `< 24 h` minimum span, the starting median scales with mean altitude (`0.01` below `600 km`, `0.002` at
-`600-800 km`, `0.0005` at `>= 800 km`). When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a
+short-span (`< 24 h`) passes. When FIT.DRAG_PRIOR is unset under NRLMSISE-00 or `< 24 h` minimum span, BTERM's
+LOG_NORMAL prior takes its median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at
+`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10` (12.8); a stated FIT.DRAG_PRIOR is
+fitted as given. When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a
 non-eccentric orbit without `USEABLE_START_TIME`, `fit` runs a two-stage decoupled solve: Stage 1 fits the `48-72 h`
 span to determine `BTERM` and `AGOM`; Stage 2 fits the trailing `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2
 tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 (`sigma = 1e-9`) and the epoch placed at cutoff (`last_useable`).
