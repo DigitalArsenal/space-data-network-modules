@@ -46,7 +46,7 @@
   },
   "shipped": {
     "kind": "shipped",
-    "created": "2026-11-03T12:21:03.114Z",
+    "created": "2026-11-03T13:55:48.089Z",
     "forces": [
       31,
       20
@@ -98,8 +98,8 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 0.8356277547333165,
-        "coverage95": 0.9424123337363967,
+        "meanD2Over3": 0.8391884047120528,
+        "coverage95": 0.942550886739218,
         "required": true,
         "pass": true
       },
@@ -108,7 +108,7 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 1.0991533237276516,
+        "meanD2Over3": 1.0990085445983209,
         "coverage95": 0.9970292044310172,
         "required": true,
         "pass": false
@@ -118,7 +118,7 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 0.5185326084506942,
+        "meanD2Over3": 0.5184712070103438,
         "coverage95": 0.9975156376109766,
         "required": true,
         "pass": false
@@ -128,7 +128,7 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 1.1985874778013441,
+        "meanD2Over3": 1.1985417598571233,
         "coverage95": 0.9899299253881831,
         "required": true,
         "pass": false
@@ -149,15 +149,15 @@
         "c": 0
       }
     },
-    "basisModuleSha256": "fef0e72eff4aafb9217c1dd184e1b735ed584c512813541e594958e61bd12085",
-    "remeasured": "2026-11-03, sdn-ap 0.4.12: under NRLMSISE-00 at 800-1400 km the default BTERM prior takes sigma of the log 10 ln 10 (SPEC 12.8); noise constants unchanged"
+    "basisModuleSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
+    "remeasured": "2026-11-03, sdn-ap 0.4.14: the half-day class steps at most a 32nd of its resonant angle's period (SPEC 16.10); noise constants unchanged"
   },
   "conformance": {
     "passed": true,
     "xpDigestPrefix": "72dcf6005046",
     "controlDigestPrefix": "9ecfafcd9027",
     "reproduces": "test/results/conformance.json",
-    "moduleSha256": "fef0e72eff4aafb9217c1dd184e1b735ed584c512813541e594958e61bd12085"
+    "moduleSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646"
   },
   "calibration": {
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
@@ -480,8 +480,8 @@
   },
   "realism": "Neither theory is inside the band at every lead; neither earns a realism label.",
   "verification": {
-    "moduleSha256": "fef0e72eff4aafb9217c1dd184e1b735ed584c512813541e594958e61bd12085",
-    "measured": "2026-11-03T12:21:03.114Z",
+    "moduleSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
+    "measured": "2026-11-03T13:55:48.089Z",
     "windows": 4150,
     "samples": 777150,
     "shippedTableMatches": true,
@@ -535,8 +535,8 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 0.8356277547333165,
-        "coverage95": 0.9424123337363967,
+        "meanD2Over3": 0.8391884047120528,
+        "coverage95": 0.942550886739218,
         "required": true,
         "pass": true
       },
@@ -545,7 +545,7 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 1.0991533237276516,
+        "meanD2Over3": 1.0990085445983209,
         "coverage95": 0.9970292044310172,
         "required": true,
         "pass": false
@@ -555,7 +555,7 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 0.5185326084506942,
+        "meanD2Over3": 0.5184712070103438,
         "coverage95": 0.9975156376109766,
         "required": true,
         "pass": false
@@ -565,7 +565,7 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 1.1985874778013441,
+        "meanD2Over3": 1.1985417598571233,
         "coverage95": 0.9899299253881831,
         "required": true,
         "pass": false
