@@ -112,9 +112,10 @@ async function replay(list){
    }
    const pos=c=>[c.CX_X,c.CY_X,c.CY_Y,c.CZ_X,c.CZ_Y,c.CZ_Z];
    const samples=scored.map((l,i)=>{const state=runs[0].EPHEMERIS_DATA_LINES[i],P0=pos(runs[0].COVARIANCE_MATRIX_LINES[i]);return{day:Math.ceil((ms(l.epoch)-cutoff)/DAY),e:[state.X-l.r[0],state.Y-l.r[1],state.Z-l.r[2]],P0,B:runs.slice(1).map(r=>pos(r.COVARIANCE_MATRIX_LINES[i]).map((v,j)=>(v-P0[j])/UNIT**2))};});
-   const result={key:w.key,arm:w.arm,group:w.group,regime:ud.SDNAP_COV_REGIME,ngRate:Number(ud.SDNAP_COV_NG_RATE),nDay:omm.MEAN_MOTION*2*Math.PI,samples,stored:w.stored.days};
+   const result={noise:ud.SDNAP_COV_NOISE.split(' ').map(Number),key:w.key,arm:w.arm,group:w.group,regime:ud.SDNAP_COV_REGIME,ngRate:Number(ud.SDNAP_COV_NG_RATE),nDay:omm.MEAN_MOTION*2*Math.PI,samples,stored:w.stored.days};
    fs.writeFileSync(file,zlib.gzipSync(JSON.stringify(result)));
    console.log(`${w.key} ${w.arm}: ${samples.length} covariance samples`);
+   await new Promise(resolve=>setImmediate(resolve));
   }catch(e){console.error(`${w.key} ${w.arm}: ${e.stack}`);throw e;}
  }
 }
@@ -135,7 +136,7 @@ if(!isMainThread)await replay(workerData.list);
 // Symmetric 3x3 Gaussian likelihood; statistics only, no orbital dynamics.
 function metric(P,e){
  const [a,b,c,d,f,g]=P, det=a*(c*g-f*f)-b*(b*g-f*d)+d*(b*f-c*d);
- if(!(det>0))return null;
+ if(!(a>0&&a*c-b*b>0&&det>0))return null;
  const d2=((c*g-f*f)*e[0]**2+(a*g-d*d)*e[1]**2+(a*c-b*b)*e[2]**2+2*(d*f-b*g)*e[0]*e[1]+2*(b*f-c*d)*e[0]*e[2]+2*(b*d-a*f)*e[1]*e[2])/det;
  return {d2,logDet:Math.log(det)};
 }
