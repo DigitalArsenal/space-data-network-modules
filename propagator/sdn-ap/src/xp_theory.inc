@@ -738,7 +738,8 @@ struct RateContext {
   int32_t half_day_count;
   uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
-  uint8_t ap_third_body;              ///< AP: the third bodies' tidal terms of degree 4 up, near-circular averaged rates (SPEC 16.8)
+  uint8_t ap_third_body;              ///< AP: the third bodies' tidal terms of degree 4 up in the averaged rates (SPEC 16.8)
+  uint8_t ap_short_period;            ///< AP: the third bodies' short-period terms by quadrature (SPEC 5.4)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
@@ -766,19 +767,19 @@ inline int state_test(const RateContext& ctx, const double* y) {
   return 0;
 }
 
-/// AP (SPEC 16.8): a body's tidal acceleration at r beyond the octupole, Legendre degrees 4 to kThirdBodyTailDegree
-/// (ER/min^2): mu_b r^(l-1) / r_b^(l+1) [(l P_l - u P_l') r_hat + P_l' s_hat], u = r_hat . s_hat.
+/// AP (SPEC 16.8): a body's tidal acceleration at r of Legendre degrees lo to hi (ER/min^2):
+/// mu_b r^(l-1) / r_b^(l+1) [(l P_l - u P_l') r_hat + P_l' s_hat], u = r_hat . s_hat.
 constexpr int kThirdBodyTailDegree = 10;
 constexpr int kThirdBodyTailNodes = 32;
 /// The terms apply below this epoch eccentricity: measured to help near-circular orbits, they raise the errors of the
 /// e 0.72-0.74 model-truth fixtures (SPEC 16.6, 16.8).
 constexpr double kThirdBodyTailMaxE = 0.1;
-inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio) {
+inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio, int lo, int hi) {
   const double rn = norm(r);
   const Vec3 ru = (1.0 / rn) * r;
   const double u = dot(ru, su), x = rn / sr;
   double pm = 1.0, p = u, dm = 0.0, dp = 1.0, xp = 1.0, ar = 0.0, as = 0.0;
-  for (int l = 1; l < kThirdBodyTailDegree; ++l) {
+  for (int l = 1; l < hi; ++l) {
     const double pn = ((2 * l + 1) * u * p - l * pm) / (l + 1);
     const double dn = dm + (2 * l + 1) * p;  // P'_{l+1} = P'_{l-1} + (2l + 1) P_l
     pm = p;
@@ -787,7 +788,7 @@ inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio) {
     dp = dn;
     xp *= x;  // (r / r_b)^(L - 1), L = l + 1
     const int L = l + 1;
-    if (L >= 4) {
+    if (L >= lo) {
       ar += xp * (L * p - u * dp);
       as += xp * dp;
     }
@@ -796,20 +797,107 @@ inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio) {
   return (k * ar) * ru + (k * as) * su;
 }
 
+/// The Gauss rates (state order) of the Sun's and the Moon's tidal terms of degree lo to hi on the mean orbit at the
+/// eccentric longitudes F_j = 2 pi j / kThirdBodyTailNodes, each body at its position in b, and the weights r/a.
+struct TailSamples {
+  double f[kThirdBodyTailNodes][6];
+  double w[kThirdBodyTailNodes];
+};
+inline void tail_samples(const double* y, const Frame& fr, const Bodies& b, int lo, int hi, TailSamples& s) {
+  for (int j = 0; j < kThirdBodyTailNodes; ++j) {
+    const double F = kTwoPi * j / kThirdBodyTailNodes;
+    Vec3 r, v;
+    state_at_F(y, fr, F, r, v, s.w[j]);
+    const Vec3 d = tidal_tail(r, b.sun_u, b.sun_r, kSunMass, lo, hi) + tidal_tail(r, b.moon_u, b.moon_r, kMoonMass, lo, hi);
+    gauss(y, fr, r, v, d, s.f[j]);
+  }
+}
+
 /// AP (SPEC 16.8): the Sun's and the Moon's tidal terms of degree 4 to kThirdBodyTailDegree, averaged over the mean
 /// longitude as SPEC 5 averages degrees 2 and 3 (each body held at its position at the stage time): the Gauss rates on
 /// the mean orbit at kThirdBodyTailNodes eccentric longitudes weighted by r/a (d lambda = (r/a) dF), added to `out`.
 inline void third_body_tail(const double* y, const Frame& fr, const Bodies& b, double* out) {
-  for (int j = 0; j < kThirdBodyTailNodes; ++j) {
-    const double F = kTwoPi * j / kThirdBodyTailNodes;
-    Vec3 r, v;
-    double roa;
-    state_at_F(y, fr, F, r, v, roa);
-    const Vec3 d = tidal_tail(r, b.sun_u, b.sun_r, kSunMass) + tidal_tail(r, b.moon_u, b.moon_r, kMoonMass);
-    double g[6];
-    gauss(y, fr, r, v, d, g);
-    for (int m = 0; m < 6; ++m) out[m] += roa * g[m] / kThirdBodyTailNodes;
+  TailSamples s;
+  tail_samples(y, fr, b, 4, kThirdBodyTailDegree, s);
+  for (int j = 0; j < kThirdBodyTailNodes; ++j)
+    for (int m = 0; m < 6; ++m) out[m] += s.w[j] * s.f[j][m] / kThirdBodyTailNodes;
+}
+
+/// The integral from 0 to F of a zero-mean function g sampled at the nodes F_j = 2 pi j / N (its trigonometric
+/// interpolant, integrated term by term), at F and at every node.
+struct NodeIntegral {
+  double at;                           ///< at F
+  double nodes[kThirdBodyTailNodes];   ///< at each node
+};
+inline NodeIntegral integrate_nodes(const double* g, double F) {
+  constexpr int N = kThirdBodyTailNodes, M = N / 2;
+  NodeIntegral out{};
+  for (int m = 1; m <= M; ++m) {
+    double a = 0.0, bm = 0.0;
+    for (int j = 0; j < N; ++j) {
+      const double ang = kTwoPi * m * j / N;
+      a += g[j] * std::cos(ang);
+      bm += g[j] * std::sin(ang);
+    }
+    // the Nyquist term (m = N / 2) carries half the cosine sum and no sine
+    const double scale = m == M ? 1.0 / N : 2.0 / N;
+    a *= scale;
+    bm = m == M ? 0.0 : bm * scale;
+    out.at += (a * std::sin(m * F) + bm * (1.0 - std::cos(m * F))) / m;
+    for (int j = 0; j < N; ++j) {
+      const double ang = kTwoPi * m * j / N;
+      out.nodes[j] += (a * std::sin(ang) + bm * (1.0 - std::cos(ang))) / m;
+    }
   }
+  return out;
+}
+
+/// AP (SPEC 5.4, 16.8): the short-period terms of the tidal terms of degree lo to hi at the eccentric longitude F of the
+/// mean orbit, each body held at its output-time position: for every element the integral over the mean longitude of
+/// its rate less the average (zero mean over the orbit), divided by n; the mean longitude also takes the integral of
+/// the mean motion's own short-period term. Added to `d` (state order).
+inline void third_body_short_period(const double* y, const Frame& fr, const Bodies& b, double F, int lo, int hi,
+                                    double* d) {
+  constexpr int N = kThirdBodyTailNodes;
+  TailSamples s;
+  tail_samples(y, fr, b, lo, hi, s);
+  const double n = fr.n;
+  double dn_nodes[N];
+  for (int m = 0; m < 6; ++m) {
+    double mean = 0.0;
+    for (int j = 0; j < N; ++j) mean += s.w[j] * s.f[j][m] / N;
+    double g[N];
+    for (int j = 0; j < N; ++j) g[j] = (s.f[j][m] - mean) * s.w[j];
+    const NodeIntegral I = integrate_nodes(g, F);
+    double avg = 0.0;
+    for (int j = 0; j < N; ++j) avg += I.nodes[j] * s.w[j] / N;
+    d[m] += (I.at - avg) / n;
+    if (m == kN)
+      for (int j = 0; j < N; ++j) dn_nodes[j] = (I.nodes[j] - avg) / n;
+  }
+  double h[N];
+  for (int j = 0; j < N; ++j) h[j] = dn_nodes[j] * s.w[j];
+  const NodeIntegral L = integrate_nodes(h, F);
+  double avg = 0.0;
+  for (int j = 0; j < N; ++j) avg += L.nodes[j] * s.w[j] / N;
+  d[kLam] += (L.at - avg) / n;
+}
+
+/// The eccentric longitude F of an equinoctial state: lambda = F + ag cos F - af sin F (Halley iteration).
+inline double eccentric_longitude(const double* y) {
+  const double lam = y[kLam];
+  double F = lam;
+  for (int it = 0; it < 25; ++it) {
+    double sF, cF;
+    fm::sincos(F, sF, cF);
+    const double fv = F + y[kAg] * cF - y[kAf] * sF - lam;
+    const double f1 = 1.0 - y[kAg] * sF - y[kAf] * cF;
+    const double f2 = -y[kAg] * cF + y[kAf] * sF;
+    const double dF = -fv / (f1 - 0.5 * fv * f2 / f1);
+    F += dF;
+    if (std::fabs(dF) < 1e-14) break;
+  }
+  return F;
 }
 
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
@@ -1008,7 +1096,13 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     const double n = ym[kN], etam = std::sqrt(1.0 - km.e * km.e);
     const AngleTrig agm = angle_trig(km);
     const Perifocal pfm = perifocal_of(agm);
-    if (!ctx.long_period) {
+    if (!ctx.long_period && ctx.ap_short_period) {
+      // AP (SPEC 5.4): the third bodies' short-period terms by quadrature, degrees 2 and 3 and, where SPEC 16.8's
+      // terms apply, 4 to 10; the bodies at the output time
+      double d[6] = {0, 0, 0, 0, 0, 0};
+      third_body_short_period(ym, frame_of(ym), b, eccentric_longitude(ym), 2, ctx.ap_third_body ? kThirdBodyTailDegree : 3, d);
+      for (int j = 0; j < 6; ++j) y[j] += d[j];
+    } else if (!ctx.long_period) {
       // SPEC 5.4: the Sun and Moon output-time corrections, added to the
       // equinoctial elements before the short-period step.
       const Vec3 us[2] = {b.sun_u, b.moon_u};
@@ -1163,6 +1257,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // This one ingest-time policy is shared by fit residuals and every flight.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = (t.tesseral > 0 || t.zonal > 0) && e.eo < kThirdBodyTailMaxE;
+  s.ctx.ap_short_period = t.tesseral > 0 || t.zonal > 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
