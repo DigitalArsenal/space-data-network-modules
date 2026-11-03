@@ -419,8 +419,12 @@ inline double node_density(const atm::Atmosphere* atmosphere, const drag::DateTe
 /// term at the geodetic latitude, the co-rotation speed factor V; rho = 0
 /// above 2500 km; the acceleration -(1/2) rho B |v_rel| v_rel, B = C_D A/m.
 /// `atmosphere` (null: the theory's own) selects the density (node_density); theta_g is the Greenwich angle at d50.
+/// AP above e 0.3 (SPEC 16.12, `pass`): d50 and theta_g are those of a perigee passage, each node takes the Earth angle and
+/// date of its own time on that pass (M(nu) / n after perigee), the arcs beyond nu_c to apogee are added (13 nodes each,
+/// nu = nu_c + (pi - nu_c) s^2), and `scale` multiplies the rates.
 inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag, double bterm,
-                       const Bodies& b, double d50, const atm::Atmosphere* atmosphere, double theta_g, double* out) {
+                       const Bodies& b, double d50, const atm::Atmosphere* atmosphere, double theta_g, double* out,
+                       bool pass = false, double scale = 1.0) {
   static const double gx[13] = {-0.98418305471858814, -0.91759839922297803, -0.80157809073330988,
                                 -0.64234933944034023, -0.44849275103644692, -0.23045831595513480, 0.0,
                                 0.23045831595513480, 0.44849275103644692, 0.64234933944034023,
@@ -457,8 +461,8 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
   const double q = kOmegaE * eta * eta * eta / n;
   const double cj2 = kJ2 / (4.0 * p);
   double G = 0, SD = 0, Se = 0, Ssu = 0, Sn = 0, Snc = 0, Suu = 0, Ss = 0, Sw = 0;
-  for (int j = 0; j < 13; ++j) {
-    const double nu = nuc * gx[j];
+  const double ve = std::sqrt((1.0 - e) / (1.0 + e));
+  const auto node = [&](double nu, double w) {
     double sn, cn;
     fm::sincos(nu, sn, cn);
     const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;  // u = omega + nu
@@ -471,9 +475,17 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
     const double alpha = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
     double H = alpha - rasun;
     H -= kTwoPi * std::floor(H / kTwoPi);
-    const double rho = node_density(atmosphere, dt, fl, dca, d50, sp, cp, sdsun, cdsun, H, alpha, theta_g, nh);
+    double d50n = d50, thn = theta_g;
+    if (pass) {
+      // the node's time after perigee: M(nu) / n, E = 2 atan(sqrt((1 - e) / (1 + e)) tan(nu / 2))
+      const double E = 2.0 * std::atan(ve * std::tan(0.5 * nu));
+      const double tau = (E - e * std::sin(E)) / n;
+      d50n = d50 + tau / kMinutesPerDay;
+      thn = theta_g + kOmegaE * tau;
+    }
+    const double rho = node_density(atmosphere, dt, fl, dca, d50n, sp, cp, sdsun, cdsun, H, alpha, thn, nh);
     const double V = std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp * cp / (Dn * Dn));
-    const double K = gw[j] * rho * V / (Dn * Dn);
+    const double K = w * rho * V / (Dn * Dn);
     const double iD2 = 1.0 / (Dn * Dn);
     G += K;
     SD += K * Dn;
@@ -484,6 +496,17 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
     Suu += K * cu * cu * iD2;
     Ss += K * sn * (1.0 - q * th * iD2);
     Sw += K * (Dn * cn + e + cn) * iD2;
+  };
+  for (int j = 0; j < 13; ++j) node(nuc * gx[j], gw[j]);
+  if (pass && nuc < kPi) {
+    // the arcs nu_c < |nu| < pi: int g dnu = sum w_j (pi - nu_c) s_j g(nu_j), s_j = (x_j + 1) / 2, in the units of the
+    // perigee arc's sums (whose integral is nu_c sum w_j g)
+    for (int j = 0; j < 13; ++j) {
+      const double sj = 0.5 * (gx[j] + 1.0);
+      const double nu = nuc + (kPi - nuc) * sj * sj, w = gw[j] * (kPi - nuc) * sj / nuc;
+      node(nu, w);
+      node(-nu, w);
+    }
   }
   const double P = 500.0 * kRe * nuc / kPi;
   const double Ar = eta * eta * n * a / 2.0, oa = q * th;
@@ -502,7 +525,7 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
   six[5] = PB * ((oa - q) * Ar * Ssu + 2.0 * eta * e * Ar * Sn + (1.0 - eta) * oa * Ar * Snc - (2.0 * e * Ar / (1.0 + eta)) * Ss);
   double d[6];
   six_to_equinoctial(ag, six, d);
-  for (int m = 0; m < 6; ++m) out[m] += d[m];
+  for (int m = 0; m < 6; ++m) out[m] += scale * d[m];
 }
 
 /// SPEC 4 (amendment 3): cbrt(x) = sign(x) |pow(|x|, 1/3)|, 1/3 the double 0.3333333333333333.
@@ -746,6 +769,7 @@ struct RateContext {
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
+  uint8_t drag_pass;                  ///< AP: epoch e above tess::kWideE, the drag rates of the perigee passages (SPEC 16.12)
   const float* mdaily;                ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
   int32_t mdaily_degree;
   const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
@@ -1008,8 +1032,17 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     for (int j = 0; j < 6; ++j) out[j] += tb[j];
   }
   if (ctx.agom > 0.0) srp_rates(y, fr, k, pf, ctx.agom, b, out);
-  if (ctx.bterm > 0.0)
+  if (ctx.bterm > 0.0 && ctx.drag_pass) {
+    // AP above e 0.3 (SPEC 16.12): the mean of the perigee passages before and after t, each at its own time
+    const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
+    for (int s = 0; s < 2; ++s) {
+      const double tq = tp + s * period;
+      drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
+                 out, true, 0.5);
+    }
+  } else if (ctx.bterm > 0.0) {
     drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out);
+  }
   return true;
 }
 
@@ -1282,6 +1315,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // This one ingest-time policy is shared by fit residuals and every flight.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
+  s.ctx.drag_pass = s.ctx.ap_third_body && e.eo > tess::kWideE ? 1 : 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
