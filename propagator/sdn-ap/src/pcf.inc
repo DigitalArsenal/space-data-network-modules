@@ -50,6 +50,11 @@ constexpr Prior kSrpPriorDefault = {0.0, 0.05, pcfPriorForm_GAUSSIAN_SIGNED};
 constexpr Prior kSrpPriorShortArc = {0.0, 0.1, pcfPriorForm_GAUSSIAN_SIGNED};
 /// An arc shorter than this takes kSrpPriorShortArc: the 24 h arcs; spans of 48 h and more keep kSrpPriorDefault.
 constexpr double kShortArcHours = 36.0;
+/// BTERM's sigma of the log when FIT.DRAG_PRIOR is unset under NRLMSISE-00 at a mean altitude of 800 to 1400 km (SPEC
+/// 12.8): 10 ln 10. Under ln 10 the fit started at the band's median 0.0005 m^2/kg does not leave it, whatever the arc
+/// holds (a true 0.044 ended at 0.0005-0.0008 and 1.3-4.0 km at day 3 on model truth); under 10 ln 10 it reaches the
+/// value the arc determines.
+constexpr double kDragPriorWideLogSigma = 23.02585092994045684;
 
 /// One call's options, every one at its documented default.
 struct Options {
@@ -64,7 +69,8 @@ struct Options {
   double eccentricity_threshold = 0.5, eccentric_default_span_h = 24.0, eccentric_extension_margin = 0.7;
   double eccentric_maximum_period_h = 36.0, implausible_rms_km = 100.0;
   Prior drag_prior = kDragPriorDefault, srp_prior = kSrpPriorDefault;
-  bool srp_prior_given = false;  ///< FIT.SRP_PRIOR stated with its sigma: no short-arc prior (kSrpPriorShortArc)
+  bool drag_prior_given = false;  ///< FIT.DRAG_PRIOR stated with its sigma: fitted as given, no altitude band (SPEC 12.8)
+  bool srp_prior_given = false;   ///< FIT.SRP_PRIOR stated with its sigma: no short-arc prior (kSrpPriorShortArc)
   // FORCES (fit, propagate): SGP4XP's drag atmosphere (SPEC 15). ENABLE_DRAG false keeps the theory's own Jacchia
   // 1970; true selects ATMOSPHERE_MODEL (NRLMSISE00 only). The drivers: WEATHER_SOURCE UNSPECIFIED infers them ('space_weather'
   // rows when given, else the theory's generic flux model), RECORDS needs the rows.
@@ -242,6 +248,7 @@ inline int read_fit(const PCFFitPolicy* f, Options& o) {
   o.implausible_rms_km = f->IMPLAUSIBLE_RMS_KM();
   if (!(o.implausible_rms_km > 0.0)) return refuse("FIT.IMPLAUSIBLE_RMS_KM", "a bound is positive");
   if (const int rc = read_prior(f->DRAG_PRIOR(), f->DRAG_PRIOR_FORM(), "DRAG_PRIOR", o.drag_prior)) return rc;
+  o.drag_prior_given = f->DRAG_PRIOR() != nullptr && f->DRAG_PRIOR()->HAS_SIGMA();
   o.srp_prior_given = f->SRP_PRIOR() != nullptr && f->SRP_PRIOR()->HAS_SIGMA();
   return read_prior(f->SRP_PRIOR(), f->SRP_PRIOR_FORM(), "SRP_PRIOR", o.srp_prior);
 }

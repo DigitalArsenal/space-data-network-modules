@@ -371,16 +371,16 @@ static int fit_blocks() {
                                    : !po.srp_prior_given && fit_end_min - fit_begin_min < pcf::kShortArcHours * 60.0
                                        ? pcf::kSrpPriorShortArc
                                        : po.srp_prior;
-        if (drag_override == nullptr && (po.msis || po.minimum_span_h < 24.0) &&
-            eff_drag.form == pcfPriorForm_LOG_NORMAL &&
-            eff_drag.mean == pcf::kDragPriorDefault.mean &&
-            eff_drag.sigma == pcf::kDragPriorDefault.sigma &&
+        // SPEC 12.8: FIT.DRAG_PRIOR unset under NRLMSISE-00 or a < 24 h minimum span takes its median by mean altitude,
+        // and under NRLMSISE-00 at 800 to 1400 km the wide sigma of the log; a stated prior is fitted as given
+        if (drag_override == nullptr && !po.drag_prior_given && (po.msis || po.minimum_span_h < 24.0) &&
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
           const double h_km = a_km - xpt::kRe;
           if (h_km >= 800.0) eff_drag.mean = 0.0005;
           else if (h_km >= 600.0) eff_drag.mean = 0.002;
+          if (po.msis && h_km >= 800.0 && h_km < 1400.0) eff_drag.sigma = pcf::kDragPriorWideLogSigma;
         }
         if (drag_override == nullptr) used_drag = eff_drag;
         // a LOG_NORMAL term starts at its prior's median and stays > 0: the 2-revolution stage holds BTERM there, and
