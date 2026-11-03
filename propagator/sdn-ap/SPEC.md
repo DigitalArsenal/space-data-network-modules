@@ -1120,6 +1120,9 @@ and e >= 0.5) are not used for type 4.
 
 ### 6.1 Resonant terms per class
 
+AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
+with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
+
 A term is labeled (l, m, p, q). Its resonant angle is
 
     psi_lmpq = (l - 2p) omega + (l - 2p + q) M + m (Omega - theta_G(t)),   theta_G(t) = theta_G(epoch) + omega_E t
@@ -1757,6 +1760,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 | at output time, first order at the mean elements |
 | first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
+| half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
@@ -1768,6 +1772,10 @@ Section 6's classes keep their terms, and with d above 0 take the correct functi
 departs from them, in place of 6.3 and 6.4's epoch values: the current class by the current n, F and G at the current e and i, the exact dF_632/di,
 G_410 with e^2 coefficient 1, dG_40,-2/de with its e^13 and e^15 terms, G_30,-1 with its e^27 term, and above e = 0.3 G from the
 Hansen coefficient expanded to third order about the epoch e of the epoch class, valid past the Laplace limit e = 0.6627.
+
+The half-day tail uses cubic expansions of F about the epoch inclination and G about the epoch eccentricity,
+with their consistent derivatives. F comes from the normalized Legendre recurrence; G comes from shared
+eccentric-anomaly quadrature. The class's original 29 terms retain their exact inclination functions.
 
 **16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
 (w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
