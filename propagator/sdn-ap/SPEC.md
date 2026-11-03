@@ -1,5 +1,7 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
+Version 0.4.1.
+
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
 same agreement as `Licenses/SGP4_Open_License.txt`). Its section 2.A grants Use, Distribution, Reproduction,
@@ -1572,6 +1574,20 @@ These sizes, and the cells of 12.7, were measured on 2026-10-25 (module SHA-256 
 `fit`'s former default prior on BTERM, GAUSSIAN_SIGNED 0 +- 0.05, and were not re-measured under the LOG_NORMAL default
 of 0.2.0.
 
+SDNAP uses its own table when FORCES requests AP gravity terms. At FORCES 31,20, the minimax
+fit below minimizes the worst violation of the mean band across days 1,2,3,7. It retains all
+4,150 AP24/AP72 calibration fits (777,150 samples), under the LOG_NORMAL default, from
+`operator-theory/ap/b040/compare-truth2` (AP arms joined from `truth2`) and `regimes`.
+The registered cutoff and satellite exclusions are unchanged. Original reference arcs are
+re-fitted; signed forecast errors and covariance share TEME epochs on a 30-minute grid,
+with lead bins counted from each fit's end. Stored daily RTN RMS values are not signed errors.
+Measured 2026-11-03; full provenance and results: `test/results/covariance-ap-calibration.json`.
+
+| Theory | Regime | s_e (1/day) | s_i (1/day) | s_l | c |
+| --- | --- | --: | --: | --: | --: |
+| SDNAP | DRAG | 0.0030020720101006817 | 1.3729304605949328e-06 | 0.00022005794330391744 | 0.52454406174861778 |
+| SDNAP | ABOVE | 9.6961538661171821e-07 | 8.1531127919544734e-07 | 4.753573962018311e-06 | 0 |
+
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
 rotated with the state) for an SGP4XP set that carries COVARIANCE. An SGP4 set has none.
@@ -1600,6 +1616,25 @@ realism"), 0 of 12 inside:
 Outside the band: SGP4XP in every cell, LAGEOS-1 at 1.38 to 1.93 throughout, the LAGEOS-2 and Etalon and LEO cells
 too large from day 2 (coverage 0.98 to 1.0). These are a measured limit of the process-noise model of 12.5, not of the
 band; the band is not widened.
+
+
+SDNAP calibration cells measured 2026-11-03 on the rows named in 12.5, from
+`test/results/covariance-ap-calibration.json` (0 of 8 inside):
+
+| Theory | Regime | Day | Mean d^2/3 | Inside 95 % | Band |
+| --- | --- | --: | --: | --: | --- |
+| SDNAP | DRAG | 1 | 0.577704435 | 0.968500425 | outside |
+| SDNAP | DRAG | 2 | 0.638049318 | 0.982292098 | outside |
+| SDNAP | DRAG | 3 | 0.949024359 | 0.992778741 | outside |
+| SDNAP | DRAG | 7 | 1.472295565 | 0.998080241 | outside |
+| SDNAP | ABOVE | 1 | 0.706137866 | 0.958144397 | outside |
+| SDNAP | ABOVE | 2 | 1.343862134 | 0.997004028 | outside |
+| SDNAP | ABOVE | 3 | 0.706137866 | 0.997528249 | outside |
+| SDNAP | ABOVE | 7 | 1.343862134 | 0.990320629 | outside |
+
+Neither theory's table is inside the band at every lead, so neither earns a realism label.
+The AP E2E asserts the shipped minimax table, reproduction of every cell mean and coverage
+within 1e-6, and bit-exact default-FORCES SGP4XP conformance; it does not assert band acceptance.
 
 ---
 

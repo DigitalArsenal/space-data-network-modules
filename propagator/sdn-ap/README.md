@@ -1,5 +1,7 @@
 # sdn-ap-propagator
 
+Version 0.4.1.
+
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
@@ -186,7 +188,11 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
   km/s for impulses of 1 mm/s to 1 m/s along U, V and W; a finite burn's eccentricity-vector increment is the
   impulse's times sinc(dL/2) to 1e-4 (10 and 60 minutes).
 
-## Covariance realism (SPEC 12; measured 2026-10-25, module f20f5a059b76)
+## Covariance realism
+
+Neither SDNAP's 2026-11-03 minimax table nor SGP4XP's table is inside SPEC 12.7's band at every lead; neither earns a realism label (AP: `test/results/covariance-ap-calibration.json`).
+
+SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
 Held-out laser-ranged truth (ILRS combination orbits for LAGEOS and Etalon, NSGF arcs for the LEO set; GCRF): each
 window a 24 h `fit` (USEABLE_START_TIME to USEABLE_STOP_TIME), then `propagate` of its set onto the reference epochs

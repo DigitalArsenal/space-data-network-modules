@@ -27,7 +27,11 @@ struct Noise {
   double s_e, s_i, s_l, c;
 };
 /// SGP4XP's, [regime: 0 perigee below kDragRegimeKm, 1 above]
-constexpr Noise kNoise[2] = {{2.813e-06, 7.432e-06, 8.505e-07, 1.275e-06}, {2.308e-07, 3.752e-07, 2.666e-07, 0}};
+constexpr Noise kNoiseXP[2] = {{2.813e-06, 7.432e-06, 8.505e-07, 1.275e-06}, {2.308e-07, 3.752e-07, 2.666e-07, 0}};
+// SDNAP minimax calibration, 2026-11-03; neither table earns a realism label.
+constexpr Noise kNoiseAP[2] = {
+    {0.0030020720101006817, 1.3729304605949328e-06, 0.00022005794330391744, 0.5245440617486178},
+    {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
 
 constexpr int kMaxConsider = 2;
@@ -244,7 +248,8 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
   regime = (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
-  const Noise& k = kNoise[regime];
+  const auto& terms = xpt::tess::active();
+  const Noise& k = (terms.tesseral || terms.zonal) ? kNoiseAP[regime] : kNoiseXP[regime];
   noise[0] = k.s_e;
   noise[1] = k.s_i;
   noise[2] = k.s_l;

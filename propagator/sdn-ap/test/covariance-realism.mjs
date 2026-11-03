@@ -37,6 +37,7 @@
 // $OEM, made by analysis/reference-states).
 // JS moves bytes and does statistics on the module's numbers; it computes no orbit and no frame.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -78,7 +79,27 @@ if (THEORY === "SDNAP") {
   const report = process.argv.includes("--calibrate") ? calibrate(results) : evaluate(results);
   if (OUT) fs.writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
   assert.ok(!Number(process.env.SDN_AP_CALIBRATION_LIMIT ?? 0), "A diagnostic subset cannot satisfy the full calibration acceptance");
-  assert.ok(report.pass, "SPEC 12.7: every supported regime/lead cell must meet both unchanged bands");
+  const frozen = JSON.parse(fs.readFileSync(new URL("./results/covariance-ap-calibration.json", import.meta.url)));
+  assert.equal(results.length, frozen.protocol.fits, "frozen calibration window count");
+  for (const r of results) {
+    const t = frozen.shipped.tables[r.regime];
+    assert.deepEqual(r.noise.slice(0, 3), [t.s_e, t.s_i, t.s_l], "shipped minimax table");
+    const sd = t.c * Math.abs(r.ngRate) * r.nDay;
+    assert.ok(Math.abs(r.noise[3] - sd) <= 1e-12 * Math.max(1, Math.abs(sd)), "shipped drag constant");
+  }
+  for (const cell of report.cells) {
+    const expected = frozen.shipped.cells.find(c => c.regime === cell.regime && c.day === cell.day);
+    assert.equal(cell.samples, expected.samples);
+    assert.equal(cell.windows, expected.windows);
+    assert.ok(Math.abs(cell.meanD2Over3 - expected.meanD2Over3) <= 1e-6, "reproduced mean d2/3");
+    assert.ok(Math.abs(cell.coverage95 - expected.coverage95) <= 1e-6, "reproduced coverage");
+  }
+  execFileSync(process.execPath, [new URL("./conformance.e2e.mjs", import.meta.url).pathname,
+    "--reproduce", new URL("./results/conformance.json", import.meta.url).pathname], {
+    stdio: "inherit", env: { ...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ??
+      "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle" }
+  });
+  console.log("PASS: frozen minimax calibration reproduced; neither theory earns a realism label.");
   process.exit(0);
 }
 

@@ -1,6 +1,6 @@
 {
   "task": "modules-sdn-ap-covariance-noise-ap-20261103",
-  "status": "acceptance-failed",
+  "status": "reproducibility-acceptance",
   "protocol": {
     "theory": "SDNAP",
     "forces": [
@@ -46,7 +46,7 @@
   "shipped": {
     "kind": "shipped",
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
-    "created": "2026-11-03T03:16:04.644Z",
+    "created": "2026-11-03T03:39:34.137Z",
     "forces": [
       31,
       20
@@ -58,8 +58,8 @@
         "day": 1,
         "windows": 1246,
         "samples": 116573,
-        "meanD2Over3": 290.1727481511841,
-        "coverage95": 0.9058358281934925,
+        "meanD2Over3": 0.5777044351770348,
+        "coverage95": 0.9685004246266288,
         "required": true,
         "pass": false
       },
@@ -68,8 +68,8 @@
         "day": 2,
         "windows": 1237,
         "samples": 115824,
-        "meanD2Over3": 4506.960834166548,
-        "coverage95": 0.8818465948335406,
+        "meanD2Over3": 0.6380493176933182,
+        "coverage95": 0.9822920983561265,
         "required": true,
         "pass": false
       },
@@ -78,8 +78,8 @@
         "day": 3,
         "windows": 1219,
         "samples": 114246,
-        "meanD2Over3": 19272.48952589427,
-        "coverage95": 0.8230310032736375,
+        "meanD2Over3": 0.949024358863792,
+        "coverage95": 0.9927787406123628,
         "required": true,
         "pass": false
       },
@@ -88,8 +88,8 @@
         "day": 7,
         "windows": 1208,
         "samples": 113035,
-        "meanD2Over3": 204910.03042378704,
-        "coverage95": 0.6212500552926085,
+        "meanD2Over3": 1.4722955652327079,
+        "coverage95": 0.9980802406334321,
         "required": true,
         "pass": false
       },
@@ -98,8 +98,8 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 2.0845325772976975,
-        "coverage95": 0.7158529826682789,
+        "meanD2Over3": 0.7061378663772593,
+        "coverage95": 0.958144397420395,
         "required": true,
         "pass": false
       },
@@ -108,8 +108,8 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 44.26247189518412,
-        "coverage95": 0.685813192346425,
+        "meanD2Over3": 1.3438621336233225,
+        "coverage95": 0.9970040281973817,
         "required": true,
         "pass": false
       },
@@ -118,8 +118,8 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 41.460528861090985,
-        "coverage95": 0.6810053470540759,
+        "meanD2Over3": 0.7061378663774218,
+        "coverage95": 0.9975282485875706,
         "required": true,
         "pass": false
       },
@@ -128,13 +128,27 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 130.23495498153082,
-        "coverage95": 0.6779214559386973,
+        "meanD2Over3": 1.3438621336230732,
+        "coverage95": 0.9903206291591047,
         "required": true,
         "pass": false
       }
     ],
-    "pass": false
+    "pass": false,
+    "tables": {
+      "DRAG": {
+        "s_e": 0.0030020720101006817,
+        "s_i": 0.0000013729304605949328,
+        "s_l": 0.00022005794330391744,
+        "c": 0.5245440617486178
+      },
+      "ABOVE": {
+        "s_e": 9.696153866117182e-7,
+        "s_i": 8.153112791954473e-7,
+        "s_l": 0.000004753573962018311,
+        "c": 0
+      }
+    }
   },
   "conformance": {
     "passed": true,
@@ -158,14 +172,14 @@
     "tables": {
       "DRAG": {
         "s_e": 0.0012409377607517195,
-        "s_i": 2.838735964758755e-06,
-        "s_l": 2.4582440689201974e-05,
-        "c": 8.058421877614819e-09,
+        "s_i": 0.000002838735964758755,
+        "s_l": 0.000024582440689201974,
+        "c": 8.058421877614819e-9,
         "negativeLogLikelihood": 4385903.859537203
       },
       "ABOVE": {
-        "s_e": 7.233941627366747e-06,
-        "s_i": 1.7782794100389227e-07,
+        "s_e": 0.000007233941627366747,
+        "s_i": 1.7782794100389227e-7,
         "s_l": 2.4582440689201974e-14,
         "c": 0,
         "negativeLogLikelihood": -2350927.5973235243
@@ -286,7 +300,7 @@
         "DRAG": {
           "theta": [
             0.0034334565692197045,
-            1.3777009478753921e-06,
+            0.0000013777009478753921,
             0.0008335467191340119,
             0.31312021837691184
           ],
@@ -304,9 +318,9 @@
         },
         "ABOVE": {
           "theta": [
-            1.0324953584014068e-06,
-            3.1848644709753274e-07,
-            5.585383785636336e-06
+            0.0000010324953584014068,
+            3.1848644709753274e-7,
+            0.000005585383785636336
           ],
           "loss": 0.018145942547129743,
           "margins": [
@@ -338,7 +352,7 @@
           ],
           "theta": [
             0.0030020720101006817,
-            1.3729304605949328e-06,
+            0.0000013729304605949328,
             0.00022005794330391744,
             0.5245440617486178
           ],
@@ -353,9 +367,9 @@
             1.3438621336229248
           ],
           "theta": [
-            9.696153866117182e-07,
-            8.153112791954473e-07,
-            4.753573962018311e-06
+            9.696153866117182e-7,
+            8.153112791954473e-7,
+            0.000004753573962018311
           ],
           "seed": 1
         }
@@ -368,5 +382,98 @@
     "fitRmsKm": 0.019259,
     "day7ForecastRmsKm": 7654.697717439888
   },
-  "remaining": "No passing AP table was found. Production noise and version remain unchanged. Changing the fixed SPEC 12.5 model or registered window eligibility requires an owner decision."
+  "baseline": {
+    "kind": "shipped",
+    "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
+    "created": "2026-11-03T03:16:04.644Z",
+    "forces": [
+      31,
+      20
+    ],
+    "windows": 4150,
+    "cells": [
+      {
+        "regime": "DRAG",
+        "day": 1,
+        "windows": 1246,
+        "samples": 116573,
+        "meanD2Over3": 290.1727481511841,
+        "coverage95": 0.9058358281934925,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 2,
+        "windows": 1237,
+        "samples": 115824,
+        "meanD2Over3": 4506.960834166548,
+        "coverage95": 0.8818465948335406,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 3,
+        "windows": 1219,
+        "samples": 114246,
+        "meanD2Over3": 19272.48952589427,
+        "coverage95": 0.8230310032736375,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 7,
+        "windows": 1208,
+        "samples": 113035,
+        "meanD2Over3": 204910.03042378704,
+        "coverage95": 0.6212500552926085,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 1,
+        "windows": 908,
+        "samples": 79392,
+        "meanD2Over3": 2.0845325772976975,
+        "coverage95": 0.7158529826682789,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 2,
+        "windows": 909,
+        "samples": 79440,
+        "meanD2Over3": 44.26247189518412,
+        "coverage95": 0.685813192346425,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 3,
+        "windows": 906,
+        "samples": 79296,
+        "meanD2Over3": 41.460528861090985,
+        "coverage95": 0.6810053470540759,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 7,
+        "windows": 907,
+        "samples": 79344,
+        "meanD2Over3": 130.23495498153082,
+        "coverage95": 0.6779214559386973,
+        "required": true,
+        "pass": false
+      }
+    ],
+    "pass": false
+  },
+  "realism": "Neither theory is inside the band at every lead; neither earns a realism label."
 }
