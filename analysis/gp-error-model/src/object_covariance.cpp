@@ -1,20 +1,21 @@
-// Per-object SGP4 history second moments, shrunk toward the population model.
+// Per-object SGP4 history second moments, used only to raise the population model's covariance, never to lower it.
 // One translation unit, after source_products.cpp. All physics stays in C++.
 namespace objectcov {
 using Json = nlohmann::json;
 using namespace covreal;
-constexpr const char* kMethod = "empirical-history-shrunk";
-// SDS 1.261.0 covarianceRule::EmpiricalHistoryShrunk. Wire values are append-only; 2 (ScaledFit) is an orbit fit's rule.
+constexpr const char* kMethod = "empirical-history-inflated";
+// SDS 1.261.0 covarianceRule::EmpiricalHistoryShrunk, the wire value for an empirical estimate of this object's own history
+// against a population prior (the enum has no inflate-only name; wire values are append-only). 2 (ScaledFit) is an orbit fit's rule.
 constexpr int kRuleEmpirical = static_cast<int>(covarianceRule::EmpiricalHistoryShrunk);
 constexpr const char* kProducer = "SDN object covariance";
 
 struct Settings {
-  double history_days = 30, max_age_days = 8, minimum_sets = 8, minimum_bin_sets = 12, shrinkage = 30;
+  double history_days = 30, max_age_days = 8, minimum_sets = 8, minimum_bin_sets = 12;
 };
 std::string settings(const Json& j, Settings* s) {
   for (auto [key, value] : {std::pair<const char*, double*>{"historyDays", &s->history_days},
                            {"maxAgeDays", &s->max_age_days}, {"minimumSets", &s->minimum_sets},
-                           {"minimumBinSets", &s->minimum_bin_sets}, {"shrinkage", &s->shrinkage}}) {
+                           {"minimumBinSets", &s->minimum_bin_sets}}) {
     if (!j.contains(key)) continue;
     if (!j[key].is_number() || !std::isfinite(j[key].get<double>()) || j[key].get<double>() < 0)
       return std::string("object.") + key + " must be finite and non-negative.";
@@ -130,24 +131,92 @@ History history(const std::vector<ElementSet>& sets, const ElementSet& anchor, c
   }
   return out;
 }
+// The rule. P is the population covariance at the requested age (RTN, 6x6 row-major, the module's own population answer);
+// d2[k] >= 1 is the history's second moment over the prior's variance on axis k where the history exceeds the prior, else 1.
+// With D = diag(sqrt(d2)), S = diag(sqrt(P_kk)) and C = S^-1 P S^-1, the shipped covariance is
+//   P_o = P + S [D C D - C]_+ S,
+// where [.]_+ keeps the positive eigenvalues of the symmetric matrix: P_o - P is positive semidefinite, so P_o is at least P in
+// the Loewner order and no direction (and no projection of any kind) is smaller than the prior's. (D P D alone is not: with
+// correlated axes it can shrink the variance along some direction.) Nothing changes when no axis exceeds the prior.
+// Positive guard added below; see the end of the function.
+bool inflate(double p[36], const double d2[6]) {
+  double s[6];
+  bool raised = false;
+  for (int k = 0; k < 6; ++k) {
+    if (!(p[7 * k] > 0) || !std::isfinite(p[7 * k])) return false;
+    s[k] = std::sqrt(p[7 * k]);
+    raised = raised || d2[k] > 1;
+  }
+  if (!raised) return true;
+  double d[6], a[36], v[36] = {};
+  for (int k = 0; k < 6; ++k) { d[k] = std::sqrt(d2[k]); v[7 * k] = 1; }
+  for (int i = 0; i < 6; ++i)
+    for (int j = 0; j < 6; ++j) a[6 * i + j] = (d[i] * d[j] - 1) * p[6 * i + j] / (s[i] * s[j]);
+  for (int sweep = 0; sweep < 100; ++sweep) {  // cyclic Jacobi: A = V diag(lambda) V^T
+    double off = 0;
+    for (int i = 0; i < 6; ++i)
+      for (int j = i + 1; j < 6; ++j) off += a[6 * i + j] * a[6 * i + j];
+    if (off < 1e-34) break;
+    for (int q = 0; q < 6; ++q)
+      for (int r = q + 1; r < 6; ++r) {
+        if (std::fabs(a[6 * q + r]) < 1e-300) continue;
+        const double theta = (a[7 * r] - a[7 * q]) / (2 * a[6 * q + r]);
+        const double t = (theta < 0 ? -1.0 : 1.0) / (std::fabs(theta) + std::sqrt(theta * theta + 1));
+        const double c = 1 / std::sqrt(t * t + 1), sn = t * c;
+        for (int k = 0; k < 6; ++k) {
+          const double x = a[6 * k + q], y = a[6 * k + r];
+          a[6 * k + q] = c * x - sn * y; a[6 * k + r] = sn * x + c * y;
+        }
+        for (int k = 0; k < 6; ++k) {
+          const double x = a[6 * q + k], y = a[6 * r + k];
+          a[6 * q + k] = c * x - sn * y; a[6 * r + k] = sn * x + c * y;
+        }
+        for (int k = 0; k < 6; ++k) {
+          const double x = v[6 * k + q], y = v[6 * k + r];
+          v[6 * k + q] = c * x - sn * y; v[6 * k + r] = sn * x + c * y;
+        }
+      }
+  }
+  double add[36];
+  for (int i = 0; i < 6; ++i)
+    for (int j = 0; j <= i; ++j) {
+      double e = 0;
+      for (int k = 0; k < 6; ++k) if (a[7 * k] > 0) e += a[7 * k] * v[6 * i + k] * v[6 * j + k];
+      add[6 * i + j] = add[6 * j + i] = e * s[i] * s[j];
+    }
+  // Rounding guard: P + E is formed in floating point, and the eigen-decomposition leaves E negative by about the machine
+  // epsilon times its size in some directions. Adding guard * diag(P) (guard = 1e-12 times the largest ratio) makes the stored
+  // P_o - P positive semidefinite in exact arithmetic, not only before rounding; it is far below any covariance's meaning.
+  double largest = 1;
+  for (int k = 0; k < 6; ++k) largest = std::max(largest, d2[k]);
+  for (int i = 0; i < 36; ++i) p[i] += add[i];
+  for (int k = 0; k < 6; ++k) p[7 * k] += 1e-12 * largest * (s[k] * s[k]);
+  return true;
+}
 // What an EmpiricalHistoryShrunk CVR's EVIDENCE must let a reader rebuild: the estimator, its configuration, the bin that
-// holds the requested age, and every bin the blend interpolated between with its share of the interpolation, the distinct
-// older sets n and pairs m it retained and its history weight w: "<method>/1 clip=5 historyDays=.. maxAgeDays=.. minimumSets=..
-// minimumBinSets=.. shrinkage=.. bin=<index> blend=<bin>:<share>:<n>:<m>:<w> ...". The estimator is the second moment about
-// zero of the object's older/newer SGP4 residual pairs in the later set's RTN axes, pairs more than clip robust sigma of
-// position from the bin's median rejected; w = n/(n+shrinkage) once n >= minimumBinSets; alpha = 1 - sum(share*w).
+// holds the requested age, and every bin the raise interpolated between with its share of the interpolation, the distinct
+// older sets n and pairs m it retained, and the six variance ratios d2 (history over prior, at least 1) that the age's raise
+// was built from: "<method>/1 clip=5 historyDays=.. maxAgeDays=.. minimumSets=.. minimumBinSets=.. bin=<index>
+// raise=<bin>:<share>:<n>:<m> ... d2=<six values, R T N Rdot Tdot Ndot>". The estimator is the second moment about zero of the
+// object's older/newer SGP4 residual pairs in the later set's RTN axes, pairs more than clip robust sigma of position from the
+// bin's median rejected; a bin with fewer than minimumBinSets older sets has ratio 1 on every axis.
 std::string empirical_evidence(const Settings& cfg, int bin, const History& h, const std::vector<double>& share,
-                               const std::vector<double>& weights) {
+                               const std::vector<double>& d2) {
   char text[256];
-  std::snprintf(text, sizeof text, "%s/1 clip=5 historyDays=%g maxAgeDays=%g minimumSets=%g minimumBinSets=%g shrinkage=%g bin=%d blend=",
-                kMethod, cfg.history_days, cfg.max_age_days, cfg.minimum_sets, cfg.minimum_bin_sets, cfg.shrinkage, bin);
+  std::snprintf(text, sizeof text, "%s/1 clip=5 historyDays=%g maxAgeDays=%g minimumSets=%g minimumBinSets=%g bin=%d raise=",
+                kMethod, cfg.history_days, cfg.max_age_days, cfg.minimum_sets, cfg.minimum_bin_sets, bin);
   std::string out = text;
   bool first = true;
   for (size_t b = 0; b < share.size(); ++b) {
     if (!(share[b] > 0)) continue;
-    std::snprintf(text, sizeof text, "%s%zu:%.6g:%zu:%zu:%.6g", first ? "" : " ", b, share[b], h.bins[b].sets, h.bins[b].samples, weights[b]);
+    std::snprintf(text, sizeof text, "%s%zu:%.6g:%zu:%zu", first ? "" : " ", b, share[b], h.bins[b].sets, h.bins[b].samples);
     out += text;
     first = false;
+  }
+  out += " d2=";
+  for (int k = 0; k < 6; ++k) {
+    std::snprintf(text, sizeof text, "%s%.6g", k ? " " : "", d2[k]);
+    out += text;
   }
   return out;
 }
@@ -285,31 +354,37 @@ extern "C" int object_covariance() {
         report_pairs = h.bins[bin].samples; report_sets = h.bins[bin].sets;
         double rtn[36] = {}, inertial[36], factor_for_output = factor;
         std::vector<double> evaluated = pop;
+        double d2_age[6] = {1, 1, 1, 1, 1, 1};
         if (empirical) {
-          std::vector<std::array<double, 21>> blend(h.bins.size());
-          std::vector<double> weights(h.bins.size());
+          // The history's variance over the bin prior's on each axis where it exceeds the prior (a bin with too few older
+          // sets: 1), interpolated by the population model's one interpolation rule. The covariance itself stays the
+          // population answer below; the history only raises it.
+          std::vector<std::array<double, 6>> ratio(h.bins.size());
           for (size_t b = 0; b < h.bins.size(); ++b) {
-            if (!have[b]) continue;
+            ratio[b].fill(1.0);
+            if (!have[b] || h.bins[b].sets < cfg.minimum_bin_sets) continue;
             const auto cell = std::make_pair(regime, static_cast<int>(b));
-            const double w = h.bins[b].sets >= cfg.minimum_bin_sets ? h.bins[b].sets / (h.bins[b].sets + cfg.shrinkage) : 0;
-            weights[b] = w;
             const double f = model.sm.factor.count(cell) ? model.sm.factor.at(cell) : 1;
-            for (int k = 0; k < 21; ++k) blend[b][k] = w * h.bins[b].moment[k] + (1 - w) * model.sm.cov.at(cell)[k] * f;
+            for (int k = 0; k < 6; ++k) {
+              const int at = k * (k + 1) / 2 + k;
+              const double prior = model.sm.cov.at(cell)[at] * f;
+              if (prior > 0 && std::isfinite(h.bins[b].moment[at])) ratio[b][k] = std::max(1.0, h.bins[b].moment[at] / prior);
+            }
           }
-          interpolate_bins(options.ages, have, age, [&](int b, size_t k) { return blend[b][k]; }, 21, &evaluated);
-          std::vector<double> weight;
-          interpolate_bins(options.ages, have, age, [&](int b, size_t) { return weights[b]; }, 1, &weight);
+          std::vector<double> raised;
+          interpolate_bins(options.ages, have, age, [&](int b, size_t k) { return ratio[b][k]; }, 6, &raised);
+          for (int k = 0; k < 6; ++k) d2_age[k] = std::max(1.0, raised[k]);
           // Each populated bin's interpolation share, by the one interpolation rule: a unit value on that bin alone.
           std::vector<double> share(h.bins.size(), 0.0), unit;
           for (size_t b = 0; b < h.bins.size(); ++b)
             if (have[b] && interpolate_bins(options.ages, have, age, [&](int bb, size_t) { return bb == static_cast<int>(b) ? 1.0 : 0.0; }, 1, &unit))
               share[b] = unit[0];
-          report_weight = weight[0];
+          // The report keeps the history weight (0: the population prior is never given up) and the prior's share (1).
+          report_weight = 0;
           label.history_samples = h.bins[bin].samples; label.history_sets = h.bins[bin].sets;
           label.history_window = h.window;
-          label.shrinkage_weight = 1.0 - weight[0];
-          label.evidence = empirical_evidence(cfg, bin, h, share, weights);
-          factor = 1;
+          label.shrinkage_weight = 1.0;
+          label.evidence = empirical_evidence(cfg, bin, h, share, std::vector<double>(d2_age, d2_age + 6));
         } else {
           label.evidence = model.evidence;
           // The population cell's own test, never an object claim: Uncalibrated, and the NOTES say why.
@@ -321,6 +396,7 @@ extern "C" int object_covariance() {
         }
         for (int a = 0, k = 0; a < 6; ++a)
           for (int b = 0; b <= a; ++b, ++k) rtn[6 * a + b] = rtn[6 * b + a] = evaluated[k] * 1e6 * factor;
+        if (empirical && !inflate(rtn, d2_age)) return fail("invalid-models", "population covariance must have positive variances.");
         StateFailure why;
         if (!state_at(*anchor, age, r, v, &why)) {
           // The console's call fails explicitly. A call that builds records answers the entry with a row that says why.

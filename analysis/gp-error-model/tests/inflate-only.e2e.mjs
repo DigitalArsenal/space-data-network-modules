@@ -194,8 +194,8 @@ for (const [rel, want] of Object.entries(FROZEN)) check(hash(rel) === want, `${r
 
 const objects = sample(readArchive());
 const stats = { objects: objects.length, objectDays: 0, noCovariance: 0, belowPrior: 0, aboveShare: 0, shortHistory: 0, shortExact: 0,
-  byRegime: Object.fromEntries(REGIMES.map((r) => [r, { objects: 0, days: 0, below: 0 }])), minEigen: Infinity, minEigenPlane: Infinity,
-  lambdaMax: [], lambdaMaxInflated: [], uncalibrated: 0 };
+  byRegime: Object.fromEntries(REGIMES.map((r) => [r, { objects: 0, days: 0, below: 0, empirical: 0, inflated: 0, lambdas: [] }])), minEigen: Infinity, minEigenPlane: Infinity,
+  lambdaMax: [], lambdaMaxInflated: [], uncalibrated: 0, empirical: 0, belowEmpirical: 0, lambdaEmpirical: [] };
 const request = (id, anchor, ages) => ages.map((a) => ({ id: `${id}:${a}`, set: { norad: anchor.norad, epoch: anchor.epoch }, ageDays: a }));
 const seenRegime = new Map();
 
@@ -231,7 +231,8 @@ for (const o of objects) {
         stats.minEigen = Math.min(stats.minEigen, eig[0]);
         const lambdaMax = eig[5];
         stats.lambdaMax.push(lambdaMax);
-        if (lambdaMax > 1 + 1e-9) { stats.aboveShare++; stats.lambdaMaxInflated.push(lambdaMax); }
+        if (lambdaMax > 1 + 1e-9) { stats.aboveShare++; stats.lambdaMaxInflated.push(lambdaMax); reg.inflated++; }
+        if (c.status === 'EMPIRICAL') { stats.empirical++; reg.empirical++; stats.lambdaEmpirical.push(lambdaMax); reg.lambdas.push(lambdaMax); }
         let below = eig[0] < 1 - TOLERANCE;
         check(!below, `${where}: min eigenvalue ${eig[0]}`);
         for (const a of ANGLES) for (const f of AZIMUTHS) {
@@ -239,7 +240,7 @@ for (const o of objects) {
           stats.minEigenPlane = Math.min(stats.minEigenPlane, e2[0]);
           if (e2[0] < 1 - TOLERANCE) { below = true; check(false, `${where}: plane ${a}/${f} min eigenvalue ${e2[0]}`); }
         }
-        if (below) { stats.belowPrior++; reg.below++; }
+        if (below) { stats.belowPrior++; reg.below++; if (c.status === 'EMPIRICAL') stats.belowEmpirical++; }
       });
     }
   }
@@ -251,10 +252,13 @@ const summary = {
   module: path.relative(process.cwd(), wasmPath), objects: seenRegime.size, objectDays: stats.objectDays, noCovariance: stats.noCovariance,
   shortHistory: stats.shortHistory, shortHistoryExact: stats.shortExact, examined,
   belowPrior: stats.belowPrior, belowPriorShare: examined ? stats.belowPrior / examined : NaN,
+  empirical: stats.empirical, belowPriorEmpirical: stats.belowEmpirical, belowPriorShareEmpirical: stats.empirical ? stats.belowEmpirical / stats.empirical : NaN,
+  medianLambdaMaxEmpirical: median(stats.lambdaEmpirical),
   inflated: stats.aboveShare, inflatedShare: examined ? stats.aboveShare / examined : NaN,
   medianLambdaMaxAll: median(stats.lambdaMax), medianLambdaMaxInflated: median(stats.lambdaMaxInflated),
   minEigen: stats.minEigen, minEigenPlane: stats.minEigenPlane, uncalibrated: stats.uncalibrated, byRegime: stats.byRegime,
 };
+for (const r of Object.values(stats.byRegime)) { r.medianLambdaMaxEmpirical = median(r.lambdas); delete r.lambdas; }
 console.log(JSON.stringify(summary, null, 1));
 if (measure) process.exit(0);
 check(seenRegime.size >= 200, `only ${seenRegime.size} objects`);
