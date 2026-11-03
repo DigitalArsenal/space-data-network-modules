@@ -1047,14 +1047,14 @@ inline double long_period_step(const RateContext& ctx) {
   return ctx.ap_frame && ctx.resonance == 1 ? 38.0 : kLongPeriodStep;
 }
 
-/// The averaged regime's grid step (SPEC 9): two revolutions; AP's half-day class (SPEC 16.10) at most a sixteenth of
-/// the period of its resonant angle lambda - 2 theta, 2 pi / |n - 2 omega_E|, which near the commensurability leaves
-/// the two revolutions and away from it (a GTO at 2.40 rev/day: 2.5 days) resolves the class terms.
+/// The averaged regime's grid step (SPEC 9): two revolutions; AP's half-day class (SPEC 16.10) at most a 32nd of the
+/// period of its resonant angle lambda - 2 theta, 2 pi / |n - 2 omega_E|, which near the commensurability leaves the
+/// two revolutions and away from it (a GTO at 2.40 rev/day: 2.5 days) resolves the class terms.
 inline double averaged_step(const RateContext& ctx, double n) {
   const double two_revolutions = 2.0 * kTwoPi / n;
   if (!(ctx.ap_frame && ctx.resonance == 2)) return two_revolutions;
   const double slip = std::fabs(n - 2.0 * kOmegaE);
-  return slip > 0.0 ? std::fmin(two_revolutions, kTwoPi / slip / 16.0) : two_revolutions;
+  return slip > 0.0 ? std::fmin(two_revolutions, kTwoPi / slip / 32.0) : two_revolutions;
 }
 
 inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out) {
