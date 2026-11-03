@@ -2123,14 +2123,14 @@ unchanged: one of its eight cells (ABOVE, day 1) is now inside the band, none wa
 
 **16.10 The half-day class's step.** The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
 2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the
-commensurability (the half-day, Molniya and GPS orbits: hundreds of days) and short away from it (GTO at 2.40 rev/day:
-2.5 days; Galileo at 1.70: 3.3 days; BeiDou at 1.86: 6.9 days); two revolutions, 20 h on GTO, do not resolve the
-latter. From 0.4.14 the class steps at most a 32nd of that period: 114 min on GTO, 150 on Galileo, 312 on BeiDou and
-361 on Etalon and GLONASS; near the commensurability the two revolutions stand, and the half-day, Molniya, 12-hour 55
-deg and GPS cases are bit for bit 0.4.13's. Against the class stepped at 23.75 min (11.875 min moves that by under
-0.003 m in 7 days), on seeded FORCES 31,20 sets: GTO 0.065 m RMS over one orbit (two revolutions: 84.5 m, and 261 m
-over 7 days), the 500 km perigee GTO 0.057 m, and over 7 days Galileo-, BeiDou- and Etalon-like orbits 0.004, 0.013
-and 0.016 m.
+commensurability (Molniya at 2.00 rev/day: 183 days; the half-day fixture at 2.0059 and GPS: 6.5 and 22 years) and
+short away from it (GTO at 2.40 rev/day: 2.5 days; Galileo at 1.70: 3.3 days; BeiDou at 1.86: 6.9 days); two
+revolutions, 20 h on GTO, do not resolve the latter. From 0.4.14 the class steps at most a 32nd of that period: 114
+min on GTO, 150 on Galileo, 312 on BeiDou and 357 to 359 on Etalon and GLONASS; near the commensurability the two
+revolutions stand, and the half-day, Molniya, 12-hour 55 deg and GPS cases are bit for bit 0.4.13's. Against the class
+stepped at 23.75 min (11.875 min moves that by under 0.003 m in 7 days), on seeded FORCES 31,20 sets: GTO 0.065 m RMS
+over one orbit (two revolutions: 84.5 m, and 261 m over 7 days), the 500 km perigee GTO 0.057 m, and over 7 days
+Galileo-, BeiDou- and Etalon-like orbits 0.004, 0.013 and 0.016 m.
 
 On FFM model truth without Sun or Moon on either side (2-minute samples; day-7 3D RMS, m), the geopotential cut on both
 sides, the class stepped two revolutions and 95 min:
@@ -2144,14 +2144,16 @@ sides, the class stepped two revolutions and 95 min:
 | 70x70 (31,20) | 1,369.8 | 627.6 | 831.1 | 418.4 |
 
 On GTO at 70x70 the class stepped 600, 450, 300, 190, 95 and 47.5 min gives 639.0, 623.6, 626.3, 627.2, 627.6 and
-627.7 m. With zonals only the comparison does not separate the fields: XP's own half-day resonance terms (SPEC 6)
-have no counterpart in a zonal truth (4x0 against AP 0,4: 600.3 m). What remains on GTO grows with the degree (233 to
-628 m from 4x4 to 70x70): high-degree terms at perigee that AP does not carry, an open part.
+627.7 m. With zonals only the comparison does not separate the fields: XP's own half-day resonance terms (SPEC 6) have
+no counterpart in a zonal truth (4x0 against AP 0,4: 600.3 m). What remains on GTO grows with the degree (233 to 628 m
+from 4x4 to 70x70): high-degree terms at perigee that AP does not carry.
 
 FFM model truth with Sun and Moon (`test/gto-geopotential-perigee.e2e.mjs`; hourly, day-7 whole-day RMS
-along-track/radial against 0.4.13): GTO 960.82/935.27 to 419.32/455.90 m (day-7 sample 2449.15 to 929.45 m), the 500 km
-perigee GTO 605.15/576.31 to 295.44/304.96 m; on the read AP6 windows Etalon-1 and -2 move by +0.07 and +0.14 m (paired
-day 3), LAGEOS, LARES-2, IG and GE not at all.
+along-track/radial against 0.4.13): GTO 960.82/935.27 to 419.32/455.90 m (day-7 sample 2449.15 to 929.45 m), the 500
+km perigee GTO 605.15/576.31 to 295.44/304.96 m; on the read AP6 windows Etalon-1 and -2 move from 6.64 and 7.58 to
+6.72 and 7.74 m (paired day 3) and LAGEOS-1 and -2, LARES-2, IG and GE not at all; on the Etalon-like synthetic orbit
+of `test/twelve-hour-class-terms.e2e.mjs` (no Sun or Moon) the day-7 along-track RMS at nodes 0, 90, 180 and 270 deg
+is 3.22, 2.10, 1.65 and 2.84 m (3.37, 3.19, 1.77 and 6.76 m at 0.4.11), cross-track and radial within 0.02 m.
 
 Cost (owner Mac under load, browser host, `propagate` over 7 days, the two releases interleaved, median of 9 runs,
 milliseconds per object-day from 0.4.13 to 0.4.14): on a 1 h grid GTO 12.0 to 16.2, Galileo-like 5.8 to 10.5 and

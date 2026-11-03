@@ -405,3 +405,15 @@ On the already-read AP6 windows (exploratory) Etalon-1 and -2 fall to 6.64 and 7
 reference, and LAGEOS-1/2, LARES-2, IG and GE stay within 0.03 m (SPEC 16.6, 16.8,
 `test/third-body-short-period-eccentric.e2e.mjs`). A propagation costs 1.6-12.0 ms per object-day on a 1 h grid and
 52-86 ms on a 1 min grid (1.4-12.3 and 51-66 ms before; SPEC 16.8).
+
+AP's half-day class (1.604 to 2.406 rev/day) steps at most a 32nd of the period of its resonant angle lambda - 2 theta
+instead of two revolutions, which away from the commensurability (GTO at 2.40 rev/day: 2.5 days) do not resolve the
+class's terms (SPEC 16.10). Against the class stepped at 23.75 min the step is within 0.065 m RMS over one GTO orbit
+(two revolutions: 84.5 m). On FFM model truth the GTO fixture's day-7 whole-day RMS (along-track/radial) falls from
+960.82/935.27 to 419.32/455.90 m and the 500 km perigee fixture's from 605.15/576.31 to 295.44/304.96 m; the half-day,
+Molniya and 12-hour 55 deg fixtures are unchanged bit for bit. On the Etalon-like synthetic orbit the day-7
+along-track RMS falls to 1.65-3.22 m at the four nodes (1.77-6.76 m at 0.4.11); on the already-read AP6 windows
+(exploratory) Etalon-1 and -2 move from 6.64 and 7.58 to 6.72 and 7.74 m and LAGEOS-1/2, LARES-2, IG and GE not at all
+(`test/gto-geopotential-perigee.e2e.mjs`). What remains on GTO grows with the field's degree (233 to 628 m from 4x4 to
+70x70 without Sun or Moon): high-degree terms at perigee that AP does not carry. A propagation on a 1 h grid costs
+16.2 ms per object-day on GTO and 10.5 ms on Galileo-like orbits (12.0 and 5.8 before).
