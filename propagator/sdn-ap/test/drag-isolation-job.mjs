@@ -26,13 +26,13 @@ if (job.kind === 'iso') {
   const common = {...f, thirdBody: false, modulePath: job.module};
   if (job.mode === 'seed') Object.assign(common, {mode: 'seed', seedGridMin: 10, seedDays: 7});
   else Object.assign(common, {hourly: true, gridMinutes: 10});
-  const onPolicy = job.mode === 'pinned' ? {fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: 0.044, sigma: 1e-7, ...(job.agom0 ? {agom: [0, 1e-10]} : {})}} : {};
+  const onPolicy = job.mode === 'pinned' ? {fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: 0.044, sigma: 1e-7}, ...(job.agom0 ? {agomPrior: [0, 1e-10]} : {})} : {};
   result = {job, on: slim(await runModelTruth({name: job.fixture + '-on', ...common, drag: true, ...onPolicy})),
     off: slim(await runModelTruth({name: job.fixture + '-off', ...common, drag: false}))};
 } else if (job.kind === 'scan') {
   // the day-7 error with BTERM pinned at job.b (the truth is 0.044), Sun and Moon off (job.thirdBody false) or on, 10 minute grid
   const c = {...f, drag: true, hourly: true, gridMinutes: 10, thirdBody: job.thirdBody ?? false, modulePath: job.module,
-    fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: job.b, sigma: 1e-7, ...(job.agom0 ? {agom: [0, 1e-10]} : {})}};
+    fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: job.b, sigma: 1e-7}, ...(job.agom0 ? {agomPrior: [0, 1e-10]} : {})};
   result = {job, run: slim(await runModelTruth({name: job.fixture, ...c}))};
 } else {
   const c = {...f, drag: true, hourly: true, gridMinutes: 60, fitDays: job.fitDays, forecastDays: job.forecastDays, modulePath: job.module, thirdBody: job.thirdBody ?? true};
