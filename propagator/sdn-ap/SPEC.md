@@ -1694,19 +1694,19 @@ too large from day 2 (coverage 0.98 to 1.0). These are a measured limit of the p
 band; the band is not widened.
 
 
-SDNAP calibration cells measured 2026-11-03 on the rows named in 12.5, from
-`test/results/covariance-ap-calibration.json` (0 of 8 inside):
+SDNAP calibration cells measured 2026-11-03 on the rows named in 12.5 with the full-precision AP sets of 0.4.9
+(16.9; noise constants unchanged), from `test/results/covariance-ap-calibration.json` (1 of 8 inside):
 
 | Theory | Regime | Day | Mean d^2/3 | Inside 95 % | Band |
 | --- | --- | --: | --: | --: | --- |
-| SDNAP | DRAG | 1 | 0.577704435 | 0.968500425 | outside |
-| SDNAP | DRAG | 2 | 0.638049318 | 0.982292098 | outside |
-| SDNAP | DRAG | 3 | 0.949024359 | 0.992778741 | outside |
-| SDNAP | DRAG | 7 | 1.472295565 | 0.998080241 | outside |
-| SDNAP | ABOVE | 1 | 0.706137866 | 0.958144397 | outside |
-| SDNAP | ABOVE | 2 | 1.343862134 | 0.997004028 | outside |
-| SDNAP | ABOVE | 3 | 0.706137866 | 0.997528249 | outside |
-| SDNAP | ABOVE | 7 | 1.343862134 | 0.990320629 | outside |
+| SDNAP | DRAG | 1 | 0.601767030 | 0.964837484 | outside |
+| SDNAP | DRAG | 2 | 0.651373607 | 0.981540959 | outside |
+| SDNAP | DRAG | 3 | 0.961576311 | 0.992866271 | outside |
+| SDNAP | DRAG | 7 | 1.476930466 | 0.998071394 | outside |
+| SDNAP | ABOVE | 1 | 0.814963278 | 0.943482971 | inside |
+| SDNAP | ABOVE | 2 | 1.101331141 | 0.997029204 | outside |
+| SDNAP | ABOVE | 3 | 0.519707793 | 0.997515638 | outside |
+| SDNAP | ABOVE | 7 | 1.199193799 | 0.989929925 | outside |
 
 Neither theory's table is inside the band at every lead, so neither earns a realism label.
 The AP E2E asserts the shipped minimax table, reproduction of every cell mean and coverage
@@ -1888,6 +1888,9 @@ The day-3 median paired AP-minus-XP error changes from +420.105792 m to -0.00078
 Their day-1/3/7 3D errors change by 0.000 m (acceptance: less than 1 m); the half-day day-7 error remains
 104.725 m. XP reproduces the archived AP6 scores within 0.001 m and retains its conformance digest.
 `test/results/heo-frame.json` records the per-window errors, fixture checks and kernel hashes.
+From 0.4.9 an AP set keeps its full precision while an XP set keeps the two-line lattice (16.9): on the same seven
+windows AP then leads XP by a median 137.5 m at day 3 (per window -298.4 to +101.0 m). The E2E requires AP no more than
+50 m behind XP, and the fixtures it checks carry their 0.4.9 values.
 
 **16.5 Mark.** A set fitted with either degree set records `SDNAP_GRAVITY_TERMS` (`"<d>,<z>"`) in
 `$OMM.USER_DEFINED_PARAMETERS`. `propagate`, `load_epochs` and `propagate_epochs` refuse a set whose mark differs from the call's
@@ -1990,7 +1993,8 @@ read; day 3, leads from the fit end; 0.4.8 to 0.4.9): Etalon-1 paired AP-minus-n
 Etalon-2 23.55 to 9.74 m; medians LAGEOS-1 14.10 to 7.81 m, LAGEOS-2 12.24 to 6.78 m, LARES-2 11.00 to 9.73 m, IG
 36.26 to 17.10 m, GE 54.31 to 45.86 m. The e 0.72-0.74 fixtures of 16.6 at day 7: half-day 104.7 to 91.4 m, Molniya
 654.1 to 700.4 m, GTO 2326.6 to 2356.1 m, 12-hour 55 deg 188.7 to 175.5 m. `test/twelve-hour-class-terms.e2e.mjs`
-prints every number.
+prints every number. The AP covariance calibration of 12.7 is re-measured on these sets with its noise constants
+unchanged: one of its eight cells (ABOVE, day 1) is now inside the band, none was before.
 
 ---
 
