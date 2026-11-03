@@ -22,6 +22,15 @@ const cases=[
 if(process.argv.includes('--seed-diagnostic')){const c={...cases[0],mode:'seed'};cases.splice(0,cases.length,c);}
 // Registered literal 12-hour diagnostic (2 rev/day); retain the sidereal case.
 if(process.argv.includes('--exact-12h-diagnostic')){const c={...cases[0],name:'12-hour',n:2};cases.splice(0,cases.length,c);}
+// Registered reference-convergence check: same initial state, tenfold tighter
+// RK78 tolerance and half the maximum step; report the change at each lead.
+if(process.argv.includes('--reference-convergence')){
+ const a=await runModelTruth(cases[0]),b=await runModelTruth({...cases[0],referenceTolerance:1e-13,referenceMaxStep:150});
+ const differences=a.referenceStates.map((v,k)=>({day:[1,3,7][k],meters:1000*Math.hypot(...v.position.map((x,j)=>x-b.referenceStates[k].position[j]))}));
+ console.log(JSON.stringify({referenceConvergence:differences,standard:a,tight:b}));
+ assert.ok(differences.every(v=>v.meters<.1),'FFM reference convergence below 0.1 m');
+ process.exit(0);
+}
 const results=[];
 for(const c of cases){const result=await runModelTruth(c);results.push(result);console.log(JSON.stringify(result));}
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');

@@ -55,7 +55,7 @@ export async function runModelTruth(c){
  }
  const times=c.mode==='seed'?[0,1,3,7]:[...Array(145)].map((_,k)=>k/48).concat([4,6,10]);
  const first=c.mode==='seed'?1:145;
- const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM96',maxDegree:70,maxOrder:70,thirdBody:true,srp:false,drag:c.drag,massKg:1000,areaM2:20,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:1e-12,minStep:.01,maxStep:300}};
+ const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM96',maxDegree:70,maxOrder:70,thirdBody:true,srp:false,drag:c.drag,massKg:1000,areaM2:20,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:c.referenceTolerance??1e-12,minStep:.01,maxStep:c.referenceMaxStep??300}};
  params.ephemerisSource='JPL_SPK';
  const kernel=fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));
  const key=createHash('sha256').update(fs.readFileSync(ffmPath)).update(JSON.stringify(params)).update(kernel).digest('hex');
@@ -73,7 +73,7 @@ export async function runModelTruth(c){
  const omm=seed??fit.find(v=>v.portId==='elements').payload;
  const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:omm},{portId:'grid',typeRef:type('OEM'),payload:oem(lines.slice(first))}]);
  const flown=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
- const result={name:c.name,apSha256:createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
+ const result={name:c.name,fixture:{...c,initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
  for(let k=0;k<3;k++){
   const ref=truth[first+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];
   a(0,3).set(ref.position);a(24,3).set(ref.velocity);a(48,3).set(err);x.sdnap_frame_to_uvw(p,p+24,p+48,p+72);
