@@ -45,6 +45,11 @@ struct Prior {
 /// mean and sigma (FIT.DRAG_PRIOR, HAS_SIGMA true). AGOM: GAUSSIAN_SIGNED 0 +- 0.05.
 constexpr Prior kDragPriorDefault = {0.01, 2.302585092994045684, pcfPriorForm_LOG_NORMAL};
 constexpr Prior kSrpPriorDefault = {0.0, 0.05, pcfPriorForm_GAUSSIAN_SIGNED};
+/// AGOM's prior on an arc shorter than kShortArcHours when FIT.SRP_PRIOR is unset: the Space Force wrapper's
+/// (propagator/sgp4-xp/src/fit.hpp SGP4XP_PRIOR_SIGMA_AGOM), GAUSSIAN_SIGNED 0 +- 0.1 m^2/kg (SPEC 12.1).
+constexpr Prior kSrpPriorShortArc = {0.0, 0.1, pcfPriorForm_GAUSSIAN_SIGNED};
+/// An arc shorter than this takes kSrpPriorShortArc: the 24 h arcs; spans of 48 h and more keep kSrpPriorDefault.
+constexpr double kShortArcHours = 36.0;
 
 /// One call's options, every one at its documented default.
 struct Options {
@@ -59,6 +64,7 @@ struct Options {
   double eccentricity_threshold = 0.5, eccentric_default_span_h = 24.0, eccentric_extension_margin = 0.7;
   double eccentric_maximum_period_h = 36.0, implausible_rms_km = 100.0;
   Prior drag_prior = kDragPriorDefault, srp_prior = kSrpPriorDefault;
+  bool srp_prior_given = false;  ///< FIT.SRP_PRIOR stated with its sigma: no short-arc prior (kSrpPriorShortArc)
   // FORCES (fit, propagate): SGP4XP's drag atmosphere (SPEC 15). ENABLE_DRAG false keeps the theory's own Jacchia
   // 1970; true selects ATMOSPHERE_MODEL (NRLMSISE00 only). The drivers: WEATHER_SOURCE UNSPECIFIED infers them ('space_weather'
   // rows when given, else the theory's generic flux model), RECORDS needs the rows.
@@ -236,6 +242,7 @@ inline int read_fit(const PCFFitPolicy* f, Options& o) {
   o.implausible_rms_km = f->IMPLAUSIBLE_RMS_KM();
   if (!(o.implausible_rms_km > 0.0)) return refuse("FIT.IMPLAUSIBLE_RMS_KM", "a bound is positive");
   if (const int rc = read_prior(f->DRAG_PRIOR(), f->DRAG_PRIOR_FORM(), "DRAG_PRIOR", o.drag_prior)) return rc;
+  o.srp_prior_given = f->SRP_PRIOR() != nullptr && f->SRP_PRIOR()->HAS_SIGMA();
   return read_prior(f->SRP_PRIOR(), f->SRP_PRIOR_FORM(), "SRP_PRIOR", o.srp_prior);
 }
 

@@ -275,6 +275,7 @@ static int fit_blocks() {
         int iterations = 0;
         double first_pass_rms = 0.0;
         double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
+        pcf::Prior srp{};                                ///< AGOM's prior as used (SPEC 12.1 short-arc rule)
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       pcf::Prior used_drag = po.drag_prior;
@@ -364,7 +365,12 @@ static int fit_blocks() {
         row.theory = kTheorySgp4Xp;
         fitoem::start_row(s0, row);
         pcf::Prior eff_drag = drag_override != nullptr ? *drag_override : po.drag_prior;
-        const pcf::Prior eff_srp = srp_override != nullptr ? *srp_override : po.srp_prior;
+        // SPEC 12.1: an arc shorter than pcf::kShortArcHours with FIT.SRP_PRIOR unset takes the Space Force wrapper's
+        // AGOM prior, 0 +- 0.1 m^2/kg
+        const pcf::Prior eff_srp = srp_override != nullptr ? *srp_override
+                                   : !po.srp_prior_given && fit_end_min - fit_begin_min < pcf::kShortArcHours * 60.0
+                                       ? pcf::kSrpPriorShortArc
+                                       : po.srp_prior;
         if (drag_override == nullptr && (po.msis || po.minimum_span_h < 24.0) &&
             eff_drag.form == pcfPriorForm_LOG_NORMAL &&
             eff_drag.mean == pcf::kDragPriorDefault.mean &&
@@ -420,7 +426,7 @@ static int fit_blocks() {
         iterations += res.iterations;
         const double first_pass_rms = res.rms_km;
         opt.fit_agom = 1;
-        // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg; LOG_NORMAL on ln AGOM)
+        // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg, 0 +- 0.1 on a short arc; LOG_NORMAL on ln AGOM)
         fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
@@ -438,6 +444,7 @@ static int fit_blocks() {
         P.first_pass_rms = first_pass_rms;
         P.fit_begin_min = fit_begin_min;
         P.fit_end_min = fit_end_min;
+        P.srp = eff_srp;
         return 0;
       };
       // the default span: 48 h; 24 h for eccentric orbits (e > 0.5: the lane's THEMIS and Chandra windows lost
@@ -545,6 +552,7 @@ static int fit_blocks() {
           stage2.opt.agom_log = chosen.opt.agom_log;
           stage2.opt.agom_prior = chosen.opt.agom_prior;
           stage2.opt.agom_sigma = chosen.opt.agom_sigma;
+          stage2.srp = chosen.srp;
           chosen = std::move(stage2);
         }
       }
@@ -709,7 +717,7 @@ static int fit_blocks() {
         const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
         char bmodel[400], amodel[400];
         fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, bmodel, sizeof bmodel);
-        fitoem::model_text("AGOM (SGP4XP)", po.srp_prior, have_cov ? fit_cov.log_sigma[1] : 0.0, amodel, sizeof amodel);
+        fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, amodel, sizeof amodel);
         const auto o_bmodel = ob.CreateString(bmodel);
         const auto o_amodel = ob.CreateString(amodel);
         const auto o_object = object != nullptr && object->OBJECT_ID() != nullptr ? ob.CreateString(object->OBJECT_ID()->c_str()) : 0;
