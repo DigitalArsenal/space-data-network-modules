@@ -1,0 +1,139 @@
+{
+  "task": "modules-sdn-ap-covariance-noise-ap-20261103",
+  "status": "calibration-in-progress",
+  "protocol": {
+    "theory": "SDNAP",
+    "forces": [
+      31,
+      20
+    ],
+    "prior": "LOG_NORMAL (module default)",
+    "fitArcsHours": [
+      24,
+      72
+    ],
+    "leadDayBins": [
+      1,
+      2,
+      3,
+      7
+    ],
+    "sampleMinutes": 30,
+    "errorFrame": "TEME",
+    "referenceTransform": "registered foundation/frames GCRF to TEME",
+    "fits": 4150,
+    "samples": 777150,
+    "additionalRowExclusions": 0,
+    "storedRowErrors": "daily RTN RMS, not signed epoch errors",
+    "acceptance": {
+      "meanD2Over3": [
+        0.8,
+        1.25
+      ],
+      "coverage95": [
+        0.93,
+        0.97
+      ],
+      "minimumWindows": 30
+    }
+  },
+  "shipped": {
+    "kind": "shipped",
+    "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
+    "created": "2026-11-03T03:16:04.644Z",
+    "forces": [
+      31,
+      20
+    ],
+    "windows": 4150,
+    "cells": [
+      {
+        "regime": "DRAG",
+        "day": 1,
+        "windows": 1246,
+        "samples": 116573,
+        "meanD2Over3": 290.1727481511841,
+        "coverage95": 0.9058358281934925,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 2,
+        "windows": 1237,
+        "samples": 115824,
+        "meanD2Over3": 4506.960834166548,
+        "coverage95": 0.8818465948335406,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 3,
+        "windows": 1219,
+        "samples": 114246,
+        "meanD2Over3": 19272.48952589427,
+        "coverage95": 0.8230310032736375,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "DRAG",
+        "day": 7,
+        "windows": 1208,
+        "samples": 113035,
+        "meanD2Over3": 204910.03042378704,
+        "coverage95": 0.6212500552926085,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 1,
+        "windows": 908,
+        "samples": 79392,
+        "meanD2Over3": 2.0845325772976975,
+        "coverage95": 0.7158529826682789,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 2,
+        "windows": 909,
+        "samples": 79440,
+        "meanD2Over3": 44.26247189518412,
+        "coverage95": 0.685813192346425,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 3,
+        "windows": 906,
+        "samples": 79296,
+        "meanD2Over3": 41.460528861090985,
+        "coverage95": 0.6810053470540759,
+        "required": true,
+        "pass": false
+      },
+      {
+        "regime": "ABOVE",
+        "day": 7,
+        "windows": 907,
+        "samples": 79344,
+        "meanD2Over3": 130.23495498153082,
+        "coverage95": 0.6779214559386973,
+        "required": true,
+        "pass": false
+      }
+    ],
+    "pass": false
+  },
+  "conformance": {
+    "passed": true,
+    "xpDigestPrefix": "72dcf6005046",
+    "controlDigestPrefix": "9ecfafcd9027",
+    "reproduces": "test/results/conformance.json"
+  }
+}
