@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import * as fb from 'flatbuffers';
 import {PCF} from 'spacedatastandards.org/lib/js/PCF/PCF.js';
-const experiments='/Users/tj/software/private/coordinator-d9/orbit-accuracy-experiments-fiveday';
+import {experiments} from './experiments.mjs';
 const modules=fileURLToPath(new URL('../../../../',import.meta.url));
 const scratch='/Users/tj/software/terrain-work/body-look/codex-apfix-d9/heo-frame';
 const DAY=86400000,ms=l=>Date.parse(/Z$/.test(l.epoch)?l.epoch:l.epoch+'Z');

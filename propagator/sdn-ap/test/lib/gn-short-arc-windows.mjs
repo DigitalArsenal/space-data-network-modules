@@ -6,7 +6,8 @@ import path from 'node:path';
 import {parentPort, workerData} from 'node:worker_threads';
 import {fileURLToPath} from 'node:url';
 
-export const experiments = '/Users/tj/software/private/coordinator-d9/orbit-accuracy-experiments-fiveday';
+import {experiments} from './experiments.mjs';
+export {experiments};
 export const archive = '/opt/data/sdn-archive/operator-theory/ap-gap';
 const modules = fileURLToPath(new URL('../../../../', import.meta.url));
 
