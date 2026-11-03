@@ -412,7 +412,7 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
 /// Normalized F and dF/di at the epoch; G is cubic about the epoch eccentricity.
 struct HalfDayCoef {
   int8_t l, m, p, k;
-  double f, df;
+  double f, df, ddf, dddf;
   res::GTaylor g;
 };
 inline int half_day_bound(int degree) {
@@ -422,20 +422,25 @@ inline int half_day_bound(int degree) {
 }
 inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out) {
   int count = 0;
-  double f[72], fp[72], fm[72];
-  const double h = 1e-5;
+  double f[72], fp[72], fm[72], fpp[72], fmm[72];
+  const double h = 5e-4;
   // Adjacent degrees share one angle in resonance_six.
   for (int m = 2; m <= degree; m += 2) {
     for (int w = -degree; w <= degree; ++w) {
       normalized_Fk(m, w, degree, i0, f);
       normalized_Fk(m, w, degree, i0 + h, fp);
       normalized_Fk(m, w, degree, i0 - h, fm);
+      normalized_Fk(m, w, degree, i0 + 2*h, fpp);
+      normalized_Fk(m, w, degree, i0 - 2*h, fmm);
       int first = std::max(6, std::max(m, std::abs(w)));
       if ((first - w) & 1) ++first;
       for (int l = first; l <= degree; l += 2) {
         const int p = (l - w) / 2, k = m / 2;
         out[count++] = HalfDayCoef{static_cast<int8_t>(l), static_cast<int8_t>(m),
-          static_cast<int8_t>(p), static_cast<int8_t>(k), f[l], (fp[l]-fm[l])/(2*h), res::GTaylor{}};
+          static_cast<int8_t>(p), static_cast<int8_t>(k), f[l],
+          (fmm[l]-8*fm[l]+8*fp[l]-fpp[l])/(12*h),
+          (-fpp[l]+16*fp[l]-30*f[l]+16*fm[l]-fmm[l])/(12*h*h),
+          (fpp[l]-2*fp[l]+2*fm[l]-fmm[l])/(2*h*h*h), res::GTaylor{}};
       }
     }
   }
@@ -494,9 +499,11 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
     for (int j = 0; j < size; ++j) {
       const HalfDayCoef& c = table[first+j];
       const double G = c.g.g0+d*(c.g.g1+d*(0.5*c.g.g2+d*c.g.g3/6.0));
-      const double dG = c.g.g1+d*(c.g.g2+0.5*d*c.g.g3), F = c.f+c.df*di;
+      const double dG = c.g.g1+d*(c.g.g2+0.5*d*c.g.g3);
+      const double F = c.f+di*(c.df+di*(0.5*c.ddf+di*c.dddf/6.0));
+      const double dF = c.df+di*(c.ddf+0.5*di*c.dddf);
       terms[j] = res::ResCoef{c.l,c.m,c.p,c.k,static_cast<int8_t>((c.l-c.m)&1),
-        kEgmC[c.l][c.m],kEgmS[c.l][c.m],F*G,F*dG,c.df*G};
+        kEgmC[c.l][c.m],kEgmS[c.l][c.m],F*G,F*dG,dF*G};
     }
     res::resonance_six(terms,size,t,k,n,eta,si,ci,theta,six);
   }
