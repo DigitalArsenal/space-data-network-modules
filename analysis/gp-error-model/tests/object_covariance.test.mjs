@@ -105,17 +105,54 @@ function interpolate(values, age, model = kc) {
     }
   }
 }
-function expected(stats, age, model = kc, threshold = 12, shrinkage = 30) {
-  const weights = [], mixed = [], population = [];
+// The rule's oracle, in test arithmetic: the population covariance at the age (interpolated moment times interpolated
+// factor, the module's population fallback), the history's variance ratios per bin (at least 1, and 1 where the bin has
+// fewer than `threshold` older sets) interpolated at the age, and P_o = P + [D P D - P]_+ by a Jacobi eigendecomposition.
+function psdPartOfInflation(P, d2) {
+  const s = Array.from({ length: 6 }, (_, i) => Math.sqrt(P[6 * i + i]));
+  const d = d2.map(Math.sqrt);
+  const A = Array.from({ length: 36 }, (_, k) => { const i = Math.floor(k / 6), j = k % 6; return (d[i] * d[j] - 1) * P[k] / (s[i] * s[j]); });
+  const V = Array.from({ length: 36 }, (_, k) => (k % 7 === 0 ? 1 : 0));
+  for (let sweep = 0; sweep < 100; sweep++) {
+    for (let p = 0; p < 6; p++) for (let q = p + 1; q < 6; q++) {
+      if (Math.abs(A[6 * p + q]) < 1e-300) continue;
+      const theta = (A[7 * q] - A[7 * p]) / (2 * A[6 * p + q]);
+      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1)), c = 1 / Math.sqrt(t * t + 1), sn = t * c;
+      for (let k = 0; k < 6; k++) {
+        const x = A[6 * k + p], y = A[6 * k + q]; A[6 * k + p] = c * x - sn * y; A[6 * k + q] = sn * x + c * y;
+      }
+      for (let k = 0; k < 6; k++) {
+        const x = A[6 * p + k], y = A[6 * q + k]; A[6 * p + k] = c * x - sn * y; A[6 * q + k] = sn * x + c * y;
+      }
+      for (let k = 0; k < 6; k++) {
+        const x = V[6 * k + p], y = V[6 * k + q]; V[6 * k + p] = c * x - sn * y; V[6 * k + q] = sn * x + c * y;
+      }
+    }
+  }
+  const out = Array(36).fill(0);
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
+    let e = 0;
+    for (let k = 0; k < 6; k++) if (A[7 * k] > 0) e += A[7 * k] * V[6 * i + k] * V[6 * j + k];
+    out[6 * i + j] = P[6 * i + j] + e * s[i] * s[j];
+  }
+  // The rounding guard of the rule: 1e-12 times the largest ratio, of each variance.
+  const largest = Math.max(1, ...d2);
+  for (let k = 0; k < 6; k++) out[7 * k] += 1e-12 * largest * s[k] * s[k];
+  return out;
+}
+function expected(stats, age, model = kc, threshold = 12) {
+  const cells = [], factors = [], ratios = [], population = [];
+  const diag = (k) => k * (k + 1) / 2 + k;
   for (let i = 0; i < stats.length; i++) {
     const cell = model.strata.find((s) => s.regimeIndex === regimeIndex && s.ageIndex === i && s.n >= (model.minimumBinSamples ?? 0));
     if (!cell) continue;
     const f = model.factors?.find((s) => s.regimeIndex === regimeIndex && s.ageIndex === i)?.factor ?? 1;
-    const w = stats[i].sets >= threshold ? stats[i].sets / (stats[i].sets + shrinkage) : 0;
-    weights[i] = [w]; population[i] = cell.covariance.map((x) => x * f);
-    mixed[i] = cell.covariance.map((x, k) => w * stats[i].moment[k] + (1 - w) * x * f);
+    cells[i] = cell.covariance; factors[i] = [f]; population[i] = cell.covariance.map((x) => x * f);
+    ratios[i] = Array.from({ length: 6 }, (_, k) => stats[i].sets >= threshold ? Math.max(1, stats[i].moment[diag(k)] / population[i][diag(k)]) : 1);
   }
-  return { covariance: interpolate(mixed, age, model).map((x) => x * 1e6), weight: interpolate(weights, age, model)[0], population };
+  const P = full(interpolate(cells, age, model).map((x) => x * interpolate(factors, age, model)[0] * 1e6));
+  const d2 = interpolate(ratios, age, model);
+  return { covariance: lower(psdPartOfInflation(P, d2)), population: P, d2 };
 }
 async function stateAt(s, age) {
   const epoch = new Date(Date.parse(s.epoch) + age * 86400000).toISOString();
@@ -142,7 +179,7 @@ function eigenvalues(m) {
   return Array.from({ length:6 }, (_,i)=>a[7*i]);
 }
 
-test('history covariance: common_epoch residual oracle, finalize clipping, shrinkage and GCRF rotation', async () => {
+test('history covariance: common_epoch residual oracle, finalize clipping, the inflate-only rule and GCRF rotation', async () => {
   const { stats } = await oracle();
   // finalize independently reads the oracle's sufficient statistics and signed
   // histograms; its quantiles must agree, including the designed outlier removal.
@@ -162,15 +199,17 @@ test('history covariance: common_epoch residual oracle, finalize clipping, shrin
   assert.ok(stats.some((s) => s.clipped.n < s.n), 'the outlier exercises clipping');
   const ages = [0.25, 0.5, 0.8, 1.125, 2, 3, 5, 7];
   const got = await run(history, ages);
-  assert.equal(got.covariance.rule, 'empirical-history-shrunk');
+  assert.equal(got.covariance.rule, 'empirical-history-inflated');
   assert.equal(got.covariance.calibrationVersion, '0.8.0:' + kc.id);
   for (let i = 0; i < ages.length; i++) {
     const age = ages[i], row = got.covariance.objects[i], label = got.report.objects[i].rows[0], bin = binOf(age);
     assert.equal(row.status, 'EMPIRICAL');
-    const want = expected(stats, age); close(row.covarianceRtn, want.covariance);
-    close([label.scaleFactor], [want.weight], 1e-12);
+    const want = expected(stats, age); close(row.covarianceRtn, want.covariance, 1e-8);
+    assert.equal(label.scaleFactor, 0); // the prior is never given up: the history only raises it
+    const pop = await populationOracle(anchor, age);
+    assertAbovePrior(row.covarianceRtn, pop.covarianceRtn);
     assert.equal(label.samples, stats[bin].clipped.n); assert.equal(label.objects, stats[bin].sets);
-    assert.equal(label.rule, 2); assert.equal(label.calibration, 'UNCALIBRATED');
+    assert.equal(label.rule, 5); assert.equal(label.calibration, 'UNCALIBRATED');
     assert.equal(got.report.objects[i].calibrated, false);
     const cvr = got.rawReport.OBJECTS[i].ROWS[0].REALISM;
     assert.ok(Number.isNaN(cvr.MEAN_D2_OVER_3) && Number.isNaN(cvr.COVERAGE_95)); assert.ok(!cvr.TEST_WINDOW);
@@ -198,23 +237,33 @@ test('three older sets: bit-identical population fallback, zero weight and reaso
   }
 });
 
-test('bin threshold, zero shrinkage, large sample weight and PSD convex combination', async () => {
+// O - P is positive semidefinite (checked on the diagonally normalized difference, so position and velocity units mix safely).
+function assertAbovePrior(o, p) {
+  const O = full(o), P = full(p), s = Array.from({ length: 6 }, (_, i) => Math.sqrt(P[7 * i]));
+  assert.ok(eigenvalues(O.map((x, k) => (x - P[k]) / s[Math.floor(k / 6)] / s[k % 6])).every((v) => v >= -1e-10), 'the covariance is below the prior in some direction');
+}
+
+test('bin threshold and the raise: below the threshold the prior, at it the prior plus a positive semidefinite part', async () => {
   const { stats } = await oracle(), age = 2, b = binOf(age), n = stats[b].sets;
+  const pop = await populationOracle(anchor, age);
   const below = await run(history, [age], { config: { minimumBinSets: n + 1 } });
   assert.equal(below.covariance.objects[0].status, 'POPULATION');
-  assert.deepEqual(below.covariance.objects[0].covarianceRtn, (await populationOracle(anchor, age)).covarianceRtn);
+  assert.deepEqual(below.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
   assert.equal(below.report.objects[0].rows[0].scaleFactor, 0);
   const at = await run(history, [age], { config: { minimumBinSets: n } });
   assert.equal(at.covariance.objects[0].status, 'EMPIRICAL');
-  close([at.report.objects[0].rows[0].scaleFactor], [n / (n + 30)], 1e-12);
-  const m = full(at.covariance.objects[0].covarianceRtn), em = stats[b].moment.map((x) => x * 1e6);
-  const pop = expected(stats, age).population[b].map((x) => x * 1e6);
-  at.covariance.objects[0].covarianceRtn.forEach((x, k) => assert.ok(x >= Math.min(em[k], pop[k]) - 1e-6 && x <= Math.max(em[k], pop[k]) + 1e-6));
-  const diagonal = Array.from({ length: 6 }, (_, i) => Math.sqrt(m[7*i]));
-  assert.ok(eigenvalues(m.map((x, k) => x / diagonal[Math.floor(k/6)] / diagonal[k%6])).every((v) => v >= -1e-10));
-  const noPrior = await run(history, [age], { config: { shrinkage: 0 } });
-  close(noPrior.covariance.objects[0].covarianceRtn, em);
-  assert.equal(noPrior.report.objects[0].rows[0].scaleFactor, 1);
+  assert.equal(at.report.objects[0].rows[0].scaleFactor, 0);
+  assertAbovePrior(at.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
+  // The history of this designed set exceeds the prior on some axis at 2 days, so the raise is real; and the raise is
+  // not the diagonal scaling alone: D P D is also below the result (P_o >= D P D as well as P_o >= P).
+  const want = expected(stats, age);
+  assert.ok(want.d2.some((x) => x > 1), 'the designed history exceeds the prior');
+  assert.notDeepEqual(at.covariance.objects[0].covarianceRtn, pop.covarianceRtn);
+  const d = want.d2.map(Math.sqrt), P = full(pop.covarianceRtn);
+  assertAbovePrior(at.covariance.objects[0].covarianceRtn, lower(P.map((x, k) => x * d[Math.floor(k / 6)] * d[k % 6])));
+  // No shrinkage knob: the object config has no prior weight any more.
+  const ignored = await run(history, [age], { config: { shrinkage: 0 } });
+  assert.deepEqual(ignored.covariance, (await run(history, [age])).covariance);
 });
 
 test('causality, duplicate stream order, object isolation and request order', async () => {
@@ -304,7 +353,7 @@ test('config window and pair limit; 200 epoch cap', async () => {
 test('typed contract: raw CVR, wrong arms, unknown ports, bad ages and config', async () => {
   const r = await run(history, [2]);
   assert.equal(r.rawReport.OBJECTS[0].ROWS[0].REALISM.CALIBRATION, E.covarianceCalibration.Uncalibrated);
-  assert.equal(r.rawReport.OBJECTS[0].ROWS[0].REALISM.RULE, E.covarianceRule.ScaledFit);
+  assert.equal(r.rawReport.OBJECTS[0].ROWS[0].REALISM.RULE, E.covarianceRule.EmpiricalHistoryShrunk);
   const valid = [elements(history), modelsFrame([kc]), json('request', { objects: [request(2)] })];
   const unknown = await invoke('object_covariance', [...valid, frame('unknown', 'objects', { objects: [] })]); assert.notEqual(unknown.statusCode, 0);
   const wrong = await invoke('object_covariance', [elements(history), modelsFrame([kc]), frame('request', 'model', kc)]); assert.notEqual(wrong.statusCode, 0);
@@ -315,8 +364,8 @@ test('typed contract: raw CVR, wrong arms, unknown ports, bad ages and config', 
   for (const age of [-1, Infinity, NaN]) {
     const bad = await invoke('object_covariance', [elements(history), modelsFrame([kc]), json('request', { objects: [request(age)] })]); assert.notEqual(bad.statusCode, 0);
   }
-  const badConfig = await invoke('object_covariance', valid, { config: cfg({ shrinkage: -1 }) }); assert.notEqual(badConfig.statusCode, 0);
-  assert.equal(JSON.parse(fs.readFileSync(new URL('../dist/plugin-manifest.json', import.meta.url))).version, '0.8.1');
+  const badConfig = await invoke('object_covariance', valid, { config: cfg({ historyDays: -1 }) }); assert.notEqual(badConfig.statusCode, 0);
+  assert.equal(JSON.parse(fs.readFileSync(new URL('../dist/plugin-manifest.json', import.meta.url))).version, JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).version);
 });
 
 test('varying cell factors: exact population fallback and independently scaled empirical bin priors', async () => {

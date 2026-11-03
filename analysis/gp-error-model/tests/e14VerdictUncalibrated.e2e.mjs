@@ -23,7 +23,7 @@ import { recipeFor } from '../../../flows/source-products/recipe.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const moduleRoot = path.resolve(here, '..');
-const BASE = 'b93ec1af73f1eae3ecc82aaa1e74baed3606f3fe';  // modules main with gp-error-model 0.10.0, the parent of 0.11.0's commits
+const BASE = 'b93ec1af73f1eae3ecc82aaa1e74baed3606f3fe';  // modules main with gp-error-model 0.10.0, the parent of 0.13.0's commits
 const NOTE = 'population cell tested by time only, on payload truth';
 const fb = createRequire(path.join(standardsRoot, 'package.json'))('flatbuffers');
 const [OMM, OCM] = await Promise.all(['OMM', 'OCM'].map((code) => import(pathToFileURL(path.join(standardsRoot, `lib/js/${code}/main.js`)))));
@@ -31,7 +31,7 @@ const kc = JSON.parse(fs.readFileSync(path.join(moduleRoot, 'data/e14-s3-kc.json
 const cell = kc.cells.find((c) => c.regime === 'LEO-H' && c.ageIndex === 1);
 const git = (file) => execFileSync('git', ['-C', moduleRoot, 'show', `${BASE}:analysis/gp-error-model/${file}`], { maxBuffer: 1 << 26 });
 const builds = {
-  '0.11.0': { wasm: fs.readFileSync(path.join(moduleRoot, 'dist/isomorphic/module.wasm')), manifest: JSON.parse(fs.readFileSync(path.join(moduleRoot, 'plugin-manifest.json'), 'utf8')) },
+  '0.13.0': { wasm: fs.readFileSync(path.join(moduleRoot, 'dist/isomorphic/module.wasm')), manifest: JSON.parse(fs.readFileSync(path.join(moduleRoot, 'plugin-manifest.json'), 'utf8')) },
   '0.10.0': { wasm: git('dist/isomorphic/module.wasm'), manifest: JSON.parse(git('plugin-manifest.json').toString('utf8')) },
 };
 const epochState = { wasm: fs.readFileSync(path.join(moduleRoot, '../epoch-state/dist/isomorphic/module.wasm')),
@@ -72,13 +72,17 @@ const request = frame('request', 'objects', { objects: [{ id: 'leo-h', set: { no
 const recipe = recipeFor('celestrak-gp', { created: '2026-10-30T00:00:00Z', ages: [0, 0.25] });
 
 test('object_covariance: a LEO-H set at 0.25 days on POPULATION is Uncalibrated, with 0.10.0\'s matrix bit for bit', async () => {
-  const [now, before] = await Promise.all(['0.11.0', '0.10.0'].map((v) => invoke(builds[v], 'object_covariance', [elements, request])));
+  const [now, before] = await Promise.all(['0.13.0', '0.10.0'].map((v) => invoke(builds[v], 'object_covariance', [elements, request])));
   const [covNow, covBefore] = [now, before].map((r) => decode(port(r, 'covariance')));
   const row = covNow.objects[0];
   assert.deepEqual([row.status, row.regime, row.cell.ageIndex], ['POPULATION', 'LEO-H', 1], 'E14\'s passing cell, on the population path');
   bitIdentical(row.covarianceRtn, covBefore.objects[0].covarianceRtn, 'covarianceRtn (m, m/s)');
   bitIdentical(row.covarianceInertial, covBefore.objects[0].covarianceInertial, 'covarianceInertial (GCRF, m, m/s)');
-  assert.ok(port(now, 'covariance').equals(port(before, 'covariance')), 'the covariance frame is 0.10.0\'s, byte for byte');
+  // 0.13.0 renamed the object rule (empirical-history-shrunk -> empirical-history-inflated, modules-gp-error-model-inflate-only-20261103);
+  // the frame's RULE text is the one thing that differs on the population path.
+  assert.equal(covBefore.rule, 'empirical-history-shrunk');
+  assert.equal(covNow.rule, 'empirical-history-inflated');
+  assert.deepEqual({ ...covNow, rule: covBefore.rule }, covBefore, 'the covariance frame is 0.10.0\'s apart from the rule name');
 
   const [repNow, repBefore] = [now, before].map((r) => decode(port(r, 'report')));
   assert.equal(repBefore.objects[0].calibrated, true, '0.10.0 called the object Calibrated');
@@ -89,7 +93,7 @@ test('object_covariance: a LEO-H set at 0.25 days on POPULATION is Uncalibrated,
   // The report's SAMPLES and OBJECTS count the object's history (none here); the $OCM's CVR carries the cell's (next test).
   assert.deepEqual([label.meanD2Over3, label.coverage95], [cell.meanD2Over3, cell.coverage95], 'the cell\'s held-out numbers stay on the CVR');
   assert.deepEqual(entry.notes.filter((n) => n.reason === NOTE), [{ rule: 3, reason: NOTE }]);
-  // Nothing else moved: 0.10.0's report with the verdict and the note is 0.11.0's.
+  // Nothing else moved: 0.10.0's report with the verdict and the note is 0.13.0's.
   const expected = structuredClone(repBefore);
   expected.objects[0].calibrated = false;
   expected.objects[0].rows[0].calibration = 'UNCALIBRATED';
@@ -99,7 +103,7 @@ test('object_covariance: a LEO-H set at 0.25 days on POPULATION is Uncalibrated,
 
 test('object_covariance on the node (object.source): the $OCM record is Uncalibrated, its state and covariance 0.10.0\'s', async () => {
   const config = { object: { source: recipe.source } };
-  const [now, before] = await Promise.all(['0.11.0', '0.10.0'].map((v) => invoke(builds[v], 'object_covariance', [elements, request], config)));
+  const [now, before] = await Promise.all(['0.13.0', '0.10.0'].map((v) => invoke(builds[v], 'object_covariance', [elements, request], config)));
   const [ocmNow, ocmBefore] = [now, before].map((r) => unpackOcm(port(r, 'ocm')));
   assert.equal(ocmBefore.COV_REALISM[0].CALIBRATION, OCM.covarianceCalibration.Calibrated, '0.10.0 wrote a Calibrated CVR');
   assert.equal(ocmNow.COV_REALISM[0].CALIBRATION, OCM.covarianceCalibration.Uncalibrated);
@@ -109,14 +113,19 @@ test('object_covariance on the node (object.source): the $OCM record is Uncalibr
   bitIdentical(ocmNow.COVARIANCE_DATA, ocmBefore.COVARIANCE_DATA, 'COVARIANCE_DATA (GCRF, km, km/s)');
   bitIdentical(ocmNow.STATE_DATA, ocmBefore.STATE_DATA, 'STATE_DATA (GCRF, km, km/s)');
   ocmBefore.COV_REALISM[0].CALIBRATION = ocmBefore.COV_CALIBRATION = OCM.covarianceCalibration.Uncalibrated;
-  assert.deepEqual(ocmNow, ocmBefore, 'the record is 0.10.0\'s apart from its verdict');
+  // The method is renamed in 0.13.0 (empirical-history-shrunk -> empirical-history-inflated): the message id, OD_ALGORITHM
+  // and OD_COV_REDUCTION name it.
+  const renamed = (text) => text.replace('empirical-history-shrunk', 'empirical-history-inflated');
+  ocmBefore.HEADER.MESSAGE_ID = renamed(ocmBefore.HEADER.MESSAGE_ID);
+  for (const k of ['OD_ALGORITHM', 'OD_COV_REDUCTION']) ocmBefore.ORBIT_DETERMINATION[k] = renamed(ocmBefore.ORBIT_DETERMINATION[k]);
+  assert.deepEqual(ocmNow, ocmBefore, 'the record is 0.10.0\'s apart from its verdict and the method name');
 });
 
 test('attach_covariance rule 3 (the source-products recipe for CelesTrak GP): the same set at 0.25 days gets an Uncalibrated CVR, as at 0 days', async () => {
   const states = port(await invoke(epochState, 'derive_omm', [{ portId: 'omm', payload: omm, typeRef: typeRef('OMM') }], { ages: recipe.ages }), 'states');
   const inputs = [elements, { portId: 'states', payload: states, typeRef: typeRef('OEM') }, modelsFrame(recipe.models)];
   const { models, ages, ...attach } = recipe;
-  const [now, before] = await Promise.all(['0.11.0', '0.10.0'].map((v) => invoke(builds[v], 'attach_covariance', inputs, recipeConfig(attach, 'attach'))));
+  const [now, before] = await Promise.all(['0.13.0', '0.10.0'].map((v) => invoke(builds[v], 'attach_covariance', inputs, recipeConfig(attach, 'attach'))));
   const [ocmNow, ocmBefore] = [now, before].map((r) => unpackOcm(port(r, 'ocm')));
   const [ommNow, ommBefore] = [now, before].map((r) => unpackOmm(port(r, 'omm')));
   assert.deepEqual(ocmBefore.COV_REALISM.map((c) => c.CALIBRATION), [OCM.covarianceCalibration.Calibrated, OCM.covarianceCalibration.Calibrated],

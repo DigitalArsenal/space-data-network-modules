@@ -11,8 +11,9 @@ const standardsRoot = path.dirname(require.resolve('spacedatastandards.org/packa
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 
-test('manifest validates against fixed SDS 1.249.0 and declares typed object_covariance ports', async () => {
-  assert.equal(JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'))).version, '1.249.0');
+test('manifest validates against the SDS the module is built on and declares typed object_covariance ports', async () => {
+  const built = JSON.parse(fs.readFileSync(new URL('../dist/build-provenance.json', import.meta.url))).spacedatastandards;
+  assert.equal(JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'))).version, built);
   const report = await validateManifestWithStandards(manifest, { standardsRoot });
   assert.equal(report.ok, true, JSON.stringify(report.issues));
   const method = manifest.methods.find((m) => m.methodId === 'object_covariance');
@@ -26,9 +27,8 @@ test('manifest validates against fixed SDS 1.249.0 and declares typed object_cov
   assert.deepEqual(Object.fromEntries(method.inputPorts.map((p) => [p.portId, { required: p.required, minStreams: p.minStreams }])), {
     elements: { required: true, minStreams: 1 }, models: { required: false, minStreams: 0 }, request: { required: true, minStreams: 1 },
   });
-  assert.deepEqual(types(method.outputPorts), { covariance: '$ERM', report: '$ERM' });
+  assert.deepEqual(types(method.outputPorts), { covariance: '$ERM', report: '$ERM', ocm: '$OCM' });
   assert.deepEqual(method.invokeSurfaces, ['direct']);
-  assert.equal(manifest.version, '0.8.1');
   assert.equal(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).version, manifest.version);
   assert.deepEqual(JSON.parse(fs.readFileSync(new URL('../dist/plugin-manifest.json', import.meta.url))), manifest);
 });
