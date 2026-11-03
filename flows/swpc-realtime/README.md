@@ -6,6 +6,7 @@ The flow builds the existing host connectors inside its own output tree and
 adds SWS/SWA/SFE typed input-port declarations to that local storage manifest.
 Shared connector source and manifests are untouched.
 
+Install the flow’s pinned SDK with `npm ci --prefix flows/swpc-realtime`.
 Build from modules root with `node flows/swpc-realtime/build.mjs --unsigned`.
 `dist/runtime/runtime.wasm` is the deployable linked flow artifact. It is
 unsigned; the owner signs and installs it on host-02. The example configuration

@@ -125,7 +125,7 @@
       "dependencyId": "com.digitalarsenal.data-source.swpc-realtime",
       "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
       "version": "0.2.0",
-      "sha256": "44bf0d65e32fd14ca8c068abc467019ab6699313fdc8768bf7426567a08ffc2e",
+      "sha256": "75a54b76a04dd290abd07041592d48e226339f99ab125fce6ce199a53e030fa0",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,

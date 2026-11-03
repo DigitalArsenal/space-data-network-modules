@@ -38,9 +38,19 @@ No measurement winner is inferred or dropped. Numerical comparisons use
 exact binary64 equality, with source null doubles compared as NaN.
 
 Artifact SHA-256:
-- Module: `44bf0d65e32fd14ca8c068abc467019ab6699313fdc8768bf7426567a08ffc2e`
-- Production flow: `f37c6c8bbbe573a8c42e94ee4bb43506026b7ddc19fba72f7295c762e3da3d06`
-- Replay flow: `b4ac83d4494f7bc2bc4c512148aff95f4b1dcfaac763bec956875c1192a9b765`
+- Module: `75a54b76a04dd290abd07041592d48e226339f99ab125fce6ce199a53e030fa0`
+- Production flow: `ec50e70d6276f7b393c2a0bacaa690b216313d4fe50967d3005ca43f5f5dc8c6`
+- Replay flow: `79d165a088154aa54a89f11e1ac3b485edfb14993c519eb2b13ea493f527494a`
 - Native node: `02516e740cd7f14002848b6b28dfb9b82c2f2bf6e813154a586d69c44dd9b5cc`
 
-No host-02 installation, main push or gauntlet was performed. Owner signing and deployment remain owner-run.
+Owner signing and host-02 deployment remain owner-run.
+
+## Static-gate follow-up
+
+The flow now pins SDK 0.9.12 locally. Build helpers no longer emit intermediate
+JSON, and integer source tokens use decimal integer conversion. All six module
+methods declare and validate optional MCFG inputs. Configuration tests passed:
+12 configured calls have identical output, and 30 invalid configs are refused.
+The three required static gates pass without baseline changes. Both unsigned
+artifacts were rebuilt; hashes below reflect this follow-up. The CID acceptance
+lines above document the preceding run; the full gauntlet will repeat them.

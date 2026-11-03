@@ -167,6 +167,11 @@
       "schemaName": "SFE.fbs",
       "fileIdentifier": "$SFE",
       "rootTypeName": "SFE"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig"
     }
   ],
   "runtimeTargets": [

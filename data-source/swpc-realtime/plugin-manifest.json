@@ -33,6 +33,11 @@
       "schemaName": "SFE.fbs",
       "fileIdentifier": "$SFE",
       "rootTypeName": "SFE"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig"
     }
   ],
   "methods": [
@@ -58,6 +63,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional empty ModuleConfig. Fixed SWPC source contracts have no configurable settings; nonempty config is refused."
         }
       ],
       "outputPorts": [
@@ -106,6 +131,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional empty ModuleConfig. Fixed SWPC source contracts have no configurable settings; nonempty config is refused."
         }
       ],
       "outputPorts": [
@@ -154,6 +199,26 @@
           "minStreams": 1,
           "maxStreams": 9,
           "required": true
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional empty ModuleConfig. Fixed SWPC source contracts have no configurable settings; nonempty config is refused."
         }
       ],
       "outputPorts": [
@@ -221,6 +286,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional empty ModuleConfig. Fixed SWPC source contracts have no configurable settings; nonempty config is refused."
         }
       ],
       "outputPorts": [
@@ -288,6 +373,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional empty ModuleConfig. Fixed SWPC source contracts have no configurable settings; nonempty config is refused."
         }
       ],
       "outputPorts": [
@@ -355,6 +460,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional empty ModuleConfig. Fixed SWPC source contracts have no configurable settings; nonempty config is refused."
         }
       ],
       "outputPorts": [

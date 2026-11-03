@@ -7,10 +7,12 @@ if(!process.argv.includes('--unsigned'))throw new Error('Explicit --unsigned req
 const replay=process.argv.includes('--fixtures');
 const out=path.join(modules,replay?'data-source/swpc-realtime/tests/fixture-flow':'flows/swpc-realtime/dist');
 const packageDir=path.join(modules,'data-source/swpc-realtime');
-const require=createRequire(path.join(packageDir,'package.json'));
-process.env.SPACE_DATA_STANDARDS_ROOT=path.dirname(require.resolve('spacedatastandards.org/package.json'));
+const sourceRequire=createRequire(path.join(packageDir,'package.json'));
+const require=createRequire(import.meta.url);
+process.env.SPACE_DATA_STANDARDS_ROOT=path.dirname(sourceRequire.resolve('spacedatastandards.org/package.json'));
 const {compileModuleFromSource}=await import(pathToFileURL(require.resolve('space-data-module-sdk/compiler')));
 const {compileFlowProgram,resolveFlowDependencies}=await import(pathToFileURL(require.resolve('space-data-module-sdk/flow/compiler')));
+const {normalizeManifestForSdnFlow}=await import(pathToFileURL(path.join(path.dirname(require.resolve('space-data-module-sdk/flow/compiler')),'normalize.js')));
 const {compilation}=await import('../../data-source/swpc-realtime/build.mjs');
 const source='com.digitalarsenal.data-source.swpc-realtime',http='com.digitalarsenal.hostcap.http-request',storage='com.digitalarsenal.hostcap.storage-ingest';
 const node=(nodeId,pluginId,methodId,kind='transform')=>({nodeId,pluginId,methodId,kind,drainPolicy:'single-shot'});
@@ -46,10 +48,9 @@ async function transport(folder,sourceFile) {
  }
  const result=await compileModuleFromSource({manifest,sourceCode,language:'c++',outputPath:path.join(target,'dist/isomorphic/module.wasm'),threadModel:'wasi-sequential',allowUndefinedImports:true});
  if(!result.report?.ok)throw new Error(`Host hook ${folder} validation failed`,{cause:result.report?.issues});
- await fs.writeFile(path.join(target,'plugin-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
- const entries=await resolveFlowDependencies({depsPath:target});
+ const entries=await resolveFlowDependencies({depsPath:original});
  const entry=entries.get(manifest.pluginId);
- return {...entry,manifest,wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
+ return {...entry,manifest,normalized:normalizeManifestForSdnFlow(manifest),wasmPath:result.outputPath,guestLink:{objectBytes:result.guestLink.objectBytes,metadata:result.guestLink}};
 }
 const dependencies=await resolveFlowDependencies({depsPath:packageDir});
 dependencies.get(source).guestLink={objectBytes:compilation.guestLink.objectBytes,metadata:compilation.guestLink};

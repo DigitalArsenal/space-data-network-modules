@@ -31,6 +31,11 @@ The base URL is `https://services.swpc.noaa.gov/`.
 
 `plan_sws` emits nine GET requests; `parse_sws` accepts exactly one complete
 200 response for each URL. `plan_swa`/`parse_swa` handle alerts, and `plan_sfe`/`parse_sfe` handle flares separately.
+All six methods accept an optional `config` port containing a `ModuleConfig`
+(MCFG) FlatBuffer. The source contracts currently have no configurable settings:
+an empty config is accepted, while nonempty, malformed or duplicate configs
+are refused before any output. JSON settings are never read.
+
 Requests have a 90-second timeout and 16 MiB body limit. Explicit validators
 request full bodies. Failed, duplicate, missing or malformed responses refuse
 the batch before output; a partial batch cannot replace a complete lane.
@@ -67,11 +72,13 @@ From this directory:
 npm ci
 node build.mjs --unsigned
 node --test tests/sdk_compat.test.mjs
+node tests/config.test.mjs
 ```
 
 From modules root:
 
 ```sh
+npm ci --prefix flows/swpc-realtime
 node flows/swpc-realtime/build.mjs --unsigned
 node flows/swpc-realtime/build.mjs --unsigned --fixtures
 SDN_NODE_BINARY=/absolute/path/to/current/spacedatanetwork node data-source/swpc-realtime/tests/swpc-realtime.e2e.mjs

@@ -1,6 +1,7 @@
 #include "HttpRequest_generated.h"
 #include "HttpResponse_generated.h"
 #include "IngestRequest_generated.h"
+#include "ModuleConfig_generated.h"
 #include "TimerTick_generated.h"
 #include "space_data_module_invoke.h"
 #include <algorithm>
@@ -44,8 +45,10 @@ std::string str(const J &j, const char *k) {
     return "";
   if (j[k].is_string())
     return j[k].get<std::string>();
+  if (j[k].is_number_unsigned())
+    return std::to_string(j[k].get<uint64_t>());
   if (j[k].is_number_integer())
-    return j[k].dump();
+    return std::to_string(j[k].get<int64_t>());
   failure = "Expected source string/integer token";
   return "";
 }
@@ -498,9 +501,37 @@ int push(const char *p, const char *schema, const char *id, const char *root,
                                PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0,
                                0, b.GetBufferPointer(), b.GetSize());
 }
+// Fixed source contracts currently expose no configurable settings. Accept an
+// optional empty typed config, and refuse unsupported settings explicitly.
+std::vector<const plugin_input_frame_t *> dataFrames(const char *port) {
+  std::vector<const plugin_input_frame_t *> frames;
+  bool configured = false;
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    auto f = plugin_get_input_frame(i);
+    require(f && f->port_id && f->payload, "Invalid input frame");
+    if (std::strcmp(f->port_id, "config") == 0) {
+      require(!configured && f->payload_length <= 65536,
+              "Exactly one bounded config allowed");
+      configured = true;
+      flatbuffers::Verifier verifier(f->payload, f->payload_length);
+      require(R::VerifyModuleConfigBuffer(verifier),
+              "Expected ModuleConfig (MCFG)");
+      const auto *config = R::GetModuleConfig(f->payload);
+      require(!config->ENTRIES() || config->ENTRIES()->size() == 0,
+              "SWPC has no configurable settings");
+    } else {
+      require(std::strcmp(f->port_id, port) == 0, "Unexpected input port");
+      frames.push_back(f);
+    }
+  }
+  return frames;
+}
 int plan(int begin, int end) {
-  require(plugin_get_input_count() == 1, "Exactly one tick");
-  auto f = plugin_get_input_frame(0);
+  auto frames = dataFrames("tick");
+  if (!failure.empty())
+    return 1;
+  require(frames.size() == 1, "Exactly one tick");
+  auto f = frames[0];
   flatbuffers::Verifier v(f->payload, f->payload_length);
   require(R::VerifyTimerTickBuffer(v), "Expected TICK");
   for (int i = begin; i < end; i++) {
@@ -521,11 +552,12 @@ int plan(int begin, int end) {
   return 0;
 }
 int parse(int begin, int end, const char *code) {
-  require(plugin_get_input_count() == unsigned(end - begin),
-          "Incomplete source batch");
+  auto frames = dataFrames("response");
+  if (!failure.empty())
+    return 1;
+  require(frames.size() == unsigned(end - begin), "Incomplete source batch");
   std::map<int, Source> sources;
-  for (uint32_t i = 0; i < plugin_get_input_count(); i++) {
-    auto f = plugin_get_input_frame(i);
+  for (const auto *f : frames) {
     require(f && f->payload && f->payload_length <= 16842752,
             "Invalid response size");
     flatbuffers::Verifier v(f->payload, f->payload_length);
