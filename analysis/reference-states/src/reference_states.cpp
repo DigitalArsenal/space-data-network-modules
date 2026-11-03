@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -223,6 +224,154 @@ size_t window_start(size_t i, size_t count, size_t n) {
   return lo + n > count ? count - n : lo;
 }
 
+// One satellite's samples (Earth-fixed, on the product's scale) as GCRF reference states with covariance, pushed on
+// `reference`. `record_basis` is the uncertainty basis of samples that carry their own sigma_mm; `comment_of(sigma basis,
+// tail)` is the block's COMMENT. The same conversion serves SP3 files (reference_states) and the WAAS broadcast
+// (sbas_reference_states).
+struct Identity {
+  std::string name, object_id;
+  uint32_t norad;
+};
+int emit_block(const std::string& sat, const Identity& who, const std::vector<Sample>& samples, bool has_velocity, double interval,
+               double header_mm, double stated_sigma_m, const std::string& stated_basis, const std::string& record_basis,
+               std::map<std::string, EarthRotation>& rotations,
+               const std::function<std::string(const std::string&, const std::string&)>& comment_of, int* emitted) {
+  const std::string& name = who.name;
+  const std::string& object_id = who.object_id;
+  const uint32_t norad = who.norad;
+  double step = interval;
+  if (step <= 0) {
+    step = samples[1].t - samples[0].t;
+    for (size_t i = 2; i < samples.size(); ++i) step = std::fmin(step, samples[i].t - samples[i - 1].t);
+  }
+
+  flatbuffers::FlatBufferBuilder fbb(1 << 16);
+  std::vector<flatbuffers::Offset<ephemerisDataLine>> out_lines;
+  std::vector<flatbuffers::Offset<covarianceMatrixLine>> out_cov;
+  std::string sigma_basis;
+  size_t skipped = 0;
+  const Instant* first = nullptr;
+  const Instant* last = nullptr;
+  for (size_t i = 0; i < samples.size(); ++i) {
+    // Derivative weights over the ten nearest epochs (relative times for
+    // conditioning) and over the eight nearest inside them.
+    const size_t lo = window_start(i, samples.size(), kPoints);
+    bool gap = false;
+    for (size_t k = lo + 1; k < lo + kPoints; ++k) gap = gap || samples[k].t - samples[k - 1].t > 1.5 * step;
+    if (gap) {  // missing epochs nearby: no velocity this file can support
+      ++skipped;
+      continue;
+    }
+    double ts[kPoints], w9[kPoints], w7[kPoints - 2];
+    for (size_t k = 0; k < kPoints; ++k) ts[k] = samples[lo + k].t - samples[i].t;
+    const size_t lo7 = window_start(i - lo, kPoints, kPoints - 2);
+    derivative_weights(ts, kPoints, 0.0, w9);
+    derivative_weights(ts + lo7, kPoints - 2, 0.0, w7);
+    double v9[3] = {0, 0, 0}, v7[3] = {0, 0, 0}, w2 = 0;
+    for (size_t k = 0; k < kPoints; ++k) {
+      for (int c = 0; c < 3; ++c) v9[c] += w9[k] * samples[lo + k].r[c];
+      w2 += w9[k] * w9[k];
+    }
+    for (size_t k = 0; k < kPoints - 2; ++k)
+      for (int c = 0; c < 3; ++c) v7[c] += w7[k] * samples[lo + lo7 + k].r[c];
+    const double w_self = w9[i - lo];
+
+    double sig[3];
+    const Sample& s = samples[i];
+    if (s.sigma_mm[0] > 0 && s.sigma_mm[1] > 0 && s.sigma_mm[2] > 0) {
+      for (int c = 0; c < 3; ++c) sig[c] = s.sigma_mm[c] * 1e-6;
+      sigma_basis = record_basis;
+    } else if (header_mm > 0) {
+      for (double& x : sig) x = header_mm * 1e-6;
+      sigma_basis = "the SP3 header accuracy for the satellite (2^n mm)";
+    } else if (stated_sigma_m > 0) {
+      for (double& x : sig) x = stated_sigma_m * 1e-3;
+      sigma_basis = "the product accuracy stated by " + stated_basis;
+    } else {
+      return fail("unstated-uncertainty",
+                  sat + ": the SP3 states no accuracy and none was stated for the product; no default is assumed.");
+    }
+
+    const std::string epoch = utc_iso(s.at);
+    if (epoch.empty()) return fail("time-conversion-failed", sat + ": epoch outside the leap-second table.");
+    auto found = rotations.find(epoch);
+    if (found == rotations.end()) {
+      EarthRotation rot;
+      const std::string error = earth_rotation(s.at, &rot);
+      if (!error.empty()) return fail("invalid-earth-orientation", epoch + ": " + error);
+      found = rotations.emplace(epoch, rot).first;
+    }
+    const EarthRotation& rot = found->second;
+    const double* v = has_velocity ? s.v : v9;
+    double rg[3], vg[3];
+    for (int a = 0; a < 3; ++a) {
+      rg[a] = vg[a] = 0;
+      for (int k = 0; k < 3; ++k) {
+        rg[a] += rot.m[a][k] * s.r[k];
+        vg[a] += rot.m[a][k] * v[k] + rot.n[a][k] * s.r[k];
+      }
+    }
+    out_lines.push_back(CreateephemerisDataLineDirect(fbb, epoch.c_str(), rg[0], rg[1], rg[2], vg[0], vg[1], vg[2]));
+
+    // Earth-fixed covariance C = [[D, w_self D], [w_self D, w2 D + T]],
+    // D = diag(sig^2), T = diag((v9 - v7)^2); GCRS covariance J C J^T with
+    // J = [[M, 0], [N, M]].
+    double c[6][6] = {}, j[6][6] = {}, jc[6][6] = {}, g[6][6] = {};
+    for (int k = 0; k < 3; ++k) {
+      const double d = sig[k] * sig[k];
+      c[k][k] = d;
+      c[k][3 + k] = c[3 + k][k] = w_self * d;
+      c[3 + k][3 + k] = w2 * d + (v9[k] - v7[k]) * (v9[k] - v7[k]);
+    }
+    for (int a = 0; a < 3; ++a)
+      for (int b = 0; b < 3; ++b) {
+        j[a][b] = j[3 + a][3 + b] = rot.m[a][b];
+        j[3 + a][b] = rot.n[a][b];
+      }
+    for (int a = 0; a < 6; ++a)
+      for (int b = 0; b < 6; ++b)
+        for (int k = 0; k < 6; ++k) jc[a][b] += j[a][k] * c[k][b];
+    for (int a = 0; a < 6; ++a)
+      for (int b = 0; b < 6; ++b)
+        for (int k = 0; k < 6; ++k) g[a][b] += jc[a][k] * j[b][k];
+    out_cov.push_back(CreatecovarianceMatrixLineDirect(
+        fbb, epoch.c_str(), g[0][0], g[1][0], g[1][1], g[2][0], g[2][1], g[2][2], g[3][0], g[3][1], g[3][2], g[3][3],
+        g[4][0], g[4][1], g[4][2], g[4][3], g[4][4], g[5][0], g[5][1], g[5][2], g[5][3], g[5][4], g[5][5]));
+    if (!first) first = &s.at;
+    last = &s.at;
+  }
+  if (out_lines.empty()) return 0;
+
+  const auto name_offset = fbb.CreateString(name);
+  const auto id_offset = fbb.CreateString(object_id);
+  CATBuilder cat(fbb);
+  if (!name.empty()) cat.add_OBJECT_NAME(name_offset);
+  if (!object_id.empty()) cat.add_OBJECT_ID(id_offset);
+  cat.add_NORAD_CAT_ID(norad);
+  const auto cat_offset = cat.Finish();
+  const auto frame = CreateRFMDirect(fbb, RFMUnion::CelestialFrameWrapper,
+                                     CreateCelestialFrameWrapper(fbb, CelestialFrame::GCRF).Union(), 0, "GCRF");
+  const auto cov_frame = CreateRFMDirect(fbb, RFMUnion::CelestialFrameWrapper,
+                                         CreateCelestialFrameWrapper(fbb, CelestialFrame::GCRF).Union(), 0, "GCRF");
+  char tail[160];
+  std::snprintf(tail, sizeof(tail), "; %zu of %zu epochs without gap-free neighbours omitted.", skipped,
+                samples.size());
+  const std::string comment = comment_of(sigma_basis, tail);
+  const std::string start = utc_iso(*first), stop = utc_iso(*last);
+  const auto out_block = CreateephemerisDataBlockDirect(
+      fbb, comment.c_str(), cat_offset, "EARTH", frame, nullptr, cov_frame, timingStandard::UTC, start.c_str(),
+      nullptr, nullptr, stop.c_str(), has_velocity ? nullptr : "LAGRANGE", has_velocity ? 0 : 9, 0.0, 6, nullptr,
+      &out_lines, &out_cov, nullptr, 0, 399);
+  const std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{out_block};
+  fbb.FinishSizePrefixed(CreateOEMDirect(fbb, nullptr, 3.0, nullptr, "reference-states", &blocks), "$OEM");
+  if (plugin_push_output_ex("reference", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0,
+                            fbb.GetBufferPointer(), fbb.GetSize()) < 0)
+    return 1;
+  ++*emitted;
+  return 0;
+}
+
+
 }  // namespace
 
 extern "C" int reference_states() {
@@ -296,149 +445,25 @@ extern "C" int reference_states() {
         if (base > 0 && table->CheckField(vt[k])) s.sigma_mm[k] = std::pow(base, e[k]);
       samples.push_back(s);
     }
-    double step = interval;
-    if (step <= 0) {
-      step = samples[1].t - samples[0].t;
-      for (size_t i = 2; i < samples.size(); ++i) step = std::fmin(step, samples[i].t - samples[i - 1].t);
-    }
     const double header_mm =
         header_accuracy.count(sat) && header_accuracy[sat] > 0 ? std::pow(2.0, header_accuracy[sat]) : 0.0;
-
-    flatbuffers::FlatBufferBuilder fbb(1 << 16);
-    std::vector<flatbuffers::Offset<ephemerisDataLine>> out_lines;
-    std::vector<flatbuffers::Offset<covarianceMatrixLine>> out_cov;
-    std::string sigma_basis;
-    size_t skipped = 0;
-    const Instant* first = nullptr;
-    const Instant* last = nullptr;
-    for (size_t i = 0; i < samples.size(); ++i) {
-      // Derivative weights over the ten nearest epochs (relative times for
-      // conditioning) and over the eight nearest inside them.
-      const size_t lo = window_start(i, samples.size(), kPoints);
-      bool gap = false;
-      for (size_t k = lo + 1; k < lo + kPoints; ++k) gap = gap || samples[k].t - samples[k - 1].t > 1.5 * step;
-      if (gap) {  // missing epochs nearby: no velocity this file can support
-        ++skipped;
-        continue;
-      }
-      double ts[kPoints], w9[kPoints], w7[kPoints - 2];
-      for (size_t k = 0; k < kPoints; ++k) ts[k] = samples[lo + k].t - samples[i].t;
-      const size_t lo7 = window_start(i - lo, kPoints, kPoints - 2);
-      derivative_weights(ts, kPoints, 0.0, w9);
-      derivative_weights(ts + lo7, kPoints - 2, 0.0, w7);
-      double v9[3] = {0, 0, 0}, v7[3] = {0, 0, 0}, w2 = 0;
-      for (size_t k = 0; k < kPoints; ++k) {
-        for (int c = 0; c < 3; ++c) v9[c] += w9[k] * samples[lo + k].r[c];
-        w2 += w9[k] * w9[k];
-      }
-      for (size_t k = 0; k < kPoints - 2; ++k)
-        for (int c = 0; c < 3; ++c) v7[c] += w7[k] * samples[lo + lo7 + k].r[c];
-      const double w_self = w9[i - lo];
-
-      double sig[3];
-      const Sample& s = samples[i];
-      if (s.sigma_mm[0] > 0 && s.sigma_mm[1] > 0 && s.sigma_mm[2] > 0) {
-        for (int c = 0; c < 3; ++c) sig[c] = s.sigma_mm[c] * 1e-6;
-        char b[48];
-        std::snprintf(b, sizeof(b), "%.4g", base);
-        sigma_basis = std::string("the SP3 records' standard deviations (") + b + "^n mm per axis)";
-      } else if (header_mm > 0) {
-        for (double& x : sig) x = header_mm * 1e-6;
-        sigma_basis = "the SP3 header accuracy for the satellite (2^n mm)";
-      } else if (stated_sigma_m > 0) {
-        for (double& x : sig) x = stated_sigma_m * 1e-3;
-        sigma_basis = "the product accuracy stated by " + stated_basis;
-      } else {
-        return fail("unstated-uncertainty",
-                    sat + ": the SP3 states no accuracy and none was stated for the product; no default is assumed.");
-      }
-
-      const std::string epoch = utc_iso(s.at);
-      if (epoch.empty()) return fail("time-conversion-failed", sat + ": epoch outside the leap-second table.");
-      auto found = rotations.find(epoch);
-      if (found == rotations.end()) {
-        EarthRotation rot;
-        const std::string error = earth_rotation(s.at, &rot);
-        if (!error.empty()) return fail("invalid-earth-orientation", epoch + ": " + error);
-        found = rotations.emplace(epoch, rot).first;
-      }
-      const EarthRotation& rot = found->second;
-      const double* v = has_velocity ? s.v : v9;
-      double rg[3], vg[3];
-      for (int a = 0; a < 3; ++a) {
-        rg[a] = vg[a] = 0;
-        for (int k = 0; k < 3; ++k) {
-          rg[a] += rot.m[a][k] * s.r[k];
-          vg[a] += rot.m[a][k] * v[k] + rot.n[a][k] * s.r[k];
-        }
-      }
-      out_lines.push_back(CreateephemerisDataLineDirect(fbb, epoch.c_str(), rg[0], rg[1], rg[2], vg[0], vg[1], vg[2]));
-
-      // Earth-fixed covariance C = [[D, w_self D], [w_self D, w2 D + T]],
-      // D = diag(sig^2), T = diag((v9 - v7)^2); GCRS covariance J C J^T with
-      // J = [[M, 0], [N, M]].
-      double c[6][6] = {}, j[6][6] = {}, jc[6][6] = {}, g[6][6] = {};
-      for (int k = 0; k < 3; ++k) {
-        const double d = sig[k] * sig[k];
-        c[k][k] = d;
-        c[k][3 + k] = c[3 + k][k] = w_self * d;
-        c[3 + k][3 + k] = w2 * d + (v9[k] - v7[k]) * (v9[k] - v7[k]);
-      }
-      for (int a = 0; a < 3; ++a)
-        for (int b = 0; b < 3; ++b) {
-          j[a][b] = j[3 + a][3 + b] = rot.m[a][b];
-          j[3 + a][b] = rot.n[a][b];
-        }
-      for (int a = 0; a < 6; ++a)
-        for (int b = 0; b < 6; ++b)
-          for (int k = 0; k < 6; ++k) jc[a][b] += j[a][k] * c[k][b];
-      for (int a = 0; a < 6; ++a)
-        for (int b = 0; b < 6; ++b)
-          for (int k = 0; k < 6; ++k) g[a][b] += jc[a][k] * j[b][k];
-      out_cov.push_back(CreatecovarianceMatrixLineDirect(
-          fbb, epoch.c_str(), g[0][0], g[1][0], g[1][1], g[2][0], g[2][1], g[2][2], g[3][0], g[3][1], g[3][2], g[3][3],
-          g[4][0], g[4][1], g[4][2], g[4][3], g[4][4], g[5][0], g[5][1], g[5][2], g[5][3], g[5][4], g[5][5]));
-      if (!first) first = &s.at;
-      last = &s.at;
-    }
-    if (out_lines.empty()) continue;
-
-    const std::string name = config_string(who, "name");
-    const std::string object_id = config_string(who, "objectId");
-    const auto name_offset = fbb.CreateString(name);
-    const auto id_offset = fbb.CreateString(object_id);
-    CATBuilder cat(fbb);
-    if (!name.empty()) cat.add_OBJECT_NAME(name_offset);
-    if (!object_id.empty()) cat.add_OBJECT_ID(id_offset);
-    cat.add_NORAD_CAT_ID(norad);
-    const auto cat_offset = cat.Finish();
-    const auto frame = CreateRFMDirect(fbb, RFMUnion::CelestialFrameWrapper,
-                                       CreateCelestialFrameWrapper(fbb, CelestialFrame::GCRF).Union(), 0, "GCRF");
-    const auto cov_frame = CreateRFMDirect(fbb, RFMUnion::CelestialFrameWrapper,
-                                           CreateCelestialFrameWrapper(fbb, CelestialFrame::GCRF).Union(), 0, "GCRF");
-    char tail[160];
-    std::snprintf(tail, sizeof(tail), "; %zu of %zu epochs without gap-free neighbours omitted.", skipped,
-                  samples.size());
-    const std::string comment =
-        "Reference states from " + (product.empty() ? std::string("an SP3 product") : product) +
-        (source.empty() ? std::string() : " (" + source + ")") + ", SP3 satellite " + sat + ", agency " +
-        text(header->AGENCY()) + ", orbit type " + text(header->ORBIT_TYPE()) + ", file SHA-256 " +
-        text(ncd->SOURCE_SHA256()) + ". " + coordinates + " to GCRF by IAU 2006/2000A (CIO) with the supplied EOP. " +
-        "Velocity: " +
-        (has_velocity ? std::string("the product's own") : std::string("derivative of the degree-9 Lagrange interpolant")) +
-        ". Covariance: " + sigma_basis + "; velocity variance from the position variance and the degree-9 minus " +
-        "degree-7 difference" + tail;
-    const std::string start = utc_iso(*first), stop = utc_iso(*last);
-    const auto out_block = CreateephemerisDataBlockDirect(
-        fbb, comment.c_str(), cat_offset, "EARTH", frame, nullptr, cov_frame, timingStandard::UTC, start.c_str(),
-        nullptr, nullptr, stop.c_str(), has_velocity ? nullptr : "LAGRANGE", has_velocity ? 0 : 9, 0.0, 6, nullptr,
-        &out_lines, &out_cov, nullptr, 0, 399);
-    const std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks{out_block};
-    fbb.FinishSizePrefixed(CreateOEMDirect(fbb, nullptr, 3.0, nullptr, "reference-states", &blocks), "$OEM");
-    if (plugin_push_output_ex("reference", "OEM.fbs", "$OEM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OEM", 0, 0,
-                              fbb.GetBufferPointer(), fbb.GetSize()) < 0)
+    char b[48];
+    std::snprintf(b, sizeof(b), "%.4g", base);
+    const std::string record_basis = std::string("the SP3 records' standard deviations (") + b + "^n mm per axis)";
+    const auto comment_of = [&](const std::string& sigma_basis, const std::string& tail) {
+      return "Reference states from " + (product.empty() ? std::string("an SP3 product") : product) +
+             (source.empty() ? std::string() : " (" + source + ")") + ", SP3 satellite " + sat + ", agency " +
+             text(header->AGENCY()) + ", orbit type " + text(header->ORBIT_TYPE()) + ", file SHA-256 " +
+             text(ncd->SOURCE_SHA256()) + ". " + coordinates + " to GCRF by IAU 2006/2000A (CIO) with the supplied EOP. " +
+             "Velocity: " +
+             (has_velocity ? std::string("the product's own") : std::string("derivative of the degree-9 Lagrange interpolant")) +
+             ". Covariance: " + sigma_basis + "; velocity variance from the position variance and the degree-9 minus " +
+             "degree-7 difference" + tail;
+    };
+    const Identity identity{config_string(who, "name"), config_string(who, "objectId"), norad};
+    if (emit_block(sat, identity, samples, has_velocity, interval, header_mm, stated_sigma_m, stated_basis, record_basis, rotations,
+                   comment_of, &emitted))
       return 1;
-    ++emitted;
   }
   if (!emitted) return fail("no-reference-states", "No SP3 satellite matched a catalogued identity.");
   return 0;
